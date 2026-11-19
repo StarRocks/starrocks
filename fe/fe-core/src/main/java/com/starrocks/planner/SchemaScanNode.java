@@ -55,10 +55,6 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TSchemaScanNode;
-<<<<<<< HEAD
-=======
-import com.starrocks.thrift.TUserIdentity;
->>>>>>> fe8be24 ([BugFix][RB-904] Honor group-granted roles in information_schema RPCs (#82567))
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -211,12 +207,7 @@ public class SchemaScanNode extends ScanNode {
         msg.schema_scan_node.setPort(frontendPort);
 
         ConnectContext currentCtx = ConnectContext.get();
-<<<<<<< HEAD
         msg.schema_scan_node.setCurrent_user_ident(UserIdentityUtils.callerToThrift(currentCtx));
-=======
-        TUserIdentity tCurrentUser = UserIdentityUtils.callerToThrift(currentCtx);
-        msg.schema_scan_node.setCurrent_user_ident(tCurrentUser);
->>>>>>> fe8be24 ([BugFix][RB-904] Honor group-granted roles in information_schema RPCs (#82567))
 
         if (tableId != null) {
             msg.schema_scan_node.setTable_id(tableId);

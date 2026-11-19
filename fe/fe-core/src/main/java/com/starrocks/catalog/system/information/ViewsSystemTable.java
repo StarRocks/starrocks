@@ -50,12 +50,6 @@ import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TUserIdentity;
-<<<<<<< HEAD
-import com.starrocks.thrift.TUserRoles;
-=======
-import com.starrocks.type.Type;
-import com.starrocks.type.TypeFactory;
->>>>>>> fe8be24 ([BugFix][RB-904] Honor group-granted roles in information_schema RPCs (#82567))
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

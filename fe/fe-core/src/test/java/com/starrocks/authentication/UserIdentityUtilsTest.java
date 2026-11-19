@@ -77,18 +77,15 @@ public class UserIdentityUtilsTest {
         starRocksAssert.ddl("GRANT SELECT ON TABLE " + DB + ".t_secret TO ROLE uiu_secret_role");
         starRocksAssert.ddl("CREATE ROLE uiu_group_role");
         starRocksAssert.ddl("GRANT SELECT ON TABLE " + DB + ".t_group TO ROLE uiu_group_role");
-        starRocksAssert.ddl("GRANT uiu_group_role TO EXTERNAL GROUP uiu_group");
+        starRocksAssert.ddl("GRANT uiu_group_role TO EXTERNAL GROUP uiu_tables_group");
         starRocksAssert.ddl("CREATE USER uiu_native");
         starRocksAssert.ddl("GRANT uiu_open_role TO USER uiu_native");
         openRoleId = GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdByNameAllowNull("uiu_open_role");
         secretRoleId =
                 GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdByNameAllowNull("uiu_secret_role");
-<<<<<<< HEAD
         starRocksAssert.ddl("GRANT uiu_secret_role TO EXTERNAL GROUP uiu_group");
-=======
         groupRoleId =
                 GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdByNameAllowNull("uiu_group_role");
->>>>>>> fe8be24 ([BugFix][RB-904] Honor group-granted roles in information_schema RPCs (#82567))
     }
 
     private static TUserIdentity userIdent(UserIdentity user, List<Long> roleIds) {
@@ -150,10 +147,10 @@ public class UserIdentityUtilsTest {
     public void testNativeUserGetsTheRolesOfItsGroups() throws Exception {
         // A role the session got from its group, e.g. an LDAP memberOf, is kept, and grants its privileges.
         TUserIdentity userIdent = userIdent(new UserIdentity("uiu_native", "%"), List.of(openRoleId, groupRoleId),
-                List.of("uiu_group"));
+                List.of("uiu_tables_group"));
         ConnectContext caller = withoutSession(() -> callerOf(userIdent));
 
-        assertEquals(Set.of("uiu_group"), caller.getGroups());
+        assertEquals(Set.of("uiu_tables_group"), caller.getGroups());
         assertEquals(Set.of(openRoleId, groupRoleId), caller.getCurrentRoleIds());
         assertDoesNotThrow(() -> Authorizer.checkTableAction(caller, DB, "t_group", PrivilegeType.SELECT));
         assertThrows(AccessDeniedException.class,
@@ -178,7 +175,7 @@ public class UserIdentityUtilsTest {
     public void testNativeUserWithoutActivatedRolesGetsTheRolesOfItsGroups() throws Exception {
         // A caller that sends no role ids gets its default roles and the roles of its groups, as at login.
         TUserIdentity userIdent = UserIdentityUtils.toThrift(new UserIdentity("uiu_native", "%"));
-        userIdent.setGroups(List.of("uiu_group"));
+        userIdent.setGroups(List.of("uiu_tables_group"));
         ConnectContext caller = withoutSession(() -> callerOf(userIdent));
 
         assertDoesNotThrow(() -> Authorizer.checkTableAction(caller, DB, "t_group", PrivilegeType.SELECT));
@@ -191,10 +188,10 @@ public class UserIdentityUtilsTest {
         ConnectContext session = new ConnectContext();
         UserIdentity user = new UserIdentity("uiu_native", "%");
         session.setCurrentUserIdentity(user);
-        session.setGroups(Set.of("uiu_group"));
-        session.setCurrentRoleIds(user, Set.of("uiu_group"));
+        session.setGroups(Set.of("uiu_tables_group"));
+        session.setCurrentRoleIds(user, Set.of("uiu_tables_group"));
         TUserIdentity userIdent = UserIdentityUtils.callerToThrift(session);
-        assertEquals(List.of("uiu_group"), userIdent.getGroups());
+        assertEquals(List.of("uiu_tables_group"), userIdent.getGroups());
 
         TAuthInfo authInfo = new TAuthInfo();
         authInfo.setCurrent_user_ident(userIdent);

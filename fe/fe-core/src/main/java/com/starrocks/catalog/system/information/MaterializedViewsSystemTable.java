@@ -50,15 +50,6 @@ import com.starrocks.thrift.TListMaterializedViewStatusResult;
 import com.starrocks.thrift.TMaterializedViewStatus;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TUserIdentity;
-<<<<<<< HEAD
-import com.starrocks.thrift.TUserRoles;
-=======
-import com.starrocks.type.DateType;
-import com.starrocks.type.FloatType;
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.Type;
-import com.starrocks.type.TypeFactory;
->>>>>>> fe8be24 ([BugFix][RB-904] Honor group-granted roles in information_schema RPCs (#82567))
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -235,7 +226,7 @@ public class MaterializedViewsSystemTable extends SystemTable {
         // database privs should be checked in analysis phrase
         long limit = params.isSetLimit() ? params.getLimit() : -1;
         if (params.isSetCurrent_user_ident()) {
-            context.setAuthInfoFromThrift(params.getCurrent_user_ident());
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.getCurrent_user_ident());
         } else {
             UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
             context.setCurrentUserIdentity(currentUser);
