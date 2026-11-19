@@ -37,6 +37,7 @@
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
+#include "column/flat_json/flat_json_internal.h"
 #include "column/flat_json/json_merger.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
@@ -1286,5 +1287,120 @@ INSTANTIATE_TEST_SUITE_P(JsonBoolExtractionCases, JsonBoolExtractionTest,
                                            std::make_tuple(R"({"bool_field": "false"})", false),
                                            std::make_tuple(R"({"bool_field": "1"})", true),
                                            std::make_tuple(R"({"bool_field": "0"})", false)));
+
+// flat_column_to_json rebuilds a VARCHAR sub-column as JSON strings -- a JSON-looking value stays a string --
+// keeps NULL rows NULL, unfolds a constant input, and leaves its source (owned by the caller) unchanged.
+TEST_F(JsonFlattenerTest, testFlatColumnToJsonKeepsStringsAndReadsSource) {
+    auto strings = BinaryColumn::create();
+    strings->append(Slice(R"({"a":1})"));
+    strings->append_default();
+    strings->append(Slice("plain"));
+    auto nulls = NullColumn::create();
+    nulls->append(0);
+    nulls->append(1);
+    nulls->append(0);
+    ColumnPtr source = NullableColumn::create(std::move(strings), std::move(nulls));
+    const Column* source_data = down_cast<const NullableColumn*>(source.get())->data_column().get();
+
+    auto result = flat_json::flat_column_to_json(source, TYPE_VARCHAR);
+    ASSERT_EQ(3, result->size());
+    ASSERT_TRUE(result->is_nullable());
+    EXPECT_FALSE(result->is_null(0));
+    EXPECT_TRUE(result->is_null(1));
+    EXPECT_FALSE(result->is_null(2));
+    const auto* json =
+            down_cast<const JsonColumn*>(down_cast<const NullableColumn*>(result.get())->data_column().get());
+    EXPECT_EQ(0, JsonValue::from_string(R"({"a":1})").compare(*json->get_object(0)));
+    EXPECT_TRUE(json->get_object(0)->to_vslice().isString());
+    EXPECT_EQ(0, JsonValue::from_string("plain").compare(*json->get_object(2)));
+    // the source is unchanged
+    EXPECT_EQ(source_data, down_cast<const NullableColumn*>(source.get())->data_column().get());
+    EXPECT_EQ(R"({"a":1})", source_data->get(0).get_slice().to_string());
+
+    // a constant input is unfolded to one value per row
+    auto one = BinaryColumn::create();
+    one->append(Slice("[1]"));
+    ColumnPtr constant = ConstColumn::create(std::move(one), 2);
+    auto from_const = flat_json::flat_column_to_json(constant, TYPE_VARCHAR);
+    ASSERT_EQ(2, from_const->size());
+    const auto* const_json =
+            down_cast<const JsonColumn*>(down_cast<const NullableColumn*>(from_const.get())->data_column().get());
+    for (size_t i = 0; i < 2; i++) {
+        EXPECT_FALSE(from_const->is_null(i));
+        EXPECT_EQ(0, JsonValue::from_string("[1]").compare(*const_json->get_object(i)));
+    }
+}
+
+// flat_column_to_json gives every scalar flat type back the JSON value the whole-document rebuild writes:
+// BIGINT and DOUBLE keep their numbers, LARGEINT goes back to the signed or unsigned 64-bit encoding it was
+// merged from (so a value above INT64_MAX stays exact), a JSON sub-column passes through, and a non-nullable
+// source has no NULL rows.
+TEST_F(JsonFlattenerTest, testFlatColumnToJsonNumericAndJsonSources) {
+    auto values_of = [](const MutableColumnPtr& result) {
+        std::vector<vpack::Slice> slices;
+        const auto* json =
+                down_cast<const JsonColumn*>(down_cast<const NullableColumn*>(result.get())->data_column().get());
+        for (size_t i = 0; i < result->size(); i++) {
+            slices.emplace_back(json->get_object(i)->to_vslice());
+        }
+        return slices;
+    };
+
+    {
+        auto data = Int64Column::create();
+        data->append(-7);
+        data->append(std::numeric_limits<int64_t>::max());
+        auto result = flat_json::flat_column_to_json(std::move(data), TYPE_BIGINT);
+        ASSERT_EQ(2, result->size());
+        EXPECT_FALSE(result->has_null());
+        auto v = values_of(result);
+        EXPECT_EQ(-7, v[0].getInt());
+        EXPECT_EQ(std::numeric_limits<int64_t>::max(), v[1].getInt());
+    }
+    {
+        const auto above_int64 = static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 5;
+        auto data = Int128Column::create();
+        data->append(static_cast<int128_t>(above_int64));
+        data->append(static_cast<int128_t>(-3));
+        auto nulls = NullColumn::create();
+        nulls->append(0);
+        nulls->append(0);
+        ColumnPtr source = NullableColumn::create(std::move(data), std::move(nulls));
+        auto result = flat_json::flat_column_to_json(source, TYPE_LARGEINT);
+        auto v = values_of(result);
+        ASSERT_TRUE(v[0].isUInt());
+        EXPECT_EQ(above_int64, v[0].getUInt());
+        ASSERT_TRUE(v[1].isInt() || v[1].isSmallInt());
+        EXPECT_EQ(-3, v[1].getInt());
+    }
+    {
+        auto data = DoubleColumn::create();
+        data->append(0.1);
+        data->append_default();
+        auto nulls = NullColumn::create();
+        nulls->append(0);
+        nulls->append(1);
+        ColumnPtr source = NullableColumn::create(std::move(data), std::move(nulls));
+        auto result = flat_json::flat_column_to_json(source, TYPE_DOUBLE);
+        ASSERT_EQ(2, result->size());
+        EXPECT_TRUE(result->is_null(1));
+        auto v = values_of(result);
+        ASSERT_TRUE(v[0].isDouble());
+        EXPECT_EQ(0.1, v[0].getDouble());
+    }
+    {
+        auto data = JsonColumn::create();
+        ASSIGN_OR_ABORT(auto object, JsonValue::parse(R"({"k": [1, "x"]})"));
+        data->append(&object);
+        auto text = JsonValue::from_string(R"({"k":1})");
+        data->append(&text);
+        auto result = flat_json::flat_column_to_json(std::move(data), TYPE_JSON);
+        const auto* json =
+                down_cast<const JsonColumn*>(down_cast<const NullableColumn*>(result.get())->data_column().get());
+        EXPECT_EQ(0, object.compare(*json->get_object(0)));
+        EXPECT_EQ(0, text.compare(*json->get_object(1)));
+        EXPECT_TRUE(json->get_object(1)->to_vslice().isString());
+    }
+}
 
 } // namespace starrocks
