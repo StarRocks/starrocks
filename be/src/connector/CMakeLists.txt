@@ -92,6 +92,8 @@ target_link_libraries(ConnectorHive PRIVATE Formats)
 # before collecting coverage, and only scans src/ for .gcda files.
 if ("${WITH_PAIMON_CPP}" STREQUAL "ON" AND "${MAKE_TEST}" STREQUAL "ON")
     add_library(paimon_cpp_test_support OBJECT
+            hive/paimon/paimon_global_index_evaluator.cpp
+            hive/paimon/paimon_global_index_scanner.cpp
             hive/paimon/paimon_predicate_converter.cpp
             hive/paimon/paimon_file_system.cpp
             hive/paimon/paimon_scanner.cpp
