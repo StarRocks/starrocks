@@ -23,6 +23,8 @@ import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.delta.DeltaConnectorScanRangeSource;
 import com.starrocks.connector.delta.DeltaLakeAddFileStatsSerDe;
+import com.starrocks.connector.delta.DeltaLakeCatalogProperties;
+import com.starrocks.connector.delta.DeltaLakeEngine;
 import com.starrocks.connector.delta.DeltaLakeMetadata;
 import com.starrocks.connector.delta.DeltaMetastoreOperations;
 import com.starrocks.connector.delta.DeltaStatisticProvider;
@@ -63,6 +65,7 @@ import io.delta.kernel.internal.actions.Metadata;
 import io.delta.kernel.types.StructField;
 import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.CloseableIterator;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
@@ -384,7 +387,8 @@ public class ExternalResourceCleanupTest {
 
         // Prepare table and delta components.
         DeltaLakeTable table = Mockito.mock(DeltaLakeTable.class);
-        Engine engine = Mockito.mock(Engine.class);
+        Engine engine = DeltaLakeEngine.create(new Configuration(false),
+                new DeltaLakeCatalogProperties(Map.of()), null, null);
         SnapshotImpl snapshot = Mockito.mock(SnapshotImpl.class);
         Metadata meta = Mockito.mock(Metadata.class);
         StructType schema = Mockito.mock(StructType.class);
@@ -850,7 +854,8 @@ public class ExternalResourceCleanupTest {
                 new ConnectorProperties(ConnectorType.DELTALAKE));
 
         DeltaLakeTable table = Mockito.mock(DeltaLakeTable.class);
-        Engine engine = Mockito.mock(Engine.class);
+        Engine engine = DeltaLakeEngine.create(new Configuration(false),
+                new DeltaLakeCatalogProperties(Map.of()), null, null);
         SnapshotImpl snapshot = Mockito.mock(SnapshotImpl.class);
         Metadata meta = Mockito.mock(Metadata.class);
         StructType schema = Mockito.mock(StructType.class);
