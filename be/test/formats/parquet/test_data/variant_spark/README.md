@@ -1,6 +1,7 @@
 # Iceberg 1.12 VARIANT data files written by Spark and the Iceberg Java API
 
-Test data for `test/sql/test_iceberg/T/test_iceberg_variant_spark_shredding`, which checks that StarRocks reads
+Test data for `test/sql/test_iceberg/T/test_iceberg_variant_spark_shredding` and
+`test/sql/test_iceberg/T/test_iceberg_variant_mixed_files`, which check that StarRocks reads
 VARIANT columns written by real writers correctly
 ([StarRocks#82480](https://github.com/StarRocks/starrocks/issues/82480),
 [StarRocks#82482](https://github.com/StarRocks/starrocks/issues/82482)).
@@ -41,6 +42,28 @@ The rows are in `gen_variant_spark.sql`.
 
 `expected_variant_spark.tsv` holds Spark's answers for the queries in `expected_variant_spark.sql` (whole document as
 JSON and a few paths); Spark returns the same rows for the shredded and the unshredded table.
+
+## Schema evolution and pruning files (`gen_variant_evolution.sql`)
+
+`evo_*` (shredded) and `evo_noshred_*` (unshredded) hold the same rows, one file per id range. Each file shreds
+`$.a` as a different type, and `b`/`c` come and go, so one scan meets a different shredded layout in every file:
+
+| Suffix | ids | `$.a` shredded as | Other fields |
+|---|---|---|---|
+| `e1_int` | 1000-1099 | int8 | `b` string |
+| `e2_bigint` | 2000-2099 | int64, values above 2^53 | `b` missing, `c` decimal(5,1) |
+| `e3_double` | 3000-3099 | double | `b` int16 |
+| `e4_array` | 4000-4099 | array<int16> | `b` string |
+| `e5_string` | 5000-5099 | string | |
+| `e6_object` | 6000-6099 | object `{x: int16}` | |
+| `e7_mixed` | 7000-7099 | not shredded (int, string and double mixed) | |
+
+`prune_rowgroups.parquet`: ids 0-2999 sorted by id, `write.parquet.row-group-size-bytes=8192` and
+`write.parquet.page-row-limit=100`, which gives 6 row groups; `v = {"n": id, "s": "s" + 6-digit id,
+"m": id except every tenth row, "g": id / 1000}`. Iceberg cannot write bloom filters for shredded variant
+fields (the bloom filter properties name Iceberg columns), so there are none.
+
+Regenerate them with `SPARK_HOME=<spark-4.1.x> WAREHOUSE=<empty scratch dir> ./gen_variant_evolution.sh`.
 
 ## Regenerating
 
