@@ -262,6 +262,8 @@ public class JsonTypeTest extends PlanTestBase {
                 "Invalid type cast from map<decimal(10, 2),int(11)> to json");
         assertExceptionMsgContains("select cast([cast(1 as decimal(50, 10))] as json)",
                 "Invalid type cast from array<DECIMAL256(50,10)> to json");
+        assertExceptionMsgContains("select cast([cast(1 as decimalv2(10, 2))] as json)",
+                "Invalid type cast from array<DECIMAL(10,2)> to json");
         assertExceptionMsgContains("select cast(v_map_boolean as json) from tjson_complex",
                 "Invalid type cast from map<boolean,int(11)> to json");
         // Only explicit casts are rewritten: a complex value is still not implicitly converted to JSON.

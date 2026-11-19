@@ -34,7 +34,7 @@ cast(sql_expr AS JSON)
 
 - `sql_data_type`: the SQL data type to which you want to convert the JSON value. Only the STRING, VARCHAR, CHAR, BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DOUBLE, and FLOAT data types are supported.
 
-- `sql_expr`: the expression that represents the SQL value you want to convert to a JSON value. This parameter supports all SQL data types that are supported by the `sql_data_type` parameter. It also supports ARRAY, MAP, and STRUCT values whose elements, values, and fields are of these types, DECIMAL with a precision of up to 38, DATE, DATETIME, JSON, or nested ARRAY, MAP, and STRUCT types, and whose MAP keys are strings or integers.
+- `sql_expr`: the expression that represents the SQL value you want to convert to a JSON value. This parameter supports all SQL data types that are supported by the `sql_data_type` parameter. It also supports ARRAY, MAP, and STRUCT values whose elements, values, and fields are of these types, DECIMAL (DECIMAL32, DECIMAL64, and DECIMAL128), DATE, DATETIME, JSON, or nested ARRAY, MAP, and STRUCT types, and whose MAP keys are strings or integers.
 
 ## Return value
 

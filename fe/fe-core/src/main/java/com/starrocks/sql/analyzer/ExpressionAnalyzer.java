@@ -1108,8 +1108,8 @@ public class ExpressionAnalyzer {
                     fields.add(new StructField(field.getName(), fieldType, field.getComment()));
                 }
                 return new StructType(fields, true);
-            } else if (type.isDecimal256()) {
-                // The BE does not cast DECIMAL256 to JSON.
+            } else if (type.isDecimal256() || type.isDecimalV2()) {
+                // The BE does not cast DECIMAL256 or DECIMALV2 to JSON.
                 return null;
             } else if (type.isDecimalOfAnyVersion() || type.isBoolean() || type.isLargeint()) {
                 return JsonType.JSON;
