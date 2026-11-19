@@ -43,6 +43,8 @@ import io.delta.kernel.utils.FileStatus;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.RawLocalFileSystem;
 import org.apache.hadoop.fs.s3a.Constants;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,8 +52,10 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.net.URI;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * Unity vends a credential scoped to one table's storage path, so a credential loaded for one table
@@ -62,9 +66,13 @@ public class DeltaLakeCredentialIsolationTest {
             "s3://bucket/nation/_delta_log/00000000000000000000.checkpoint.parquet";
 
     private DeltaLakeMetastore metastore;
+    private String tablePathPrefix;
+    private Function<String, CloudConfiguration> credentialForTable;
 
     @BeforeEach
     public void setUp() {
+        tablePathPrefix = "s3://bucket/";
+        credentialForTable = DeltaLakeCredentialIsolationTest::vendedCredentialFor;
         HiveMetaClient client = new HiveMetastoreTest.MockedHiveMetaClient();
         IHiveMetastore hiveMetastore = new HiveMetastore(client, "delta0", MetastoreType.HMS);
         DeltaLakeCatalogProperties properties = new DeltaLakeCatalogProperties(Maps.newHashMap());
@@ -73,8 +81,8 @@ public class DeltaLakeCredentialIsolationTest {
         new MockUp<HMSBackedDeltaMetastore>() {
             @Mock
             public MetastoreTable getMetastoreTable(String dbName, String tableName) {
-                return new MetastoreTable(dbName, tableName, "s3://bucket/" + tableName, 123,
-                        vendedCredentialFor(tableName));
+                return new MetastoreTable(dbName, tableName, tablePathPrefix + tableName, 123,
+                        credentialForTable.apply(tableName));
             }
         };
         new MockUp<TableImpl>() {
@@ -121,6 +129,60 @@ public class DeltaLakeCredentialIsolationTest {
         // authority only get separate clients when their fingerprints differ.
         Assertions.assertNotEquals(credentialFingerprintOf(nation.getDeltaLakeEngine()),
                 credentialFingerprintOf(supplier.getDeltaLakeEngine()));
+        Assertions.assertTrue(HadoopExt.getInstance().getCredentialFingerprint(
+                configurationOf(nation.getDeltaLakeEngine())).isEmpty());
+    }
+
+    @Test
+    public void testAzureSnapshotClientsAreIsolatedFromCatalogClients() throws Exception {
+        useAzureCredentials();
+        Configuration nation = configurationOf(metastore.getLatestSnapshot("db1", "nation").getDeltaLakeEngine());
+        Configuration sameNation = configurationOf(metastore.getLatestSnapshot("db1", "nation").getDeltaLakeEngine());
+        Configuration supplier = configurationOf(metastore.getLatestSnapshot("db1", "supplier").getDeltaLakeEngine());
+        Assertions.assertFalse(HadoopExt.getInstance().getCredentialFingerprint(nation).isEmpty());
+        Assertions.assertTrue(HadoopExt.getInstance().getCredentialFingerprint(metastore.hdfsConfiguration).isEmpty());
+        Assertions.assertNotEquals(HadoopExt.getInstance().getCredentialFingerprint(nation),
+                HadoopExt.getInstance().getCredentialFingerprint(supplier));
+
+        Configuration catalogConf = new Configuration(metastore.hdfsConfiguration);
+        credentialForTable.apply("nation").applyToConfiguration(catalogConf);
+        Assertions.assertEquals(HadoopExt.getInstance().getCloudConfString(catalogConf),
+                HadoopExt.getInstance().getCloudConfString(nation));
+        Assertions.assertTrue(HadoopExt.getInstance().getCredentialFingerprint(catalogConf).isEmpty());
+        Assertions.assertEquals(HadoopExt.getInstance().getCredentialFingerprint(nation),
+                HadoopExt.getInstance().getCredentialFingerprint(sameNation));
+    }
+
+    @Test
+    public void testAzureSnapshotRespectsDisabledFileSystemCache() throws Exception {
+        useAzureCredentials();
+        metastore.hdfsConfiguration.setBoolean("fs.abfss.impl.disable.cache", true);
+        Configuration snapshot = configurationOf(metastore.getLatestSnapshot("db1", "nation").getDeltaLakeEngine());
+        Assertions.assertTrue(HadoopExt.getInstance().getCredentialFingerprint(snapshot).isEmpty());
+        URI uri = URI.create(tablePathPrefix);
+        try (FileSystem first = FileSystem.get(uri, snapshot); FileSystem second = FileSystem.get(uri, snapshot)) {
+            Assertions.assertNotSame(first, second);
+        }
+    }
+
+    @Test
+    public void testAzureSnapshotUsesDefaultFileSystemAndCatalogCredentials() throws Exception {
+        useAzureCredentials();
+        credentialForTable.apply("catalog").applyToConfiguration(metastore.hdfsConfiguration);
+        credentialForTable = table -> null;
+        metastore.hdfsConfiguration.set("fs.defaultFS", tablePathPrefix);
+        tablePathPrefix = "/warehouse/";
+        Configuration snapshot = configurationOf(metastore.getLatestSnapshot("db1", "nation").getDeltaLakeEngine());
+        Assertions.assertFalse(HadoopExt.getInstance().getCredentialFingerprint(snapshot).isEmpty());
+        Assertions.assertTrue(HadoopExt.getInstance().getCredentialFingerprint(metastore.hdfsConfiguration).isEmpty());
+    }
+
+    private void useAzureCredentials() {
+        tablePathPrefix = "abfss://snapshot@account.dfs.core.windows.net/";
+        metastore.hdfsConfiguration.setClass("fs.abfss.impl", RawLocalFileSystem.class, FileSystem.class);
+        credentialForTable = table -> CloudConfigurationFactory.buildCloudConfigurationForStorage(ImmutableMap.of(
+                CloudConfigurationConstants.AZURE_ADLS2_STORAGE_ACCOUNT, "account",
+                CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN, "sas-" + table));
     }
 
     private static CloudConfiguration vendedCredentialFor(String tableName) {
