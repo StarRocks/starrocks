@@ -654,6 +654,9 @@ private:
     int _reserve_chunk_size = 0;
 
     bool _inited = false;
+    // Set when start_read_ahead() failed to initialize the reader, which may have left it partly initialized: _init()
+    // returns it instead of initializing again.
+    Status _read_ahead_init_status;
     // Until the first get_next after the iterator was opened or reused returns.
     bool _first_chunk_pending = true;
     bool _one_time_setup_done = false;
@@ -1020,6 +1023,7 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
 }
 
 Status SegmentIterator::_init() {
+    RETURN_IF_ERROR(_read_ahead_init_status);
     auto st = _init_internal();
     if (st.is_not_found()) {
         // NOTE: this may cause the metric increasing twice the call path is from segment::open.
@@ -1061,6 +1065,7 @@ Status SegmentIterator::reset_for_reuse(const SegmentReadOptions& options) {
     _reserve_chunk_size =
             static_cast<int32_t>(std::min(static_cast<uint32_t>(options.chunk_size), _segment->num_rows()));
     _inited = false;
+    _read_ahead_init_status = Status::OK();
     return Status::OK();
 }
 
@@ -1189,7 +1194,14 @@ Status SegmentIterator::_init_scan_range_and_context() {
 
 Status SegmentIterator::start_read_ahead(bool* started) {
     if (!_inited) {
-        RETURN_IF_ERROR(_init());
+        Status st = _init();
+        if (!st.ok()) {
+            // The read returns this status when the reader's turn comes. An end of file (e.g. every row deleted) only
+            // means there is nothing to read, so the readers after it may still start.
+            _read_ahead_init_status = st;
+            *started = st.is_end_of_file();
+            return st.is_end_of_file() ? Status::OK() : st;
+        }
         _inited = true;
     }
     // A reader with nothing left to read has nothing to fetch either; one without a window does not read ahead.
@@ -5263,6 +5275,7 @@ void SegmentIterator::close() {
     }
     _one_time_setup_done = false;
     _inited = false;
+    _read_ahead_init_status = Status::OK();
 }
 
 // put the field that has predicated on it ahead of those without one, for handle late

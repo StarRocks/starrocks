@@ -1529,9 +1529,15 @@ public:
     explicit WarmableFileSystem(std::shared_ptr<FileSystem> fs) : _fs(std::move(fs)) {}
 
     std::atomic<int64_t> warms{0};
+    // The next segment reader that opens a file whose name ends with this fails to open it, once.
+    std::string fail_once;
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& fname) override {
+        if (opts.remote_read_retainable && !fail_once.empty() && fname.ends_with(fail_once)) {
+            fail_once.clear();
+            return Status::IOError("injected");
+        }
         ASSIGN_OR_RETURN(auto file, _fs->new_random_access_file(opts, fname));
         std::shared_ptr<io::SeekableInputStream> stream = std::make_shared<WarmableStream>(std::move(file), &warms);
         return std::make_unique<RandomAccessFile>(std::move(stream), fname);
@@ -1697,6 +1703,88 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_ahead_starts_segment_windows) {
     EXPECT_EQ(0, stats.segment_read_ahead_started);
     EXPECT_EQ(0, stats.remote_prefetch_blocks);
     EXPECT_EQ(warms, fs->warms.load());
+}
+
+// A segment reader that fails to initialize while it is started early is not initialized again when its turn comes,
+// which could read with what the failed initialization left behind: its read returns the error, as it does when the
+// reader is initialized at its turn.
+TEST_F(LakeDuplicateTabletReaderTest, test_read_ahead_keeps_init_error) {
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    std::string last_segment;
+    {
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+        ASSERT_OK(writer->open());
+        for (int s = 0; s < 3; s++) {
+            std::vector<int> k(20000);
+            std::iota(k.begin(), k.end(), s * 20000);
+            auto c0 = Int32Column::create();
+            auto c1 = Int32Column::create();
+            c0->append_numbers(k.data(), k.size() * sizeof(int));
+            c1->append_numbers(k.data(), k.size() * sizeof(int));
+            ASSERT_OK(writer->write(Chunk({std::move(c0), std::move(c1)}, _schema)));
+            ASSERT_OK(writer->finish());
+        }
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(false);
+        rowset->set_id(1);
+        for (const auto& file : writer->segments()) {
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
+            last_segment = file.path;
+        }
+        writer->close();
+    }
+    _tablet_metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    ASSIGN_OR_ABORT(auto local_fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
+    auto fs = std::make_shared<WarmableFileSystem>(local_fs);
+    const bool scheduler_was_enabled = remote_io_scheduler_enabled();
+    DeferOp restore([&] { g_remote_io_scheduler_enabled.store(scheduler_was_enabled); });
+    g_remote_io_scheduler_enabled.store(true);
+    ConfigResetGuard<int32_t> window_guard(&config::remote_prefetch_window_blocks, 128);
+
+    // Reads the whole tablet with the last segment's file failing to open once; returns the first error.
+    auto scan = [&](int32_t segments_ahead, int64_t* rows, OlapReaderStatistics* stats) {
+        ConfigResetGuard<int32_t> ahead_guard(&config::lake_scan_read_ahead_segments, segments_ahead);
+        fs->fail_once = last_segment;
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+        CHECK_OK(reader->prepare());
+        TabletReaderParams params;
+        params.reader_type = ReaderType::READER_QUERY;
+        params.lake_io_opts.fill_data_cache = true;
+        params.lake_io_opts.fs = fs;
+        params.lake_io_opts.remote_read = RemoteReadContext::for_query(1, 1, 0, 42);
+        CHECK_OK(reader->open(params));
+        auto chunk = ChunkFactory::new_chunk(*_schema, 4096);
+        *rows = 0;
+        Status st;
+        while (true) {
+            chunk->reset();
+            st = reader->get_next(chunk.get());
+            if (!st.ok()) {
+                break;
+            }
+            *rows += chunk->num_rows();
+        }
+        reader->close();
+        *stats = reader->stats();
+        return st;
+    };
+
+    int64_t rows = 0;
+    OlapReaderStatistics stats;
+    // Started early: the failed start stops the read-ahead, and the reader's turn returns the error.
+    Status st = scan(16, &rows, &stats);
+    EXPECT_TRUE(st.is_io_error()) << st;
+    EXPECT_EQ(1, stats.segment_read_ahead_started);
+    EXPECT_EQ(40000, rows);
+    // Initialized at its turn: the same error.
+    st = scan(0, &rows, &stats);
+    EXPECT_TRUE(st.is_io_error()) << st;
+    EXPECT_EQ(0, stats.segment_read_ahead_started);
+    EXPECT_EQ(40000, rows);
 }
 
 // A non-split query scan reads ahead across the segments of a rowset, not only across rowsets. While the remote I/O
