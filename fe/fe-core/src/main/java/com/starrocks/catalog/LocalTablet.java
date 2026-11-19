@@ -294,30 +294,48 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     public void getQueryableReplicas(List<Replica> allQueryableReplicas, List<Replica> localReplicas,
                                      long visibleVersion, long localBeId, int schemaHash) {
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+            int initialSize = allQueryableReplicas.size();
+            List<Replica> decommissionedReplicas = null;
             for (Replica replica : replicas) {
-                if (replica.isBad() || replica.isErrorState()) {
+                if (!isReadableAtVersion(replica, visibleVersion, schemaHash)) {
                     continue;
                 }
-
-                // Skip the missing version replica
-                if (replica.getLastFailedVersion() > 0) {
-                    continue;
+                if (replica.getState().canQuery()) {
+                    allQueryableReplicas.add(replica);
+                    if (localBeId != -1 && replica.getBackendId() == localBeId) {
+                        localReplicas.add(replica);
+                    }
+                } else if (replica.getState() == ReplicaState.DECOMMISSION) {
+                    if (decommissionedReplicas == null) {
+                        decommissionedReplicas = Lists.newArrayList();
+                    }
+                    decommissionedReplicas.add(replica);
                 }
-
-                ReplicaState state = replica.getState();
-                if (state.canQuery()) {
-                    // replica.getSchemaHash() == -1 is for compatibility
-                    if (replica.checkVersionCatchUp(visibleVersion, false)
-                            && replica.getMinReadableVersion() <= visibleVersion
-                            && (replica.getSchemaHash() == -1 || replica.getSchemaHash() == schemaHash)) {
-                        allQueryableReplicas.add(replica);
-                        if (localBeId != -1 && replica.getBackendId() == localBeId) {
+            }
+            // A balance source can still hold the only readable version while the new replica
+            // is being repaired. Reading it must not restore its loadable state or its watermark.
+            if (allQueryableReplicas.size() == initialSize && decommissionedReplicas != null) {
+                allQueryableReplicas.addAll(decommissionedReplicas);
+                if (localBeId != -1) {
+                    for (Replica replica : decommissionedReplicas) {
+                        if (replica.getBackendId() == localBeId) {
                             localReplicas.add(replica);
                         }
                     }
                 }
             }
         }
+    }
+
+    private static boolean isReadableAtVersion(Replica replica, long visibleVersion, int schemaHash) {
+        long failedVersion = replica.getLastFailedVersion();
+        // A failure in a later load does not invalidate the version requested by this query.
+        // Still check the actual replica version: lastFailedVersion is not the first missing version.
+        return !replica.isBad() && !replica.isErrorState()
+                && (failedVersion <= 0 || failedVersion > visibleVersion)
+                && replica.checkVersionCatchUp(visibleVersion, false)
+                && replica.getMinReadableVersion() <= visibleVersion
+                && (replica.getSchemaHash() == -1 || replica.getSchemaHash() == schemaHash);
     }
 
     @Override
@@ -328,30 +346,21 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     public int getQueryableReplicasSize(long visibleVersion, int schemaHash) {
-        int size = 0;
+        int normalSize = 0;
+        int decommissionedSize = 0;
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
-                if (replica.isBad() || replica.isErrorState()) {
+                if (!isReadableAtVersion(replica, visibleVersion, schemaHash)) {
                     continue;
                 }
-
-                // Skip the missing version replica
-                if (replica.getLastFailedVersion() > 0) {
-                    continue;
-                }
-
-                ReplicaState state = replica.getState();
-                if (state.canQuery()) {
-                    // replica.getSchemaHash() == -1 is for compatibility
-                    if (replica.checkVersionCatchUp(visibleVersion, false)
-                            && replica.getMinReadableVersion() <= visibleVersion
-                            && (replica.getSchemaHash() == -1 || replica.getSchemaHash() == schemaHash)) {
-                        size++;
-                    }
+                if (replica.getState().canQuery()) {
+                    normalSize++;
+                } else if (replica.getState() == ReplicaState.DECOMMISSION) {
+                    decommissionedSize++;
                 }
             }
         }
-        return size;
+        return normalSize > 0 ? normalSize : decommissionedSize;
     }
 
     public Replica getReplicaById(long replicaId) {
