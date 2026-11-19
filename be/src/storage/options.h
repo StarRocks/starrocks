@@ -66,7 +66,7 @@ struct EngineOptions {
 struct LakeIOOptions {
     // Cache remote file locally on read requests.
     // This options can be ignored if the underlying filesystem does not support local cache.
-    bool fill_data_cache = false;
+    bool fill_data_cache = true;
 
     bool skip_disk_cache = false;
     // Specify different buffer size for different read scenarios
