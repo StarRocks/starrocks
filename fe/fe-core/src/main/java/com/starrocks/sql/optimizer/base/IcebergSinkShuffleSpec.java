@@ -161,6 +161,10 @@ public class IcebergSinkShuffleSpec implements ConnectorSinkShuffleSpec {
 
         for (PartitionField field : spec.fields()) {
             String sourceColumnName = icebergSchema.findColumnName(field.sourceId());
+            // a V1 void field whose source column was dropped has no source column
+            if (sourceColumnName == null) {
+                continue;
+            }
             boolean isTimestampWithZone =
                     icebergSchema.findType(field.sourceId()).equals(Types.TimestampType.withZone());
             int sourceColumnIndex = -1;
