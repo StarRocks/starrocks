@@ -220,8 +220,19 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     @Override
     public List<String> listTables(ConnectContext context, String dbName) {
         validateNotUnderLock();
-        List<TableIdentifier> tableIdentifiers = delegate.listTables(Namespace.of(dbName));
-        return tableIdentifiers.stream().map(TableIdentifier::name).collect(Collectors.toCollection(ArrayList::new));
+        List<String> names = delegate.listTables(Namespace.of(dbName)).stream()
+                .map(TableIdentifier::name)
+                .collect(Collectors.toCollection(ArrayList::new));
+        names.addAll(listViews(context, dbName));
+        return names;
+    }
+
+    @Override
+    public List<String> listViews(ConnectContext context, String dbName) {
+        validateNotUnderLock();
+        return delegate.listViews(Namespace.of(dbName)).stream()
+                .map(TableIdentifier::name)
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
     @Override
