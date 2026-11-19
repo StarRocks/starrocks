@@ -166,7 +166,7 @@ public class NativeGeoTypeTest {
     @Test
     public void testSemanticWireFixture() throws Exception {
         // Shared with the BE FrontendWireFixture test: no column/storage wrapper.
-        String wire = "0a1a08001216081e2a120801180122094f47433a435253383428e621";
+        String wire = "0a1a08001216081e2a12080110011a094f47433a435253383420e621";
         var codec = ProtobufProxy.create(PTypeDesc.class);
         ScalarType type = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, descriptor(PrimitiveType.GEOGRAPHY));
         assertEquals(type, TypeDeserializer.fromProtobuf(codec.decode(HexFormat.of().parseHex(wire))));
@@ -178,14 +178,14 @@ public class NativeGeoTypeTest {
         // Produced by BE TypeDescriptor::to_thrift/to_protobuf with direct geo type metadata,
         // then serialized with Thrift TBinaryProtocol and protobuf SerializeAsString respectively.
         String[] protobufWires = {
-                "0a2508001221081e10ffffffffffffffffff012a120801180122094f47433a435253383428e621",
-                "0a2508001221081f10ffffffffffffffffff012a120802180622094f47433a435253383428e621"
+                "0a2508001221081e10ffffffffffffffffff012a12080110011a094f47433a435253383420e621",
+                "0a2508001221081f10ffffffffffffffffff012a12080210061a094f47433a435253383420e621"
         };
         String[] thriftWires = {
                 "0f00010c00000001080001000000000c00020800010000001e080002ffffffff0c000608000100000001"
-                        + "080003000000010b0004000000094f47433a4352533834080005000010e600000000",
+                        + "080002000000010b0003000000094f47433a4352533834080004000010e600000000",
                 "0f00010c00000001080001000000000c00020800010000001f080002ffffffff0c000608000100000002"
-                        + "080003000000060b0004000000094f47433a4352533834080005000010e600000000"
+                        + "080002000000060b0003000000094f47433a4352533834080004000010e600000000"
         };
         PrimitiveType[] primitives = {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY};
         var codec = ProtobufProxy.create(PTypeDesc.class);
