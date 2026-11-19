@@ -22,6 +22,7 @@ import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.type.VarcharType;
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -317,5 +318,87 @@ public class ClickhouseSchemaResolverTest {
 
         long count = resolver.getTableRowCount(connection, "testdb", "tbl1");
         Assertions.assertEquals(-1L, count, "Should return -1 when total_rows is NULL (e.g. Distributed engine)");
+    }
+
+    // -------------------------------------------------------------------------
+    // getPartitions tests
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void testGetPartitionsUsesPartsModificationTimeWhenAvailable() throws SQLException {
+        ClickhouseSchemaResolver resolver = new ClickhouseSchemaResolver(properties);
+        JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", VarcharType.VARCHAR)),
+                Lists.newArrayList(), "test", "catalog", properties);
+        MockResultSet partsRs = new MockResultSet("parts");
+        partsRs.addColumn("max_modification_time", Arrays.asList("2023-08-02 00:00:00"));
+
+        new Expectations() {
+            {
+                connection.prepareStatement(anyString);
+                result = preparedStatement;
+                minTimes = 1;
+
+                preparedStatement.executeQuery();
+                result = partsRs;
+                minTimes = 1;
+                maxTimes = 1;
+            }
+        };
+
+        List<Partition> partitions = resolver.getPartitions(connection, jdbcTable);
+        Assertions.assertEquals(1, partitions.size());
+        Assertions.assertEquals("tbl1", partitions.get(0).getPartitionName());
+    }
+
+    @Test
+    public void testGetPartitionsFallsBackToMetadataTimeWhenPartsEmpty() throws SQLException {
+        // Non-MergeTree engines (Distributed/Memory/Log/...) have no rows in system.parts.
+        ClickhouseSchemaResolver resolver = new ClickhouseSchemaResolver(properties);
+        JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", VarcharType.VARCHAR)),
+                Lists.newArrayList(), "test", "catalog", properties);
+        MockResultSet emptyPartsRs = new MockResultSet("parts");
+        emptyPartsRs.addColumn("max_modification_time", Arrays.asList());
+        MockResultSet metaRs = new MockResultSet("meta");
+        metaRs.addColumn("metadata_modification_time", Arrays.asList("2023-08-01 00:00:00"));
+
+        new Expectations() {
+            {
+                connection.prepareStatement(anyString);
+                result = preparedStatement;
+                minTimes = 2;
+
+                preparedStatement.executeQuery();
+                returns(emptyPartsRs, metaRs);
+            }
+        };
+
+        List<Partition> partitions = resolver.getPartitions(connection, jdbcTable);
+        Assertions.assertEquals(1, partitions.size());
+        Assertions.assertEquals("tbl1", partitions.get(0).getPartitionName());
+    }
+
+    @Test
+    public void testGetPartitionsFallsBackToCurrentTimeWhenBothEmpty() throws SQLException {
+        ClickhouseSchemaResolver resolver = new ClickhouseSchemaResolver(properties);
+        JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", VarcharType.VARCHAR)),
+                Lists.newArrayList(), "test", "catalog", properties);
+        MockResultSet emptyPartsRs = new MockResultSet("parts");
+        emptyPartsRs.addColumn("max_modification_time", Arrays.asList());
+        MockResultSet emptyMetaRs = new MockResultSet("meta");
+        emptyMetaRs.addColumn("metadata_modification_time", Arrays.asList());
+
+        new Expectations() {
+            {
+                connection.prepareStatement(anyString);
+                result = preparedStatement;
+                minTimes = 2;
+
+                preparedStatement.executeQuery();
+                returns(emptyPartsRs, emptyMetaRs);
+            }
+        };
+
+        List<Partition> partitions = resolver.getPartitions(connection, jdbcTable);
+        Assertions.assertEquals(1, partitions.size(), "Should still return one synthetic partition when both queries are empty");
     }
 }
