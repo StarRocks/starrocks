@@ -28,6 +28,7 @@
 #include "storage/compaction.h"
 #include "storage/compaction_context.h"
 #include "storage/compaction_manager.h"
+#include "storage/compaction_task_factory.h"
 #include "storage/compaction_utils.h"
 #include "storage/cumulative_compaction.h"
 #include "storage/rowset/rowset_factory.h"
@@ -35,6 +36,8 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
+#include "storage/tablet_reader.h"
+#include "storage/tablet_reader_params.h"
 #include "testutil/assert.h"
 
 namespace starrocks {
@@ -234,6 +237,79 @@ public:
         }
 
         return Status::OK();
+    }
+
+    void check_cross_version_shortcut(bool overlapping) {
+        create_tablet_schema(AGG_KEYS);
+        auto tablet_meta = std::make_shared<TabletMeta>();
+        create_tablet_meta(tablet_meta.get());
+        auto tablet = Tablet::create_tablet_from_meta(tablet_meta, _engine->get_stores()[0]);
+        ASSERT_OK(tablet->init());
+        init_compaction_context(tablet);
+        tablet_meta->set_enable_shortcut_compaction(true);
+
+        RowsetWriterContext context;
+        create_rowset_writer_context(&context, 2);
+        context.segments_overlap = overlapping ? OVERLAPPING : NONOVERLAPPING;
+        std::unique_ptr<RowsetWriter> writer;
+        ASSERT_OK(RowsetFactory::create_rowset_writer(context, &writer));
+        auto schema = ChunkHelper::convert_schema(_tablet_schema);
+        for (int segment = 0; segment < 2; ++segment) {
+            auto chunk = ChunkHelper::new_chunk(schema, 2);
+            for (int i = 1; i <= 2; ++i) {
+                int32_t key = i + (overlapping ? 0 : segment * 2);
+                chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(key));
+                chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(Slice("key")));
+                chunk->get_column_by_index(2)->as_mutable_ptr()->append_datum(Datum(key * 10));
+            }
+            ASSERT_OK(writer->add_chunk(*chunk));
+            ASSERT_OK(writer->flush());
+        }
+        ASSIGN_OR_ABORT(auto source, writer->build());
+        ASSERT_EQ(2, source->num_segments());
+        tablet->overwrite_rowset(source, 2);
+        ASSERT_EQ(Version(0, 2), source->version());
+
+        create_rowset_writer_context(&context, 3);
+        ASSERT_OK(RowsetFactory::create_rowset_writer(context, &writer));
+        ASSERT_OK(writer->flush());
+        ASSIGN_OR_ABORT(auto empty, writer->build());
+        ASSERT_OK(tablet->add_rowset(empty));
+        ASSERT_EQ(0, empty->num_rows());
+
+        // Exercise shortcut selection independently of the scheduling policy.
+        CompactionTaskFactory factory(Version(0, 3), tablet, {source, empty}, 2, BASE_COMPACTION);
+        auto task = factory.create_compaction_task();
+        ASSERT_NE(nullptr, task);
+        task->run();
+        ASSERT_EQ(COMPACTION_SUCCESS, task->compaction_task_state());
+        EXPECT_EQ(!overlapping, task->is_shortcut_compaction());
+        auto output = tablet->get_rowset_by_version(Version(0, 3));
+        ASSERT_NE(nullptr, output);
+        EXPECT_EQ(NONOVERLAPPING, output->rowset_meta()->segments_overlap());
+        EXPECT_EQ(overlapping ? 2 : 4, output->num_rows());
+        EXPECT_OK(output->verify());
+
+        TabletReader reader(tablet, Version(0, 3), schema);
+        TabletReaderParams params;
+        params.skip_aggregation = false;
+        ASSERT_OK(reader.prepare());
+        ASSERT_OK(reader.open(params));
+        auto chunk = ChunkHelper::new_chunk(schema, 4);
+        int rows = 0;
+        while (true) {
+            chunk->reset();
+            auto st = reader.get_next(chunk.get());
+            if (st.is_end_of_file()) break;
+            ASSERT_OK(st);
+            for (size_t i = 0; i < chunk->num_rows(); ++i) {
+                const auto key = chunk->get_column_by_index(0)->get(i).get_int32();
+                EXPECT_EQ(++rows, key);
+                EXPECT_EQ(key * (overlapping ? 20 : 10), chunk->get_column_by_index(2)->get(i).get_int32());
+            }
+        }
+        EXPECT_EQ(overlapping ? 2 : 4, rows);
+        reader.close();
     }
 
     void SetUp() override {
@@ -935,6 +1011,14 @@ TEST_F(DefaultCompactionPolicyTest, test_shortcut_compaction) {
     ASSERT_EQ(1, versions.size());
     ASSERT_EQ(0, versions[0].first);
     ASSERT_EQ(2, versions[0].second);
+}
+
+TEST_F(DefaultCompactionPolicyTest, cross_version_overlap_disables_shortcut_compaction) {
+    check_cross_version_shortcut(true);
+}
+
+TEST_F(DefaultCompactionPolicyTest, cross_version_nonoverlap_keeps_shortcut_compaction) {
+    check_cross_version_shortcut(false);
 }
 
 } // namespace starrocks
