@@ -19,7 +19,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
-import com.starrocks.proto.GeoCoordinateSystemPB;
 import com.starrocks.proto.GeoEdgeAlgorithmPB;
 import com.starrocks.proto.GeoTypeDescPB;
 import com.starrocks.proto.PTypeDesc;
@@ -28,7 +27,6 @@ import com.starrocks.sql.common.TypeManager;
 import com.starrocks.statistic.base.ColumnClassifier;
 import com.starrocks.statistic.base.ComplexTypeColumnStats;
 import com.starrocks.statistic.base.PrimitiveTypeColumnStats;
-import com.starrocks.thrift.TGeoCoordinateSystem;
 import com.starrocks.thrift.TGeoEdgeAlgorithm;
 import com.starrocks.thrift.TGeoTypeDesc;
 import com.starrocks.thrift.TPrimitiveType;
@@ -168,7 +166,7 @@ public class NativeGeoTypeTest {
     @Test
     public void testSemanticWireFixture() throws Exception {
         // Shared with the BE FrontendWireFixture test: no column/storage wrapper.
-        String wire = "0a1c08001218081e2a1408011001180122094f47433a435253383428e621";
+        String wire = "0a1a08001216081e2a12080110011a094f47433a435253383420e621";
         var codec = ProtobufProxy.create(PTypeDesc.class);
         ScalarType type = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, descriptor(PrimitiveType.GEOGRAPHY));
         assertEquals(type, TypeDeserializer.fromProtobuf(codec.decode(HexFormat.of().parseHex(wire))));
@@ -180,14 +178,14 @@ public class NativeGeoTypeTest {
         // Produced by BE TypeDescriptor::to_thrift/to_protobuf with direct geo type metadata,
         // then serialized with Thrift TBinaryProtocol and protobuf SerializeAsString respectively.
         String[] protobufWires = {
-                "0a2708001223081e10ffffffffffffffffff012a1408011001180122094f47433a435253383428e621",
-                "0a2708001223081f10ffffffffffffffffff012a1408021002180622094f47433a435253383428e621"
+                "0a2508001221081e10ffffffffffffffffff012a12080110011a094f47433a435253383420e621",
+                "0a2508001221081f10ffffffffffffffffff012a12080210061a094f47433a435253383420e621"
         };
         String[] thriftWires = {
                 "0f00010c00000001080001000000000c00020800010000001e080002ffffffff0c000608000100000001"
-                        + "08000200000001080003000000010b0004000000094f47433a4352533834080005000010e600000000",
+                        + "080002000000010b0003000000094f47433a4352533834080004000010e600000000",
                 "0f00010c00000001080001000000000c00020800010000001f080002ffffffff0c000608000100000002"
-                        + "08000200000002080003000000060b0004000000094f47433a4352533834080005000010e600000000"
+                        + "080002000000060b0003000000094f47433a4352533834080004000010e600000000"
         };
         PrimitiveType[] primitives = {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY};
         var codec = ProtobufProxy.create(PTypeDesc.class);
@@ -204,36 +202,6 @@ public class NativeGeoTypeTest {
             assertEquals(HexFormat.of().formatHex(codec.encode(proto)),
                     HexFormat.of().formatHex(codec.encode(TypeSerializer.toProtobuf(expected))));
             assertEquals(thrift, TypeSerializer.toThrift(expected));
-        }
-    }
-
-    @Test
-    public void testWireCoordinateSystemFollowsLogicalType() {
-        // The descriptor no longer keeps the coordinate system. It is still written for peers that require it,
-        // and a value sent by a peer is ignored, whether it is absent or disagrees with the logical type.
-        for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
-            boolean geography = primitive == PrimitiveType.GEOGRAPHY;
-            ScalarType type = ScalarType.createGeoType(primitive, descriptor(primitive));
-
-            TTypeDesc thrift = TypeSerializer.toThrift(type);
-            TGeoTypeDesc thriftGeo = thrift.types.get(0).scalar_type.geo;
-            assertTrue(thriftGeo.isSetCoordinate_system());
-            assertEquals(geography ? TGeoCoordinateSystem.SPHERICAL : TGeoCoordinateSystem.CARTESIAN,
-                    thriftGeo.coordinate_system);
-            thriftGeo.setCoordinate_system(geography ? TGeoCoordinateSystem.CARTESIAN : TGeoCoordinateSystem.SPHERICAL);
-            assertEquals(type, TypeDeserializer.fromThrift(thrift));
-            thriftGeo.unsetCoordinate_system();
-            assertEquals(type, TypeDeserializer.fromThrift(thrift));
-
-            PTypeDesc proto = TypeSerializer.toProtobuf(type);
-            GeoTypeDescPB protoGeo = proto.types.get(0).scalarType.geo;
-            assertEquals(geography ? GeoCoordinateSystemPB.GEO_COORDINATE_SYSTEM_SPHERICAL
-                    : GeoCoordinateSystemPB.GEO_COORDINATE_SYSTEM_CARTESIAN, protoGeo.coordinateSystem);
-            protoGeo.coordinateSystem = geography ? GeoCoordinateSystemPB.GEO_COORDINATE_SYSTEM_CARTESIAN
-                    : GeoCoordinateSystemPB.GEO_COORDINATE_SYSTEM_SPHERICAL;
-            assertEquals(type, TypeDeserializer.fromProtobuf(proto));
-            protoGeo.coordinateSystem = null;
-            assertEquals(type, TypeDeserializer.fromProtobuf(proto));
         }
     }
 
