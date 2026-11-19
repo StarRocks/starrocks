@@ -92,14 +92,6 @@ Status check_geometry_boundary(const GeoColumn& column) {
     return Status::OK();
 }
 
-Status check_geometry_compute_boundary(const GeoColumn& column) {
-    RETURN_IF_ERROR(check_geometry_boundary(column));
-    if (column.descriptor().storage.dimension != GEO_DIMENSION_XY) {
-        return Status::NotSupported("GEOMETRY compute functions require XY dimension");
-    }
-    return Status::OK();
-}
-
 struct GeoInput {
     const GeoColumn* data;
     const NullableColumn* nullable;
@@ -116,10 +108,11 @@ StatusOr<GeoInput> geo_input(const ColumnPtr& column) {
     const Column* source = constant ? down_cast<const ConstColumn*>(column.get())->data_column().get() : column.get();
     const auto* nullable = source->is_nullable() ? down_cast<const NullableColumn*>(source) : nullptr;
     const auto* geo = down_cast<const GeoColumn*>(nullable ? nullable->data_column().get() : source);
+    // The storage dimension is a producer claim; kernels decode each row's own WKB header and reject Z/M rows.
     if constexpr (Type == TYPE_GEOGRAPHY) {
         RETURN_IF_ERROR(check_geography_boundary(*geo));
     } else {
-        RETURN_IF_ERROR(check_geometry_compute_boundary(*geo));
+        RETURN_IF_ERROR(check_geometry_boundary(*geo));
     }
     return GeoInput{geo, nullable, constant};
 }
@@ -1575,7 +1568,7 @@ StatusOr<MutableColumnPtr> create_centroid_result(FunctionContext* context) {
     if constexpr (Type == TYPE_GEOGRAPHY) {
         RETURN_IF_ERROR(check_geography_boundary(*data));
     } else {
-        RETURN_IF_ERROR(check_geometry_compute_boundary(*data));
+        RETURN_IF_ERROR(check_geometry_boundary(*data));
     }
     return NullableColumn::create(std::move(data), NullColumn::create());
 }
