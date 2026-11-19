@@ -904,6 +904,14 @@ You can use one of the following syntaxes to view the schema of a Paimon table:
    SELECT count(*) FROM <table_name> LIMIT 10;
    ```
 
+For append-only tables, a scan with `WHERE` and `LIMIT` can plan candidate files incrementally. StarRocks continues requesting files when filtering produces too few rows, and stops further planning after execution reaches the limit. For example:
+
+```SQL
+SELECT * FROM <table_name> WHERE <column_name> > 100 LIMIT 10;
+```
+
+This optimization requires connector incremental scan ranges to be enabled. Small limits also reduce the number of scan ranges requested per batch. Manifest batches and in-flight scan tasks can still read ahead; a query with no matching rows may need to inspect all candidate files. Primary-key tables, deletion vectors, data evolution, and SDK query authorization retain native Paimon split planning so that merge and access-control semantics are preserved.
+
 ### Inspect the planned scan size
 
 `EXPLAIN VERBOSE` and `EXPLAIN COSTS` include candidate file metrics for each
@@ -947,6 +955,8 @@ deletion/index files, and does not account for column projection, page pruning,
 cache hits, or execution stopping early. It is a scan-size signal, not measured
 I/O, output size, or an execution limit. In particular, a small `LIMIT` can still
 select large files.
+
+For incremental scans, these metrics accumulate only the splits planned so far. Before file planning starts, the metrics block is absent; until planning completes, the values are partial totals and do not describe the entire table.
 
 ## Load data from Paimon
 

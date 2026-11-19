@@ -904,6 +904,14 @@ FE 发布 Paimon 原生快照后，数据才对读取可见。空输入的 INSER
    SELECT count(*) FROM <table_name> LIMIT 10;
    ```
 
+对于 append-only 表，带有 `WHERE` 和 `LIMIT` 的扫描可以按需规划候选文件。过滤后行数不足时，StarRocks 会继续请求文件；执行端达到 LIMIT 后，停止后续规划。例如：
+
+```SQL
+SELECT * FROM <table_name> WHERE <column_name> > 100 LIMIT 10;
+```
+
+此优化需要启用连接器的增量扫描范围。较小的 LIMIT 也会减少每批请求的扫描范围数量。Manifest 批次和已提交的扫描任务仍可能提前读取部分文件；没有匹配行的查询可能需要检查所有候选文件。主键表、删除向量、数据演进和 SDK 查询授权场景仍使用 Paimon 原生的 split 规划，以保留合并和访问控制语义。
+
 ### 查看计划扫描的数据量
 
 `EXPLAIN VERBOSE` 和 `EXPLAIN COSTS` 会为每个 Paimon 扫描节点显示候选文件指标，普通 `EXPLAIN` 不显示该指标块：
@@ -937,6 +945,8 @@ FE 发布 Paimon 原生快照后，数据才对读取可见。空输入的 INSER
 `cardinality` 仍表示优化器估算的输出行数，可能受谓词和 `LIMIT` 影响而减少。`data_file_rows` 不会被该输出估算值截断。
 字节数统计整个候选数据文件，不包含删除文件或索引文件，也不考虑列投影、页裁剪、缓存命中或提前结束执行。
 它反映候选扫描数据量，不表示实际 I/O、输出大小或执行限制。因此，即使 `LIMIT` 很小，仍可能选中很大的文件。
+
+对于增量扫描，这些指标只累加目前已规划的 split。文件规划开始前不显示该指标块；规划完成前，这些值是部分累计值，不表示整张表的总量。
 
 ## 从 Paimon 导入数据
 
