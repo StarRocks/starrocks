@@ -17,14 +17,22 @@ package com.starrocks.type;
 import java.util.Objects;
 
 /**
- * A native GEOGRAPHY or GEOMETRY type with its semantic descriptor. Like the other scalar type classes, it only
- * constructs a {@link ScalarType}; the descriptor is still stored on {@link ScalarType}.
+ * A native GEOGRAPHY or GEOMETRY type. It holds the single copy of the semantic descriptor, which is validated
+ * against the primitive type on construction and never changes afterwards. The descriptor is not persisted in FE
+ * metadata.
  */
 public class GeoType extends ScalarType {
+    private final GeoTypeDescriptor descriptor;
+
     public GeoType(PrimitiveType primitiveType, GeoTypeDescriptor descriptor) {
         super(primitiveType);
         Objects.requireNonNull(descriptor).validate(primitiveType);
-        setGeoDescriptor(descriptor);
+        this.descriptor = descriptor;
+    }
+
+    @Override
+    public GeoTypeDescriptor getGeoDescriptor() {
+        return descriptor;
     }
 
     /** Creates a GEOGRAPHY type in {@code crs} with spherical edges. */
