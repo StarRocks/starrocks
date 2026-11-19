@@ -590,6 +590,63 @@ void SchemaChangeUtils::init_materialized_params(const TAlterTabletReqV2& reques
     }
 }
 
+namespace {
+int signed_integer_width(LogicalType type) {
+    switch (type) {
+    case TYPE_TINYINT:
+        return 8;
+    case TYPE_SMALLINT:
+        return 16;
+    case TYPE_INT:
+        return 32;
+    case TYPE_BIGINT:
+        return 64;
+    case TYPE_LARGEINT:
+        return 128;
+    default:
+        return 0;
+    }
+}
+
+// Strict order is required before another sort key, or when equal keys must be aggregated.
+// A non-decreasing conversion alone can reverse the suffix of a composite key.
+bool is_order_preserving_conversion(const TabletColumn& from, const TabletColumn& to, bool strict) {
+    auto src = from.type();
+    auto dst = to.type();
+    if (is_decimalv3_field_type(src) && is_decimalv3_field_type(dst)) {
+        return to.scale() >= from.scale() && to.precision() - to.scale() >= from.precision() - from.scale();
+    }
+    if (src == dst) {
+        return true;
+    }
+    int src_width = signed_integer_width(src);
+    int dst_width = signed_integer_width(dst);
+    if (src_width != 0 && dst_width >= src_width) {
+        return true;
+    }
+    if (dst == TYPE_DOUBLE && src_width != 0 && src_width <= 64) {
+        return src_width <= 32 || !strict;
+    }
+    if (src == TYPE_CHAR && dst == TYPE_VARCHAR) {
+        return true;
+    }
+    if (src == TYPE_DATE && dst == TYPE_DATETIME) {
+        return true;
+    }
+    if (src == TYPE_DATETIME && dst == TYPE_DATE) {
+        return !strict;
+    }
+    if (src == TYPE_DECIMALV2 && dst == TYPE_DECIMAL128) {
+        return to.precision() == 27 && to.scale() == 9;
+    }
+    // The schema-change FLOAT converter rounds through a six-decimal string.
+    if (src == TYPE_FLOAT && dst == TYPE_DOUBLE) {
+        return !strict;
+    }
+    return false;
+}
+} // namespace
+
 Status SchemaChangeUtils::parse_request(const TabletSchemaCSPtr& base_schema, const TabletSchemaCSPtr& new_schema,
                                         ChunkChanger* chunk_changer,
                                         const MaterializedViewParamMap& materialized_view_param_map,
@@ -728,6 +785,22 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
         // so we use sorting schema change to sort and merge the data.
         *sc_sorting = true;
         return Status::OK();
+    }
+
+    const auto& sort_keys = new_schema->sort_key_idxes();
+    for (size_t i = 0; i < sort_keys.size(); ++i) {
+        const auto& mapping = chunk_changer->get_schema_mapping()[sort_keys[i]];
+        // MV expressions do not use ChunkChanger's type converters.
+        if (mapping.ref_column < 0 || mapping.mv_expr_ctx != nullptr) {
+            continue;
+        }
+        bool strict = i + 1 < sort_keys.size() || new_schema->keys_type() != DUP_KEYS;
+        if (!is_order_preserving_conversion(base_schema->column(mapping.ref_column), new_schema->column(sort_keys[i]),
+                                            strict)) {
+            *sc_sorting = true;
+            *sc_directly = false;
+            return Status::OK();
+        }
     }
 
     if (base_schema->num_short_key_columns() != new_schema->num_short_key_columns()) {
