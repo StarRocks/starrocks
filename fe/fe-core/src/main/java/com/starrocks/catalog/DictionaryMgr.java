@@ -81,6 +81,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -358,6 +359,20 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
 
     public Dictionary getDictionaryByName(String dictionaryName) {
         return dictionariesMapById.get(dictionariesIdMapByName.get(dictionaryName));
+    }
+
+    // Called from query threads, so take the lock: the map is a plain HashMap. CANCEL REFRESH holds the lock
+    // while it calls every node, so wait at most timeoutMs. Returns null if the dictionary does not exist or
+    // the lock stays busy.
+    public Dictionary tryGetDictionaryById(long dictionaryId, long timeoutMs) throws InterruptedException {
+        if (!lock.tryLock(timeoutMs, TimeUnit.MILLISECONDS)) {
+            return null;
+        }
+        try {
+            return dictionariesMapById.get(dictionaryId);
+        } finally {
+            lock.unlock();
+        }
     }
 
     private void resigerUnfinishedToRunningUnlocked(long dictionaryId) {

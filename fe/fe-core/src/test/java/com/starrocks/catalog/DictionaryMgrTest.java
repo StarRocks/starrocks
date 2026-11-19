@@ -34,10 +34,13 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.locks.Lock;
 
 public class DictionaryMgrTest {
     @Mocked
@@ -418,5 +421,45 @@ public class DictionaryMgrTest {
         long nextSchedulableTime = autoRefreshDictionary.getNextSchedulableTime();
         Assertions.assertTrue(nextSchedulableTime >= before + 10000L);
         Assertions.assertTrue(nextSchedulableTime <= System.currentTimeMillis() + 10000L);
+    }
+
+    @Test
+    public void testTryGetDictionaryByIdGivesUpWhenTheLockIsBusy() throws Exception {
+        DictionaryMgr localDictionaryMgr = new DictionaryMgr();
+        Dictionary dictionary = new Dictionary(7, "busy_dict", "t", "default_catalog", "testDb",
+                List.of("key"), List.of("value"), null);
+        localDictionaryMgr.addDictionary(dictionary);
+        Assertions.assertSame(dictionary, localDictionaryMgr.tryGetDictionaryById(7, 100));
+        Assertions.assertNull(localDictionaryMgr.tryGetDictionaryById(8, 100));
+
+        // Another thread holds the lock, as CANCEL REFRESH does while it calls every node.
+        Field lockField = DictionaryMgr.class.getDeclaredField("lock");
+        lockField.setAccessible(true);
+        Lock lock = (Lock) lockField.get(localDictionaryMgr);
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Thread holder = new Thread(() -> {
+            lock.lock();
+            try {
+                locked.countDown();
+                release.await();
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            } finally {
+                lock.unlock();
+            }
+        });
+        holder.start();
+        locked.await();
+        try {
+            long start = System.currentTimeMillis();
+            Assertions.assertNull(localDictionaryMgr.tryGetDictionaryById(7, 50));
+            long elapsed = System.currentTimeMillis() - start;
+            Assertions.assertTrue(elapsed >= 50, "waited " + elapsed + " ms");
+            Assertions.assertTrue(elapsed < 2000, "waited " + elapsed + " ms");
+        } finally {
+            release.countDown();
+            holder.join();
+        }
     }
 }
