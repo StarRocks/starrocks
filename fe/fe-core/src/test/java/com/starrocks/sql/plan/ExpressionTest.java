@@ -1189,6 +1189,20 @@ public class ExpressionTest extends PlanTestBase {
                 planFragment.contains("PREDICATES: 1: v1 <= 2, 2: v2 IS NOT NULL, NOT (if(3: v3 > 2, FALSE, TRUE))"));
     }
 
+    /** <=> has no opposite operator, so inside a negated AND/OR it must stay as NOT (a <=> b). */
+    @Test
+    public void testNotOverNullSafeEqualInCompound() throws Exception {
+        String plan = getFragmentPlan("select v1 from t0 where not (v1 <=> 1 and v2 = 2)");
+        assertContains(plan, "PREDICATES: (NOT (1: v1 <=> 1)) OR (2: v2 != 2)");
+
+        plan = getFragmentPlan("select v1 from t0 where not (v1 <=> v2 or v3 > 2)");
+        assertContains(plan, "NOT (1: v1 <=> 2: v2), 3: v3 <= 2");
+
+        plan = getFragmentPlan("select v1, count(*) from t0 group by v1 having not (v1 <=> 1 or count(*) = 2)");
+        assertContains(plan, "NOT (1: v1 <=> 1)");
+        assertContains(plan, "4: count != 2");
+    }
+
     @Test
     public void testCaseWhenType2() throws Exception {
         String sql =

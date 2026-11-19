@@ -58,7 +58,7 @@ frontmatter.
 
 ### 3. Categorize and rewrite
 Apply `references/categorization.md`:
-- Map each PR to `Behavior Changes` / `Improvements` / `Bug fixes`; exclude
+- Map each PR to `Behavior Changes` / `Improvements` / `Security` / `Bug fixes`; exclude
   `[Doc]`/`[UT]`/`[Tool]` and behavior-neutral `[Refactor]`.
 - Rewrite each title into a user-facing sentence (strip prefixes/scope, backtick
   identifiers), grouping closely related PRs with space-separated links.

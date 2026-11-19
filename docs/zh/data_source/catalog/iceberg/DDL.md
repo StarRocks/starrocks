@@ -184,6 +184,7 @@ ORDER BY (column_name [ASC | DESC] [NULLS FIRST | NULLS LAST], ...)
 - `write.metadata.metrics.default`: StarRocks 写入数据文件的列统计信息的默认 metrics 模式。选项：`none`、`counts`、`truncate(N)`、`full`（默认：`truncate(16)`）。`none` 不写统计信息，`counts` 只写值个数和 NULL 个数，`truncate(N)` 还会写上下界，其中 STRING 和 BINARY 的上下界截断为 N 个字符（字节），`full` 写不截断的上下界。
 - `write.metadata.metrics.column.<col>`: 列 `<col>` 的 metrics 模式，覆盖默认模式。选项与 `write.metadata.metrics.default` 相同。
 - `write.metadata.metrics.max-inferred-column-defaults`: 未设置 `write.metadata.metrics.default` 时，只有前 N 列使用默认的 `truncate(16)`，其余列为 `none`（默认：`100`）。
+- `identifier-fields`: 用于标识行的列名，多个列以逗号分隔，写入 Iceberg schema 的 identifier fields。每个列必须是顶层的 `NOT NULL` 列，且为 FLOAT、DOUBLE 以外的基本类型。该属性只能在 CREATE TABLE 时设置。
 
 ### 示例
 

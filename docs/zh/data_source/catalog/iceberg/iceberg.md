@@ -37,23 +37,21 @@ Iceberg catalog 是一种外部 catalog，从 StarRocks v2.4 开始支持。使�
 
 | Iceberg 类型 | StarRocks 类型 | 读取条件 |
 | --- | --- | --- |
-| `geometry` | `GEOMETRY` | 支持 Iceberg 格式版本 3 及以上的 Parquet 表中的顶层列。CRS 必须为 `OGC:CRS84`（默认值）或 `EPSG:<n>`，其中 `n` 仅包含 ASCII 数字，且表示一个正的 32 位有符号整数。其他 CRS 标识符映射为 `UNKNOWN_TYPE`。 |
+| `geometry` | `GEOMETRY` | 支持 Iceberg 格式版本 3 及以上的 Parquet 表中的顶层列和嵌套字段。CRS 必须为 `OGC:CRS84`（默认值）或 `EPSG:<n>`，其中 `n` 仅包含 ASCII 数字，且表示一个正的 32 位有符号整数。其他 CRS 标识符映射为 `UNKNOWN_TYPE`。 |
 
 StarRocks 原样保留 CRS 标识符。`OGC:CRS84` 和 `EPSG:4326` 是不同的标识符。使用 `ST_AsText(g)` 或 `ST_AsBinary(g)` 返回 GEOMETRY 值。直接输出 GEOMETRY 列（包括输出包含此列的 `SELECT *`）会在查询分析阶段报错。
 
-对于格式版本 3 及以上且使用 Parquet 数据文件的 Iceberg 表，StarRocks 支持读取数组元素、映射值和结构体字段中的 `GEOGRAPHY`。这些容器可以继续嵌套，例如包含 `GEOGRAPHY` 字段的结构体数组。支持的 CRS 为 `OGC:CRS84`，边算法为球面算法。
+对于格式版本 3 及以上且使用 Parquet 数据文件的 Iceberg 表，可以通过 SQL 读取数组元素、映射值和结构体字段中的 `GEOGRAPHY` 和 `GEOMETRY`，也支持包含 GEO 字段的结构体数组等多层嵌套。`GEOGRAPHY` 支持 `OGC:CRS84` 和球面边算法。嵌套 `GEOMETRY` 遵循与顶层 `GEOMETRY` 相同的 CRS 规则。
 
 要返回嵌套值，请先访问叶字段，再显式序列化。例如，对数组使用 `ST_AsText(places[1])`，对映射使用 `ST_AsText(places_by_id[42])`，对结构体使用 `ST_AsBinary(location.shape)`。不支持直接输出含 GEO 字段的容器。
 
-如果容器包含 GEO 映射键、嵌套的 `GEOMETRY` 或不受支持的地理空间元数据，则整个容器映射为 `UNKNOWN_TYPE`。仍不支持 GEO 比较、分组、排序、基于空间边界的裁剪、包含嵌套 GEO 的持久化 SQL 定义，以及在内表中存储这些容器。
+如果容器在任意层级包含 GEO 映射键，或包含不受支持的地理空间元数据，则整个容器映射为 `UNKNOWN_TYPE`。仍不支持 GEO 比较、分组、排序、基于空间边界的裁剪、包含嵌套 GEO 的持久化 SQL 定义，以及在内表中存储这些容器。
 
-滚动升级时，请先将所有 BE 和 CN 节点升级到支持读取 Parquet 嵌套 `GEOGRAPHY` 的版本，再升级 FE 节点。
+滚动升级时，必须先将所有 BE 和 CN 节点升级到支持读取 Parquet 中相应嵌套 GEO 类型的版本，再将 FE 节点升级到启用这些 SQL 读取的版本。
 
 ## 使用注意事项
 
 使用 StarRocks 查询 Iceberg 数据时，请注意以下几点：
-
-BE 和 CN 的 Parquet 读取器支持读取 Iceberg 数组元素、映射值和结构体字段中嵌套的 `GEOMETRY`。在 FE 的后续版本单独启用查询之前，FE 会将这些列映射为 `UNKNOWN_TYPE`。升级到该 FE 版本前，请先将所有 BE 和 CN 节点升级到支持读取嵌套 `GEOMETRY` 的版本。
 
 | **文件格式** | **压缩格式**                                   | **Iceberg 表版本**                                           |
 | --------------- | ---------------------------------------------- | ------------------------------------------------------------ |

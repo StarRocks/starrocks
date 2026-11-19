@@ -21,6 +21,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergPartitionKey;
 import com.starrocks.catalog.IcebergTable;
@@ -90,6 +91,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnPosition;
 import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropPartitionColumnClause;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -200,6 +202,7 @@ import org.apache.iceberg.util.TableScanUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
@@ -3765,6 +3768,13 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertThrows(DdlException.class,
                 () -> metadata.alterTable(new ConnectContext(), new AlterTableStmt(createTableRef(tableName), clauses)));
 
+        // identifier fields are schema metadata, not a settable property
+        clauses.clear();
+        clauses.add(new ModifyTablePropertiesClause(new HashMap<>(Map.of("identifier-fields", "id"))));
+        DdlException identifierError = Assertions.assertThrows(DdlException.class,
+                () -> metadata.alterTable(new ConnectContext(), new AlterTableStmt(createTableRef(tableName), clauses)));
+        Assertions.assertTrue(identifierError.getMessage().contains("identifier-fields"), identifierError.getMessage());
+
         // add & drop partition columns
         {
             SlotRef partitionSlot = new SlotRef(tableName, "dt");
@@ -6326,6 +6336,29 @@ public class IcebergMetadataTest extends TableTestBase {
         }
     }
 
+    private CreateTableStmt buildIcebergCreateTableStmt(String dbName, String tableName,
+                                                        Map<String, String> properties) {
+        CreateTableStmt stmt = new CreateTableStmt(
+                false,
+                false,
+                new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME, dbName, tableName)),
+                        null, NodePosition.ZERO),
+                Lists.newArrayList(
+                        new ColumnDef("c1", new TypeDef(TypeFactory.createType(PrimitiveType.INT)))),
+                "iceberg",
+                null,
+                null,
+                null,
+                properties == null ? new HashMap<>() : properties,
+                new HashMap<>(),
+                null);
+        List<Column> columns = stmt.getColumnDefs().stream()
+                .map(def -> ColumnBuilder.buildGeneratedColumn(null, def))
+                .collect(Collectors.toList());
+        stmt.setColumns(columns);
+        return stmt;
+    }
+
     @Test
     public void testListTableDeltaTraitsSkipsReplaceSnapshots() {
         // Step 1: APPEND FILE_A
@@ -6365,6 +6398,81 @@ public class IcebergMetadataTest extends TableTestBase {
         // Verify the returned trait corresponds to snap3, not snap2
         TvrTableDelta delta = traits.get(0).getTvrDelta();
         Assertions.assertEquals(snap3.snapshotId(), delta.end().get());
+    }
+
+    private Map<String, String> createTableWithProperties(IcebergCatalog icebergCatalog, Map<String, String> props)
+            throws DdlException {
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, String>> propsCaptor = ArgumentCaptor.forClass(Map.class);
+        Mockito.when(icebergCatalog.createTable(Mockito.eq(connectContext), Mockito.eq("db"), Mockito.eq("tbl"),
+                Mockito.any(Schema.class), Mockito.any(PartitionSpec.class), Mockito.isNull(), Mockito.isNull(),
+                propsCaptor.capture())).thenReturn(true);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
+                Executors.newSingleThreadExecutor(), new IcebergCatalogProperties(DEFAULT_CONFIG));
+        Assertions.assertTrue(metadata.createTable(connectContext,
+                buildIcebergCreateTableStmt("db", "tbl", new HashMap<>(props))));
+        return propsCaptor.getValue();
+    }
+
+    @Test
+    public void testCreateTableRejectsValuesIcebergCannotParse() {
+        List<Map<String, String>> invalid = List.of(
+                Map.of("write.parquet.compression-codec", "xxx"),
+                Map.of("write.parquet.compression-codec", "zlib"),
+                Map.of("write.parquet.compression-codec", "none"),
+                Map.of("write.delete.parquet.compression-codec", "xxx"),
+                Map.of("write.format.default", "xxx"),
+                Map.of("write.format.default", "metadata"),
+                Map.of("write.target-file-size-bytes", "-100"),
+                Map.of("write.target-file-size-bytes", "0"),
+                Map.of("write.target-file-size-bytes", "abc"),
+                Map.of("write.target-file-size-bytes", " 134217728 "),
+                // the SR alias lands on the parquet codec key of a parquet table
+                Map.of("compression_codec", "xxx"),
+                Map.of("compression_codec", "zlib"),
+                Map.of("compression_codec", "none"));
+        for (Map<String, String> props : invalid) {
+            IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
+            String value = props.values().iterator().next();
+            StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                    () -> createTableWithProperties(icebergCatalog, props), props.toString());
+            Assertions.assertTrue(e.getMessage().contains("'" + value + "'"), e.getMessage());
+            Mockito.verify(icebergCatalog, Mockito.never()).createTable(Mockito.any(), Mockito.any(), Mockito.any(),
+                    Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any());
+        }
+    }
+
+    @Test
+    public void testCreateTableKeepsValidValues() throws DdlException {
+        Map<String, String> passed = createTableWithProperties(Mockito.mock(IcebergCatalog.class), Map.of(
+                "write.parquet.compression-codec", "ZSTD",
+                "write.delete.parquet.compression-codec", "lzo",
+                "write.target-file-size-bytes", "134217728",
+                "WRITE.PARQUET.COMPRESSION-CODEC", "xxx",
+                "foo.bar", "baz"));
+        Assertions.assertEquals("ZSTD", passed.get("write.parquet.compression-codec"));
+        Assertions.assertEquals("lzo", passed.get("write.delete.parquet.compression-codec"));
+        Assertions.assertEquals("134217728", passed.get("write.target-file-size-bytes"));
+        Assertions.assertEquals("xxx", passed.get("WRITE.PARQUET.COMPRESSION-CODEC"));
+
+        // an alias codec without a format lands on the parquet codec key
+        passed = createTableWithProperties(Mockito.mock(IcebergCatalog.class), Map.of("compression_codec", "snappy"));
+        Assertions.assertEquals("snappy", passed.get("write.parquet.compression-codec"));
+
+        passed = createTableWithProperties(Mockito.mock(IcebergCatalog.class), Map.of("write.format.default", "avro"));
+        Assertions.assertEquals("avro", passed.get("write.format.default"));
+
+        // an alias codec that lands on the ORC key is not checked against the parquet codecs
+        passed = createTableWithProperties(Mockito.mock(IcebergCatalog.class),
+                Map.of("file_format", "orc", "compression_codec", "lzo"));
+        Assertions.assertEquals("orc", passed.get("write.format.default"));
+        Assertions.assertEquals("lzo", passed.get("write.orc.compression-codec"));
+
+        // without the file_format alias, the alias codec follows the native default format
+        passed = createTableWithProperties(Mockito.mock(IcebergCatalog.class),
+                Map.of("write.format.default", "orc", "compression_codec", "zlib"));
+        Assertions.assertEquals("zlib", passed.get("write.orc.compression-codec"));
+        Assertions.assertFalse(passed.containsKey("write.parquet.compression-codec"));
     }
 
     @Test
@@ -6983,5 +7091,94 @@ public class IcebergMetadataTest extends TableTestBase {
                 (TableRelation) ((SelectRelation) stmt.getQueryRelation()).getRelation();
         Assertions.assertNotNull(tableRelation.getTvrVersionRange());
         Assertions.assertEquals(Optional.of(s1), tableRelation.getTvrVersionRange().end());
+    }
+
+    private Schema createTableWithIdentifierFields(String identifierFields) throws DdlException {
+        IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
+        ArgumentCaptor<Schema> schemaCaptor = ArgumentCaptor.forClass(Schema.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, String>> propsCaptor = ArgumentCaptor.forClass(Map.class);
+        Mockito.when(icebergCatalog.createTable(Mockito.eq(connectContext), Mockito.eq("db"), Mockito.eq("tbl"),
+                schemaCaptor.capture(), Mockito.any(PartitionSpec.class), Mockito.isNull(), Mockito.isNull(),
+                propsCaptor.capture())).thenReturn(true);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
+                Executors.newSingleThreadExecutor(), new IcebergCatalogProperties(DEFAULT_CONFIG));
+
+        Map<String, String> props = new HashMap<>();
+        props.put("identifier-fields", identifierFields);
+        CreateTableStmt stmt = buildIcebergCreateTableStmt("db", "tbl", props);
+        stmt.setColumns(Lists.newArrayList(
+                new Column("id", IntegerType.BIGINT, false),
+                new Column("region", VARCHAR, false),
+                new Column("v", INT, true)));
+        Assertions.assertTrue(metadata.createTable(connectContext, stmt));
+        Assertions.assertFalse(propsCaptor.getValue().containsKey("identifier-fields"));
+        return schemaCaptor.getValue();
+    }
+
+    @Test
+    public void testCreateTableSetsIdentifierFields() throws DdlException {
+        Assertions.assertEquals(Set.of("id"), createTableWithIdentifierFields("id").identifierFieldNames());
+        Assertions.assertEquals(Set.of("id", "region"),
+                createTableWithIdentifierFields(" ID , region ").identifierFieldNames());
+    }
+
+    @Test
+    public void testCreateTableRejectsInvalidIdentifierFields() {
+        DdlException e = Assertions.assertThrows(DdlException.class, () -> createTableWithIdentifierFields("v"));
+        Assertions.assertTrue(e.getMessage().contains("not a required field"), e.getMessage());
+        e = Assertions.assertThrows(DdlException.class, () -> createTableWithIdentifierFields("id,nope"));
+        Assertions.assertTrue(e.getMessage().contains("nope"), e.getMessage());
+        Assertions.assertThrows(DdlException.class, () -> createTableWithIdentifierFields(" , "));
+        e = Assertions.assertThrows(DdlException.class, () -> createTableWithIdentifierFields("id,ID"));
+        Assertions.assertTrue(e.getMessage().contains("Duplicate"), e.getMessage());
+    }
+
+    @Test
+    public void testShowCreateTableWithIdentifierFields() {
+        Schema schema = new Schema(List.of(required(1, "id", Types.LongType.get()),
+                required(2, "region", Types.StringType.get())), Set.of(2, 1));
+        IcebergTable table = IcebergTable.builder()
+                .setSrTableName("t_ident")
+                .setCatalogName(CATALOG_NAME)
+                .setCatalogDBName("db")
+                .setCatalogTableName("t_ident")
+                .setFullSchema(IcebergApiConverter.toFullSchemas(schema))
+                .setNativeTable(create(schema, PartitionSpec.unpartitioned(), "t_ident", 2))
+                .build();
+        table.getNativeTable().updateProperties().set("identifier-fields", "stale").commit();
+
+        String createSql = AstToStringBuilder.getExternalCatalogTableDdlStmt(table);
+        Assertions.assertTrue(createSql.contains("\"identifier-fields\" = \"id,region\""), createSql);
+        Assertions.assertFalse(createSql.contains("stale"), createSql);
+    }
+
+    @Test
+    public void testShowCreateTableOmitsNestedIdentifierFields() {
+        Schema schema = new Schema(List.of(required(1, "id", Types.LongType.get()),
+                required(2, "key", Types.StructType.of(required(3, "kid", Types.LongType.get())))), Set.of(1, 3));
+        Assertions.assertNull(IcebergApiConverter.toIdentifierFieldsProperty(schema));
+    }
+
+    @Test
+    public void testShowCreateTableOmitsIdentifierFieldsWithComma() {
+        Schema schema = new Schema(List.of(required(1, "id", Types.LongType.get()),
+                required(2, "a,b", Types.LongType.get())), Set.of(1, 2));
+        Assertions.assertNull(IcebergApiConverter.toIdentifierFieldsProperty(schema));
+        // also when a,b resolve to other columns
+        schema = new Schema(List.of(required(1, "a", Types.LongType.get()), required(2, "b", Types.LongType.get()),
+                required(3, "a,b", Types.LongType.get())), Set.of(3));
+        Assertions.assertNull(IcebergApiConverter.toIdentifierFieldsProperty(schema));
+    }
+
+    @Test
+    public void testShowCreateTableOmitsIdentifierFieldsThatResolveElsewhere() {
+        // CREATE trims names and matches case-insensitively, so these would resolve to the other column
+        Schema schema = new Schema(List.of(required(1, "id", Types.LongType.get()),
+                required(2, " id", Types.LongType.get())), Set.of(2));
+        Assertions.assertNull(IcebergApiConverter.toIdentifierFieldsProperty(schema));
+        schema = new Schema(List.of(required(1, "id", Types.LongType.get()),
+                required(2, "ID", Types.LongType.get())), Set.of(2));
+        Assertions.assertNull(IcebergApiConverter.toIdentifierFieldsProperty(schema));
     }
 }

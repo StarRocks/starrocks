@@ -31,8 +31,6 @@ namespace {
 GeoColumnDescriptor descriptor(GeoLogicalTypePB kind = GEO_LOGICAL_TYPE_GEOGRAPHY) {
     GeoColumnDescriptor desc;
     desc.type.logical_type = kind;
-    desc.type.coordinate_system =
-            kind == GEO_LOGICAL_TYPE_GEOGRAPHY ? GEO_COORDINATE_SYSTEM_SPHERICAL : GEO_COORDINATE_SYSTEM_CARTESIAN;
     desc.type.edge_algorithm =
             kind == GEO_LOGICAL_TYPE_GEOGRAPHY ? GEO_EDGE_ALGORITHM_SPHERICAL : GEO_EDGE_ALGORITHM_PLANAR;
     desc.type.crs = "OGC:CRS84";

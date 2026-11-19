@@ -2210,6 +2210,23 @@ StatusOr<VersionedTablet> TabletManager::get_tablet(int64_t tablet_id, int64_t v
     return VersionedTablet(this, std::move(metadata));
 }
 
+// Whether a cached |segment| can serve a request for |tablet_schema|.
+static bool segment_schema_matches(Segment& segment, const TabletSchemaPtr& tablet_schema) {
+    const auto cached_schema = segment.tablet_schema_share_ptr();
+    return cached_schema != nullptr && cached_schema->id() == tablet_schema->id() &&
+           cached_schema->schema_version() == tablet_schema->schema_version() &&
+           cached_schema->num_columns() == tablet_schema->num_columns();
+}
+
+SegmentPtr TabletManager::lookup_opened_segment(const FileInfo& segment_info, const TabletSchemaPtr& tablet_schema) {
+    auto segment = metacache()->lookup_segment(MetacacheKey::segment(segment_info), /*count_miss=*/false);
+    if (segment == nullptr || !segment->has_opened() ||
+        (tablet_schema != nullptr && !segment_schema_matches(*segment, tablet_schema))) {
+        return nullptr;
+    }
+    return segment;
+}
+
 StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
                                                  const LakeIOOptions& lake_io_opts, bool fill_meta_cache,
                                                  TabletSchemaPtr tablet_schema, OlapReaderStatistics* stats) {
@@ -2233,7 +2250,7 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
         } else {
             ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(segment_info.path));
         }
-        segment = Segment::create(fs, segment_info, segment_id, tablet_schema, this);
+        segment = std::make_shared<Segment>(std::move(fs), segment_info, segment_id, tablet_schema, this);
         if (fill_meta_cache) {
             TEST_SYNC_POINT_CALLBACK("TabletManager::load_segment:before_cache_insert", &segment);
             // NOTE: the returned segment may be not the same as the parameter passed in
@@ -2245,10 +2262,7 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
         }
     }
     if (tablet_schema != nullptr) {
-        const auto cached_schema = segment->tablet_schema_share_ptr();
-        if (cached_schema == nullptr || cached_schema->id() != tablet_schema->id() ||
-            cached_schema->schema_version() != tablet_schema->schema_version() ||
-            cached_schema->num_columns() != tablet_schema->num_columns()) {
+        if (!segment_schema_matches(*segment, tablet_schema)) {
             // A physical lookup hit can still be unusable for this request's schema.
             // Count the final cache winner, including an insert-if-absent race.
             g_segment_cache_schema_reject_total << 1;
@@ -2256,13 +2270,13 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
             // only the entry we just checked so subsequent requests can reuse this schema. A racing
             // replacement or eviction must not be overwritten; serve this request privately instead.
             auto fs = segment_info.fs ? segment_info.fs : segment->shared_file_system();
-            auto replacement =
-                    Segment::create(fs, segment_info, segment_id, tablet_schema, fill_meta_cache ? this : nullptr);
+            auto replacement = std::make_shared<Segment>(fs, segment_info, segment_id, tablet_schema,
+                                                         fill_meta_cache ? this : nullptr);
             if (fill_meta_cache) {
                 TEST_SYNC_POINT_CALLBACK("TabletManager::load_segment:before_cache_replace", nullptr);
                 if (!_metacache->replace_segment_if_matches(cache_key, segment.get(), replacement)) {
-                    replacement = Segment::create(fs, segment_info, segment_id, tablet_schema,
-                                                  /*tablet_manager=*/nullptr);
+                    replacement = std::make_shared<Segment>(std::move(fs), segment_info, segment_id,
+                                                            std::move(tablet_schema), /*tablet_manager=*/nullptr);
                 }
             }
             segment = std::move(replacement);

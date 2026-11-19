@@ -90,7 +90,8 @@ class IcebergGeoColumnStatisticsTest {
 
     static Stream<Arguments> geoTables() {
         return Stream.of(Types.GeographyType.crs84(), Types.GeometryType.crs84(),
-                        Types.StructType.of(Types.NestedField.optional(3, "point", Types.GeographyType.crs84())))
+                        Types.StructType.of(Types.NestedField.optional(3, "point", Types.GeographyType.crs84())),
+                        Types.StructType.of(Types.NestedField.optional(3, "point", Types.GeometryType.of("EPSG:3857"))))
                 .flatMap(type -> Stream.of(Arguments.of(type, 3, 3), Arguments.of(type, 4, 4), Arguments.of(type, 3, 4)));
     }
 

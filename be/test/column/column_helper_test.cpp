@@ -37,11 +37,9 @@ protected:
     static TypeDescriptor geo_type(LogicalType primitive) {
         const bool geography = primitive == TYPE_GEOGRAPHY;
         return TypeDescriptor::create_geo_type(
-                primitive,
-                GeoTypeDescriptor{geography ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY,
-                                  geography ? GEO_COORDINATE_SYSTEM_SPHERICAL : GEO_COORDINATE_SYSTEM_CARTESIAN,
-                                  geography ? GEO_EDGE_ALGORITHM_KARNEY : GEO_EDGE_ALGORITHM_PLANAR, "custom:geo-crs",
-                                  4326});
+                primitive, GeoTypeDescriptor{geography ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY,
+                                             geography ? GEO_EDGE_ALGORITHM_KARNEY : GEO_EDGE_ALGORITHM_PLANAR,
+                                             "custom:geo-crs", 4326});
     }
 
     MutableColumnPtr create_column() {
@@ -68,6 +66,30 @@ protected:
         return builder.build(true);
     }
 };
+
+// A const column may report size 1 for a chunk of N rows; the row count comes from a non-const column (RB-1379).
+TEST_F(ColumnHelperTest, num_packed_rows_with_size_one_const) {
+    auto const_data = Int32Column::create();
+    const_data->append(7);
+    ColumnPtr const_column = ConstColumn::create(std::move(const_data), 1);
+    auto vector_data = Int32Column::create();
+    for (int32_t v : {1, 2, 3, 4}) {
+        vector_data->append(v);
+    }
+    ColumnPtr vector_column = std::move(vector_data);
+
+    auto [all_const, num_rows] = ColumnHelper::num_packed_rows(Columns{const_column, vector_column});
+    ASSERT_FALSE(all_const);
+    ASSERT_EQ(4, num_rows);
+
+    std::tie(all_const, num_rows) = ColumnHelper::num_packed_rows(Columns{vector_column, const_column});
+    ASSERT_FALSE(all_const);
+    ASSERT_EQ(4, num_rows);
+
+    std::tie(all_const, num_rows) = ColumnHelper::num_packed_rows(Columns{const_column, const_column});
+    ASSERT_TRUE(all_const);
+    ASSERT_EQ(1, num_rows);
+}
 
 TEST_F(ColumnHelperTest, mark_binary_columns_skips_const_null) {
     const auto binary_type = TYPE_VARBINARY_DESC;
