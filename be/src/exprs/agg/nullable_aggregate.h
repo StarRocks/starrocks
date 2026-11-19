@@ -351,7 +351,10 @@ public:
 
         if (columns[0]->is_nullable()) {
             if (columns[0]->is_null(row_num)) {
-                // Always ingore nulls.
+                if constexpr (!IgnoreNull) {
+                    this->data(state).is_null = false;
+                    this->nested_function->process_null(ctx, this->data(state).mutable_nest_state());
+                }
                 return;
             }
             const auto* column = down_cast<const NullableColumn*>(columns[0]);
