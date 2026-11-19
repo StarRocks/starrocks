@@ -15,12 +15,14 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.SubqueryUtils;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -28,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.CorrelatedPredicateRewriter;
@@ -122,10 +125,10 @@ public class PushDownApplyAggFilterRule extends TransformationRule {
             throw new SemanticException(SubqueryUtils.NOT_FOUND_CORRELATED_PREDICATE);
         }
 
-        // @Todo: Can be support contain one EQ predicate
         // check correlation filter
         if (!SubqueryUtils.checkAllIsBinaryEQ(correlationPredicate)) {
-            throw new SemanticException(SubqueryUtils.EXIST_NON_EQ_PREDICATE);
+            return transformNonEQCorrelation(input, apply, aggregate, filterOptExpression.inputAt(0),
+                    correlationPredicate, unCorrelationPredicate, context);
         }
 
         // extract group columns
@@ -181,4 +184,48 @@ public class PushDownApplyAggFilterRule extends TransformationRule {
         return Lists.newArrayList(newApplyOptExpression);
     }
 
+    /*
+     * The correlation predicate is not a conjunction of equalities, so the inner rows can't be grouped by a join key.
+     * Group them by the distinct outer correlation columns instead, see NonEqCorrelationApplyRewriter:
+     *
+     *   SELECT t0.v1, (SELECT count(*) FROM t1 WHERE t1.v4 = t0.v1 AND t1.v5 < t0.v2) FROM t0
+     * =>
+     *   with cte as (select * from t0)
+     *   select cte.*, ifnull(r.cnt, 0)
+     *   from cte left outer join (
+     *       select d.v1, d.v2, count(*) cnt
+     *       from (select distinct v1, v2 from cte) d inner join t1 on t1.v4 = d.v1 and t1.v5 < d.v2
+     *       group by d.v1, d.v2) r
+     *     on cte.v1 <=> r.v1 and cte.v2 <=> r.v2
+     */
+    private List<OptExpression> transformNonEQCorrelation(OptExpression input, LogicalApplyOperator apply,
+                                                          LogicalAggregationOperator aggregate, OptExpression inner,
+                                                          List<ScalarOperator> correlationPredicate,
+                                                          List<ScalarOperator> unCorrelationPredicate,
+                                                          OptimizerContext context) {
+        if (!apply.isScalar() || !aggregate.getGroupingKeys().isEmpty() || aggregate.getPredicate() != null
+                || aggregate.getProjection() != null || apply.getCorrelationConjuncts() != null
+                || apply.getPredicate() != null || apply.getSubqueryOperator() == null
+                || SubqueryUtils.containsColumnRef(apply.getCorrelationColumnRefs(), inner)) {
+            throw new SemanticException(SubqueryUtils.EXIST_NON_EQ_PREDICATE);
+        }
+
+        // The scalar aggregation returns a row even when no inner row qualifies, but the outer join returns NULL.
+        // ifnull(x, 0) restores count-like aggregations, other aggregations with a non-NULL empty result (e.g.
+        // bitmap_union) are not supported.
+        ColumnRefSet usedColumns = apply.getSubqueryOperator().getUsedColumns();
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregate.getAggregations().entrySet()) {
+            if (usedColumns.contains(entry.getKey()) && ScalarApplyNormalizeCountRule.isNonNullOnEmpty(entry.getValue())
+                    && !ScalarApplyNormalizeCountRule.isZeroOnEmpty(entry.getValue())) {
+                throw new SemanticException(SubqueryUtils.EXIST_NON_EQ_PREDICATE);
+            }
+        }
+        ScalarOperator applyOutput =
+                ScalarApplyNormalizeCountRule.normalizeCount(apply.getSubqueryOperator(), aggregate.getAggregations());
+
+        OptExpression result = new NonEqCorrelationApplyRewriter(input, context).rewrite(inner,
+                Utils.compoundAnd(correlationPredicate), Utils.compoundAnd(unCorrelationPredicate),
+                aggregate.getAggregations(), applyOutput, Maps.newHashMap());
+        return Lists.newArrayList(result);
+    }
 }

@@ -77,41 +77,41 @@ public class ExistentialApply2OuterJoinRule extends TransformationRule {
 
     private List<OptExpression> transformCorrelation(OptExpression input, LogicalApplyOperator apply,
                                                      ExistsPredicateOperator epo, OptimizerContext context) {
-        boolean hasEqPredicate = Utils.extractConjuncts(apply.getCorrelationConjuncts()).stream()
-                .anyMatch(d -> OperatorType.BINARY.equals(d.getOpType()) && BinaryType.EQ
-                        .equals(((BinaryPredicateOperator) d).getBinaryType()));
-
-        if (hasEqPredicate) {
+        if (SubqueryUtils.checkAllIsBinaryEQ(Utils.extractConjuncts(apply.getCorrelationConjuncts()))) {
             return transformCorrelationWithEQ(input, apply, epo, context);
         } else {
-            return transformCorrelationWithOther();
+            return transformCorrelationWithNonEQ(input, apply, epo, context);
         }
     }
 
-    // @Todo: right plan
     // Exists:
-    //       PROJECT(Apply-OutputRef, COUNT(Correlation And Predicate) > 0)
-    //          |
-    //      Aggregate(Group by UniqueKey, COUNT(Correlation And Predicate))
-    //          |
-    //      Cross-Join
-    //       /      \
-    //  UniqueKey    \
-    //    /           \
-    //  LEFT          RIGHT
+    //      Project [..., countRows is not null]
+    //         |
+    //     Left-Outer-Join(outer correlation columns <=> distinct correlation columns)
+    //     /       \
+    //  LEFT      AGG(GROUP BY distinct correlation columns, COUNT(1) as countRows)
+    //               \
+    //             Inner-Join(correlation predicate)
+    //             /        \
+    //   AGG(distinct LEFT    Filter(UnCorrelation)
+    //   correlation columns)   \
+    //                          RIGHT
     //
-    // Not Exists:
-    //       PROJECT(Apply-OutputRef, COUNT(Correlation And Predicate) = 0)
-    //          |
-    //      Aggregate(Group by UniqueKey, COUNT(Correlation And Predicate))
-    //          |
-    //      Cross-Join
-    //       /      \
-    //  UniqueKey    \
-    //    /           \
-    //  LEFT          RIGHT
-    private List<OptExpression> transformCorrelationWithOther() {
-        throw new SemanticException("Not support exists correlation subquery with Non-EQ predicate");
+    // Not Exists: same, with [..., countRows is null]
+    //
+    // LEFT is shared by a CTE, see NonEqCorrelationApplyRewriter.
+    private List<OptExpression> transformCorrelationWithNonEQ(OptExpression input, LogicalApplyOperator apply,
+                                                              ExistsPredicateOperator epo, OptimizerContext context) {
+        Map<ColumnRefOperator, CallOperator> aggregates = Maps.newHashMap();
+        CallOperator countRowsCallOp = SubqueryUtils.createCountRowsOperator();
+        ColumnRefOperator countRows = context.getColumnRefFactory()
+                .create("countRows", countRowsCallOp.getType(), countRowsCallOp.isNullable());
+        aggregates.put(countRows, countRowsCallOp);
+
+        OptExpression result = new NonEqCorrelationApplyRewriter(input, context).rewrite(input.inputAt(1),
+                apply.getCorrelationConjuncts(), apply.getPredicate(), aggregates,
+                new IsNullPredicateOperator(!epo.isNotExists(), countRows), Maps.newHashMap());
+        return Lists.newArrayList(result);
     }
 
     // Exists:
