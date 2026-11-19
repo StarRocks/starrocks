@@ -382,6 +382,43 @@ public class PartitionPruneTest extends PlanTestBase {
     }
 
     @Test
+    public void testGeneratedColumnPruneKeepsNullPartition() throws Exception {
+        // from_unixtime is not defined for every bigint: from_unixtime(-1) is NULL, so a row with c1 = -1
+        // lands in the NULL partition while still satisfying a predicate such as c1 < 1700000000. The
+        // predicate deduced on the generated column says nothing about that partition, so it must not
+        // prune it away.
+        starRocksAssert.withTable("CREATE TABLE t_gen_col_null (" +
+                " c1 bigint NOT NULL," +
+                " c2 bigint," +
+                " c3 varchar(64) NULL AS from_unixtime(c1) " +
+                " ) " +
+                " DUPLICATE KEY(c1) " +
+                " PARTITION BY (c3) " +
+                " PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col_null ADD PARTITION p202401 VALUES IN ('2024-01-01 00:00:00')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col_null ADD PARTITION p202402 VALUES IN ('2024-02-01 00:00:00')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_col_null ADD PARTITION pnull VALUES IN (NULL)");
+
+        // the deduced predicate matches no partition value, the NULL partition is still kept
+        starRocksAssert.query("select count(*) from t_gen_col_null where c1 > 1707000000 ")
+                .explainContains("partitions=1/3");
+        starRocksAssert.query("select count(*) from t_gen_col_null where c1 < 1700000000 ")
+                .explainContains("partitions=1/3");
+        starRocksAssert.query("select count(*) from t_gen_col_null where c1 in (1706000000) ")
+                .explainContains("partitions=1/3");
+        // the deduced predicate still prunes the partitions it does describe
+        starRocksAssert.query("select count(*) from t_gen_col_null where c1 > 1706000000 ")
+                .explainContains("partitions=2/3");
+
+        // a predicate written on the partition column itself is not a deduction: NULL is not greater
+        // than any value, so the NULL partition is pruned exactly as before
+        starRocksAssert.query("select count(*) from t_gen_col_null where c3 > '2024-01-23 00:00:00' ")
+                .explainContains("partitions=1/3");
+        starRocksAssert.query("select count(*) from t_gen_col_null where c3 is null ")
+                .explainContains("partitions=1/3");
+    }
+
+    @Test
     public void testMinMaxPrune_Check() throws Exception {
         starRocksAssert.withTable("create table t5_dup " +
                 "(c1 datetime NOT NULL, c2 int) " +
