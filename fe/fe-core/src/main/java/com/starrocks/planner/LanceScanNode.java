@@ -27,6 +27,7 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
+import com.starrocks.thrift.TLanceScanSplit;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -36,6 +37,9 @@ import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TException;
+import org.apache.thrift.TSerializer;
+import org.apache.thrift.protocol.TBinaryProtocol;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -109,7 +113,15 @@ public class LanceScanNode extends ScanNode {
         hdfsScanRange.setFull_path(lanceTable.getUri());
         // The reader takes its dataset URI from TLanceTable; full_path identifies the range to the scheduler.
         // A single range scans the entire dataset, including every fragment.
-        // Leave split_info unset until fragment enumeration and reader splitting are implemented.
+        if (lanceTable.getDatasetVersion() > 0) {
+            TLanceScanSplit split = new TLanceScanSplit();
+            split.setDataset_version(lanceTable.getDatasetVersion());
+            try {
+                hdfsScanRange.setLance_split_info(new TSerializer(new TBinaryProtocol.Factory()).serialize(split));
+            } catch (TException e) {
+                throw new IllegalStateException("Could not serialize the Lance snapshot version", e);
+            }
+        }
         hdfsScanRange.setFile_length(0);
         hdfsScanRange.setLength(0);
         hdfsScanRange.setFile_format(THdfsFileFormat.LANCE);

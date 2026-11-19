@@ -304,7 +304,7 @@ LanceNativeReader::~LanceNativeReader() {
 }
 
 Status LanceNativeReader::open(RuntimeState* state, const TupleDescriptor* tuple, const std::string& uri,
-                               const TCloudConfiguration& cloud) {
+                               int64_t version, const TCloudConfiguration& cloud) {
     close();
     RETURN_IF_CANCELLED(state);
     _tuple = tuple;
@@ -313,7 +313,7 @@ Status LanceNativeReader::open(RuntimeState* state, const TupleDescriptor* tuple
     _max_chunk_size = state->chunk_size();
     _init_read_fields();
     if (_field_names.empty()) return Status::NotSupported("Lance scan requires a materialized slot");
-    return _open_reader(uri, cloud);
+    return _open_reader(uri, version, cloud);
 }
 
 void LanceNativeReader::_init_read_fields() {
@@ -322,7 +322,8 @@ void LanceNativeReader::_init_read_fields() {
     for (const auto* slot : _tuple->slots()) _field_names.emplace_back(slot->col_name());
 }
 
-Status LanceNativeReader::_open_reader(const std::string& dataset_uri, const TCloudConfiguration& cloud) {
+Status LanceNativeReader::_open_reader(const std::string& dataset_uri, int64_t version,
+                                       const TCloudConfiguration& cloud) {
     std::vector<SrLanceString> fields;
     fields.reserve(_field_names.size());
     for (const auto& name : _field_names) fields.emplace_back(to_lance_string(name));
@@ -331,9 +332,9 @@ Status LanceNativeReader::_open_reader(const std::string& dataset_uri, const TCl
     for (const auto& [key, value] : cloud.cloud_properties)
         properties.push_back({to_lance_string(key), to_lance_string(value)});
     char* error = nullptr;
-    int result = sr_lance_reader_open(to_lance_string(dataset_uri), 0, fields.data(), fields.size(), _max_chunk_size,
-                                      cloud.cloud_type, properties.data(), properties.size(), {is_cancelled, _state},
-                                      &_reader, &error);
+    int result = sr_lance_reader_open(to_lance_string(dataset_uri), version, fields.data(), fields.size(),
+                                      _max_chunk_size, cloud.cloud_type, properties.data(), properties.size(),
+                                      {is_cancelled, _state}, &_reader, &error);
     if (_state->is_cancelled()) {
         sr_lance_free_error(error);
         return Status::Cancelled("Lance scan cancelled");

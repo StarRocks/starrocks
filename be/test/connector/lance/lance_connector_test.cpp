@@ -22,6 +22,7 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
 #include "column/fixed_length_column.h"
+#include "common/util/thrift_util.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/query/fragment_runtime_state.h"
 #include "connector/lance/lance_native_reader.h"
@@ -35,10 +36,11 @@ namespace starrocks::connector {
 class StubLanceScanner final : public LanceNativeReader {
 public:
     explicit StubLanceScanner(int* close_count) : _close_count(close_count) {}
-    Status open(RuntimeState*, const TupleDescriptor* tuple, const std::string& uri,
+    Status open(RuntimeState*, const TupleDescriptor* tuple, const std::string& uri, int64_t version,
                 const TCloudConfiguration& cloud) override {
         this->tuple = tuple;
         this->uri = uri;
+        this->version = version;
         this->cloud = cloud;
         return open_status;
     }
@@ -53,6 +55,7 @@ public:
     void close() override { ++*_close_count; }
     const TupleDescriptor* tuple = nullptr;
     std::string uri;
+    int64_t version = 0;
     TCloudConfiguration cloud;
     Status open_status;
     Status read_status;
@@ -192,11 +195,25 @@ TEST_F(LanceConnectorTest, RejectsUnsupportedCloudBeforeOpeningReader) {
     source->close(_state.get());
 }
 
-TEST_F(LanceConnectorTest, RejectsFragmentSplitsBeforeOpeningReader) {
+TEST_F(LanceConnectorTest, OpensExactlyThePlannedVersion) {
+    TLanceScanSplit split;
+    split.__set_dataset_version(17);
+    ThriftSerializer serializer(false, 128);
+    std::vector<uint8_t> encoded;
+    ASSERT_OK(serializer.serialize(&split, &encoded));
+    _range.hdfs_scan_range.__set_lance_split_info(std::string(encoded.begin(), encoded.end()));
+    LanceDataSourceProvider provider(nullptr, _plan);
+    auto source = provider.create_data_source(_range);
+    ASSERT_OK(source->open(_state.get()));
+    EXPECT_EQ(17, _scanner->version);
+    source->close(_state.get());
+}
+
+TEST_F(LanceConnectorTest, RejectsMalformedSnapshotBeforeOpeningReader) {
     _range.hdfs_scan_range.__set_lance_split_info("fragment");
     LanceDataSourceProvider provider(nullptr, _plan);
     auto source = provider.create_data_source(_range);
-    EXPECT_TRUE(source->open(_state.get()).is_not_supported());
+    EXPECT_FALSE(source->open(_state.get()).ok());
     EXPECT_EQ(nullptr, _scanner);
     source->close(_state.get());
 }

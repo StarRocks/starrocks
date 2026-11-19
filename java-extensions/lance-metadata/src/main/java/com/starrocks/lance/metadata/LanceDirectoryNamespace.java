@@ -69,7 +69,7 @@ public final class LanceDirectoryNamespace {
                     .readOptions(new ReadOptions.Builder().setStorageOptions(storage).build()).build()) {
                 // Namespace JSON types omit details such as decimal precision. Read the persisted schema instead.
                 // getLanceSchema does not allocate Arrow C Data buffers in the FE.
-                return JSON.writeValueAsString(Map.of("location", response.getLocation(), "schema",
+                return JSON.writeValueAsString(Map.of("location", response.getLocation(), "version", dataset.version(), "schema",
                         JSON.readTree(dataset.getLanceSchema().asArrowSchema().toJson())));
             }
         }

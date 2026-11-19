@@ -15,6 +15,7 @@
 #include "connector/lance/lance_connector.h"
 
 #include "base/testutil/sync_point.h"
+#include "common/util/thrift_util.h"
 #include "connector/lance/lance_native_reader.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "runtime/descriptors_ext.h"
@@ -54,15 +55,23 @@ Status LanceDataSource::open(RuntimeState* state) {
         return Status::InternalError("Failed to get tuple descriptor for Lance scan");
     }
 
-    // The dataset URI lives on TLanceTable in the table descriptor (the per-split
-    // payload only carries fragment metadata); read it from LanceTableDescriptor.
+    // The descriptor identifies the dataset; each range selects its read version.
     const auto* lance_table = dynamic_cast<const LanceTableDescriptor*>(_tuple_desc->table_desc());
     if (lance_table == nullptr) {
         return Status::InternalError("Failed to resolve LanceTableDescriptor for Lance scan");
     }
 
-    if (_scan_range.__isset.lance_split_info && !_scan_range.lance_split_info.empty()) {
-        return Status::NotSupported("Lance fragment splits are not supported yet");
+    int64_t version = 0;
+    if (_scan_range.__isset.lance_split_info) {
+        const auto& bytes = _scan_range.lance_split_info;
+        uint32_t length = bytes.size();
+        TLanceScanSplit split;
+        RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<const uint8_t*>(bytes.data()), &length,
+                                               TProtocolType::BINARY, &split));
+        if (length != bytes.size() || !split.__isset.dataset_version || split.dataset_version <= 0) {
+            return Status::InvalidArgument("Invalid Lance snapshot split");
+        }
+        version = split.dataset_version;
     }
     TCloudConfiguration cloud;
     cloud.__set_cloud_type(TCloudType::DEFAULT);
@@ -73,7 +82,7 @@ Status LanceDataSource::open(RuntimeState* state) {
     }
     _scanner = std::make_unique<LanceNativeReader>();
     TEST_SYNC_POINT_CALLBACK("LanceDataSource::open:scanner", &_scanner);
-    RETURN_IF_ERROR(_scanner->open(state, _tuple_desc, std::string(lance_table->lance_dataset_uri()), cloud));
+    RETURN_IF_ERROR(_scanner->open(state, _tuple_desc, std::string(lance_table->lance_dataset_uri()), version, cloud));
     return Status::OK();
 }
 

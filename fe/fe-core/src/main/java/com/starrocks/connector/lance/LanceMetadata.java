@@ -52,15 +52,21 @@ public class LanceMetadata implements ConnectorMetadata {
     private final String rootDatabase;
     private final String storageOptions;
     private final LanceDirectoryCatalog directory;
-    private final Map<String, Long> tableIds = new ConcurrentHashMap<>();
-    private final Map<String, Database> databases = new ConcurrentHashMap<>();
-    private final Map<String, List<Table>> tables = new ConcurrentHashMap<>();
+    private final Map<String, Long> tableIds;
+    private final Map<String, Database> databases;
+    private final Map<String, List<Table>> tables;
+
+    // MetadataMgr retains a metadata instance for the lifetime of a query.
+    private final Map<String, LanceTable> snapshots = new ConcurrentHashMap<>();
 
     public LanceMetadata(String catalogName, Map<String, String> properties) {
         this(catalogName, properties, new LanceDirectoryCatalog());
     }
 
     LanceMetadata(String catalogName, Map<String, String> properties, LanceDirectoryCatalog directory) {
+        this.tableIds = new ConcurrentHashMap<>();
+        this.databases = new ConcurrentHashMap<>();
+        this.tables = new ConcurrentHashMap<>();
         this.catalogName = catalogName;
         String type = properties.getOrDefault("lance.catalog.type", "directory");
         if (!"directory".equalsIgnoreCase(type)) {
@@ -95,6 +101,18 @@ public class LanceMetadata implements ConnectorMetadata {
         this.cloudConfiguration = LanceStorageOptions.buildCloudConfiguration(properties);
         this.storageOptions = new Gson().toJson(LanceStorageOptions.from(warehouse, cloudConfiguration));
         addDatabase(new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), rootDatabase));
+    }
+
+    LanceMetadata(LanceMetadata catalog) {
+        catalogName = catalog.catalogName;
+        cloudConfiguration = catalog.cloudConfiguration;
+        warehouse = catalog.warehouse;
+        rootDatabase = catalog.rootDatabase;
+        storageOptions = catalog.storageOptions;
+        directory = catalog.directory;
+        tableIds = catalog.tableIds;
+        databases = catalog.databases;
+        tables = catalog.tables;
     }
 
     @Override
@@ -147,12 +165,17 @@ public class LanceMetadata implements ConnectorMetadata {
             throw new StarRocksConnectorException("Ambiguous Lance table name: " + tblName);
         }
         String name = matches.get(0);
+        return context == null || context.getQueryId() == null ? loadSnapshot(dbName, name)
+                : snapshots.computeIfAbsent(name, ignored -> loadSnapshot(dbName, name));
+    }
+
+    private LanceTable loadSnapshot(String dbName, String name) {
         JsonObject description = JsonParser.parseString(directory.describeTable(warehouse, storageOptions, name))
                 .getAsJsonObject();
         List<Column> columns = LanceApiConverter.fromSchema(description.getAsJsonObject("schema"));
         long id = tableIds.computeIfAbsent(name, ignored -> CONNECTOR_ID_GENERATOR.getNextId().asLong());
         return new LanceTable(id, catalogName, dbName, name,
-                columns, description.get("location").getAsString());
+                columns, description.get("location").getAsString(), description.get("version").getAsLong());
     }
 
     @Override

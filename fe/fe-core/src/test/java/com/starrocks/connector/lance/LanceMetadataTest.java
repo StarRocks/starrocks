@@ -16,6 +16,7 @@ package com.starrocks.connector.lance;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.LanceTable;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
@@ -93,7 +94,7 @@ public class LanceMetadataTest {
         org.mockito.Mockito.when(directory.listTables("s3://bucket/warehouse", "{}"))
                 .thenReturn("[\"users\",\"events\"]");
         org.mockito.Mockito.when(directory.describeTable("s3://bucket/warehouse", "{}", "users"))
-                .thenReturn("{\"location\":\"s3://bucket/warehouse/users.lance\",\"schema\":" + SCHEMA + "}");
+                .thenReturn("{\"version\":3,\"location\":\"s3://bucket/warehouse/users.lance\",\"schema\":" + SCHEMA + "}");
         LanceMetadata metadata = new LanceMetadata("lance_catalog", java.util.Map.of(
                 "lance.catalog.warehouse", "s3://bucket/warehouse",
                 "lance.namespace.root_database", "datasets"), directory);
@@ -116,6 +117,26 @@ public class LanceMetadataTest {
         // Re-read dataset metadata, rather than keeping a stale configured schema.
         org.mockito.Mockito.verify(directory, org.mockito.Mockito.times(2))
                 .describeTable("s3://bucket/warehouse", "{}", "users");
+    }
+
+    @Test
+    public void testLatestSnapshotIsScopedToOneQuery() {
+        LanceDirectoryCatalog directory = org.mockito.Mockito.mock(LanceDirectoryCatalog.class);
+        org.mockito.Mockito.when(directory.listTables("/warehouse", "{}")).thenReturn("[\"users\"]");
+        String description = "{\"location\":\"/warehouse/users.lance\",\"schema\":" + SCHEMA + ",\"version\":";
+        org.mockito.Mockito.when(directory.describeTable("/warehouse", "{}", "users"))
+                .thenReturn(description + "1}", description + "2}");
+        LanceMetadata catalog = new LanceMetadata("catalog",
+                java.util.Map.of("lance.catalog.warehouse", "/warehouse"), directory);
+        ConnectContext context = org.mockito.Mockito.mock(ConnectContext.class);
+        org.mockito.Mockito.when(context.getQueryId()).thenReturn(java.util.UUID.randomUUID());
+        LanceMetadata first = new LanceMetadata(catalog);
+        LanceTable pinned = (LanceTable) first.getTable(context, "default", "users");
+        Assertions.assertEquals(1, pinned.getDatasetVersion());
+        Assertions.assertSame(pinned, first.getTable(context, "default", "USERS"));
+        LanceTable next = (LanceTable) new LanceMetadata(catalog).getTable(context, "default", "users");
+        Assertions.assertEquals(2, next.getDatasetVersion());
+        Assertions.assertEquals(pinned.getId(), next.getId());
     }
 
     private static final String SCHEMA = """
@@ -211,7 +232,7 @@ public class LanceMetadataTest {
             org.mockito.Mockito.when(directory.listTables("/tmp/warehouse", "{}"))
                     .thenReturn("[\"users\"]");
             org.mockito.Mockito.when(directory.describeTable("/tmp/warehouse", "{}", "users"))
-                    .thenReturn("{\"location\":\"/tmp/warehouse/users.lance\",\"schema\":" + schema + "}");
+                    .thenReturn("{\"version\":3,\"location\":\"/tmp/warehouse/users.lance\",\"schema\":" + schema + "}");
             LanceMetadata metadata = new LanceMetadata("lance", java.util.Map.of(
                     "lance.catalog.warehouse", "/tmp/warehouse"), directory);
             Assertions.assertThrows(com.starrocks.connector.exception.StarRocksConnectorException.class,

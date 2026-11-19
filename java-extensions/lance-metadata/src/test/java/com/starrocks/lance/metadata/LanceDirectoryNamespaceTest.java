@@ -58,6 +58,7 @@ class LanceDirectoryNamespaceTest {
         assertEquals("[\"vectors\"]", LanceDirectoryNamespace.listTables(warehouse.toString(), "{}"));
         JsonNode table = json.readTree(LanceDirectoryNamespace.describeTable(warehouse.toString(), "{}", "vectors"));
         assertEquals(warehouse.resolve("vectors.lance").toString(), table.get("location").asText());
+        assertEquals(1L, table.get("version").asLong());
         JsonNode fields = table.get("schema").get("fields");
         assertEquals(4, fields.size());
         assertEquals("ID", fields.get(0).get("name").asText());

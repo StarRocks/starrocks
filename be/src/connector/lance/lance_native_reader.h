@@ -40,7 +40,7 @@ class LanceNativeReader {
 public:
     LanceNativeReader();
     virtual ~LanceNativeReader();
-    virtual Status open(RuntimeState* state, const TupleDescriptor* tuple, const std::string& uri,
+    virtual Status open(RuntimeState* state, const TupleDescriptor* tuple, const std::string& uri, int64_t version,
                         const TCloudConfiguration& cloud);
     virtual Status get_next(RuntimeState* state, ChunkPtr* chunk);
     virtual void close();
@@ -52,7 +52,7 @@ public:
                                 const std::shared_ptr<arrow::RecordBatch>& batch, ChunkPtr* chunk);
 
 private:
-    Status _open_reader(const std::string& dataset_uri, const TCloudConfiguration& cloud);
+    Status _open_reader(const std::string& dataset_uri, int64_t version, const TCloudConfiguration& cloud);
     Status _next_batch();
     Status _append_batch_to_read_chunk(ChunkPtr* chunk);
     void _init_read_fields();

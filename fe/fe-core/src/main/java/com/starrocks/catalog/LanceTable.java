@@ -24,6 +24,7 @@ import java.util.List;
 public class LanceTable extends Table {
 
     private final String uri;
+    private final long datasetVersion;
 
     private final String catalogName;
 
@@ -38,7 +39,13 @@ public class LanceTable extends Table {
     }
 
     public LanceTable(long id, String catalogName, String dbName, String name, List<Column> schema, String uri) {
+        this(id, catalogName, dbName, name, schema, uri, 0);
+    }
+
+    public LanceTable(long id, String catalogName, String dbName, String name, List<Column> schema, String uri,
+                      long datasetVersion) {
         super(id, name, TableType.LANCE, schema);
+        this.datasetVersion = datasetVersion;
         this.uri = uri;
         this.catalogName = catalogName;
         this.dbName = dbName;
@@ -57,6 +64,10 @@ public class LanceTable extends Table {
     @Override
     public String getCatalogTableName() {
         return getName();
+    }
+
+    public long getDatasetVersion() {
+        return datasetVersion;
     }
 
     public String getUri() {
