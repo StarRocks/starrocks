@@ -16,10 +16,19 @@
 
 #include <gtest/gtest.h>
 
+#include <optional>
 #include <string>
+#include <string_view>
+#include <utility>
+
+#include "types/file_value.h"
 
 namespace starrocks {
 namespace {
+
+FileRowRef inline_file(std::string_view bytes, std::optional<Slice> content_type = std::nullopt) {
+    return {.content_type = content_type, .inline_bytes = Slice(bytes)};
+}
 
 TEST(AIMediaInputTest, DetectsSupportedHeadersAndOwnsBinaryBytes) {
     const std::pair<std::string, std::string> cases[] = {
@@ -32,12 +41,13 @@ TEST(AIMediaInputTest, DetectsSupportedHeadersAndOwnsBinaryBytes) {
              "video/mp4"},
     };
     for (const auto& [bytes, mime] : cases) {
-        auto result = prepare_inline_ai_media(bytes, "", bytes.size());
+        auto result = create_ai_media(inline_file(bytes), bytes.size());
         ASSERT_TRUE(result.ok()) << result.status();
         EXPECT_EQ(mime, result->mime_type);
         EXPECT_EQ(bytes, result->bytes);
         EXPECT_NE(bytes.data(), result->bytes.data());
-        EXPECT_TRUE(prepare_inline_ai_media(bytes, mime, bytes.size()).ok());
+        EXPECT_TRUE(create_ai_media(inline_file(bytes, ""), bytes.size()).ok());
+        EXPECT_TRUE(create_ai_media(inline_file(bytes, mime), bytes.size()).ok());
     }
 }
 
@@ -51,20 +61,41 @@ TEST(AIMediaInputTest, RejectsEmptyUnknownTruncatedMismatchAndOversizedInputs) {
                               std::string("\0\0\0\x10"
                                           "ftypavif\0\0\0\0",
                                           16)}) {
-        auto result = prepare_inline_ai_media(bytes, "", 1024);
-        ASSERT_FALSE(result.ok());
+        auto result = create_ai_media(inline_file(bytes), 1024);
+        ASSERT_TRUE(result.status().is_data_quality_error());
         EXPECT_EQ(std::string::npos, result.status().message().find("private-payload"));
     }
-    EXPECT_FALSE(prepare_inline_ai_media(jpeg, "image/png", 1024).ok());
-    EXPECT_FALSE(prepare_inline_ai_media(jpeg, "application/octet-stream", 1024).ok());
-    EXPECT_FALSE(prepare_inline_ai_media(jpeg, "image/jpeg; private-secret", 1024).ok());
-    EXPECT_FALSE(prepare_inline_ai_media(jpeg, "image/jpeg", jpeg.size() - 1).ok());
-    EXPECT_FALSE(prepare_inline_ai_media(jpeg, "image/jpeg", 0).ok());
+    for (const char* mime : {"image/png", "application/octet-stream", "image/jpeg; private-secret"}) {
+        auto result = create_ai_media(inline_file(jpeg, mime), 1024);
+        ASSERT_TRUE(result.status().is_data_quality_error());
+        EXPECT_EQ(std::string::npos, result.status().message().find(mime));
+    }
+    EXPECT_TRUE(create_ai_media(inline_file(jpeg), jpeg.size() - 1).status().is_data_quality_error());
+    EXPECT_TRUE(create_ai_media(inline_file(jpeg), 0).status().is_data_quality_error());
+}
+
+TEST(AIMediaInputTest, RejectsReferencesAndMalformedInlineRows) {
+    FileRowRef file;
+    EXPECT_TRUE(create_ai_media(file, 1024).status().is_data_quality_error());
+
+    file.uri = Slice("https://private.example/object");
+    auto reference = create_ai_media(file, 1024);
+    ASSERT_TRUE(reference.status().is_not_supported());
+    EXPECT_EQ(std::string::npos, reference.status().message().find("private"));
+
+    file.inline_bytes = Slice("\x89PNG\r\n\x1a\n", 8);
+    EXPECT_TRUE(create_ai_media(file, 1024).status().is_data_quality_error());
+    file.uri.reset();
+    file.offset = 0;
+    EXPECT_TRUE(create_ai_media(file, 1024).status().is_data_quality_error());
+    file.offset.reset();
+    file.size = 0;
+    EXPECT_TRUE(create_ai_media(file, 1024).status().is_data_quality_error());
 }
 
 TEST(AIMediaInputTest, CanonicalizesDeclaredMimeAndEncodesAllBinaryBytes) {
     const std::string jpeg("\xff\xd8\xff\xe0\0\x02", 6);
-    auto media = prepare_inline_ai_media(jpeg, "IMAGE/JPEG", 1024);
+    auto media = create_ai_media(inline_file(jpeg, "IMAGE/JPEG"), 1024);
     ASSERT_TRUE(media.ok()) << media.status();
     EXPECT_EQ("image/jpeg", media->mime_type);
     auto uri = encode_ai_media_data_uri(*media);
@@ -84,7 +115,7 @@ TEST(AIMediaInputTest, RejectsTruncatedJpegSegmentsAndNonVideoIsoMedia) {
                               std::string("\0\0\0\x18"
                                           "ftypavif\0\0\0\0isommp42",
                                           24)}) {
-        EXPECT_FALSE(prepare_inline_ai_media(bytes, "", 1024).ok());
+        EXPECT_TRUE(create_ai_media(inline_file(bytes), 1024).status().is_data_quality_error());
     }
 }
 

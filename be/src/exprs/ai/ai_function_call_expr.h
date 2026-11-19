@@ -31,8 +31,11 @@ namespace starrocks {
 struct AIFunctionDescriptor;
 
 enum class AIFunctionRowAction : uint8_t {
+    // Row input is ready. Queue a provider request for this row.
     DISPATCH,
+    // SQL null propagation applies. Complete the row with NULL without sending a request.
     SQL_NULL,
+    // Row input is invalid. Skip the request and return NULL if on_error is "ignore", otherwise fail the query.
     TERMINAL_ROW_FAILURE,
 };
 

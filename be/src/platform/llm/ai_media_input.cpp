@@ -17,8 +17,10 @@
 #include <algorithm>
 #include <limits>
 #include <new>
+#include <string_view>
 
 #include "base/url_coding.h"
+#include "types/file_value.h"
 
 namespace starrocks {
 namespace {
@@ -77,14 +79,22 @@ bool mime_matches(std::string_view declared, std::string_view detected) {
 
 } // namespace
 
-StatusOr<AIMediaInput> prepare_inline_ai_media(std::string_view bytes, std::string_view content_type,
-                                               size_t max_bytes) {
-    if (bytes.empty()) return Status::InvalidArgument("AI FILE input is empty");
-    if (bytes.size() > max_bytes) return Status::InvalidArgument("AI FILE input exceeds the configured byte limit");
+StatusOr<AIMediaInput> create_ai_media(const FileRowRef& file, size_t max_bytes) {
+    if (!file.inline_bytes && file.uri) {
+        return Status::NotSupported(
+                "AI reference FILE inputs require an authorized FILE reader; "
+                "only inline FILE inputs are supported");
+    }
+    if (!file.inline_bytes || file.uri || file.offset || file.size) {
+        return Status::DataQualityError("Invalid inline AI FILE fields");
+    }
+    const std::string_view bytes = *file.inline_bytes;
+    if (bytes.empty()) return Status::DataQualityError("AI FILE input is empty");
+    if (bytes.size() > max_bytes) return Status::DataQualityError("AI FILE input exceeds the configured byte limit");
     const auto mime = detect_mime(bytes);
-    if (mime.empty()) return Status::InvalidArgument("AI FILE input has an unsupported or invalid media header");
-    if (!mime_matches(content_type, mime)) {
-        return Status::InvalidArgument("AI FILE content type does not match its media header");
+    if (mime.empty()) return Status::DataQualityError("AI FILE input has an unsupported or invalid media header");
+    if (file.content_type && !mime_matches(*file.content_type, mime)) {
+        return Status::DataQualityError("AI FILE content type does not match its media header");
     }
     try {
         return AIMediaInput{std::string(mime), std::string(bytes)};
