@@ -192,7 +192,7 @@ public:
                                          ArrayAggWindowState<LT, is_distinct, MyHashSet>>) {
                 mem_pool = &this->data(state).mem_pool;
             }
-            auto slice = ColumnHelper::get_binary_slice(columns[0], row_num);
+            const auto slice = GetContainer<LT>::get_data(columns[0], row_num);
             this->data(state).update_with_slice(mem_pool, slice);
         } else {
             const auto& column = down_cast<const InputColumnType&>(*columns[0]);
