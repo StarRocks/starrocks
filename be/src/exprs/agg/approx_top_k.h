@@ -62,6 +62,7 @@ struct ApproxTopKState {
         this->k = k;
         this->counter_num = counter_num;
         this->unused_idx = 0;
+        this->counters.clear();
         this->counters.reserve(counter_num);
         for (size_t i = 0; i < counter_num; i++) {
             this->counters.emplace_back(i);
@@ -343,7 +344,6 @@ public:
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      MutableColumnPtr& dst) const override {
-        const auto kv = get_k_and_counter_num(ctx);
         DCHECK(dst->is_binary());
         auto* dst_column = down_cast<BinaryColumn*>(dst.get());
 
@@ -354,7 +354,7 @@ public:
 
             ApproxTopKState<LT> state;
             for (size_t i = 0; i < src_nullable_column->size(); ++i) {
-                state.reset(kv.first, kv.second);
+                state.reset(1, 1);
                 if (src_nullable_column->is_null(i)) {
                     state.process_null(1);
                 } else {
@@ -369,7 +369,7 @@ public:
             const auto imm_data = GetContainer<LT>::get_data(src_column);
             size_t size = imm_data.size();
             for (size_t i = 0; i < size; ++i) {
-                state.reset(kv.first, kv.second);
+                state.reset(1, 1);
                 state.template process<false>(ctx->mem_pool(), imm_data[i], 1, false);
                 serialize_state(state, dst_column);
             }

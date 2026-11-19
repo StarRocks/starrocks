@@ -17,8 +17,10 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <optional>
 
 #include "common/config_exec_fwd.h"
+#include "exprs/agg/approx_top_k.h"
 #include "exprs/agg/base_aggregate_test.h"
 #include "testutil/column_test_helper.h"
 
@@ -3152,6 +3154,49 @@ TEST_F(AggregateTest, test_ds_theta_count_distinct) {
 
     func->finalize_to_column(local_ctx.get(), state3->state(), result_column.get());
     ASSERT_EQ(5, result_column->get_data()[0]);
+}
+
+TEST_F(AggregateTest, test_approx_top_k_convert_to_serialize_format) {
+    std::vector<TypeDescriptor> arg_types = {TYPE_INT_DESC, TYPE_INT_DESC, TYPE_INT_DESC};
+    TypeDescriptor item_type = TypeDescriptor::create_struct_type({"item", "count"}, {TYPE_INT_DESC, TYPE_BIGINT_DESC});
+    TypeDescriptor ret_type = TypeDescriptor::create_array_type(item_type);
+    auto local_utils = std::make_unique<FunctionUtils>(nullptr, ret_type, arg_types);
+    FunctionContext* local_ctx = local_utils->get_fn_ctx();
+    // approx_top_k(c, 3, 1000)
+    local_ctx->set_constant_columns({nullptr, ColumnHelper::create_const_column<TYPE_INT>(3, 1),
+                                     ColumnHelper::create_const_column<TYPE_INT>(1000, 1)});
+
+    const AggregateFunction* func = get_aggregate_function("approx_top_k", TYPE_INT, TYPE_ARRAY, true);
+    ASSERT_NE(nullptr, func);
+
+    // 7 x5, 3 x3, NULL x2, 9 x1
+    const std::vector<std::optional<int32_t>> values = {7, 3, 7, std::nullopt, 9, 7, 3, 7, std::nullopt, 3, 7};
+    auto data_column = Int32Column::create();
+    auto null_column = NullColumn::create();
+    for (const auto& value : values) {
+        data_column->append(value.value_or(0));
+        null_column->append(value.has_value() ? 0 : 1);
+    }
+    ColumnPtr input = NullableColumn::create(std::move(data_column), std::move(null_column));
+    const size_t num_rows = values.size();
+
+    auto direct_state = ManagedAggrState::create(local_ctx, func);
+    const Column* input_columns[] = {input.get()};
+    func->update_batch_single_state(local_ctx, num_rows, input_columns, direct_state->state());
+
+    MutableColumnPtr serialized = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    func->convert_to_serialize_format(local_ctx, Columns{input}, num_rows, serialized);
+    ASSERT_EQ(num_rows, serialized->size());
+    auto merged_state = ManagedAggrState::create(local_ctx, func);
+    func->merge_batch_single_state(local_ctx, merged_state->state(), serialized.get(), 0, num_rows);
+
+    const std::string expected = "[{item:7,count:5},{item:3,count:3},{item:NULL,count:2}]";
+    for (auto* state : {direct_state->state(), merged_state->state()}) {
+        auto result = ColumnHelper::create_column(ret_type, false);
+        func->finalize_to_column(local_ctx, state, result.get());
+        ASSERT_EQ(1, result->size());
+        ASSERT_EQ(expected, result->debug_item(0));
+    }
 }
 
 } // namespace starrocks
