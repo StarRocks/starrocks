@@ -15,6 +15,7 @@
 """Tests for AST-based SQL canonicalization (starrocks.common.sql_canonical)."""
 
 import pytest
+from sqlalchemy.testing import fixtures
 
 from starrocks.common.sql_canonical import canonicalize_sql, is_available
 
@@ -36,7 +37,7 @@ def _distinct(a: str, b: str, remove_qualifiers: bool = False) -> None:
     assert ca != cb, f"{a!r} and {b!r} both -> {ca!r} (should differ)"
 
 
-class TestSemanticEquivalence:
+class SemanticEquivalenceTest(fixtures.TestBase):
     """Syntactic variation StarRocks introduces must canonicalize to the same string."""
 
     def test_inner_join_keyword_optional(self):
@@ -80,7 +81,7 @@ class TestSemanticEquivalence:
         )
 
 
-class TestRealChangesDetected:
+class RealChangesDetectedTest(fixtures.TestBase):
     """Genuine definition changes must NOT collapse to the same string."""
 
     def test_arithmetic_paren_is_significant(self):
@@ -129,7 +130,7 @@ class TestRealChangesDetected:
         _distinct("select id from t", "select t.id from t", remove_qualifiers=True)
 
 
-class TestFallbackSignalling:
+class FallbackSignallingTest(fixtures.TestBase):
     """canonicalize_sql returns None (caller falls back to regex) on unusable input."""
 
     def test_none_input(self):

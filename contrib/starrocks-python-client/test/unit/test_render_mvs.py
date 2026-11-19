@@ -15,6 +15,7 @@
 from unittest.mock import Mock
 
 from alembic.autogenerate.api import AutogenContext
+from sqlalchemy.testing import fixtures
 
 from starrocks.alembic.ops import (
     AlterMaterializedViewOp,
@@ -26,11 +27,11 @@ from starrocks.alembic.render import (
     _create_materialized_view,
     _drop_materialized_view,
 )
-from test.unit.test_render import _normalize_py_call
+from test.util import normalize_py_call
 
 
-class TestMaterializedViewRendering:
-    def setup_method(self, method):
+class MaterializedViewRenderingTest(fixtures.TestBase):
+    def setup_test(self):
         self.ctx = Mock(spec=AutogenContext)
 
     # ========================================================================
@@ -96,7 +97,7 @@ class TestMaterializedViewRendering:
             starrocks_properties={'replication_num': '1'}
         )
         """
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
     # ========================================================================
     # DROP MATERIALIZED VIEW Rendering
@@ -143,7 +144,7 @@ class TestMaterializedViewRendering:
             refresh='MANUAL',
             properties={'k': 'v'}
         """
-        assert _normalize_py_call(expected) in _normalize_py_call(rendered)
+        assert normalize_py_call(expected) in normalize_py_call(rendered)
 
     # ========================================================================
     # Reverse Operations
