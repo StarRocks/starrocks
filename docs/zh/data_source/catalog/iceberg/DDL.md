@@ -180,6 +180,7 @@ ORDER BY (column_name [ASC | DESC] [NULLS FIRST | NULLS LAST], ...)
 - `location`: 表的文件路径。在使用 AWS Glue 且未指定数据库级别位置时是必需的。
 - `file_format`: 文件格式。仅支持 `parquet`（默认）。
 - `compression_codec`: 压缩算法。选项：SNAPPY、GZIP、ZSTD、LZ4（默认：`zstd`）。
+- `identifier-fields`: 用于标识行的列名，多个列以逗号分隔，写入 Iceberg schema 的 identifier fields。每个列必须是顶层的 `NOT NULL` 列，且为 FLOAT、DOUBLE 以外的基本类型。该属性只能在 CREATE TABLE 时设置。
 
 ### 示例
 
