@@ -80,7 +80,6 @@ a Catalog requiring cleanup. Tests that generate or modify data must use a
 separate `tmp/<case-name>/<UUID>/` prefix, not this persistent warehouse.
 See [T/test_paimon_reader_modes](T/test_paimon_reader_modes) for an example.
 
-<<<<<<< HEAD
 `test_paimon_hms_files` also needs HiveServer2 and the Hive metastore. It creates a unique
 temporary Hive database using HiveServer2, then registers the existing `pk_merge_v1` fixture
 directly in HMS as an external Paimon table. This avoids requiring Paimon classes on the
@@ -90,7 +89,7 @@ fixture data untouched.
 For local HDFS runs, override `paimon_hms_prefix`, `paimon_hms_warehouse`, and
 `paimon_hms_fixture_location` in a private SQL-tester config. This SQL test checks the
 end-to-end path; the Java compatibility tests exercise the Hive/Thrift dependency failure.
-=======
+
 ## DDL tests
 
 `T/test_paimon_catalog_ddl` creates and drops native databases and tables through SQL.
@@ -114,7 +113,6 @@ Cases skip if neither local storage nor OSS credentials are configured. CLEANUP
 blocks drop the temporary SQL objects even after an assertion fails. Empty warehouse
 directories or OSS directory markers may remain after SQL cleanup.
 Run `python3 run.py -d sql/test_paimon_catalog/R/test_paimon_catalog_ddl -v`.
->>>>>>> d0391e8 ([Feature] Support native Paimon catalog DDL (#82236))
 
 ## Reader assertions
 
