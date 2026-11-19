@@ -16,6 +16,7 @@
 
 #include <bthread/bthread.h>
 
+#include <algorithm>
 #include <mutex>
 #include <string_view>
 
@@ -137,8 +138,9 @@ bool SinkBuffer::is_full() const {
     }
     bool is_full = buffer_size > max_buffer_size;
 
-    if (!is_full) {
-        is_full = _buffered_mem_usage->consumption() > config::sink_buffer_mem_limit_per_driver * _sink_ctxs.size();
+    const int64_t mem_limit_per_driver = config::sink_buffer_mem_limit_per_driver;
+    if (!is_full && mem_limit_per_driver > 0) {
+        is_full = _buffered_mem_usage->consumption() > mem_limit_per_driver * static_cast<int64_t>(_sink_ctxs.size());
     }
 
     int64_t last_full_timestamp = _last_full_timestamp;
@@ -200,12 +202,13 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
 
     // Memory of requests that are queued or in flight. It is only released when the RPC completes,
     // so it keeps growing while the receiver holds closures (back pressure) until it reaches
-    // SinkBufferMemoryLimit, which is what finally blocks the upstream operators.
+    // SinkBufferMemoryLimit, which is what finally blocks the upstream operators. The limit is
+    // only enforced when sink_buffer_mem_limit_per_driver > 0 (off by default); 0 is shown otherwise.
     RuntimeProfile::Counter* buffer_peak_mem_counter = ADD_COUNTER(profile, "SinkBufferPeakMemoryUsage", TUnit::BYTES);
     RuntimeProfile::Counter* buffer_mem_limit_counter = ADD_COUNTER(profile, "SinkBufferMemoryLimit", TUnit::BYTES);
     COUNTER_SET(buffer_peak_mem_counter, _peak_buffered_bytes.load());
-    COUNTER_SET(buffer_mem_limit_counter,
-                static_cast<int64_t>(config::sink_buffer_mem_limit_per_driver * _sink_ctxs.size()));
+    const int64_t mem_limit_per_driver = std::max<int64_t>(0, config::sink_buffer_mem_limit_per_driver);
+    COUNTER_SET(buffer_mem_limit_counter, mem_limit_per_driver * static_cast<int64_t>(_sink_ctxs.size()));
     RuntimeProfile::Counter* peak_in_flight_rpc_counter =
             ADD_COUNTER(profile, "SinkBufferPeakInFlightRpcNum", TUnit::UNIT);
     RuntimeProfile::Counter* peak_buffered_request_counter =

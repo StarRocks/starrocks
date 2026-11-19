@@ -1931,7 +1931,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Whether an exchange sink bounds the memory of the partial chunks it buffers while shuffling; the
     // threshold is the BE config exchange_sink_buffer_flush_threshold_bytes.
     @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_SINK_BUFFER_FLUSH)
-    private boolean enableExchangeSinkBufferFlush = true;
+    private boolean enableExchangeSinkBufferFlush = false;
 
     @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PERF, flag = VariableMgr.INVISIBLE)
     private boolean enableExchangePerf = false;
