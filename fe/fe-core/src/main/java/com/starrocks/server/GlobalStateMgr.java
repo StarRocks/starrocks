@@ -174,6 +174,7 @@ import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.memory.MemoryUsageTracker;
+import com.starrocks.memory.ProcProfileCleaner;
 import com.starrocks.memory.ProcProfileCollector;
 import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.meta.SqlBlackList;
@@ -548,6 +549,8 @@ public class GlobalStateMgr {
 
     private ProcProfileCollector procProfileCollector;
 
+    private ProcProfileCleaner procProfileCleaner;
+
     private LogCleaner logCleaner;
 
     private final MetaRecoveryDaemon metaRecoveryDaemon = new MetaRecoveryDaemon();
@@ -904,6 +907,7 @@ public class GlobalStateMgr {
 
         this.memoryUsageTracker = new MemoryUsageTracker();
         this.procProfileCollector = new ProcProfileCollector();
+        this.procProfileCleaner = new ProcProfileCleaner();
         this.logCleaner = new LogCleaner();
 
         this.sqlParser = new SqlParser(AstBuilder.getInstance());
@@ -2005,6 +2009,8 @@ public class GlobalStateMgr {
         refreshDictionaryCacheTaskDaemon.start();
 
         procProfileCollector.start();
+
+        procProfileCleaner.start();
 
         logCleaner.start();
 
