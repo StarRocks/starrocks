@@ -1407,41 +1407,35 @@ public class StatisticsCalculatorTest {
             joinType = JoinOperator.LEFT_OUTER_JOIN;
         }
 
-        // The big side is preserved, the small side only matches a part of it
-        final var bigKey = columnRefFactory.create("big_key", FloatType.DOUBLE, true);
-        final var bigVal = columnRefFactory.create("big_val", IntegerType.INT, true);
-        final var smallKey = columnRefFactory.create("small_key", FloatType.DOUBLE, true);
-        columnRefFactory.updateColumnToRelationIds(bigKey.getId(), 0);
-        columnRefFactory.updateColumnToRelationIds(bigVal.getId(), 0);
-        columnRefFactory.updateColumnToRelationIds(smallKey.getId(), 1);
+        final var leftKey = columnRefFactory.create("left_key", FloatType.DOUBLE, true);
+        final var leftVal = columnRefFactory.create("left_val", IntegerType.INT, true);
+        final var rightKey = columnRefFactory.create("right_key", FloatType.DOUBLE, true);
+        columnRefFactory.updateColumnToRelationIds(leftKey.getId(), 0);
+        columnRefFactory.updateColumnToRelationIds(leftVal.getId(), 0);
+        columnRefFactory.updateColumnToRelationIds(rightKey.getId(), 1);
 
-        final var bigHistogram = new Histogram(
-                Lists.newArrayList(new Bucket(1, 200000, 200000L, 1L)), Maps.newHashMap());
-        final var bigGroup = new Group(0);
-        bigGroup.setStatistics(Statistics.builder().setOutputRowCount(200000)
-                .addColumnStatistic(bigKey, new ColumnStatistic(1, 200000, 0, 8, 200000, bigHistogram,
+        final var leftHistogram = new Histogram(
+                Lists.newArrayList(new Bucket(0, 200, 200L, 1L)), Maps.newHashMap());
+        final var leftGroup = new Group(0);
+        leftGroup.setStatistics(Statistics.builder().setOutputRowCount(200)
+                .addColumnStatistic(leftKey, new ColumnStatistic(0, 200, 0, 8, 200, leftHistogram,
                         ColumnStatistic.StatisticType.ESTIMATE))
-                .addColumnStatistic(bigVal, new ColumnStatistic(1, 200000, 0, 8, 100000))
+                .addColumnStatistic(leftVal, new ColumnStatistic(0, 200, 0, 8, 150))
                 .build());
-        bigGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(bigKey, bigVal))));
+        leftGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(leftKey, leftVal))));
 
-        final var smallHistogram = new Histogram(
-                Lists.newArrayList(new Bucket(1, 100, 100L, 1L)), Maps.newHashMap());
-        final var smallGroup = new Group(1);
-        smallGroup.setStatistics(Statistics.builder().setOutputRowCount(100)
-                .addColumnStatistic(smallKey, new ColumnStatistic(1, 100, 0, 8, 100, smallHistogram,
+        final var rightHistogram = new Histogram(
+                Lists.newArrayList(new Bucket(0, 100, 200L, 1L)), Maps.newHashMap());
+        final var rightGroup = new Group(1);
+        rightGroup.setStatistics(Statistics.builder().setOutputRowCount(200)
+                .addColumnStatistic(rightKey, new ColumnStatistic(0, 100, 0, 8, 100, rightHistogram,
                         ColumnStatistic.StatisticType.ESTIMATE))
                 .build());
-        smallGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(smallKey))));
+        rightGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(rightKey))));
 
-        final var IsRight = joinType == JoinOperator.RIGHT_OUTER_JOIN;
-        final var joinPred = IsRight
-                ? new BinaryPredicateOperator(BinaryType.EQ, smallKey, bigKey)
-                : new BinaryPredicateOperator(BinaryType.EQ, bigKey, smallKey);
-        final var children = IsRight
-                ? Lists.newArrayList(smallGroup, bigGroup)
-                : Lists.newArrayList(bigGroup, smallGroup);
-        final var groupExpr = new GroupExpression(new LogicalJoinOperator(joinType, joinPred), children);
+        final var joinPred = new BinaryPredicateOperator(BinaryType.EQ, leftKey, rightKey);
+        final var groupExpr = new GroupExpression(new LogicalJoinOperator(joinType, joinPred),
+                Lists.newArrayList(leftGroup, rightGroup));
         groupExpr.setGroup(new Group(2));
         final var exprCtx = new ExpressionContext(groupExpr);
         final var calc = new StatisticsCalculator(exprCtx, columnRefFactory, optimizerContext);
@@ -1451,24 +1445,29 @@ public class StatisticsCalculatorTest {
         final var joinStats = exprCtx.getStatistics();
 
         // THEN
-        Assertions.assertEquals(200000, joinStats.getOutputRowCount(), 0.0001);
-        final var bigKeyStat = joinStats.getColumnStatistic(bigKey);
-        Assertions.assertEquals(200000, bigKeyStat.getDistinctValuesCount(), 0.0001);
-        Assertions.assertEquals(1, bigKeyStat.getMinValue(), 0.0001);
-        Assertions.assertEquals(200000, bigKeyStat.getMaxValue(), 0.0001);
-        // The preserved key keeps the joined histogram: the intersection of the two single buckets is [1, 100]
-        final var statBuckets = bigKeyStat.getHistogram().getBuckets();
-        Assertions.assertEquals(1, statBuckets.size());
-        for (Bucket actual : statBuckets) {
-            Assertions.assertEquals(1, actual.getLower(), 0.0001);
-            Assertions.assertEquals(100, actual.getUpper(), 0.0001);
-            Assertions.assertEquals(99L, actual.getCount());
-            Assertions.assertEquals(1L, actual.getUpperRepeats());
-            Assertions.assertEquals(101L, actual.getDistinctCount().orElseThrow());
+        Assertions.assertEquals(200, joinStats.getOutputRowCount(), 0.0001);
+        final var leftKeyStat = joinStats.getColumnStatistic(leftKey);
+        final var rightKeyStat = joinStats.getColumnStatistic(rightKey);
+        if (outerJoin == OuterJoin.LEFT_OUTER_JOIN) {
+            Assertions.assertEquals(200, leftKeyStat.getDistinctValuesCount(), 0.0001);
+            Assertions.assertEquals(0, leftKeyStat.getMinValue(), 0.0001);
+            Assertions.assertEquals(200, leftKeyStat.getMaxValue(), 0.0001);
+            // The preserved NDV is larger than the joined NDV so the joined histogram cannot be used
+            Assertions.assertNull(leftKeyStat.getHistogram());
+            Assertions.assertEquals(150, joinStats.getColumnStatistic(leftVal).getDistinctValuesCount(), 0.0001);
+        } else {
+            Assertions.assertEquals(100, rightKeyStat.getDistinctValuesCount(), 0.0001);
+            Assertions.assertEquals(0, rightKeyStat.getMinValue(), 0.0001);
+            Assertions.assertEquals(100, rightKeyStat.getMaxValue(), 0.0001);
+            // The preserved NDV (100) equals the joined NDV, so the joined histogram is kept.
+            final var buckets = rightKeyStat.getHistogram().getBuckets();
+            Assertions.assertEquals(1, buckets.size());
+            Assertions.assertEquals(0, buckets.get(0).getLower(), 0.0001);
+            Assertions.assertEquals(100, buckets.get(0).getUpper(), 0.0001);
+            Assertions.assertEquals(200L, buckets.get(0).getCount());
+            Assertions.assertEquals(1L, buckets.get(0).getUpperRepeats());
+            Assertions.assertEquals(101L, buckets.get(0).getDistinctCount().orElseThrow());
         }
-        Assertions.assertEquals(bigHistogram.getMCV(), bigKeyStat.getHistogram().getMCV());
-        Assertions.assertEquals(100000, joinStats.getColumnStatistic(bigVal).getDistinctValuesCount(), 0.0001);
-        Assertions.assertTrue(joinStats.getColumnStatistic(smallKey).getDistinctValuesCount() <= 100);
     }
 
     @Test

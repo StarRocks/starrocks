@@ -2055,10 +2055,14 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
             double ndv = Math.min(raw.getDistinctValuesCount(), outputRowCount);
             // The joined histogram covers only the matched rows, so set its bucket NDVs according to the matched NDV
+            // If we have a larger NDV count as the joined stats we cannot restore the histogram
             Histogram joined = current.getHistogram();
-            Histogram histogram = joined == null || joined == raw.getHistogram()
-                    ? raw.getHistogram()
-                    : setHistogramNDV(joined, current.getDistinctValuesCount(), column.getType());
+            Histogram histogram = raw.getHistogram();
+            if (joined != null && joined != raw.getHistogram()) {
+                histogram = ndv > current.getDistinctValuesCount()
+                        ? null
+                        : setHistogramNDV(joined, current.getDistinctValuesCount(), column.getType());
+            }
             restored.put(column, ColumnStatistic.buildFrom(current)
                     .setMinValue(raw.getMinValue())
                     .setMaxValue(raw.getMaxValue())
