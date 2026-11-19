@@ -184,6 +184,14 @@ under the License.
                     <id>kunpeng</id>
                     <url>https://mirror.iscas.ac.cn/kunpeng/maven/</url>
                 </repository>
+                <!-- TEMPORARY: serves org.apache.iceberg:*:1.11.0-mv1 (the Iceberg MV spec patch on Apache
+                     Iceberg 1.11.0). Remove before merge - this prototype is not mergeable until the Iceberg MV
+                     spec is released and the artifacts are on Maven Central. Source: github.com/osscm/iceberg
+                     (branch mv_spec_1.11); design: StarRocks/community#33. -->
+                <repository>
+                    <id>osscm-iceberg-mv</id>
+                    <url>https://raw.githubusercontent.com/osscm/iceberg/maven-repo/</url>
+                </repository>
 
             </repositories>
 
