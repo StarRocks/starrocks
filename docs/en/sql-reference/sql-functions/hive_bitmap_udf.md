@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 0.9
 description: "Hive Bitmap UDF provides UDFs that can be directly used in Hive."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Hive Bitmap UDF

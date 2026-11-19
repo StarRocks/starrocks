@@ -37,35 +37,35 @@ set enable_async_profile = false;
 
 -- expected: 2,3,4,5,8 then 5 files
 select group_concat(id order by id) from t where year(ts) = 2024;
-select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+select cast(regexp_extract(get_query_profile(last_query_id()), 'ResultDataFiles: ([0-9]+)', 1) as bigint);
 
 -- expected: 3,4 then 2 files
 select group_concat(id order by id) from t where date_trunc('month', ts) = '2024-02-01 00:00:00';
-select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+select cast(regexp_extract(get_query_profile(last_query_id()), 'ResultDataFiles: ([0-9]+)', 1) as bigint);
 
 -- expected: 1,6 then 2 files
 select group_concat(id order by id) from t where to_date(ts) in ('2023-12-31', '2025-01-01');
-select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+select cast(regexp_extract(get_query_profile(last_query_id()), 'ResultDataFiles: ([0-9]+)', 1) as bigint);
 
 -- expected: 1,7 then 2 files
 select group_concat(id order by id) from t where year(ts) between 2020 and 2023;
-select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+select cast(regexp_extract(get_query_profile(last_query_id()), 'ResultDataFiles: ([0-9]+)', 1) as bigint);
 
 -- expected: 3,4 then 2 files
 select group_concat(id order by id) from t where date_format(ts, '%Y-%m') = '2024-02';
-select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+select cast(regexp_extract(get_query_profile(last_query_id()), 'ResultDataFiles: ([0-9]+)', 1) as bigint);
 
 -- expected: 5 then 1 file
 select group_concat(id order by id) from t where datediff('2024-03-06', ts) between 0 and 5;
-select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+select cast(regexp_extract(get_query_profile(last_query_id()), 'ResultDataFiles: ([0-9]+)', 1) as bigint);
 
 -- expected: 1,7 then 2 files
 select group_concat(id order by id) from t where ts - interval 12 hour < '2023-12-31 00:00:00';
-select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+select cast(regexp_extract(get_query_profile(last_query_id()), 'ResultDataFiles: ([0-9]+)', 1) as bigint);
 
 -- expected: 2,8 then 2 files
 select group_concat(id order by id) from t where year(ts) = 2024 and month(ts) in (1, 7);
-select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+select cast(regexp_extract(get_query_profile(last_query_id()), 'ResultDataFiles: ([0-9]+)', 1) as bigint);
 
 -- one file per truncate(s, 2) partition: UN (UNITED, UNIX), UK, CH, 中国
 create table s_t (
@@ -76,28 +76,28 @@ insert into s_t values (1, 'UNITED'), (2, 'UNIX'), (3, 'UK'), (4, 'CHINA'), (5, 
 
 -- expected: 1 then 1 file
 select group_concat(id order by id) from s_t where left(s, 4) = 'UNIT';
-select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+select cast(regexp_extract(get_query_profile(last_query_id()), 'ResultDataFiles: ([0-9]+)', 1) as bigint);
 
 -- expected: 5 then 1 file
 select group_concat(id order by id) from s_t where starts_with(s, '中国');
-select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+select cast(regexp_extract(get_query_profile(last_query_id()), 'ResultDataFiles: ([0-9]+)', 1) as bigint);
 
 -- expected: 3 then 1 file
 select group_concat(id order by id) from s_t where substr(s, 1, 3) = 'UK';
-select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+select cast(regexp_extract(get_query_profile(last_query_id()), 'ResultDataFiles: ([0-9]+)', 1) as bigint);
 
 -- a non-aligned constant never equals date_trunc(): nothing is derived. expected: empty then 9 files
 select group_concat(id order by id) from t where date_trunc('month', ts) = '2024-02-15 00:00:00';
-select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+select cast(regexp_extract(get_query_profile(last_query_id()), 'ResultDataFiles: ([0-9]+)', 1) as bigint);
 
 -- NOT is never pruned by the derived range. expected: 1,6,7,9 then 9 files
 select group_concat(id order by id) from t where not (year(ts) = 2024);
-select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+select cast(regexp_extract(get_query_profile(last_query_id()), 'ResultDataFiles: ([0-9]+)', 1) as bigint);
 
 -- switched off: same rows, no pruning. expected: 2,3,4,5,8 then 9 files
 set enable_iceberg_function_predicate_pruning = false;
 select group_concat(id order by id) from t where year(ts) = 2024;
-select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+select cast(regexp_extract(get_query_profile(last_query_id()), 'ResultDataFiles: ([0-9]+)', 1) as bigint);
 set enable_iceberg_function_predicate_pruning = true;
 
 drop table t force;

@@ -2,6 +2,7 @@
 sidebar_position: 10
 displayed_sidebar: docs
 description: "StarRocks デプロイ後に実行すべき初期アカウント保護と変数・プロパティ設定。"
+products: [oss]
 ---
 
 # デプロイ後のセットアップ

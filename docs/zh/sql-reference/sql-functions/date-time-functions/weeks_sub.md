@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回原始日期减去指定周数后的日期。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # weeks_sub

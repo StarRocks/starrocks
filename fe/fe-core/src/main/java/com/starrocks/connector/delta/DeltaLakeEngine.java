@@ -17,16 +17,25 @@ package com.starrocks.connector.delta;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.cache.Cache;
 import com.starrocks.common.Pair;
+import com.starrocks.connector.hadoop.HadoopExt;
+import com.starrocks.connector.hadoop.HadoopExt.FileSystemAccess;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.defaults.engine.DefaultEngine;
 import io.delta.kernel.defaults.engine.fileio.FileIO;
+import io.delta.kernel.defaults.engine.hadoopio.HadoopFileIO;
 import io.delta.kernel.engine.JsonHandler;
 import io.delta.kernel.engine.ParquetHandler;
 import io.delta.kernel.types.StructType;
+import io.delta.kernel.utils.CloseableIterator;
+import org.apache.hadoop.conf.Configuration;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.List;
+import java.util.NoSuchElementException;
 
 public class DeltaLakeEngine extends DefaultEngine {
+    private final Configuration hadoopConf;
     private final FileIO fileIO;
     private final DeltaLakeCatalogProperties properties;
     // Cache for checkpoint metadata, key is file path and read schema, value is list of ColumnarBatch
@@ -34,11 +43,12 @@ public class DeltaLakeEngine extends DefaultEngine {
     // Cache for json metadata, key is file path, value is list of JsonNode
     private final Cache<DeltaLakeFileStatus, List<JsonNode>> jsonCache;
 
-    protected DeltaLakeEngine(FileIO fileIO, DeltaLakeCatalogProperties properties,
+    protected DeltaLakeEngine(FileIO fileIO, Configuration hadoopConf, DeltaLakeCatalogProperties properties,
                               Cache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache,
                               Cache<DeltaLakeFileStatus, List<JsonNode>> jsonCache) {
         super(fileIO);
         this.fileIO = fileIO;
+        this.hadoopConf = hadoopConf;
         this.properties = properties;
         this.checkpointCache = checkpointCache;
         this.jsonCache = jsonCache;
@@ -56,9 +66,93 @@ public class DeltaLakeEngine extends DefaultEngine {
                 new TraceDefaultParquetHandler(fileIO);
     }
 
-    public static DeltaLakeEngine create(FileIO fileIO, DeltaLakeCatalogProperties properties,
+    FileSystemAccess acquireFileSystemAccess() {
+        return HadoopExt.getInstance().acquireFileSystemAccess(hadoopConf);
+    }
+
+    // The iterator must defer I/O until hasNext/next; close it before releasing the access scope.
+    <T> CloseableIterator<T> withFileSystemAccess(CloseableIterator<T> iterator) {
+        return new CloseableIterator<>() {
+            // Cancellation must wait for an in-flight open to publish the resource before closing it.
+            private boolean closed;
+            private FileSystemAccess access;
+
+            private void acquire() {
+                if (access == null) {
+                    access = acquireFileSystemAccess();
+                }
+            }
+
+            @Override
+            public synchronized boolean hasNext() {
+                if (closed) {
+                    return false;
+                }
+                try {
+                    acquire();
+                    if (iterator.hasNext()) {
+                        return true;
+                    }
+                    close();
+                    return false;
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                } catch (RuntimeException | Error e) {
+                    closeOnFailure(e);
+                    throw e;
+                }
+            }
+
+            @Override
+            public synchronized T next() {
+                if (closed) {
+                    throw new NoSuchElementException();
+                }
+                try {
+                    acquire();
+                    return iterator.next();
+                } catch (RuntimeException | Error e) {
+                    closeOnFailure(e);
+                    throw e;
+                }
+            }
+
+            private void closeOnFailure(Throwable failure) {
+                try {
+                    close();
+                } catch (Throwable closeFailure) {
+                    if (failure != closeFailure) {
+                        failure.addSuppressed(closeFailure);
+                    }
+                }
+            }
+
+            @Override
+            public synchronized void close() throws IOException {
+                if (!closed) {
+                    closed = true;
+                    try {
+                        iterator.close();
+                    } finally {
+                        if (access != null) {
+                            access.close();
+                            access = null;
+                        }
+                    }
+                }
+            }
+        };
+    }
+
+    public static DeltaLakeEngine create(Configuration hadoopConf, DeltaLakeCatalogProperties properties,
                                          Cache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache,
                                          Cache<DeltaLakeFileStatus, List<JsonNode>> jsonCache) {
-        return new DeltaLakeEngine(fileIO, properties, checkpointCache, jsonCache);
+        return create(new HadoopFileIO(hadoopConf), hadoopConf, properties, checkpointCache, jsonCache);
+    }
+
+    public static DeltaLakeEngine create(FileIO fileIO, Configuration hadoopConf, DeltaLakeCatalogProperties properties,
+                                         Cache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache,
+                                         Cache<DeltaLakeFileStatus, List<JsonNode>> jsonCache) {
+        return new DeltaLakeEngine(fileIO, hadoopConf, properties, checkpointCache, jsonCache);
     }
 }

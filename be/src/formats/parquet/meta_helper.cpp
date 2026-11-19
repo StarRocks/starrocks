@@ -98,7 +98,19 @@ void ParquetMetaHelper::prepare_read_columns(const std::vector<FormatColumnInfo>
         auto extended_variant_binding =
                 find_extended_variant_virtual_binding(column_access_paths, materialized_column.name());
 
-        int32_t field_idx = find_field_idx_for_materialized_column(_file_metadata, materialized_column);
+        int32_t field_idx;
+        if (extended_variant_binding.has_value()) {
+            // A variant virtual column (`v.a`, from get_variant_*(v, '$.a')) has no id of its own and is not a
+            // column of the file: it reads the source variant column. Look that one up, by the physical name the
+            // FE carries over from it if any, else by its name, as LakeMetaHelper does for files with field ids.
+            std::string_view source_name = materialized_column.col_physical_name();
+            if (source_name.empty()) {
+                source_name = extended_variant_binding->access_path->path();
+            }
+            field_idx = _file_metadata->schema().get_field_idx_by_column_name(std::string(source_name));
+        } else {
+            field_idx = find_field_idx_for_materialized_column(_file_metadata, materialized_column);
+        }
         const TIcebergSchemaField* mapped_lake_field = nullptr;
         if (field_idx < 0) {
             std::tie(field_idx, mapped_lake_field) = _find_field_idx_by_mapped_names(materialized_column);

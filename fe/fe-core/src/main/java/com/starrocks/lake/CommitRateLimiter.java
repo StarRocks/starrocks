@@ -15,6 +15,8 @@
 package com.starrocks.lake;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.lake.compaction.CompactionMgr;
@@ -75,6 +77,39 @@ public class CommitRateLimiter {
 
     private static double slowdownRatio() {
         return Config.lake_ingest_slowdown_ratio;
+    }
+
+    /**
+     * A partition whose compaction score makes the commit path reject commits into it.
+     */
+    public record RejectingPartition(long partitionId, double compactionScore, long upperBound) {
+    }
+
+    /**
+     * The first partition of the table whose compaction score makes {@link #check} reject a commit into it, or empty
+     * when none does. Mirrors the commit path: the limiter runs only when lake_enable_ingest_slowdown is on
+     * (LakeTableTxnStateListener.preCommit), it rejects only above a positive upper bound, a partition without a
+     * compaction score yet is not throttled, and only partitions the table still has are checked. The caller holds
+     * the table's read or write lock while this reads the partitions and their scores.
+     */
+    public static Optional<RejectingPartition> findPartitionRejectingCommits(@NotNull CompactionMgr compactionMgr,
+                                                                             long dbId, @NotNull OlapTable table) {
+        if (!Config.lake_enable_ingest_slowdown) {
+            return Optional.empty();
+        }
+        long upperBound = compactionScoreUpperBound();
+        if (upperBound <= 0) {
+            return Optional.empty();
+        }
+        long tableId = table.getId();
+        for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
+            long partitionId = partition.getId();
+            Quantiles compactionScore = getCompactionScore(compactionMgr, dbId, tableId, partitionId);
+            if (compactionScore != null && compactionScore.getMax() > upperBound) {
+                return Optional.of(new RejectingPartition(partitionId, compactionScore.getMax(), upperBound));
+            }
+        }
+        return Optional.empty();
     }
 
     // 0 means no limit
@@ -184,10 +219,7 @@ public class CommitRateLimiter {
 
     // partitionId is a physical partition id, the key under which compaction statistics are recorded
     private double getPartitionCompactionScore(@NotNull Long partitionId) {
-        long dbId = transactionState.getDbId();
-        PartitionIdentifier partitionIdentifier = new PartitionIdentifier(dbId, tableId, partitionId);
-        PartitionStatistics statistics = compactionMgr.getStatistics(partitionIdentifier);
-        Quantiles compactionScore = statistics != null ? statistics.getCompactionScore() : null;
+        Quantiles compactionScore = getCompactionScore(compactionMgr, transactionState.getDbId(), tableId, partitionId);
         if (compactionScore == null) {
             // Expected only before the partition's first load becomes visible. Anything else means the lookup key
             // does not match the one the statistics were recorded under, and the partition escapes throttling.
@@ -196,6 +228,11 @@ public class CommitRateLimiter {
             return 0;
         }
         return compactionScore.getMax();
+    }
+
+    private static Quantiles getCompactionScore(CompactionMgr compactionMgr, long dbId, long tableId, long partitionId) {
+        PartitionStatistics statistics = compactionMgr.getStatistics(new PartitionIdentifier(dbId, tableId, partitionId));
+        return statistics == null ? null : statistics.getCompactionScore();
     }
 
     // Returns the first partition id and its compaction score that exceeds the upper bound

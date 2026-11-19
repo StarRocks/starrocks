@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Subtracts specified months from the date."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # months_sub

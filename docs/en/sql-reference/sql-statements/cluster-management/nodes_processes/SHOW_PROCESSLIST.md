@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW PROCESSLIST lists the operations currently being performed by threads executing within the server."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW PROCESSLIST

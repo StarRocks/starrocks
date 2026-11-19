@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Subtracts one native planar polygon or multipolygon from another."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Difference

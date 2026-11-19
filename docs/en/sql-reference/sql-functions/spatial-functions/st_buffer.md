@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns a round Cartesian buffer around native XY geometry."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Buffer

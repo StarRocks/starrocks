@@ -117,6 +117,7 @@ public class CreateSyncMVStmtAnalyzer {
         } finally {
             context.getSessionVariable().setSqlSelectLimit(originSelectLimit);
         }
+        SavedSqlGeoValidator.validate(queryStatement);
         verifyNoAIFunctions(queryStatement);
 
         boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(queryStatement);

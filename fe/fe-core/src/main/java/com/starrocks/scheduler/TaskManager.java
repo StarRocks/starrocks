@@ -666,18 +666,34 @@ public class TaskManager implements MemoryTrackable {
      * NOTE: this method will write edit log.
      */
     public void suspendTask(Task task, boolean isReplay) {
-        suspendTask(task, isReplay, true);
+        suspendTask(task, isReplay, RunsOnSuspend.KILL);
+    }
+
+    // What suspending a task does with its runs.
+    private enum RunsOnSuspend {
+        KILL,
+        DROP_PENDING,
+        // Both of the above take the task run lock.
+        LEAVE,
+    }
+
+    /**
+     * Suspends a task and drops its queued runs, but lets its running one finish: a run that suspends its own task as
+     * it fails would otherwise be killed, and report "TaskRun killed" instead of its failure.
+     */
+    public void suspendTaskWithoutKilling(Task task) {
+        suspendTask(task, false, RunsOnSuspend.DROP_PENDING);
     }
 
     /**
      * Suspends a task and leaves its runs as they are, for a caller that has just failed to take the task run lock,
-     * which killing them takes, and must not wait for it again.
+     * which killing or dropping them takes, and must not wait for it again.
      */
     public void suspendTaskLeavingRuns(Task task) {
-        suspendTask(task, false, false);
+        suspendTask(task, false, RunsOnSuspend.LEAVE);
     }
 
-    private void suspendTask(Task task, boolean isReplay, boolean killTaskRuns) {
+    private void suspendTask(Task task, boolean isReplay, RunsOnSuspend runs) {
         if (task == null) {
             return;
         }
@@ -687,13 +703,13 @@ public class TaskManager implements MemoryTrackable {
                     wal -> task.setState(Constants.TaskState.PAUSE)
             );
         }
-        suspendTaskInternal(task, killTaskRuns);
+        suspendTaskInternal(task, runs);
     }
 
     /**
      * Internal method to suspend a task without writing edit log.
      */
-    private void suspendTaskInternal(Task task, boolean killTaskRuns) {
+    private void suspendTaskInternal(Task task, RunsOnSuspend runs) {
         if (task == null) {
             return;
         }
@@ -710,15 +726,30 @@ public class TaskManager implements MemoryTrackable {
                 }
             }
 
-            // kill running task run
-            if (killTaskRuns && !killTask(task.getName(), true)) {
-                LOG.warn("kill task failed: {}", task.getName());
+            if (runs == RunsOnSuspend.KILL) {
+                if (!killTask(task.getName(), true)) {
+                    LOG.warn("kill task failed: {}", task.getName());
+                }
+            } else if (runs == RunsOnSuspend.DROP_PENDING && !removePendingTaskRuns(task)) {
+                LOG.warn("remove pending task runs failed: {}", task.getName());
             }
             // remove task from scheduler
             periodFutureMap.remove(task.getId());
         } finally {
             taskUnlock();
         }
+    }
+
+    private boolean removePendingTaskRuns(Task task) {
+        if (!taskRunManager.tryTaskRunLock()) {
+            return false;
+        }
+        try {
+            taskRunScheduler.removePendingTask(task);
+        } finally {
+            taskRunManager.taskRunUnlock();
+        }
+        return true;
     }
 
     /**
@@ -1060,7 +1091,12 @@ public class TaskManager implements MemoryTrackable {
                 LOG.warn("failed to execute periodical task: {}", task, e);
             }
         }, initialDelay, periodSeconds, TimeUnit.SECONDS);
-        periodFutureMap.put(task.getId(), future);
+        // Registering a task that is still scheduled must not leave the replaced submitter firing: no later
+        // suspend, alter or drop could reach it.
+        ScheduledFuture<?> replaced = periodFutureMap.put(task.getId(), future);
+        if (replaced != null) {
+            replaced.cancel(false);
+        }
     }
 
     private boolean tryTaskLock() {

@@ -91,10 +91,10 @@ CONF_Bool(net_use_ipv6_when_priority_networks_empty, "false");
 
 // Memory urged water level, if the memory usage exceeds this level,
 // be will free up some memory immediately to ensure the system runs smoothly.
-// Currently, only support to release memory of data cache and lake memtable.
+// Currently, only support to release memory of data cache, shared-data metadata cache and lake memtable.
 CONF_mInt64(memory_urgent_level, "85");
 // Memory high water level, if the memory usage exceeds this level, be will free up some memory slowly
-// Currently, only support release memory of data cache.
+// Currently, only support release memory of data cache and shared-data metadata cache.
 CONF_mInt64(memory_high_level, "75");
 
 // The high disk usage level, which trigger to release of disk space immediately to disk_safe_level,
@@ -367,6 +367,10 @@ CONF_Int32(max_hdfs_scanner_num, "50");
 // once they are due. Not retried: on failure the scan keeps its current credentials and asks
 // again a minute later. A value <= 0 turns the refresh off for scans that start afterwards.
 CONF_mInt32(scan_credential_refresh_rpc_timeout_ms, "10000");
+// Max number of idle deserialized Iceberg tables the JNI metadata scanner keeps on one BE/CN. The scan tasks
+// of one Iceberg metadata table query share one deserialized table instead of each deserializing its own copy.
+// A value <= 0 turns the sharing off for scans that start afterwards.
+CONF_mInt32(iceberg_metadata_table_cache_capacity, "128");
 // Number of max scan keys.
 CONF_mInt32(max_scan_key_num, "1024");
 // The max number of push down values of a single column.
@@ -882,6 +886,14 @@ CONF_Int32(load_segment_thread_pool_queue_size, "10240");
 // When enabled, segments whose sort key range does not intersect with query predicates will be skipped.
 CONF_mBool(enable_lake_segment_metadata_filter, "true");
 
+// Once a query scan of a lake tablet has opened its segments, split or not, start filling the local cache with the
+// index pages its reads need next -- the short key index of every segment, the zone map and bloom filter roots of the
+// predicate columns and the ordinal index roots of the read columns -- asynchronously, without waiting for them. The
+// reads then join those fills instead of fetching one page after another. Takes effect only for queries and only
+// while the remote I/O scheduler is enabled and initialized (remote_io_scheduler_enable); otherwise, and when a file
+// cannot be warmed, the scan reads its index pages as before. Independent of lake_scan_parallel_segment_open.
+CONF_mBool(lake_scan_warm_index, "true");
+
 // When a prepared-split scan's main morsel queue is momentarily empty (its seed page-pruning is still
 // running), it issues an extra PRE_REFINEMENT_COARSE morsel over an un-pruned segment range to keep
 // otherwise-idle drivers busy until the refined ranges land. Set to false to disable that pre-refinement
@@ -889,6 +901,12 @@ CONF_mBool(enable_lake_segment_metadata_filter, "true");
 // range is always a superset that the refined ranges subtract from) -- it only trades early parallelism
 // for less redundant coarse scanning. Only affects the enable_lake_prepared_physical_split_scan path.
 CONF_mBool(enable_lake_prepared_split_pre_refinement, "true");
+
+// While the remote I/O scheduler is enabled (remote_io_scheduler_enable), a lake query scan opens the segments of all
+// rowsets of a tablet at once on the load segment thread pool, one task per segment, instead of one rowset after
+// another, and builds the rowsets' iterators in parallel. Has no effect while the scheduler is off. Loads, compaction
+// and the other readers keep following enable_load_segment_parallel.
+CONF_mBool(lake_scan_parallel_segment_open, "true");
 
 // Fragment thread pool
 CONF_Int32(fragment_pool_thread_num_min, "64");
@@ -1088,6 +1106,19 @@ CONF_mInt32(max_consumer_num_per_group, "3");
 
 // Max pulsar consumer num in one data consumer group, for routine load.
 CONF_mInt32(max_pulsar_consumer_num_per_group, "10");
+
+// Max number of idle routine load data consumers kept for reuse. The default covers the consumer groups of at
+// least 16 concurrent tasks per node (3 consumers each, see max_consumer_num_per_group); when the pool is full,
+// returning a consumer evicts the one idle for the longest.
+CONF_mInt32(routine_load_kafka_consumer_pool_size, "64");
+
+// How long a routine load Kafka consumer holds off the next fetch of a partition once its local queue is over
+// queued.min.messages or queued.max.messages.kbytes: librdkafka's fetch.queue.backoff.ms, 1000 ms by default.
+// librdkafka does not fetch earlier when the queue drains, so a consumer that reads its queue in less time waits for
+// the rest of it. A job's property.fetch.queue.backoff.ms overrides it, a negative value keeps librdkafka's default,
+// and values above 300000 count as 300000. 0 makes librdkafka's broker thread poll in a busy loop while the queue
+// stays over those thresholds. After a change, the pool no longer reuses consumers created before it.
+CONF_mInt32(routine_load_kafka_fetch_queue_backoff_ms, "10");
 
 // kafka request timeout
 CONF_Int32(routine_load_kafka_timeout_second, "10");
@@ -1638,6 +1669,68 @@ CONF_Int32(starlet_s3_client_num_instances_per_cache, "1");
 CONF_mBool(starlet_fs_read_prefetch_enable, "false");
 // prefetch threadpool size
 CONF_mInt32(starlet_fs_read_prefetch_threadpool_size, "128");
+// Remote I/O scheduler for shared-data reads (off by default). When enabled, every GET that a lake read issues to the
+// object store after a local cache miss is queued in one process-wide scheduler, which hands out the IOs -- one IO is a
+// GET of a cache block -- by weight: queries, loads, compaction and other background work share by
+// remote_read_*_weight, the resource groups of the queries share by their cpu_weight, and the queries of a group share
+// by a weight that decays with the blocks they have read, so that a big scan yields to newer, smaller ones. Inside a query the reads it waits for go
+// before its read-ahead. Query scans also read ahead the cache blocks of the pages they will read
+// (remote_prefetch_window_blocks). Needs datacache_enable=true and starlet_use_star_cache=true; without them the node
+// logs a warning and the remote reads keep their old paths. While enabled, io_coalesce_lake_read_enable is set to false
+// at startup and starlet_fs_read_prefetch_enable is forced off without changing its value; be.conf is not changed, so
+// a restart with the scheduler disabled restores both. Read once at startup.
+CONF_Bool(remote_io_scheduler_enable, "false");
+// Threads that run the scheduled remote GETs. The pool size caps how many GETs are in flight on the node. 0 (the
+// default) means as many as the lake scan threads (pipeline_connector_scan_thread_num_per_cpu x cores). Read once at
+// startup; only used when remote_io_scheduler_enable is true.
+CONF_Int32(remote_read_io_threads, "0");
+// Whether the scheduler holds the GETs in flight, below the pool size, to what the path to the object store delivers:
+// what does not fit waits in the scheduler, where the weights decide who goes next, instead of in the network. Off
+// means up to remote_read_io_threads GETs in flight. Read once at startup; only used when remote_io_scheduler_enable
+// is true.
+CONF_Bool(remote_read_adaptive_limit, "true");
+// The fewest GETs in flight the adaptive limit holds, and the limit it uses to measure the unloaded latency of a GET.
+// Must be positive. Read once at startup; only used when remote_io_scheduler_enable and remote_read_adaptive_limit
+// are true.
+CONF_Int32(remote_read_adaptive_min_inflight, "16");
+// The n-th cache block a query (or a background task) reads weighs max(remote_read_weight_decay_min,
+// 2^(-n / remote_read_weight_decay_ios)) of it, so that a big scan yields more and more to newer queries of its
+// resource group. remote_read_weight_decay_ios = 0 turns the decay off; remote_read_weight_decay_min must be in
+// (0, 1]. Read once at startup; only used when remote_io_scheduler_enable is true.
+CONF_Int64(remote_read_weight_decay_ios, "1024");
+CONF_Double(remote_read_weight_decay_min, "0.03125");
+// Shares of the remote reads of queries, of loads (publish, primary key indexes, delete files and the spill of a
+// load), of compaction and of the other background work while all of them wait: 9:5:1:1 by default. Each must be
+// positive. Read once at startup; only used when remote_io_scheduler_enable is true.
+CONF_Int32(remote_read_query_weight, "9");
+CONF_Int32(remote_read_load_weight, "5");
+CONF_Int32(remote_read_compaction_weight, "1");
+CONF_Int32(remote_read_background_weight, "1");
+// Cache blocks a query's segment reader keeps asked for ahead of what it is consuming -- queued, in flight, or filled
+// and not read yet -- while the remote I/O scheduler is enabled. It bounds how far a reader runs ahead of itself;
+// when the blocks are fetched is the scheduler's decision. Loads, compaction and other background reads do not read
+// ahead. 0 turns the read-ahead off. Applies to the segment readers opened afterwards.
+CONF_mInt32(remote_prefetch_window_blocks, "128");
+// With late materialization, the columns read only for the rows that pass the predicates are fetched per chunk once
+// those rows are known. From the fourth chunk of a segment reader on, once those rows have touched at least this
+// share of the pages they span, these columns are read ahead like the predicate columns. Above 1, never. Applies to
+// the segment readers opened afterwards; only used while the remote I/O scheduler is enabled.
+CONF_mDouble(remote_prefetch_late_read_ahead_ratio, "0.5");
+// Whether starlet's remote I/O scheduler may skip the local-cache write of a block fill while the cache disk is
+// contended: 90% busy or more with reads taking at least 20% of its service time, for two 250 ms samples in a row. Only
+// a fill of the body of a big query scan qualifies, and only once its block is retained in memory (see
+// remote_read_retain_prefetched_bytes), which then serves its readers; a later reader fetches the block again. Helps when
+// the cache disk is slower than the network and a later scan reads back what an earlier one just cached. Has no effect
+// while the remote I/O scheduler is disabled or retains nothing. Forwarded to the starlet gflag of the same name.
+CONF_mBool(remote_read_skip_contended_cache_writes, "false");
+// Bytes of finished read-ahead blocks of segment data files kept in memory while the reader that warmed them still
+// covers them, when the remote I/O scheduler is enabled: a reader of such a block copies it from memory instead of
+// reading it back from the local cache, which is still written. Once this many bytes are held, later blocks are not
+// kept. 0 turns it off. Has no effect while the remote I/O scheduler is disabled. A raise applies to the blocks
+// finished afterwards; a lowered value keeps new blocks out at once, and a block already held is released when it is
+// next read while the total is still over the budget, or when no reader covers it any more. The buffers are charged
+// to the process, not to a query. Must not be negative.
+CONF_mInt64(remote_read_retain_prefetched_bytes, "2147483648");
 CONF_mInt32(starlet_fslib_s3client_nonread_max_retries, "5");
 CONF_mInt32(starlet_fslib_s3client_nonread_retry_scale_factor, "200");
 CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
@@ -1680,16 +1773,39 @@ CONF_mInt32(starlet_filesystem_instance_cache_ttl_sec, "86400");
 // the compute nodes. An unrecognized value is reported and falls back to "none" rather than
 // keeping the node from starting.
 CONF_mString_enum_or_default(starlet_starmgr_client_compression_type, "none", "none,zstd");
+// Whether the gRPC channels that starlet opens from this node to StarMgr (GetShard, the worker
+// heartbeat, the shard replica info update) and to peer nodes (cache replication) go through the
+// HTTP proxy that the process environment names. starlet's gRPC library reads only the lowercase
+// grpc_proxy, https_proxy and http_proxy variables, and exempts only the hosts listed in the
+// lowercase no_grpc_proxy or no_proxy. false, the default, ignores them and connects directly:
+// these channels only connect cluster nodes, and a proxy inherited for other outbound traffic that
+// does not exempt the cluster addresses breaks shard lookups and heartbeats. Other outbound traffic
+// of the process, such as object storage access, is not affected either way.
+//
+// Immutable: starlet reads it whenever it creates a channel, and it creates channels at unrelated
+// times (a channel to StarMgr is rebuilt after repeated transport failures or an address change, a
+// channel to a peer is kept for the life of the process), so a runtime change would reach some
+// channels and never others.
+CONF_Bool(starlet_grpc_client_enable_http_proxy, "false");
 CONF_mBool(starlet_write_file_with_tag, "false");
 #endif
 
 // Capacity of the shared-data tablet metadata cache, as a percentage of the process memory limit, clamped to
 // [0, 100]. The cache holds tablet metadata and txn logs, apart from the segment metadata cache, so that segments
 // loaded by queries and compactions cannot evict them. Set to 0 to disable the cache.
-CONF_mInt32(lake_tablet_metadata_cache_limit_percent, "10");
+CONF_mInt32(lake_tablet_metadata_cache_limit_percent, "5");
 // Capacity of the shared-data segment metadata cache, as a percentage of the process memory limit, clamped to
 // [0, 100]. The cache holds opened segments, delete vectors and tablet schemas. Set to 0 to disable the cache.
-CONF_mInt32(lake_segment_metadata_cache_limit_percent, "20");
+CONF_mInt32(lake_segment_metadata_cache_limit_percent, "10");
+// The capacity, in bytes, that the shared-data tablet metadata cache never shrinks below. While the process memory
+// usage is above memory_high_level, the tablet and segment metadata caches give memory back, and they grow back to the
+// capacities set by lake_tablet_metadata_cache_limit_percent and lake_segment_metadata_cache_limit_percent once it
+// drops below. A value above the configured capacity keeps the cache at the configured capacity.
+CONF_mInt64(lake_tablet_metadata_cache_min_limit, /*1GB=*/"1073741824");
+// The capacity, in bytes, that the shared-data segment metadata cache never shrinks below. See
+// lake_tablet_metadata_cache_min_limit. A value above the configured capacity keeps the cache at the configured
+// capacity.
+CONF_mInt64(lake_segment_metadata_cache_min_limit, /*1GB=*/"1073741824");
 // Tracked memory budget for synchronously processing one dump_tablet_metadata request. It uses the standard
 // MemTracker accounting granularity. New requests fail closed when the value is non-positive.
 CONF_mInt64(lake_dump_tablet_metadata_per_request_memory_limit_bytes, "268435456");
@@ -1894,6 +2010,14 @@ CONF_mInt32(lake_pk_index_block_cache_limit_percent, "10");
 // the checksummed format, because during a rolling upgrade or a downgrade an older BE/CN uses the
 // legacy reader and cannot parse files written in the new format.
 CONF_mBool(lake_enable_protobuf_file_checksum, "true");
+// Write multi-statement version logs as ordered groups instead of the legacy merged TxnLogPB.
+// Disabled by default for a reader-first rollout; the legacy write path and its limitations remain
+// until enabled. Readers accept both formats regardless of this flag. Enable only after every CN
+// that can publish, replay or clean up these logs has the group reader. Before either enabling or
+// disabling, pause affected schema-change/multi-statement publishers and drain in-flight requests;
+// switching concurrently with publish is not supported. Disabling does not make existing groups
+// downgrade-readable: drain and verify them before rolling back to a pre-reader CN.
+CONF_mBool(lake_enable_txn_vlog_group, "false");
 // clear *.meta cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_meta, "true");
 // clear *.data cache for lake table, so that a read which finds the local copy of a data file corrupted

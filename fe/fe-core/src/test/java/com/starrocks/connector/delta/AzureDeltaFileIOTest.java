@@ -191,7 +191,7 @@ public class AzureDeltaFileIOTest {
                 + "{\"add\":{\"path\":\"part.parquet\",\"partitionValues\":{},\"size\":123,"
                 + "\"modificationTime\":0,\"dataChange\":true}}\n";
         metadata = Map.of(folder + "_delta_log/00000000000000000000.json", log.getBytes(StandardCharsets.UTF_8));
-        DeltaLakeEngine engine = DeltaLakeEngine.create(fileIO, new DeltaLakeCatalogProperties(Map.of(
+        DeltaLakeEngine engine = DeltaLakeEngine.create(fileIO, new Configuration(false), new DeltaLakeCatalogProperties(Map.of(
                         DeltaLakeCatalogProperties.ENABLE_DELTA_LAKE_JSON_META_CACHE, String.valueOf(cached))),
                 CacheBuilder.newBuilder().build(), CacheBuilder.newBuilder().build());
         var snapshot = Table.forPath(engine, ROOT + folder).getLatestSnapshot(engine);

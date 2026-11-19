@@ -267,10 +267,22 @@ INSERT INTO mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.lineorder VALUES
 REFRESH MATERIALIZED VIEW lineorder_flat_mv WITH SYNC MODE;
 select count(1) from lineorder_flat_mv;
 
-drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.customer;
-drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.dates;
-drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.supplier;
-drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.part;
-drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.lineorder;
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.customer force;
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.dates force;
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.supplier force;
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.part force;
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.lineorder force;
 drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
 drop database db_${uuid0};
+
+CLEANUP {
+drop database if exists default_catalog.db_${uuid0} force;
+drop table if exists mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.customer force;
+drop table if exists mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.dates force;
+drop table if exists mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.supplier force;
+drop table if exists mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.part force;
+drop table if exists mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.lineorder force;
+drop database if exists mv_iceberg_${uuid0}.mv_ice_db_${uuid0};
+set catalog default_catalog;
+drop catalog if exists mv_iceberg_${uuid0};
+} END CLEANUP

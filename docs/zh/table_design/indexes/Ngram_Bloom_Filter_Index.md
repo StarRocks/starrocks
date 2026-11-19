@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "How to use N-gram Bloom filter indexes in StarRocks to accelerate LIKE queries and ngram_search functions by tokenizing strings."
 sidebar_position: 40
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'

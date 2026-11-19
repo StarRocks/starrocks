@@ -113,6 +113,7 @@ public class DeltaLakeFileIOTest {
         DeltaLakeCatalogProperties properties = new DeltaLakeCatalogProperties(Map.of(
                 DeltaLakeCatalogProperties.ENABLE_DELTA_LAKE_JSON_META_CACHE, String.valueOf(cached),
                 DeltaLakeCatalogProperties.ENABLE_DELTA_LAKE_CHECKPOINT_META_CACHE, String.valueOf(cached)));
-        return DeltaLakeEngine.create(fileIO, properties, CacheBuilder.newBuilder().build(), CacheBuilder.newBuilder().build());
+        return DeltaLakeEngine.create(fileIO, new Configuration(false), properties,
+                CacheBuilder.newBuilder().build(), CacheBuilder.newBuilder().build());
     }
 }

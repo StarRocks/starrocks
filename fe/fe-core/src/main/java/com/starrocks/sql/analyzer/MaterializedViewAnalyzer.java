@@ -432,6 +432,7 @@ public class MaterializedViewAnalyzer {
 
             // analyze query statement, can check whether tables and columns exist in catalog
             Analyzer.analyze(queryStatement, context);
+            SavedSqlGeoValidator.validate(queryStatement);
             AnalyzerUtils.checkNondeterministicFunction(queryStatement);
             AnalyzerUtils.prohibitTimeTravelQuery(queryStatement, "create materialized view");
 
@@ -552,10 +553,11 @@ public class MaterializedViewAnalyzer {
                 checkPartitionColumnExprs(statement, columnExprMap, changedPartitionByExprs, aliasTableMap, context);
                 // check whether partition expression functions are allowed if it exists
                 checkPartitionExpPatterns(statement);
+                // check window function can be used in partitioned mv; must run before the table names in
+                // partition exprs are replaced with the base table's, which may differ in case from the query's
+                checkWindowFunctions(statement);
                 // check partition column must be base table's partition column
                 checkPartitionColumnWithBaseTable(statement, changedPartitionByExprs, aliasTableMap);
-                // check window function can be used in partitioned mv
-                checkWindowFunctions(statement);
                 // determine mv partition 's type: list or range
                 checkMVPartitionInfoType(statement, aliasTableMap);
                 // deduce generate partition infos for list partition expressions
@@ -1695,12 +1697,6 @@ public class MaterializedViewAnalyzer {
             if (hasSpecifiedPartitions && refreshMode.isIncrementalOrAuto()) {
                 throw new SemanticException("Partition refresh is not supported for materialized views with " +
                         "refresh_mode=" + refreshMode.name() + ". Please refresh the whole materialized view instead.",
-                        tableRef.getPos());
-            }
-            if (statement.isForceRefresh() && refreshMode.isIncrementalOrAuto()) {
-                throw new SemanticException("FORCE refresh is not supported for materialized views with " +
-                        "refresh_mode=" + refreshMode.name() +
-                        ". Please drop and re-create the materialized view instead.",
                         tableRef.getPos());
             }
             PartitionInfo partitionInfo = mv.getPartitionInfo();

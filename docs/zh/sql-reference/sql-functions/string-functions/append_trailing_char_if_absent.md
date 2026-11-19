@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "如果字符串非空且末尾不包含指定字符，则将该字符附加到末尾。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # append_trailing_char_if_absent

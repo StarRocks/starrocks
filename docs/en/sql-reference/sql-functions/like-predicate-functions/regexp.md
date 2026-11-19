@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Checks whether a given expression matches the regular expression specified by pattern."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # regexp

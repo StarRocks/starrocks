@@ -34,7 +34,6 @@ import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.data.FilteredColumnarBatch;
 import io.delta.kernel.data.Row;
 import io.delta.kernel.defaults.engine.DefaultEngine;
-import io.delta.kernel.defaults.engine.hadoopio.HadoopFileIO;
 import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.CloseableIterator;
 import org.apache.hadoop.conf.Configuration;
@@ -258,7 +257,7 @@ public class DeltaLakeCacheMemoryAccuracyTest {
                 field(metastore, DeltaLakeMetastore.class, "checkpointCache");
         Cache<DeltaLakeFileStatus, List<JsonNode>> jsonCache = field(metastore, DeltaLakeMetastore.class, "jsonCache");
         DeltaLakeEngine engine = DeltaLakeEngine.create(
-                new HadoopFileIO(new Configuration()), properties, checkpointCache, jsonCache);
+                new Configuration(), properties, checkpointCache, jsonCache);
         Snapshot snapshot = Table.forPath(engine, path).getLatestSnapshot(engine);
         Scan scan = snapshot.getScanBuilder().build();
         try (CloseableIterator<FilteredColumnarBatch> it = scan.getScanFiles(engine)) {

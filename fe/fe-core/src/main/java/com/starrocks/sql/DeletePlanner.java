@@ -114,6 +114,14 @@ public class DeletePlanner {
                 }
             }
 
+            // Format version 1 has no delete files. Metadata deletes above write no files and remain supported.
+            if (icebergTable.getFormatVersion() < 2) {
+                throw new SemanticException(
+                        "DELETE on Iceberg format version 1 table %s can only remove whole partitions or data files. " +
+                                "Row-level deletes require format version 2 or later.",
+                        icebergTable.getName());
+            }
+
             // Anything that is not a metadata delete writes Parquet position delete files, which Iceberg
             // rejects at commit on format version 3+ (it requires deletion vectors there). Refuse now, before
             // the BE writes files the commit would throw away. Encrypted tables are always v3.

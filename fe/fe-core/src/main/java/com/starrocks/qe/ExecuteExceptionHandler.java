@@ -25,7 +25,7 @@ import com.starrocks.common.QueryPlanLog;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.common.util.SqlCredentialRedactor;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.GlobalDictNotMatchException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
@@ -118,10 +118,11 @@ public class ExecuteExceptionHandler {
             try {
                 String sql = originStmt != null ? originStmt.originStmt : "";
                 String queryId = DebugUtil.printId(connectContext.getQueryId());
-                String plan = execPlan.getExplainString(TExplainLevel.COSTS);
+                String plan = execPlan.getExplainStringForLog(TExplainLevel.COSTS);
                 QueryPlanLog.getQueryPlan().log(String.format(
                         "Query failed. queryId=%s, errType=%s, error=%s, sql=%s\n%s",
-                        queryId, errType, errorMsg, SqlCredentialRedactor.redact(sql), plan));
+                        queryId, errType, LogUtil.desensitizeText(errorMsg),
+                        LogUtil.redactSqlForLog(sql, null), plan));
             } catch (Exception e) {
                 LOG.warn("Failed to write plan to fe.plan.log", e);
             }
@@ -383,8 +384,10 @@ public class ExecuteExceptionHandler {
         if (context.retryTime == 0) {
             LOG.warn("Query cancelled by crash of backends or RpcException, [QueryId={}] [SQL={}]",
                     DebugUtil.printId(connectContext.getExecutionId()),
-                    context.parsedStmt.getOrigStmt() == null ? "" : context.parsedStmt.getOrigStmt().originStmt,
-                    e);
+                    LogUtil.desensitizeSql(
+                            context.parsedStmt.getOrigStmt() == null ? "" : context.parsedStmt.getOrigStmt().originStmt,
+                            context.parsedStmt),
+                    LogUtil.desensitize(e));
             logFailedQueryPlan(context.execPlan, connectContext,
                     context.parsedStmt.getOrigStmt(), e.getMessage(), QueryState.ErrType.INTERNAL_ERR);
         }

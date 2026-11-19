@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the largest integer that is not more than x."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # floor, dfloor

@@ -17,6 +17,7 @@
 #include <memory>
 #include <string_view>
 #include <variant>
+#include <vector>
 
 #include "gutil/macros.h"
 #include "storage/lake/metacache_key.h"
@@ -61,9 +62,15 @@ public:
 
     std::shared_ptr<const TabletSchema> lookup_tablet_schema(const MetacacheKey& key);
 
-    std::shared_ptr<Segment> lookup_segment(const MetacacheKey& key);
+    // |count| false leaves the lookup out of the segment cache hit and miss counters, for a probe that may reject
+    // what it finds or is followed by a load that looks the same key up again. Such a caller counts a hit it uses
+    // with count_segment_hit().
+    std::shared_ptr<Segment> lookup_segment(const MetacacheKey& key, bool count = true);
+    void count_segment_hit();
 
-    std::shared_ptr<const DelVector> lookup_delvec(const MetacacheKey& key);
+    // |count_stats| false leaves the lookup out of the delete vector cache hit and miss counters, for a probe that
+    // is followed by a real lookup of the same key.
+    std::shared_ptr<const DelVector> lookup_delvec(const MetacacheKey& key, bool count_stats = true);
 
     bool lookup_bundled_metadata_marker(const MetacacheKey& key);
 
@@ -98,9 +105,10 @@ public:
     // Erases |key| from both caches.
     void erase(const MetacacheKey& key);
 
-    void update_tablet_metadata_capacity(size_t new_capacity);
+    // Set the capacity of one LRU. Returns the total charge of the entries evicted to fit it.
+    size_t update_tablet_metadata_capacity(size_t new_capacity);
 
-    void update_segment_metadata_capacity(size_t new_capacity);
+    size_t update_segment_metadata_capacity(size_t new_capacity);
 
     void prune();
 
@@ -112,12 +120,17 @@ public:
 
     size_t segment_metadata_capacity() const;
 
+    // Memory usage of each shard of the LRU, which divides its capacity evenly among its shards.
+    std::vector<size_t> tablet_metadata_shard_memory_usages() const;
+
+    std::vector<size_t> segment_metadata_shard_memory_usages() const;
+
 private:
     static void cache_value_deleter(const CacheKey& key, void* value);
 
     static void insert(Cache* cache, std::string_view key, CacheValue* ptr, size_t size);
 
-    static void update_capacity(Cache* cache, size_t new_capacity);
+    static size_t update_capacity(Cache* cache, size_t new_capacity);
 
     // No metacache-level lock: conditional replacement, the compare-and-insert needed by cache_segment_if_absent()
     // and the in-place charge update needed by update_segment_cache_size() are provided

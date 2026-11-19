@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "FILE 是只读标量类型，通过一组固定字段引用一个文件或文件中的一段字节。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'

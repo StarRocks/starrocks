@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Calculates the base 2 logarithm of a number."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # log2

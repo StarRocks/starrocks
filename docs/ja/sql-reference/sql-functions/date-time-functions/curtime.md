@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "現在のタイムゾーンを取得し、VARCHAR 値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # curtime,current_time

@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "FAQ for common StarRocks shared-data cluster questions."
+products: [oss, enterprise]
 ---
 
 # Shared-data
@@ -202,7 +203,7 @@ To clean up stuck compaction tasks, follow these steps:
 
 ## Why is compaction slow in Kubernetes shared-data clusters?
 
-If ingestion happens in one warehouse but compaction runs in another (for example, `default_warehouse`), compaction must pull data across warehouses with no cache, slowing it down.
+If ingestion happens in one warehouse but compaction runs in another (for example, `default_warehouse`), compaction must pull data across warehouses with no cache, slowing it down. This applies only to editions that support multiple warehouses. StarRocks open source has only `default_warehouse`, so ingestion and compaction always run in the same warehouse.
 
 Solution:
 

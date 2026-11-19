@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从仓库中删除数据快照及其数据文件。"
+products: [oss, enterprise, anywhere]
 ---
 
 # DROP SNAPSHOT

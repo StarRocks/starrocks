@@ -2,6 +2,7 @@
 sidebar_position: 40
 displayed_sidebar: docs
 description: "How to prepare StarRocks deployment files for x86 or ARM-based CPU deployments."
+products: [oss]
 ---
 
 # Prepare deployment files

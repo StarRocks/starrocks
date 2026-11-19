@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "计算一组 Bitmap 值的并集。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_union

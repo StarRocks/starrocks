@@ -33,6 +33,7 @@ import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.LoadDataSourceType;
 import com.starrocks.load.routineload.PulsarRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.load.routineload.RoutineLoadPropertyNames;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -174,6 +175,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(TASK_CONSUME_SECOND)
             .add(TASK_TIMEOUT_SECOND)
             .add(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
+            .addAll(RoutineLoadPropertyNames.LEGACY_NAMES.keySet())
             .build();
 
     private static final ImmutableSet<String> KAFKA_PROPERTIES_SET = new ImmutableSet.Builder<String>()
@@ -212,6 +214,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private long maxBatchRows = -1;
     private long taskConsumeSecond;
     private long taskTimeoutSecond;
+    // the descriptive property names the statement used, with normalized values; see RoutineLoadPropertyNames
+    private Map<String, String> descriptivePropertyValues = Maps.newHashMap();
     private long logRejectedRecordNum = 0;
     private boolean strictMode = true;
     private String timezone = TimeUtils.DEFAULT_TIME_ZONE;
@@ -300,6 +304,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     public long getTaskTimeoutSecond() {
         return taskTimeoutSecond;
+    }
+
+    public Map<String, String> getDescriptivePropertyValues() {
+        return descriptivePropertyValues;
     }
 
     public boolean isTrimspace() {
@@ -568,6 +576,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     }
 
     public void checkJobProperties() throws StarRocksException {
+        // The checks below read the legacy names; a descriptive name is resolved into its legacy name first.
+        Map<String, String> jobProperties = RoutineLoadPropertyNames.resolve(this.jobProperties);
+        descriptivePropertyValues = RoutineLoadPropertyNames.descriptiveValues(jobProperties);
+
         Optional<String> optional = jobProperties.keySet().stream().filter(
                 entity -> !PROPERTIES_SET.contains(entity)).findFirst();
         if (optional.isPresent()) {

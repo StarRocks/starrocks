@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回 StarRocks FE 模块中特定类或字段的估计内存使用量。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # inspect_memory_detail

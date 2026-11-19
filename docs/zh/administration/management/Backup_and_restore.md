@@ -2,6 +2,7 @@
 sidebar_position: 50
 displayed_sidebar: docs
 description: "StarRocks 支持将数据备份为快照并从远端存储恢复至任意集群。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 备份与恢复
@@ -175,7 +176,7 @@ StarRocks 支持以数据库、表、或分区为粒度全量备份数据。
 
 ### 备份数据库
 
-对数据库执行完全备份将备份数据库中的所有表、物化视图、逻辑视图和 UDF。
+对数据库执行完全备份将备份数据库中的所有表、同步物化视图、逻辑视图和 UDF。除非 FE 配置项 [`enable_backup_materialized_view`](../configuration/FE_parameters/user_query_loading.md#enable_backup_materialized_view) 设置为 `true`（默认值为 `false`），否则会跳过异步物化视图。如需在默认配置下备份异步物化视图，请在 BACKUP 语句中指定其名称，参见[备份物化视图](#备份物化视图)。
 
 以下示例为数据库 `sr_hub` 创建数据快照 `sr_member_backup` 并备份至仓库 `test_repo` 中。
 
@@ -245,7 +246,10 @@ ON (sr_member PARTITION (p1));
 
 同步物化视图无需手动备份，备份基表时系统将同时备份其上建立的同步物化视图。
 
-异步物化视图可通过备份其所属数据库一起备份，也可以通过手动备份。
+默认情况下，备份数据库时不会同时备份其中的异步物化视图。您可以通过以下任一方式备份异步物化视图：
+
+- 在 `ON` 子句中指定物化视图名称，如下方示例。此方式不受 `enable_backup_materialized_view` 影响。
+- 将 FE 配置项 [`enable_backup_materialized_view`](../configuration/FE_parameters/user_query_loading.md#enable_backup_materialized_view) 设置为 `true`。此后，备份整个数据库以及 `ON (ALL MATERIALIZED VIEWS)` 都会包含异步物化视图。
 
 增量物化视图（`refresh_mode` 为 `INCREMENTAL`，或为 `AUTO` 且没有按 PCT 创建）不支持备份。在备份语句中指定增量物化视图会报错；备份整个数据库或所有物化视图时会跳过增量物化视图。请在基表恢复后重新创建增量物化视图。
 
@@ -272,6 +276,12 @@ BACKUP DATABASE sr_hub SNAPSHOT sr_mv3_backup
 TO test_repo
 ON (ALL MATERIALIZED VIEWS);
 ```
+
+:::note
+
+如果 `enable_backup_materialized_view` 为 `false`（默认值），上述语句不会备份任何物化视图，但 BACKUP 作业仍会成功完成，不报错。
+
+:::
 
 ### 备份逻辑视图
 
@@ -455,7 +465,8 @@ PROPERTIES ("backup_timestamp" = "2024-12-09-10-52-10-940");
 RESTORE SNAPSHOT sr_all_backup
 FROM test_repo
 DATABASE sr_hub
-ON (ALL TABLES);
+ON (ALL TABLES)
+PROPERTIES ("backup_timestamp" = "2024-12-09-10-52-10-940");
 ```
 
 以下示例将快照 `sr_core_backup` 中数据库 `sr_hub` 下其中一张表恢复到目标群集中数据库 `sr_hub` 中。
@@ -685,4 +696,4 @@ CANCEL RESTORE FOR EXTERNAL CATALOG;
 - 如果被恢复表与已有表重名，StarRocks 会首先识别已有表的 Schema。如果 Schema 相同，StarRocks 会覆盖写入已有表。如果 Schema 不同，恢复作业失败。您可以通过 `AS` 关键字重新命名被恢复表，或者删除已有表后重新发起恢复作业。
 - 如果恢复作业是一次覆盖操作（指定恢复数据到已经存在的表或分区中），那么从恢复作业的 COMMIT 阶段开始，当前集群上被覆盖的数据有可能不能再被还原。此时如果恢复作业失败或被取消，有可能造成之前的数据损坏且无法访问。这种情况下，只能通过再次执行恢复操作，并等待作业完成。因此，我们建议您，如无必要，不要使用覆盖的方式恢复数据，除非确认当前数据已不再使用。覆盖操作会检查快照和已存在的表或分区的元数据是否相同，包括 Schema 和 Rollup 等信息，如果不同则无法执行恢复操作。
 - 目前 StarRocks 暂不支持备份恢复用户、权限以及资源组配置相关数据。
-- StarRocks 不支持备份恢复表之间的 Colocate Join 关系。
+- 默认情况下，StarRocks 不会恢复表之间的 Colocate Join 关系。自 v3.2.10 和 v3.3.2 起，在存算一体集群中，您可以将 FE 配置项 `enable_colocate_restore` 设置为 `true`，使恢复的表保留其 Colocate Join 关系。该配置仅对目标集群中不存在的表生效。

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "FE ランタイムと StarOS ベースのストレージボリュームにおける AWS 認証情報のサポートを比較します。"
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ストレージボリュームの AWS 認証情報サポート

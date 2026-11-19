@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "JSONオブジェクトからトップレベルのキーをJSON配列として返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # json_keys

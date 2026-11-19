@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW TABLE STATUS は、テーブルのいくつかの情報を表示するために使用されます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW TABLE STATUS

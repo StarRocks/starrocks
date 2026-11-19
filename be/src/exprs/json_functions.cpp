@@ -23,6 +23,7 @@
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "column/flat_json/flat_json_internal.h"
 #include "column/json_column.h"
 #include "column/json_converter.h"
 #include "column/nullable_column.h"
@@ -531,7 +532,12 @@ StatusOr<ColumnPtr> JsonFunctions::_flat_json_query_impl(FunctionContext* contex
             result.append_nulls(num_rows);
             return result.build(ColumnHelper::is_all_const(columns));
         }
-        if (ResultType != state->flat_column_type) {
+        if (ResultType == TYPE_JSON && ResultType != state->flat_column_type &&
+            flat_json::JSON_MERGE_FUNC.contains(state->flat_column_type)) {
+            // The flat sub-column holds JSON values of its type (a VARCHAR one holds JSON strings). Rebuild
+            // them as JSON instead of casting: a cast parses a string that reads like JSON text.
+            ret = flat_json::flat_column_to_json(flat_column, state->flat_column_type);
+        } else if (ResultType != state->flat_column_type) {
             DCHECK(state->cast_expr != nullptr);
             Chunk chunk;
             chunk.append_column(flat_column, 0);
