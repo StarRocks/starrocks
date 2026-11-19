@@ -45,23 +45,13 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(AndImpl, l_value, r_value) {
     return l_value & r_value;
 }
 
-<<<<<<< HEAD
-class VectorizedAndCompoundPredicate final : public Predicate {
-=======
 // A NULL side only yields a non-NULL result when the other side is FALSE (0), and 0 & x is 0,
 // so the value under a NULL row cannot leak here.
 DEFINE_LOGIC_NULL_BINARY_FUNCTION_WITH_IMPL(AndNullableImpl, l_value, l_null, r_value, r_null) {
     return l_value & r_value;
 }
 
-#ifdef STARROCKS_JIT_ENABLE
-class VectorizedAndCompoundPredicate final : public Predicate,
-                                             public JITCodegenNode
-#else
-class VectorizedAndCompoundPredicate final : public Predicate
-#endif
-{
->>>>>>> 0da307b ([BugFix][RB-1117] Keep TRUE OR NULL exactly 1 instead of OR-ing in the byte under the NULL (#83377))
+class VectorizedAndCompoundPredicate final : public Predicate {
 public:
     DEFINE_COMPOUND_CONSTRUCT(VectorizedAndCompoundPredicate);
 
@@ -142,9 +132,6 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(OrImpl, l_value, r_value) {
     return l_value | r_value;
 }
 
-<<<<<<< HEAD
-class VectorizedOrCompoundPredicate final : public Predicate {
-=======
 // TRUE OR NULL is a non-NULL TRUE, so the value under the NULL side must not be OR-ed in: it is undefined
 // (e.g. uninitialized after resize_uninitialized) and would turn TRUE into 17, 185, ...
 // (null - 1) is all ones for a non-NULL row and 0 for a NULL row.
@@ -152,14 +139,7 @@ DEFINE_LOGIC_NULL_BINARY_FUNCTION_WITH_IMPL(OrNullableImpl, l_value, l_null, r_v
     return (l_value & (l_null - 1)) | (r_value & (r_null - 1));
 }
 
-#ifdef STARROCKS_JIT_ENABLE
-class VectorizedOrCompoundPredicate final : public Predicate,
-                                            public JITCodegenNode
-#else
-class VectorizedOrCompoundPredicate final : public Predicate
-#endif
-{
->>>>>>> 0da307b ([BugFix][RB-1117] Keep TRUE OR NULL exactly 1 instead of OR-ing in the byte under the NULL (#83377))
+class VectorizedOrCompoundPredicate final : public Predicate {
 public:
     DEFINE_COMPOUND_CONSTRUCT(VectorizedOrCompoundPredicate);
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
