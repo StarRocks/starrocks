@@ -930,7 +930,7 @@ PARALLEL_TEST(VariantColumnTest, test_append_double_into_bigint_path_keeps_the_e
 }
 
 // A SMALLINT fits a double exactly, so the typed DOUBLE path is kept.
-PARALLEL_TEST(VariantColumnTest, test_append_smallint_into_double_path_stays_typed_double) {
+PARALLEL_TEST(VariantColumnTest, test_append_smallint_into_double_path_keeps_value_types) {
     auto src = VariantColumn::create();
     auto src_metadata = BinaryColumn::create();
     auto src_remain = BinaryColumn::create();
@@ -951,10 +951,17 @@ PARALLEL_TEST(VariantColumnTest, test_append_smallint_into_double_path_stays_typ
 
     dst->append(*src, 0, src->size());
 
-    ASSERT_EQ((std::vector<TypeDescriptor>{TYPE_DOUBLE_DESC}), dst->shredded_types());
-    const auto* typed_a = down_cast<const NullableColumn*>(dst->typed_column_by_index(0));
-    ASSERT_EQ(1.5, typed_a->get(0).get_double());
-    ASSERT_EQ(12.0, typed_a->get(1).get_double());
+    // Widening the SMALLINT to DOUBLE would read 12 back as the double 12.0, so the path is hoisted to VARIANT.
+    ASSERT_EQ((std::vector<TypeDescriptor>{TypeDescriptor(TYPE_VARIANT)}), dst->shredded_types());
+    const std::vector<std::string> expected = {R"({"a":1.5})", R"({"a":12})"};
+    for (size_t row = 0; row < expected.size(); ++row) {
+        VariantRowValue buffer;
+        const VariantRowValue* value = dst->get_row_value(row, &buffer);
+        ASSERT_NE(nullptr, value);
+        auto json = value->to_json();
+        ASSERT_TRUE(json.ok()) << json.status();
+        ASSERT_EQ(expected[row], json.value());
+    }
 }
 
 // NOLINTNEXTLINE

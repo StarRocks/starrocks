@@ -52,8 +52,7 @@ public class ScalarGeoMultiInTest {
 
     @Test
     public void testScalarGeoOnEitherSide() {
-        var geography = new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
-                GeoTypeDescriptor.CoordinateSystem.SPHERICAL, GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL,
+        var geography = new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY, GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL,
                 "OGC:CRS84", 4326);
         for (Type geo : List.of(ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, geography),
                 ScalarType.createGeoType(PrimitiveType.GEOMETRY, GeoTypeDescriptor.geometry("EPSG:3857")))) {

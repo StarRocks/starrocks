@@ -208,6 +208,24 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
     reader->close();
 }
 
+// The remote read scheduler waits of a prepared tablet's segment opens reach the scan's waits, which the profile
+// reports; the prepared-tablet breakdown has no fields of its own for them.
+TEST_F(LakeDuplicateTabletReaderTest, test_prepare_stats_keep_remote_io_waits) {
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+    OlapReaderStatistics prepare_stats;
+    prepare_stats.io_ns_remote = 5;
+    prepare_stats.remote_io_queue_wait_ns = 100;
+    prepare_stats.remote_io_fill_wait_ns = 200;
+    prepare_stats.remote_io_fill_joins = 2;
+    reader->record_tablet_prepare_stats(prepare_stats);
+    reader->record_tablet_prepare_stats(prepare_stats);
+    const auto& stats = reader->stats();
+    EXPECT_EQ(10, stats.lake_prepared_tablet_io_remote_ns);
+    EXPECT_EQ(200, stats.remote_io_queue_wait_ns);
+    EXPECT_EQ(400, stats.remote_io_fill_wait_ns);
+    EXPECT_EQ(4, stats.remote_io_fill_joins);
+}
+
 // With the remote I/O scheduler enabled, a query scan that fills the cache builds a read-ahead window for its segment
 // readers. A file that cannot warm the cache (a local file here) turns the window off at its first warm-up, and the
 // scan reads exactly what it reads without the scheduler; reads without a query context build no window at all.
@@ -3171,6 +3189,136 @@ TEST_F(LakeTabletReaderSpit, test_parallel_tasks_charge_the_caller_tracker) {
     for (auto* t : rowset_task_trackers) EXPECT_EQ(tracker.get(), t);
 }
 
+// A failed parallel open of a CLASSIC split falls back to an unsplit read, as a failed split does, once every task has
+// finished; the unsplit read returns every row.
+TEST_F(LakeTabletReaderSpit, test_classic_parallel_open_error_falls_back_to_unsplit) {
+    ASSERT_NO_FATAL_FAILURE(write_two_rowsets_with_three_segments());
+    TInternalScanRange internal;
+    internal.__set_tablet_id(_tablet_metadata->id());
+    internal.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan;
+    scan.__set_internal_scan_range(internal);
+    ConfigResetGuard<bool> parallel_guard(&config::enable_load_segment_parallel, false);
+    ParallelSegmentOpenScope scope(true, true);
+    auto* sync = SyncPoint::GetInstance();
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+    std::atomic<int> started{0};
+    std::atomic<int> finished{0};
+    sync->SetCallBack("TabletReader::open_segment_task", [&](void* arg) {
+        if (started.fetch_add(1) == 0) {
+            *static_cast<Status*>(arg) = Status::IOError("injected footer read failure");
+        }
+        finished.fetch_add(1);
+    });
+    _tablet_mgr->metacache()->prune();
+    auto params = generate_tablet_reader_params(&scan);
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                 /*need_split=*/true, /*could_split_physically=*/true);
+    ASSERT_OK(reader->prepare());
+    ASSERT_OK(reader->open(params));
+    EXPECT_EQ(3, started.load());
+    EXPECT_EQ(started.load(), finished.load());
+    std::vector<pipeline::ScanSplitContextPtr> tasks;
+    reader->get_split_tasks(&tasks);
+    EXPECT_TRUE(tasks.empty());
+    auto chunk = ChunkFactory::new_chunk(*_schema, 1024);
+    int64_t rows = 0;
+    while (true) {
+        chunk->reset();
+        auto st = reader->get_next(chunk.get());
+        if (st.is_end_of_file()) break;
+        ASSERT_OK(st);
+        rows += chunk->num_rows();
+    }
+    EXPECT_EQ(3 * 22, rows);
+    reader->close();
+}
+
+// The parallel open makes the memory check Rowset::load_segments() makes: before any task is admitted, and in each task
+// before its IO.
+TEST_F(LakeTabletReaderSpit, test_parallel_segment_open_checks_mem_limit) {
+    ASSERT_NO_FATAL_FAILURE(write_two_rowsets_with_three_segments());
+    TInternalScanRange internal;
+    internal.__set_tablet_id(_tablet_metadata->id());
+    internal.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan;
+    scan.__set_internal_scan_range(internal);
+    ConfigResetGuard<bool> parallel_guard(&config::enable_load_segment_parallel, false);
+    ParallelSegmentOpenScope scope(true, true);
+    auto* sync = SyncPoint::GetInstance();
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+    std::atomic<int> started{0};
+    sync->SetCallBack("TabletReader::open_segment_task", [&](void*) { started.fetch_add(1); });
+    for (const int fail_from : {0, 1}) {
+        // fail_from 0: over the limit at admission; 1: over the limit once the tasks run.
+        std::atomic<int> checks{0};
+        sync->SetCallBack("TabletReader::open_segments_in_parallel::check_mem_limit", [&](void* arg) {
+            if (checks.fetch_add(1) >= fail_from) {
+                *static_cast<Status*>(arg) = Status::MemoryLimitExceeded("injected memory limit");
+            }
+        });
+        started = 0;
+        _tablet_mgr->metacache()->prune();
+        auto params = generate_tablet_reader_params(&scan);
+        params.enable_prepared_physical_split_scan = true;
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                     /*need_split=*/true, /*could_split_physically=*/true);
+        ASSERT_OK(reader->prepare());
+        auto st = reader->open(params);
+        EXPECT_TRUE(st.is_mem_limit_exceeded()) << fail_from << ": " << st;
+        EXPECT_EQ(fail_from == 0 ? 1 : 4, checks.load()) << fail_from;
+        EXPECT_EQ(0, started.load()) << fail_from;
+        reader->close();
+    }
+}
+
+// The non-split reader that opens its segments for index warming on this thread, without parallel open, makes the same
+// memory check: once before any segment is opened, and before each open.
+TEST_F(LakeTabletReaderSpit, test_index_warm_inline_open_checks_mem_limit) {
+    ASSERT_NO_FATAL_FAILURE(write_two_rowsets_with_three_segments());
+    ConfigResetGuard<bool> parallel_guard(&config::enable_load_segment_parallel, false);
+    ConfigResetGuard<bool> open_guard(&config::lake_scan_parallel_segment_open, false);
+    ConfigResetGuard<bool> warm_guard(&config::lake_scan_warm_index, true);
+    const bool old_scheduler = g_remote_io_scheduler_enabled.exchange(true);
+    auto* sync = SyncPoint::GetInstance();
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+        g_remote_io_scheduler_enabled.store(old_scheduler);
+    });
+    int started = 0;
+    sync->SetCallBack("TabletReader::open_segment_task", [&](void*) { ++started; });
+    for (const int fail_from : {0, 1, 2}) {
+        // fail_from 0: over the limit before any open; 1: before the first open; 2: after the first open.
+        int checks = 0;
+        sync->SetCallBack("TabletReader::open_segments_in_parallel::check_mem_limit", [&](void* arg) {
+            if (checks++ >= fail_from) {
+                *static_cast<Status*>(arg) = Status::MemoryLimitExceeded("injected memory limit");
+            }
+        });
+        started = 0;
+        _tablet_mgr->metacache()->prune();
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+        ASSERT_OK(reader->prepare());
+        TabletReaderParams params;
+        params.reader_type = READER_QUERY;
+        auto st = reader->open(params);
+        EXPECT_TRUE(st.is_mem_limit_exceeded()) << fail_from << ": " << st;
+        EXPECT_EQ(fail_from + 1, checks) << fail_from;
+        EXPECT_EQ(std::max(0, fail_from - 1), started) << fail_from;
+        reader->close();
+    }
+}
+
 TEST_F(LakeTabletReaderSpit, test_parallel_segment_open_error_waits_all_tasks) {
     ASSERT_NO_FATAL_FAILURE(write_two_rowsets_with_three_segments());
     TInternalScanRange internal;
@@ -3231,6 +3379,24 @@ TEST_F(LakeTabletReaderCancelTest, test_parallel_segment_open_cancelled) {
         ASSERT_TRUE(st.is_cancelled()) << st;
     }
     ASSERT_EQ(0, started.load());
+}
+
+// A cancel stops the submission: the task submitted before it skips its IO, and no other task is submitted.
+TEST_F(LakeTabletReaderCancelTest, test_parallel_segment_open_cancel_stops_submission) {
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, false);
+    ParallelSegmentOpenScope scope(true, true);
+    std::atomic<int> submits{0};
+    std::atomic<int> started{0};
+    SyncPoint::GetInstance()->SetCallBack("TabletReader::open_segments_in_parallel::submit", [&](void*) {
+        submits.fetch_add(1);
+        _state.set_is_cancelled(true);
+    });
+    SyncPoint::GetInstance()->SetCallBack("TabletReader::open_segment_task", [&](void*) { started.fetch_add(1); });
+    _tablet_mgr->metacache()->prune();
+    auto st = open(true, true);
+    ASSERT_TRUE(st.is_cancelled()) << st;
+    EXPECT_EQ(1, submits.load());
+    EXPECT_EQ(0, started.load());
 }
 
 // Iterators are built in rowset order whatever order the parallel rowset reads finish in, so the key models that

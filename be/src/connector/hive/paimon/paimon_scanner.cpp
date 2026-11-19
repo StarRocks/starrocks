@@ -22,6 +22,7 @@
 #include <paimon/table/source/table_read.h>
 
 #include <algorithm>
+#include <limits>
 #include <optional>
 #include <string_view>
 #include <utility>
@@ -390,6 +391,11 @@ Status PaimonScanner::_append_arrow_record_batch_to_chunk(ChunkPtr& chunk) {
     for (size_t i = 0; i < materialized_columns.size(); ++i) {
         SlotDescriptor* slot_desc = materialized_columns[i].slot_desc;
         _convert_context.set_current_column(slot_desc->col_name(), slot_desc->type());
+        if (slot_desc->type().type == TYPE_VARCHAR) {
+            // Read Paimon VARCHAR as STRING, without revalidating its declared character count.
+            // Retain only Arrow UTF-8's signed 32-bit byte limit.
+            _convert_context.current_type_length = std::numeric_limits<int32_t>::max();
+        }
         Column* column = chunk->get_column_raw_ptr_by_slot_id(slot_desc->id());
         const auto arrow_column = _arrow_record_batch->GetColumnByName(std::string(materialized_columns[i].name()));
         if (slot_desc->type().is_file_type()) {

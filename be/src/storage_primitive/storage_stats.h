@@ -300,6 +300,14 @@ struct OlapReaderStatistics {
     int64_t sample_build_histogram_count = 0; // Records the number of histogram built for sampling
     int64_t sample_build_histogram_time_ns = 0; // Records the time to build histogram
 
+    // Adds the remote read scheduler waits of |other|. Every path that moves the IO of one statistics object into
+    // another adds these as well, or the waits of those reads never reach the profile.
+    void add_remote_io_waits(const OlapReaderStatistics& other) {
+        remote_io_queue_wait_ns += other.remote_io_queue_wait_ns;
+        remote_io_fill_wait_ns += other.remote_io_fill_wait_ns;
+        remote_io_fill_joins += other.remote_io_fill_joins;
+    }
+
     // Merge task-local reader statistics after parallel rowset reads. Include every counter so
     // the existing query and load profiles retain their complete totals.
     void merge_from(const OlapReaderStatistics& other) {
@@ -405,9 +413,7 @@ struct OlapReaderStatistics {
         prefetch_hit_count += other.prefetch_hit_count;
         prefetch_wait_finish_ns += other.prefetch_wait_finish_ns;
         prefetch_pending_ns += other.prefetch_pending_ns;
-        remote_io_queue_wait_ns += other.remote_io_queue_wait_ns;
-        remote_io_fill_wait_ns += other.remote_io_fill_wait_ns;
-        remote_io_fill_joins += other.remote_io_fill_joins;
+        add_remote_io_waits(other);
         remote_prefetch_blocks += other.remote_prefetch_blocks;
         remote_prefetch_rejected_blocks += other.remote_prefetch_rejected_blocks;
         remote_prefetch_ranges += other.remote_prefetch_ranges;

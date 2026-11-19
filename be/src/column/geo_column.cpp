@@ -33,14 +33,11 @@ namespace {
 
 Status check_transport_descriptor(const GeoColumnDescriptor& descriptor) {
     const auto& type = descriptor.type;
-    const bool geography = type.logical_type == GEO_LOGICAL_TYPE_GEOGRAPHY &&
-                           type.coordinate_system == GEO_COORDINATE_SYSTEM_SPHERICAL &&
-                           GeoEdgeAlgorithmPB_IsValid(type.edge_algorithm) &&
-                           type.edge_algorithm != GEO_EDGE_ALGORITHM_UNKNOWN &&
-                           type.edge_algorithm != GEO_EDGE_ALGORITHM_PLANAR;
-    const bool geometry = type.logical_type == GEO_LOGICAL_TYPE_GEOMETRY &&
-                          type.coordinate_system == GEO_COORDINATE_SYSTEM_CARTESIAN &&
-                          type.edge_algorithm == GEO_EDGE_ALGORITHM_PLANAR;
+    const bool geography =
+            type.logical_type == GEO_LOGICAL_TYPE_GEOGRAPHY && GeoEdgeAlgorithmPB_IsValid(type.edge_algorithm) &&
+            type.edge_algorithm != GEO_EDGE_ALGORITHM_UNKNOWN && type.edge_algorithm != GEO_EDGE_ALGORITHM_PLANAR;
+    const bool geometry =
+            type.logical_type == GEO_LOGICAL_TYPE_GEOMETRY && type.edge_algorithm == GEO_EDGE_ALGORITHM_PLANAR;
     if ((!geography && !geometry) || type.crs.empty() || type.crs.size() > 65536) {
         return Status::NotSupported("Unsupported GEO transport descriptor");
     }
@@ -112,7 +109,6 @@ void GeoColumn::remove_first_n_values(size_t count) {
 
 void GeoColumn::append(const Column& src, size_t offset, size_t count) {
     if (count == 0) {
-        _source(src);
         return;
     }
     if (&src == this) {
@@ -126,7 +122,6 @@ void GeoColumn::append(const Column& src, size_t offset, size_t count) {
 
 void GeoColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t count) {
     if (count == 0) {
-        _source(src);
         return;
     }
     if (&src == this) {
@@ -140,7 +135,6 @@ void GeoColumn::append_selective(const Column& src, const uint32_t* indexes, uin
 
 void GeoColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t count) {
     if (count == 0) {
-        _source(src);
         return;
     }
     if (&src == this) {

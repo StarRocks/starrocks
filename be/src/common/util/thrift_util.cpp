@@ -78,6 +78,19 @@ void redact_plan_credentials(TPlanFragment& fragment) {
     for (auto& node : fragment.plan.nodes) {
         redact_plan_credentials(node);
     }
+    if (fragment.__isset.output_sink && fragment.output_sink.__isset.paimon_table_sink) {
+        // Only the diagnostic copy reaches here. Besides credentials, paths/options/schema may
+        // themselves contain tokens; do not attempt to recognize individual sensitive keys.
+        auto& sink = fragment.output_sink.paimon_table_sink;
+        sink.__set_cloud_configuration(TCloudConfiguration{});
+        sink.__set_options({});
+        sink.__set_schema_json(std::string(kCredentialMask));
+        sink.__set_location(std::string(kCredentialMask));
+        sink.__set_table_identity(std::string(kCredentialMask));
+        sink.__set_static_partition({});
+        sink.__set_commit_user(std::string(kCredentialMask));
+        sink.__set_operation_id(std::string(kCredentialMask));
+    }
 }
 
 } // namespace

@@ -131,6 +131,11 @@ public:
     bool try_get_row_ref(size_t idx, VariantRowRef* out) const;
     const VariantRowValue* get_row_value(size_t idx, VariantRowValue* output) const;
     bool try_materialize_row(size_t idx, VariantRowValue* output) const;
+    // Write-side materialization: reject malformed residuals/overlays instead of falling back
+    // to a partial base row. SQL NULL belongs to the caller's nullable wrapper; encoded VARIANT
+    // null is a real value. Empty/absent residuals require at least one effective overlay.
+    // The source columns are never modified.
+    StatusOr<VariantRowValue> materialize_row_strict(size_t idx) const;
 
     std::string get_name() const override { return "variant"; }
 
