@@ -273,6 +273,7 @@ void PersistentIndexMemtable::clear() {
 }
 
 void PersistentIndexMemtable::run() {
+    ScopedRemoteReadContext remote_read_scope(_flush_remote_read);
     auto st = flush();
     if (!st.ok()) {
         LOG(ERROR) << "PersistentIndexMemtable flush failed for tablet " << _tablet_id << ": " << st;
