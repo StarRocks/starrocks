@@ -77,8 +77,6 @@ public class ScalarType extends Type implements Cloneable {
     // type identity; it only tells the BE reader to keep the naive wall clock unshifted.
     private boolean datetimeIsNtz = false;
 
-    private GeoTypeDescriptor geo;
-
     public ScalarType(PrimitiveType type) {
         this.type = type;
     }
@@ -362,7 +360,7 @@ public class ScalarType extends Type implements Cloneable {
             return precision == other.precision && scale == other.scale;
         }
         if (isGeoType()) {
-            return Objects.equals(geo, other.geo);
+            return Objects.equals(getGeoDescriptor(), other.getGeoDescriptor());
         }
         return true;
     }
@@ -374,7 +372,7 @@ public class ScalarType extends Type implements Cloneable {
         result = 31 * result + precision;
         result = 31 * result + scale;
         if (isGeoType()) {
-            result = 31 * result + Objects.hashCode(geo);
+            result = 31 * result + Objects.hashCode(getGeoDescriptor());
         }
         return result;
     }
@@ -445,12 +443,11 @@ public class ScalarType extends Type implements Cloneable {
         return stringBuilder.toString();
     }
 
-    // Package-private setter for the geo descriptor, used by GeoType
-    void setGeoDescriptor(GeoTypeDescriptor descriptor) {
-        this.geo = descriptor;
-    }
-
+    /**
+     * The semantic descriptor of a native GEO type; {@link GeoType} carries it. Null for other types and for
+     * a GEO type read back from FE metadata, where the descriptor is not persisted.
+     */
     public GeoTypeDescriptor getGeoDescriptor() {
-        return geo;
+        return null;
     }
 }
