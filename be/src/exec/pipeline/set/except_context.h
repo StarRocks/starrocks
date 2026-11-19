@@ -59,7 +59,11 @@ public:
 
     bool is_build_finished() const;
     bool is_probe_finished() const;
-    bool is_output_finished() const { return _next_processed_iter == _hash_set_end_iter; }
+    // The iterators are only set when the build finishes; before that both are default-constructed and compare
+    // equal. A probe child without input, e.g. a right side whose tablets were all pruned for this driver, finishes
+    // the probe before the build, and the output must not count as finished then: it finished the EXCEPT context,
+    // which stopped the build and lost the left rows of this driver (RB-1102).
+    bool is_output_finished() const { return _is_build_finished && _next_processed_iter == _hash_set_end_iter; }
 
     // Called in the preparation phase of ExceptBuildSinkOperator.
     Status prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs);
