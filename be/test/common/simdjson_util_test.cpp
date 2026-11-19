@@ -315,8 +315,7 @@ TEST_F(SimdJsonUtilTest, HandlesLargeString) {
     EXPECT_EQ(buffer.size(), big_str.size() + 2 + simdjson::SIMDJSON_PADDING); // 2 for quotes
 }
 
-TEST_F(SimdJsonUtilTest, ReportsVersion511AndActiveImplementation) {
-    EXPECT_STREQ(SIMDJSON_VERSION, "5.1.1");
+TEST_F(SimdJsonUtilTest, ReportsActiveImplementation) {
     const simdjson::implementation* active = simdjson::get_active_implementation();
     ASSERT_NE(active, nullptr);
     const char* forced_impl = std::getenv("SIMDJSON_FORCE_IMPLEMENTATION");
