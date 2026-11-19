@@ -5,9 +5,6 @@ CREATE DATABASE test_gin_lower_case_${uuid0};
 USE test_gin_lower_case_${uuid0};
 -- result:
 -- !result
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
--- result:
--- !result
 CREATE TABLE t_gin_lc_cs (
   k bigint(20) NULL COMMENT "",
   msg varchar(100) NULL COMMENT "",
