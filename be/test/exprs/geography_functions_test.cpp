@@ -61,15 +61,13 @@ public:
     void SetUp() override {}
 
     static TypeDescriptor geography_type() {
-        return TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY,
-                                               {GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                                GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326});
+        return TypeDescriptor::create_geo_type(
+                TYPE_GEOGRAPHY, {GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326});
     }
 
     static TypeDescriptor geometry_type(std::string crs = "EPSG:3857", std::optional<int32_t> srid = 3857) {
         return TypeDescriptor::create_geo_type(
-                TYPE_GEOMETRY, {GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR,
-                                std::move(crs), srid});
+                TYPE_GEOMETRY, {GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, std::move(crs), srid});
     }
 
     static ColumnPtr geography(std::initializer_list<const char*> values) {
@@ -595,8 +593,7 @@ TEST_F(geographyFunctionsTest, st_containsConstTest) {
 }
 
 TEST_F(geographyFunctionsTest, nativeGeographyWktAndWkbRoundTrip) {
-    GeoTypeDescriptor descriptor{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                 GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
+    GeoTypeDescriptor descriptor{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
     auto geography = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, descriptor);
     std::unique_ptr<FunctionContext> constructor(FunctionContext::create_test_context({TYPE_VARCHAR_DESC}, geography));
 
@@ -860,8 +857,7 @@ TEST_F(geographyFunctionsTest, nativeGeographyPointWkbConstructorRetainsNullSrid
 }
 
 TEST_F(geographyFunctionsTest, nativeGeographyRejectsInvalidInputAndSrid) {
-    GeoTypeDescriptor descriptor{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                 GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
+    GeoTypeDescriptor descriptor{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
     auto geography = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, descriptor);
     std::unique_ptr<FunctionContext> context(
             FunctionContext::create_test_context({TYPE_VARCHAR_DESC, TYPE_INT_DESC}, geography));
@@ -885,8 +881,7 @@ TEST_F(geographyFunctionsTest, nativeGeographyRejectsInvalidInputAndSrid) {
 }
 
 TEST_F(geographyFunctionsTest, nativeGeographySerializerChecksBoundaryDescriptor) {
-    GeoTypeDescriptor type{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR,
-                           "OGC:CRS84", 4326};
+    GeoTypeDescriptor type{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_PLANAR, "OGC:CRS84", 4326};
     GeoColumnDescriptor descriptor{type};
     auto column = GeoColumn::create(std::move(descriptor));
     const char point[] = {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -1357,16 +1352,16 @@ TEST_F(geographyFunctionsTest, nativeGeographyComputeChecksDescriptorCapabilityA
     ASSERT_TRUE(WkbCodec::to_wkb(point, &wkb).ok());
 
     // An unsupported edge algorithm is a semantic type mismatch and stays NotSupported.
-    auto vincenty = GeoColumn::create(GeoColumnDescriptor{{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                                           GEO_EDGE_ALGORITHM_VINCENTY, "OGC:CRS84", 4326}});
+    auto vincenty = GeoColumn::create(
+            GeoColumnDescriptor{{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_VINCENTY, "OGC:CRS84", 4326}});
     vincenty->append_wkb(Slice(wkb));
     auto rejected = GeoFunctions::st_geography_x(nullptr, {vincenty});
     ASSERT_FALSE(rejected.ok());
     EXPECT_TRUE(rejected.status().is_not_supported());
 
     // The same row computes under the SPHERICAL edge algorithm.
-    auto spherical = GeoColumn::create(GeoColumnDescriptor{{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                                            GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326}});
+    auto spherical = GeoColumn::create(
+            GeoColumnDescriptor{{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326}});
     spherical->append_wkb(Slice(wkb));
     auto admitted = GeoFunctions::st_geography_x(nullptr, {spherical});
     ASSERT_TRUE(admitted.ok()) << admitted.status();
@@ -1550,8 +1545,7 @@ TEST_F(geographyFunctionsTest, nativeGeometryComputeRejectsUnsupportedInputs) {
     ASSERT_TRUE(WkbCodec::parse_wkt("POINT (1 2)", &point).ok());
     std::string wkb;
     ASSERT_TRUE(WkbCodec::to_wkb(point, &wkb).ok());
-    GeoColumnDescriptor descriptor{
-            {GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857}};
+    GeoColumnDescriptor descriptor{{GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857}};
     auto column = GeoColumn::create(std::move(descriptor));
     column->append_wkb(Slice(wkb));
     auto type_name = GeoFunctions::st_geometry_type(nullptr, {column});
@@ -3041,7 +3035,7 @@ TEST_F(geographyFunctionsTest, nativeGeoValiditySeparatesTopologyFromBoundaryErr
     EXPECT_TRUE(null->is_null(0));
 
     GeoColumnDescriptor unsupported_descriptor{
-            {GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857}};
+            {GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857}};
     auto unsupported = GeoColumn::create(std::move(unsupported_descriptor));
     std::string point_wkb(21, 0);
     point_wkb[0] = 1;
@@ -4747,14 +4741,13 @@ TEST_F(geographyFunctionsTest, h3BoundaryDirectWkbRetainsDescriptorAndNullPreced
     ASSERT_FALSE(missing_context.ok());
     EXPECT_TRUE(missing_context.status().is_not_supported());
     EXPECT_EQ("H3_ToBoundary requires GEOGRAPHY return descriptor", missing_context.status().message());
-    for (int variant = 0; variant < 6; ++variant) {
+    for (int variant = 0; variant < 5; ++variant) {
         auto type = geography_type();
         if (variant == 0) type = TYPE_BIGINT_DESC;
         if (variant == 1) type.geo_type.reset();
         if (variant == 2) type.geo_type->logical_type = GEO_LOGICAL_TYPE_GEOMETRY;
-        if (variant == 3) type.geo_type->coordinate_system = GEO_COORDINATE_SYSTEM_CARTESIAN;
-        if (variant == 4) type.geo_type->edge_algorithm = GEO_EDGE_ALGORITHM_PLANAR;
-        if (variant == 5) type.geo_type->crs = "EPSG:4326";
+        if (variant == 3) type.geo_type->edge_algorithm = GEO_EDGE_ALGORITHM_PLANAR;
+        if (variant == 4) type.geo_type->crs = "EPSG:4326";
         std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context({TYPE_BIGINT_DESC}, type));
         auto actual = GeoFunctions::h3_to_boundary(context.get(), {invalid_cell});
         ASSERT_FALSE(actual.ok());

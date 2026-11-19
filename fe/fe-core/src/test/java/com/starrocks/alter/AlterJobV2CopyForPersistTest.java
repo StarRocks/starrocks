@@ -31,6 +31,7 @@ import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.thrift.TDropIndexInfo;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.type.IntegerType;
@@ -282,6 +283,38 @@ public class AlterJobV2CopyForPersistTest {
         LakeTableDropIndexJob dropJob = new LakeTableDropIndexJob();
         setField(dropJob, "historySchema", buildHistorySchema());
         assertFieldsEqual(dropJob, dropJob.copyForPersist(), "historySchema");
+    }
+
+    /** Every journal entry must retain independent catalog definitions and the DROP payload. */
+    @Test
+    public void testLakeTableIndexFastPathJobsCopySubclassFields() throws Exception {
+        LakeTableAddIndexJob addJob = newLakeTableAddIndexJob();
+        assertCollectionsEqual(addJob, addJob.copyForPersist(),
+                "newIndexes", "addBfColumns", "indexMetaIdToNewSchema");
+        assertCollectionsIndependent(AlterJobV2CopyForPersistTest::newLakeTableAddIndexJob,
+                "newIndexes", "addBfColumns", "indexMetaIdToNewSchema");
+
+        LakeTableDropIndexJob dropJob = newLakeTableDropIndexJob();
+        assertCollectionsEqual(dropJob, dropJob.copyForPersist(),
+                "dropIndexIds", "dropInfos", "dropBfColumns");
+        assertCollectionsIndependent(AlterJobV2CopyForPersistTest::newLakeTableDropIndexJob,
+                "dropIndexIds", "dropInfos", "dropBfColumns");
+    }
+
+    private static LakeTableAddIndexJob newLakeTableAddIndexJob() {
+        Index index = new Index(-1L, "ix_bm", List.of(ColumnId.create("c1")), IndexDef.IndexType.BITMAP, "",
+                Maps.newHashMap());
+        LakeTableAddIndexJob job = new LakeTableAddIndexJob(1L, 2L, 3L, "tbl", 1000L, List.of(index), List.of(),
+                List.of("c2"));
+        job.putNewSchema(10L, 100L, 2L);
+        return job;
+    }
+
+    private static LakeTableDropIndexJob newLakeTableDropIndexJob() {
+        TDropIndexInfo dropInfo = new TDropIndexInfo();
+        dropInfo.setIndex_id(-1L);
+        return new LakeTableDropIndexJob(1L, 2L, 3L, "tbl", 1000L, List.of(-1L), List.of("ix_bm"),
+                List.of(dropInfo), List.of("c2"));
     }
 
     @Test

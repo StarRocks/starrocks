@@ -70,6 +70,10 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
 
     private boolean isSetStoragePath = false;
 
+    // Journaled so that a follower, which may become the leader, knows it before the next heartbeat.
+    @SerializedName(value = "supportLakeIndexFastPath")
+    private boolean supportLakeIndexFastPath = false;
+
     public BackendHbResponse() {
         super(HeartbeatResponse.Type.BACKEND);
     }
@@ -153,6 +157,14 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
 
     public boolean isSetStoragePath() {
         return isSetStoragePath;
+    }
+
+    public boolean isSupportLakeIndexFastPath() {
+        return supportLakeIndexFastPath;
+    }
+
+    public void setSupportLakeIndexFastPath(boolean supportLakeIndexFastPath) {
+        this.supportLakeIndexFastPath = supportLakeIndexFastPath;
     }
 
     public TStatusCode getStatusCode() {

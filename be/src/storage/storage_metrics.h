@@ -129,6 +129,9 @@ public:
     METRIC_DEFINE_INT_COUNTER(lake_add_index_requests_failed, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(lake_drop_index_requests_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(lake_idg_files_written_total, MetricUnit::OPERATIONS);
+    // Counts reads that found an .idx file referenced by tablet metadata missing
+    // and went on without that IDG index (no bitmap iterator, no bloom pruning).
+    METRIC_DEFINE_INT_COUNTER(lake_idg_files_missing_total, MetricUnit::OPERATIONS);
     // Counts remote lake tablet metadata read attempts that return NotFound,
     // including each failed fallback attempt. A tablet's metadata lives either
     // in its own metadata object or in a bundled metadata file, never in both,

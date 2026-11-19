@@ -588,8 +588,7 @@ TEST(GeoMetadataTest, AnnotatedAndUnannotatedWkbKeepExistingBinaryReads) {
     }
 }
 TEST(GeoMetadataTest, NativeGeographyPermutationPreservesPayloadAndDescriptor) {
-    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                     GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
+    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
     auto input = ColumnHelper::create_column(TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, semantic), true);
     auto* nullable = down_cast<NullableColumn*>(input.get());
     auto* geo = down_cast<GeoColumn*>(nullable->data_column_raw_ptr());
@@ -621,8 +620,7 @@ TEST(GeoMetadataTest, NativeGeographyPermutationPreservesPayloadAndDescriptor) {
 }
 
 TEST(GeoMetadataTest, NativeGeographyScanDoesNotBuildValueRanges) {
-    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                     GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
+    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
     TSlotDescriptor slot;
     slot.__set_id(1);
     slot.__set_parent(0);
@@ -649,8 +647,7 @@ TEST(GeoMetadataTest, NativeGeographyScanDoesNotBuildValueRanges) {
 }
 
 TEST(GeoMetadataTest, NativeGeographyRequiresCompatibleIcebergMetadata) {
-    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                     GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
+    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
     SlotDescriptor slot(1, "shape", TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, semantic));
     TIcebergSchema lake;
     lake.__set_fields({lake_geo()});
@@ -671,8 +668,7 @@ TEST(GeoMetadataTest, NativeGeographyRequiresCompatibleIcebergMetadata) {
 }
 
 TEST(GeoMetadataTest, NativeGeographyChecksParquetDefaultsAndExplicitMetadata) {
-    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                     GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
+    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
     SlotDescriptor slot(1, "shape", TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, semantic));
     TIcebergSchema lake;
     lake.__set_fields({lake_geo()});
@@ -689,8 +685,7 @@ TEST(GeoMetadataTest, NativeGeographyChecksParquetDefaultsAndExplicitMetadata) {
 }
 
 TEST(GeoMetadataTest, NativeGeographyRejectsConflictingParquetMetadata) {
-    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                     GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
+    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
     SlotDescriptor slot(1, "shape", TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, semantic));
     TIcebergSchema lake;
     lake.__set_fields({lake_geo()});
@@ -728,8 +723,7 @@ TEST(GeoMetadataTest, NativeGeographyRejectsConflictingParquetMetadata) {
 
 TEST(GeoMetadataTest, GeoLeavesDoNotUseRowGroupOrPageIndexMinMax) {
     const auto geography = TypeDescriptor::create_geo_type(
-            TYPE_GEOGRAPHY, {GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL, GEO_EDGE_ALGORITHM_SPHERICAL,
-                             "OGC:CRS84", 4326});
+            TYPE_GEOGRAPHY, {GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326});
     for (int kind : {0, 1, 2, 3}) {
         auto element = geo_element(kind == 1);
         if (kind >= 2) element.__isset.logicalType = false;
@@ -838,8 +832,7 @@ TEST(GeoMetadataTest, GeoMinMaxCannotHideMatchingFileRows) {
 }
 
 TEST(GeoMetadataTest, NativeGeometryValidatesIcebergAndParquetDescriptors) {
-    const GeoTypeDescriptor crs84{GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR,
-                                  "OGC:CRS84", 4326};
+    const GeoTypeDescriptor crs84{GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "OGC:CRS84", 4326};
     TIcebergSchema lake;
     lake.__set_fields({lake_geo(TIcebergGeoKind::GEOMETRY, "PLANAR")});
     const auto geometry = geo_element(false);
@@ -869,9 +862,6 @@ TEST(GeoMetadataTest, NativeGeometryValidatesIcebergAndParquetDescriptors) {
     spherical.edge_algorithm = GEO_EDGE_ALGORITHM_SPHERICAL;
     EXPECT_TRUE(validate(geometry, spherical, &lake).is_invalid_argument());
     source.edge_algorithm = "PLANAR";
-    spherical = crs84;
-    spherical.coordinate_system = GEO_COORDINATE_SYSTEM_SPHERICAL;
-    EXPECT_TRUE(validate(geometry, spherical, &lake).is_invalid_argument());
     // create_geo_type() requires the kind to match the primitive, but a type deserialized from thrift is not
     // checked, so build the mismatched type directly.
     TypeDescriptor wrong_kind_type(TYPE_GEOMETRY);
@@ -960,7 +950,6 @@ void expect_nested_geo_scan(LogicalType logical_type) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&tracker);
     const bool geography = logical_type == TYPE_GEOGRAPHY;
     const GeoTypeDescriptor semantic{geography ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY,
-                                     geography ? GEO_COORDINATE_SYSTEM_SPHERICAL : GEO_COORDINATE_SYSTEM_CARTESIAN,
                                      geography ? GEO_EDGE_ALGORITHM_SPHERICAL : GEO_EDGE_ALGORITHM_PLANAR, "OGC:CRS84",
                                      4326};
     auto map_semantic = semantic;
@@ -1139,8 +1128,7 @@ TEST(GeoMetadataTest, NestedNativeGeometryReadsContainers) {
 }
 
 TEST(GeoMetadataTest, NativeGeographyConverterPreservesNullsAndOwnership) {
-    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                     GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
+    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
     const auto type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, semantic);
     ParquetField field;
     field.physical_type = tparquet::Type::BYTE_ARRAY;
@@ -1186,7 +1174,6 @@ static void expect_native_geo_scan(LogicalType logical_type) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&tracker);
     const bool geography = logical_type == TYPE_GEOGRAPHY;
     const GeoTypeDescriptor semantic{geography ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY,
-                                     geography ? GEO_COORDINATE_SYSTEM_SPHERICAL : GEO_COORDINATE_SYSTEM_CARTESIAN,
                                      geography ? GEO_EDGE_ALGORITHM_SPHERICAL : GEO_EDGE_ALGORITHM_PLANAR, "OGC:CRS84",
                                      4326};
     const auto type = TypeDescriptor::create_geo_type(logical_type, semantic);

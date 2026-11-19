@@ -85,6 +85,7 @@
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/struct_column_iterator.h"
 #include "storage/rowset/zone_map_index.h"
+#include "storage/storage_metrics.h"
 #include "storage/types.h"
 #include "types/logical_type.h"
 
@@ -387,6 +388,20 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
     }
 }
 
+// An IDG .idx file only accelerates the scan; the segment data is complete without it. One that tablet
+// metadata still references can be gone -- a vacuum racing a query on an old version, or a downgrade and
+// re-upgrade that reclaimed it -- so NotFound reads as "no IDG index" for this segment rather than failing
+// the query. Returns whether |st| is that case.
+static bool skip_missing_idg_index_file(const Status& st, const std::string& index_file, const IndexReadOptions& opts) {
+    if (!st.is_not_found()) {
+        return false;
+    }
+    StorageMetrics::instance()->lake_idg_files_missing_total.increment(1);
+    LOG_EVERY_N(WARNING, 100) << "IDG index file " << index_file << " of tablet " << opts.tablet_id << " segment "
+                              << opts.segment_id << " is missing, reading the segment without it: " << st;
+    return true;
+}
+
 Status ColumnReader::new_bitmap_index_iterator(const IndexReadOptions& opts, BitmapIndexIterator** iterator) {
     // Lake ADD INDEX fast-path: if the IDG loader has an active entry for
     // this (segment, col_unique_id, BITMAP), prefer the standalone .idx
@@ -402,7 +417,14 @@ Status ColumnReader::new_bitmap_index_iterator(const IndexReadOptions& opts, Bit
             for (const auto& e : list) {
                 for (const auto& k : e.keys) {
                     if (k.col_unique_id == opts.col_unique_id && k.index_type == IndexType::BITMAP) {
-                        return _new_idg_backed_bitmap_index_iterator(opts, e.index_file, e.encryption_meta, iterator);
+                        Status st =
+                                _new_idg_backed_bitmap_index_iterator(opts, e.index_file, e.encryption_meta, iterator);
+                        if (skip_missing_idg_index_file(st, e.index_file, opts)) {
+                            // No iterator: the caller treats the column as having no bitmap index.
+                            *iterator = nullptr;
+                            return Status::OK();
+                        }
+                        return st;
                     }
                 }
             }
@@ -469,6 +491,7 @@ Status ColumnReader::_new_idg_backed_bitmap_index_iterator(const IndexReadOption
     // the OwningBitmapIndexIterator below and its object address is stable.
     IndexReadOptions sub_opts = opts;
     sub_opts.read_file = idx_file.get();
+    sub_opts.idg_bitmap_file_missing = std::make_shared<bool>(false);
 
     auto bitmap_reader = std::make_unique<BitmapIndexReader>();
     ASSIGN_OR_RETURN(auto first_load, bitmap_reader->load(sub_opts, meta->bitmap_index()));
@@ -670,43 +693,54 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
                 }
                 if (!match) continue;
 
-                // Resolve .idx path under the segment directory and parse footer.
-                const std::string& seg_path = _segment->file_name();
-                auto pos = seg_path.find_last_of('/');
-                std::string idx_path =
-                        (pos == std::string::npos) ? e.index_file : seg_path.substr(0, pos + 1) + e.index_file;
-                // Same encryption plumbing as the bitmap IDG path: when the
-                // entry carries a non-empty EncryptionMetaPB, unwrap it back
-                // into a FileEncryptionInfo so the .idx file is decrypted at
-                // read time.
-                RandomAccessFileOptions raf_opts;
-                if (!e.encryption_meta.empty()) {
-                    ASSIGN_OR_RETURN(raf_opts.encryption_info,
-                                     KeyCache::instance().unwrap_encryption_meta(e.encryption_meta));
-                }
-                ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(idx_path));
-                ASSIGN_OR_RETURN(idg_file_holder, fs->new_random_access_file(raf_opts, idx_path));
+                auto open_idg_bloom_filter = [&]() -> Status {
+                    // Resolve .idx path under the segment directory and parse footer.
+                    const std::string& seg_path = _segment->file_name();
+                    auto pos = seg_path.find_last_of('/');
+                    std::string idx_path =
+                            (pos == std::string::npos) ? e.index_file : seg_path.substr(0, pos + 1) + e.index_file;
+                    // Same encryption plumbing as the bitmap IDG path: when the
+                    // entry carries a non-empty EncryptionMetaPB, unwrap it back
+                    // into a FileEncryptionInfo so the .idx file is decrypted at
+                    // read time.
+                    RandomAccessFileOptions raf_opts;
+                    if (!e.encryption_meta.empty()) {
+                        ASSIGN_OR_RETURN(raf_opts.encryption_info,
+                                         KeyCache::instance().unwrap_encryption_meta(e.encryption_meta));
+                    }
+                    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(idx_path));
+                    ASSIGN_OR_RETURN(idg_file_holder, fs->new_random_access_file(raf_opts, idx_path));
 
-                lake::IndexFileReader idx_reader;
-                RETURN_IF_ERROR(idx_reader.init(idg_file_holder.get()));
-                const ColumnIndexMetaPB* meta = idx_reader.find(opts.col_unique_id, wanted);
-                if (meta == nullptr || !meta->has_bloom_filter_index()) {
-                    return Status::Corruption("IDG entry references missing bloom filter in .idx file");
+                    lake::IndexFileReader idx_reader;
+                    RETURN_IF_ERROR(idx_reader.init(idg_file_holder.get()));
+                    const ColumnIndexMetaPB* meta = idx_reader.find(opts.col_unique_id, wanted);
+                    if (meta == nullptr || !meta->has_bloom_filter_index()) {
+                        return Status::Corruption("IDG entry references missing bloom filter in .idx file");
+                    }
+                    // Use the RandomAccessFile WRAPPER, not its inner stream: the
+                    // page cache key comes from read_file->page_cache_key(), and
+                    // only the wrapper carries the unique .idx path. Passing the
+                    // inner stream (whose filename() is empty on lake) collapses
+                    // all .idx page keys to ("", offset) and returns the wrong
+                    // file's cached page. idg_file_holder outlives bf_iter (both
+                    // are stack locals; the holder is declared first so it is
+                    // destroyed last).
+                    IndexReadOptions sub_opts = opts;
+                    sub_opts.read_file = idg_file_holder.get();
+                    idg_reader_holder = std::make_unique<BloomFilterIndexReader>();
+                    ASSIGN_OR_RETURN(auto bf_first_load, idg_reader_holder->load(sub_opts, meta->bloom_filter_index()));
+                    (void)bf_first_load;
+                    return idg_reader_holder->new_iterator(sub_opts, &bf_iter);
+                };
+                Status st = open_idg_bloom_filter();
+                if (skip_missing_idg_index_file(st, e.index_file, opts)) {
+                    // Nothing to prune with: keep every row range. Do not fall back
+                    // to the footer either, it may hold the other bloom flavor (a
+                    // dropped NGRAMBF beside this plain BF), which would prune
+                    // rows that match.
+                    return Status::OK();
                 }
-                // Use the RandomAccessFile WRAPPER, not its inner stream: the
-                // page cache key comes from read_file->page_cache_key(), and
-                // only the wrapper carries the unique .idx path. Passing the
-                // inner stream (whose filename() is empty on lake) collapses
-                // all .idx page keys to ("", offset) and returns the wrong
-                // file's cached page. idg_file_holder outlives bf_iter (both
-                // are stack locals; the holder is declared first so it is
-                // destroyed last).
-                IndexReadOptions sub_opts = opts;
-                sub_opts.read_file = idg_file_holder.get();
-                idg_reader_holder = std::make_unique<BloomFilterIndexReader>();
-                ASSIGN_OR_RETURN(auto bf_first_load, idg_reader_holder->load(sub_opts, meta->bloom_filter_index()));
-                (void)bf_first_load;
-                RETURN_IF_ERROR(idg_reader_holder->new_iterator(sub_opts, &bf_iter));
+                RETURN_IF_ERROR(st);
                 used_idg = true;
                 break;
             }
