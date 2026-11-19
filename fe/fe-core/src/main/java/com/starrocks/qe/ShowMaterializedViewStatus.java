@@ -391,6 +391,9 @@ public class ShowMaterializedViewStatus {
             // sort by process start time
             lastJobTaskRunStatus.sort(Comparator.comparing(TaskRunStatus::getProcessStartTime));
             this.lastJobTaskRunStatus = lastJobTaskRunStatus;
+            if (!lastJobTaskRunStatus.isEmpty()) {
+                this.lastJobTaskRunStatus.add(lastJobTaskRunStatus.get(lastJobTaskRunStatus.size() - 1));
+            }
         }
     }
 
