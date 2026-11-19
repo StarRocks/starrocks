@@ -863,4 +863,24 @@ PARALLEL_TEST(BinaryColumnTest, test_deserialize_and_append_batch_zero_chunk_siz
     ASSERT_FALSE(nullable_column->has_null());
 }
 
+// BinaryImmContainer::immutable_bytes_size
+PARALLEL_TEST(BinaryColumnTest, test_immutable_bytes_size_empty) {
+    auto col = BinaryColumn::create();
+    EXPECT_EQ(col->get_proxy_data().immutable_bytes_size(), 0);
+}
+
+PARALLEL_TEST(BinaryColumnTest, test_immutable_bytes_size_binary_column) {
+    auto col = BinaryColumn::create();
+    col->append_string("hello"); // 5 bytes
+    col->append_string("world"); // 5 bytes
+    EXPECT_EQ(col->get_proxy_data().immutable_bytes_size(), 10);
+}
+
+PARALLEL_TEST(BinaryColumnTest, test_immutable_bytes_size_large_binary_column) {
+    auto col = LargeBinaryColumn::create();
+    col->append_string("foo"); // 3 bytes
+    col->append_string("bar"); // 3 bytes
+    EXPECT_EQ(col->get_proxy_data().immutable_bytes_size(), 6);
+}
+
 } // namespace starrocks
