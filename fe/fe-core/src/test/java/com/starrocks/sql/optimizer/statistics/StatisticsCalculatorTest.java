@@ -1011,9 +1011,12 @@ public class StatisticsCalculatorTest {
                 .build());
         bigGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(bigKey, bigVal))));
 
+        final var smallHistogram = new Histogram(
+                Lists.newArrayList(new Bucket(1, 100, 100L, 1L)), Maps.newHashMap());
         final var smallGroup = new Group(1);
         smallGroup.setStatistics(Statistics.builder().setOutputRowCount(100)
-                .addColumnStatistic(smallKey, new ColumnStatistic(1, 100, 0, 8, 100))
+                .addColumnStatistic(smallKey, new ColumnStatistic(1, 100, 0, 8, 100, smallHistogram,
+                        ColumnStatistic.StatisticType.ESTIMATE))
                 .build());
         smallGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(smallKey))));
 
@@ -1039,11 +1042,20 @@ public class StatisticsCalculatorTest {
         Assertions.assertEquals(200000, bigKeyStat.getDistinctValuesCount(), 0.0001);
         Assertions.assertEquals(1, bigKeyStat.getMinValue(), 0.0001);
         Assertions.assertEquals(200000, bigKeyStat.getMaxValue(), 0.0001);
-        Assertions.assertSame(bigHistogram, bigKeyStat.getHistogram());
+        // The preserved key keeps the joined histogram: the intersection of the two single buckets is [1, 100] with 100
+        final var statBuckets = bigKeyStat.getHistogram().getBuckets();
+        Assertions.assertEquals(1, statBuckets.size());
+        for (Bucket actual : statBuckets) {
+            Assertions.assertEquals(1, actual.getLower(), 0.0001);
+            Assertions.assertEquals(100, actual.getUpper(), 0.0001);
+            Assertions.assertEquals(100L, actual.getCount());
+            Assertions.assertEquals(1L, actual.getUpperRepeats());
+            Assertions.assertEquals(101L, actual.getDistinctCount().orElseThrow());
+        }
+        Assertions.assertEquals(bigHistogram.getMCV(), bigKeyStat.getHistogram().getMCV());
         Assertions.assertEquals(100000, joinStats.getColumnStatistic(bigVal).getDistinctValuesCount(), 0.0001);
         Assertions.assertTrue(joinStats.getColumnStatistic(smallKey).getDistinctValuesCount() <= 100);
     }
-
 
     @Test
     public void testLeftJoinInnerSideNullFractionReflectsResultNulls() {

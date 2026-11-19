@@ -2012,10 +2012,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return builder == null ? joinStats : builder.build();
     }
 
-    // The inner-join estimate caps every column's stats at the inner-join row count and narrows the join keys range
-    // to the matched values. An outer join also keeps the unmatched rows of its preserved side, so every distinct
-    // value and the range of a preserve side columns survive.
-    // Restore the original NDV, range and histogram (with matching MCV included) of the preserved columns.
+    // Restore the original NDV and range of the preserved columns for preserved sides of the outer join
+    // For the histogram we keep the joined version and match the old NDV count to it buckets so it stays accurate
     private static Statistics restorePreservedColumnsStats(Statistics joinStats, Statistics rawCrossJoinStats,
                                                            ColumnRefSet preservedColumns) {
         double outputRowCount = Math.max(1, joinStats.getOutputRowCount());
@@ -2030,16 +2028,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             }
 
             double ndv = Math.min(raw.getDistinctValuesCount(), outputRowCount);
-            // For MCV we can take the unmatched values of the preserve side and the matched ones of the joined MCVs
-            // For Buckets we keep the values of the preserved side
-            Histogram rawHistogram = raw.getHistogram();
-            Histogram currentHistogram = current.getHistogram();
-            Histogram histogram = rawHistogram;
-            if (rawHistogram != null && currentHistogram != null) {
-                Map<String, Long> mcv = new HashMap<>(rawHistogram.getMCV());
-                mcv.putAll(currentHistogram.getMCV());
-                histogram = new Histogram(rawHistogram.getBuckets(), mcv);
-            }
+            // The joined histogram covers only the matched rows, so set its bucket NDVs according to the matched NDV
+            Histogram joined = current.getHistogram();
+            Histogram histogram = joined == null || joined == raw.getHistogram()
+                    ? raw.getHistogram()
+                    : setHistogramNDV(joined, current.getDistinctValuesCount());
             restored.put(column, ColumnStatistic.buildFrom(current)
                     .setMinValue(raw.getMinValue())
                     .setMaxValue(raw.getMaxValue())
@@ -2051,6 +2044,21 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             return joinStats;
         }
         return Statistics.buildFrom(joinStats).addColumnStatistics(restored).build();
+    }
+
+    // Copy the histogram and set each buckets NDV count to the correct distinctCount
+    static Histogram setHistogramNDV(Histogram histogram, double distinctCount) {
+        if (histogram == null || histogram.getBuckets().isEmpty()) {
+            return histogram;
+        }
+        List<Bucket> buckets = histogram.getBuckets();
+        long bucketNdv = Math.max(1, Math.round(distinctCount / buckets.size()));
+        List<Bucket> newHistogram = new ArrayList<>(buckets.size());
+        for (Bucket bucket : buckets) {
+            newHistogram.add(new Bucket(bucket.getLower(), bucket.getUpper(), bucket.getCount(), bucket.getUpperRepeats(),
+                    bucketNdv + 1));
+        }
+        return new Histogram(newHistogram, histogram.getMCV());
     }
 
     // For an equi-join key whose statistics are unknown on one side only, assume its values are contained in the
