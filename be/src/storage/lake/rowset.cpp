@@ -1269,6 +1269,7 @@ static void add_segment_open_stats(const OlapReaderStatistics& from, OlapReaderS
     to->io_count_remote += from.io_count_remote;
     to->io_ns_read_local_disk += from.io_ns_read_local_disk;
     to->io_ns_remote += from.io_ns_remote;
+    to->add_remote_io_waits(from);
 }
 
 Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size) {

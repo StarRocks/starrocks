@@ -763,6 +763,57 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_two_group
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
+// Planning a parallel compaction -- tablet metadata, range-split sampling -- reads as that compaction, not as an
+// unattributed background read, whatever context the calling thread had.
+TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_plans_as_compaction) {
+    int64_t tablet_id = 10002;
+    int64_t txn_id = 20002;
+    int64_t version = 11;
+    create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
+
+    TabletParallelConfig config;
+    config.set_max_parallel_per_tablet(2);
+    config.set_max_bytes_per_subtask(5 * 1024 * 1024);
+
+    CompactRequest request;
+    request.set_skip_write_txnlog(true);
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    std::vector<RemoteReadContext> seen;
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->SetCallBack("TabletParallelCompactionManager::submit_subtasks_from_groups:after_register",
+                            [&](void* /*arg*/) { seen.push_back(ScopedRemoteReadContext::current_or_load()); });
+    sync_point->EnableProcessing();
+    DeferOp clear_callback([sync_point]() {
+        sync_point->ClearCallBack("TabletParallelCompactionManager::submit_subtasks_from_groups:after_register");
+        sync_point->DisableProcessing();
+    });
+
+    BlockedThreadPool pool;
+    {
+        // A caller context of another workload must not leak into the planning.
+        ScopedRemoteReadContext caller(RemoteReadContext::for_load(7));
+        auto st = _manager->create_parallel_tasks(
+                tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
+        ASSERT_TRUE(st.ok()) << st.status();
+        ASSERT_EQ(2, st.value());
+        // The caller's context is back once the planning returns.
+        EXPECT_EQ(RemoteReadContext::Workload::LOAD, ScopedRemoteReadContext::current_or_load().workload);
+    }
+    ASSERT_EQ(2, seen.size());
+    for (const auto& ctx : seen) {
+        EXPECT_TRUE(ctx.is_set);
+        EXPECT_EQ(RemoteReadContext::Workload::COMPACTION, ctx.workload);
+        EXPECT_EQ(static_cast<uint64_t>(txn_id), ctx.flow_id);
+    }
+
+    pool.release();
+    _manager->cleanup_tablet(tablet_id, txn_id);
+}
+
 TEST_F(TabletParallelCompactionManagerTest, test_forced_non_pk_base_selects_oldest_rowset) {
     constexpr int64_t tablet_id = 10064;
     constexpr int64_t txn_id = 20064;

@@ -386,6 +386,8 @@ Status LakePersistentIndex::flush_memtable(bool force) {
         // 3. flush current memtable
         bool flush_async = false;
         if (_inactive_memtables.size() + 1 < config::pk_index_memtable_max_count) {
+            // The flush thread runs without the context of the work flushing; carry it over.
+            _memtable->set_flush_remote_read(ScopedRemoteReadContext::current_or_load());
             if (RuntimeEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->submit(_memtable).ok()) {
                 flush_async = true;
             }

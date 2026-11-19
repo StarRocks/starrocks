@@ -172,6 +172,7 @@ static void add_tablet_prepare_io_stats(const OlapReaderStatistics& from, OlapRe
     to->io_ns_remote += from.io_ns_remote;
     to->io_count_remote += from.io_count_remote;
     to->compressed_bytes_read_remote += from.compressed_bytes_read_remote;
+    to->add_remote_io_waits(from);
 }
 
 // lake_scan_parallel_segment_open: opens the segments of all |rowsets| at once, one task per segment, and puts
@@ -977,6 +978,8 @@ void TabletReader::record_tablet_prepare_stats(const OlapReaderStatistics& prepa
     _stats.lake_prepared_tablet_io_remote_ns += prepare_stats.io_ns_remote;
     _stats.lake_prepared_tablet_io_count_remote += prepare_stats.io_count_remote;
     _stats.lake_prepared_tablet_bytes_read_remote += prepare_stats.compressed_bytes_read_remote;
+    // No prepared-tablet breakdown of these: they go straight to the scan's remote read scheduler waits.
+    _stats.add_remote_io_waits(prepare_stats);
 }
 
 Status TabletReader::build_prepared_tablet_read_state(const TabletReaderParams& params, PreparedTabletReadState* state,
@@ -1262,6 +1265,7 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(const 
         _stats.lake_prepared_seed_zonemap_filtered_rows += prepare_stats.rows_stats_filtered;
         _stats.lake_prepared_seed_bf_ns += prepare_stats.bf_filter_ns;
         _stats.lake_prepared_seed_bf_filtered_rows += prepare_stats.rows_bf_filtered;
+        _stats.add_remote_io_waits(prepare_stats);
     });
     ASSIGN_OR_RETURN(auto shared_segment_range, rowset->get_seek_range());
     Status st;

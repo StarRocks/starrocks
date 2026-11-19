@@ -2366,6 +2366,40 @@ TEST_F(LakePersistentIndexTest, test_complete_checkpoint_serial_reload_with_cach
     run_complete_checkpoint_cache_only_tail(false);
 }
 
+// The async flush of a memtable runs on a flush thread, without the context of the publish that flushes. The SST it
+// opens once written is read as that publish, not as a load of its own.
+TEST_F(LakePersistentIndexTest, test_async_memtable_flush_reads_as_the_flushing_work) {
+    auto md = make_varchar_pk_metadata();
+    md->set_version(2);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*md));
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), md->id());
+    ASSERT_OK(index->init(md));
+    const std::string key = "async_flush_key";
+    const Slice key_slice(key);
+    const IndexValue value(uint64_t{1} << 32);
+    ASSERT_OK(index->insert(1, &key_slice, &value, 2));
+
+    std::optional<RemoteReadContext> seen;
+    std::thread::id flush_thread;
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexMemtable::flush:after_create", [&](void* /*arg*/) {
+        seen = ScopedRemoteReadContext::current_or_load();
+        flush_thread = std::this_thread::get_id();
+    });
+    DeferOp clear_callback(
+            []() { SyncPoint::GetInstance()->ClearCallBack("PersistentIndexMemtable::flush:after_create"); });
+    const auto publish = RemoteReadContext::for_load(42);
+    {
+        ScopedRemoteReadContext scope(publish);
+        // Enables the sync point processing and waits for the flush thread.
+        wait_for_one_async_memtable_flush(index.get());
+    }
+    ASSERT_TRUE(seen.has_value());
+    EXPECT_NE(std::this_thread::get_id(), flush_thread);
+    EXPECT_TRUE(seen->is_set);
+    EXPECT_EQ(RemoteReadContext::Workload::LOAD, seen->workload);
+    EXPECT_EQ(publish.flow_id, seen->flow_id);
+}
+
 TEST_F(LakePersistentIndexTest, test_complete_checkpoint_drains_inactive_and_active_lower_tails) {
     auto md = make_varchar_pk_metadata();
     md->set_version(4);
