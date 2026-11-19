@@ -173,6 +173,7 @@ Key table properties:
 - `location`: File path for the table. Required when using AWS Glue without database-level location.
 - `file_format`: File format. Only `parquet` (Default) is supported.
 - `compression_codec`: Compression algorithm. Options: SNAPPY, GZIP, ZSTD, LZ4 (Default: `zstd`).
+- `identifier-fields`: Comma-separated names of the columns that identify a row, stored as the Iceberg schema's identifier fields. Each column must be a top-level `NOT NULL` column of a primitive type other than FLOAT or DOUBLE. This property can only be set in CREATE TABLE.
 
 ### Examples
 
