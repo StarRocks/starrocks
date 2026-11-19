@@ -34,6 +34,7 @@
 
 package com.starrocks.http;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.authentication.AuthChannel;
@@ -53,6 +54,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelProgressiveFuture;
 import io.netty.channel.ChannelProgressiveFutureListener;
 import io.netty.channel.DefaultFileRegion;
@@ -276,6 +278,73 @@ public abstract class BaseAction implements IAction {
             // Close the connection when the whole content is written out.
             lastContentFuture.addListener(ChannelFutureListener.CLOSE);
         }
+    }
+
+    // How long a streamed response waits for the client to take a chunk before it gives up on the client, as the
+    // MySQL protocol's net_write_timeout does by default.
+    @VisibleForTesting
+    static long chunkWriteTimeoutMs = 60_000L;
+
+    // Send a body too large to build in memory, from the handler thread, the way HttpResultSender streams query
+    // results: netty's HttpChunkedInput turns each chunk of the input into an HTTP chunk and adds the last one, and
+    // the HTTP encoder frames them for chunked transfer encoding. At most two chunks are in flight, so the body
+    // holds about two chunks of heap and is produced as fast as the client reads; a client that stops reading is
+    // cut off after chunkWriteTimeoutMs rather than holding this thread. The status line is out before the body is
+    // produced, so a failure while producing it closes the connection, and a cut-off body never ends with the last
+    // chunk. An HTTP/1.0 client cannot take chunked encoding, so its body is ended by closing the connection.
+    protected void writeChunkedResponse(BaseRequest request, BaseResponse response, HttpResponseStatus status,
+                                        ChunkedInput<ByteBuf> body) {
+        ChannelHandlerContext ctx = request.getContext();
+        // Waiting for each chunk to go out would block the event loop, which is what sends it.
+        Preconditions.checkState(!ctx.executor().inEventLoop(), "a streamed response is written off the event loop");
+
+        HttpResponse responseObj = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status);
+        checkDefaultContentTypeHeader(response, responseObj);
+        writeCustomHeaders(response, responseObj);
+        writeCookies(response, responseObj);
+        boolean chunked = !request.getRequest().protocolVersion().equals(HttpVersion.HTTP_1_0);
+        HttpUtil.setTransferEncodingChunked(responseObj, chunked);
+        boolean keepAlive = chunked && HttpUtil.isKeepAlive(request.getRequest()) && !response.isForceCloseConnection();
+        responseObj.headers().set(HttpHeaderNames.CONNECTION.toString(),
+                keepAlive ? HttpHeaderValues.KEEP_ALIVE.toString() : HttpHeaderValues.CLOSE.toString());
+
+        String uri = WebUtils.sanitizeHttpReqUriForLog(request.getRequest().uri());
+        ctx.write(responseObj);
+        HttpChunkedInput chunks = new HttpChunkedInput(body);
+        boolean keepOpen = false;
+        try {
+            ChannelFuture previous = null;
+            while (!chunks.isEndOfInput()) {
+                ChannelFuture current = ctx.writeAndFlush(chunks.readChunk(ctx.alloc()));
+                if (previous != null && !awaitWritten(previous, uri)) {
+                    return;
+                }
+                previous = current;
+            }
+            // The last chunk has to be out before the connection may be closed.
+            keepOpen = (previous == null || awaitWritten(previous, uri)) && keepAlive;
+        } catch (Exception e) {
+            LOG.warn("failed to send the response body of {}, closing the connection", uri, e);
+        } finally {
+            try {
+                chunks.close();
+            } catch (Exception e) {
+                LOG.warn("failed to close the response body of {}", uri, e);
+            }
+            if (!keepOpen) {
+                ctx.channel().close();
+            }
+        }
+    }
+
+    // False when the client went away, or has not taken the chunk within chunkWriteTimeoutMs.
+    private static boolean awaitWritten(ChannelFuture future, String uri) {
+        if (!future.awaitUninterruptibly(chunkWriteTimeoutMs)) {
+            LOG.warn("the client of {} has not read the response for {} ms, closing the connection", uri,
+                    chunkWriteTimeoutMs);
+            return false;
+        }
+        return future.isSuccess();
     }
 
     // Set 'CONTENT_TYPE' header if it hasn't been set.

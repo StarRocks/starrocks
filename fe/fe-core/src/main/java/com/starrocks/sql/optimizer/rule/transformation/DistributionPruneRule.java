@@ -17,6 +17,8 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -24,11 +26,14 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rewrite.OptDistributionPruner;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.transformer.TabletClause;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * This class need to run after PartitionPruneRule
@@ -50,7 +55,7 @@ public class DistributionPruneRule extends TransformationRule {
         Preconditions.checkState(olapScanOperator.getHintsTabletIds() != null);
         List<Long> result;
         if (!olapScanOperator.getHintsTabletIds().isEmpty()) {
-            result = olapScanOperator.getHintsTabletIds();
+            result = namedTabletsOfSelectedPartitions(olapScanOperator);
         } else {
             result = OptDistributionPruner.pruneTabletIds(olapScanOperator,
                     olapScanOperator.getSelectedPartitionId());
@@ -64,5 +69,27 @@ public class DistributionPruneRule extends TransformationRule {
         return Lists.newArrayList(OptExpression.create(
                 builder.withOperator(olapScanOperator).setSelectedTabletId(result).build(),
                 input.getInputs()));
+    }
+
+    // A TABLET clause names tablets of the partitions the scan reads, and partition pruning may still drop the
+    // partition of one, because the WHERE clause rules it out or because it holds no data. Such a tablet holds nothing
+    // the scan reads, so it is left out; once every named tablet is, the scan reads nothing.
+    private static List<Long> namedTabletsOfSelectedPartitions(LogicalOlapScanOperator olapScanOperator) {
+        OlapTable table = (OlapTable) olapScanOperator.getTable();
+        List<Long> selectedPartitionIds = olapScanOperator.getSelectedPartitionId();
+        List<Partition> selectedPartitions = Lists.newArrayListWithCapacity(selectedPartitionIds.size());
+        for (Long partitionId : selectedPartitionIds) {
+            selectedPartitions.add(table.getPartition(partitionId));
+        }
+        List<Long> namedTabletIds = olapScanOperator.getHintsTabletIds();
+        Set<Long> selectedTabletIds = TabletClause.partitionsHolding(selectedPartitions,
+                olapScanOperator.getSelectedIndexMetaId(), new HashSet<>(namedTabletIds)).keySet();
+        List<Long> result = Lists.newArrayList();
+        for (Long tabletId : namedTabletIds) {
+            if (selectedTabletIds.contains(tabletId)) {
+                result.add(tabletId);
+            }
+        }
+        return result;
     }
 }

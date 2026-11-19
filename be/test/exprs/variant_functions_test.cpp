@@ -170,7 +170,7 @@ static MutableColumnPtr build_nullable_int_array_column(const std::vector<DatumA
 
 static MutableColumnPtr build_nullable_map_si_column(const std::vector<DatumMap>& values,
                                                      const std::vector<uint8_t>& is_null) {
-    TypeDescriptor map_type = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_VARCHAR), TYPE_INT_DESC);
+    TypeDescriptor map_type = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_INT_DESC);
     auto col = ColumnHelper::create_column(map_type, true);
     DCHECK_EQ(values.size(), is_null.size());
     for (size_t i = 0; i < values.size(); ++i) {
@@ -185,8 +185,7 @@ static MutableColumnPtr build_nullable_map_si_column(const std::vector<DatumMap>
 
 static MutableColumnPtr build_nullable_struct_is_column(const std::vector<DatumStruct>& values,
                                                         const std::vector<uint8_t>& is_null) {
-    TypeDescriptor struct_type =
-            TypeDescriptor::create_struct_type({"x", "y"}, {TYPE_INT_DESC, TypeDescriptor(TYPE_VARCHAR)});
+    TypeDescriptor struct_type = TypeDescriptor::create_struct_type({"x", "y"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC});
     auto col = ColumnHelper::create_column(struct_type, true);
     DCHECK_EQ(values.size(), is_null.size());
     for (size_t i = 0; i < values.size(); ++i) {
@@ -704,7 +703,7 @@ TEST_F(VariantFunctionsTest, numeric_strings_in_shredded_variant_fields) {
     auto variants = VariantColumn::create();
     MutableColumns typed;
     typed.emplace_back(build_nullable_varchar_column({"35", "3.5", "bad", "NaN", ""}, {0, 0, 0, 0, 1}));
-    variants->set_shredded_columns({"x"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(typed), nullptr, nullptr);
+    variants->set_shredded_columns({"x"}, {TYPE_VARCHAR_DESC}, std::move(typed), nullptr, nullptr);
     ColumnBuilder<TYPE_VARCHAR> paths(1);
     paths.append("$.x");
     Columns columns{variants, paths.build(true)};
@@ -744,8 +743,8 @@ TEST_F(VariantFunctionsTest, get_variant_string_shredded_typed_only_path) {
 
     MutableColumns typed;
     typed.emplace_back(build_nullable_varchar_column({"typed_string"}, {0}));
-    variant_column->set_shredded_columns({"typed_only"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(typed),
-                                         std::move(metadata_col), std::move(remain_col));
+    variant_column->set_shredded_columns({"typed_only"}, {TYPE_VARCHAR_DESC}, std::move(typed), std::move(metadata_col),
+                                         std::move(remain_col));
 
     auto path_column = ColumnTestHelper::build_column<Slice>({"$.typed_only"});
     Columns columns{variant_column, path_column};
@@ -1078,8 +1077,8 @@ TEST_F(VariantFunctionsTest, variant_typeof_multi_key_typed_only_object) {
     MutableColumns typed;
     typed.emplace_back(build_nullable_int64_column({1}, {0}));
     typed.emplace_back(build_nullable_varchar_column({"x"}, {0}));
-    variant_column->set_shredded_columns({"a", "b"}, {TYPE_BIGINT_DESC, TypeDescriptor(TYPE_VARCHAR)}, std::move(typed),
-                                         nullptr, nullptr);
+    variant_column->set_shredded_columns({"a", "b"}, {TYPE_BIGINT_DESC, TYPE_VARCHAR_DESC}, std::move(typed), nullptr,
+                                         nullptr);
 
     Columns columns{variant_column};
     auto result = VariantFunctions::variant_typeof(ctx.get(), columns);
@@ -1227,8 +1226,8 @@ TEST_F(VariantFunctionsTest, get_variant_int_typed_path_string_type_mismatch_ret
 
     MutableColumns typed;
     typed.emplace_back(build_nullable_varchar_column({"typed_string"}, {0}));
-    variant_column->set_shredded_columns({"typed_only"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(typed),
-                                         std::move(metadata_col), std::move(remain_col));
+    variant_column->set_shredded_columns({"typed_only"}, {TYPE_VARCHAR_DESC}, std::move(typed), std::move(metadata_col),
+                                         std::move(remain_col));
 
     auto path_column = ColumnTestHelper::build_column<Slice>({"$.typed_only"});
     Columns columns{variant_column, path_column};
@@ -1254,8 +1253,8 @@ TEST_F(VariantFunctionsTest, get_variant_int_typed_cast_fail_does_not_fallback_t
 
     MutableColumns typed;
     typed.emplace_back(build_nullable_varchar_column({"typed_string"}, {0}));
-    variant_column->set_shredded_columns({"typed_only"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(typed),
-                                         std::move(metadata_col), std::move(remain_col));
+    variant_column->set_shredded_columns({"typed_only"}, {TYPE_VARCHAR_DESC}, std::move(typed), std::move(metadata_col),
+                                         std::move(remain_col));
 
     auto path_column = ColumnTestHelper::build_column<Slice>({"$.typed_only"});
     Columns columns{variant_column, path_column};
@@ -1413,7 +1412,7 @@ TEST_F(VariantFunctionsTest, variant_query_typed_only_map_non_root_path) {
     MutableColumns typed;
     typed.emplace_back(build_nullable_map_si_column({m}, {0}));
     variant_column->set_shredded_columns({"map_root"},
-                                         {TypeDescriptor::create_map_type(TypeDescriptor(TYPE_VARCHAR), TYPE_INT_DESC)},
+                                         {TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_INT_DESC)},
                                          std::move(typed), nullptr, nullptr);
 
     auto path_column = ColumnTestHelper::build_column<Slice>({"$.map_root"});
@@ -1433,8 +1432,7 @@ TEST_F(VariantFunctionsTest, variant_query_typed_only_struct_non_root_path) {
     MutableColumns typed;
     typed.emplace_back(build_nullable_struct_is_column({s}, {0}));
     variant_column->set_shredded_columns(
-            {"struct_root"},
-            {TypeDescriptor::create_struct_type({"x", "y"}, {TYPE_INT_DESC, TypeDescriptor(TYPE_VARCHAR)})},
+            {"struct_root"}, {TypeDescriptor::create_struct_type({"x", "y"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC})},
             std::move(typed), nullptr, nullptr);
 
     auto path_column = ColumnTestHelper::build_column<Slice>({"$.struct_root"});
@@ -1469,8 +1467,8 @@ TEST_F(VariantFunctionsTest, variant_path_reader_full_materialize_partial_merge)
     typed.emplace_back(build_nullable_varchar_column({"hello"}, {0}));
 
     auto variant_column = VariantColumn::create();
-    variant_column->set_shredded_columns({"a.b.c", "a.b.d"}, {TYPE_BIGINT_DESC, TypeDescriptor(TYPE_VARCHAR)},
-                                         std::move(typed), std::move(metadata_col), std::move(remain_col));
+    variant_column->set_shredded_columns({"a.b.c", "a.b.d"}, {TYPE_BIGINT_DESC, TYPE_VARCHAR_DESC}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
 
     // Prepare reader for $.a.b — a strict prefix of typed paths a.b.c and a.b.d.
     auto path_result = VariantPathParser::parse(std::string("$.a.b"));

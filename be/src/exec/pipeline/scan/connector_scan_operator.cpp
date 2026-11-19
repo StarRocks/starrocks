@@ -490,7 +490,20 @@ void ConnectorScanOperator::detach_chunk_source(int32_t source_index) {
 bool ConnectorScanOperator::has_shared_chunk_source() const {
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     auto& active_inputs = factory->get_active_inputs();
-    return !active_inputs.empty();
+    auto* morsel_factory = factory->morsel_queue_factory();
+    if (_scan_node->is_shared_scan_enabled() || morsel_factory == nullptr || morsel_factory->is_shared() ||
+        morsel_factory->enable_random_append_split_morsel()) {
+        return !active_inputs.empty();
+    }
+
+    // With independent work and output, only our sources can still produce for this operator.
+    // Keep every slot registered until close, including paused readers and pending split publication.
+    for (int32_t slot = 0; slot < _io_tasks_per_scan_operator; ++slot) {
+        if (active_inputs.contains(std::make_pair(_driver_sequence, slot))) {
+            return true;
+        }
+    }
+    return false;
 }
 
 connector::ConnectorType ConnectorScanOperator::connector_type() const {

@@ -14,49 +14,49 @@
 
 package org.apache.iceberg;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
-import com.github.benmanes.caffeine.cache.Weigher;
+import com.starrocks.connector.ConnectorMetadataCache;
+import com.starrocks.connector.ConnectorMetadataCache.Kind;
 import com.starrocks.connector.iceberg.CachingIcebergCatalog.IcebergTableName;
 
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.Executor;
 import java.util.function.ToLongFunction;
-
-import static java.util.concurrent.TimeUnit.SECONDS;
 
 // Built DeleteFileIndex objects shared across scans, so that a table with many position deletes does not
 // re-sort the same delete files on every query. Only filter-free indexes of position deletes and DVs are
 // stored (see StarRocksIcebergTableScan#reuseCachedDeleteFileIndex); their delete files are the objects
 // held by the delete file cache, so an entry mostly adds the index arrays and maps on top of them.
+// One catalog's view (scope) of the Iceberg metadata cache all catalogs share.
 public final class DeleteFileIndexCache {
     // Delete manifests are immutable, so the same manifest set always yields the same index. The scan schema
     // and the table's spec ids are part of the key because the index binds partitions through the specs.
     record Key(IcebergTableName table, int schemaId, Set<Integer> specIds, Set<String> deleteManifestPaths) {
     }
 
+    // An entry weighs what it keeps alive once the delete file cache has evicted its delete files.
     private record Entry(DeleteFileIndex index, long weight) {
     }
 
-    private final Cache<Key, Entry> cache;
+    static {
+        ConnectorMetadataCache.registerWeigher(Kind.DELETE_FILE_INDEX,
+                (key, entry) -> ((Entry) entry).weight());
+    }
+
+    private final ConnectorMetadataCache.Store store;
+    private final String scope;
     private final ToLongFunction<Set<DeleteFile>> weigher;
 
     // weigher estimates the memory of one delete manifest's cached files; an entry weighs the sum over its
-    // manifests, i.e. what it keeps alive once the delete file cache has evicted them.
-    public DeleteFileIndexCache(long ttlSec, long maximumWeight, Executor executor,
+    // manifests.
+    public DeleteFileIndexCache(ConnectorMetadataCache.Store store, String scope,
                                 ToLongFunction<Set<DeleteFile>> weigher) {
+        this.store = store;
+        this.scope = scope;
         this.weigher = weigher;
-        this.cache = Caffeine.newBuilder()
-                .executor(executor)
-                .expireAfterWrite(ttlSec, SECONDS)
-                .weigher((Weigher<Key, Entry>) (key, entry) -> (int) Math.min(entry.weight(), Integer.MAX_VALUE))
-                .maximumWeight(maximumWeight)
-                .build();
     }
 
     DeleteFileIndex get(Key key) {
-        Entry entry = cache.getIfPresent(key);
+        Entry entry = (Entry) store.getIfPresent(scope, Kind.DELETE_FILE_INDEX, key);
         return entry == null ? null : entry.index();
     }
 
@@ -65,14 +65,19 @@ public final class DeleteFileIndexCache {
         for (Set<DeleteFile> files : deleteFiles) {
             weight += weigher.applyAsLong(files);
         }
-        cache.put(key, new Entry(index, weight));
+        store.put(scope, Kind.DELETE_FILE_INDEX, key, new Entry(index, weight));
     }
 
     public void invalidate(IcebergTableName table) {
-        cache.asMap().keySet().removeIf(key -> key.table().equals(table));
+        store.invalidateIf(scope, Kind.DELETE_FILE_INDEX, key -> isKeyOf(key, table));
+    }
+
+    // Whether a key of this cache belongs to the table.
+    public static boolean isKeyOf(Object key, IcebergTableName table) {
+        return ((Key) key).table().equals(table);
     }
 
     public long estimatedSize() {
-        return cache.estimatedSize();
+        return store.entries(scope, Kind.DELETE_FILE_INDEX).size();
     }
 }

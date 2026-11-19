@@ -339,6 +339,31 @@ class DecodeContext {
         return ExprUtils.getBuiltinFunction(fnName, argTypes, Function.CompareMode.IS_SUPERTYPE_OF);
     }
 
+    // Replaces a field of a struct that is built in place, e.g. named_struct('a', name, 'b', name).b, with the argument
+    // the field is built from, as DecodeCollector also resolves it. Without this, DictExprRewrite built the struct
+    // from the dict codes and used it as an anchor, so the expression had to be evaluated on dict codes. The storage
+    // layer rewrites a pushed-down predicate by evaluating it on the dictionary's string values instead, so the struct
+    // whose fields are declared INT got string columns and the BE aborted (RB-1168).
+    private static final BaseScalarOperatorShuttle CONSTRUCTED_FIELD_INLINER = new BaseScalarOperatorShuttle() {
+        @Override
+        public ScalarOperator visitSubfield(SubfieldOperator operator, Void context) {
+            if (operator.getFieldNames().size() == 1 && operator.getChild(0) instanceof CallOperator call &&
+                    LOW_CARD_STRUCT_FUNCTIONS.contains(call.getFnName())) {
+                String fieldName = operator.getFieldNames().get(0);
+                StructType structType = (StructType) call.getType();
+                if (structType.containsField(fieldName)) {
+                    int pos = structType.getFieldPos(fieldName);
+                    // named_struct takes (name, value) pairs, row and struct take the values only.
+                    int argIndex = call.getFnName().equals(FunctionSet.NAMED_STRUCT) ? 2 * pos + 1 : pos;
+                    if (argIndex < call.getChildren().size()) {
+                        return call.getChild(argIndex).accept(this, context);
+                    }
+                }
+            }
+            return super.visitSubfield(operator, context);
+        }
+    };
+
     // define mode: means the result column is dict, DictExpr should return int/array<int> type
     // decode mode: means the result column is string, DictExpr should return string/array<string> type
     private class DictExprRewrite extends BaseScalarOperatorShuttle {
@@ -390,6 +415,7 @@ class DecodeContext {
 
         public ScalarOperator decode(ColumnRefOperator useDictRef, ColumnRefOperator useStringRef,
                                      ScalarOperator expression) {
+            expression = expression.accept(CONSTRUCTED_FIELD_INLINER, null);
             anchorOp = null;
             anchorUseDictRef = null;
             ScalarOperator result = expression.accept(this, null);
@@ -424,6 +450,7 @@ class DecodeContext {
 
         public ScalarOperator define(Type type, ColumnRefOperator useStringRef, ScalarOperator expression) {
             ColumnRefOperator useDictRef = stringRefToDictRefMap.get(useStringRef);
+            expression = expression.accept(CONSTRUCTED_FIELD_INLINER, null);
             anchorOp = null;
             anchorUseDictRef = null;
             ScalarOperator result = expression.accept(this, null);

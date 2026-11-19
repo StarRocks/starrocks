@@ -66,7 +66,9 @@ import com.starrocks.sql.spm.SPMFunctions;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
+import com.starrocks.type.FileType;
 import com.starrocks.type.FloatType;
+import com.starrocks.type.GeoType;
 import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
@@ -76,6 +78,7 @@ import com.starrocks.type.StringType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
 
 import java.math.BigInteger;
@@ -108,6 +111,7 @@ public class FunctionAnalyzer {
         }
 
         String fnName = functionCallExpr.getFunctionName();
+        checkGeoFunctionArguments(functionCallExpr);
         if (fnName.equals(FunctionSet.DATE_TRUNC)) {
             if (!(functionCallExpr.getChild(0) instanceof StringLiteral)) {
                 throw new SemanticException("date_trunc requires first parameter must be a string constant",
@@ -163,6 +167,7 @@ public class FunctionAnalyzer {
             Preconditions.checkState(functionCallExpr.getChild(0).getChild(0) != null,
                     "map_apply's lambda function can not be null");
             functionCallExpr.setType(functionCallExpr.getChild(0).getChild(0).getType());
+            PolymorphicFunctionAnalyzer.checkMapKeyType(functionCallExpr.getType());
         }
 
         if (FunctionSet.INDEX_ONLY_FUNCTIONS.contains(fnName)) {
@@ -287,10 +292,43 @@ public class FunctionAnalyzer {
             FunctionCallExpr functionCallWithoutIf =
                     new FunctionCallExpr(argFuncNameWithoutIf, functionParamsWithOutIf);
             analyzeBuiltinAggFunction(argFuncNameWithoutIf, functionParamsWithOutIf, functionCallWithoutIf);
-        }
-
-        if (fn != null && fn.isAI()) {
+        } else if (fn != null && fn.isAI()) {
             AIFunctionAnalyzer.analyze(functionCallExpr);
+        }
+    }
+
+    private static void checkGeoFunctionArguments(FunctionCallExpr call) {
+        String name = call.getFunctionName();
+        switch (name) {
+            case FunctionSet.ARRAY_SORT:
+            case FunctionSet.ARRAY_SORT_LAMBDA:
+            case FunctionSet.ARRAY_MAX:
+            case FunctionSet.ARRAY_MIN:
+            case FunctionSet.ARRAY_SORTBY:
+            case FunctionSet.ARRAY_TOP_N:
+            case FunctionSet.ARRAY_DISTINCT:
+            case FunctionSet.ARRAY_CONTAINS:
+            case FunctionSet.ARRAY_CONTAINS_ALL:
+            case FunctionSet.ARRAY_CONTAINS_SEQ:
+            case FunctionSet.ARRAY_POSITION:
+            case FunctionSet.ARRAY_REMOVE:
+            case FunctionSet.ARRAY_INTERSECT:
+            case FunctionSet.ARRAYS_OVERLAP:
+            case FunctionSet.ARRAY_UNIQUE_AGG:
+            case FunctionSet.NULLIF:
+            case FunctionSet.CRC32_HASH:
+            case FunctionSet.ENCODE_SORT_KEY:
+            case FunctionSet.ENCODE_FINGERPRINT_SHA256:
+            case FunctionSet.ENCODE_FINGERPRINT_SHA256_V2:
+            case FunctionSet.TO_JSON:
+                break;
+            default:
+                return;
+        }
+        for (Type type : call.getFn().getArgs()) {
+            if (type.isGeoType() || type.hasNestedGeoType()) {
+                throw new SemanticException(name + " does not support geo arguments: " + type.toSql(), call.getPos());
+            }
         }
     }
 
@@ -305,6 +343,12 @@ public class FunctionAnalyzer {
                                                   FunctionCallExpr functionCallExpr) {
         if (fnParams.isStar() && !fnName.equals(FunctionSet.COUNT)) {
             throw new SemanticException("'*' can only be used in conjunction with COUNT: " + ExprToSql.toSql(functionCallExpr),
+                    functionCallExpr.getPos());
+        }
+
+        Type resultType = functionCallExpr.getType();
+        if (fnParams.getOrderByElemNum() > 0 && (resultType.isGeoType() || resultType.hasNestedGeoType())) {
+            throw new SemanticException("ORDER BY aggregation is not supported for geo results: " + resultType.toSql(),
                     functionCallExpr.getPos());
         }
 
@@ -428,6 +472,10 @@ public class FunctionAnalyzer {
                 throw new SemanticException(
                         fnName + " requires two parameters: " + ExprToSql.toSql(functionCallExpr),
                         functionCallExpr.getPos());
+            }
+
+            if (functionCallExpr.getChild(0).getType().hasNestedGeoType()) {
+                throw new SemanticException(fnName + " does not support nested geo values", functionCallExpr.getPos());
             }
 
             if (functionCallExpr.getChild(0).isConstant() || functionCallExpr.getChild(1).isConstant()) {
@@ -1006,6 +1054,12 @@ public class FunctionAnalyzer {
         if (fn != null) {
             return fn;
         }
+        // get fn from the presign builtins, which are bound to the storage volume they sign with
+        fn = AnalyzerUtils.getPresignedFunction(session, node, argumentTypes);
+        if (fn != null) {
+            return fn;
+        }
+
         // get fn from builtin functions
         fn = getAnalyzedBuiltInFunction(session, fnName, params, argumentTypes, node.getPos());
         if (fn != null) {
@@ -1144,8 +1198,7 @@ public class FunctionAnalyzer {
                 node.getParams().exprs().set(1, target);
                 node.setChild(1, target);
                 fn = fn.copy();
-                fn.setRetType(ScalarType.createGeoType(PrimitiveType.GEOMETRY,
-                        GeoTypeDescriptor.geometry("EPSG:" + targetSrid)));
+                fn.setRetType(GeoType.createGeometryType("EPSG:" + targetSrid));
             }
         } else if ("st_geogfromtext".equalsIgnoreCase(fnName) || "st_geogfromwkb".equalsIgnoreCase(fnName) ||
                 FunctionSet.H3_TOBOUNDARY.equalsIgnoreCase(fnName)) {
@@ -1153,10 +1206,7 @@ public class FunctionAnalyzer {
             fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (fn != null) {
                 fn = fn.copy();
-                fn.setRetType(ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
-                        new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
-                                GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
-                                GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326)));
+                fn.setRetType(GeoType.createGeographyType("OGC:CRS84"));
             }
         } else if (FunctionSet.ST_CENTROID.equalsIgnoreCase(fnName) && argumentTypes.length == 1 &&
                 (argumentTypes[0].getPrimitiveType() == PrimitiveType.GEOGRAPHY ||
@@ -1179,7 +1229,7 @@ public class FunctionAnalyzer {
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (fn != null) {
                 fn = fn.copy();
-                fn.setRetType(ScalarType.createGeoType(PrimitiveType.GEOMETRY, GeoTypeDescriptor.geometry(crs)));
+                fn.setRetType(GeoType.createGeometryType(crs));
             }
         } else if (FunctionSet.CONCAT.equals(fnName) && node.getChildren().stream().anyMatch(child ->
                 child.getType().isArrayType())) {
@@ -1218,6 +1268,8 @@ public class FunctionAnalyzer {
                 sf.add(new StructField(literal.getStringValue(), node.getChild(i + 1).getType()));
             }
             fn.setRetType(new StructType(sf));
+        } else if (FunctionSet.TO_FILE.equalsIgnoreCase(fnName) || FunctionSet.TRY_TO_FILE.equalsIgnoreCase(fnName)) {
+            fn = getToFileFunction(fnName, argumentTypes);
         } else if (FunctionSet.STR_TO_DATE.equals(fnName)) {
             fn = getStrToDateFunction(node, argumentTypes);
         } else if (FunctionSet.ARRAY_GENERATE.equals(fnName)) {
@@ -1345,6 +1397,54 @@ public class FunctionAnalyzer {
         // add new argument types
         Arrays.stream(argumentTypes).forEach(newArgumentTypes::add);
         return fn;
+    }
+
+    /**
+     * Resolves the to_file and try_to_file overloads that need more than the regular builtin lookup, returning null
+     * for other overloads. For the STRUCT overload, each field is widened to its FILE field type so the
+     * planner casts the argument, and an untyped NULL field takes that type instead of the generic BOOLEAN.
+     */
+    private static Function getToFileFunction(String functionName, Type[] argumentTypes) {
+        if (argumentTypes.length != 1 || !(argumentTypes[0].isStructType() || argumentTypes[0].isNull())) {
+            return null;
+        }
+        Type inputType = argumentTypes[0];
+        StructType targetType;
+        if (inputType.isNull()) {
+            // Give a bare NULL a concrete STRUCT type; the value remains NULL.
+            targetType = new StructType(Lists.newArrayList(new StructField(FileType.URI, VarcharType.VARCHAR)));
+        } else {
+            ArrayList<StructField> fields = new ArrayList<>();
+            for (StructField field : ((StructType) inputType).getFields()) {
+                Type source = field.getType();
+                Type target;
+                boolean valid = switch (field.getName().toLowerCase(Locale.ROOT)) {
+                    case FileType.URI, FileType.CONTENT_TYPE, FileType.CHECKSUM -> {
+                        target = VarcharType.VARCHAR;
+                        yield source.isStringType();
+                    }
+                    case FileType.OFFSET, FileType.SIZE -> {
+                        target = IntegerType.BIGINT;
+                        yield source.isIntegerType();
+                    }
+                    case FileType.INLINE -> {
+                        target = VarbinaryType.VARBINARY;
+                        yield source.isBinaryType();
+                    }
+                    default -> throw new SemanticException("%s has unknown field '%s'",
+                            functionName.toUpperCase(Locale.ROOT), field.getName());
+                };
+                if (!source.isNull() && !valid) {
+                    throw new SemanticException("%s field '%s' has unsupported type %s; expected %s",
+                            functionName.toUpperCase(Locale.ROOT), field.getName(), source.toSql(), target.toSql());
+                }
+                fields.add(new StructField(field.getName(), target));
+            }
+            // StructType also enforces case-insensitive field-name uniqueness.
+            targetType = new StructType(fields);
+        }
+        return ExprUtils.getBuiltinFunction(functionName, new Type[] {targetType},
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
     }
 
     private static Function getRegexpPositionFunction(FunctionCallExpr node) {

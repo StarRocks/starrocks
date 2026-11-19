@@ -1039,10 +1039,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
      * Whether a partition may be added to {@code olapTable} while it is in a non-NORMAL state.
      * Only the metadata-only, provably-safe alter situations are tolerated (gated by
      * {@link Config#enable_concurrent_add_partition_during_alter}): the transient UPDATING_META
-     * window of fast schema evolution, and the shared-data ADD/DROP INDEX fast-path jobs that
-     * declare {@link com.starrocks.alter.AlterJobV2#allowConcurrentPartitionCreation()}. The
-     * consistency guarantee for the newly built tablets is provided by checkIfMetaChange under
-     * the table WRITE lock, not by this coarse table-state check.
+     * window of fast schema evolution, and the alter jobs that declare
+     * {@link com.starrocks.alter.AlterJobV2#allowConcurrentPartitionCreation()}: the shared-data
+     * ADD/DROP INDEX fast-path jobs, and the optimize jobs while they wait for the table to become
+     * stable (WAITING_STABLE). The consistency guarantee for the newly built tablets is provided by
+     * checkIfMetaChange under the table WRITE lock, not by this coarse table-state check.
      */
     private boolean allowAddPartitionDuringAlter(OlapTable olapTable) {
         if (!Config.enable_concurrent_add_partition_during_alter) {
@@ -1050,7 +1051,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         OlapTable.OlapTableState state = olapTable.getState();
         return state == OlapTable.OlapTableState.UPDATING_META
-                || (state == OlapTable.OlapTableState.SCHEMA_CHANGE
+                || ((state == OlapTable.OlapTableState.SCHEMA_CHANGE || state == OlapTable.OlapTableState.WAITING_STABLE)
                     && AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(olapTable.getId()));
     }
 
@@ -1209,6 +1210,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         if (olapTable.getDefaultDistributionInfo().getType() !=
                 copiedTable.getDefaultDistributionInfo().getType()) {
+            metaChanged = true;
+        }
+
+        // An optimize may give the table other distribution columns while the partition is built: no load could write
+        // the partition together with the ones that have the new columns.
+        if (olapTable.getDefaultDistributionInfo() instanceof HashDistributionInfo distribution
+                && copiedTable.getDefaultDistributionInfo() instanceof HashDistributionInfo copiedDistribution
+                && !distribution.getDistributionColumns().equals(copiedDistribution.getDistributionColumns())) {
             metaChanged = true;
         }
 
@@ -1680,6 +1689,16 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                                             " The partition [" + partitionName +
                                             "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
                                             " please use \"DROP PARTITION <partition> FORCE\".");
+                        }
+                        // A tablet split or merge reserves its publish version without registering a transaction,
+                        // so the check above cannot see it, and a recovered partition would sit below that version.
+                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                            if (stateMgr.getTabletReshardJobMgr()
+                                    .isPhysicalPartitionReshardingLocked(olapTable, physicalPartition.getId())) {
+                                throw new DdlException("A tablet split or merge is in progress on the partition [" +
+                                        partitionName + "]. Wait until it completes, or use " +
+                                        "\"DROP PARTITION <partition> FORCE\" to drop it forcibly (cannot be recovered).");
+                            }
                         }
                     }
                 }
@@ -2264,6 +2283,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 TabletTaskExecutor.buildPartitionsSequentially(
                         db.getId(), table, partitions, numReplicas, numAliveNodes, computeResource, option);
             }
+        } catch (RuntimeException e) {
+            // A create replica task that cannot be sent, as to a backend that is down, fails with a RuntimeException
+            // in shared-nothing mode. The callers drop the tablets they registered for the partitions on a
+            // DdlException only, and a tablet left in the inverted index keeps a decommission of its backend from
+            // ever ending.
+            LOG.warn("failed to build {} partitions for table {}.{}", partitions.size(), db.getFullName(),
+                    table.getName(), e);
+            throw new DdlException(e.getMessage(), e);
         } finally {
             GlobalStateMgr.getCurrentState().getConsistencyChecker().deleteCreatingTableId(table.getId());
         }
@@ -2643,7 +2670,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     + table.getColocateGroup() + "', cannot create range colocate tablets");
         }
         int colocateColumnCount = colocateTableIndex.getGroupSchema(groupId).getColocateColumnCount();
-        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table);
+        // Expand with the sort key of the index being created, not the base index's: every index routes its rows by its
+        // own sort key, which starts with the colocate columns but can be shorter or longer than the base sort key.
+        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table, index.getMetaId());
 
         for (ColocateRange colocateRange : colocateRanges) {
             List<Long> shardIds = stateMgr.getStarOSAgent().createShards(1,
@@ -4626,6 +4655,31 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+    private void alterTabletReshardTargetSize(OlapTable table, Map<String, String> properties,
+                                              Map<String, String> propertiesToPersist,
+                                              List<Runnable> appliers) throws DdlException {
+        if (!table.isRangeDistribution()) {
+            throw new DdlException(PropertyAnalyzer.TABLET_RESHARD_TARGET_SIZE_RANGE_ONLY_MSG);
+        }
+        long size;
+        try {
+            size = PropertyAnalyzer.analyzeTableTabletReshardTargetSize(
+                    properties.remove(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE), true);
+        } catch (SemanticException e) {
+            throw new DdlException(e.getMessage(), e);
+        }
+        // Store and journal the parsed value, as CREATE TABLE does, so "+1073741824" reads back as "1073741824";
+        // "" (a clear) stays "".
+        String value = size == 0L ? "" : String.valueOf(size);
+        propertiesToPersist.put(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, value);
+        // The same steps replay takes, so an empty value removes the property here as it does on a follower.
+        appliers.add(() -> {
+            TableProperty tableProperty = table.getTableProperty();
+            tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, value);
+            tableProperty.buildTabletReshardTargetSize();
+        });
+    }
+
     private void alterDataCacheEnable(Database db, OlapTable table,
                                       Map<String, String> properties,
                                       List<Runnable> appliers) throws DdlException {
@@ -4727,6 +4781,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
             alterTableQueryTimeout(table, properties, appliers);
+        }
+        if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE)) {
+            alterTabletReshardTargetSize(table, properties, propertiesToPersist, appliers);
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
             alterDataCacheEnable(db, table, properties, appliers);

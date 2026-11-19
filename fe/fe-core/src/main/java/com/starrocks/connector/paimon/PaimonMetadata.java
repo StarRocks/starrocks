@@ -22,7 +22,10 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PaimonView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrDeltaStats;
@@ -50,6 +53,7 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.KeyPartitionRef;
@@ -64,12 +68,14 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.paimon.CoreOptions;
 import org.apache.paimon.Snapshot;
 import org.apache.paimon.catalog.CachingCatalog;
 import org.apache.paimon.catalog.Catalog;
+import org.apache.paimon.catalog.DelegateCatalog;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.data.Timestamp;
@@ -79,10 +85,13 @@ import org.apache.paimon.operation.metrics.ScanMetrics;
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
+import org.apache.paimon.schema.Schema;
 import org.apache.paimon.stats.ColStats;
 import org.apache.paimon.table.DataTable;
 import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.sink.BatchTableCommit;
+import org.apache.paimon.table.sink.CommitMessage;
+import org.apache.paimon.table.sink.InnerTableCommit;
 import org.apache.paimon.table.source.InnerTableScan;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
@@ -171,6 +180,202 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public void createDb(ConnectContext context, String dbName, Map<String, String> dbProperties)
+            throws DdlException, AlreadyExistsException {
+        if (dbProperties != null && !dbProperties.isEmpty()) {
+            throw new DdlException("Paimon CREATE DATABASE does not support catalog or location overrides");
+        }
+        try {
+            paimonNativeCatalog.createDatabase(dbName, false);
+            invalidateDatabaseAfterDdl(dbName);
+        } catch (Catalog.DatabaseAlreadyExistException e) {
+            throw new AlreadyExistsException("Paimon database already exists: " + dbName);
+        } catch (RuntimeException e) {
+            throw new DdlException("Cannot create Paimon database " + dbName, e);
+        }
+    }
+
+    @Override
+    public void dropDb(ConnectContext context, String dbName, boolean isForceDrop)
+            throws DdlException, MetaNotFoundException {
+        try {
+            // FORCE must not turn a nonempty external database into a recursive delete.
+            paimonNativeCatalog.dropDatabase(dbName, false, false);
+            invalidateDatabaseAfterDdl(dbName);
+        } catch (Catalog.DatabaseNotExistException e) {
+            throw new MetaNotFoundException("Paimon database does not exist: " + dbName, e);
+        } catch (Catalog.DatabaseNotEmptyException e) {
+            throw new DdlException("Cannot drop nonempty Paimon database " + dbName, e);
+        } catch (RuntimeException e) {
+            throw new DdlException("Cannot drop Paimon database " + dbName, e);
+        }
+    }
+
+    @Override
+    public boolean createTable(ConnectContext context, CreateTableStmt stmt) throws DdlException {
+        Schema schema = PaimonTableSchemaConverter.toSchema(stmt);
+        Identifier identifier = new Identifier(stmt.getDbName(), stmt.getTableName());
+        try {
+            // Handle duplicates reported by the SDK; filesystem creation races may still raise RuntimeException.
+            paimonNativeCatalog.createTable(identifier, schema, false);
+        } catch (Catalog.TableAlreadyExistException e) {
+            if (stmt.isSetIfNotExists()) {
+                return false;
+            }
+            throw new DdlException("Paimon table already exists: " + identifier.getFullName(), e);
+        } catch (Catalog.DatabaseNotExistException e) {
+            throw new DdlException("Paimon database does not exist: " + stmt.getDbName(), e);
+        } catch (RuntimeException e) {
+            throw new DdlException("Cannot create Paimon table " + identifier.getFullName(), e);
+        }
+        invalidateTableAfterDdl(identifier);
+        return true;
+    }
+
+    private void invalidateDatabaseAfterDdl(String dbName) {
+        databases.remove(dbName);
+        Set<Identifier> cached = new HashSet<>(tables.keySet());
+        cached.addAll(partitionInfos.keySet());
+        // The SDK only evicts cached tables for a cascading drop. An external client may already
+        // have dropped the tables, leaving positive entries even though this database is empty.
+        Catalog catalog = paimonNativeCatalog;
+        while (catalog instanceof DelegateCatalog delegate) {
+            if (catalog instanceof CachingCatalog caching) {
+                caching.tableCache().asMap().keySet().stream()
+                        .filter(identifier -> identifier.getDatabaseName().equals(dbName)).forEach(cached::add);
+            }
+            catalog = delegate.wrapped();
+        }
+        cached.stream().filter(identifier -> identifier.getDatabaseName().equals(dbName))
+                .forEach(this::invalidateTableAfterDdl);
+        paimonSplits.keySet().removeIf(key -> key.getDatabaseName().equals(dbName));
+    }
+
+    private void invalidateTableAfterDdl(Identifier identifier) {
+        tables.remove(identifier);
+        partitionInfos.remove(identifier);
+        paimonSplits.keySet().removeIf(key -> key.getDatabaseName().equals(identifier.getDatabaseName())
+                && key.getTableName().equals(identifier.getObjectName()));
+        try {
+            paimonNativeCatalog.invalidateTable(identifier);
+        } catch (RuntimeException e) {
+            // The durable mutation succeeded; a cache failure must not report the DDL as failed.
+            LOG.warn("Cannot invalidate Paimon metadata after a successful mutation of {}.{}",
+                    identifier.getDatabaseName(), identifier.getObjectName());
+        }
+    }
+
+    @Override
+    public void finishSink(String dbName, String tableName, List<TSinkCommitInfo> commitInfos,
+                           String branch, Object extra, ConnectContext context) {
+        if (!(extra instanceof PaimonSinkExtra operation)) {
+            throw new StarRocksConnectorException("Paimon commit requires its frozen write context");
+        }
+        if (branch != null && !branch.equals(DEFAULT_MAIN_BRANCH)) {
+            throw new StarRocksConnectorException("Paimon branch writes are not supported");
+        }
+        synchronized (operation) {
+            if (operation.getPublicationState() == PaimonSinkExtra.PublicationState.COMMITTED) {
+                return;
+            }
+            if (operation.getPublicationState() != PaimonSinkExtra.PublicationState.WRITING) {
+                throw new StarRocksConnectorException("Paimon operation is not eligible for publication");
+            }
+            operation.validateCommitReports(commitInfos);
+            PaimonCommitCodec.CollectedMessages collected = PaimonCommitCodec.collect(commitInfos, operation);
+            Identifier identifier = new Identifier(dbName, tableName);
+            FileStoreTable table = loadWriteTarget(identifier, operation);
+            List<CommitMessage> messages = collected.validateOwnership(table);
+            if (messages.isEmpty() && operation.getOverwriteMode().equals("APPEND")) {
+                operation.transition(PaimonSinkExtra.PublicationState.WRITING,
+                        PaimonSinkExtra.PublicationState.PREPARED);
+                operation.transition(PaimonSinkExtra.PublicationState.PREPARED,
+                        PaimonSinkExtra.PublicationState.COMMITTED);
+                return;
+            }
+            operation.transition(PaimonSinkExtra.PublicationState.WRITING,
+                    PaimonSinkExtra.PublicationState.PREPARED);
+            try (InnerTableCommit commit = table.newCommit(operation.getCommitUser());
+                    Timer ignored = Tracers.watchScope(EXTERNAL, "PaimonSinkCommit")) {
+                // Configure completely before publication. A failure in this phase remains abortable.
+                commit.ignoreEmptyCommit(false);
+                if (context != null && context.isStatementCancelled()) {
+                    throw new StarRocksConnectorException("Paimon operation was cancelled before publication");
+                }
+                operation.transition(PaimonSinkExtra.PublicationState.PREPARED,
+                        PaimonSinkExtra.PublicationState.PUBLISHING);
+                commit.commit(operation.getCommitIdentifier(), messages);
+            } catch (Exception e) {
+                if (operation.getPublicationState() == PaimonSinkExtra.PublicationState.PREPARED) {
+                    throw new StarRocksConnectorException("Cannot prepare Paimon publication "
+                            + operation.getOperationId(), e);
+                }
+                // Commit can fail after a durable snapshot (for example during maintenance/close).
+                // A matching public snapshot identity proves success; absence does not prove failure.
+                if (!publicationVisible(table, operation)) {
+                    operation.transition(PaimonSinkExtra.PublicationState.PUBLISHING,
+                            PaimonSinkExtra.PublicationState.UNKNOWN);
+                    throw new PaimonCommitUnknownException(operation.getOperationId(), e);
+                }
+            }
+            operation.transition(PaimonSinkExtra.PublicationState.PUBLISHING,
+                    PaimonSinkExtra.PublicationState.COMMITTED);
+            invalidateTableAfterDdl(identifier);
+        }
+    }
+
+    @Override
+    public void abortSink(String dbName, String tableName, List<TSinkCommitInfo> commitInfos,
+                          Object extra, ConnectContext context) {
+        if (!(extra instanceof PaimonSinkExtra operation)) {
+            // Without the identity there is no safe ownership or publication decision.
+            return;
+        }
+        synchronized (operation) {
+            if (!operation.canAbort()) {
+                return;
+            }
+            PaimonCommitCodec.CollectedMessages collected = PaimonCommitCodec.collect(commitInfos, operation);
+            FileStoreTable table = loadWriteTarget(new Identifier(dbName, tableName), operation);
+            List<CommitMessage> messages = collected.validateOwnership(table);
+            if (!messages.isEmpty()) {
+                try (BatchTableCommit commit = table.newCommit(operation.getCommitUser())) {
+                    commit.abort(messages);
+                } catch (Exception e) {
+                    throw new StarRocksConnectorException("Cannot abort uncommitted Paimon operation "
+                            + operation.getOperationId(), e);
+                }
+            }
+            operation.transition(operation.getPublicationState(), PaimonSinkExtra.PublicationState.ABORTED);
+        }
+    }
+
+    private FileStoreTable loadWriteTarget(Identifier identifier, PaimonSinkExtra operation) {
+        try {
+            paimonNativeCatalog.invalidateTable(identifier);
+            org.apache.paimon.table.Table nativeTable = paimonNativeCatalog.getTable(identifier);
+            if (!(nativeTable instanceof FileStoreTable fileStoreTable)) {
+                throw new StarRocksConnectorException("Paimon write target is no longer a file-store table");
+            }
+            operation.validateTable(fileStoreTable);
+            return fileStoreTable;
+        } catch (Catalog.TableNotExistException e) {
+            throw new StarRocksConnectorException("Paimon write target no longer exists", e);
+        }
+    }
+
+    private static boolean publicationVisible(FileStoreTable table, PaimonSinkExtra operation) {
+        try {
+            Optional<Snapshot> snapshot = table.snapshotManager()
+                    .latestSnapshotOfUserFromFilesystem(operation.getCommitUser());
+            return snapshot.isPresent() && snapshot.get().commitIdentifier() == operation.getCommitIdentifier()
+                    && snapshot.get().schemaId() == operation.getSchemaId();
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    @Override
     public void createView(ConnectContext context, CreateViewStmt stmt) {
         String dbName = stmt.getDbName();
         String viewName = stmt.getTable();
@@ -194,18 +399,23 @@ public class PaimonMetadata implements ConnectorMetadata {
         String tableName = stmt.getTableName();
         Table paimonTable = getTable(context, stmt.getDbName(), stmt.getTableName());
         if (paimonTable == null) {
+            if (!stmt.isSetIfExists()) {
+                throw new StarRocksConnectorException("Paimon table %s.%s does not exist", dbName, tableName);
+            }
             return;
         }
+        Identifier identifier = new Identifier(dbName, tableName);
         try {
             if (paimonTable.isPaimonView()) {
-                paimonNativeCatalog.dropView(new Identifier(dbName, tableName), stmt.isForceDrop());
-                return;
+                paimonNativeCatalog.dropView(identifier, stmt.isSetIfExists());
+            } else {
+                paimonNativeCatalog.dropTable(identifier, stmt.isSetIfExists());
             }
-            paimonNativeCatalog.dropTable(new Identifier(dbName, tableName), stmt.isForceDrop());
         } catch (Exception e) {
             throw new StarRocksConnectorException(
                     String.format("Paimon dropTable error for %s.%s", dbName, tableName), e);
         }
+        invalidateTableAfterDdl(identifier);
     }
 
     private void updateAllPartitionInfos(String databaseName, String tableName) {
@@ -653,8 +863,12 @@ public class PaimonMetadata implements ConnectorMetadata {
             int[] projected =
                     params.getFieldNames().stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
             List<Predicate> predicates = extractPredicates(paimonTable, params.getPredicate());
+            // withLimit stops at the first splits that pass the pushed filter, so it is only safe when every
+            // partition conjunct was converted: one left to the BE (e.g. LIKE 'a_c%') would let Paimon pick
+            // splits the BE then filters out entirely, while splits that match are never scanned.
             boolean pruneManifestsByLimit = params.getLimit() != -1 && params.getLimit() < Integer.MAX_VALUE
-                    && onlyHasPartitionPredicate(table, params.getPredicate());
+                    && onlyHasPartitionPredicate(table, params.getPredicate())
+                    && predicates.size() == Utils.extractConjuncts(params.getPredicate()).size();
             readBuilder = readBuilder.withFilter(predicates).withProjection(projected);
 
             if (pruneManifestsByLimit) {

@@ -31,5 +31,5 @@ scan:
     - "**/gcs-connector-3.0.13-shaded.jar"
     - "**/hadoop-shaded-guava-1.5.0.jar"
     - "**/hbase-shaded-miscellaneous-4.1.10.jar"
-    - "**/iceberg-bundled-guava-1.11.0.jar"
+    - "**/iceberg-bundled-guava-1.12.0.jar"
     - "**/spark-network-common_2.12-3.5.7.jar"

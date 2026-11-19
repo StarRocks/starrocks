@@ -253,6 +253,7 @@ public class TabletReshardJobMgrTest {
     protected static StarRocksAssert starRocksAssert;
     private static Database reshardDb;
     private static OlapTable reshardTable;
+    private static OlapTable targetSizeTable;
     private static LakeTablet oversizedTablet;
 
     @BeforeEach
@@ -265,6 +266,9 @@ public class TabletReshardJobMgrTest {
         // TABLET_RESHARD via init(), and triggerTabletReshard short-circuits on non-NORMAL.
         if (reshardTable != null) {
             reshardTable.setState(OlapTable.OlapTableState.NORMAL);
+        }
+        if (targetSizeTable != null) {
+            targetSizeTable.setState(OlapTable.OlapTableState.NORMAL);
         }
         NODE_COUNT_RESOLUTIONS.set(0);
     }
@@ -301,6 +305,12 @@ public class TabletReshardJobMgrTest {
         starRocksAssert.withTable(sql);
         reshardTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(reshardDb.getFullName(), "reshard_trigger_table");
+
+        starRocksAssert.withTable("create table reshard_target_size_table (key1 int, key2 varchar(10))\n"
+                + "order by(key1)\n"
+                + "properties('replication_num' = '1', 'tablet_reshard_target_size' = '1073741824');");
+        targetSizeTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(reshardDb.getFullName(), "reshard_target_size_table");
 
         // Grab the single tablet from the default partition.
         Tablet t = reshardTable.getPartitions().iterator().next()
@@ -811,6 +821,144 @@ public class TabletReshardJobMgrTest {
         }
     }
 
+    private static final long GIB = 1024L * 1024L * 1024L;
+
+    @Test
+    public void testTargetSizeTableQueuesSplitBelowClusterThreshold() throws Exception {
+        mockLeaderAdmissionOpen();
+        TabletReshardJobMgr mgr = new TabletReshardJobMgr();
+        // 2 GiB is above the table's 1 GiB target's split trigger but far below the cluster's 10 GiB one.
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 2 * GIB, Long.MAX_VALUE, 0L, 0);
+        Assertions.assertEquals(0, mgr.getReshardCandidateCount());
+        mgr.addReshardCandidate(reshardDb.getId(), targetSizeTable.getId(), 2 * GIB, Long.MAX_VALUE, 0L, 0);
+        Assertions.assertEquals(1, mgr.getReshardCandidateCount());
+    }
+
+    @Test
+    public void testTargetSizeTableAutoSplitUsesTableTarget() throws Exception {
+        long[] targets = {-1L};
+        int[] calls = {0};
+        new MockUp<TabletReshardJobMgr>() {
+            @Mock
+            public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
+                    com.starrocks.sql.ast.SplitTabletClause clause) {
+                calls[0]++;
+                targets[0] = clause.getTabletReshardTargetSize();
+                TestNormalTabletReshardJob job =
+                        new TestNormalTabletReshardJob(3000L + calls[0], TabletReshardJob.JobType.SPLIT_TABLET);
+                job.setTableId(table.getId());
+                return job;
+            }
+        };
+        mockLeaderAdmissionOpen();
+        TabletReshardJobMgr mgr = new TabletReshardJobMgr();
+        mgr.addReshardCandidate(reshardDb.getId(), targetSizeTable.getId(), 2 * GIB, Long.MAX_VALUE, 0L, 0);
+        mgr.runAfterCatalogReadyForTest();
+        Assertions.assertEquals(1, calls[0]);
+        Assertions.assertEquals(GIB, targets[0]);
+        Assertions.assertTrue(mgr.hasSizeSplitLatch(targetSizeTable.getId()));
+    }
+
+    @Test
+    public void testTargetSizeTableAutoMergeUsesTableTarget() throws Exception {
+        long[] target = {-1L};
+        int[] calls = {0};
+        new MockUp<TabletReshardJobMgr>() {
+            @Mock
+            public void createTabletReshardJob(Database db, OlapTable table, MergeTabletClause clause) {
+                calls[0]++;
+                target[0] = clause.getTabletReshardTargetSize();
+            }
+        };
+        mockLeaderAdmissionOpen();
+        boolean savedMergeFlag = Config.tablet_reshard_enable_tablet_merge;
+        try {
+            Config.tablet_reshard_enable_tablet_merge = true;
+            TabletReshardJobMgr mgr = new TabletReshardJobMgr();
+            mgr.addReshardCandidate(reshardDb.getId(), targetSizeTable.getId(), 0L,
+                    TabletReshardUtils.mergePairThreshold(GIB) - 1, 0L, 0);
+            mgr.runAfterCatalogReadyForTest();
+        } finally {
+            Config.tablet_reshard_enable_tablet_merge = savedMergeFlag;
+        }
+        Assertions.assertEquals(1, calls[0]);
+        Assertions.assertEquals(GIB, target[0]);
+    }
+
+    @Test
+    public void testClusterOffSwitchStopsTargetSizeTable() throws Exception {
+        int[] calls = {0};
+        new MockUp<TabletReshardJobMgr>() {
+            @Mock
+            public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
+                    com.starrocks.sql.ast.SplitTabletClause clause) {
+                calls[0]++;
+                TestNormalTabletReshardJob job =
+                        new TestNormalTabletReshardJob(3100L + calls[0], TabletReshardJob.JobType.SPLIT_TABLET);
+                job.setTableId(table.getId());
+                return job;
+            }
+        };
+        mockLeaderAdmissionOpen();
+        long savedTarget = Config.tablet_reshard_target_size;
+        try {
+            TabletReshardJobMgr mgr = new TabletReshardJobMgr();
+            // Queued while the cluster switch is on, drained after it is turned off.
+            mgr.addReshardCandidate(reshardDb.getId(), targetSizeTable.getId(), 2 * GIB, Long.MAX_VALUE, 0L, 0);
+            Assertions.assertEquals(1, mgr.getReshardCandidateCount());
+            Config.tablet_reshard_target_size = 0L;
+            mgr.runAfterCatalogReadyForTest();
+            Assertions.assertEquals(0, calls[0], "G = 0 must stop splits even on a table with its own target size");
+
+            mgr.addReshardCandidate(reshardDb.getId(), targetSizeTable.getId(), 2 * GIB, Long.MAX_VALUE, 0L, 0);
+            Assertions.assertEquals(0, mgr.getReshardCandidateCount());
+        } finally {
+            Config.tablet_reshard_target_size = savedTarget;
+        }
+    }
+
+    @Test
+    public void testAlterTargetSizeReArmsEmptyMergeLatch() throws Exception {
+        int[] mergeAttempts = {0};
+        new MockUp<TabletReshardJobMgr>() {
+            @Mock
+            public void createTabletReshardJob(Database db, OlapTable table, MergeTabletClause clause)
+                    throws StarRocksException {
+                mergeAttempts[0]++;
+                throw new EmptyReshardPlanException("No tablets need to merge in table t");
+            }
+        };
+        mockLeaderAdmissionOpen();
+        TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        long pairSize = TabletReshardUtils.mergePairThreshold(GIB) - 1;
+        boolean savedMergeFlag = Config.tablet_reshard_enable_tablet_merge;
+        try {
+            Config.tablet_reshard_enable_tablet_merge = true;
+            for (int i = 0; i < 3; i++) {
+                Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, targetSizeTable,
+                        0L, pairSize, 0L, 0);
+            }
+            Assertions.assertEquals(1, mergeAttempts[0], "an unchanged signal must not be re-planned");
+
+            targetSizeTable.setTabletReshardTargetSize(2 * GIB);
+            Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, targetSizeTable,
+                    0L, pairSize, 0L, 0);
+            Assertions.assertEquals(2, mergeAttempts[0], "a changed table target size must re-arm the latch");
+        } finally {
+            targetSizeTable.setTabletReshardTargetSize(GIB);
+            Config.tablet_reshard_enable_tablet_merge = savedMergeFlag;
+        }
+    }
+
+    @Test
+    public void testPlanSignaturesFoldTarget() {
+        long s = 8 * GIB;
+        Assertions.assertNotEquals(TabletReshardJobMgr.splitPlanSignature(GIB, s, 0L, 0, 1024),
+                TabletReshardJobMgr.splitPlanSignature(2 * GIB, s, 0L, 0, 1024));
+        Assertions.assertNotEquals(TabletReshardJobMgr.mergePlanSignature(GIB, 1024L),
+                TabletReshardJobMgr.mergePlanSignature(2 * GIB, 1024L));
+    }
+
     @Test
     public void testAutoSplitSuppressedAfterNoProgress() throws Exception {
         int[] splitCalls = {0};
@@ -983,9 +1131,11 @@ public class TabletReshardJobMgrTest {
                     "the old 32-bit Objects.hash fingerprint would have collided on these inputs");
 
             Config.tablet_reshard_target_size = targetA;
-            long sigA = TabletReshardJobMgr.splitPlanSignature(huge, 0L, 8, Config.tablet_reshard_max_split_count);
+            long sigA = TabletReshardJobMgr.splitPlanSignature(
+                    Config.tablet_reshard_target_size, huge, 0L, 8, Config.tablet_reshard_max_split_count);
             Config.tablet_reshard_target_size = targetB;
-            long sigB = TabletReshardJobMgr.splitPlanSignature(huge, 0L, 8, Config.tablet_reshard_max_split_count);
+            long sigB = TabletReshardJobMgr.splitPlanSignature(
+                    Config.tablet_reshard_target_size, huge, 0L, 8, Config.tablet_reshard_max_split_count);
             Assertions.assertNotEquals(sigA, sigB,
                     "the 64-bit murmur3 fingerprint must distinguish targets that collide under Objects.hash");
         } finally {
@@ -1202,23 +1352,27 @@ public class TabletReshardJobMgrTest {
             long max = Config.tablet_reshard_target_size * 4;
             long adaptive = Config.tablet_reshard_min_split_size * 4;
             int cap = Config.tablet_reshard_max_split_count;
-            long base = TabletReshardJobMgr.splitPlanSignature(max, adaptive, 8, cap);
+            long base = TabletReshardJobMgr.splitPlanSignature(Config.tablet_reshard_target_size, max, adaptive, 8, cap);
 
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max * 4, adaptive, 8, cap),
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(
+                    Config.tablet_reshard_target_size, max * 4, adaptive, 8, cap),
                     "a larger max tablet changes the size rule's answer");
 
             Config.tablet_reshard_min_split_size = savedMin * 2;
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, adaptive, 8, cap),
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(
+                    Config.tablet_reshard_target_size, max, adaptive, 8, cap),
                     "min_split_size moves the adaptive target");
             Config.tablet_reshard_min_split_size = savedMin;
 
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, adaptive * 8, 8, cap),
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(
+                    Config.tablet_reshard_target_size, max, adaptive * 8, 8, cap),
                     "a different adaptive-split tablet size");
 
             // The bound is a plan input, not just a scan input: an index the adaptive rule declined
             // to widen at four nodes may be worth widening at eight, so a resized warehouse has to
             // re-arm a suppressed table rather than leave it latched on the old bound's answer.
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(max, adaptive, 4, cap),
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.splitPlanSignature(
+                    Config.tablet_reshard_target_size, max, adaptive, 4, cap),
                     "a resized warehouse moves the bound");
         } finally {
             Config.tablet_reshard_min_split_size = savedMin;
@@ -1231,13 +1385,13 @@ public class TabletReshardJobMgrTest {
         try {
             // Literal, not derived from the config another test in this class may have moved: two
             // pair sums that happen to be equal would make the first assertion vacuous.
-            long base = TabletReshardJobMgr.mergePlanSignature(1024L);
+            long base = TabletReshardJobMgr.mergePlanSignature(Config.tablet_reshard_target_size, 1024L);
 
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.mergePlanSignature(4096L),
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.mergePlanSignature(Config.tablet_reshard_target_size, 4096L),
                     "a different adjacent-pair sum changes the size rule's answer");
 
             Config.tablet_reshard_target_size = savedTarget * 2 + 1;
-            Assertions.assertNotEquals(base, TabletReshardJobMgr.mergePlanSignature(1024L),
+            Assertions.assertNotEquals(base, TabletReshardJobMgr.mergePlanSignature(Config.tablet_reshard_target_size, 1024L),
                     "target_size moves every merge threshold, so a suppressed table must re-arm");
         } finally {
             Config.tablet_reshard_target_size = savedTarget;

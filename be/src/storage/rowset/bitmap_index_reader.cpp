@@ -135,7 +135,7 @@ Status BitmapIndexReader::new_iterator(const IndexReadOptions& opts, SegmentBitm
     }
     *iterator = new SegmentBitmapIndexIterator(this, std::move(dict_iter), std::move(bitmap_iter),
                                                std::move(ngram_dict_iter), std::move(ngram_bitmap_iter), _has_null,
-                                               bitmap_nums());
+                                               bitmap_nums(), opts.idg_bitmap_file_missing);
     return Status::OK();
 }
 

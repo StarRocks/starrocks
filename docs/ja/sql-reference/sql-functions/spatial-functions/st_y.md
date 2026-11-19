@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "GEOGRAPHY または GEOMETRY の点の Y 座標を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Y

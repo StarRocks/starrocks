@@ -17,6 +17,8 @@
 #include <bvar/bvar.h>
 
 #include <algorithm>
+#include <optional>
+#include <unordered_map>
 
 #include "base/compression/compression_utils.h"
 #include "cache/data_cache_hit_rate_counter.hpp"
@@ -32,6 +34,9 @@
 #include "fs/hdfs_metrics.h"
 #include "runtime/runtime_state.h"
 #include "storage_primitive/predicate_parser.h"
+#include "storage_primitive/zone_map_detail.h"
+#include "types/date_value.h"
+#include "types/timestamp_value.h"
 
 namespace starrocks {
 
@@ -67,6 +72,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.format_scan_context.is_first_split = false;
     ctx.format_scan_context.first_row_id.reset();
     ctx.format_scan_context.min_max_values.clear();
+    ctx.format_scan_context.min_max_value_cursors.clear();
     ctx.format_scan_context.extended_column_exprs.clear();
     ctx.format_scan_context.predicate_tree = nullptr;
     ctx.format_scan_context.runtime_filter_scan_range_pruner = nullptr;
@@ -209,6 +215,136 @@ Status HdfsScanner::_build_scanner_context() {
     return Status::OK();
 }
 
+namespace {
+
+using FileZoneMaps = std::unordered_map<ColumnId, ZoneMapDetail>;
+
+TimestampValue timestamp_from_unix_micros(int64_t micros) {
+    constexpr int64_t kMicrosPerSecond = 1000000L;
+    int64_t seconds = micros / kMicrosPerSecond;
+    int64_t microseconds = micros % kMicrosPerSecond;
+    if (microseconds < 0) {
+        microseconds += kMicrosPerSecond;
+        --seconds;
+    }
+    TimestampValue ts;
+    ts.from_unix_second(seconds, microseconds);
+    return ts;
+}
+
+// The file-level zone map of a slot from its min/max values. Only integer, date and datetime slots: float bounds
+// leave out NaN. Datetime only when the FE chose the slots (`with_datetime`): it widens timestamptz bounds there to
+// surely cover the file in the session time zone, while the min/max optimization sends them converted at the two
+// ends only, which is not exact across offset changes (DST).
+std::optional<ZoneMapDetail> file_zone_map(const SlotDescriptor& slot, const TExprMinMaxValue& value,
+                                           bool with_datetime) {
+    if (value.all_null || value.type != TExprNodeType::INT_LITERAL) {
+        return std::nullopt;
+    }
+    Datum min;
+    Datum max;
+    switch (slot.type().type) {
+    case TYPE_TINYINT:
+        min = static_cast<int8_t>(value.min_int_value);
+        max = static_cast<int8_t>(value.max_int_value);
+        break;
+    case TYPE_SMALLINT:
+        min = static_cast<int16_t>(value.min_int_value);
+        max = static_cast<int16_t>(value.max_int_value);
+        break;
+    case TYPE_INT:
+        min = static_cast<int32_t>(value.min_int_value);
+        max = static_cast<int32_t>(value.max_int_value);
+        break;
+    case TYPE_BIGINT:
+        min = static_cast<int64_t>(value.min_int_value);
+        max = static_cast<int64_t>(value.max_int_value);
+        break;
+    case TYPE_DATE:
+        min = DateValue::from_days_since_unix_epoch(value.min_int_value);
+        max = DateValue::from_days_since_unix_epoch(value.max_int_value);
+        break;
+    case TYPE_DATETIME:
+        if (!with_datetime) {
+            return std::nullopt;
+        }
+        min = timestamp_from_unix_micros(value.min_int_value);
+        max = timestamp_from_unix_micros(value.max_int_value);
+        break;
+    default:
+        return std::nullopt;
+    }
+    return ZoneMapDetail(std::move(min), std::move(max), value.has_null);
+}
+
+// Whether a row satisfying `pred` may be in a file with zone map `zm`. An expression predicate always may: it is
+// judged by evaluating the expression at the bounds, which is only sound for a range as narrow as a row group's
+// (e.g. an integer expression that overflows inside the file's range).
+bool file_may_satisfy_pred(const ColumnPredicate* pred, const ZoneMapDetail& zm) {
+    return pred->type() == PredicateType::kExpr || pred->zone_map_filter(zm);
+}
+
+// Whether a row of the file may satisfy `node`, judged by the file-level zone maps only. A column without a zone
+// map, and a predicate that cannot use one, may always be satisfied.
+template <CompoundNodeType Type>
+bool file_may_satisfy(const PredicateTree& tree, const PredicateCompoundNode<Type>& node, const FileZoneMaps& zms) {
+    const auto& cid_to_col_preds = tree.compound_node_context(node.id()).cid_to_col_preds(node);
+    if constexpr (Type == CompoundNodeType::AND) {
+        for (const auto& [cid, col_preds] : cid_to_col_preds) {
+            auto it = zms.find(cid);
+            if (it != zms.end() && !std::ranges::all_of(col_preds, [&](const ColumnPredicate* pred) {
+                    return file_may_satisfy_pred(pred, it->second);
+                })) {
+                return false;
+            }
+        }
+        return std::ranges::all_of(node.compound_children(),
+                                   [&](const auto& child) { return file_may_satisfy(tree, child, zms); });
+    } else {
+        if (node.empty()) {
+            return true;
+        }
+        for (const auto& [cid, col_preds] : cid_to_col_preds) {
+            auto it = zms.find(cid);
+            if (it == zms.end() || std::ranges::any_of(col_preds, [&](const ColumnPredicate* pred) {
+                    return file_may_satisfy_pred(pred, it->second);
+                })) {
+                return true;
+            }
+        }
+        return std::ranges::any_of(node.compound_children(),
+                                   [&](const auto& child) { return file_may_satisfy(tree, child, zms); });
+    }
+}
+
+} // namespace
+
+// The scan range carries the file's min/max values of the slots probed by join runtime filters. The predicate
+// tree holds the conjuncts and the runtime filters that have arrived, so a file none of whose rows can pass is
+// skipped before it is opened.
+bool HdfsScanner::_pruned_by_file_stats() const {
+    const auto& fsc = _scanner_ctx->format_scan_context;
+    if (!support_file_stats_pruning() || !fsc.options.enable_dynamic_prune_scan_range || fsc.min_max_values.empty()) {
+        return false;
+    }
+    const PredicateTree& tree = _scanner_ctx->predicates.predicate_tree;
+    if (tree.empty()) {
+        return false;
+    }
+    FileZoneMaps zms;
+    for (const auto& [slot_id, value] : fsc.min_max_values) {
+        const SlotDescriptor* slot = _scanner_ctx->tuple_desc->get_slot_by_id(slot_id);
+        if (slot == nullptr) {
+            continue;
+        }
+        if (auto zm = file_zone_map(*slot, value, !fsc.options.min_max_values_of_all_slots); zm.has_value()) {
+            // ConnectorPredicateParser::column_id() is the slot id.
+            zms.emplace(static_cast<ColumnId>(slot_id), std::move(*zm));
+        }
+    }
+    return !zms.empty() && !file_may_satisfy(tree, tree.root(), zms);
+}
+
 Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_total_running_time);
     RETURN_IF_CANCELLED(_runtime_state);
@@ -281,6 +417,14 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
         _scanner_ctx->format_scan_context.can_use_min_max_optimization()) {
         return Status::OK();
     }
+    if (_pruned_by_file_stats()) {
+        _skipped_by_file_stats = true;
+        _scanner_ctx->no_more_chunks = true;
+        if (_scanner_ctx->profile.scan_ranges_pruned_by_file_stats_counter != nullptr) {
+            COUNTER_UPDATE(_scanner_ctx->profile.scan_ranges_pruned_by_file_stats_counter, 1);
+        }
+        return Status::OK();
+    }
     Status status = do_open(runtime_state);
     if (!status.ok()) {
         // Reopening runs do_open() again, nothing else to redo.
@@ -302,6 +446,15 @@ void HdfsScanner::close() noexcept {
     // short circuit for min/max optimization.
     if (_scanner_ctx->format_scan_context.can_use_count_optimization() ||
         _scanner_ctx->format_scan_context.can_use_min_max_optimization()) {
+        return;
+    }
+    // A file skipped by its min/max values has no reader to close, but still reports the work done before the
+    // skip, e.g. the delete files the parquet scanner builds in do_init().
+    if (_skipped_by_file_stats) {
+        bool expect = false;
+        if (_closed.compare_exchange_strong(expect, true)) {
+            update_counter();
+        }
         return;
     }
     VLOG_FILE << "close file success: " << _scanner_ctx->file_path << ", scan range = ["

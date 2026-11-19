@@ -386,6 +386,16 @@ Status PhysicalSplitMorselQueue::_init_segment() {
         ASSIGN_OR_RETURN(_segment_scan_range, block_aligned_rowid_range_from_seek_ranges(segment, _tablet_seek_ranges));
     }
 
+    if (_candidate_rowid_ranges != nullptr) {
+        const auto [candidate, ignored_first_split] =
+                _candidate_rowid_ranges->get_segment_rowid_range(_cur_rowset(), segment);
+        if (candidate != nullptr) {
+            _segment_scan_range = _segment_scan_range.intersection(*candidate);
+        } else {
+            _segment_scan_range.clear();
+        }
+    }
+
     _segment_range_iter = _segment_scan_range.new_iterator();
     _num_segment_rest_rows = _segment_scan_range.span_size();
 

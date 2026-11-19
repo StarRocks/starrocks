@@ -1,0 +1,414 @@
+-- name: test_iceberg_variant_mixed_files
+create external catalog iceberg_variant_mixed_${uuid0}
+PROPERTIES (
+    "type"="iceberg",
+    "iceberg.catalog.type"="hadoop",
+    "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_variant_mixed_files/${uuid0}/warehouse/"
+);
+-- result:
+-- !result
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_variant_mixed_files/${uuid0}/warehouse/db > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp -r ../be/test/formats/parquet/test_data/variant_spark/ oss://${oss_bucket}/test_iceberg_variant_mixed_files/${uuid0}/data/ --include "*.parquet" > /dev/null
+-- result:
+0
+
+-- !result
+use iceberg_variant_mixed_${uuid0}.db;
+-- result:
+-- !result
+set time_zone = 'Asia/Shanghai';
+-- result:
+-- !result
+create table mixed (id int, v variant) properties ('format-version' = '3');
+-- result:
+-- !result
+create table plain (id int, v variant) properties ('format-version' = '3');
+-- result:
+-- !result
+alter table mixed execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_mixed_files/${uuid0}/data/shred_01_typed.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table mixed execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_mixed_files/${uuid0}/data/noshred_02_conflict.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table mixed execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_mixed_files/${uuid0}/data/api_shred_03_nulls.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table mixed execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_mixed_files/${uuid0}/data/noshred_04_scalars.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table mixed execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_mixed_files/${uuid0}/data/shred_05_inference.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table mixed execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_mixed_files/${uuid0}/data/noshred_06_top_int.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table plain execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_mixed_files/${uuid0}/data/noshred_01_typed.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table plain execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_mixed_files/${uuid0}/data/noshred_02_conflict.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table plain execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_mixed_files/${uuid0}/data/noshred_03_nulls.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table plain execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_mixed_files/${uuid0}/data/noshred_04_scalars.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table plain execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_mixed_files/${uuid0}/data/noshred_05_inference.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table plain execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_mixed_files/${uuid0}/data/noshred_06_top_int.parquet', file_format='parquet');
+-- result:
+-- !result
+select count(*), count(v), min(id), max(id) from mixed;
+-- result:
+276	273	1	405
+-- !result
+function: assert_equal_result("select id, cast(v as string) from mixed order by id", "select id, cast(v as string) from plain order by id")
+-- result:
+None
+-- !result
+function: assert_equal_result("select id, cast(variant_query(v, '$.i') as string), cast(variant_query(v, '$.s') as string), cast(variant_query(v, '$.o.z.w') as string), cast(variant_query(v, '$.arr[1]') as string), cast(variant_query(v, '$.ao[0].k') as string), cast(variant_query(v, '$.x') as string) from mixed order by id", "select id, cast(variant_query(v, '$.i') as string), cast(variant_query(v, '$.s') as string), cast(variant_query(v, '$.o.z.w') as string), cast(variant_query(v, '$.arr[1]') as string), cast(variant_query(v, '$.ao[0].k') as string), cast(variant_query(v, '$.x') as string) from plain order by id")
+-- result:
+None
+-- !result
+function: assert_equal_result("select id, get_variant_int(v, '$.i'), get_variant_string(v, '$.s'), get_variant_double(v, '$.dec'), get_variant_datetime(v, '$.t'), get_variant_int(v, '$') from mixed order by id", "select id, get_variant_int(v, '$.i'), get_variant_string(v, '$.s'), get_variant_double(v, '$.dec'), get_variant_datetime(v, '$.t'), get_variant_int(v, '$') from plain order by id")
+-- result:
+None
+-- !result
+function: assert_equal_result("select id from mixed where get_variant_int(v, '$.i') between 5 and 160 order by id", "select id from plain where get_variant_int(v, '$.i') between 5 and 160 order by id")
+-- result:
+None
+-- !result
+function: assert_equal_result("select id from mixed where get_variant_string(v, '$.s') in ('alpha', 'r150', 'ten') order by id", "select id from plain where get_variant_string(v, '$.s') in ('alpha', 'r150', 'ten') order by id")
+-- result:
+None
+-- !result
+function: assert_equal_result("select id from mixed where variant_query(v, '$.i') is null order by id", "select id from plain where variant_query(v, '$.i') is null order by id")
+-- result:
+None
+-- !result
+function: assert_equal_result("select variant_typeof(variant_query(v, '$.i')), count(*), sum(get_variant_int(v, '$.i')) from mixed group by 1 order by 1", "select variant_typeof(variant_query(v, '$.i')), count(*), sum(get_variant_int(v, '$.i')) from plain group by 1 order by 1")
+-- result:
+None
+-- !result
+select variant_typeof(variant_query(v, '$.i')), count(*), sum(get_variant_int(v, '$.i')) from mixed group by 1 order by 1;
+-- result:
+None	113	None
+Int16	73	11972
+Int64	2	-1
+Int8	35	3141
+Null	1	None
+String	52	None
+-- !result
+drop table mixed force;
+-- result:
+-- !result
+drop table plain force;
+-- result:
+-- !result
+drop catalog iceberg_variant_mixed_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_mixed_files/${uuid0}/ > /dev/null
+-- result:
+0
+
+-- !result
+-- name: test_iceberg_variant_schema_evolution
+create external catalog iceberg_variant_evo_${uuid0}
+PROPERTIES (
+    "type"="iceberg",
+    "iceberg.catalog.type"="hadoop",
+    "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_variant_schema_evolution/${uuid0}/warehouse/"
+);
+-- result:
+-- !result
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_variant_schema_evolution/${uuid0}/warehouse/db > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp -r ../be/test/formats/parquet/test_data/variant_spark/ oss://${oss_bucket}/test_iceberg_variant_schema_evolution/${uuid0}/data/ --include "evo_*.parquet" > /dev/null
+-- result:
+0
+
+-- !result
+use iceberg_variant_evo_${uuid0}.db;
+-- result:
+-- !result
+set time_zone = 'Asia/Shanghai';
+-- result:
+-- !result
+create table evo (id int, v variant) properties ('format-version' = '3');
+-- result:
+-- !result
+create table evo_plain (id int, v variant) properties ('format-version' = '3');
+-- result:
+-- !result
+alter table evo execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_schema_evolution/${uuid0}/data/evo_e1_int.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table evo execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_schema_evolution/${uuid0}/data/evo_e2_bigint.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table evo execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_schema_evolution/${uuid0}/data/evo_e3_double.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table evo execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_schema_evolution/${uuid0}/data/evo_e4_array.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table evo execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_schema_evolution/${uuid0}/data/evo_e5_string.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table evo execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_schema_evolution/${uuid0}/data/evo_e6_object.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table evo execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_schema_evolution/${uuid0}/data/evo_e7_mixed.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table evo_plain execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_schema_evolution/${uuid0}/data/evo_noshred_e1_int.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table evo_plain execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_schema_evolution/${uuid0}/data/evo_noshred_e2_bigint.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table evo_plain execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_schema_evolution/${uuid0}/data/evo_noshred_e3_double.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table evo_plain execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_schema_evolution/${uuid0}/data/evo_noshred_e4_array.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table evo_plain execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_schema_evolution/${uuid0}/data/evo_noshred_e5_string.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table evo_plain execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_schema_evolution/${uuid0}/data/evo_noshred_e6_object.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table evo_plain execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_schema_evolution/${uuid0}/data/evo_noshred_e7_mixed.parquet', file_format='parquet');
+-- result:
+-- !result
+select count(*), count(v), count(distinct id) from evo;
+-- result:
+700	700	700
+-- !result
+select id, cast(v as string), cast(variant_query(v, '$.a') as string), variant_typeof(variant_query(v, '$.a')),
+       get_variant_int(v, '$.a'), get_variant_double(v, '$.a'), get_variant_string(v, '$.b'), get_variant_double(v, '$.c'),
+       get_variant_int(v, '$.a.x'), get_variant_int(v, '$.a[1]')
+from evo where id in (1000, 2000, 2099, 3000, 4000, 5000, 6000, 7000, 7001, 7002) order by id;
+-- result:
+1000	{"a":0,"b":"b1000"}	0	Int8	0	0.0	b1000	None	None	None
+2000	{"a":9007199254742993,"c":2000.5}	9007199254742993	Int64	9007199254742993	9007199254742992.0	None	2000.5	None	None
+2099	{"a":9007199254743092,"c":2099.5}	9007199254743092	Int64	9007199254743092	9007199254743092.0	None	2099.5	None	None
+3000	{"a":3000.25,"b":3000}	3000.25	Double	3000	3000.25	3000	None	None	None
+4000	{"a":[4000,4001],"b":"b4000"}	[4000,4001]	Array	None	None	b4000	None	None	4001
+5000	{"a":"a5000"}	a5000	String	None	None	None	None	None	None
+6000	{"a":{"x":6000}}	{"x":6000}	Object	None	None	None	None	6000	None
+7000	{"a":"a7000"}	a7000	String	None	None	None	None	None	None
+7001	{"a":7001.5}	7001.5	Double	7001	7001.5	None	None	None	None
+7002	{"a":7002}	7002	Int16	7002	7002.0	None	None	None	None
+-- !result
+select variant_typeof(variant_query(v, '$.a')), count(*), min(id), max(id) from evo group by 1 order by 1;
+-- result:
+Array	100	4000	4099
+Double	133	3000	7097
+Int16	33	7002	7098
+Int64	100	2000	2099
+Int8	100	1000	1099
+Object	100	6000	6099
+String	134	5000	7099
+-- !result
+select variant_typeof(variant_query(v, '$.b')), count(*) from evo group by 1 order by 1;
+-- result:
+None	400
+Int16	100
+String	200
+-- !result
+select sum(get_variant_int(v, '$.a')), count(get_variant_int(v, '$.a')), cast(max(get_variant_int(v, '$.a')) as string) from evo;
+-- result:
+900719925475079417	366	9007199254743092
+-- !result
+function: assert_equal_result("select id, cast(v as string) from evo order by id", "select id, cast(v as string) from evo_plain order by id")
+-- result:
+None
+-- !result
+function: assert_equal_result("select id, cast(variant_query(v, '$.a') as string), cast(variant_query(v, '$.b') as string), cast(variant_query(v, '$.c') as string), cast(variant_query(v, '$.a.x') as string), cast(variant_query(v, '$.a[1]') as string) from evo order by id", "select id, cast(variant_query(v, '$.a') as string), cast(variant_query(v, '$.b') as string), cast(variant_query(v, '$.c') as string), cast(variant_query(v, '$.a.x') as string), cast(variant_query(v, '$.a[1]') as string) from evo_plain order by id")
+-- result:
+None
+-- !result
+function: assert_equal_result("select id, get_variant_int(v, '$.a'), get_variant_double(v, '$.a'), get_variant_string(v, '$.a'), get_variant_string(v, '$.b'), get_variant_int(v, '$.b'), get_variant_double(v, '$.c') from evo order by id", "select id, get_variant_int(v, '$.a'), get_variant_double(v, '$.a'), get_variant_string(v, '$.a'), get_variant_string(v, '$.b'), get_variant_int(v, '$.b'), get_variant_double(v, '$.c') from evo_plain order by id")
+-- result:
+None
+-- !result
+function: assert_equal_result("select variant_typeof(variant_query(v, '$.a')), count(*), sum(get_variant_int(v, '$.a')) from evo group by 1 order by 1", "select variant_typeof(variant_query(v, '$.a')), count(*), sum(get_variant_int(v, '$.a')) from evo_plain group by 1 order by 1")
+-- result:
+None
+-- !result
+function: assert_equal_result("select id from evo where get_variant_int(v, '$.a') > 50 order by id", "select id from evo_plain where get_variant_int(v, '$.a') > 50 order by id")
+-- result:
+None
+-- !result
+function: assert_equal_result("select id from evo where get_variant_double(v, '$.a') between 3010 and 3020 order by id", "select id from evo_plain where get_variant_double(v, '$.a') between 3010 and 3020 order by id")
+-- result:
+None
+-- !result
+function: assert_equal_result("select id from evo where get_variant_string(v, '$.a') in ('a5001', 'a7001') order by id", "select id from evo_plain where get_variant_string(v, '$.a') in ('a5001', 'a7001') order by id")
+-- result:
+None
+-- !result
+function: assert_equal_result("select id, cast(v as string) from evo order by id % 7, id", "select id, cast(v as string) from evo_plain order by id % 7, id")
+-- result:
+None
+-- !result
+function: assert_equal_result("select * from (select id, v from evo union all select id, v from evo_plain) t order by id, cast(v as string)", "select * from (select id, v from evo_plain union all select id, v from evo_plain) t order by id, cast(v as string)")
+-- result:
+None
+-- !result
+drop table evo force;
+-- result:
+-- !result
+drop table evo_plain force;
+-- result:
+-- !result
+drop catalog iceberg_variant_evo_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_schema_evolution/${uuid0}/ > /dev/null
+-- result:
+0
+
+-- !result
+-- name: test_iceberg_variant_shredded_pruning
+create external catalog iceberg_variant_prune_${uuid0}
+PROPERTIES (
+    "type"="iceberg",
+    "iceberg.catalog.type"="hadoop",
+    "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_variant_shredded_pruning/${uuid0}/warehouse/"
+);
+-- result:
+-- !result
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_variant_shredded_pruning/${uuid0}/warehouse/db > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ../be/test/formats/parquet/test_data/variant_spark/prune_rowgroups.parquet oss://${oss_bucket}/test_iceberg_variant_shredded_pruning/${uuid0}/data/prune_rowgroups.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ../be/test/formats/parquet/test_data/variant_spark/prune_int16.parquet oss://${oss_bucket}/test_iceberg_variant_shredded_pruning/${uuid0}/data/prune_int16.parquet > /dev/null
+-- result:
+0
+
+-- !result
+use iceberg_variant_prune_${uuid0}.db;
+-- result:
+-- !result
+create table prune (id int, v variant) properties ('format-version' = '3');
+-- result:
+-- !result
+alter table prune execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_shredded_pruning/${uuid0}/data/prune_rowgroups.parquet', file_format='parquet');
+-- result:
+-- !result
+select count(*), min(id), max(id) from prune where get_variant_string(v, '$.s') = 's001234';
+-- result:
+1	1234	1234
+-- !result
+select count(*), min(id), max(id) from prune where get_variant_string(v, '$.s') >= 's002900';
+-- result:
+100	2900	2999
+-- !result
+select count(*), min(id), max(id) from prune where get_variant_string(v, '$.s') in ('s000005', 's000010');
+-- result:
+2	5	10
+-- !result
+select count(*), min(id), max(id) from prune where get_variant_string(v, '$.s') like 's0029%';
+-- result:
+100	2900	2999
+-- !result
+select count(*), sum(get_variant_int(v, '$.n')) from prune where get_variant_int(v, '$.n') = 1234;
+-- result:
+1	1234
+-- !result
+select count(*), sum(get_variant_int(v, '$.n')) from prune where get_variant_int(v, '$.n') in (5, 2990);
+-- result:
+2	2995
+-- !result
+select count(*), min(id), max(id) from prune where get_variant_int(v, '$.n') between 1200 and 1210;
+-- result:
+11	1200	1210
+-- !result
+select count(*), sum(id) from prune where variant_query(v, '$.m') is null;
+-- result:
+300	448500
+-- !result
+select count(*), sum(id) from prune where variant_query(v, '$.m') is not null and get_variant_int(v, '$.g') = 2;
+-- result:
+900	2250000
+-- !result
+select count(*) from prune where get_variant_int(v, '$.n') in (1, 2, 3) or get_variant_string(v, '$.s') like 's0029%';
+-- result:
+103
+-- !result
+create table prune_int16 (id int, v variant) properties ('format-version' = '3');
+-- result:
+-- !result
+alter table prune_int16 execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_shredded_pruning/${uuid0}/data/prune_int16.parquet', file_format='parquet');
+-- result:
+-- !result
+select count(*), min(id), max(id) from prune_int16 where get_variant_int(v, '$.w') = 2234;
+-- result:
+1	1234	1234
+-- !result
+select count(*), min(id), max(id) from prune_int16 where get_variant_int(v, '$.w') >= 3900;
+-- result:
+100	2900	2999
+-- !result
+select count(*), min(id), max(id) from prune_int16 where get_variant_int(v, '$.w') between 1500 and 1510;
+-- result:
+11	500	510
+-- !result
+select count(*), sum(id) from prune_int16 where get_variant_int(v, '$.w') in (1005, 3995);
+-- result:
+2	3000
+-- !result
+select count(*), sum(id) from prune_int16 where get_variant_int(v, '$.w') not in (1005, 3995);
+-- result:
+2998	4495500
+-- !result
+select count(*), min(id), max(id) from prune_int16 where get_variant_int(v, '$.w') < 66536;
+-- result:
+3000	0	2999
+-- !result
+select count(*), min(id), max(id) from prune_int16 where get_variant_int(v, '$.w') between 1500 and 67036;
+-- result:
+2500	500	2999
+-- !result
+select count(*) from prune_int16 where get_variant_int(v, '$.w') in (2000, 67536);
+-- result:
+1
+-- !result
+select count(*) from prune_int16 where get_variant_int(v, '$.w') > 4000 or get_variant_int(v, '$.w') is null;
+-- result:
+0
+-- !result
+drop table prune force;
+-- result:
+-- !result
+drop table prune_int16 force;
+-- result:
+-- !result
+drop catalog iceberg_variant_prune_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_shredded_pruning/${uuid0}/ > /dev/null
+-- result:
+0
+
+-- !result

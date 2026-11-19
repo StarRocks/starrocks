@@ -4027,6 +4027,47 @@ TEST_F(GroupReaderTest, GetVariantShreddedHintsSkipsExtendedAccessPathUnlessIncl
     EXPECT_EQ("kind", hidden_hints.shredded_paths[0]);
 }
 
+// `v IS [NOT] NULL` reaches the BE as /v/OFFSET: the null mask alone, or nothing extra next to subfield reads.
+TEST_F(GroupReaderTest, GetVariantShreddedHintsNullOnlyFromOffsetPath) {
+    auto make_root = [](bool with_offset, bool with_field) {
+        auto root = ColumnAccessPath::create(TAccessPathType::ROOT, "data", 0).value();
+        if (with_offset) {
+            root->children().emplace_back(
+                    ColumnAccessPath::create(TAccessPathType::OFFSET, "P", 0, root->absolute_path()).value());
+        }
+        if (with_field) {
+            root->children().emplace_back(
+                    ColumnAccessPath::create(TAccessPathType::FIELD, "a", 0, root->absolute_path()).value());
+        }
+        return root;
+    };
+
+    {
+        std::vector<ColumnAccessPathPtr> paths;
+        paths.emplace_back(make_root(true, false));
+        auto hints = build_variant_shredded_hints(&paths, "data", false);
+        EXPECT_TRUE(hints.null_only);
+        EXPECT_TRUE(hints.parsed_shredded_paths.empty());
+    }
+    {
+        std::vector<ColumnAccessPathPtr> paths;
+        paths.emplace_back(make_root(true, true));
+        auto hints = build_variant_shredded_hints(&paths, "data", false);
+        EXPECT_FALSE(hints.null_only);
+        ASSERT_EQ(1u, hints.shredded_paths.size());
+        EXPECT_EQ("a", hints.shredded_paths[0]);
+    }
+    {
+        // A full read of the same column wins over the null-only path.
+        std::vector<ColumnAccessPathPtr> paths;
+        paths.emplace_back(make_root(true, false));
+        paths.emplace_back(make_root(false, false));
+        auto hints = build_variant_shredded_hints(&paths, "data", false);
+        EXPECT_FALSE(hints.null_only);
+        EXPECT_TRUE(hints.parsed_shredded_paths.empty());
+    }
+}
+
 // ── Decimal virtual column fallback tests ──────────────────────────────────────
 //
 // These tests exercise the row-by-row decimal fallback path that is reached when
@@ -4749,13 +4790,13 @@ TEST_F(GroupReaderTest, MaterializeSlotFinalizesLazyStateBeforeCaching) {
 TEST_F(GroupReaderTest, TempColumnAccretesStaleWithoutReset) {
     MockTempColumnReader reader;
 
-    ColumnPtr col1 = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    ColumnPtr col1 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     ASSERT_OK(reader.read_range(Range<uint64_t>(0, 1), nullptr, col1));
     EXPECT_EQ(1u, col1->size()) << "First read: 1 row";
 
     // Simulate skipped fill: don't call finalize_lazy_state
 
-    ColumnPtr col2 = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    ColumnPtr col2 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     ASSERT_OK(reader.read_range(Range<uint64_t>(0, 1), nullptr, col2));
     EXPECT_EQ(2u, col2->size()) << "Without reset, second read accretes stale data: 1 stale + 1 new = 2 rows";
 

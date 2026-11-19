@@ -22,7 +22,10 @@
 
 namespace starrocks::lake {
 
-ParallelTaskRunner::ParallelTaskRunner(ThreadPoolToken* token) : _token(token), _trace(Trace::CurrentTrace()) {}
+ParallelTaskRunner::ParallelTaskRunner(ThreadPoolToken* token)
+        : _token(token),
+          _trace(Trace::CurrentTrace()),
+          _remote_read(ScopedRemoteReadContext::or_current(RemoteReadContext{})) {}
 
 ParallelTaskRunner::~ParallelTaskRunner() {
     // A task still in flight would write into _mutex / _status as they are destroyed.
@@ -42,6 +45,7 @@ void ParallelTaskRunner::run(std::function<Status()> task) {
         // Pool workers do not inherit the caller's thread-local trace, so re-adopt it or every
         // TRACE_COUNTER_* inside the task is silently dropped.
         ADOPT_TRACE(_trace);
+        ScopedRemoteReadContext remote_read_scope(_remote_read);
         record((*shared)());
     });
     if (!st.ok()) {

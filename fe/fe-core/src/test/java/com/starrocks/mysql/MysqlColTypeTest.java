@@ -17,6 +17,7 @@
 
 package com.starrocks.mysql;
 
+import com.starrocks.type.GeoType;
 import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
@@ -31,9 +32,9 @@ public class MysqlColTypeTest {
     @Test
     public void testGeographyUsesVarbinaryMetadata() {
         GeoTypeDescriptor descriptor = new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
-                GeoTypeDescriptor.CoordinateSystem.SPHERICAL, GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL,
+                GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL,
                 "OGC:CRS84", null);
-        ScalarType geography = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, descriptor);
+        ScalarType geography = GeoType.createGeographyType(descriptor);
         Assertions.assertEquals(MysqlColType.MYSQL_TYPE_BLOB, MysqlCodec.toMysqlType(PrimitiveType.GEOGRAPHY));
         Assertions.assertEquals(MysqlCodec.CHARSET_BINARY, MysqlCodec.getMysqlResultSetFieldCharsetIndex(geography));
         ByteArrayOutputStream expected = new ByteArrayOutputStream();

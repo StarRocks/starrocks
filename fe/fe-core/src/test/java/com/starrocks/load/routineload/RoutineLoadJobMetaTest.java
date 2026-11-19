@@ -23,6 +23,11 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.load.streamload.AbstractStreamLoadTask;
+import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TExecPlanFragmentParams;
@@ -32,11 +37,19 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class RoutineLoadJobMetaTest {
     private static ConnectContext connectContext;
@@ -119,6 +132,53 @@ public class RoutineLoadJobMetaTest {
         } finally {
             Config.enable_pipeline_routine_load = saved;
         }
+    }
+
+    @Test
+    public void testPlanRegistersTheStreamLoadTaskAfterReleasingTheTableLock() throws Exception {
+        // StreamLoadMgr.addLoadTask waits for the manager write lock, whose holder can in turn wait for this table's
+        // lock (aborting a transaction takes it in OlapTableTxnStateListener.postAbort). If plan still held the table
+        // READ lock there, a table writer queued behind it would complete a deadlock cycle.
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "site_access_auto");
+        KafkaRoutineLoadJob job = new KafkaRoutineLoadJob(102L, "register_rl_job", db.getId(),
+                table.getId(), "localhost:9092", "topic1");
+        String label = "register_rl_label";
+        long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
+                db.getId(), Lists.newArrayList(table.getId()), label, null,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localhost"),
+                TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, job.getId(),
+                60, job.getComputeResource());
+
+        int lockDepthBeforePlan = LockHoldDepth.current();
+        List<Boolean> writerTookTableLock = new ArrayList<>();
+        new MockUp<StreamLoadMgr>() {
+            @Mock
+            public void addLoadTask(Invocation invocation, AbstractStreamLoadTask task) throws Exception {
+                Assertions.assertEquals(lockDepthBeforePlan, LockHoldDepth.current());
+                ExecutorService writer = Executors.newSingleThreadExecutor();
+                try {
+                    writerTookTableLock.add(writer.submit(() -> {
+                        Locker locker = new Locker();
+                        if (!locker.tryLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()),
+                                LockType.WRITE, 10, TimeUnit.SECONDS)) {
+                            return false;
+                        }
+                        locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()),
+                                LockType.WRITE);
+                        return true;
+                    }).get());
+                } finally {
+                    writer.shutdownNow();
+                }
+                invocation.proceed(task);
+            }
+        };
+
+        Assertions.assertNotNull(job.plan(new TUniqueId(8, 9), txnId, label, -1L));
+        Assertions.assertEquals(List.of(true), writerTookTableLock);
+        Assertions.assertNotNull(GlobalStateMgr.getCurrentState().getStreamLoadMgr().getTaskByLabel(label));
     }
 
     @Test

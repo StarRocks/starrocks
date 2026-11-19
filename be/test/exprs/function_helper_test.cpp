@@ -133,14 +133,12 @@ TEST_F(FunctionHelperTest, testMergeNotNullableColumnMergeWithNullColumn) {
 }
 
 TEST_F(FunctionHelperTest, testCreateColumnScalarNullableAndNonNullable) {
-    TypeDescriptor type_desc(TYPE_INT);
-
-    auto non_nullable = FunctionHelper::create_column(type_desc, false);
+    auto non_nullable = FunctionHelper::create_column(TYPE_INT_DESC, false);
     ASSERT_NE(non_nullable, nullptr);
     ASSERT_FALSE(non_nullable->is_nullable());
     ASSERT_TRUE(non_nullable->is_numeric());
 
-    auto nullable = FunctionHelper::create_column(type_desc, true);
+    auto nullable = FunctionHelper::create_column(TYPE_INT_DESC, true);
     ASSERT_NE(nullable, nullptr);
     ASSERT_TRUE(nullable->is_nullable());
     auto* nullable_column = down_cast<NullableColumn*>(nullable.get());
@@ -190,10 +188,13 @@ static const GeoColumn* check_geo_leaf(const Column* column, const GeoTypeDescri
 }
 
 TEST_F(FunctionHelperTest, testCreateColumnSpecialTypes) {
+    const auto geography = TypeDescriptor::create_geo_type(
+            TYPE_GEOGRAPHY, {GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326});
+    const auto geometry = TypeDescriptor::create_geo_type(
+            TYPE_GEOMETRY, {GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857});
     for (const auto& type :
          {TypeDescriptor(TYPE_NULL), TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, TYPE_UNKNOWN_DESC),
-          TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 35, 7), TypeDescriptor(TYPE_GEOGRAPHY),
-          TypeDescriptor(TYPE_GEOMETRY)}) {
+          TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 35, 7), geography, geometry}) {
         for (bool nullable : {false, true}) {
             auto column = FunctionHelper::create_column(type, nullable);
             EXPECT_EQ(nullable, column->is_nullable());
@@ -211,7 +212,7 @@ TEST_F(FunctionHelperTest, testCreateColumnSpecialTypes) {
                 EXPECT_EQ(35, down_cast<Decimal128Column*>(data)->precision());
                 EXPECT_EQ(7, down_cast<Decimal128Column*>(data)->scale());
             } else {
-                check_geo_leaf(column.get(), {});
+                check_geo_leaf(column.get(), *type.geo_type);
             }
             column->check_or_die();
         }
@@ -231,7 +232,6 @@ protected:
         return TypeDescriptor::create_geo_type(
                 GetParam(),
                 {geography ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY,
-                 geography ? GEO_COORDINATE_SYSTEM_SPHERICAL : GEO_COORDINATE_SYSTEM_CARTESIAN,
                  geography ? GEO_EDGE_ALGORITHM_SPHERICAL : GEO_EDGE_ALGORITHM_PLANAR,
                  geography ? "OGC:CRS84" : "EPSG:3857", geography ? std::nullopt : std::optional<int32_t>(3857)});
     }
@@ -245,8 +245,7 @@ protected:
         return column;
     }
     MutableColumnPtr physical_input(const TypeDescriptor& arg, int mode) {
-        auto geo = GeoColumn::create(GeoColumnDescriptor{
-                *type.geo_type, {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED}});
+        auto geo = GeoColumn::create(GeoColumnDescriptor{*type.geo_type});
         geo->append_wkb(Slice(point));
         auto column = ColumnHelper::create_column(arg, true);
         if (mode == 4) return column; // Empty, with the factory's physical placeholder.
@@ -295,7 +294,7 @@ protected:
             for (int mode : {0, 1, 2, 3, 4}) {
                 SCOPED_TRACE(::testing::Message() << path << ":" << KT << ":" << arg.type << ":" << mode);
                 auto source = physical_input(arg, mode);
-                // Copies carry the semantic type only; storage metadata is not propagated.
+                // Copies carry the semantic type only.
                 const auto expected = check_geo_leaf(source.get(), *type.geo_type)->descriptor().type;
                 auto state = ManagedAggrState::create(ctx.get(), function);
                 auto* data = reinterpret_cast<MapAggState<KT>*>(state->state());
@@ -347,16 +346,18 @@ protected:
             auto wrong = ColumnHelper::create_column(wrong_type, false);
             auto intermediate = ColumnHelper::create_column(map_type, false);
             function->convert_to_serialize_format(ctx.get(), {keys, source}, source->size(), intermediate);
+#ifndef NDEBUG
+            testing::FLAGS_gtest_death_test_style = "threadsafe";
             if (path < 2) {
                 auto wrong_ctx = context(wrong_type, {TypeDescriptor(KT), wrong_type.children[1]});
                 auto wrong_state = ManagedAggrState::create(wrong_ctx.get(), function);
                 const Column* columns[] = {keys.get(), source.get()};
                 if (path == 0)
-                    EXPECT_THROW(function->update(wrong_ctx.get(), columns, wrong_state->state(), 0),
-                                 std::invalid_argument);
+                    EXPECT_DEATH(function->update(wrong_ctx.get(), columns, wrong_state->state(), 0),
+                                 "descriptor mismatch");
                 else
-                    EXPECT_THROW(function->merge(wrong_ctx.get(), intermediate.get(), wrong_state->state(), 0),
-                                 std::invalid_argument);
+                    EXPECT_DEATH(function->merge(wrong_ctx.get(), intermediate.get(), wrong_state->state(), 0),
+                                 "descriptor mismatch");
             } else {
                 auto* data = reinterpret_cast<MapAggState<KT>*>(state->state());
                 data->value_column->append(*source, 0, 1);
@@ -365,12 +366,13 @@ protected:
                 else
                     data->hash_map.emplace(Slice("b"), 0);
                 if (path == 3)
-                    EXPECT_THROW(function->finalize_to_column(ctx.get(), state->state(), wrong.get()),
-                                 std::invalid_argument);
+                    EXPECT_DEATH(function->finalize_to_column(ctx.get(), state->state(), wrong.get()),
+                                 "descriptor mismatch");
                 else
-                    EXPECT_THROW(function->serialize_to_column(ctx.get(), state->state(), wrong.get()),
-                                 std::invalid_argument);
+                    EXPECT_DEATH(function->serialize_to_column(ctx.get(), state->state(), wrong.get()),
+                                 "descriptor mismatch");
             }
+#endif
         }
     }
     void check_array_conversion() {
@@ -414,9 +416,12 @@ protected:
             while (!leaf->children.empty()) leaf = &leaf->children[0];
             leaf->geo_type->crs = "custom:incompatible";
             auto wrong = ColumnHelper::create_column(wrong_type, true);
+#ifndef NDEBUG
+            testing::FLAGS_gtest_death_test_style = "threadsafe";
             auto source = physical_input(arg, 0);
-            EXPECT_THROW(function->convert_to_serialize_format(ctx.get(), {source}, source->size(), wrong),
-                         std::invalid_argument);
+            EXPECT_DEATH(function->convert_to_serialize_format(ctx.get(), {source}, source->size(), wrong),
+                         "descriptor mismatch");
+#endif
         }
     }
     void check_aggregate(const char* name) {
@@ -464,14 +469,11 @@ TEST_P(GeoFunctionHelperTest, CreateColumns) {
             auto column = FunctionHelper::create_column(nested, nullable);
             EXPECT_EQ(nullable, column->is_nullable());
             EXPECT_EQ(0, column->size());
-            const auto* geo = check_geo_leaf(column.get(), *type.geo_type);
-            EXPECT_EQ((GeoStorageDescriptor{GEO_ENCODING_WKB, GEO_DIMENSION_UNKNOWN, GEO_VALIDATION_STATE_UNVALIDATED}),
-                      geo->descriptor().storage);
+            check_geo_leaf(column.get(), *type.geo_type);
             column->check_or_die();
         }
     }
-    auto source = GeoColumn::create(GeoColumnDescriptor{
-            *type.geo_type, {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED}});
+    auto source = GeoColumn::create(GeoColumnDescriptor{*type.geo_type});
     source->append_wkb(Slice(point));
     auto result = FunctionHelper::create_column(type, false);
     result->append(*source);
@@ -479,8 +481,11 @@ TEST_P(GeoFunctionHelperTest, CreateColumns) {
     EXPECT_EQ(point, check_geo_leaf(result.get(), *type.geo_type)->get_wkb(0).to_string());
     auto other = type;
     other.geo_type->crs = "custom:incompatible";
+#ifndef NDEBUG
+    testing::FLAGS_gtest_death_test_style = "threadsafe";
     auto incompatible = ColumnHelper::create_column(other, false);
-    EXPECT_THROW(incompatible->append(*result), std::invalid_argument);
+    EXPECT_DEATH(incompatible->append(*result), "descriptor mismatch");
+#endif
 }
 
 TEST_P(GeoFunctionHelperTest, ArrayAgg) {
@@ -563,9 +568,8 @@ TEST_P(GeoFunctionHelperTest, StructCallers) {
         if (mode == 1 || mode == 3) source->append_nulls(mode == 3 ? 2 : 1);
         if (mode == 2) source = ConstColumn::create(std::move(source), 2);
         for (bool named : {false, true}) {
-            auto ctx =
-                    context(result_type, named ? std::vector<TypeDescriptor>{TypeDescriptor(TYPE_VARCHAR), array_type}
-                                               : std::vector<TypeDescriptor>{array_type});
+            auto ctx = context(result_type, named ? std::vector<TypeDescriptor>{TYPE_VARCHAR_DESC, array_type}
+                                                  : std::vector<TypeDescriptor>{array_type});
             auto name = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("g"), source->size());
             auto result = named ? StructFunctions::named_struct(ctx.get(), {name, source})
                                 : StructFunctions::new_struct(ctx.get(), {source});
@@ -593,8 +597,7 @@ TEST_P(GeoFunctionHelperTest, StructCallers) {
 TEST_F(FunctionHelperTest, ArrayV2ColumnCopyControls) {
     MemPool pool;
     ArrayAggAggregateFunctionV2<ArrayAggAggregateStateV2> current;
-    for (const auto& arg :
-         {TYPE_INT_DESC, TypeDescriptor(TYPE_VARCHAR), TypeDescriptor::create_array_type(TYPE_INT_DESC)}) {
+    for (const auto& arg : {TYPE_INT_DESC, TYPE_VARCHAR_DESC, TypeDescriptor::create_array_type(TYPE_INT_DESC)}) {
         for (int mode : {0, 1, 2, 3, 4, 5}) {
             SCOPED_TRACE(::testing::Message() << arg.type << ":" << mode);
             auto source = ColumnHelper::create_column(arg, mode != 0 && mode != 2);
@@ -639,8 +642,7 @@ TEST_F(FunctionHelperTest, MapColumnCopyControls) {
     ASSERT_NE(nullptr, map_function);
     auto keys = Int32Column::create();
     for (int key : {2, 1, 2}) keys->append(key);
-    for (const auto& arg :
-         {TYPE_INT_DESC, TypeDescriptor(TYPE_VARCHAR), TypeDescriptor::create_array_type(TYPE_INT_DESC)}) {
+    for (const auto& arg : {TYPE_INT_DESC, TYPE_VARCHAR_DESC, TypeDescriptor::create_array_type(TYPE_INT_DESC)}) {
         for (int mode : {0, 1, 2, 3, 4, 5}) {
             SCOPED_TRACE(::testing::Message() << arg.type << ":" << mode);
             auto source = ColumnHelper::create_column(arg, mode != 0 && mode != 2);

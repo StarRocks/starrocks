@@ -258,8 +258,8 @@ private:
 // Expression to cast VARIANT type to STRUCT<ANY>
 class CastVariantToStruct final : public Expr {
 public:
-    CastVariantToStruct(const TExprNode& node, std::vector<Expr*> field_casts)
-            : Expr(node), _field_casts(std::move(field_casts)) {
+    CastVariantToStruct(const TExprNode& node, std::vector<Expr*> field_casts, bool allow_throw_exception)
+            : Expr(node), _field_casts(std::move(field_casts)), _allow_throw_exception(allow_throw_exception) {
         _variant_paths.reserve(_type.field_names.size());
         for (const auto& field_name : _type.field_names) {
             // Each struct field maps directly to a top-level object key of the variant.
@@ -289,10 +289,12 @@ public:
 
 private:
     // Invoked only by clone.
-    CastVariantToStruct(const CastVariantToStruct& rhs) : Expr(rhs), _variant_paths(rhs._variant_paths) {}
+    CastVariantToStruct(const CastVariantToStruct& rhs)
+            : Expr(rhs), _variant_paths(rhs._variant_paths), _allow_throw_exception(rhs._allow_throw_exception) {}
 
     std::vector<Expr*> _field_casts;
     std::vector<VariantPath> _variant_paths;
+    bool _allow_throw_exception;
 };
 
 // Expression to cast SQL types to VARIANT

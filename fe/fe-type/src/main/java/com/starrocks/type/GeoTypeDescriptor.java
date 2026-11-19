@@ -16,31 +16,55 @@ package com.starrocks.type;
 
 import java.util.Objects;
 
-/** Immutable semantic type metadata; column representation belongs to the column/transport layer. */
-public record GeoTypeDescriptor(LogicalType logicalType, CoordinateSystem coordinateSystem,
-                                EdgeAlgorithm edgeAlgorithm, String crs, Integer srid) {
+/**
+ * Immutable semantic type metadata; column representation belongs to the column/transport layer.
+ * <p>
+ * A plain class rather than a record: FE's GSON version cannot read a record back, which persisting this descriptor
+ * in FE metadata will need.
+ */
+public final class GeoTypeDescriptor {
+    private final LogicalType logicalType;
+    private final EdgeAlgorithm edgeAlgorithm;
+    private final String crs;
+    private final Integer srid;
+
     public enum LogicalType {
         UNKNOWN, GEOGRAPHY, GEOMETRY
-    }
-
-    public enum CoordinateSystem {
-        UNKNOWN, SPHERICAL, CARTESIAN
     }
 
     public enum EdgeAlgorithm {
         UNKNOWN, SPHERICAL, VINCENTY, THOMAS, ANDOYER, KARNEY, PLANAR
     }
 
-    public GeoTypeDescriptor {
-        Objects.requireNonNull(logicalType);
-        Objects.requireNonNull(coordinateSystem);
-        Objects.requireNonNull(edgeAlgorithm);
-        Objects.requireNonNull(crs);
+    public GeoTypeDescriptor(LogicalType logicalType, EdgeAlgorithm edgeAlgorithm, String crs, Integer srid) {
+        this.logicalType = Objects.requireNonNull(logicalType);
+        this.edgeAlgorithm = Objects.requireNonNull(edgeAlgorithm);
+        this.crs = Objects.requireNonNull(crs);
+        this.srid = srid;
+    }
+
+    public LogicalType logicalType() {
+        return logicalType;
+    }
+
+    public EdgeAlgorithm edgeAlgorithm() {
+        return edgeAlgorithm;
+    }
+
+    public String crs() {
+        return crs;
+    }
+
+    public Integer srid() {
+        return srid;
+    }
+
+    public static GeoTypeDescriptor geography(String crs) {
+        return new GeoTypeDescriptor(LogicalType.GEOGRAPHY, EdgeAlgorithm.SPHERICAL, crs, deriveSrid(crs));
     }
 
     public static GeoTypeDescriptor geometry(String crs) {
-        return new GeoTypeDescriptor(LogicalType.GEOMETRY, CoordinateSystem.CARTESIAN,
-                EdgeAlgorithm.PLANAR, crs, deriveSrid(crs));
+        return new GeoTypeDescriptor(LogicalType.GEOMETRY, EdgeAlgorithm.PLANAR, crs, deriveSrid(crs));
     }
 
     public void validate(PrimitiveType primitive) {
@@ -55,7 +79,6 @@ public record GeoTypeDescriptor(LogicalType logicalType, CoordinateSystem coordi
         boolean sphericalEdge = edgeAlgorithm != EdgeAlgorithm.UNKNOWN && edgeAlgorithm != EdgeAlgorithm.PLANAR;
         if ((primitive != PrimitiveType.GEOGRAPHY && primitive != PrimitiveType.GEOMETRY)
                 || logicalType != (geography ? LogicalType.GEOGRAPHY : LogicalType.GEOMETRY)
-                || coordinateSystem != (geography ? CoordinateSystem.SPHERICAL : CoordinateSystem.CARTESIAN)
                 || (geography ? !sphericalEdge : edgeAlgorithm != EdgeAlgorithm.PLANAR)) {
             throw new IllegalArgumentException("Native geo primitive conflicts with its semantic descriptor");
         }
@@ -63,8 +86,31 @@ public record GeoTypeDescriptor(LogicalType logicalType, CoordinateSystem coordi
 
     public boolean isSemanticallyCompatible(GeoTypeDescriptor other) {
         return other != null && !crs.isEmpty() && logicalType == other.logicalType
-                && coordinateSystem == other.coordinateSystem && edgeAlgorithm == other.edgeAlgorithm
-                && crs.equals(other.crs);
+                && edgeAlgorithm == other.edgeAlgorithm && crs.equals(other.crs);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof GeoTypeDescriptor)) {
+            return false;
+        }
+        GeoTypeDescriptor other = (GeoTypeDescriptor) o;
+        return logicalType == other.logicalType && edgeAlgorithm == other.edgeAlgorithm
+                && Objects.equals(crs, other.crs) && Objects.equals(srid, other.srid);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(logicalType, edgeAlgorithm, crs, srid);
+    }
+
+    @Override
+    public String toString() {
+        return "GeoTypeDescriptor[logicalType=" + logicalType + ", edgeAlgorithm=" + edgeAlgorithm + ", crs=" + crs
+                + ", srid=" + srid + "]";
     }
 
     private static Integer deriveSrid(String crs) {

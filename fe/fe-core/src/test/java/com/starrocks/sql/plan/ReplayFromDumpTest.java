@@ -245,7 +245,11 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testTPCDS78() throws Exception {
         // check outer join with isNull predicate on inner table
         // The estimate cardinality of join should not be 0.
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds78"), SV);
+        // Checked with OuterJoinSemiJoinReductionRule off: its CTEs renumber the nodes and columns asserted below.
+        SessionVariable sv = new SessionVariable();
+        sv.setEnableGlobalLateMaterialization(false);
+        sv.setEnableOuterJoinSemiJoinReduction(false);
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds78"), sv);
         Assertions.assertTrue(replayPair.second.contains("3:HASH JOIN\n"
                 + "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n"
                 + "  |  equal join conjunct: [2: ss_ticket_number, INT, false] = [25: sr_ticket_number, INT, true]\n"

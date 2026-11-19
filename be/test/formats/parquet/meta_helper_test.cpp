@@ -16,8 +16,17 @@
 
 #include <gtest/gtest.h>
 
+#include <map>
+#include <memory>
+
+#include "base/testutil/assert.h"
+#include "column/column_access_path.h"
+#include "formats/parquet/metadata.h"
 #include "formats/parquet/schema.h"
+#include "formats/scan_context.h"
 #include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/parquet_types.h"
+#include "runtime/descriptors.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
@@ -268,17 +277,149 @@ TEST(ParquetMetaHelperTest, IncompatibleGroupMapKeyIsKeptForTheReaderToReject) {
     map.type = ColumnType::MAP;
     map.children = {key, value};
 
-    const TypeDescriptor unknown(TYPE_UNKNOWN);
     ParquetMetaHelper helper(/*file_metadata=*/nullptr, /*case_sensitive=*/false);
     // incompatible key read, value pruned: kept for the reader to reject
-    const TypeDescriptor key_only = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, unknown);
+    const TypeDescriptor key_only = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_UNKNOWN_DESC);
     EXPECT_TRUE(helper._is_valid_type(&map, &key_only));
     // key pruned, value read: valid as before
-    const TypeDescriptor value_only = TypeDescriptor::create_map_type(unknown, TYPE_VARCHAR_DESC);
+    const TypeDescriptor value_only = TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, TYPE_VARCHAR_DESC);
     EXPECT_TRUE(helper._is_valid_type(&map, &value_only));
     // nothing read
-    const TypeDescriptor none = TypeDescriptor::create_map_type(unknown, unknown);
+    const TypeDescriptor none = TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, TYPE_UNKNOWN_DESC);
     EXPECT_FALSE(helper._is_valid_type(&map, &none));
+}
+
+// A file without field ids stores c1 and c2 under the names they had before the table renamed them; the name mapping
+// lists those names, so the columns are read from them instead of being missing.
+TEST(ParquetMetaHelperTest, RenamedColumnWithoutFieldIdsIsReadThroughMappedNames) {
+    tparquet::FileMetaData t_meta;
+    std::vector<tparquet::SchemaElement> schema;
+    tparquet::SchemaElement root;
+    root.__set_name("table");
+    root.__set_num_children(5);
+    schema.push_back(root);
+    for (const char* name : {"id", "c1", "c2", "c3", "A"}) {
+        tparquet::SchemaElement col;
+        col.__set_name(name);
+        col.__set_type(tparquet::Type::INT32);
+        col.__set_num_children(0);
+        schema.push_back(col);
+    }
+    t_meta.__set_schema(schema);
+    FileMetaData file_meta;
+    ASSERT_OK(file_meta.init(t_meta, /*case_sensitive=*/false));
+    ASSERT_FALSE(file_meta.schema().exist_filed_id());
+
+    auto make_field = [](int32_t id, const std::string& name, std::vector<std::string> mapped_names) {
+        TIcebergSchemaField field;
+        field.__set_field_id(id);
+        field.__set_name(name);
+        if (!mapped_names.empty()) {
+            field.__set_mapped_names(mapped_names);
+        }
+        return field;
+    };
+    // c1 -> c1_new; c2 -> c2_new; c3 -> c3_new and a new c3 added, so the file's c3 belongs to the new column;
+    // a -> p, then A added and renamed to q: the file's A is q's only, the mapping tells a and A apart (the scan is
+    // case-insensitive, so the file's column name is lowercased in the schema)
+    TIcebergSchema lake;
+    lake.__set_fields({make_field(1, "id", {}), make_field(2, "c1_new", {"c1"}), make_field(3, "c2_new", {"c2"}),
+                       make_field(4, "c3_new", {"c3"}), make_field(5, "c3", {}), make_field(6, "c4", {}),
+                       make_field(7, "p", {"a"}), make_field(8, "q", {"A"})});
+
+    std::vector<std::unique_ptr<SlotDescriptor>> slots;
+    for (const char* name : {"id", "c1_new", "c2_new", "c3_new", "c3", "c4", "p", "q"}) {
+        slots.emplace_back(std::make_unique<SlotDescriptor>(static_cast<SlotId>(slots.size() + 1), name,
+                                                            TypeDescriptor::from_logical_type(TYPE_INT)));
+    }
+    std::vector<FormatColumnInfo> columns;
+    for (size_t i = 0; i < slots.size(); i++) {
+        columns.push_back({static_cast<int>(i), slots[i].get(), true});
+    }
+
+    auto read = [&](const TIcebergSchema* lake_schema) {
+        ParquetMetaHelper helper(&file_meta, /*case_sensitive=*/false, lake_schema);
+        std::vector<GroupReaderParam::Column> read_cols;
+        std::unordered_set<std::string> existed;
+        helper.prepare_read_columns(columns, nullptr, read_cols, existed);
+        std::map<std::string, int32_t> result;
+        for (const auto& col : read_cols) {
+            result.emplace(std::string(col.slot_desc->col_name()), col.idx_in_parquet);
+            // a column found through the mapping carries its Iceberg field (e.g. for GEOGRAPHY metadata)
+            bool by_mapping = col.slot_desc->col_name() == "c1_new" || col.slot_desc->col_name() == "c2_new" ||
+                              col.slot_desc->col_name() == "q";
+            EXPECT_EQ(by_mapping, col.t_lake_schema_field != nullptr) << col.slot_desc->col_name();
+        }
+        return result;
+    };
+
+    std::map<std::string, int32_t> expected{{"id", 0}, {"c1_new", 1}, {"c2_new", 2}, {"c3", 3}, {"q", 4}};
+    EXPECT_EQ(expected, read(&lake));
+    // without the lake schema only the current names match
+    std::map<std::string, int32_t> by_name{{"id", 0}, {"c3", 3}};
+    EXPECT_EQ(by_name, read(nullptr));
+}
+
+// get_variant_int(payload, '$.a') is read as the virtual column `payload.a`. In a file without field ids it must be
+// bound to the stored `payload` column; looking it up by its own name found nothing and read it as all NULL.
+TEST(ParquetMetaHelperTest, VariantVirtualColumnWithoutFieldIdsReadsSourceColumn) {
+    tparquet::FileMetaData t_meta;
+    std::vector<tparquet::SchemaElement> schema;
+    tparquet::SchemaElement root;
+    root.__set_name("table");
+    root.__set_num_children(2);
+    schema.push_back(root);
+    tparquet::SchemaElement id;
+    id.__set_name("id");
+    id.__set_type(tparquet::Type::INT64);
+    id.__set_num_children(0);
+    schema.push_back(id);
+    tparquet::SchemaElement payload;
+    payload.__set_name("payload");
+    payload.__set_repetition_type(tparquet::FieldRepetitionType::OPTIONAL);
+    payload.__set_num_children(2);
+    schema.push_back(payload);
+    for (const char* name : {"metadata", "value"}) {
+        tparquet::SchemaElement col;
+        col.__set_name(name);
+        col.__set_type(tparquet::Type::BYTE_ARRAY);
+        col.__set_repetition_type(tparquet::FieldRepetitionType::OPTIONAL);
+        col.__set_num_children(0);
+        schema.push_back(col);
+    }
+    t_meta.__set_schema(schema);
+    FileMetaData file_meta;
+    ASSERT_OK(file_meta.init(t_meta, /*case_sensitive=*/false));
+    ASSERT_FALSE(file_meta.schema().exist_filed_id());
+
+    // the extended access path the FE sends for the virtual column: /payload/a, marked extended
+    TColumnAccessPath tleaf;
+    tleaf.__set_type(TAccessPathType::FIELD);
+    tleaf.__set_type_desc(TypeDescriptor::from_logical_type(TYPE_BIGINT).to_thrift());
+    TColumnAccessPath troot;
+    troot.__set_type(TAccessPathType::ROOT);
+    troot.__set_extended(true);
+    troot.__set_children({tleaf});
+    std::vector<std::string> resolved = {"payload", "a"};
+    size_t resolve_index = 0;
+    auto resolver = [&](const TColumnAccessPath&) -> StatusOr<std::string> { return resolved[resolve_index++]; };
+    ASSIGN_OR_ABORT(auto access_path, ColumnAccessPath::create(troot, resolver));
+    std::vector<ColumnAccessPathPtr> access_paths;
+    access_paths.emplace_back(std::move(access_path));
+
+    SlotDescriptor virtual_slot(1, "payload.a", TypeDescriptor::from_logical_type(TYPE_BIGINT));
+    std::vector<FormatColumnInfo> columns{{0, &virtual_slot, true}};
+
+    ParquetMetaHelper helper(&file_meta, /*case_sensitive=*/false);
+    std::vector<GroupReaderParam::Column> read_cols;
+    std::unordered_set<std::string> existed;
+    helper.prepare_read_columns(columns, &access_paths, read_cols, existed);
+
+    ASSERT_EQ(1u, read_cols.size());
+    EXPECT_EQ(1, read_cols[0].idx_in_parquet);
+    EXPECT_TRUE(read_cols[0].is_extended_variant_virtual);
+    EXPECT_EQ("payload", read_cols[0].source_variant_column_name);
+    EXPECT_EQ("a", read_cols[0].variant_virtual_leaf_path);
 }
 
 } // namespace starrocks::parquet

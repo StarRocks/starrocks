@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ADMIN SET REPLICA STATUS is used to set the status of the specified replicas."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ADMIN SET REPLICA STATUS
@@ -24,7 +25,7 @@ PROPERTIES ("key" = "value", ...)
 
 The following attributes are currently supported:
 
-"table_id': required. Specify a Tablet Id.
+"tablet_id": required. Specify a Tablet Id.
 
 "backend_id": required. Specify a Backend Id.
 

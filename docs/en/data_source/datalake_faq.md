@@ -2,6 +2,7 @@
 sidebar_position: 50
 displayed_sidebar: docs
 description: "FAQ for common data lake analytics issues in StarRocks, including catalog setup and query problems."
+products: [oss, enterprise, anywhere]
 ---
 
 # Data lake FAQ

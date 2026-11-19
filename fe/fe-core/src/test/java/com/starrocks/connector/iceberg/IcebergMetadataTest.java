@@ -21,6 +21,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergPartitionKey;
 import com.starrocks.catalog.IcebergTable;
@@ -90,6 +91,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnPosition;
 import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropPartitionColumnClause;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -105,6 +107,7 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
@@ -147,6 +150,7 @@ import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -156,11 +160,14 @@ import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.DataOperations;
+import org.apache.iceberg.DataTableScan;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileMetadata;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.GenericBlobMetadata;
+import org.apache.iceberg.GenericStatisticsFile;
 import org.apache.iceberg.ManifestContent;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.MetadataColumns;
@@ -180,18 +187,22 @@ import org.apache.iceberg.Transaction;
 import org.apache.iceberg.UpdateProperties;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.encryption.StarRocksKeyMetadata;
 import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.hive.HiveCatalog;
 import org.apache.iceberg.hive.HiveTableOperations;
 import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.io.CloseableIterator;
+import org.apache.iceberg.puffin.StandardBlobTypes;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.TableScanUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
@@ -218,6 +229,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -1375,6 +1387,364 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testFinishSinkRejectsMissingDataKeyOnEncryptedTable() {
+        // Regression test for the rolling-upgrade fail-open. The guard used to be keyed on
+        // isSetFile_dek(): a BE without encryption support ignores the unknown optional thrift field,
+        // writes plaintext, and returns NO key -- so the check was skipped entirely and the plaintext
+        // file was committed into an encrypted table. The requirement must come from the TABLE.
+        //
+        // file_dek is deliberately NOT set below. If the guard is ever keyed on the BE's response
+        // again, this test fails.
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        // Declared via a mocked property map: TableTestBase builds format-v2 tables and
+        // EncryptionUtil.checkCompatibility rejects encryption.key-id below v3.
+        new MockUp<BaseTable>() {
+            @Mock
+            public Map<String, String> properties() {
+                return ImmutableMap.of(TableProperties.ENCRYPTION_TABLE_KEY, "some-kms-key");
+            }
+        };
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        TIcebergDataFile tIcebergDataFile = new TIcebergDataFile();
+        tIcebergDataFile.setPath(mockedNativeTableA.location() + "/data/data_bucket=0/plain.parquet");
+        tIcebergDataFile.setFormat("parquet");
+        tIcebergDataFile.setRecord_count(10);
+        tIcebergDataFile.setSplit_offsets(Lists.newArrayList(4L));
+        tIcebergDataFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=0/");
+        tIcebergDataFile.setFile_size_in_bytes(2000);
+        tIcebergDataFile.setPartition_null_fingerprint("0");
+
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        tSinkCommitInfo.setIs_overwrite(false);
+        tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
+
+        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.finishSink("iceberg_db", "iceberg_table",
+                        Lists.newArrayList(tSinkCommitInfo), null, null, connectContext));
+        Assertions.assertTrue(e.getMessage().contains("returned no data encryption key"), e.getMessage());
+    }
+
+    private StarRocksConnectorException finishSinkRefusal(Map<String, String> tableProperties, byte[] dek,
+                                                          byte[] aadPrefix) {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        if (tableProperties != null) {
+            // Mocked property map: TableTestBase builds format-v2 tables and EncryptionUtil.checkCompatibility
+            // rejects encryption.key-id below v3.
+            new MockUp<BaseTable>() {
+                @Mock
+                public Map<String, String> properties() {
+                    return tableProperties;
+                }
+            };
+        }
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        TIcebergDataFile tIcebergDataFile = new TIcebergDataFile();
+        tIcebergDataFile.setPath(mockedNativeTableA.location() + "/data/data_bucket=0/enc.parquet");
+        tIcebergDataFile.setFormat("parquet");
+        tIcebergDataFile.setRecord_count(10);
+        tIcebergDataFile.setSplit_offsets(Lists.newArrayList(4L));
+        tIcebergDataFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=0/");
+        tIcebergDataFile.setFile_size_in_bytes(2000);
+        tIcebergDataFile.setPartition_null_fingerprint("0");
+        if (dek != null) {
+            tIcebergDataFile.setFile_dek(dek);
+        }
+        if (aadPrefix != null) {
+            tIcebergDataFile.setAad_prefix(aadPrefix);
+        }
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        tSinkCommitInfo.setIs_overwrite(false);
+        tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
+
+        return Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.finishSink("iceberg_db", "iceberg_table",
+                        Lists.newArrayList(tSinkCommitInfo), null, null, connectContext));
+    }
+
+    @Test
+    public void testFinishSinkRejectsAnEncryptedFileOnATableThatNoLongerDeclaresEncryption() {
+        // The commit re-reads the table. If encryption.key-id was removed after the sink was planned, BE has
+        // already encrypted the file; committing it without a key would make it unreadable forever.
+        StarRocksConnectorException e = finishSinkRefusal(null, new byte[16], new byte[16]);
+        Assertions.assertTrue(e.getMessage().contains("no longer declares encryption"), e.getMessage());
+    }
+
+    @Test
+    public void testFinishSinkRejectsAnEncryptedFileWithoutItsAadPrefix() {
+        // BE withholds the AAD prefix from the file, so key_metadata holds the only copy. Committing without
+        // it (or with a wrong length) records a file no reader can authenticate.
+        Map<String, String> encrypted = ImmutableMap.of(TableProperties.ENCRYPTION_TABLE_KEY, "some-kms-key");
+        StarRocksConnectorException missing = finishSinkRefusal(encrypted, new byte[16], null);
+        Assertions.assertTrue(missing.getMessage().contains("returned no AAD prefix"), missing.getMessage());
+        StarRocksConnectorException shortPrefix = finishSinkRefusal(encrypted, new byte[16], new byte[8]);
+        Assertions.assertTrue(shortPrefix.getMessage().contains("8-byte AAD prefix"), shortPrefix.getMessage());
+    }
+
+    @Test
+    public void testFinishSinkRejectsWrongLengthDataKey() {
+        // A data key shorter than the table's encryption.data-key-length must not be committed.
+        // Nothing downstream re-checks it: the key goes straight into key_metadata, so a file
+        // encrypted below the table's declared strength would become part of the table silently.
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        // Partial-mock IcebergMetadata.getTable, not the catalog: finishSink calls getTable, which
+        // calls getDb, which reaches HiveCatalog.loadNamespaceMetadata and tries to open a real Hive
+        // Metastore connection. Mocking IcebergHiveCatalog.getTable does not intercept that, so the
+        // test failed with RuntimeMetaException instead of reaching the guard. This is the same
+        // pattern testFinishSink above uses.
+        // The guard is keyed on the TABLE declaring encryption, not on what BE returned, so the
+        // property has to be present for the length check to be reached at all. Declared via a mocked
+        // property map because TableTestBase builds format-v2 tables and EncryptionUtil.checkCompatibility
+        // rejects encryption.key-id below v3.
+        new MockUp<BaseTable>() {
+            @Mock
+            public Map<String, String> properties() {
+                return ImmutableMap.of(TableProperties.ENCRYPTION_TABLE_KEY, "some-kms-key");
+            }
+        };
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        TIcebergDataFile tIcebergDataFile = new TIcebergDataFile();
+        tIcebergDataFile.setPath(mockedNativeTableA.location() + "/data/data_bucket=0/enc.parquet");
+        tIcebergDataFile.setFormat("parquet");
+        tIcebergDataFile.setRecord_count(10);
+        tIcebergDataFile.setSplit_offsets(Lists.newArrayList(4L));
+        tIcebergDataFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=0/");
+        tIcebergDataFile.setFile_size_in_bytes(2000);
+        tIcebergDataFile.setPartition_null_fingerprint("0");
+        // The table carries no encryption.data-key-length, so Iceberg's default of 16 applies.
+        // An 8-byte key is therefore a downgrade and has to be refused.
+        tIcebergDataFile.setFile_dek(new byte[8]);
+        tIcebergDataFile.setAad_prefix(new byte[16]);
+
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        tSinkCommitInfo.setIs_overwrite(false);
+        tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
+
+        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.finishSink("iceberg_db", "iceberg_table",
+                        Lists.newArrayList(tSinkCommitInfo), null, null, connectContext));
+        Assertions.assertTrue(e.getMessage().contains("8-byte data key"), e.getMessage());
+    }
+
+    @Test
+    public void testFinishSinkRefusesAPositionDeleteFileOnAnEncryptedTable() {
+        // An encrypted table is format version 3, where Iceberg accepts only deletion vectors, and StarRocks
+        // writes Parquet position deletes. Planning refuses the statements that write them; the commit refuses
+        // one that got past it, even when it carries a key. file_content routes this file down the delete path.
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        new MockUp<BaseTable>() {
+            @Mock
+            public Map<String, String> properties() {
+                return ImmutableMap.of(TableProperties.ENCRYPTION_TABLE_KEY, "some-kms-key");
+            }
+        };
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        TIcebergDataFile deleteFile = new TIcebergDataFile();
+        deleteFile.setPath(mockedNativeTableA.location() + "/data/data_bucket=0/deletes.parquet");
+        deleteFile.setFormat("parquet");
+        deleteFile.setRecord_count(3);
+        deleteFile.setSplit_offsets(Lists.newArrayList(4L));
+        deleteFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=0/");
+        deleteFile.setFile_size_in_bytes(500);
+        deleteFile.setPartition_null_fingerprint("0");
+        deleteFile.setFile_content(TIcebergFileContent.POSITION_DELETES);
+        deleteFile.setFile_dek(new byte[16]);
+        deleteFile.setAad_prefix(new byte[16]);
+
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        tSinkCommitInfo.setIs_overwrite(false);
+        tSinkCommitInfo.setIceberg_data_file(deleteFile);
+
+        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.finishSink("iceberg_db", "iceberg_table",
+                        Lists.newArrayList(tSinkCommitInfo), null, null, connectContext));
+        Assertions.assertTrue(e.getMessage().contains("position delete files are not supported"), e.getMessage());
+    }
+
+    @Test
+    public void testFinishSinkRejectsEqualityDeleteFiles() {
+        // StarRocks emits no equality deletes, and finishSink's dispatch is a two-way split on
+        // POSITION_DELETES -- so without this guard an equality-delete file falls into the data-file
+        // arm and is committed as a DataFile, ADDING its rows to the table instead of deleting
+        // anything. Refused for any table, encrypted or not; on an encrypted one it would also
+        // expose the column values it matches on. The check is a full pass over the file list on
+        // purpose: the flag scan after it short-circuits, so a per-file check there would miss an
+        // equality delete that is not first -- which is why this fixture puts a data file first.
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        TIcebergDataFile dataFile = new TIcebergDataFile();
+        dataFile.setPath(mockedNativeTableA.location() + "/data/data_bucket=0/data.parquet");
+        dataFile.setFormat("parquet");
+        dataFile.setRecord_count(10);
+        dataFile.setSplit_offsets(Lists.newArrayList(4L));
+        dataFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=0/");
+        dataFile.setFile_size_in_bytes(2000);
+        dataFile.setPartition_null_fingerprint("0");
+        TSinkCommitInfo dataCommitInfo = new TSinkCommitInfo();
+        dataCommitInfo.setIs_overwrite(false);
+        dataCommitInfo.setIceberg_data_file(dataFile);
+
+        TIcebergDataFile eqDelete = new TIcebergDataFile();
+        eqDelete.setPath(mockedNativeTableA.location() + "/data/data_bucket=0/eq-deletes.parquet");
+        eqDelete.setFormat("parquet");
+        eqDelete.setRecord_count(3);
+        eqDelete.setSplit_offsets(Lists.newArrayList(4L));
+        eqDelete.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=0/");
+        eqDelete.setFile_size_in_bytes(500);
+        eqDelete.setPartition_null_fingerprint("0");
+        eqDelete.setFile_content(TIcebergFileContent.EQUALITY_DELETES);
+        TSinkCommitInfo eqCommitInfo = new TSinkCommitInfo();
+        eqCommitInfo.setIs_overwrite(false);
+        eqCommitInfo.setIceberg_data_file(eqDelete);
+
+        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.finishSink("iceberg_db", "iceberg_table",
+                        Lists.newArrayList(dataCommitInfo, eqCommitInfo), null, null, connectContext));
+        Assertions.assertTrue(e.getMessage().contains("equality-delete files are not supported"), e.getMessage());
+    }
+
+    @Test
+    public void testFinishSinkRecordsKeyMetadataOnAnEncryptedFile() {
+        // The refusals are all tested; this tests the thing they protect. Without an assertion here,
+        // dropping builder.withEncryptionKeyMetadata(...) leaves the whole suite green while every
+        // encrypted file StarRocks writes becomes undecryptable by anything, StarRocks included --
+        // the DEK would exist only in the BE process that generated it.
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        // Declared via a mocked property map: TableTestBase builds format-v2 tables and
+        // EncryptionUtil.checkCompatibility rejects encryption.key-id below v3.
+        // The commit records audit info about this FE.
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+            }
+        };
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version";
+            }
+        };
+        new MockUp<BaseTable>() {
+            @Mock
+            public Map<String, String> properties() {
+                return ImmutableMap.of(TableProperties.ENCRYPTION_TABLE_KEY, "some-kms-key");
+            }
+        };
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        byte[] dek = new byte[TableProperties.ENCRYPTION_DEK_LENGTH_DEFAULT];
+        for (int i = 0; i < dek.length; i++) {
+            dek[i] = (byte) (i + 1);
+        }
+        byte[] aadPrefix = new byte[16];
+        for (int i = 0; i < aadPrefix.length; i++) {
+            aadPrefix[i] = (byte) (0x40 + i);
+        }
+
+        String path = mockedNativeTableA.location() + "/data/data_bucket=0/encrypted.parquet";
+        TIcebergDataFile tIcebergDataFile = new TIcebergDataFile();
+        tIcebergDataFile.setPath(path);
+        tIcebergDataFile.setFormat("parquet");
+        tIcebergDataFile.setRecord_count(10);
+        tIcebergDataFile.setSplit_offsets(Lists.newArrayList(4L));
+        tIcebergDataFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=0/");
+        tIcebergDataFile.setFile_size_in_bytes(2000);
+        tIcebergDataFile.setPartition_null_fingerprint("0");
+        tIcebergDataFile.setFile_dek(dek);
+        tIcebergDataFile.setAad_prefix(aadPrefix);
+
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        tSinkCommitInfo.setIs_overwrite(false);
+        tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
+
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo),
+                null, null, connectContext);
+        mockedNativeTableA.refresh();
+
+        List<FileScanTask> tasks = Lists.newArrayList(mockedNativeTableA.newScan().planFiles());
+        Assertions.assertEquals(1, tasks.size());
+        DataFile committed = tasks.get(0).file();
+        Assertions.assertEquals(path, committed.path());
+        Assertions.assertNotNull(committed.keyMetadata(),
+                "an encrypted table's committed file must carry key_metadata or nothing can decrypt it");
+
+        // Round-trip it: the bytes must be the DEK and prefix that went in, in Iceberg's own format.
+        StarRocksKeyMetadata.Parsed parsed = StarRocksKeyMetadata.parse(committed.keyMetadata());
+        Assertions.assertArrayEquals(dek, parsed.dek, "key_metadata must carry the DEK the BE returned");
+        Assertions.assertArrayEquals(aadPrefix, parsed.aadPrefix, "key_metadata must carry the AAD prefix");
+    }
+
+    @Test
     public void testFinishSink2() {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
 
@@ -1457,6 +1827,114 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals(fileSize, dataFile.fileSizeInBytes());
         Assertions.assertEquals(4, dataFile.splitOffsets().get(0).longValue());
         Assertions.assertEquals(111L, dataFile.valueCounts().get(1).longValue());
+    }
+
+    private static TSinkCommitInfo appendCommitInfo(org.apache.iceberg.Table nativeTable, String partition) {
+        TIcebergDataFile dataFile = new TIcebergDataFile();
+        dataFile.setPath(nativeTable.location() + "/data/" + partition + "/c.parquet");
+        dataFile.setFormat("parquet");
+        dataFile.setRecord_count(10);
+        dataFile.setSplit_offsets(Lists.newArrayList(4L));
+        dataFile.setPartition_path(nativeTable.location() + "/data/" + partition + "/");
+        dataFile.setFile_size_in_bytes(2000);
+        dataFile.setPartition_null_fingerprint("0");
+        TSinkCommitInfo commitInfo = new TSinkCommitInfo();
+        commitInfo.setIs_overwrite(false);
+        commitInfo.setIceberg_data_file(dataFile);
+        return commitInfo;
+    }
+
+    @Test
+    public void testFinishSinkInvalidatesOtherFesOnceCommitted() {
+        // A commit writes no edit log: the other FEs must drop the pre-commit table before the statement returns
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableJ, Maps.newHashMap());
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+        List<TableName> invalidated = new ArrayList<>();
+        List<Integer> timeouts = new ArrayList<>();
+        List<Boolean> committedWhenInvalidated = new ArrayList<>();
+        Snapshot before = mockedNativeTableJ.currentSnapshot();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public void invalidateOthersFeTable(TableName tableName, int timeoutMs) {
+                invalidated.add(tableName);
+                timeouts.add(timeoutMs);
+                mockedNativeTableJ.refresh();
+                Snapshot now = mockedNativeTableJ.currentSnapshot();
+                committedWhenInvalidated.add(now != null && (before == null || now.snapshotId() != before.snapshotId()));
+            }
+        };
+
+        metadata.finishSink("iceberg_db", "iceberg_table",
+                Lists.newArrayList(appendCommitInfo(mockedNativeTableJ, "ts_month=2022-01")), null);
+
+        Assertions.assertEquals(List.of(new TableName(CATALOG_NAME, "iceberg_db", "iceberg_table")), invalidated);
+        Assertions.assertEquals(List.of(Config.iceberg_commit_invalidate_other_fe_timeout_ms), timeouts);
+        Assertions.assertEquals(List.of(true), committedWhenInvalidated);
+    }
+
+    @Test
+    public void testFinishSinkDoesNotInvalidateOtherFesWhenCommitIsRefused() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+        AtomicInteger invalidations = new AtomicInteger();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public void invalidateOthersFeTable(TableName tableName, int timeoutMs) {
+                invalidations.incrementAndGet();
+            }
+        };
+        TSinkCommitInfo eqDelete = appendCommitInfo(mockedNativeTableA, "data_bucket=0");
+        eqDelete.getIceberg_data_file().setFile_content(TIcebergFileContent.EQUALITY_DELETES);
+
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(eqDelete), null));
+        Assertions.assertEquals(0, invalidations.get());
+    }
+
+    @Test
+    public void testInvalidateCachedTableDropsTheCachedTable() {
+        String dbName = "iceberg_db";
+        String tableName = "iceberg_table";
+        AtomicInteger catalogGetTableCalls = new AtomicInteger();
+        IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
+        Mockito.when(icebergCatalog.getTable(Mockito.any(), Mockito.eq(dbName), Mockito.eq(tableName)))
+                .thenAnswer(invocation -> {
+                    catalogGetTableCalls.incrementAndGet();
+                    return mockedNativeTableB;
+                });
+        Mockito.when(icebergCatalog.getDB(Mockito.any(), Mockito.eq(dbName))).thenReturn(new Database(1, dbName));
+        Mockito.when(icebergCatalog.getIcebergCatalogType()).thenReturn(IcebergCatalogType.HIVE_CATALOG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+
+        metadata.getTable(connectContext, dbName, tableName);
+        metadata.getTable(connectContext, dbName, tableName);
+        Assertions.assertEquals(1, catalogGetTableCalls.get());
+
+        metadata.invalidateCachedTable(dbName, tableName);
+        Mockito.verify(icebergCatalog).invalidateTableCache(dbName, tableName);
+        metadata.getTable(connectContext, dbName, tableName);
+        Assertions.assertEquals(2, catalogGetTableCalls.get());
     }
 
     // End-to-end regression for the decimal manifest bound encoding bug: BE reports raw, fixed-width
@@ -1938,6 +2416,46 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testFinishSinkDeletesFilesWhenBuildingDataFileFails() throws IOException {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        File fakeFile = File.createTempFile("junit", null, temp);
+        Assertions.assertTrue(fakeFile.exists());
+        TIcebergDataFile tIcebergDataFile = new TIcebergDataFile();
+        tIcebergDataFile.setPath(fakeFile.getPath());
+        tIcebergDataFile.setFormat("parquet");
+        tIcebergDataFile.setRecord_count(10);
+        tIcebergDataFile.setSplit_offsets(Lists.newArrayList(4L));
+        // A bucket value that is not an integer: building the DataFile fails before the commit.
+        tIcebergDataFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=not_a_number/");
+        tIcebergDataFile.setFile_size_in_bytes(2000);
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        tSinkCommitInfo.setIs_overwrite(false);
+        tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
+
+        long snapshotId = mockedNativeTableA.currentSnapshot() == null ? -1 :
+                mockedNativeTableA.currentSnapshot().snapshotId();
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo), null));
+        // The BE-written file is not left behind as an orphan, and nothing was committed.
+        Assertions.assertFalse(fakeFile.exists());
+        mockedNativeTableA.refresh();
+        Assertions.assertEquals(snapshotId, mockedNativeTableA.currentSnapshot() == null ? -1 :
+                mockedNativeTableA.currentSnapshot().snapshotId());
+    }
+
+    @Test
     public void testGetRemoteFile() throws IOException {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
@@ -1973,7 +2491,8 @@ public class IcebergMetadataTest extends TableTestBase {
 
         PredicateSearchKey filter = PredicateSearchKey.of("db", "table", emptyParams);
         Assertions.assertEquals(
-                "Filter{databaseName='db', tableName='table', version=Snapshot@(1), predicate=true, enableColumnStats=false}",
+                "Filter{databaseName='db', tableName='table', version=Snapshot@(1), predicate=true, " +
+                        "enableColumnStats=false, statsColumns=null}",
                 filter.toString());
     }
 
@@ -2300,6 +2819,134 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals(1.0, manifestPrunedRowCount(metadata, icebergTable, table, k2EqDate(2019, 1, 1)), 0.001);
     }
 
+    private static GenericBlobMetadata thetaBlob(long sourceSnapshotId, int fieldId, String ndv) {
+        return new GenericBlobMetadata(StandardBlobTypes.APACHE_DATASKETCHES_THETA_V1, sourceSnapshotId, 1,
+                List.of(fieldId), Map.of("ndv", ndv));
+    }
+
+    private static void setPuffinStatistics(org.apache.iceberg.Table table, long snapshotId, GenericBlobMetadata... blobs) {
+        table.updateStatistics().setStatistics(new GenericStatisticsFile(snapshotId,
+                "/path/to/stats-" + snapshotId + ".puffin", 100, 10, List.of(blobs))).commit();
+    }
+
+    private static double columnStatisticsNdv(IcebergMetadata metadata, IcebergTable icebergTable,
+                                              ColumnRefOperator column, long snapshotId) {
+        return columnStatisticsNdv(metadata, icebergTable, column, TvrTableSnapshot.of(Optional.of(snapshotId)));
+    }
+
+    private static double columnStatisticsNdv(IcebergMetadata metadata, IcebergTable icebergTable,
+                                              ColumnRefOperator column, TvrVersionRange version) {
+        OptimizerContext context = OptimizerFactory.mockContext(new ColumnRefFactory());
+        context.getSessionVariable().setEnableIcebergColumnStatistics(true);
+        Statistics statistics = metadata.getTableStatistics(context, icebergTable,
+                Map.of(column, new Column(column.getName(), column.getType())), null, null, -1, version);
+        return statistics.getColumnStatistic(column).getDistinctValuesCount();
+    }
+
+    // The column-statistics path uses a Puffin NDV (e.g. from a Trino/Spark ANALYZE) only while it still describes
+    // the queried snapshot: computed on it, or on an ancestor with only appends and compactions since and at most
+    // 10% more or fewer rows. Otherwise the column falls back to the estimate (0.3 of the rows for an INT without
+    // bounds).
+    @Test
+    public void testColumnStatisticsUseFreshPuffinNdvOnly() {
+        IcebergMetadata metadata = newStatsMetadata();
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        long unanalyzed = mockedNativeTableA.currentSnapshot().snapshotId();
+        mockedNativeTableA.newFastAppend().appendFile(DataFiles.builder(SPEC_A).withPath("/path/to/data-big.parquet")
+                .withFileSizeInBytes(10).withPartitionPath("data_bucket=0").withRecordCount(100).build()).commit();
+        long analyzed = mockedNativeTableA.currentSnapshot().snapshotId();
+        setPuffinStatistics(mockedNativeTableA, analyzed, thetaBlob(analyzed, 1, "3"));
+        // +2 rows (2%): fresh
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A_1).commit();
+        long smallAppend = mockedNativeTableA.currentSnapshot().snapshotId();
+        // a compaction keeps the rows: fresh
+        mockedNativeTableA.newRewrite().rewriteFiles(Set.of(FILE_A_1), Set.of(FILE_A_2)).commit();
+        long compacted = mockedNativeTableA.currentSnapshot().snapshotId();
+        // +20 rows (22%): stale
+        DataFile twentyRows = DataFiles.builder(SPEC_A).withPath("/path/to/data-twenty.parquet")
+                .withFileSizeInBytes(10).withPartitionPath("data_bucket=0").withRecordCount(20).build();
+        mockedNativeTableA.newFastAppend().appendFile(twentyRows).commit();
+        long largeAppend = mockedNativeTableA.currentSnapshot().snapshotId();
+        // back to 104 rows, but a delete in between always makes it stale
+        mockedNativeTableA.newDelete().deleteFile(twentyRows).commit();
+        long deleted = mockedNativeTableA.currentSnapshot().snapshotId();
+        Assertions.assertEquals(DataOperations.REPLACE, mockedNativeTableA.snapshot(compacted).operation());
+        Assertions.assertEquals(DataOperations.DELETE, mockedNativeTableA.snapshot(deleted).operation());
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
+                "table_name", "", Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR)),
+                mockedNativeTableA, Maps.newHashMap());
+        ColumnRefOperator id = new ColumnRefOperator(3, INT, "id", true);
+
+        Assertions.assertEquals(3.0, columnStatisticsNdv(metadata, icebergTable, id, analyzed), 0.001);
+        Assertions.assertEquals(3.0, columnStatisticsNdv(metadata, icebergTable, id, smallAppend), 0.001);
+        Assertions.assertEquals(3.0, columnStatisticsNdv(metadata, icebergTable, id, compacted), 0.001);
+        Assertions.assertEquals(1.0, columnStatisticsNdv(metadata, icebergTable, id, unanalyzed), 0.001);
+        Assertions.assertEquals(0.3 * 124, columnStatisticsNdv(metadata, icebergTable, id, largeAppend), 0.001);
+        Assertions.assertEquals(0.3 * 104, columnStatisticsNdv(metadata, icebergTable, id, deleted), 0.001);
+        // A whole-snapshot NDV says nothing about the rows an incremental delta added (2 here), even when the delta
+        // starts at the analyzed snapshot: the estimate of the 2 rows, not min(3, 2).
+        Assertions.assertEquals(1.0, columnStatisticsNdv(metadata, icebergTable, id,
+                TvrTableDelta.of(TvrVersion.of(analyzed), TvrVersion.of(smallAppend))), 0.001);
+
+        // A blob is judged by the snapshot it was computed on, not by the file carrying it: carried over from the
+        // analyzed snapshot to the compacted one it is fresh, carried over past the delete it is stale.
+        setPuffinStatistics(mockedNativeTableA, compacted, thetaBlob(analyzed, 1, "4"));
+        Assertions.assertEquals(4.0, columnStatisticsNdv(metadata, icebergTable, id, compacted), 0.001);
+        setPuffinStatistics(mockedNativeTableA, deleted, thetaBlob(analyzed, 1, "5"));
+        Assertions.assertEquals(0.3 * 104, columnStatisticsNdv(metadata, icebergTable, id, deleted), 0.001);
+        // a source snapshot that expired: the file's own snapshot stands in for it
+        Assertions.assertNull(mockedNativeTableA.snapshot(424242L));
+        setPuffinStatistics(mockedNativeTableA, deleted, thetaBlob(424242L, 1, "6"));
+        Assertions.assertEquals(6.0, columnStatisticsNdv(metadata, icebergTable, id, deleted), 0.001);
+        // a malformed NDV falls back to the estimate instead of failing the query
+        setPuffinStatistics(mockedNativeTableA, deleted, thetaBlob(deleted, 1, "not-a-number"));
+        Assertions.assertEquals(0.3 * 104, columnStatisticsNdv(metadata, icebergTable, id, deleted), 0.001);
+    }
+
+    // An incremental delta takes no Puffin NDV, but keeps the partition-derived NDV of the files it scanned.
+    @Test
+    public void testColumnStatisticsDeltaKeepsPartitionNdv() {
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        long start = mockedNativeTableA.currentSnapshot().snapshotId();
+        mockedNativeTableA.newFastAppend()
+                .appendFile(DataFiles.builder(SPEC_A).withPath("/path/to/delta-0.parquet").withFileSizeInBytes(10)
+                        .withPartitionPath("data_bucket=0").withRecordCount(100).build())
+                .appendFile(DataFiles.builder(SPEC_A).withPath("/path/to/delta-1.parquet").withFileSizeInBytes(10)
+                        .withPartitionPath("data_bucket=1").withRecordCount(100).build())
+                .commit();
+        long end = mockedNativeTableA.currentSnapshot().snapshotId();
+        setPuffinStatistics(mockedNativeTableA, end, thetaBlob(end, 2, "50"));
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
+                "table_name", "", Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR)),
+                mockedNativeTableA, Maps.newHashMap());
+        ColumnRefOperator data = new ColumnRefOperator(4, VARCHAR, "data", true);
+        // the two partitions of the 200 appended rows, not the Puffin NDV nor the 0.5 x rows estimate
+        Assertions.assertEquals(2.0, columnStatisticsNdv(newStatsMetadata(), icebergTable, data,
+                TvrTableDelta.of(TvrVersion.of(start), TvrVersion.of(end))), 0.001);
+    }
+
+    // A time-travel read resolves columns against the snapshot's schema: after a rename, `id` of the old snapshot is
+    // field 1, not the field that carries the name now.
+    @Test
+    public void testColumnStatisticsResolveColumnsByReadSchema() {
+        IcebergMetadata metadata = newStatsMetadata();
+        mockedNativeTableA.newFastAppend().appendFile(DataFiles.builder(SPEC_A).withPath("/path/to/data-big.parquet")
+                .withFileSizeInBytes(10).withPartitionPath("data_bucket=0").withRecordCount(100).build()).commit();
+        long s1 = mockedNativeTableA.currentSnapshot().snapshotId();
+        setPuffinStatistics(mockedNativeTableA, s1, thetaBlob(s1, 1, "3"), thetaBlob(s1, 2, "50"));
+        mockedNativeTableA.updateSchema().renameColumn("id", "old_id").commit();
+        mockedNativeTableA.updateSchema().renameColumn("data", "id").commit();
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
+                "table_name", "", Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR)),
+                mockedNativeTableA, Maps.newHashMap())
+                .withReadMetadata(IcebergMetadata.getSnapshotSchema(mockedNativeTableA, s1),
+                        IcebergMetadata.getSnapshotSpecs(mockedNativeTableA, s1));
+        Assertions.assertEquals(3.0, columnStatisticsNdv(metadata, icebergTable,
+                new ColumnRefOperator(3, INT, "id", true), s1), 0.001);
+    }
+
     @Test
     public void testGetTableStatisticsManifestPrunedKeepsIncrementalDelivery() throws Exception {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
@@ -2585,6 +3232,58 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testPartitionSourceColumnRanges() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("dt", DATE));
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
+                "table_name", "", columns, mockedNativeTableF, Maps.newHashMap());
+
+        long firstSnapshot = -1;
+        for (int day : new int[] {19660, 19665}) {
+            org.apache.iceberg.PartitionKey partitionKey = new org.apache.iceberg.PartitionKey(SPEC_F, SCHEMA_F);
+            partitionKey.set(0, day);
+            mockedNativeTableF.newAppend().appendFile(DataFiles.builder(SPEC_F)
+                    .withPath("/path/to/data-f-" + day + ".parquet")
+                    .withFileSizeInBytes(20)
+                    .withPartition(partitionKey)
+                    .withRecordCount(2)
+                    .build()).commit();
+            mockedNativeTableF.refresh();
+            if (firstSnapshot < 0) {
+                firstSnapshot = mockedNativeTableF.currentSnapshot().snapshotId();
+            }
+        }
+        long lastSnapshot = mockedNativeTableF.currentSnapshot().snapshotId();
+
+        java.util.Map<String, com.starrocks.common.Pair<Double, Double>> ranges =
+                metadata.getPartitionSourceColumnRanges(icebergTable, TvrTableSnapshot.of(Optional.of(lastSnapshot)));
+        Assertions.assertEquals(com.starrocks.common.Pair.create(
+                (double) com.starrocks.sql.optimizer.Utils.getLongFromDateTime(
+                        java.time.LocalDate.ofEpochDay(19660).atStartOfDay()),
+                (double) com.starrocks.sql.optimizer.Utils.getLongFromDateTime(
+                        java.time.LocalDate.ofEpochDay(19665).atStartOfDay())), ranges.get("dt"));
+        // the snapshot queried, not the current one
+        Assertions.assertEquals(ranges.get("dt").first,
+                metadata.getPartitionSourceColumnRanges(icebergTable,
+                        TvrTableSnapshot.of(Optional.of(firstSnapshot))).get("dt").second);
+        // an incremental read covers only part of the table
+        Assertions.assertTrue(metadata.getPartitionSourceColumnRanges(icebergTable,
+                TvrTableDelta.of(firstSnapshot, lastSnapshot)).isEmpty());
+        Assertions.assertTrue(metadata.getPartitionSourceColumnRanges(icebergTable, TvrTableSnapshot.empty()).isEmpty());
+
+        // After a rename, a read bound to the snapshot's schema keys the range by the column name the query uses.
+        mockedNativeTableF.updateSchema().renameColumn("dt", "dt_new").commit();
+        mockedNativeTableF.refresh();
+        IcebergTable boundTable = icebergTable.withReadMetadata(
+                IcebergMetadata.getSnapshotSchema(mockedNativeTableF, lastSnapshot),
+                IcebergMetadata.getSnapshotSpecs(mockedNativeTableF, lastSnapshot));
+        Assertions.assertEquals(ranges.get("dt"), metadata.getPartitionSourceColumnRanges(boundTable,
+                TvrTableSnapshot.of(Optional.of(lastSnapshot))).get("dt"));
+    }
+
+    @Test
     public void testIcebergFilter() {
         List<ScalarOperator> arguments = new ArrayList<>(2);
         arguments.add(ConstantOperator.createVarchar("day"));
@@ -2664,6 +3363,46 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals(2, partitionNames.size());
         Assertions.assertTrue(partitionNames.contains("k2=2"));
         Assertions.assertTrue(partitionNames.contains("k2=3"));
+    }
+
+    @Test
+    public void testPartitionsAtAnEarlierSnapshot() {
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
+        long earlier = mockedNativeTableB.currentSnapshot().snapshotId();
+        DataFile laterFileInK2Is2 = DataFiles.builder(SPEC_B)
+                .withPath("/path/to/data-b1-later.parquet")
+                .withFileSizeInBytes(20)
+                .withPartitionPath("k2=2")
+                .withRecordCount(5)
+                .build();
+        mockedNativeTableB.newAppend().appendFile(laterFileInK2Is2).appendFile(FILE_B_2).commit();
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
+                return mockedNativeTableB;
+            }
+
+            @Mock
+            Database getDB(ConnectContext context, String dbName) {
+                return new Database(0, dbName);
+            }
+        };
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergHiveCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME,
+                "resource_name", "db",
+                "table", "", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+        ConnectorMetadataRequestContext atEarlier = new ConnectorMetadataRequestContext();
+        atEarlier.setTableVersionRange(TvrTableSnapshot.of(Optional.of(earlier)));
+
+        Assertions.assertEquals(List.of("k2=2"), metadata.listPartitionNames("db", "table", atEarlier));
+        PartitionInfo readAtEarlier = metadata.getPartitions(icebergTable, List.of("k2=2"), atEarlier).get(0);
+        PartitionInfo readLive = metadata.getPartitions(icebergTable, List.of("k2=2")).get(0);
+        Assertions.assertNotEquals(readLive.getVersion(), readAtEarlier.getVersion());
     }
 
     @Test
@@ -3028,6 +3767,13 @@ public class IcebergMetadataTest extends TableTestBase {
         clauses.add(invalidCompressionClause);
         Assertions.assertThrows(DdlException.class,
                 () -> metadata.alterTable(new ConnectContext(), new AlterTableStmt(createTableRef(tableName), clauses)));
+
+        // identifier fields are schema metadata, not a settable property
+        clauses.clear();
+        clauses.add(new ModifyTablePropertiesClause(new HashMap<>(Map.of("identifier-fields", "id"))));
+        DdlException identifierError = Assertions.assertThrows(DdlException.class,
+                () -> metadata.alterTable(new ConnectContext(), new AlterTableStmt(createTableRef(tableName), clauses)));
+        Assertions.assertTrue(identifierError.getMessage().contains("identifier-fields"), identifierError.getMessage());
 
         // add & drop partition columns
         {
@@ -5007,6 +5753,62 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testCanDeleteUsingMetadataClosesTaskIteratorOnEarlyReturn() {
+        // Some scans (e.g. REST server-side planning) only stop their planning workers when the task iterator is
+        // closed, not the iterable. The early "return false" must close the iterator as well.
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_3).commit();
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
+                new ColumnRefOperator(0, INT, "k1", true), ConstantOperator.createInt(1));
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT,
+                new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG),
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+
+        AtomicBoolean iteratorOpened = new AtomicBoolean(false);
+        AtomicBoolean iteratorClosed = new AtomicBoolean(false);
+        new MockUp<DataTableScan>() {
+            @Mock
+            public CloseableIterable<FileScanTask> doPlanFiles(Invocation inv) {
+                CloseableIterable<FileScanTask> real = inv.proceed();
+                return new CloseableIterable<FileScanTask>() {
+                    @Override
+                    public CloseableIterator<FileScanTask> iterator() {
+                        iteratorOpened.set(true);
+                        CloseableIterator<FileScanTask> it = real.iterator();
+                        return new CloseableIterator<FileScanTask>() {
+                            @Override
+                            public boolean hasNext() {
+                                return it.hasNext();
+                            }
+
+                            @Override
+                            public FileScanTask next() {
+                                return it.next();
+                            }
+
+                            @Override
+                            public void close() throws IOException {
+                                iteratorClosed.set(true);
+                                it.close();
+                            }
+                        };
+                    }
+
+                    @Override
+                    public void close() throws IOException {
+                        real.close();
+                    }
+                };
+            }
+        };
+
+        Assertions.assertFalse(metadata.canDeleteUsingMetadata(icebergTable, predicate));
+        Assertions.assertTrue(iteratorOpened.get(), "planFiles should have been iterated");
+        Assertions.assertTrue(iteratorClosed.get(), "task iterator must be closed on early return");
+    }
+
+    @Test
     public void testCanDeleteUsingMetadataWithAlwaysTrue() {
         // Test delete all rows (no predicate)
         mockedNativeTableB.newFastAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).commit();
@@ -5336,6 +6138,22 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testMetadataDeleteNodeExplainStringDigestsPredicate() {
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_1).commit();
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME,
+                "resource_name", "iceberg_db", "iceberg_table", "",
+                Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
+                new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(987654));
+        IcebergMetadataDeleteNode node = new IcebergMetadataDeleteNode(new PlanNodeId(0), icebergTable, predicate);
+
+        Assertions.assertTrue(node.getExplainString().contains("987654"));
+        String digested = ExprToSql.withDigestedLiterals(node::getExplainString);
+        Assertions.assertTrue(digested.contains("predicate: ?"), digested);
+        Assertions.assertFalse(digested.contains("987654"), digested);
+    }
+
+    @Test
     public void testMetadataDeleteNodeExplainStringWithNullPredicate() {
         // Test EXPLAIN output when predicate is null (delete all)
         mockedNativeTableB.newFastAppend().appendFile(FILE_B_1).commit();
@@ -5518,6 +6336,29 @@ public class IcebergMetadataTest extends TableTestBase {
         }
     }
 
+    private CreateTableStmt buildIcebergCreateTableStmt(String dbName, String tableName,
+                                                        Map<String, String> properties) {
+        CreateTableStmt stmt = new CreateTableStmt(
+                false,
+                false,
+                new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME, dbName, tableName)),
+                        null, NodePosition.ZERO),
+                Lists.newArrayList(
+                        new ColumnDef("c1", new TypeDef(TypeFactory.createType(PrimitiveType.INT)))),
+                "iceberg",
+                null,
+                null,
+                null,
+                properties == null ? new HashMap<>() : properties,
+                new HashMap<>(),
+                null);
+        List<Column> columns = stmt.getColumnDefs().stream()
+                .map(def -> ColumnBuilder.buildGeneratedColumn(null, def))
+                .collect(Collectors.toList());
+        stmt.setColumns(columns);
+        return stmt;
+    }
+
     @Test
     public void testListTableDeltaTraitsSkipsReplaceSnapshots() {
         // Step 1: APPEND FILE_A
@@ -5557,6 +6398,81 @@ public class IcebergMetadataTest extends TableTestBase {
         // Verify the returned trait corresponds to snap3, not snap2
         TvrTableDelta delta = traits.get(0).getTvrDelta();
         Assertions.assertEquals(snap3.snapshotId(), delta.end().get());
+    }
+
+    private Map<String, String> createTableWithProperties(IcebergCatalog icebergCatalog, Map<String, String> props)
+            throws DdlException {
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, String>> propsCaptor = ArgumentCaptor.forClass(Map.class);
+        Mockito.when(icebergCatalog.createTable(Mockito.eq(connectContext), Mockito.eq("db"), Mockito.eq("tbl"),
+                Mockito.any(Schema.class), Mockito.any(PartitionSpec.class), Mockito.isNull(), Mockito.isNull(),
+                propsCaptor.capture())).thenReturn(true);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
+                Executors.newSingleThreadExecutor(), new IcebergCatalogProperties(DEFAULT_CONFIG));
+        Assertions.assertTrue(metadata.createTable(connectContext,
+                buildIcebergCreateTableStmt("db", "tbl", new HashMap<>(props))));
+        return propsCaptor.getValue();
+    }
+
+    @Test
+    public void testCreateTableRejectsValuesIcebergCannotParse() {
+        List<Map<String, String>> invalid = List.of(
+                Map.of("write.parquet.compression-codec", "xxx"),
+                Map.of("write.parquet.compression-codec", "zlib"),
+                Map.of("write.parquet.compression-codec", "none"),
+                Map.of("write.delete.parquet.compression-codec", "xxx"),
+                Map.of("write.format.default", "xxx"),
+                Map.of("write.format.default", "metadata"),
+                Map.of("write.target-file-size-bytes", "-100"),
+                Map.of("write.target-file-size-bytes", "0"),
+                Map.of("write.target-file-size-bytes", "abc"),
+                Map.of("write.target-file-size-bytes", " 134217728 "),
+                // the SR alias lands on the parquet codec key of a parquet table
+                Map.of("compression_codec", "xxx"),
+                Map.of("compression_codec", "zlib"),
+                Map.of("compression_codec", "none"));
+        for (Map<String, String> props : invalid) {
+            IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
+            String value = props.values().iterator().next();
+            StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                    () -> createTableWithProperties(icebergCatalog, props), props.toString());
+            Assertions.assertTrue(e.getMessage().contains("'" + value + "'"), e.getMessage());
+            Mockito.verify(icebergCatalog, Mockito.never()).createTable(Mockito.any(), Mockito.any(), Mockito.any(),
+                    Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any());
+        }
+    }
+
+    @Test
+    public void testCreateTableKeepsValidValues() throws DdlException {
+        Map<String, String> passed = createTableWithProperties(Mockito.mock(IcebergCatalog.class), Map.of(
+                "write.parquet.compression-codec", "ZSTD",
+                "write.delete.parquet.compression-codec", "lzo",
+                "write.target-file-size-bytes", "134217728",
+                "WRITE.PARQUET.COMPRESSION-CODEC", "xxx",
+                "foo.bar", "baz"));
+        Assertions.assertEquals("ZSTD", passed.get("write.parquet.compression-codec"));
+        Assertions.assertEquals("lzo", passed.get("write.delete.parquet.compression-codec"));
+        Assertions.assertEquals("134217728", passed.get("write.target-file-size-bytes"));
+        Assertions.assertEquals("xxx", passed.get("WRITE.PARQUET.COMPRESSION-CODEC"));
+
+        // an alias codec without a format lands on the parquet codec key
+        passed = createTableWithProperties(Mockito.mock(IcebergCatalog.class), Map.of("compression_codec", "snappy"));
+        Assertions.assertEquals("snappy", passed.get("write.parquet.compression-codec"));
+
+        passed = createTableWithProperties(Mockito.mock(IcebergCatalog.class), Map.of("write.format.default", "avro"));
+        Assertions.assertEquals("avro", passed.get("write.format.default"));
+
+        // an alias codec that lands on the ORC key is not checked against the parquet codecs
+        passed = createTableWithProperties(Mockito.mock(IcebergCatalog.class),
+                Map.of("file_format", "orc", "compression_codec", "lzo"));
+        Assertions.assertEquals("orc", passed.get("write.format.default"));
+        Assertions.assertEquals("lzo", passed.get("write.orc.compression-codec"));
+
+        // without the file_format alias, the alias codec follows the native default format
+        passed = createTableWithProperties(Mockito.mock(IcebergCatalog.class),
+                Map.of("write.format.default", "orc", "compression_codec", "zlib"));
+        Assertions.assertEquals("zlib", passed.get("write.orc.compression-codec"));
+        Assertions.assertFalse(passed.containsKey("write.parquet.compression-codec"));
     }
 
     @Test
@@ -6175,5 +7091,94 @@ public class IcebergMetadataTest extends TableTestBase {
                 (TableRelation) ((SelectRelation) stmt.getQueryRelation()).getRelation();
         Assertions.assertNotNull(tableRelation.getTvrVersionRange());
         Assertions.assertEquals(Optional.of(s1), tableRelation.getTvrVersionRange().end());
+    }
+
+    private Schema createTableWithIdentifierFields(String identifierFields) throws DdlException {
+        IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
+        ArgumentCaptor<Schema> schemaCaptor = ArgumentCaptor.forClass(Schema.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, String>> propsCaptor = ArgumentCaptor.forClass(Map.class);
+        Mockito.when(icebergCatalog.createTable(Mockito.eq(connectContext), Mockito.eq("db"), Mockito.eq("tbl"),
+                schemaCaptor.capture(), Mockito.any(PartitionSpec.class), Mockito.isNull(), Mockito.isNull(),
+                propsCaptor.capture())).thenReturn(true);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
+                Executors.newSingleThreadExecutor(), new IcebergCatalogProperties(DEFAULT_CONFIG));
+
+        Map<String, String> props = new HashMap<>();
+        props.put("identifier-fields", identifierFields);
+        CreateTableStmt stmt = buildIcebergCreateTableStmt("db", "tbl", props);
+        stmt.setColumns(Lists.newArrayList(
+                new Column("id", IntegerType.BIGINT, false),
+                new Column("region", VARCHAR, false),
+                new Column("v", INT, true)));
+        Assertions.assertTrue(metadata.createTable(connectContext, stmt));
+        Assertions.assertFalse(propsCaptor.getValue().containsKey("identifier-fields"));
+        return schemaCaptor.getValue();
+    }
+
+    @Test
+    public void testCreateTableSetsIdentifierFields() throws DdlException {
+        Assertions.assertEquals(Set.of("id"), createTableWithIdentifierFields("id").identifierFieldNames());
+        Assertions.assertEquals(Set.of("id", "region"),
+                createTableWithIdentifierFields(" ID , region ").identifierFieldNames());
+    }
+
+    @Test
+    public void testCreateTableRejectsInvalidIdentifierFields() {
+        DdlException e = Assertions.assertThrows(DdlException.class, () -> createTableWithIdentifierFields("v"));
+        Assertions.assertTrue(e.getMessage().contains("not a required field"), e.getMessage());
+        e = Assertions.assertThrows(DdlException.class, () -> createTableWithIdentifierFields("id,nope"));
+        Assertions.assertTrue(e.getMessage().contains("nope"), e.getMessage());
+        Assertions.assertThrows(DdlException.class, () -> createTableWithIdentifierFields(" , "));
+        e = Assertions.assertThrows(DdlException.class, () -> createTableWithIdentifierFields("id,ID"));
+        Assertions.assertTrue(e.getMessage().contains("Duplicate"), e.getMessage());
+    }
+
+    @Test
+    public void testShowCreateTableWithIdentifierFields() {
+        Schema schema = new Schema(List.of(required(1, "id", Types.LongType.get()),
+                required(2, "region", Types.StringType.get())), Set.of(2, 1));
+        IcebergTable table = IcebergTable.builder()
+                .setSrTableName("t_ident")
+                .setCatalogName(CATALOG_NAME)
+                .setCatalogDBName("db")
+                .setCatalogTableName("t_ident")
+                .setFullSchema(IcebergApiConverter.toFullSchemas(schema))
+                .setNativeTable(create(schema, PartitionSpec.unpartitioned(), "t_ident", 2))
+                .build();
+        table.getNativeTable().updateProperties().set("identifier-fields", "stale").commit();
+
+        String createSql = AstToStringBuilder.getExternalCatalogTableDdlStmt(table);
+        Assertions.assertTrue(createSql.contains("\"identifier-fields\" = \"id,region\""), createSql);
+        Assertions.assertFalse(createSql.contains("stale"), createSql);
+    }
+
+    @Test
+    public void testShowCreateTableOmitsNestedIdentifierFields() {
+        Schema schema = new Schema(List.of(required(1, "id", Types.LongType.get()),
+                required(2, "key", Types.StructType.of(required(3, "kid", Types.LongType.get())))), Set.of(1, 3));
+        Assertions.assertNull(IcebergApiConverter.toIdentifierFieldsProperty(schema));
+    }
+
+    @Test
+    public void testShowCreateTableOmitsIdentifierFieldsWithComma() {
+        Schema schema = new Schema(List.of(required(1, "id", Types.LongType.get()),
+                required(2, "a,b", Types.LongType.get())), Set.of(1, 2));
+        Assertions.assertNull(IcebergApiConverter.toIdentifierFieldsProperty(schema));
+        // also when a,b resolve to other columns
+        schema = new Schema(List.of(required(1, "a", Types.LongType.get()), required(2, "b", Types.LongType.get()),
+                required(3, "a,b", Types.LongType.get())), Set.of(3));
+        Assertions.assertNull(IcebergApiConverter.toIdentifierFieldsProperty(schema));
+    }
+
+    @Test
+    public void testShowCreateTableOmitsIdentifierFieldsThatResolveElsewhere() {
+        // CREATE trims names and matches case-insensitively, so these would resolve to the other column
+        Schema schema = new Schema(List.of(required(1, "id", Types.LongType.get()),
+                required(2, " id", Types.LongType.get())), Set.of(2));
+        Assertions.assertNull(IcebergApiConverter.toIdentifierFieldsProperty(schema));
+        schema = new Schema(List.of(required(1, "id", Types.LongType.get()),
+                required(2, "ID", Types.LongType.get())), Set.of(2));
+        Assertions.assertNull(IcebergApiConverter.toIdentifierFieldsProperty(schema));
     }
 }

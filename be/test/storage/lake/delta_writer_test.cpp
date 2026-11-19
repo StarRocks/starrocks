@@ -28,12 +28,15 @@
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
+#include "column/json_column.h"
 #include "column/schema.h"
 #include "common/config_ingest_fwd.h"
+#include "common/config_json_flat_fwd.h"
 #include "common/logging.h"
 #include "fs/bundle_file.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -43,11 +46,15 @@
 #include "storage/lake/multi_node_write_txn_log.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/tablet_writer.h"
 #include "storage/lake/txn_log.h"
+#include "storage/lake/versioned_tablet.h"
+#include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
+#include "types/json_value.h"
 
 namespace starrocks::lake {
 
@@ -383,6 +390,46 @@ TEST_F(LakeDeltaWriterTest, test_close) {
     }));
 }
 
+// The load's slots cover one column fewer than the write schema: the plan was made before a fast ADD COLUMN and the
+// write schema after it. Every write must fail with the mismatch, not only the first: a memtable left behind by the
+// first failure would take the next write, and its flush would read the column no slot fills.
+TEST_F(LakeDeltaWriterTest, test_write_with_slots_missing_a_schema_column) {
+    static const int kChunkSize = 16;
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    std::vector<uint32_t> indexes(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        c0->append(i);
+        c1->append(i * 3);
+        indexes[i] = i;
+    }
+    Chunk chunk(Columns{std::move(c0), std::move(c1)}, Chunk::SlotHashMap{{0, 0}, {1, 1}});
+    // The tablet schema has c0 and c1; the load has a slot for c0 only.
+    std::vector<SlotDescriptor> slots;
+    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    std::vector<SlotDescriptor*> slot_pointers{&slots[0]};
+
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_slot_descriptors(&slot_pointers)
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    for (int i = 0; i < 2; i++) {
+        auto st = delta_writer->write(chunk, indexes.data(), indexes.size());
+        ASSERT_TRUE(st.is_internal_error()) << "write " << i << ": " << st;
+        ASSERT_NE(std::string::npos, st.message().find("the load carries 1 columns but its write schema has 2")) << st;
+    }
+    delta_writer->close();
+}
+
 TEST_F(LakeDeltaWriterTest, test_finish_without_write_txn_log) {
     // Prepare data for writing
     static const int kChunkSize = 1;
@@ -466,6 +513,155 @@ TEST_F(LakeDeltaWriterTest, test_empty_write) {
     ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(0, txnlog->op_write().rowset().num_rows());
     ASSERT_EQ(0, txnlog->op_write().rowset().data_size());
+}
+
+// The load request carries the table's flat_json.* settings (PTabletWriterOpenRequest.lake_tablet_params
+// .flat_json_config -> DeltaWriterBuilder::set_flat_json_config). They decide the shape of the JSON
+// column even when this node holds no cached metadata for the tablet, which is every first write under
+// light_weight_tablet_creation, and win over whatever the cache holds. A request without them (a table
+// that sets none, or a sender that predates the field) falls back to the cache as loads always did.
+TEST_F(LakeDeltaWriterTest, test_flat_json_config_from_load_request) {
+    ASSERT_TRUE(config::enable_json_flat) << "test assumes the be.conf default";
+
+    // c0 INT key, c1 JSON value
+    auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+    metadata->mutable_schema()->mutable_column(1)->set_type("JSON");
+    auto tablet_schema = TabletSchema::create(metadata->schema());
+    auto schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
+    const int64_t tablet_id = metadata->id();
+    const size_t json_uid = tablet_schema->column(1).unique_id();
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    // Rows whose JSON values share the same two keys: the shape the flattener does extract.
+    auto generate_json_data = [&](int64_t chunk_size) {
+        auto c0 = Int32Column::create();
+        auto c1 = JsonColumn::create();
+        for (int i = 0; i < chunk_size; i++) {
+            c0->append(i);
+            auto json = JsonValue::parse(strings::Substitute(R"({"a": $0, "b": $1})", i, i * 3));
+            CHECK(json.ok());
+            c1->append(&json.value());
+        }
+        return Chunk({std::move(c0), std::move(c1)}, schema);
+    };
+
+    // Writes one segment and reports whether its JSON column was written flat.
+    auto write_and_check_flat = [&](std::shared_ptr<FlatJsonConfig> load_config, bool cold) -> bool {
+        if (cold) {
+            // No metadata of this tablet is cached: the state of a light-weight tablet before its
+            // first publish.
+            _tablet_mgr->metacache()->prune();
+            CHECK(_tablet_mgr->get_latest_cached_tablet_metadata(tablet_id) == nullptr);
+        }
+        static const int kChunkSize = 256;
+        auto chunk = generate_json_data(kChunkSize);
+        auto indexes = std::vector<uint32_t>(kChunkSize);
+        for (int i = 0; i < kChunkSize; i++) {
+            indexes[i] = i;
+        }
+        auto txn_id = next_id();
+        auto builder = DeltaWriterBuilder();
+        builder.set_tablet_manager(_tablet_mgr.get())
+                .set_tablet_id(tablet_id)
+                .set_txn_id(txn_id)
+                .set_db_id(100)
+                .set_table_id(101)
+                .set_partition_id(_partition_id)
+                .set_mem_tracker(_mem_tracker.get())
+                .set_schema_id(tablet_schema->id())
+                .set_profile(&_dummy_runtime_profile)
+                .set_flat_json_config(std::move(load_config));
+        auto delta_writer = builder.build().value();
+        CHECK_OK(delta_writer->open());
+        CHECK_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+
+        auto txnlog = _tablet_mgr->get_txn_log(tablet_id, txn_id).value();
+        CHECK_EQ(1, txnlog->op_write().rowset().segment_metas_size());
+        auto fs = FileSystemFactory::CreateSharedFromString(kTestDirectory).value();
+        auto path = _tablet_mgr->segment_location(tablet_id, txnlog->op_write().rowset().segment_metas(0).filename());
+        auto segment = Segment::open(fs, FileInfo{path}, 0, tablet_schema).value();
+        const ColumnReader* reader = segment->column_with_uid(json_uid);
+        CHECK(reader != nullptr);
+        return reader->is_flat_json();
+    };
+
+    // 1. Cold write without a config from the load: the pre-existing fallback to the be.conf globals.
+    EXPECT_TRUE(write_and_check_flat(nullptr, /*cold=*/true));
+
+    // 2. Cold write, the load says the table disabled flat JSON: the segment must not be flattened.
+    auto disabled = std::make_shared<FlatJsonConfig>(false, config::json_flat_null_factor,
+                                                     config::json_flat_sparsity_factor, config::json_flat_column_max);
+    EXPECT_FALSE(write_and_check_flat(disabled, /*cold=*/true));
+
+    // 3. Cached metadata says flat JSON is enabled, the load says disabled: the load wins.
+    metadata->mutable_flat_json_config()->set_flat_json_enable(true);
+    metadata->mutable_flat_json_config()->set_flat_json_null_factor(config::json_flat_null_factor);
+    metadata->mutable_flat_json_config()->set_flat_json_sparsity_factor(config::json_flat_sparsity_factor);
+    metadata->mutable_flat_json_config()->set_flat_json_max_column_max(config::json_flat_column_max);
+    metadata->set_version(2);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+    ASSERT_TRUE(_tablet_mgr->get_latest_cached_tablet_metadata(tablet_id) != nullptr);
+    EXPECT_FALSE(write_and_check_flat(disabled, /*cold=*/false));
+
+    // 4. No load config while the cached metadata says disabled: the request of an FE or sender CN
+    //    that predates the field during a rolling upgrade. The writer keeps the table's setting from
+    //    the warm cache instead of switching to the be.conf globals.
+    metadata->mutable_flat_json_config()->set_flat_json_enable(false);
+    metadata->set_version(3);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+    ASSERT_TRUE(_tablet_mgr->get_latest_cached_tablet_metadata(tablet_id) != nullptr);
+    EXPECT_FALSE(write_and_check_flat(nullptr, /*cold=*/false));
+
+    // 5. No load config and the cached metadata carries none either: a table that sets no flat_json.*
+    //    property follows the be.conf globals on a warm node just as on a cold one.
+    metadata->clear_flat_json_config();
+    metadata->set_version(4);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+    ASSERT_TRUE(_tablet_mgr->get_latest_cached_tablet_metadata(tablet_id) != nullptr);
+    EXPECT_TRUE(write_and_check_flat(nullptr, /*cold=*/false));
+}
+
+// Writers that compaction, schema change and spark load create through a VersionedTablet take the
+// table's flat_json.* settings from the metadata the tablet is pinned to, not from the cache.
+TEST_F(LakeDeltaWriterTest, test_versioned_tablet_writer_takes_flat_json_config_from_metadata) {
+    auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+    metadata->mutable_schema()->mutable_column(1)->set_type("JSON");
+    const int64_t tablet_id = metadata->id();
+
+    // Version 1: the table sets no flat_json.* property -> the writer carries no config.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+    _tablet_mgr->metacache()->prune();
+    {
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 1));
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+        EXPECT_TRUE(writer->flat_json_config() == nullptr);
+    }
+
+    // Version 2: flat JSON disabled on the table -> the writer carries exactly that config, even
+    // though nothing of this tablet is cached.
+    metadata->set_version(2);
+    metadata->mutable_flat_json_config()->set_flat_json_enable(false);
+    metadata->mutable_flat_json_config()->set_flat_json_null_factor(0.25);
+    metadata->mutable_flat_json_config()->set_flat_json_sparsity_factor(0.75);
+    metadata->mutable_flat_json_config()->set_flat_json_max_column_max(12);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+    _tablet_mgr->metacache()->prune();
+    {
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 2));
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+        ASSERT_TRUE(writer->flat_json_config() != nullptr);
+        EXPECT_FALSE(writer->flat_json_config()->is_flat_json_enabled());
+        EXPECT_DOUBLE_EQ(0.25, writer->flat_json_config()->get_flat_json_null_factor());
+        EXPECT_DOUBLE_EQ(0.75, writer->flat_json_config()->get_flat_json_sparsity_factor());
+        EXPECT_EQ(12, writer->flat_json_config()->get_flat_json_max_column_max());
+        // A clone keeps it.
+        ASSIGN_OR_ABORT(auto cloned, writer->clone());
+        ASSERT_TRUE(cloned->flat_json_config() != nullptr);
+        EXPECT_FALSE(cloned->flat_json_config()->is_flat_json_enabled());
+        cloned->close();
+    }
 }
 
 TEST_F(LakeDeltaWriterTest, test_negative_txn_id) {

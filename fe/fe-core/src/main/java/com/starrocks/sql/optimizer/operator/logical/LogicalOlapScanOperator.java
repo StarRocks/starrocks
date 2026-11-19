@@ -38,6 +38,8 @@ import java.util.Objects;
 public final class LogicalOlapScanOperator extends LogicalScanOperator {
     private DistributionSpec distributionSpec;
     private boolean parallelRangeScan;
+    private boolean groupedRangeScan;
+    private List<Integer> orderedPhysicalCUniqueIds = List.of();
     private long selectedIndexMetaId;
     private List<Long> selectedPartitionId;
     private PartitionNames partitionNames;
@@ -114,6 +116,14 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     private LogicalOlapScanOperator() {
         super(OperatorType.LOGICAL_OLAP_SCAN);
         this.prunedPartitionPredicates = ImmutableList.of();
+    }
+
+    public boolean isGroupedRangeScan() {
+        return groupedRangeScan;
+    }
+
+    public List<Integer> getOrderedPhysicalCUniqueIds() {
+        return orderedPhysicalCUniqueIds;
     }
 
     public boolean isParallelRangeScan() {
@@ -210,7 +220,9 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         }
 
         LogicalOlapScanOperator that = (LogicalOlapScanOperator) o;
-        return parallelRangeScan == that.parallelRangeScan &&
+        return groupedRangeScan == that.groupedRangeScan
+                && orderedPhysicalCUniqueIds.equals(that.orderedPhysicalCUniqueIds)
+                && parallelRangeScan == that.parallelRangeScan &&
                 selectedIndexMetaId == that.selectedIndexMetaId &&
                 gtid == that.gtid &&
                 Objects.equals(distributionSpec, that.distributionSpec) &&
@@ -224,7 +236,8 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), parallelRangeScan, selectedIndexMetaId, gtid, selectedPartitionId,
+        return Objects.hash(super.hashCode(), parallelRangeScan, groupedRangeScan, orderedPhysicalCUniqueIds,
+                selectedIndexMetaId, gtid, selectedPartitionId,
                 selectedTabletId, hintsTabletIds, hintsReplicaIds, sample);
     }
 
@@ -245,6 +258,8 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
             builder.distributionSpec = scanOperator.distributionSpec;
             builder.parallelRangeScan = scanOperator.parallelRangeScan;
+            builder.groupedRangeScan = scanOperator.groupedRangeScan;
+            builder.orderedPhysicalCUniqueIds = scanOperator.orderedPhysicalCUniqueIds;
             builder.selectedIndexMetaId = scanOperator.selectedIndexMetaId;
             builder.gtid = scanOperator.gtid;
             builder.selectedPartitionId = scanOperator.selectedPartitionId;
@@ -258,6 +273,16 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             builder.fromSplitOR = scanOperator.fromSplitOR;
             builder.vectorSearchOptions = scanOperator.vectorSearchOptions;
             builder.sample = scanOperator.getSample();
+            return this;
+        }
+
+        public Builder setGroupedRangeScan(boolean groupedRangeScan) {
+            builder.groupedRangeScan = groupedRangeScan;
+            return this;
+        }
+
+        public Builder setOrderedPhysicalCUniqueIds(List<Integer> ids) {
+            builder.orderedPhysicalCUniqueIds = List.copyOf(ids);
             return this;
         }
 

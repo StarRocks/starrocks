@@ -36,6 +36,7 @@
 #include "common/statusor.h"
 #include "compute_env/query/file_scan_split_context.h"
 #include "formats/deletion_bitmap.h"
+#include "formats/utils.h"
 #include "gen_cpp/Exprs_types.h"
 #include "runtime/descriptors.h"
 
@@ -176,10 +177,19 @@ struct FormatScannerStats {
 struct FormatScannerOptions {
     bool case_sensitive = false;
     bool use_min_max_opt = false;
+    // The scan node plans with the min/max optimization, so min_max_values carry every slot (use_min_max_opt may be
+    // turned off for one scan range). Otherwise they carry only the runtime filter probe slots the FE chose for file
+    // pruning.
+    bool min_max_values_of_all_slots = false;
     // Set by PruneHDFSScanColumnRule when all queried columns are partition columns
     // and a placeholder materialized column was injected.  Combined with
     // use_min_max_opt to skip reading the placeholder from the data file.
     bool can_use_any_column = false;
+    // Materialized slots the query reads itself although can_use_any_column is set. The FE treats the source column
+    // of an Iceberg partition transform (e.g. `d` of `year(d)`) as a partition column, so a query on it gets a
+    // placeholder column, but a file stores the column as data. Only the placeholder may then be filled with a default
+    // value; these slots keep their min/max value or are read from the file.
+    std::unordered_set<SlotId> any_column_queried_slots;
     bool use_count_opt = false;
     bool orc_use_column_names = false;
     bool parquet_page_index_enable = false;
@@ -222,10 +232,7 @@ struct FormatColumnInfo {
     SlotDescriptor* slot_desc;
     bool decode_needed = true;
 
-    std::string formatted_name(bool case_sensitive) const {
-        auto n = std::string(name());
-        return case_sensitive ? n : boost::algorithm::to_lower_copy(n);
-    }
+    std::string formatted_name(bool case_sensitive) const { return Utils::format_name(name(), case_sensitive); }
     std::string_view name() const { return slot_desc->col_name(); }
     int32_t col_unique_id() const { return slot_desc->col_unique_id(); }
     std::string_view col_physical_name() const { return slot_desc->col_physical_name(); }
@@ -282,6 +289,8 @@ struct FormatScanContext {
     int64_t scan_range_length = std::numeric_limits<int64_t>::max();
     int32_t scan_range_id = -1;
     std::map<int32_t, TExprMinMaxValue> min_max_values;
+    // Per slot, how many values of its [null?, min, max] the batches too small to hold them all have emitted.
+    std::unordered_map<int32_t, size_t> min_max_value_cursors;
     std::map<int32_t, TExpr> extended_column_exprs;
     std::optional<int64_t> first_row_id;
     int64_t file_record_count = 0;

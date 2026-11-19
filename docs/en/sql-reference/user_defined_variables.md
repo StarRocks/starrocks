@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 2.5 and later versions support user-defined variables."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # User-defined variables

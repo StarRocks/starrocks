@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks FE 配置参数完整参考：fe.conf 或 ADMIN SET FRONTEND CONFIG 可配置的所有参数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import FEConfigMethod from '../../../_assets/commonMarkdown/FE_config_method.mdx'
@@ -46,6 +47,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <StaticFEConfigNote />
 
 ## 参数组
+
+存算分离 Compaction 的表级调度控制，参见
+[`lake_compaction_admission_mode` 和 `lake_compaction_allow_table_ids`](./shared_lake_other.md#lake_compaction_admission_mode)。
+默认 `NORMAL` 模式保持现有行为；显式选择 `ALLOWLIST` 后才限制允许调度的表。
 
 参数分为以下几类：
 

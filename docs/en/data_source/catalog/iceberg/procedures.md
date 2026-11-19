@@ -3,11 +3,11 @@ sidebar_position: 70
 displayed_sidebar: docs
 keywords: ['iceberg', 'procedures', 'fast forward', 'cherry pick', 'expire snapshots', 'rewrite data files', 'add files', 'register table', 'rollback to snapshot', 'remove orphan files']
 description: "Iceberg catalog procedures in StarRocks for snapshot management, branch management, data maintenance, and metadata operations."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Iceberg Procedures
 
-import AutoMetaMaintenance from '../../../_assets/commonMarkdown/auto_meta_maintenance.mdx'
 
 StarRocks Iceberg Catalog supports a variety of procedures for managing Iceberg tables, including snapshot management, branch management, data maintenance, metadata management, and table management.
 
@@ -37,6 +37,52 @@ Roll back the table to snapshot with ID 98765:
 ```SQL
 ALTER TABLE iceberg.sales.order
 EXECUTE rollback_to_snapshot(98765);
+```
+
+### Rollback to timestamp
+
+Rolls back the table to the latest snapshot that was committed before the specified timestamp. The timestamp is interpreted in the session time zone.
+
+#### `rollback_to_timestamp` Syntax
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+EXECUTE rollback_to_timestamp(<timestamp>)
+```
+
+#### Parameters
+
+`timestamp`: The table is rolled back to the latest snapshot committed before this point in time. Format: 'YYYY-MM-DD HH:MM:SS'. An error is returned if no snapshot was committed before it.
+
+#### Example
+
+Roll back the table to its state before 2025-01-01 00:00:00:
+
+```SQL
+ALTER TABLE iceberg.sales.order
+EXECUTE rollback_to_timestamp('2025-01-01 00:00:00');
+```
+
+### Set current snapshot
+
+Sets the table's current snapshot to the specified snapshot ID. Unlike `rollback_to_snapshot`, the snapshot does not need to be an ancestor of the current snapshot, so you can use it to move the table forward again to a snapshot that was rolled back.
+
+#### `set_current_snapshot` Syntax
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+EXECUTE set_current_snapshot(<snapshot_id>)
+```
+
+#### Parameters
+
+`snapshot_id`: ID of the snapshot to set as the current snapshot of the table.
+
+#### Example
+
+```SQL
+ALTER TABLE iceberg.sales.order
+EXECUTE set_current_snapshot(98765);
 ```
 
 ### Cherry pick a snapshot
@@ -270,8 +316,6 @@ Rewrite the data manifests of the current snapshot:
 ALTER TABLE iceberg.sales.order
 EXECUTE rewrite_manifests()
 ```
-
-<AutoMetaMaintenance />
 
 ## Table management
 

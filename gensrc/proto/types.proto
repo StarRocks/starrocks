@@ -256,12 +256,6 @@ enum GeoLogicalTypePB {
     GEO_LOGICAL_TYPE_GEOMETRY = 2;
 }
 
-enum GeoCoordinateSystemPB {
-    GEO_COORDINATE_SYSTEM_UNKNOWN = 0;
-    GEO_COORDINATE_SYSTEM_SPHERICAL = 1;
-    GEO_COORDINATE_SYSTEM_CARTESIAN = 2;
-}
-
 enum GeoEdgeAlgorithmPB {
     GEO_EDGE_ALGORITHM_UNKNOWN = 0;
     GEO_EDGE_ALGORITHM_SPHERICAL = 1;
@@ -272,11 +266,7 @@ enum GeoEdgeAlgorithmPB {
     GEO_EDGE_ALGORITHM_PLANAR = 6;
 }
 
-enum GeoEncodingPB {
-    GEO_ENCODING_UNKNOWN = 0;
-    GEO_ENCODING_WKB = 1;
-}
-
+// Coordinate dimension of one WKB value, as decoded from its own header.
 enum GeoDimensionPB {
     GEO_DIMENSION_UNKNOWN = 0;
     GEO_DIMENSION_XY = 1;
@@ -286,29 +276,14 @@ enum GeoDimensionPB {
     GEO_DIMENSION_MIXED = 5;
 }
 
-enum GeoValidationStatePB {
-    GEO_VALIDATION_STATE_UNKNOWN = 0;
-    GEO_VALIDATION_STATE_UNVALIDATED = 1;
-    GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED = 2;
-    GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED = 3;
-}
-
-// Semantic and physical metadata for native geo types.
+// Semantic type metadata for native geo types.
 message GeoTypeDescPB {
     optional GeoLogicalTypePB logical_type = 1;
-    optional GeoCoordinateSystemPB coordinate_system = 2;
-    optional GeoEdgeAlgorithmPB edge_algorithm = 3;
-    optional string crs = 4;
-    optional int32 srid = 5;
-}
-
-message GeoStorageDescPB {
-    optional GeoEncodingPB encoding = 1;
-    optional GeoDimensionPB dimension = 2;
-    optional GeoValidationStatePB validation_state = 3;
+    optional GeoEdgeAlgorithmPB edge_algorithm = 2;
+    optional string crs = 3;
+    optional int32 srid = 4;
 }
 
 message GeoColumnDescPB {
     optional GeoTypeDescPB type = 1;
-    optional GeoStorageDescPB storage = 2;
 }

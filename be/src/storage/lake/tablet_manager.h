@@ -29,6 +29,7 @@
 #include "gen_cpp/Types_types.h" // for PUniqueId
 #include "gutil/macros.h"
 #include "platform/store_path.h"
+#include "storage/lake/metacache_key.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/options.h"
 #include "storage/lake/tablet_metadata.h"
@@ -303,6 +304,11 @@ public:
 
     Status put_txn_vlog(const TxnLogPtr& log, int64_t version);
 
+    // Preserve statement-local write metadata and order in a versioned log. A single log keeps the
+    // legacy format at the legacy location; multiple logs go to the separate group file, in a distinct
+    // checksummed format that older readers reject. Neither is ever written over the other's file.
+    Status put_txn_vlog_group(const TxnLogVector& logs, int64_t version);
+
     // |expected_tablet_ids| is the set of tablets this combined txn log must cover. A combined txn
     // log is the only record of those tablets' rowset metadata: publish looks each tablet up inside
     // it and has no per-tablet fallback, so an object written short of an entry leaves the
@@ -328,9 +334,25 @@ public:
 
     StatusOr<TxnLogPtr> get_txn_slog(const std::string& path, bool fill_cache = true);
 
-    StatusOr<TxnLogPtr> get_txn_vlog(int64_t tablet_id, int64_t version);
-
+    // Reads a legacy single-log version file. A version may be stored as a statement group instead, so
+    // read the version log of a tablet with get_txn_vlog_group(tablet_id, version).
     StatusOr<TxnLogPtr> get_txn_vlog(const std::string& path, bool fill_cache = true);
+
+    // Reads both legacy single-log vlogs and ordered statement groups, told apart by the group header,
+    // which a group file must carry. The group is not stored in the single-TxnLog metacache, where
+    // retaining just one statement would lose transaction data. Neither file is ever rewritten in the
+    // other format, so a cached copy stays valid and reads may use the disk cache.
+    StatusOr<TxnLogVector> get_txn_vlog_group(const std::string& path, bool fill_cache = true);
+
+    // Reads the version log of a tablet: the legacy file when it exists, otherwise the statement group.
+    // Both exist only after a retry straddled a writer-flag change; the legacy file then wins unless it
+    // is damaged. Sets |path|, when given, to the file read. With neither file it reports the legacy file's
+    // NotFound and path, as the read did before statement groups existed.
+    StatusOr<TxnLogVector> get_txn_vlog_group(int64_t tablet_id, int64_t version, std::string* path = nullptr);
+    // The rest of get_txn_vlog_group(tablet_id, version) after the legacy file was read: |legacy| is what
+    // get_txn_vlog() returned for it. Probes the group only when the legacy file is missing or damaged.
+    StatusOr<TxnLogVector> resolve_txn_vlog(int64_t tablet_id, int64_t version, StatusOr<TxnLogPtr> legacy,
+                                            std::string* path = nullptr);
 
     StatusOr<TabletSchemaPtr> get_output_rowset_schema(std::vector<uint32_t>& input_rowset,
                                                        const TabletMetadata* metadata);
@@ -390,6 +412,15 @@ public:
 
     std::string bundle_tablet_metadata_location(int64_t tablet_id, int64_t version) const;
 
+    // Keeps |metadata|, one tablet's publish result under file bundling that the aggregator may never put into
+    // the version's bundle, in this node's local disk cache (the datacache) and nowhere else: a retry of the
+    // publish on this node reads it back. Never written to object storage and never deleted; the cache evicts it
+    // like any other entry. NotSupported when the local disk cache is not enabled.
+    Status put_partial_tablet_metadata(const TabletMetadataPtr& metadata);
+
+    // Reads what put_partial_tablet_metadata() kept on this node. NotFound when there is none.
+    StatusOr<TabletMetadataPtr> get_partial_tablet_metadata(int64_t tablet_id, int64_t version, int64_t expected_gtid);
+
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id) const;
 
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id, const PUniqueId& load_id) const;
@@ -397,6 +428,8 @@ public:
     std::string txn_slog_location(int64_t tablet_id, int64_t txn_id) const;
 
     std::string txn_vlog_location(int64_t tablet_id, int64_t version) const;
+
+    std::string txn_vlog_group_location(int64_t tablet_id, int64_t version) const;
 
     std::string combined_txn_log_location(int64_t tablet_id, int64_t txn_id) const;
 
@@ -440,10 +473,10 @@ public:
     // only for TEST purpose
     void TEST_set_global_schema_cache(int64_t index_id, TabletSchemaPtr schema);
 
-    // Update the cache size of the segment with the given key. The update is applied only when the
-    // key still maps to `segment`, so that a cache entry replaced by a different instance in the
-    // meantime is not charged with this segment's memory cost.
-    void update_segment_cache_size(std::string_view key, size_t mem_cost, const Segment* segment);
+    // Update the cache size of the segment identified by the file, including its bundle offset.
+    // Apply only when the key still maps to `segment`, so a cache entry replaced by another
+    // instance in the meantime is not charged with this segment's memory cost.
+    void update_segment_cache_size(const FileInfo& file, size_t mem_cost, const Segment* segment);
 
     // If |stats| is not null and the segment footer is read, the read is added to it.
     StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
@@ -453,6 +486,10 @@ public:
     StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, const LakeIOOptions& lake_io_opts,
                                       bool fill_meta_cache, TabletSchemaPtr tablet_schema,
                                       OlapReaderStatistics* stats = nullptr);
+    // The metadata cache entry load_segment() would return without reading anything: one whose footer is already
+    // open and that was opened with |tablet_schema|. nullptr otherwise, including for an entry still being opened.
+    // Does not block, and counts a cache hit only for a segment it returns: on nullptr the caller loads the segment.
+    SegmentPtr lookup_opened_segment(const FileInfo& segment_info, const TabletSchemaPtr& tablet_schema);
 
     StatusOr<TabletSchemaPtr> get_tablet_schema(int64_t tablet_id, int64_t* version_hint = nullptr);
 
@@ -476,9 +513,9 @@ public:
     TabletSchemaPtr get_cached_schema(int64_t schema_id);
 
 private:
-    static std::string global_schema_cache_key(int64_t index_id);
-    static std::string tablet_schema_cache_key(int64_t tablet_id);
-    static std::string tablet_latest_metadata_cache_key(int64_t tablet_id);
+    static MetacacheKey global_schema_cache_key(int64_t index_id);
+    static MetacacheKey tablet_schema_cache_key(int64_t tablet_id);
+    static MetacacheKey tablet_latest_metadata_cache_key(int64_t tablet_id);
 
     StatusOr<TabletSchemaPtr> load_and_parse_schema_file(const std::string& path);
     StatusOr<TabletSchemaPtr> get_tablet_schema_by_id(int64_t tablet_id, int64_t schema_id);

@@ -167,9 +167,15 @@ TEST_F(DateColumnReaderTest, test_datetime_dst_timezone_matches_cctz) {
             for (int64_t second : seconds) {
                 const int64_t sub = static_cast<int64_t>(rng() % per_second);
                 values.push_back(second * per_second + (second < 0 ? -sub : sub));
+                // floor the seconds, so a value before 1970 keeps a non-negative fraction of a second
+                int64_t floor_second = values.back() / per_second;
+                int64_t fraction = values.back() % per_second;
+                if (fraction < 0) {
+                    floor_second -= 1;
+                    fraction += per_second;
+                }
                 TimestampValue tv;
-                tv.from_unixtime(values.back() / per_second, values.back() % per_second * (1000000 / per_second),
-                                 timezone);
+                tv.from_unixtime(floor_second, fraction * (1000000 / per_second), timezone);
                 want.push_back(tv.to_string());
             }
 

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将字符串转换为大写形式；upper 函数的别名。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ucase

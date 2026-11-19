@@ -141,10 +141,10 @@ struct TStatisticData {
     18: optional i64 collectedPartitionCount
     19: optional i64 perPartitionNdvSum
     // Two nested subsets of those partitions, picked by a hash of the partition name - about a third
-    // and about two thirds of them: the merged distinct count over each, and how many partitions each
-    // holds. Next to countDistinct over all of them they trace how the distinct count grows as
-    // partitions are added, which is what the read side extrapolates to the partitions that were not
-    // collected.
+    // and about two thirds of them (STATISTIC_EXTERNAL_QUERY_V4_VERSION): the merged distinct count
+    // over each, and how many partitions each holds. Next to countDistinct over all of them they trace
+    // how the distinct count grows as partitions are added, which is what the read side extrapolates
+    // to the partitions that were not collected.
     20: optional i64 thirdNdv
     21: optional i64 twoThirdsNdv
     22: optional i64 thirdPartitionCount

@@ -2,6 +2,7 @@
 sidebar_position: 80
 displayed_sidebar: docs
 description: "StarRocks stores its audit logs in the local file fe/log/fe.audit.log rather than an internal database."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Manage audit logs within StarRocks via AuditLoader
@@ -78,7 +79,7 @@ After a partition is created, you can move on to the next step.
 
 :::note
 
-If the table already exists from an earlier version, add the columns that were introduced since, otherwise the corresponding fields are silently dropped when the audit logs are loaded. For example, `errorMessage` is introduced in v4.2.0:
+If the table already exists from an earlier version, add the columns that were introduced since, otherwise the corresponding fields are silently dropped when the audit logs are loaded. For example, `errorMessage` is introduced in v4.1.6:
 
 ```SQL
 ALTER TABLE starrocks_audit_db__.starrocks_audit_tbl__

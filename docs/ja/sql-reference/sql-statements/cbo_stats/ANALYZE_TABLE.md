@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CBO 統計情報を収集するための手動収集タスクを作成します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ANALYZE TABLE

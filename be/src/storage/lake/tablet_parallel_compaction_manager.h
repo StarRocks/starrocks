@@ -490,7 +490,7 @@ private:
                                                    const std::vector<SubtaskGroup>& groups);
 
     // Merge multiple subtask LCRM files into a single LCRM file for the merged compaction.
-    // This enables the light publish path (SST ingestion) for large rowset split compaction.
+    // Publish of a large rowset split compaction reads this merged LCRM.
     Status _merge_subtask_lcrm_files(int64_t tablet_id, int64_t txn_id, const std::vector<FileMetaPB>& lcrm_files,
                                      const std::vector<int64_t>& num_rows_per_subtask,
                                      TxnLogPB_OpCompaction* merged_compaction);

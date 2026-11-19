@@ -886,11 +886,10 @@ Buffer<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* state, O
     TDescriptorTableBuilder builder;
     TTupleDescriptorBuilder b3;
 
-    TypeDescriptor type(TYPE_DATETIME);
     DescriptorTbl* tbl;
     std::vector<SlotDescriptor*> slots;
     TSlotDescriptorBuilder b2;
-    b2.column_name("c0").type(type).id(0).nullable(true);
+    b2.column_name("c0").type(TYPE_DATETIME_DESC).id(0).nullable(true);
     b3.add_slot(b2.build());
     b3.build(&builder);
 
@@ -905,7 +904,7 @@ Buffer<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* state, O
     CHECK(st.ok()) << st.to_string();
 
     auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnHelper::create_column(type, true), 0);
+    chunk->append_column(ColumnHelper::create_column(TYPE_DATETIME_DESC, true), 0);
 
     st = reader.fill_chunk(&chunk);
     CHECK(st.ok()) << st.to_string();
@@ -1028,19 +1027,18 @@ static std::pair<std::string, std::string> decode_ts_min_max(RuntimeState* state
                                                              const orc::proto::ColumnStatistics& stats,
                                                              int64_t tz_offset_in_seconds) {
     ORC_UNIQUE_PTR<orc::Type> orc_type = orc::createPrimitiveType(kind);
-    TypeDescriptor type(TYPE_DATETIME);
     TDescriptorTableBuilder builder;
     TTupleDescriptorBuilder tuple;
     TSlotDescriptorBuilder slot_builder;
-    slot_builder.column_name("c0").type(type).id(0).nullable(false);
+    slot_builder.column_name("c0").type(TYPE_DATETIME_DESC).id(0).nullable(false);
     tuple.add_slot(slot_builder.build());
     tuple.build(&builder);
     DescriptorTbl* tbl = nullptr;
     CHECK(DescriptorTbl::create(state, pool, builder.desc_tbl(), &tbl, config::vector_chunk_size).ok());
     SlotDescriptor* slot = tbl->get_slot_descriptor(0);
 
-    auto min_col = ColumnHelper::create_column(type, false);
-    auto max_col = ColumnHelper::create_column(type, false);
+    auto min_col = ColumnHelper::create_column(TYPE_DATETIME_DESC, false);
+    auto max_col = ColumnHelper::create_column(TYPE_DATETIME_DESC, false);
     CHECK(OrcMinMaxDecoder::decode(slot, orc_type.get(), stats, min_col.get(), max_col.get(), tz_offset_in_seconds)
                   .ok());
     return {down_cast<TimestampColumn*>(min_col.get())->get_data()[0].to_string(),
@@ -2474,7 +2472,7 @@ TEST_F(OrcChunkReaderTest, GetFileSchema) {
               {"col_string", TYPE_VARCHAR_DESC},
               {"col_char", TypeDescriptor::create_char_type(10)},
               {"col_varchar", TypeDescriptor::create_varchar_type(10)},
-              {"col_binary", TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
+              {"col_binary", TYPE_VARBINARY_DESC},
               {"col_decimal", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 19)},
               {"col_timestamp", TYPE_DATETIME_DESC},
               {"col_date", TYPE_DATE_DESC}}},

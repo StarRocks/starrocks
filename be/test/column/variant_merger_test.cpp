@@ -234,9 +234,10 @@ static MutableColumnPtr build_nullable_variant_column_from_timestamp_ntz_micros(
 }
 
 PARALLEL_TEST(VariantColumnMergerTest, choose_common_type_numeric_and_decimal_cases) {
+    // A BIGINT does not fit a double exactly, so a BIGINT / DOUBLE path is hoisted to VARIANT.
     auto numeric = VariantColumnMerger::choose_common_type(TYPE_BIGINT_DESC, TYPE_DOUBLE_DESC);
     ASSERT_TRUE(numeric.ok());
-    ASSERT_EQ(TYPE_DOUBLE_DESC, numeric.value());
+    ASSERT_EQ(TypeDescriptor(TYPE_VARIANT), numeric.value());
 
     auto decimal =
             VariantColumnMerger::choose_common_type(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 2),
@@ -270,8 +271,7 @@ PARALLEL_TEST(VariantColumnMergerTest, cast_const_variant_typed_column_uses_oute
 
 PARALLEL_TEST(VariantColumnMergerTest, cast_variant_typed_column_to_varchar_formats_rows) {
     auto src = build_nullable_variant_column_from_json({"\"dept_0\"", "100", "null"}, {0, 0, 0});
-    auto casted =
-            VariantColumnMerger::cast_typed_column(*src, TypeDescriptor(TYPE_VARIANT), TypeDescriptor(TYPE_VARCHAR));
+    auto casted = VariantColumnMerger::cast_typed_column(*src, TypeDescriptor(TYPE_VARIANT), TYPE_VARCHAR_DESC);
     ASSERT_TRUE(casted.ok()) << casted.status().to_string();
 
     const auto* nullable = down_cast<const NullableColumn*>(casted.value().get());
@@ -376,7 +376,7 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_type_conflict_hoist_varian
     append_primitive_int8_row(src1_metadata.get(), src1_remain.get(), 2);
     MutableColumns src1_typed;
     src1_typed.emplace_back(build_nullable_varchar_column({"x"}, {0}));
-    src1->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(src1_typed), std::move(src1_metadata),
+    src1->set_shredded_columns({"a"}, {TYPE_VARCHAR_DESC}, std::move(src1_typed), std::move(src1_metadata),
                                std::move(src1_remain));
 
     Columns inputs{src0, src1};
@@ -419,11 +419,11 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_numeric_widen) {
 
     auto* merged = down_cast<VariantColumn*>(merged_status.value().get());
     ASSERT_EQ((std::vector<std::string>{"a"}), merged->shredded_paths());
-    ASSERT_EQ((std::vector<TypeDescriptor>{TYPE_DOUBLE_DESC}), merged->shredded_types());
-
-    const auto* typed_a = down_cast<const NullableColumn*>(merged->typed_column_by_index(0));
-    ASSERT_DOUBLE_EQ(10.0, typed_a->get(0).get_double());
-    ASSERT_DOUBLE_EQ(30.5, typed_a->get(1).get_double());
+    // A BIGINT does not fit a double exactly, so a BIGINT / DOUBLE path is hoisted to VARIANT, which keeps the type
+    // of each value.
+    ASSERT_EQ((std::vector<TypeDescriptor>{TypeDescriptor(TYPE_VARIANT)}), merged->shredded_types());
+    assert_variant_row_json(merged, 0, R"({"a":10})");
+    assert_variant_row_json(merged, 1, R"({"a":30.5})");
 }
 
 PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_array_conflict_hoist_variant) {
@@ -548,7 +548,7 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_decimal_conflict_hoist_var
     append_primitive_int8_row(src1_metadata.get(), src1_remain.get(), 2);
     MutableColumns src1_typed;
     src1_typed.emplace_back(build_nullable_varchar_column({"x"}, {0}));
-    src1->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(src1_typed), std::move(src1_metadata),
+    src1->set_shredded_columns({"a"}, {TYPE_VARCHAR_DESC}, std::move(src1_typed), std::move(src1_metadata),
                                std::move(src1_remain));
 
     Columns inputs{src0, src1};
@@ -805,15 +805,13 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_into_rejects_duplicate_paths_in_dst
 PARALLEL_TEST(VariantColumnMergerTest, choose_common_type_string_like_types_are_compatible) {
     // Any two string-like types (VARCHAR/CHAR/VARBINARY/BINARY) share physical BinaryColumn
     // storage and should resolve to the lhs type rather than hoisting to VARIANT.
-    auto varchar_varbinary =
-            VariantColumnMerger::choose_common_type(TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARBINARY));
+    auto varchar_varbinary = VariantColumnMerger::choose_common_type(TYPE_VARCHAR_DESC, TypeDescriptor(TYPE_VARBINARY));
     ASSERT_TRUE(varchar_varbinary.ok());
-    EXPECT_EQ(TypeDescriptor(TYPE_VARCHAR), varchar_varbinary.value());
+    EXPECT_EQ(TYPE_VARCHAR_DESC, varchar_varbinary.value());
 
-    auto char_varchar =
-            VariantColumnMerger::choose_common_type(TypeDescriptor(TYPE_CHAR), TypeDescriptor(TYPE_VARCHAR));
+    auto char_varchar = VariantColumnMerger::choose_common_type(TYPE_CHAR_DESC, TYPE_VARCHAR_DESC);
     ASSERT_TRUE(char_varchar.ok());
-    EXPECT_EQ(TypeDescriptor(TYPE_CHAR), char_varchar.value());
+    EXPECT_EQ(TYPE_CHAR_DESC, char_varchar.value());
 
     auto varbinary_binary =
             VariantColumnMerger::choose_common_type(TypeDescriptor(TYPE_VARBINARY), TypeDescriptor(TYPE_BINARY));
@@ -821,7 +819,7 @@ PARALLEL_TEST(VariantColumnMergerTest, choose_common_type_string_like_types_are_
     EXPECT_EQ(TypeDescriptor(TYPE_VARBINARY), varbinary_binary.value());
 
     // A string-like type vs a non-string-like type falls through to numeric/variant hoisting.
-    auto varchar_bigint = VariantColumnMerger::choose_common_type(TypeDescriptor(TYPE_VARCHAR), TYPE_BIGINT_DESC);
+    auto varchar_bigint = VariantColumnMerger::choose_common_type(TYPE_VARCHAR_DESC, TYPE_BIGINT_DESC);
     ASSERT_TRUE(varchar_bigint.ok());
     EXPECT_EQ(TypeDescriptor(TYPE_VARIANT), varchar_bigint.value());
 }
@@ -831,8 +829,7 @@ PARALLEL_TEST(VariantColumnMergerTest, cast_typed_column_string_like_is_noop_clo
     // without any byte-level conversion (they all use BinaryColumn storage).
     auto src = build_nullable_varchar_column({"hello", "world", ""}, {0, 0, 1});
 
-    auto to_varbinary =
-            VariantColumnMerger::cast_typed_column(*src, TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARBINARY));
+    auto to_varbinary = VariantColumnMerger::cast_typed_column(*src, TYPE_VARCHAR_DESC, TypeDescriptor(TYPE_VARBINARY));
     ASSERT_TRUE(to_varbinary.ok()) << to_varbinary.status().to_string();
     ASSERT_EQ(3, to_varbinary.value()->size());
     const auto* result = down_cast<const NullableColumn*>(to_varbinary.value().get());
@@ -841,8 +838,7 @@ PARALLEL_TEST(VariantColumnMergerTest, cast_typed_column_string_like_is_noop_clo
     EXPECT_EQ(Slice("world"), result_bin->get_slice(1));
     EXPECT_EQ(1, result->null_column_data()[2]);
 
-    auto to_char =
-            VariantColumnMerger::cast_typed_column(*src, TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_CHAR));
+    auto to_char = VariantColumnMerger::cast_typed_column(*src, TYPE_VARCHAR_DESC, TYPE_CHAR_DESC);
     ASSERT_TRUE(to_char.ok()) << to_char.status().to_string();
     ASSERT_EQ(3, to_char.value()->size());
 }
@@ -897,6 +893,105 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_array_of_variant_path_with_variant_
     EXPECT_EQ(TYPE_VARIANT, merged->shredded_types()[merged->find_shredded_path("a")].type);
     assert_variant_row_json(merged, 0, R"({"a":[{"k":1},{"k":2}],"x":1})");
     assert_variant_row_json(merged, 1, R"({"a":[3],"x":2})");
+}
+
+// A float and an integer are merged into a double only when the double holds every value of the integer type exactly.
+PARALLEL_TEST(VariantColumnMergerTest, choose_common_type_float_and_other_numbers_keep_their_types) {
+    const auto choose = [](const TypeDescriptor& lhs, const TypeDescriptor& rhs) {
+        auto common = VariantColumnMerger::choose_common_type(lhs, rhs);
+        EXPECT_TRUE(common.ok()) << common.status().to_string();
+        return common.ok() ? common.value() : TypeDescriptor(TYPE_NULL);
+    };
+    const TypeDescriptor largeint(TYPE_LARGEINT);
+    const TypeDescriptor variant(TYPE_VARIANT);
+
+    // Widening to DOUBLE would change the variant type (and the text) of the other side's values, so both sides keep
+    // their own type under VARIANT, whatever the order.
+    EXPECT_EQ(variant, choose(TYPE_INT_DESC, TYPE_DOUBLE_DESC));
+    EXPECT_EQ(variant, choose(TYPE_DOUBLE_DESC, TYPE_INT_DESC));
+    EXPECT_EQ(variant, choose(TYPE_SMALLINT_DESC, TYPE_FLOAT_DESC));
+    EXPECT_EQ(variant, choose(TYPE_FLOAT_DESC, TYPE_DOUBLE_DESC));
+    EXPECT_EQ(variant, choose(TYPE_BIGINT_DESC, TYPE_DOUBLE_DESC));
+    EXPECT_EQ(variant, choose(TYPE_DOUBLE_DESC, TYPE_BIGINT_DESC));
+    EXPECT_EQ(variant, choose(TYPE_BIGINT_DESC, TYPE_FLOAT_DESC));
+    EXPECT_EQ(variant, choose(largeint, TYPE_DOUBLE_DESC));
+    // The same type, and integers alone, are unchanged / widened: integer widths are one logical number type.
+    EXPECT_EQ(TYPE_DOUBLE_DESC, choose(TYPE_DOUBLE_DESC, TYPE_DOUBLE_DESC));
+    EXPECT_EQ(TYPE_BIGINT_DESC, choose(TYPE_INT_DESC, TYPE_BIGINT_DESC));
+}
+
+// The hoist that choose_common_type asks for must keep a BIGINT value that a double would round: 2^53 + 1 and the
+// largest BIGINT.
+PARALLEL_TEST(VariantColumnMergerTest, bigint_typed_column_hoisted_to_variant_keeps_the_exact_value) {
+    auto src = build_nullable_int64_column({9007199254740993LL, 9223372036854775807LL, -9007199254740993LL},
+                                           {0, 0, 0}); // 2^53 + 1, INT64_MAX, -(2^53 + 1)
+    auto casted = VariantColumnMerger::cast_typed_column(*src, TYPE_BIGINT_DESC, TypeDescriptor(TYPE_VARIANT));
+    ASSERT_TRUE(casted.ok()) << casted.status().to_string();
+
+    const auto* variant = down_cast<const VariantColumn*>(ColumnHelper::get_data_column(casted.value().get()));
+    ASSERT_NE(nullptr, variant);
+    assert_variant_row_json(variant, 0, "9007199254740993");
+    assert_variant_row_json(variant, 1, "9223372036854775807");
+    assert_variant_row_json(variant, 2, "-9007199254740993");
+}
+
+// One shredded path per input, as a scan produces from data files whose writers inferred different layouts.
+static MutableColumnPtr build_single_path_shredded_variant(std::string path, const TypeDescriptor& type,
+                                                           MutableColumnPtr typed) {
+    auto col = VariantColumn::create();
+    auto metadata = BinaryColumn::create();
+    auto remain = BinaryColumn::create();
+    for (size_t i = 0; i < typed->size(); ++i) {
+        append_primitive_int8_row(metadata.get(), remain.get(), 1);
+    }
+    MutableColumns typed_columns;
+    typed_columns.emplace_back(std::move(typed));
+    col->set_shredded_columns({std::move(path)}, {type}, std::move(typed_columns), std::move(metadata),
+                              std::move(remain));
+    return col;
+}
+
+static MutableColumnPtr build_nullable_double_column(const std::vector<double>& values) {
+    auto data = DoubleColumn::create();
+    auto null = NullColumn::create();
+    for (double v : values) {
+        data->append(v);
+        null->append(0);
+    }
+    return NullableColumn::create(std::move(data), std::move(null));
+}
+
+// Appending chunks whose shredded schemas differ (the per-chunk path that sorts, unions and exchanges take)
+// must keep every row and every value: BIGINT above 2^53 + DOUBLE + ARRAY on the same path, then a disjoint path.
+PARALLEL_TEST(VariantColumnMergerTest, append_across_shredded_schemas_keeps_rows_and_values) {
+    auto a_bigint = build_single_path_shredded_variant("a", TYPE_BIGINT_DESC,
+                                                       build_nullable_int64_column({9007199254740993, 2}, {0, 0}));
+    auto a_double = build_single_path_shredded_variant("a", TYPE_DOUBLE_DESC, build_nullable_double_column({1.5}));
+    auto a_array = build_single_path_shredded_variant("a", TYPE_ARRAY_BIGINT_DESC,
+                                                      build_nullable_array_int64_column({{1, 2}}, {0}));
+    auto b_varchar =
+            build_single_path_shredded_variant("b", TYPE_VARCHAR_DESC, build_nullable_varchar_column({"x"}, {0}));
+
+    auto dst = VariantColumn::create();
+    dst->append(*a_bigint);
+    ASSERT_EQ(2, dst->size());
+    dst->append(*a_double, 0, 1);
+    ASSERT_EQ(3, dst->size());
+    const uint32_t first[] = {0};
+    dst->append_selective(*a_array, first, 0, 1);
+    ASSERT_EQ(4, dst->size());
+    dst->append(*b_varchar, 0, 1);
+    ASSERT_EQ(5, dst->size());
+    dst->append_value_multiple_times(*a_bigint, 1, 2);
+    ASSERT_EQ(7, dst->size());
+
+    assert_variant_row_json(dst.get(), 0, R"({"a":9007199254740993})");
+    assert_variant_row_json(dst.get(), 1, R"({"a":2})");
+    assert_variant_row_json(dst.get(), 2, R"({"a":1.5})");
+    assert_variant_row_json(dst.get(), 3, R"({"a":[1,2]})");
+    assert_variant_row_json(dst.get(), 4, R"({"b":"x"})");
+    assert_variant_row_json(dst.get(), 5, R"({"a":2})");
+    assert_variant_row_json(dst.get(), 6, R"({"a":2})");
 }
 
 } // namespace starrocks

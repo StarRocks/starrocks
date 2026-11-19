@@ -1,0 +1,23 @@
+-- name: test_cse_conditional_throw_mode
+-- With ALLOW_THROW_EXCEPTION, a sub-expression that is evaluated only conditionally (an IF/CASE branch, the right side
+-- of AND/OR, a lambda body) must not be moved into the projection's common expressions: BE evaluates those for every
+-- row, so the query would fail on rows that never needed the expression.
+create database db_${uuid0};
+use db_${uuid0};
+create table t1 (id int, xs array<int>, j varchar(100)) duplicate key(id) distributed by hash(id) buckets 1 properties('replication_num' = '1');
+insert into t1 values (1, [], 'invalid');
+set sql_mode = concat(@@sql_mode, ',ALLOW_THROW_EXCEPTION');
+-- the failing expression appears twice, but only in branches no row takes
+select if(id > 0, null, cast(cast(parse_json(j) as varchar) as int)), if(id > 0, null, cast(cast(parse_json(j) as varchar) as int) + 1) from t1;
+select case when id > 0 then 0 else cast(cast(parse_json(j) as varchar) as int) end, case when id > 0 then 1 else cast(cast(parse_json(j) as varchar) as int) + 1 end from t1;
+select id > 0 or cast(cast(parse_json(j) as varchar) as int) > 0, id > 0 or cast(cast(parse_json(j) as varchar) as int) > 1 from t1;
+-- the lambda body is never evaluated for an empty array
+select array_map(x -> if(x > 0, 0, cast(cast(parse_json(j) as varchar) as int)) + if(x > 1, 0, cast(cast(parse_json(j) as varchar) as int) + 1), xs) from t1;
+-- an expression that is always evaluated still fails
+function: assert_query_error_contains("select cast(cast(parse_json(j) as varchar) as int), if(id > 0, null, cast(cast(parse_json(j) as varchar) as int) + 1) from t1", "cast from VARCHAR(invalid) to INT failed")
+-- one rand() referenced from two branches stays one evaluation
+create table t2 (id int) duplicate key(id) distributed by hash(id) buckets 1 properties('replication_num' = '1');
+insert into t2 select generate_series from table(generate_series(1, 1000));
+select count(*) from (select if(id > 0, r, 0) a, if(id > 0, r, 1) b from (select id, rand() r from t2) s) t where a = b;
+select count(*) from (select if(id > 0, r, 0) a, if(id > 0, r, 1) b from (select id, array_sum([rand(), cast(id as double)]) r from t2) s) t where a = b;
+drop database db_${uuid0};

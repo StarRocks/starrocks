@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "CREATE TABLE AS SELECT 创建新表并使用查询结果填充，支持同步和异步模式。"
 keywords: ['CTAS']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE TABLE AS SELECT

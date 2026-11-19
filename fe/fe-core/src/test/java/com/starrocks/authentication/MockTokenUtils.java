@@ -68,26 +68,42 @@ public class MockTokenUtils {
         return generateTestOIDCToken(validity, "12345", null);
     }
 
+    /**
+     * Same signer and standard claims as {@link #generateTestOIDCToken(long)}, but with the given
+     * custom claims instead of the default {@code preferred_username}. Nested {@link Map} values
+     * become nested JSON objects.
+     */
+    public String generateTestOIDCToken(long validity, Map<String, Object> extraClaims) throws Exception {
+        return generateTestOIDCToken(validity, "12345", "http://localhost:38080/realms/master", extraClaims);
+    }
+
     // issuer null: the token carries no iss claim.
     private String generateTestOIDCToken(long validity, String audience, String issuer) throws Exception {
+        return generateTestOIDCToken(validity, audience, issuer, Map.of("preferred_username", "harbor"));
+    }
+
+    private String generateTestOIDCToken(long validity, String audience, String issuer,
+                                         Map<String, Object> extraClaims) throws Exception {
         MockJwkMgr mockJwkMgr = new MockJwkMgr();
         RSASSASigner signer = new RSASSASigner(mockJwkMgr.loadPrivateKey("jwks-private-key.pem"));
         JWKSet jwkSet = mockJwkMgr.getJwkSet("signer-jwks.json");
 
-        JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
+        JWTClaimsSet.Builder builder = new JWTClaimsSet.Builder()
                 .issuer(issuer)
                 .subject("8f7f0fa5-e1eb-45d0-8e82-8c89c1a45663")
                 .audience(audience)
                 .issueTime(new Date())
-                .expirationTime(new Date(new Date().getTime() + validity))
-                .claim("preferred_username", "harbor")
-                .build();
+                .expirationTime(new Date(new Date().getTime() + validity));
+
+        for (Map.Entry<String, Object> entry : extraClaims.entrySet()) {
+            builder.claim(entry.getKey(), entry.getValue());
+        }
 
         JWSHeader.Builder headerBuilder = new JWSHeader.Builder(JWSAlgorithm.RS256)
                 .keyID(jwkSet.getKeys().get(0).getKeyID());
         SignedJWT signedJWT = new SignedJWT(
                 new JWSHeader(headerBuilder.build()),
-                claimsSet);
+                builder.build());
         signedJWT.sign(signer);
 
         return signedJWT.serialize();

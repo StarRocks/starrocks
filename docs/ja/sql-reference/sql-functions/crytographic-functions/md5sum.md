@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "複数の文字列の 128 ビットチェックサムを計算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # md5sum

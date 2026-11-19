@@ -71,6 +71,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ExternalScanPartitionPruneRule;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -1044,6 +1045,19 @@ public class PaimonMetadataTest {
         // partition with function predicate, limit 1
         metadata = new PaimonMetadata("paimon", environment, catalog, properties);
         params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(createDateCoalescePredicate)
+                .setLimit(1).setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L))).build();
+        result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
+        assertEquals(1, result.size());
+        assertEquals(1, result.get(0).getFiles().size());
+        assertEquals(6, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
+                .getPaimonSplitsInfo().getPaimonSplits().size());
+
+        // partition LIKE that cannot be pushed down ('_' is a wildcard), limit 1: no limit pruning, otherwise
+        // Paimon could return a split the BE filters out entirely while the matching ones are never scanned
+        ScalarOperator createDateLikePredicate = new LikePredicateOperator(LikePredicateOperator.LikeType.LIKE,
+                createDateColumn, ConstantOperator.createVarchar(dateFormatter.format(now).substring(0, 2) + "__%"));
+        metadata = new PaimonMetadata("paimon", environment, catalog, properties);
+        params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(createDateLikePredicate)
                 .setLimit(1).setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L))).build();
         result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
         assertEquals(1, result.size());
@@ -2520,6 +2534,7 @@ public class PaimonMetadataTest {
 
     @Test
     public void testView(@Mocked org.apache.paimon.view.View paimonView) throws Exception {
+        Identifier viewIdentifier = new Identifier("db", "test_view");
         //test createview
         new Expectations() {
             {
@@ -2538,6 +2553,9 @@ public class PaimonMetadataTest {
         //test getview
         new Expectations() {
             {
+                paimonNativeCatalog.getTable(viewIdentifier);
+                result = new Catalog.TableNotExistException(viewIdentifier);
+                minTimes = 0;
                 paimonNativeCatalog.getView((Identifier) any);
                 result = paimonView;
                 paimonView.query();
@@ -2553,17 +2571,25 @@ public class PaimonMetadataTest {
         //test drop normal
         DropTableStmt dropStmt = new DropTableStmt(true, new TableRef(QualifiedName.of(
                 Lists.newArrayList("paimon_catalog", "db", "test_view")), null, NodePosition.ZERO),
-                true, true);
-        metadata.dropTable(connectContext, dropStmt);
-
-        //test drop not exist
+                true, false);
         new Expectations() {
             {
-                paimonNativeCatalog.dropView((Identifier) any, true);
-                result = new Catalog.ViewNotExistException(new Identifier("test", "ViewNotExist"));
+                paimonNativeCatalog.dropView(viewIdentifier, true);
+                times = 1;
             }
         };
-        org.junit.jupiter.api.Assertions.assertThrows(StarRocksConnectorException.class,
-                () -> metadata.dropTable(connectContext, dropStmt));
+        metadata.dropTable(connectContext, dropStmt);
+
+        // A successful drop evicts the view. IF EXISTS then tolerates a missing native object.
+        new Expectations() {
+            {
+                paimonNativeCatalog.getView(viewIdentifier);
+                result = new Catalog.ViewNotExistException(viewIdentifier);
+            }
+        };
+        assertNull(metadata.getTable(connectContext, "db", "test_view"));
+        metadata.dropTable(connectContext, dropStmt);
+        DropTableStmt missing = new DropTableStmt(false, dropStmt.getTableRef(), true, false);
+        assertThrows(StarRocksConnectorException.class, () -> metadata.dropTable(connectContext, missing));
     }
 }

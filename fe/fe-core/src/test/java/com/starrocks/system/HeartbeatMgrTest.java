@@ -147,6 +147,36 @@ public class HeartbeatMgrTest {
     }
 
     @Test
+    public void testFrontendHbHandlerReadsLakeIndexPayloadRebuild() {
+        new MockUp<Util>() {
+            @Mock
+            public String getResultForUrl(String urlStr, String encodedAuthInfo, int connectTimeoutMs,
+                                          int readTimeoutMs) {
+                String reply = "{\"replayedJournalId\":191224,\"queryPort\":9131,\"rpcPort\":9121,\"status\":\"OK\","
+                        + "\"msg\":\"Success\",\"feStartTime\":1637288321250,\"feVersion\":\"2.0-ac45651a\"";
+                // An FE from before the rebuild does not send the key.
+                return urlStr.contains("192.168.1.1") ? reply + "}" : reply + ",\"rebuildsLakeIndexPayload\":true}";
+            }
+        };
+
+        HeartbeatResponse olderFe = new FrontendHeartbeatHandler(
+                new Frontend(FrontendNodeType.FOLLOWER, "older", "192.168.1.1", 9010), 0, "abcd").call();
+        Assertions.assertEquals(HbStatus.OK, olderFe.getStatus());
+        Assertions.assertFalse(((FrontendHbResponse) olderFe).rebuildsLakeIndexPayload());
+
+        HeartbeatResponse upgradedFe = new FrontendHeartbeatHandler(
+                new Frontend(FrontendNodeType.FOLLOWER, "upgraded", "192.168.1.2", 9010), 0, "abcd").call();
+        Assertions.assertEquals(HbStatus.OK, upgradedFe.getStatus());
+        Assertions.assertTrue(((FrontendHbResponse) upgradedFe).rebuildsLakeIndexPayload());
+
+        // The heartbeat to the FE itself does not go over HTTP.
+        HeartbeatResponse self = new FrontendHeartbeatHandler(
+                new Frontend(FrontendNodeType.FOLLOWER, "self", "192.168.1.3", 9010), 0, "abcd").call();
+        Assertions.assertEquals(HbStatus.OK, self.getStatus());
+        Assertions.assertTrue(((FrontendHbResponse) self).rebuildsLakeIndexPayload());
+    }
+
+    @Test
     public void testBrokerHbHandler(@Mocked TFileBrokerService.Client client) throws Exception {
         TBrokerOperationStatus status = new TBrokerOperationStatus();
         status.setStatusCode(TBrokerOperationStatusCode.OK);

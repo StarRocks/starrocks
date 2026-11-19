@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Create a new table in StarRocks."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE TABLE
@@ -852,7 +853,7 @@ PROPERTIES (
 )
 ```
 
-- `storage_volume`: The name of the storage volume used to store the cloud-native table you want to create. If this property is not specified, the default storage volume is used. This property is supported from v3.1 onwards.
+- `storage_volume`: The name of the storage volume used to store the cloud-native table you want to create. If this property is not specified, the storage volume of the database is used; if the database has no storage volume, the default storage volume is used. This property is supported from v3.1 onwards.
 
 - `datacache.enable`: Whether to enable the local disk cache. Default: `true`.
 
@@ -863,7 +864,7 @@ PROPERTIES (
   To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`.
   :::
 
-- `datacache.partition_duration`: The validity duration of the hot data. When the local disk cache is enabled, all data is loaded into the cache. When the cache is full, StarRocks deletes the less recently used data from the cache. When a query needs to scan the deleted data, StarRocks checks if the data is within the duration of validity. If the data is within the duration, StarRocks loads the data into the cache again. If the data is not within the duration, StarRocks does not load it into the cache. This property is a string value that can be specified with the following units: `YEAR`, `MONTH`, `DAY`, and `HOUR`, for example, `7 DAY` and `12 HOUR`. If it is not specified, all data is cached as the hot data.
+- `datacache.partition_duration`: The time range of the hot partitions, counted back from the current time. For a table partitioned by a DATE or DATETIME column, when a query scans a partition, StarRocks populates the cache with the scanned data only if the partition's range overlaps this time range (or, for list partitioning, if a partition value falls within it). Queries on other partitions still read data that is already cached, but they do not populate the cache and do not use the in-memory page cache. This property is checked against partition bounds at query time, not against the time when data was loaded, and it does not evict data that is already cached. It has no effect on tables that are neither range-partitioned by a single DATE or DATETIME column nor list-partitioned by a DATE or DATETIME column. This property is a string value in the format `<number> <unit>`, where the unit can be `YEAR`, `MONTH`, `WEEK`, `DAY`, `HOUR`, `MINUTE`, or `SECOND` (case-insensitive, singular or plural), for example, `7 DAY` and `12 HOUR`. You can combine several pairs, such as `1 DAY 12 HOUR`, but `YEAR`, `MONTH`, and `WEEK` cannot be combined with `HOUR`, `MINUTE`, or `SECOND`. If it is not specified, queries on all partitions populate the cache.
 
   :::note
   This property is available only when `datacache.enable` is set to `true`.
@@ -924,6 +925,8 @@ For cloud-native tables with Fast Schema Evolution v2 enabled, schema change job
 ### Forbid Base Compaction
 
 `base_compaction_forbidden_time_ranges`: The time range used to restrict Base Compaction for the table. Its effect depends on the table architecture and compaction policy, as described below. This property is supported from v3.2.13.
+
+**Version scope:** v3.2.13 is when this property became available for shared-nothing non-Primary Key tables, not for shared-data tables. The 4.1 series does not support setting it on shared-data tables; FE rejects the setting. The shared-data behavior below is supported from v4.2. The property defines when automatic Base Compaction is forbidden; manual `ALTER TABLE ... COMPACT` requests bypass the restriction in versions that support it. See [Version support for shared-data Base Compaction](../../../administration/management/compaction.md#primary-key-base-compaction-versions).
 
 For shared-data Primary Key tables and non-Primary Key tables using the Base and Cumulative policy, the range restricts automatic Base Compaction when compaction is dispatched; Cumulative Compaction can still run. For non-Primary Key tables using the Size Tiered policy, the range only disables the delete-version threshold that forces Base Compaction. Normal Size Tiered level selection can still choose the oldest level during the forbidden period. The BE/CN parameter `base_compaction_interval_seconds_since_last_operation` applies the same restrictions until the minimum interval has elapsed. Manual `ALTER TABLE ... COMPACT` requests override these restrictions.
 
@@ -1005,6 +1008,20 @@ PROPERTIES (
 - `flat_json.null.factor` (Optional): The proportion threshold of NULL values in the column. A column will not be extracted by Flat JSON if its proportion of NULL values is higher than this threshold. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `0.3`.
 - `flat_json.sparsity.factor` (Optional): The proportion threshold of columns with the same name. A column will not be extracted by Flat JSON if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `0.3`.
 - `flat_json.column.max` (Optional): The maximum number of sub-fields that can be extracted by Flat JSON. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `100`.
+
+### Target tablet size of a range-distributed table
+
+*Available only on range-distributed tables*
+
+You can set the property `tablet_reshard_target_size` to give a range-distributed table its own target tablet size. Automatic tablet split and merge of the table use this value in place of the FE configuration `tablet_reshard_target_size` while that configuration is positive. Unit: bytes. The value must be a positive integer.
+
+```SQL
+PROPERTIES (
+    "tablet_reshard_target_size" = "4294967296"
+)
+```
+
+The property has no default value. A table without it follows the FE configuration `tablet_reshard_target_size`. On a table that is not range-distributed, the statement fails with `tablet_reshard_target_size is only supported for range-distributed tables`. You can change or remove this property with [ALTER TABLE](ALTER_TABLE.md). For details, see [Data distribution - Target tablet size](../../../table_design/data_distribution/Data_distribution.md#target-tablet-size).
 
 ### Skip a table in automatic statistics collection
 

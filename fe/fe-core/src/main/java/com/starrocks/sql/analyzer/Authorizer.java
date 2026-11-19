@@ -50,7 +50,6 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.pipe.PipeName;
-import com.starrocks.sql.common.AIModelConfigs;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.ListUtils;
@@ -90,14 +89,17 @@ public class Authorizer {
             AccessDeniedException.reportAccessDenied(null, context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.USAGE.name(), "AI FUNCTION", function.functionName());
         }
-        AIProvider provider = AIModelConfigs.resolveProvider(context.getGlobalStateMgr().getAIProviderMgr(), call);
-        String name = provider.getName();
+    }
+
+    public static void checkAIProviderUsage(ConnectContext context, AIProvider provider) {
+        if (context.getCurrentUserIdentity() == null) {
+            throw new SemanticException("AI providers require a user identity in the execution context");
+        }
         try {
             checkAIProviderAction(context, provider, PrivilegeType.USAGE);
-            AIModelConfigs.validateProvider(provider);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(null, context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.USAGE.name(), "AI PROVIDER", name);
+                    PrivilegeType.USAGE.name(), "AI PROVIDER", provider.getName());
         }
     }
 
@@ -272,6 +274,11 @@ public class Authorizer {
     public static void checkAnyActionOnTableLikeObject(ConnectContext context, String dbName,
                                                        BasicTable tableBasicInfo) throws AccessDeniedException {
         doCheckTableLikeObject(context, dbName, tableBasicInfo, null);
+    }
+
+    public static void checkActionOnTableLikeObject(ConnectContext context, String dbName, BasicTable tableBasicInfo,
+                                                    PrivilegeType privilegeType) throws AccessDeniedException {
+        doCheckTableLikeObject(context, dbName, tableBasicInfo, privilegeType);
     }
 
     private static void doCheckTableLikeObject(ConnectContext context, String dbName,

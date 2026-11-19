@@ -195,4 +195,43 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
         assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01' and hour < 10",
                 "partitions=2/2");
     }
+
+    @Test
+    public void testFunctionPredicatePrunesPartitions() throws Exception {
+        // o_orderdate is a DATE partition column with one partition per day from 1991-01-01 to 1993-12-30 (1095 days)
+        String sql = "select * from orders where year(o_orderdate) = 1992";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "9: o_orderdate >= '1992-01-01'", "9: o_orderdate < '1993-01-01'", "partitions=366/1095");
+
+        sql = "select * from orders where date_trunc('month', o_orderdate) = '1992-02-01'";
+        assertContains(getFragmentPlan(sql), "partitions=29/1095");
+
+        connectContext.getSessionVariable().setEnableHiveFunctionPredicatePruning(false);
+        try {
+            plan = getFragmentPlan("select * from orders where year(o_orderdate) = 1992");
+            assertNotContains(plan, "o_orderdate >= '1992-01-01'");
+        } finally {
+            connectContext.getSessionVariable().setEnableHiveFunctionPredicatePruning(true);
+        }
+    }
+
+    @Test
+    public void testFunctionPredicateOnDataColumn() throws Exception {
+        // l_shipdate is not a partition column: the derived range goes to the BE and its min/max row group check
+        String plan = getFragmentPlan("select * from hive0.tpch.lineitem where year(l_shipdate) = 1995");
+        assertContains(plan, "NON-PARTITION PREDICATES: year(11: l_shipdate) = 1995, "
+                + "11: l_shipdate >= '1995-01-01', 11: l_shipdate < '1996-01-01'");
+        assertContains(plan, "MIN/MAX PREDICATES: 11: l_shipdate >= '1995-01-01', 11: l_shipdate < '1996-01-01'");
+    }
+
+    @Test
+    public void testFunctionPredicateInList() throws Exception {
+        // on a partition column the OR of the IN ranges prunes partitions (1992-01 and 1993-03: 31 + 31 days)
+        String plan = getFragmentPlan("select * from orders "
+                + "where date_trunc('month', o_orderdate) in ('1992-01-01', '1993-03-01')");
+        assertContains(plan, "partitions=62/1095");
+        // on a data column it would only be evaluated on every row next to the IN itself
+        plan = getFragmentPlan("select * from hive0.tpch.lineitem where year(l_shipdate) in (1995, 1997)");
+        assertNotContains(plan, "l_shipdate >= '1995-01-01'");
+    }
 }

@@ -36,8 +36,8 @@
 namespace starrocks {
 namespace {
 TypeDescriptor coverage_type() {
-    return TypeDescriptor::create_geo_type(TYPE_GEOMETRY, {GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN,
-                                                           GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857});
+    return TypeDescriptor::create_geo_type(TYPE_GEOMETRY,
+                                           {GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857});
 }
 std::string bytes(const std::string& text) {
     WkbGeometry geometry;
@@ -70,8 +70,8 @@ StatusOr<ColumnPtr> constructed_coverage_input(const std::vector<std::optional<s
     }
     ColumnPtr input = NullableColumn::create(std::move(wkt), std::move(nulls));
     auto crs = ColumnHelper::create_const_column<TYPE_VARCHAR>("EPSG:3857", input->size());
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(
-            {TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR)}, coverage_type()));
+    std::unique_ptr<FunctionContext> ctx(
+            FunctionContext::create_test_context({TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC}, coverage_type()));
     return GeoFunctions::st_geom_from_text(ctx.get(), {input, crs});
 }
 std::string output_text(const ColumnPtr& column, size_t row) {
@@ -211,8 +211,6 @@ Status drive_coverage_analytor(size_t chunk_rows, const std::vector<int32_t>& ke
             const auto* geo =
                     down_cast<const GeoColumn*>(down_cast<const NullableColumn*>(result.get())->data_column().get());
             EXPECT_EQ(geo->descriptor().type, *type.geo_type);
-            EXPECT_EQ(geo->descriptor().storage.dimension, GEO_DIMENSION_XY);
-            EXPECT_EQ(geo->descriptor().storage.validation_state, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED);
             ASSIGN_OR_RETURN(auto measured, GeoFunctions::st_geometry_area(nullptr, {result}));
             ColumnViewer<TYPE_DOUBLE> area(measured);
             ASSIGN_OR_RETURN(auto rendered, GeoFunctions::st_geometry_as_text(nullptr, {result}));

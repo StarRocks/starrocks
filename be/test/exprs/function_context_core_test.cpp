@@ -26,7 +26,7 @@
 namespace starrocks {
 
 TEST(FunctionContextCoreTest, CreateTestContextArgAccess) {
-    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_INT_DESC, TypeDescriptor(TYPE_VARCHAR)};
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_INT_DESC, TYPE_VARCHAR_DESC};
     auto ctx = std::unique_ptr<FunctionContext>(
             FunctionContext::create_test_context(std::move(arg_types), TYPE_BIGINT_DESC));
 

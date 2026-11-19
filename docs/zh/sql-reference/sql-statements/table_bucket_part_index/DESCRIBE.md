@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "查看StarRocks表或外部表的schema，包括排序键和物化视图信息。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DESC

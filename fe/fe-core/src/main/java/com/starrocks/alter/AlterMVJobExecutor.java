@@ -61,9 +61,11 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.AlterMVClauseAnalyzerVisitor;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
+import com.starrocks.sql.analyzer.SavedSqlGeoValidator;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -781,6 +783,17 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                                                  ConnectContext context) {
         MaterializedView materializedView = (MaterializedView) table;
         Map<String, String> properties = modifyTablePropertiesClause.getProperties();
+        // file_bundling changes how every tablet's metadata is stored, so instead of being applied here it runs
+        // as the same asynchronous alter job that ALTER TABLE uses
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)) {
+            try {
+                GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
+                        .processLakeTableAlterMeta(modifyTablePropertiesClause, db, materializedView);
+            } catch (StarRocksException e) {
+                throw new AlterJobException(e.getMessage(), e);
+            }
+            return null;
+        }
         // A constraint analyzed before the lock names the MV and its columns as they were then; applied after a
         // RENAME or a column change that got in between, it would persist names that no longer resolve.
         if (preResolvedProperties != null && preResolvedProperties.constraintBasis() != null
@@ -952,6 +965,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         // analyze this ast
         ConnectContext connectContext = context == null ? ConnectContext.buildInner() : context;
         Analyzer.analyze(queryStatement, connectContext);
+        SavedSqlGeoValidator.validate(queryStatement);
 
         List<SlotRef> slots = Lists.newArrayList();
         addColumnExpr.collect(SlotRef.class, slots);
@@ -1216,6 +1230,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
         ConnectContext connectContext = context == null ? ConnectContext.buildInner() : context;
         Analyzer.analyze(queryStatement, connectContext);
+        SavedSqlGeoValidator.validate(queryStatement);
 
         // fast schema evolution
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
@@ -1258,6 +1273,11 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
     @Override
     public Void visitReorderColumnsClause(ReorderColumnsClause clause, ConnectContext context) {
         MaterializedView mv = (MaterializedView) table;
+        // The statement was analyzed against the materialized view its name resolved to at the time, and ALTER
+        // MATERIALIZED VIEW ... SWAP WITH can have given the name to another one since. The view was looked up by
+        // name before the lock and its identity is re-checked under it; analyze again on the view this statement
+        // locked, so that every analysis rule holds for the view this rewrites.
+        new AlterMVClauseAnalyzerVisitor(mv).visitReorderColumnsClause(clause, context);
         SortKeyResolution sortKey = resolveSortKey(mv, clause.getColumnsByPos());
         List<Integer> sortKeyIdxes = sortKey.sortKeyIdxes();
         List<Integer> sortKeyUniqueIds = sortKey.sortKeyUniqueIds();
@@ -1360,23 +1380,23 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
                     AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
                     IntervalLiteral intervalLiteral = asyncRefreshSchemeDesc.getIntervalLiteral();
+                    // Resolved in resolveBeforeLock: getTableChecked goes to the connector for
+                    // an external base table, and this runs under the MV's write lock.
+                    if (intervalLiteral == null && Boolean.TRUE.equals(preResolvedHasNonNativeBaseTable)) {
+                        throw new DdlException("Materialized view which type is ASYNC need to specify refresh interval for " +
+                                "external table");
+                    }
+                    // Only the schedule changes: the version maps and the incremental baseline still describe the
+                    // MV's data, and dropping them would make the next refresh recompute every partition.
+                    final MaterializedView.AsyncRefreshContext asyncRefreshContext = copiedScheme.getAsyncRefreshContext();
+                    asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
+                    asyncRefreshContext.setDefineStartTime(asyncRefreshSchemeDesc.isDefineStartTime());
                     if (intervalLiteral != null) {
-                        final IntLiteral step = (IntLiteral) intervalLiteral.getValue();
-                        final MaterializedView.AsyncRefreshContext asyncRefreshContext =
-                                copiedScheme.getAsyncRefreshContext();
-                        asyncRefreshContext.setStartTime(
-                                Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
-                        asyncRefreshContext.setDefineStartTime(asyncRefreshSchemeDesc.isDefineStartTime());
-                        asyncRefreshContext.setStep(step.getLongValue());
+                        asyncRefreshContext.setStep(((IntLiteral) intervalLiteral.getValue()).getLongValue());
                         asyncRefreshContext.setTimeUnit(intervalLiteral.getUnitIdentifier().getDescription());
                     } else {
-                        // Resolved in resolveBeforeLock: getTableChecked goes to the connector for
-                        // an external base table, and this runs under the MV's write lock.
-                        if (Boolean.TRUE.equals(preResolvedHasNonNativeBaseTable)) {
-                            throw new DdlException("Materialized view which type is ASYNC need to specify refresh interval for " +
-                                    "external table");
-                        }
-                        copiedScheme.setAsyncRefreshContext(new MaterializedView.AsyncRefreshContext());
+                        asyncRefreshContext.setStep(0);
+                        asyncRefreshContext.setTimeUnit(null);
                     }
                 }
 
@@ -1860,6 +1880,19 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             } finally {
                 mv.markVersionMapReset();
             }
+        }
+    }
+
+    /**
+     * Inactivates an MV from inside the refresh that found it can no longer be refreshed, and stops scheduling it as
+     * every other inactivation does. Both happen under the MV's write lock, which ALTER ... ACTIVE takes too: an
+     * activation in between would be paused by the suspension, and leave an active MV that is never refreshed.
+     */
+    public static void inactiveMvAndSuspendTask(MaterializedView mv, String inactiveReason) {
+        try (AutoCloseableLock ignored = new AutoCloseableLock(mv.getDbId(), mv.getId(), LockType.WRITE)) {
+            inactiveMvAndLog(mv, inactiveReason);
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            taskManager.suspendTaskWithoutKilling(taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId())));
         }
     }
 

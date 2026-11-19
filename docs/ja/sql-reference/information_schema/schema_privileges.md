@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "schema_privilegesはStarRocksで実装されていないプレースホルダービューです。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # schema_privileges

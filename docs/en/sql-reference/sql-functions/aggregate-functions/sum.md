@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the sum of non-null values for expr."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # sum

@@ -4345,8 +4345,8 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpPositionInvalidRegex) {
 PARALLEL_TEST(VecStringFunctionsTest, regexpCountTest) {
     // regexp_count_prepare runs under FRAGMENT_LOCAL and validates get_num_args() == 2, so the
     // test context must carry the two (str, pattern) argument types.
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(
-            {TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR)}, TYPE_BIGINT_DESC));
+    std::unique_ptr<FunctionContext> ctx(
+            FunctionContext::create_test_context({TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC}, TYPE_BIGINT_DESC));
     auto context = ctx.get();
 
     {

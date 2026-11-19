@@ -33,9 +33,8 @@ namespace starrocks {
 namespace {
 constexpr const char* kSquare = "POLYGON ((0 0,10 0,10 10,0 10,0 0))";
 TypeDescriptor geo_type(std::string crs = "EPSG:3857") {
-    return TypeDescriptor::create_geo_type(
-            TYPE_GEOMETRY, {GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR, crs,
-                            crs == "EPSG:4326" ? 4326 : 3857});
+    return TypeDescriptor::create_geo_type(TYPE_GEOMETRY, {GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, crs,
+                                                           crs == "EPSG:4326" ? 4326 : 3857});
 }
 std::unique_ptr<FunctionContext> context(const TypeDescriptor& type = geo_type()) {
     return std::unique_ptr<FunctionContext>(FunctionContext::create_test_context({type, TYPE_DOUBLE_DESC}, type));
@@ -54,7 +53,7 @@ ColumnPtr geometries(std::initializer_list<const char*> values, const TypeDescri
     ColumnPtr input = NullableColumn::create(text, nulls);
     auto crs = ColumnHelper::create_const_column<TYPE_VARCHAR>(type.geo_type->crs, input->size());
     std::unique_ptr<FunctionContext> ctx(
-            FunctionContext::create_test_context({TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR)}, type));
+            FunctionContext::create_test_context({TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC}, type));
     return GeoFunctions::st_geom_from_text(ctx.get(), {input, crs}).value();
 }
 ColumnPtr distances(std::initializer_list<double> values) {
@@ -65,10 +64,7 @@ ColumnPtr distances(std::initializer_list<double> values) {
 ColumnPtr radius(double value, size_t size = 1) {
     return ColumnHelper::create_const_column<TYPE_DOUBLE>(value, size);
 }
-ColumnPtr raw_geometry(std::string_view wkb,
-                       GeoColumnDescriptor descriptor = {
-                               geo_type().geo_type.value(),
-                               {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED}}) {
+ColumnPtr raw_geometry(std::string_view wkb, GeoColumnDescriptor descriptor = {geo_type().geo_type.value()}) {
     auto result = GeoColumn::create(std::move(descriptor));
     result->append_wkb(Slice(wkb));
     return result;
@@ -102,8 +98,6 @@ TEST(GeoBufferFunctionTest, SignedDistancesPreserveCrsAndValidationState) {
         EXPECT_GT(area(*result, 2), 140);
         auto* data = down_cast<const GeoColumn*>(down_cast<const NullableColumn*>(result->get())->data_column().get());
         EXPECT_EQ(type.geo_type.value(), data->descriptor().type);
-        EXPECT_EQ(GEO_DIMENSION_XY, data->descriptor().storage.dimension);
-        EXPECT_EQ(GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED, data->descriptor().storage.validation_state);
     }
 }
 TEST(GeoBufferFunctionTest, SixFamiliesAndTypedEmptiesExecuteThroughSqlWrapper) {
@@ -186,16 +180,9 @@ TEST(GeoBufferFunctionTest, RejectsMalformedDimensionsKindsAndIncompatibleReturn
     auto data = GeoFunctions::st_geometry_as_wkb(nullptr, {good});
     ASSERT_TRUE(data.ok());
     const auto wkb = ColumnViewer<TYPE_VARBINARY>(*data).value(0).to_string();
-    GeoColumnDescriptor descriptor{geo_type().geo_type.value(),
-                                   {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED}};
-    // Storage dimension labels are not gates; each row's WKB is checked instead.
-    for (auto dimension :
-         {GEO_DIMENSION_UNKNOWN, GEO_DIMENSION_MIXED, GEO_DIMENSION_XYZ, GEO_DIMENSION_XYM, GEO_DIMENSION_XYZM}) {
-        auto other = descriptor;
-        other.storage.dimension = dimension;
-        auto result = GeoFunctions::st_geometry_buffer(ctx.get(), {raw_geometry(wkb, other), radius(1)});
-        EXPECT_TRUE(result.ok()) << dimension << ": " << result.status();
-    }
+    GeoColumnDescriptor descriptor{geo_type().geo_type.value()};
+    auto result = GeoFunctions::st_geometry_buffer(ctx.get(), {raw_geometry(wkb, descriptor), radius(1)});
+    EXPECT_TRUE(result.ok()) << result.status();
     auto geography = descriptor;
     geography.type.logical_type = GEO_LOGICAL_TYPE_GEOGRAPHY;
     EXPECT_FALSE(GeoFunctions::st_geometry_buffer(ctx.get(), {raw_geometry(wkb, geography), radius(1)}).ok());

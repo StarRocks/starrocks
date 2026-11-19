@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回物化视图的刷新信息，包括基表分区元数据和版本映射。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # inspect_mv_refresh_info

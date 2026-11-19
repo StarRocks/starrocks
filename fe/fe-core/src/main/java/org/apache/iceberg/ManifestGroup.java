@@ -73,7 +73,7 @@ class ManifestGroup {
     private Cache<String, Set<DataFile>> dataFileCache;
     private DeleteFileIndex preparedDeleteFileIndex;
     private Set<Integer> identifierFieldIds;
-    private int cacheStatsColumnLimit = -1;
+    private int cacheStatsColumnLimit = 0;
     private Map<Integer, Long> cacheStatsCandidateRanks;
     private Map<Integer, Type.TypeID> cacheStatsTruncatedTypes;
 

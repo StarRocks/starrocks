@@ -23,6 +23,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfoBuilder;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
@@ -59,6 +60,7 @@ import com.starrocks.sql.analyzer.DistributionDescAnalyzer;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.OptimizeClause;
+import com.starrocks.sql.common.MetaUtils;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -194,6 +196,14 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
         Preconditions.checkState(table instanceof OlapTable);
         return (OlapTable) table;
+    }
+
+    // Until the table is stable (OlapTableState.WAITING_STABLE) the job has created nothing on it, and it rewrites only
+    // the partitions it was created for: loads may create partitions meanwhile, as they may once it runs
+    // (OlapTableState.OPTIMIZE). The wait lasts as long as a replica repair, and would fail every such load.
+    @Override
+    public boolean allowConcurrentPartitionCreation() {
+        return jobState == JobState.PENDING;
     }
 
     /**
@@ -632,14 +642,23 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 targetPartitionNames.retainAll(sourcePartitionNames);
 
                 if (optimizeClause.isTableOptimize()) {
+                    boolean partial = targetPartitionNames.size() != targetPartitionNum
+                            || targetPartitionNum != sourcePartitionNames.size();
                     if (DistributionDescAnalyzer.isDifferentDistributionType(optimizeClause.getDistributionDesc(),
                             targetTable.getDefaultDistributionInfo())) {
-                        if (targetPartitionNames.size() != targetPartitionNum
-                                || targetPartitionNum != sourcePartitionNames.size()) {
+                        if (partial) {
                             // partial partitions of target table are optimized
                             throw new AlterCancelException("can not change distribution type of target table" +
                                     " since partial partitions are not optimized [" + errMsg + "]");
                         }
+                    } else if (partial && changesDistributionColumns(optimizeClause, targetTable)) {
+                        // A partition the job did not rewrite, such as one a load created by expression while it
+                        // ran, would keep the old distribution columns, and no load could write it together with
+                        // the others (OlapTableSink#setDistributedColumns).
+                        Set<String> notOptimized = targetTable.getPartitionNames();
+                        notOptimized.removeAll(sourcePartitionNames);
+                        throw new AlterCancelException("can not change distribution columns of target table since"
+                                + " partitions " + notOptimized + " are not optimized [" + errMsg + "]");
                     }
                     allPartitionOptimized = true;
                 }
@@ -723,6 +742,29 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             LOG.warn("optimize table failed dbId:{}, tableId:{} exception: {}", dbId, tableId, e);
             throw new AlterCancelException("optimize table failed " + e.getMessage());
         }
+    }
+
+    /**
+     * Whether the optimize keeps a hash distribution but on other columns. All the partitions of a table keep the
+     * same distribution columns: a load writes all the partitions it targets with one set of them.
+     */
+    static boolean changesDistributionColumns(OptimizeClause optimizeClause, OlapTable table) {
+        if (!(optimizeClause.getDistributionDesc() instanceof HashDistributionDesc hashDistributionDesc)
+                || !(table.getDefaultDistributionInfo() instanceof HashDistributionInfo hashDistributionInfo)) {
+            return false;
+        }
+        List<String> columns = MetaUtils.getColumnNamesByColumnIds(table.getIdToColumn(),
+                hashDistributionInfo.getDistributionColumns());
+        List<String> newColumns = hashDistributionDesc.getDistributionColumnNames();
+        if (columns.size() != newColumns.size()) {
+            return true;
+        }
+        for (int i = 0; i < columns.size(); i++) {
+            if (!columns.get(i).equalsIgnoreCase(newColumns.get(i))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

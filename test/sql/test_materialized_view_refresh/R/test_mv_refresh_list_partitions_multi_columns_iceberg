@@ -272,7 +272,10 @@ SELECT year, month, date_trunc('day', dt), province,sum(num) FROM mv_iceberg_${u
 None	None	None	shanghai	1
 2024	01	2024-01-01 00:00:00	beijing	15
 -- !result
-DROP DATABASE IF EXISTS mv_iceberg_${uuid0}.mv_db_${uuid0};
+drop table mv_iceberg_${uuid0}.db_${uuid0}.t1 force;
+-- result:
+-- !result
+DROP DATABASE IF EXISTS mv_iceberg_${uuid0}.db_${uuid0};
 -- result:
 -- !result
 drop catalog mv_iceberg_${uuid0};
@@ -281,3 +284,11 @@ drop catalog mv_iceberg_${uuid0};
 drop database db_${uuid0} force;
 -- result:
 -- !result
+CLEANUP {
+drop database if exists default_catalog.mv_db_${uuid0} force;
+drop table if exists mv_iceberg_${uuid0}.db_${uuid0}.t1 force;
+drop database if exists mv_iceberg_${uuid0}.db_${uuid0};
+set catalog default_catalog;
+drop catalog if exists mv_iceberg_${uuid0};
+drop database if exists default_catalog.db_${uuid0} force;
+} END CLEANUP

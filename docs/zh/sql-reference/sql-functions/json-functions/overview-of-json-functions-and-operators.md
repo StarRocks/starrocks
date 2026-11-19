@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 支持的 JSON 构造、查询、处理函数、操作符和路径表达式概述。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # JSON 函数和操作符概述

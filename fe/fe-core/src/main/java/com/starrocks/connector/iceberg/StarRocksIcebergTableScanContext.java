@@ -38,6 +38,8 @@ public class StarRocksIcebergTableScanContext {
     private DeleteFileIndexCache deleteFileIndexCache;
     private Map<IcebergTableName, Set<String>> metaFileCacheMap;
     private boolean onlyReadCache;
+    // The requested column statistics are optional: they must not force local planning.
+    private boolean optionalColumnStats;
     private int localParallelism;
     private long localPlanningMaxSlotSize;
     private boolean enableCacheDataFileIdentifierColumnMetrics;
@@ -122,6 +124,14 @@ public class StarRocksIcebergTableScanContext {
 
     public void setMetaFileCacheMap(Map<IcebergTableName, Set<String>> metaFileCacheMap) {
         this.metaFileCacheMap = metaFileCacheMap;
+    }
+
+    public boolean isOptionalColumnStats() {
+        return optionalColumnStats;
+    }
+
+    public void setOptionalColumnStats(boolean optionalColumnStats) {
+        this.optionalColumnStats = optionalColumnStats;
     }
 
     public boolean isOnlyReadCache() {

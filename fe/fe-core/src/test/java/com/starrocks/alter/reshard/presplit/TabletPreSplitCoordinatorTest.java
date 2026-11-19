@@ -45,6 +45,7 @@ import java.util.Optional;
 import java.util.function.Consumer;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.DUMMY_CONTEXT;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -415,7 +416,7 @@ public class TabletPreSplitCoordinatorTest {
 
     private static int selectTabletCount(long totalBytes, int activeComputeNodeCount) {
         return TabletPreSplitCoordinator.selectTabletCount(
-                new Estimates(totalBytes, /*totalRows*/ 0L), activeComputeNodeCount);
+                new Estimates(totalBytes, /*totalRows*/ 0L), activeComputeNodeCount, Config.tablet_reshard_target_size);
     }
 
     @Test
@@ -519,9 +520,11 @@ public class TabletPreSplitCoordinatorTest {
     public void testTabletCountRejectsNonPositiveComputeNodeCount() {
         Estimates anyEstimates = new Estimates(DebugUtil.GIGABYTE, 0L);
         Assertions.assertThrows(IllegalArgumentException.class,
-                () -> TabletPreSplitCoordinator.selectTabletCount(anyEstimates, 0));
+                () -> TabletPreSplitCoordinator.selectTabletCount(anyEstimates, 0,
+                        Config.tablet_reshard_target_size));
         Assertions.assertThrows(IllegalArgumentException.class,
-                () -> TabletPreSplitCoordinator.selectTabletCount(anyEstimates, -1));
+                () -> TabletPreSplitCoordinator.selectTabletCount(anyEstimates, -1,
+                        Config.tablet_reshard_target_size));
     }
 
     @Test
@@ -529,10 +532,12 @@ public class TabletPreSplitCoordinatorTest {
         Estimates anyEstimates = new Estimates(DebugUtil.GIGABYTE, 0L);
         Config.tablet_reshard_target_size = 0L;
         Assertions.assertThrows(IllegalStateException.class,
-                () -> TabletPreSplitCoordinator.selectTabletCount(anyEstimates, 3));
+                () -> TabletPreSplitCoordinator.selectTabletCount(anyEstimates, 3,
+                        Config.tablet_reshard_target_size));
         Config.tablet_reshard_target_size = -1L;
         Assertions.assertThrows(IllegalStateException.class,
-                () -> TabletPreSplitCoordinator.selectTabletCount(anyEstimates, 3));
+                () -> TabletPreSplitCoordinator.selectTabletCount(anyEstimates, 3,
+                        Config.tablet_reshard_target_size));
     }
 
     @Test
@@ -540,14 +545,100 @@ public class TabletPreSplitCoordinatorTest {
         Estimates anyEstimates = new Estimates(DebugUtil.GIGABYTE, 0L);
         Config.tablet_reshard_max_split_count = 1;
         Assertions.assertThrows(IllegalStateException.class,
-                () -> TabletPreSplitCoordinator.selectTabletCount(anyEstimates, 3));
+                () -> TabletPreSplitCoordinator.selectTabletCount(anyEstimates, 3,
+                        Config.tablet_reshard_target_size));
     }
 
     // ---- selectPreSplitTabletCount / tablet_pre_split_target_size ----
 
     private static int selectPreSplitTabletCount(long totalBytes, int activeComputeNodeCount) {
         return TabletPreSplitCoordinator.selectPreSplitTabletCount(
-                new Estimates(totalBytes, /*totalRows*/ 0L), activeComputeNodeCount);
+                new Estimates(totalBytes, /*totalRows*/ 0L), activeComputeNodeCount, tableWithoutOverride());
+    }
+
+    /** A table whose own target size is not in force (a hash or random table, or a range table without one). */
+    private static OlapTable tableWithoutOverride() {
+        OlapTable table = mock(OlapTable.class);
+        when(table.getTabletReshardTargetSizeOverride(anyLong())).thenReturn(0L);
+        return table;
+    }
+
+    /** A range table with a 1 GiB target size, which is in force only while the cluster target is positive. */
+    private static OlapTable tableWithTargetSize() {
+        OlapTable table = mock(OlapTable.class);
+        when(table.getTabletReshardTargetSizeOverride(anyLong()))
+                .thenAnswer(invocation -> (long) invocation.getArgument(0) > 0 ? DebugUtil.GIGABYTE : 0L);
+        return table;
+    }
+
+    @Test
+    public void testPreSplitPrefersTableTarget() {
+        OlapTable overriding = tableWithTargetSize();
+        OlapTable plain = tableWithoutOverride();
+        Config.tablet_pre_split_target_size = 512L * DebugUtil.MEGABYTE;
+        Assertions.assertEquals(DebugUtil.GIGABYTE, TabletPreSplitCoordinator.preSplitTargetSize(overriding));
+        Assertions.assertEquals(512L * DebugUtil.MEGABYTE, TabletPreSplitCoordinator.preSplitTargetSize(plain));
+
+        // With the cluster target off the table target is not in force, so the pre-split config applies.
+        Config.tablet_reshard_target_size = 0L;
+        Assertions.assertEquals(512L * DebugUtil.MEGABYTE, TabletPreSplitCoordinator.preSplitTargetSize(overriding));
+    }
+
+    @Test
+    public void testPreSplitTabletCountUsesTableTarget() {
+        Config.tablet_pre_split_target_size = 0L;
+        Config.tablet_reshard_target_size = 10L * DebugUtil.GIGABYTE;
+        Estimates estimates = new Estimates(10L * DebugUtil.GIGABYTE, 0L);
+        Assertions.assertEquals(12,
+                TabletPreSplitCoordinator.selectPreSplitTabletCount(estimates, 3, tableWithTargetSize()));
+        Assertions.assertEquals(3,
+                TabletPreSplitCoordinator.selectPreSplitTabletCount(estimates, 3, tableWithoutOverride()));
+    }
+
+    private static int selectPreSplitTabletBudget(long totalBytes, int activeComputeNodeCount) {
+        return TabletPreSplitCoordinator.selectPreSplitTabletBudget(
+                new Estimates(totalBytes, /*totalRows*/ 0L), activeComputeNodeCount, tableWithoutOverride());
+    }
+
+    @Test
+    public void testPreSplitTabletBudgetIsNotCappedByMaxSplitCount() {
+        Config.tablet_pre_split_target_size = 0L;
+        Config.tablet_reshard_max_split_count = 2;
+        Assertions.assertEquals(12, selectPreSplitTabletBudget(100L * DebugUtil.GIGABYTE, 3));
+        Assertions.assertEquals(2, selectPreSplitTabletCount(100L * DebugUtil.GIGABYTE, 3));
+    }
+
+    @Test
+    public void testPreSplitTabletBudgetUsesTableTarget() {
+        Config.tablet_pre_split_target_size = 0L;
+        Config.tablet_reshard_target_size = 10L * DebugUtil.GIGABYTE;
+        Estimates estimates = new Estimates(10L * DebugUtil.GIGABYTE, 0L);
+        Assertions.assertEquals(12,
+                TabletPreSplitCoordinator.selectPreSplitTabletBudget(estimates, 3, tableWithTargetSize()));
+        Assertions.assertEquals(3,
+                TabletPreSplitCoordinator.selectPreSplitTabletBudget(estimates, 3, tableWithoutOverride()));
+    }
+
+    @Test
+    public void testPreSplitTabletBudgetMatchesTheCappedCountBelowTheCap() {
+        Config.tablet_pre_split_target_size = 0L;
+        assertBudgetMatchesCount(1, 3, 2);
+        assertBudgetMatchesCount(70, 3, 9);
+        assertBudgetMatchesCount(30, 100, 15);
+        Assertions.assertEquals(2, selectPreSplitTabletCount(0L, 1));
+        Assertions.assertEquals(2, selectPreSplitTabletBudget(0L, 1));
+    }
+
+    private static void assertBudgetMatchesCount(long gib, int activeComputeNodeCount, int expected) {
+        long bytes = gib * DebugUtil.GIGABYTE;
+        Assertions.assertEquals(expected, selectPreSplitTabletCount(bytes, activeComputeNodeCount));
+        Assertions.assertEquals(expected, selectPreSplitTabletBudget(bytes, activeComputeNodeCount));
+    }
+
+    @Test
+    public void testPreSplitTabletBudgetSaturatesWithoutOverflow() {
+        Config.tablet_pre_split_target_size = 1L;
+        Assertions.assertEquals(Integer.MAX_VALUE, selectPreSplitTabletBudget(Long.MAX_VALUE, 3));
     }
 
     @Test
@@ -555,7 +646,7 @@ public class TabletPreSplitCoordinatorTest {
         // Zero is the default: pre-split must size exactly as it did before the config existed.
         Config.tablet_pre_split_target_size = 0L;
         Assertions.assertEquals(Config.tablet_reshard_target_size,
-                TabletPreSplitCoordinator.preSplitTargetSize());
+                TabletPreSplitCoordinator.preSplitTargetSize(tableWithoutOverride()));
         Assertions.assertEquals(selectTabletCount(100L * DebugUtil.GIGABYTE, 3),
                 selectPreSplitTabletCount(100L * DebugUtil.GIGABYTE, 3));
     }
@@ -563,7 +654,7 @@ public class TabletPreSplitCoordinatorTest {
     @Test
     public void testPreSplitTargetSizeOverridesReshardTargetSize() {
         Config.tablet_pre_split_target_size = DebugUtil.GIGABYTE;
-        Assertions.assertEquals(DebugUtil.GIGABYTE, TabletPreSplitCoordinator.preSplitTargetSize());
+        Assertions.assertEquals(DebugUtil.GIGABYTE, TabletPreSplitCoordinator.preSplitTargetSize(tableWithoutOverride()));
     }
 
     @Test
@@ -573,7 +664,7 @@ public class TabletPreSplitCoordinatorTest {
         // IllegalStateException instead of falling back.
         Config.tablet_pre_split_target_size = -1L;
         Assertions.assertEquals(Config.tablet_reshard_target_size,
-                TabletPreSplitCoordinator.preSplitTargetSize());
+                TabletPreSplitCoordinator.preSplitTargetSize(tableWithoutOverride()));
         Assertions.assertEquals(12, selectPreSplitTabletCount(100L * DebugUtil.GIGABYTE, 3));
     }
 

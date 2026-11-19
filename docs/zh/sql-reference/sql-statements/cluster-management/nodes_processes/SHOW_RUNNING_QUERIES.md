@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW RUNNING QUERIES 显示所有正在运行或在查询队列中等待执行的查询信息。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW RUNNING QUERIES

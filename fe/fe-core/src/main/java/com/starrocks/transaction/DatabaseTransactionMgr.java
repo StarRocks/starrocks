@@ -78,6 +78,9 @@ import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.FeNameFormat;
+import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.AgentTaskExecutor;
+import com.starrocks.task.ClearTransactionTask;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.opentelemetry.api.trace.Span;
@@ -368,13 +371,16 @@ public class DatabaseTransactionMgr {
             throw new MetaNotFoundException("could not find db [" + dbId + "]");
         }
 
-        TransactionState transactionState = getTransactionState(transactionId);
-        if (transactionState == null) {
+        TransactionState lockedState = getTransactionState(transactionId);
+        if (lockedState == null) {
             throw new TransactionNotFoundException(transactionId);
         }
 
-        transactionState.writeLock();
+        lockedState.writeLock();
         try {
+            // An abort (a rollback, a cancel, the timeout checker) may have run after the lookup above, so prepare
+            // the current state: preparing the looked-up copy would write PREPARED over the abort.
+            TransactionState transactionState = getLatestTransactionStateInTxnLock(transactionId, lockedState);
             if (transactionState.getTransactionStatus() == TransactionStatus.ABORTED) {
                 throw new TransactionCommitFailedException(transactionState.getReason());
             }
@@ -470,7 +476,7 @@ public class DatabaseTransactionMgr {
 
             LOG.debug("transaction:[{}] successfully prepare", copiedState);
         } finally {
-            transactionState.writeUnlock();
+            lockedState.writeUnlock();
         }
     }
 
@@ -497,12 +503,16 @@ public class DatabaseTransactionMgr {
             throw new MetaNotFoundException("could not find db [" + dbId + "]");
         }
 
-        TransactionState transactionState = getTransactionState(transactionId);
-        if (transactionState == null) {
+        TransactionState lockedState = getTransactionState(transactionId);
+        if (lockedState == null) {
             throw new TransactionNotFoundException(transactionId);
         }
-        transactionState.writeLock();
+        lockedState.writeLock();
         try {
+            // A rollback sent together with this commit may have aborted the transaction after the lookup above.
+            // Commit the current state: committing the looked-up PREPARED copy would write COMMITTED over the abort,
+            // while the abort has told the backends to delete the load's txn logs and segments.
+            TransactionState transactionState = getLatestTransactionStateInTxnLock(transactionId, lockedState);
             if (transactionState.getTransactionStatus() == TransactionStatus.ABORTED) {
                 throw new TransactionCommitFailedException(transactionState.getReason());
             }
@@ -534,10 +544,11 @@ public class DatabaseTransactionMgr {
 
             // transaction state transform
             boolean txnOperated;
+            List<Long> leftOutDoubleWritePartitionIds = new ArrayList<>();
             writeLock();
             try {
                 checkPartitionsStillEmptyForPlainInsert(copiedState, db);
-                txnOperated = unprotectedCommitPreparedTransaction(copiedState, db);
+                txnOperated = unprotectedCommitPreparedTransaction(copiedState, db, leftOutDoubleWritePartitionIds);
             } finally {
                 writeUnlock();
             }
@@ -553,6 +564,9 @@ public class DatabaseTransactionMgr {
                     writeUnlock();
                 }
             });
+            // Not before the commit is logged: a commit that fails before and is retried can take a version above the
+            // rewrite version by then, and keep these partitions.
+            clearLeftOutDoubleWrites(copiedState, leftOutDoubleWritePartitionIds);
 
             txnSpan.setAttribute("num_partition", calculateNumPartitions(copiedState));
             unprotectedCommitSpan.end();
@@ -575,8 +589,31 @@ public class DatabaseTransactionMgr {
             LOG.info("transaction:[{}] successfully committed", copiedState);
             return waiter;
         } finally {
-            transactionState.writeUnlock();
+            lockedState.writeUnlock();
         }
+    }
+
+    /**
+     * Returns the current state object of a transaction. Call it while holding the transaction's write lock, which
+     * the caller took on {@code lockedState}, the object it looked up before.
+     * <p>
+     * Every state change stores a new copy in the transaction maps, so the looked-up object can be replaced before
+     * the caller gets the lock: a concurrent abort, which does not take the table locks, may already have stored an
+     * ABORTED copy. All copies share one lock, so the map entry no longer changes while the caller holds it, and a
+     * caller that checks and copies the returned object cannot write its change over a newer state.
+     */
+    private TransactionState getLatestTransactionStateInTxnLock(long transactionId, TransactionState lockedState)
+            throws TransactionNotFoundException {
+        TransactionState latest = getTransactionState(transactionId);
+        if (latest == null) {
+            // Only a finished transaction leaves the maps, when it expires.
+            throw new TransactionNotFoundException(transactionId);
+        }
+        if (latest != lockedState) {
+            LOG.info("transaction {} changed from {} to {} before its lock was taken, using the current state",
+                    transactionId, lockedState.getTransactionStatus(), latest.getTransactionStatus());
+        }
+        return latest;
     }
 
     private String buildTableListString(Database db, TransactionState transactionState) {
@@ -1148,19 +1185,18 @@ public class DatabaseTransactionMgr {
                 // A head that was already sent belongs to a publish attempt that did not finish. Retry it with
                 // only the txns of that attempt, the only ones sent: taking in txns committed since would move
                 // every partition's new version and waste what the attempt already published. Such a retry is
-                // as big as the attempt was, even below lake_batch_publish_min_version_num.
+                // as big as the attempt was.
                 TransactionState head = idToRunningTransactionState.get(txnId);
                 boolean retryLastAttempt = Config.lake_enable_batch_publish_retry_freeze
                         && head != null && head.hasSendTask();
-                int minBatchSize = retryLastAttempt ? 1 : Config.lake_batch_publish_min_version_num;
                 LongPredicate canJoin = retryLastAttempt ? this::hasSentPublishTask : id -> true;
                 List<Long> txnsWithDependency;
                 if (Config.lake_enable_batch_publish_multi_table) {
                     txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatchMultiTable(
-                            minBatchSize, Config.lake_batch_publish_max_version_num, txnId, canJoin);
+                            Config.lake_batch_publish_max_version_num, txnId, canJoin);
                 } else {
                     txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatch(
-                            minBatchSize, Config.lake_batch_publish_max_version_num, txnId, canJoin);
+                            Config.lake_batch_publish_max_version_num, txnId, canJoin);
                 }
                 List<TransactionState> states = txnsWithDependency.stream().map(idToRunningTransactionState::get)
                         .filter(Objects::nonNull)
@@ -1299,7 +1335,7 @@ public class DatabaseTransactionMgr {
                     // The version of a replication transaction may not continuously
                     if (txn.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
                             !txn.isVersionOverwrite() &&
-                            !partitionCommitInfo.isDoubleWrite() &&
+                            !isDoubleWriteToTempPartition(table, partition, partitionCommitInfo) &&
                             !txn.isShadowRewrite() &&
                             partition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
                         return false;
@@ -1314,6 +1350,11 @@ public class DatabaseTransactionMgr {
                             // if most replica's version have been updated to version published
                             // which means publish version task finished in replica
                             for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                                // A double write to the temp partition moves the version of a replica in the
+                                // catalog past the versions that a version overwrite fills: for an overwrite,
+                                // trust the version its backend reports, as finishTransaction does.
+                                long publishedVersion =
+                                        txn.isVersionOverwrite() ? replica.getLastReportVersion() : replica.getVersion();
                                 if (!errReplicas.contains(replica.getId())) {
                                     // success healthy replica condition:
                                     // 1. version is equal to partition's visible version
@@ -1325,13 +1366,13 @@ public class DatabaseTransactionMgr {
                                         ++successHealthyReplicaNum;
                                         // replica report version has greater cur transaction commit version
                                         // This can happen when the BE publish succeeds but fails to send a response to FE
-                                    } else if (replica.getVersion() >= partitionCommitInfo.getVersion()) {
+                                    } else if (publishedVersion >= partitionCommitInfo.getVersion()) {
                                         ++successHealthyReplicaNum;
                                     } else if (unfinishedBackends != null
                                             && unfinishedBackends.contains(replica.getBackendId())) {
                                         errReplicas.add(replica.getId());
                                     }
-                                } else if (replica.getVersion() >= partitionCommitInfo.getVersion()) {
+                                } else if (publishedVersion >= partitionCommitInfo.getVersion()) {
                                     // the replica's version is larger than or equal to current transaction partition's version
                                     // the replica is normal, then remove it from error replica ids
                                     // this branch will be true if BE's replica reports it's version to FE
@@ -1463,7 +1504,7 @@ public class DatabaseTransactionMgr {
                         // The version of a replication transaction may not continuously
                         if (copiedState.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
                                 !copiedState.isVersionOverwrite() &&
-                                !partitionCommitInfo.isDoubleWrite() &&
+                                !isDoubleWriteToTempPartition(table, physicalPartition, partitionCommitInfo) &&
                                 !copiedState.isShadowRewrite() &&
                                 physicalPartition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
                             // prevent excessive logging
@@ -1500,7 +1541,16 @@ public class DatabaseTransactionMgr {
                                 int healthReplicaNum = 0;
                                 for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                     if (copiedState.isVersionOverwrite()) {
-                                        ++healthReplicaNum;
+                                        // A replica whose overwrite failed lacks the versions it overwrites until a
+                                        // republish or a clone brings them, which its backend then reports. Its
+                                        // version in the catalog proves nothing: a double write to the temp
+                                        // partition published since moves it past them.
+                                        if (replica.getLastReportVersion() >= partitionCommitInfo.getVersion()) {
+                                            errorReplicaIds.remove(replica.getId());
+                                        }
+                                        if (!errorReplicaIds.contains(replica.getId())) {
+                                            ++healthReplicaNum;
+                                        }
                                         continue;
                                     }
                                     if (!errorReplicaIds.contains(replica.getId())
@@ -1693,7 +1743,10 @@ public class DatabaseTransactionMgr {
         }
     }
 
-    protected boolean unprotectedCommitPreparedTransaction(TransactionState transactionState, Database db) {
+    // Adds to leftOutDoubleWritePartitionIds the physical partitions of online optimize temp partitions that the
+    // transaction double wrote but leaves out of its commit.
+    protected boolean unprotectedCommitPreparedTransaction(TransactionState transactionState, Database db,
+                                                           List<Long> leftOutDoubleWritePartitionIds) {
         // transaction state is modified during check if the transaction could be committed
         if (transactionState.getTransactionStatus() != TransactionStatus.PREPARED) {
             return false;
@@ -1723,6 +1776,7 @@ public class DatabaseTransactionMgr {
             }
             Map<Long, PartitionCommitInfo> doubleWritePartitionCommitInfos = Maps.newHashMap();
             Map<Long, Long> doubleWritePartitionVersions = Maps.newHashMap();
+            Map<Long, PartitionCommitInfo> doubleWriteSourceCommitInfos = Maps.newHashMap();
             Iterator<PartitionCommitInfo> partitionCommitInfoIterator = tableCommitInfo.getIdToPartitionCommitInfo()
                     .values().iterator();
             while (partitionCommitInfoIterator.hasNext()) {
@@ -1776,6 +1830,8 @@ public class DatabaseTransactionMgr {
                             if (doubleWritePartitions.containsKey(parentPartitionId)) {
                                 doubleWritePartitionVersions.put(doubleWritePartitions.get(parentPartitionId),
                                         partition.getNextVersion());
+                                doubleWriteSourceCommitInfos.put(doubleWritePartitions.get(parentPartitionId),
+                                        partitionCommitInfo);
                             }
                             partitionCommitInfo.setVersion(partition.getNextVersion());
                             LOG.info("set partition {}:{} version to {} in transaction {}",
@@ -1802,19 +1858,69 @@ public class DatabaseTransactionMgr {
             }
 
             // set double write partition version
-            for (Map.Entry<Long, Long> entry : doubleWritePartitionVersions.entrySet()) {
-                PartitionCommitInfo partitionCommitInfo = doubleWritePartitionCommitInfos.get(entry.getKey());
-                if (partitionCommitInfo != null) {
-                    partitionCommitInfo.setVersion(entry.getValue());
-                    partitionCommitInfo.setIsDoubleWrite(true);
-                    LOG.info("set double write partition {}:{} version to {} in transaction {}",
-                            entry.getKey(), table.getPartition(entry.getKey()).getDefaultPhysicalPartition().getId(),
-                            entry.getValue(), transactionState);
+            for (Map.Entry<Long, PartitionCommitInfo> entry : doubleWritePartitionCommitInfos.entrySet()) {
+                long tempPartitionId = entry.getKey();
+                PartitionCommitInfo partitionCommitInfo = entry.getValue();
+                Long version = doubleWritePartitionVersions.get(tempPartitionId);
+                if (version == null) {
+                    continue;
                 }
+                Long rewriteVersion = table.getDoubleWriteRewriteVersion(tempPartitionId);
+                if (rewriteVersion == null || version <= rewriteVersion) {
+                    // The online optimize rewrite copies this load from the source partition: the job fixes the
+                    // version it reads at no lower than any version committed before. The temp partition must hold
+                    // no double-written version at or below the rewrite's version overwrite, see
+                    // OnlineOptimizeJobV2.fixRewriteVersion.
+                    // The listener may have put the dictionary metadata of the load on this partition only.
+                    doubleWriteSourceCommitInfos.get(tempPartitionId).takeDictMetadataFrom(partitionCommitInfo);
+                    tableCommitInfo.getIdToPartitionCommitInfo().remove(partitionCommitInfo.getPhysicalPartitionId());
+                    leftOutDoubleWritePartitionIds.add(partitionCommitInfo.getPhysicalPartitionId());
+                    LOG.info("leave double write partition {}:{} out of transaction {}: version {} is not above the "
+                                    + "rewrite version {}", tempPartitionId, partitionCommitInfo.getPhysicalPartitionId(),
+                            transactionState.getTransactionId(), version, rewriteVersion);
+                    continue;
+                }
+                partitionCommitInfo.setVersion(version);
+                partitionCommitInfo.setIsDoubleWrite(true);
+                // The job swaps the temp partition in without waiting for this load to become visible, and the swap
+                // drops the source partition, which the listener may have put the dictionary metadata of the load on.
+                partitionCommitInfo.takeDictMetadataFrom(doubleWriteSourceCommitInfos.get(tempPartitionId));
+                LOG.info("set double write partition {}:{} version to {} in transaction {}",
+                        tempPartitionId, partitionCommitInfo.getPhysicalPartitionId(), version, transactionState);
             }
         }
 
         return true;
+    }
+
+    /**
+     * A double write of an online optimize takes the version of its source partition, so its temp partition sees
+     * gaps and does not wait for the version below it: the source partition already orders the transactions. Once
+     * the job has swapped the temp partition in, the source partition is gone and the double writes still pending
+     * are the next versions of the swapped-in partition, which have to become visible in order like any load.
+     */
+    private static boolean isDoubleWriteToTempPartition(OlapTable table, PhysicalPartition partition,
+                                                        PartitionCommitInfo partitionCommitInfo) {
+        return partitionCommitInfo.isDoubleWrite() && table.isTempPartition(partition.getParentId());
+    }
+
+    /**
+     * Drops the double writes a committed transaction left out of online optimize temp partitions from the backends
+     * that took part in it. No publish of the transaction reaches these partitions, so the backends would otherwise
+     * keep the committed rowsets in their transaction manager until they expire, and under steady loads enough of
+     * them pile up there to make the backends refuse new transactions. A backend this misses reports them as
+     * expired later, see ReportHandler.
+     */
+    private static void clearLeftOutDoubleWrites(TransactionState transactionState, List<Long> partitionIds) {
+        if (partitionIds.isEmpty()) {
+            return;
+        }
+        AgentBatchTask batchTask = new AgentBatchTask();
+        for (long backendId : transactionState.getPublishVersionTasks().keySet()) {
+            batchTask.addTask(new ClearTransactionTask(backendId, transactionState.getTransactionId(), partitionIds,
+                    transactionState.getTransactionType()));
+        }
+        AgentTaskExecutor.submit(batchTask);
     }
 
     private long reserveCommitTs() {
@@ -2393,6 +2499,14 @@ public class DatabaseTransactionMgr {
             TransactionLogApplier applier = txnLogApplierFactory.create(table);
             ((LakeTableTxnLogApplier) applier).applyVisibleLogBatch(transactionStateBatch, db);
         }
+        // same per-transaction load row accounting as updateCatalogAfterVisible
+        for (TransactionState transactionState : transactionStateBatch.getTransactionStates()) {
+            try {
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateLoadRows(transactionState);
+            } catch (Throwable t) {
+                LOG.warn("update load rows failed for txn: {}", transactionState, t);
+            }
+        }
         return true;
     }
 
@@ -2422,6 +2536,27 @@ public class DatabaseTransactionMgr {
             readUnlock();
         }
         return true;
+    }
+
+    /**
+     * The oldest of the running transactions that {@link #isPreviousTransactionsFinished(long, List)} waits for, or
+     * null when there is none.
+     */
+    public TransactionState getOldestPreviousRunningTransaction(long endTransactionId, List<Long> tableIdList) {
+        readLock();
+        try {
+            TransactionState oldest = null;
+            for (TransactionState state : idToRunningTransactionState.values()) {
+                if (state.getDbId() == dbId && isIntersectionNotEmpty(state.getTableIdList(), tableIdList)
+                        && state.isRunning() && state.getTransactionId() <= endTransactionId
+                        && (oldest == null || state.getTransactionId() < oldest.getTransactionId())) {
+                    oldest = state;
+                }
+            }
+            return oldest;
+        } finally {
+            readUnlock();
+        }
     }
 
     /**

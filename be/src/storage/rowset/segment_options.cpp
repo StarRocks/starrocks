@@ -52,6 +52,13 @@ Status SegmentReadOptions::convert_to(SegmentReadOptions* dst, const std::vector
         ranges[i].convert_to(&dst->ranges[i], new_types);
     }
 
+    if (task_range.has_value()) {
+        dst->task_range = SeekRange();
+        task_range->convert_to(&dst->task_range.value(), new_types);
+    } else {
+        dst->task_range.reset();
+    }
+
     // predicates
     PredicateAndNode new_pred_root;
     RETURN_IF_ERROR(pred_tree.visit(PredicateTreeConverter{new_types, obj_pool}, new_pred_root));

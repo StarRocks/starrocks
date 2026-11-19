@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "计算数组中相邻两个元素的差值构成的数组。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_difference

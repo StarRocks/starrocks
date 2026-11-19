@@ -1,0 +1,184 @@
+-- name: test_decimal_null_row_error_if_overflow
+create database test_decimal_null_row_${uuid0};
+-- result:
+-- !result
+use test_decimal_null_row_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t (
+  k int,
+  s varchar(32),
+  d1 decimal(10,2),
+  d2 decimal(10,2),
+  b bigint,
+  big decimal(38,0)
+)
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t VALUES
+  (1, NULL,   1.00, NULL, NULL, NULL),
+  (2, '1.25', 3.00, 2.00, 1,    1),
+  (3, '',     5.00, 4.00, 2,    2);
+-- result:
+-- !result
+set sql_mode = 'ERROR_IF_OVERFLOW';
+-- result:
+-- !result
+select k, cast(nullif(s, '') as decimal(36,18)) from t order by k;
+-- result:
+1	None
+2	1.250000000000000000
+3	None
+-- !result
+select k, cast(s as decimal(9,2)) from t where k < 3 order by k;
+-- result:
+1	None
+2	1.25
+-- !result
+select max(cast(nullif(s, '') as decimal(36,18))), min(cast(nullif(s, '') as decimal(36,18))) from t;
+-- result:
+1.250000000000000000	1.250000000000000000
+-- !result
+select cast(nullif(if(generate_series = 1, '', '1.25'), '') as decimal(36,18)) from table(generate_series(1, 2)) order by 1;
+-- result:
+None
+1.250000000000000000
+-- !result
+select k, cast(b + if(k = 1, 10000000000, 0) as decimal(18,9)) from t order by k;
+-- result:
+1	None
+2	1.000000000
+3	2.000000000
+-- !result
+select k, cast(cast(b as double) + if(k = 1, 1e300, 0) as decimal(9,2)) from t order by k;
+-- result:
+1	None
+2	1.00
+3	2.00
+-- !result
+select k, cast(big + if(k = 1, 100000000000000000000, 0) as decimal(18,0)) from t order by k;
+-- result:
+1	None
+2	1
+3	2
+-- !result
+select k, cast(big + if(k = 1, 10000000000, 0) as decimal(38,30)) from t order by k;
+-- result:
+1	None
+2	1.000000000000000000000000000000
+3	2.000000000000000000000000000000
+-- !result
+select k, cast(big + if(k = 1, 1000, 0) as tinyint) from t order by k;
+-- result:
+1	None
+2	1
+3	2
+-- !result
+select k, cast(big + if(k = 1, 99, 0) as time) from t order by k;
+-- result:
+1	None
+2	00:00:01
+3	00:00:02
+-- !result
+select k, cast([s, null] as array<decimal(10,2)>) from t where k < 3 order by k;
+-- result:
+1	[null,null]
+2	[1.25,null]
+-- !result
+select k, cast(map{1: s, 2: null} as map<int, decimal(10,2)>) from t where k < 3 order by k;
+-- result:
+1	{1:null,2:null}
+2	{1:1.25,2:null}
+-- !result
+select k, cast(row(s) as struct<a decimal(10,2)>) from t where k < 3 order by k;
+-- result:
+1	{"a":null}
+2	{"a":1.25}
+-- !result
+select k, d1 / d2, d1 % d2, mod(d1, d2) from t order by k;
+-- result:
+1	None	None	None
+2	1.50000000	1.00	1.00
+3	1.25000000	1.00	1.00
+-- !result
+select k, 1.00 / d2, 1.00 % d2 from t order by k;
+-- result:
+1	None	None
+2	0.50000000	1.00
+3	0.25000000	1.00
+-- !result
+select k, (big + if(k = 1, 90000000000000000000000000000000000000, 0)) + 90000000000000000000000000000000000000 from t order by k;
+-- result:
+1	None
+2	90000000000000000000000000000000000001
+3	90000000000000000000000000000000000002
+-- !result
+select k, (big + if(k = 1, 90000000000000000000000000000000000000, 0)) - (-90000000000000000000000000000000000000) from t order by k;
+-- result:
+1	None
+2	90000000000000000000000000000000000001
+3	90000000000000000000000000000000000002
+-- !result
+select k, (big + if(k = 1, 10000000000000000000000000000000000000, 0)) * cast(100 as decimal(38,0)) from t order by k;
+-- result:
+1	None
+2	100
+3	200
+-- !result
+select k, (big + if(k = 1, 100000000000000000000, 0)) div cast(1 as decimal(38,0)) from t order by k;
+-- result:
+1	None
+2	1
+3	2
+-- !result
+select k, d1 / cast(0 as decimal(10,2)), d1 % cast(0 as decimal(10,2)), mod(d1, cast(0 as decimal(10,2))) from t order by k;
+-- result:
+1	None	None	None
+2	None	None	None
+3	None	None	None
+-- !result
+select k, d1 / (d2 - d2), d1 % (d2 - d2), d1 div (d2 - d2) from t order by k;
+-- result:
+1	None	None	None
+2	None	None	None
+3	None	None	None
+-- !result
+select k, d1 / if(k = 3, 0, d2) from t order by k;
+-- result:
+1	None
+2	1.50000000
+3	None
+-- !result
+select k, (big + 90000000000000000000000000000000000000) / (big - big), big % (big - big) from t order by k;
+-- result:
+1	None	None
+2	None	None
+3	None	None
+-- !result
+select k, 90000000000000000000000000000000000000 / (big - big) from t order by k;
+-- result:
+1	None
+2	None
+3	None
+-- !result
+select k, cast(s as decimal(9,2)) from t order by k;
+-- result:
+[REGEX].*Expr evaluate meet error: The type cast from string to decimal overflows.*
+-- !result
+select k, cast(big + if(k = 2, 1000, 0) as tinyint) from t order by k;
+-- result:
+[REGEX].*Expr evaluate meet error: The type cast from decimal to other types overflows.*
+-- !result
+select k, (big + 90000000000000000000000000000000000000) / if(k = 3, 0.1, 0) from t order by k;
+-- result:
+[REGEX].*Expr evaluate meet error: The 'div' operation involving decimal values overflows.*
+-- !result
+set sql_mode = default;
+-- result:
+-- !result
+drop database test_decimal_null_row_${uuid0};
+-- result:
+-- !result

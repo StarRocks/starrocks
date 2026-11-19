@@ -43,7 +43,7 @@ namespace starrocks {
 template <class Provider>
 class ProvideExpr final : public Expr {
 public:
-    ProvideExpr(Provider provider) : Expr(TypeDescriptor(TYPE_VARCHAR), false), _provider(provider){};
+    ProvideExpr(Provider provider) : Expr(TYPE_VARCHAR_DESC, false), _provider(provider){};
     Expr* clone(ObjectPool* pool) const override { return pool->add(new ProvideExpr(*this)); }
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {

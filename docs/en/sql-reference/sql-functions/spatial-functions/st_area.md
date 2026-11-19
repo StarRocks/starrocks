@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the two-dimensional area of a native GEOGRAPHY or GEOMETRY value."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Area
