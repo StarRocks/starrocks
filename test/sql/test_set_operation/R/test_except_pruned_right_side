@@ -1,0 +1,64 @@
+-- name: test_except_pruned_right_side
+-- A colocated EXCEPT on the bucket key whose right side is pruned to a few tablets: a driver whose
+-- right-side scan gets no tablet finishes its probe before its build. The output must still wait for
+-- the build instead of finishing the EXCEPT and dropping the left rows of that driver (RB-1102).
+create table t_exc (k int, v int) duplicate key(k)
+  distributed by hash(k) buckets 3 properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t_exc values (1,1),(2,2),(3,3),(4,4),(5,5),(6,6),(7,7),(8,8),(9,9),(10,10);
+-- result:
+-- !result
+create table t_exc48 (k int, v int) duplicate key(k)
+  distributed by hash(k) buckets 48 properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t_exc48 select s, s from table(generate_series(1, 1000)) t(s);
+-- result:
+-- !result
+select count(*) from (select k from t_exc48 except select k from t_exc48 where k = 5) s;
+-- result:
+999
+-- !result
+select count(*) from (select k from t_exc48 except select k from t_exc48 where k in (5, 77)) s;
+-- result:
+998
+-- !result
+select count(*) from (select k from t_exc48 intersect select k from t_exc48 where k in (5, 77)) s;
+-- result:
+2
+-- !result
+set pipeline_dop = 1;
+-- result:
+-- !result
+select k from t_exc except select k from t_exc where k = 5 order by k;
+-- result:
+1
+2
+3
+4
+6
+7
+8
+9
+10
+-- !result
+select count(*) from (select k from t_exc48 except select k from t_exc48 where k = 5) s;
+-- result:
+999
+-- !result
+select k from t_exc except select k from t_exc where k = 5 except select k from t_exc where k = 6 order by k;
+-- result:
+1
+2
+3
+4
+7
+8
+9
+10
+-- !result
+select k from t_exc intersect select k from t_exc where k = 5 order by k;
+-- result:
+5
+-- !result
