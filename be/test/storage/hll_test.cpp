@@ -274,10 +274,14 @@ TEST_F(TestHll, UpdateAfterExplicitMergeAllocationFailure) {
     }
 
     HyperLogLog other(hash(HLL_EXPLICLIT_INT64_NUM));
-    {
-        ScopedHllAllocateFail scoped_fail;
-        ASSERT_THROW(hll.merge(other), std::bad_alloc);
-    }
+    auto* fp = failpoint::FailPointRegistry::GetInstance()->get("mem_chunk_allocator_allocate_fail");
+    ASSERT_NE(fp, nullptr);
+    PFailPointTriggerMode mode;
+    mode.set_mode(FailPointTriggerModeType::ENABLE);
+    fp->setMode(mode);
+    EXPECT_THROW(hll.merge(other), std::bad_alloc);
+    mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(mode);
 
     hll.update(hash(0));
     EXPECT_EQ(HLL_REGISTERS_COUNT + 1, hll.max_serialized_size());
