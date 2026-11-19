@@ -27,6 +27,7 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
@@ -210,6 +211,21 @@ public final class TrinoFormatFunction {
             throw new SemanticException("format() " + e.getMessage(), node.getPos());
         }
 
+        // Java ignores an argument that the format does not use. Dropping it here would also drop an aggregate in it,
+        // as in format('done', count(*)), so such a call is rejected.
+        boolean[] used = new boolean[arguments.size()];
+        for (Object piece : pieces) {
+            if (piece instanceof Specifier) {
+                used[((Specifier) piece).argumentIndex - 1] = true;
+            }
+        }
+        for (int i = 0; i < used.length; i++) {
+            if (!used[i]) {
+                throw new SemanticException(String.format("format() does not support an argument that the format " +
+                        "does not use (argument %d)", i + 1), node.getPos());
+            }
+        }
+
         List<Expr> result = new ArrayList<>();
         for (Object piece : pieces) {
             if (piece instanceof String) {
@@ -229,10 +245,10 @@ public final class TrinoFormatFunction {
     private static Expr format(Specifier specifier, Expr argument, UnaryOperator<Expr> analyzer,
                                FunctionCallExpr node) {
         Type type = argument.getType();
-        if (isNondeterministic(argument)) {
+        if (isNondeterministicOrSubquery(argument)) {
             // The pieces can evaluate an argument more than once, and each evaluation could return a different value.
-            throw new SemanticException(String.format("format() does not support nondeterministic arguments [%s]",
-                    specifier.text), node.getPos());
+            throw new SemanticException(String.format("format() does not support nondeterministic arguments or " +
+                    "subqueries [%s]", specifier.text), node.getPos());
         }
         // Java formats a null argument as "null", cut to the precision and padded to the width.
         String nullText = "null";
@@ -379,12 +395,14 @@ public final class TrinoFormatFunction {
         return call(analyzer, FunctionSet.SUBSTR, moneyFormatted, new IntLiteral(1), withoutCentsLength);
     }
 
-    private static boolean isNondeterministic(Expr expr) {
-        if (expr instanceof FunctionCallExpr && ((FunctionCallExpr) expr).isNondeterministicBuiltinFnName()) {
+    // A subquery is planned once for each occurrence, and its query is not among its children.
+    private static boolean isNondeterministicOrSubquery(Expr expr) {
+        if (expr instanceof Subquery ||
+                (expr instanceof FunctionCallExpr && ((FunctionCallExpr) expr).isNondeterministicBuiltinFnName())) {
             return true;
         }
         for (Expr child : expr.getChildren()) {
-            if (isNondeterministic(child)) {
+            if (isNondeterministicOrSubquery(child)) {
                 return true;
             }
         }
