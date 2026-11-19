@@ -122,7 +122,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -143,14 +142,10 @@ public class PaimonMetadata implements ConnectorMetadata {
     private final Map<Identifier, Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<SplitCacheKey, PaimonSplitsInfo> paimonSplits = new ConcurrentHashMap<>();
-    private final Map<ScanCacheKey, PaimonSplitsInfo> paimonScanSplits = new ConcurrentHashMap<>();
 
     private record SplitCacheKey(PredicateSearchKey filter, PaimonGlobalIndexMode mode, String tablePath,
                                  String branch, long schemaId, long schemaTimeMillis,
                                  List<String> fieldNames, long limit) {
-    }
-
-    private record ScanCacheKey(UUID queryId, SplitCacheKey scan, Map<Integer, String> columnNames) {
     }
 
     private final ConnectorProperties properties;
@@ -258,7 +253,6 @@ public class PaimonMetadata implements ConnectorMetadata {
         cached.stream().filter(identifier -> identifier.getDatabaseName().equals(dbName))
                 .forEach(this::invalidateTableAfterDdl);
         paimonSplits.keySet().removeIf(key -> key.filter().getDatabaseName().equals(dbName));
-        paimonScanSplits.keySet().removeIf(key -> key.scan().filter().getDatabaseName().equals(dbName));
     }
 
     private void invalidateTableAfterDdl(Identifier identifier) {
@@ -266,8 +260,6 @@ public class PaimonMetadata implements ConnectorMetadata {
         partitionInfos.remove(identifier);
         paimonSplits.keySet().removeIf(key -> key.filter().getDatabaseName().equals(identifier.getDatabaseName())
                 && key.filter().getTableName().equals(identifier.getObjectName()));
-        paimonScanSplits.keySet().removeIf(key -> key.scan().filter().getDatabaseName().equals(identifier.getDatabaseName())
-                && key.scan().filter().getTableName().equals(identifier.getObjectName()));
         try {
             paimonNativeCatalog.invalidateTable(identifier);
         } catch (RuntimeException e) {
@@ -907,37 +899,25 @@ public class PaimonMetadata implements ConnectorMetadata {
         org.apache.paimon.table.Table paimonNativeTable = versionedPaimonTable instanceof FileStoreTable fileStoreTable
                 ? fileStoreTable.copyWithoutTimeTravel(options) : versionedPaimonTable.copy(options);
 
-        PredicateSearchKey filter = PredicateSearchKey.of(paimonTable.getCatalogDBName(),
-                paimonTable.getCatalogTableName(), params.copy());
-        FileStoreTable fileStore = paimonNativeTable instanceof FileStoreTable ? (FileStoreTable) paimonNativeTable : null;
-        // Snapshot ids alone do not identify a branch or its read schema. Keep the full
-        // version range, including incremental bounds, in both probe and final-scan caches.
-        SplitCacheKey splitKey = new SplitCacheKey(filter, mode,
-                fileStore == null ? paimonNativeTable.fullName() : fileStore.location().toString(), currentBranch,
-                fileStore == null ? -1 : fileStore.schema().id(),
-                fileStore == null ? -1 : fileStore.schema().timeMillis(),
-                List.copyOf(params.getFieldNames()), params.getLimit());
-
         boolean evaluateIndex = distributed && forScan && indexEnabled && DEFAULT_MAIN_BRANCH.equals(currentBranch)
                 && tvrVersionRange.start().isEmpty();
         PaimonSplitsInfo splitsInfo;
         if (distributed && forScan) {
-            if (snapshotId >= 0 && caller.getQueryId() != null && params.isUseCache()
-                    && fileStore != null) {
-                // Keep final scan results separate from optimizer/statistics probes. Cache splits,
-                // including a completed fallback, rather than retaining the intermediate bitmap.
-                ScanCacheKey key = new ScanCacheKey(caller.getQueryId(), splitKey,
-                        ((PaimonScanRangeParams) params).getColumnNames());
-                boolean reused = paimonScanSplits.containsKey(key);
-                splitsInfo = paimonScanSplits.computeIfAbsent(key, unused ->
-                        planSplits(paimonTable, paimonNativeTable, params, evaluateIndex, snapshotId, caller));
-                if (reused) {
-                    Tracers.count(EXTERNAL, "PaimonGlobalIndex.ScanSplitCacheHit", 1);
-                }
-            } else {
-                splitsInfo = planSplits(paimonTable, paimonNativeTable, params, evaluateIndex, snapshotId, caller);
-            }
+            // Final distributed scans must plan their own splits, including after an index fallback.
+            // Reusing optimizer/statistics probe splits here would skip index evaluation.
+            splitsInfo = planSplits(paimonTable, paimonNativeTable, params, evaluateIndex, snapshotId, caller);
         } else {
+            PredicateSearchKey filter = PredicateSearchKey.of(paimonTable.getCatalogDBName(),
+                    paimonTable.getCatalogTableName(), params.copy());
+            FileStoreTable fileStore = paimonNativeTable instanceof FileStoreTable
+                    ? (FileStoreTable) paimonNativeTable : null;
+            // Snapshot ids alone do not identify a branch or its read schema. Keep the full
+            // version range, including incremental bounds, in the split-cache identity.
+            SplitCacheKey splitKey = new SplitCacheKey(filter, mode,
+                    fileStore == null ? paimonNativeTable.fullName() : fileStore.location().toString(), currentBranch,
+                    fileStore == null ? -1 : fileStore.schema().id(),
+                    fileStore == null ? -1 : fileStore.schema().timeMillis(),
+                    List.copyOf(params.getFieldNames()), params.getLimit());
             splitsInfo = paimonSplits.computeIfAbsent(splitKey, unused ->
                     planSplits(paimonTable, paimonNativeTable, params, false, snapshotId, caller));
         }
@@ -997,7 +977,6 @@ public class PaimonMetadata implements ConnectorMetadata {
     @Override
     public void clear() {
         paimonSplits.clear();
-        paimonScanSplits.clear();
     }
 
     @Override

@@ -112,6 +112,7 @@ import org.apache.paimon.data.Timestamp;
 import org.apache.paimon.disk.IOManager;
 import org.apache.paimon.disk.IOManagerImpl;
 import org.apache.paimon.fs.Path;
+import org.apache.paimon.globalindex.GlobalIndexResult;
 import org.apache.paimon.globalindex.IndexedSplit;
 import org.apache.paimon.globalindex.sorted.SortedGlobalIndexBuilder;
 import org.apache.paimon.io.DataFileMeta;
@@ -174,6 +175,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.catalog.Table.TableType.PAIMON_VIEW;
 import static com.starrocks.type.IntegerType.INT;
@@ -184,7 +186,9 @@ import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
 import static org.apache.paimon.stats.SimpleStats.EMPTY_STATS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -1162,6 +1166,75 @@ public class PaimonMetadataTest {
     }
 
     @Test
+    public void testDistributedFinalPlanningBypassesProbeAndFallbackSplits() throws Exception {
+        java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_distributed_splits_");
+        Identifier identifier = Identifier.create("test_db", "indexed_table");
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.setQueryId(java.util.UUID.randomUUID());
+        context.getSessionVariable().setPaimonGlobalIndexMode("distributed");
+        context.setThreadLocalInfo();
+        try (Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())))) {
+            catalog.createDatabase(identifier.getDatabaseName(), true);
+            catalog.createTable(identifier, Schema.newBuilder()
+                    .column("id", DataTypes.INT())
+                    .column("payload", DataTypes.STRING())
+                    .option(CoreOptions.BUCKET.key(), "-1")
+                    .option(CoreOptions.ROW_TRACKING_ENABLED.key(), "true")
+                    .option(CoreOptions.DATA_EVOLUTION_ENABLED.key(), "true")
+                    .build(), false);
+            FileStoreTable written = (FileStoreTable) catalog.getTable(identifier);
+            writeRows(written, GenericRow.of(1, BinaryString.fromString("first")),
+                    GenericRow.of(2, BinaryString.fromString("second")));
+            buildBtreeIndex(written, "id", tmpDir);
+            long snapshotId = catalog.getTable(identifier).latestSnapshot().orElseThrow().id();
+            PaimonMetadata scanMetadata = new PaimonMetadata("paimon", new HdfsEnvironment(), catalog,
+                    new ConnectorProperties(ConnectorType.PAIMON));
+            PaimonTable table = (PaimonTable) scanMetadata.getTable(context, "test_db", "indexed_table");
+            ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
+                    new ColumnRefOperator(1, IntegerType.INT, "id", true), ConstantOperator.createInt(1));
+            GetRemoteFilesParams.Builder builder = GetRemoteFilesParams.newBuilder()
+                    .setPredicate(predicate).setFieldNames(List.of("id", "payload"))
+                    .setTableVersionRange(TvrTableSnapshot.of(snapshotId));
+            GetRemoteFilesParams probeParams = builder.build();
+            GetRemoteFilesParams scanParams = new PaimonScanRangeParams(builder, Map.of(1, "id", 2, "payload"));
+            AtomicInteger evaluations = new AtomicInteger();
+            new MockUp<PaimonGlobalIndexCollectJob>() {
+                @Mock
+                public GlobalIndexResult collect(ConnectContext caller) {
+                    assertSame(context, caller);
+                    if (evaluations.incrementAndGet() == 1) {
+                        throw new IllegalStateException("index temporarily unavailable");
+                    }
+                    return GlobalIndexResult.fromRange(new org.apache.paimon.utils.Range(0, 0));
+                }
+            };
+
+            // Optimizer probes keep their ordinary split cache and never evaluate the distributed index.
+            PaimonSplitsInfo probe = ((PaimonRemoteFileDesc) scanMetadata.getRemoteFiles(table, probeParams)
+                    .get(0).getFiles().get(0)).getPaimonSplitsInfo();
+            assertSame(probe, ((PaimonRemoteFileDesc) scanMetadata.getRemoteFiles(table, probeParams)
+                    .get(0).getFiles().get(0)).getPaimonSplitsInfo());
+            assertEquals(0, evaluations.get());
+
+            // First planning falls back. Later planning retries the index instead of reusing that fallback.
+            for (int attempt = 1; attempt <= 3; attempt++) {
+                PaimonSplitsInfo planned = ((PaimonRemoteFileDesc) scanMetadata.getRemoteFiles(table, scanParams)
+                        .get(0).getFiles().get(0)).getPaimonSplitsInfo();
+                assertNotSame(probe, planned);
+                assertEquals(attempt, evaluations.get());
+                assertEquals(List.of(1), readIds((FileStoreTable) planned.getNativeTable(), planned));
+                assertEquals(attempt > 1, planned.getPaimonSplits().stream().allMatch(IndexedSplit.class::isInstance));
+            }
+            assertSame(probe, ((PaimonRemoteFileDesc) scanMetadata.getRemoteFiles(table, probeParams)
+                    .get(0).getFiles().get(0)).getPaimonSplitsInfo());
+            assertEquals(3, evaluations.get());
+        } finally {
+            ConnectContext.remove();
+            FileUtils.deleteDirectory(tmpDir.toFile());
+        }
+    }
+
+    @Test
     public void testBranchSurvivesStatisticsAndAliasesAtEveryIndexMode() throws Exception {
         java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_branch_isolation_");
         ConnectContext context = UtFrameUtils.createDefaultCtx();
@@ -1374,8 +1447,14 @@ public class PaimonMetadataTest {
                 }
                 // STRING ordering must be used even though the data file stores INT values.
                 assertEquals(List.of(2, 3), readIds(bound, planned));
-                assertEquals(planned, ((PaimonRemoteFileDesc) schemaMetadata.getRemoteFiles(table, params)
-                        .get(0).getFiles().get(0)).getPaimonSplitsInfo());
+                PaimonSplitsInfo repeated = ((PaimonRemoteFileDesc) schemaMetadata.getRemoteFiles(table, params)
+                        .get(0).getFiles().get(0)).getPaimonSplitsInfo();
+                if ("distributed".equals(mode)) {
+                    assertNotSame(planned, repeated);
+                } else {
+                    assertSame(planned, repeated);
+                }
+                assertEquals(List.of(2, 3), readIds((FileStoreTable) repeated.getNativeTable(), repeated));
             }
 
             // Already-resolved historical schemas must also survive attaching scan options.
