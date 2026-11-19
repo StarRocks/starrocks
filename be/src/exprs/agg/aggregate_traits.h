@@ -36,6 +36,9 @@ struct AggDataTypeTraits<lt, FixedLengthLTGuard<lt>> {
     static void assign_value(ColumnType* column, size_t row, const RefType& ref) { column->get_data()[row] = ref; }
 
     static void append_value(ColumnType* column, const ValueType& value) { column->append(value); }
+    static void append_values(Column* column, const ValueType& value, size_t count) {
+        down_cast<ColumnType*>(column)->append_value_multiple_times(&value, count);
+    }
 
     static RefType get_row_ref(const Column& column, size_t row) {
         return down_cast<const ColumnType&>(column).immutable_data()[row];
@@ -68,6 +71,18 @@ struct AggDataTypeTraits<lt, ObjectFamilyLTGuard<lt>> {
     static void assign_value(ColumnType* column, size_t row, const ValueType& ref) { *column->get_object(row) = ref; }
 
     static void append_value(ColumnType* column, const ValueType& value) { column->append(&value); }
+
+    static void append_values(Column* column, const ValueType& value, size_t count) {
+        if (count == 0) {
+            return;
+        }
+        auto* col = down_cast<ColumnType*>(column);
+        col->reserve(col->size() + count);
+        for (size_t i = 0; i < count; ++i) {
+            col->append(&value);
+        }
+    }
+
     static RefType get_ref(const ValueType& value) { return &value; }
 
     static const RefType get_row_ref(const Column& column, size_t row) {
@@ -107,6 +122,10 @@ struct AggDataTypeTraits<lt, ArrayGuard<lt>> {
     static void append_value(ColumnType* column, const ValueType& value) {
         column->append_datum(value->get(0).template get<CppType>());
     }
+    static void append_values(Column* column, const ValueType& value, size_t count) {
+        Datum d(value->get(0).template get<CppType>());
+        column->append_value_multiple_times(&d, count);
+    }
 
     static RefType get_row_ref(const Column& column, size_t row) { return RefType(&column, row); }
 
@@ -133,6 +152,16 @@ struct AggDataTypeTraits<lt, StringOrBinaryGuard<lt>> {
 
     static void append_value(ColumnType* column, const ValueType& value) {
         column->append(Slice(value.data(), value.size()));
+    }
+
+    static void append_values(Column* column, const ValueType& value, size_t count) {
+        if (UNLIKELY(column->is_large_binary())) {
+            Slice slice(value.data(), value.size());
+            down_cast<LargeColumnType*>(column)->append_value_multiple_times(&slice, count);
+        } else {
+            Slice slice(value.data(), value.size());
+            down_cast<ColumnType*>(column)->append_value_multiple_times(&slice, count);
+        }
     }
 
     static RefType get_row_ref(const Column& column, size_t row) {
