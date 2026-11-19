@@ -241,6 +241,7 @@ template <>
 struct RunTimeTypeTraits<TYPE_CHAR> {
     using CppType = Slice;
     using ColumnType = BinaryColumn;
+    using LargeColumnType = LargeBinaryColumn;
     using ProxyContainerType = ColumnType::BinaryDataProxyContainer;
 };
 
@@ -248,6 +249,7 @@ template <>
 struct RunTimeTypeTraits<TYPE_VARCHAR> {
     using CppType = Slice;
     using ColumnType = BinaryColumn;
+    using LargeColumnType = LargeBinaryColumn;
     using ProxyContainerType = ColumnType::BinaryDataProxyContainer;
 };
 
@@ -311,6 +313,7 @@ template <>
 struct RunTimeTypeTraits<TYPE_BINARY> {
     using CppType = Slice;
     using ColumnType = BinaryColumn;
+    using LargeColumnType = LargeBinaryColumn;
     using ProxyContainerType = ColumnType::BinaryDataProxyContainer;
 };
 
@@ -318,6 +321,7 @@ template <>
 struct RunTimeTypeTraits<TYPE_VARBINARY> {
     using CppType = Slice;
     using ColumnType = BinaryColumn;
+    using LargeColumnType = LargeBinaryColumn;
     using ProxyContainerType = ColumnType::BinaryDataProxyContainer;
 };
 
@@ -350,6 +354,9 @@ using RunTimeColumnType = typename RunTimeTypeTraits<Type>::ColumnType;
 
 template <LogicalType Type>
 using RunTimeProxyContainerType = typename RunTimeTypeTraits<Type>::ProxyContainerType;
+
+template <LogicalType Type>
+using RunTimeLargeColumnType = typename RunTimeTypeTraits<Type>::LargeColumnType;
 
 // Movable: rvalue reference type
 template <LogicalType Type>
