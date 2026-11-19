@@ -1290,6 +1290,12 @@ public class ConnectProcessor {
         if (!ctx.getSessionVariable().isEnableReturnQueryId()) {
             return false;
         }
+        // The client must have advertised CLIENT_MULTI_RESULTS in its handshake. If the variable
+        // was set globally or at user level, a client that never negotiated multi-result framing
+        // would otherwise receive unexpected trailing packets and desync.
+        if (!ctx.getClientCapability().isMultiResults()) {
+            return false;
+        }
         // Only the native MySQL protocol can carry a trailing MySQL result set. The HTTP SQL
         // endpoint and Arrow Flight SQL reuse processOnce() with their own transports, so skip them.
         if (ctx instanceof HttpConnectContext || ctx.isArrowFlightSql()) {

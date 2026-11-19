@@ -900,6 +900,13 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Data Type**: Boolean
 * **Introduced in**: v3.5.16, v4.0.9
 
+### enable_return_query_id
+
+* **Description**: Whether the server appends a trailing result set containing the query's `query_id` after the query's own result, so a client can read it in the same round trip instead of issuing a separate `SELECT last_query_id()`. The extra result set is delivered using the MySQL `CLIENT_MULTI_RESULTS` protocol; the client reads it with `Statement.getMoreResults()` (JDBC) or `cursor.nextset()` (pymysql). The `query_id` can then be passed to `get_query_profile()` or `ANALYZE PROFILE FROM`. When enabled, the client must drain the extra result set. It applies only to text-protocol queries (`COM_QUERY`) over the MySQL protocol, is skipped on error, for queries forwarded to the Leader FE, and for the HTTP SQL / Arrow Flight SQL transports, and takes effect only for clients that advertised `CLIENT_MULTI_RESULTS` during the handshake.
+* **Default**: false
+* **Data Type**: Boolean
+* **Introduced in**: v4.0
+
 ### enable_load_profile
 
 * **Scope**: Session

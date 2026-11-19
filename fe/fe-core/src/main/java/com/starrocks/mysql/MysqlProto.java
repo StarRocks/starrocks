@@ -166,6 +166,9 @@ public class MysqlProto {
         // change the capability of serializer
         context.setCapability(context.getServerCapability());
         serializer.setCapability(context.getCapability());
+        // Remember what the client advertised so features can check client support
+        // (e.g. CLIENT_MULTI_RESULTS) independently of the server-fixed negotiated capability.
+        context.setClientCapability(authPacket.getCapability());
         if (offerCompression) {
             channel.setNegotiatedCompression(MysqlCompression.negotiate(authPacket));
         }
