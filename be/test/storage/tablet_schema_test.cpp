@@ -16,6 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include <utility>
+#include <vector>
+
 #include "base/json/json_util.h"
 #include "base/testutil/assert.h"
 #include "column/chunk_factory.h"
@@ -93,6 +96,62 @@ TEST(TabletSchemaTest, rejects_invalid_geo_tablet_columns_before_materialization
     array.add_sub_column(column);
     EXPECT_TRUE(schema.append_column(array).is_not_supported());
     EXPECT_EQ(0, schema.num_columns());
+}
+
+TEST(TabletSchemaTest, compares_geo_descriptor_values) {
+    const auto append_geo = [](TabletSchema& schema, const GeoTypeDescriptor& descriptor) {
+        TabletColumn column(STORAGE_AGGREGATE_NONE, TYPE_GEOMETRY, true, 11, 0);
+        column.set_name("shape");
+        column.set_geo_descriptor(descriptor);
+        return schema.append_column(std::move(column));
+    };
+
+    const GeoTypeDescriptor descriptor{GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857};
+    TabletSchema original;
+    TabletSchema same;
+    ASSERT_OK(append_geo(original, descriptor));
+    ASSERT_OK(append_geo(same, descriptor));
+    ASSERT_NE(original.column(0).geo_descriptor(), same.column(0).geo_descriptor());
+    EXPECT_EQ(original, same);
+
+    auto no_srid = descriptor;
+    no_srid.srid.reset();
+    TabletSchema without_srid;
+    ASSERT_OK(append_geo(without_srid, no_srid));
+    EXPECT_NE(original, without_srid);
+
+    auto other_crs = no_srid;
+    other_crs.crs = "custom:LocalSurveyGrid";
+    TabletSchema different_crs;
+    ASSERT_OK(append_geo(different_crs, other_crs));
+    EXPECT_NE(without_srid, different_crs);
+}
+
+TEST(TabletSchemaTest, rejects_geo_at_inherited_sort_key_uid) {
+    TabletSchemaPB pb;
+    pb.set_keys_type(DUP_KEYS);
+    auto* key = pb.add_column();
+    key->set_unique_id(11);
+    key->set_name("sort_key");
+    key->set_type("INT");
+    key->set_is_key(true);
+    pb.add_sort_key_unique_ids(key->unique_id());
+    auto source = TabletSchema::create(pb);
+    ASSERT_TRUE(source->column(0).is_sort_key());
+    TabletSchemaPB before;
+    source->to_schema_pb(&before);
+
+    TabletColumn geo = source->column(0);
+    geo.set_type(TYPE_GEOMETRY);
+    geo.set_is_key(false);
+    geo.set_is_sort_key(false);
+    geo.set_geo_descriptor({GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857});
+    const auto result = TabletSchema::copy(*source, std::vector<TabletColumn>{std::move(geo)});
+    EXPECT_TRUE(result.status().is_not_supported()) << result.status();
+    TabletSchemaPB after;
+    source->to_schema_pb(&after);
+    EXPECT_EQ(before.SerializeAsString(), after.SerializeAsString());
+    EXPECT_TRUE(source->column(0).is_sort_key());
 }
 
 // NOLINTNEXTLINE
