@@ -45,6 +45,7 @@
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "util/defer_op.h"
 #include "util/filesystem_util.h"
 
 namespace starrocks {
@@ -590,6 +591,45 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_delete_predicat
     EXPECT_FALSE(delete_predicate.in_predicates(0).is_not_in());
     EXPECT_EQ(1, delete_predicate.in_predicates(0).values_size());
     EXPECT_EQ("1", delete_predicate.in_predicates(0).values(0));
+}
+
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, conversion_preserves_overlap_across_versions) {
+    const auto encryption_enabled = config::enable_transparent_data_encryption;
+    DeferOp restore_encryption([&] { config::enable_transparent_data_encryption = encryption_enabled; });
+    config::enable_transparent_data_encryption = false;
+    for (const auto& version : {Version(2, 2), Version(0, 2)}) {
+        for (auto overlap : {OVERLAPPING, NONOVERLAPPING}) {
+            for (int segments : {0, 1, 2}) {
+                SCOPED_TRACE(testing::Message() << version.first << "," << overlap << "," << segments);
+                RowsetMetaPB pb;
+                pb.set_rowset_id("0");
+                pb.set_start_version(version.first);
+                pb.set_end_version(version.second);
+                pb.set_segments_overlap_pb(overlap);
+                pb.set_num_segments(segments);
+                pb.set_num_rows(segments * 10);
+                pb.set_data_disk_size(segments * 1024);
+                pb.set_rowset_seg_id(5);
+                RowsetMeta source(pb);
+                TxnLogPB::OpWrite converted;
+                std::unordered_map<std::string, std::pair<std::string, FileEncryptionInfo>> filename_map;
+                ASSERT_OK(lake::ReplicationTxnManager::convert_rowset_meta(source, 12345, &converted, &filename_map));
+
+                TxnLogPB::OpWrite reloaded;
+                ASSERT_TRUE(reloaded.ParseFromString(converted.SerializeAsString()));
+                EXPECT_EQ(segments > 1 && overlap == OVERLAPPING, reloaded.rowset().overlapped());
+                EXPECT_EQ(segments, reloaded.rowset().segments_size());
+                EXPECT_EQ(segments, filename_map.size());
+                EXPECT_EQ(segments * 10, reloaded.rowset().num_rows());
+                EXPECT_EQ(segments * 1024, reloaded.rowset().data_size());
+                for (int i = 0; i < segments; ++i) {
+                    const auto canonical = source.rowset_id().to_string() + "_" + std::to_string(i) + ".dat";
+                    ASSERT_EQ(1, filename_map.count(canonical));
+                    EXPECT_EQ(filename_map.at(canonical).first, reloaded.rowset().segments(i));
+                }
+            }
+        }
+    }
 }
 
 } // namespace starrocks

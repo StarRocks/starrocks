@@ -676,6 +676,8 @@ void Tablet::overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     }
     Version rowset_version(0, version);
     rowset->make_visible(rowset_version);
+    // The old cumulative point describes the rowsets being replaced.
+    set_cumulative_layer_point(kInvalidCumulativePoint);
     modify_rowsets_without_lock({rowset}, origin_rowsets, nullptr);
 }
 
