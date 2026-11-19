@@ -112,11 +112,14 @@ void SegmentPrefetchWindow::submit(size_t cursor_idx, rowid_t row) {
     const int64_t end = begin + pp.size;
     const int64_t first_block = begin / _block_size;
     const int64_t last_block = (end - 1) / _block_size;
-    c.page.next();
-    settle(&c);
+    auto next_page = [&] {
+        c.page.next();
+        settle(&c);
+    };
 
     if (end_row <= row || pp.size == 0) {
         // The reader is past this page already.
+        next_page();
         return;
     }
     if (last_block <= c.last_block) {
@@ -128,18 +131,27 @@ void SegmentPrefetchWindow::submit(size_t cursor_idx, rowid_t row) {
                 break;
             }
         }
+        next_page();
         return;
     }
+    // A page larger than what is left of the window is asked for a window at a time: the cursor stays on it,
+    // and the rest follows once the reader has released enough blocks.
     const int64_t from_block = std::max(first_block, c.last_block + 1);
+    const int64_t budget = static_cast<int64_t>(_ahead_limit) - static_cast<int64_t>(_ahead_blocks);
+    const int64_t to_block = std::min(last_block, from_block + std::max<int64_t>(budget, 1) - 1);
     const int64_t warm_begin = std::max(begin, from_block * _block_size);
+    const int64_t warm_end = std::min(end, (to_block + 1) * _block_size);
     std::shared_ptr<io::CacheWarmHandle> handle;
-    if (!warm(c.column.file, warm_begin - c.column.object_offset, end - warm_begin, false /* urgent */, &handle)) {
+    if (!warm(c.column.file, warm_begin - c.column.object_offset, warm_end - warm_begin, false /* urgent */, &handle)) {
         return;
     }
-    const size_t blocks = static_cast<size_t>(last_block - from_block + 1);
-    c.last_block = last_block;
+    const size_t blocks = static_cast<size_t>(to_block - from_block + 1);
+    c.last_block = to_block;
     _inflight.push_back(InFlight{cursor_idx, begin_row, end_row, blocks, std::move(handle)});
     _ahead_blocks += blocks;
+    if (to_block == last_block) {
+        next_page();
+    }
 }
 
 void SegmentPrefetchWindow::advance(rowid_t row) {
