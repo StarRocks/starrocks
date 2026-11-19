@@ -2688,6 +2688,17 @@ public class AggregateTest extends PlanTestBase {
             getFragmentPlan(sql);
         }
         {
+            // A constant aggregated value must not be re-appended to the merge phase args: BE reads
+            // the const args positionally, so approx_top_k(<intermediate>, 1, 3, 10) would make it
+            // read the TINYINT literal 1 as k and abort on the type mismatch.
+            String sql = "select /*+SET_VAR(new_planner_agg_stage=2)*/ L_RETURNFLAG, "
+                    + "approx_top_k(cast(1 as tinyint), 3, 10) from lineitem group by L_RETURNFLAG";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "(merge finalize)");
+            assertContains(plan, ": approx_top_k, 3, 10)");
+            assertNotContains(plan, ": approx_top_k, 1, 3, 10)");
+        }
+        {
             Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
                 String sql = "select approx_top_k(L_LINENUMBER, '111') from lineitem";
                 getFragmentPlan(sql);
@@ -3054,4 +3065,417 @@ public class AggregateTest extends PlanTestBase {
                 "  0:OlapScanNode\n" +
                 "     TABLE: tbl1");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testGroupByCompressedKey() throws Exception {
+        final IMinMaxStatsMgr minMaxStatsMgr = IMinMaxStatsMgr.internalInstance();
+
+        new Expectations(minMaxStatsMgr) {
+            {
+                minMaxStatsMgr.getStats((ColumnIdentifier) any, (StatsVersion) any);
+                result = Optional.of(new IMinMaxStatsMgr.ColumnMinMax("0", "1"));
+                minMaxStatsMgr.getStats((ColumnIdentifier) any, (StatsVersion) any);
+                result = Optional.of(new IMinMaxStatsMgr.ColumnMinMax("0", "1"));
+                minMaxStatsMgr.getStats((ColumnIdentifier) any, (StatsVersion) any);
+                result = Optional.of(new IMinMaxStatsMgr.ColumnMinMax("0", "1"));
+            }
+        };
+
+        String sql = "select distinct v1, v2, v3 from t0";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "group by min-max stats:");
+        plan = getThriftPlan(sql);
+        assertContains(plan, "group_by_min_max:[TExpr(");
+    }
+
+    @Test
+    public void testAggregateFilterSyntax() throws Exception {
+        // Test basic FILTER syntax with boolean expression
+        String sql = "select count(*) filter (where v1 > 5) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "count_if");
+
+        // Test FILTER with complex boolean expression
+        sql = "select sum(v2) filter (where v1 > 5 and v2 < 10) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "sum_if");
+
+        // Test FILTER with logical operators
+        sql = "select avg(v3) filter (where v1 = 1 or v2 = 2) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "avg_if");
+
+        // Test FILTER with NOT operator
+        sql = "select max(v1) filter (where not (v2 > 10)) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "max_if");
+    }
+
+    @Test
+    public void testAggregateFilterBooleanTypeValidation() throws Exception {
+        // Test that numeric expressions in FILTER are now allowed (can be cast to boolean)
+        String sql = "select count(*) filter (where v1) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "count_if");
+
+        // Test that string expressions in FILTER are also allowed (can be cast to boolean) 
+        sql = "select sum(v2) filter (where 'true') from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "sum_if");
+    }
+
+    @Test
+    public void testAggIfFunctionBooleanTypeValidation() throws Exception {
+        // Test sum_if with correct boolean condition
+        String sql = "select sum_if(v2, v1 > 5) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "sum_if");
+
+        // Test count_if with correct boolean condition
+        sql = "select count_if(v1 > 0 and v2 < 100) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "count_if");
+
+        // Test that numeric conditions in sum_if are now allowed (can be cast to boolean)
+        sql = "select sum_if(v2, v1) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "sum_if");
+
+        // Test that numeric conditions in count_if are now allowed (can be cast to boolean)
+        sql = "select count_if(v2) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "count_if");
+
+        // Test string conditions are also allowed
+        sql = "select sum_if(v2, 'true') from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "sum_if");
+    }
+
+    @Test
+    public void testPruneAggregateNode() throws Exception {
+        String sql;
+        String plan;
+
+        FeConstants.runningUnitTest = true;
+        try {
+            sql = "with w1 as (SELECT v2, v3 from t0 order by v2 ) SELECT count(v2), sum(v3) from w1";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  3:AGGREGATE (update finalize)\n" +
+                    "  |  output: count(2: v2), sum(3: v3)\n" +
+                    "  |  group by: \n" +
+                    "  |  \n" +
+                    "  2:MERGING-EXCHANGE");
+
+            sql = "SELECT count(distinct v2), bitmap_union_count(to_bitmap(v2)) from t0 group by v3;";
+            plan = getCostExplain(sql);
+            assertContains(plan, "  5:AGGREGATE (update finalize)\n" +
+                    "  |  aggregate: count[([2: v2, BIGINT, true]); args: BIGINT; result: BIGINT; " +
+                    "args nullable: true; result nullable: false], " +
+                    "bitmap_union_count[([6: bitmap_union_count, BIGINT, false]); " +
+                    "args: BITMAP; result: BIGINT; args nullable: true; " +
+                    "result nullable: false]\n" +
+                    "  |  group by: [3: v3, BIGINT, true]\n" +
+                    "  |  cardinality: 1\n" +
+                    "  |  column statistics: \n" +
+                    "  |  * v3-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                    "  |  * count-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                    "  |  * bitmap_union_count-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                    "  |  \n" +
+                    "  4:AGGREGATE (merge serialize)\n" +
+                    "  |  aggregate: bitmap_union_count[([6: bitmap_union_count, BITMAP, false]); " +
+                    "args: BITMAP; result: BIGINT; " +
+                    "args nullable: true; result nullable: false]\n" +
+                    "  |  group by: [2: v2, BIGINT, true], [3: v3, BIGINT, true]\n" +
+                    "  |  cardinality: 1");
+
+            sql = "SELECT /*+SET_VAR(enable_cost_based_multi_stage_agg=false)*/ " +
+                    "count(distinct v2), bitmap_union_count(to_bitmap(v2)) from t0 group by v3;";
+            String disabledPlan = getCostExplain(sql);
+            Assertions.assertEquals(disabledPlan, plan);
+
+            // distinct group_concat cannot merge two phase agg to one phase agg.
+            sql = "select group_concat(distinct 1,2 order by 1,2) from t0 group by v1 order by 1;";
+            plan = getFragmentPlan(sql);
+            // '1' is the aggregated value, so it is not re-appended to the merge phase args --
+            // only the remaining constant args ('2' and the separator) are carried over.
+            assertContains(plan, "  2:AGGREGATE (merge finalize)\n" +
+                    "  |  output: group_concat(4: group_concat, '2', ',')\n" +
+                    "  |  group by: 1: v1\n" +
+                    "  |  \n" +
+                    "  1:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  output: group_concat(DISTINCT '1', '2', ',')\n" +
+                    "  |  group by: 1: v1\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+
+            // distinct avg cannot merge two phase agg to one phase agg.
+            sql = "select avg(distinct v2) from t0 group by v1";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                    "  |  output: avg(2: v2)\n" +
+                    "  |  group by: 1: v1\n" +
+                    "  |  \n" +
+                    "  1:AGGREGATE (update serialize)\n" +
+                    "  |  group by: 1: v1, 2: v2\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+        } finally {
+            FeConstants.runningUnitTest = false;
+        }
+    }
+
+    @Test
+    public void testSplitTopNAgg() throws Exception {
+        FeConstants.runningUnitTest = true;
+        try {
+            // Test basic case - should apply the rule
+            String plan = getFragmentPlan(
+                    "SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                            + "FROM lineitem_partition "
+                            + "WHERE L_LINENUMBER <> 123 "
+                            + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                            + "ORDER BY c DESC LIMIT 10;");
+
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)\n"
+                    + "  |  colocate: false, reason: \n"
+                    + "  |  equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY\n"
+                    + "  |  equal join conjunct: 2: L_PARTKEY = 22: L_PARTKEY");
+
+            // Test case 1: duplicatedColumns.size() > 3 - should not apply the rule
+            // This query has 4 columns in first scan: L_ORDERKEY, L_PARTKEY, L_SUPPKEY, L_LINENUMBER
+            plan = getFragmentPlan(
+                    "SELECT L_ORDERKEY, L_PARTKEY, L_SUPPKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                            + "FROM lineitem_partition "
+                            + "WHERE L_LINENUMBER <> 123 "
+                            + "GROUP BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY "
+                            + "ORDER BY c DESC LIMIT 10;");
+            // Should not contain HASH JOIN, meaning the rule was not applied
+            assertNotContains(plan, "equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY");
+
+            // Test case 2: conjuncts.size() > 2 - should not apply the rule
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER <> 123 AND L_QUANTITY > 0 AND L_DISCOUNT < 1 "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should not contain HASH JOIN, meaning the rule was not applied
+            assertNotContains(plan, "equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY");
+
+            // Test case 3: disconjuncts.size() > 2 - should not apply the rule
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER = 1 OR L_LINENUMBER = 2 OR L_DISCOUNT = 3 "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should not contain HASH JOIN, meaning the rule was not applied
+            assertNotContains(plan, "equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY");
+
+            // Test case 4: conjuncts.size() = 2 - should apply the rule
+            plan = getFragmentPlan("SELECT L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER <> 123 AND L_QUANTITY > 0 "
+                    + "GROUP BY L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should contain HASH JOIN, meaning the rule was applied
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)");
+
+            // Test case 5: disconjuncts.size() = 2 - should apply the rule
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER = 1 OR L_LINENUMBER = 2 "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should contain HASH JOIN, meaning the rule was applied
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)");
+
+            // Test case 6: duplicatedColumns.size() = 3 - should apply the rule (boundary case)
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER <> 123 "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should contain HASH JOIN, meaning the rule was applied
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)");
+
+            // Test case 7: long string column (averageRowSize > 5) - should not apply the rule
+
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_COMMENT <> '' "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should not contain HASH JOIN, meaning the rule was not applied due to long string
+            assertNotContains(plan, "equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY");
+
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_RETURNFLAG <> '' "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should contain HASH JOIN, meaning the rule was applied for short string
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)");
+        } finally {
+            FeConstants.runningUnitTest = false;
+        }
+    }
+
+    @Test
+    public void testAvoidMergeNonGroupByAgg() throws Exception {
+        String plan = getFragmentPlan("SELECT /*+SET_VAR(disable_join_reorder=true)*/ COUNT(*) " +
+                "FROM t0 RIGHT JOIN t1 ON v1 < v4");
+        assertContains(plan, "  7:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(7: count)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  6:AGGREGATE (update serialize)\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: ");
+    }
+
+    @Test
+    public void testGroupByAllBasic() throws Exception {
+        // basic: v1, v2 are non-agg, should become group by keys; sum(v3) is agg
+        String sql = "select v1, v2, sum(v3) from t0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1, 2: v2");
+        assertContains(plan, "output: sum(3: v3)");
+    }
+
+    @Test
+    public void testGroupByAllSingleNonAgg() throws Exception {
+        // single non-agg column with one agg function
+        String sql = "select v1, sum(v2) from t0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1");
+        assertContains(plan, "output: sum(2: v2)");
+    }
+
+    @Test
+    public void testGroupByAllOnlyAgg() throws Exception {
+        // all columns are aggregate — group by all yields scalar aggregation (empty group by)
+        String sql = "select sum(v1), count(v2) from t0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: sum(1: v1), count(2: v2)");
+        assertContains(plan, "group by: \n");
+    }
+
+    @Test
+    public void testGroupByAllNoAgg() throws Exception {
+        // no aggregate functions — group by all collects all columns, equivalent to GROUP BY v1, v2, v3
+        String sql = "select v1, v2, v3 from t0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1, 2: v2, 3: v3");
+    }
+
+    @Test
+    public void testGroupByAllAggExpression() throws Exception {
+        // sum(v1)+1 contains aggregate — should NOT be a group by key
+        String sql = "select v1, sum(v1) + 1 from t0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1");
+        assertContains(plan, "output: sum(1: v1)");
+    }
+
+    @Test
+    public void testGroupByAllMultipleAgg() throws Exception {
+        // multiple agg functions: only v1 is non-agg
+        String sql = "select v1, sum(v2), avg(v3), count(*) from t0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1");
+        assertContains(plan, "output: sum(2: v2), avg(3: v3), count(*)");
+    }
+
+    @Test
+    public void testGroupByAllWithHaving() throws Exception {
+        // having clause should work normally with group by all
+        String sql = "select v1, sum(v2) from t0 group by all having sum(v2) > 10";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1");
+        assertContains(plan, "having: 4: sum > 10");
+    }
+
+    @Test
+    public void testGroupByAllWithWhere() throws Exception {
+        // where clause should be pushed down, group by all still works
+        String sql = "select v1, sum(v2) from t0 where v3 > 0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 3: v3 > 0");
+        assertContains(plan, "group by: 1: v1");
+    }
+
+    @Test
+    public void testGroupByAllWithJoin() throws Exception {
+        // join: non-agg columns from both sides become group by keys
+        String sql = "select t0.v1, t1.v4, sum(t0.v2) from t0 join t1 on t0.v1 = t1.v4 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: sum(2: v2)");
+        assertContains(plan, "group by: 1: v1, 4: v4");
+    }
+
+    @Test
+    public void testGroupByAllWithSubquery() throws Exception {
+        // subquery in from clause
+        String sql = "select a, sum(b) from (select v1 as a, v2 as b from t0) t group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1");
+        assertContains(plan, "output: sum(2: v2)");
+    }
+
+    @Test
+    public void testGroupByAllWithLimit() throws Exception {
+        // limit should not affect group by all behavior
+        String sql = "select v1, sum(v2) from t0 group by all limit 5";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1");
+        assertContains(plan, "limit: 5");
+    }
+
+    @Test
+    public void testGroupByAllDeduplicateKeys() throws Exception {
+        String sql = "select v1, v1, sum(v2) from t0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1\n");
+    }
+
+    @Test
+    public void testGroupByAllWithGroupingFunction() throws Exception {
+        String sql = "select v1, sum(v2) + grouping(v1) from t0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1");
+        assertContains(plan, "output: sum(2: v2)");
+    }
+
+    @Test
+    public void testGroupByAllWithStandaloneGroupingFunction() throws Exception {
+        String sql = "select grouping(v1), sum(v2) from t0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: sum(2: v2)");
+        assertContains(plan, "group by: 1: v1");
+    }
+
+    @Test
+    public void testGroupByAllWithOnlyGroupingFunction() throws Exception {
+        String sql = "select grouping(v1) from t0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1");
+        assertContains(plan, "0");
+    }
+
+    @Test
+    public void testGroupByAllWithStarProjection() throws Exception {
+        String sql = "select *, sum(v1) from t0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1, 2: v2, 3: v3");
+        assertContains(plan, "output: sum(1: v1)");
+    }
+>>>>>>> 8bfe440c95 ([BugFix] Do not re-append a constant aggregated value to the merge phase args (#77069))
 }
