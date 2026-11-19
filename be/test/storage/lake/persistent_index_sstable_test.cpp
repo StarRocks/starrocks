@@ -1485,4 +1485,124 @@ TEST_F(PersistentIndexSstableTest, test_multi_get_reuses_value_message_across_ke
     }
 }
 
+// MultiGet reads the clock for one key in Table::kMultiGetTimingSampleInterval, and only when a trace will report
+// the time: one at random among the first kInterval keys, then every kInterval-th. The counts it adds to the trace
+// stay exact: every probe is found in the block already open, rejected by the bloom filter, or reads a block.
+TEST_F(PersistentIndexSstableTest, test_multi_get_times_sampled_keys_only) {
+    constexpr int kTableKeys = 4096;
+    constexpr size_t kInterval = sstable::Table::kMultiGetTimingSampleInterval;
+    const std::string filename = "test_multi_get_times_sampled_keys_only.sst";
+    auto key_of = [](int n) { return fmt::format("sampled_key_{:08d}", n); };
+    ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(lake::join_path(kTestDir, filename)));
+    phmap::btree_map<std::string, IndexValueWithVer, std::less<>> map;
+    for (int i = 0; i < kTableKeys; ++i) {
+        // Even numbers only: the odd ones are absent keys inside the table's range.
+        map.emplace(key_of(2 * i), std::make_pair(int64_t(1), IndexValue(i)));
+    }
+    uint64_t filesize = 0;
+    PersistentIndexSstableRangePB range_pb;
+    ASSERT_OK(PersistentIndexSstable::build_sstable(map, wf.get(), &filesize, &range_pb));
+    ASSERT_OK(wf->close());
+
+    ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
+    auto sst = std::make_unique<PersistentIndexSstable>();
+    std::unique_ptr<Cache> cache(new_lru_cache(1024 * 1024));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename(filename);
+    sstable_pb.set_filesize(filesize);
+    sstable_pb.mutable_range()->CopyFrom(range_pb);
+    sstable_pb.mutable_fileset_id()->CopyFrom(UniqueId::gen_uid().to_proto());
+    ASSERT_OK(sst->init(std::move(read_file), sstable_pb, cache.get()));
+
+    // Positions, within each lookup, of the keys MultiGet timed.
+    std::vector<size_t> timed;
+    SyncPoint::GetInstance()->SetCallBack("sstable::Table::MultiGet:timed_probe",
+                                          [&](void* arg) { timed.push_back(*static_cast<size_t*>(arg)); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_callback([] {
+        SyncPoint::GetInstance()->ClearCallBack("sstable::Table::MultiGet:timed_probe");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // Looks up the keys numbered `numbers` under `trace` (none if nullptr) and returns how many were found.
+    auto multi_get = [&](const std::vector<int>& numbers, Trace* trace) {
+        std::vector<std::string> key_str;
+        for (int n : numbers) {
+            key_str.push_back(key_of(n));
+        }
+        std::vector<Slice> keys(key_str.begin(), key_str.end());
+        std::vector<IndexValue> values(keys.size(), IndexValue(NullIndexValue));
+        KeyIndexSet key_indexes;
+        for (size_t i = 0; i < keys.size(); ++i) {
+            key_indexes.insert(i);
+        }
+        KeyIndexSet found;
+        if (trace != nullptr) {
+            ADOPT_TRACE(trace);
+            CHECK_OK(sst->multi_get(keys.data(), key_indexes, -1, values.data(), &found));
+        } else {
+            CHECK_OK(sst->multi_get(keys.data(), key_indexes, -1, values.data(), &found));
+        }
+        return found.size();
+    };
+    auto probes_in = [](const std::map<const char*, int64_t>& metrics) {
+        return find_trace_metric(metrics, "continue_block_read_cnt") +
+               find_trace_metric(metrics, "sst_bloom_filter_rows") +
+               find_trace_metric(metrics, "read_block_hit_cache_cnt") +
+               find_trace_metric(metrics, "read_block_miss_cache_cnt");
+    };
+
+    // Absent keys, as in an upsert of new primary keys: the bloom filter rejects nearly all of them and none is
+    // found in an open block, so every key picked for timing reaches the end of the loop and is timed.
+    std::vector<int> absent;
+    for (int i = 0; i < 1000; ++i) {
+        absent.push_back(2 * i + 1);
+    }
+    {
+        scoped_refptr<Trace> trace(new Trace);
+        ASSERT_EQ(0, multi_get(absent, trace.get()));
+        ASSERT_FALSE(timed.empty());
+        EXPECT_LT(timed.front(), kInterval);
+        for (size_t j = 1; j < timed.size(); ++j) {
+            EXPECT_EQ(timed[j - 1] + kInterval, timed[j]);
+        }
+        EXPECT_GE(timed.back() + kInterval, absent.size());
+        auto metrics = trace->metrics()->Get();
+        EXPECT_EQ(absent.size(), probes_in(metrics));
+        EXPECT_EQ(0, find_trace_metric(metrics, "continue_block_read_cnt"));
+        EXPECT_GT(find_trace_metric(metrics, "sst_bloom_filter_rows"), 900);
+        for (std::string_view name : {"multiget_t1_us", "multiget_t2_us", "multiget_t3_us"}) {
+            auto it = std::find_if(metrics.begin(), metrics.end(),
+                                   [&](const auto& kv) { return kv.first != nullptr && name == kv.first; });
+            ASSERT_TRUE(it != metrics.end()) << name;
+            EXPECT_GE(it->second, 0) << name;
+        }
+    }
+
+    // Present keys: most are found in the block already open and leave the loop before its timed end, so only some
+    // of the keys picked for timing show up, all kInterval apart.
+    std::vector<int> present;
+    for (int i = 0; i < kTableKeys; ++i) {
+        present.push_back(2 * i);
+    }
+    {
+        timed.clear();
+        scoped_refptr<Trace> trace(new Trace);
+        ASSERT_EQ(present.size(), multi_get(present, trace.get()));
+        EXPECT_LE(timed.size(), (present.size() + kInterval - 1) / kInterval);
+        for (size_t pos : timed) {
+            EXPECT_EQ(timed.front() % kInterval, pos % kInterval);
+        }
+        auto metrics = trace->metrics()->Get();
+        EXPECT_EQ(present.size(), probes_in(metrics));
+        EXPECT_GT(find_trace_metric(metrics, "continue_block_read_cnt"), 0);
+        EXPECT_EQ(0, find_trace_metric(metrics, "sst_bloom_filter_rows"));
+    }
+
+    // Without a trace nothing would report the time, so no key is timed.
+    timed.clear();
+    ASSERT_EQ(0, multi_get(absent, nullptr));
+    EXPECT_TRUE(timed.empty());
+}
+
 } // namespace starrocks::lake
