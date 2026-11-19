@@ -852,9 +852,15 @@ An explicit column list and `BY NAME` are supported. For a static partition, omi
 
 `INSERT OVERWRITE` replaces the entire table by default. An explicit `PARTITION` replaces only that partition. With `dynamic_overwrite = true`, an overwrite without an explicit partition replaces only partitions present in the input. An empty full or static overwrite clears its target; an empty dynamic overwrite is a no-op.
 
+:::warning
+
+Avoid specifying the table's reserved NULL partition name as a string in `PARTITION (...)`. Paimon treats the value of `partition.default-name` (`__DEFAULT_PARTITION__` by default) as NULL when resolving the overwrite target. For example, an overwrite with `PARTITION (p = '__DEFAULT_PARTITION__')` and zero input rows can clear the NULL partition. To intentionally overwrite the NULL partition, use `PARTITION (p = NULL)`.
+
+:::
+
 Writes require Parquet data files, and matching FE/BE versions with the native Paimon writer installed. The writer uses the catalog storage credentials. `paimon_reader_mode` selects a reader and does not change the write implementation. Explicit transactions, partial updates, dynamic primary-key buckets, cross-partition primary-key updates, data evolution, row tracking, global indexes, and external data paths are not supported.
 
-Partition columns support boolean, integer, string, and date types. Empty or whitespace-only string partition values and the reserved default partition name are rejected because the native SDK cannot preserve them distinctly from NULL. Each sink driver defaults to at most 64 active partition/bucket writers and a 256 MiB native/Arrow allocation budget; exceeding a bound fails the statement before publication. The table options `starrocks.paimon.max-active-writers` (1–4096) and `starrocks.paimon.max-writer-memory-bytes` (2 MiB–4 GiB, in bytes) control these bounds. The query memory limit also applies.
+Partition columns support boolean, integer, string, and date types. When writing rows, StarRocks rejects partition strings that are empty, contain only whitespace, or match the reserved default partition name. The native SDK cannot preserve these values separately from NULL. Each sink driver defaults to at most 64 active partition/bucket writers and a 256 MiB native/Arrow allocation budget; exceeding a bound fails the statement before publication. The table options `starrocks.paimon.max-active-writers` (1–4096) and `starrocks.paimon.max-writer-memory-bytes` (2 MiB–4 GiB, in bytes) control these bounds. The query memory limit also applies.
 
 Data becomes visible after the FE publishes the native Paimon snapshot. An empty INSERT INTO is a no-op. If the client receives a Paimon commit-outcome-unknown error, reconcile the operation before retrying: the snapshot may already have been published, and retrying an append can duplicate rows. The query profile exposes `PaimonOperationId` and `PaimonPublicationState` for this purpose.
 
