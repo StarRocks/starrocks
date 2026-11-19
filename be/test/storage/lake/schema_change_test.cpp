@@ -945,7 +945,7 @@ TEST_P(SchemaChangeKeyConversionTest, test_sorted_generated_columns) {
         ASSERT_OK(_tablet_manager->put_tablet_metadata(base_metadata));
         ASSERT_OK(_tablet_manager->put_tablet_metadata(target_metadata));
         auto base_schema = TabletSchema::create(*base_pb);
-        auto chunk = ChunkFactory::new_chunk(*base_schema->schema(), 4);
+        auto chunk = ChunkHelper::new_chunk(*base_schema->schema(), 4);
         const std::vector<int64_t> keys{9, 10, 90, 100};
         for (size_t i = 0; i < keys.size(); ++i) {
             chunk->get_column_by_index(0)->as_mutable_raw_ptr()->append_datum(Datum(keys[i]));
