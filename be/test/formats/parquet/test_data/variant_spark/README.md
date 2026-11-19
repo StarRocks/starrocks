@@ -62,6 +62,12 @@ JSON and a few paths); Spark returns the same rows for the shredded and the unsh
 `write.parquet.page-row-limit=100`, which gives 6 row groups; `v = {"n": id, "s": "s" + 6-digit id,
 "m": id except every tenth row, "g": id / 1000}`. Iceberg cannot write bloom filters for shredded variant
 fields (the bloom filter properties name Iceberg columns), so there are none.
+`$.n` is shredded as int8, inferred from the first rows, so its values above 127 stay in the fallback `value`
+column and row group statistics cannot skip on it.
+
+`prune_int16.parquet`: the same ids and row group settings with `v = {"w": 1000 + id}`. Every value fits int16,
+so `$.w` is shredded as int16 with a null fallback `value`, and predicates on the BIGINT `get_variant_int(v, '$.w')`
+can be checked against the narrower int16 statistics.
 
 Regenerate them with `SPARK_HOME=<spark-4.1.x> WAREHOUSE=<empty scratch dir> ./gen_variant_evolution.sh`.
 

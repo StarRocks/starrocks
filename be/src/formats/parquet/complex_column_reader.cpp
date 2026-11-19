@@ -17,6 +17,7 @@
 #include <fmt/core.h>
 
 #include <algorithm>
+#include <limits>
 #include <optional>
 #include <string_view>
 #include <unordered_set>
@@ -104,6 +105,105 @@ const ShreddedFieldNode* find_deepest_shredded_ancestor_for_path(const std::vect
     }
     // Every object segment is shredded: the path itself (or its array boundary) is the node.
     return nullptr;
+}
+
+// Integer rank for a lossless widening check; -1 for every other type.
+static int integer_rank(LogicalType type) {
+    switch (type) {
+    case TYPE_TINYINT:
+        return 0;
+    case TYPE_SMALLINT:
+        return 1;
+    case TYPE_INT:
+        return 2;
+    case TYPE_BIGINT:
+        return 3;
+    default:
+        return -1;
+    }
+}
+
+// The value of an integer literal of a predicate on a `slot_type` column, widened to int64.
+static std::optional<int64_t> integer_literal(const Datum& datum, LogicalType slot_type) {
+    if (datum.is_null()) {
+        return std::nullopt;
+    }
+    switch (slot_type) {
+    case TYPE_TINYINT:
+        return datum.get_int8();
+    case TYPE_SMALLINT:
+        return datum.get_int16();
+    case TYPE_INT:
+        return datum.get_int32();
+    case TYPE_BIGINT:
+        return datum.get_int64();
+    default:
+        return std::nullopt;
+    }
+}
+
+static bool integer_fits(int64_t value, LogicalType type) {
+    switch (type) {
+    case TYPE_TINYINT:
+        return value >= std::numeric_limits<int8_t>::min() && value <= std::numeric_limits<int8_t>::max();
+    case TYPE_SMALLINT:
+        return value >= std::numeric_limits<int16_t>::min() && value <= std::numeric_limits<int16_t>::max();
+    case TYPE_INT:
+        return value >= std::numeric_limits<int32_t>::min() && value <= std::numeric_limits<int32_t>::max();
+    case TYPE_BIGINT:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// Writers shred an integer path in the narrowest width that holds its values (int8/int16 for small numbers), while
+// the virtual slot reads it as a wider integer. Comparing the narrower leaf values with a literal gives the same
+// answer as comparing the widened values, as long as the literal itself fits the leaf type: convert_to() only
+// converts the literal, and one outside the leaf range would wrap and prune matching rows. So a predicate can be
+// delegated across the widening only when it has no literal (IS [NOT] NULL) or every literal fits the leaf type.
+static bool can_delegate_across_integer_widening(const std::vector<const ColumnPredicate*>& predicates,
+                                                 const TypeDescriptor& leaf_type, const TypeDescriptor& slot_type) {
+    const int leaf_rank = integer_rank(leaf_type.type);
+    const int slot_rank = integer_rank(slot_type.type);
+    if (leaf_rank < 0 || slot_rank < 0 || leaf_rank > slot_rank) {
+        return false;
+    }
+    for (const ColumnPredicate* predicate : predicates) {
+        if (predicate == nullptr) {
+            return false;
+        }
+        std::vector<Datum> literals;
+        switch (predicate->type()) {
+        case PredicateType::kIsNull:
+        case PredicateType::kNotNull:
+            continue;
+        case PredicateType::kEQ:
+        case PredicateType::kNE:
+        case PredicateType::kGT:
+        case PredicateType::kGE:
+        case PredicateType::kLT:
+        case PredicateType::kLE:
+            literals.emplace_back(predicate->value());
+            break;
+        case PredicateType::kInList:
+        case PredicateType::kNotInList:
+            literals = predicate->values();
+            if (literals.empty()) {
+                return false;
+            }
+            break;
+        default:
+            return false;
+        }
+        for (const Datum& literal : literals) {
+            std::optional<int64_t> value = integer_literal(literal, slot_type.type);
+            if (!value.has_value() || !integer_fits(*value, leaf_type.type)) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 Status rewrite_delegate_predicates(const std::vector<const ColumnPredicate*>& predicates,
@@ -3677,7 +3777,9 @@ bool VariantVirtualZoneMapReader::_prepare_delegate_predicates(
     // ColumnPredicate::convert_to() converts only the literal; it does not derive the inverse
     // predicate of CAST(leaf AS virtual_type). For a lossy cross-type projection, delegating
     // the converted predicate to leaf statistics can incorrectly prune matching rows.
-    if (*leaf_type != _virtual_slot_type) {
+    // The exception is a lossless integer widening whose literals all fit the narrower leaf type.
+    if (*leaf_type != _virtual_slot_type &&
+        !can_delegate_across_integer_widening(predicates, *leaf_type, _virtual_slot_type)) {
         VLOG_FILE << "skip cross-type variant virtual predicate pushdown for path="
                   << _leaf_path.to_shredded_path().value_or("") << ", leaf type=" << leaf_type->debug_string()
                   << ", virtual slot type=" << _virtual_slot_type.debug_string();

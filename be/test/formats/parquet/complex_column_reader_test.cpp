@@ -1085,6 +1085,78 @@ TEST(VariantZoneMapTest, ZoneMapReaderSkipsDecimalToBigintPredicateDelegation) {
     EXPECT_FALSE(row_group_result.value());
 }
 
+// Writers shred small integers in a narrow type; a BIGINT virtual slot (get_variant_int) still uses the INT32 leaf
+// statistics [20,24] when every literal fits INT32.
+TEST(VariantZoneMapTest, ZoneMapReaderDelegatesBigintPredicateToNarrowerIntegerLeaf) {
+    auto file_meta = make_minimal_file_meta();
+    ASSERT_NE(file_meta, nullptr);
+
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    opts.file_meta_data = file_meta.get();
+    ParquetField root_field;
+    ASSIGN_OR_ABORT(auto reader,
+                    make_shredded_variant_reader(rg, opts, root_field, /*stats_on_age_chunk=*/true,
+                                                 /*age_value_all_null=*/false, /*include_age_value=*/false));
+    auto* vr = down_cast<VariantColumnReader*>(reader.get());
+
+    auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));
+    ASSERT_OK(path);
+    VariantVirtualZoneMapReader zm_reader(vr, *path, TYPE_BIGINT_DESC);
+
+    ObjectPool pool;
+    TypeInfoPtr ti = get_type_info(LogicalType::TYPE_BIGINT);
+    const auto filtered = [&](const ColumnPredicate* pred) {
+        auto result = zm_reader.row_group_zone_map_filter({pred}, CompoundNodeType::AND, 0, 5);
+        EXPECT_TRUE(result.ok()) << result.status();
+        return result.value_or(false);
+    };
+    EXPECT_TRUE(filtered(pool.add(new_column_gt_predicate_from_datum(ti, 0, Datum(int64_t(100))))));
+    EXPECT_FALSE(filtered(pool.add(new_column_gt_predicate_from_datum(ti, 0, Datum(int64_t(10))))));
+    EXPECT_TRUE(filtered(pool.add(new_column_eq_predicate_from_datum(ti, 0, Datum(int64_t(25))))));
+    EXPECT_FALSE(filtered(pool.add(new_column_eq_predicate_from_datum(ti, 0, Datum(int64_t(22))))));
+    EXPECT_TRUE(
+            filtered(pool.add(new_column_in_predicate_from_datum(ti, 0, {Datum(int64_t(100)), Datum(int64_t(200))}))));
+    EXPECT_FALSE(
+            filtered(pool.add(new_column_in_predicate_from_datum(ti, 0, {Datum(int64_t(100)), Datum(int64_t(21))}))));
+}
+
+// A literal outside the INT32 leaf range would wrap when converted to the leaf type: 2^32 + 20 becomes 20, and
+// "age < 20" would wrongly skip a row group whose every row satisfies "age < 2^32 + 20". Such predicates must not be
+// delegated.
+TEST(VariantZoneMapTest, ZoneMapReaderSkipsBigintPredicateWhoseLiteralDoesNotFitLeaf) {
+    auto file_meta = make_minimal_file_meta();
+    ASSERT_NE(file_meta, nullptr);
+
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    opts.file_meta_data = file_meta.get();
+    ParquetField root_field;
+    ASSIGN_OR_ABORT(auto reader,
+                    make_shredded_variant_reader(rg, opts, root_field, /*stats_on_age_chunk=*/true,
+                                                 /*age_value_all_null=*/false, /*include_age_value=*/false));
+    auto* vr = down_cast<VariantColumnReader*>(reader.get());
+
+    auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));
+    ASSERT_OK(path);
+    VariantVirtualZoneMapReader zm_reader(vr, *path, TYPE_BIGINT_DESC);
+
+    ObjectPool pool;
+    TypeInfoPtr ti = get_type_info(LogicalType::TYPE_BIGINT);
+    const int64_t wraps_to_20 = (int64_t(1) << 32) + 20;
+    for (const ColumnPredicate* pred :
+         {static_cast<const ColumnPredicate*>(pool.add(new_column_lt_predicate_from_datum(ti, 0, Datum(wraps_to_20)))),
+          static_cast<const ColumnPredicate*>(
+                  pool.add(new_column_in_predicate_from_datum(ti, 0, {Datum(int64_t(100)), Datum(wraps_to_20)})))}) {
+        const ColumnReader* leaf_reader = nullptr;
+        std::vector<const ColumnPredicate*> rewritten_predicates;
+        EXPECT_FALSE(zm_reader._prepare_delegate_predicates({pred}, &pool, 5, &leaf_reader, &rewritten_predicates));
+        auto result = zm_reader.row_group_zone_map_filter({pred}, CompoundNodeType::AND, 0, 5);
+        ASSERT_OK(result);
+        EXPECT_FALSE(result.value());
+    }
+}
+
 TEST(VariantZoneMapTest, ZoneMapReaderSkipsPushdownWhenPredicateRewriteFails) {
     auto file_meta = make_minimal_file_meta();
     ASSERT_NE(file_meta, nullptr);
