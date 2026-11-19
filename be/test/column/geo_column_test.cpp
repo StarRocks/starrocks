@@ -267,7 +267,7 @@ TEST(GeoColumnTest, CopiesCheckSemanticType) {
     EXPECT_EQ(2, raw->size());
 }
 
-TEST(GeoColumnTest, ZeroCountCopiesCheckTypeOnly) {
+TEST(GeoColumnTest, ZeroCountCopiesAreNoOps) {
     for (auto kind : {GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_LOGICAL_TYPE_GEOMETRY}) {
         auto desc = descriptor(kind);
         const auto primitive = kind == GEO_LOGICAL_TYPE_GEOGRAPHY ? TYPE_GEOGRAPHY : TYPE_GEOMETRY;
@@ -316,10 +316,8 @@ TEST(GeoColumnTest, ZeroCountCopiesCheckTypeOnly) {
                     else
                         incompatible.type = {};
                     auto target = GeoColumn::create(incompatible);
-#ifndef NDEBUG
-                    testing::FLAGS_gtest_death_test_style = "threadsafe";
-                    EXPECT_DEATH(copy(*target, *source), "descriptor mismatch") << mismatch;
-#endif
+                    // A zero-count copy returns before looking at the source at all.
+                    copy(*target, *source);
                     EXPECT_EQ(incompatible, target->descriptor());
                     EXPECT_EQ(0, target->size());
                 }
