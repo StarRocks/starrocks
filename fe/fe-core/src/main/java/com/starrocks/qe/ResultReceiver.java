@@ -59,6 +59,9 @@ import java.util.concurrent.TimeoutException;
 
 public class ResultReceiver {
     private static final Logger LOG = LogManager.getLogger(ResultReceiver.class);
+    // Poll the in-flight fetch_data RPC in slices of this length so a cancel() is observed within this
+    // bound instead of blocking for the whole remaining query deadline. See getNext().
+    private static final long CANCEL_CHECK_INTERVAL_MS = 1000L;
     private volatile boolean isDone = false;
     private volatile boolean isCancel = false;
     private long packetIdx = 0;
@@ -90,12 +93,37 @@ public class ResultReceiver {
                 Future<PFetchDataResult> future = BackendServiceClient.getInstance().fetchDataAsync(address, request);
                 PFetchDataResult pResult = null;
                 while (pResult == null) {
+                    // cancel() only flips a flag; it cannot abort the RPC (jprotobuf's Future.cancel() is a
+                    // no-op) and the sink BE answers fetch_data only when it has rows. If that BE is gone
+                    // (crashed, node reclaimed, wedged in SHUTDOWN) no answer ever comes and its brpc talk
+                    // timeout is a day. Blocking here for the whole remaining deadline would keep this thread
+                    // parked until query_timeout, and because StmtExecutor.execute() releases the query's
+                    // admission slot only after getNext() returns, that slot (and every query waiting on it)
+                    // would stay stuck too. So check the cancel flag first, then wait in short slices.
+                    if (isCancel) {
+                        status.setStatus(Status.CANCELLED);
+                        return null;
+                    }
                     long currentTs = System.currentTimeMillis();
                     if (currentTs >= deadlineMs) {
                         throw new TimeoutException("query timeout");
                     }
+                    long waitMs = Math.min(deadlineMs - currentTs, CANCEL_CHECK_INTERVAL_MS);
                     try {
-                        pResult = future.get(deadlineMs - currentTs, TimeUnit.MILLISECONDS);
+                        pResult = future.get(waitMs, TimeUnit.MILLISECONDS);
+                    } catch (TimeoutException e) {
+                        // A poll slice elapsed with no answer (standard Future contract). Loop to re-check
+                        // the cancel flag and the real deadline. The brpc callback survives a timed-out
+                        // get(), so re-issuing get() on the same future simply keeps waiting.
+                    } catch (ExecutionException e) {
+                        // jprotobuf-rpc-core does not honor the Future contract: a slice timeout surfaces as
+                        // ExecutionException wrapping a TimeoutException rather than a bare TimeoutException.
+                        // Treat that as a slice expiry; propagate any genuine execution failure to the outer
+                        // handler. (Matching only the wrapped-TimeoutException cause avoids mistaking the
+                        // real query-deadline path, which we raise ourselves above, for a slice.)
+                        if (!(e.getCause() instanceof TimeoutException)) {
+                            throw e;
+                        }
                     } catch (InterruptedException e) {
                         // continue to get result
                         LOG.info("future get interrupted Exception");
