@@ -123,7 +123,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String ENCLOSE = "enclose";
     public static final String ESCAPE = "escape";
 
+
     public static final String PAUSE_ON_FATAL_PARSE_ERROR = "pause_on_fatal_parse_error";
+    public static final String SKIP_ON_FATAL_PARSE_ERROR = "skip_on_fatal_parse_error";
 
     // kafka type properties
     public static final String KAFKA_BROKER_LIST_PROPERTY = "kafka_broker_list";
@@ -159,7 +161,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(MAX_BATCH_ROWS_PROPERTY)
             .add(MAX_BATCH_SIZE_PROPERTY)
             .add(PAUSE_ON_FATAL_PARSE_ERROR)
+            .add(SKIP_ON_FATAL_PARSE_ERROR)
             .add(FORMAT)
+
             .add(JSONPATHS)
             .add(STRIP_OUTER_ARRAY)
             .add(JSONROOT)
@@ -223,6 +227,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private String mergeConditionStr;
     private String partialUpdateMode = "row";
     private boolean pauseOnFatalParseError = RoutineLoadJob.DEFAULT_PAUSE_ON_FATAL_PARSE_ERROR;
+    private boolean skipOnFatalParseError = RoutineLoadJob.DEFAULT_SKIP_ON_FATAL_PARSE_ERROR;
     /**
      * RoutineLoad support json data.
      * Require Params:
@@ -409,6 +414,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public boolean isPauseOnFatalParseError() {
         return pauseOnFatalParseError;
     }
+    public boolean isSkipOnFatalParseError() { return skipOnFatalParseError;}
 
     public String getFormat() {
         return format;
@@ -640,6 +646,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         pauseOnFatalParseError = Util.getBooleanPropertyOrDefault(jobProperties.get(PAUSE_ON_FATAL_PARSE_ERROR),
                 RoutineLoadJob.DEFAULT_PAUSE_ON_FATAL_PARSE_ERROR,
                 PAUSE_ON_FATAL_PARSE_ERROR + " should be a boolean");
+        skipOnFatalParseError = Util.getBooleanPropertyOrDefault(jobProperties.get(SKIP_ON_FATAL_PARSE_ERROR),
+                RoutineLoadJob.DEFAULT_SKIP_ON_FATAL_PARSE_ERROR,
+                SKIP_ON_FATAL_PARSE_ERROR + " should be a boolean");
 
         format = jobProperties.get(FORMAT);
         if (format != null) {
