@@ -258,8 +258,11 @@ public final class TrinoFormatFunction {
             nullText = nullText.substring(0, specifier.precision);
         }
         nullText = justify(nullText, specifier);
-        if (type.isNull()) {
+        if (argument instanceof NullLiteral) {
             return new StringLiteral(nullText);
+        } else if (type.isNull()) {
+            // The expression is kept, since it can contain an aggregate.
+            return call(analyzer, FunctionSet.IFNULL, toVarchar(argument, analyzer), new StringLiteral(nullText));
         }
         Expr formatted;
         switch (specifier.conversion) {

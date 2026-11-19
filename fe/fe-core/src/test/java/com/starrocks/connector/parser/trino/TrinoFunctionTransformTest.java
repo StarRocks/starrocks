@@ -384,6 +384,9 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
                 "'null null nu | null|null |'");
         assertPlanContains("select format('100%% done%n%s', 'x')", "'100% done\nx'");
         assertPlanContains("select format('%s|%s', CAST(NULL AS BOOLEAN), false)", "'null|false'");
+        // A NULL-typed expression is kept, with its aggregate.
+        assertPlanContains("select format('%s', ARRAY[NULL][1 + 0 * count(*)]) from tall", "AGGREGATE (merge finalize)",
+                "<slot 13> : 'null'");
 
         // %d pads to the width without truncating, with zeros after the sign for the '0' flag.
         assertPlanContains("select format('%03d|%-5d|%2d', tc, tc, tc) from tall",
