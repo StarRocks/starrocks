@@ -760,8 +760,6 @@ public class ExplicitTxnTest {
     }
 
     @Test
-<<<<<<< HEAD
-=======
     public void testExplicitDeleteLoadJobFollowsTransactionOutcome() throws Exception {
         new MockUp<GlobalTransactionMgr>() {
             @Mock
@@ -838,7 +836,6 @@ public class ExplicitTxnTest {
     }
 
     @Test
->>>>>>> dd180c6 ([BugFix] Finalize load jobs for explicit transaction DML (#83761))
     public void testRollbackWithoutItemsReportsAbortFailure() {
         GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         long txnId = 990001L;
