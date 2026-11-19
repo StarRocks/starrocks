@@ -121,6 +121,21 @@ public class NativeGeoTypeTest {
             assertNull(((ScalarType) restored).getGeoDescriptor());
             assertEquals(new ScalarType(primitive), restored);
         }
+        // The descriptor is a value: equal by content, with a stable text form.
+        GeoTypeDescriptor one = GeoTypeDescriptor.geometry("EPSG:3857");
+        assertEquals(one, one);
+        assertEquals(one, GeoTypeDescriptor.geometry("EPSG:3857"));
+        assertEquals(one.hashCode(), GeoTypeDescriptor.geometry("EPSG:3857").hashCode());
+        assertNotEquals(one, GeoTypeDescriptor.geometry("EPSG:4326"));
+        assertNotEquals(one, new GeoTypeDescriptor(one.logicalType(), one.edgeAlgorithm(), one.crs(), null));
+        assertNotEquals(one, GeoTypeDescriptor.geography("EPSG:3857"));
+        assertNotEquals(one, "EPSG:3857");
+        assertEquals("GeoTypeDescriptor[logicalType=GEOMETRY, edgeAlgorithm=PLANAR, crs=EPSG:3857, srid=3857]",
+                one.toString());
+        assertThrows(NullPointerException.class, () -> new GeoTypeDescriptor(null, one.edgeAlgorithm(), "x", null));
+        assertThrows(NullPointerException.class, () -> new GeoTypeDescriptor(one.logicalType(), null, "x", null));
+        assertThrows(NullPointerException.class, () -> new GeoTypeDescriptor(one.logicalType(), one.edgeAlgorithm(),
+                null, null));
         // The convenience factories fill in everything that follows from the kind and the CRS.
         assertEquals(new GeoType(PrimitiveType.GEOGRAPHY, descriptor(PrimitiveType.GEOGRAPHY)),
                 GeoType.createGeographyType("OGC:CRS84"));
