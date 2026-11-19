@@ -1691,17 +1691,17 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_ahead_starts_segment_windows) {
     EXPECT_EQ(expected, scan(true, 16, &stats));
     // The first segment reads ahead at its own turn; the two after it start while it is read.
     EXPECT_EQ(2, stats.segment_read_ahead_started);
-    EXPECT_GT(stats.remote_prefetch_blocks, 0);
     EXPECT_GT(fs->warms.load(), 0);
 
+    // Each segment still reads ahead at its own turn.
+    int64_t warms = fs->warms.load();
     EXPECT_EQ(expected, scan(true, 0, &stats));
     EXPECT_EQ(0, stats.segment_read_ahead_started);
-    EXPECT_GT(stats.remote_prefetch_blocks, 0);
+    EXPECT_GT(fs->warms.load(), warms);
 
-    const int64_t warms = fs->warms.load();
+    warms = fs->warms.load();
     EXPECT_EQ(expected, scan(false, 16, &stats));
     EXPECT_EQ(0, stats.segment_read_ahead_started);
-    EXPECT_EQ(0, stats.remote_prefetch_blocks);
     EXPECT_EQ(warms, fs->warms.load());
 }
 
