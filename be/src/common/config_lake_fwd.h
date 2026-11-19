@@ -184,6 +184,12 @@ CONF_mInt64(lake_max_garbage_version_distance, "100");
 // Turn this on after upgrade to clean up existing orphans, then turn it off once done.
 CONF_mBool(lake_enable_orphan_delvec_cleanup_on_compaction, "false");
 
+// When a publish reads an old row from a segment that the tablet no longer has, rebuild the
+// cloud-native PK index on the next publish attempt, once per base version.
+// Off by default: the rebuild moves the index sstables to orphan files, and those hold the evidence
+// of how the stale entry got there.
+CONF_mBool(lake_pk_index_auto_rebuild_on_missing_rssid, "false");
+
 CONF_mBool(enable_strict_delvec_crc_check, "true");
 
 // When true, a shared-data del file (.del) read back during publish or primary-key index rebuild is

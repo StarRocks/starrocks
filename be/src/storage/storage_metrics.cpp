@@ -79,6 +79,7 @@ void StorageMetrics::install(MetricRegistry* registry) {
     REGISTER_STORAGE_METRIC(delta_column_group_get_non_pk_total);
     REGISTER_STORAGE_METRIC(delta_column_group_get_non_pk_hit_cache);
     REGISTER_STORAGE_METRIC(primary_key_table_error_state_total);
+    REGISTER_STORAGE_METRIC(primary_key_index_auto_rebuild_total);
     REGISTER_STORAGE_METRIC(primary_key_wait_apply_done_duration_ms);
     REGISTER_STORAGE_METRIC(primary_key_wait_apply_done_total);
     REGISTER_STORAGE_METRIC(pk_index_sst_read_error_total);

@@ -513,8 +513,10 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
     plan_read_by_rssid(src_rss_rowids, &num_default, &rowids_by_rssid, &idxes);
     size_t total_rows = src_rss_rowids.size();
     // get column values by rowid, also get default values if needed
-    RETURN_IF_ERROR(params.tablet->primary_key_mgr()->get_column_values(
-            params, read_column_ids, num_default > 0, rowids_by_rssid, &read_columns, &_column_to_expr_value));
+    auto st = params.tablet->primary_key_mgr()->get_column_values(
+            params, read_column_ids, num_default > 0, rowids_by_rssid, &read_columns, &_column_to_expr_value);
+    PrimaryKeyManager::log_keys_at_missing_rssid(st, params, *segment_pk_column, src_rss_rowids);
+    RETURN_IF_ERROR(st);
     for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
         TRY_CATCH_BAD_ALLOC(_partial_update_states[segment_id].write_columns[col_idx]->append_selective(
                 *read_columns[col_idx], idxes.data(), 0, idxes.size()));
