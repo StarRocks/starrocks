@@ -34,8 +34,11 @@
 
 #pragma once
 
+#include <array>
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
-#include <shared_mutex>
 
 #include "base/concurrency/spinlock.h"
 #include "base/phmap/phmap.h"
@@ -60,14 +63,15 @@ public:
     void add_exec_stats_item(uint32_t node_id, int64_t push, int64_t pull, int64_t pred_filter, int64_t index_filter,
                              int64_t rf_filter);
     void add_scan_stats(int64_t scan_rows, int64_t scan_bytes);
-    void add_cpu_costs(int64_t cpu_ns) { this->cpu_ns += cpu_ns; }
-    void add_mem_costs(int64_t bytes) { mem_cost_bytes += bytes; }
-    void add_spill_bytes(int64_t bytes) { spill_bytes += bytes; }
+    void add_cpu_costs(int64_t cpu_ns) { this->cpu_ns.fetch_add(cpu_ns, std::memory_order_relaxed); }
+    void add_mem_costs(int64_t bytes) { mem_cost_bytes.fetch_add(bytes, std::memory_order_relaxed); }
+    void update_max_mem_costs(int64_t bytes);
+    void add_spill_bytes(int64_t bytes) { spill_bytes.fetch_add(bytes, std::memory_order_relaxed); }
     void add_read_stats(int64_t local_cnt, int64_t remote_cnt) {
-        read_local_cnt += local_cnt;
-        read_remote_cnt += remote_cnt;
+        read_local_cnt.fetch_add(local_cnt, std::memory_order_relaxed);
+        read_remote_cnt.fetch_add(remote_cnt, std::memory_order_relaxed);
     }
-    void add_transmitted_bytes(int64_t bytes) { transmitted_bytes += bytes; }
+    void add_transmitted_bytes(int64_t bytes) { transmitted_bytes.fetch_add(bytes, std::memory_order_relaxed); }
     void add_ai_statistics(const AIExecutionStatistics& statistics);
 
     void to_pb(PQueryStatistics* statistics);
@@ -76,12 +80,12 @@ public:
     void merge(int sender_id, QueryStatistics& other);
     void merge_pb(const PQueryStatistics& statistics);
 
-    int64_t get_scan_rows() const { return scan_rows; }
-    int64_t get_mem_bytes() const { return mem_cost_bytes; }
-    int64_t get_transmitted_bytes() const { return transmitted_bytes; }
-    int64_t get_cpu_ns() const { return cpu_ns; }
-    int64_t get_read_local_cnt() const { return read_local_cnt; }
-    int64_t get_read_remote_cnt() const { return read_remote_cnt; }
+    int64_t get_scan_rows() const { return scan_rows.load(std::memory_order_relaxed); }
+    int64_t get_mem_bytes() const { return mem_cost_bytes.load(std::memory_order_relaxed); }
+    int64_t get_transmitted_bytes() const { return transmitted_bytes.load(std::memory_order_relaxed); }
+    int64_t get_cpu_ns() const { return cpu_ns.load(std::memory_order_relaxed); }
+    int64_t get_read_local_cnt() const { return read_local_cnt.load(std::memory_order_relaxed); }
+    int64_t get_read_remote_cnt() const { return read_remote_cnt.load(std::memory_order_relaxed); }
 
     void clear();
 
@@ -104,19 +108,22 @@ private:
     // only set once by result sink when closing.
     int64_t returned_rows{0};
     struct ScanStats {
+        ScanStats() = default;
         ScanStats(int64_t rows, int64_t bytes) : scan_rows(rows), scan_bytes(bytes) {}
         int64_t scan_rows = 0;
         int64_t scan_bytes = 0;
+
+        bool empty() const { return scan_rows == 0 && scan_bytes == 0; }
     };
 
     struct NodeExecStats {
-        std::atomic_int64_t push_rows;
-        std::atomic_int64_t pull_rows;
-        std::atomic_int64_t pred_filter_rows;
-        std::atomic_int64_t index_filter_rows;
-        std::atomic_int64_t rf_filter_rows;
+        int64_t push_rows = 0;
+        int64_t pull_rows = 0;
+        int64_t pred_filter_rows = 0;
+        int64_t index_filter_rows = 0;
+        int64_t rf_filter_rows = 0;
 
-        NodeExecStats() : push_rows(0), pull_rows(0), pred_filter_rows(0), index_filter_rows(0), rf_filter_rows(0) {}
+        NodeExecStats() = default;
 
         NodeExecStats(int64_t push, int64_t pull, int64_t pred_filter, int64_t index_filter, int64_t rf_filter)
                 : push_rows(push),
@@ -124,26 +131,39 @@ private:
                   pred_filter_rows(pred_filter),
                   index_filter_rows(index_filter),
                   rf_filter_rows(rf_filter) {}
+
+        bool empty() const {
+            return push_rows == 0 && pull_rows == 0 && pred_filter_rows == 0 && index_filter_rows == 0 &&
+                   rf_filter_rows == 0;
+        }
     };
     SpinLock _lock;
+    bool _has_map_updates{false};
     // Protected by _lock; no payload is allocated for queries without AI tasks.
     std::unique_ptr<AIExecutionStatistics> _ai_statistics;
-    std::unordered_map<int64_t, std::shared_ptr<ScanStats>> _stats_items;
-    std::unordered_map<uint32_t, std::shared_ptr<NodeExecStats>> _exec_stats_items;
+    phmap::flat_hash_map<int64_t, ScanStats> _stats_items;
+    phmap::flat_hash_map<uint32_t, NodeExecStats> _exec_stats_items;
 };
 
 // It is used for collecting sub plan query statistics in DataStreamRecvr.
 class QueryStatisticsRecvr {
 public:
-    ~QueryStatisticsRecvr();
+    static constexpr size_t kNumStripes = 16;
+
+    QueryStatisticsRecvr() = default;
+    ~QueryStatisticsRecvr() = default;
 
     void insert(const PQueryStatistics& statistics, int sender_id);
     void aggregate(QueryStatistics* statistics);
 
 private:
-    phmap::parallel_flat_hash_map<int, QueryStatistics*, phmap::Hash<int>, phmap::EqualTo<int>,
-                                  phmap::Allocator<phmap::Pair<const int, QueryStatistics*>>, 4, std::shared_mutex>
-            _query_statistics;
+    struct alignas(64) Stripe {
+        QueryStatistics stats;
+        std::atomic<bool> dirty{false};
+    };
+
+    std::array<Stripe, kNumStripes> _stripes;
+    std::atomic_int64_t _max_mem_cost_bytes{0};
 };
 
 } // namespace starrocks
