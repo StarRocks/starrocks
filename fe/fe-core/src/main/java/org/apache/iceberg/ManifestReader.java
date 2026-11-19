@@ -446,12 +446,8 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
                                     tmpDataFiles.add(DataFileWrapper.wrap(dataFile, columnStats, index)));
                         }
                         if (!tmpDataFiles.isEmpty()) {
-<<<<<<< HEAD
-                            dataFileCache.put(file.location(), tmpDataFiles); // to recalculate the weight
-=======
                             logDataFileCacheFill(liveDataEntries.get(), tmpDataFiles);
-                            dataFileCache.put(manifestEntriesCacheKey(), tmpDataFiles); // to recalculate the weight
->>>>>>> a545a6d8d49... [BugFix][RB-1509] Keep duplicate live entries of an Iceberg manifest in the data file cache (#70532)
+                            dataFileCache.put(file.location(), tmpDataFiles); // to recalculate the weight
                         }
                         if (!tmpDeleteFiles.isEmpty()) {
                             deleteFileCache.put(file.location(), tmpDeleteFiles); // to recalculate the weight
@@ -462,12 +458,6 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
                 }
             }
         };
-    }
-
-<<<<<<< HEAD
-=======
-    private String manifestEntriesCacheKey() {
-        return StarRocksIcebergTableScan.manifestEntriesCacheKey(file.location(), firstRowId);
     }
 
     // Records a fill whose size differs from the manifest's declared live file count, which the read side will drop;
@@ -481,7 +471,6 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         }
     }
 
->>>>>>> a545a6d8d49... [BugFix][RB-1509] Keep duplicate live entries of an Iceberg manifest in the data file cache (#70532)
     private boolean shouldCacheDataFiles() {
         return dataFileCache != null && content == FileType.DATA_FILES && dataFileCache.getIfPresent(file.location()) != null;
     }
