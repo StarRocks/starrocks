@@ -1264,10 +1264,9 @@ TEST_F(SchemaChangeTest, historical_key_conversion_order_and_aggregation) {
                 ASSERT_LT(count, 8192);
                 auto key = result->get_column_by_index(0)->get(i);
                 if (strings) {
-                    ASSERT_EQ(count < 4096, key.is_null());
-                    if (!key.is_null()) {
-                        ASSERT_EQ(1, key.get_int64());
-                    }
+                    // branch-4.0 converts the unparseable "bad" to 0, not NULL (#75538 and #76707 are not on 4.0).
+                    ASSERT_FALSE(key.is_null());
+                    ASSERT_EQ(count < 4096 ? 0 : 1, key.get_int64());
                 } else {
                     ASSERT_EQ(count < 4096 ? "2026-11-17" : "2026-11-18", key.get_date().to_string());
                 }
@@ -1391,12 +1390,8 @@ TEST_F(SchemaChangeTest, order_conversion_exact_and_lossy_numeric) {
     ASSERT_OK(
             SchemaChangeUtils::parse_request(base, target, &changer, {}, nullptr, false, &sorting, &directly, nullptr));
     EXPECT_TRUE(sorting);
-    ChunkPtr input = ChunkHelper::new_chunk(*base->schema(), 1);
-    input->get_column_by_index(0)->append_datum(Datum(Slice("bad")));
-    input->get_column_by_index(1)->append_datum(Datum(int32_t{1}));
-    input->get_column_by_index(2)->append_datum(Datum(int32_t{1}));
-    ChunkPtr output = ChunkHelper::new_chunk(*target->schema(), 1);
-    EXPECT_FALSE(changer.change_chunk_v2(input, output, *base->schema(), *target->schema(), &_mem_pool));
+    // The main-branch check that an unparseable string fails a NOT NULL numeric conversion is
+    // dropped: branch-4.0 converts it to 0 (#75538 and #76707 are not on 4.0).
 }
 
 } // namespace starrocks
