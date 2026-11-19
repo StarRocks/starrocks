@@ -36,6 +36,8 @@ public:
 
     void handle(HttpRequest* req) override;
 
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
+
 private:
     int64_t make_snapshot(int64_t tablet_id, int schema_hash, std::string* snapshot_path);
 

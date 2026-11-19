@@ -37,6 +37,7 @@ package com.starrocks.http.rest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
@@ -50,10 +51,12 @@ import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.WebUtils;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaderNames;
@@ -83,6 +86,25 @@ public class RestBaseAction extends BaseAction {
 
     public RestBaseAction(ActionController controller) {
         super(controller);
+    }
+
+    /**
+     * Whether this action requires HTTP Basic Auth. {@code true} by default — auth is
+     * performed by {@link #execute(BaseRequest, BaseResponse)} before dispatching to
+     * {@link #executeWithoutPassword(BaseRequest, BaseResponse)}. Subclasses may override
+     * {@code execute} for pre-dispatch bypasses (see {@code LoadAction#tryInternalTokenBypass});
+     * the normal path must still call {@code super.execute(...)} so the auth pipeline runs.
+     * <p>
+     * Subclasses opt out by returning {@code false}:
+     * <ul>
+     *   <li>Probes / OAuth callback / internal token-protected endpoints — always {@code false}.</li>
+     *   <li>Endpoints that historically accepted anonymous requests and are gated for backward
+     *       compatibility — return {@link Config#enable_http_auth} so they require Basic only when
+     *       the operator opts in.</li>
+     * </ul>
+     */
+    public boolean needAuth() {
+        return true;
     }
 
     @Override
@@ -130,31 +152,41 @@ public class RestBaseAction extends BaseAction {
         }
     }
 
+    // Subclasses may override execute to short-circuit before auth runs (see
+    // LoadAction#tryInternalTokenBypass), but if a subclass falls through to
+    // the normal Basic-auth path it MUST call super.execute(...) — do not
+    // reimplement auth/ctx population, otherwise group-derived roles will be
+    // lost and requireXxxIfHttpAuthEnabled() helpers will deny legitimate users.
     @Override
     public void execute(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
-        ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
-        // check password
-        UserIdentity currentUser = checkPassword(authInfo);
-
         HttpConnectContext ctx = request.getConnectContext();
 
-        // Change user for ConnectContext if necessary
-        UserIdentity prevUserIdentity = ctx.getCurrentUserIdentity();
-        Set<Long> prevRoleIds = ctx.getCurrentRoleIds();
-        String prevUserName = ctx.getQualifiedUser();
+        if (needAuth()) {
+            ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
+            // 3.3 has no AuthenticationHandler / group-derived roles; checkPassword() verifies the
+            // Basic credentials and returns the UserIdentity, and ctx.setCurrentRoleIds(UserIdentity)
+            // derives the role set from that identity.
+            UserIdentity currentUser = checkPassword(authInfo);
 
-        ctx.setCurrentUserIdentity(currentUser);
-        ctx.setCurrentRoleIds(currentUser);
-        ctx.setQualifiedUser(authInfo.fullUserName);
+            // Change user for ConnectContext if necessary
+            UserIdentity prevUserIdentity = ctx.getCurrentUserIdentity();
+            Set<Long> prevRoleIds = ctx.getCurrentRoleIds();
+            String prevUserName = ctx.getQualifiedUser();
 
-        if (ctx.isRegistered() && prevUserName != null && !prevUserName.equals(authInfo.fullUserName)) {
-            ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
-            Pair<Boolean, String> userChangeRes = connectScheduler.onUserChanged(ctx, prevUserName, ctx.getQualifiedUser());
-            if (!userChangeRes.first) {
-                ctx.setCurrentUserIdentity(prevUserIdentity);
-                ctx.setCurrentRoleIds(prevRoleIds);
-                ctx.setQualifiedUser(prevUserName);
-                throw new StarRocksHttpException(SERVICE_UNAVAILABLE, userChangeRes.second);
+            ctx.setCurrentUserIdentity(currentUser);
+            ctx.setCurrentRoleIds(currentUser);
+            ctx.setQualifiedUser(authInfo.fullUserName);
+
+            if (ctx.isRegistered() && prevUserName != null && !prevUserName.equals(authInfo.fullUserName)) {
+                ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
+                Pair<Boolean, String> userChangeRes =
+                        connectScheduler.onUserChanged(ctx, prevUserName, ctx.getQualifiedUser());
+                if (!userChangeRes.first) {
+                    ctx.setCurrentUserIdentity(prevUserIdentity);
+                    ctx.setCurrentRoleIds(prevRoleIds);
+                    ctx.setQualifiedUser(prevUserName);
+                    throw new StarRocksHttpException(SERVICE_UNAVAILABLE, userChangeRes.second);
+                }
             }
         }
 
@@ -162,16 +194,43 @@ public class RestBaseAction extends BaseAction {
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setNettyChannel(request.getContext());
         ctx.setQueryId(UUIDUtil.genUUID());
-        ctx.setRemoteIP(authInfo.remoteIp);
+        ctx.setRemoteIP(request.getHostString());
         ctx.setThreadLocalInfo();
         executeWithoutPassword(request, response);
     }
 
-    // If user password should be checked, the derived class should implement this method, NOT 'execute()',
-    // otherwise, override 'execute()' directly
+    // Subclasses implement this. Auth + ConnectContext setup are already done by the final
+    // {@link #execute(BaseRequest, BaseResponse)} above; if {@link #needAuth()} returns false,
+    // the user-identity fields on ctx are left unset.
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response)
             throws DdlException, AccessDeniedException {
         throw new DdlException("Not implemented");
+    }
+
+    // ---------- privilege helpers, gated by Config.enable_http_auth ----------
+    // Endpoints historically accepted anonymous (or any-authenticated) callers and we
+    // can't tighten them by default without breaking running scripts. These helpers
+    // let the subclass declare the intended privilege; the check actually runs only
+    // when the operator opts in via `enable_http_auth=true`.
+
+    /** Require INSERT on any table within the given db. */
+    protected void requireDbInsertIfHttpAuthEnabled(String dbName) throws AccessDeniedException {
+        if (!Config.enable_http_auth) {
+            return;
+        }
+        ConnectContext context = ConnectContext.get();
+        Authorizer.checkActionInDb(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), dbName,
+                PrivilegeType.INSERT);
+    }
+
+    /** Require SYSTEM.OPERATE — for db/data/query operations. */
+    protected void requireOperateIfHttpAuthEnabled() throws AccessDeniedException {
+        if (!Config.enable_http_auth) {
+            return;
+        }
+        ConnectContext context = ConnectContext.get();
+        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                PrivilegeType.OPERATE);
     }
 
     public void sendResult(BaseRequest request, BaseResponse response, RestBaseResult result) {

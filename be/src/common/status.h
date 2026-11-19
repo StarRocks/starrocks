@@ -108,6 +108,7 @@ public:
     static Status NotFound(std::string_view msg) { return Status(TStatusCode::NOT_FOUND, msg); }
     static Status AlreadyExist(std::string_view msg) { return Status(TStatusCode::ALREADY_EXIST, msg); }
     static Status NotSupported(std::string_view msg) { return Status(TStatusCode::NOT_IMPLEMENTED_ERROR, msg); }
+    static Status NotAuthorized(std::string_view msg) { return Status(TStatusCode::NOT_AUTHORIZED, msg); }
     static Status EndOfFile(std::string_view msg) { return Status(TStatusCode::END_OF_FILE, msg); }
     static Status InternalError(std::string_view msg) { return Status(TStatusCode::INTERNAL_ERROR, msg); }
     static Status RuntimeError(std::string_view msg) { return Status(TStatusCode::RUNTIME_ERROR, msg); }

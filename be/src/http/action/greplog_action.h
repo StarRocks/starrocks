@@ -28,6 +28,8 @@ public:
     ~GrepLogAction() override = default;
 
     void handle(HttpRequest* req) override;
+
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
 };
 
 } // namespace starrocks

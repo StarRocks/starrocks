@@ -22,6 +22,7 @@
 
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
+#include "http/download_action.h"
 #include "http/http_channel.h"
 #include "http/http_request.h"
 #include "runtime/exec_env.h"
@@ -94,6 +95,10 @@ protected:
     ExecEnv _env;
     evhttp_request* _evhttp_req = nullptr;
 };
+
+// `need_auth() == false` for both handlers is pinned in handler_required_privilege_test.cpp
+// (BeHandlerNeedAuthTest.transaction_endpoints_skip_framework_auth). This file focuses on
+// the txn dispatch semantics under various auth/label combinations below.
 
 TEST_F(TransactionStreamLoadActionTest, txn_begin_no_auth) {
     TransactionManagerAction txn_action(&_env);

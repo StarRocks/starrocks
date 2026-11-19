@@ -35,10 +35,12 @@
 package com.starrocks.http.rest;
 
 import com.google.gson.Gson;
+import com.starrocks.common.Config;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.privilege.AccessDeniedException;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -57,8 +59,16 @@ public class ShowRuntimeInfoAction extends RestBaseAction {
                 new ShowRuntimeInfoAction(controller));
     }
 
+    // Historically anonymous; gated for backward compatibility until enable_http_auth flips on.
     @Override
-    public void execute(BaseRequest request, BaseResponse response) {
+    public boolean needAuth() {
+        return Config.enable_http_auth;
+    }
+
+    @Override
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
+        requireOperateIfHttpAuthEnabled();
+
         HashMap<String, String> feInfo = new HashMap<String, String>();
 
         // Get memory info

@@ -74,8 +74,16 @@ public class BootstrapFinishAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, "/api/bootstrap", new BootstrapFinishAction(controller));
     }
 
+    // Always anonymous, even under enable_http_auth: the FE-to-FE heartbeat (HeartbeatMgr)
+    // polls this with the cluster token, not HTTP Basic, so gating it would break peer-FE
+    // heartbeats.
     @Override
-    public void execute(BaseRequest request, BaseResponse response) throws DdlException {
+    public boolean needAuth() {
+        return false;
+    }
+
+    @Override
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
         boolean isReady = GlobalStateMgr.getCurrentState().isReady();
 
         // to json response

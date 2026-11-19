@@ -34,11 +34,13 @@
 
 package com.starrocks.http.rest;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.service.ExecuteEnv;
 import io.netty.handler.codec.http.HttpMethod;
@@ -56,8 +58,16 @@ public class ConnectionAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, "/api/connection", new ConnectionAction(controller));
     }
 
+    // Historically anonymous; gated for backward compatibility until enable_http_auth flips on.
     @Override
-    public void execute(BaseRequest request, BaseResponse response) {
+    public boolean needAuth() {
+        return Config.enable_http_auth;
+    }
+
+    @Override
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
+        requireOperateIfHttpAuthEnabled();
+
         String connStr = request.getSingleParameter("connection_id");
         if (connStr == null) {
             response.getContent().append("not valid parameter");

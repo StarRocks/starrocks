@@ -39,6 +39,7 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
 import io.netty.handler.codec.http.HttpMethod;
@@ -57,7 +58,9 @@ public class QueryDetailAction extends RestBaseAction {
     }
 
     @Override
-    public void executeWithoutPassword(BaseRequest request, BaseResponse response) {
+    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
+        requireOperateIfHttpAuthEnabled();
+
         String eventTimeStr = request.getSingleParameter("event_time");
         if (eventTimeStr == null) {
             response.getContent().append("not valid parameter");

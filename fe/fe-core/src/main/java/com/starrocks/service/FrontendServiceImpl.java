@@ -100,6 +100,7 @@ import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.BaseAction;
+import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.http.rest.WarehouseInfosBuilder;
 import com.starrocks.lake.LakeTablet;
@@ -119,6 +120,7 @@ import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
+import com.starrocks.metric.JsonMetricVisitor;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.planner.OlapTableSink;
@@ -184,6 +186,7 @@ import com.starrocks.thrift.TFeLocksReq;
 import com.starrocks.thrift.TFeLocksRes;
 import com.starrocks.thrift.TFeMemoryReq;
 import com.starrocks.thrift.TFeMemoryRes;
+import com.starrocks.thrift.TFeMetricsResult;
 import com.starrocks.thrift.TFeResult;
 import com.starrocks.thrift.TFetchResourceResult;
 import com.starrocks.thrift.TFinishSlotRequirementRequest;
@@ -270,6 +273,7 @@ import com.starrocks.thrift.TObjectDependencyRes;
 import com.starrocks.thrift.TOlapTableIndexTablets;
 import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TOlapTablePartitionParam;
+import com.starrocks.thrift.TPrivilegeRequirement;
 import com.starrocks.thrift.TQueryStatisticsInfo;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
@@ -690,6 +694,30 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return SysFeMemoryUsage.listFeMemoryUsage(request);
     }
 
+    // information_schema.fe_metrics: return this FE's metrics as the JSON payload that the
+    // HTTP `/metrics?type=json` endpoint produces. Serving it over this Thrift RPC (instead of
+    // the BE scanner scraping the HTTP endpoint) keeps fe_metrics working regardless of
+    // `enable_http_auth` — the internal RPC needs no HTTP Basic credentials. FE process metrics
+    // have no per-object RBAC, so the RPC takes no arguments and there is nothing to authorize
+    // here.
+    @Override
+    public TFeMetricsResult getFeMetrics() throws TException {
+        TFeMetricsResult result = new TFeMetricsResult();
+        try {
+            JsonMetricVisitor visitor = new JsonMetricVisitor("starrocks_fe");
+            String json = MetricRepo.getMetric(visitor,
+                    new MetricsAction.RequestParams(false, false, false, false, false));
+            result.setJson_metrics(json);
+            result.setStatus(new TStatus(TStatusCode.OK));
+        } catch (Exception e) {
+            LOG.warn("get fe metrics failed", e);
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList(e.getMessage()));
+            result.setStatus(status);
+        }
+        return result;
+    }
+
     // list MaterializedView table match pattern
     private TListMaterializedViewStatusResult listMaterializedViewStatus(long limit, PatternMatcher matcher,
                                                                          UserIdentity currentUser, TGetTablesParams params) {
@@ -1103,6 +1131,74 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             default:
                 status.setStatus_code(NOT_IMPLEMENTED_ERROR);
                 break;
+        }
+        return result;
+    }
+
+    @Override
+    public TFeResult checkAuth(TAuthenticateParams request) throws TException {
+        TStatus status = new TStatus(TStatusCode.OK);
+        TFeResult result = new TFeResult(FrontendServiceVersion.V1, status);
+        if (request == null || !request.isSetUser() || !request.isSetPasswd()) {
+            status.setStatus_code(TStatusCode.NOT_AUTHORIZED);
+            status.addToError_msgs("missing authentication parameters");
+            return result;
+        }
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("checkAuth request user={} host={} requiredPriv={}",
+                    request.getUser(),
+                    request.isSetHost() ? request.getHost() : null,
+                    request.isSetRequired_privilege() ? request.getRequired_privilege() : null);
+        }
+
+        String host = request.isSetHost() ? request.getHost() : "";
+        try {
+            // 3.3 has no AuthenticationHandler; authenticate via AuthenticationMgr.checkPlainPassword
+            // (returns null on failure) and derive the role set from the resolved identity. 3.3 has no
+            // group-derived-role support on this path, so role IDs come solely from the user identity.
+            UserIdentity currentUser = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+                    .checkPlainPassword(request.getUser(), host, request.getPasswd());
+            if (currentUser == null) {
+                throw new AccessDeniedException("invalid credentials");
+            }
+            ConnectContext ctx = new ConnectContext();
+            ctx.setCurrentUserIdentity(currentUser);
+            ctx.setCurrentRoleIds(currentUser);
+            Set<Long> roleIds = ctx.getCurrentRoleIds();
+
+            // getRequired_privilege() can return null when a newer BE sends an enum value
+            // this FE doesn't know (TPrivilegeRequirement.findByValue returns null); guard
+            // before the switch so we reject cleanly instead of throwing NPE.
+            TPrivilegeRequirement requiredPriv = request.isSetRequired_privilege()
+                    ? request.getRequired_privilege() : TPrivilegeRequirement.NONE;
+            if (requiredPriv == null) {
+                LOG.warn("checkAuth received unknown required_privilege (enum int) from BE for user={}",
+                        request.getUser());
+                status.setStatus_code(TStatusCode.INTERNAL_ERROR);
+                status.addToError_msgs("auth verification failed");
+                return result;
+            }
+            switch (requiredPriv) {
+                case NONE:
+                    break;
+                case OPERATE:
+                    Authorizer.checkSystemAction(currentUser, roleIds, PrivilegeType.OPERATE);
+                    break;
+                case NODE:
+                    Authorizer.checkSystemAction(currentUser, roleIds, PrivilegeType.NODE);
+                    break;
+                default:
+                    LOG.warn("checkAuth hit default switch arm for required_privilege={} (FE enum out of sync)",
+                            requiredPriv);
+                    status.setStatus_code(TStatusCode.INTERNAL_ERROR);
+                    status.addToError_msgs("auth verification failed");
+                    return result;
+            }
+        } catch (AccessDeniedException e) {
+            LOG.warn("checkAuth privilege check failed for user={}: {}", request.getUser(), e.getMessage());
+            status.setStatus_code(TStatusCode.NOT_AUTHORIZED);
+            status.addToError_msgs("Access denied for " + request.getUser() + "@" + host);
         }
         return result;
     }

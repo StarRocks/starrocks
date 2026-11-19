@@ -109,6 +109,12 @@ EvHttpServer::~EvHttpServer() {
 }
 
 Status EvHttpServer::start() {
+    // Mark the server as started so `set_auth_verifier` will DCHECK if called
+    // late. Setting before _bind() means even a failed start can't be "fixed
+    // up" by retroactively wiring a verifier between attempts — but that's
+    // intentional: re-using a partially-started instance isn't supported.
+    _started = true;
+
     // bind to
     RETURN_IF_ERROR(_bind());
     for (int i = 0; i < _num_workers; ++i) {
@@ -274,6 +280,26 @@ int EvHttpServer::on_header(struct evhttp_request* ev_req) {
         HttpChannel::send_reply(request.get(), HttpStatus::NOT_FOUND, "Not Found");
         return 0;
     }
+
+    // Basic-Auth check (gated by `config::enable_http_auth` inside the injected verifier).
+    // Done before handler->on_header so handlers don't get a chance to read the body.
+    // HttpCore stays format-agnostic: the verifier shapes the failure response (status,
+    // headers, body) and HttpCore just dispatches it.
+    if (handler->need_auth() && _auth_verifier) {
+        auto failure = _auth_verifier(request.get(), handler->required_privilege());
+        if (failure.has_value()) {
+            evhttp_remove_header(evhttp_request_get_input_headers(ev_req), HttpHeaders::EXPECT);
+            if (!failure->www_authenticate.empty()) {
+                evhttp_add_header(evhttp_request_get_output_headers(ev_req), "WWW-Authenticate",
+                                  failure->www_authenticate.c_str());
+            }
+            evhttp_add_header(evhttp_request_get_output_headers(ev_req), HttpHeaders::CONTENT_TYPE,
+                              HttpHeaders::JsonType.c_str());
+            HttpChannel::send_reply(request.get(), failure->http_status, failure->body);
+            return 0;
+        }
+    }
+
     // set handler before call on_header, because handler_ctx will set in on_header
     request->set_handler(handler);
     res = handler->on_header(request.get());

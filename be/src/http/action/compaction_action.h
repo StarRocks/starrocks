@@ -62,6 +62,8 @@ public:
     static Status do_compaction(uint64_t tablet_id, const std::string& compaction_type,
                                 const std::string& rowset_ids_string);
 
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
+
 private:
     Status _handle_show_compaction(HttpRequest* req, std::string* json_result);
     Status _handle_compaction(HttpRequest* req, std::string* json_result);

@@ -39,6 +39,7 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.privilege.AccessDeniedException;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
@@ -57,7 +58,9 @@ public class ProfileAction extends RestBaseAction {
     }
 
     @Override
-    public void executeWithoutPassword(BaseRequest request, BaseResponse response) {
+    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
+        requireOperateIfHttpAuthEnabled();
+
         String queryId = request.getSingleParameter("query_id");
         if (queryId == null) {
             response.getContent().append("not valid parameter");

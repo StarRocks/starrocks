@@ -56,4 +56,5 @@ public class BasicActionTest {
         result = WebUtils.sanitizeHttpReqUri(uri);
         Assert.assertEquals(uri, result);
     }
+
 }
