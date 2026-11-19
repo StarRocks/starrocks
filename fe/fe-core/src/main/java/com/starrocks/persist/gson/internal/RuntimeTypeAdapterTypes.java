@@ -176,6 +176,7 @@ import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.type.AnyArrayType;
 import com.starrocks.type.AnyElementType;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.GeoType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.PseudoType;
@@ -201,6 +202,7 @@ public class RuntimeTypeAdapterTypes {
                 RuntimeTypeAdapterFactory
                         .of(com.starrocks.type.Type.class, "clazz")
                         .registerSubtype(ScalarType.class, "ScalarType", true)
+                        .registerSubtype(GeoType.class, "GeoType")
                         .registerSubtype(ArrayType.class, "ArrayType")
                         .registerSubtype(MapType.class, "MapType")
                         .registerSubtype(StructType.class, "StructType")

@@ -163,15 +163,24 @@ DROP MATERIALIZED VIEW test_date;
 DROP DATABASE db_${uuid0};
 -- result:
 -- !result
-DROP TABLE mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours;
+DROP TABLE mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours FORCE;
 -- result:
 -- !result
-DROP TABLE mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_date;
+DROP TABLE mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_date FORCE;
 -- result:
 -- !result
-DROP TABLE mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t1;
+DROP TABLE mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t1 FORCE;
 -- result:
 -- !result
 DROP DATABASE mv_iceberg_${uuid0}.sql_test_db_${uuid0} force;
 -- result:
 -- !result
+CLEANUP {
+drop database if exists default_catalog.db_${uuid0} force;
+drop table if exists mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_hours force;
+drop table if exists mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_date force;
+drop table if exists mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t1 force;
+drop database if exists mv_iceberg_${uuid0}.sql_test_db_${uuid0};
+set catalog default_catalog;
+drop catalog if exists mv_iceberg_${uuid0};
+} END CLEANUP

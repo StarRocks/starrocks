@@ -18,6 +18,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "column/vectorized_fwd.h"
@@ -49,6 +50,13 @@ uint32_t get_max_segment_idx(const RowsetMetadataPB& rowset_meta);
 uint32_t get_rowset_id_step(const RowsetMetadataPB& rowset_meta);
 uint32_t get_segment_idx(const RowsetMetadataPB& rowset_meta, int32_t segment_pos);
 uint32_t get_rssid(const RowsetMetadataPB& rowset_meta, int32_t segment_pos);
+
+// Drop the IDG entries of the segments |rssids| from |metadata| and move their .idx files to
+// orphan_files for vacuum. Compaction calls it for its input segments, whose rssids become
+// unreachable. Rewritten segments build the indexes declared by the selected output schema inline;
+// the ones a non-PK partial compaction keeps move under new rssids and read without the index
+// until a later compaction rewrites them under a schema that declares the index.
+void retire_idg_entries(TabletMetadataPB* metadata, const std::unordered_set<uint32_t>& rssids);
 
 // Resolve the segment index a del file logically follows (the delete's rssid is
 // `rowset_id + <returned index>`), preserving the in-transaction upsert/delete order.
@@ -259,6 +267,9 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, co
                    bool fill_cache, const LakeIOOptions& lake_io_opts, DelVector* delvec);
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, bool fill_cache,
                    const LakeIOOptions& lake_io_opts, DelVector* delvec);
+// Whether get_del_vec() of |segment_id| would be answered without any read: the segment has no delete vector in
+// |metadata|, or its delete vector is in the metadata cache. The probe is not counted as a cache hit or miss.
+bool del_vec_cached(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id);
 bool is_primary_key(TabletMetadata* metadata);
 bool is_primary_key(const TabletMetadata& metadata);
 

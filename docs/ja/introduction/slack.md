@@ -2,6 +2,7 @@
 sidebar_position: 70
 description: コミュニティと Slack で交流する
 displayed_sidebar: docs
+products: [oss, enterprise]
 ---
 
 # コミュニティチャット (Slack 経由)

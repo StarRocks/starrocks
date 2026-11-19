@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "症状から根本原因、実証済みの修正までを示す、StarRocks クエリチューニング実践ガイド。"
 keywords: ['profile', 'query', 'チューニング']
 sidebar_position: 40
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # クエリチューニングのレシピ
@@ -165,7 +166,7 @@ StarRocks は、ベクトル化されたパイプラインフレンドリーな�
             PROCESS
 ```
 
-**ソートのスピル** - `MaxBufferedBytes` がおよそ 2 GB を超えるか、`SpillBytes` がゼロでない場合、ソートフェーズはディスクにスピルしています。`LIMIT` を追加するか、上流で事前集計を行うか、マシンに十分なメモリがある場合は `sort_spill_threshold` を上げてください。
+**ソートのスピル** - `MaxBufferedBytes` がおよそ 2 GB を超えるか、`SpillBytes` がゼロでない場合、ソートフェーズはディスクにスピルしています。`LIMIT` を追加するか、上流で事前集計を行ってください。
 
 **マージのスターベーション** - 高い `PendingStageTime` は、マージが上流のチャンクを待っていることを示しています。最初にプロデューサー operator を最適化するか、パイプラインバッファを拡大してください。
 

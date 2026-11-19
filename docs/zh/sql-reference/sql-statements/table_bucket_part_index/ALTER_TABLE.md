@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "修改现有表，包括重命名、修改分区、修改分桶、调整 Tablet 大小和修改列。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER TABLE
@@ -487,7 +488,7 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
     - Tablet 的大小**大于或等于** `tablet_reshard_target_size` 的 1.5 倍（即 `ceil(1.5 × tablet_reshard_target_size)`）。以默认值 10 GB 为例，Tablet 达到 15 GB 才会拆分。后台自动拆分和手动执行的 `ALTER TABLE ... SPLIT` 均按此阈值判断：自动拆分使用表的目标大小；手动 SPLIT 使用 `PROPERTIES` 中指定的值，未指定时同样使用表的目标大小。指定 Tablet ID 时也不例外：小于该阈值的 Tablet 不会被拆分；如果没有任何 Tablet 满足条件，语句会报错 `No tablets need to split in table ...`。
     - 当前正在执行 SPLIT 或 MERGE 的 Tablet 数量小于 FE 配置项 `tablet_reshard_max_parallel_tablets`（默认值：10240）。
 
-  - 此外，如果 Tablet 所属物化索引的 Tablet 数量少于其所属仓库的计算节点数（该数量同时受 `tablet_reshard_max_split_count` 上限约束，因此调小该配置会让此行为更早停止），且该 Tablet 的大小达到该规则目标大小的两倍，则无需达到上述阈值即可触发拆分，从而使新建分区更快获得集群级别的写入并行度。该规则的目标大小为“索引数据量按上述槽位数均分”所得的大小，不超过表的目标大小，并以 `tablet_reshard_min_split_size` 为下限；因此在其 2 GB 默认值下，数据量尚未超过该下限的索引会在单个 Tablet 达到 4 GB 时触发拆分。在该目标仍小于表的目标大小时，如果按上述条件拆分后仍有剩余槽位，会把它们分给上述拆分没有涉及的 Tablet 中最大的几个继续拆分，前提是拆分出的每个 Tablet 都不小于 `tablet_reshard_min_split_size`。例如在 3 个计算节点上，已有 2 个 Tablet 的索引会在其中一个 Tablet 达到 4 GB 时拆出第 3 个。该规则适用于后台自动拆分，以及既未指定 Tablet ID、也未指定 `tablet_reshard_target_size` 的手动 SPLIT；指定其中任意一项都会禁用该规则，仅按上述阈值判断。将 `tablet_reshard_min_split_size` 设置为大于或等于表的目标大小，即可对该表禁用该规则；如需在整个集群范围内禁用，该值须同时大于或等于 FE 配置项 `tablet_reshard_target_size` 和各表设置的表属性 `tablet_reshard_target_size`。
+  - 此外，当 Tablet 所属物化索引的 Tablet 数量少于其所属仓库的计算节点数（该数量同时受 `tablet_reshard_max_split_count` 上限约束，因此调小该配置会让此行为更早停止），且索引数据量小于该数量与表的目标大小之积时，无需达到上述阈值即可触发拆分，从而使新建分区更快获得集群级别的写入并行度。空余的槽位会逐个分配给未被上述阈值拆分的 Tablet，每次都分给按当前拆分份数计算、每份数据量最大的那个 Tablet；拆分出的每个 Tablet 都不能小于 `tablet_reshard_min_split_size`，单个 Tablet 拆分出的数量也不能超过单次拆分的上限。以 `tablet_reshard_min_split_size` 的默认值 2 GB 为例，只有一个 Tablet 的索引会在该 Tablet 达到 4 GB 时触发拆分；在 3 个计算节点上，已有 2 个 Tablet 的索引会在其中一个 Tablet 达到 4 GB 时拆出第 3 个。该规则适用于后台自动拆分，以及既未指定 Tablet ID、也未指定 `tablet_reshard_target_size` 的手动 SPLIT；指定其中任意一项都会禁用该规则，仅按上述阈值判断。将 `tablet_reshard_min_split_size` 设置为大于或等于表的目标大小，即可对该表禁用该规则；如需在整个集群范围内禁用，该值须同时大于或等于 FE 配置项 `tablet_reshard_target_size` 和各表设置的表属性 `tablet_reshard_target_size`。
 
   - 合并（MERGE）需要将 FE 配置项 `tablet_reshard_enable_tablet_merge` 设置为 `true`（默认值：`false`），否则系统不会自动合并 Tablet，`ALTER TABLE ... MERGE` 也会被拒绝。开启后，合并规则如下：
     - 自动合并：物化索引中任意两个相邻 Tablet 的大小总和**小于** `tablet_reshard_target_size` 的 80%（即 `ceil(0.8 × tablet_reshard_target_size)`）时触发，此处使用表的目标大小。以默认值 10 GB 为例，相邻两个 Tablet 合计不足 8 GB 时即触发合并。
@@ -933,9 +934,11 @@ StarRocks使用 Compaction 机制来合并已加载数据的不同版本。此�
 
 存算分离集群从v3.3.0起支持此功能。
 
+存算分离主键表的 Base Compaction 从 v4.1.4 开始支持。直接使用 `ALTER TABLE ... COMPACT` 即可请求手动 Compaction，无需额外写 `BASE`。从 v4.1.7 开始，`lake_pk_compaction_base_enable_delete_trigger` 只控制自动触发，设置为 `false` 也不影响手动请求；手动请求同样不要求达到两个删除阈值。Tablet 没有删除行时，会回退到普通 Compaction 选取。请求是异步的，且一次不保证合完整个 Tablet。详见[主键表 Base Compaction](../../../administration/management/compaction.md#primary-key-base-compaction)。
+
 > **注意**
 >
-> 从v3.2.13起，可以使用属性[`base_compaction_forbidden_time_ranges`](./CREATE_TABLE.md#forbid-base-compaction)在特定时间范围内禁止基础合并。
+> [`base_compaction_forbidden_time_ranges`](./CREATE_TABLE.md#禁止-base-compaction) 的 v3.2.13 支持起点适用于存算一体非主键表。4.1 系列不支持给存算分离表设置此属性。存算分离的自动 Base Compaction 时段和最小间隔限制从 v4.2 开始支持；手动 `ALTER TABLE ... COMPACT` 可绕过这些限制。
 
 语法：
 
@@ -962,7 +965,7 @@ ALTER TABLE <tbl_name> CUMULATIVE COMPACT (<partition1_name>[,<partition2_name>,
 ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
 ```
 
-`information_schema`数据库中的`be_compactions`表记录 Compaction 结果。可以运行`SELECT * FROM information_schema.be_compactions;`查询 Compaction 后的数据版本。
+存算一体集群可以通过 `information_schema.be_compactions` 查询 Compaction 结果。存算分离集群使用 `SHOW PROC '/compactions'` 查看任务状态，并通过 `information_schema.be_cloud_native_compactions` 查看 Tablet 执行详情，参见[查看 Compaction 任务](../../../administration/management/compaction.md#查看-compaction-任务)。
 
 ### 删除主键索引 (3.3.9 版本起)
 

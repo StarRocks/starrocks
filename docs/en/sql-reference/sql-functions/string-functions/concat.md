@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Concatenates multiple strings into a single string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # concat

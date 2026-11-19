@@ -288,6 +288,7 @@ void Bitset<LT>::insert(const CppType& value) {
     const uint64_t bucket = _value_interval(value);
     const uint64_t group = bucket / 8;
     const uint64_t index_in_group = bucket % 8;
+    DCHECK_LT(group, _bitset.size());
     _bitset[group] |= (1 << index_in_group);
 }
 
@@ -348,9 +349,7 @@ bool Bitset<LT>::contains_range(const CppType& min_value, const CppType& max_val
 
 template <LogicalType LT>
 void Bitset<LT>::init() {
-    const size_t key_interval = value_interval() + 1;
-    const size_t num_buckets = (key_interval + 7) / 8;
-    _bitset.resize(num_buckets);
+    _bitset.resize(num_bytes_for_span(value_interval()));
 }
 
 template <LogicalType LT>

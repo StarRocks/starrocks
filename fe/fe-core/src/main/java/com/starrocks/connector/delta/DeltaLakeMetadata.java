@@ -47,7 +47,6 @@ import com.starrocks.sql.optimizer.rewrite.ExternalScanPredicates;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import io.delta.kernel.data.FilteredColumnarBatch;
 import io.delta.kernel.data.Row;
-import io.delta.kernel.engine.Engine;
 import io.delta.kernel.expressions.Predicate;
 import io.delta.kernel.internal.InternalScanFileUtils;
 import io.delta.kernel.internal.ScanBuilderImpl;
@@ -171,12 +170,6 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
         triggerDeltaLakePlanFilesIfNeeded(key, deltaLakeTable, predicate, columns);
 
-        List<FileScanTask> deltaLakeScanTasks = splitTasks.get(key);
-        if (deltaLakeScanTasks == null) {
-            throw new StarRocksConnectorException("Missing delta split task for table:[{}.{}]. predicate:[{}]",
-                    dbName, table, predicate);
-        }
-
         String traceLabel = session.getSessionVariable().enableDeltaLakeColumnStatistics() ?
                 "DELTA_LAKE.getTableStatistics" + key : "DELTA_LAKE.getCardinalityStats" + key;
         try (Timer ignored = Tracers.watchScope(EXTERNAL, traceLabel)) {
@@ -188,31 +181,44 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         }
     }
 
+    // Statistics: one enumeration per key. The file list is kept only for a scan that will list its files with
+    // getRemoteFiles; an incremental scan enumerates them again through getRemoteFilesAsync and never reads the
+    // list, so keeping it would only hold every FileScanTask of the table for the rest of planning.
     private void triggerDeltaLakePlanFilesIfNeeded(PredicateSearchKey key, Table table,
                                                    ScalarOperator operator, Map<ColumnRefOperator, Column> columns) {
         if (!scannedTables.contains(key)) {
             try (Timer ignored = Tracers.watchScope(Tracers.get(), EXTERNAL, "DELTA_LAKE.processSplit." + key)) {
                 List<String> fieldNames = columns.keySet().stream()
                         .map(ColumnRefOperator::getName).collect(Collectors.toList());
-                collectDeltaLakePlanFiles(key, table, operator, ConnectContext.get(), fieldNames);
+                ConnectContext connectContext = ConnectContext.get();
+                collectDeltaLakePlanFiles(key, table, operator, connectContext, fieldNames,
+                        !isIncrementalScanRanges(connectContext), true);
             }
         }
     }
 
+    // getRemoteFiles: needs the file list, so enumerates unless it is already kept. Statistics are updated only if
+    // this key was never enumerated, so a statistics pass that did not keep its list is not counted twice.
     private void triggerDeltaLakePlanFilesIfNeeded(PredicateSearchKey key, Table table,
                                                    ScalarOperator operator, List<String> fieldNames) {
-        if (!scannedTables.contains(key)) {
+        if (!splitTasks.containsKey(key)) {
             try (Timer ignored = Tracers.watchScope(Tracers.get(), EXTERNAL, "DELTA_LAKE.processSplit." + key)) {
-                collectDeltaLakePlanFiles(key, table, operator, ConnectContext.get(), fieldNames);
+                collectDeltaLakePlanFiles(key, table, operator, ConnectContext.get(), fieldNames, true,
+                        !scannedTables.contains(key));
             }
         }
     }
 
-    private CloseableIterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> buildFileScanTaskIterator(
+    private static boolean isIncrementalScanRanges(ConnectContext context) {
+        return context != null && context.getSessionVariable() != null
+                && context.getSessionVariable().isEnableConnectorIncrementalScanRanges();
+    }
+
+    CloseableIterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> buildFileScanTaskIterator(
             Table table, ScalarOperator operator, boolean enableCollectColumnStats) {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
         Metadata metadata = deltaLakeTable.getDeltaMetadata();
-        Engine engine = deltaLakeTable.getDeltaEngine();
+        DeltaLakeEngine engine = (DeltaLakeEngine) deltaLakeTable.getDeltaEngine();
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
 
         StructType schema = metadata.getSchema();
@@ -244,6 +250,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         CloseableIterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> baseIterator = new CloseableIterator<>() {
             CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches;
             CloseableIterator<Row> scanFileRows;
+            ScanFileUtils.RowContext rowContext;
             boolean hasMore = true;
 
             @Override
@@ -262,8 +269,11 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                 try {
                     Row scanFileRow = scanFileRows.next();
                     DeletionVectorDescriptor dv = InternalScanFileUtils.getDeletionVectorDescriptorFromRow(scanFileRow);
+                    if (rowContext == null) {
+                        rowContext = new ScanFileUtils.RowContext(metadata);
+                    }
                     Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> task =
-                            ScanFileUtils.convertFromRowToFileScanTask(enableCollectColumnStats, scanFileRow, metadata,
+                            ScanFileUtils.convertFromRowToFileScanTask(enableCollectColumnStats, scanFileRow, rowContext,
                                     estimateRowSize, dv);
                     converted = true;
                     return task;
@@ -327,12 +337,12 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         };
 
         if (residual.residual.isEmpty()) {
-            return baseIterator;
+            return engine.withFileSystemAccess(baseIterator);
         }
         // Evaluate the cast-on-string-partition residual StarRocks-side: keep a file unless its partition value
         // provably cannot satisfy the residual (partitionMayMatch drops only on a definitive false), consistent
         // with the backend filter and never dropping a possibly-matching file.
-        return new CloseableIterator<>() {
+        return engine.withFileSystemAccess(new CloseableIterator<>() {
             Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> nextMatch = null;
             boolean finished = false;
 
@@ -376,12 +386,13 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                     LOG.error("Failed to close delta lake scan file iterator", e);
                 }
             }
-        };
+        });
     }
 
     // Partition columns of string type. Delta partitioning is always identity, so every string partition column is
-    // an identity string partition column for ExternalScanPredicates.splitStringPartitionCast. Package-private for testing.
-    static Set<String> identityStringPartitionColumns(DeltaLakeTable table, Set<String> partitionColumns) {
+    // an identity string partition column for ExternalScanPredicates.splitStringPartitionCast. Also used by the
+    // scan statistics to tell which conjuncts this residual prunes.
+    public static Set<String> identityStringPartitionColumns(DeltaLakeTable table, Set<String> partitionColumns) {
         Set<String> lowerPartitionColumns = new HashSet<>();
         for (String name : partitionColumns) {
             lowerPartitionColumns.add(name.toLowerCase(Locale.ROOT));
@@ -423,6 +434,12 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
     private void collectDeltaLakePlanFiles(PredicateSearchKey key, Table table, ScalarOperator operator,
                                            ConnectContext connectContext, List<String> fieldNames) {
+        collectDeltaLakePlanFiles(key, table, operator, connectContext, fieldNames, true, true);
+    }
+
+    private void collectDeltaLakePlanFiles(PredicateSearchKey key, Table table, ScalarOperator operator,
+                                           ConnectContext connectContext, List<String> fieldNames,
+                                           boolean keepFiles, boolean updateStats) {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
         Metadata metadata = deltaLakeTable.getDeltaMetadata();
         StructType schema = metadata.getSchema();
@@ -457,16 +474,22 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                 buildFileScanTaskIterator(table, operator, enableCollectColumnStats)) {
             while (iterator.hasNext()) {
                 Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair = iterator.next();
-                files.add(pair.first);
-                try (Timer ignored = Tracers.watchScope(EXTERNAL, traceLabel)) {
-                    statisticProvider.updateFileStats(deltaLakeTable, key, pair.first, pair.second,
-                            nonPartitionPrimitiveColumns, partitionPrimitiveColumns);
+                if (keepFiles) {
+                    files.add(pair.first);
+                }
+                if (updateStats) {
+                    try (Timer ignored = Tracers.watchScope(EXTERNAL, traceLabel)) {
+                        statisticProvider.updateFileStats(deltaLakeTable, key, pair.first, pair.second,
+                                nonPartitionPrimitiveColumns, partitionPrimitiveColumns);
+                    }
                 }
             }
         } catch (IOException e) {
             throw new StarRocksConnectorException("Failed to iter deltalake file scan iterator", e);
         }
-        splitTasks.put(key, files);
+        if (keepFiles) {
+            splitTasks.put(key, files);
+        }
         scannedTables.add(key);
     }
 

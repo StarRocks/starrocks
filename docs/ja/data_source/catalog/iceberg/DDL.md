@@ -3,6 +3,7 @@ sidebar_position: 50
 displayed_sidebar: docs
 description: "StarRocks Iceberg Catalog のデータベース、テーブル、ビュー作成を含む DDL 操作。"
 keywords: ['iceberg', 'ddl', 'create table', 'alter table', 'create database', 'drop table', 'create view', 'alter view']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Iceberg DDL 操作
@@ -153,7 +154,7 @@ PARTITION BY (partition_expr[, partition_expr...])
 - `transform_expr(column_name)`
 - `transform_expr(column_name, parameter)`
 
-StarRocks は、Apache Iceberg 仕様で定義されているパーティション変換式をサポートしています。
+StarRocks は、次のパーティション変換をサポートしています: identity（列名または `identity()`）、`year()`、`month()`、`day()`、`hour()`、`truncate()`、`bucket()`、および `void()`。その他の変換を使用するとエラーが返されます。
 
 :::note
 パーティション列は、FLOAT、DOUBLE、DECIMAL、DATETIME を除くすべてのデータ型をサポートしています。
@@ -178,6 +179,7 @@ ORDER BY (column_name [ASC | DESC] [NULLS FIRST | NULLS LAST], ...)
 - `write.metadata.metrics.default`: StarRocks がデータファイルに書き込む列統計のデフォルトの metrics モード。オプション: `none`, `counts`, `truncate(N)`, `full` (デフォルト: `truncate(16)`)。`none` は統計を書き込まず、`counts` は値の数と NULL の数のみを書き込み、`truncate(N)` は上下限も書き込み、STRING と BINARY の上下限を N 文字 (バイト) に切り詰めます。`full` は切り詰めない上下限を書き込みます。
 - `write.metadata.metrics.column.<col>`: 列 `<col>` の metrics モード。デフォルトを上書きします。オプションは `write.metadata.metrics.default` と同じです。
 - `write.metadata.metrics.max-inferred-column-defaults`: `write.metadata.metrics.default` が設定されていない場合、先頭の N 列のみがデフォルトの `truncate(16)` を使用し、残りの列は `none` になります (デフォルト: `100`)。
+- `identifier-fields`: 行を識別する列名をカンマ区切りで指定します。Iceberg スキーマの identifier fields として保存されます。各列は、FLOAT と DOUBLE 以外のプリミティブ型で、トップレベルの `NOT NULL` 列である必要があります。このプロパティは CREATE TABLE でのみ設定できます。
 
 ### 例
 

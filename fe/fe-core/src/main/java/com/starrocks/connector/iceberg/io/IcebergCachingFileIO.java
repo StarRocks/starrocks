@@ -51,11 +51,17 @@ package com.starrocks.connector.iceberg.io;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Weigher;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
+import com.google.common.hash.Hasher;
+import com.google.common.hash.Hashing;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.common.util.concurrent.lock.LockInvariantViolationException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hadoop.HadoopExt;
+import com.starrocks.connector.share.iceberg.AzurePathNormalizingFileIO;
 import com.starrocks.connector.share.iceberg.SerializableTable;
 import com.starrocks.credential.gcp.GCPCloudConfigurationProvider;
 import com.starrocks.fs.azure.AzBlobURI;
@@ -87,9 +93,11 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -208,9 +216,22 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
 
     @Override
     public InputFile newInputFile(String path) {
+        return newInputFile(path, -1);
+    }
+
+    // Iceberg opens manifests (and data/delete files) through this overload with the length it already
+    // knows from the manifest list. Keep it, so neither the cache decision nor the cache fill has to stat
+    // the object first.
+    @Override
+    public InputFile newInputFile(String path, long length) {
         try {
-            setWrappedConf(buildConfFromProperties(properties, path));
-            return new CachingInputFile(fileContentCache, wrappedIO.newInputFile(path));
+            String normalizedPath = AzurePathNormalizingFileIO.normalizeAzurePath(path);
+            setWrappedConf(buildConfFromProperties(properties, normalizedPath));
+            InputFile wrappedInputFile = length >= 0 ? wrappedIO.newInputFile(normalizedPath, length)
+                    : wrappedIO.newInputFile(normalizedPath);
+            // Keep the caller's path as location(): the content cache and the parsed-manifest caches
+            // (seeded under ManifestFile.path()) are keyed by it. Only the storage access is normalized.
+            return new CachingInputFile(fileContentCache, wrappedInputFile, path, length);
         } catch (StarRocksException e) {
             String errorMessage = String.format("Failed to new input file for path: %s, properties: %s", path, properties);
             LOG.error(errorMessage, e);
@@ -221,7 +242,8 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     @Override
     public OutputFile newOutputFile(String path) {
         try {
-            setWrappedConf(buildConfFromProperties(properties, path));
+            String normalizedPath = AzurePathNormalizingFileIO.normalizeAzurePath(path);
+            setWrappedConf(buildConfFromProperties(properties, normalizedPath));
             // Wrapped rather than returned as is: newOutputFile itself contacts nothing -- the wait is in
             // create()/createOrOverwrite() on the object handed back, which is where the guard has to be.
             // Returned as the wrapped IO made it, deliberately. The write has no door and cannot have one
@@ -230,7 +252,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
             // -- so wrapping it to add a guard would quietly move the writer onto its generic path and take
             // the Hadoop configuration, the block size and native encryption with it. An observability
             // change does not get to cost that; the gap is recorded in BlockingCallValidator's javadoc.
-            return wrappedIO.newOutputFile(path);
+            return wrappedIO.newOutputFile(normalizedPath);
         } catch (StarRocksException e) {
             String errorMessage = String.format("Failed to new output file for path: %s, properties: %s", path, properties);
             LOG.error(errorMessage, e);
@@ -243,8 +265,8 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
         // No cache in front of a delete: it always goes out. Reached by table purge and by the cleanup of
         // a failed commit, both of which can run inside a DDL's database lock.
         BlockingCallValidator.validateNotUnderLock("remote-storage");
-        wrappedIO.deleteFile(path);
-        // remove from cache.
+        wrappedIO.deleteFile(AzurePathNormalizingFileIO.normalizeAzurePath(path));
+        // remove from cache, keyed by the caller's path like CachingInputFile.location().
         fileContentCache.invalidate(path);
     }
 
@@ -260,7 +282,13 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     public Configuration buildConfFromProperties(Map<String, String> properties, String path) throws StarRocksException {
         // build Hadoop configuration from properties for HadoopFileIO
         Configuration copied = new Configuration(conf.get());
-        disableSharedFileSystemCache(copied, path);
+        applyVendedCredentials(copied, properties, path);
+        keyFileSystemCacheOnCredentials(copied, path);
+        return copied;
+    }
+
+    private static void applyVendedCredentials(Configuration copied, Map<String, String> properties, String path)
+            throws StarRocksException {
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             if (entry.getKey().startsWith(ADLS_SAS_TOKEN) && entry.getKey().endsWith(ADLS_ENDPOINT)) {
                 // Handle Azure ADLS SAS token
@@ -269,14 +297,14 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                         "SAS");
                 copied.set(String.format("fs.azure.sas.fixed.token.%s", endpoint),
                         entry.getValue());
-                return copied;
+                return;
             } else if (entry.getKey().startsWith(ADLS_SAS_TOKEN) && (entry.getKey().endsWith(BLOB_ENDPOINT))) {
                 // Handle Azure Blob SAS token
                 AzBlobURI uri = AzBlobURI.parse(path);
                 String key =
                         String.format("fs.azure.sas.%s.%s.blob.core.windows.net", uri.getContainer(), uri.getAccount());
                 copied.set(key, entry.getValue());
-                return copied;
+                return;
             } else if (entry.getKey().equals(GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN)) {
                 // Handle GCS access token
                 copied.set(GCPCloudConfigurationProvider.AUTH_TYPE_KEY,
@@ -292,29 +320,55 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                 copied.set(GCPCloudConfigurationProvider.TOKEN_EXPIRATION_KEY,
                         properties.getOrDefault(GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN_EXPIRES_AT,
                                 String.valueOf(Long.MAX_VALUE)));
-                return copied;
+                return;
             }
         }
-        return copied;
     }
 
-    // GCSFileIO/ADLSFileIO are absent from the FE classpath, so ResolvingFileIO falls back to
-    // HadoopFileIO, whose FileSystem cache key is (scheme, authority, ugi) and excludes the
-    // Configuration holding the credential — one shared instance would serve every catalog on a bucket
-    // with whichever credential created it first. Kept to Azure and GCS deliberately: bypassing the
-    // cache leaks an unclosed FileSystem per call, so other schemes wait for a credential-keyed cache.
-    private static final Set<String> SCHEMES_REQUIRING_FS_ISOLATION =
-            Set.of("gs", "abfs", "abfss", "wasb", "wasbs", "adl");
+    // GCSFileIO/ADLSFileIO are absent from the FE classpath, so ResolvingFileIO falls back to HadoopFileIO and
+    // Hadoop's FileSystem cache. The FileSystem reads its credential once, at initialize(), so the cache key
+    // has to separate credentials. The catalog's CloudConfiguration string is already in the key, but it
+    // records config resources by file name only and knows nothing of vended tokens, so the final auth
+    // settings of these schemes are fingerprinted into HadoopExt.HADOOP_DYNAMIC_CREDENTIAL_PREFIX entries,
+    // which hadoop-ext adds to the key and evicts once idle.
+    //
+    // Applied to the schemes below only, so hdfs/oss/cosn keep today's cache behavior. Within them the
+    // entries do not depend on the path: ResolvingFileIO hands this Configuration to the HadoopFileIO it
+    // creates for the first path of an impl and keeps it for every later path of that impl, and one ADLS
+    // impl serves abfs, abfss, wasb and wasbs.
+    private static final Set<String> CREDENTIAL_KEYED_SCHEMES = Set.of("gs", "abfs", "abfss", "wasb", "wasbs", "adl");
+    // hadoop.security.credential.* covers secrets kept in a credential provider (e.g. JCEKS), which the
+    // connectors read through Configuration.getPassword().
+    private static final Map<String, List<String>> CREDENTIAL_FINGERPRINT_PREFIXES = Map.of(
+            "gs", List.of("fs.gs.", "google.cloud.", "hadoop.security.credential."),
+            "azure", List.of("fs.azure.", "fs.adl.", "dfs.adls.", "hadoop.security.credential."));
 
-    private static void disableSharedFileSystemCache(Configuration conf, String path) {
+    @VisibleForTesting
+    static void keyFileSystemCacheOnCredentials(Configuration conf, String path) {
         String scheme = new Path(path).toUri().getScheme();
         if (scheme == null) {
-            // FileSystem.get() resolves a scheme-less path through fs.defaultFS and only then consults
-            // the flag, so the flag has to be keyed on the default scheme rather than skipped.
+            // FileSystem.get() resolves a scheme-less path through fs.defaultFS.
             scheme = FileSystem.getDefaultUri(conf).getScheme();
         }
-        if (scheme != null && SCHEMES_REQUIRING_FS_ISOLATION.contains(scheme)) {
-            conf.setBoolean(String.format("fs.%s.impl.disable.cache", scheme), true);
+        if (scheme == null || !CREDENTIAL_KEYED_SCHEMES.contains(scheme)) {
+            return;
+        }
+        for (Map.Entry<String, List<String>> family : CREDENTIAL_FINGERPRINT_PREFIXES.entrySet()) {
+            Map<String, String> entries = new TreeMap<>();
+            for (Map.Entry<String, String> entry : conf) {
+                for (String prefix : family.getValue()) {
+                    if (entry.getKey().startsWith(prefix)) {
+                        entries.put(entry.getKey(), conf.get(entry.getKey()));
+                        break;
+                    }
+                }
+            }
+            Hasher hasher = Hashing.sha256().newHasher();
+            for (Map.Entry<String, String> entry : entries.entrySet()) {
+                hasher.putString(entry.getKey(), StandardCharsets.UTF_8).putByte((byte) 0);
+                hasher.putString(Strings.nullToEmpty(entry.getValue()), StandardCharsets.UTF_8).putByte((byte) 0);
+            }
+            conf.set(HadoopExt.HADOOP_DYNAMIC_CREDENTIAL_PREFIX + family.getKey(), hasher.hash().toString());
         }
     }
 
@@ -715,14 +769,23 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     private static class CachingInputFile implements InputFile {
         private final ContentCache contentCache;
         private final InputFile wrappedInputFile;
+        private final String location;
+        // Length supplied by the caller or learned by the first stat, -1 if unknown. Kept so one open does
+        // not stat the object twice (once to decide to cache it, once more to fill the entry).
+        private volatile long knownLength;
 
-        private CachingInputFile(ContentCache cache, InputFile inFile) {
+        private CachingInputFile(ContentCache cache, InputFile inFile, String location, long knownLength) {
             this.contentCache = cache;
             this.wrappedInputFile = inFile;
+            this.location = location;
+            this.knownLength = knownLength;
         }
 
         @Override
         public long getLength() {
+            if (knownLength >= 0) {
+                return knownLength;
+            }
             long len = contentCache.getLength(location());
             if (len != -1) {
                 return len;
@@ -731,7 +794,18 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
             // planning goes through -- manifest lists, manifests, metadata.json -- and it is reached
             // through the FileIO the catalogs install, not through MetadataMgr.
             BlockingCallValidator.validateNotUnderLock("remote-storage");
-            return wrappedInputFile.getLength();
+            IcebergPlanningIoStats stats = IcebergPlanningIoStats.current();
+            long start = System.nanoTime();
+            try {
+                len = wrappedInputFile.getLength();
+            } finally {
+                // A HEAD that fails (a timeout after retries, a denial) is the one a slow planning must show.
+                if (stats != null) {
+                    stats.recordHead(System.nanoTime() - start, location());
+                }
+            }
+            knownLength = len;
+            return len;
         }
 
         @Override
@@ -740,15 +814,19 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                 // read-through cache if file length is less than or equal to maximum length allowed to cache.
                 // do not cache metadata json files because the name could be same, like "v1.metadata.json"
                 // when re-create table with same name.
+                // The length is asked last: without a known length it is a stat against storage, which is
+                // wasted when the file could not be cached anyway -- in particular when the cache is off
+                // (iceberg_metadata_cache_max_entry_size = 0, the default).
                 Path path = new Path(wrappedInputFile.location());
-                if (getLength() <= contentCache.maxContentLength() &&
-                        !HADOOP_CATALOG_METADATA_JSON_PATTERN.matcher(path.getName()).matches()) {
+                if (contentCache.maxContentLength() > 0 &&
+                        !HADOOP_CATALOG_METADATA_JSON_PATTERN.matcher(path.getName()).matches() &&
+                        getLength() <= contentCache.maxContentLength()) {
                     return cachedStream();
                 }
 
                 // fallback to non-caching input stream.
                 BlockingCallValidator.validateNotUnderLock("remote-storage");
-                return wrappedInputFile.newStream();
+                return openRemoteStream();
             } catch (FileNotFoundException e) {
                 throw new NotFoundException(e, "Failed to open input stream for file: %s", wrappedInputFile.location());
             } catch (IOException e) {
@@ -759,7 +837,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
 
         @Override
         public String location() {
-            return wrappedInputFile.location();
+            return location;
         }
 
         @Override
@@ -768,7 +846,15 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                 return true;
             }
             BlockingCallValidator.validateNotUnderLock("remote-storage");
-            return wrappedInputFile.exists();
+            IcebergPlanningIoStats stats = IcebergPlanningIoStats.current();
+            long start = System.nanoTime();
+            try {
+                return wrappedInputFile.exists();
+            } finally {
+                if (stats != null) {
+                    stats.recordHead(System.nanoTime() - start, location());
+                }
+            }
         }
 
         private CacheEntry newCacheEntry() {
@@ -782,14 +868,14 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                     if (stream == null) {
                         LOG.debug(location() + " load from remote");
                         BlockingCallValidator.validateNotUnderLock("remote-storage");
-                        stream = wrappedInputFile.newStream();
+                        stream = openRemoteStream();
                     }
                 } else {
                     LOG.debug(location() + " load from remote");
                     // The content cache's loader, so a hit never reaches here; the disk-cache branch above
                     // is local until its stream comes back null.
                     BlockingCallValidator.validateNotUnderLock("remote-storage");
-                    stream = wrappedInputFile.newStream();
+                    stream = openRemoteStream();
                 }
                 List<ByteBuffer> buffers = Lists.newArrayList();
 
@@ -817,6 +903,13 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                     IOUtil.closeInputStreamIgnoreException(stream);
                 }
                 throw new UncheckedIOException(ex);
+            } catch (RuntimeException ex) {
+                // Storage clients fail unchecked too (the AWS SDK does): close the stream all the same, so it does
+                // not leak and the planning I/O of the failed read is counted.
+                if (stream != null) {
+                    IOUtil.closeInputStreamIgnoreException(stream);
+                }
+                throw ex;
             }
         }
 
@@ -835,6 +928,24 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                 LockInvariantViolationException.rethrowIfRefusal(ex);
                 throw new IOException("Caught an error while reading through cache", ex);
             }
+        }
+
+        // A stream from storage. When a planning is being measured, the stream is timed for that planning: one
+        // GET, whose time is spent inside the stream's calls.
+        private SeekableInputStream openRemoteStream() {
+            IcebergPlanningIoStats stats = IcebergPlanningIoStats.current();
+            if (stats == null) {
+                return wrappedInputFile.newStream();
+            }
+            long start = System.nanoTime();
+            SeekableInputStream stream;
+            try {
+                stream = wrappedInputFile.newStream();
+            } catch (RuntimeException e) {
+                stats.recordGet(System.nanoTime() - start, location());
+                throw e;
+            }
+            return PlanningIoTimedInputStream.wrap(stream, stats, location(), System.nanoTime() - start);
         }
 
         @Override

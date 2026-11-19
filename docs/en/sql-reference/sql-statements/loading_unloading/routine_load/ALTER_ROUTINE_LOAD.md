@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ALTER ROUTINE LOAD alters a Routine Load job that is in the PAUSED state."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER ROUTINE LOAD
@@ -56,13 +57,17 @@ FROM data_source
 
   Only the following parameters can be altered:
 
-  - `desired_concurrent_number`
+  - `desired_concurrent_number` or `max_concurrency`
 
-  - `max_error_number`
+  - `max_error_number` or `max_error_rows`
 
-  - `max_batch_interval`
+  - `max_batch_interval` or `load_interval`
 
-  - `max_batch_rows`
+  - `max_batch_rows` or `error_window_rows`
+
+  - `task_consume_second` or `max_consume_duration`
+
+  - `task_timeout_second` or `load_timeout`
 
   - `max_batch_size`
 

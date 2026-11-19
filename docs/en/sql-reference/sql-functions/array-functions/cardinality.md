@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the number of elements in an array."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # cardinality

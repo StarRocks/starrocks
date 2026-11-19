@@ -54,6 +54,9 @@ public:
     bool is_finished() const override { return _is_finished || _except_ctx->is_finished(); }
 
     Status set_finishing(RuntimeState* state) override {
+        // The probe may finish before the build (a probe child without input), so the output source can only start
+        // once the build finishes: wake it up as well.
+        auto notify_src = _except_ctx->observable().defer_notify_source();
         auto notify = _except_ctx->observable().defer_notify_sink();
         ONCE_DETECT(_set_finishing_once);
         _is_finished = true;

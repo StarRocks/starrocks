@@ -2,6 +2,7 @@
 sidebar_position: 10
 displayed_sidebar: docs
 description: "Data Cache はメモリ内とディスクキャッシュで内部・外部テーブルをキャッシュしクエリを高速化。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Data Cache
@@ -169,7 +170,8 @@ v3.3.0 以降、非同期キャッシュポピュレーションがデフォル�
 
 - `DataCacheReadBytes`: システムがメモリおよびディスクから直接読み取ったデータのサイズ。
 - `DataCacheWriteBytes`: リモートストレージシステムからメモリおよびディスクにロードされたデータのサイズ。
-- `BytesRead`: リモートストレージシステム、メモリ、およびディスクからシステムが読み取ったデータの総量。
+- `AppIOBytesRead`: リモートストレージシステム、メモリ、およびディスクからシステムが読み取ったデータの総量。
+- `FSIOBytesRead`: システムがリモートストレージシステムから読み取ったデータのサイズ。
 
 例1: この例では、システムがリモートストレージシステムから大量のデータ (7.65 GB) を読み取り、ディスクからは少量のデータ (518.73 MB) を読み取っています。これは、Block Cache がほとんどヒットしていないことを意味します。
 
@@ -191,12 +193,9 @@ v3.3.0 以降、非同期キャッシュポピュレーションがデフォル�
  - DataCacheWriteTimer: 23.467ms
    - __MAX_OF_DataCacheWriteTimer: 62.280ms
    - __MIN_OF_DataCacheWriteTimer: 0ns
- - BufferUnplugCount: 15
-   - __MAX_OF_BufferUnplugCount: 2
-   - __MIN_OF_BufferUnplugCount: 0
- - BytesRead: 7.65 GB
-   - __MAX_OF_BytesRead: 64.39 MB
-   - __MIN_OF_BytesRead: 0.00
+ - FSIOBytesRead: 7.65 GB
+   - __MAX_OF_FSIOBytesRead: 64.39 MB
+   - __MIN_OF_FSIOBytesRead: 0.00
 ```
 
 例2: この例では、システムがデータキャッシュから大量のデータ (46.08 GB) を読み取り、リモートストレージシステムからはデータを読み取っていません。これは、Block Cache からのみデータを読み取っていることを意味します。
@@ -215,12 +214,9 @@ Table: lineitem
 - DataCacheWriteBytes: 0.00 
 - DataCacheWriteCounter: 0
 - DataCacheWriteTimer: 0ns
-- BufferUnplugCount: 1.231K (1231)
- - __MAX_OF_BufferUnplugCount: 81
- - __MIN_OF_BufferUnplugCount: 35
-- BytesRead: 46.08 GB
- - __MAX_OF_BytesRead: 194.99 MB
- - __MIN_OF_BytesRead: 81.25 MB
+- AppIOBytesRead: 46.08 GB
+ - __MAX_OF_AppIOBytesRead: 194.99 MB
+ - __MIN_OF_AppIOBytesRead: 81.25 MB
 ```
 
 ## I/O アダプタ
@@ -261,12 +257,12 @@ UPDATE be_configs SET VALUE="2T" WHERE NAME="datacache_disk_size";
 
 ### 自動スケーリング
 
-StarRocks は現在、ディスク容量の自動スケーリングをサポートしています。BE 設定でキャッシュディスクパスと容量制限を指定しない場合、自動スケーリングがデフォルトで有効になります。
+StarRocks は現在、ディスク容量の自動スケーリングをサポートしています。自動スケーリングはデフォルトで有効です。`datacache_disk_size` を指定した場合も自動スケーリングは有効のままで、その値をキャッシュ容量の上限として使用します。
 
 設定ファイルに次の設定項目を追加し、BE または CN プロセスを再起動することで、自動スケーリングを有効にすることもできます:
 
 ```Plain
-datacache_auto_adjust_enable=true
+enable_datacache_disk_auto_adjust=true
 ```
 
 自動スケーリングが有効になると:
@@ -315,10 +311,10 @@ Data Cache は BE ノードのローカルディスクに依存しているた�
 - [datacache_enable](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_enable)
 - [datacache_mem_size](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_mem_size)
 - [datacache_disk_size](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_size)
-- [datacache_auto_adjust_enable](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_auto_adjust_enable)
-- [datacache_disk_high_level](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_high_level)
-- [datacache_disk_safe_level](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_safe_level)
-- [datacache_disk_low_level](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_low_level)
+- [enable_datacache_disk_auto_adjust](../../administration/configuration/BE_parameters/BE_parameters.md#enable_datacache_disk_auto_adjust)
+- [disk_high_level](../../administration/configuration/BE_parameters/BE_parameters.md#disk_high_level)
+- [disk_safe_level](../../administration/configuration/BE_parameters/BE_parameters.md#disk_safe_level)
+- [disk_low_level](../../administration/configuration/BE_parameters/BE_parameters.md#disk_low_level)
 - [datacache_disk_adjust_interval_seconds](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_adjust_interval_seconds)
 - [datacache_disk_idle_seconds_for_expansion](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_idle_seconds_for_expansion)
 - [datacache_min_disk_quota_for_adjustment](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_min_disk_quota_for_adjustment)

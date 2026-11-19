@@ -303,6 +303,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
                 Preconditions.checkNotNull(entry.getValue(), "property value cannot be null");
                 switch (entry.getKey().toLowerCase()) {
                     case FILE_FORMAT:
+                        IcebergApiConverter.checkWriteProperty(TableProperties.DEFAULT_FILE_FORMAT, entry.getValue());
                         updateProperties.defaultFormat(FileFormat.fromString(entry.getValue()));
                         break;
                     case LOCATION_PROPERTY:
@@ -315,15 +316,22 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
                                     "Unsupported compression codec for iceberg connector: " + entry.getValue());
                         }
 
-                        String fileFormat = pendingUpdate.get(FILE_FORMAT);
-                        // only modify compression_codec or modify both file_format and compression_codec.
+                        // the codec follows the format set in the same statement (alias or native key), else the table's
+                        String fileFormat = pendingUpdate.getOrDefault(FILE_FORMAT,
+                                pendingUpdate.get(TableProperties.DEFAULT_FILE_FORMAT));
                         String currentFileFormat = fileFormat != null ? fileFormat : transaction.table().properties()
                                 .getOrDefault(TableProperties.DEFAULT_FILE_FORMAT,
                                         TableProperties.DEFAULT_FILE_FORMAT_DEFAULT);
+                        IcebergApiConverter.checkWriteProperty(TableProperties.DEFAULT_FILE_FORMAT, currentFileFormat);
 
                         updateCodeCompr(updateProperties, FileFormat.fromString(currentFileFormat), entry.getValue());
                         break;
+                    case IcebergApiConverter.IDENTIFIER_FIELDS:
+                        // stored as a property it would be silently ignored; it is schema metadata
+                        throw new StarRocksConnectorException(
+                                "Property " + IcebergApiConverter.IDENTIFIER_FIELDS + " can only be set by CREATE TABLE");
                     default:
+                        IcebergApiConverter.checkWriteProperty(entry.getKey(), entry.getValue());
                         updateProperties.set(entry.getKey(), entry.getValue());
                 }
             }
@@ -336,6 +344,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     private void updateCodeCompr(UpdateProperties updateProperties, FileFormat fileFormat, String codeCompression) {
         switch (fileFormat) {
             case PARQUET:
+                IcebergApiConverter.checkWriteProperty(TableProperties.PARQUET_COMPRESSION, codeCompression);
                 updateProperties.set(TableProperties.PARQUET_COMPRESSION, codeCompression);
                 break;
             case ORC:

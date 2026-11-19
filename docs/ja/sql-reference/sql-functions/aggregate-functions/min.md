@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "expr 式の最小値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # min

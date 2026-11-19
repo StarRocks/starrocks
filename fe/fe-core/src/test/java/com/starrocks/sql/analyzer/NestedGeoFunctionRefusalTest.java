@@ -32,17 +32,16 @@ import com.starrocks.type.AnyElementType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.FunctionType;
-import com.starrocks.type.GeoTypeDescriptor;
+import com.starrocks.type.GeoType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.MapType;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -61,10 +60,8 @@ public class NestedGeoFunctionRefusalTest {
     static List<Type> types() {
         List<Type> result = new ArrayList<>();
         for (Type leaf : List.of(IntegerType.INT,
-                ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, new GeoTypeDescriptor(
-                        GeoTypeDescriptor.LogicalType.GEOGRAPHY, GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
-                        GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326)),
-                ScalarType.createGeoType(PrimitiveType.GEOMETRY, GeoTypeDescriptor.geometry("EPSG:3857")))) {
+                GeoType.createGeographyType("OGC:CRS84"),
+                GeoType.createGeometryType("EPSG:3857"))) {
             result.addAll(List.of(leaf, new ArrayType(leaf), new MapType(IntegerType.INT, leaf),
                     new StructType(List.of(leaf)), new ArrayType(new StructType(List.of(new ArrayType(leaf))))));
         }
@@ -179,6 +176,26 @@ public class NestedGeoFunctionRefusalTest {
         sorted.setChild(1, mapped);
         check(sorted, item.isGeoType() || item.hasNestedGeoType(),
                 "array_sortby does not support geo arguments: " + array.toSql());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ST_GeogFromText(%s)", "ST_GeomFromText(%s, 'EPSG:3857')"})
+    public void testSumMapAndToJson(String constructor) {
+        String geo = constructor.formatted("'POINT (1 2)'");
+        String nullGeo = constructor.formatted("CAST(NULL AS VARCHAR)");
+        for (String value : List.of(geo, nullGeo)) {
+            AnalyzeTestUtil.analyzeFail("SELECT cardinality(sum_map(map{1:" + value + "}))",
+                    "sum_map unsupported value type:");
+            AnalyzeTestUtil.analyzeFail("SELECT to_json(map{'g':" + value + "})",
+                    "to_json does not support geo arguments:");
+            AnalyzeTestUtil.analyzeFail("SELECT to_json(named_struct('g'," + value + "))",
+                    "to_json does not support geo arguments:");
+        }
+        AnalyzeTestUtil.analyzeFail("SELECT to_json(named_struct('g',[" + geo + "]))",
+                "to_json does not support geo arguments:");
+        AnalyzeTestUtil.analyzeSuccess("SELECT sum_map(map{1:2})");
+        AnalyzeTestUtil.analyzeSuccess("SELECT to_json(map{'g':1}), to_json(named_struct('g',1))");
+        AnalyzeTestUtil.analyzeSuccess("SELECT to_json(named_struct('g',ST_AsText(" + geo + ")))");
     }
 
     @ParameterizedTest

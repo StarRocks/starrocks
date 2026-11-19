@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Complete SQL text for all 99 TPC-DS benchmark queries used in StarRocks performance testing."
+products: [oss, enterprise]
 ---
 
 # TPC-DS test SQL

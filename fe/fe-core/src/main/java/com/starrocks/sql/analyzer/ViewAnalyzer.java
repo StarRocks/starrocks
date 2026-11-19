@@ -81,6 +81,7 @@ public class ViewAnalyzer {
             }
 
             Analyzer.analyze(stmt.getQueryStatement(), context);
+            SavedSqlGeoValidator.validate(stmt.getQueryStatement());
             AnalyzerUtils.prohibitTimeTravelQuery(stmt.getQueryStatement(), "create view");
             boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(stmt.getQueryStatement());
             if (hasTemporaryTable) {
@@ -134,6 +135,7 @@ public class ViewAnalyzer {
             AlterViewClause alterViewClause = (AlterViewClause) alterClause;
 
             Analyzer.analyze(alterViewClause.getQueryStatement(), context);
+            SavedSqlGeoValidator.validate(alterViewClause.getQueryStatement());
             AnalyzerUtils.prohibitTimeTravelQuery(alterViewClause.getQueryStatement(), "alter view");
             boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(((AlterViewClause) alterClause).getQueryStatement());
             if (hasTemporaryTable) {

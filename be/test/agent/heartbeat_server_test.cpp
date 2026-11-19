@@ -111,6 +111,18 @@ TEST(HeartbeatServerTest, test_unmatched_node_type_heartbeat) {
     EXPECT_TRUE(res.status().message().find("actually BE"));
 }
 
+// FE sends the lake ADD/DROP INDEX fast path only to nodes that report it: a node that predates the fast
+// path would run the request as a regular schema change of the tablet into itself and duplicate its rows.
+TEST(HeartbeatServerTest, test_report_lake_index_fast_path) {
+    HeartbeatServer server;
+    THeartbeatResult result;
+    TMasterInfo info;
+    server.heartbeat(result, info);
+    ASSERT_EQ(TStatusCode::OK, result.status.status_code);
+    ASSERT_TRUE(result.backend_info.__isset.support_lake_index_fast_path);
+    EXPECT_TRUE(result.backend_info.support_lake_index_fast_path);
+}
+
 TEST(HeartbeatServerTest, test_frontend_aware_of_exit) {
     clear_frontend_aware_of_exit();
     ASSERT_FALSE(is_frontend_aware_of_exit());

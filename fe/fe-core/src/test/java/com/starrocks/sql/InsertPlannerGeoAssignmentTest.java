@@ -18,11 +18,9 @@ import com.starrocks.catalog.Column;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.type.ArrayType;
-import com.starrocks.type.GeoTypeDescriptor;
+import com.starrocks.type.GeoType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.MapType;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarbinaryType;
@@ -49,15 +47,12 @@ public class InsertPlannerGeoAssignmentTest {
     }
 
     private static Stream<Type> geoTypes() {
-        return Stream.of(ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
-                new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
-                        GeoTypeDescriptor.CoordinateSystem.SPHERICAL, GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL,
-                        "OGC:CRS84", 4326)),
+        return Stream.of(GeoType.createGeographyType("OGC:CRS84"),
                 geometry("EPSG:3857"), geometry("EPSG:4326"), geometry("LOCAL:linear"));
     }
 
     private static Type geometry(String crs) {
-        return ScalarType.createGeoType(PrimitiveType.GEOMETRY, GeoTypeDescriptor.geometry(crs));
+        return GeoType.createGeometryType(crs);
     }
 
     private static Stream<Arguments> assignments() {

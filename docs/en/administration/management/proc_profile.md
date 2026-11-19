@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "Collects and visualizes CPU and memory flame graph profiles for StarRocks FE and BE processes to diagnose performance bottlenecks."
+products: [oss, enterprise, anywhere]
 ---
 
 # Process Profile (Proc Profile)

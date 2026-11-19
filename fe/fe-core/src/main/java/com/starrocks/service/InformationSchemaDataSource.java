@@ -738,7 +738,8 @@ public class InformationSchemaDataSource {
 
         AuthorizationMgr authMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
-            for (RolePrivilegeCollectionV2 role : authMgr.getApplicableRoles(currentUser)) {
+            for (RolePrivilegeCollectionV2 role : authMgr.getApplicableRoles(currentUser,
+                    result.authContext.getGroups(), result.authContext.getCurrentRoleIds())) {
                 String roleName = role.getName();
                 String roleHost = "%";
 

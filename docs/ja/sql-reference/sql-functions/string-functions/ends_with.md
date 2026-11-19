@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "文字列が指定されたサフィックスで終わる場合にtrueを返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ends_with

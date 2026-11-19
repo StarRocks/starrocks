@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "fe_threadsは各FEノードで実行されているスレッドに関する情報を提供します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # fe_threads

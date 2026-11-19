@@ -169,6 +169,10 @@ StatusOr<std::string_view> VariantMetadata::get_key(uint32_t index) const {
                                     " >= " + std::to_string(dict_sz));
     }
 
+    // The offset table has dict_sz + 1 entries after the dictionary size field; a truncated metadata must not be read past.
+    if (kHeaderSizeBytes + static_cast<size_t>(offset_sz) * (static_cast<size_t>(dict_sz) + 2) > _metadata.size()) {
+        return Status::VariantError("Variant metadata is shorter than its offset table");
+    }
     size_t offset_start_pos = kHeaderSizeBytes + offset_sz + (index * offset_sz);
     uint32_t value_offset = inline_read_little_endian_unsigned32(_metadata.data() + offset_start_pos, offset_sz);
     uint32_t value_next_offset =
@@ -834,6 +838,27 @@ static std::string float_to_json_string_impl(FloatType value) {
     return result;
 }
 
+// Splits microseconds since the epoch into whole seconds and a non-negative microsecond part, so that instants
+// before 1970 keep their value: -1 us is (-1 s, 999999 us), not (0 s, -1 us).
+static TimestampValue timestamp_from_epoch_micros(int64_t micros) {
+    int64_t seconds = micros / 1000000;
+    int64_t microseconds = micros % 1000000;
+    if (microseconds < 0) {
+        seconds -= 1;
+        microseconds += 1000000;
+    }
+    TimestampValue tsv{};
+    tsv.from_unix_second(seconds, microseconds);
+    return tsv;
+}
+
+// Formats an instant given in nanoseconds since the epoch; the fraction keeps up to nine digits, without trailing zeros.
+static std::string format_timestamp_nanos(int64_t nanos, const char* format, const cctz::time_zone& zone) {
+    const std::chrono::time_point<std::chrono::system_clock, std::chrono::nanoseconds> instant{
+            std::chrono::nanoseconds(nanos)};
+    return cctz::format(format, instant, zone);
+}
+
 Status VariantUtil::variant_to_json(const VariantMetadata& metadata, const VariantValue& variant,
                                     std::stringstream& json_str, cctz::time_zone timezone) {
     switch (variant.type()) {
@@ -921,18 +946,27 @@ Status VariantUtil::variant_to_json(const VariantMetadata& metadata, const Varia
     }
     case VariantType::TIMESTAMP_TZ: {
         ASSIGN_OR_RETURN(const int64_t timestamp_micros, variant.get_timestamp_micros());
-        TimestampValue tsv{};
-        tsv.from_unix_second(timestamp_micros / 1000000, timestamp_micros % 1000000);
+        const TimestampValue tsv = timestamp_from_epoch_micros(timestamp_micros);
         std::string timestamp_str = timestamp::to_string_with_timezone<false, false>(tsv.timestamp(), timezone);
         append_quoted_string(json_str, timestamp_str);
         break;
     }
     case VariantType::TIMESTAMP_NTZ: {
         ASSIGN_OR_RETURN(const int64_t timestamp_micros, variant.get_timestamp_micros_ntz());
-        TimestampValue tsv{};
-        tsv.from_unix_second(timestamp_micros / 1000000, timestamp_micros % 1000000);
+        const TimestampValue tsv = timestamp_from_epoch_micros(timestamp_micros);
         std::string timestamp_str = tsv.to_string(false);
         append_quoted_string(json_str, timestamp_str);
+        break;
+    }
+    case VariantType::TIMESTAMP_TZ_NANOS: {
+        ASSIGN_OR_RETURN(const int64_t timestamp_nanos, variant.get_timestamp_nanos_tz());
+        append_quoted_string(json_str, format_timestamp_nanos(timestamp_nanos, "%Y-%m-%d %H:%M:%E*S%Ez", timezone));
+        break;
+    }
+    case VariantType::TIMESTAMP_NTZ_NANOS: {
+        ASSIGN_OR_RETURN(const int64_t timestamp_nanos, variant.get_timestamp_nanos_ntz());
+        append_quoted_string(json_str,
+                             format_timestamp_nanos(timestamp_nanos, "%Y-%m-%d %H:%M:%E*S", cctz::utc_time_zone()));
         break;
     }
     case VariantType::OBJECT: {

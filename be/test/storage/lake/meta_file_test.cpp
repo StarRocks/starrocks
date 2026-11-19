@@ -1666,6 +1666,61 @@ TEST_F(MetaFileTest, test_apply_opcompaction_does_not_carry_dels_when_index_pers
     }
 }
 
+// The PK compaction path retires the IDG entries of its input segments: their .idx files go to orphan_files with
+// their size, version and shared flag (vacuum only delay-deletes a shared one), and the entries of a segment the
+// compaction does not touch stay.
+TEST_F(MetaFileTest, test_apply_opcompaction_retires_input_idg_entries) {
+    const int64_t tablet_id = next_id();
+    Tablet tablet(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(3);
+    metadata->set_next_rowset_id(4);
+    metadata->set_enable_persistent_index(true);
+    metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+    metadata->add_rowsets()->set_id(1);
+    metadata->mutable_rowsets(0)->add_segment_metas()->set_filename("1.dat");
+    metadata->add_rowsets()->set_id(2);
+    metadata->mutable_rowsets(1)->add_segment_metas()->set_filename("2.dat");
+    metadata->add_rowsets()->set_id(3);
+    metadata->mutable_rowsets(2)->add_segment_metas()->set_filename("3.dat");
+    auto* idgs = metadata->mutable_idg_meta()->mutable_idgs();
+    auto* shared = (*idgs)[1].add_entries();
+    shared->set_index_file("1.idx");
+    shared->set_file_size(64);
+    shared->set_version(2);
+    shared->set_shared_file(true);
+    (*idgs)[2].add_entries()->set_index_file("2.idx");
+    (*idgs)[3].add_entries()->set_index_file("3.idx");
+
+    MetaFileBuilder builder(tablet, metadata);
+    TxnLogPB_OpCompaction op_compaction;
+    op_compaction.add_input_rowsets(1);
+    op_compaction.add_input_rowsets(2);
+    op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("output.dat");
+    ASSERT_OK(builder.apply_opcompaction(op_compaction, 2, 0));
+
+    ASSERT_EQ(1u, metadata->idg_meta().idgs().size());
+    EXPECT_EQ(1u, metadata->idg_meta().idgs().count(3));
+    auto find_orphan = [&](const std::string& name) -> const FileMetaPB* {
+        for (const auto& file : metadata->orphan_files()) {
+            if (file.name() == name) {
+                return &file;
+            }
+        }
+        return nullptr;
+    };
+    const FileMetaPB* shared_orphan = find_orphan("1.idx");
+    ASSERT_NE(nullptr, shared_orphan);
+    EXPECT_TRUE(shared_orphan->shared());
+    EXPECT_EQ(64, shared_orphan->size());
+    EXPECT_EQ(2, shared_orphan->version());
+    const FileMetaPB* own_orphan = find_orphan("2.idx");
+    ASSERT_NE(nullptr, own_orphan);
+    EXPECT_FALSE(own_orphan->shared());
+    EXPECT_EQ(nullptr, find_orphan("3.idx"));
+}
+
 TEST_F(MetaFileTest, test_clear_delete_predicate_when_compact) {
     // Regression for the metadata-reclaim change: when compaction archives its input
     // rowsets into compaction_inputs, the (potentially large) delete_predicate must be

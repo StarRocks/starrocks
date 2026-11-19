@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "VARCHAR(M)"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # VARCHAR

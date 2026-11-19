@@ -2,9 +2,9 @@
 displayed_sidebar: docs
 hide_table_of_contents: true
 description: "Alphabetical i - p"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
-import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 
 # 指标 i 到 p
 
@@ -19,7 +19,36 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 
 :::
 
-<MetricsIP />
+## `iceberg_delete_bytes`
+
+- 单位：字节
+- 类型：累积
+- 标签：`delete_type` (`position` 或 `metadata`)
+- 描述：Iceberg `DELETE` 任务删除的总字节数。对于 `metadata` 删除，这表示已删除数据文件的大小。对于 `position` 删除，这表示创建的位置删除文件的大小。
+
+## `iceberg_delete_duration_ms_total`
+
+- 单位：毫秒
+- 类型：累积
+- 标签：`delete_type` (`position` 或 `metadata`)
+- 描述：Iceberg `DELETE` 任务的总执行时间（毫秒）。每个任务的持续时间在其结束后添加。`delete_type` 区分两种删除方法。
+
+## `iceberg_delete_rows`
+
+- 单位：行
+- 类型：累积
+- 标签：`delete_type` (`position` 或 `metadata`)
+- 描述：Iceberg `DELETE` 任务删除的总行数。对于 `metadata` 删除，这表示已删除数据文件中的行数。对于 `position` 删除，这表示创建的位置删除数。
+
+## `iceberg_delete_total`
+
+- 单位：计数
+- 类型：累积
+- 标签：
+  - `status` (`success` 或 `failed`)
+  - `reason` (`none`、`timeout`、`oom`、`access_denied`、`unknown`)
+  - `delete_type` (`position` 或 `metadata`)
+- 描述：针对 Iceberg 表的 `DELETE` 任务总数。无论任务成功或失败，每当任务结束时，该指标都会增加 1。`delete_type` 区分两种删除方法：`position`（生成位置删除文件）和 `metadata`（元数据级别删除）。
 
 ## `iceberg_compaction_duration_ms_total`
 
@@ -353,6 +382,12 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 
 - 单位：计数
 - 描述：成功的存算分离（lake）压缩任务计数。
+
+## `lake_idg_files_missing_total`
+
+- 单位：操作次数
+- 类型：Counter
+- 描述：在存算分离模式下，统计索引增量组（Index Delta Group，IDG）`.idx` 初始化期间因文件缺失而降级的次数，以及每个位图索引迭代器首次在延迟页面读取时遇到文件缺失的次数。布隆过滤器页的延迟读取失败不计入。重新打开同一缺失文件可以再次计数，因此该指标不是缺失文件的去重数量。指标增长表示索引过滤能力下降，例如 Vacuum 与查询并发，或降级后再次升级时可能出现这种情况。
 
 ## `lake_pk_index_cache_delvec_bytes`
 

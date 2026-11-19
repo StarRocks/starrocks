@@ -83,7 +83,6 @@ Status CoverageWindowFunction::initialize(FunctionContext* ctx, CoverageWindowSt
     auto planar = [](const TypeDescriptor& type) {
         return type.type == TYPE_GEOMETRY && type.geo_type &&
                type.geo_type->logical_type == GEO_LOGICAL_TYPE_GEOMETRY &&
-               type.geo_type->coordinate_system == GEO_COORDINATE_SYSTEM_CARTESIAN &&
                type.geo_type->edge_algorithm == GEO_EDGE_ALGORITHM_PLANAR && !type.geo_type->crs.empty();
     };
     if (!planar(args[0]) || !planar(result) || !is_geo_semantically_compatible(*args[0].geo_type, *result.geo_type))

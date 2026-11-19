@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "collationsは利用可能な照合順序を含みます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # collations

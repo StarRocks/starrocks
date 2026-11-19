@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "The StarRocksWriter plugin allows writing data to StarRocks' destination table."
+products: [oss, enterprise, anywhere]
 ---
 
 # DataX writer

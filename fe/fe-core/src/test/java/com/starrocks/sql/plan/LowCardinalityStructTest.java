@@ -100,6 +100,29 @@ public class LowCardinalityStructTest extends PlanTestBase {
     }
 
     @Test
+    public void testStructOfStringColumnNeedsNoAnchor() throws Exception {
+        // RB-1168: a field of a struct built in place from a low-cardinality string column is planned as a string
+        // expression on the dictionary values, not with an anchor that builds the struct from the dict codes. The
+        // scan pushes the predicate down to the storage layer, which evaluates it on the dictionary's string values.
+        String sql = """
+                SELECT c1 FROM (SELECT ! ! (named_struct('a', VARCHAR_COL, 'b', VARCHAR_COL).b) FROM T) t(c1)
+                WHERE c1 IS NULL
+                UNION ALL
+                SELECT c1 FROM (SELECT ! ! (named_struct('a', VARCHAR_COL, 'b', VARCHAR_COL).b) FROM T) t(c1)
+                WHERE NOT (c1 IS NULL)
+                """;
+        String plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("DictDecode("), plan);
+        Assertions.assertFalse(plan.contains("struct<`a` int(11), `b` int(11)>"), plan);
+
+        // The same holds when the struct also has a field built from a dict-encoded array column.
+        sql = "SELECT INTEGER_COL FROM T WHERE upper(STRUCT(VARCHAR_COL, ARRAY_VARCHAR_COL, INTEGER_COL).col1) = 'X'";
+        plan = getVerboseExplain(sql);
+        Assertions.assertTrue(plan.contains("DictDecode("), plan);
+        Assertions.assertFalse(plan.contains("struct<`col1` int(11)"), plan);
+    }
+
+    @Test
     public void testExpressionDictField() throws Exception {
         String sql = """
                 SELECT UPPER(STRUCT(VARCHAR_COL, ARRAY_VARCHAR_COL, INTEGER_COL).col1)
@@ -107,8 +130,7 @@ public class LowCardinalityStructTest extends PlanTestBase {
                 """;
         String plan = getVerboseExplain(sql);
         String expected = "5 <-> DictDecode([6: VARCHAR_COL, INT, true], [upper[(<place-holder>); args: VARCHAR; " +
-                "result: VARCHAR; args nullable: true; result nullable: true]], row[([6: VARCHAR_COL, INT, true], " +
-                "[3: ARRAY_VARCHAR_COL, ARRAY<VARCHAR(40)>, true], [4: INTEGER_COL, INT, true]);";
+                "result: VARCHAR; args nullable: true; result nullable: true]])";
         Assertions.assertTrue(plan.contains(expected), plan);
     }
 
@@ -135,20 +157,8 @@ public class LowCardinalityStructTest extends PlanTestBase {
                 SELECT S.col1, S.col2, S.col3 FROM T
                 """;
         String plan = getVerboseExplain(sql);
-        String expected = "  1:Project\n" +
-                "  |  output columns:\n" +
-                "  |  6 <-> DictDecode([9: VARCHAR_COL, INT, true], [<place-holder>], row[([9: VARCHAR_COL, INT, " +
-                "true], [10: ARRAY_VARCHAR_COL, ARRAY<INT>, true], [4: INTEGER_COL, INT, true]); args: " +
-                "INT,INVALID_TYPE,INT; result: struct<`col1` int(11), `col2` array<int(11)>, `col3` int(11)>; args " +
-                "nullable: true; result nullable: true].col1[true])\n" +
-                "  |  7 <-> DictDecode([10: ARRAY_VARCHAR_COL, ARRAY<INT>, true], [<place-holder>], row[([9: " +
-                "VARCHAR_COL, INT, true], [10: ARRAY_VARCHAR_COL, ARRAY<INT>, true], [4: INTEGER_COL, INT, true]); " +
-                "args: INT,INVALID_TYPE,INT; result: struct<`col1` int(11), `col2` array<int(11)>, `col3` int(11)>; args " +
-                "nullable: true; result nullable: true].col2[true])\n" +
-                "  |  8 <-> row[(DictDecode([9: VARCHAR_COL, INT, true], [<place-holder>]), DictDecode([10: " +
-                "ARRAY_VARCHAR_COL, ARRAY<INT>, true], [<place-holder>]), [4: INTEGER_COL, INT, true]); args: " +
-                "VARCHAR,INVALID_TYPE,INT; result: struct<`col1` varchar(25), `col2` array<varchar(40)>, `col3` int(11)>;" +
-                " args nullable: true; result nullable: true].col3[true]\n";
+        String expected = "  |  11 <-> DictDecode([9: VARCHAR_COL, INT, true], [<place-holder>])\n" +
+                "  |  12 <-> DictDecode([10: ARRAY_VARCHAR_COL, ARRAY<INT>, true], [<place-holder>])\n";
         Assertions.assertTrue(plan.contains(expected), plan);
     }
 
@@ -203,20 +213,8 @@ public class LowCardinalityStructTest extends PlanTestBase {
                 SELECT S.c1, S.c2, S.c3 FROM TB2
                 """;
         String plan = getVerboseExplain(sql);
-        String expected = "  1:Project\n" +
-                "  |  output columns:\n" +
-                "  |  6 <-> DictDecode([9: VARCHAR_COL, INT, true], [<place-holder>], named_struct[('c1', [9: " +
-                "VARCHAR_COL, INT, true], 'c2', [10: ARRAY_VARCHAR_COL, ARRAY<INT>, true], 'c3', [4: INTEGER_COL, " +
-                "INT, true]); args: VARCHAR,INT,VARCHAR,INVALID_TYPE,VARCHAR,INT; result: struct<`c1` int(11), `c2` " +
-                "array<int(11)>, `c3` int(11)>; args nullable: true; result nullable: true].c1[true])\n" +
-                "  |  7 <-> DictDecode([10: ARRAY_VARCHAR_COL, ARRAY<INT>, true], [<place-holder>], named_struct[('c1'" +
-                ", [9: VARCHAR_COL, INT, true], 'c2', [10: ARRAY_VARCHAR_COL, ARRAY<INT>, true], 'c3', [4: " +
-                "INTEGER_COL, INT, true]); args: VARCHAR,INT,VARCHAR,INVALID_TYPE,VARCHAR,INT; result: struct<`c1` " +
-                "int(11), `c2` array<int(11)>, `c3` int(11)>; args nullable: true; result nullable: true].c2[true])\n" +
-                "  |  8 <-> named_struct[('c1', DictDecode([9: VARCHAR_COL, INT, true], [<place-holder>]), 'c2', " +
-                "DictDecode([10: ARRAY_VARCHAR_COL, ARRAY<INT>, true], [<place-holder>]), 'c3', [4: INTEGER_COL, INT," +
-                " true]); args: VARCHAR,VARCHAR,VARCHAR,INVALID_TYPE,VARCHAR,INT; result: struct<`c1` varchar(25), `c2`" +
-                " array<varchar(40)>, `c3` int(11)>; args nullable: true; result nullable: true].c3[true]\n";
+        String expected = "  |  11 <-> DictDecode([9: VARCHAR_COL, INT, true], [<place-holder>])\n" +
+                "  |  12 <-> DictDecode([10: ARRAY_VARCHAR_COL, ARRAY<INT>, true], [<place-holder>])\n";
         Assertions.assertTrue(plan.contains(expected), plan);
     }
 
@@ -239,8 +237,7 @@ public class LowCardinalityStructTest extends PlanTestBase {
     public void testArrayDictField() throws Exception {
         String sql = "SELECT STRUCT(ARRAY_VARCHAR_COL, VARCHAR_COL).col1 FROM T";
         String plan = getVerboseExplain(sql);
-        String expected = "5 <-> DictDecode([6: ARRAY_VARCHAR_COL, ARRAY<INT>, true], [<place-holder>], " +
-                "row[([6: ARRAY_VARCHAR_COL, ARRAY<INT>, true], [2: VARCHAR_COL, VARCHAR, true]);";
+        String expected = "5 <-> DictDecode([6: ARRAY_VARCHAR_COL, ARRAY<INT>, true], [<place-holder>])";
         Assertions.assertTrue(plan.contains(expected), plan);
     }
 
@@ -249,9 +246,7 @@ public class LowCardinalityStructTest extends PlanTestBase {
         String sql = "SELECT STRUCT(ARRAY_VARCHAR_COL, VARCHAR_COL).col1[1] FROM T";
         String plan = getVerboseExplain(sql);
         String expected = "5 <-> DictDecode([6: ARRAY_VARCHAR_COL, ARRAY<INT>, true], [<place-holder>], " +
-                "row[([6: ARRAY_VARCHAR_COL, ARRAY<INT>, true], [2: VARCHAR_COL, VARCHAR, true]); args: " +
-                "INVALID_TYPE,VARCHAR; result: struct<`col1` array<int(11)>, `col2` varchar(25)>; args nullable: true; " +
-                "result nullable: true].col1[true][1])";
+                "[6: ARRAY_VARCHAR_COL, ARRAY<INT>, true][1])";
         Assertions.assertTrue(plan.contains(expected), plan);
     }
 

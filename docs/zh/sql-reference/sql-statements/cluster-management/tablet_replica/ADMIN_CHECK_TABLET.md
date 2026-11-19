@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ADMIN CHECK TABLET checks a group of tablets for consistency or integrity issues."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ADMIN CHECK TABLET

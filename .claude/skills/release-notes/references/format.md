@@ -65,6 +65,10 @@ Release date: Month D, YYYY
 
 - <user-facing description>. [#NNNNN](https://github.com/StarRocks/starrocks/pull/NNNNN)
 
+### Security
+
+- [CVE-YYYY-NNNNN] Bumped <component> to <version> to fix <the vulnerability>. [#NNNNN](https://github.com/StarRocks/starrocks/pull/NNNNN)
+
 ### Bug fixes
 
 The following issues have been fixed:
@@ -74,9 +78,12 @@ The following issues have been fixed:
 
 Rules:
 
-- Use the heading text exactly: `### Behavior Changes`, `### Improvements`, `### Bug fixes`
-  (note the lowercase "fixes" — match the existing file; some older sections use
-  `### Bug Fixes`, but follow the most recent section's casing).
+- Use the heading text exactly: `### Behavior Changes`, `### Improvements`, `### Security`,
+  `### Bug fixes` (note the lowercase "fixes" — match the existing file; some older sections
+  use `### Bug Fixes`, but follow the most recent section's casing).
+- `### Security` goes between Improvements and Bug fixes, and only in a file whose most recent
+  patch section has one (`release-4.1.md` does; `release-4.0.md` and `release-3.5.md` do not).
+  In any other file, its entries go under Bug fixes. See `categorization.md`.
 - **Omit any subsection that has no entries.** Do not emit an empty heading.
 - The `### Bug fixes` section is conventionally preceded by the line
   `The following issues have been fixed:` — keep it if the existing file uses it.

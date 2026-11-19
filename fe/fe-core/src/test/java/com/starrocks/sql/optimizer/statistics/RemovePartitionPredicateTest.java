@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
 import io.delta.kernel.internal.SnapshotImpl;
@@ -39,6 +40,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -118,6 +120,19 @@ public class RemovePartitionPredicateTest {
         Assertions.assertEquals(idEq, remove(Utils.compoundAnd(dtEq, idEq), TABLE_METADATA));
         // the table's partition column list is not grown by the call
         Assertions.assertEquals(List.of("dt", "Region"), table.getPartitionColumnNames());
+    }
+
+    @Test
+    public void testStringToTemporalCastOnPartitionColumnIsRemoved() {
+        // not converted into the kernel predicate, but DeltaLakeMetadata prunes files with it by partition value
+        ScalarOperator castEq = eq(new CastOperator(DateType.DATETIME, dt),
+                ConstantOperator.createDatetime(LocalDateTime.of(2026, 11, 1, 0, 0)));
+        ScalarOperator regionCastEq = eq(new CastOperator(DateType.DATE, region),
+                ConstantOperator.createDate(LocalDateTime.of(2026, 11, 1, 0, 0)));
+        Assertions.assertEquals(ConstantOperator.TRUE,
+                remove(Utils.compoundAnd(castEq, regionCastEq), TABLE_METADATA));
+        // not with statistics that do not come from the planned files
+        Assertions.assertEquals(castEq, remove(castEq, ANALYZE));
     }
 
     @Test

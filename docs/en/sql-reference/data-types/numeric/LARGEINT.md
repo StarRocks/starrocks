@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "LARGEINT is a 16-byte signed integer."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # LARGEINT

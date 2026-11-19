@@ -43,6 +43,7 @@ import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -578,7 +579,8 @@ public class MVPartitionExprResolver {
             if (partitionExprMaps.isEmpty()) {
                 LOG.warn("The partition expr maps slot ref should be from the base table, eqExprs:{}",
                         partitionExprMaps);
-                throw new SemanticException("Failed to build mv partition expr from base table: " + stmt.getOrigStmt());
+                throw new SemanticException("Failed to build mv partition expr from base table: "
+                        + ExprToSql.toSql(mvRefPartitionExpr));
             }
             // If mv contains multi partition columns, needs to ensure each partition column refers the same base tables' count.
             if (refBaseTableCols == -1) {

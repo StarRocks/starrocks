@@ -274,6 +274,7 @@ public class IcebergScanNode extends ScanNode {
                         .setScanBytesCap(scanBytesCap)
                         .setScanFilesCap(scanFilesCap)
                         .setScanRowsCap(scanRowsCap)
+                        .setScanNodeId(getId().asInt())
                         .build();
 
         RemoteFileInfoSource remoteFileInfoSource;

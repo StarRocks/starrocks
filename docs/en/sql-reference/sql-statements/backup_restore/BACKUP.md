@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 description: "Backs up databases, tables, materialized views, logical views, and UDFs in StarRocks to a remote storage repository."
 ---
 
@@ -67,7 +68,7 @@ TO <repository_name>
 | db_name         | Name of the database that stores the data to be backed up.   |
 | snapshot_name   | Specify a name for the data snapshot. Globally unique.       |
 | repository_name | Repository name. You can create a repository using [CREATE REPOSITORY](./CREATE_REPOSITORY.md). |
-| ON              | Name of the tables to be backed up. The whole database is backed up if this parameter is not specified. |
+| ON              | Name of the tables to be backed up. The whole database is backed up if this parameter is not specified. Asynchronous materialized views are included only if the FE configuration item `enable_backup_materialized_view` is `true`. |
 | PARTITION       | Name of the partitions to be backed up. The whole table is backed up if this parameter is not specified. |
 | PROPERTIES      | Properties of the data snapshot. Valid keys:<ul><li>`type`: Backup type. Currently, only full backup `FULL` is supported. Default: `FULL`.</li><li>`timeout`: Task timeout. Unit: second. Default: `86400`.</li><li>`ttl`: How long the snapshot is kept, written as `<number> <unit>` where the unit is one of `SECOND`, `MINUTE`, `HOUR`, `DAY`, `WEEK`, `MONTH`, or `YEAR`, for example `7 DAY`. The snapshot is kept forever if this key is not set. Supported from v4.2.0 onwards.</li></ul> |
 
@@ -105,7 +106,7 @@ backup_object ::= [
 | db_name.        | Name of the database to which the object(s) or snapshot belongs. You can only specify either `DATABASE <db_name>` or `<db_name>.`. |
 | snapshot_name   | Name of the data snapshot. Globally unique.                  |
 | repository_name | Repository name. You can create a repository using [CREATE REPOSITORY](./CREATE_REPOSITORY.md). |
-| ON              | The object to be backed up. The whole database is backed up if this parameter is not specified. |
+| ON              | The object to be backed up. The whole database is backed up if this parameter is not specified. Asynchronous materialized views are included only if the FE configuration item `enable_backup_materialized_view` is `true`. |
 | table_name      | Name of the table(s) to be backed up.                        |
 | mv_name         | Name of the materialized view(s) to be backed up.            |
 | view_name       | Name of the logical view(s) to be backed up.                 |
@@ -208,7 +209,7 @@ BACKUP DATABASE sr_hub SNAPSHOT sr_mv2_backup
 TO test_repo
 ON (MATERIALIZED VIEW sr_mv1, MATERIALIZED VIEW sr_mv2);
 
--- Backs up all materialized views.
+-- Backs up all asynchronous materialized views. Requires enable_backup_materialized_view = true; otherwise nothing is backed up.
 BACKUP DATABASE sr_hub SNAPSHOT sr_mv3_backup
 TO test_repo
 ON (ALL MATERIALIZED VIEWS);
@@ -265,5 +266,6 @@ ON (ALL FUNCTIONS);
 - If there is an existing table that has a duplicated name with the table to be restored, StarRocks first checks whether or not the schema of the existing table matches that of the table to be restored. If the schemas match, StarRocks overwrites the existing table with the data in the snapshot. If the schema does not match, the RESTORE job fails. You can either rename the table to be restored using the keyword `AS`, or delete the existing table before restoring data.
 - If the RESTORE job overwrites an existing database, table, or partition, the overwritten data cannot be restored after the job enters the COMMIT phase. If the RESTORE job fails or is canceled at this point, the data may be corrupted and inaccessible. In this case, you can only perform the RESTORE operation again and wait for the job to complete. Therefore, we recommend that you do not restore data by overwriting unless you are sure that the current data is no longer used. The overwrite operation first checks metadata consistency between the snapshot and the existing database, table, or partition. If an inconsistency is detected, the RESTORE operation cannot be performed.
 - Currently, StarRocks does not support backing up and restoring the configuration data related to user accounts, privileges, and resource groups.
-- Currently, StarRocks does not support backing up and restoring the Colocate Join relationship among tables.
+- By default, StarRocks does not restore the Colocate Join relationship among tables. From v3.2.10 and v3.3.2 onwards, in shared-nothing clusters, you can set the FE configuration item `enable_colocate_restore` to `true` so that the restored tables keep their Colocate Join relationship. This applies only to tables that do not already exist in the target cluster.
+- Asynchronous materialized views are backed up only if you specify them by name, unless the FE configuration item `enable_backup_materialized_view` is set to `true`. With the default value `false`, BACKUP skips them when you back up a whole database, and `ON (ALL MATERIALIZED VIEWS)` backs up nothing while the job still finishes without an error.
 - Incremental materialized views (`refresh_mode` is `INCREMENTAL`, or `AUTO` when the view was not created as PCT) cannot be backed up. BACKUP returns an error if you specify one, and skips them when you back up a database or all materialized views.

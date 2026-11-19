@@ -468,6 +468,7 @@ public class UtFrameUtils {
         be.setBrpcPort(backend.getBrpcPort());
         be.setHttpPort(backend.getHttpPort());
         be.setStarletPort(backend.getStarletPort());
+        be.setSupportLakeIndexFastPath(MockedBackend.reportLakeIndexFastPath);
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(be);
         if (RunMode.isSharedDataMode()) {
             int starletPort = backend.getStarletPort();
@@ -486,6 +487,7 @@ public class UtFrameUtils {
         cn.setHttpPort(backend.getHttpPort());
         cn.setStarletPort(backend.getStarletPort());
         cn.setIsStoragePath(false);
+        cn.setSupportLakeIndexFastPath(MockedBackend.reportLakeIndexFastPath);
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn);
         if (RunMode.isSharedDataMode()) {
             int starletPort = backend.getStarletPort();
@@ -1783,6 +1785,23 @@ public class UtFrameUtils {
                     dis.close();
                 }
             }
+        }
+
+        /**
+         * Removes every record queued for the follower and returns them deserialized, in journal order.
+         */
+        public static synchronized List<JournalEntity> drainFollowerJournal() throws InterruptedException, IOException {
+            assert (followerJournalQueue != null);
+            List<JournalEntity> entities = new ArrayList<>();
+            while (!followerJournalQueue.isEmpty()) {
+                DataOutputBuffer buffer = followerJournalQueue.take().getBuffer();
+                try (DataInputStream dis = new DataInputStream(
+                        new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()))) {
+                    short opCode = dis.readShort();
+                    entities.add(new JournalEntity(opCode, EditLogDeserializer.deserialize(opCode, dis)));
+                }
+            }
+            return entities;
         }
 
         public static synchronized void replayJournalToEnd() throws InterruptedException, IOException {

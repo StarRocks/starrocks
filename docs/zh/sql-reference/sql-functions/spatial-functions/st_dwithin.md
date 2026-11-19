@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "判断点是否位于线或多线的指定闭区间距离内。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_DWITHIN
