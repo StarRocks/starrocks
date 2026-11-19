@@ -62,3 +62,4 @@ ADD_BE_BENCH(${SRC_DIR}/bench/flat_json_vertical_compaction_mem_bench)
 # Measure task memory with the same malloc hooks as starrocks_be.
 target_sources(flat_json_vertical_compaction_mem_bench PRIVATE ${SRC_DIR}/service/mem_hook.cpp)
 ADD_BE_BENCH(${SRC_DIR}/bench/tdigest_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/query_statistics_recvr_bench)
