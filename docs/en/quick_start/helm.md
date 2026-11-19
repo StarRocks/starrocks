@@ -51,7 +51,7 @@ There is a lot of information in this document, and it is presented with step-by
 ---
 ### Kubernetes environment
 
-The Kubernetes environment used while writing this guide consists of three nodes with four vCPUS, and 16GB RAM each (GCP `e2-standard-4` machines). The Kubernetes cluster was deployed with this `gcloud` command:
+The Kubernetes environment used while writing this guide consists of three nodes with four vCPUs, and 16GB RAM each (GCP `e2-standard-4` machines). The Kubernetes cluster was deployed with this `gcloud` command:
 
 :::tip
 This command is for your reference, if you are using AWS, Azure, or any other Kubernetes provider you will need to modify this for your environment. In Google Cloud you will need to specify your own project and an appropriate location.
