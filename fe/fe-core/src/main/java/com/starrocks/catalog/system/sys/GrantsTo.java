@@ -61,6 +61,8 @@ import com.starrocks.thrift.TGrantsToType;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.Warehouse;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -75,6 +77,7 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class GrantsTo {
+    private static final Logger LOG = LogManager.getLogger(GrantsTo.class);
     private static final String GRANTS_TO_ROLES = "grants_to_roles";
     private static final String GRANTS_TO_USERS = "grants_to_users";
 
@@ -149,6 +152,7 @@ public class GrantsTo {
         Set<TGetGrantsToRolesOrUserItem> items = new HashSet<>();
         for (Map.Entry<ObjectType, List<PrivilegeEntry>> privEntry : privileges.entrySet()) {
             for (PrivilegeEntry privilegeEntry : privEntry.getValue()) {
+                try {
                 Set<List<String>> objects = new HashSet<>();
                 if (ObjectType.CATALOG.equals(privEntry.getKey())) {
                     CatalogPEntryObject catalogPEntryObject = (CatalogPEntryObject) privilegeEntry.getObject();
@@ -468,6 +472,10 @@ public class GrantsTo {
                     tGetGrantsToRolesOrUserItem.setIs_grantable(privilegeEntry.isWithGrantOption());
 
                     items.add(tGetGrantsToRolesOrUserItem);
+                }
+                } catch (Exception e) {
+                    LOG.warn("Failed to expand privilege entry for grantee={}, objectType={}, skipping",
+                            grantee, privEntry.getKey(), e);
                 }
             }
         }
