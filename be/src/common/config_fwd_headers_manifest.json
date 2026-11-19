@@ -956,6 +956,7 @@
         "lake_enable_del_file_crc_check",
         "lake_clear_corrupted_cache_meta",
         "lake_enable_protobuf_file_checksum",
+        "lake_enable_txn_vlog_group",
         "experimental_enable_lake_capture_tablet_and_rowsets",
         "lake_vacuum_min_batch_delete_size",
         "lake_local_pk_index_unused_threshold_seconds",
