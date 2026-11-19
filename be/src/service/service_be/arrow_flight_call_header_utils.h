@@ -14,10 +14,9 @@
 
 #pragma once
 
-#include <sstream>
+#include <string>
 
 #include "arrow/flight/types.h"
-#include "arrow/util/base64.h"
 
 namespace starrocks {
 
@@ -28,31 +27,9 @@ const char kAuthHeader[] = "authorization";
 
 // Function to look in CallHeaders for a key that has a value starting with prefix and
 // return the rest of the value after the prefix.
-inline std::string FindKeyValPrefixInCallHeaders(const arrow::flight::CallHeaders& incoming_headers,
-                                                 const std::string& key, const std::string& prefix) {
-    // Lambda function to compare characters without case sensitivity.
-    auto char_compare = [](const char& char1, const char& char2) { return (::toupper(char1) == ::toupper(char2)); };
+std::string FindKeyValPrefixInCallHeaders(const arrow::flight::CallHeaders& incoming_headers, const std::string& key,
+                                          const std::string& prefix);
 
-    auto iter = incoming_headers.find(key);
-    if (iter == incoming_headers.end()) {
-        return "";
-    }
-    const std::string val(iter->second);
-
-    if (val.size() > prefix.length()) {
-        if (std::equal(val.begin(), val.begin() + prefix.length(), prefix.begin(), char_compare)) {
-            return val.substr(prefix.length());
-        }
-    }
-    return "";
-}
-
-inline void ParseBasicHeader(const arrow::flight::CallHeaders& incoming_headers, std::string& username,
-                             std::string& password) {
-    std::string encoded_credentials = FindKeyValPrefixInCallHeaders(incoming_headers, kAuthHeader, kBasicPrefix);
-    std::stringstream decoded_stream(arrow::util::base64_decode(encoded_credentials));
-    std::getline(decoded_stream, username, ':');
-    std::getline(decoded_stream, password, ':');
-}
+void ParseBasicHeader(const arrow::flight::CallHeaders& incoming_headers, std::string& username, std::string& password);
 
 } // namespace starrocks
