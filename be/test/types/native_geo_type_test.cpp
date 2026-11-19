@@ -126,9 +126,9 @@ TEST(NativeGeoTypeTest, ColumnRepresentationIsSeparateFromType) {
 TEST(NativeGeoTypeTest, FrontendWireFixture) {
     // FE serializes semantic metadata directly in PScalarType.geo.
     const std::string_view wire(
-            "\x0a\x1c\x08\x00\x12\x18\x08\x1e\x2a\x14\x08\x01\x10\x01\x18\x01\x22\x09\x4f\x47\x43\x3a\x43\x52"
-            "\x53\x38\x34\x28\xe6\x21",
-            30);
+            "\x0a\x1a\x08\x00\x12\x16\x08\x1e\x2a\x12\x08\x01\x18\x01\x22\x09\x4f\x47\x43\x3a\x43\x52\x53\x38"
+            "\x34\x28\xe6\x21",
+            28);
     PTypeDesc proto;
     ASSERT_TRUE(proto.ParseFromArray(wire.data(), wire.size()));
     auto expected = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, descriptor(TYPE_GEOGRAPHY).type);
