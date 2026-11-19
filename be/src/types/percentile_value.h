@@ -64,6 +64,13 @@ public:
 
     Value quantile(Value q) { return _tdigest.quantile(q); }
 
+    // Reset to an empty digest with a new compression, in place. Produces the
+    // same state as constructing a fresh PercentileValue(compression) but reuses
+    // this object: the inline TDigest's centroid vectors are empty (compression
+    // is applied before any value is added), so move-assigning a freshly
+    // constructed TDigest touches only scalar fields and does no heap work.
+    void set_compression(double compression) { _tdigest = TDigest(compression); }
+
 private:
     enum PercentileDataType { TDIGEST = 0 };
     TDigest _tdigest;
