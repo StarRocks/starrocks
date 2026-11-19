@@ -2568,171 +2568,6 @@ TEST_F(FlatJsonColumnRWTest, testSegmentWriterIteratorWithMixedDataTypes) {
     }
 }
 
-<<<<<<< HEAD
-=======
-// Regression for reading a JSON subfield whose INTERMEDIATE level is stored as a JSON sub-column.
-//
-// JsonPathDeriver::_dfs_finalize() stores a node as one JSON sub-column as soon as the node carries
-// both object and scalar values inside the same segment, so a single row holding `{"a": 4}` next to
-// rows holding `{"a":{"b":{"c":..,"d":..}}}` collapses the whole subtree into the sub-column "a" of
-// type JSON. The descendants then live INSIDE that sub-column -- they are not in remain -- while the
-// remain bloom filter only ever learns the DIRECT children of the collapsed node ("b"), never the
-// leaves ("c"/"d"). Segment::_new_extended_column_iterator() used to read the bloom miss as "this
-// segment has no such field" and hand back an all-NULL iterator, so every typed read of `a.b.c` /
-// `a.b.d` silently produced NULL although `select j` still showed the value on disk. That is not
-// only a projection returning NULL: the same iterator feeds predicates, joins, sorts, aggregates and
-// DELETE, so rows disappear from WHERE, sums come out short and a DELETE reports success while
-// leaving matching rows behind.
-TEST_F(FlatJsonColumnRWTest, testDeepFieldUnderJsonAncestorSubColumn) {
-    const std::string kJsonColumnName = "json_col";
-    TabletSchemaPB schema_pb;
-    {
-        ColumnPB* json_column = schema_pb.add_column();
-        json_column->set_unique_id(0);
-        json_column->set_name(kJsonColumnName);
-        json_column->set_type("json");
-        json_column->set_is_nullable(true);
-    }
-    auto tablet_schema = TabletSchema::create(schema_pb);
-
-    // Row 4 is the odd one out: its "a" is a scalar, which makes the flattener keep the whole "a"
-    // subtree in a single JSON sub-column instead of flattening "a.b.c" / "a.b.d".
-    // "o" stays a normal intermediate node (only "o.inner" is stored) and "p" a normal scalar leaf.
-    std::vector<std::string> json_strings = {R"({"a": {"b": {"c": 1, "d": 2}}, "k": 1, "o": {"inner": 1}, "p": 1})",
-                                             R"({"a": {"b": {"c": 2, "d": 4}}, "k": 2, "o": {"inner": 2}, "p": 2})",
-                                             R"({"a": {"b": {"c": 3, "d": 6}}, "k": 3, "o": {"inner": 3}, "p": 3})",
-                                             R"({"a": 4, "k": 4, "o": {"inner": 4}, "p": 4})",
-                                             R"({"a": {"b": {"c": 5, "d": 10}}, "k": 5, "o": {"inner": 5}, "p": 5})",
-                                             R"({"a": {"b": {"c": 6, "d": 12}}, "k": 6, "o": {"inner": 6}, "p": 6})"};
-
-    std::string file_name = TEST_DIR + "/test_json_ancestor_subcolumn.data";
-    auto fs = std::make_shared<MemoryFileSystem>();
-    ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
-
-    {
-        SegmentWriterOptions opts;
-        opts.flat_json_config = std::make_shared<FlatJsonConfig>();
-        opts.flat_json_config->set_flat_json_enabled(true);
-        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(file_name));
-        auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), 0, tablet_schema, opts);
-        ASSERT_OK(segment_writer->init());
-
-        auto json_column = JsonColumn::create();
-        for (const auto& json_str : json_strings) {
-            JsonValue json_value;
-            ASSERT_OK(JsonValue::parse(json_str, &json_value));
-            json_column->append(&json_value);
-        }
-
-        SchemaPtr chunk_schema = std::make_shared<Schema>(tablet_schema->schema());
-        auto chunk = std::make_shared<Chunk>(Columns{json_column}, chunk_schema);
-        ASSERT_OK(segment_writer->append_chunk(*chunk));
-        uint64_t index_size, segment_file_size;
-        ASSERT_OK(segment_writer->finalize_columns(&index_size));
-        ASSERT_OK(segment_writer->finalize_footer(&segment_file_size));
-    }
-
-    ASSIGN_OR_ABORT(auto segment, Segment::open(fs, FileInfo{file_name}, 0, tablet_schema));
-
-    {
-        // The shape this regression needs: "a" is one JSON sub-column, its descendants are NOT
-        // sub-columns of their own. Assert it so the test fails loudly if the flattener changes,
-        // instead of silently no longer reproducing the bug.
-        const auto* reader = segment->column_with_uid(0);
-        ASSERT_TRUE(reader != nullptr);
-        ASSERT_TRUE(reader->is_flat_json());
-        auto [begin, end] = reader->user_sub_reader_range();
-        std::vector<std::string> names;
-        LogicalType a_type = TYPE_NONE;
-        for (size_t i = begin; i < end; ++i) {
-            const auto& sub = (*reader->sub_readers())[i];
-            names.emplace_back(sub->name());
-            if (sub->name() == "a") {
-                a_type = sub->column_type();
-            }
-        }
-        ASSERT_EQ(std::vector<std::string>({"a", "k", "o.inner", "p"}), names);
-        ASSERT_EQ(TYPE_JSON, a_type);
-    }
-
-    {
-        // The whole column still reads back intact -- the data is on disk, only the subfield read
-        // path was wrong, which is why no re-import is needed to recover from this bug.
-        OlapReaderStatistics stats;
-        SegmentReadOptions read_opts;
-        read_opts.fs = fs;
-        read_opts.tablet_schema = tablet_schema;
-        read_opts.stats = &stats;
-        ASSIGN_OR_ABORT(auto segment_iterator, segment->new_iterator(*tablet_schema->schema(), read_opts));
-
-        auto read_chunk = std::make_shared<Chunk>();
-        read_chunk->append_column(ColumnHelper::create_column(TypeDescriptor::create_json_type(), true), 0);
-        ASSERT_OK(segment_iterator->get_next(read_chunk.get()));
-        ASSERT_EQ(read_chunk->num_rows(), json_strings.size());
-        auto read_json_column = read_chunk->get_column_by_index(0);
-        for (size_t i = 0; i < json_strings.size(); ++i) {
-            JsonValue expected_json;
-            ASSERT_OK(JsonValue::parse(json_strings[i], &expected_json));
-            ASSERT_EQ(expected_json.to_string().value(), read_json_column->get(i).get_json()->to_string().value());
-        }
-    }
-
-    {
-        OlapReaderStatistics reader_stats;
-        ColumnIteratorOptions column_opts;
-        column_opts.stats = &reader_stats;
-        ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(file_name));
-        column_opts.read_file = read_file.get();
-
-        // clang-format off
-        std::vector<std::tuple<std::string, LogicalType, std::string>> fields = {
-            // THE BUG: two levels below the JSON sub-column "a". The leaf name never reaches the
-            // remain bloom filter, so these used to come back all-NULL.
-            {"a.b.d", TYPE_BIGINT, "[2, 4, 6, NULL, 10, 12]"},
-            {"a.b.c", TYPE_BIGINT, "[1, 2, 3, NULL, 5, 6]"},
-            {"a.b.c", TYPE_VARCHAR, "['1', '2', '3', NULL, '5', '6']"},
-            // a leaf that really is absent, below the same JSON ancestor: NULL is the right answer
-            {"a.b.zz", TYPE_BIGINT, "[NULL, NULL, NULL, NULL, NULL, NULL]"},
-
-            // GUARD, opposite direction (#75764): an intermediate node whose descendants ARE
-            // flattened ("o.inner") must still be rebuilt from them rather than reported absent.
-            {"o", TYPE_VARCHAR, R"(['{"inner": 1}', '{"inner": 2}', '{"inner": 3}', '{"inner": 4}', '{"inner": 5}', '{"inner": 6}'])"},
-            {"o.inner", TYPE_BIGINT, "[1, 2, 3, 4, 5, 6]"},
-            // GUARD: a plain flattened leaf is unaffected
-            {"k", TYPE_BIGINT, "[1, 2, 3, 4, 5, 6]"},
-            // GUARD: the ancestor sub-column is a SCALAR ("p" is a BIGINT sub-column), so it cannot
-            // hold "p.q" -- the fast NULL path must stay.
-            {"p.q", TYPE_BIGINT, "[NULL, NULL, NULL, NULL, NULL, NULL]"},
-            // GUARD: a field that exists nowhere keeps the fast NULL path
-            {"nope", TYPE_BIGINT, "[NULL, NULL, NULL, NULL, NULL, NULL]"},
-            // GUARD: path-segment boundary -- the sub-column "a" is not an ancestor of "ab.c"
-            {"ab.c", TYPE_BIGINT, "[NULL, NULL, NULL, NULL, NULL, NULL]"},
-        };
-        // clang-format on
-
-        for (const auto& [field_name, field_type, expected] : fields) {
-            ASSIGN_OR_ABORT(auto path, ColumnAccessPath::create(TAccessPathType::FIELD, "$", 0));
-            ColumnAccessPath::insert_json_path(path.get(), field_type, field_name);
-            ASSERT_EQ("$." + field_name, path->linear_path());
-
-            TabletColumn col(STORAGE_AGGREGATE_NONE, field_type, true);
-            col.set_unique_id(123);
-            col.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), 0));
-
-            ASSIGN_OR_ABORT(auto column_iter, segment->new_column_iterator_or_default(col, path.get()));
-            ASSERT_OK(column_iter->init(column_opts));
-            ASSERT_OK(column_iter->seek_to_first());
-            size_t count = json_strings.size();
-            auto column = ColumnHelper::create_column(TypeDescriptor(field_type), true);
-            ASSERT_OK(column_iter->next_batch(&count, column.get()));
-            ASSERT_EQ(json_strings.size(), column->size());
-            // EXPECT, not ASSERT: report every field in one run instead of stopping at the first
-            EXPECT_EQ(expected, column->debug_string())
-                    << fmt::format("field={} type={}", field_name, logical_type_to_string(field_type));
-        }
-    }
-}
-
 // A path the flattener stores as a VARCHAR sub-column holds JSON strings. Reading it through a JSON-typed
 // extended column must hand those strings back as JSON strings -- one that reads like JSON text included --
 // and must not cast the sub-column to JSON, which parses such a string into an object. Numeric sub-columns read
@@ -2787,10 +2622,8 @@ TEST_F(FlatJsonColumnRWTest, testJsonTypedExtendedColumnOverScalarSubColumns) {
         const auto* reader = segment->column_with_uid(0);
         ASSERT_TRUE(reader != nullptr);
         ASSERT_TRUE(reader->is_flat_json());
-        auto [begin, end] = reader->user_sub_reader_range();
         std::map<std::string, LogicalType> types;
-        for (size_t i = begin; i < end; ++i) {
-            const auto& sub = (*reader->sub_readers())[i];
+        for (const auto& sub : *reader->sub_readers()) {
             types[sub->name()] = sub->column_type();
         }
         ASSERT_EQ(TYPE_VARCHAR, types["s"]);
@@ -2851,7 +2684,6 @@ TEST_F(FlatJsonColumnRWTest, testJsonTypedExtendedColumnOverScalarSubColumns) {
     }
 }
 
->>>>>>> 126fb1c3613... [Enhancement][RB-345] Rebuild flat JSON sub-columns as JSON instead of casting them (#70427)
 TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
     // Test JSON global dictionary functionality
     auto fs = std::make_shared<MemoryFileSystem>();

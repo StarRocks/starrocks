@@ -28,15 +28,10 @@ CastColumnIterator::CastColumnIterator(std::unique_ptr<ColumnIterator> source_it
         : ColumnIteratorDecorator(source_iter.release(), kTakesOwnership),
           _obj_pool(new ObjectPool()),
 
-<<<<<<< HEAD
-          _source_chunk() {
-=======
           _source_chunk(),
-          _zone_map_forwardable(zone_map_survives_cast(source_type, target_type)),
           _flat_json_to_json(flat_json_source && target_type.type == TYPE_JSON &&
                              flat_json::JSON_MERGE_FUNC.contains(source_type.type)),
           _source_type(source_type.type) {
->>>>>>> 126fb1c3613... [Enhancement][RB-345] Rebuild flat JSON sub-columns as JSON instead of casting them (#70427)
     auto slot_id = SlotId{0};
     auto column = ColumnHelper::create_column(source_type, nullable_source);
     auto slot_desc = SlotDescriptor(slot_id, "", source_type);

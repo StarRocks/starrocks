@@ -76,15 +76,9 @@ private:
     Expr* _cast_expr{nullptr};
     // Chunk for holding data read from the source column iterator
     Chunk _source_chunk;
-<<<<<<< HEAD
-=======
-    // Whether the source column's zone map can be parsed as the target type without changing the
-    // value, ordering, or null statistics. Computed once from the two types by the constructor.
-    bool _zone_map_forwardable{false};
     // Rebuild the flat JSON sub-column values as JSON (flat_json::flat_column_to_json) instead of casting.
     bool _flat_json_to_json{false};
     LogicalType _source_type{TYPE_UNKNOWN};
->>>>>>> 126fb1c3613... [Enhancement][RB-345] Rebuild flat JSON sub-columns as JSON instead of casting them (#70427)
 };
 
 } // namespace starrocks
