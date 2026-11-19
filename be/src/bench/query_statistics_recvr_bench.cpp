@@ -30,6 +30,7 @@
 
 #include <benchmark/benchmark.h>
 
+#include "absl/container/inlined_vector.h"
 #include "base/concurrency/spinlock.h"
 #include "base/logging.h"
 #include "base/phmap/phmap.h"
@@ -389,27 +390,21 @@ public:
             uint32_t node_id;
             NodeExecStats stats;
         };
-        std::vector<DrainedScan> drained_scans;
-        std::vector<DrainedExec> drained_execs;
+        absl::InlinedVector<DrainedScan, 8> drained_scans;
+        absl::InlinedVector<DrainedExec, 32> drained_execs;
         {
             std::lock_guard<LockType> l(other._lock);
             if (other._has_map_updates) {
-                if (!other._stats_items.empty()) {
-                    drained_scans.reserve(other._stats_items.size());
-                    for (auto& [tid, s] : other._stats_items) {
-                        if (!s.empty()) {
-                            drained_scans.push_back({tid, s});
-                            s = ScanStats{};
-                        }
+                for (auto& [tid, s] : other._stats_items) {
+                    if (!s.empty()) {
+                        drained_scans.push_back({tid, s});
+                        s = ScanStats{};
                     }
                 }
-                if (!other._exec_stats_items.empty()) {
-                    drained_execs.reserve(other._exec_stats_items.size());
-                    for (auto& [nid, e] : other._exec_stats_items) {
-                        if (!e.empty()) {
-                            drained_execs.push_back({nid, e});
-                            e = NodeExecStats{};
-                        }
+                for (auto& [nid, e] : other._exec_stats_items) {
+                    if (e.active) {
+                        drained_execs.push_back({nid, e});
+                        e = NodeExecStats{};
                     }
                 }
                 other._has_map_updates = false;
@@ -440,10 +435,7 @@ private:
         int64_t pred_filter_rows = 0;
         int64_t index_filter_rows = 0;
         int64_t rf_filter_rows = 0;
-        bool empty() const {
-            return push_rows == 0 && pull_rows == 0 && pred_filter_rows == 0 && index_filter_rows == 0 &&
-                   rf_filter_rows == 0;
-        }
+        bool active = false;
     };
 
     void update_stats_item(int64_t table_id, int64_t rows, int64_t bytes) {
@@ -456,13 +448,13 @@ private:
     }
 
     void update_exec_stats_item(uint32_t node_id, int64_t push, int64_t pull, int64_t pred, int64_t idx, int64_t rf) {
-        if (push == 0 && pull == 0 && pred == 0 && idx == 0 && rf == 0) return;
         auto& item = _exec_stats_items[node_id];
         item.push_rows += push;
         item.pull_rows += pull;
         item.pred_filter_rows += pred;
         item.index_filter_rows += idx;
         item.rf_filter_rows += rf;
+        item.active = true;
         _has_map_updates = true;
     }
 
@@ -501,7 +493,8 @@ public:
     void aggregate(StatsType* statistics) {
         statistics->update_max_mem_costs(_max_mem_cost_bytes.load(std::memory_order_relaxed));
         for (size_t i = 0; i < K; ++i) {
-            if (_stripes[i].dirty.exchange(false, std::memory_order_acq_rel)) {
+            if (_stripes[i].dirty.load(std::memory_order_relaxed) &&
+                _stripes[i].dirty.exchange(false, std::memory_order_acq_rel)) {
                 statistics->merge(static_cast<int>(i), _stripes[i].stats);
             }
         }

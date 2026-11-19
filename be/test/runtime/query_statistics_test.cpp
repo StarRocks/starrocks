@@ -479,4 +479,30 @@ TEST_F(QueryStatisticsTest, RecvrConcurrent90SendersAndEosBurstConservation) {
     EXPECT_EQ(total_ops * 10, push_sum);
 }
 
+TEST_F(QueryStatisticsTest, PreservesExplicitZeroNodeExecStatsAndOmitsDrainedEntries) {
+    QueryStatistics source;
+    source.add_exec_stats_item(7, 0, 0, 0, 0, 0);
+
+    PQueryStatistics before_merge_pb;
+    source.to_pb(&before_merge_pb);
+    ASSERT_EQ(1, before_merge_pb.node_exec_stats_items_size());
+    EXPECT_EQ(7U, before_merge_pb.node_exec_stats_items(0).node_id());
+    EXPECT_EQ(0, before_merge_pb.node_exec_stats_items(0).push_rows());
+    EXPECT_EQ(0, before_merge_pb.node_exec_stats_items(0).pull_rows());
+
+    QueryStatistics dest;
+    dest.merge(0, source);
+
+    PQueryStatistics dest_pb;
+    dest.to_pb(&dest_pb);
+    ASSERT_EQ(1, dest_pb.node_exec_stats_items_size());
+    EXPECT_EQ(7U, dest_pb.node_exec_stats_items(0).node_id());
+    EXPECT_EQ(0, dest_pb.node_exec_stats_items(0).push_rows());
+
+    // After draining source into dest, source must omit the drained entry.
+    PQueryStatistics drained_source_pb;
+    source.to_pb(&drained_source_pb);
+    EXPECT_EQ(0, drained_source_pb.node_exec_stats_items_size());
+}
+
 } // namespace starrocks

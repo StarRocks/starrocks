@@ -34,8 +34,7 @@
 
 #include "runtime/query_statistics.h"
 
-#include <algorithm>
-#include <vector>
+#include "absl/container/inlined_vector.h"
 
 namespace starrocks {
 
@@ -101,7 +100,7 @@ void QueryStatistics::to_pb(PQueryStatistics* statistics) {
             new_stats_item->set_scan_bytes(stats_item.scan_bytes);
         }
         for (const auto& [node_id, exec_stats_item] : _exec_stats_items) {
-            if (exec_stats_item.empty()) {
+            if (!exec_stats_item.active) {
                 continue;
             }
             auto* new_exec_stats_item = statistics->add_node_exec_stats_items();
@@ -188,15 +187,13 @@ void QueryStatistics::update_stats_item(int64_t table_id, int64_t scan_rows, int
 
 void QueryStatistics::update_exec_stats_item(uint32_t node_id, int64_t push, int64_t pull, int64_t pred_filter,
                                              int64_t index_filter, int64_t rf_filter) {
-    if (push == 0 && pull == 0 && pred_filter == 0 && index_filter == 0 && rf_filter == 0) {
-        return;
-    }
     auto& item = _exec_stats_items[node_id];
     item.push_rows += push;
     item.pull_rows += pull;
     item.pred_filter_rows += pred_filter;
     item.index_filter_rows += index_filter;
     item.rf_filter_rows += rf_filter;
+    item.active = true;
     _has_map_updates = true;
 }
 
@@ -276,28 +273,22 @@ void QueryStatistics::merge(int sender_id, QueryStatistics& other) {
         uint32_t node_id;
         NodeExecStats stats;
     };
-    std::vector<DrainedScanItem> drained_scan_items;
-    std::vector<DrainedExecItem> drained_exec_items;
+    absl::InlinedVector<DrainedScanItem, 8> drained_scan_items;
+    absl::InlinedVector<DrainedExecItem, 32> drained_exec_items;
     std::unique_ptr<AIExecutionStatistics> other_ai_statistics;
     {
         std::lock_guard l(other._lock);
         if (other._has_map_updates) {
-            if (!other._stats_items.empty()) {
-                drained_scan_items.reserve(other._stats_items.size());
-                for (auto& [table_id, stats_item] : other._stats_items) {
-                    if (!stats_item.empty()) {
-                        drained_scan_items.push_back({table_id, stats_item});
-                        stats_item = ScanStats{};
-                    }
+            for (auto& [table_id, stats_item] : other._stats_items) {
+                if (!stats_item.empty()) {
+                    drained_scan_items.push_back({table_id, stats_item});
+                    stats_item = ScanStats{};
                 }
             }
-            if (!other._exec_stats_items.empty()) {
-                drained_exec_items.reserve(other._exec_stats_items.size());
-                for (auto& [node_id, exec_stats_item] : other._exec_stats_items) {
-                    if (!exec_stats_item.empty()) {
-                        drained_exec_items.push_back({node_id, exec_stats_item});
-                        exec_stats_item = NodeExecStats{};
-                    }
+            for (auto& [node_id, exec_stats_item] : other._exec_stats_items) {
+                if (exec_stats_item.active) {
+                    drained_exec_items.push_back({node_id, exec_stats_item});
+                    exec_stats_item = NodeExecStats{};
                 }
             }
             other._has_map_updates = false;
@@ -405,7 +396,8 @@ void QueryStatisticsRecvr::aggregate(QueryStatistics* statistics) {
     DCHECK(statistics != nullptr);
     statistics->update_max_mem_costs(_max_mem_cost_bytes.load(std::memory_order_relaxed));
     for (size_t i = 0; i < kNumStripes; ++i) {
-        if (_stripes[i].dirty.exchange(false, std::memory_order_acq_rel)) {
+        if (_stripes[i].dirty.load(std::memory_order_relaxed) &&
+            _stripes[i].dirty.exchange(false, std::memory_order_acq_rel)) {
             statistics->merge(static_cast<int>(i), _stripes[i].stats);
         }
     }

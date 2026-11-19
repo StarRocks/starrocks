@@ -122,6 +122,7 @@ private:
         int64_t pred_filter_rows = 0;
         int64_t index_filter_rows = 0;
         int64_t rf_filter_rows = 0;
+        bool active = false;
 
         NodeExecStats() = default;
 
@@ -130,12 +131,8 @@ private:
                   pull_rows(pull),
                   pred_filter_rows(pred_filter),
                   index_filter_rows(index_filter),
-                  rf_filter_rows(rf_filter) {}
-
-        bool empty() const {
-            return push_rows == 0 && pull_rows == 0 && pred_filter_rows == 0 && index_filter_rows == 0 &&
-                   rf_filter_rows == 0;
-        }
+                  rf_filter_rows(rf_filter),
+                  active(true) {}
     };
     SpinLock _lock;
     bool _has_map_updates{false};
