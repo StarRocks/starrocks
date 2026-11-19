@@ -514,7 +514,7 @@ inline size_t BinaryDataProxyContainer::size() const {
     return _column == nullptr ? 0 : _column->size();
 }
 
-inline size_t BinaryImmContainer::immutable_bytes_size() const {
+inline size_t BinaryDataProxyContainer::immutable_bytes_size() const {
     if (_column == nullptr) {
         return 0;
     }
