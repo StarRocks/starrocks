@@ -2089,4 +2089,51 @@ TEST_F(AggStateFunctionsTest, test_combinator_batch_destroy_with_selection) {
     test_combinator_batch_destroy_with_selection<AggStateIf>();
 }
 
+// |input| holds a non-NULL row followed by two NULL rows. The nullable wrapper of |func_name| keeps NULL rows
+// (IgnoreNull=false), and AggStateCombine reaches it through its single-row update rather than its batch paths.
+void test_nullable_wrapper_keeps_null_rows(const std::string& func_name, const TypeDescriptor& arg_type,
+                                           const ColumnPtr& input) {
+    const TypeDescriptor array_int_type = TypeDescriptor::create_array_type(TYPE_INT_DESC);
+    auto utils = std::make_unique<FunctionUtils>(nullptr, array_int_type, std::vector<TypeDescriptor>{arg_type});
+    auto ctx = utils->get_fn_ctx();
+    auto func = get_aggregate_function(func_name, TYPE_INT, TYPE_ARRAY, true);
+    ASSERT_NE(func, nullptr);
+    AggStateDesc agg_state_desc(func_name, array_int_type, {arg_type}, true, 1);
+    AggStateCombine combine_func(agg_state_desc, func);
+
+    auto aggregate = [&](auto&& update) {
+        auto group1 = ManagedAggrState::create(ctx, func);
+        auto group2 = ManagedAggrState::create(ctx, func);
+        AggDataPtr states[] = {group1->state(), group1->state(), group2->state()};
+        const Column* row_column = input.get();
+        update(&row_column, states);
+        auto result = ColumnHelper::create_column(array_int_type, true);
+        func->serialize_to_column(ctx, group1->state(), result.get());
+        func->serialize_to_column(ctx, group2->state(), result.get());
+        return std::vector<std::string>{result->debug_item(0), result->debug_item(1)};
+    };
+
+    const std::vector<std::string> expected = {"[1,NULL]", "[NULL]"};
+    ASSERT_EQ(expected, aggregate([&](const Column** columns, AggDataPtr* states) {
+                  func->update_batch(ctx, input->size(), 0, columns, states);
+              }));
+    ASSERT_EQ(expected, aggregate([&](const Column** columns, AggDataPtr* states) {
+                  for (size_t i = 0; i < input->size(); ++i) {
+                      func->update(ctx, columns, states[i], i);
+                  }
+              }));
+    ASSERT_EQ(expected, aggregate([&](const Column** columns, AggDataPtr* states) {
+                  combine_func.update_batch(ctx, input->size(), 0, columns, states);
+              }));
+}
+
+TEST_F(AggStateFunctionsTest, test_nullable_wrapper_single_row_update_keeps_null_rows) {
+    const TypeDescriptor array_int_type = TypeDescriptor::create_array_type(TYPE_INT_DESC);
+    test_nullable_wrapper_keeps_null_rows(
+            "array_unique_agg", array_int_type,
+            ColumnTestHelper::build_array_column<int32_t>(array_int_type, true, {{1}, NullArrayRow{}, NullArrayRow{}}));
+    test_nullable_wrapper_keeps_null_rows("array_agg_distinct", TYPE_INT_DESC,
+                                          ColumnTestHelper::build_nullable_column<int32_t>({1, 0, 0}, {0, 1, 1}));
+}
+
 } // namespace starrocks
