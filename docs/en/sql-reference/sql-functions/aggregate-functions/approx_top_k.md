@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the top k most frequently occurring item values in an expr along with their approximate counts."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # approx_top_k

@@ -275,26 +275,32 @@ Status CSVScanner::_init_reader() {
         }
 
         // only the first range needs to skip header
-        if (_parse_options.skip_header && range_desc.start_offset == 0) {
-            for (int64_t i = 0; i < _parse_options.skip_header; i++) {
-                CSVReader::Record dummy;
-                auto st = _curr_reader->next_record(&dummy);
-                if (!st.ok()) {
-                    if (st.is_end_of_file()) {
-                        auto err_msg = fmt::format(
-                                "The parameter 'skip_header' is set to {}, but there are only {} rows in the csv file",
-                                _parse_options.skip_header, i);
-
-                        return Status::EndOfFile(err_msg);
-                    } else {
-                        return st;
-                    }
-                }
-            }
-        }
-        return Status::OK();
+        _header_rows_to_skip =
+                (_parse_options.skip_header && range_desc.start_offset == 0) ? _parse_options.skip_header : 0;
     } else if (_curr_reader == nullptr) {
         return Status::EndOfFile("CSVScanner");
+    }
+    return _skip_header_rows();
+}
+
+Status CSVScanner::_skip_header_rows() {
+    // A read of a stream load pipe that has no data yet times out. The header rows still to skip carry over to the
+    // next call, which goes on with the same reader.
+    while (_header_rows_to_skip > 0) {
+        CSVReader::Record dummy;
+        auto st = _curr_reader->next_record(&dummy);
+        if (!st.ok()) {
+            if (st.is_end_of_file()) {
+                const int64_t skipped = _parse_options.skip_header - _header_rows_to_skip;
+                _header_rows_to_skip = 0;
+                auto err_msg = fmt::format(
+                        "The parameter 'skip_header' is set to {}, but there are only {} rows in the csv file",
+                        _parse_options.skip_header, skipped);
+                return Status::EndOfFile(err_msg);
+            }
+            return st;
+        }
+        --_header_rows_to_skip;
     }
     return Status::OK();
 }
@@ -602,27 +608,27 @@ void CSVScanner::_report_rejected_record(const CSVReader::Record& record, const 
 
 static TypeDescriptor get_type_desc(const Slice& field, const bool& sampleTypes) {
     if (!sampleTypes) {
-        return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        return TYPE_VARCHAR_DESC;
     }
     StringParser::ParseResult result;
 
     StringParser::string_to_int<int64_t>(field.get_data(), field.get_size(), &result);
     if (result == StringParser::PARSE_SUCCESS) {
-        return TypeDescriptor(TYPE_BIGINT);
+        return TYPE_BIGINT_DESC;
     }
 
     StringParser::string_to_float<double>(field.get_data(), field.get_size(), &result);
     if (result == StringParser::PARSE_SUCCESS) {
-        return TypeDescriptor(TYPE_DOUBLE);
+        return TYPE_DOUBLE_DESC;
     }
 
     StringParser::string_to_bool(field.get_data(), field.get_size(), &result);
     if (result == StringParser::PARSE_SUCCESS) {
-        return TypeDescriptor(TYPE_BOOLEAN);
+        return TYPE_BOOLEAN_DESC;
     }
 
     // default VARCHAR.
-    return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    return TYPE_VARCHAR_DESC;
 }
 
 Status CSVScanner::get_schema(std::vector<SlotDescriptor>* schema) {

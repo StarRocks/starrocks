@@ -24,7 +24,7 @@ public:
 };
 
 TEST_F(VectorizedLiteralTest, literal_test) {
-    TypeDescriptor type = TypeDescriptor::from_logical_type(TYPE_DECIMAL128, 10, 5, 2);
+    TypeDescriptor type = TypeDescriptor::from_logical_type(TYPE_DECIMAL128, 5, 2);
     ColumnPtr column = ColumnHelper::create_const_decimal_column<TYPE_DECIMAL128>(10, 5, 2, 1);
     VectorizedLiteral literal{std::move(column), type};
     ASSERT_EQ(TExprNodeType::DECIMAL_LITERAL, literal.node_type());

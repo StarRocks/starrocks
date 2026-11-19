@@ -27,6 +27,7 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
@@ -71,6 +72,7 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.thrift.TFlatJsonConfig;
 import com.starrocks.thrift.TOlapTableIndexSchema;
 import com.starrocks.thrift.TOlapTableIndexTablets;
 import com.starrocks.thrift.TOlapTableLocationParam;
@@ -766,6 +768,100 @@ public class OlapTableSinkTest {
 
         Assertions.assertEquals(1, sink.toThrift().getOlap_table_sink().getNum_replicas(),
                 "shared-data sink must report a single replica so any node channel failure aborts the load");
+    }
+
+    /**
+     * The CN writer takes the table's flat_json.* properties from the sink. Without them it reads
+     * its tablet metadata cache and falls back to be.conf on a miss, which under
+     * light_weight_tablet_creation is every tablet's first write.
+     */
+    @Test
+    public void testCloudNativeSinkCarriesTableFlatJsonConfig(@Mocked GlobalStateMgr globalStateMgr,
+                                                            @Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        FlatJsonConfig flatJsonConfig = new FlatJsonConfig(false, 0.25, 0.75, 12);
+        flatJsonConfig.setVersion(3);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                minTimes = 0;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                minTimes = 0;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                minTimes = 0;
+                dstTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                dstTable.getFlatJsonConfig();
+                result = flatJsonConfig;
+                minTimes = 0;
+            }
+        };
+
+        OlapTableSink sink = buildSinkForReplicaCountTest(tuple, (short) 3);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        TOlapTableSink tSink = sink.toThrift().getOlap_table_sink();
+        Assertions.assertTrue(tSink.isSetFlat_json_config(), "a table with flat_json.* properties must send them");
+        TFlatJsonConfig tConfig = tSink.getFlat_json_config();
+        Assertions.assertFalse(tConfig.isFlat_json_enable());
+        Assertions.assertEquals(0.25, tConfig.getFlat_json_null_factor(), 1e-9);
+        Assertions.assertEquals(0.75, tConfig.getFlat_json_sparsity_factor(), 1e-9);
+        Assertions.assertEquals(12, tConfig.getFlat_json_column_max());
+        Assertions.assertEquals(3, tConfig.getVersion());
+    }
+
+    /**
+     * A table without flat_json.* properties sends none, so the CN keeps following be.conf exactly as
+     * an eagerly created tablet (whose version 1 carries no flat_json_config) does.
+     */
+    @Test
+    public void testCloudNativeSinkWithoutTableFlatJsonConfigSendsNone(@Mocked GlobalStateMgr globalStateMgr,
+                                                                       @Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                minTimes = 0;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                minTimes = 0;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                minTimes = 0;
+                dstTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                dstTable.getFlatJsonConfig();
+                result = null;
+                minTimes = 0;
+            }
+        };
+
+        OlapTableSink sink = buildSinkForReplicaCountTest(tuple, (short) 3);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        Assertions.assertFalse(sink.toThrift().getOlap_table_sink().isSetFlat_json_config());
     }
 
     /**
@@ -1577,7 +1673,8 @@ public class OlapTableSinkTest {
     /**
      * In shared-data mode the backup of an unavailable tablet owner follows the session's blacklist_backup_routing and
      * is keyed on the tablet, as the scan is: under TABLET_HASH the owner's tablets spread over the other nodes, each
-     * on the backup a scan of it picks. A load without a session keeps the default CIRCULAR policy.
+     * on the backup a scan of it picks. TABLET_HASH is the default, for a session that does not set the variable and
+     * for a load without a session. CIRCULAR sends all of them to the next node.
      */
     @Test
     public void testCreateLocationWithSharedDataModeRoutesBackupBySessionPolicy(@Mocked GlobalStateMgr globalStateMgr)
@@ -1654,18 +1751,9 @@ public class OlapTableSinkTest {
         tPartition.setId(physicalPartitionId);
         partitionParam.addToPartitions(tPartition);
 
-        ConnectContext context = new ConnectContext();
-        SessionVariable sessionVariable = new SessionVariable();
-        sessionVariable.setBlacklistBackupRouting("tablet_hash");
-        context.setSessionVariable(sessionVariable);
-        context.setThreadLocalInfo();
-        Map<Long, List<Long>> tabletHashNodes = new HashMap<>();
-        try {
-            OlapTableSink.createLocation(table, partitionParam, false, null).getTablets()
-                    .forEach(location -> tabletHashNodes.put(location.getTablet_id(), location.getNode_ids()));
-        } finally {
-            ConnectContext.remove();
-        }
+        SessionVariable tabletHashSession = new SessionVariable();
+        tabletHashSession.setBlacklistBackupRouting("tablet_hash");
+        Map<Long, List<Long>> tabletHashNodes = createLocationNodeIds(table, partitionParam, tabletHashSession);
 
         DefaultSharedDataWorkerProvider scanProvider = new DefaultSharedDataWorkerProvider(allNodes, aliveNodes,
                 WarehouseManager.DEFAULT_RESOURCE, SessionVariableConstants.BlacklistBackupRoutingPolicy.TABLET_HASH);
@@ -1676,10 +1764,35 @@ public class OlapTableSinkTest {
         tabletHashNodes.values().forEach(tabletHashBackups::addAll);
         Assertions.assertEquals(aliveNodes.keySet(), tabletHashBackups);
 
-        Set<Long> defaultBackups = new HashSet<>();
-        OlapTableSink.createLocation(table, partitionParam, false, null).getTablets()
-                .forEach(location -> defaultBackups.addAll(location.getNode_ids()));
-        Assertions.assertEquals(Set.of(10002L), defaultBackups);
+        Assertions.assertEquals(tabletHashNodes, createLocationNodeIds(table, partitionParam, new SessionVariable()));
+        Assertions.assertEquals(tabletHashNodes, createLocationNodeIds(table, partitionParam, null));
+
+        SessionVariable circularSession = new SessionVariable();
+        circularSession.setBlacklistBackupRouting("circular");
+        Set<Long> circularBackups = new HashSet<>();
+        createLocationNodeIds(table, partitionParam, circularSession).values().forEach(circularBackups::addAll);
+        Assertions.assertEquals(Set.of(10002L), circularBackups);
+    }
+
+    /**
+     * Runs OlapTableSink.createLocation with {@code sessionVariable} in the thread's ConnectContext, or without a
+     * ConnectContext if it is null, and returns the node ids of every tablet.
+     */
+    private static Map<Long, List<Long>> createLocationNodeIds(OlapTable table, TOlapTablePartitionParam partitionParam,
+                                                               SessionVariable sessionVariable) throws Exception {
+        if (sessionVariable != null) {
+            ConnectContext context = new ConnectContext();
+            context.setSessionVariable(sessionVariable);
+            context.setThreadLocalInfo();
+        }
+        Map<Long, List<Long>> tabletToNodeIds = new HashMap<>();
+        try {
+            OlapTableSink.createLocation(table, partitionParam, false, null).getTablets()
+                    .forEach(location -> tabletToNodeIds.put(location.getTablet_id(), location.getNode_ids()));
+        } finally {
+            ConnectContext.remove();
+        }
+        return tabletToNodeIds;
     }
 
     /**
@@ -1756,6 +1869,7 @@ public class OlapTableSinkTest {
                 ConnectContext context = new ConnectContext();
                 SessionVariable sessionVariable = new SessionVariable();
                 Deencapsulation.setField(sessionVariable, "skipBlackList", skipBlackList);
+                sessionVariable.setBlacklistBackupRouting("circular");
                 context.setSessionVariable(sessionVariable);
                 context.setThreadLocalInfo();
                 Set<Long> nodeIds = new HashSet<>();

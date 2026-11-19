@@ -89,4 +89,136 @@ TEST(MorselPrimitiveTest, ScanMorselHandlesEmptyScanRangeMarker) {
     ASSERT_TRUE(has_more);
 }
 
+TEST(MorselPrimitiveTest, GroupedEnvelopeSurvivesCopiesAndKeepsSameTabletTasksDistinct) {
+    TInternalScanRange internal;
+    internal.__set_tablet_id(77);
+    internal.__set_version("42");
+    internal.__set_bucket_sequence(0);
+    TGroupedRangeTask task;
+    task.__set_group_id(0);
+    TTuple cut;
+    for (auto literal : {"5", "0", "0"}) {
+        TScalarType scalar;
+        scalar.__set_type(TPrimitiveType::BIGINT);
+        TTypeNode node;
+        node.__set_type(TTypeNodeType::SCALAR);
+        node.__set_scalar_type(scalar);
+        TTypeDesc type;
+        type.__set_types({node});
+        type.__isset.types = true;
+        TVariant value;
+        value.__set_type(type);
+        value.__set_variant_type(TVariantType::NORMAL_VALUE);
+        value.__set_value(literal);
+        cut.values.push_back(value);
+    }
+    TTabletRange clip;
+    clip.__set_upper_bound(cut);
+    clip.__set_upper_bound_included(false);
+    task.__set_key_range(clip);
+    task.__set_sort_key_unique_ids({100, 101, 102});
+    TScanRangeParams first;
+    first.scan_range.__set_internal_scan_range(internal);
+    first.scan_range.__set_grouped_range_task(task);
+    auto second = first;
+    second.scan_range.grouped_range_task.__set_group_id(1);
+    second.scan_range.grouped_range_task.key_range.__isset.upper_bound = false;
+    second.scan_range.grouped_range_task.key_range.__set_lower_bound(cut);
+    second.scan_range.grouped_range_task.key_range.__set_lower_bound_included(true);
+    second.scan_range.internal_scan_range.__set_bucket_sequence(1);
+    Morsels morsels;
+    bool has_more = false;
+    ScanMorsel::build_scan_morsels(9, {first, second}, true, &morsels, &has_more);
+    ASSERT_EQ(2, morsels.size());
+    first.scan_range.grouped_range_task.__set_group_id(99);
+    for (int i = 0; i < 2; ++i) {
+        auto* range = morsels[i]->get_scan_range();
+        EXPECT_TRUE(range->__isset.grouped_range_task);
+        EXPECT_EQ(i, range->grouped_range_task.group_id);
+        EXPECT_EQ(i == 0, range->grouped_range_task.key_range.__isset.upper_bound);
+        EXPECT_EQ(i == 1, range->grouped_range_task.key_range.__isset.lower_bound);
+        const auto& bound = i == 0 ? range->grouped_range_task.key_range.upper_bound
+                                   : range->grouped_range_task.key_range.lower_bound;
+        EXPECT_EQ(cut, bound);
+        EXPECT_EQ((std::vector<int32_t>{100, 101, 102}), range->grouped_range_task.sort_key_unique_ids);
+        EXPECT_EQ(77, range->internal_scan_range.tablet_id);
+        EXPECT_EQ("42", range->internal_scan_range.version);
+        EXPECT_EQ(i, morsels[i]->owner_id());
+    }
+    EXPECT_FALSE(has_more);
+}
+
+TEST(MorselPrimitiveTest, GroupedPaddingHasNoSyntheticTabletAndTerminates) {
+    TScanRangeParams marker;
+    marker.__set_empty(true);
+    Morsels morsels;
+    bool has_more = true;
+    ScanMorsel::build_scan_morsels(9, {marker}, true, &morsels, &has_more);
+    EXPECT_TRUE(morsels.empty());
+    EXPECT_FALSE(has_more);
+    auto queue = make_fixed_morsel_queue_builder(std::move(morsels))->build();
+    ASSERT_TRUE(queue.ok());
+    EXPECT_TRUE(queue.value()->empty());
+    EXPECT_FALSE(queue.value()->has_more());
+    auto next = queue.value()->try_get();
+    ASSERT_TRUE(next.ok());
+    EXPECT_EQ(nullptr, next.value());
+}
+
+// Passing the ranges by std::move must build the same morsels as passing a copy, skip empty
+// markers and carry has_more.
+TEST(MorselPrimitiveTest, BuildScanMorselsMovesScanRanges) {
+    auto make_ranges = [] {
+        std::vector<TScanRangeParams> ranges(3);
+        ranges[0].scan_range.__set_hdfs_scan_range(THdfsScanRange());
+        ranges[0].scan_range.hdfs_scan_range.__set_full_path("a.parquet");
+        ranges[1].__set_empty(true);
+        ranges[1].__set_has_more(true);
+        TInternalScanRange internal;
+        internal.__set_tablet_id(42);
+        internal.__set_version("7");
+        ranges[2].scan_range.__set_internal_scan_range(internal);
+        return ranges;
+    };
+
+    const std::vector<TScanRangeParams> copied_ranges = make_ranges();
+    Morsels copied;
+    bool copied_has_more = false;
+    ScanMorsel::build_scan_morsels(1, copied_ranges, false, &copied, &copied_has_more);
+
+    std::vector<TScanRangeParams> moved_ranges = make_ranges();
+    Morsels moved;
+    bool moved_has_more = false;
+    ScanMorsel::build_scan_morsels(1, std::move(moved_ranges), false, &moved, &moved_has_more);
+
+    ASSERT_EQ(2, moved.size());
+    ASSERT_EQ(copied.size(), moved.size());
+    ASSERT_TRUE(moved_has_more);
+    ASSERT_EQ(copied_has_more, moved_has_more);
+    for (size_t i = 0; i < moved.size(); i++) {
+        EXPECT_EQ(*copied[i]->get_scan_range(), *moved[i]->get_scan_range());
+        EXPECT_EQ(copied[i]->has_owner_id(), moved[i]->has_owner_id());
+        EXPECT_EQ(copied[i]->owner_id(), moved[i]->owner_id());
+        EXPECT_EQ(copied[i]->get_lane_owner_and_version(), moved[i]->get_lane_owner_and_version());
+    }
+    EXPECT_EQ("a.parquet", moved[0]->get_scan_range()->hdfs_scan_range.full_path);
+    EXPECT_TRUE(moved[1]->has_owner_id());
+    EXPECT_EQ(42, moved[1]->owner_id());
+    // The const& overload leaves its input alone; the && one takes each scan range.
+    EXPECT_EQ("a.parquet", copied_ranges[0].scan_range.hdfs_scan_range.full_path);
+    EXPECT_FALSE(moved_ranges[0].scan_range.__isset.hdfs_scan_range);
+}
+
+// Thrift structs have no move constructor, so std::move alone would deep-copy: the morsel must
+// take the scan range's members.
+TEST(MorselPrimitiveTest, ScanMorselTakesScanRange) {
+    TScanRange scan_range;
+    scan_range.__set_hdfs_scan_range(THdfsScanRange());
+    scan_range.hdfs_scan_range.__set_full_path("a.parquet");
+    ScanMorsel morsel(1, std::move(scan_range));
+    EXPECT_EQ("a.parquet", morsel.get_scan_range()->hdfs_scan_range.full_path);
+    EXPECT_FALSE(scan_range.__isset.hdfs_scan_range);
+    EXPECT_TRUE(scan_range.hdfs_scan_range.full_path.empty());
+}
+
 } // namespace starrocks::pipeline

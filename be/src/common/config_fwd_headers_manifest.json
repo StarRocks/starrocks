@@ -130,7 +130,8 @@
         "datacache_persistence_enable",
         "datacache_inline_item_count_limit",
         "datacache_eviction_policy",
-        "block_cache_enable"
+        "block_cache_enable",
+        "external_table_clear_corrupted_cache_data"
       ]
     },
     {
@@ -230,7 +231,8 @@
         "hdfs_client_hedged_read_threadpool_size",
         "internal_service_datacache_rpc_thread_num",
         "internal_service_query_rpc_thread_num",
-        "lake_metadata_cache_limit",
+        "lake_tablet_metadata_cache_limit_percent",
+        "lake_segment_metadata_cache_limit_percent",
         "load_process_max_memory_limit_bytes",
         "load_process_max_memory_limit_percent",
         "load_segment_thread_pool_num_max",
@@ -242,6 +244,7 @@
         "merge_commit_thread_pool_num_min",
         "merge_commit_thread_pool_queue_size",
         "pipeline_connector_scan_thread_num_per_cpu",
+        "arrow_io_thread_pool_size",
         "pipeline_exec_thread_pool_thread_num",
         "automatic_partition_thread_pool_thread_num",
         "pipeline_max_num_drivers_per_exec_thread",
@@ -304,10 +307,7 @@
         "ai_function_on_error",
         "ai_function_rate_limit_qps_chat",
         "ai_function_rate_limit_qps_embedding",
-        "ai_function_max_inflight",
-        "llm_cache_size",
-        "llm_max_concurrent_queries",
-        "llm_max_queue_size"
+        "ai_function_max_inflight"
       ]
     },
     {
@@ -336,6 +336,8 @@
       "configs": [
         "enable_json_flat",
         "enable_compaction_flat_json",
+        "enable_compaction_flat_json_mixed_inputs",
+        "enable_compaction_flat_json_partial_paths",
         "enable_lazy_dynamic_flat_json",
         "enable_json_flat_remain_filter",
         "enable_json_flat_complex_type",
@@ -345,6 +347,7 @@
         "json_flat_null_factor",
         "json_flat_sparsity_factor",
         "json_flat_column_max",
+        "json_max_parse_nesting_depth",
         "json_flat_remain_filter_max_bytes"
       ]
     },
@@ -484,6 +487,8 @@
         "get_txn_status_internal_sec",
         "max_consumer_num_per_group",
         "max_pulsar_consumer_num_per_group",
+        "routine_load_kafka_consumer_pool_size",
+        "routine_load_kafka_fetch_queue_backoff_ms",
         "routine_load_kafka_timeout_second",
         "routine_load_pulsar_timeout_second",
         "dependency_librdkafka_debug_enable",
@@ -519,6 +524,8 @@
       "configs": [
         "scanner_row_num",
         "max_hdfs_scanner_num",
+        "scan_credential_refresh_rpc_timeout_ms",
+        "iceberg_metadata_table_cache_capacity",
         "max_scan_key_num",
         "max_pushdown_conditions_per_column",
         "enable_check_string_lengths",
@@ -571,7 +578,10 @@
         "orc_coalesce_read_enable",
         "orc_natural_read_size",
         "enable_orc_libdeflate_decompression",
-        "orc_writer_version"
+        "orc_writer_version",
+        "remote_prefetch_window_blocks",
+        "remote_prefetch_late_read_ahead_ratio",
+        "starlet_star_cache_block_size_bytes"
       ]
     },
     {
@@ -680,6 +690,7 @@
         "lake_shard_info_cache_ttl_sec",
         "object_storage_max_connection",
         "object_storage_request_timeout_ms",
+        "remote_read_retain_prefetched_bytes",
         "s3_multipart_equal_part_size",
         "s3_use_list_objects_v1",
         "starlet_cache_dir",
@@ -698,6 +709,7 @@
         "starlet_fslib_s3client_connect_timeout_ms",
         "starlet_fslib_s3client_nonread_max_retries",
         "starlet_fslib_s3client_nonread_retry_scale_factor",
+        "starlet_grpc_client_enable_http_proxy",
         "starlet_port",
         "starlet_s3_client_max_cache_capacity",
         "starlet_s3_client_num_instances_per_cache",
@@ -710,7 +722,22 @@
         "starlet_star_cache_mem_size_percent",
         "starlet_star_cache_skip_fresh_block_checksum_verification",
         "starlet_starmgr_client_compression_type",
-        "starlet_use_star_cache"
+        "starlet_use_star_cache",
+        "datacache_enable",
+        "pipeline_connector_scan_thread_num_per_cpu",
+        "io_coalesce_lake_read_enable",
+        "remote_io_scheduler_enable",
+        "remote_read_io_threads",
+        "remote_read_adaptive_limit",
+        "remote_read_adaptive_min_inflight",
+        "remote_read_weight_decay_ios",
+        "remote_read_weight_decay_min",
+        "remote_read_query_weight",
+        "remote_read_load_weight",
+        "remote_read_compaction_weight",
+        "remote_read_background_weight",
+        "remote_prefetch_window_blocks",
+        "remote_read_skip_contended_cache_writes"
       ]
     },
     {
@@ -764,6 +791,7 @@
         "lake_enable_compaction_async_write",
         "lake_pk_compaction_max_input_rowsets",
         "lake_pk_compaction_min_input_segments",
+        "lake_pk_compaction_max_rowsets_per_level",
         "lake_pk_compaction_base_enable_delete_trigger",
         "lake_pk_compaction_base_delete_ratio_threshold",
         "lake_pk_compaction_base_delete_rows_threshold",
@@ -790,7 +818,9 @@
         "transaction_apply_worker_idle_time_ms",
         "update_compaction_per_tablet_min_interval_seconds",
         "partial_update_memory_limit_per_worker",
+        "pk_vector_chunk_size",
         "pk_index_eager_build_threshold_bytes",
+        "pk_index_del_sst_min_rows",
         "pk_index_parallel_compaction_threadpool_max_threads",
         "pk_index_parallel_compaction_threadpool_size",
         "pk_index_parallel_compaction_task_split_threshold_bytes",
@@ -907,8 +937,11 @@
         "lake_replication_max_file_copy_retry",
         "lake_replication_max_parallel_files_per_tablet",
         "lake_replication_parallel_copy_min_file_count",
+        "lake_replication_enable_light_schema_change",
         "enable_lake_segment_metadata_filter",
+        "lake_scan_warm_index",
         "enable_lake_prepared_split_pre_refinement",
+        "lake_scan_parallel_segment_open",
         "lake_flush_thread_num_per_store",
         "lake_tablet_rows_splitted_ratio",
         "lake_tablet_ignore_invalid_delete_predicate",
@@ -924,6 +957,7 @@
         "lake_enable_del_file_crc_check",
         "lake_clear_corrupted_cache_meta",
         "lake_enable_protobuf_file_checksum",
+        "lake_enable_txn_vlog_group",
         "experimental_enable_lake_capture_tablet_and_rowsets",
         "lake_vacuum_min_batch_delete_size",
         "lake_local_pk_index_unused_threshold_seconds",
@@ -934,11 +968,15 @@
         "table_schema_service_max_retries",
         "lake_pk_partial_update_use_segment_cache",
         "lake_publish_version_slow_log_ms",
+        "lake_enable_publish_partial_meta",
         "lake_put_txn_log_timeout_guard_ms",
         "lake_enable_accurate_pk_row_count",
         "lake_tablet_stat_slow_log_ms",
         "lake_metadata_fetch_thread_count",
-        "lake_metadata_cache_limit",
+        "lake_tablet_metadata_cache_limit_percent",
+        "lake_segment_metadata_cache_limit_percent",
+        "lake_tablet_metadata_cache_min_limit",
+        "lake_segment_metadata_cache_min_limit",
         "lake_dump_tablet_metadata_per_request_memory_limit_bytes",
         "lake_dump_tablet_metadata_per_request_json_size_limit_bytes",
         "lake_dump_tablet_metadata_max_concurrency",
@@ -997,7 +1035,8 @@
         "deliver_broadcast_rf_passthrough_inflight_num",
         "send_rpc_runtime_filter_timeout_ms",
         "send_runtime_filter_via_http_rpc_min_size",
-        "runtime_filter_queue_limit"
+        "runtime_filter_queue_limit",
+        "runtime_filter_worker_thread_num"
       ]
     },
     {

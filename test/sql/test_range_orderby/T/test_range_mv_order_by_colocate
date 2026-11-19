@@ -1,0 +1,45 @@
+-- name: test_range_mv_order_by_colocate @cloud
+-- ALTER MATERIALIZED VIEW ... ORDER BY on a range-distributed materialized view that belongs to a
+-- colocate group must keep the group's colocate columns at the front of the new sort key, so moving
+-- the colocate column k1 out of first place is rejected, while a range materialized view without
+-- colocate_with accepts the same ALTER.
+set enable_range_distribution = true;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    k1 int not null,
+    k2 int not null,
+    v int not null
+)
+duplicate key(k1, k2)
+order by(k1, k2)
+properties('replication_num' = '1');
+
+insert into t values (1, 10, 100), (2, 20, 200), (3, 30, 300);
+
+create materialized view mv_colocate
+order by (k1, k2)
+refresh deferred manual
+properties('replication_num' = '1', 'colocate_with' = 'grp_mv_${uuid0}:k1')
+as select k1, k2, v from t;
+refresh materialized view mv_colocate with sync mode;
+
+-- Rejected: the new sort key does not start with the colocate column k1. No rewrite job is registered.
+alter materialized view mv_colocate order by (k2, k1);
+function: assert_schema_change_job_count("db_${uuid0}", "mv_colocate", 0)
+select * from mv_colocate order by k1;
+
+-- Control: without colocate_with the same ALTER is accepted and runs to FINISHED.
+create materialized view mv_plain
+order by (k1, k2)
+refresh deferred manual
+properties('replication_num' = '1')
+as select k1, k2, v from t;
+refresh materialized view mv_plain with sync mode;
+alter materialized view mv_plain order by (k2, k1);
+function: wait_table_schema_change_finish("db_${uuid0}", "mv_plain", "FINISHED")
+select * from mv_plain order by k1;
+
+drop database db_${uuid0} force;

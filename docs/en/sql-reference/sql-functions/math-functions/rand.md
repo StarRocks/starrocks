@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns a random floating-point number between 0 (inclusive) and 1 (exclusive)."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # rand, random

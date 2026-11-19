@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks FE 設定リファレンス：fe.conf またはADMIN SET FRONTEND CONFIG で設定可能なすべての FE パラメーター。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import FEConfigMethod from '../../../_assets/commonMarkdown/FE_config_method.mdx'
@@ -46,6 +47,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <StaticFEConfigNote />
 
 ## パラメータグループ
+
+共有データ Compaction のテーブル単位の制御については、
+[`lake_compaction_admission_mode` と `lake_compaction_allow_table_ids`](./shared_lake_other.md#lake_compaction_admission_mode) を参照してください。
+デフォルトの `NORMAL` は従来の動作を維持し、`ALLOWLIST` を明示的に選択した場合のみ対象テーブルを制限します。
 
 パラメータは以下のカテゴリに分類されています：
 

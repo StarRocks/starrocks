@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "数値または文字列を16進数表現に変換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # hex

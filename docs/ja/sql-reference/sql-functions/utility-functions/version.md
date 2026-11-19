@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "MySQLデータベースの現在のバージョンを返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # version

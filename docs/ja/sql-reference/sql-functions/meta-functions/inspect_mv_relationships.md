@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ConnectorTblMetaInfoMgr内の外部テーブルからマテリアライズドビューへのマッピング情報を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # inspect_mv_relationships

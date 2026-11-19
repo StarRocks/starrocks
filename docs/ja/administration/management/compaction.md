@@ -2,6 +2,7 @@
 sidebar_position: 120
 displayed_sidebar: docs
 description: "StarRocks 共有データクラスタで Compaction を管理・監視し、クエリ効率を向上させる方法。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 共有データクラスタの Compaction
@@ -18,7 +19,7 @@ StarRocks の各データロード操作は、新しいバージョンのデー�
 
 *Compaction スコア* は、パーティション内のデータファイルのマージ状況を反映します。スコアが高いほどマージの進捗が低いことを示し、パーティションには未マージのデータファイルバージョンが多く存在します。FE は各パーティションの Compaction スコア情報を保持しており、Max Compaction スコア（パーティション内のすべてのタブレットの中で最も高いスコア）を含みます。
 
-パーティションの Max Compaction スコアが FE パラメータ `lake_compaction_score_selector_min_score`（デフォルト: 10）を下回る場合、そのパーティションの compaction は完了と見なされます。Max Compaction スコアが 100 を超えると、compaction の状態が不健全であることを示します。スコアが FE パラメータ `lake_ingest_slowdown_threshold`（デフォルト: 100）を超えると、システムはそのパーティションのデータロードトランザクションのコミットを遅らせます。`lake_compaction_score_upper_bound`（デフォルト: 2000）を超えると、そのパーティションのインポートトランザクションを拒否します。
+パーティションの Max Compaction スコアが FE パラメータ `lake_compaction_score_selector_min_score`（デフォルト: 10）を下回る場合、通常はそのパーティションが自動 Compaction の候補から外れます。ただし、すべての削除マークが除去されたことを意味しません。Max Compaction スコアが 100 を超えると、compaction の状態が不健全であることを示します。スコアが FE パラメータ `lake_ingest_slowdown_threshold`（デフォルト: 100）を超えると、システムはそのパーティションのデータロードトランザクションのコミットを遅らせます。`lake_compaction_score_upper_bound`（デフォルト: 2000）を超えると、そのパーティションのインポートトランザクションを拒否します。
 
 ### 計算ルール
 
@@ -39,11 +40,87 @@ StarRocks の各データロード操作は、新しいバージョンのデー�
 5. 結果収集: FE はサブタスクの結果を集約し、compaction トランザクションをコミットします。
 6. 公開: FE は正常にコミットされた compaction トランザクションを公開します。
 
+## 主キーテーブルの Base Compaction {/* #primary-key-base-compaction */}
+
+この節では、共有データクラスタの主キーテーブルに対する Base Compaction を説明します。通常の Cumulative Compaction は size-tiered ポリシーで Rowset を選択し、主に小さいファイルをマージします。Base Compaction はタブレット内のすべての Rowset を候補とし、削除行数が多い Rowset を優先的に書き換えて、無効なデータを除去し Delete Vector を縮小します。そのため、既存の主キーが継続的に更新または削除される場合、小さいファイルのマージが続いていても Base Compaction が必要になることがあります。
+
+### バージョン別のサポート {/* #primary-key-base-compaction-versions */}
+
+| バージョン | 自動 PK Base Compaction | 手動 PK Base Compaction | 共有データ Base Compaction の時間帯と最小間隔の制御 |
+| --- | --- | --- | --- |
+| v4.1.0～v4.1.3 | 非対応。 | PK Base Compaction は非対応。通常の Compaction は手動で実行できます。 | 非対応。 |
+| v4.1.4～v4.1.6 | タスク配布後に削除率または削除行数を確認します。自動トリガー専用のスイッチはありません。 | 自動トリガーの削除しきい値に達していなくても実行できます。 | 非対応。 |
+| v4.1.7 以降の 4.1 リリース | `lake_pk_compaction_base_enable_delete_trigger` で制御します。デフォルトは `false` です。 | スイッチと削除しきい値に関係なく実行できます。 | 非対応。 |
+| v4.2 | 同じスイッチで制御します。デフォルトは `false` です。 | 実行可能。自動 Base Compaction の時間帯と最小間隔の制限も回避します。 | 対応。[実行時間の制御](#base-compaction-time-controls)を参照してください。 |
+
+PK Base Compaction は v4.1.4 からサポートされています。v4.1.7 で追加された `lake_pk_compaction_base_enable_delete_trigger` は、**削除量による自動 Base Compaction だけを制御します**。手動 Base Compaction や通常の Cumulative Compaction を無効にするものではありません。
+
+### 自動トリガー {/* #automatic-base-compaction */}
+
+自動 Compaction は引き続き FE がパーティション単位でスケジュールし、デフォルトでは Compaction スコアで候補を選択します。タスクが CN に配布された後、CN が各タブレットに Base Compaction を選択するかを判断します。削除しきい値に達しても、それだけで FE が新しいタスクをスケジュールするわけではなく、即時実行は保証されません。
+
+v4.1.7 以降では、以下の判定を有効にするため、まず CN パラメータ `lake_pk_compaction_base_enable_delete_trigger` を `true` に設定します。v4.1.4～v4.1.6 にはこのスイッチがなく、以下の条件を直接確認します。
+
+- タブレット全体の削除率 `sum(num_dels) / sum(num_rows)` が `lake_pk_compaction_base_delete_ratio_threshold`（デフォルト `0.5`）以上である。
+- タブレットの合計削除行数 `sum(num_dels)` が `lake_pk_compaction_base_delete_rows_threshold`（デフォルト `10000000`）以上である。
+
+**いずれか一方**の条件を満たすと Base Compaction の選択対象になります。統計はタブレット内の現在のすべての Rowset を対象とし、更新で置き換えられた古い行の削除マークも含みます。削除行がないタブレットには通常の Compaction 選択を使用します。[実行時間の制御](#base-compaction-time-controls)をサポートするバージョンでは、自動 Base Compaction は時間帯と最小間隔の条件も満たす必要があります。
+
+例えば、v4.1.7 以降では、削除量による自動トリガーを動的に有効化できます。
+
+```sql
+UPDATE information_schema.be_configs
+SET VALUE = 'true'
+WHERE NAME = 'lake_pk_compaction_base_enable_delete_trigger';
+```
+
+パラメータの定義は [BE パラメータリファレンス](../configuration/BE_parameters/shared_lake_other.md#lake_pk_compaction_base_enable_delete_trigger)を参照してください。更新が継続する大きなタブレットでは、Compaction 後すぐに絶対削除行数のしきい値へ再到達することがあります。有効化する前に、繰り返しのデータ書き換えによるリソース消費を評価してください。
+
+### 手動トリガー {/* #manual-base-compaction */}
+
+対象のテーブルまたはパーティションに `ALTER TABLE ... COMPACT` を実行すると、手動 Compaction を要求できます。`BASE` キーワードを追加する必要はありません。SQL の例は [Compaction タスクの手動トリガー](#compaction-タスクの手動トリガー)を参照してください。
+
+- v4.1.4 以降では、削除行のあるタブレットに対し、自動トリガーの削除しきい値に達していなくても手動要求で Base Compaction を選択できます。
+- v4.1.7 以降では、`lake_pk_compaction_base_enable_delete_trigger = false` の場合も手動 Base Compaction を実行できます。
+- 実行時間の制御をサポートするバージョンでは、手動要求は自動 Base Compaction の禁止時間帯と最小間隔も回避します。
+- 削除行がないタブレットは通常の Compaction 選択にフォールバックするため、対象となる入力がない場合もあります。
+
+手動要求は非同期です。SQL が成功しても、要求が送信されたことを示すだけで、Compaction の完了を示すものではありません。スケジューリングとリソースの制限は引き続き適用され、1 回の要求でタブレット全体が Compaction されるとは限りません。
+
+### 入力の選択とリソース消費 {/* #base-compaction-inputs */}
+
+Base Compaction は削除率ではなく、Rowset の**絶対削除行数の降順**で入力を選択します。すべての Rowset が候補となるため、予算内であれば削除行のない Rowset もマージされます。
+
+1 回の選択は、`lake_pk_compaction_max_input_rowsets`（デフォルト `500`）と、保持データ量の推定予算 `max(update_compaction_result_bytes, タブレットの総データ量 × update_compaction_ratio_threshold)` によって制限されます。後者の 2 つのパラメータのデフォルトは、それぞれ `1 GiB` と `0.5` です。Rowset 単位で選択するため、最後の Rowset によって推定値が予算を超える場合があります。また、この予算は実際の読み取りバイト数の上限ではありません。自動と手動の両方に入力制限が適用されるため、1 回の実行ですべての削除マークが除去されるとは限りません。
+
+### 実行時間の制御 {/* #base-compaction-time-controls */}
+
+以下の制御は v4.2 からサポートされています。**4.1 系列では、共有データテーブルに対するこれらの制限はサポートされていません**。
+
+- テーブルプロパティ [`base_compaction_forbidden_time_ranges`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#ベースコンパクションの禁止) は、**自動 Base Compaction を禁止する時間帯**を指定します。それ以外の時間帯は許可されます。4.1 系列の FE は、共有データテーブルへのこのプロパティの設定を拒否します。
+- CN パラメータ [`base_compaction_interval_seconds_since_last_operation`](../configuration/BE_parameters/stats_storage.md#base_compaction_interval_seconds_since_last_operation) は、同じタブレットで Base Compaction が成功した後、次の自動 Base Compaction を選択するまでの最小間隔を指定します。デフォルトは `86400` 秒です。毎日定時に実行する周期ではありません。過去の Base Compaction 時刻が記録されていない場合、または値が `0` 以下の場合は、間隔を制限しません。このパラメータは v4.1 より前から存在しますが、4.1 系列の共有データ PK Base Compaction は制限しません。
+
+例えば、これらの制御をサポートするバージョンでのみ、毎日 08:00 以上 21:00 未満の自動 Base Compaction を禁止できます。
+
+```sql
+ALTER TABLE example_db.pk_table SET (
+    "base_compaction_forbidden_time_ranges" = "* 8-20 * * *"
+);
+```
+
+これらの制限は自動 Base Compaction だけに適用されます。通常の Cumulative Compaction は継続でき、手動の `ALTER TABLE ... COMPACT` は制限を回避します。
+
+### 実行結果の確認 {/* #verify-base-compaction */}
+
+[Compaction タスクの表示](#compaction-タスクの表示)で説明する `SHOW PROC '/compactions'` と `information_schema.be_cloud_native_compactions` を使用し、非同期タスクの状態と実行の詳細を確認します。Compaction スコアはスケジューリング用の指標であり、それだけですべての削除マークが除去されたとは判断できません。
+
+Base Compaction は CN の CPU、メモリ、およびオブジェクトストレージの読み書きリソースを消費します。まず 1 つのパーティションで手動実行し、リソース消費を確認することを推奨します。Compaction 後も保持ポリシーによって過去のデータバージョンが残る場合があります。これらの回収は AutoVacuum と [`lake_autovacuum_grace_period_minutes`](../configuration/FE_parameters/shared_lake_other.md#lake_autovacuum_grace_period_minutes) にも依存し、タスク完了時にオブジェクトストレージの領域がすべて即時解放されるわけではありません。
+
 ## Compaction の管理
 
 ### Compaction スコアの表示
 
-- 特定のテーブル内のパーティションの compaction スコアを表示するには、SHOW PROC ステートメントを使用します。通常、`MaxCS` フィールドに注目するだけで十分です。`MaxCS` が 10 未満の場合、compaction は完了と見なされます。`MaxCS` が 100 を超える場合、Compaction スコアは比較的高いです。`MaxCS` が 500 を超える場合、Compaction スコアは非常に高く、手動での介入が必要になることがあります。
+- 特定のテーブル内のパーティションの compaction スコアを表示するには、SHOW PROC ステートメントを使用します。通常、`MaxCS` フィールドに注目するだけで十分です。デフォルトのスケジュール設定では、`MaxCS` が 10 未満のパーティションは通常、自動 Compaction の候補から外れますが、すべての削除マークが除去されたことを意味しません。`MaxCS` が 100 を超える場合、Compaction スコアは比較的高いです。`MaxCS` が 500 を超える場合、Compaction スコアは非常に高く、手動での介入が必要になることがあります。
 
   ```Plain
   SHOW PARTITIONS FROM <table_name>
@@ -237,16 +314,16 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "-1");
 - 導入バージョン: v3.1.0
 
 ```SQL
-ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_tables" = "11111;22222");
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "11111;22222");
 ```
 
-##### lake_compaction_disable_tables
+##### lake_compaction_disable_ids
 
 - デフォルト：""
 - タイプ：String
 - 単位：-
 - 変更可能：はい
-- 説明：特定のテーブルの compaction を無効にします。これにより、すでに開始された compaction には影響しません。この項目の値はテーブル ID です。複数の値は ';' で区切られます。
+- 説明：特定のテーブルまたはパーティションの compaction を無効にします。これにより、すでに開始された compaction には影響しません。この項目の値はテーブル ID またはパーティション ID です。複数の値は ';' で区切られます。v3.4.5 および v3.5.0 より前のバージョンでは、この項目の名前は `lake_compaction_disable_tables` で、テーブル ID のみをサポートします。旧名は引き続きエイリアスとして使用できます。
 - 導入バージョン：v3.2.7
 
 #### CN パラメータ
@@ -297,7 +374,18 @@ WHERE name = "compact_threads";
 >
 > 本番環境では、`max_cumulative_compaction_num_singleton_deltas` を `100` に設定して、Compaction タスクを加速し、そのリソース消費を減らすことを推奨します。
 
+##### lake_pk_compaction_max_rowsets_per_level
+
+- デフォルト: 20
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタ内の Primary Key テーブルで、あるサイズレベルの compaction 待ちの rowset がこの数に達すると、そのレベルのスコアが最高でなくてもマージされます。Size-tiered Compaction ポリシーは各ラウンドでスコアが最も高いレベルのみをマージします。ロードが継続している間は、最新の小さな rowset のレベルが毎回最高スコアとなるため、より大きな rowset（以前の compaction の出力や中規模のロード）からなるレベルは増え続けます。その結果、クエリが読み取る segment 数が増え、compaction の完了直後に compaction スコアのスパイクとして現れます。選択されていないレベルの compaction 待ちの rowset がこの数に達し、かつそれらが選択済みの rowset と同じ compaction タスクに収まる場合、そのレベルはその compaction タスクでマージされます。`0` に設定するとこの動作は無効になります。
+- 導入バージョン: -
+
 ### Compaction タスクの手動トリガー
+
+以下のステートメントは手動要求を非同期に送信します。共有データ PK Base Compaction は v4.1.4 からサポートされています。v4.1.7 以降では、自動削除トリガーのスイッチを `false` にしても手動要求には影響しません。削除行がないタブレットは通常の Compaction 選択にフォールバックします。詳細は[主キーテーブルの Base Compaction](#primary-key-base-compaction)を参照してください。
 
 ```SQL
 -- テーブル全体の compaction をトリガーします。

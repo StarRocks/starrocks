@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "点が線または複数線から指定された包含距離内にあるかを判定します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_DWITHIN

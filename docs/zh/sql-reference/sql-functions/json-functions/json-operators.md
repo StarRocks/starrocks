@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks支持的JSON比较操作符包括<、<=、>、>=、=和!=。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # JSON 操作符

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回原生 GEO 值按维度加权的质心。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Centroid

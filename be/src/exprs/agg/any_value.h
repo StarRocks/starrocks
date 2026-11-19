@@ -104,6 +104,8 @@ public:
         }
     }
 
+    bool is_first_value_only() const override { return true; }
+
     std::string get_name() const override { return "any_value"; }
 };
 
@@ -153,6 +155,8 @@ public:
             to->append(*(this->data(state).data_column.get()));
         }
     }
+
+    bool is_first_value_only() const override { return true; }
 
     std::string get_name() const override { return "any_value"; }
 };

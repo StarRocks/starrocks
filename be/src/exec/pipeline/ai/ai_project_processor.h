@@ -42,7 +42,7 @@ struct AIProjectPreparedOutput {
     // projected column order. Test projections may leave this false and let
     // materialization append the AI column.
     bool replace_existing = false;
-    TypeDescriptor result_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    TypeDescriptor result_type = TYPE_VARCHAR_DESC;
     AIFunctionResultKind result_kind = AIFunctionResultKind::STRING;
     std::string provider_id;
     AICapability capability = AICapability::CHAT;

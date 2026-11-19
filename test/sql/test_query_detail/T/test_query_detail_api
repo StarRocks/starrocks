@@ -1,0 +1,18 @@
+-- name: test_query_detail_api_streams_the_window @sequential
+admin set frontend config ("enable_collect_query_detail_info" = "true");
+-- Eight statements of 256 KiB each put a window of about 2 MiB behind /api/query_detail, many chunks long.
+shell: for i in $(seq 1 8); do printf "select '%s' is not null as qd_${uuid0}_$i;\n" "$(head -c 262144 /dev/zero | tr '\0' x)"; done | ${mysql_cmd} > /dev/null
+-- The window is streamed, not sent with a length built in memory.
+shell: curl -s -u 'root:' -D - -o /dev/null '${url}/api/query_detail?event_time=0' | grep -i -c '^transfer-encoding: chunked'
+-- Every statement comes back whole, in a body that parses as one JSON array.
+shell: curl -s -u 'root:' '${url}/api/query_detail?event_time=0' | python3 -c "import json, sys; d = json.load(sys.stdin); m = [x for x in d if 'qd_${uuid0}_' in (x.get('sql') or '')]; print(len({x['queryId'] for x in m}), all(len(x['sql']) > 262144 for x in m))"
+-- An HTTP/1.0 client, such as a proxy that speaks 1.0 upstream, gets the same body ended by the connection close.
+shell: curl -s -0 -u 'root:' -D - -o /dev/null '${url}/api/query_detail?event_time=0' | grep -i -c '^transfer-encoding' || true
+shell: curl -s -0 -u 'root:' '${url}/api/query_detail?event_time=0' | python3 -c "import json, sys; d = json.load(sys.stdin); print(len({x['queryId'] for x in d if 'qd_${uuid0}_' in (x.get('sql') or '')}))"
+-- The connection stays usable after a streamed response: the second request reuses it.
+shell: curl -s -u 'root:' -o /dev/null -o /dev/null -w '%{http_code} %{num_connects}\n' '${url}/api/query_detail?event_time=0' '${url}/api/query_detail?event_time=0'
+-- On a connection that asked for /metrics with gzip first, the streamed window still decodes.
+shell: curl -s --compressed -u 'root:' -o /dev/null '${url}/metrics' '${url}/api/query_detail?event_time=0' | python3 -c "import json, sys; d = json.load(sys.stdin); print(len({x['queryId'] for x in d if 'qd_${uuid0}_' in (x.get('sql') or '')}))"
+CLEANUP {
+    admin set frontend config ("enable_collect_query_detail_info" = "false");
+} END CLEANUP

@@ -14,15 +14,21 @@
 
 package com.starrocks.alter.reshard;
 
+import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RecycleMaterializedIndexInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
+import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LeaderLease;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TTabletReshardJobsItem;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -148,6 +154,40 @@ public abstract class TabletReshardJob implements Writable {
     // volatile + concurrent set: written by the submitting session thread, read by the reshard daemon.
     protected volatile Set<Long> cleanupExcludedTransactionIds;
 
+    // Only registered, durable PENDING jobs may be scheduled. Recovery initializes this explicitly.
+    private transient volatile boolean admissionReady;
+    private transient LeaderLease admissionLease;
+    // Published only after the installed replacement layout's CLEANING record is durable.
+    private transient volatile boolean layoutReady;
+
+    public boolean isLayoutReady() {
+        return layoutReady && (jobState == JobState.CLEANING || jobState == JobState.FINISHED);
+    }
+
+    public boolean isAdmissionReady() {
+        return admissionReady;
+    }
+
+    void markAdmissionReady() {
+        admissionReady = true;
+    }
+
+    void initializeAfterRecovery() {
+        admissionReady = true;
+        layoutReady = jobState == JobState.CLEANING || jobState == JobState.FINISHED;
+    }
+
+    public LeaderLease getAdmissionLease() {
+        return admissionLease;
+    }
+
+    void captureAdmissionLease(LeaderLease lease) {
+        if (admissionLease != null) {
+            throw new IllegalStateException("Reshard job already captured its admission lease");
+        }
+        admissionLease = lease;
+    }
+
     public TabletReshardJob(long jobId, JobType jobType) {
         this.jobId = jobId;
         this.jobType = jobType;
@@ -219,12 +259,17 @@ public abstract class TabletReshardJob implements Writable {
     }
 
     protected void setJobState(JobState jobState) {
-        long currentTimeMs = System.currentTimeMillis();
-
         if (jobState.isFinalState()) {
-            this.finishedTimeMs = currentTimeMs;
+            publishFinalState(jobState);
+            return;
         }
-
+        if (jobState == JobState.CLEANING) {
+            // A job with no layout to install; split and merge install theirs through journalCleaningThenInstall.
+            journalCleaningThenInstall(newCleaningRecord(), () -> {
+            });
+            return;
+        }
+        long currentTimeMs = System.currentTimeMillis();
         this.jobState = jobState;
 
         this.stateStartedTimeMs = currentTimeMs;
@@ -232,6 +277,96 @@ public abstract class TabletReshardJob implements Writable {
         GlobalStateMgr.getCurrentState().getEditLog().logUpdateTabletReshardJob(this);
 
         LOG.info("Tablet reshard job set job state. {}", this);
+    }
+
+    /**
+     * Moves the job to CLEANING, the state in which its new layout -- the replacement indexes, and the commit version
+     * they make visible -- is in place. The CLEANING record is journaled first; only once it is durable does the
+     * record's applier install the layout and change the state. The caller holds the table WRITE lock across the call
+     * and has checked that the layout can be installed.
+     *
+     * <p>The order matters because a load committed at the version right above the job's finishes, and journals its
+     * VISIBLE record, as soon as it sees the job's version visible, and replaying that record needs the job's version
+     * to be visible already. A load checks the version under the table READ lock and journals VISIBLE under the WRITE
+     * lock, so with the caller holding the WRITE lock, no load can do either before the CLEANING record is in the
+     * journal and the layout is installed.
+     *
+     * <p>If the record cannot be journaled, which short of a programming error happens only while this FE is giving up
+     * leadership (a failed commit on a serving leader exits the process), nothing has changed: the job is still
+     * RUNNING on the old layout, and whichever leader runs it next repeats the RUNNING step. The caller changes the
+     * job only from installNewLayout, which runs once the record is durable.
+     * The install cannot fail once the record is durable, because the caller checked it under the same lock: an
+     * install stopping halfway would leave this FE's catalog different from the one every replay of the record builds,
+     * and nothing would ever reconcile them.
+     *
+     * @param record the job's CLEANING record, from {@link #newCleaningRecord}
+     */
+    protected void journalCleaningThenInstall(TabletReshardJob record, Runnable installNewLayout) {
+        record.stateStartedTimeMs = System.currentTimeMillis();
+        GlobalStateMgr.getCurrentState().getEditLog().logUpdateTabletReshardJob(record, wal -> {
+            // Set before the install, which stamps the visible version with it, as the replay of the record does.
+            stateStartedTimeMs = record.stateStartedTimeMs;
+            installNewLayout.run();
+            jobState = JobState.CLEANING;
+            layoutReady = true;
+        });
+        LOG.info("Tablet reshard job set job state. {}", this);
+    }
+
+    /**
+     * A copy of the job as its CLEANING record, for {@link #journalCleaningThenInstall}. The copy carries every new
+     * tablet, so the caller takes it before the table lock it journals under, and adds under that lock only what is
+     * decided there.
+     */
+    protected TabletReshardJob newCleaningRecord() {
+        TabletReshardJob record = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(this), getClass());
+        record.jobState = JobState.CLEANING;
+        return record;
+    }
+
+    private void publishFinalState(JobState desiredState) {
+        if (isDone()) {
+            return;
+        }
+        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+        try (EditLog.WalScope ignored = editLog.openWalScope()) {
+            // Use the existing type adapter without ever exposing an uncommitted terminal enum.
+            TabletReshardJob snapshot = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(this), getClass());
+            snapshot.jobState = desiredState;
+            snapshot.finishedTimeMs = System.currentTimeMillis();
+            snapshot.stateStartedTimeMs = snapshot.finishedTimeMs;
+            editLog.logUpdateTabletReshardJob(snapshot, wal ->
+                    ReshardTableFinalizer.withTableWrite(getDbId(), getTableId(), table -> {
+                        if (isDone()) {
+                            return;
+                        }
+                        finishedTimeMs = snapshot.finishedTimeMs;
+                        stateStartedTimeMs = snapshot.stateStartedTimeMs;
+                        jobState = desiredState;
+                        GlobalStateMgr.getCurrentState().getTabletReshardJobMgr()
+                                .refreshTableStateLocked(table, jobId);
+                        recordTerminalMetrics(desiredState);
+                    }));
+        }
+        LOG.info("Tablet reshard job set job state. {}", this);
+    }
+
+    private void recordTerminalMetrics(JobState state) {
+        if (!MetricRepo.hasInit) {
+            return;
+        }
+        if (state == JobState.FINISHED) {
+            if (jobType == JobType.SPLIT_TABLET) {
+                MetricRepo.COUNTER_TABLET_RESHARD_SPLIT_JOB_FINISHED.increase(1L);
+            } else if (jobType == JobType.MERGE_TABLET) {
+                MetricRepo.COUNTER_TABLET_RESHARD_MERGE_JOB_FINISHED.increase(1L);
+            }
+            MetricRepo.HISTO_TABLET_RESHARD_JOB_DURATION.update(finishedTimeMs - createdTimeMs);
+        } else if (jobType == JobType.SPLIT_TABLET) {
+            MetricRepo.COUNTER_TABLET_RESHARD_SPLIT_JOB_ABORTED.increase(1L);
+        } else if (jobType == JobType.MERGE_TABLET) {
+            MetricRepo.COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED.increase(1L);
+        }
     }
 
     public long getCreatedTimeMs() {
@@ -347,11 +482,15 @@ public abstract class TabletReshardJob implements Writable {
 
     public abstract long getTableId();
 
+    public abstract long getDbId();
+
+    public abstract Map<Long, ReshardingPhysicalPartition> getReshardingPhysicalPartitions();
+
+    protected abstract void initLocked(OlapTable table) throws StarRocksException;
+
     /*
-     * Admission-time reservation. Reserve the table for this job before it is queued in
-     * TabletReshardJobMgr. Must succeed before the job becomes visible to the scheduler, so that
-     * an admitted job is guaranteed runnable and never forced to abort at execution time due to an
-     * unexpected table state. Throws if the table is not reservable (not NORMAL / dropped).
+     * Standalone initialization wrapper retained for focused callers. The manager invokes initLocked
+     * under the same WRITE lock as conflict checking and provisional registration.
      */
     public abstract void init() throws StarRocksException;
 
@@ -389,22 +528,11 @@ public abstract class TabletReshardJob implements Writable {
 
     public abstract TTabletReshardJobsItem getInfo();
 
-    /**
-     * Admission-time reservation body, shared by the split and merge jobs. The caller runs it under
-     * the table WRITE lock: the table must be NORMAL, every index the job is about to reshard must
-     * still be the live version of its index meta, and only then does the table flip to
-     * {@code TABLET_RESHARD}.
-     *
-     * <p>All three steps belong in one lock scope. The job was built from a snapshot the factory took
-     * under a lock it has since released, so the layout can have moved on; and the state flip is what
-     * stops it from moving again, because the factories and this method both require NORMAL, so no
-     * second reshard job can be admitted while this one holds the table. Validating before the flip
-     * and under the same lock is therefore the only point at which "these indexes are live" can be
-     * established and stay true for the rest of the job.
-     */
+    /** Validates the source layout and reserves the aggregate table state under the caller's WRITE lock. */
     protected static void reserveTableForReshard(long dbId, OlapTable olapTable,
             Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) throws StarRocksException {
-        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL
+                && olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
             throw new TabletReshardException(
                     "Unexpected table state " + olapTable.getState() + " in table " + olapTable.getName());
         }
@@ -433,6 +561,32 @@ public abstract class TabletReshardJob implements Writable {
                         reshardingIndex.getMaterializedIndexId(),
                         reshardingIndex.getMaterializedIndex().getMetaId(),
                         dbName, olapTable.getName());
+            }
+        }
+    }
+
+    /**
+     * Checks, under the caller's table WRITE lock, what installing the replacement indexes requires, so that a layout
+     * that cannot be installed is found before anything of it is journaled or changed: every partition still there is
+     * at the version right below the job's, and every replacement index can be added to its partition.
+     */
+    protected static void checkNewIndexesInstallable(OlapTable olapTable,
+            Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) {
+        for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
+            PhysicalPartition physicalPartition = olapTable
+                    .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
+            if (physicalPartition == null) {
+                continue;
+            }
+            long commitVersion = reshardingPhysicalPartition.getCommitVersion();
+            Preconditions.checkState(commitVersion == physicalPartition.getVisibleVersion() + 1,
+                    "partition: " + physicalPartition.getId() + ", commit version: " + commitVersion
+                            + ", visible version: " + physicalPartition.getVisibleVersion());
+            for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
+                    .getReshardingIndexes().values()) {
+                MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
+                physicalPartition.checkMaterializedIndexAddable(newIndex,
+                        newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
             }
         }
     }

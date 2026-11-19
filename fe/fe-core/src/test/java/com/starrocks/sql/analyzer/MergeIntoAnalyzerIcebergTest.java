@@ -73,6 +73,22 @@ public class MergeIntoAnalyzerIcebergTest {
     // ---- Error cases ----
 
     @Test
+    public void testMergeIntoBranch() {
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 FOR VERSION AS OF no_such_branch AS t " +
+                "USING (SELECT 1 AS id, 'x' AS data) AS s " +
+                "ON t.id = s.id " +
+                "WHEN MATCHED THEN UPDATE SET data = s.data";
+        MergeIntoStmt stmt = parseMerge(sql);
+        assertEquals("no_such_branch", stmt.getTargetBranch());
+        assertEquals("t", stmt.getTargetAlias());
+
+        SemanticException exception = assertThrows(SemanticException.class,
+                () -> MergeIntoAnalyzer.analyze(stmt, connectContext));
+        assertTrue(exception.getMessage().contains("Cannot find snapshot with reference name: no_such_branch"),
+                exception.getMessage());
+    }
+
+    @Test
     public void testMergeIntoNonV2Table() {
         // t0 is format version 3, so MERGE INTO should be rejected
         String sql = "MERGE INTO iceberg0.unpartitioned_db.t0 AS t " +

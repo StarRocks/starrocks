@@ -54,6 +54,8 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.load.Load;
+import com.starrocks.load.LoadJobRedaction;
+import com.starrocks.load.LoadJobVisibility;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.AlterLoadJobOperationLog;
@@ -603,12 +605,13 @@ public class LoadMgr implements MemoryTrackable {
      * @param labelValue    used to filter jobs which's label is or like labelValue.
      * @param accurateMatch true: filter jobs which's label is labelValue. false: filter jobs which's label like itself.
      * @param statesValue   used to filter jobs which's state within the statesValue set.
+     * @param caller        the user to show the jobs to: each job is shown as {@link LoadJobVisibility} allows.
      * @return The result is the list of jobInfo.
      * JobInfo is a List<Comparable> which includes the comparable object: jobId, label, state etc.
      * The result is unordered.
      */
-    public List<List<Comparable>> getLoadJobInfosByDb(long dbId, String labelValue,
-                                                      boolean accurateMatch, Set<String> statesValue) {
+    public List<List<Comparable>> getLoadJobInfosByDb(long dbId, String labelValue, boolean accurateMatch,
+                                                      Set<String> statesValue, ConnectContext caller) {
 
         LinkedList<List<Comparable>> loadJobInfos = new LinkedList<>();
 
@@ -632,8 +635,16 @@ public class LoadMgr implements MemoryTrackable {
                 if (!states.contains(loadJob.getAcutalState())) {
                     continue;
                 }
+                // With the rule off SHOW LOAD and SHOW PROC check nothing, as before it.
+                LoadJobVisibility.Access access = LoadJobVisibility.isEnabled()
+                        ? LoadJobVisibility.accessOf(caller, loadJob) : LoadJobVisibility.Access.FULL;
+                if (access == LoadJobVisibility.Access.NONE) {
+                    continue;
+                }
                 // add load job info
-                loadJobInfos.add(loadJob.getShowInfo());
+                List<Comparable> jobInfo = loadJob.getShowInfo();
+                loadJobInfos.add(access == LoadJobVisibility.Access.FULL ? jobInfo
+                        : LoadJobRedaction.redactShowLoad(jobInfo, loadJob.getFailMsg()));
             } catch (DdlException ignored) {
                 // ignored
             }
@@ -720,7 +731,10 @@ public class LoadMgr implements MemoryTrackable {
         }
     }
 
-    public void getLoadJobInfo(Load.JobInfo info) throws DdlException {
+    /**
+     * Fills {@code info} from the latest load job with its label, and returns that job.
+     */
+    public LoadJob getLoadJobInfo(Load.JobInfo info) throws DdlException {
         Database database = checkDb(info.dbName);
         readLock();
         try {
@@ -736,6 +750,7 @@ public class LoadMgr implements MemoryTrackable {
 
             LoadJob loadJob = loadJobList.get(loadJobList.size() - 1);
             loadJob.getJobInfo(info);
+            return loadJob;
         } finally {
             readUnlock();
         }

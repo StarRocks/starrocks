@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "按 ISO 标准返回指定日期对应的周几（1-7），其中 1 代表星期一，7 代表星期日。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # dayofweek_iso

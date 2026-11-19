@@ -22,6 +22,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
@@ -261,6 +262,11 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
     }
 
     @Override
+    public Map<String, Pair<Double, Double>> getPartitionSourceColumnRanges(Table table, TvrVersionRange version) {
+        return metadataOfTable(table).getPartitionSourceColumnRanges(table, version);
+    }
+
+    @Override
     public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers, ConnectContext connectContext) {
         ConnectorMetadata metadata = metadataOfTable(item.getTable());
         return metadata.prepareMetadata(item, tracers, connectContext);
@@ -280,6 +286,12 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
     @Override
     public void invalidateTableForRead(String srDbName, Table table) {
         metadataOfTable(table).invalidateTableForRead(srDbName, table);
+    }
+
+    // The table type is unknown without loading the table, and invalidating does no I/O, so ask every connector.
+    @Override
+    public void invalidateCachedTable(String dbName, String tableName) {
+        metadataMap.values().forEach(metadata -> metadata.invalidateCachedTable(dbName, tableName));
     }
 
     @Override

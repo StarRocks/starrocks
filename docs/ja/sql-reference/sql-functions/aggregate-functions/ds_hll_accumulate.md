@@ -1,3 +1,7 @@
+---
+products: [oss, enterprise, cloud, anywhere]
+---
+
 # ds_hll_accumulate
 
 値を HyperLogLog スケッチに蓄積し、シリアライズされたスケッチを VARBINARY として返します。この関数は DataSketches HLL 近似重複除去カウント関数ファミリーの一部です。

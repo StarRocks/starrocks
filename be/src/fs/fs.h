@@ -22,6 +22,7 @@
 #include "common/statusor.h"
 #include "fs/encryption.h"
 #include "fs/fs_options.h"
+#include "fs/remote_read_context.h"
 #include "io/input_stream.h"
 #include "io/seekable_input_stream.h"
 
@@ -50,6 +51,8 @@ struct SequentialFileOptions {
     int64_t buffer_size = -1;
     FileEncryptionInfo encryption_info;
     bool skip_disk_cache = false;
+    // Who the remote reads of this file are for; only the starlet filesystem uses it.
+    RemoteReadContext remote_read;
 };
 
 struct RandomAccessFileOptions {
@@ -60,6 +63,12 @@ struct RandomAccessFileOptions {
     int64_t buffer_size = -1;
     FileEncryptionInfo encryption_info;
     bool skip_disk_cache = false;
+    // Who the remote reads of this file are for; only the starlet filesystem uses it.
+    RemoteReadContext remote_read;
+    // The object at this path is never rewritten in place, as with a uniquely named segment file, so a filesystem
+    // may keep blocks of it in memory beyond its own cache (see remote_read_retain_prefetched_bytes) without them
+    // going stale. Leave it false for anything that can be overwritten, such as metadata.
+    bool remote_read_retainable = false;
 };
 
 struct DirEntry {
@@ -264,6 +273,13 @@ public:
 
     // Determines the information about the filesystem on which the pathname 'path' is located.
     virtual StatusOr<SpaceInfo> space(const std::string& path) { return Status::NotSupported("FileSystem::space()"); }
+
+    // Returns a URL that grants read access to |path| without credentials, valid for |expiration_seconds|
+    // after it is signed. The URL is computed locally without sending a request to the storage service,
+    // so neither the existence of the object nor the permission to read it is checked.
+    virtual StatusOr<std::string> presign_read(const std::string& path, int64_t expiration_seconds) {
+        return Status::NotSupported("FileSystem::presign_read()");
+    }
 
     // Given the path to a remote file, delete the file's cache on the local file system, if any.
     // On success, Status::OK is returned. If there is no cache, Status::NotFound is returned.

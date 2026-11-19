@@ -1,0 +1,125 @@
+-- name: test_array_map_lambda_prune
+trino: CREATE SCHEMA iceberg.sqltest_db_${uuid0} WITH (location = 'oss://${oss_bucket}/sqltest_db_${uuid0}.db');
+-- result:
+-- !result
+trino: CREATE TABLE iceberg.sqltest_db_${uuid0}.t (id integer, l array(row(a integer, b varchar)), s row(k integer, items array(row(a integer, b varchar)), other array(row(c integer))), m map(integer, row(a integer, b varchar))) WITH (format = 'PARQUET');
+-- result:
+-- !result
+trino: INSERT INTO iceberg.sqltest_db_${uuid0}.t VALUES (1, array[row(1, 'x'), row(2, 'y')], row(10, array[row(11, 'p'), row(12, 'q')], array[row(1), row(2)]), map(array[1], array[row(100, 'm')])), (2, array[], row(20, array[], array[]), map(array[2], array[row(200, 'n')])), (3, NULL, NULL, NULL);
+-- result:
+3
+-- !result
+trino: ALTER TABLE iceberg.sqltest_db_${uuid0}.t ADD COLUMN l.element.c integer;
+-- result:
+-- !result
+trino: INSERT INTO iceberg.sqltest_db_${uuid0}.t VALUES (4, array[row(4, 'z', 44)], row(40, array[row(41, 'r')], array[row(1)]), map(array[4], array[row(400, 'o')]));
+-- result:
+1
+-- !result
+create external catalog ice_cat_${uuid0} properties ("type" = "iceberg", "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+use ice_cat_${uuid0}.sqltest_db_${uuid0};
+-- result:
+-- !result
+function: assert_explain_verbose_contains("select array_map(x -> x.a, l) from t", "Pruned type: 2 <-> [ARRAY<struct<`a` int(11)>>]")
+-- result:
+None
+-- !result
+[ORDER]select id, array_map(x -> x.a, l), array_sum(array_map(x -> x.a, l)) from t order by id;
+-- result:
+1	[1,2]	3
+2	[]	None
+3	None	None
+4	[4]	4
+-- !result
+[ORDER]select id, array_map(x -> x.c, l) from t order by id;
+-- result:
+1	[null,null]
+2	[]
+3	None
+4	[44]
+-- !result
+[ORDER]select id, array_map(x -> x.a, s.items) from t order by id;
+-- result:
+1	[11,12]
+2	[]
+3	None
+4	[41]
+-- !result
+[ORDER]select id, array_map(x -> x.items[array_length(x.other)].a, [s]) from t order by id;
+-- result:
+1	[12]
+2	[null]
+3	[null]
+4	[41]
+-- !result
+[ORDER]select id, array_map(e -> e.value.a, map_entries(m)) from t order by id;
+-- result:
+1	[100]
+2	[200]
+3	None
+4	[400]
+-- !result
+[ORDER]select id, array_map(x -> x.a, arr) from (select id, s.items as arr from t) v order by id;
+-- result:
+1	[11,12]
+2	[]
+3	None
+4	[41]
+-- !result
+[ORDER]select v.id, array_map(x -> x.a, v.arr) from (select id, s.items as arr from t) v join [shuffle] t t2 on v.id = t2.id order by v.id;
+-- result:
+1	[11,12]
+2	[]
+3	None
+4	[41]
+-- !result
+[ORDER]select id, map_entries(m)[1].value.a from t order by id;
+-- result:
+1	100
+2	200
+3	None
+4	400
+-- !result
+set enable_prune_complex_types = false;
+-- result:
+-- !result
+[ORDER]select id, array_map(x -> x.a, l), array_sum(array_map(x -> x.a, l)) from t order by id;
+-- result:
+1	[1,2]	3
+2	[]	None
+3	None	None
+4	[4]	4
+-- !result
+[ORDER]select id, array_map(x -> x.c, l) from t order by id;
+-- result:
+1	[null,null]
+2	[]
+3	None
+4	[44]
+-- !result
+[ORDER]select id, array_map(x -> x.a, s.items) from t order by id;
+-- result:
+1	[11,12]
+2	[]
+3	None
+4	[41]
+-- !result
+set enable_prune_complex_types = true;
+-- result:
+-- !result
+drop catalog ice_cat_${uuid0};
+-- result:
+-- !result
+trino: DROP TABLE iceberg.sqltest_db_${uuid0}.t;
+-- result:
+-- !result
+trino: DROP SCHEMA iceberg.sqltest_db_${uuid0};
+-- result:
+-- !result

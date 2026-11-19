@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Computes the natural (base e) logarithm of a number."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ln, dlog1, log

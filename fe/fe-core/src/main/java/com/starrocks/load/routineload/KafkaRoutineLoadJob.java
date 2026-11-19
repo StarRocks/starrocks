@@ -438,7 +438,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     // otherwise readers (admin RPCs, SHOW ROUTINE LOAD, processTimeoutTasks) stall for the
     // full RPC plus retries. Three phases:
     //   1. Snapshot brokerList/topic/state/configVersion under readLock.
-    //   2. Run convertCustomProperties (self-synchronized) and the brpc with no per-job lock.
+    //   2. Run convertCustomProperties (self-synchronized) and the brpc with no per-job lock,
+    //      routed through a usable compute resource (see resolveFetchComputeResource).
     //   3. Apply under writeLock, discarding the result if configVersion changed mid-flight.
     @Override
     protected void refreshPartitionsIfNeeded() throws StarRocksException {
@@ -469,7 +470,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         Exception fetchError = null;
         try {
             newPartitions = KafkaUtil.getAllKafkaPartitions(snapshot.brokerList, snapshot.topic,
-                    snapshotConvertedCustomProperties(), snapshot.computeResource);
+                    snapshotConvertedCustomProperties(), resolveFetchComputeResource(snapshot.computeResource));
         } catch (Exception e) {
             fetchError = e;
         }

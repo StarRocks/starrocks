@@ -64,6 +64,11 @@ public:
     // For kTypedNoSuffix prefer the batch paths in variant_functions.cpp instead.
     VariantReadResult read_row(size_t row);
 
+    // Same as read_row(), but returns the value as a view instead of an owned copy when it can be read in place.
+    // *out points into the column or into *buffer, so it stays valid only while both are alive and unchanged.
+    // *out is set only when the state is kValue.
+    VariantReadState read_row_view(size_t row, VariantRowRef* out, VariantRowValue* buffer);
+
 private:
     const VariantColumn* _col = nullptr;
     const VariantPath* _path = nullptr;
@@ -71,7 +76,7 @@ private:
     int _match_index = -1;         // index into shredded columns; -1 = no typed match
     VariantPath _suffix;           // path suffix after the matched typed prefix
     bool _has_typed_child = false; // leading object-key prefix is a parent of some shredded path
-                                   // → remain at this prefix is incomplete → skip _seek_base
+                                   // → remain at this prefix is incomplete → skip _seek_base_view
 
     // Try typed match (longest-to-shortest prefix).  On no match, also sets
     // _has_typed_child if the query path's leading object-key prefix is a parent
@@ -83,11 +88,11 @@ private:
     VariantReadResult _read_typed_row(size_t row);
 
     // Layer 2: seek the requested path inside the base remain payload.
-    // Returns true and fills *out on success.
-    bool _seek_base(size_t row, VariantRowValue* out);
+    // Returns true and points *out into the column on success.
+    bool _seek_base_view(size_t row, VariantRowRef* out);
 
-    // Layer 3: materialise the full row and seek.
-    VariantReadResult _read_full(size_t row);
+    // Layer 3: materialise the full row and seek. *out points into the column or into *buffer.
+    VariantReadState _read_full_view(size_t row, VariantRowRef* out, VariantRowValue* buffer);
 };
 
 } // namespace starrocks

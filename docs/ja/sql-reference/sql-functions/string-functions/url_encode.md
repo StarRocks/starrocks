@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "文字列をapplication/x-www-form-urlencoded形式にエンコードします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # url_encode

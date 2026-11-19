@@ -15,6 +15,7 @@
 #include "storage/rowset/cast_column_iterator.h"
 
 #include <gtest/gtest.h>
+#include <velocypack/vpack.h>
 
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
@@ -22,6 +23,7 @@
 #include "column/nullable_column.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/series_column_iterator.h"
+#include "types/json_value.h"
 
 namespace starrocks {
 
@@ -30,8 +32,8 @@ class CastColumnIteratorTestBase : public ::testing::Test {};
 class CastColumnIteratorWithDefaultValueColumnIteratorTest : public CastColumnIteratorTestBase {};
 
 TEST_F(CastColumnIteratorWithDefaultValueColumnIteratorTest, test01) {
-    auto source_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
-    auto target_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+    auto source_type = TYPE_INT_DESC;
+    auto target_type = TYPE_BIGINT_DESC;
     auto source_iter =
             std::make_unique<DefaultValueColumnIterator>(true, "NULL", true, get_type_info(source_type.type), 0, 2);
     auto cast_iter = new CastColumnIterator(std::move(source_iter), source_type, target_type, true);
@@ -50,8 +52,8 @@ TEST_F(CastColumnIteratorWithDefaultValueColumnIteratorTest, test01) {
 }
 
 TEST_F(CastColumnIteratorWithDefaultValueColumnIteratorTest, test02) {
-    auto source_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
-    auto target_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+    auto source_type = TYPE_INT_DESC;
+    auto target_type = TYPE_BIGINT_DESC;
     auto source_iter =
             std::make_unique<DefaultValueColumnIterator>(true, "10", false, get_type_info(source_type.type), 0, 2);
     auto cast_iter = new CastColumnIterator(std::move(source_iter), source_type, target_type, true);
@@ -68,9 +70,39 @@ TEST_F(CastColumnIteratorWithDefaultValueColumnIteratorTest, test02) {
     ASSERT_EQ(10, column.get(1).get_int64());
 }
 
+// A flat JSON sub-column of type VARCHAR holds JSON strings: read as JSON it must stay a string even when it
+// reads like JSON text. Any other VARCHAR source (a column whose type changed to JSON) is still parsed.
+TEST_F(CastColumnIteratorWithDefaultValueColumnIteratorTest, flat_json_varchar_source_stays_json_string) {
+    const std::string text = R"({"a":1})";
+    auto source_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    auto target_type = TypeDescriptor(TYPE_JSON);
+    for (bool flat_json_source : {true, false}) {
+        SCOPED_TRACE(flat_json_source ? "flat_json_source" : "plain_source");
+        auto source_iter =
+                std::make_unique<DefaultValueColumnIterator>(true, text, true, get_type_info(source_type.type), 0, 2);
+        CastColumnIterator cast_iter(std::move(source_iter), source_type, target_type, true, flat_json_source);
+        ASSERT_OK(cast_iter.init(ColumnIteratorOptions{}));
+        auto column = ColumnHelper::create_column(target_type, true);
+        auto range = SparseRange<>{0, 2};
+        ASSERT_OK(cast_iter.next_batch(range, column.get()));
+        ASSERT_EQ(2, column->size());
+        for (size_t i = 0; i < column->size(); i++) {
+            Datum datum = column->get(i);
+            ASSERT_FALSE(datum.is_null());
+            vpack::Slice slice = datum.get_json()->to_vslice();
+            if (flat_json_source) {
+                ASSERT_TRUE(slice.isString()) << datum.get_json()->to_string_uncheck();
+                ASSERT_EQ(text, slice.copyString());
+            } else {
+                ASSERT_TRUE(slice.isObject()) << datum.get_json()->to_string_uncheck();
+            }
+        }
+    }
+}
+
 TEST_F(CastColumnIteratorWithDefaultValueColumnIteratorTest, test_get_io_range_vec) {
-    auto source_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
-    auto target_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+    auto source_type = TYPE_INT_DESC;
+    auto target_type = TYPE_BIGINT_DESC;
     auto source_iter =
             std::make_unique<DefaultValueColumnIterator>(true, "10", false, get_type_info(source_type.type), 0, 2);
     auto cast_iter = new CastColumnIterator(std::move(source_iter), source_type, target_type, true);
@@ -96,8 +128,8 @@ class CastColumnIteratorWithNumericTypeTest : public CastColumnIteratorTestBase,
                                               public ::testing::WithParamInterface<TestParameter> {};
 
 TEST_P(CastColumnIteratorWithNumericTypeTest, test) {
-    auto source_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_SMALLINT);
-    auto target_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+    auto source_type = TYPE_SMALLINT_DESC;
+    auto target_type = TYPE_BIGINT_DESC;
     auto source_iter = std::make_unique<SeriesColumnIterator<int16_t>>(0, 31);
     auto nullable_source = GetParam().nullable_source;
     auto cast_iter = new CastColumnIterator(std::move(source_iter), source_type, target_type, nullable_source);

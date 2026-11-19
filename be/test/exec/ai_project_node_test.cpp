@@ -39,7 +39,7 @@
 namespace starrocks {
 namespace {
 
-constexpr int64_t kAICompletePromptFid = 200001;
+constexpr int64_t kAICompletePromptFid = 200000;
 constexpr TSlotId kPromptSlotId = 1;
 constexpr TSlotId kCommonSlotId = 2;
 constexpr TSlotId kAnswerSlotId = 3;
@@ -50,7 +50,7 @@ constexpr std::string_view kSecretSentinel = "must-not-appear-in-plan-or-error";
 constexpr std::string_view kArbitraryCredentialEnvironment = "UNIT_TEST_ARBITRARY_AI_CREDENTIAL_ENV";
 
 TypeDescriptor varchar_type() {
-    return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    return TYPE_VARCHAR_DESC;
 }
 
 TExpr make_slot_ref(TTupleId tuple_id, TSlotId slot_id) {
@@ -262,11 +262,12 @@ TEST(AIProviderConfigParserTest, RejectsInvalidMetadataWithoutExposingProperties
         missing.params.erase(key);
         EXPECT_FALSE(pipeline::AIProviderConfigParser::parse(provider.id, missing).ok());
     }
-    for (auto protocol :
-         {TAIProviderProtocol::ANTHROPIC, TAIProviderProtocol::COHERE, static_cast<TAIProviderProtocol::type>(99)}) {
+    for (auto protocol : {TAIProviderProtocol::ANTHROPIC, TAIProviderProtocol::COHERE, TAIProviderProtocol::DASHSCOPE,
+                          static_cast<TAIProviderProtocol::type>(99)}) {
         provider.__set_protocol(protocol);
         provider.params["protocol"] = "openai";
-        EXPECT_FALSE(pipeline::AIProviderConfigParser::parse(provider.id, provider).ok());
+        auto result = pipeline::AIProviderConfigParser::parse(provider.id, provider);
+        EXPECT_TRUE(result.status().is_not_supported()) << result.status();
     }
     provider.__set_protocol(TAIProviderProtocol::OPENAI);
     provider.__isset.protocol = false;
@@ -408,6 +409,7 @@ TEST_F(AIProjectNodeTest, RejectsMalformedThriftContractsBeforeCreatingATree) {
     struct Case {
         const char* name;
         std::function<void(TPlanNode&)> mutate;
+        TStatusCode::type expected_status = TStatusCode::INVALID_ARGUMENT;
     };
 
     const std::vector<Case> cases{
@@ -459,7 +461,8 @@ TEST_F(AIProjectNodeTest, RejectsMalformedThriftContractsBeforeCreatingATree) {
              [](TPlanNode& node) {
                  node.ai_project_node.ai_provider_mapping[std::string(kDefaultChatConfigId)] =
                          make_provider_chat_config(TAIProviderProtocol::ANTHROPIC);
-             }},
+             },
+             TStatusCode::NOT_IMPLEMENTED_ERROR},
     };
 
     for (const Case& test_case : cases) {
@@ -474,7 +477,7 @@ TEST_F(AIProjectNodeTest, RejectsMalformedThriftContractsBeforeCreatingATree) {
         if (root != nullptr) {
             root->close(&_runtime_state);
         }
-        ASSERT_TRUE(status.is_invalid_argument()) << status;
+        ASSERT_EQ(test_case.expected_status, status.code()) << status;
         EXPECT_EQ(nullptr, root);
         EXPECT_EQ(std::string::npos, status.to_string().find(kEndpointSentinel));
         EXPECT_EQ(std::string::npos, status.to_string().find(kModelSentinel));

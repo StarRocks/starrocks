@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Modifies an asynchronous ETL task submitted using SUBMIT TASK."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER TASK

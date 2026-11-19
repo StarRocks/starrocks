@@ -474,7 +474,14 @@ public class TPCDS1TTest extends TPCDS1TTestBase {
 
     @Test
     public void testQ78() throws Exception {
-        testAllInlineCTE(Q78);
+        // the user's CTEs are all inlined; OuterJoinSemiJoinReductionRule then adds its own forced CTEs, which
+        // OuterJoinSemiJoinReductionTest covers
+        connectContext.getSessionVariable().setEnableOuterJoinSemiJoinReduction(false);
+        try {
+            testAllInlineCTE(Q78);
+        } finally {
+            connectContext.getSessionVariable().setEnableOuterJoinSemiJoinReduction(true);
+        }
     }
 
     @Test

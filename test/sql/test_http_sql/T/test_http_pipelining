@@ -1,0 +1,4 @@
+-- name: test_http_pipelined_request_waits_for_stream
+-- A request pipelined on a connection whose HTTP SQL response is still being streamed is answered after that
+-- response has ended, both whole.
+function: assert_pipelined_request_waits_for_stream("select * from TABLE(generate_series(1, 2000000))")

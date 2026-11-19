@@ -68,6 +68,7 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.OnPredicateMoveAroundRule;
+import com.starrocks.sql.optimizer.rule.transformation.OuterJoinSemiJoinReductionRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionColumnMinMaxRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionColumnValueOnlyOnScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
@@ -144,6 +145,7 @@ import com.starrocks.sql.optimizer.rule.tree.lazymaterialize.GlobalLateMateriali
 import com.starrocks.sql.optimizer.rule.tree.lowcardinality.LowCardinalityRewriteRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PruneSubfieldRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PushDownSubfieldRule;
+import com.starrocks.sql.optimizer.statistics.JoinKeyContainmentBound;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.PrepareCollectMetaTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -268,6 +270,10 @@ public class QueryOptimizer extends Optimizer {
             logicOperatorTree = rewriteAndValidatePlan(logicOperatorTree, rootTaskContext);
         }
 
+        // the bounds only matter to the cost-based reorder that cbo_join_reorder_with_unknown_stats turns on
+        if (context.getSessionVariable().isCboJoinReorderWithUnknownStats()) {
+            context.setJoinKeyNdvBounds(JoinKeyContainmentBound.compute(logicOperatorTree, context));
+        }
         Preconditions.checkNotNull(memo);
         memo.init(logicOperatorTree);
         OptimizerTraceUtil.log("after logical rewrite, root group:\n%s", memo.getRootGroup());
@@ -650,6 +656,11 @@ public class QueryOptimizer extends Optimizer {
 
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownLimitRankingWindowRule());
         rewriteGroupingSets(tree, rootTaskContext, sessionVariable);
+        if (sessionVariable.isEnableOuterJoinSemiJoinReduction()) {
+            // After predicate pushdown and column pruning, before the CTE phase re-collects the CTEs it adds.
+            deriveLogicalProperty(tree);
+            scheduler.rewriteOnce(tree, rootTaskContext, new OuterJoinSemiJoinReductionRule());
+        }
 
         // No heavy metadata operation before external table partition prune
         prepareMetaOnlyOnce(tree, rootTaskContext);

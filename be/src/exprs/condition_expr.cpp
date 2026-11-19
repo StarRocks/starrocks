@@ -95,7 +95,7 @@ public:
         }
 
         Columns list = {lhs, rhs};
-        if constexpr (lt_is_collection<Type> || Type == TYPE_VARIANT) {
+        if constexpr (lt_is_row_wise_append<Type>) {
             return _evaluate_complex(list);
         } else {
             return _evaluate_general(list);
@@ -164,7 +164,7 @@ public:
         }
 
         Columns list = {lhs, rhs};
-        if constexpr (lt_is_collection<Type> || Type == TYPE_VARIANT) {
+        if constexpr (lt_is_row_wise_append<Type>) {
             return _evaluate_complex(list);
         } else {
             return _evaluate_general(list);
@@ -254,7 +254,7 @@ public:
         // optimization for 3 columns all not null.
         if (bhs_nulls == 0 && lhs_nulls == 0 && rhs_nulls == 0) {
             // only arithmetic type could use SIMD optimization
-            if constexpr (lt_is_collection<Type> || Type == TYPE_VARIANT) {
+            if constexpr (lt_is_row_wise_append<Type>) {
                 return _evaluate_complex<false>(list);
             } else if (bhs->is_constant() || !isArithmeticLT<Type>) {
                 return _evaluate_general<false>(list);
@@ -264,7 +264,7 @@ public:
                 __builtin_unreachable();
             }
         } else {
-            if constexpr (lt_is_collection<Type> || Type == TYPE_VARIANT) {
+            if constexpr (lt_is_row_wise_append<Type>) {
                 return _evaluate_complex<true>(list);
             } else if constexpr (isArithmeticLT<Type>) {
                 // SIMD branch
@@ -278,8 +278,7 @@ public:
                 // call select if
                 auto selector = bhs->only_null() ? UInt8Column::create(num_rows) : bhs;
                 auto select_data = dispatch_nonull_template<SelectIfOP, Type>(lds, rds, bhs, type());
-                auto select_null =
-                        dispatch_nonull_template<SelectIfOP, TYPE_BOOLEAN>(lns, rns, bhs, TypeDescriptor(TYPE_BOOLEAN));
+                auto select_null = dispatch_nonull_template<SelectIfOP, TYPE_BOOLEAN>(lns, rns, bhs, TYPE_BOOLEAN_DESC);
                 auto res = NullableColumn::create(select_data, ColumnHelper::as_column<NullColumn>(select_null));
                 return res;
             } else {
@@ -416,7 +415,7 @@ public:
             return Column::mutate(std::move(columns[0]));
         }
 
-        if constexpr (lt_is_collection<Type> || Type == TYPE_VARIANT) {
+        if constexpr (lt_is_row_wise_append<Type>) {
             return _evaluate_complex(columns);
         } else {
             return _evaluate_general(columns);

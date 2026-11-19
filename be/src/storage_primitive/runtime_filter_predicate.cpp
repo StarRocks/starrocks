@@ -28,6 +28,7 @@ bool RuntimeFilterPredicate::init(int32_t driver_sequence) {
         return true;
     }
     _rf = _rf_desc->runtime_filter(driver_sequence);
+    _pass_all = _rf != nullptr && _rf->always_true() && _rf->is_pass_all();
     return _rf != nullptr;
 }
 
@@ -54,6 +55,10 @@ bool RuntimeFilterPredicate::init(int32_t driver_sequence) {
 // made an earlier attempt at this flip the shuffle modes from ReduceOp to ModuloOp in code
 // shared with the OLAP scan path.
 Status RuntimeFilterPredicate::evaluate(Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) {
+    // A join filter that passes every row filters nothing, also no row its min/max can not hold, e.g. NaN.
+    if (_pass_all) {
+        return Status::OK();
+    }
     auto column = chunk->get_column_by_id(_column_id);
     auto& hash_values = _running_ctx.hash_values;
     if (_rf->num_hash_partitions() > 0) {
@@ -67,13 +72,29 @@ Status RuntimeFilterPredicate::evaluate(Chunk* chunk, uint8_t* selection, uint16
                                          &_running_ctx);
         }
     }
+    if (!column->has_null()) {
+        _rf->evaluate(column.get(), hash_values, selection, from, to);
+        return Status::OK();
+    }
+    // A filter writes its has_null verdict for a NULL key without looking at selection[i], so a <=> join
+    // filter would revive NULL-key rows an earlier predicate rejected unless its result is ANDed back.
+    _input_selection.assign(selection + from, selection + to);
     _rf->evaluate(column.get(), hash_values, selection, from, to);
+    for (uint16_t i = from; i < to; i++) {
+        selection[i] &= _input_selection[i - from];
+    }
     return Status::OK();
 }
 
 StatusOr<uint16_t> RuntimeFilterPredicate::evaluate(Chunk* chunk, uint16_t* sel, uint16_t sel_size,
                                                     uint16_t* target_sel) {
     if (sel_size == 0) {
+        return sel_size;
+    }
+    if (_pass_all) {
+        if (target_sel != sel) {
+            memcpy(target_sel, sel, sel_size * sizeof(uint16_t));
+        }
         return sel_size;
     }
     auto column = chunk->get_column_by_id(_column_id);

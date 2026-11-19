@@ -20,6 +20,7 @@
 #include "exprs/condition_expr.h"
 #include "exprs/expr_factory.h"
 #include "exprs/mock_vectorized_expr.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -57,25 +58,20 @@ TEST_F(VectorizedIfExprTest, ifArray) {
     auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
     std::unique_ptr<Expr> expr_ptr(expr);
 
-    auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
-    target->append_datum(Datum{(int8_t)0});
-    target->append_datum(Datum{(int8_t)1});
-    target->append_datum(Datum{(int8_t)0});
-    auto cond = MockExpr(TypeDescriptor(TYPE_BOOLEAN), target);
+    auto target = ColumnTestHelper::build_column<uint8_t>({0, 1, 0});
+    auto cond = MockExpr(TYPE_BOOLEAN_DESC, target);
 
-    TypeDescriptor type_arr_int = array_type(TYPE_INT);
-
-    auto array0 = ColumnHelper::create_column(type_arr_int, true);
+    auto array0 = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
     array0->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
     array0->append_datum(DatumArray{Datum(), Datum()});                     // [NULL, NULL]
     array0->append_datum(DatumArray{Datum(), Datum((int32_t)12)});          // [NULL, 12]
-    auto array_expr0 = MockExpr(type_arr_int, array0);
+    auto array_expr0 = MockExpr(TYPE_ARRAY_INT_DESC, array0);
 
-    auto array1 = ColumnHelper::create_column(type_arr_int, false);
+    auto array1 = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, false);
     array1->append_datum(DatumArray{Datum((int32_t)11), Datum((int32_t)41)}); // [11,41]
     array1->append_datum(DatumArray{Datum(), Datum()});                       // [NULL, NULL]
     array1->append_datum(DatumArray{Datum(), Datum((int32_t)1)});             // [NULL, 1]
-    auto array_expr1 = MockExpr(type_arr_int, array1);
+    auto array_expr1 = MockExpr(TYPE_ARRAY_INT_DESC, array1);
 
     expr->_children.emplace_back(&cond);
     expr->_children.emplace_back(&array_expr0);
@@ -98,7 +94,7 @@ TEST_F(VectorizedIfExprTest, ifConstTrue) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
-        expr->set_type(TypeDescriptor(TYPE_BIGINT));
+        expr->set_type(TYPE_BIGINT_DESC);
 
         MockConstVectorizedExpr<TYPE_BOOLEAN> bol(expr_node, true);
         MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
@@ -124,7 +120,7 @@ TEST_F(VectorizedIfExprTest, ifAllFalse) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
-        expr->set_type(TypeDescriptor(TYPE_BIGINT));
+        expr->set_type(TYPE_BIGINT_DESC);
 
         MockVectorizedExpr<TYPE_BOOLEAN> bol(expr_node, 10, false);
         MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
@@ -150,7 +146,7 @@ TEST_F(VectorizedIfExprTest, ifNull) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
-        expr->set_type(TypeDescriptor(TYPE_BIGINT));
+        expr->set_type(TYPE_BIGINT_DESC);
 
         MockMultiVectorizedExpr<TYPE_BOOLEAN> bol(expr_node, 10, true, false);
         MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
@@ -183,7 +179,7 @@ TEST_F(VectorizedIfExprTest, ifNullRightConst) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
-        expr->set_type(TypeDescriptor(TYPE_BIGINT));
+        expr->set_type(TYPE_BIGINT_DESC);
 
         MockMultiVectorizedExpr<TYPE_BOOLEAN> bol(expr_node, 10, true, false);
         MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);

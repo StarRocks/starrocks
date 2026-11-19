@@ -27,6 +27,7 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/rowset/segment_file_info.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/flat_json_config.h"
 
 namespace starrocks {
 class Chunk;
@@ -113,8 +114,9 @@ public:
     const std::vector<std::vector<uint32_t>>& seg_delvecs() const { return _seg_delvecs; }
 
     // Parallel to dels(): the pre-built tombstone sstable for each del file, built at write time when
-    // its serialized size reaches pk_index_eager_build_threshold_bytes. An empty entry means publish
-    // applies that delete via the memtable erase path. del_sst_ranges() carries each sstable's key range.
+    // its serialized size reaches pk_index_eager_build_threshold_bytes or it holds pk_index_del_sst_min_rows
+    // rows. An empty entry means publish applies that delete via the memtable erase path.
+    // del_sst_ranges() carries each sstable's key range.
     const std::vector<FileInfo>& del_ssts() const { return _del_ssts; }
 
     const std::vector<PersistentIndexSstableRangePB>& del_sst_ranges() const { return _del_sst_ranges; }
@@ -227,6 +229,16 @@ public:
     // allow to set custom tablet schema for writer, used in partial update
     void set_tablet_schema(TabletSchemaCSPtr schema) { _schema = std::move(schema); }
 
+    // The table's flat JSON settings for the segments this writer produces, set by whoever creates
+    // the writer: a load from its open request (PTabletWriterOpenRequest.lake_tablet_params.flat_json_config,
+    // or the metadata cache when the request lacks it, see DeltaWriterImpl), compaction and schema change
+    // from version-pinned metadata. The writer itself never reads the tablet metadata cache; without a
+    // config it follows the be.conf globals.
+    void set_flat_json_config(std::shared_ptr<FlatJsonConfig> flat_json_config) {
+        _flat_json_config = std::move(flat_json_config);
+    }
+    const std::shared_ptr<FlatJsonConfig>& flat_json_config() const { return _flat_json_config; }
+
     const starrocks::TabletSchemaCSPtr& tablet_schema() const { return _schema; }
 
     void set_auto_flush(bool auto_flush) { _auto_flush = auto_flush; }
@@ -247,9 +259,9 @@ public:
     // However, whether eager PK index build is actually enabled still depends on the schema.
     void try_enable_pk_index_eager_build();
     // Parallel to _dels: pre-built tombstone sstable + its key range for each del file (an empty FileInfo
-    // when this del file has no sstable). Built when the serialized del-file size reaches
-    // pk_index_eager_build_threshold_bytes; shared-data primary-key tablets always use the cloud-native
-    // persistent index, so publish can ingest it directly.
+    // when this del file has no sstable). Built when the del file reaches pk_index_eager_build_threshold_bytes
+    // or pk_index_del_sst_min_rows rows. Publish ingests it into a cloud-native persistent index; any other
+    // index applies the delete through the memtable and hands the sstable to vacuum.
     std::vector<FileInfo> _del_ssts;
     std::vector<PersistentIndexSstableRangePB> _del_sst_ranges;
 
@@ -279,6 +291,7 @@ protected:
     TabletSchemaCSPtr _schema;
     int64_t _txn_id;
     ThreadPool* _flush_pool;
+    std::shared_ptr<FlatJsonConfig> _flat_json_config;
     std::vector<SegmentFileInfo> _segments;
     std::vector<FileInfo> _dels;
     // Parallel to _dels: op_offset (segment index the delete follows) for each del file.

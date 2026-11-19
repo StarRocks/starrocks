@@ -23,6 +23,7 @@
 #include "common/logging.h"
 #include "common/system/cpu_info.h"
 #include "compute_env/ai/ai_executor.h"
+#include "compute_env/arrow_io_thread_pool.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
 #include "compute_env/dictionary_cache/dictionary_cache_manager.h"
 #include "compute_env/load/load_stream_mgr.h"
@@ -115,6 +116,13 @@ Status ComputeEnv::init(const ComputeEnvOptions& options) {
     _stream_mgr = std::move(stream_mgr);
     _result_mgr = std::move(result_mgr);
     _result_queue_mgr = std::move(result_queue_mgr);
+
+    // Before the first scan, so Arrow async IO starts with the configured pool size. A bad value
+    // must not stop the node from starting: keep the size Arrow chose.
+    if (Status st = apply_arrow_io_thread_pool_size(config::arrow_io_thread_pool_size); !st.ok()) {
+        LOG(WARNING) << "keep arrow io thread pool capacity " << arrow_io_thread_pool_default_capacity() << ": "
+                     << st.message();
+    }
 
     status = _init_workgroup(options, max_executor_threads);
     if (!status.ok()) {

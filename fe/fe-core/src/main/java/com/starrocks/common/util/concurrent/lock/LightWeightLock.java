@@ -68,6 +68,11 @@ public class LightWeightLock extends Lock {
     }
 
     @Override
+    public boolean isOwnedByThread(long threadId, LockType lockType) {
+        return isHeldByThread(lockHolder, threadId, lockType);
+    }
+
+    @Override
     public Set<LockHolder> cloneOwners() {
         Set<LockHolder> ret = new HashSet<>();
         if (lockHolder != null) {

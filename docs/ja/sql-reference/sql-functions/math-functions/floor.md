@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "x 以下の最大の整数を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # floor, dfloor

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将字符串从 application/x-www-form-urlencoded 格式转换回来。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # url_decode

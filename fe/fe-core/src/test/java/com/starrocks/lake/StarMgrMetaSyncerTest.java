@@ -27,9 +27,9 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SchemaChangeJobV2;
+import com.starrocks.alter.reshard.SplitTabletJob;
 import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
-import com.starrocks.alter.reshard.TabletReshardJobMgrTest;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Column;
@@ -92,6 +92,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -1061,10 +1062,9 @@ public class StarMgrMetaSyncerTest {
         long reshardTableId = 6L;
         long orphanGroupId = shardGroupId + 100; // not part of the FE-known shard group set
 
-        TabletReshardJobMgrTest.TestNormalTabletReshardJob reshardJob =
-                new TabletReshardJobMgrTest.TestNormalTabletReshardJob(1, TabletReshardJob.JobType.SPLIT_TABLET);
-        reshardJob.setTableId(reshardTableId);
-        reshardJob.markFinished(1000L);
+        SplitTabletJob reshardJob = new SplitTabletJob(1L, 66L, reshardTableId, Map.of());
+        Deencapsulation.setField(reshardJob, "jobState", TabletReshardJob.JobState.FINISHED);
+        Deencapsulation.setField(reshardJob, "finishedTimeMs", 1000L);
         tabletReshardJobMgr.getTabletReshardJobs().put(reshardJob.getJobId(), reshardJob);
 
         List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();

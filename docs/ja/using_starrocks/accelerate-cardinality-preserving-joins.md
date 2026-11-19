@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "テーブルプルーニングで StarRocks の基数保持ジョインを高速化し、結果に影響しない冗長テーブルを削除します。"
 sidebar_position: 120
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 基数保持ジョインの高速化

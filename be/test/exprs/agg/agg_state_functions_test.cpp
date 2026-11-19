@@ -16,8 +16,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <memory>
 
+#include "column/array_column.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "exprs/agg/aggregate_factory.h"
@@ -30,7 +32,9 @@
 #include "exprs/agg/combinator/state_function.h"
 #include "exprs/agg/combinator/state_merge_function.h"
 #include "exprs/agg/combinator/state_union_function.h"
+#include "testutil/column_test_helper.h"
 #include "types/logical_type.h"
+#include "types/tdigest.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -838,8 +842,8 @@ TEST_F(AggStateFunctionsTest, test_state_function_avg) {
 // states, e.g. INSERT ... VALUES (..., avg_state(38)) that avg_merge later reads
 // back as garbage (or crashes the BE).
 TEST_F(AggStateFunctionsTest, test_state_function_const_column) {
-    TypeDescriptor return_type_desc = TypeDescriptor(TYPE_DOUBLE);
-    TypeDescriptor arg_type_desc = TypeDescriptor(TYPE_BIGINT);
+    TypeDescriptor return_type_desc = TYPE_DOUBLE_DESC;
+    TypeDescriptor arg_type_desc = TYPE_BIGINT_DESC;
     TypeDescriptor intermediate_type_desc = TypeDescriptor(TYPE_VARBINARY);
     std::vector<TypeDescriptor> arg_type_descs = {arg_type_desc};
     auto utils = std::make_unique<FunctionUtils>(nullptr, return_type_desc, arg_type_descs);
@@ -853,8 +857,7 @@ TEST_F(AggStateFunctionsTest, test_state_function_const_column) {
 
     // avg_state(38) evaluated over a 5-row chunk: the argument is a ConstColumn.
     const size_t chunk_size = 5;
-    auto data_column = Int64Column::create();
-    data_column->append(38);
+    auto data_column = ColumnTestHelper::build_column<int64_t>({38});
     ColumnPtr const_column = ConstColumn::create(std::move(data_column), chunk_size);
 
     Columns input_columns = {const_column};
@@ -877,8 +880,8 @@ TEST_F(AggStateFunctionsTest, test_state_function_const_column) {
 // Same for a const-NULL data argument (e.g. avg_state(NULL)): it must be expanded
 // into a nullable column instead of reaching the aggregate as a ConstColumn.
 TEST_F(AggStateFunctionsTest, test_state_function_const_null_column) {
-    TypeDescriptor return_type_desc = TypeDescriptor(TYPE_DOUBLE);
-    TypeDescriptor arg_type_desc = TypeDescriptor(TYPE_BIGINT);
+    TypeDescriptor return_type_desc = TYPE_DOUBLE_DESC;
+    TypeDescriptor arg_type_desc = TYPE_BIGINT_DESC;
     TypeDescriptor intermediate_type_desc = TypeDescriptor(TYPE_VARBINARY);
     std::vector<TypeDescriptor> arg_type_descs = {arg_type_desc};
     auto utils = std::make_unique<FunctionUtils>(nullptr, return_type_desc, arg_type_descs);
@@ -1824,6 +1827,216 @@ TEST_F(AggStateFunctionsTest, test_agg_state_combine_error_cases) {
     test_agg_state_combine_error_cases<int32_t>(ctx, "sum", arg_type_descs, return_type_desc);
 }
 
+ColumnPtr combine_into_state(const AggregateFunction* func, FunctionContext* ctx, const Columns& args) {
+    auto state = ManagedAggrState::create(ctx, func);
+    std::vector<const Column*> raw_args;
+    for (const auto& arg : args) {
+        raw_args.push_back(arg.get());
+    }
+    func->update_batch_single_state(ctx, args[0]->size(), raw_args.data(), state->state());
+    auto result = ColumnHelper::create_column(TYPE_VARBINARY_DESC, true);
+    func->serialize_to_column(ctx, state->state(), result.get());
+    return result;
+}
+
+// The merge phase of the plain aggregate, whose context carries the call's constant arguments.
+ColumnPtr merge_and_finalize(const AggregateFunction* func, FunctionContext* ctx, const ColumnPtr& states,
+                             const TypeDescriptor& ret_type) {
+    auto state = ManagedAggrState::create(ctx, func);
+    for (size_t i = 0; i < states->size(); ++i) {
+        func->merge(ctx, states.get(), state->state(), i);
+    }
+    auto result = ColumnHelper::create_column(ret_type, true);
+    func->finalize_to_column(ctx, state->state(), result.get());
+    return result;
+}
+
+ColumnPtr concat_rows(const ColumnPtr& first, const ColumnPtr& second) {
+    auto result = first->clone();
+    result->append(*second);
+    return result;
+}
+
+Slice serialized_state(const ColumnPtr& states, size_t row) {
+    return down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(states.get()))->get_slice(row);
+}
+
+// <fn>_state_merge / <fn>_state_union and the <fn>_merge / <fn>_union aggregates run merge() without the call's
+// constant arguments; `check_state` asserts the constants a serialized state still carries.
+void test_state_combinators_keep_constant_args(const AggStateDesc& desc, FunctionContext* ctx,
+                                               const Columns& first_part, const Columns& second_part,
+                                               const std::function<void(const ColumnPtr&)>& check_state) {
+    const AggregateFunction* func = get_aggregate_function(desc);
+    ASSERT_NE(func, nullptr);
+    const TypeDescriptor& ret_type = desc.get_return_type();
+    auto first_state = combine_into_state(func, ctx, first_part);
+    auto second_state = combine_into_state(func, ctx, second_part);
+    auto both_states = concat_rows(first_state, second_state);
+    auto expected = merge_and_finalize(func, ctx, both_states, ret_type);
+    check_state(first_state);
+
+    // The aggregator gives a <fn>_union / <fn>_merge call the wrapped function's argument types, but its only
+    // constant column is the one of the state argument.
+    auto no_constants_utils = std::make_unique<FunctionUtils>(nullptr, ret_type, desc.get_arg_types());
+    FunctionContext* no_constants_ctx = no_constants_utils->get_fn_ctx();
+    no_constants_ctx->set_constant_columns({nullptr});
+
+    StateMergeFunction state_merge(desc, TYPE_VARBINARY_DESC, {true});
+    auto merged = state_merge.execute(no_constants_ctx, {first_state});
+    ASSERT_TRUE(merged.ok()) << merged.status();
+    ASSERT_EQ(merge_and_finalize(func, ctx, first_state, ret_type)->debug_item(0), merged.value()->debug_item(0));
+
+    StateUnionFunction state_union(desc, TYPE_VARBINARY_DESC, {true, true});
+    auto unioned = state_union.execute(no_constants_ctx, {first_state, second_state});
+    ASSERT_TRUE(unioned.ok()) << unioned.status();
+    check_state(unioned.value());
+    merged = state_merge.execute(no_constants_ctx, {unioned.value()});
+    ASSERT_TRUE(merged.ok()) << merged.status();
+    ASSERT_EQ(expected->debug_item(0), merged.value()->debug_item(0));
+
+    AggStateUnion union_agg(desc, func);
+    auto union_agg_state = ManagedAggrState::create(no_constants_ctx, &union_agg);
+    AggStateMerge merge_agg(desc, func);
+    auto merge_agg_state = ManagedAggrState::create(no_constants_ctx, &merge_agg);
+    for (size_t i = 0; i < both_states->size(); ++i) {
+        const Column* state_column = both_states.get();
+        union_agg.update(no_constants_ctx, &state_column, union_agg_state->state(), i);
+        merge_agg.update(no_constants_ctx, &state_column, merge_agg_state->state(), i);
+    }
+    auto union_agg_output = ColumnHelper::create_column(TYPE_VARBINARY_DESC, true);
+    union_agg.finalize_to_column(no_constants_ctx, union_agg_state->state(), union_agg_output.get());
+    ColumnPtr union_agg_result = std::move(union_agg_output);
+    check_state(union_agg_result);
+    merged = state_merge.execute(no_constants_ctx, {union_agg_result});
+    ASSERT_TRUE(merged.ok()) << merged.status();
+    ASSERT_EQ(expected->debug_item(0), merged.value()->debug_item(0));
+
+    auto merge_agg_result = ColumnHelper::create_column(ret_type, true);
+    merge_agg.finalize_to_column(no_constants_ctx, merge_agg_state->state(), merge_agg_result.get());
+    ASSERT_EQ(expected->debug_item(0), merge_agg_result->debug_item(0));
+}
+
+TEST_F(AggStateFunctionsTest, test_state_combinators_keep_min_max_n) {
+    std::vector<TypeDescriptor> arg_types = {TYPE_INT_DESC, TYPE_INT_DESC};
+    TypeDescriptor ret_type = TypeDescriptor::create_array_type(TYPE_INT_DESC);
+    auto utils = std::make_unique<FunctionUtils>(nullptr, ret_type, arg_types);
+    FunctionContext* ctx = utils->get_fn_ctx();
+    ColumnPtr n = ColumnHelper::create_const_column<TYPE_INT>(3, 1);
+    ctx->set_constant_columns({nullptr, n});
+    Columns first_part = {ColumnTestHelper::build_column<int32_t>({5, 1, 9, 3, 12}), n};
+    Columns second_part = {ColumnTestHelper::build_column<int32_t>({7, 2, 8, 10, 4, 11}), n};
+    auto check_n = [](const ColumnPtr& states) {
+        int32_t serialized_n;
+        memcpy(&serialized_n, serialized_state(states, 0).data, sizeof(int32_t));
+        ASSERT_EQ(3, serialized_n);
+    };
+
+    for (const std::string fn : {"max_n", "min_n"}) {
+        AggStateDesc desc(fn, ret_type, arg_types, true, 1);
+        test_state_combinators_keep_constant_args(desc, ctx, first_part, second_part, check_n);
+
+        // A state that never saw a row serializes n = 0 and must not decide the n of the union.
+        AggStateDesc not_null_desc(fn, ret_type, arg_types, false, 1);
+        const AggregateFunction* not_null_func = get_aggregate_function(not_null_desc);
+        ASSERT_NE(not_null_func, nullptr);
+        auto empty = ManagedAggrState::create(ctx, not_null_func);
+        auto empty_state = BinaryColumn::create();
+        not_null_func->serialize_to_column(ctx, empty->state(), empty_state.get());
+        ColumnPtr nullable_empty_state = ColumnHelper::cast_to_nullable_column(std::move(empty_state));
+
+        const AggregateFunction* func = get_aggregate_function(desc);
+        auto first_state = combine_into_state(func, ctx, first_part);
+        StateUnionFunction state_union(desc, TYPE_VARBINARY_DESC, {true, true});
+        auto unioned = state_union.execute(ctx, {nullable_empty_state, first_state});
+        ASSERT_TRUE(unioned.ok()) << unioned.status();
+        check_n(unioned.value());
+        ASSERT_EQ(merge_and_finalize(func, ctx, first_state, ret_type)->debug_item(0),
+                  merge_and_finalize(func, ctx, unioned.value(), ret_type)->debug_item(0));
+    }
+}
+
+double serialized_compression(const ColumnPtr& states, size_t row, size_t digest_offset) {
+    // Skip the PercentileValue type tag.
+    return TDigest(serialized_state(states, row).data + digest_offset + 1).compression();
+}
+
+// Values spread wide enough for a compression of 2048 to merge centroids.
+MutableColumnPtr percentile_values(int begin, int end) {
+    auto values = DoubleColumn::create();
+    for (int i = begin; i < end; ++i) {
+        values->append(static_cast<double>((i * 7919) % 10007));
+    }
+    return values;
+}
+
+TEST_F(AggStateFunctionsTest, test_state_combinators_keep_percentile_approx_compression) {
+    constexpr double compression = 2048;
+    ColumnPtr quantile = ColumnHelper::create_const_column<TYPE_DOUBLE>(0.9, 1);
+    ColumnPtr compression_column = ColumnHelper::create_const_column<TYPE_DOUBLE>(compression, 1);
+    constexpr size_t scalar_digest_offset = sizeof(double);
+    auto check_scalar_compression = [&](const ColumnPtr& states) {
+        ASSERT_EQ(compression, serialized_compression(states, 0, scalar_digest_offset));
+    };
+
+    {
+        std::vector<TypeDescriptor> arg_types = {TYPE_DOUBLE_DESC, TYPE_DOUBLE_DESC, TYPE_DOUBLE_DESC};
+        auto utils = std::make_unique<FunctionUtils>(nullptr, TYPE_DOUBLE_DESC, arg_types);
+        FunctionContext* ctx = utils->get_fn_ctx();
+        ctx->set_constant_columns({nullptr, quantile, compression_column});
+        AggStateDesc desc("percentile_approx", TYPE_DOUBLE_DESC, arg_types, true, 1);
+        test_state_combinators_keep_constant_args(desc, ctx, {percentile_values(0, 6000), quantile, compression_column},
+                                                  {percentile_values(6000, 10000), quantile, compression_column},
+                                                  check_scalar_compression);
+
+        // percentile_approx_state(x, 0.9, 2048) builds one digest per row with the call's compression.
+        StateFunction state_func(desc, TYPE_VARBINARY_DESC, {false, false, false});
+        auto states = state_func.execute(ctx, {percentile_values(0, 3), quantile, compression_column});
+        ASSERT_TRUE(states.ok()) << states.status();
+        ASSERT_EQ(compression, serialized_compression(states.value(), 2, scalar_digest_offset));
+    }
+    {
+        std::vector<TypeDescriptor> arg_types = {TYPE_DOUBLE_DESC, TYPE_BIGINT_DESC, TYPE_DOUBLE_DESC,
+                                                 TYPE_DOUBLE_DESC};
+        auto utils = std::make_unique<FunctionUtils>(nullptr, TYPE_DOUBLE_DESC, arg_types);
+        FunctionContext* ctx = utils->get_fn_ctx();
+        ctx->set_constant_columns({nullptr, nullptr, quantile, compression_column});
+        auto weights = [](int begin, int end) {
+            auto column = Int64Column::create();
+            for (int i = begin; i < end; ++i) {
+                column->append(i % 3 + 1);
+            }
+            return column;
+        };
+        AggStateDesc desc("percentile_approx_weighted", TYPE_DOUBLE_DESC, arg_types, true, 1);
+        test_state_combinators_keep_constant_args(
+                desc, ctx, {percentile_values(0, 6000), weights(0, 6000), quantile, compression_column},
+                {percentile_values(6000, 10000), weights(6000, 10000), quantile, compression_column},
+                check_scalar_compression);
+    }
+    {
+        TypeDescriptor array_type = TypeDescriptor::create_array_type(TYPE_DOUBLE_DESC);
+        std::vector<TypeDescriptor> arg_types = {TYPE_DOUBLE_DESC, array_type, TYPE_DOUBLE_DESC};
+        auto utils = std::make_unique<FunctionUtils>(nullptr, array_type, arg_types);
+        FunctionContext* ctx = utils->get_fn_ctx();
+        auto offsets = UInt32Column::create();
+        offsets->append(0);
+        offsets->append(2);
+        ColumnPtr quantiles = ConstColumn::create(
+                ArrayColumn::create(
+                        ColumnHelper::cast_to_nullable_column(ColumnTestHelper::build_column<double>({0.5, 0.9})),
+                        std::move(offsets)),
+                1);
+        ctx->set_constant_columns({nullptr, quantiles, compression_column});
+        AggStateDesc desc("percentile_approx", array_type, arg_types, true, 1);
+        constexpr size_t array_digest_offset = sizeof(uint32_t) + 2 * sizeof(double);
+        test_state_combinators_keep_constant_args(
+                desc, ctx, {percentile_values(0, 6000), quantiles, compression_column},
+                {percentile_values(6000, 10000), quantiles, compression_column}, [&](const ColumnPtr& states) {
+                    ASSERT_EQ(compression, serialized_compression(states, 0, array_digest_offset));
+                });
+    }
+}
+
 // A state that is not trivially destructible and counts how many of it are alive.
 struct LiveCountedState {
     static inline int64_t live = 0;
@@ -1849,7 +2062,7 @@ public:
 template <typename Combinator>
 void test_combinator_batch_destroy_with_selection() {
     LiveCountedFunction inner;
-    AggStateDesc agg_state_desc("live_counted", TypeDescriptor(TYPE_BIGINT), {TypeDescriptor(TYPE_BIGINT)}, false, 1);
+    AggStateDesc agg_state_desc("live_counted", TYPE_BIGINT_DESC, {TYPE_BIGINT_DESC}, false, 1);
     Combinator combinator(agg_state_desc, &inner);
     ASSERT_FALSE(combinator.is_pod_state());
 
@@ -1874,6 +2087,53 @@ TEST_F(AggStateFunctionsTest, test_combinator_batch_destroy_with_selection) {
     test_combinator_batch_destroy_with_selection<AggStateUnion>();
     test_combinator_batch_destroy_with_selection<AggStateCombine>();
     test_combinator_batch_destroy_with_selection<AggStateIf>();
+}
+
+// |input| holds a non-NULL row followed by two NULL rows. The nullable wrapper of |func_name| keeps NULL rows
+// (IgnoreNull=false), and AggStateCombine reaches it through its single-row update rather than its batch paths.
+void test_nullable_wrapper_keeps_null_rows(const std::string& func_name, const TypeDescriptor& arg_type,
+                                           const ColumnPtr& input) {
+    const TypeDescriptor array_int_type = TypeDescriptor::create_array_type(TYPE_INT_DESC);
+    auto utils = std::make_unique<FunctionUtils>(nullptr, array_int_type, std::vector<TypeDescriptor>{arg_type});
+    auto ctx = utils->get_fn_ctx();
+    auto func = get_aggregate_function(func_name, TYPE_INT, TYPE_ARRAY, true);
+    ASSERT_NE(func, nullptr);
+    AggStateDesc agg_state_desc(func_name, array_int_type, {arg_type}, true, 1);
+    AggStateCombine combine_func(agg_state_desc, func);
+
+    auto aggregate = [&](auto&& update) {
+        auto group1 = ManagedAggrState::create(ctx, func);
+        auto group2 = ManagedAggrState::create(ctx, func);
+        AggDataPtr states[] = {group1->state(), group1->state(), group2->state()};
+        const Column* row_column = input.get();
+        update(&row_column, states);
+        auto result = ColumnHelper::create_column(array_int_type, true);
+        func->serialize_to_column(ctx, group1->state(), result.get());
+        func->serialize_to_column(ctx, group2->state(), result.get());
+        return std::vector<std::string>{result->debug_item(0), result->debug_item(1)};
+    };
+
+    const std::vector<std::string> expected = {"[1,NULL]", "[NULL]"};
+    ASSERT_EQ(expected, aggregate([&](const Column** columns, AggDataPtr* states) {
+                  func->update_batch(ctx, input->size(), 0, columns, states);
+              }));
+    ASSERT_EQ(expected, aggregate([&](const Column** columns, AggDataPtr* states) {
+                  for (size_t i = 0; i < input->size(); ++i) {
+                      func->update(ctx, columns, states[i], i);
+                  }
+              }));
+    ASSERT_EQ(expected, aggregate([&](const Column** columns, AggDataPtr* states) {
+                  combine_func.update_batch(ctx, input->size(), 0, columns, states);
+              }));
+}
+
+TEST_F(AggStateFunctionsTest, test_nullable_wrapper_single_row_update_keeps_null_rows) {
+    const TypeDescriptor array_int_type = TypeDescriptor::create_array_type(TYPE_INT_DESC);
+    test_nullable_wrapper_keeps_null_rows(
+            "array_unique_agg", array_int_type,
+            ColumnTestHelper::build_array_column<int32_t>(array_int_type, true, {{1}, NullArrayRow{}, NullArrayRow{}}));
+    test_nullable_wrapper_keeps_null_rows("array_agg_distinct", TYPE_INT_DESC,
+                                          ColumnTestHelper::build_nullable_column<int32_t>({1, 0, 0}, {0, 1, 1}));
 }
 
 } // namespace starrocks

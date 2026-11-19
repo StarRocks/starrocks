@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "特定の非同期マテリアライズドビューの定義を表示します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW CREATE MATERIALIZED VIEW

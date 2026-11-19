@@ -12,6 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <cctz/time_zone.h>
+#include <fmt/format.h>
+
+#include <optional>
+#include <vector>
+
 #include "base/simd/simd.h"
 #include "base/string/slice.h"
 #include "column/array_column.h"
@@ -20,6 +26,8 @@
 #include "column/column_viewer.h"
 #include "column/json_column.h"
 #include "column/variant_column.h"
+#include "column/variant_converter.h"
+#include "column/variant_path_parser.h"
 #include "exprs/cast_expr.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
@@ -27,6 +35,7 @@
 #include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
 #include "jsonpath.h"
+#include "runtime/exception.h"
 #include "runtime/memory/memory_resource.h"
 #include "types/logical_type.h"
 #include "velocypack/Iterator.h"
@@ -132,6 +141,108 @@ StatusOr<ColumnPtr> CastJsonToStruct::evaluate_checked(ExprContext* context, Chu
     return std::move(res);
 }
 
+namespace {
+
+// The object rows of one batch, with every struct field reachable as a view.
+// A row that can be viewed in place keeps a view of its object, and its fields are sought on demand. A row that has
+// to be materialized (e.g. a shredded row with typed values) keeps only copies of the struct's fields: the full row
+// is released as soon as they are taken, so no more than one materialized row is alive at a time.
+class VariantObjectRows {
+public:
+    VariantObjectRows(const std::vector<VariantPath>& field_paths, size_t num_rows)
+            : _field_paths(field_paths), _rows(num_rows), _materialized_index(num_rows, -1) {}
+
+    void set_view(size_t row, const VariantRowRef& object) { _rows[row] = object; }
+
+    void set_materialized(size_t row, const VariantRowRef& object) {
+        _materialized_index[row] = static_cast<int32_t>(_materialized_fields.size() / _field_paths.size());
+        for (const VariantPath& path : _field_paths) {
+            auto field = VariantPath::seek_view(object, path);
+            _materialized_fields.emplace_back(field.ok() ? std::optional(field.value().to_owned()) : std::nullopt);
+        }
+    }
+
+    // Returns false when the object has no such key.
+    bool field(size_t row, size_t field_idx, VariantRowRef* out) const {
+        if (int32_t index = _materialized_index[row]; index >= 0) {
+            const auto& value = _materialized_fields[index * _field_paths.size() + field_idx];
+            if (!value.has_value()) {
+                return false;
+            }
+            *out = value->as_ref();
+            return true;
+        }
+        auto field = VariantPath::seek_view(_rows[row], _field_paths[field_idx]);
+        if (!field.ok()) {
+            return false;
+        }
+        *out = field.value();
+        return true;
+    }
+
+private:
+    const std::vector<VariantPath>& _field_paths;
+    std::vector<VariantRowRef> _rows;
+    std::vector<int32_t> _materialized_index;
+    std::vector<std::optional<VariantRowValue>> _materialized_fields;
+};
+
+// Reads one struct field from every object row and casts it straight into the field's column, in a single pass.
+// It must behave exactly like the generic VARIANT -> scalar cast (cast_from_variant_fn) it replaces: the same
+// converter, the same time zone, NULL on failure, and the same error in throw mode.
+template <LogicalType ResultType, bool AllowThrowException>
+MutableColumnPtr cast_variant_field_direct(const VariantObjectRows& rows, const NullColumn& row_nulls,
+                                           size_t field_idx) {
+    const size_t num_rows = row_nulls.size();
+    const uint8_t* is_null_row = row_nulls.get_data().data();
+    const cctz::time_zone& zone = cctz::local_time_zone();
+    ColumnBuilder<ResultType> builder(num_rows);
+    VariantRowRef field;
+    for (size_t row = 0; row < num_rows; ++row) {
+        if (is_null_row[row] || !rows.field(row, field_idx, &field)) {
+            builder.append_null();
+            continue;
+        }
+        Status status = VariantRowConverter::cast_to<ResultType, AllowThrowException>(field, zone, builder);
+        if (!status.ok()) {
+            if constexpr (AllowThrowException) {
+                throw RuntimeException(fmt::format("cast from {}({}) to {} failed", type_to_string(TYPE_VARIANT),
+                                                   field.to_owned().to_string(), type_to_string(ResultType)));
+            }
+            builder.append_null();
+        }
+    }
+    return builder.build_nullable_column();
+}
+
+template <bool AllowThrowException>
+MutableColumnPtr try_cast_variant_field_direct(LogicalType field_type, const VariantObjectRows& rows,
+                                               const NullColumn& row_nulls, size_t field_idx) {
+#define CAST_VARIANT_FIELD_DIRECT(TYPE) \
+    case TYPE:                          \
+        return cast_variant_field_direct<TYPE, AllowThrowException>(rows, row_nulls, field_idx);
+    switch (field_type) {
+        CAST_VARIANT_FIELD_DIRECT(TYPE_BOOLEAN)
+        CAST_VARIANT_FIELD_DIRECT(TYPE_TINYINT)
+        CAST_VARIANT_FIELD_DIRECT(TYPE_SMALLINT)
+        CAST_VARIANT_FIELD_DIRECT(TYPE_INT)
+        CAST_VARIANT_FIELD_DIRECT(TYPE_BIGINT)
+        CAST_VARIANT_FIELD_DIRECT(TYPE_LARGEINT)
+        CAST_VARIANT_FIELD_DIRECT(TYPE_FLOAT)
+        CAST_VARIANT_FIELD_DIRECT(TYPE_DOUBLE)
+        CAST_VARIANT_FIELD_DIRECT(TYPE_VARCHAR)
+        CAST_VARIANT_FIELD_DIRECT(TYPE_DATE)
+        CAST_VARIANT_FIELD_DIRECT(TYPE_DATETIME)
+        CAST_VARIANT_FIELD_DIRECT(TYPE_TIME)
+    default:
+        // DECIMAL, CHAR, JSON, VARIANT and nested types keep the generic two-pass cast.
+        return nullptr;
+    }
+#undef CAST_VARIANT_FIELD_DIRECT
+}
+
+} // namespace
+
 StatusOr<ColumnPtr> CastVariantToStruct::evaluate_checked(ExprContext* context, Chunk* input_chunk) {
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
     if (column->only_null()) {
@@ -140,61 +251,68 @@ StatusOr<ColumnPtr> CastVariantToStruct::evaluate_checked(ExprContext* context, 
 
     ColumnViewer<TYPE_VARIANT> viewer(column);
     const auto* variant_data_column = down_cast<const VariantColumn*>(ColumnHelper::get_data_column(column.get()));
-    NullColumn::MutablePtr null_column = NullColumn::create();
+    const size_t num_rows = viewer.size();
+    NullColumn::MutablePtr null_column = NullColumn::create(num_rows, 0);
+    uint8_t* is_null_row = null_column->get_data().data();
 
-    // 1. Cast struct fields to variant columns.
+    // 1. Resolve every row to its variant object once. A row that is NULL or not an object becomes a NULL struct.
+    // The name of a struct field must match a variant object key, otherwise the field is NULL.
     const size_t field_size = _type.children.size();
     DCHECK_EQ(field_size, _type.field_names.size());
-    vector<ColumnBuilder<TYPE_VARIANT>> variant_columns;
-    for (size_t i = 0; i < field_size; i++) {
-        ColumnBuilder<TYPE_VARIANT> variant_column_builder(viewer.size());
-        variant_columns.emplace_back(variant_column_builder);
-    }
-
-    for (size_t row = 0; row < viewer.size(); row++) {
+    VariantObjectRows rows(_variant_paths, num_rows);
+    for (size_t row = 0; row < num_rows; row++) {
         if (viewer.is_null(row)) {
-            APPEND_NULL(variant_columns, null_column);
+            is_null_row[row] = 1;
             continue;
         }
-
         const size_t variant_row = column->is_constant() ? 0 : row;
-        VariantRowRef row_ref;
-        VariantRowValue variant_buffer;
-        if (!variant_data_column->try_get_row_ref(variant_row, &row_ref)) {
-            const VariantRowValue* variant = variant_data_column->get_row_value(variant_row, &variant_buffer);
-            if (variant == nullptr) {
-                APPEND_NULL(variant_columns, null_column);
+        VariantRowRef object;
+        if (variant_data_column->try_get_row_ref(variant_row, &object)) {
+            if (object.get_value().type() != VariantType::OBJECT) {
+                is_null_row[row] = 1;
                 continue;
             }
-            row_ref = variant->as_ref();
+            rows.set_view(row, object);
+            continue;
         }
-        const VariantValue& value = row_ref.get_value();
-        if (value.type() != VariantType::OBJECT) {
-            APPEND_NULL(variant_columns, null_column);
+        VariantRowValue variant_buffer;
+        const VariantRowValue* variant = variant_data_column->get_row_value(variant_row, &variant_buffer);
+        if (variant == nullptr || variant->get_value().type() != VariantType::OBJECT) {
+            is_null_row[row] = 1;
+            continue;
+        }
+        rows.set_materialized(row, variant->as_ref());
+    }
+
+    // 2. Build each field.
+    MutableColumns casted_fields;
+    for (size_t field_idx = 0; field_idx < field_size; field_idx++) {
+        const LogicalType field_type = _type.children[field_idx].type;
+        MutableColumnPtr direct =
+                _allow_throw_exception
+                        ? try_cast_variant_field_direct<true>(field_type, rows, *null_column, field_idx)
+                        : try_cast_variant_field_direct<false>(field_type, rows, *null_column, field_idx);
+        if (direct != nullptr) {
+            casted_fields.emplace_back(std::move(direct));
             continue;
         }
 
-        // 2. Find matched fields from variant object and append to variant columns.
-        // The name of the struct fields must match the variant object keys, otherwise, the value of the field will be NULL.
-        // iterate struct fields via iterator:
-        for (int field_index = 0; field_index < _type.field_names.size(); field_index++) {
-            const VariantPath& variant_path = _variant_paths[field_index];
-            const auto field_variant = VariantPath::seek_view(row_ref, variant_path);
-            // If the field not found, append null.
-            if (!field_variant.ok()) {
-                variant_columns[field_index].append_null();
+        // Generic path: collect the field values as a VARIANT column, then run the field's cast over it.
+        auto field_values = VariantColumn::create();
+        auto field_nulls = NullColumn::create();
+        field_values->reserve(num_rows);
+        field_nulls->reserve(num_rows);
+        VariantRowRef field;
+        for (size_t row = 0; row < num_rows; row++) {
+            if (!is_null_row[row] && rows.field(row, field_idx, &field)) {
+                field_values->append(field);
+                field_nulls->append(0);
             } else {
-                variant_columns[field_index].append(field_variant.value().to_owned());
+                field_values->append_default();
+                field_nulls->append(1);
             }
         }
-        null_column->append(0);
-    }
-
-    // 3. Cast variant column to expected field type
-    MutableColumns casted_fields;
-    for (size_t field_idx = 0; field_idx < field_size; field_idx++) {
-        ColumnPtr elements = variant_columns[field_idx].build_nullable_column();
-        // do casting for the required fields
+        ColumnPtr elements = NullableColumn::create(std::move(field_values), std::move(field_nulls));
         if (_field_casts[field_idx] != nullptr) {
             Chunk field_chunk;
             field_chunk.append_column(elements, 0);

@@ -363,6 +363,38 @@ public class MaterializedViewTextBasedRewriteTest extends MaterializedViewTestBa
     }
 
     @Test
+    public void testTextMatchRewriteWithCteBody() {
+        String mv = "select user_id, time from user_tags where tag_id = 1 " +
+                "union all " +
+                "select user_id, time from user_tags where tag_id = 2";
+        {
+            // single reference, inlined CTE
+            String query = String.format("with events as (%s) select user_id, count(*) from events group by user_id", mv);
+            testRewriteOK(mv, query).notContain("TABLE: user_tags");
+        }
+        {
+            // multiple references, CTE may be reused
+            String query = String.format("with events as (%s) " +
+                    "select user_id, count(*) from events group by user_id " +
+                    "union all " +
+                    "select user_id, count(*) from events where user_id > 10 group by user_id", mv);
+            testRewriteOK(mv, query).notContain("TABLE: user_tags");
+        }
+        {
+            // forced CTE producer
+            String query = String.format("with events as (%s) [materialized] " +
+                    "select user_id, count(*) from events group by user_id", mv);
+            testRewriteOK(mv, query).notContain("TABLE: user_tags");
+        }
+        {
+            // CTE body differs from mv definition
+            String query = String.format("with events as (%s and user_id > 1) " +
+                    "select user_id, count(*) from events group by user_id", mv);
+            testRewriteNonmatch(mv, query);
+        }
+    }
+
+    @Test
     public void testTextMatchRewriteWithExtraOrder1() {
         String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id)) as a from user_tags group by user_id, time";
         String query = String.format("select user_id from (%s) t order by user_id, time;", mv);

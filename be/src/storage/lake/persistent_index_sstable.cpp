@@ -93,12 +93,14 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
                 return Status::InvalidArgument("tablet_mgr is null when loading sst file");
             }
             RandomAccessFileOptions opts;
+            opts.remote_read = ScopedRemoteReadContext::current_or_load();
             if (!sstable_pb.encryption_meta().empty()) {
                 ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
                 opts.encryption_info = std::move(info);
             }
-            ASSIGN_OR_RETURN(rf, fs::new_random_access_file(
-                                         opts, tablet_mgr->sst_location(metadata->id(), sstable_pb.filename())));
+            ASSIGN_OR_RETURN(rf,
+                             open_sstable_file(opts, tablet_mgr->sst_location(metadata->id(), sstable_pb.filename()),
+                                               sstable_pb.filesize()));
             open_st = sstable::Table::Open(options, rf.get(), sstable_pb.filesize(), table);
             TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::init:table_open_retry_error", &open_st);
         }
@@ -125,6 +127,7 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
             }
             // otherwise, load delvec from file
             LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
+            lake_io_opts.remote_read = ScopedRemoteReadContext::current_or_load();
             auto delvec_loader =
                     std::make_unique<LakeDelvecLoader>(tablet_mgr, nullptr, true /* fill cache */, lake_io_opts);
             RETURN_IF_ERROR(delvec_loader->load_from_meta(metadata, _sstable_pb.delvec(), &_delvec));
@@ -218,13 +221,15 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     // Read through a per-call file handle instead of the shared `_rf`: multi_get runs concurrently
     // on the pk index execution pool, and file-class state must not be shared across those readers.
     // A fresh handle also starts its IO counters at 0, so the deltas below are the absolute IO done
-    // by this multi_get.
+    // by this multi_get. The handle is opened with the recorded file size: it is opened on every
+    // call, and a size lookup that misses the star cache is a HEAD request to the object storage.
     RandomAccessFileOptions opts;
+    opts.remote_read = ScopedRemoteReadContext::current_or_load();
     if (!_sstable_pb.encryption_meta().empty()) {
         ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_sstable_pb.encryption_meta()));
         opts.encryption_info = std::move(info);
     }
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, _rf->filename()));
+    ASSIGN_OR_RETURN(auto rf, open_sstable_file(opts, _rf->filename(), _sstable_pb.filesize()));
     // Test seam: the per-call handle is the only thing the IO-breakdown counters below measure, so a
     // UT has to be able to wrap it in a stream that reports synthetic local/remote statistics. A
     // shared-nothing POSIX file exposes none, which would leave the counters pinned at zero.
@@ -270,6 +275,11 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
             std::max<int64_t>(0, io_snap_after.io_count_local_disk - io_snap_before.io_count_local_disk));
     TRACE_COUNTER_INCREMENT("sstable_io_count_remote",
                             std::max<int64_t>(0, io_snap_after.io_count_remote - io_snap_before.io_count_remote));
+    // One message for every key: ParseFromString() clears it but keeps the repeated elements it has
+    // already allocated, so decoding a value costs no heap allocation once the first one is parsed.
+    // A large delete reverse-looks-up millions of keys here, and the per-key allocations otherwise
+    // dominate the lookup.
+    IndexValuesWithVerPB index_value_with_ver_pb;
     size_t i = 0;
     for (auto& key_index : key_indexes) {
         // Index_value_with_vers is empty means key is not found in sst.
@@ -278,7 +288,6 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
             ++i;
             continue;
         }
-        IndexValuesWithVerPB index_value_with_ver_pb;
         if (!index_value_with_ver_pb.ParseFromString(index_value_with_vers[i])) {
             return Status::InternalError("parse index value info failed");
         }
@@ -314,12 +323,12 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
         if (index_value_with_ver_pb.values_size() > 0) {
             if (version < 0) {
                 values[key_index] = build_index_value(index_value_with_ver_pb.values(0));
-                found_key_indexes->insert(key_index);
+                found_key_indexes->insert(found_key_indexes->end(), key_index);
             } else {
                 for (size_t j = 0; j < index_value_with_ver_pb.values_size(); ++j) {
                     if (index_value_with_ver_pb.values(j).version() == version) {
                         values[key_index] = build_index_value(index_value_with_ver_pb.values(j));
-                        found_key_indexes->insert(key_index);
+                        found_key_indexes->insert(found_key_indexes->end(), key_index);
                         break;
                     }
                 }
@@ -383,13 +392,25 @@ StatusOr<PersistentIndexSstableUniquePtr> PersistentIndexSstable::new_sstable(
         const DelVectorPtr& delvec, const TabletMetadataPtr& metadata, TabletManager* tablet_mgr) {
     auto sstable = std::make_unique<PersistentIndexSstable>();
     RandomAccessFileOptions opts;
+    opts.remote_read = ScopedRemoteReadContext::current_or_load();
     if (!sstable_pb.encryption_meta().empty()) {
         ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
         opts.encryption_info = std::move(info);
     }
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
+    ASSIGN_OR_RETURN(auto rf, open_sstable_file(opts, location, sstable_pb.filesize()));
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, cache, need_filter, delvec, metadata, tablet_mgr));
     return std::move(sstable);
+}
+
+StatusOr<std::unique_ptr<RandomAccessFile>> PersistentIndexSstable::open_sstable_file(
+        const RandomAccessFileOptions& opts, const std::string& location, int64_t file_size) {
+    FileInfo file_info{.path = location};
+    if (file_size > 0) {
+        file_info.size = file_size;
+    }
+    TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::open_sstable_file", &file_info);
+    ASSIGN_OR_RETURN(auto file_system, FileSystemFactory::CreateSharedFromString(location));
+    return file_system->new_random_access_file(opts, file_info);
 }
 
 PersistentIndexSstableStreamBuilder::PersistentIndexSstableStreamBuilder(std::unique_ptr<WritableFile> wf,

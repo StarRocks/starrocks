@@ -30,6 +30,17 @@ public abstract class Lock {
 
     public abstract Set<LockHolder> getOwners();
 
+    /**
+     * Whether a locker of thread {@code threadId} holds {@code lockType}. Unlike {@link #isOwner}, matched by
+     * thread rather than by {@code Locker}; unlike {@link #getOwners}, copies nothing, so it is cheap enough
+     * for a check that runs on every planning copy. The caller holds the lock table's mutex.
+     */
+    public abstract boolean isOwnedByThread(long threadId, LockType lockType);
+
+    protected static boolean isHeldByThread(LockHolder owner, long threadId, LockType lockType) {
+        return owner != null && owner.getLocker().getThreadId() == threadId && owner.getLockType() == lockType;
+    }
+
     public abstract Set<LockHolder> cloneOwners();
 
     public abstract void removeWaiter(Locker locker, LockType lockType);

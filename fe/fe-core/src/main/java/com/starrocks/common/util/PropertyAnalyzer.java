@@ -294,6 +294,8 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL = "lake_compaction_max_parallel";
 
     public static final String PROPERTIES_TABLET_RESHARD_TARGET_SIZE = "tablet_reshard_target_size";
+    public static final String TABLET_RESHARD_TARGET_SIZE_RANGE_ONLY_MSG =
+            PROPERTIES_TABLET_RESHARD_TARGET_SIZE + " is only supported for range-distributed tables";
 
     public static final String PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD = "enable_statistic_collect_on_first_load";
 
@@ -1949,9 +1951,9 @@ public class PropertyAnalyzer {
         return defaultValue;
     }
 
-    public static long analyzeTabletReshardTargetSize(Map<String, String> properties, boolean removeProperties)
-            throws AnalysisException {
-        long tabletReshardTargetSize = Config.tablet_reshard_target_size;
+    public static long analyzeTabletReshardTargetSize(Map<String, String> properties, boolean removeProperties,
+                                                      long defaultTargetSize) throws AnalysisException {
+        long tabletReshardTargetSize = defaultTargetSize;
         if (properties != null) {
             String value = removeProperties ? properties.remove(PROPERTIES_TABLET_RESHARD_TARGET_SIZE)
                     : properties.get(PROPERTIES_TABLET_RESHARD_TARGET_SIZE);
@@ -1965,6 +1967,32 @@ public class PropertyAnalyzer {
             }
         }
         return tabletReshardTargetSize;
+    }
+
+    // The tablet_reshard_target_size table property: a positive integer, or, when allowClear, "" (returned as 0)
+    // to remove it so the table follows the FE configuration of the same name again.
+    public static long analyzeTableTabletReshardTargetSize(String value, boolean allowClear) {
+        if (allowClear && value.isEmpty()) {
+            return 0L;
+        }
+        long size;
+        try {
+            size = Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            throw invalidTableTabletReshardTargetSize(allowClear);
+        }
+        if (size <= 0) {
+            throw invalidTableTabletReshardTargetSize(allowClear);
+        }
+        return size;
+    }
+
+    private static SemanticException invalidTableTabletReshardTargetSize(boolean allowClear) {
+        String msg = PROPERTIES_TABLET_RESHARD_TARGET_SIZE + " of a table must be a positive integer";
+        if (allowClear) {
+            msg += ", or \"\" to fall back to the FE configuration " + PROPERTIES_TABLET_RESHARD_TARGET_SIZE;
+        }
+        return new SemanticException(msg);
     }
 
     public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties,
@@ -2291,6 +2319,14 @@ public class PropertyAnalyzer {
                     PeriodDuration duration = PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
                     materializedView.setDataCachePartitionDuration(duration);
                 }
+            }
+
+            // file_bundling
+            if (materializedView.isCloudNativeMaterializedView()) {
+                materializedView.setFileBundling(PropertyAnalyzer.analyzeFileBundling(properties));
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)) {
+                throw new AnalysisException(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING
+                        + " is only supported for materialized views in shared-data mode");
             }
 
             // NOTE: for recognizing unknown properties, this should be put as the last if condition

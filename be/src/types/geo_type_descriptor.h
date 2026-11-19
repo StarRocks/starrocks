@@ -22,14 +22,13 @@
 
 namespace starrocks {
 
-// Normalized semantic/storage metadata. Missing wire fields become
+// Normalized semantic metadata. Missing wire fields become
 // UNKNOWN / empty CRS / default subdescriptors; only parsed SRID retains presence.
 // Unrecognized Thrift enum values normalize to UNKNOWN. Protobuf conversions use
 // the generated proto2 enum accessors, without interpreting unknown fields.
 // Callers supply declared enum values and decide which semantics an operation supports.
 struct GeoTypeDescriptor {
     GeoLogicalTypePB logical_type = GEO_LOGICAL_TYPE_UNKNOWN;
-    GeoCoordinateSystemPB coordinate_system = GEO_COORDINATE_SYSTEM_UNKNOWN;
     GeoEdgeAlgorithmPB edge_algorithm = GEO_EDGE_ALGORITHM_UNKNOWN;
     std::string crs;
     std::optional<int32_t> srid;
@@ -43,27 +42,12 @@ struct GeoTypeDescriptor {
     bool operator==(const GeoTypeDescriptor& rhs) const = default;
 };
 
-struct GeoStorageDescriptor {
-    GeoEncodingPB encoding = GEO_ENCODING_UNKNOWN;
-    GeoDimensionPB dimension = GEO_DIMENSION_UNKNOWN;
-    GeoValidationStatePB validation_state = GEO_VALIDATION_STATE_UNKNOWN;
-
-    static GeoStorageDescriptor from_thrift(const TGeoStorageDesc& thrift);
-    static GeoStorageDescriptor from_protobuf(const GeoStorageDescPB& protobuf);
-    TGeoStorageDesc to_thrift() const;
-    GeoStorageDescPB to_protobuf() const;
-
-    // Exact normalized metadata equality, not SQL type compatibility.
-    bool operator==(const GeoStorageDescriptor& rhs) const = default;
-};
-
+// The column descriptor carries only the semantic type. Physical facts such as the dimension of a row
+// are read from each row's own WKB by the kernels that need them.
 struct GeoColumnDescriptor {
     GeoTypeDescriptor type;
-    GeoStorageDescriptor storage;
 
-    static GeoColumnDescriptor from_thrift(const TGeoColumnDesc& thrift);
     static GeoColumnDescriptor from_protobuf(const GeoColumnDescPB& protobuf);
-    TGeoColumnDesc to_thrift() const;
     GeoColumnDescPB to_protobuf() const;
 
     bool operator==(const GeoColumnDescriptor& rhs) const = default;
@@ -75,7 +59,6 @@ struct GeoColumnDescriptor {
 bool is_geo_semantically_compatible(const GeoTypeDescriptor& lhs, const GeoTypeDescriptor& rhs);
 
 // Semantic compatibility is not capability validation or a row-dimension guarantee.
-// Encoding and producer-validation state do not determine overload identity.
 bool is_geo_compute_compatible(const GeoColumnDescriptor& lhs, const GeoColumnDescriptor& rhs);
 
 } // namespace starrocks

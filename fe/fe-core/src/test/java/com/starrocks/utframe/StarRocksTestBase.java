@@ -21,6 +21,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.lock.LockTestUtils;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -73,6 +74,11 @@ public abstract class StarRocksTestBase {
                 // ignore exception
             }
         }
+    }
+
+    @AfterEach
+    public void assertNoLockInvariantViolations() {
+        LockTestUtils.assertNoLockInvariantViolations();
     }
 
     public static void logSysInfo(boolean info) {

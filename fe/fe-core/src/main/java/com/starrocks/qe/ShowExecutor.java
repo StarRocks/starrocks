@@ -38,6 +38,7 @@ import com.google.common.base.Enums;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.base.Suppliers;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -124,6 +125,9 @@ import com.starrocks.lake.TabletRepairHelper;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
+import com.starrocks.load.LoadJobRedaction;
+import com.starrocks.load.LoadJobVisibility;
+import com.starrocks.load.LoadJobVisibility.VisibleTask;
 import com.starrocks.load.pipe.Pipe;
 import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.load.routineload.RoutineLoadFunctionalExprProvider;
@@ -297,6 +301,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -306,7 +311,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -318,6 +323,7 @@ import java.util.UUID;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -1450,6 +1456,9 @@ public class ShowExecutor {
                     if (matcher != null && !matcher.match(col.getName())) {
                         continue;
                     }
+                    if (col.isHidden() && table.isNativeTableOrMaterializedView()) {
+                        continue;
+                    }
                     final String columnName = col.getName();
                     final String columnType = col.getType().canonicalName().toLowerCase();
                     final String isAllowNull = col.isAllowNull() ? SchemaConstants.YES : SchemaConstants.NO;
@@ -1511,7 +1520,8 @@ public class ShowExecutor {
             List<List<Comparable>> loadInfos =
                     globalStateMgr.getLoadMgr().getLoadJobInfosByDb(dbId, statement.getLabelValue(),
                             statement.isAccurateMatch(),
-                            statesValue);
+                            statesValue,
+                            context);
 
             // order the result of List<LoadInfo> by orderByPairs in show statement
             List<OrderByPair> orderByPairs = statement.getOrderByPairs();
@@ -1565,32 +1575,23 @@ public class ShowExecutor {
                 LOG.warn(e.getMessage(), e);
                 throw new SemanticException(e.getMessage());
             }
-            // In new privilege framework(RBAC), user needs any action on the table to show routine load job on it.
             if (routineLoadJobList != null) {
-                Iterator<RoutineLoadJob> iterator = routineLoadJobList.iterator();
-                while (iterator.hasNext()) {
-                    RoutineLoadJob routineLoadJob = iterator.next();
-                    try {
-                        try {
-                            Authorizer.checkAnyActionOnTable(context, new TableName(routineLoadJob.getDbFullName(),
-                                    routineLoadJob.getTableName()));
-                        } catch (AccessDeniedException e) {
-                            iterator.remove();
-                        }
-                    } catch (MetaNotFoundException e) {
-                        // ignore
-                    }
+                // Decided here rather than in the parallel stream below, which runs off the session thread.
+                Map<RoutineLoadJob, LoadJobVisibility.Access> accesses = new IdentityHashMap<>();
+                for (RoutineLoadJob routineLoadJob : routineLoadJobList) {
+                    accesses.put(routineLoadJob, LoadJobVisibility.isEnabled()
+                            ? LoadJobVisibility.accessOf(context, routineLoadJob)
+                            : legacyRoutineLoadAccess(context, routineLoadJob));
                 }
-            }
-
-            if (routineLoadJobList != null) {
+                routineLoadJobList.removeIf(job -> accesses.get(job) == LoadJobVisibility.Access.NONE);
                 RoutineLoadFunctionalExprProvider fProvider = statement.getFunctionalExprProvider(context);
                 rows = routineLoadJobList.parallelStream()
                         .filter(fProvider.getPredicateChain())
                         .sorted(fProvider.getOrderComparator())
                         .skip(fProvider.getSkipCount())
                         .limit(fProvider.getLimitCount())
-                        .map(RoutineLoadJob::getShowInfo)
+                        .map(job -> accesses.get(job) == LoadJobVisibility.Access.FULL ? job.getShowInfo()
+                                : LoadJobRedaction.redactShowRoutineLoad(job.getShowInfo()))
                         .collect(Collectors.toList());
             }
 
@@ -1603,6 +1604,20 @@ public class ShowExecutor {
                         ", you can try `show all routine load job for job_name` if you want to list stopped and cancelled jobs");
             }
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
+        }
+
+        // The check of SHOW ROUTINE LOAD with the load job privilege check off, as it was before: any privilege on the
+        // table the job's table name leads to, and the job is kept if its table is gone. The INSERT check of the row
+        // filter applies on top.
+        private static LoadJobVisibility.Access legacyRoutineLoadAccess(ConnectContext context, RoutineLoadJob job) {
+            try {
+                Authorizer.checkAnyActionOnTable(context, new TableName(job.getDbFullName(), job.getTableName()));
+            } catch (AccessDeniedException e) {
+                return LoadJobVisibility.Access.NONE;
+            } catch (MetaNotFoundException e) {
+                // ignore
+            }
+            return LoadJobVisibility.Access.FULL;
         }
 
         @Override
@@ -1748,6 +1763,14 @@ public class ShowExecutor {
             }
 
             if (streamLoadTaskList != null) {
+                // Decided here rather than in the parallel stream below, which runs off the session thread.
+                Map<AbstractStreamLoadTask, List<VisibleTask>> visibleTasks = new IdentityHashMap<>();
+                for (AbstractStreamLoadTask task : streamLoadTaskList) {
+                    // With the rule off, every task, which the INSERT check of the row filter then narrows, as before.
+                    visibleTasks.put(task, LoadJobVisibility.isEnabled() ? LoadJobVisibility.visibleTasks(context, task)
+                            : LoadJobVisibility.allTasksInFull(task));
+                }
+                streamLoadTaskList.removeIf(task -> visibleTasks.get(task).isEmpty());
                 StreamLoadFunctionalExprProvider fProvider =
                         statement.getFunctionalExprProvider(context);
                 List<AbstractStreamLoadTask> tasks = streamLoadTaskList.parallelStream()
@@ -1757,7 +1780,12 @@ public class ShowExecutor {
                         .limit(fProvider.getLimitCount())
                         .collect(Collectors.toList());
                 for (AbstractStreamLoadTask task : tasks) {
-                    rows.addAll(task.getShowInfo());
+                    for (VisibleTask visibleTask : visibleTasks.get(task)) {
+                        for (List<String> row : visibleTask.task().getShowInfo()) {
+                            rows.add(visibleTask.access() == LoadJobVisibility.Access.FULL ? row
+                                    : LoadJobRedaction.redactShowStreamLoad(row));
+                        }
+                    }
                 }
             }
 
@@ -2916,13 +2944,24 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowAnalyzeStatusStatement(ShowAnalyzeStatusStmt statement, ConnectContext context) {
+            ShowResultSetMetaData metaData = showResultMetaFactory.getMetadata(statement);
+            Predicate<List<String>> earlyFilter = buildEarlyFilter(statement, metaData,
+                    ShowAnalyzeStatusStmt.EARLY_FILTER_COLUMNS);
+            long rowCap = rowCapForLimit(statement);
+
+            long startMs = System.currentTimeMillis();
             List<AnalyzeStatus> statuses = new ArrayList<>(context.getGlobalStateMgr().getAnalyzeMgr()
                     .getAnalyzeStatusMap().values());
             List<List<String>> rows = Lists.newArrayList();
             statuses.sort(Comparator.comparing(AnalyzeStatus::getId));
+            int built = 0;
             for (AnalyzeStatus status : statuses) {
+                if (rows.size() >= rowCap) {
+                    break;
+                }
+                built++;
                 try {
-                    List<String> result = ShowAnalyzeStatusStmt.showAnalyzeStatus(context, status);
+                    List<String> result = ShowAnalyzeStatusStmt.showAnalyzeStatus(context, status, earlyFilter);
                     if (result != null) {
                         rows.add(result);
                     }
@@ -2931,44 +2970,140 @@ public class ShowExecutor {
                 }
             }
 
-            rows = doPredicate(statement, showResultMetaFactory.getMetadata(statement), rows);
+            rows = doPredicate(statement, metaData, rows);
             rows = doOrderBy(rows, statement.getOrderByPairs());
             rows = doLimit(rows, statement.getLimitElement());
-            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
+
+            long totalMs = System.currentTimeMillis() - startMs;
+            if (totalMs >= SLOW_STATS_META_MS) {
+                LOG.info("show analyze status took {} ms: statuses {}/{} built, early filter: {}, rows returned: {}",
+                        totalMs, built, statuses.size(), earlyFilter != null, rows.size());
+            }
+            return new ShowResultSet(metaData, rows);
         }
 
         @Override
         public ShowResultSet visitShowBasicStatsMetaStatement(ShowBasicStatsMetaStmt statement, ConnectContext context) {
+            ShowResultSetMetaData metaData = showResultMetaFactory.getMetadata(statement);
+            Predicate<List<String>> earlyFilter = buildEarlyFilter(statement, metaData, STATS_META_EARLY_FILTER_COLUMNS);
+            long rowCap = rowCapForLimit(statement);
+
+            long startMs = System.currentTimeMillis();
             List<BasicStatsMeta> metas = new ArrayList<>(context.getGlobalStateMgr().getAnalyzeMgr()
                     .getBasicStatsMetaMap().values());
             List<List<String>> rows = Lists.newArrayList();
+            int internalBuilt = 0;
             for (BasicStatsMeta meta : metas) {
+                if (rows.size() >= rowCap) {
+                    break;
+                }
+                internalBuilt++;
+                long metaStartMs = System.currentTimeMillis();
                 try {
-                    List<String> result = ShowExecutor.showBasicStatsMeta(context, meta);
+                    List<String> result = ShowExecutor.showBasicStatsMeta(context, meta, earlyFilter);
                     if (result != null) {
                         rows.add(result);
                     }
                 } catch (MetaNotFoundException e) {
                     // pass
                 }
+                logSlowStatsMetaRow(metaStartMs, "dbId=" + meta.getDbId() + ", tableId=" + meta.getTableId());
             }
+            long internalMs = System.currentTimeMillis() - startMs;
+
+            long externalStartMs = System.currentTimeMillis();
             List<ExternalBasicStatsMeta> externalMetas =
                     new ArrayList<>(context.getGlobalStateMgr().getAnalyzeMgr().getExternalBasicStatsMetaMap().values());
+            int externalBuilt = 0;
+            Map<String, Integer> externalSkipped = new TreeMap<>();
             for (ExternalBasicStatsMeta meta : externalMetas) {
+                if (rows.size() >= rowCap) {
+                    break;
+                }
+                externalBuilt++;
+                long metaStartMs = System.currentTimeMillis();
                 try {
-                    List<String> result = ShowExecutor.showExternalBasicStatsMeta(context, meta);
+                    List<String> result = ShowExecutor.showExternalBasicStatsMeta(context, meta, earlyFilter);
                     if (result != null) {
                         rows.add(result);
                     }
                 } catch (Exception e) {
                     // The catalog(HMS/Glue...) may can not connected, so the meta can not be found. Just ignore it.
+                    externalSkipped.merge(meta.getCatalogName(), 1, Integer::sum);
+                    LOG.debug("skip external basic stats meta {}.{}.{} in show stats meta",
+                            meta.getCatalogName(), meta.getDbName(), meta.getTableName(), e);
                 }
+                logSlowStatsMetaRow(metaStartMs,
+                        meta.getCatalogName() + "." + meta.getDbName() + "." + meta.getTableName());
             }
+            long externalMs = System.currentTimeMillis() - externalStartMs;
 
-            rows = doPredicate(statement, showResultMetaFactory.getMetadata(statement), rows);
+            rows = doPredicate(statement, metaData, rows);
             rows = doOrderBy(rows, statement.getOrderByPairs());
             rows = doLimit(rows, statement.getLimitElement());
-            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
+
+            long totalMs = System.currentTimeMillis() - startMs;
+            if (totalMs >= SLOW_STATS_META_MS) {
+                LOG.info("show stats meta took {} ms: internal metas {}/{} built in {} ms, external metas {}/{} " +
+                                "built in {} ms, early filter: {}, rows returned: {}, external metas skipped " +
+                                "by error per catalog: {}",
+                        totalMs, internalBuilt, metas.size(), internalMs, externalBuilt, externalMetas.size(),
+                        externalMs, earlyFilter != null, rows.size(), externalSkipped);
+            }
+            return new ShowResultSet(metaData, rows);
+        }
+
+        private static final long SLOW_STATS_META_MS = 1000L;
+
+        /**
+         * Without WHERE and ORDER BY, rows are returned in build order, so building can stop once LIMIT + OFFSET
+         * rows are built. Returns Long.MAX_VALUE when no such cap applies.
+         */
+        private static long rowCapForLimit(ShowStmt statement) {
+            LimitElement limitElement = statement.getLimitElement();
+            if (statement.getPredicate() == null && CollectionUtils.isEmpty(statement.getOrderByPairs())
+                    && limitElement != null && limitElement.hasLimit() && limitElement.getLimit() >= 0) {
+                long cap = limitElement.getLimit() + Math.max(limitElement.getOffset(), 0L);
+                return cap < 0 ? Long.MAX_VALUE : cap;
+            }
+            return Long.MAX_VALUE;
+        }
+
+        private static void logSlowStatsMetaRow(long startMs, String target) {
+            long costMs = System.currentTimeMillis() - startMs;
+            if (costMs >= SLOW_STATS_META_MS) {
+                LOG.warn("show stats meta: building the row of {} took {} ms", target, costMs);
+            }
+        }
+
+        /**
+         * Returns a per-row filter equivalent to the WHERE clause when every conjunct only references columns that
+         * are known before the costly columns are computed, otherwise null. The full WHERE clause is still applied
+         * to the built rows afterwards, so this only skips work and never changes the result.
+         */
+        private Predicate<List<String>> buildEarlyFilter(ShowStmt statement, ShowResultSetMetaData metaData,
+                                                         Set<String> earlyColumns) {
+            Expr predicate = statement.getPredicate();
+            if (predicate == null) {
+                return null;
+            }
+            List<Expr> conjuncts = AnalyzerUtils.extractConjuncts(predicate);
+            if (conjuncts.isEmpty()) {
+                return null;
+            }
+            for (Expr conjunct : conjuncts) {
+                if (!(conjunct instanceof BinaryPredicate || conjunct instanceof LikePredicate)
+                        || conjunct.getChildren().size() != 2
+                        || !(conjunct.getChild(0) instanceof SlotRef)
+                        || !(conjunct.getChild(1) instanceof StringLiteral)) {
+                    return null;
+                }
+                String columnName = ((SlotRef) conjunct.getChild(0)).getColumnName();
+                if (columnName == null || !earlyColumns.contains(columnName.toLowerCase())) {
+                    return null;
+                }
+            }
+            return row -> !doPredicate(statement, metaData, Lists.<List<String>>newArrayList(row)).isEmpty();
         }
 
         @Override
@@ -3650,8 +3785,23 @@ public class ShowExecutor {
         }
     }
 
+    // Columns of SHOW STATS META that are filled before the costly ones (health of internal tables, table loading
+    // from the remote catalog of external tables), lower case.
+    static final Set<String> STATS_META_EARLY_FILTER_COLUMNS = ImmutableSet.of(
+            "database", "table", "type", "updatetime", "properties", "columnstats", "tabletstatsreporttime");
+
     public static List<String> showBasicStatsMeta(ConnectContext context,
                                                   BasicStatsMeta basicStatsMeta) throws MetaNotFoundException {
+        return showBasicStatsMeta(context, basicStatsMeta, null);
+    }
+
+    /**
+     * @param earlyFilter if not null, evaluated on a row in which only the columns in
+     *                    {@link #STATS_META_EARLY_FILTER_COLUMNS} are filled; returns null when it rejects the row,
+     *                    so the expensive health columns are only computed for rows that can be returned.
+     */
+    static List<String> showBasicStatsMeta(ConnectContext context, BasicStatsMeta basicStatsMeta,
+                                           Predicate<List<String>> earlyFilter) throws MetaNotFoundException {
         List<String> row = Lists.newArrayList("", "", "ALL", "", "", "", "", "", "", "", "");
         long dbId = basicStatsMeta.getDbId();
         long tableId = basicStatsMeta.getTableId();
@@ -3683,11 +3833,18 @@ public class ShowExecutor {
         row.set(3, basicStatsMeta.getType().name());
         row.set(4, basicStatsMeta.getUpdateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         row.set(5, basicStatsMeta.getProperties() == null ? "{}" : basicStatsMeta.getProperties().toString());
-        row.set(6, (int) (basicStatsMeta.getHealthy() * 100) + "%");
         row.set(7, basicStatsMeta.getColumnStatsString());
         row.set(8, basicStatsMeta.getTabletStatsReportTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-        row.set(9, basicStatsMeta.getTableHealthyMetrics(table).toString());
-        row.set(10, StatisticUtils.getTableLastUpdateTime(table).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        if (earlyFilter != null && !earlyFilter.test(row)) {
+            return null;
+        }
+
+        // Both are costly (all partitions, maybe a statistics cache load), so compute them once per row.
+        BasicStatsMeta.TableHealthyMetrics metrics = basicStatsMeta.getTableHealthyMetrics(table);
+        LocalDateTime tableUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
+        row.set(6, (int) (basicStatsMeta.getHealthy(metrics, tableUpdateTime) * 100) + "%");
+        row.set(9, metrics.toString());
+        row.set(10, tableUpdateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
 
         return row;
     }
@@ -3695,12 +3852,35 @@ public class ShowExecutor {
     public static List<String> showExternalBasicStatsMeta(ConnectContext context,
                                                           ExternalBasicStatsMeta basicStatsMeta)
             throws MetaNotFoundException {
+        return showExternalBasicStatsMeta(context, basicStatsMeta, null);
+    }
+
+    /**
+     * @param earlyFilter see {@link #showBasicStatsMeta(ConnectContext, BasicStatsMeta, Predicate)}; evaluated
+     *                    before the database and table are loaded from the remote catalog.
+     */
+    static List<String> showExternalBasicStatsMeta(ConnectContext context, ExternalBasicStatsMeta basicStatsMeta,
+                                                   Predicate<List<String>> earlyFilter)
+            throws MetaNotFoundException {
         List<String> row = Lists.newArrayList("", "", "ALL", "", "", "", "", "", "", "", "");
         String catalogName = basicStatsMeta.getCatalogName();
         String dbName = basicStatsMeta.getDbName();
         String tableName = basicStatsMeta.getTableName();
 
         List<String> columns = basicStatsMeta.getColumns();
+
+        if (earlyFilter != null) {
+            List<String> earlyRow = Lists.newArrayList(row);
+            earlyRow.set(0, catalogName + "." + dbName);
+            earlyRow.set(1, tableName);
+            earlyRow.set(3, basicStatsMeta.getType().name());
+            earlyRow.set(4, basicStatsMeta.getUpdateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+            earlyRow.set(5, basicStatsMeta.getProperties() == null ? "{}" : basicStatsMeta.getProperties().toString());
+            earlyRow.set(7, basicStatsMeta.getColumnStatsString());
+            if (!earlyFilter.test(earlyRow)) {
+                return null;
+            }
+        }
 
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, dbName);
         if (db == null) {

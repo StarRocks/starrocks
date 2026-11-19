@@ -163,8 +163,15 @@ DEFINE_UNARY_FN_WITH_IMPL(TimeToNumber, value) {
     return timestamp::time_to_literal(value);
 }
 
+// The session time zone of the query evaluating `context`, or the process zone outside a query.
+static inline cctz::time_zone session_zone(const ExprContext* context) {
+    return (context != nullptr && context->runtime_state() != nullptr) ? context->runtime_state()->timezone_obj()
+                                                                       : cctz::local_time_zone();
+}
+
+// `zone` renders VARIANT timestamps with time zone; callers that have a query pass its session time zone.
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
-static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
+static ColumnPtr cast_to_json_fn(ColumnPtr& column, const cctz::time_zone& zone) {
     ColumnViewer<FromType> viewer(column);
     ColumnBuilder<TYPE_JSON> builder(viewer.size());
 
@@ -218,8 +225,7 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
 
             if (!overflow) {
                 std::stringstream ss;
-                auto st = VariantUtil::variant_to_json(row_ref.get_metadata(), row_ref.get_value(), ss,
-                                                       cctz::local_time_zone());
+                auto st = VariantUtil::variant_to_json(row_ref.get_metadata(), row_ref.get_value(), ss, zone);
                 if (!st.ok()) {
                     overflow = true;
                 } else {
@@ -254,6 +260,11 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
 }
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
+static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
+    return cast_to_json_fn<FromType, ToType, AllowThrowException>(column, cctz::local_time_zone());
+}
+
+template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
     ColumnViewer<TYPE_JSON> viewer(column);
     ColumnBuilder<ToType> builder(viewer.size());
@@ -277,8 +288,9 @@ static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
     return builder.build(column->is_constant());
 }
 
+// `zone` renders and converts VARIANT timestamps with time zone; callers that have a query pass its session time zone.
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
-static ColumnPtr cast_from_variant_fn(ColumnPtr& column) {
+static ColumnPtr cast_from_variant_fn(ColumnPtr& column, const cctz::time_zone& zone) {
     ColumnViewer<TYPE_VARIANT> viewer(column);
     ColumnBuilder<ToType> builder(viewer.size());
     const auto* variant_data_column = down_cast<const VariantColumn*>(ColumnHelper::get_data_column(column.get()));
@@ -302,8 +314,7 @@ static ColumnPtr cast_from_variant_fn(ColumnPtr& column) {
             row_ref = variant->as_ref();
         }
 
-        auto status =
-                VariantRowConverter::cast_to<ToType, AllowThrowException>(row_ref, cctz::local_time_zone(), builder);
+        auto status = VariantRowConverter::cast_to<ToType, AllowThrowException>(row_ref, zone, builder);
         if (!status.ok()) {
             if constexpr (AllowThrowException) {
                 THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, row_ref.to_owned().to_string());
@@ -313,6 +324,11 @@ static ColumnPtr cast_from_variant_fn(ColumnPtr& column) {
     }
 
     return builder.build(column->is_constant());
+}
+
+template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
+static ColumnPtr cast_from_variant_fn(ColumnPtr& column) {
+    return cast_from_variant_fn<FromType, ToType, AllowThrowException>(column, cctz::local_time_zone());
 }
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
@@ -1090,6 +1106,7 @@ UNARY_FN_CAST(TYPE_DATE, TYPE_TIME, DateToTime);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_TIME, DatetimeToTime);
 
 SELF_CAST(TYPE_JSON);
+SELF_CAST(TYPE_VARBINARY);
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 static ColumnPtr cast_from_string_to_time_fn(ColumnPtr& column) {
@@ -1222,6 +1239,8 @@ public:
                             FromType, TYPE_DOUBLE>(column);
                 }
                 result_column = CastFn<TYPE_DOUBLE, TYPE_JSON, AllowThrowException>::cast_fn(std::move(double_column));
+            } else if constexpr (FromType == TYPE_VARIANT) {
+                result_column = cast_to_json_fn<FromType, ToType, AllowThrowException>(column, session_zone(context));
             } else {
                 result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column));
             }
@@ -1234,14 +1253,18 @@ public:
                     return VectorizedUnaryFunction<DecimalFrom<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
                             column, to_type.precision, to_type.scale);
                 }
+            } else if constexpr (FromType == TYPE_VARIANT) {
+                result_column =
+                        cast_from_variant_fn<FromType, ToType, AllowThrowException>(column, session_zone(context))
+                                ->as_mutable_ptr();
             } else {
                 result_column =
                         CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column))->as_mutable_ptr();
             }
         } else if constexpr (lt_is_decimal<FromType> && lt_is_decimal<ToType>) {
             if (context != nullptr && context->error_if_overflow()) {
-                return VectorizedUnaryFunction<DecimalToDecimal<OverflowMode::REPORT_ERROR>>::evaluate<FromType,
-                                                                                                       ToType>(
+                return VectorizedDecimalCastFunction<DecimalToDecimal, OverflowMode::REPORT_ERROR>::evaluate<FromType,
+                                                                                                             ToType>(
                         column, to_type.precision, to_type.scale);
             } else {
                 return VectorizedUnaryFunction<DecimalToDecimal<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
@@ -1249,7 +1272,7 @@ public:
             }
         } else if constexpr (lt_is_decimal<FromType>) {
             if (context != nullptr && context->error_if_overflow()) {
-                return VectorizedUnaryFunction<DecimalTo<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(
+                return VectorizedDecimalCastFunction<DecimalTo, OverflowMode::REPORT_ERROR>::evaluate<FromType, ToType>(
                         column);
             } else {
                 return VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
@@ -1257,7 +1280,8 @@ public:
             }
         } else if constexpr (lt_is_decimal<ToType>) {
             if (context != nullptr && context->error_if_overflow()) {
-                return VectorizedUnaryFunction<DecimalFrom<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(
+                return VectorizedDecimalCastFunction<DecimalFrom, OverflowMode::REPORT_ERROR>::evaluate<FromType,
+                                                                                                        ToType>(
                         column, to_type.precision, to_type.scale);
             } else {
                 return VectorizedUnaryFunction<DecimalFrom<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
@@ -1580,7 +1604,7 @@ public:
         }
 
         if constexpr (Type == TYPE_VARIANT) {
-            return cast_from_variant_fn<TYPE_VARIANT, TYPE_VARCHAR, AllowThrowException>(column);
+            return cast_from_variant_fn<TYPE_VARIANT, TYPE_VARCHAR, AllowThrowException>(column, session_zone(context));
         }
 
         return _evaluate_string(context, std::move(column));

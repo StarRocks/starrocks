@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "exprs/cast_expr_tpl.hpp"
+#include "exprs/clone_expr.h"
 
 namespace starrocks {
 
@@ -202,15 +203,14 @@ Expr* VectorizedCastExprFactory::create_json_to_complex_type_cast(ObjectPool* po
         Expr* key_cast_expr = nullptr;
         auto& key_desc = cast_to.children[0];
         if (key_desc.type != TYPE_VARCHAR) {
-            TypeDescriptor varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-            auto result = create_cast_expr(pool, varchar_type, key_desc, allow_throw_exception);
+            auto result = create_cast_expr(pool, TYPE_VARCHAR_DESC, key_desc, allow_throw_exception);
             if (!result.ok()) {
                 LOG(ERROR) << "Fail to create cast expr from json to map, map key type: " << key_desc
                            << ", status: " << result.status();
                 return nullptr;
             }
             key_cast_expr = result.value();
-            Expr* cast_input = create_slot_ref(varchar_type).release();
+            Expr* cast_input = create_slot_ref(TYPE_VARCHAR_DESC).release();
             key_cast_expr->add_child(cast_input);
             pool->add(key_cast_expr);
             pool->add(cast_input);
@@ -276,8 +276,7 @@ Expr* VectorizedCastExprFactory::create_variant_to_complex_type_cast(ObjectPool*
         Expr* key_cast_expr = nullptr;
         auto& key_desc = expected_type.children[0];
         if (key_desc.type != TYPE_VARCHAR) {
-            const TypeDescriptor varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-            auto result = create_cast_expr(pool, varchar_type, key_desc, allow_throw_exception);
+            auto result = create_cast_expr(pool, TYPE_VARCHAR_DESC, key_desc, allow_throw_exception);
             if (!result.ok()) {
                 LOG(ERROR) << "Fail to create cast expr from variant to map, map key type: " << key_desc
                            << ", status: " << result.status();
@@ -285,7 +284,7 @@ Expr* VectorizedCastExprFactory::create_variant_to_complex_type_cast(ObjectPool*
             }
 
             key_cast_expr = result.value();
-            Expr* cast_input = create_slot_ref(varchar_type).release();
+            Expr* cast_input = create_slot_ref(TYPE_VARCHAR_DESC).release();
             key_cast_expr->add_child(cast_input);
             pool->add(key_cast_expr);
             pool->add(cast_input);
@@ -328,7 +327,7 @@ Expr* VectorizedCastExprFactory::create_variant_to_complex_type_cast(ObjectPool*
             pool->add(cast_input.release());
         }
 
-        return new CastVariantToStruct(node, std::move(field_casts));
+        return new CastVariantToStruct(node, std::move(field_casts), allow_throw_exception);
     }
     default:
         LOG(WARNING) << "Not support cast from type: " << type_to_string(from_type)
@@ -494,6 +493,12 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
             } else {
                 return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_VARBINARY, false>(node);
             }
+        } else if (is_binary_type(from_type)) {
+            if (allow_throw_exception) {
+                return new VectorizedCastExpr<TYPE_VARBINARY, TYPE_VARBINARY, true>(node);
+            } else {
+                return new VectorizedCastExpr<TYPE_VARBINARY, TYPE_VARBINARY, false>(node);
+            }
         } else {
             LOG(WARNING) << "Not support cast " << type_to_string(from_type) << " to " << type_to_string(to_type);
             return nullptr;
@@ -612,7 +617,16 @@ StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, co
             return new CastStructExpr(node, std::move(field_casts), std::move(source_field_indices));
         }
     }
-    if ((from_type.type == TYPE_NULL || from_type.type == TYPE_BOOLEAN) && to_type.is_complex_type()) {
+    if (from_type.is_geo_type() && to_type.is_geo_type()) {
+        if (!from_type.geo_type || from_type != to_type) {
+            return Status::NotSupported(fmt::format("Native GEO cast from {} to {} requires identical descriptors.",
+                                                    from_type.debug_string(), to_type.debug_string()));
+        }
+        return new CloneExpr(node);
+    }
+
+    if ((from_type.type == TYPE_NULL || from_type.type == TYPE_BOOLEAN) &&
+        (to_type.is_complex_type() || to_type.is_geo_type())) {
         return new MustNullExpr(node);
     }
 

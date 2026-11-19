@@ -352,7 +352,9 @@ public class InsertOverwriteJobRunner {
         try {
             OlapTable targetTable;
             targetTable = checkAndGetTable(db, tableId);
-            if (targetTable.getState() != OlapTable.OlapTableState.NORMAL) {
+            if (targetTable.getState() != OlapTable.OlapTableState.NORMAL
+                    && !(targetTable.getState() == OlapTable.OlapTableState.TABLET_RESHARD
+                        && targetTable.isCloudNativeTableOrMaterializedView() && targetTable.isRangeDistribution())) {
                 throw new DmlException("table state is %s, please wait to insert overwrite until table state is normal",
                         targetTable.getState());
             }
@@ -945,6 +947,9 @@ public class InsertOverwriteJobRunner {
                         stats.setSourceRows(sumSourceRows);
                     }
                     LOG.info("dynamic overwrite job {} replace tmpPartitionNames:{}", job.getJobId(), tmpPartitionNames);
+                    // replaceMatchPartitions swaps by name only; refuse a swap that would leave two formal
+                    // partitions with overlapping ranges, which reads and later loads cannot tell apart
+                    targetTable.checkReplaceMatchPartitions(tmpPartitionNames);
                     ensureTempPartitionsVisible(targetTable, tmpPartitionIds);
                 } else {
                     ensureTempPartitionsVisible(targetTable, tmpPartitionIds);

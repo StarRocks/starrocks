@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW PROC 查看当前集群中的特定指标，以树状层次结构展示。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW PROC
@@ -245,7 +246,7 @@ mysql> show proc '/statistic/10002';
 | IndexNum              | 数据库中索引的数量。                        |
 | TabletNum             | 数据库中 Tablet 的数量。                    |
 | ReplicaNum            | 数据库中副本的数量。                        |
-| UnhealthyTabletNum    | 数据重分布过程中还未完成的 Tablet 数量。      |
+| UnhealthyTabletNum    | 数据库中不健康的 Tablet 数量，即健康状态不是 `HEALTHY`、`REDUNDANT`、`COLOCATE_REDUNDANT` 或 `NEED_FURTHER_REPAIR` 的 Tablet。不统计云原生表的 Tablet。      |
 | InconsistentTabletNum | 数据库中不一致的 Tablet 数量。              |
 | CloningTabletNum      | 数据库中正在进行 Clone 操作的 Tablet 数量。   |
 | ErrorStateTabletNum   | 主键表中错误状态的 Tablet 数量。          |

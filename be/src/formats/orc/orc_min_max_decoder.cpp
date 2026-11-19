@@ -14,6 +14,8 @@
 
 #include "formats/orc/orc_min_max_decoder.h"
 
+#include <cmath>
+
 #include "base/time/timezone_utils.h"
 #include "cctz/civil_time.h"
 #include "cctz/time_zone.h"
@@ -64,6 +66,12 @@ static Status decode_double_min_max(LogicalType ltype, const orc::proto::ColumnS
         const auto& stats = colStats.doublestatistics();
         double min = stats.minimum();
         double max = stats.maximum();
+        // A NaN value makes the bounds unusable: an ORC writer keeps min = max = NaN once the first value is NaN, and
+        // every comparison with NaN is false, so a row group with matching rows would be skipped. Ignore the bounds
+        // when they or the sum are not finite, as the ORC library does for its search arguments.
+        if (std::isnan(min) || std::isnan(max) || !std::isfinite(stats.sum())) {
+            return Status::NotFound("OrcMinMaxFilter: double column stats contain NaN");
+        }
         switch (ltype) {
         case LogicalType::TYPE_FLOAT:
             DOWN_CAST_ASSIGN_MIN_MAX(LogicalType::TYPE_FLOAT);

@@ -1044,13 +1044,16 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_update_file_iterators(const 
 }
 
 StatusOr<ChunkIteratorPtr> Rowset::get_update_file_iterator(const Schema& schema, uint32_t update_file_id,
-                                                            OlapReaderStatistics* stats) {
+                                                            OlapReaderStatistics* stats, size_t chunk_size) {
     SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(_rowset_path));
     seg_options.stats = stats;
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
     seg_options.rowset_path = _rowset_path;
+    if (chunk_size > 0) {
+        seg_options.chunk_size = chunk_size;
+    }
 
     // open update file
     DCHECK(update_file_id < num_update_files());

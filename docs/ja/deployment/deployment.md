@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "本番環境での StarRocks クラスタのデプロイ、アップグレード、ダウングレード手順の概要。"
+products: [oss]
 ---
 
 # デプロイの概要

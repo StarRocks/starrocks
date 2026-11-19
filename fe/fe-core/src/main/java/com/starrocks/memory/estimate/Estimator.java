@@ -21,6 +21,7 @@ import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.InaccessibleObjectException;
 import java.lang.reflect.Modifier;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -29,6 +30,7 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.RandomAccess;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -72,6 +74,8 @@ public class Estimator {
     private static final int LINKED_HASH_ENTRY_SIZE = 40;
     private static final int TREE_ENTRY_SIZE = 40;
     private static final int LINKED_LIST_NODE_SIZE = 24;
+    //   Guava ImmutableMapEntry                : header(12)+key+value(+nextInBucket)      -> 24
+    private static final int GUAVA_ENTRY_SIZE = 24;
     private static final double HASH_LOAD_FACTOR = 0.75;
 
     // Shallow sizes of classes (bound to Class lifecycle, avoids ClassLoader leaks)
@@ -147,6 +151,43 @@ public class Estimator {
             long.class, 8,
             double.class, 8
     );
+
+    static {
+        registerDefaultEstimators();
+    }
+
+    /**
+     * Register the estimators every caller needs: JDK value types whose internals are not reflectively
+     * reachable (java.lang / java.nio are not opened to the FE), so the field walk would charge only their
+     * shell. Registered at class load rather than by the memory tracker's first run, so cache weighers that
+     * run before it see the same sizes.
+     */
+    public static void registerDefaultEstimators() {
+        registerCustomEstimator(String.class, new StringEstimator());
+        registerCustomEstimator(java.nio.ByteBuffer.class, new ByteBufferEstimator());
+        registerCustomEstimator("java.nio.HeapByteBuffer", new ByteBufferEstimator());
+        // Autoboxing hands out the JDK's cached instances for small values (Integer/Long/Short/Byte in
+        // -128..127, Character up to 127, both Booleans). Those are shared singletons, so a reference to one
+        // costs nothing; charging each reference its shell over-counts maps keyed by field ids or holding
+        // zero counts. A box allocated another way (deserialized, constructed) is its own object and is charged.
+        registerCustomEstimator(Boolean.class, obj -> obj == Boolean.TRUE || obj == Boolean.FALSE ? 0L : shallow(obj));
+        registerCustomEstimator(Byte.class, obj -> obj == Byte.valueOf((Byte) obj) ? 0L : shallow(obj));
+        registerCustomEstimator(Character.class,
+                obj -> (Character) obj <= 127 && obj == Character.valueOf((Character) obj) ? 0L : shallow(obj));
+        registerCustomEstimator(Short.class,
+                obj -> boxCached((Short) obj) && obj == Short.valueOf((Short) obj) ? 0L : shallow(obj));
+        registerCustomEstimator(Integer.class,
+                obj -> boxCached((Integer) obj) && obj == Integer.valueOf((Integer) obj) ? 0L : shallow(obj));
+        registerCustomEstimator(Long.class,
+                obj -> boxCached((Long) obj) && obj == Long.valueOf((Long) obj) ? 0L : shallow(obj));
+        registerShallowMemoryClass(Float.class);
+        registerShallowMemoryClass(Double.class);
+    }
+
+    private static boolean boxCached(Number value) {
+        long v = value.longValue();
+        return v >= -128 && v <= 127;
+    }
 
     // Set to track visited objects and avoid counting the same object twice
     private final Set<Object> visited;
@@ -288,6 +329,24 @@ public class Estimator {
     }
 
     /**
+     * Estimate several roots in one pass, in the given order, counting an object reachable from more
+     * than one of them once. Put a root first to charge it in full before a later root's sampling would
+     * reach it (or miss it).
+     *
+     * @param ignoreClasses set of classes to ignore during estimation
+     * @param roots the objects to estimate
+     * @return the estimated memory size in bytes
+     */
+    public static long estimateAll(Set<Class<?>> ignoreClasses, Object... roots) {
+        Estimator estimator = new Estimator(ignoreClasses);
+        long size = 0;
+        for (Object root : roots) {
+            size += estimator.estimateInternal(root, DEFAULT_MAX_DEPTH, DEFAULT_SAMPLE_SIZE);
+        }
+        return size;
+    }
+
+    /**
      * Internal estimation method with sampled set to track visited objects.
      */
     private long estimateInternal(Object obj, int maxDepth, int sampleSize) {
@@ -340,7 +399,7 @@ public class Estimator {
         // (see isCacheView) and stay on the sampling path.
         if (obj instanceof Collection) {
             Collection<?> collection = (Collection<?>) obj;
-            if (!isJdkContainer(clazz) && !isCacheView(clazz)) {
+            if (!isJdkContainer(clazz) && !isCacheView(clazz) && !isGuavaImmutableMapOrSet(clazz)) {
                 return estimateObject(obj, maxDepth, sampleSize);
             }
             return estimateCollection(collection, maxDepth, sampleSize) + collectionBackingOverhead(collection);
@@ -349,13 +408,20 @@ public class Estimator {
         // Handle maps. keySet()/values() are views, so their backing is added once here via
         // mapStructureOverhead rather than inside estimateCollection.
         if (obj instanceof Map<?, ?> map) {
-            if (!isJdkContainer(clazz) && !isCacheView(clazz)) {
+            if (!isJdkContainer(clazz) && !isCacheView(clazz) && !isGuavaImmutableMapOrSet(clazz)) {
                 return estimateObject(obj, maxDepth, sampleSize);
             }
             return shallow(obj) +
                     mapStructureOverhead(map) +
                     estimateCollection(map.keySet(), maxDepth, sampleSize) +
                     estimateCollection(map.values(), maxDepth, sampleSize);
+        }
+
+        // java.util is not opened to the FE, so the field walk cannot read an Optional's value and would
+        // charge only its shell.
+        if (obj instanceof Optional<?> optional) {
+            return shallow(obj) +
+                    (optional.isPresent() ? estimateInternal(optional.get(), maxDepth - 1, sampleSize) : 0);
         }
 
         // Recursively calculate size for reference fields
@@ -434,18 +500,44 @@ public class Estimator {
         }
 
         List<Object> samples = getSamples(collection, sampleSize);
+        return shallowSize + extrapolate(samples, collection.size(), maxDepth, sampleSize);
+    }
 
-        if (samples.isEmpty()) {
-            return shallowSize;
+    // Scale the sampled elements up to `count`. Two biases are kept out of it:
+    //  - Null slots are sampled positions like any other. The share of non-null samples estimates how many
+    //    of the `count` slots hold a value; dropping the nulls would extrapolate a half-null array from its
+    //    non-null half.
+    //  - Objects the elements share (a schema, a location string, a catalog-wide client) are charged to
+    //    the first non-null sample only, since the visited set skips them in the others. Averaging that
+    //    sample in with the rest would charge the shared graph once per element, so it stands for its own
+    //    slot alone and the other non-null samples are scaled to the other estimated non-null slots. With no
+    //    other non-null sample it is the only evidence for those slots and is scaled itself.
+    private long extrapolate(List<Object> samples, long count, int maxDepth, int sampleSize) {
+        int anchor = 0;
+        while (anchor < samples.size() && samples.get(anchor) == null) {
+            anchor++;
         }
-
-        long sampleTotalSize = 0;
-        for (Object sample : samples) {
-            sampleTotalSize += estimateInternal(sample, maxDepth - 1, sampleSize);
+        if (anchor == samples.size()) {
+            return 0;
         }
-
-        double avgSize = (double) sampleTotalSize / samples.size();
-        return shallowSize + (long) (avgSize * collection.size());
+        long anchorSize = estimateInternal(samples.get(anchor), maxDepth - 1, sampleSize);
+        long othersSize = 0;
+        int nonNull = 1;
+        for (int i = anchor + 1; i < samples.size(); i++) {
+            Object sample = samples.get(i);
+            if (sample != null) {
+                nonNull++;
+                othersSize += estimateInternal(sample, maxDepth - 1, sampleSize);
+            }
+        }
+        if (samples.size() >= count) {
+            return anchorSize + othersSize;
+        }
+        double nonNullSlots = (double) count * nonNull / samples.size();
+        if (nonNull == 1) {
+            return (long) (anchorSize * nonNullSlots);
+        }
+        return anchorSize + (long) ((double) othersSize / (nonNull - 1) * (nonNullSlots - 1));
     }
 
     // Structural overhead of a Map's internal entry objects plus the backing table, which shallow
@@ -465,6 +557,11 @@ public class Estimator {
         }
         if (map instanceof java.util.TreeMap) {
             return (long) size * TREE_ENTRY_SIZE;       // red-black tree nodes, no backing table
+        }
+        if (isGuavaImmutableMapOrSet(map.getClass())) {
+            // entry objects, the insertion-order entry array and the hash table array
+            return (long) size * GUAVA_ENTRY_SIZE + ARRAY_HEADER_SIZE + (long) size * REFERENCE_SIZE +
+                    hashTableBytes(size);
         }
         return 0;
     }
@@ -496,6 +593,10 @@ public class Estimator {
             // Backed by a ConcurrentHashMap; charge the same node + table overhead as the map itself.
             return (long) size * HASH_NODE_SIZE + hashTableBytes(size);
         }
+        if (isGuavaImmutableMapOrSet(collection.getClass())) {
+            // the insertion-order element array and the hash table array
+            return ARRAY_HEADER_SIZE + (long) size * REFERENCE_SIZE + hashTableBytes(size);
+        }
         return 0;
     }
 
@@ -503,6 +604,18 @@ public class Estimator {
     // and their fields are not reflectively accessible anyway); anything else is field-walked.
     private static boolean isJdkContainer(Class<?> clazz) {
         return clazz.getName().startsWith("java.util.");
+    }
+
+    // Guava's immutable maps and sets (also the copy relocated into Iceberg) reach the same entries from two
+    // arrays, in insertion order and in hash order. Field-walking samples different entries from each, and
+    // since the visited set only knows the sampled ones, both extrapolations charge the shared graph: an
+    // Iceberg TableMetadata, whose snapshotsById indexes the snapshots list, was weighed at 2.4x. Sample them
+    // through the Map/Set interface instead, in insertion order -- which also lands on the same elements as
+    // a list they index -- and charge their arrays and entries via the *Overhead helpers.
+    private static boolean isGuavaImmutableMapOrSet(Class<?> clazz) {
+        String name = clazz.getName();
+        return name.contains("com.google.common.collect.") && name.contains("Immutable") &&
+                (Map.class.isAssignableFrom(clazz) || Set.class.isAssignableFrom(clazz));
     }
 
     // A cache's keySet()/values()/asMap() view keeps a back-reference to the owning cache, so
@@ -557,18 +670,7 @@ public class Estimator {
         }
 
         List<Object> samples = getSamplesFromArray(array, length, sampleSize);
-
-        if (samples.isEmpty()) {
-            return shallowSize;
-        }
-
-        long sampleTotalSize = 0;
-        for (Object sample : samples) {
-            sampleTotalSize += estimateInternal(sample, maxDepth - 1, sampleSize);
-        }
-
-        double avgSize = (double) sampleTotalSize / samples.size();
-        return shallowSize + (long) (avgSize * length);
+        return shallowSize + extrapolate(samples, length, maxDepth, sampleSize);
     }
 
     /**
@@ -589,6 +691,15 @@ public class Estimator {
         for (Class<?> c = obj.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
             if (c.isAnnotationPresent(IgnoreMemoryTrack.class)) {
                 return 0;
+            }
+            if (c == AbstractMap.SimpleImmutableEntry.class || c == AbstractMap.SimpleEntry.class) {
+                // Guava's ImmutableMapEntry (every ImmutableMap entry, also the copy relocated into Iceberg)
+                // keeps its key and value in these java.util fields, which the FE cannot read reflectively:
+                // java.util is not opened. Read them through the entry instead.
+                Map.Entry<?, ?> entry = (Map.Entry<?, ?>) obj;
+                size += estimateInternal(entry.getKey(), maxDepth - 1, sampleSize) +
+                        estimateInternal(entry.getValue(), maxDepth - 1, sampleSize);
+                continue;
             }
             Field[] nestedFields = CLASS_NESTED_FIELDS.get(c);
             for (Field field : nestedFields) {
@@ -614,7 +725,8 @@ public class Estimator {
 
     /**
      * Get sample elements from a collection.
-     * Samples are evenly distributed across the collection using a fixed step size.
+     * Samples are evenly distributed across the collection using a fixed step size. A sampled null is kept
+     * (it weighs 0), so the sample stays representative of the null slots.
      * For RandomAccess lists (ArrayList, etc.), uses index access for efficiency.
      * For non-RandomAccess collections (LinkedList, etc.), iterates with step skipping.
      *
@@ -632,18 +744,14 @@ public class Estimator {
         if (size <= sampleSize) {
             // If collection is small, use all elements
             for (Object item : collection) {
-                if (item != null) {
-                    samples.add(item);
-                }
+                samples.add(item);
             }
         } else if (collection instanceof List<?> list && collection instanceof RandomAccess) {
             // For RandomAccess lists, sample evenly distributed elements using index access
             int step = size / sampleSize;
             for (int i = 0; i < size && samples.size() < sampleSize; i += step) {
                 Object item = list.get(i);
-                if (item != null) {
-                    samples.add(item);
-                }
+                samples.add(item);
             }
         } else {
             // For non-RandomAccess collections, iterate with step skipping
@@ -652,9 +760,7 @@ public class Estimator {
             int nextSampleIndex = 0;
             for (Object item : collection) {
                 if (index == nextSampleIndex) {
-                    if (item != null) {
-                        samples.add(item);
-                    }
+                    samples.add(item);
                     nextSampleIndex += step;
                     if (samples.size() >= sampleSize) {
                         break;
@@ -685,18 +791,14 @@ public class Estimator {
             // If array is small, use all elements
             for (int i = 0; i < length; i++) {
                 Object item = Array.get(array, i);
-                if (item != null) {
-                    samples.add(item);
-                }
+                samples.add(item);
             }
         } else {
             // Sample evenly distributed elements
             int step = length / sampleSize;
             for (int i = 0; i < length && samples.size() < sampleSize; i += step) {
                 Object item = Array.get(array, i);
-                if (item != null) {
-                    samples.add(item);
-                }
+                samples.add(item);
             }
         }
 
