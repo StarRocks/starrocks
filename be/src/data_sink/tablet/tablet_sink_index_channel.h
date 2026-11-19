@@ -235,6 +235,13 @@ public:
     Status try_close();
     bool is_close_done();
     Status close_wait(RuntimeState* state);
+    // Whether any row of this load was handed to this channel. Rows buffered but not yet
+    // sent still count: eos must flush them.
+    bool received_any_chunk() const { return _received_any_chunk; }
+
+    // True when this node is the primary of a tablet whose partition this sender wrote.
+    // That tablet must get eos even if this channel was given no rows.
+    bool is_primary_of_written_partition() const;
 
     Status try_finish();
     bool is_finished();
@@ -378,6 +385,7 @@ private:
     ExprContext* _where_clause = nullptr;
 
     bool _has_primary_replica = false;
+    bool _received_any_chunk = false;
     RefCountClosure<PLoadDiagnoseResult>* _diagnose_closure = nullptr;
 };
 
@@ -415,6 +423,11 @@ public:
     }
 
     void mark_as_failed(const NodeChannel* ch);
+    // Close path only. An empty channel is still counted toward quorum. The primary
+    // short-circuit is skipped only for a single sender that did not write a partition
+    // this node is primary for. Other senders, lake, and channels that carried rows
+    // keep the old fatal behavior.
+    void mark_close_failed(const NodeChannel* ch);
 
     bool is_failed_channel(const NodeChannel* ch) {
         std::shared_lock<std::shared_mutex> lock(_failure_state_mutex);
