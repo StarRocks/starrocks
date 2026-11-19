@@ -106,6 +106,16 @@ TEST(TabletColumnTest, InitFromPbAndRoundTripPreserveScalarMetadata) {
     EXPECT_EQ(column_pb.is_auto_increment(), round_trip.is_auto_increment());
 }
 
+TEST(TabletColumnTest, InMemoryGeoDescriptorIsClearedByPbInitialization) {
+    TabletColumn column(STORAGE_AGGREGATE_NONE, TYPE_GEOMETRY);
+    column.set_geo_descriptor({GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857});
+    ASSERT_NE(nullptr, column.geo_descriptor());
+
+    column.init_from_pb(make_column_pb(7, "value", TYPE_INT));
+    EXPECT_EQ(TYPE_INT, column.type());
+    EXPECT_EQ(nullptr, column.geo_descriptor());
+}
+
 TEST(TabletColumnTest, NestedSubcolumnsArePreserved) {
     auto root = make_column_pb(10, "payload", TYPE_STRUCT, STORAGE_AGGREGATE_NONE, true, 1);
 

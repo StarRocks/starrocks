@@ -138,7 +138,7 @@ StatusOr<TabletSchemaCSPtr> extend_schema_by_virtual_columns(const TabletSchemaC
     if (!has_virtual_column) {
         return schema;
     }
-    TabletSchemaSPtr tmp_schema = TabletSchema::copy(*schema, schema->columns());
+    ASSIGN_OR_RETURN(auto tmp_schema, TabletSchema::copy(*schema, schema->columns()));
     for (const auto& slot : slots) {
         const auto col_name = slot->col_name();
         if (slot->is_virtual()) {
@@ -156,7 +156,7 @@ StatusOr<TabletSchemaCSPtr> extend_schema_by_virtual_columns(const TabletSchemaC
                         tc.set_aggregation(StorageAggregateType::STORAGE_AGGREGATE_REPLACE);
                     }
 
-                    tmp_schema->append_column(tc);
+                    RETURN_IF_ERROR(tmp_schema->append_column(tc));
                     found = true;
                     break;
                 }
@@ -193,7 +193,7 @@ StatusOr<TabletSchemaCSPtr> extend_schema_by_virtual_columns(const TabletSchemaC
             tc.set_aggregation(StorageAggregateType::STORAGE_AGGREGATE_REPLACE);
         }
 
-        tmp_schema->append_column(tc);
+        RETURN_IF_ERROR(tmp_schema->append_column(tc));
     }
     return tmp_schema;
 }

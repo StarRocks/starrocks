@@ -80,7 +80,7 @@ Status LakeMetaReader::init(const LakeMetaReaderParams& read_params) {
             int32_t root_uid = tmp_schema->column(static_cast<size_t>(root_column_index)).unique_id();
             column.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), root_uid));
 
-            tmp_schema->append_column(column);
+            RETURN_IF_ERROR(tmp_schema->append_column(column));
             VLOG(2) << "extend the tablet-schema: " << column.debug_string();
         }
         tablet_schema = tmp_schema;
