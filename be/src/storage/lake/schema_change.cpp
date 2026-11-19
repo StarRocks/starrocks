@@ -379,6 +379,12 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
             return Status::InternalError("failed to convert chunk data");
         }
 
+        if (auto st = _chunk_changer->fill_generated_columns(_new_chunk); !st.ok()) {
+            std::stringstream ss;
+            ss << "fill generated columns failed: " << st.message();
+            return Status::InternalError(ss.str());
+        }
+
         ChunkHelper::padding_char_columns(_char_field_indexes, _new_schema, _new_tablet_schema, _new_chunk.get());
         RETURN_IF_ERROR(writer->write(*_new_chunk, _selective->data(), _new_chunk->num_rows()));
     }
@@ -528,9 +534,8 @@ Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& req
                                                      &sc_params.sc_directly, &generated_column_idxs));
 
     if (request.__isset.materialized_column_req && request.materialized_column_req.mc_exprs.size() != 0) {
-        DCHECK_EQ(sc_params.sc_sorting, false);
-        // for cloud native table, schema change for generated column must be in directly mode
-        sc_params.sc_directly = true;
+        // Generated columns require rewriting the data, with sorting when requested.
+        sc_params.sc_directly = !sc_params.sc_sorting;
 
         chunk_changer->init_runtime_state(request.materialized_column_req.query_options,
                                           request.materialized_column_req.query_globals, _exec_env);
