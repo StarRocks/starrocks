@@ -23,13 +23,11 @@ import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.type.AnyElementType;
 import com.starrocks.type.ArrayType;
-import com.starrocks.type.GeoTypeDescriptor;
+import com.starrocks.type.GeoType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.JsonType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.NullType;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarbinaryType;
@@ -47,9 +45,8 @@ public class GeoEncodingRefusalTest {
     static List<Type> types() {
         List<Type> types = new ArrayList<>();
         for (Type leaf : List.of(IntegerType.INT,
-                ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, new GeoTypeDescriptor(
-                        GeoTypeDescriptor.LogicalType.GEOGRAPHY, GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326)),
-                ScalarType.createGeoType(PrimitiveType.GEOMETRY, GeoTypeDescriptor.geometry("EPSG:3857")))) {
+                GeoType.createGeographyType("OGC:CRS84"),
+                GeoType.createGeometryType("EPSG:3857"))) {
             types.addAll(List.of(leaf, new ArrayType(leaf), new MapType(IntegerType.INT, leaf),
                     new StructType(List.of(leaf)), new ArrayType(new StructType(List.of(new ArrayType(leaf))))));
         }
