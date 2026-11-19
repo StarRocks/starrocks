@@ -378,6 +378,8 @@ TEST_F(ExchangeSinkOperatorTest, shuffle_chunk_buffer_counters_follow_flat_json_
 static void run_memory_limited_shuffle(ShuffleSinkHarness& harness, RuntimeState* state, bool json_payload,
                                        int num_pushes, int64_t* limit_out) {
     auto* sink = harness.sink();
+    // The flush is off by default on this branch.
+    sink->set_enable_shuffle_buffer_flush_for_testing(true);
     const size_t chunk_size = state->chunk_size();
     auto reference = make_payload_chunk(chunk_size, json_payload);
     const int64_t one_chunk_bytes = static_cast<int64_t>(reference->memory_usage());
@@ -534,6 +536,11 @@ TEST_F(SinkBufferCancelTest, cancel_aborts_inflight_rpc) {
         server.Join();
     });
 
+    // The sink buffer memory limit is off by default on this branch; enable it to check the counter.
+    const int64_t prev_mem_limit = config::sink_buffer_mem_limit_per_driver;
+    config::sink_buffer_mem_limit_per_driver = 134217728;
+    DeferOp restore_mem_limit([&] { config::sink_buffer_mem_limit_per_driver = prev_mem_limit; });
+
     auto dest_id = make_dest_id(/*lo*/ 987654321);
     auto buffer = make_remote_sink_buffer(port, dest_id);
     buffer->incr_sinker(_runtime_state.get());
@@ -595,6 +602,7 @@ TEST_F(SinkBufferCancelTest, cancel_with_no_inflight_rpc_is_safe) {
     EXPECT_TRUE(buffer->is_finished());
 }
 
+<<<<<<< HEAD
 // When enable_rpc_compress_overflow_skip=true and the codec reports overflow,
 // serialize_chunk should succeed (skip compression rather than error).
 TEST_F(ExchangeSinkOperatorTest, serialize_chunk_overflow_skip_enabled) {
@@ -636,6 +644,36 @@ TEST_F(ExchangeSinkOperatorTest, serialize_chunk_overflow_skip_disabled) {
     EXPECT_TRUE(st.is_internal_error()) << st.to_string();
 
     op->close(_runtime_state.get());
+=======
+// sink_buffer_mem_limit_per_driver <= 0 (the default on this branch) disables the limit, while an explicit
+// update_memory_limit() (low-memory spill mode) still applies.
+TEST_F(SinkBufferCancelTest, memory_limit_off_when_config_not_positive) {
+    const int64_t prev_mem_limit = config::sink_buffer_mem_limit_per_driver;
+    config::sink_buffer_mem_limit_per_driver = -1;
+    DeferOp restore_mem_limit([&] { config::sink_buffer_mem_limit_per_driver = prev_mem_limit; });
+
+    auto dest_id = make_dest_id(/*lo*/ 192837465);
+    auto buffer = make_remote_sink_buffer(/*port*/ 1, dest_id);
+    buffer->incr_sinker(_runtime_state.get());
+    EXPECT_FALSE(buffer->is_full());
+    {
+        RuntimeProfile profile("sink_buffer");
+        buffer->update_profile(&profile);
+        auto* mem_limit = profile.get_counter("SinkBufferMemoryLimit");
+        ASSERT_NE(mem_limit, nullptr);
+        EXPECT_EQ(COUNTER_VALUE(mem_limit), 0);
+    }
+
+    buffer->update_memory_limit(4096);
+    {
+        RuntimeProfile profile("sink_buffer");
+        buffer->update_profile(&profile);
+        EXPECT_EQ(COUNTER_VALUE(profile.get_counter("SinkBufferMemoryLimit")), 4096);
+    }
+
+    buffer->cancel_one_sinker(_runtime_state.get());
+    EXPECT_TRUE(buffer->is_finished());
+>>>>>>> 37200d7 ([Enhancement] Keep the sink buffer memory limit and shuffle buffer flush off by default on branch-4.1 (#83673))
 }
 
 } // namespace starrocks::pipeline

@@ -74,7 +74,9 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
             ctx.finst_id = std::move(finst_id);
         }
     }
-    _memory_limit = config::sink_buffer_mem_limit_per_driver * _sink_ctxs.size();
+    // sink_buffer_mem_limit_per_driver <= 0 disables the limit; it can still be set by update_memory_limit().
+    const int64_t mem_limit_per_driver = config::sink_buffer_mem_limit_per_driver;
+    _memory_limit = mem_limit_per_driver > 0 ? mem_limit_per_driver * _sink_ctxs.size() : 0;
 }
 
 SinkBuffer::~SinkBuffer() {
@@ -152,7 +154,7 @@ bool SinkBuffer::is_full() const {
     }
     bool is_full = buffer_size > max_buffer_size;
 
-    if (!is_full && buffer_size > 0) {
+    if (!is_full && buffer_size > 0 && _memory_limit > 0) {
         is_full = _buffered_mem_usage->consumption() > _memory_limit;
     }
     int64_t last_full_timestamp = _last_full_timestamp;

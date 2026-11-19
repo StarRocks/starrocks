@@ -222,7 +222,7 @@ private:
     int64_t _shuffle_buffered_bytes = 0;
     // Session variable enable_exchange_sink_buffer_flush: whether to flush the partial chunks
     // once they retain more than config::exchange_sink_buffer_flush_threshold_bytes.
-    bool _enable_shuffle_buffer_flush = true;
+    bool _enable_shuffle_buffer_flush = false;
     // How many times, and how many rows, the partial chunks were flushed because of the memory limit.
     RuntimeProfile::Counter* _shuffle_buffer_flush_counter = nullptr;
     RuntimeProfile::Counter* _shuffle_buffer_flush_rows_counter = nullptr;

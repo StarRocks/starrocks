@@ -392,7 +392,7 @@ struct TQueryOptions {
 
   // Whether an exchange sink bounds the memory of the partial chunks it buffers while shuffling
   // (BE config exchange_sink_buffer_flush_threshold_bytes is the threshold).
-  227: optional bool enable_exchange_sink_buffer_flush = true;
+  227: optional bool enable_exchange_sink_buffer_flush = false;
 }
 
 // A scan range plus the parameters needed to execute that scan.
