@@ -177,15 +177,20 @@ TEST_F(SegmentPrefetchWindowTest, advance_bounds_read_ahead) {
 
     ASSERT_FALSE(_stream.warms.empty());
     ASSERT_LT(_stream.warms.size(), _pages.size());
-    EXPECT_GE(window->ahead_blocks(), 4u);
-    for (size_t i = 0; i < _stream.warms.size(); ++i) {
-        EXPECT_FALSE(_stream.warms[i].urgent);
-        // Offsets are those of the segment file; a page sharing its first block with the previous page starts at
-        // the next block.
-        EXPECT_GE(_stream.warms[i].offset, static_cast<int64_t>(_pages[i].pointer.offset));
-        EXPECT_EQ(static_cast<int64_t>(_pages[i].pointer.offset + _pages[i].pointer.size),
-                  _stream.warms[i].offset + static_cast<int64_t>(_stream.warms[i].length));
+    // Exactly the window: a page larger than what is left of it is asked for in part.
+    EXPECT_EQ(4u, window->ahead_blocks());
+    EXPECT_EQ(static_cast<int64_t>(_pages[0].pointer.offset), _stream.warms[0].offset);
+    int64_t prev_end = 0;
+    size_t blocks = 0;
+    for (const auto& w : _stream.warms) {
+        EXPECT_FALSE(w.urgent);
+        // Offsets are those of the segment file, in file order; a page sharing its first block with the previous
+        // page starts at the next block.
+        EXPECT_GE(w.offset, prev_end);
+        prev_end = w.offset + static_cast<int64_t>(w.length);
+        blocks += static_cast<size_t>((prev_end - 1) / kBlockSize - w.offset / static_cast<int64_t>(kBlockSize) + 1);
     }
+    EXPECT_EQ(4u, blocks);
     EXPECT_EQ(_stream.warms.size(), _stats.remote_prefetch_ranges);
 
     // Topping up again without progress asks for nothing more.
@@ -204,8 +209,14 @@ TEST_F(SegmentPrefetchWindowTest, advance_releases_consumed_pages) {
     ASSERT_FALSE(_stream.warms[0].handle.expired());
 
     // Every page asked for so far ends before the reader's new row: all of them are released, and the window asks
-    // for pages further on.
-    const rowid_t past = _pages[asked].first;
+    // for pages further on (skipping what was left of a page asked for in part).
+    const int64_t asked_end = _stream.warms.back().offset + static_cast<int64_t>(_stream.warms.back().length);
+    size_t next_page = 0;
+    while (next_page < _pages.size() && static_cast<int64_t>(_pages[next_page].pointer.offset) < asked_end) {
+        next_page++;
+    }
+    ASSERT_LT(next_page, _pages.size());
+    const rowid_t past = _pages[next_page].first;
     window->advance(past);
     for (size_t i = 0; i < asked; ++i) {
         EXPECT_TRUE(_stream.warms[i].handle.expired()) << i;
@@ -220,6 +231,30 @@ TEST_F(SegmentPrefetchWindowTest, advance_releases_consumed_pages) {
     for (const auto& w : _stream.warms) {
         EXPECT_TRUE(w.handle.expired());
     }
+}
+
+// A page larger than the window is asked for a window at a time; the reader passing it drops the rest.
+TEST_F(SegmentPrefetchWindowTest, page_larger_than_window_is_asked_in_part) {
+    constexpr size_t kSmallBlock = 1024;
+    const Page& page = _pages[0];
+    ASSERT_GT(page.pointer.size, 4 * kSmallBlock);
+    SparseRange<> range(0, kRows);
+    auto window = make_window(&range, 0, 1, 2.0, 0, kSmallBlock);
+    window->advance(0);
+    ASSERT_EQ(1u, _stream.warms.size());
+    EXPECT_EQ(static_cast<int64_t>(page.pointer.offset), _stream.warms[0].offset);
+    EXPECT_EQ(kSmallBlock - page.pointer.offset % kSmallBlock, _stream.warms[0].length);
+    EXPECT_EQ(1u, window->ahead_blocks());
+    // Still on the page: nothing more until the reader releases a block.
+    window->advance(page.last);
+    EXPECT_EQ(1u, _stream.warms.size());
+
+    // Past the page: its warm-up is released and the window moves to the next page, a block of it.
+    window->advance(_pages[1].first);
+    EXPECT_TRUE(_stream.warms[0].handle.expired());
+    ASSERT_EQ(2u, _stream.warms.size());
+    EXPECT_EQ(static_cast<int64_t>(_pages[1].pointer.offset), _stream.warms[1].offset);
+    EXPECT_EQ(1u, window->ahead_blocks());
 }
 
 // Only the pages holding rows of the scan range are warmed.

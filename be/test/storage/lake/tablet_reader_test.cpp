@@ -32,6 +32,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/testutil/scoped_updater.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
@@ -42,6 +43,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/config_staros_worker_fwd.h"
 #include "common/logging.h"
 #include "common/thread/threadpool.h"
@@ -293,6 +295,8 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_ahead_window_falls_back_when_fil
 
     g_remote_io_scheduler_enabled.store(true);
     DeferOp restore([] { g_remote_io_scheduler_enabled.store(false); });
+    // As during a rejected dynamic update of it: the scans must not coalesce while the scheduler runs.
+    SCOPED_UPDATE(bool, config::io_coalesce_lake_read_enable, true);
     for (const auto& remote_read : {query, RemoteReadContext{}}) {
         std::vector<std::pair<int, int>> rows;
         OlapReaderStatistics stats;
