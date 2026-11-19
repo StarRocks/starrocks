@@ -753,6 +753,81 @@ class TestAlterTableIntegration:
                 conn.exec_driver_sql(f"DROP TABLE IF EXISTS {self.test_schema}.{table_name}")
                 conn.commit()
 
+    @pytest.mark.parametrize("meta_bucket_size, expect_change", [("2147483648", True), ("0", False)],
+                             ids=["to_2gib", "stays_zero"])
+    def test_random_zero_bucket_size_compared(self, meta_bucket_size: str, expect_change: bool) -> None:
+        """
+        Test: a RANDOM table with bucket_size 0 is still compared against the model.
+
+        StarRocks accepts bucket_size 0 but does not report it (only positive sizes are), so
+        the reflected table has no bucket_size. That must read as 0, not as a property the
+        table cannot hold.
+        - to_2gib: the model sets 2 GiB, so an ALTER is generated.
+        - stays_zero: the model sets 0, so nothing is generated.
+        """
+        table_name = "test_random_zero_bucket_size"
+
+        with self.engine.connect() as conn:
+            conn.exec_driver_sql(f"""
+                CREATE TABLE {self.test_schema}.{table_name} (
+                    id INT,
+                    name VARCHAR(50)
+                )
+                DUPLICATE KEY(id)
+                DISTRIBUTED BY RANDOM
+                PROPERTIES ("replication_num" = "1", "bucket_size" = "0")
+            """)
+            conn.commit()
+
+            try:
+                reflected_table = Table(
+                    table_name, MetaData(),
+                    autoload_with=self.engine,
+                    schema=self.test_schema
+                )
+                assert "bucket_size" not in reflected_table.dialect_options["starrocks"]["properties"]
+
+                target_table = Table(
+                    table_name, MetaData(),
+                    Column('id', Integer),
+                    Column('name', String(50)),
+                    **{
+                        "starrocks_duplicate_key": "id",
+                        "starrocks_distributed_by": "RANDOM",
+                        "starrocks_properties": {"replication_num": "1", "bucket_size": meta_bucket_size}
+                    },
+                    schema=self.test_schema
+                )
+
+                autogen_context = self._setup_autogen_context()
+                upgrade_ops = UpgradeOps()
+                compare_starrocks_table(
+                    autogen_context, upgrade_ops, self.test_schema, table_name, reflected_table, target_table
+                )
+                if not expect_change:
+                    assert upgrade_ops.ops == [], f"Expected no changes, but got: {upgrade_ops.ops}"
+                    return
+
+                assert len(upgrade_ops.ops) == 1
+                from starrocks.alembic.ops import AlterTablePropertiesOp
+                op = upgrade_ops.ops[0]
+                assert isinstance(op, AlterTablePropertiesOp)
+                assert op.properties == {"bucket_size": meta_bucket_size}
+
+                conn.exec_driver_sql(f"ALTER TABLE {self.test_schema}.{table_name} "
+                                     f"SET ('bucket_size' = '{meta_bucket_size}')")
+                conn.commit()
+                reflected_table = Table(
+                    table_name, MetaData(),
+                    autoload_with=self.engine,
+                    schema=self.test_schema
+                )
+                assert reflected_table.dialect_options["starrocks"]["properties"]["bucket_size"] == meta_bucket_size
+
+            finally:
+                conn.exec_driver_sql(f"DROP TABLE IF EXISTS {self.test_schema}.{table_name}")
+                conn.commit()
+
     def test_multiple_changes_detection(self) -> None:
         """
         Test: Multiple changes detection with real reflection.

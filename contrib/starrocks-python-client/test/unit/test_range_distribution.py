@@ -17,7 +17,7 @@
 import pytest
 
 from starrocks.common.consts import TableConfigKey
-from starrocks.common.utils import is_range_distribution
+from starrocks.common.utils import is_random_distribution, is_range_distribution
 from starrocks.engine.interfaces import ReflectedDistributionInfo
 from starrocks.reflection import StarRocksTableDefinitionParser
 
@@ -41,6 +41,21 @@ def _parser() -> StarRocksTableDefinitionParser:
 ])
 def test_is_range_distribution(value, expected):
     assert is_range_distribution(value) is expected
+
+
+@pytest.mark.parametrize("value, expected", [
+    ("RANDOM", True),
+    ("random", True),
+    ("RANDOM BUCKETS 4", True),
+    ("RANGE", False),
+    ("HASH(random_col)", False),
+    ("", False),
+    (None, False),
+    (ReflectedDistributionInfo(type="RANDOM", columns=None, distribution_method=None, buckets=4), True),
+    (ReflectedDistributionInfo(type="HASH", columns=["id"], distribution_method=None, buckets=8), False),
+])
+def test_is_random_distribution(value, expected):
+    assert is_random_distribution(value) is expected
 
 
 @pytest.mark.parametrize("distribute_key", [None, "", "k1, k2"])

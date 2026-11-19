@@ -1771,6 +1771,31 @@ class TestPropertiesNotReportedByDatabase:
         """bucket_size on a RANDOM-distributed table is reported, so it is compared as usual."""
         assert self._run({"bucket_size": "4294967296"}, {"bucket_size": "1073741824"}) == {"bucket_size": "1073741824"}
 
+    @staticmethod
+    def _run_random(conn_props, meta_props):
+        from starrocks.alembic.compare import _compare_table_properties_impl
+
+        return _compare_table_properties_impl(
+            "test_db", "test_table",
+            {TableInfoKey.PROPERTIES: conn_props, TableInfoKey.DISTRIBUTED_BY: "RANDOM BUCKETS 3"},
+            {TableInfoKey.PROPERTIES: meta_props, TableInfoKey.DISTRIBUTED_BY: "RANDOM"},
+            SystemRunMode.SHARED_NOTHING,
+        )
+
+    def test_unreported_zero_bucket_size_on_random_table_changed(self, caplog):
+        """A RANDOM-distributed table omits bucket_size only when it is 0, so a positive model
+        value is a real change, not a property the table cannot hold."""
+        caplog.set_level("WARNING")
+        to_set, to_reverse = self._run_random({}, {"bucket_size": "2147483648"})
+        assert to_set == {"bucket_size": "2147483648"}
+        assert to_reverse == {"bucket_size": "0"}
+        assert "the database does not report it" not in caplog.text
+
+    def test_unreported_zero_bucket_size_on_random_table_unchanged(self, caplog):
+        caplog.set_level("WARNING")
+        assert self._run_random({}, {"bucket_size": "0"}) == ({}, {})
+        assert caplog.records == []
+
     @pytest.mark.parametrize("prop_key, conn_value, meta_value", [
         ("write_quorum", "ONE", "one"),
         ("compression", "LZ4", "lz4"),

@@ -47,7 +47,8 @@ class ReflectionTableDefaults(ReflectionDefaults):
         'replicated_storage': 'true',
         'storage_format': 'DEFAULT',
         # FE default_automatic_bucket_size: 4294967296 before 4.0, 1073741824 from 4.0 (#63168).
-        # Only reported for RANDOM-distributed tables; see _UNREPORTED_PROPERTY_REASONS.
+        # Only reported for RANDOM-distributed tables, and there only when positive (0 is
+        # omitted); see _UNREPORTED_PROPERTY_REASONS.
         'bucket_size': '4294967296',
         'storage_medium': 'HDD',
 
@@ -82,7 +83,7 @@ class ReflectionTableDefaults(ReflectionDefaults):
     # repeat on every run.
     _UNREPORTED_PROPERTY_REASONS: dict = {
         'storage_format': 'StarRocks never reports it',
-        'bucket_size': 'StarRocks only reports it for RANDOM-distributed tables with automatic bucketing',
+        'bucket_size': 'StarRocks only reports it for RANDOM-distributed tables',
         'enable_persistent_index': 'StarRocks only reports it for PRIMARY KEY tables',
     }
 

@@ -1969,6 +1969,12 @@ def _compare_table_properties_impl(
         meta_value = normalized_meta.get(key)
         default_value = default_cls.properties(run_mode).get(key)
 
+        if (key == 'bucket_size' and conn_value is None
+                and utils.is_random_distribution(conn_table_attributes.get(TableInfoKey.DISTRIBUTED_BY))):
+            # A RANDOM-distributed table always reports a positive bucket_size; StarRocks omits
+            # it only when it is 0 (OlapTable.getProperties), so absent here means 0.
+            conn_value = '0'
+
         # Convert all to strings for comparison to avoid type issues (e.g., int vs str)
         conn_str = str(conn_value) if conn_value is not None else None
         meta_str = str(meta_value) if meta_value is not None else None
