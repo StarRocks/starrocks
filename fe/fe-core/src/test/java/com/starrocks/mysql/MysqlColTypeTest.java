@@ -31,7 +31,7 @@ public class MysqlColTypeTest {
     @Test
     public void testGeographyUsesVarbinaryMetadata() {
         GeoTypeDescriptor descriptor = new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
-                GeoTypeDescriptor.CoordinateSystem.SPHERICAL, GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL,
+                GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL,
                 "OGC:CRS84", null);
         ScalarType geography = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, descriptor);
         Assertions.assertEquals(MysqlColType.MYSQL_TYPE_BLOB, MysqlCodec.toMysqlType(PrimitiveType.GEOGRAPHY));

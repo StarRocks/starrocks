@@ -102,7 +102,7 @@ public class IcebergGeoMetadataTest {
         Assertions.assertEquals(PrimitiveType.GEOMETRY, mapped.getPrimitiveType());
         GeoTypeDescriptor descriptor = ((ScalarType) mapped).getGeoDescriptor();
         Assertions.assertEquals(new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOMETRY,
-                GeoTypeDescriptor.CoordinateSystem.CARTESIAN, GeoTypeDescriptor.EdgeAlgorithm.PLANAR,
+                GeoTypeDescriptor.EdgeAlgorithm.PLANAR,
                 expectedCrs, expectedSrid), descriptor);
         var array = Assertions.assertInstanceOf(ArrayType.class,
                 ColumnTypeConverter.fromIcebergType(Types.ListType.ofOptional(2, geometry)));
@@ -214,7 +214,7 @@ public class IcebergGeoMetadataTest {
         var scalar = Assertions.assertInstanceOf(ScalarType.class, type);
         Assertions.assertEquals(PrimitiveType.GEOMETRY, scalar.getPrimitiveType());
         Assertions.assertEquals(new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOMETRY,
-                GeoTypeDescriptor.CoordinateSystem.CARTESIAN, GeoTypeDescriptor.EdgeAlgorithm.PLANAR,
+                GeoTypeDescriptor.EdgeAlgorithm.PLANAR,
                 crs, srid), scalar.getGeoDescriptor());
         Assertions.assertEquals(id, field.getField_id());
         Assertions.assertEquals(new TIcebergGeoMetadata().setKind(TIcebergGeoKind.GEOMETRY).setCrs(crs)

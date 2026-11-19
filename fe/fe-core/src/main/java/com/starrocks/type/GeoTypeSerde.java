@@ -23,7 +23,12 @@ import com.starrocks.thrift.TGeoEdgeAlgorithm;
 import com.starrocks.thrift.TGeoLogicalType;
 import com.starrocks.thrift.TGeoTypeDesc;
 
-/** Wire conversion only; native primitive consistency belongs to ScalarType construction. */
+/**
+ * Wire conversion only; native primitive consistency belongs to ScalarType construction.
+ * <p>
+ * The coordinate system always follows from the logical type, so the descriptor does not keep it. It is still
+ * written to the wire for peers that require it, and ignored when read.
+ */
 final class GeoTypeSerde {
     private GeoTypeSerde() {
     }
@@ -31,7 +36,7 @@ final class GeoTypeSerde {
     static TGeoTypeDesc toThrift(GeoTypeDescriptor descriptor) {
         TGeoTypeDesc semantic = new TGeoTypeDesc();
         semantic.setLogical_type(TGeoLogicalType.valueOf(descriptor.logicalType().name()));
-        semantic.setCoordinate_system(TGeoCoordinateSystem.valueOf(descriptor.coordinateSystem().name()));
+        semantic.setCoordinate_system(TGeoCoordinateSystem.valueOf(wireCoordinateSystem(descriptor)));
         semantic.setEdge_algorithm(TGeoEdgeAlgorithm.valueOf(descriptor.edgeAlgorithm().name()));
         semantic.setCrs(descriptor.crs());
         if (descriptor.srid() != null) {
@@ -44,7 +49,7 @@ final class GeoTypeSerde {
         GeoTypeDescPB semantic = new GeoTypeDescPB();
         semantic.logicalType = GeoLogicalTypePB.valueOf("GEO_LOGICAL_TYPE_" + descriptor.logicalType().name());
         semantic.coordinateSystem =
-                GeoCoordinateSystemPB.valueOf("GEO_COORDINATE_SYSTEM_" + descriptor.coordinateSystem().name());
+                GeoCoordinateSystemPB.valueOf("GEO_COORDINATE_SYSTEM_" + wireCoordinateSystem(descriptor));
         semantic.edgeAlgorithm = GeoEdgeAlgorithmPB.valueOf("GEO_EDGE_ALGORITHM_" + descriptor.edgeAlgorithm().name());
         semantic.crs = descriptor.crs();
         semantic.srid = descriptor.srid();
@@ -54,7 +59,6 @@ final class GeoTypeSerde {
     static GeoTypeDescriptor fromThrift(TGeoTypeDesc semantic) {
         return new GeoTypeDescriptor(
                 fromWire(semantic.logical_type, GeoTypeDescriptor.LogicalType.class, ""),
-                fromWire(semantic.coordinate_system, GeoTypeDescriptor.CoordinateSystem.class, ""),
                 fromWire(semantic.edge_algorithm, GeoTypeDescriptor.EdgeAlgorithm.class, ""),
                 semantic.crs == null ? "" : semantic.crs, semantic.isSetSrid() ? semantic.srid : null);
     }
@@ -62,9 +66,19 @@ final class GeoTypeSerde {
     static GeoTypeDescriptor fromProtobuf(GeoTypeDescPB semantic) {
         return new GeoTypeDescriptor(
                 fromWire(semantic.logicalType, GeoTypeDescriptor.LogicalType.class, "GEO_LOGICAL_TYPE_"),
-                fromWire(semantic.coordinateSystem, GeoTypeDescriptor.CoordinateSystem.class, "GEO_COORDINATE_SYSTEM_"),
                 fromWire(semantic.edgeAlgorithm, GeoTypeDescriptor.EdgeAlgorithm.class, "GEO_EDGE_ALGORITHM_"),
                 semantic.crs == null ? "" : semantic.crs, semantic.srid);
+    }
+
+    private static String wireCoordinateSystem(GeoTypeDescriptor descriptor) {
+        switch (descriptor.logicalType()) {
+            case GEOGRAPHY:
+                return "SPHERICAL";
+            case GEOMETRY:
+                return "CARTESIAN";
+            default:
+                return "UNKNOWN";
+        }
     }
 
     private static <T extends Enum<T>> T fromWire(Enum<?> value, Class<T> type, String prefix) {
