@@ -1204,6 +1204,13 @@ Status SegmentIterator::start_read_ahead(bool* started) {
         }
         _inited = true;
     }
+    // Apply the runtime filters that arrived while the readers before it were read, as the first read does, so that a
+    // segment they exclude fetches nothing. A failure is returned when the reader's turn comes (see _init()).
+    if (Status st = _try_to_update_ranges_by_runtime_filter(); !st.ok()) {
+        _read_ahead_init_status = st;
+        _inited = false;
+        return st;
+    }
     // A reader with nothing left to read has nothing to fetch either; one without a window does not read ahead.
     if (!_range_iter.has_more()) {
         *started = true;
@@ -1212,6 +1219,10 @@ Status SegmentIterator::start_read_ahead(bool* started) {
     *started = _prefetch_window != nullptr && !_prefetch_window->disabled();
     if (*started) {
         _prefetch_window->advance(_range_iter.begin());
+        // The first warm-up finds out whether the file can warm at all; one that cannot disables the window.
+        *started = !_prefetch_window->disabled();
+    }
+    if (*started) {
         _opts.stats->segment_read_ahead_started++;
     }
     return Status::OK();

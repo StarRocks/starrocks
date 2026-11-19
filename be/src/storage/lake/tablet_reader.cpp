@@ -1907,8 +1907,14 @@ bool TabletReader::union_reads_ahead(const TabletReaderParams& params) const {
     const bool union_branch =
             !params.sorted_by_keys_per_tablet && (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS ||
                                                   (keys_type == UNIQUE_KEYS && params.skip_aggregation));
-    return union_branch && params.reader_type == ReaderType::READER_QUERY && !_need_split && _is_asc_hint &&
-           params.rowid_range_option == nullptr && params.short_key_ranges_option == nullptr &&
+    // The segment readers read ahead only for an attributed query read that fills the cache (see
+    // SegmentIterator::_should_read_ahead()); starting the others early would only initialize them before their turn.
+    const auto& io = params.lake_io_opts;
+    const bool cache_read_ahead = io.fill_data_cache && !io.skip_disk_cache && !io.cache_file_only &&
+                                  io.remote_read.is_set &&
+                                  io.remote_read.workload == RemoteReadContext::Workload::QUERY;
+    return union_branch && cache_read_ahead && params.reader_type == ReaderType::READER_QUERY && !_need_split &&
+           _is_asc_hint && params.rowid_range_option == nullptr && params.short_key_ranges_option == nullptr &&
            remote_io_scheduler_enabled() && config::lake_scan_read_ahead_segments > 0 &&
            config::remote_prefetch_window_blocks > 0;
 }

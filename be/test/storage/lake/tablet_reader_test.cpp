@@ -1828,14 +1828,18 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_ahead_across_segments_of_a_rowse
     ConfigResetGuard<int32_t> segments_guard(&config::lake_scan_read_ahead_segments, 16);
     ConfigResetGuard<int32_t> window_guard(&config::remote_prefetch_window_blocks, 128);
 
-    // Reads the tablet, returning the keys and setting |early_inits| to the segment readers initialized by the
-    // first chunk beyond the one it is read from.
-    auto scan = [&](bool scheduler, bool asc, int64_t* early_inits) {
+    // Reads the tablet as a query that fills the cache (or not, |fill_cache|), returning the keys and setting
+    // |early_inits| to the segment readers initialized by the first chunk beyond the one it is read from.
+    int64_t started = -1;
+    auto scan = [&](bool scheduler, bool asc, int64_t* early_inits, bool fill_cache = true) {
         g_remote_io_scheduler_enabled.store(scheduler);
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
         reader->set_is_asc_hint(asc);
         CHECK_OK(reader->prepare());
         TabletReaderParams params;
+        params.reader_type = ReaderType::READER_QUERY;
+        params.lake_io_opts.fill_data_cache = fill_cache;
+        params.lake_io_opts.remote_read = RemoteReadContext::for_query(1, 1, 0, 42);
         CHECK_OK(reader->open(params));
         std::vector<int> keys;
         auto chunk = ChunkFactory::new_chunk(*_schema, 1024);
@@ -1856,6 +1860,7 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_ahead_across_segments_of_a_rowse
             }
         }
         reader->close();
+        started = reader->stats().segment_read_ahead_started;
         return keys;
     };
 
@@ -1869,6 +1874,12 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_ahead_across_segments_of_a_rowse
         int64_t early_inits = -1;
         EXPECT_EQ(expected, scan(true, true, &early_inits)) << rowsets;
         EXPECT_EQ(1, early_inits) << rowsets;
+        // Local files cannot warm: the first warm-up of the segment started early disables its window, so it does not
+        // count as started and the segments after it are not prepared early.
+        EXPECT_EQ(0, started) << rowsets;
+        // A scan that does not fill the cache has no read-ahead windows, so nothing is prepared early either.
+        EXPECT_EQ(expected, scan(true, true, &early_inits, false)) << rowsets;
+        EXPECT_EQ(0, early_inits) << rowsets;
         EXPECT_EQ(expected, scan(false, true, &early_inits)) << rowsets;
         EXPECT_EQ(0, early_inits) << rowsets;
         // A descending scan does not read ahead, and keeps its order of the rowsets.
