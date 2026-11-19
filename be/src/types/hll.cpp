@@ -164,6 +164,9 @@ void HyperLogLog::update(uint64_t hash_value) {
             _hash_set.insert(hash_value);
             break;
         }
+        if (_hash_set.size() == HLL_EXPLICLIT_INT64_NUM && _hash_set.contains(hash_value)) {
+            break;
+        }
         _convert_explicit_to_register();
         _type = HLL_DATA_FULL;
         // fall through
