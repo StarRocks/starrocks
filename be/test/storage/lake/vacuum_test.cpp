@@ -27,6 +27,7 @@
 
 #include "common/config.h"
 #include "fs/fs.h"
+#include "gutil/strings/substitute.h"
 #include "json2pb/json_to_pb.h"
 #include "service/mem_hook.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -4800,7 +4801,10 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        EXPECT_EQ(7, response.vacuumed_files());
+        // The 2 shared data files and the bundle metadata of version 3. The metadata below version 3
+        // (the min_version the previous round reported) was deleted by that round and is not deleted
+        // again.
+        EXPECT_EQ(3, response.vacuumed_files());
         EXPECT_EQ(16384, response.vacuumed_file_size());
 
         EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 1)));
@@ -6939,6 +6943,107 @@ TEST_P(LakeVacuumTest, test_vacuum_bundle_keeps_v1_metadata_when_range_empty) {
         EXPECT_FALSE(file_exist(tablet_metadata_filename(701, 1)));
         EXPECT_TRUE(file_exist(tablet_metadata_filename(700, 2)));
         EXPECT_TRUE(file_exist(tablet_metadata_filename(701, 2)));
+    }
+}
+
+// A partition that keeps being written inside the grace period is vacuumed every round with the same
+// retained version. The round that first retained it deleted the tablet metadata below it; the
+// following rounds must not delete that metadata again (on a versioned bucket every delete of a
+// missing key adds a delete marker).
+TEST_P(LakeVacuumTest, test_vacuum_does_not_redelete_metadata_below_min_version) {
+    auto put_metadata = [&](int64_t tablet_id, int64_t version, int64_t commit_time, int64_t prev_garbage_version) {
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(
+                strings::Substitute(R"DEL({"id": $0, "version": $1, "commit_time": $2, "prev_garbage_version": $3})DEL",
+                                    tablet_id, version, commit_time, prev_garbage_version))));
+    };
+    auto run = [&](int64_t tablet_id, int64_t min_version, int64_t grace_timestamp, VacuumResponse* response) {
+        VacuumRequest request;
+        request.set_delete_txn_log(false);
+        auto* info = request.add_tablet_infos();
+        info->set_tablet_id(tablet_id);
+        info->set_min_version(min_version);
+        request.set_min_retain_version(6);
+        request.set_grace_timestamp(grace_timestamp);
+        request.set_min_active_txn_id(99999);
+        vacuum(_tablet_mgr.get(), request, response);
+        ASSERT_TRUE(response->has_status());
+        ASSERT_EQ(0, response->status().status_code()) << response->status().error_msgs(0);
+    };
+    // v1..v4 are older than the grace timestamp used below, v5 is the last version committed before it
+    // (retained), v6 is inside the grace period. v5's prev_garbage_version is 2, so v3 and v4 sit
+    // between the retained version and the version the walk steps to next.
+    auto prepare = [&](int64_t tablet_id) {
+        put_metadata(tablet_id, 1, 100, 0);
+        put_metadata(tablet_id, 2, 110, 1);
+        put_metadata(tablet_id, 3, 120, 2);
+        put_metadata(tablet_id, 4, 130, 2);
+        put_metadata(tablet_id, 5, 140, 2);
+        put_metadata(tablet_id, 6, 200, 5);
+    };
+    // The first round retains v5 and deletes v1..v4.
+    auto first_round = [&](int64_t tablet_id) {
+        VacuumResponse response;
+        run(tablet_id, 0, 150, &response);
+        EXPECT_EQ(4, response.vacuumed_files());
+        EXPECT_EQ(5, response.vacuumed_version());
+        ASSERT_EQ(1, response.tablet_infos_size());
+        EXPECT_EQ(5, response.tablet_infos(0).min_version());
+        for (int64_t v = 1; v <= 4; v++) {
+            EXPECT_FALSE(file_exist(tablet_metadata_filename(tablet_id, v)));
+        }
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(tablet_id, 5)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(tablet_id, 6)));
+    };
+    // Puts v3 and v4 back, so that deleting them again is observable on a local file system.
+    auto restore_deleted = [&](int64_t tablet_id) {
+        put_metadata(tablet_id, 3, 120, 2);
+        put_metadata(tablet_id, 4, 130, 2);
+    };
+
+    {
+        const int64_t tablet_id = 6000;
+        prepare(tablet_id);
+        first_round(tablet_id);
+        restore_deleted(tablet_id);
+
+        // Same boundary again, with the min_version reported by the first round: nothing is deleted.
+        for (int i = 0; i < 2; i++) {
+            VacuumResponse response;
+            run(tablet_id, 5, 150, &response);
+            EXPECT_EQ(0, response.vacuumed_files());
+            EXPECT_EQ(5, response.vacuumed_version());
+            EXPECT_EQ(5, response.tablet_infos(0).min_version());
+            EXPECT_TRUE(file_exist(tablet_metadata_filename(tablet_id, 3)));
+            EXPECT_TRUE(file_exist(tablet_metadata_filename(tablet_id, 4)));
+            EXPECT_TRUE(file_exist(tablet_metadata_filename(tablet_id, 5)));
+        }
+
+        // v6 ages past the grace timestamp: the boundary moves to v6 and v5 goes away, the metadata
+        // below v5 is still left alone.
+        VacuumResponse response;
+        run(tablet_id, 5, 250, &response);
+        EXPECT_EQ(1, response.vacuumed_files());
+        EXPECT_EQ(6, response.vacuumed_version());
+        EXPECT_EQ(6, response.tablet_infos(0).min_version());
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(tablet_id, 3)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(tablet_id, 4)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(tablet_id, 5)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(tablet_id, 6)));
+    }
+    {
+        // The FE has no record of the previous round (restart, leader change): the walk goes down to
+        // v2, finds it missing, and the range is rebuilt from there.
+        const int64_t tablet_id = 6001;
+        prepare(tablet_id);
+        first_round(tablet_id);
+        restore_deleted(tablet_id);
+
+        VacuumResponse response;
+        run(tablet_id, 0, 150, &response);
+        EXPECT_EQ(2, response.vacuumed_files());
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(tablet_id, 3)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(tablet_id, 4)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(tablet_id, 5)));
     }
 }
 
