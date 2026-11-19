@@ -23,11 +23,79 @@
 #include "base/testutil/parallel_test.h"
 #include "column/chunk_factory.h"
 #include "storage/chunk_helper.h"
+#include "storage/rowset/segment_options.h"
 #include "storage/types.h"
 #include "types/decimalv3.h"
 #include "types/storage_type_traits.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
+
+TEST(SeekTupleConversionTest, rejects_geo_in_tuple_and_segment_read_options) {
+    const GeoTypeDescriptor descriptor{GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857};
+    auto field = Field::create_geo(0, "g", TypeDescriptor::create_geo_type(TYPE_GEOMETRY, descriptor), true);
+    ASSERT_TRUE(field.ok()) << field.status();
+    SeekTuple geo(Schema(Fields{field->copy()}, DUP_KEYS, {}), {Datum()});
+    SeekTuple converted;
+    for (auto type : {TYPE_GEOMETRY, TYPE_GEOGRAPHY, TYPE_VARCHAR}) {
+        const auto status = geo.convert_to(&converted, {type});
+        ASSERT_TRUE(status.is_not_supported()) << status;
+        EXPECT_EQ("Native GEO is not supported in seek tuples", status.message());
+        EXPECT_TRUE(converted.empty());
+        EXPECT_EQ(0, converted.schema().num_fields());
+    }
+
+    ObjectPool pool;
+    const SeekRange geo_lower(geo, SeekTuple{});
+    const SeekRange geo_upper(SeekTuple{}, geo);
+    SegmentReadOptions ranges;
+    ranges.ranges.push_back(geo_lower);
+    SegmentReadOptions task;
+    task.task_range = geo_upper;
+    SegmentReadOptions tablet;
+    tablet.tablet_range = geo_lower;
+    for (const auto* options : {&ranges, &task, &tablet}) {
+        SegmentReadOptions dst;
+        const auto status = options->convert_to(&dst, {TYPE_GEOMETRY}, &pool);
+        ASSERT_TRUE(status.is_not_supported()) << status;
+        EXPECT_EQ("Native GEO is not supported in seek tuples", status.message());
+    }
+}
+
+TEST(SeekTupleConversionTest, propagates_row_converter_initialization_failure) {
+    SeekTuple number(Schema(Fields{std::make_shared<Field>(0, "k", TYPE_INT, false)}, DUP_KEYS, {}), {Datum(7)});
+    SeekTuple converted;
+    ASSERT_TRUE(number.convert_to(&converted, {TYPE_INT}).ok());
+
+    const auto status = number.convert_to(&converted, {TYPE_VARCHAR});
+    ASSERT_TRUE(status.is_not_supported()) << status;
+    EXPECT_EQ("Cannot get field converter", status.message());
+    EXPECT_EQ(TYPE_INT, converted.schema().field(0)->logical_type());
+    EXPECT_EQ(7, converted.get(0).get_int32());
+}
+
+TEST(SeekTupleConversionTest, converts_non_geo_read_ranges) {
+    const Schema schema(Fields{std::make_shared<Field>(0, "k", TYPE_INT, false)}, DUP_KEYS, {});
+    SeekRange range(SeekTuple(schema, {Datum(7)}), SeekTuple(schema, {Datum(9)}));
+    range.set_inclusive_lower(true);
+    SegmentReadOptions source;
+    source.ranges.push_back(range);
+    source.task_range = range;
+    source.tablet_range = range;
+
+    ObjectPool pool;
+    SegmentReadOptions dst;
+    ASSERT_TRUE(source.convert_to(&dst, {TYPE_INT}, &pool).ok());
+    ASSERT_EQ(1, dst.ranges.size());
+    ASSERT_TRUE(dst.task_range.has_value());
+    ASSERT_TRUE(dst.tablet_range.has_value());
+    for (const auto* converted : {&dst.ranges[0], &*dst.task_range, &*dst.tablet_range}) {
+        EXPECT_TRUE(converted->inclusive_lower());
+        EXPECT_FALSE(converted->inclusive_upper());
+        EXPECT_EQ(7, converted->lower().get(0).get_int32());
+        EXPECT_EQ(9, converted->upper().get(0).get_int32());
+    }
+}
 
 static std::string trim_trailing_zeros(const std::string& s) {
     if (s.find('.') == std::string::npos) return s;

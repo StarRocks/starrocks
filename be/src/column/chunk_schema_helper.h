@@ -27,6 +27,7 @@ class Schema;
 class ChunkSchemaHelper {
 public:
     // Get non nullable version schema
+    // Returns nullptr when the schema or key override places GEO in a key field.
     static SchemaPtr get_non_nullable_schema(const SchemaPtr& schema, const std::vector<int>* keys);
 
     static ColumnId max_column_id(const Schema& schema);

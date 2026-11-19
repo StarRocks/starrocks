@@ -49,12 +49,12 @@ Status SegmentReadOptions::convert_to(SegmentReadOptions* dst, const std::vector
     int num_ranges = ranges.size();
     dst->ranges.resize(num_ranges);
     for (int i = 0; i < num_ranges; ++i) {
-        ranges[i].convert_to(&dst->ranges[i], new_types);
+        RETURN_IF_ERROR(ranges[i].convert_to(&dst->ranges[i], new_types));
     }
 
     if (task_range.has_value()) {
         dst->task_range = SeekRange();
-        task_range->convert_to(&dst->task_range.value(), new_types);
+        RETURN_IF_ERROR(task_range->convert_to(&dst->task_range.value(), new_types));
     } else {
         dst->task_range.reset();
     }
@@ -79,7 +79,7 @@ Status SegmentReadOptions::convert_to(SegmentReadOptions* dst, const std::vector
     dst->is_first_split_of_segment = is_first_split_of_segment;
     if (tablet_range.has_value()) {
         dst->tablet_range = SeekRange();
-        tablet_range->convert_to(&dst->tablet_range.value(), new_types);
+        RETURN_IF_ERROR(tablet_range->convert_to(&dst->tablet_range.value(), new_types));
     } else {
         dst->tablet_range.reset();
     }

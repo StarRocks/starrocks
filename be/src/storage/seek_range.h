@@ -41,11 +41,14 @@ public:
 
     bool all_range() const { return _lower.empty() && _upper.empty(); }
 
-    void convert_to(SeekRange* dst, const std::vector<LogicalType>& new_types) const {
-        dst->_inc_lower = _inc_lower;
-        dst->_inc_upper = _inc_upper;
-        _lower.convert_to(&dst->_lower, new_types);
-        _upper.convert_to(&dst->_upper, new_types);
+    Status convert_to(SeekRange* dst, const std::vector<LogicalType>& new_types) const {
+        SeekRange range;
+        range._inc_lower = _inc_lower;
+        range._inc_upper = _inc_upper;
+        RETURN_IF_ERROR(_lower.convert_to(&range._lower, new_types));
+        RETURN_IF_ERROR(_upper.convert_to(&range._upper, new_types));
+        *dst = std::move(range);
+        return Status::OK();
     }
 
     std::string debug_string() const {

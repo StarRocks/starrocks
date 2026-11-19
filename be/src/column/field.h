@@ -26,15 +26,19 @@
 #include "column/column.h"
 #include "column/vectorized_fwd.h"
 #include "common/column_id.h"
+#include "common/statusor.h"
 #include "common/storage_aggregate_type.h"
 #include "types/type_info.h"
 
 namespace starrocks {
 
 class AggStateDesc;
+struct GeoTypeDescriptor;
 
 class Field {
 public:
+    static StatusOr<Field> create_geo(ColumnId id, std::string_view name, const TypeDescriptor& type, bool nullable);
+
     Field(ColumnId id, std::string_view name, TypeInfoPtr type, starrocks::StorageAggregateType agg,
           AggStateDesc* agg_state_desc, uint8_t short_key_length, bool is_key, bool nullable)
             : _id(id),
@@ -86,6 +90,7 @@ public:
               _agg_state_desc(rhs._agg_state_desc),
               _name(rhs._name),
               _type(rhs._type),
+              _geo_descriptor(rhs._geo_descriptor),
               _sub_fields(rhs._sub_fields ? new std::vector<Field>(*rhs._sub_fields) : nullptr),
               _length(rhs._length),
               _short_key_length(rhs._short_key_length),
@@ -99,6 +104,7 @@ public:
               _agg_state_desc(rhs._agg_state_desc),
               _name(std::move(rhs._name)),
               _type(std::move(rhs._type)),
+              _geo_descriptor(std::move(rhs._geo_descriptor)),
               _sub_fields(rhs._sub_fields),
               _length(rhs._length),
               _short_key_length(rhs._short_key_length),
@@ -114,6 +120,7 @@ public:
             _id = rhs._id;
             _name = rhs._name;
             _type = rhs._type;
+            _geo_descriptor = rhs._geo_descriptor;
             _agg_method = rhs._agg_method;
             _length = rhs._length;
             _agg_state_desc = rhs._agg_state_desc;
@@ -131,6 +138,7 @@ public:
             _id = rhs._id;
             _name = std::move(rhs._name);
             _type = std::move(rhs._type);
+            _geo_descriptor = std::move(rhs._geo_descriptor);
             _agg_method = rhs._agg_method;
             _length = rhs._length;
             _agg_state_desc = rhs._agg_state_desc;
@@ -156,7 +164,10 @@ public:
 
     ColumnId id() const { return _id; }
     std::string_view name() const { return {_name.data(), _name.size()}; }
+    // GEO fields have no row TypeInfo. Use logical_type() for schema metadata.
     const TypeInfoPtr& type() const { return _type; }
+    LogicalType logical_type() const;
+    const GeoTypeDescriptor* geo_descriptor() const { return _geo_descriptor.get(); }
 
     bool is_nullable() const;
 
@@ -210,6 +221,7 @@ private:
     AggStateDesc* _agg_state_desc;
     CString _name;
     TypeInfoPtr _type = nullptr;
+    std::shared_ptr<const GeoTypeDescriptor> _geo_descriptor;
     std::vector<Field>* _sub_fields;
     int32_t _length = 0;
     uint8_t _short_key_length;
@@ -259,17 +271,27 @@ inline FieldPtr Field::with_type(const TypeInfoPtr& type) {
 }
 
 inline FieldPtr Field::with_name(std::string_view name) {
+    if (_geo_descriptor) {
+        auto field = copy();
+        field->_name.assign(name);
+        return field;
+    }
     return std::make_shared<Field>(_id, name, _type, _agg_method, _agg_state_desc, _short_key_length, is_key(),
                                    is_nullable());
 }
 
 inline FieldPtr Field::with_nullable(bool nullable) {
+    if (_geo_descriptor) {
+        auto field = copy();
+        field->_flags = static_cast<uint8_t>((field->_flags & ~(1 << kNullableShift)) | (nullable << kNullableShift));
+        return field;
+    }
     return std::make_shared<Field>(_id, std::string_view(_name.data(), _name.size()), _type, _agg_method,
                                    _agg_state_desc, _short_key_length, is_key(), nullable);
 }
 
 inline std::ostream& operator<<(std::ostream& os, const Field& field) {
-    os << field.id() << ":" << field.name() << " " << field.type()->type() << " "
+    os << field.id() << ":" << field.name() << " " << field.logical_type() << " "
        << (field.is_nullable() ? "NULL" : "NOT NULL") << (field.is_key() ? " KEY" : "") << " "
        << static_cast<int>(field.aggregate_method()) << " uid:" << field.uid();
     return os;

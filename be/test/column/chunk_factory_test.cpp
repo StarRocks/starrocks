@@ -15,16 +15,19 @@
 #include "column/chunk_factory.h"
 
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/field.h"
+#include "column/geo_column.h"
 #include "column/map_column.h"
 #include "column/schema.h"
 #include "gtest/gtest.h"
 #include "gutil/casts.h"
+#include "types/type_descriptor.h"
 #include "types/type_info.h"
 
 namespace starrocks {
@@ -98,6 +101,56 @@ TEST(ChunkFactoryTest, new_chunks_from_schema) {
     std::unique_ptr<Chunk> pooled_chunk(ChunkFactory::new_chunk_pooled(schema, 8));
     ASSERT_EQ(2, pooled_chunk->num_columns());
     ASSERT_EQ(0, pooled_chunk->num_rows());
+}
+
+TEST(ChunkFactoryTest, materializes_typed_geo_fields) {
+    const GeoTypeDescriptor descriptors[] = {
+            {GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", std::nullopt},
+            {GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857},
+            {GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "custom:LocalSurveyGrid-Moscow-2026", std::nullopt},
+    };
+    for (const auto& descriptor : descriptors) {
+        SCOPED_TRACE(descriptor.crs);
+        const auto type = descriptor.logical_type == GEO_LOGICAL_TYPE_GEOGRAPHY ? TYPE_GEOGRAPHY : TYPE_GEOMETRY;
+        auto plain = Field::create_geo(1, "geo", TypeDescriptor::create_geo_type(type, descriptor), false);
+        ASSERT_TRUE(plain.ok()) << plain.status();
+        auto nullable = Field::create_geo(2, "nullable_geo", TypeDescriptor::create_geo_type(type, descriptor), false);
+        ASSERT_TRUE(nullable.ok()) << nullable.status();
+        auto renamed = plain->with_name("renamed_geo");
+        EXPECT_EQ("geo", plain->name());
+        EXPECT_EQ("renamed_geo", renamed->name());
+        Fields fields{std::make_shared<Field>(0, "control", TYPE_INT, false), std::move(renamed),
+                      nullable->with_nullable(true)};
+        Schema schema(std::move(fields), DUP_KEYS, {});
+        Schema projection(&schema, {2, 0, 1});
+
+        const auto check = [&](const auto& chunk) {
+            ASSERT_EQ(3, chunk->num_columns());
+            ASSERT_EQ(0, chunk->num_rows());
+            ASSERT_EQ("integral-4", chunk->get_column_by_index(1)->get_name());
+            for (size_t index : {0, 2}) {
+                const auto* column = chunk->get_column_by_index(index).get();
+                ASSERT_EQ(index == 0, column->is_nullable());
+                const auto* geo = dynamic_cast<const GeoColumn*>(ColumnHelper::get_data_column(column));
+                ASSERT_NE(nullptr, geo);
+                EXPECT_EQ(descriptor, geo->descriptor().type);
+            }
+        };
+        check(ChunkFactory::new_chunk(projection, 8));
+        check(ChunkFactory::new_mutable_chunk(projection, 8));
+        check(std::unique_ptr<Chunk>(ChunkFactory::new_chunk_pooled(projection, 8)));
+    }
+}
+
+TEST(ChunkFactoryTest, rejects_missing_or_mismatched_geo_descriptor) {
+    const GeoTypeDescriptor geography{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84"};
+    const GeoTypeDescriptor geometry{GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857};
+    for (const auto type : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
+        TypeDescriptor input(type);
+        EXPECT_TRUE(Field::create_geo(0, "geo", input, true).status().is_invalid_argument());
+        input.geo_type = type == TYPE_GEOGRAPHY ? geometry : geography;
+        EXPECT_TRUE(Field::create_geo(0, "geo", input, true).status().is_invalid_argument());
+    }
 }
 
 } // namespace starrocks

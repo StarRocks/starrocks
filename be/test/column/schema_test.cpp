@@ -16,7 +16,89 @@
 
 #include <gtest/gtest.h>
 
+#include "column/chunk.h"
+#include "column/chunk_factory.h"
+#include "column/geo_column.h"
+#include "column/nullable_column.h"
+#include "types/type_descriptor.h"
+
 namespace starrocks {
+
+TEST(SchemaGeoConversionTest, copies_value_field_only_for_same_geo_type) {
+    const GeoTypeDescriptor descriptor{GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857};
+    auto field = Field::create_geo(1, "g", TypeDescriptor::create_geo_type(TYPE_GEOMETRY, descriptor), true);
+    ASSERT_TRUE(field.ok()) << field.status();
+    field->set_uid(99);
+    Schema schema(Fields{std::make_shared<Field>(0, "c", TYPE_CHAR, false), field->copy()}, DUP_KEYS, {});
+    Schema dst;
+    ASSERT_TRUE(schema.convert_to(&dst, {TYPE_CHAR, TYPE_GEOMETRY}).ok());
+    const auto copied = dst.field(1);
+    EXPECT_NE(schema.field(1), copied);
+    EXPECT_EQ(1, copied->id());
+    EXPECT_EQ("g", copied->name());
+    EXPECT_EQ(99, copied->uid());
+    EXPECT_TRUE(copied->is_nullable());
+    ASSERT_NE(nullptr, copied->geo_descriptor());
+    EXPECT_EQ(descriptor, *copied->geo_descriptor());
+
+    auto chunk = ChunkFactory::new_chunk(dst, 8);
+    const auto* nullable = dynamic_cast<const NullableColumn*>(chunk->get_column_by_index(1).get());
+    ASSERT_NE(nullptr, nullable);
+    const auto* geo = dynamic_cast<const GeoColumn*>(nullable->data_column().get());
+    ASSERT_NE(nullptr, geo);
+    EXPECT_EQ(descriptor, geo->descriptor().type);
+
+    EXPECT_TRUE(schema.convert_to(&dst, {TYPE_VARCHAR, TYPE_GEOGRAPHY}).is_not_supported());
+    EXPECT_TRUE(schema.convert_to(&dst, {TYPE_CHAR, TYPE_VARBINARY}).is_not_supported());
+    EXPECT_TRUE(schema.convert_to(&dst, {TYPE_GEOMETRY, TYPE_GEOMETRY}).is_not_supported());
+    EXPECT_EQ(copied, dst.field(1));
+    EXPECT_EQ(TYPE_CHAR, dst.field(0)->logical_type());
+    ASSERT_TRUE(schema.convert_to(&dst, {TYPE_VARCHAR, TYPE_GEOMETRY}).ok());
+    EXPECT_EQ(TYPE_VARCHAR, dst.field(0)->type()->type());
+}
+
+TEST(SchemaGeoConversionTest, converted_schema_owns_name_index) {
+    const GeoTypeDescriptor descriptor{GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "custom:LocalGrid",
+                                       std::nullopt};
+    for (const bool reuse_dst : {false, true}) {
+        SCOPED_TRACE(reuse_dst);
+        Schema dst;
+        if (reuse_dst) {
+            dst.append(std::make_shared<Field>(0, "old", TYPE_INT, false));
+            const Schema shared(dst);
+            dst.append(std::make_shared<Field>(1, "old_append", TYPE_INT, false));
+            EXPECT_EQ(nullptr, shared.get_field_by_name("old_append"));
+        }
+        std::weak_ptr<Field> source_geo;
+        {
+            auto field = Field::create_geo(1, "geo", TypeDescriptor::create_geo_type(TYPE_GEOMETRY, descriptor), true);
+            ASSERT_TRUE(field.ok()) << field.status();
+            Schema source(Fields{std::make_shared<Field>(0, "c", TYPE_CHAR, false), field->copy()}, DUP_KEYS, {});
+            source_geo = source.field(1);
+            if (reuse_dst) {
+                const auto old = dst.field(0);
+                const auto old_append = dst.field(1);
+                ASSERT_TRUE(source.convert_to(&dst, {TYPE_VARCHAR, TYPE_GEOGRAPHY}).is_not_supported());
+                ASSERT_EQ(2, dst.num_fields());
+                EXPECT_EQ(old, dst.get_field_by_name("old"));
+                EXPECT_EQ(old_append, dst.get_field_by_name("old_append"));
+            }
+
+            ASSERT_TRUE(source.convert_to(&dst, {TYPE_CHAR, TYPE_GEOMETRY}).ok());
+            ASSERT_EQ(nullptr, dst.get_field_by_name("old"));
+            ASSERT_EQ(nullptr, dst.get_field_by_name("old_append"));
+            dst.append(std::make_shared<Field>(2, "dst_only", TYPE_INT, false));
+            ASSERT_EQ(-1, source.get_field_index_by_name("dst_only"));
+        }
+        ASSERT_TRUE(source_geo.expired());
+        EXPECT_EQ(dst.field(2), dst.get_field_by_name("dst_only"));
+        const auto geo = dst.get_field_by_name("geo");
+        ASSERT_EQ(dst.field(1), geo);
+        EXPECT_TRUE(geo->is_nullable());
+        ASSERT_NE(nullptr, geo->geo_descriptor());
+        EXPECT_EQ(descriptor, *geo->geo_descriptor());
+    }
+}
 
 class SchemaTest : public testing::Test {
 public:

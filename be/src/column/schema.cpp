@@ -303,24 +303,27 @@ size_t Schema::get_field_index_by_name(std::string_view name) const {
     return p->second;
 }
 
-void Schema::convert_to(Schema* new_schema, const std::vector<LogicalType>& new_types) const {
-    size_t num_fields = _fields.size();
-    new_schema->_fields.resize(num_fields);
-    for (size_t i = 0; i < num_fields; ++i) {
-        auto cid = _fields[i]->id();
-        auto new_type = new_types[cid];
-        if (_fields[i]->type()->type() == new_type) {
-            new_schema->_fields[i] = _fields[i]->copy();
+Status Schema::convert_to(Schema* new_schema, const std::vector<LogicalType>& new_types) const {
+    Schema converted;
+    converted._fields.reserve(_fields.size());
+    for (const auto& field : _fields) {
+        auto new_type = new_types[field->id()];
+        if (field->logical_type() == new_type) {
+            converted._fields.emplace_back(field->copy());
         } else {
-            new_schema->_fields[i] = _fields[i]->convert_to(new_type);
+            if (field->geo_descriptor() || new_type == TYPE_GEOGRAPHY || new_type == TYPE_GEOMETRY) {
+                return Status::NotSupported("Native GEO schema conversion requires the same logical type");
+            }
+            converted._fields.emplace_back(field->convert_to(new_type));
         }
     }
+    converted._build_index_map(converted._fields);
+    new_schema->_name_to_index = std::move(converted._name_to_index);
+    new_schema->_name_to_index_append_buffer.reset();
+    new_schema->_share_name_to_index = false;
+    new_schema->_fields = std::move(converted._fields);
     new_schema->_num_keys = _num_keys;
-    if (!_share_name_to_index) {
-        new_schema->_name_to_index = _name_to_index;
-    } else {
-        new_schema->_build_index_map(new_schema->_fields);
-    }
+    return Status::OK();
 }
 
 } // namespace starrocks

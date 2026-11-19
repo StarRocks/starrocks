@@ -34,6 +34,13 @@ starrocks::SchemaPtr ChunkSchemaHelper::get_non_nullable_schema(const starrocks:
 
     int idx = 0;
     for (const auto& old_field : old_fields) {
+        if (old_field->geo_descriptor()) {
+            if (old_field->is_key() || (keys != nullptr && (*keys)[idx] != 0)) {
+                return nullptr;
+            }
+            new_fields[idx++] = old_field->with_nullable(false);
+            continue;
+        }
         ColumnId id = old_field->id();
         std::string_view name = old_field->name();
         TypeInfoPtr type = old_field->type();
@@ -63,7 +70,7 @@ std::vector<size_t> ChunkSchemaHelper::get_char_field_indexes(const Schema& sche
     std::vector<size_t> char_field_indexes;
     for (size_t i = 0; i < schema.num_fields(); ++i) {
         const auto& field = schema.field(i);
-        if (field->type()->type() == TYPE_CHAR) {
+        if (field->logical_type() == TYPE_CHAR) {
             char_field_indexes.push_back(i);
         }
     }

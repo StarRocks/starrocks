@@ -104,7 +104,7 @@ public:
 
     std::vector<ColumnId> field_column_ids(bool use_rowstore = false) const;
 
-    void convert_to(Schema* new_schema, const std::vector<LogicalType>& new_types) const;
+    Status convert_to(Schema* new_schema, const std::vector<LogicalType>& new_types) const;
 
     KeysType keys_type() const { return static_cast<KeysType>(_keys_type); }
 
