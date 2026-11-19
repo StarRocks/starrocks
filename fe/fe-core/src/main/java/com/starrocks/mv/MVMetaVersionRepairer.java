@@ -195,7 +195,7 @@ public class MVMetaVersionRepairer {
      *                          the lookup miss below already had.
      */
     public static void repairExternalBaseTableInfo(MaterializedView mv, BaseTableInfo oldBaseTableInfo,
-                                                   Table newTable, List<String> updatedPartitionNames,
+                                                   Table newTable, Set<String> updatedPartitionNames,
                                                    Map<String, com.starrocks.connector.PartitionInfo>
                                                            newPartitionInfos) {
 
