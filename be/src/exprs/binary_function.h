@@ -390,7 +390,9 @@ public:
 /**
  * Special for logic predicate
  * @tparam NULL_FN Logic null handle function, will input values and nulls
- * @tparam FN Data handle function
+ * @tparam FN Data handle function, will also input values and nulls. The value under a NULL row is undefined
+ *         (producers may leave it uninitialized), so FN must not let it leak into a row the result keeps
+ *         non-NULL, e.g. the TRUE side of TRUE OR NULL.
  */
 template <typename NULL_FN, typename FN>
 class LogicPredicateBaseBinaryFunction {
@@ -422,7 +424,7 @@ public:
 
         for (int i = 0; i < size; ++i) {
             dd[i] = FN::template apply<RunTimeCppType<LType>, RunTimeCppType<RType>, RunTimeCppType<ResultType>>(
-                    lvd[i], rvd[i]);
+                    lvd[i], lnd[i], rvd[i], rnd[i]);
         }
 
         return NullableColumn::create(std::move(data_column), std::move(null_column));
@@ -455,7 +457,7 @@ public:
 
         for (int i = 0; i < size; ++i) {
             dd[i] = FN::template apply<RunTimeCppType<LType>, RunTimeCppType<RType>, RunTimeCppType<ResultType>>(
-                    lvd[0], rvd[i]);
+                    lvd[0], lnd[0], rvd[i], rnd[i]);
         }
 
         return NullableColumn::create(std::move(data_column), std::move(null_column));
@@ -488,7 +490,7 @@ public:
 
         for (int i = 0; i < size; ++i) {
             dd[i] = FN::template apply<RunTimeCppType<LType>, RunTimeCppType<RType>, RunTimeCppType<ResultType>>(
-                    lvd[i], rvd[0]);
+                    lvd[i], lnd[i], rvd[0], rnd[0]);
         }
 
         return NullableColumn::create(std::move(data_column), std::move(null_column));
@@ -614,13 +616,14 @@ using VectorizedUnstrictBinaryFunction =
  *
  * Login operations: and, or
  *
- * @param PRODUCE_NULL_OP: the produce null operation
- * @param OP: the operation impl, like NullUnion
+ * @param NULL_OP: the null flag of the result, from values and nulls
+ * @param OP: the value of the result when neither side is nullable
+ * @param NULLABLE_OP: the value of the result when a side is nullable, from values and nulls
  */
-template <typename NULL_OP, typename OP>
+template <typename NULL_OP, typename OP, typename NULLABLE_OP>
 using VectorizedLogicPredicateBinaryFunction = LogicPredicateBinaryFunction<
         UnpackConstColumnBinaryFunction<OP>,
-        UnpackNotAlignDataAndNullColumnBinaryFunction<LogicPredicateBaseBinaryFunction<NULL_OP, OP>>>;
+        UnpackNotAlignDataAndNullColumnBinaryFunction<LogicPredicateBaseBinaryFunction<NULL_OP, NULLABLE_OP>>>;
 
 /**
  * Define a binary function use FN(),
