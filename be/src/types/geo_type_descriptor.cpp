@@ -24,9 +24,6 @@ namespace {
 static_assert(static_cast<int>(TGeoLogicalType::UNKNOWN) == GEO_LOGICAL_TYPE_UNKNOWN);
 static_assert(static_cast<int>(TGeoLogicalType::GEOGRAPHY) == GEO_LOGICAL_TYPE_GEOGRAPHY);
 static_assert(static_cast<int>(TGeoLogicalType::GEOMETRY) == GEO_LOGICAL_TYPE_GEOMETRY);
-static_assert(static_cast<int>(TGeoCoordinateSystem::UNKNOWN) == GEO_COORDINATE_SYSTEM_UNKNOWN);
-static_assert(static_cast<int>(TGeoCoordinateSystem::SPHERICAL) == GEO_COORDINATE_SYSTEM_SPHERICAL);
-static_assert(static_cast<int>(TGeoCoordinateSystem::CARTESIAN) == GEO_COORDINATE_SYSTEM_CARTESIAN);
 static_assert(static_cast<int>(TGeoEdgeAlgorithm::UNKNOWN) == GEO_EDGE_ALGORITHM_UNKNOWN);
 static_assert(static_cast<int>(TGeoEdgeAlgorithm::SPHERICAL) == GEO_EDGE_ALGORITHM_SPHERICAL);
 static_assert(static_cast<int>(TGeoEdgeAlgorithm::VINCENTY) == GEO_EDGE_ALGORITHM_VINCENTY);
@@ -34,19 +31,6 @@ static_assert(static_cast<int>(TGeoEdgeAlgorithm::THOMAS) == GEO_EDGE_ALGORITHM_
 static_assert(static_cast<int>(TGeoEdgeAlgorithm::ANDOYER) == GEO_EDGE_ALGORITHM_ANDOYER);
 static_assert(static_cast<int>(TGeoEdgeAlgorithm::KARNEY) == GEO_EDGE_ALGORITHM_KARNEY);
 static_assert(static_cast<int>(TGeoEdgeAlgorithm::PLANAR) == GEO_EDGE_ALGORITHM_PLANAR);
-
-// The coordinate system always follows from the logical type, so the descriptor does not keep it. It is still
-// written to the wire for peers that require it, and ignored when read.
-GeoCoordinateSystemPB wire_coordinate_system(GeoLogicalTypePB logical_type) {
-    switch (logical_type) {
-    case GEO_LOGICAL_TYPE_GEOGRAPHY:
-        return GEO_COORDINATE_SYSTEM_SPHERICAL;
-    case GEO_LOGICAL_TYPE_GEOMETRY:
-        return GEO_COORDINATE_SYSTEM_CARTESIAN;
-    default:
-        return GEO_COORDINATE_SYSTEM_UNKNOWN;
-    }
-}
 
 } // namespace
 
@@ -87,7 +71,6 @@ GeoTypeDescriptor GeoTypeDescriptor::from_protobuf(const GeoTypeDescPB& protobuf
 TGeoTypeDesc GeoTypeDescriptor::to_thrift() const {
     TGeoTypeDesc result;
     result.__set_logical_type(static_cast<TGeoLogicalType::type>(logical_type));
-    result.__set_coordinate_system(static_cast<TGeoCoordinateSystem::type>(wire_coordinate_system(logical_type)));
     result.__set_edge_algorithm(static_cast<TGeoEdgeAlgorithm::type>(edge_algorithm));
     result.__set_crs(crs);
     if (srid) result.__set_srid(*srid);
@@ -97,7 +80,6 @@ TGeoTypeDesc GeoTypeDescriptor::to_thrift() const {
 GeoTypeDescPB GeoTypeDescriptor::to_protobuf() const {
     GeoTypeDescPB result;
     result.set_logical_type(logical_type);
-    result.set_coordinate_system(wire_coordinate_system(logical_type));
     result.set_edge_algorithm(edge_algorithm);
     result.set_crs(crs);
     if (srid) result.set_srid(*srid);

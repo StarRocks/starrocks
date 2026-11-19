@@ -125,12 +125,6 @@ enum TGeoLogicalType {
     GEOMETRY = 2
 }
 
-enum TGeoCoordinateSystem {
-    UNKNOWN = 0,
-    SPHERICAL = 1,
-    CARTESIAN = 2
-}
-
 enum TGeoEdgeAlgorithm {
     UNKNOWN = 0,
     SPHERICAL = 1,
@@ -144,10 +138,9 @@ enum TGeoEdgeAlgorithm {
 // Semantic and physical metadata for native geo types.
 struct TGeoTypeDesc {
     1: optional TGeoLogicalType logical_type
-    2: optional TGeoCoordinateSystem coordinate_system
-    3: optional TGeoEdgeAlgorithm edge_algorithm
-    4: optional string crs
-    5: optional i32 srid
+    2: optional TGeoEdgeAlgorithm edge_algorithm
+    3: optional string crs
+    4: optional i32 srid
 }
 
 struct TScalarType {
