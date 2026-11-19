@@ -85,22 +85,14 @@ StatusOr<TimestampValue> AvroUtils::long_to_timestamp_value(const avro::GenericD
     TimestampValue to{};
     switch (datum.logicalType().type()) {
     case avro::LogicalType::TIMESTAMP_MILLIS: {
-<<<<<<< HEAD
-        to.from_unixtime(from / 1000, (from % 1000) * 1000, timezone);
-=======
         auto [second, microsecond] = split_epoch_to_second_and_micros(from, 1000);
-        from_unixtime(&to, second, microsecond);
->>>>>>> 090f507 ([BugFix][RB-1712] Keep instants before 1970 when VARIANT and Avro split epoch microseconds (#83729))
+        to.from_unixtime(second, microsecond, timezone);
         return to;
     }
 
     case avro::LogicalType::TIMESTAMP_MICROS: {
-<<<<<<< HEAD
-        to.from_unixtime(from / 1000000, (from % 1000000), timezone);
-=======
         auto [second, microsecond] = split_epoch_to_second_and_micros(from, 1000000);
-        from_unixtime(&to, second, microsecond);
->>>>>>> 090f507 ([BugFix][RB-1712] Keep instants before 1970 when VARIANT and Avro split epoch microseconds (#83729))
+        to.from_unixtime(second, microsecond, timezone);
         return to;
     }
 
