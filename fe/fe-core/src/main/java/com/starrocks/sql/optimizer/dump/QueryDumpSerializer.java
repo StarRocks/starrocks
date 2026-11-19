@@ -30,6 +30,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.Version;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.system.BackendResourceStat;
@@ -113,6 +114,47 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableMetaData.addProperty(tableName, createTableStmt.get(0));
         }
         dumpJson.add("table_meta", tableMetaData);
+        // External-catalog (iceberg/hive/...) tables: record each table's real catalog explicitly, keyed like
+        // table_meta (db.table). This lets replay recreate the external catalog directly by name, independent
+        // of the legacy "resource" concept. Older dumps omit this section; replay then infers the catalog from
+        // the SQL, so this stays backward compatible.
+        JsonObject externalCatalogData = new JsonObject();
+        for (Pair<String, Table> entry : tableMetaPairs) {
+            String catalogName = entry.second.getCatalogName();
+            if (catalogName != null && !CatalogMgr.isInternalCatalog(catalogName)) {
+                externalCatalogData.addProperty(entry.first + "." + entry.second.getName(), catalogName);
+            }
+        }
+        if (externalCatalogData.size() > 0) {
+            dumpJson.add("external_table_catalog", externalCatalogData);
+        }
+        // External-catalog table total row counts (keyed db.table). Iceberg has no hms scanRowCount to carry
+        // it, and without it replay would fall back to a tiny default that clamps NDV/cardinality.
+        if (!dumpInfo.getExternalTableRowCountMap().isEmpty()) {
+            JsonObject externalRowCountData = new JsonObject();
+            for (Map.Entry<String, Long> entry : dumpInfo.getExternalTableRowCountMap().entrySet()) {
+                externalRowCountData.addProperty(entry.getKey(), entry.getValue());
+            }
+            dumpJson.add("external_table_row_count", externalRowCountData);
+        }
+        // Iceberg partition spec (transforms) + partition names, so replay can rebuild a real PartitionSpec
+        // and reproduce partition pruning. Keyed db.table. Only present for partitioned iceberg tables.
+        if (!dumpInfo.getExternalTablePartitionNameMap().isEmpty()) {
+            JsonObject specData = new JsonObject();
+            for (Map.Entry<String, List<String>> entry : dumpInfo.getExternalTablePartitionSpecMap().entrySet()) {
+                JsonArray arr = new JsonArray();
+                entry.getValue().forEach(arr::add);
+                specData.add(entry.getKey(), arr);
+            }
+            dumpJson.add("external_table_partition_spec", specData);
+            JsonObject namesData = new JsonObject();
+            for (Map.Entry<String, List<String>> entry : dumpInfo.getExternalTablePartitionNameMap().entrySet()) {
+                JsonArray arr = new JsonArray();
+                entry.getValue().forEach(arr::add);
+                namesData.add(entry.getKey(), arr);
+            }
+            dumpJson.add("external_table_partition_names", namesData);
+        }
         // hive meta store table info
         if (!dumpInfo.getHmsTableMap().isEmpty()) {
             JsonObject externalTableInfoData = new JsonObject();
