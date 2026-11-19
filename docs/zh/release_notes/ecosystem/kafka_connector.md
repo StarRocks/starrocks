@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks Connector for Apache Kafka 的发布说明和更新日志。"
 products: [oss]
 ---
 
@@ -7,7 +8,7 @@ products: [oss]
 
 ## 发布说明
 
-**使用文档：** [使用 Kafka connector 导入数据](https://docs.starrocks.io/zh/docs/loading/kafka/Kafka-connector-starrocks/)
+**使用文档：** [使用 Kafka connector 导入数据](../../loading/kafka/Kafka-connector-starrocks.md)
 
 **源码下载地址：**[starrocks-connector-for-kafka](https://github.com/StarRocks/starrocks-connector-for-kafka)
 

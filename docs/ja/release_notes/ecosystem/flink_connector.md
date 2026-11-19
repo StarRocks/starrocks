@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks Connector for Apache Flink のリリースノート・変更履歴。"
 products: [oss]
 ---
 
@@ -9,8 +10,8 @@ products: [oss]
 
 **ユーザーガイド:**
 
-- [Flink コネクタを使用して StarRocks にデータをロードする](https://docs.starrocks.io/docs/loading/Flink-connector-starrocks/)
-- [Flink コネクタを使用して StarRocks からデータを読み取る](https://docs.starrocks.io/docs/unloading/Flink_connector/)
+- [Flink コネクタを使用して StarRocks にデータをロードする](../../loading/Flink-connector-starrocks.md)
+- [Flink コネクタを使用して StarRocks からデータを読み取る](../../unloading/Flink_connector.md)
 
 **ソースコード:** [starrocks-connector-for-apache-flink](https://github.com/StarRocks/starrocks-connector-for-apache-flink)
 
@@ -21,9 +22,9 @@ products: [oss]
 
 **JAR ファイルを取得する方法:**
 
-- [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks) から直接 Flink コネクタ JAR ファイルをダウンロードします。
-- Flink コネクタを Maven プロジェクトの `pom.xml` ファイルに依存関係として追加し、ダウンロードします。具体的な手順は [ユーザーガイド](https://docs.starrocks.io/docs/loading/Flink-connector-starrocks/#obtain-flink-connector) を参照してください。
-- ソースコードをコンパイルして Flink コネクタ JAR ファイルを作成します。具体的な手順は [ユーザーガイド](https://docs.starrocks.io/docs/loading/Flink-connector-starrocks/#obtain-flink-connector) を参照してください。
+- [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks/) から直接 Flink コネクタ JAR ファイルをダウンロードします。
+- Flink コネクタを Maven プロジェクトの `pom.xml` ファイルに依存関係として追加し、ダウンロードします。具体的な手順は [ユーザーガイド](../../loading/Flink-connector-starrocks.md#obtain-flink-connector) を参照してください。
+- ソースコードをコンパイルして Flink コネクタ JAR ファイルを作成します。具体的な手順は [ユーザーガイド](../../loading/Flink-connector-starrocks.md#obtain-flink-connector) を参照してください。
 
 **バージョン要件:**
 
@@ -162,7 +163,7 @@ products: [oss]
 
 #### 1.2.9
 
-このリリースにはいくつかの機能とバグ修正が含まれています。注目すべき変更は、Flink コネクタが Flink CDC 3.0 と統合され、CDC ソース（MySQL や Kafka など）から StarRocks へのストリーミング ELT パイプラインを簡単に構築できるようになったことです。詳細は [Flink CDC 3.0 とのデータ同期 (schema change 対応)](https://docs.starrocks.io/docs/loading/Flink-connector-starrocks/#synchronize-data-with-flink-cdc-30-with-schema-change-supported) を参照してください。
+このリリースにはいくつかの機能とバグ修正が含まれています。注目すべき変更は、Flink コネクタが Flink CDC 3.0 と統合され、CDC ソース（MySQL や Kafka など）から StarRocks へのストリーミング ELT パイプラインを簡単に構築できるようになったことです。詳細は [Flink CDC 3.0 とのデータ同期 (schema change 対応)](../../loading/Flink-connector-starrocks.md#synchronize-data-with-flink-cdc-30-with-schema-change-supported) を参照してください。
 
 **機能**
 
@@ -180,7 +181,7 @@ products: [oss]
 このリリースにはいくつかの改善とバグ修正が含まれています。注目すべき変更は以下の通りです:
 
 - Flink 1.16 および 1.17 をサポートします。
-- シンクが設定されている場合に `sink.label-prefix` を設定して、正確に一度のセマンティクスを保証することを推奨します。具体的な手順は [Exactly Once](https://docs.starrocks.io/docs/loading/Flink-connector-starrocks/#exactly-once) を参照してください。
+- シンクが設定されている場合に `sink.label-prefix` を設定して、正確に一度のセマンティクスを保証することを推奨します。具体的な手順は [Exactly Once](../../loading/Flink-connector-starrocks.md#exactly-once) を参照してください。
 
 **改善**
 
