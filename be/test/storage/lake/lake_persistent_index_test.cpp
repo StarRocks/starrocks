@@ -14,6 +14,7 @@
 
 #include "storage/lake/lake_persistent_index.h"
 
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -49,6 +50,7 @@
 #include "testutil/assert.h"
 #include "testutil/sync_point.h"
 #include "util/defer_op.h"
+#include "util/uid_util.h"
 
 namespace starrocks::lake {
 
@@ -1264,6 +1266,22 @@ TEST_F(LakePersistentIndexTest, test_range_single_int_pk_end_to_end) {
         ASSERT_OK(index->flush_memtable(true));
         ASSERT_OK(index->sync_flush_all_memtables(10000000)); // 10 seconds timeout
     }
+    // The keys grow from batch to batch, so the three sstables share one fileset. The serial
+    // picker never takes the newest fileset, so write key 100 again to start a newer one, and
+    // force a base merge so that the picker takes the three sstables.
+    {
+        std::vector<std::string> keys = {encode_key(100)};
+        std::vector<Slice> key_slices = {Slice(keys[0])};
+        std::vector<IndexValue> values = {IndexValue(1000)};
+        std::vector<IndexValue> upsert_old_values(1);
+        index->prepare(EditVersion(3, 0), 0);
+        ASSERT_OK(index->upsert(1, key_slices.data(), values.data(), upsert_old_values.data()));
+        ASSERT_OK(index->flush_memtable(true));
+        ASSERT_OK(index->sync_flush_all_memtables(10000000)); // 10 seconds timeout
+    }
+    auto saved_ratio = config::lake_pk_index_cumulative_base_compaction_ratio;
+    config::lake_pk_index_cumulative_base_compaction_ratio = 0;
+    DeferOp restore_ratio([&]() { config::lake_pk_index_cumulative_base_compaction_ratio = saved_ratio; });
 
     Tablet tablet(_tablet_mgr.get(), tablet_id);
     auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
@@ -1516,6 +1534,219 @@ TEST_F(LakePersistentIndexTest, test_compaction_strategy_same_max_rss_rowid) {
     // Should choose base merge since there are no cumulative sstables
     ASSERT_TRUE(!merge_base_level) << "Should choose cumulative merge when no cumulative sstables exist";
     ASSERT_EQ(0, sstables.size()) << "Should be empty since no cumulative sstables exist";
+}
+
+// apply_opcompaction removes whole filesets, so the serial picker must pick whole filesets and
+// leave out the newest one, which later flushes can still join.
+TEST_F(LakePersistentIndexTest, test_compaction_strategy_picks_whole_filesets) {
+    auto add_sstable = [](PersistentIndexSstableMetaPB* meta, const std::string& name, int64_t size,
+                          const UniqueId& fileset_id) {
+        auto* sstable_pb = meta->add_sstables();
+        sstable_pb->set_filename(name);
+        sstable_pb->set_filesize(size);
+        sstable_pb->set_max_rss_rowid(meta->sstables_size());
+        sstable_pb->mutable_fileset_id()->CopyFrom(fileset_id.to_proto());
+    };
+    auto picked_names = [](const std::vector<PersistentIndexSstablePB>& sstables) {
+        std::vector<std::string> names;
+        for (const auto& sstable_pb : sstables) {
+            names.push_back(sstable_pb.filename());
+        }
+        return names;
+    };
+    std::vector<PersistentIndexSstablePB> sstables;
+    bool merge_base_level = false;
+
+    // 1. The base level is a fileset of two sstables. A cumulative merge must not take only the
+    //    second one, and the newest fileset stays out.
+    {
+        PersistentIndexSstableMetaPB meta;
+        auto base = UniqueId::gen_uid();
+        add_sstable(&meta, "base1.sst", 1000000, base);
+        add_sstable(&meta, "base2.sst", 1000, base);
+        add_sstable(&meta, "cumu1.sst", 1000, UniqueId::gen_uid());
+        add_sstable(&meta, "cumu2.sst", 1000, UniqueId::gen_uid());
+        add_sstable(&meta, "active.sst", 1000, UniqueId::gen_uid());
+        sstables.clear();
+        LakePersistentIndex::pick_sstables_for_merge(meta, &sstables, &merge_base_level);
+        ASSERT_FALSE(merge_base_level);
+        ASSERT_EQ((std::vector<std::string>{"cumu1.sst", "cumu2.sst"}), picked_names(sstables));
+    }
+
+    // 2. A base merge also leaves out the newest fileset, even when it holds several sstables.
+    {
+        PersistentIndexSstableMetaPB meta;
+        auto active = UniqueId::gen_uid();
+        add_sstable(&meta, "base.sst", 1000, UniqueId::gen_uid());
+        add_sstable(&meta, "cumu.sst", 1000, UniqueId::gen_uid());
+        add_sstable(&meta, "active1.sst", 1000, active);
+        add_sstable(&meta, "active2.sst", 1000, active);
+        sstables.clear();
+        LakePersistentIndex::pick_sstables_for_merge(meta, &sstables, &merge_base_level);
+        ASSERT_TRUE(merge_base_level);
+        ASSERT_EQ((std::vector<std::string>{"base.sst", "cumu.sst"}), picked_names(sstables));
+    }
+
+    // 3. The sstable count limit cuts at a fileset edge.
+    {
+        auto saved_limit = config::lake_pk_index_sst_max_compaction_versions;
+        config::lake_pk_index_sst_max_compaction_versions = 3;
+        DeferOp restore_config([&]() { config::lake_pk_index_sst_max_compaction_versions = saved_limit; });
+        PersistentIndexSstableMetaPB meta;
+        auto middle = UniqueId::gen_uid();
+        add_sstable(&meta, "base.sst", 1000000, UniqueId::gen_uid());
+        add_sstable(&meta, "cumu1.sst", 1000, UniqueId::gen_uid());
+        add_sstable(&meta, "cumu2.sst", 1000, UniqueId::gen_uid());
+        add_sstable(&meta, "middle1.sst", 1000, middle);
+        add_sstable(&meta, "middle2.sst", 1000, middle);
+        add_sstable(&meta, "active.sst", 1000, UniqueId::gen_uid());
+        sstables.clear();
+        LakePersistentIndex::pick_sstables_for_merge(meta, &sstables, &merge_base_level);
+        ASSERT_FALSE(merge_base_level);
+        ASSERT_EQ((std::vector<std::string>{"cumu1.sst", "cumu2.sst"}), picked_names(sstables));
+    }
+
+    // 4. When one fileset alone is over the limit, the picker takes the whole fileset.
+    {
+        auto saved_limit = config::lake_pk_index_sst_max_compaction_versions;
+        config::lake_pk_index_sst_max_compaction_versions = 2;
+        DeferOp restore_config([&]() { config::lake_pk_index_sst_max_compaction_versions = saved_limit; });
+        PersistentIndexSstableMetaPB meta;
+        auto middle = UniqueId::gen_uid();
+        add_sstable(&meta, "base.sst", 1000000, UniqueId::gen_uid());
+        add_sstable(&meta, "middle1.sst", 1000, middle);
+        add_sstable(&meta, "middle2.sst", 1000, middle);
+        add_sstable(&meta, "middle3.sst", 1000, middle);
+        add_sstable(&meta, "active.sst", 1000, UniqueId::gen_uid());
+        sstables.clear();
+        LakePersistentIndex::pick_sstables_for_merge(meta, &sstables, &merge_base_level);
+        ASSERT_FALSE(merge_base_level);
+        ASSERT_EQ((std::vector<std::string>{"middle1.sst", "middle2.sst", "middle3.sst"}), picked_names(sstables));
+    }
+
+    // 5. A base merge whose next fileset is over the limit takes that fileset whole. Cutting back
+    //    to the base alone would merge nothing, and every later round would pick the same.
+    {
+        auto saved_limit = config::lake_pk_index_sst_max_compaction_versions;
+        config::lake_pk_index_sst_max_compaction_versions = 3;
+        DeferOp restore_config([&]() { config::lake_pk_index_sst_max_compaction_versions = saved_limit; });
+        PersistentIndexSstableMetaPB meta;
+        auto middle = UniqueId::gen_uid();
+        add_sstable(&meta, "base.sst", 1000, UniqueId::gen_uid());
+        add_sstable(&meta, "middle1.sst", 1000, middle);
+        add_sstable(&meta, "middle2.sst", 1000, middle);
+        add_sstable(&meta, "middle3.sst", 1000, middle);
+        add_sstable(&meta, "middle4.sst", 1000, middle);
+        add_sstable(&meta, "cumu.sst", 1000, UniqueId::gen_uid());
+        add_sstable(&meta, "active.sst", 1000, UniqueId::gen_uid());
+        sstables.clear();
+        LakePersistentIndex::pick_sstables_for_merge(meta, &sstables, &merge_base_level);
+        ASSERT_TRUE(merge_base_level);
+        ASSERT_EQ((std::vector<std::string>{"base.sst", "middle1.sst", "middle2.sst", "middle3.sst", "middle4.sst"}),
+                  picked_names(sstables));
+    }
+
+    // 6. The same for a cumulative merge that starts with a one-sstable fileset.
+    {
+        auto saved_limit = config::lake_pk_index_sst_max_compaction_versions;
+        config::lake_pk_index_sst_max_compaction_versions = 3;
+        DeferOp restore_config([&]() { config::lake_pk_index_sst_max_compaction_versions = saved_limit; });
+        PersistentIndexSstableMetaPB meta;
+        auto middle = UniqueId::gen_uid();
+        add_sstable(&meta, "base.sst", 1000000, UniqueId::gen_uid());
+        add_sstable(&meta, "cumu.sst", 1000, UniqueId::gen_uid());
+        add_sstable(&meta, "middle1.sst", 1000, middle);
+        add_sstable(&meta, "middle2.sst", 1000, middle);
+        add_sstable(&meta, "middle3.sst", 1000, middle);
+        add_sstable(&meta, "middle4.sst", 1000, middle);
+        add_sstable(&meta, "active.sst", 1000, UniqueId::gen_uid());
+        sstables.clear();
+        LakePersistentIndex::pick_sstables_for_merge(meta, &sstables, &merge_base_level);
+        ASSERT_FALSE(merge_base_level);
+        ASSERT_EQ((std::vector<std::string>{"cumu.sst", "middle1.sst", "middle2.sst", "middle3.sst", "middle4.sst"}),
+                  picked_names(sstables));
+    }
+}
+
+// The serial index compaction picks its inputs from the metadata of the compaction task, and
+// its publish removes whole filesets. A flush that joins a picked fileset in between must
+// survive the publish. Before the fix, the index lost it and pointed those keys at an older
+// rowset.
+TEST_F(LakePersistentIndexTest, test_major_compaction_keeps_sstable_flushed_after_pick) {
+    auto saved_l0_max_mem_usage = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10;
+    DeferOp restore_config([&]() { config::l0_max_mem_usage = saved_l0_max_mem_usage; });
+    auto tablet_id = _tablet_metadata->id();
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata));
+
+    // Fixed-width keys, so that the byte order of the keys follows their numbers.
+    auto make_keys = [](int begin, int end) {
+        std::vector<std::string> keys;
+        for (int i = begin; i < end; i++) {
+            keys.push_back(fmt::format("k{:06d}", i));
+        }
+        return keys;
+    };
+    // Write keys [begin, end) as rows of segment |rssid|, then flush them to one sstable.
+    auto upsert_and_flush = [&](int begin, int end, uint32_t rssid) -> Status {
+        auto keys = make_keys(begin, end);
+        std::vector<Slice> key_slices(keys.begin(), keys.end());
+        std::vector<IndexValue> values;
+        for (int i = 0; i < keys.size(); i++) {
+            values.emplace_back((static_cast<uint64_t>(rssid) << 32) | i);
+        }
+        std::vector<IndexValue> old_values(keys.size());
+        index->prepare(EditVersion(rssid, 0), 0);
+        RETURN_IF_ERROR(index->upsert(keys.size(), key_slices.data(), values.data(), old_values.data()));
+        RETURN_IF_ERROR(index->flush_memtable(true));
+        return index->sync_flush_all_memtables(60 * 1000 * 1000);
+    };
+    auto expect_values = [&](LakePersistentIndex* idx) {
+        auto keys = make_keys(0, 200);
+        std::vector<Slice> key_slices(keys.begin(), keys.end());
+        std::vector<IndexValue> values(keys.size());
+        ASSERT_OK(idx->get(keys.size(), key_slices.data(), values.data()));
+        for (int i = 0; i < keys.size(); i++) {
+            uint64_t expected = i < 50 ? (3ULL << 32) | i : (i < 100 ? (2ULL << 32) | i : (4ULL << 32) | (i - 100));
+            ASSERT_EQ(expected, values[i].get_value()) << keys[i];
+        }
+    };
+
+    // 1. Three filesets: the key ranges overlap, so each flush starts a new one.
+    ASSERT_OK(upsert_and_flush(0, 200, 1));
+    ASSERT_OK(upsert_and_flush(0, 200, 2));
+    ASSERT_OK(upsert_and_flush(0, 50, 3));
+    ASSERT_EQ(2, index->current_fileset_index());
+    Tablet tablet(_tablet_mgr.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->CopyFrom(*_tablet_metadata);
+    MetaFileBuilder builder(tablet, metadata);
+    ASSERT_OK(index->commit(&builder));
+    ASSERT_EQ(3, metadata->sstable_meta().sstables_size());
+
+    // 2. The compaction task picks its inputs.
+    auto txn_log = std::make_shared<TxnLogPB>();
+    ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), metadata, txn_log.get()));
+    ASSERT_TRUE(txn_log->op_compaction().has_output_sstable());
+
+    // 3. Before the compaction publishes, a load writes keys that sort after the newest
+    //    fileset, so its sstable joins that fileset.
+    ASSERT_OK(upsert_and_flush(100, 200, 4));
+    ASSERT_EQ(2, index->current_fileset_index());
+
+    // 4. The compaction publishes. Keys 100 to 199 must still point at segment 4.
+    ASSERT_OK(index->apply_opcompaction(metadata, txn_log->op_compaction()));
+    expect_values(index.get());
+
+    // 5. The stored index keeps segment 4 too.
+    auto committed = std::make_shared<TabletMetadata>();
+    committed->CopyFrom(*metadata);
+    MetaFileBuilder commit_builder(tablet, committed);
+    ASSERT_OK(index->commit(&commit_builder));
+    auto reloaded = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(reloaded->init(committed));
+    expect_values(reloaded.get());
 }
 
 TEST_F(LakePersistentIndexTest, test_tablet_range_single_column_pk) {
