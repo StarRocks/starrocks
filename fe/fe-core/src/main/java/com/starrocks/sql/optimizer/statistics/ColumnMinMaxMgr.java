@@ -223,7 +223,7 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
         List<String> pieces = SubfieldAccessPathNormalizer.parseSimpleJsonPath(column.getColumnId().getId());
         String columnName;
         if (pieces.size() == 1) {
-            columnName = column.getName();
+            columnName = StatisticUtils.quoting(column.getName());
         } else {
             String path = pieces.stream().skip(1).collect(Collectors.joining("."));
             String jsonFunc;
