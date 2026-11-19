@@ -1170,17 +1170,17 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
     for (auto& ls : loaded) {
         segments.emplace_back(std::move(ls.segment));
     }
-    if (!effective_opts.hold_segments) {
+    if (!can_hold_segments()) {
         return segments;
     }
-    // read() feeds the held set through the prepared-segments path, which derives each segment's
-    // metadata position from its index in the vector. load_segments() appends in metadata order
-    // except when a parallel-load submit falls back to a serial load mid-loop
-    // (enable_load_segment_parallel): that segment lands ahead of the futures still pending.
-    // can_hold_segments() has already ruled out the partial-compaction and segment-range modes, so
-    // the loaded positions here are exactly [0, size) and reordering by segment_meta_pos restores
-    // the invariant. Anything else is unexpected: hold nothing, so read() keeps loading per read
-    // rather than indexing a set whose positions it cannot trust.
+    // The prepared-segments path of read() -- a held set, or the segments a tablet reader opened
+    // up front -- derives each segment's metadata position from its index in the vector.
+    // load_segments() appends in metadata order except when a parallel-load submit falls back to a
+    // serial load mid-loop (enable_load_segment_parallel): that segment lands ahead of the futures
+    // still pending. can_hold_segments() has ruled out the partial-compaction and segment-range
+    // modes, so the loaded positions here are exactly [0, size) and reordering by segment_meta_pos
+    // restores the invariant. Anything else is unexpected: hold nothing, so read() keeps loading per
+    // read rather than indexing a set whose positions it cannot trust.
     std::vector<SegmentPtr> ordered(segments.size());
     for (size_t i = 0; i < loaded.size(); i++) {
         const int32_t pos = loaded[i].segment_meta_pos;
@@ -1190,6 +1190,9 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
             return segments;
         }
         ordered[pos] = segments[i];
+    }
+    if (!effective_opts.hold_segments) {
+        return ordered;
     }
     std::lock_guard<std::mutex> l(_held_segments_mutex);
     // Loading runs outside the lock. A fallback during IO must also prevent publication, while
@@ -1431,10 +1434,15 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
             });
 
             auto packaged_func = [task]() { (*task)(); };
-            if (auto st = RuntimeEnv::GetInstance()->load_segment_thread_pool()->submit_func(std::move(packaged_func));
-                !st.ok()) {
+            Status submit_st;
+            TEST_SYNC_POINT_CALLBACK("Rowset::load_segments::submit", &submit_st);
+            if (submit_st.ok()) {
+                submit_st =
+                        RuntimeEnv::GetInstance()->load_segment_thread_pool()->submit_func(std::move(packaged_func));
+            }
+            if (!submit_st.ok()) {
                 // try load segment serially
-                LOG(WARNING) << "sumbit_func failed: " << st.code_as_string()
+                LOG(WARNING) << "sumbit_func failed: " << submit_st.code_as_string()
                              << ", try to load segment serially, seg_id: " << segment_id;
                 auto segment_or =
                         _tablet_mgr->load_segment(segment_info, segment_id, &footer_size_hint, lake_io_opts,

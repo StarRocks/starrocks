@@ -159,8 +159,9 @@ private:
                                                                 RowidRangeOptionPtr* local_rowid_range);
     Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
     // lake_scan_warm_index: starts warming the index pages the query scan of |state| reads next, without waiting.
-    void warm_index_pages(PreparedTabletReadState* state, ReaderType reader_type, const RowsetReadOptions& options,
-                          const LakeIOOptions& lake_io_opts);
+    // Stops issuing fills once the query of |params| is cancelled.
+    void warm_index_pages(PreparedTabletReadState* state, const TabletReaderParams& params,
+                          const RowsetReadOptions& options, const LakeIOOptions& lake_io_opts);
     Status init_rowset_read_options(const TabletReaderParams& params, RowsetReadOptions* options);
     Status init_rowset_read_options_for_split(const TabletReaderParams& params, RowsetReadOptions* options,
                                               LakeIOOptions* lake_io_opts);

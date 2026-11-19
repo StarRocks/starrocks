@@ -145,14 +145,18 @@ static Status run_on_load_segment_pool(std::vector<std::function<Status()>>& tas
     return first_error;
 }
 
-// Adds the fields the tablet preparation reports to |to|.
-static void add_tablet_prepare_io_stats(const OlapReaderStatistics& from, OlapReaderStatistics* to) {
-    to->segments_opened += from.segments_opened;
-    to->io_ns += from.io_ns;
-    to->io_count += from.io_count;
-    to->io_ns_remote += from.io_ns_remote;
-    to->io_count_remote += from.io_count_remote;
-    to->compressed_bytes_read_remote += from.compressed_bytes_read_remote;
+// Runs |tasks| one after another on this thread, under the query's remote read context as on the pool. No task starts
+// once |is_cancelled| is set or after a task fails. Returns the first error.
+static Status run_inline(std::vector<std::function<Status()>>& tasks, const RemoteReadContext& query_remote_read,
+                         const std::atomic<bool>* is_cancelled) {
+    ScopedRemoteReadContext remote_read_scope(ScopedRemoteReadContext::or_current(query_remote_read));
+    for (auto& task : tasks) {
+        if (cancel_requested(is_cancelled)) {
+            return Status::Cancelled("cancelled while opening segments");
+        }
+        RETURN_IF_ERROR(task());
+    }
+    return Status::OK();
 }
 
 // The predicate tree of the segment metadata filter that Rowset::read applies with |options|, or nullptr when it
@@ -165,19 +169,21 @@ static const PredicateTree* metadata_prune_tree(const RowsetReadOptions& options
     return &options.pred_tree_for_zone_map;
 }
 
-// lake_scan_parallel_segment_open: opens the segments of all |rowsets| at once, one task per segment, and puts
-// them in metadata order whatever order the tasks finish in. A segment whose footer is already open in the metadata
-// cache is taken as it is, without a task. If |cached_rowsets| is not null, it tells per rowset whether every segment
-// was taken that way, as found before any task ran.
+// Opens the segments of all |rowsets|, one task per segment, and puts them in metadata order whatever order the tasks
+// finish in. With |in_parallel| the tasks run at once on the load segment thread pool
+// (lake_scan_parallel_segment_open), otherwise one after another on this thread. A segment whose footer is already
+// open in the metadata cache is taken as it is, without a task. If |cached_rowsets| is not null, it tells per rowset
+// whether every segment was taken that way, as found before any task ran. |prepare_stats| receives the statistics
+// of every task that ran.
 // With a non-null |prune_tree|, a segment SegmentMetadataFilter excludes by |prune_tree| is neither looked up nor
 // opened: its slot stays nullptr, which Rowset::read skips, and it does not count against |cached_rowsets|.
-static Status open_rowset_segments_in_parallel(const std::vector<RowsetPtr>& rowsets, const LakeIOOptions& lake_io_opts,
-                                               const std::atomic<bool>* is_cancelled,
-                                               OlapReaderStatistics* prepare_stats,
-                                               std::vector<std::vector<SegmentPtr>>* rowset_segments,
-                                               std::vector<bool>* cached_rowsets = nullptr,
-                                               const PredicateTree* prune_tree = nullptr,
-                                               const TabletSchema* tablet_schema = nullptr) {
+static Status open_rowset_segments(const std::vector<RowsetPtr>& rowsets, const LakeIOOptions& lake_io_opts,
+                                   bool in_parallel, const std::atomic<bool>* is_cancelled,
+                                   OlapReaderStatistics* prepare_stats,
+                                   std::vector<std::vector<SegmentPtr>>* rowset_segments,
+                                   std::vector<bool>* cached_rowsets = nullptr,
+                                   const PredicateTree* prune_tree = nullptr,
+                                   const TabletSchema* tablet_schema = nullptr) {
     rowset_segments->resize(rowsets.size());
     if (cached_rowsets != nullptr) {
         cached_rowsets->assign(rowsets.size(), false);
@@ -230,10 +236,13 @@ static Status open_rowset_segments_in_parallel(const std::vector<RowsetPtr>& row
             (*cached_rowsets)[rowset_idx] = all_cached;
         }
     }
-    auto st = run_on_load_segment_pool(tasks, lake_io_opts.remote_read, is_cancelled);
-    // Every task that ran may have read a footer, including the ones after the first error.
+    auto st = in_parallel ? run_on_load_segment_pool(tasks, lake_io_opts.remote_read, is_cancelled)
+                          : run_inline(tasks, lake_io_opts.remote_read, is_cancelled);
+    // Every task that ran may have read a footer, including the ones after the first error. merge_from() leaves out
+    // segments_opened, which the tablet preparation reports.
     for (const auto& stats : task_stats) {
-        add_tablet_prepare_io_stats(*stats, prepare_stats);
+        prepare_stats->merge_from(*stats);
+        prepare_stats->segments_opened += stats->segments_opened;
     }
     return st;
 }
@@ -452,7 +461,7 @@ static bool allocate_initial_coarse_split(const PreparedSegmentReadStatePtr& seg
 static void warm_prepared_indexes(PreparedTabletReadState* state, const TabletSchema& tablet_schema,
                                   const std::vector<ColumnId>& predicate_cids, const std::vector<ColumnId>& read_cids,
                                   const PredicateTree* prune_tree, const LakeIOOptions& query_io_opts,
-                                  OlapReaderStatistics* stats) {
+                                  const std::atomic<bool>* is_cancelled, OlapReaderStatistics* stats) {
     LakeIOOptions lake_io_opts = query_io_opts;
     lake_io_opts.remote_read = ScopedRemoteReadContext::or_current(query_io_opts.remote_read);
     const int64_t block_size = std::max<int64_t>(1, config::starlet_star_cache_block_size_bytes);
@@ -465,6 +474,9 @@ static void warm_prepared_indexes(PreparedTabletReadState* state, const TabletSc
             rowset_meta = &state->rowsets[rowset_idx]->metadata();
         }
         for (size_t pos = 0; pos < segments.size(); ++pos) {
+            if (cancel_requested(is_cancelled)) {
+                return;
+            }
             const auto& segment = segments[pos];
             if (segment == nullptr || segment->num_rows() == 0) {
                 continue;
@@ -549,6 +561,9 @@ static void warm_prepared_indexes(PreparedTabletReadState* state, const TabletSc
                                                              std::numeric_limits<int64_t>::max() - object_offset));
             bool warmed = false;
             for (const auto& [begin, end] : merged) {
+                if (cancel_requested(is_cancelled)) {
+                    break;
+                }
                 const int64_t from = std::max(begin, object_offset);
                 const int64_t to = std::min(end, file_end);
                 if (to <= from) {
@@ -876,7 +891,7 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
             LakeIOOptions classic_io_options;
             RETURN_IF_ERROR(
                     init_rowset_read_options_for_split(read_params, &classic_read_options, &classic_io_options));
-            warm_index_pages(classic_state.get(), read_params.reader_type, classic_read_options, classic_io_options);
+            warm_index_pages(classic_state.get(), read_params, classic_read_options, classic_io_options);
         }
 
         pipeline::Morsels morsels;
@@ -1134,9 +1149,9 @@ void TabletReader::record_tablet_prepare_stats(const OlapReaderStatistics& prepa
 
 // The one entry point of index warming for the query scans of a tablet, split or not: called once the scan has opened
 // the segments of |state|.
-void TabletReader::warm_index_pages(PreparedTabletReadState* state, ReaderType reader_type,
+void TabletReader::warm_index_pages(PreparedTabletReadState* state, const TabletReaderParams& params,
                                     const RowsetReadOptions& options, const LakeIOOptions& lake_io_opts) {
-    if (!should_warm_index_pages(reader_type) || options.tablet_schema == nullptr) {
+    if (!should_warm_index_pages(params.reader_type) || options.tablet_schema == nullptr) {
         return;
     }
     const auto& predicate_ids = options.pred_tree_for_zone_map.column_ids();
@@ -1148,7 +1163,8 @@ void TabletReader::warm_index_pages(PreparedTabletReadState* state, ReaderType r
         }
     }
     warm_prepared_indexes(state, *options.tablet_schema, predicate_cids, read_cids, metadata_prune_tree(options),
-                          lake_io_opts, &_stats);
+                          lake_io_opts,
+                          params.runtime_state != nullptr ? &params.runtime_state->cancelled_ref() : nullptr, &_stats);
 }
 
 Status TabletReader::build_prepared_tablet_read_state(const TabletReaderParams& params, PreparedTabletReadState* state,
@@ -1178,8 +1194,8 @@ Status TabletReader::build_prepared_tablet_read_state(const TabletReaderParams& 
         for (const auto& rowset : rowsets) {
             _stats.lake_prepared_tablet_segments += rowset->num_segments();
         }
-        RETURN_IF_ERROR(open_rowset_segments_in_parallel(rowsets, params.lake_io_opts, is_cancelled, prepare_stats,
-                                                         &rowset_segments));
+        RETURN_IF_ERROR(open_rowset_segments(rowsets, params.lake_io_opts, /*in_parallel=*/true, is_cancelled,
+                                             prepare_stats, &rowset_segments));
         // The tasks that had started their IO when the query was cancelled may all have succeeded.
         RETURN_IF_ERROR(check_cancelled(params, _tablet_metadata->id()));
     } else {
@@ -1311,7 +1327,7 @@ Status TabletReader::build_initial_coarse_split_tasks(const TabletReaderParams& 
     LakeIOOptions lake_io_opts;
     RETURN_IF_ERROR(init_rowset_read_options_for_split(params, &rowset_read_options, &lake_io_opts));
 
-    warm_index_pages(prepared_tablet_read_state.get(), params.reader_type, rowset_read_options, lake_io_opts);
+    warm_index_pages(prepared_tablet_read_state.get(), params, rowset_read_options, lake_io_opts);
 
     _split_tasks.clear();
     const auto split_rows = rows_per_split(params);
@@ -1575,7 +1591,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         }
     }
     // Per rowset, whether all its segments were open in the metadata cache before this scan opened them. Filled only
-    // when the segments are opened up front in parallel below.
+    // when the segments are opened up front below.
     std::vector<bool> cached_rowsets;
     if (!_need_split && classic_state == nullptr && should_warm_index_pages(params.reader_type) &&
         params.rowid_range_option == nullptr && params.short_key_ranges_option == nullptr) {
@@ -1587,21 +1603,16 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         state->rowsets = _rowsets;
         const std::atomic<bool>* is_cancelled =
                 params.runtime_state != nullptr ? &params.runtime_state->cancelled_ref() : nullptr;
-        if (should_open_segments_in_parallel(params.reader_type)) {
-            RETURN_IF_ERROR(check_cancelled(params, _tablet_metadata->id()));
-            // Open only the segments Rowset::read will not skip by the segment metadata filter.
-            RETURN_IF_ERROR(open_rowset_segments_in_parallel(
-                    _rowsets, rs_opts.lake_io_opts, is_cancelled, &_stats, &state->rowset_segments, &cached_rowsets,
-                    metadata_prune_tree(rs_opts), rs_opts.tablet_schema.get()));
-        } else {
-            for (const auto& rowset : _rowsets) {
-                RETURN_IF_ERROR(check_cancelled(params, _tablet_metadata->id()));
-                ASSIGN_OR_RETURN(auto segments, rowset->segments(rs_opts.lake_io_opts, &_stats, is_cancelled));
-                state->rowset_segments.emplace_back(std::move(segments));
-            }
-        }
         RETURN_IF_ERROR(check_cancelled(params, _tablet_metadata->id()));
-        warm_index_pages(state, params.reader_type, rs_opts, rs_opts.lake_io_opts);
+        // Open only the segments Rowset::read will not skip by the segment metadata filter, in metadata order. Their
+        // footers are read on the pool when the rowsets would be read on it below, and on this thread otherwise.
+        RETURN_IF_ERROR(open_rowset_segments(
+                _rowsets, rs_opts.lake_io_opts,
+                should_open_segments_in_parallel(params.reader_type) || config::enable_load_segment_parallel,
+                is_cancelled, &_stats, &state->rowset_segments, &cached_rowsets, metadata_prune_tree(rs_opts),
+                rs_opts.tablet_schema.get()));
+        RETURN_IF_ERROR(check_cancelled(params, _tablet_metadata->id()));
+        warm_index_pages(state, params, rs_opts, rs_opts.lake_io_opts);
     }
     auto read_rowset = [&](size_t rowset_idx, const RowsetReadOptions& options) {
         const auto& rowset = _rowsets[rowset_idx];

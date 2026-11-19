@@ -3744,7 +3744,8 @@ TEST_F(LakeTabletReaderSpit, test_index_warm_handles_released_on_cancel_and_erro
         params.runtime_state = &state;
         auto st = reader->open(params);
         ASSERT_TRUE(st.is_cancelled()) << st;
-        ASSERT_FALSE(handles.empty());
+        // The warming stops at the cancel: no range after the first is submitted.
+        ASSERT_EQ(1, handles.size());
         EXPECT_TRUE(none_expired());
         reader->close();
         EXPECT_TRUE(all_expired());
@@ -3766,7 +3767,7 @@ TEST_F(LakeTabletReaderSpit, test_index_warm_handles_released_on_cancel_and_erro
         std::vector<pipeline::ScanSplitContextPtr> tasks;
         planner->get_split_tasks(&tasks);
         EXPECT_TRUE(tasks.empty());
-        ASSERT_FALSE(handles.empty());
+        ASSERT_EQ(1, handles.size());
         EXPECT_TRUE(all_expired());
         planner->close();
     }
@@ -3936,9 +3937,20 @@ TEST_F(LakeTabletReaderSpit, test_index_warm_skips_segments_excluded_by_metadata
     EXPECT_EQ(R(3, 3, 0, 0), run(true, true, 1));
     // With the segment metadata filter off, neither the read nor the open skips a segment.
     EXPECT_EQ(R(3, 3, 0, 0), run(true, false, 0));
-    // Without parallel open the segments are opened serially as before; only the warming skips the excluded one.
+    // Without parallel open the segments are opened one after another, and the excluded one is not opened either.
     config::lake_scan_parallel_segment_open = false;
-    EXPECT_EQ(R(0, 2, 1, 1), run(true, true, 0));
+    EXPECT_EQ(R(2, 2, 1, 1), run(true, true, 0));
+    // enable_load_segment_parallel opens them on the pool. A submit the pool refuses opens its segment at once, ahead
+    // of the earlier ones still queued, and every segment still keeps its metadata slot: the rows do not change.
+    ConfigResetGuard<bool> load_parallel_guard(&config::enable_load_segment_parallel, true);
+    int submits = 0;
+    sync_point->SetCallBack("TabletReader::open_segments_in_parallel::submit", [&](void* arg) {
+        if (++submits == 2) {
+            *static_cast<Status*>(arg) = Status::ServiceUnavailable("injected submit refusal");
+        }
+    });
+    EXPECT_EQ(R(2, 2, 1, 1), run(true, true, 0));
+    EXPECT_EQ(2, submits);
 }
 
 // A segment the segment metadata filter excludes leaves a nullptr slot that the cached-rowset inline path ignores:
