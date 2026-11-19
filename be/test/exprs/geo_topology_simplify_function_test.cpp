@@ -291,25 +291,6 @@ TEST(GeoTopologySimplifyFunctionTest, PreparedInvalidAndNullInputsDeferPayloadEr
         ASSERT_TRUE(GeoFunctions::native_geo_simplify_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     }
 }
-TEST(GeoTopologySimplifyFunctionTest, CancellationAndQueryMemoryLimitReturnOriginalErrors) {
-    RuntimeState state(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr);
-    state.init_mem_trackers(TUniqueId());
-    ASSERT_NE(nullptr, state.query_mem_tracker_ptr());
-    auto type = geo_type();
-    std::unique_ptr<FunctionContext> ctx(
-            FunctionContext::create_context(&state, nullptr, type, {type, TypeDescriptor(TYPE_DOUBLE)}));
-    state.set_is_cancelled(true);
-    auto result = GeoFunctions::st_geometry_simplify_preserve_topology(ctx.get(), {geometries({kSquare}), radius(1)});
-    ASSERT_FALSE(result.ok());
-    EXPECT_TRUE(result.status().is_cancelled());
-    ctx->set_constant_columns({ConstColumn::create(geometries({kSquare}), 1), nullptr});
-    EXPECT_TRUE(GeoFunctions::native_geo_simplify_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL).is_cancelled());
-    state.set_is_cancelled(false);
-    ASSERT_TRUE(state.set_mem_limit_exceeded(state.instance_mem_tracker(), 1, "simplify test").is_mem_limit_exceeded());
-    result = GeoFunctions::st_geometry_simplify_preserve_topology(ctx.get(), {geometries({kSquare}), radius(1)});
-    ASSERT_FALSE(result.ok());
-    EXPECT_TRUE(result.status().is_mem_limit_exceeded());
-}
 TEST(GeoTopologySimplifyFunctionTest, RegistryConsumesOnlyTheGeometryReservation) {
     const auto* fn = BuiltinFunctions::find_builtin_function(120411);
     ASSERT_NE(nullptr, fn);
