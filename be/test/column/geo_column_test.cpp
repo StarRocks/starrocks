@@ -235,11 +235,10 @@ TEST(GeoColumnTest, MaterializationBindsOnlyStorageOfTypedPlaceholders) {
     auto source = GeoColumn::create(desc);
     source->append_wkb(Slice(point()));
     auto empty = GeoColumn::create(type, 0);
-    const auto unbound = empty->descriptor();
     empty->append(*source, 0, 0);
     empty->append_selective(*source, nullptr, 0, 0);
     empty->append_value_multiple_times(*source, 0, 0);
-    EXPECT_EQ(unbound, empty->descriptor());
+    EXPECT_EQ(desc, empty->descriptor());
     for (int operation = 0; operation < 4; ++operation) {
         SCOPED_TRACE(operation);
         auto destination = GeoColumn::create(type, 0);
@@ -283,6 +282,67 @@ TEST(GeoColumnTest, MaterializationBindsOnlyStorageOfTypedPlaceholders) {
     auto explicit_column = GeoColumn::create(explicit_desc);
     EXPECT_THROW(explicit_column->append(*source), std::invalid_argument);
     EXPECT_EQ(explicit_desc, explicit_column->descriptor());
+}
+
+TEST(GeoColumnTest, ZeroCountCopiesBindStorageAndCheckDescriptors) {
+    for (auto kind : {GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_LOGICAL_TYPE_GEOMETRY}) {
+        auto desc = descriptor(kind);
+        desc.storage = {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED};
+        const auto primitive = kind == GEO_LOGICAL_TYPE_GEOGRAPHY ? TYPE_GEOGRAPHY : TYPE_GEOMETRY;
+        const auto type = TypeDescriptor::create_geo_type(primitive, desc.type);
+        for (int operation = 0; operation < 3; ++operation) {
+            SCOPED_TRACE(::testing::Message() << kind << ":" << operation);
+            auto copy = [&](GeoColumn& destination, const Column& source) {
+                if (operation == 0)
+                    destination.append(source, 0, 0);
+                else if (operation == 1)
+                    destination.append_selective(source, nullptr, 0, 0);
+                else
+                    destination.append_value_multiple_times(source, 0, 0);
+            };
+            for (bool populated : {false, true}) {
+                SCOPED_TRACE(populated);
+                auto source = GeoColumn::create(desc);
+                if (populated) source->append_wkb(Slice(point()));
+                auto destination = GeoColumn::create(type, 0);
+                destination->append_default(2); // Materialized NULL placeholders own no WKB bytes.
+                copy(*destination, *source);
+                EXPECT_EQ(desc, destination->descriptor());
+                ASSERT_EQ(2, destination->size());
+                EXPECT_TRUE(destination->get_wkb(0).empty());
+                EXPECT_TRUE(destination->get_wkb(1).empty());
+                EXPECT_EQ(desc, source->descriptor());
+                EXPECT_EQ(populated ? 1 : 0, source->size());
+                copy(*source, *source);
+                EXPECT_EQ(desc, source->descriptor());
+                EXPECT_EQ(populated ? 1 : 0, source->size());
+                if (populated) {
+                    EXPECT_EQ(point(), source->get_wkb(0).to_string());
+                }
+
+                // A default-only source must not downgrade an already bound destination.
+                auto placeholder = GeoColumn::create(type, 0);
+                copy(*destination, *placeholder);
+                EXPECT_EQ(desc, destination->descriptor());
+                for (int mismatch = 0; mismatch < 4; ++mismatch) {
+                    auto incompatible = desc;
+                    if (mismatch == 0)
+                        incompatible = descriptor(kind == GEO_LOGICAL_TYPE_GEOGRAPHY ? GEO_LOGICAL_TYPE_GEOMETRY
+                                                                                     : GEO_LOGICAL_TYPE_GEOGRAPHY);
+                    else if (mismatch == 1)
+                        incompatible.type.crs = "custom:other";
+                    else if (mismatch == 2)
+                        incompatible.storage.dimension = GEO_DIMENSION_XYZ;
+                    else
+                        incompatible.type = {};
+                    auto rejected = GeoColumn::create(incompatible);
+                    EXPECT_THROW(copy(*rejected, *source), std::invalid_argument) << mismatch;
+                    EXPECT_EQ(incompatible, rejected->descriptor());
+                    EXPECT_EQ(0, rejected->size());
+                }
+            }
+        }
+    }
 }
 
 TEST(GeoColumnTest, InspectionDoesNotTrustProducerFlag) {
