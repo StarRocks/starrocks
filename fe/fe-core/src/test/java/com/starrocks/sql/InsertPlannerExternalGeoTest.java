@@ -25,12 +25,10 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.plan.PlanTestNoneDBBase;
 import com.starrocks.type.ArrayType;
-import com.starrocks.type.GeoTypeDescriptor;
+import com.starrocks.type.GeoType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.NullType;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarbinaryType;
@@ -61,7 +59,7 @@ import static org.mockito.Mockito.when;
 public class InsertPlannerExternalGeoTest extends PlanTestNoneDBBase {
     private static Stream<Type> geoTypes() {
         return Stream.of(ColumnTypeConverter.fromIcebergType(Types.GeographyType.crs84()),
-                ScalarType.createGeoType(PrimitiveType.GEOMETRY, GeoTypeDescriptor.geometry("EPSG:3857")));
+                GeoType.createGeometryType("EPSG:3857"));
     }
 
     private static Stream<Arguments> externalTypes() {

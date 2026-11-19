@@ -445,11 +445,9 @@ public class ScalarType extends Type implements Cloneable {
         return stringBuilder.toString();
     }
 
-    public static ScalarType createGeoType(PrimitiveType primitive, GeoTypeDescriptor descriptor) {
-        Objects.requireNonNull(descriptor).validate(primitive);
-        ScalarType result = new ScalarType(primitive);
-        result.geo = descriptor;
-        return result;
+    // Package-private setter for the geo descriptor, used by GeoType
+    void setGeoDescriptor(GeoTypeDescriptor descriptor) {
+        this.geo = descriptor;
     }
 
     public GeoTypeDescriptor getGeoDescriptor() {

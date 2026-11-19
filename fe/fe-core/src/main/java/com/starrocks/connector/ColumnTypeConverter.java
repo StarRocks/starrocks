@@ -21,6 +21,7 @@ import com.starrocks.connector.delta.DeltaDataType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.FileType;
+import com.starrocks.type.GeoType;
 import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.MapType;
 import com.starrocks.type.NullType;
@@ -948,16 +949,14 @@ public class ColumnTypeConverter {
                 Types.GeographyType geography = (Types.GeographyType) icebergType;
                 if ((geography.crs() == null || geography.crs().equals("OGC:CRS84"))
                         && (geography.algorithm() == null || geography.algorithm().name().equals("SPHERICAL"))) {
-                    return ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
-                            new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
-                                    GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326));
+                    return GeoType.createGeographyType("OGC:CRS84");
                 }
                 return UnknownType.UNKNOWN_TYPE;
             case GEOMETRY:
                 String crs = ((Types.GeometryType) icebergType).crs();
                 GeoTypeDescriptor descriptor = GeoTypeDescriptor.geometry(crs == null ? Types.GeometryType.DEFAULT_CRS : crs);
                 Integer srid = descriptor.srid();
-                return srid != null && srid > 0 ? ScalarType.createGeoType(PrimitiveType.GEOMETRY, descriptor)
+                return srid != null && srid > 0 ? GeoType.createGeometryType(descriptor)
                         : UnknownType.UNKNOWN_TYPE;
             case FIXED:
                 return UnknownType.UNKNOWN_TYPE;
