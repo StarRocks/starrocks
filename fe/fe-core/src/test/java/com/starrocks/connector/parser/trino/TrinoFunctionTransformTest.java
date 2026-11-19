@@ -422,6 +422,7 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         analyzeFail("select format(ta, 1) from tall", "No matching function with signature: format");
         analyzeFail("select format('%s %s', 'a')", "No matching function with signature: format");
         analyzeFail("select format('%1001d', 1)", "No matching function with signature: format");
+        analyzeFail("select format('%.39f|%.2147483647f', 1.5, 1.5)", "No matching function with signature: format");
         analyzeFail("select format('%1$d|%1$d', CAST(random() * 100 AS BIGINT))",
                 "format() does not support nondeterministic arguments or subqueries [%1$d]");
         analyzeFail("select format('%1$s|%1$s', (select max(ta) from tall))",

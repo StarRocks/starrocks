@@ -53,8 +53,9 @@ import java.util.regex.Pattern;
  *   <li>%f of a DECIMAL value, with an optional precision (6 by default), and %,.2f and %,.0f</li>
  *   <li>%% and %n</li>
  * </ul>
- * Arguments can be referenced by index, as in %2$s. A NULL argument is formatted as "null", as in Java. Anything else
- * fails, for example %f of a DOUBLE value, whose digits Java computes from the shortest decimal representation.
+ * Arguments can be referenced by index, as in %2$s. A NULL argument is formatted as "null", as in Java, and the
+ * English locale of a default Trino session is assumed. Anything else fails, for example %f of a DOUBLE value, whose
+ * digits Java computes from the shortest decimal representation.
  */
 public final class TrinoFormatFunction {
     // The format specifier syntax of java.util.Formatter.
@@ -70,7 +71,7 @@ public final class TrinoFormatFunction {
     }
 
     static final class Specifier {
-        // 1-based index of the argument after the format, or 0 for %% and %n
+        // 1-based index of the argument after the format
         final int argumentIndex;
         final String flags;
         // -1 when absent
@@ -172,7 +173,8 @@ public final class TrinoFormatFunction {
                 }
                 return;
             case 'f':
-                if (width != -1 || !(flags.isEmpty() || flags.equals(",")) ||
+                // A DECIMAL has at most 38 digits.
+                if (width != -1 || precision > MAX_DECIMAL128_PRECISION || !(flags.isEmpty() || flags.equals(",")) ||
                         (flags.equals(",") && precision != 2 && precision != 0)) {
                     throw unsupported(text);
                 }
