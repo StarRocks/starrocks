@@ -89,6 +89,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
@@ -487,6 +488,18 @@ public class PublishVersionDaemon extends LeaderDaemon {
                             txnState.getTransactionId());
                     continue;
                 }
+                List<Long> attempt = txnState.getLakePublishAttempt();
+                if (attempt.size() > 1) {
+                    if (attempt.get(0) == txnId) {
+                        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+                        List<TransactionState> states = attempt.stream()
+                                .map(id -> mgr.getTransactionState(txnState.getDbId(), id)).toList();
+                        if (states.stream().noneMatch(Objects::isNull)) {
+                            publishVersionForLakeTableBatch(List.of(new TransactionStateBatch(states)));
+                        }
+                    }
+                    continue;
+                }
                 // Skip backed-off transactions before logging a publish start or creating futures.
                 if (batchHasPublishablePartition(List.of(txnState), System.currentTimeMillis())) {
                     publishingTransactions.add(txnId);
@@ -532,6 +545,10 @@ public class PublishVersionDaemon extends LeaderDaemon {
                         continue;
                     }
                     publishingLakeTransactionsBatchTableId.addAll(tableIdList);
+                    if (!isCurrentLakePublishBatch(txnStateBatch)) {
+                        tableIdList.forEach(publishingLakeTransactionsBatchTableId::remove);
+                        continue;
+                    }
                     countBatchRetry(state);
                     CompletableFuture<Void> future = publishLakeTransactionAsync(state);
                     future.thenRun(() -> tableIdList.forEach(publishingLakeTransactionsBatchTableId::remove));
@@ -571,6 +588,10 @@ public class PublishVersionDaemon extends LeaderDaemon {
                         continue;
                     }
                     publishingLakeTransactionsBatchTableId.addAll(batchTableIdList);
+                    if (!isCurrentLakePublishBatch(txnStateBatch)) {
+                        batchTableIdList.forEach(publishingLakeTransactionsBatchTableId::remove);
+                        continue;
+                    }
                     countBatchRetry(txnStateBatch.transactionStates.get(0));
 
                     CompletableFuture<Void> future = publishLakeTransactionBatchAsync(txnStateBatch);
@@ -578,6 +599,24 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 }
             }
         }
+    }
+
+    private static boolean isCurrentLakePublishBatch(TransactionStateBatch batch) {
+        List<TransactionState> states = batch.getTransactionStates();
+        if (states.stream().anyMatch(state -> state.getTransactionStatus().isFinalStatus())) {
+            return false;
+        }
+        List<Long> attempt = states.get(0).getLakePublishAttempt();
+        if (attempt.isEmpty()) {
+            return true;
+        }
+        if (!TransactionStateBatch.preservesLakePublishAttempt(batch.getTxnIds(), attempt,
+                Config.lake_enable_batch_publish_retry_freeze)) {
+            return false;
+        }
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        return states.stream().allMatch(
+                state -> mgr.getTransactionState(batch.getDbId(), state.getTransactionId()) == state);
     }
 
     // A batch whose first txn was already sent retries an attempt that did not finish.
@@ -738,13 +777,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
         long startVersion = versions.get(0);
         long endVersion = versions.get(versions.size() - 1);
 
-        // Marked only once a request goes out, after the version-order check, so that a batch that merely waited
-        // for an earlier version is not retried as a sent one. Every txn of the batch is marked: a batch that sent
-        // anything is retried with the same txns, see DatabaseTransactionMgr.getReadyToPublishTxnListBatch(). The
-        // request time is recorded only for the txns this request carries.
-        stateBatch.getTransactionStates().forEach(state -> state.setHasSendTask(true));
-        transactionStates.forEach(TransactionState::recordPublishRequestSentTime);
-        try {
+        List<PartitionCommitInfo> partitionCommits = publishVersionData.getPartitionCommitInfos();
+        try (Utils.PublishDispatch dispatch = Utils.observePublishDispatch(() -> {
+            stateBatch.recordLakePublishAttempt();
+            transactionStates.forEach(TransactionState::recordPublishRequestSentTime);
+        }, () -> partitionCommits.forEach(PartitionCommitInfo::markPublishSent))) {
             if (shadowIndexTxnBatches != null) {
                 for (ShadowIndexTxnBatch txnBatch : shadowIndexTxnBatches.values()) {
                     List<Tablet> shadowIndexTablets = txnBatch.tablets;
@@ -779,10 +816,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
                 // An earlier request may have finished some tablets: let them answer from storage. Decided here,
                 // after the version-order check, so that waiting for an earlier version is not taken for a retry.
-                boolean isRetryPublish = false;
-                for (PartitionCommitInfo info : publishVersionData.getPartitionCommitInfos()) {
-                    isRetryPublish |= info.getAndMarkPublishSent();
-                }
+                boolean isRetryPublish = partitionCommits.stream().anyMatch(PartitionCommitInfo::isPublishSent);
                 if (!useAggregatePublish) {
                     Utils.publishVersionBatch(publishTablets, txnInfos,
                             startVersion - 1, endVersion, compactionScores, null, nodeToTablets,
@@ -1342,17 +1376,16 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
         TxnInfoPB txnInfo = TxnInfoHelper.fromTransactionState(txnState);
         long rpcStartMs = System.currentTimeMillis();
-        try {
+        try (Utils.PublishDispatch dispatch = Utils.observePublishDispatch(() -> {
+            txnState.recordLakePublishAttempt(List.of(txnId));
+            txnState.recordPublishRequestSentTime();
+        }, partitionCommitInfo::markPublishSent)) {
             if (txnState.isShadowRewrite()) {
                 // Conversion-only no-op: the rewrite txn commits its op_write at shadowRewriteWatershedTxnId
                 // without advancing any partition version. The flip publish later anchors that op_write as
                 // op_schema_change@W via the TXN_SHADOW_REWRITE publish txn; nothing to publish here.
                 return true;
             }
-            // Marked only once a request goes out, after the version-order check, so that a txn that merely waited
-            // for an earlier version is not retried as a sent one.
-            txnState.setHasSendTask(true);
-            txnState.recordPublishRequestSentTime();
             if (CollectionUtils.isNotEmpty(shadowTablets)) {
                 Utils.publishLogVersion(shadowTablets, txnInfo, txnVersion, computeResource);
             }
@@ -1364,7 +1397,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
                 // An earlier request may have finished some tablets: let them answer from storage. Decided here,
                 // after the version-order check, so that waiting for an earlier version is not taken for a retry.
-                boolean isRetryPublish = partitionCommitInfo.getAndMarkPublishSent();
+                boolean isRetryPublish = partitionCommitInfo.isPublishSent();
                 if (useAggregatePublish && CollectionUtils.isNotEmpty(carryForwardTablets)) {
                     aggregatePublishWithCarryForward(normalTablets, Lists.newArrayList(txnInfo), carryForwardTablets,
                             baseVersion, txnVersion, null, computeResource, compactionScores, tabletStats,

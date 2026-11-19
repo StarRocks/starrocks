@@ -40,6 +40,8 @@ public class TransactionStateBatch implements Writable {
     @SerializedName("transactionStates")
     List<TransactionState> transactionStates = new ArrayList<>();
 
+    private boolean lakePublishAttemptRecorded;
+
     // partitionId -> beId -> tabletId
     // used to clean txnLog when publish succeeded,
     // no need to persist, just try the best effort,
@@ -144,6 +146,21 @@ public class TransactionStateBatch implements Writable {
 
     public List<Long> getTxnIds() {
         return transactionStates.stream().map(TransactionState::getTransactionId).collect(Collectors.toList());
+    }
+
+    synchronized void recordLakePublishAttempt() {
+        if (lakePublishAttemptRecorded) {
+            return;
+        }
+        List<Long> attempt = List.copyOf(getTxnIds());
+        transactionStates.forEach(state -> state.recordLakePublishAttempt(attempt));
+        lakePublishAttemptRecorded = true;
+    }
+
+    static boolean preservesLakePublishAttempt(List<Long> candidate, List<Long> attempt, boolean freeze) {
+        return attempt.isEmpty() || (candidate.size() >= attempt.size()
+                && (!freeze || candidate.size() == attempt.size())
+                && candidate.subList(0, attempt.size()).equals(attempt));
     }
 
     // Union of table ids across all transactions in the batch, in first-appearance order.
