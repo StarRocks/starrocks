@@ -17,6 +17,7 @@
 #include <cctz/time_zone.h>
 
 #include <avrocpp/GenericDatum.hh>
+#include <utility>
 
 #include "common/statusor.h"
 #include "types/date_value.h"
@@ -30,6 +31,10 @@ public:
 
     static int128_t bytes_to_decimal_integer(const std::vector<uint8_t>& from);
     static DateValue int_to_date_value(int32_t from);
+
+    // Splits a count of `units_per_second` units since the epoch into whole seconds and a non-negative microsecond
+    // part, so that values before 1970 keep their instant: -1 us is (-1 s, 999999 us), not (0 s, -1 us).
+    static std::pair<int64_t, int64_t> split_epoch_to_second_and_micros(int64_t value, int64_t units_per_second);
     static StatusOr<TimestampValue> long_to_timestamp_value(const avro::GenericDatum& datum,
                                                             const cctz::time_zone& timezone);
 

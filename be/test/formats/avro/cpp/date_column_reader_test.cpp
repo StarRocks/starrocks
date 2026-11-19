@@ -20,6 +20,7 @@
 
 #include "column/column_helper.h"
 #include "formats/avro/cpp/test_avro_utils.h"
+#include "formats/avro/cpp/utils.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "testutil/assert.h"
 #include "util/timezone_utils.h"
@@ -137,6 +138,39 @@ TEST_F(DateColumnReaderTest, test_datetime_timezone) {
 
     ASSERT_EQ(2, column->size());
     ASSERT_EQ("[2025-04-16 20:01:01.123000, 2025-04-16 20:01:01.123456]", column->debug_string());
+}
+
+// timestamp-millis / timestamp-micros values before 1970 with a fraction of a second keep their instant:
+// the seconds are floored, so the sub-second part stays non-negative.
+TEST_F(DateColumnReaderTest, test_datetime_before_epoch) {
+    auto type_desc = TypeDescriptor::from_logical_type(TYPE_DATETIME);
+    auto column = create_adaptive_nullable_column(type_desc);
+    cctz::time_zone timezone;
+    ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone("UTC", timezone));
+    auto reader = get_column_reader(type_desc, timezone, false);
+
+    for (int64_t v : {-1L, -1500L, -1000L}) {
+        avro::GenericDatum datum(avro::AVRO_LONG, avro::LogicalType(avro::LogicalType::TIMESTAMP_MILLIS), v);
+        ASSERT_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+    }
+    for (int64_t v : {-1L, -1500000L, -1000000L}) {
+        avro::GenericDatum datum(avro::AVRO_LONG, avro::LogicalType(avro::LogicalType::TIMESTAMP_MICROS), v);
+        ASSERT_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
+    }
+
+    ASSERT_EQ(6, column->size());
+    ASSERT_EQ(
+            "[1969-12-31 23:59:59.999000, 1969-12-31 23:59:58.500000, 1969-12-31 23:59:59, "
+            "1969-12-31 23:59:59.999999, 1969-12-31 23:59:58.500000, 1969-12-31 23:59:59]",
+            column->debug_string());
+}
+
+TEST(AvroUtilsTest, test_split_epoch_to_second_and_micros) {
+    ASSERT_EQ(std::make_pair(int64_t(-1), int64_t(999999)), AvroUtils::split_epoch_to_second_and_micros(-1, 1000000));
+    ASSERT_EQ(std::make_pair(int64_t(-1), int64_t(999000)), AvroUtils::split_epoch_to_second_and_micros(-1, 1000));
+    ASSERT_EQ(std::make_pair(int64_t(-2), int64_t(500000)), AvroUtils::split_epoch_to_second_and_micros(-1500, 1000));
+    ASSERT_EQ(std::make_pair(int64_t(-1), int64_t(0)), AvroUtils::split_epoch_to_second_and_micros(-1000, 1000));
+    ASSERT_EQ(std::make_pair(int64_t(1), int64_t(500000)), AvroUtils::split_epoch_to_second_and_micros(1500, 1000));
 }
 
 TEST_F(DateColumnReaderTest, test_datetime_invalid) {
