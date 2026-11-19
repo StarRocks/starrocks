@@ -102,7 +102,7 @@ select id, cast(v as string) from shred where id < 100 order by id;
 -- result:
 1	{"ao":[{"k":1,"s":"a"},{"k":2,"s":"b"}],"arr":[1,2,3],"b":true,"d":"2024-01-02","dbl":1.25,"dec":12.345,"i":1,"i8":5,"o":{"x":1,"y":"p","z":{"w":10}},"s":"alpha","t":"2024-01-02 11:04:05.123456+08:00","tn":"2024-01-02 03:04:05"}
 2	{"ao":[{"k":3,"s":"c"}],"arr":[4],"b":false,"d":"1970-01-01","dbl":-0.5,"dec":-0.001,"i":2,"i8":-5,"o":{"x":2,"y":"q","z":{"w":20}},"s":"beta","t":"1970-01-01 07:59:59.999999+08:00","tn":"1970-01-01 00:00:00"}
-3	{"ao":[],"arr":[],"b":true,"d":"9999-12-31","dbl":1.0000000000000001e+300,"dec":9999999.999,"i":9223372036854775807,"i8":127,"o":{"x":-3,"y":"","z":{"w":0}},"s":"中文 字符串","t":"2262-04-12 07:47:16.854775+08:00","tn":"9999-12-31 23:59:59.999999"}
+3	{"ao":[],"arr":[],"b":true,"d":"9999-12-31","dbl":1e+300,"dec":9999999.999,"i":9223372036854775807,"i8":127,"o":{"x":-3,"y":"","z":{"w":0}},"s":"中文 字符串","t":"2262-04-12 07:47:16.854775+08:00","tn":"9999-12-31 23:59:59.999999"}
 4	{"ao":[{"k":4,"s":"d"},{"k":5,"s":"e"}],"arr":[-1,0,1],"b":false,"d":"2000-02-29","dbl":0.0,"dec":0.0,"i":-9223372036854775808,"i8":-128,"o":{"x":4,"y":"r","z":{"w":40}},"s":"longlonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglong","t":"2000-02-29 20:00:00+08:00","tn":"2000-02-29 12:00:00"}
 5	{"ao":[{"k":6,"s":"f"}],"arr":[7,8],"b":true,"dbl":2.5,"dec":3.14,"i":5,"i8":6,"o":{"x":5,"y":"s","z":{"w":50}},"s":"gamma"}
 6	{"i":6,"o":{"x":6,"y":"t","z":{"w":60}},"s":"delta"}
