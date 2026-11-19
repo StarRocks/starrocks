@@ -950,7 +950,6 @@ public class ColumnTypeConverter {
                         && (geography.algorithm() == null || geography.algorithm().name().equals("SPHERICAL"))) {
                     return ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
                             new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
-                                    GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
                                     GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326));
                 }
                 return UnknownType.UNKNOWN_TYPE;
