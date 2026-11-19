@@ -43,6 +43,10 @@ public:
 
     Status next_batch(const SparseRange<>& range, Column* dst) override { return _parent->next_batch(range, dst); }
 
+    Status next_batch_by_ordinal(const OrdinalSparseRange& range, Column* dst) override {
+        return _parent->next_batch_by_ordinal(range, dst);
+    }
+
     ordinal_t get_current_ordinal() const override { return _parent->get_current_ordinal(); }
 
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
@@ -74,6 +78,10 @@ public:
         return _parent->next_dict_codes(range, dst);
     }
 
+    Status next_dict_codes_by_ordinal(const OrdinalSparseRange& range, Column* dst) override {
+        return _parent->next_dict_codes_by_ordinal(range, dst);
+    }
+
     Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override {
         return _parent->decode_dict_codes(codes, size, words);
     }
@@ -94,6 +102,11 @@ public:
 
     Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) override {
         return _parent->fetch_dict_codes_by_rowid(rowids, size, values);
+    }
+
+    StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec_by_ordinal(const OrdinalSparseRange& range,
+                                                                                   Column* dst) override {
+        return _parent->get_io_range_vec_by_ordinal(range, dst);
     }
 
     Status next_batch(size_t* n, Column* dst, ColumnAccessPath* path) override {
