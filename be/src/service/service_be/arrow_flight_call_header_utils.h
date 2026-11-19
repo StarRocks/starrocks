@@ -28,8 +28,8 @@ const char kAuthHeader[] = "authorization";
 
 // Function to look in CallHeaders for a key that has a value starting with prefix and
 // return the rest of the value after the prefix.
-std::string FindKeyValPrefixInCallHeaders(const arrow::flight::CallHeaders& incoming_headers, const std::string& key,
-                                          const std::string& prefix) {
+inline std::string FindKeyValPrefixInCallHeaders(const arrow::flight::CallHeaders& incoming_headers,
+                                                 const std::string& key, const std::string& prefix) {
     // Lambda function to compare characters without case sensitivity.
     auto char_compare = [](const char& char1, const char& char2) { return (::toupper(char1) == ::toupper(char2)); };
 
@@ -47,8 +47,8 @@ std::string FindKeyValPrefixInCallHeaders(const arrow::flight::CallHeaders& inco
     return "";
 }
 
-void ParseBasicHeader(const arrow::flight::CallHeaders& incoming_headers, std::string& username,
-                      std::string& password) {
+inline void ParseBasicHeader(const arrow::flight::CallHeaders& incoming_headers, std::string& username,
+                             std::string& password) {
     std::string encoded_credentials = FindKeyValPrefixInCallHeaders(incoming_headers, kAuthHeader, kBasicPrefix);
     std::stringstream decoded_stream(arrow::util::base64_decode(encoded_credentials));
     std::getline(decoded_stream, username, ':');
