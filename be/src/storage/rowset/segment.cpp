@@ -651,8 +651,11 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
                     auto source_type = TypeDescriptor::from_logical_type(reader_type);
                     auto target_type =
                             TypeDescriptor::from_logical_type(column.type(), column.precision(), column.scale());
+                    // A JSON target (json_query over the path) must get the stored JSON value back, not
+                    // a cast of it: a VARCHAR sub-column holds JSON strings, and casting one that reads
+                    // like JSON text would turn it into an object or array.
                     return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type,
-                                                                nullable);
+                                                                nullable, /*flat_json_source=*/true);
                 }
             }
         }
