@@ -14,6 +14,8 @@
 
 #include "exec/dictionary_cache_writer.h"
 
+#include <algorithm>
+
 #include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc_helper.h"
 #include "common/config_exec_flow_fwd.h"
@@ -39,9 +41,30 @@ private:
     ChunkUniquePtr _chunk;
 };
 
+bool DictionaryCacheFailedNodes::is_failed(size_t node) {
+    std::lock_guard l(_lock);
+    return _failed[node];
+}
+
+bool DictionaryCacheFailedNodes::mark_failed(size_t node, bool* newly_failed) {
+    std::lock_guard l(_lock);
+    *newly_failed = !_failed[node];
+    if (*newly_failed) {
+        _failed[node] = true;
+        _num_failed++;
+    }
+    return _num_failed >= _failed.size();
+}
+
 DictionaryCacheWriter::DictionaryCacheWriter(const TDictionaryCacheSink& t_dictionary_cache_sink, RuntimeState* state,
-                                             starrocks::pipeline::FragmentContext* fragment_ctx)
-        : _t_dictionary_cache_sink(t_dictionary_cache_sink), _state(state), _fragment_ctx(fragment_ctx) {}
+                                             starrocks::pipeline::FragmentContext* fragment_ctx,
+                                             std::shared_ptr<DictionaryCacheFailedNodes> failed_nodes)
+        : _t_dictionary_cache_sink(t_dictionary_cache_sink),
+          _state(state),
+          _fragment_ctx(fragment_ctx),
+          _failed_nodes(failed_nodes != nullptr
+                                ? std::move(failed_nodes)
+                                : std::make_shared<DictionaryCacheFailedNodes>(t_dictionary_cache_sink.nodes.size())) {}
 
 Status DictionaryCacheWriter::prepare() {
     if (_is_prepared.load(std::memory_order_acquire)) {
@@ -144,12 +167,13 @@ void DictionaryCacheWriter::sync_dictionary_cache(const Chunk* chunk) {
             break;
         }
 
-        st = _send_request(pchunk.get(), pschema.get(), closures);
+        std::vector<bool> sent(closures.size(), false);
+        st = _send_request(pchunk.get(), pschema.get(), closures, sent);
         if (!st.ok()) {
             break;
         }
 
-        st = _wait_response(closures);
+        st = _wait_response(closures, sent);
         break;
     }
 
@@ -164,11 +188,26 @@ void DictionaryCacheWriter::sync_dictionary_cache(const Chunk* chunk) {
 }
 
 Status DictionaryCacheWriter::_send_request(ChunkPB* pchunk, POlapTableSchemaParam* pschema,
-                                            std::vector<RefCountClosure<PProcessDictionaryCacheResult>*>& closures) {
+                                            std::vector<RefCountClosure<PProcessDictionaryCacheResult>*>& closures,
+                                            std::vector<bool>& sent) {
     const auto& nodes = _t_dictionary_cache_sink.nodes;
     DCHECK(closures.size() == nodes.size());
 
     for (size_t i = 0; i < nodes.size(); ++i) {
+        if (_skip_failed_nodes() && _is_node_failed(i)) {
+            continue;
+        }
+
+        auto res = HttpBrpcStubCache::getInstance()->get_http_stub(nodes[i]);
+        if (!res.ok()) {
+            LOG(WARNING) << "create brpc stub failed, " << res.status().message();
+            if (!_skip_failed_nodes()) {
+                return res.status();
+            }
+            (void)_mark_node_failed(i, res.status());
+            continue;
+        }
+
         PProcessDictionaryCacheRequest request;
         request.set_allocated_chunk(pchunk);
         request.set_dict_id(_t_dictionary_cache_sink.dictionary_id);
@@ -182,41 +221,66 @@ Status DictionaryCacheWriter::_send_request(ChunkPB* pchunk, POlapTableSchemaPar
         closure->ref();
         closure->cntl.set_timeout_ms(config::dictionary_cache_refresh_timeout_ms);
         set_ignore_overcrowded_for_load(closure->cntl);
-
-        auto res = HttpBrpcStubCache::getInstance()->get_http_stub(nodes[i]);
-        if (!res.ok()) {
-            request.release_chunk();
-            request.release_schema();
-            LOG(WARNING) << "create brpc stub failed, " << res.status().message();
-            return res.status();
-        }
         res.value()->process_dictionary_cache(&closure->cntl, &request, &closure->result, closure);
+        sent[i] = true;
 
         request.release_chunk();
         request.release_schema();
     }
+    if (_skip_failed_nodes() && std::find(sent.begin(), sent.end(), true) == sent.end()) {
+        return Status::InternalError("refreshing dictionary cache failed on every node");
+    }
     return Status::OK();
 }
 
-Status DictionaryCacheWriter::_wait_response(std::vector<RefCountClosure<PProcessDictionaryCacheResult>*>& closures) {
-    Status st = Status::OK();
+Status DictionaryCacheWriter::_wait_response(std::vector<RefCountClosure<PProcessDictionaryCacheResult>*>& closures,
+                                             const std::vector<bool>& sent) {
     for (size_t i = 0; i < closures.size(); ++i) {
+        if (!sent[i]) {
+            continue;
+        }
         auto& closure = closures[i];
         closure->join();
+        Status st;
         if (closure->cntl.Failed()) {
             st = Status::InternalError(closure->cntl.ErrorText());
             LOG(WARNING) << "Failed to send rpc "
                          << " err=" << st;
-            return st;
+        } else {
+            st = closure->result.status();
+            if (!st.ok()) {
+                LOG(WARNING) << "RPC failed "
+                             << " err=" << st;
+            }
         }
-        st = closure->result.status();
-        if (!st.ok()) {
-            LOG(WARNING) << "RPC failed "
-                         << " err=" << st;
+        if (st.ok()) {
+            continue;
+        }
+        if (!_skip_failed_nodes() || _mark_node_failed(i, st)) {
             return st;
         }
     }
-    return st;
+    return Status::OK();
+}
+
+bool DictionaryCacheWriter::_skip_failed_nodes() const {
+    return _t_dictionary_cache_sink.__isset.skip_failed_nodes && _t_dictionary_cache_sink.skip_failed_nodes;
+}
+
+bool DictionaryCacheWriter::_is_node_failed(size_t node) {
+    return _failed_nodes->is_failed(node);
+}
+
+bool DictionaryCacheWriter::_mark_node_failed(size_t node, const Status& st) {
+    bool newly_failed = false;
+    const bool no_node_left = _failed_nodes->mark_failed(node, &newly_failed);
+    if (newly_failed) {
+        const auto& address = _t_dictionary_cache_sink.nodes[node];
+        LOG(WARNING) << "refreshing dictionary cache goes on without node " << address.hostname << ":" << address.port
+                     << ", dictionary id: " << _t_dictionary_cache_sink.dictionary_id
+                     << ", txn id: " << _t_dictionary_cache_sink.txn_id << ", err=" << st;
+    }
+    return no_node_left;
 }
 
 Status DictionaryCacheWriter::set_finishing() {

@@ -14,6 +14,10 @@
 
 #pragma once
 
+#include <memory>
+#include <mutex>
+#include <vector>
+
 #include "base/brpc/ref_count_closure.h"
 #include "column/vectorized_fwd.h"
 #include "common/thread/threadpool.h"
@@ -24,10 +28,29 @@
 
 namespace starrocks {
 
+// The nodes that failed during one refresh, shared by every sink driver of the fragment. With one set per
+// driver, two drivers that lose different nodes would each go on, and every node would end up with part of
+// the data.
+class DictionaryCacheFailedNodes {
+public:
+    explicit DictionaryCacheFailedNodes(size_t num_nodes) : _failed(num_nodes, false) {}
+
+    bool is_failed(size_t node);
+    // Returns true if no node is left. Sets *newly_failed if this call is the one that marked the node.
+    bool mark_failed(size_t node, bool* newly_failed);
+
+private:
+    std::mutex _lock;
+    std::vector<bool> _failed;
+    size_t _num_failed = 0;
+};
+
 class DictionaryCacheWriter {
 public:
+    // Without `failed_nodes`, the writer keeps a set of its own.
     DictionaryCacheWriter(const TDictionaryCacheSink& t_dictionary_cache_sink, RuntimeState* state,
-                          starrocks::pipeline::FragmentContext* fragment_ctx);
+                          starrocks::pipeline::FragmentContext* fragment_ctx,
+                          std::shared_ptr<DictionaryCacheFailedNodes> failed_nodes = nullptr);
     ~DictionaryCacheWriter() = default;
 
     Status prepare();
@@ -48,9 +71,16 @@ public:
 
 private:
     Status _send_request(ChunkPB* pchunk, POlapTableSchemaParam* pschema,
-                         std::vector<RefCountClosure<PProcessDictionaryCacheResult>*>& closures);
+                         std::vector<RefCountClosure<PProcessDictionaryCacheResult>*>& closures,
+                         std::vector<bool>& sent);
 
-    Status _wait_response(std::vector<RefCountClosure<PProcessDictionaryCacheResult>*>& closures);
+    Status _wait_response(std::vector<RefCountClosure<PProcessDictionaryCacheResult>*>& closures,
+                          const std::vector<bool>& sent);
+
+    bool _skip_failed_nodes() const;
+    bool _is_node_failed(size_t node);
+    // Returns true if no node is left.
+    bool _mark_node_failed(size_t node, const Status& st);
 
     Status _submit();
 
@@ -70,6 +100,10 @@ private:
 
     RuntimeState* _state = nullptr;
     starrocks::pipeline::FragmentContext* _fragment_ctx;
+
+    // With skip_failed_nodes, a node that fails gets no more chunks. The FE then finds that it has fewer
+    // rows and leaves it out at COMMIT.
+    std::shared_ptr<DictionaryCacheFailedNodes> _failed_nodes;
 };
 
 }; // namespace starrocks

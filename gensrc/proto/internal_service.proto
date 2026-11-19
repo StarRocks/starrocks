@@ -740,6 +740,11 @@ message PProcessDictionaryCacheRequest {
 message PProcessDictionaryCacheResult {
     optional StatusPB status = 1;
     optional int64 dictionary_memory_usage = 2;
+    // The committed version on this node, or -1 if it has none. An old BE does not set it.
+    optional int64 dictionary_version = 3;
+    // The rows this node received for the txn in the request, or -1 if the txn is not open on this node.
+    // Set only if the request has a txn id. An old BE does not set it.
+    optional int64 txn_rows = 4;
 };
 
 message PFetchArrowSchemaRequest {

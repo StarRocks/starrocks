@@ -339,7 +339,11 @@ public class Dictionary implements Writable {
     }
 
     public synchronized void setRefreshing(long ts) {
-        this.stateBeforeRefresh = this.state;
+        // A new leader logs REFRESHING again for the refresh it resumes. A rollback must still go back to the
+        // state before the refresh, not to REFRESHING.
+        if (!isRefreshing()) {
+            this.stateBeforeRefresh = this.state;
+        }
         this.state = DictionaryState.REFRESHING;
         this.lastSuccessRefreshTime = ts;
         // Do not touch nextSchedulableTime when auto refresh is disabled (refreshInterval <= 0),

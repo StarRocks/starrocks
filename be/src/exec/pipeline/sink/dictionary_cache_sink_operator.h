@@ -25,10 +25,12 @@ namespace starrocks::pipeline {
 class DictionaryCacheSinkOperator final : public Operator {
 public:
     DictionaryCacheSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                                const TDictionaryCacheSink& t_dictionary_cache_sink, FragmentContext* fragment_ctx)
+                                const TDictionaryCacheSink& t_dictionary_cache_sink, FragmentContext* fragment_ctx,
+                                std::shared_ptr<DictionaryCacheFailedNodes> failed_nodes)
             : Operator(factory, id, "dictionary_cache_sink", plan_node_id, false, driver_sequence),
               _t_dictionary_cache_sink(t_dictionary_cache_sink),
-              _fragment_ctx(fragment_ctx) {}
+              _fragment_ctx(fragment_ctx),
+              _failed_nodes(std::move(failed_nodes)) {}
 
     ~DictionaryCacheSinkOperator() override = default;
 
@@ -56,6 +58,7 @@ private:
     std::unique_ptr<DictionaryCacheWriter> _writer = nullptr;
     TDictionaryCacheSink _t_dictionary_cache_sink;
     FragmentContext* _fragment_ctx = nullptr;
+    std::shared_ptr<DictionaryCacheFailedNodes> _failed_nodes;
 };
 
 class DictionaryCacheSinkOperatorFactory final : public OperatorFactory {
@@ -64,13 +67,14 @@ public:
                                        FragmentContext* fragment_ctx)
             : OperatorFactory(id, "dictionary_cache_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
               _t_dictionary_cache_sink(t_dictionary_cache_sink),
-              _fragment_ctx(fragment_ctx) {}
+              _fragment_ctx(fragment_ctx),
+              _failed_nodes(std::make_shared<DictionaryCacheFailedNodes>(t_dictionary_cache_sink.nodes.size())) {}
 
     ~DictionaryCacheSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<DictionaryCacheSinkOperator>(this, _id, _plan_node_id, driver_sequence,
-                                                             _t_dictionary_cache_sink, _fragment_ctx);
+                                                             _t_dictionary_cache_sink, _fragment_ctx, _failed_nodes);
     }
 
     Status prepare(RuntimeState* state) override;
@@ -81,6 +85,9 @@ private:
     TDictionaryCacheSink _t_dictionary_cache_sink;
 
     FragmentContext* _fragment_ctx = nullptr;
+
+    // One set for every driver of this fragment instance.
+    std::shared_ptr<DictionaryCacheFailedNodes> _failed_nodes;
 };
 
 } // namespace starrocks::pipeline

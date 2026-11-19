@@ -15,19 +15,26 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.DropDictionaryInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.UpdateDictionaryLog;
 import com.starrocks.persist.UpdateDictionaryMgrLog;
 import com.starrocks.proto.PProcessDictionaryCacheRequest;
+import com.starrocks.proto.PProcessDictionaryCacheRequestType;
 import com.starrocks.proto.PProcessDictionaryCacheResult;
+import com.starrocks.proto.StatusPB;
+import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDictionaryStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
@@ -37,9 +44,16 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
@@ -50,6 +64,8 @@ public class DictionaryMgrEditLogTest {
     private static final String TEST_DICTIONARY_NAME = "test_dictionary";
     private static final String TEST_CATALOG_NAME = "default_catalog";
     private static final String TEST_DB_NAME = "test_db";
+    private boolean oldLeaveOutFailedNodes;
+    private int oldResyncMinInterval;
 
     @BeforeEach
     public void setUp() throws Exception {
@@ -58,10 +74,18 @@ public class DictionaryMgrEditLogTest {
 
         // Create DictionaryMgr instance
         masterDictionaryMgr = new DictionaryMgr();
+
+        // Both are off by default. Most tests below are about the behavior when they are on.
+        oldLeaveOutFailedNodes = Config.dictionary_refresh_leave_out_failed_nodes;
+        oldResyncMinInterval = Config.dictionary_node_resync_min_interval_second;
+        Config.dictionary_refresh_leave_out_failed_nodes = true;
+        Config.dictionary_node_resync_min_interval_second = 30;
     }
 
     @AfterEach
     public void tearDown() {
+        Config.dictionary_refresh_leave_out_failed_nodes = oldLeaveOutFailedNodes;
+        Config.dictionary_node_resync_min_interval_second = oldResyncMinInterval;
         UtFrameUtils.tearDownForPersisTest();
     }
 
@@ -484,7 +508,8 @@ public class DictionaryMgrEditLogTest {
             @Mock
             public static Pair<Boolean, String> processDictionaryCacheInteranl(PProcessDictionaryCacheRequest request,
                                                                                List<TNetworkAddress> beNodes,
-                                                                               List<PProcessDictionaryCacheResult> results) {
+                                                                               List<PProcessDictionaryCacheResult> results,
+                                                                               List<TNetworkAddress> failedNodes) {
                 // Simulate successful result
                 return Pair.create(false, "");
             }
@@ -758,5 +783,901 @@ public class DictionaryMgrEditLogTest {
         String followerErrorMsg = followerDictionary.getRuntimeErrMsg();
         Assertions.assertEquals(errorMessage, followerErrorMsg);
     }
-}
 
+    // ========== A node that fails during a refresh ==========
+
+    private static final TNetworkAddress NODE_A = new TNetworkAddress("127.0.0.1", 8060);
+    private static final TNetworkAddress NODE_B = new TNetworkAddress("127.0.0.2", 8060);
+    private static final TNetworkAddress NODE_C = new TNetworkAddress("127.0.0.3", 8060);
+
+    // Three nodes. Node B fails the request types in failOnB, and every node fails the request types in failOnAll.
+    private void mockThreeNodes(Set<PProcessDictionaryCacheRequestType> failOnB,
+                                Set<PProcessDictionaryCacheRequestType> failOnAll) {
+        mockThreeNodes(failOnB, failOnAll, new HashMap<>(Map.of(NODE_A, 100L, NODE_B, 100L, NODE_C, 100L)));
+    }
+
+    // The test can change startTimes later to show a node that restarted.
+    private void mockThreeNodes(Set<PProcessDictionaryCacheRequestType> failOnB,
+                                Set<PProcessDictionaryCacheRequestType> failOnAll,
+                                Map<TNetworkAddress, Long> startTimes) {
+        new MockUp<DictionaryMgr>() {
+            @Mock
+            public void fillBackendsOrComputeNodes(List<TNetworkAddress> nodes) {
+                nodes.add(NODE_A);
+                nodes.add(NODE_B);
+                nodes.add(NODE_C);
+            }
+
+            @Mock
+            public Map<TNetworkAddress, Long> getAvailableNodeStartTimes() {
+                return new HashMap<>(startTimes);
+            }
+
+            @Mock
+            public Pair<Boolean, String> processDictionaryCacheInteranl(PProcessDictionaryCacheRequest request,
+                                                                        List<TNetworkAddress> beNodes,
+                                                                        List<PProcessDictionaryCacheResult> results,
+                                                                        List<TNetworkAddress> failedNodes) {
+                // failedNodes is null for the callers that stop at the first failed node.
+                if (failOnAll.contains(request.type)) {
+                    if (failedNodes != null) {
+                        failedNodes.addAll(beNodes);
+                    }
+                    return Pair.create(true, "all nodes failed");
+                }
+                if (failOnB.contains(request.type) && beNodes.contains(NODE_B)) {
+                    if (failedNodes != null) {
+                        failedNodes.add(NODE_B);
+                    }
+                    return Pair.create(true, "node B restarted");
+                }
+                return Pair.create(false, "");
+            }
+        };
+    }
+
+    private Dictionary createRefreshingDictionary(String name, boolean ignoreFailedRefresh) throws Exception {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("dictionary_warm_up", "false");
+        properties.put("dictionary_ignore_failed_refresh", String.valueOf(ignoreFailedRefresh));
+        masterDictionaryMgr.createDictionary(createTestDictionaryStmt(name, properties), TEST_CATALOG_NAME, TEST_DB_NAME);
+        Dictionary dictionary = masterDictionaryMgr.getDictionaryByName(name);
+        dictionary.setRefreshing(System.currentTimeMillis());
+        return dictionary;
+    }
+
+    @Test
+    public void testRefreshGoesOnWhenBeginFailsOnOneNode() throws Exception {
+        mockThreeNodes(Set.of(PProcessDictionaryCacheRequestType.BEGIN), Set.of());
+        Dictionary dictionary = createRefreshingDictionary("begin_fails_on_one_node", false);
+        long txnId = masterDictionaryMgr.getAndIncrementTxnIdUnlocked();
+        DictionaryMgr.RefreshDictionaryCacheWorker worker =
+                masterDictionaryMgr.new RefreshDictionaryCacheWorker(dictionary, txnId);
+
+        worker.begin();
+        worker.commit();
+        worker.finish();
+
+        Assertions.assertEquals(Lists.newArrayList(NODE_A, NODE_C), worker.getBeNodes());
+        Assertions.assertEquals(Dictionary.DictionaryState.FINISHED, dictionary.getState());
+        Assertions.assertEquals(txnId, dictionary.getLastSuccessVersion());
+    }
+
+    @Test
+    public void testRefreshGoesOnWhenCommitFailsOnOneNode() throws Exception {
+        // A failed COMMIT used to set CANCELLED, even with dictionary_ignore_failed_refresh.
+        mockThreeNodes(Set.of(PProcessDictionaryCacheRequestType.COMMIT), Set.of());
+        Dictionary dictionary = createRefreshingDictionary("commit_fails_on_one_node", true);
+        long txnId = masterDictionaryMgr.getAndIncrementTxnIdUnlocked();
+        DictionaryMgr.RefreshDictionaryCacheWorker worker =
+                masterDictionaryMgr.new RefreshDictionaryCacheWorker(dictionary, txnId);
+
+        worker.begin();
+        worker.commit();
+        worker.finish();
+
+        Assertions.assertEquals(Lists.newArrayList(NODE_A, NODE_C), worker.getBeNodes());
+        Assertions.assertEquals(Dictionary.DictionaryState.FINISHED, dictionary.getState());
+        Assertions.assertEquals(txnId, dictionary.getLastSuccessVersion());
+    }
+
+    @Test
+    public void testRefreshFailsWhenCommitFailsOnOneNodeWithTheDefaultConfiguration() throws Exception {
+        Config.dictionary_refresh_leave_out_failed_nodes = false;
+        mockThreeNodes(Set.of(PProcessDictionaryCacheRequestType.COMMIT), Set.of());
+        Dictionary dictionary = createRefreshingDictionary("commit_fails_by_default", false);
+        long txnId = masterDictionaryMgr.getAndIncrementTxnIdUnlocked();
+        DictionaryMgr.RefreshDictionaryCacheWorker worker =
+                masterDictionaryMgr.new RefreshDictionaryCacheWorker(dictionary, txnId);
+
+        worker.begin();
+        worker.commit();
+        worker.finish();
+
+        Assertions.assertEquals(Lists.newArrayList(NODE_A, NODE_B, NODE_C), worker.getBeNodes());
+        Assertions.assertEquals(Dictionary.DictionaryState.CANCELLED, dictionary.getState());
+        Assertions.assertEquals("node B restarted", dictionary.getRuntimeErrMsg());
+    }
+
+    // Runs the real request loop. Only the RPC to the node is mocked. Node B fails with an error status.
+    private List<TNetworkAddress> mockNodeRpc(List<TNetworkAddress> calledNodes) {
+        new MockUp<BackendServiceClient>() {
+            @Mock
+            public Future<PProcessDictionaryCacheResult> processDictionaryCache(
+                    TNetworkAddress address, PProcessDictionaryCacheRequest request) {
+                calledNodes.add(address);
+                PProcessDictionaryCacheResult result = new PProcessDictionaryCacheResult();
+                result.status = new StatusPB();
+                result.status.statusCode = NODE_B.equals(address) ? TStatusCode.INTERNAL_ERROR.getValue()
+                        : TStatusCode.OK.getValue();
+                result.status.errorMsgs = NODE_B.equals(address) ? List.of("node B restarted") : List.of();
+                return CompletableFuture.completedFuture(result);
+            }
+        };
+        return calledNodes;
+    }
+
+    @Test
+    public void testRequestLoopReachesNodesAfterTheFailedOne() {
+        List<TNetworkAddress> calledNodes = mockNodeRpc(Lists.newArrayList());
+        List<TNetworkAddress> failedNodes = Lists.newArrayList();
+        List<PProcessDictionaryCacheResult> results = Lists.newArrayList();
+
+        Pair<Boolean, String> ret = DictionaryMgr.processDictionaryCacheInteranl(new PProcessDictionaryCacheRequest(),
+                Lists.newArrayList(NODE_A, NODE_B, NODE_C), results, failedNodes);
+
+        Assertions.assertTrue(ret.first);
+        Assertions.assertEquals("node B restarted", ret.second);
+        Assertions.assertEquals(Lists.newArrayList(NODE_A, NODE_B, NODE_C), calledNodes);
+        Assertions.assertEquals(Lists.newArrayList(NODE_B), failedNodes);
+        Assertions.assertEquals(2, results.size());
+    }
+
+    @Test
+    public void testRequestLoopStopsAtTheFailedNodeWithoutAFailedList() {
+        List<TNetworkAddress> calledNodes = mockNodeRpc(Lists.newArrayList());
+
+        Pair<Boolean, String> ret = DictionaryMgr.processDictionaryCacheInteranl(new PProcessDictionaryCacheRequest(),
+                Lists.newArrayList(NODE_A, NODE_B, NODE_C), null);
+
+        Assertions.assertTrue(ret.first);
+        Assertions.assertEquals(Lists.newArrayList(NODE_A, NODE_B), calledNodes);
+    }
+
+    @Test
+    public void testRefreshIsCancelledWhenCommitFailsOnAllNodes() throws Exception {
+        mockThreeNodes(Set.of(), Set.of(PProcessDictionaryCacheRequestType.COMMIT));
+        Dictionary dictionary = createRefreshingDictionary("commit_fails_on_all_nodes", true);
+        long txnId = masterDictionaryMgr.getAndIncrementTxnIdUnlocked();
+        DictionaryMgr.RefreshDictionaryCacheWorker worker =
+                masterDictionaryMgr.new RefreshDictionaryCacheWorker(dictionary, txnId);
+
+        worker.begin();
+        worker.commit();
+        worker.finish();
+
+        Assertions.assertEquals(Dictionary.DictionaryState.CANCELLED, dictionary.getState());
+        Assertions.assertEquals("all nodes failed", dictionary.getRuntimeErrMsg());
+    }
+
+    @Test
+    public void testRefreshRollsBackWhenBeginFailsOnOneNodeWithIgnoreFailedRefresh() throws Exception {
+        Map<TNetworkAddress, Long> startTimes = new HashMap<>(Map.of(NODE_A, 100L, NODE_B, 100L, NODE_C, 100L));
+        Set<PProcessDictionaryCacheRequestType> failOnB = new HashSet<>();
+        mockThreeNodes(failOnB, Set.of(), startTimes);
+        Dictionary dictionary = createRefreshingDictionary("begin_fails_rolls_back", true);
+        long firstTxnId = masterDictionaryMgr.getAndIncrementTxnIdUnlocked();
+        DictionaryMgr.RefreshDictionaryCacheWorker first =
+                masterDictionaryMgr.new RefreshDictionaryCacheWorker(dictionary, firstTxnId);
+        first.begin();
+        first.commit();
+        first.finish();
+        Map<TNetworkAddress, Long> record = Map.of(NODE_A, 100L, NODE_B, 100L, NODE_C, 100L);
+        Assertions.assertEquals(record, masterDictionaryMgr.getSyncedNodeStartTimes(dictionary.getDictionaryId()));
+
+        // Node A restarted, and node B fails BEGIN.
+        startTimes.put(NODE_A, 200L);
+        failOnB.add(PProcessDictionaryCacheRequestType.BEGIN);
+        dictionary.setRefreshing(System.currentTimeMillis());
+        long secondTxnId = masterDictionaryMgr.getAndIncrementTxnIdUnlocked();
+        DictionaryMgr.RefreshDictionaryCacheWorker second =
+                masterDictionaryMgr.new RefreshDictionaryCacheWorker(dictionary, secondTxnId);
+        second.begin();
+        second.commit();
+        second.finish();
+
+        // Every node keeps the old version, so queries on node B still work.
+        Assertions.assertEquals(Dictionary.DictionaryState.FINISHED, dictionary.getState());
+        Assertions.assertEquals(firstTxnId, dictionary.getLastSuccessVersion());
+        Assertions.assertTrue(dictionary.getRuntimeErrMsg().contains("node B restarted"));
+        // The failed refresh keeps the record, so the next check still sees that node A has no copy.
+        Assertions.assertEquals(record, masterDictionaryMgr.getSyncedNodeStartTimes(dictionary.getDictionaryId()));
+    }
+
+    @Test
+    public void testCancelledRefreshDoesNotGoOnWithTheOtherNodes() throws Exception {
+        mockThreeNodes(Set.of(PProcessDictionaryCacheRequestType.COMMIT), Set.of());
+        Map<String, String> properties = new HashMap<>();
+        properties.put("dictionary_warm_up", "false");
+        masterDictionaryMgr.createDictionary(createTestDictionaryStmt("cancelled_dict", properties),
+                TEST_CATALOG_NAME, TEST_DB_NAME);
+        Dictionary dictionary = masterDictionaryMgr.getDictionaryByName("cancelled_dict");
+        masterDictionaryMgr.refreshDictionary("cancelled_dict");
+        DictionaryMgr.RefreshDictionaryCacheWorker worker = masterDictionaryMgr.new RefreshDictionaryCacheWorker(
+                dictionary, masterDictionaryMgr.getAndIncrementTxnIdUnlocked());
+
+        worker.begin();
+        // Node B fails COMMIT because of the cancel. Nodes A and C commit.
+        masterDictionaryMgr.cancelRefreshDictionary("cancelled_dict");
+        worker.commit();
+        worker.finish();
+
+        Assertions.assertEquals(Dictionary.DictionaryState.CANCELLED, dictionary.getState());
+        Assertions.assertEquals("node B restarted", dictionary.getRuntimeErrMsg());
+
+        // The cancel ends with that refresh. The next refresh leaves node B out again.
+        masterDictionaryMgr.refreshDictionary("cancelled_dict");
+        long txnId = masterDictionaryMgr.getAndIncrementTxnIdUnlocked();
+        DictionaryMgr.RefreshDictionaryCacheWorker next =
+                masterDictionaryMgr.new RefreshDictionaryCacheWorker(dictionary, txnId);
+        next.begin();
+        next.commit();
+        next.finish();
+
+        Assertions.assertEquals(Dictionary.DictionaryState.FINISHED, dictionary.getState());
+        Assertions.assertEquals(txnId, dictionary.getLastSuccessVersion());
+    }
+
+    // ========== A node that missed part of the data ==========
+
+    private List<PProcessDictionaryCacheRequest> mockThreeNodesWithRows(Map<TNetworkAddress, Long> txnRows,
+                                                                        Set<TNetworkAddress> rpcFails) {
+        return mockThreeNodesWithStatistic(txnRows, Map.of(), rpcFails);
+    }
+
+    // Three nodes with the real request loop. STATISTIC returns the rows in txnRows and the committed version
+    // in versions. A node with no entry is an old BE that does not report it. The nodes in rpcFails fail
+    // the STATISTIC RPC.
+    private List<PProcessDictionaryCacheRequest> mockThreeNodesWithStatistic(Map<TNetworkAddress, Long> txnRows,
+                                                                             Map<TNetworkAddress, Long> versions,
+                                                                             Set<TNetworkAddress> rpcFails) {
+        List<PProcessDictionaryCacheRequest> requests = Lists.newArrayList();
+        new MockUp<DictionaryMgr>() {
+            @Mock
+            public void fillBackendsOrComputeNodes(List<TNetworkAddress> nodes) {
+                nodes.add(NODE_A);
+                nodes.add(NODE_B);
+                nodes.add(NODE_C);
+            }
+
+            @Mock
+            public Map<TNetworkAddress, Long> getAvailableNodeStartTimes() {
+                return new HashMap<>(Map.of(NODE_A, 100L, NODE_B, 100L, NODE_C, 100L));
+            }
+        };
+        new MockUp<BackendServiceClient>() {
+            @Mock
+            public Future<PProcessDictionaryCacheResult> processDictionaryCache(
+                    TNetworkAddress address, PProcessDictionaryCacheRequest request) {
+                requests.add(request);
+                if (request.type == PProcessDictionaryCacheRequestType.STATISTIC && rpcFails.contains(address)) {
+                    CompletableFuture<PProcessDictionaryCacheResult> failed = new CompletableFuture<>();
+                    failed.completeExceptionally(new RuntimeException("node unreachable"));
+                    return failed;
+                }
+                PProcessDictionaryCacheResult result = new PProcessDictionaryCacheResult();
+                result.status = new StatusPB();
+                result.status.statusCode = TStatusCode.OK.getValue();
+                result.status.errorMsgs = List.of();
+                if (request.type == PProcessDictionaryCacheRequestType.STATISTIC) {
+                    result.txnRows = txnRows.get(address);
+                    result.dictionaryVersion = versions.get(address);
+                }
+                return CompletableFuture.completedFuture(result);
+            }
+        };
+        return requests;
+    }
+
+    @Test
+    public void testNodeWithFewerRowsIsLeftOutBeforeCommit() throws Exception {
+        List<PProcessDictionaryCacheRequest> requests =
+                mockThreeNodesWithRows(Map.of(NODE_A, 10L, NODE_B, 7L, NODE_C, 10L), Set.of());
+        Dictionary dictionary = createRefreshingDictionary("fewer_rows_dict", false);
+        long txnId = masterDictionaryMgr.getAndIncrementTxnIdUnlocked();
+        DictionaryMgr.RefreshDictionaryCacheWorker worker =
+                masterDictionaryMgr.new RefreshDictionaryCacheWorker(dictionary, txnId);
+
+        worker.begin();
+        worker.leaveOutNodesWithMissingRows();
+        worker.commit();
+        worker.finish();
+
+        PProcessDictionaryCacheRequest statistic = requests.get(3);
+        Assertions.assertEquals(PProcessDictionaryCacheRequestType.STATISTIC, statistic.type);
+        Assertions.assertEquals(txnId, statistic.txnId);
+        Assertions.assertEquals(Lists.newArrayList(NODE_A, NODE_C), worker.getBeNodes());
+        Assertions.assertEquals(Dictionary.DictionaryState.FINISHED, dictionary.getState());
+        Assertions.assertEquals(Map.of(NODE_A, 100L, NODE_C, 100L),
+                masterDictionaryMgr.getSyncedNodeStartTimes(dictionary.getDictionaryId()));
+    }
+
+    @Test
+    public void testNodeLeftOutByTheRowCheckIsRefreshedAtOnce() throws Exception {
+        mockThreeNodesWithRows(Map.of(NODE_A, 10L, NODE_B, 7L, NODE_C, 10L), Set.of());
+        Dictionary dictionary = createRefreshingDictionary("row_check_backoff_dict", false);
+        DictionaryMgr.RefreshDictionaryCacheWorker first = masterDictionaryMgr.new RefreshDictionaryCacheWorker(
+                dictionary, masterDictionaryMgr.getAndIncrementTxnIdUnlocked());
+        first.begin();
+        first.leaveOutNodesWithMissingRows();
+        first.commit();
+        first.finish();
+        Map<TNetworkAddress, Long> allNodes = Map.of(NODE_A, 100L, NODE_B, 100L, NODE_C, 100L);
+        long now = System.currentTimeMillis();
+        Assertions.assertTrue(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, allNodes, now));
+
+        dictionary.setRefreshing(now);
+        DictionaryMgr.RefreshDictionaryCacheWorker regular = masterDictionaryMgr.new RefreshDictionaryCacheWorker(
+                dictionary, masterDictionaryMgr.getAndIncrementTxnIdUnlocked());
+        regular.begin();
+        regular.leaveOutNodesWithMissingRows();
+        regular.commit();
+        regular.finish();
+        Assertions.assertTrue(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, allNodes, now + 1000L));
+    }
+
+    @Test
+    public void testNodeWithoutTheTxnIsLeftOutBeforeCommit() throws Exception {
+        // A new BE reports -1 when the txn is not open, for example after a restart after BEGIN.
+        mockThreeNodesWithRows(Map.of(NODE_A, 10L, NODE_B, -1L, NODE_C, 10L), Set.of());
+        Dictionary dictionary = createRefreshingDictionary("no_txn_dict", false);
+        DictionaryMgr.RefreshDictionaryCacheWorker worker = masterDictionaryMgr.new RefreshDictionaryCacheWorker(
+                dictionary, masterDictionaryMgr.getAndIncrementTxnIdUnlocked());
+        worker.begin();
+
+        worker.leaveOutNodesWithMissingRows();
+
+        Assertions.assertEquals(Lists.newArrayList(NODE_A, NODE_C), worker.getBeNodes());
+    }
+
+    @Test
+    public void testNodeThatFailsTheRowCheckRpcIsLeftOutBeforeCommit() throws Exception {
+        mockThreeNodesWithRows(Map.of(NODE_A, 10L, NODE_B, 10L, NODE_C, 10L), Set.of(NODE_C));
+        Dictionary dictionary = createRefreshingDictionary("row_check_rpc_fails_dict", false);
+        DictionaryMgr.RefreshDictionaryCacheWorker worker = masterDictionaryMgr.new RefreshDictionaryCacheWorker(
+                dictionary, masterDictionaryMgr.getAndIncrementTxnIdUnlocked());
+        worker.begin();
+
+        worker.leaveOutNodesWithMissingRows();
+
+        Assertions.assertEquals(Lists.newArrayList(NODE_A, NODE_B), worker.getBeNodes());
+    }
+
+    @Test
+    public void testRowCheckLeavesOutAnOldNodeThatDoesNotReportRows() throws Exception {
+        // In a rolling upgrade, node B is an old BE. It may have missed chunks, so it must not commit.
+        mockThreeNodesWithRows(Map.of(NODE_A, 10L, NODE_C, 10L), Set.of());
+        Dictionary dictionary = createRefreshingDictionary("old_node_dict", false);
+        DictionaryMgr.RefreshDictionaryCacheWorker worker = masterDictionaryMgr.new RefreshDictionaryCacheWorker(
+                dictionary, masterDictionaryMgr.getAndIncrementTxnIdUnlocked());
+        worker.begin();
+
+        worker.leaveOutNodesWithMissingRows();
+
+        Assertions.assertEquals(Lists.newArrayList(NODE_A, NODE_C), worker.getBeNodes());
+    }
+
+    // The FE cannot tell which node ran the sink, so nodes that report no rows never commit with leave-out on, even
+    // when every node is old: the refresh fails instead.
+    @Test
+    public void testRowCheckFailsTheRefreshWhenNoNodeReportsRows() throws Exception {
+        List<PProcessDictionaryCacheRequest> requests = mockThreeNodesWithRows(Map.of(), Set.of());
+        Dictionary dictionary = createRefreshingDictionary("only_old_nodes_dict", false);
+        DictionaryMgr.RefreshDictionaryCacheWorker worker = masterDictionaryMgr.new RefreshDictionaryCacheWorker(
+                dictionary, masterDictionaryMgr.getAndIncrementTxnIdUnlocked());
+        worker.begin();
+
+        worker.leaveOutNodesWithMissingRows();
+        worker.commit();
+        worker.finish();
+
+        Assertions.assertTrue(requests.stream().noneMatch(r -> r.type == PProcessDictionaryCacheRequestType.COMMIT));
+        Assertions.assertEquals(Dictionary.DictionaryState.CANCELLED, dictionary.getState());
+    }
+
+    // A failed STATISTIC call can hide the new sink node, which honours skip_failed_nodes. The old nodes left
+    // could then hold part of the data, so they are left out and the refresh fails.
+    @Test
+    public void testRowCheckLeavesOutOldNodesWhenANodeFailsTheCheck() throws Exception {
+        List<PProcessDictionaryCacheRequest> requests = mockThreeNodesWithRows(Map.of(), Set.of(NODE_A));
+        Dictionary dictionary = createRefreshingDictionary("hidden_sink_dict", false);
+        DictionaryMgr.RefreshDictionaryCacheWorker worker = masterDictionaryMgr.new RefreshDictionaryCacheWorker(
+                dictionary, masterDictionaryMgr.getAndIncrementTxnIdUnlocked());
+        worker.begin();
+
+        worker.leaveOutNodesWithMissingRows();
+        worker.commit();
+        worker.finish();
+
+        Assertions.assertTrue(requests.stream().noneMatch(r -> r.type == PProcessDictionaryCacheRequestType.COMMIT));
+        Assertions.assertEquals(Dictionary.DictionaryState.CANCELLED, dictionary.getState());
+    }
+
+    // A node left out at an earlier step, for example at BEGIN, can still run the sink fragment, so the old nodes
+    // left could hold part of the data even though every one of them answers the check.
+    @Test
+    public void testRowCheckLeavesOutOldNodesWhenANodeWasLeftOutEarlier() throws Exception {
+        List<PProcessDictionaryCacheRequest> requests = mockThreeNodesWithRows(Map.of(), Set.of());
+        Dictionary dictionary = createRefreshingDictionary("left_out_sink_dict", false);
+        DictionaryMgr.RefreshDictionaryCacheWorker worker = masterDictionaryMgr.new RefreshDictionaryCacheWorker(
+                dictionary, masterDictionaryMgr.getAndIncrementTxnIdUnlocked());
+        worker.begin();
+        worker.getBeNodes().remove(NODE_A);
+
+        worker.leaveOutNodesWithMissingRows();
+        worker.commit();
+        worker.finish();
+
+        Assertions.assertTrue(requests.stream().noneMatch(r -> r.type == PProcessDictionaryCacheRequestType.COMMIT));
+        Assertions.assertEquals(Dictionary.DictionaryState.CANCELLED, dictionary.getState());
+    }
+
+    @Test
+    public void testNoRowCheckWhenFailedNodesAreNotLeftOut() throws Exception {
+        List<PProcessDictionaryCacheRequest> requests =
+                mockThreeNodesWithRows(Map.of(NODE_A, 10L, NODE_B, 7L, NODE_C, 10L), Set.of());
+        // With dictionary_ignore_failed_refresh, BEGIN and the data push do not leave nodes out either.
+        Dictionary dictionary = createRefreshingDictionary("no_row_check_dict", true);
+        DictionaryMgr.RefreshDictionaryCacheWorker worker = masterDictionaryMgr.new RefreshDictionaryCacheWorker(
+                dictionary, masterDictionaryMgr.getAndIncrementTxnIdUnlocked());
+        worker.begin();
+
+        worker.leaveOutNodesWithMissingRows();
+
+        Assertions.assertEquals(3, requests.size());
+        Assertions.assertEquals(Lists.newArrayList(NODE_A, NODE_B, NODE_C), worker.getBeNodes());
+    }
+
+    // ========== A node that has no copy of the current version ==========
+
+    @Test
+    public void testNodeThatMissedTheCommitIsRefreshedEarly() throws Exception {
+        mockThreeNodes(Set.of(PProcessDictionaryCacheRequestType.COMMIT), Set.of());
+        Dictionary dictionary = createRefreshingDictionary("missed_commit_dict", true);
+        long txnId = masterDictionaryMgr.getAndIncrementTxnIdUnlocked();
+        DictionaryMgr.RefreshDictionaryCacheWorker worker =
+                masterDictionaryMgr.new RefreshDictionaryCacheWorker(dictionary, txnId);
+        worker.begin();
+        worker.commit();
+        worker.finish();
+
+        Assertions.assertEquals(Map.of(NODE_A, 100L, NODE_C, 100L),
+                masterDictionaryMgr.getSyncedNodeStartTimes(dictionary.getDictionaryId()));
+
+        Map<TNetworkAddress, Long> availableNodes = Map.of(NODE_A, 100L, NODE_B, 100L, NODE_C, 100L);
+        long now = System.currentTimeMillis();
+        Assertions.assertTrue(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, availableNodes, now));
+        // The next early refresh waits for dictionary_node_resync_min_interval_second.
+        Assertions.assertFalse(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, availableNodes, now + 1000L));
+        long later = now + Config.dictionary_node_resync_min_interval_second * 1000L;
+        Assertions.assertTrue(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, availableNodes, later));
+    }
+
+    @Test
+    public void testNodeLeftOutAtCommitIsRefreshedAtOnce() throws Exception {
+        mockThreeNodes(Set.of(PProcessDictionaryCacheRequestType.COMMIT), Set.of());
+        Dictionary dictionary = createRefreshingDictionary("left_out_at_commit_dict", false);
+        DictionaryMgr.RefreshDictionaryCacheWorker first = masterDictionaryMgr.new RefreshDictionaryCacheWorker(
+                dictionary, masterDictionaryMgr.getAndIncrementTxnIdUnlocked());
+        first.begin();
+        first.commit();
+        first.finish();
+        Map<TNetworkAddress, Long> allNodes = Map.of(NODE_A, 100L, NODE_B, 100L, NODE_C, 100L);
+        long now = System.currentTimeMillis();
+        Assertions.assertTrue(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, allNodes, now));
+
+        // A regular refresh leaves node B out at COMMIT just after that early refresh. Do not wait.
+        dictionary.setRefreshing(now);
+        DictionaryMgr.RefreshDictionaryCacheWorker regular = masterDictionaryMgr.new RefreshDictionaryCacheWorker(
+                dictionary, masterDictionaryMgr.getAndIncrementTxnIdUnlocked());
+        regular.begin();
+        regular.commit();
+        regular.finish();
+        Assertions.assertTrue(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, allNodes, now + 1000L));
+
+        // The early refresh leaves node B out again, so the wait still applies.
+        dictionary.setRefreshing(now);
+        DictionaryMgr.RefreshDictionaryCacheWorker early = masterDictionaryMgr.new RefreshDictionaryCacheWorker(
+                dictionary, masterDictionaryMgr.getAndIncrementTxnIdUnlocked());
+        early.setEarlyRefresh(true);
+        early.begin();
+        early.commit();
+        early.finish();
+        Assertions.assertFalse(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, allNodes, now + 2000L));
+    }
+
+    @Test
+    public void testFailedEarlyRefreshKeepsTheOldVersion() throws Exception {
+        mockThreeNodes(Set.of(), Set.of(PProcessDictionaryCacheRequestType.BEGIN));
+        // Without dictionary_ignore_failed_refresh, a failed regular refresh ends in CANCELLED.
+        Dictionary dictionary = createFinishedDictionary("failed_early_refresh_dict", 5L);
+        dictionary.setRefreshing(System.currentTimeMillis());
+        DictionaryMgr.RefreshDictionaryCacheWorker worker = masterDictionaryMgr.new RefreshDictionaryCacheWorker(
+                dictionary, masterDictionaryMgr.getAndIncrementTxnIdUnlocked());
+        worker.setEarlyRefresh(true);
+
+        worker.begin();
+        worker.commit();
+        worker.finish();
+
+        // An early refresh only repairs nodes. The old version is still on every node, so queries still work.
+        Assertions.assertEquals(Dictionary.DictionaryState.FINISHED, dictionary.getState());
+        Assertions.assertEquals(5L, dictionary.getLastSuccessVersion());
+        Assertions.assertTrue(dictionary.getRuntimeErrMsg().contains("all nodes failed"));
+    }
+
+    @Test
+    public void testNoEarlyRefreshForADictionaryThatReadsTheLatestVersion() throws Exception {
+        // dictionary_read_latest fails every query while the dictionary refreshes. An early refresh only repairs
+        // nodes, so it must not cause that.
+        mockThreeNodes(Set.of(PProcessDictionaryCacheRequestType.COMMIT), Set.of());
+        Map<String, String> properties = new HashMap<>();
+        properties.put("dictionary_warm_up", "false");
+        properties.put("dictionary_read_latest", "true");
+        masterDictionaryMgr.createDictionary(createTestDictionaryStmt("read_latest_dict", properties),
+                TEST_CATALOG_NAME, TEST_DB_NAME);
+        Dictionary dictionary = masterDictionaryMgr.getDictionaryByName("read_latest_dict");
+        long id = dictionary.getDictionaryId();
+        Map<TNetworkAddress, Long> allNodes = Map.of(NODE_A, 100L, NODE_B, 100L, NODE_C, 100L);
+        long now = System.currentTimeMillis();
+
+        // No record: no question to the nodes.
+        dictionary.setFinished(now, 5L);
+        Assertions.assertFalse(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, allNodes, now));
+        Assertions.assertFalse(masterDictionaryMgr.isNodeProbePending(id));
+
+        // Node B misses the COMMIT: no early refresh.
+        dictionary.setRefreshing(now);
+        DictionaryMgr.RefreshDictionaryCacheWorker worker = masterDictionaryMgr.new RefreshDictionaryCacheWorker(
+                dictionary, masterDictionaryMgr.getAndIncrementTxnIdUnlocked());
+        worker.begin();
+        worker.commit();
+        worker.finish();
+        Assertions.assertEquals(Map.of(NODE_A, 100L, NODE_C, 100L), masterDictionaryMgr.getSyncedNodeStartTimes(id));
+        Assertions.assertFalse(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, allNodes, now));
+    }
+
+    @Test
+    public void testRestartedOrNewNodeIsRefreshedEarly() throws Exception {
+        mockThreeNodes(Set.of(), Set.of());
+        Dictionary dictionary = createRefreshingDictionary("restarted_node_dict", true);
+        long txnId = masterDictionaryMgr.getAndIncrementTxnIdUnlocked();
+        DictionaryMgr.RefreshDictionaryCacheWorker worker =
+                masterDictionaryMgr.new RefreshDictionaryCacheWorker(dictionary, txnId);
+        worker.begin();
+        worker.commit();
+        worker.finish();
+
+        long now = System.currentTimeMillis();
+        Map<TNetworkAddress, Long> sameNodes = Map.of(NODE_A, 100L, NODE_B, 100L, NODE_C, 100L);
+        Assertions.assertFalse(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, sameNodes, now));
+        // A node that is down is not a reason to refresh.
+        Map<TNetworkAddress, Long> nodeDown = Map.of(NODE_A, 100L, NODE_C, 100L);
+        Assertions.assertFalse(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, nodeDown, now));
+
+        Map<TNetworkAddress, Long> restarted = Map.of(NODE_A, 100L, NODE_B, 200L, NODE_C, 100L);
+        Assertions.assertTrue(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, restarted, now));
+
+        TNetworkAddress newNode = new TNetworkAddress("127.0.0.4", 8060);
+        Map<TNetworkAddress, Long> scaledOut = Map.of(NODE_A, 100L, NODE_B, 100L, NODE_C, 100L, newNode, 100L);
+        long later = now + Config.dictionary_node_resync_min_interval_second * 1000L;
+        Assertions.assertTrue(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, scaledOut, later));
+    }
+
+    @Test
+    public void testNoEarlyRefreshWithoutARecordOrWhenTurnedOff() throws Exception {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("dictionary_warm_up", "false");
+        masterDictionaryMgr.createDictionary(createTestDictionaryStmt("no_record_dict", properties),
+                TEST_CATALOG_NAME, TEST_DB_NAME);
+        Dictionary dictionary = masterDictionaryMgr.getDictionaryByName("no_record_dict");
+        long now = System.currentTimeMillis();
+        Map<TNetworkAddress, Long> nodes = Map.of(NODE_A, 100L);
+
+        long id = dictionary.getDictionaryId();
+
+        // Not FINISHED: the regular schedule handles it.
+        Assertions.assertFalse(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, nodes, now));
+
+        // Turned off: no early refresh, and no question to the nodes.
+        dictionary.setFinished(now, 1L);
+        Config.dictionary_node_resync_min_interval_second = -1;
+        Assertions.assertFalse(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, nodes, now));
+        Assertions.assertFalse(masterDictionaryMgr.isNodeProbePending(id));
+        Config.dictionary_node_resync_min_interval_second = 30;
+
+        // A new leader has no record. It does not refresh, and it asks the nodes which version they have.
+        Assertions.assertFalse(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, nodes, now));
+        Assertions.assertNull(masterDictionaryMgr.getSyncedNodeStartTimes(id));
+        Assertions.assertTrue(masterDictionaryMgr.isNodeProbePending(id));
+
+        masterDictionaryMgr.dropDictionary("no_record_dict", false);
+        Assertions.assertNull(masterDictionaryMgr.getSyncedNodeStartTimes(id));
+        Assertions.assertFalse(masterDictionaryMgr.isNodeProbePending(id));
+    }
+
+    @Test
+    public void testEarlyRefreshWaitsLongerEachTimeANodeStaysWithoutACopy() throws Exception {
+        mockThreeNodes(Set.of(PProcessDictionaryCacheRequestType.COMMIT), Set.of());
+        Dictionary dictionary = createRefreshingDictionary("backoff_dict", false);
+        DictionaryMgr.RefreshDictionaryCacheWorker worker = masterDictionaryMgr.new RefreshDictionaryCacheWorker(
+                dictionary, masterDictionaryMgr.getAndIncrementTxnIdUnlocked());
+        worker.begin();
+        worker.commit();
+        worker.finish();
+
+        int oldMin = Config.dictionary_node_resync_min_interval_second;
+        int oldMax = Config.dictionary_node_resync_max_interval_second;
+        try {
+            Config.dictionary_node_resync_min_interval_second = 10;
+            Config.dictionary_node_resync_max_interval_second = 25;
+            Map<TNetworkAddress, Long> allNodes = Map.of(NODE_A, 100L, NODE_B, 100L, NODE_C, 100L);
+            long t = System.currentTimeMillis();
+
+            Assertions.assertTrue(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, allNodes, t));
+            Assertions.assertFalse(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, allNodes, t + 9_999L));
+            Assertions.assertTrue(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, allNodes, t + 10_000L));
+            // The wait doubles to 20 seconds.
+            Assertions.assertFalse(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, allNodes, t + 29_999L));
+            Assertions.assertTrue(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, allNodes, t + 30_000L));
+            // 40 seconds is more than the max, so the wait is 25 seconds.
+            Assertions.assertFalse(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, allNodes, t + 54_999L));
+            Assertions.assertTrue(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, allNodes, t + 55_000L));
+
+            // Node B is down, so every available node has a copy. The wait starts again from the min.
+            Map<TNetworkAddress, Long> nodeBDown = Map.of(NODE_A, 100L, NODE_C, 100L);
+            Assertions.assertFalse(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, nodeBDown, t + 56_000L));
+            Assertions.assertTrue(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, allNodes, t + 56_001L));
+        } finally {
+            Config.dictionary_node_resync_min_interval_second = oldMin;
+            Config.dictionary_node_resync_max_interval_second = oldMax;
+        }
+    }
+
+    @Test
+    public void testEarlyRefreshWaitStartsAtOneSchedulerPassWithAMinOfZero() throws Exception {
+        mockThreeNodes(Set.of(PProcessDictionaryCacheRequestType.COMMIT), Set.of());
+        Dictionary dictionary = createRefreshingDictionary("zero_min_dict", false);
+        DictionaryMgr.RefreshDictionaryCacheWorker worker = masterDictionaryMgr.new RefreshDictionaryCacheWorker(
+                dictionary, masterDictionaryMgr.getAndIncrementTxnIdUnlocked());
+        worker.begin();
+        worker.commit();
+        worker.finish();
+
+        // With 0, the doubling would stay at 0, and a node that keeps failing would cause a refresh every pass.
+        Config.dictionary_node_resync_min_interval_second = 0;
+        Map<TNetworkAddress, Long> allNodes = Map.of(NODE_A, 100L, NODE_B, 100L, NODE_C, 100L);
+        long t = System.currentTimeMillis();
+        Assertions.assertTrue(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, allNodes, t));
+        Assertions.assertFalse(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, allNodes, t + 1_000L));
+        Assertions.assertTrue(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, allNodes, t + 10_000L));
+        Assertions.assertFalse(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, allNodes, t + 29_999L));
+        Assertions.assertTrue(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, allNodes, t + 30_000L));
+    }
+
+    @Test
+    public void testScheduleTasksStartsAnEarlyRefreshForARestartedNode() throws Exception {
+        Map<TNetworkAddress, Long> startTimes = new HashMap<>(Map.of(NODE_A, 100L, NODE_B, 100L, NODE_C, 100L));
+        mockThreeNodes(Set.of(), Set.of(), startTimes);
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+        // The real refresh needs a table and live nodes. The test only needs to see that it starts.
+        CountDownLatch started = new CountDownLatch(1);
+        List<Boolean> earlyFlags = Lists.newArrayList();
+        new MockUp<DictionaryMgr.RefreshDictionaryCacheWorker>() {
+            @Mock
+            public void run(Invocation invocation) {
+                earlyFlags.add(((DictionaryMgr.RefreshDictionaryCacheWorker) invocation.getInvokedInstance())
+                        .isEarlyRefresh());
+                started.countDown();
+            }
+        };
+        // No automatic refresh, so only a node resync can start one.
+        Dictionary dictionary = createRefreshingDictionary("schedule_dict", false);
+        DictionaryMgr.RefreshDictionaryCacheWorker worker = masterDictionaryMgr.new RefreshDictionaryCacheWorker(
+                dictionary, masterDictionaryMgr.getAndIncrementTxnIdUnlocked());
+        worker.begin();
+        worker.commit();
+        worker.finish();
+        long id = dictionary.getDictionaryId();
+
+        masterDictionaryMgr.scheduleTasks();
+        Assertions.assertEquals(Dictionary.DictionaryState.FINISHED, dictionary.getState());
+        Assertions.assertFalse(masterDictionaryMgr.getUnfinishedRefreshTasks().contains(id));
+
+        startTimes.put(NODE_B, 200L);
+        masterDictionaryMgr.scheduleTasks();
+        Assertions.assertEquals(Dictionary.DictionaryState.REFRESHING, dictionary.getState());
+        Assertions.assertTrue(masterDictionaryMgr.getUnfinishedRefreshTasks().contains(id));
+        Assertions.assertTrue(started.await(10, TimeUnit.SECONDS));
+        Assertions.assertEquals(List.of(true), earlyFlags);
+    }
+
+    // ========== A new leader ==========
+
+    private Dictionary createFinishedDictionary(String name, long version) throws Exception {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("dictionary_warm_up", "false");
+        masterDictionaryMgr.createDictionary(createTestDictionaryStmt(name, properties), TEST_CATALOG_NAME, TEST_DB_NAME);
+        Dictionary dictionary = masterDictionaryMgr.getDictionaryByName(name);
+        dictionary.setFinished(System.currentTimeMillis(), version);
+        return dictionary;
+    }
+
+    @Test
+    public void testNewLeaderRefreshesANodeOnAnOldVersion() throws Exception {
+        // Node B has an old version. Node C is an old BE that does not report its version.
+        mockThreeNodesWithStatistic(Map.of(), Map.of(NODE_A, 5L, NODE_B, 4L), Set.of());
+        Dictionary dictionary = createFinishedDictionary("new_leader_old_version_dict", 5L);
+        Map<TNetworkAddress, Long> allNodes = Map.of(NODE_A, 100L, NODE_B, 100L, NODE_C, 100L);
+        long now = System.currentTimeMillis();
+        Assertions.assertFalse(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, allNodes, now));
+
+        masterDictionaryMgr.probeNodeVersions(dictionary);
+
+        Assertions.assertEquals(Map.of(NODE_A, 100L, NODE_C, 100L),
+                masterDictionaryMgr.getSyncedNodeStartTimes(dictionary.getDictionaryId()));
+        Assertions.assertFalse(masterDictionaryMgr.isNodeProbePending(dictionary.getDictionaryId()));
+        Assertions.assertTrue(masterDictionaryMgr.needNodeResyncUnlocked(dictionary, allNodes, now));
+    }
+
+    @Test
+    public void testNewLeaderRefreshesANodeWithNoCopy() throws Exception {
+        // A new BE reports -1 when it has no copy, for example after a restart.
+        mockThreeNodesWithStatistic(Map.of(), Map.of(NODE_A, 5L, NODE_B, -1L, NODE_C, 5L), Set.of());
+        Dictionary dictionary = createFinishedDictionary("new_leader_no_copy_dict", 5L);
+
+        masterDictionaryMgr.probeNodeVersions(dictionary);
+
+        Assertions.assertEquals(Map.of(NODE_A, 100L, NODE_C, 100L),
+                masterDictionaryMgr.getSyncedNodeStartTimes(dictionary.getDictionaryId()));
+    }
+
+    @Test
+    public void testNewLeaderRefreshesANodeThatDoesNotAnswer() throws Exception {
+        mockThreeNodesWithStatistic(Map.of(), Map.of(NODE_A, 5L, NODE_B, 5L, NODE_C, 5L), Set.of(NODE_B));
+        Dictionary dictionary = createFinishedDictionary("new_leader_no_answer_dict", 5L);
+
+        masterDictionaryMgr.probeNodeVersions(dictionary);
+
+        Assertions.assertEquals(Map.of(NODE_A, 100L, NODE_C, 100L),
+                masterDictionaryMgr.getSyncedNodeStartTimes(dictionary.getDictionaryId()));
+    }
+
+    @Test
+    public void testNewLeaderDoesNotRefreshWhenEveryNodeHasTheCurrentVersion() throws Exception {
+        mockThreeNodesWithStatistic(Map.of(), Map.of(NODE_A, 5L, NODE_B, 5L, NODE_C, 5L), Set.of());
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+        Dictionary dictionary = createFinishedDictionary("new_leader_current_dict", 5L);
+        long id = dictionary.getDictionaryId();
+
+        // The first pass asks the nodes on another thread.
+        masterDictionaryMgr.scheduleTasks();
+        long deadline = System.currentTimeMillis() + 10_000L;
+        while (masterDictionaryMgr.isNodeProbePending(id) && System.currentTimeMillis() < deadline) {
+            Thread.sleep(10);
+        }
+        Assertions.assertEquals(Map.of(NODE_A, 100L, NODE_B, 100L, NODE_C, 100L),
+                masterDictionaryMgr.getSyncedNodeStartTimes(id));
+
+        masterDictionaryMgr.scheduleTasks();
+        Assertions.assertEquals(Dictionary.DictionaryState.FINISHED, dictionary.getState());
+        Assertions.assertFalse(masterDictionaryMgr.getUnfinishedRefreshTasks().contains(id));
+    }
+
+    private static void replayNextModifyLogs(DictionaryMgr follower, int count) throws Exception {
+        for (int i = 0; i < count; i++) {
+            follower.replayModifyDictionaryMgr((UpdateDictionaryMgrLog) UtFrameUtils.PseudoJournalReplayer
+                    .replayNextJournal(OperationType.OP_MODIFY_DICTIONARY_MGR_V2));
+        }
+    }
+
+    @Test
+    public void testNewLeaderRollsBackAnEarlyRefreshThatFailsBeforeCommit() throws Exception {
+        Map<TNetworkAddress, Long> startTimes = new HashMap<>(Map.of(NODE_A, 100L, NODE_B, 100L, NODE_C, 100L));
+        Set<PProcessDictionaryCacheRequestType> failOnAll = new HashSet<>();
+        mockThreeNodes(Set.of(), failOnAll, startTimes);
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+        BlockingQueue<DictionaryMgr.RefreshDictionaryCacheWorker> started = new LinkedBlockingQueue<>();
+        new MockUp<DictionaryMgr.RefreshDictionaryCacheWorker>() {
+            @Mock
+            public void run(Invocation invocation) {
+                started.add(invocation.getInvokedInstance());
+            }
+        };
+        Dictionary dictionary = createRefreshingDictionary("failover_early_dict", false);
+        long id = dictionary.getDictionaryId();
+        DictionaryMgr follower = new DictionaryMgr();
+        follower.replayCreateDictionary((Dictionary) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_CREATE_DICTIONARY));
+        long version = masterDictionaryMgr.getAndIncrementTxnIdUnlocked();
+        DictionaryMgr.RefreshDictionaryCacheWorker first =
+                masterDictionaryMgr.new RefreshDictionaryCacheWorker(dictionary, version);
+        first.begin();
+        first.commit();
+        first.finish();
+        // txn id, COMMITTING, FINISHED
+        replayNextModifyLogs(follower, 3);
+
+        // Node B restarted, so the leader starts an early refresh. Then the leader goes down.
+        startTimes.put(NODE_B, 200L);
+        masterDictionaryMgr.scheduleTasks();
+        Assertions.assertTrue(started.poll(10, TimeUnit.SECONDS).isEarlyRefresh());
+        // REFRESHING, txn id
+        replayNextModifyLogs(follower, 2);
+
+        // The follower becomes the leader and goes on with the refresh, which fails on every node at BEGIN.
+        follower.scheduleTasks();
+        DictionaryMgr.RefreshDictionaryCacheWorker resumed = started.poll(10, TimeUnit.SECONDS);
+        failOnAll.add(PProcessDictionaryCacheRequestType.BEGIN);
+        resumed.begin();
+        resumed.commit();
+        resumed.finish();
+
+        Dictionary newLeaderDictionary = follower.getDictionaryByName("failover_early_dict");
+        Assertions.assertEquals(Dictionary.DictionaryState.FINISHED, newLeaderDictionary.getState());
+        Assertions.assertEquals(version, newLeaderDictionary.getLastSuccessVersion());
+        Assertions.assertTrue(newLeaderDictionary.getRuntimeErrMsg().contains("all nodes failed"));
+        Assertions.assertTrue(resumed.isEarlyRefresh());
+        Assertions.assertFalse(follower.isEarlyRefreshTask(id));
+    }
+
+    @Test
+    public void testFollowerKeepsTheEarlyRefreshMarkUntilTheRefreshEnds() throws Exception {
+        createFinishedDictionary("replay_early_mark_dict", 5L);
+        DictionaryMgr follower = new DictionaryMgr();
+        Dictionary dictionary = (Dictionary) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_CREATE_DICTIONARY);
+        follower.replayCreateDictionary(dictionary);
+        long id = dictionary.getDictionaryId();
+        long ts = System.currentTimeMillis();
+
+        UpdateDictionaryLog finished = new UpdateDictionaryLog(id, ts);
+        finished.setState(Dictionary.DictionaryState.FINISHED);
+        finished.setLastSuccessVersion(6L);
+        UpdateDictionaryLog cancelled = new UpdateDictionaryLog(id, ts);
+        cancelled.setState(Dictionary.DictionaryState.CANCELLED);
+        UpdateDictionaryLog rolledBack = new UpdateDictionaryLog(id, ts);
+        rolledBack.setResetStateBeforeRefresh(true);
+
+        for (UpdateDictionaryLog end : List.of(finished, cancelled, rolledBack)) {
+            UpdateDictionaryLog early = new UpdateDictionaryLog(id, ts);
+            early.setState(Dictionary.DictionaryState.REFRESHING);
+            early.setEarlyRefresh(true);
+            follower.replayModifyDictionaryMgr(new UpdateDictionaryMgrLog(Lists.newArrayList(early)));
+            Assertions.assertTrue(follower.isEarlyRefreshTask(id));
+
+            follower.replayModifyDictionaryMgr(new UpdateDictionaryMgrLog(Lists.newArrayList(end)));
+            Assertions.assertFalse(follower.isEarlyRefreshTask(id));
+        }
+
+        UpdateDictionaryLog regular = new UpdateDictionaryLog(id, ts);
+        regular.setState(Dictionary.DictionaryState.REFRESHING);
+        follower.replayModifyDictionaryMgr(new UpdateDictionaryMgrLog(Lists.newArrayList(regular)));
+        Assertions.assertFalse(follower.isEarlyRefreshTask(id));
+    }
+}

@@ -21,7 +21,8 @@ namespace starrocks::pipeline {
 Status DictionaryCacheSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     if (_writer == nullptr) {
-        _writer = std::make_unique<DictionaryCacheWriter>(_t_dictionary_cache_sink, state, _fragment_ctx);
+        _writer =
+                std::make_unique<DictionaryCacheWriter>(_t_dictionary_cache_sink, state, _fragment_ctx, _failed_nodes);
     }
     return _writer->prepare();
 }
