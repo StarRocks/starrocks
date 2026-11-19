@@ -158,6 +158,10 @@ private:
     Status refine_initial_coarse_split_and_append_refined_tasks(const TabletReaderParams& params,
                                                                 RowidRangeOptionPtr* local_rowid_range);
     Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
+    // lake_scan_warm_index: starts warming the index pages the query scan of |state| reads next, without waiting.
+    // Stops issuing fills once the query of |params| is cancelled.
+    void warm_index_pages(PreparedTabletReadState* state, const TabletReaderParams& params,
+                          const RowsetReadOptions& options, const LakeIOOptions& lake_io_opts);
     Status init_rowset_read_options(const TabletReaderParams& params, RowsetReadOptions* options);
     Status init_rowset_read_options_for_split(const TabletReaderParams& params, RowsetReadOptions* options,
                                               LakeIOOptions* lake_io_opts);
@@ -183,6 +187,9 @@ private:
     // (rowset, segment) of the reusable slots used since the last flush_reusable_iterator_io_stats().
     std::vector<std::pair<size_t, size_t>> _used_reusable_slots;
     std::shared_ptr<ChunkIterator> _collect_iter;
+    // lake_scan_warm_index for a non-split query scan: the segments it opened once and warmed, which its rowset
+    // iterators reuse, and the warm handles. Released by close() or the next open().
+    PreparedTabletReadStatePtr _nosplit_warm_state;
 
     DeletePredicates _delete_predicates;
     PredicateList _predicate_free_list;

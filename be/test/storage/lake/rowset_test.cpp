@@ -2819,6 +2819,38 @@ TEST_F(LakeRowsetTest, test_segments_stops_after_cancel) {
     ASSERT_EQ(3, segments.size());
 }
 
+// segments() returns a rowset's segments in metadata order, also when the parallel load runs a refused submit at once,
+// ahead of the earlier segments still queued: a caller indexes them by metadata position.
+TEST_F(LakeRowsetTest, test_segments_keep_metadata_order_after_refused_submit) {
+    create_rowsets_for_testing();
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, true);
+    _tablet_mgr->metacache()->prune();
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    int submits = 0;
+    SyncPoint::GetInstance()->SetCallBack("Rowset::load_segments::submit", [&](void* arg) {
+        if (++submits == 2) {
+            *static_cast<Status*>(arg) = Status::ServiceUnavailable("injected submit refusal");
+        }
+    });
+
+    // Rowset captures _parallel_load in its constructor.
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0);
+    LakeIOOptions lake_io_opts{.fill_data_cache = false, .fill_metadata_cache = false};
+    ASSIGN_OR_ABORT(auto segments, rowset->segments(lake_io_opts));
+    ASSERT_EQ(3, submits);
+    const auto& rs_meta = _tablet_metadata->rowsets(0);
+    ASSERT_EQ(rs_meta.segment_metas_size(), segments.size());
+    for (int i = 0; i < rs_meta.segment_metas_size(); i++) {
+        ASSERT_NE(nullptr, segments[i]);
+        EXPECT_EQ(_tablet_mgr->segment_location(_tablet_metadata->id(), rs_meta.segment_metas(i).filename()),
+                  segments[i]->file_name());
+    }
+}
+
 // A query that is not cancelled reads exactly what it read before.
 TEST_F(LakeRowsetTest, test_read_with_runtime_state_not_cancelled) {
     create_rowsets_for_testing();
