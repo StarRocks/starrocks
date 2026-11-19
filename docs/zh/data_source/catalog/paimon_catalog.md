@@ -749,6 +749,40 @@ DROP Catalog paimon_catalog_fs;
    SELECT count(*) FROM <table_name> LIMIT 10;
    ```
 
+### 查看计划扫描的数据量
+
+`EXPLAIN VERBOSE` 和 `EXPLAIN COSTS` 会为每个 Paimon 扫描节点显示候选文件指标，普通 `EXPLAIN` 不显示该指标块：
+
+```text
+0:PaimonScanNode
+   ...
+   avgRowSize=2.0
+   Paimon Scan Metrics:
+     splits=2
+     data_files=3
+     data_file_bytes=12000000000
+     data_file_rows=9000000000
+   limit: 10
+   cardinality: 10
+```
+
+这些指标统计 Paimon 规划器完成分区裁剪、文件裁剪以及规划阶段的 LIMIT 裁剪后选中的 split。
+统计使用扫描规划中已加载的文件元数据，与 reader 的选择无关。将文件拆分为多个扫描范围不会重复计算文件数、字节数或行数。
+对于全局索引 split，指标统计底层候选文件，尚未应用索引限定的行范围。
+
+| 字段 | 含义 |
+| --- | --- |
+| `splits` | 拆分扫描范围前，Paimon 输入 split 的数量。 |
+| `data_files` | 选中 split 中的数据文件条目数。 |
+| `data_file_bytes` | 这些数据文件在存储中的大小总和，单位为字节。 |
+| `data_file_rows` | 文件元数据中的记录数总和，尚未进行剩余条件过滤、删除向量过滤或主键合并。 |
+
+空扫描的指标为零。如果任一 split 缺少数据文件元数据（例如某些系统表的 split），三个文件指标均为 `-1`，表示不可用，避免返回零或不完整的总量。扫描规划前不显示该指标块。
+
+`cardinality` 仍表示优化器估算的输出行数，可能受谓词和 `LIMIT` 影响而减少。`data_file_rows` 不会被该输出估算值截断。
+字节数统计整个候选数据文件，不包含删除文件或索引文件，也不考虑列投影、页裁剪、缓存命中或提前结束执行。
+它反映候选扫描数据量，不表示实际 I/O、输出大小或执行限制。因此，即使 `LIMIT` 很小，仍可能选中很大的文件。
+
 ## 从 Paimon 导入数据
 
 假设您有一个名为 `olap_tbl` 的 OLAP 表，您可以按如下方式转换和导入数据：

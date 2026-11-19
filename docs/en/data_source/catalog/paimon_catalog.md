@@ -749,6 +749,50 @@ You can use one of the following syntaxes to view the schema of a Paimon table:
    SELECT count(*) FROM <table_name> LIMIT 10;
    ```
 
+### Inspect the planned scan size
+
+`EXPLAIN VERBOSE` and `EXPLAIN COSTS` include candidate file metrics for each
+Paimon scan node. Plain `EXPLAIN` omits this block:
+
+```text
+0:PaimonScanNode
+   ...
+   avgRowSize=2.0
+   Paimon Scan Metrics:
+     splits=2
+     data_files=3
+     data_file_bytes=12000000000
+     data_file_rows=9000000000
+   limit: 10
+   cardinality: 10
+```
+
+These metrics summarize the splits selected by Paimon's planner, after its
+partition/file pruning and any planning-time limit pruning. They use file
+metadata already loaded for the scan and are independent of reader selection.
+Splitting a file into multiple scan ranges does not multiply its file count,
+bytes, or rows. For global-index splits, the metrics describe the underlying
+candidate files, before applying the index's row ranges.
+
+| Field | Meaning |
+| --- | --- |
+| `splits` | Number of Paimon input splits, before scan-range splitting. |
+| `data_files` | Number of data-file entries across the selected splits. |
+| `data_file_bytes` | Sum of those data files' on-storage sizes, in bytes. |
+| `data_file_rows` | Sum of their metadata record counts, before residual filters, deletion-vector filtering, or primary-key merging. |
+
+An empty scan reports zero. If any split lacks data-file metadata, as can happen
+for system tables, the three file metrics are `-1` (unavailable), rather than
+zero or a partial total. The metrics block is absent before scan planning.
+
+`cardinality` remains the optimizer's estimated output row count, which can be
+reduced by predicates and `LIMIT`. `data_file_rows` is not capped to that output
+estimate. The byte count describes whole candidate data files, excludes
+deletion/index files, and does not account for column projection, page pruning,
+cache hits, or execution stopping early. It is a scan-size signal, not measured
+I/O, output size, or an execution limit. In particular, a small `LIMIT` can still
+select large files.
+
 ## Load data from Paimon
 
 Suppose you have an OLAP table named `olap_tbl`, you can transform and load data like below:
