@@ -329,6 +329,10 @@ protected:
     int32_t _effective_cluster_id;
 
 private:
+    // Friend class for testing
+    friend class StorageEngineCompactionTest;
+    friend class TabletUpdatesTest;
+
     // Instance should be inited from `static open()`
     // MUST NOT be called in other circumstances.
     Status _open(const EngineOptions& options);
