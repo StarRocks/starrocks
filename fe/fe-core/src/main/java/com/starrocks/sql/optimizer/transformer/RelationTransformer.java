@@ -65,6 +65,11 @@ import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.PivotAggregation;
+>>>>>>> b6668e3 ([BugFix][RB-1380] Plan a subquery in a PIVOT measure once instead of once per pivot value (#83780))
 import com.starrocks.sql.ast.PivotRelation;
 import com.starrocks.sql.ast.QueryPeriod;
 import com.starrocks.sql.ast.QueryRelation;
@@ -1208,8 +1213,28 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         List<FunctionCallExpr> aggFunctions = node.getRewrittenAggFunctions();
         QueryTransformer queryTransformer = new QueryTransformer(columnRefFactory, session, cteContext,
                 mvTransformerContext);
+        OptExprBuilder input = queryPlan.getRootBuilder();
+
+        // Every pivot value gets agg(CASE WHEN <pivot columns> = <value> THEN <argument> END) with the same argument of
+        // the measure. When an argument contains a subquery, project it once below the aggregation, so that each CASE
+        // reads that column instead of planning the subquery again for every pivot value: 20 NOT IN subqueries with 11
+        // pivot values were planned 220 times, and concurrent EXPLAINs of such a PIVOT exhausted the FE heap (RB-1380).
+        List<Expr> measureArguments = new ArrayList<>();
+        for (PivotAggregation pivotAggregation : node.getAggregateFunctions()) {
+            Expr argument = pivotAggregation.getFunctionCallExpr().getChild(0);
+            if (argument != null && !argument.isConstant() && !measureArguments.contains(argument)) {
+                measureArguments.add(argument);
+            }
+        }
+        if (measureArguments.stream().anyMatch(argument -> argument.contains(Subquery.class))) {
+            List<Expr> projected = new ArrayList<>(groupKeys);
+            projected.addAll(node.getPivotColumns());
+            projected.addAll(measureArguments);
+            input = queryTransformer.project(input, projected);
+        }
+
         OptExprBuilder builder = queryTransformer.aggregate(
-                queryPlan.getRootBuilder(), groupKeys, aggFunctions, null, ImmutableList.of());
+                input, groupKeys, aggFunctions, null, ImmutableList.of());
 
         // output
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) builder.getRoot().getOp();
