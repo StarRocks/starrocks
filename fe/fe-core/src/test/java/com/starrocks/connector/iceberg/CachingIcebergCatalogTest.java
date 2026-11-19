@@ -419,6 +419,7 @@ public class CachingIcebergCatalogTest {
 
         ManifestFile manifest = Mockito.mock(ManifestFile.class);
         Mockito.when(manifest.path()).thenReturn("/metadata/m1.avro");
+        Mockito.when(manifest.firstRowId()).thenReturn(null);
         Mockito.when(manifest.partitionSpecId()).thenReturn(0);
         Mockito.when(manifest.addedFilesCount()).thenReturn(1);
         Mockito.when(manifest.existingFilesCount()).thenReturn(1);
