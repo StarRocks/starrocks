@@ -846,10 +846,7 @@ StatusOr<TabletMetadataPtr> TabletManager::load_shared_initial_metadata(const st
         cache_key = std::move(real_path).value();
     }
 
-    TabletMetadataPtr shared;
-    if (!cache_opts.skip_meta_cache) {
-        shared = _metacache->lookup_tablet_metadata(cache_key);
-    }
+    auto shared = _metacache->lookup_tablet_metadata(cache_key);
     if (shared == nullptr) {
         // Cached regardless of |cache_opts.fill_meta_cache|. That flag is how publish keeps a tablet's
         // base-version metadata -- read once, then superseded -- out of the metacache, and the shared
@@ -958,11 +955,9 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata_impl(const string
                                                                     int64_t expected_gtid,
                                                                     const std::shared_ptr<FileSystem>& fs,
                                                                     InitialMetadataOrder initial_order) {
-    if (!cache_opts.skip_meta_cache) {
-        if (auto ptr = _metacache->lookup_tablet_metadata(path); ptr != nullptr) {
-            TRACE("got cached tablet metadata");
-            return ptr;
-        }
+    if (auto ptr = _metacache->lookup_tablet_metadata(path); ptr != nullptr) {
+        TRACE("got cached tablet metadata");
+        return ptr;
     }
     StatusOr<TabletMetadataPtr> metadata_or;
     auto [tablet_id, version] = parse_tablet_metadata_filename(basename(path));
@@ -1246,10 +1241,8 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata_impl(int64
                                                                            int64_t expected_gtid,
                                                                            const std::shared_ptr<FileSystem>& fs) {
     auto tablet_path = tablet_metadata_location(tablet_id, version);
-    if (!cache_opts.skip_meta_cache) {
-        if (auto ptr = _metacache->lookup_tablet_metadata(tablet_path); ptr != nullptr) {
-            return ptr;
-        }
+    if (auto ptr = _metacache->lookup_tablet_metadata(tablet_path); ptr != nullptr) {
+        return ptr;
     }
     if (version == kInitialVersion) {
         return Status::NotFound("Not found expected tablet metadata");

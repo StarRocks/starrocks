@@ -498,8 +498,8 @@ private:
     //
     // The object is per partition, not per tablet, so it is cached under its RESOLVED path whatever
     // |cache_opts.fill_meta_cache| says, and concurrent misses on one partition collapse into a single
-    // remote read through _shared_initial_metadata_group. Only |skip_meta_cache| (bypass the lookup)
-    // and |fill_data_cache| are honored. The definition says why.
+    // remote read through _shared_initial_metadata_group. |cache_opts.fill_data_cache| controls
+    // whether the remote read fills the data cache.
     StatusOr<TabletMetadataPtr> load_shared_initial_metadata(const std::string& sibling_path, int64_t tablet_id,
                                                              const CacheOptions& cache_opts, int64_t expected_gtid,
                                                              const std::shared_ptr<FileSystem>& fs);
