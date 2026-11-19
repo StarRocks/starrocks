@@ -2158,8 +2158,11 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
         // delta column group files read instead keep the default.
         opts.remote_read_retainable = true;
         ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file_with_bundling(opts, _segment->file_info()));
-        if (config::io_coalesce_lake_read_enable && !_segment->is_default_column(col) &&
-            _segment->lake_tablet_manager() != nullptr) {
+        // The scheduler turns the coalesced read off for good, but a rejected dynamic update of the config is
+        // visible for a moment before it is rolled back: check the scheduler too, so that no scan builds a
+        // coalescing stream, which cannot warm the cache, while the scheduler runs.
+        if (config::io_coalesce_lake_read_enable && !remote_io_scheduler_enabled() &&
+            !_segment->is_default_column(col) && _segment->lake_tablet_manager() != nullptr) {
             ASSIGN_OR_RETURN(auto file_size, rfile->get_size());
             auto shared_buffered_input_stream =
                     std::make_unique<SharedBufferedInputStream>(rfile->stream(), _segment->file_name(), file_size);
