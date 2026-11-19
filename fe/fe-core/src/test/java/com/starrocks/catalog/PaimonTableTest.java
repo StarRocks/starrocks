@@ -111,6 +111,12 @@ public class PaimonTableTest {
 
     @Test
     public void testEquals(@Mocked FileStoreTable paimonNativeTable) {
+        new Expectations() {
+            {
+                paimonNativeTable.uuid();
+                result = "uuid";
+            }
+        };
         String dbName = "testDB";
         String tableName = "testTable";
         PaimonTable table = new PaimonTable("testCatalog", dbName, tableName, null, paimonNativeTable);
