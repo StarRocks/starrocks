@@ -19,12 +19,6 @@
 
 #include <cstddef>
 
-<<<<<<< HEAD
-=======
-#include "base/testutil/assert.h"
-#include "base/utility/defer_op.h"
-#include "column/chunk_factory.h"
->>>>>>> 11cf399 ([BugFix] Respect segment overlap after online optimize version overwrite (#83411))
 #include "column/schema.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
@@ -40,14 +34,11 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
-<<<<<<< HEAD
-#include "testutil/assert.h"
-#include "util/json.h"
-=======
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
-#include "types/json_value.h"
->>>>>>> 11cf399 ([BugFix] Respect segment overlap after online optimize version overwrite (#83411))
+#include "testutil/assert.h"
+#include "util/defer_op.h"
+#include "util/json.h"
 
 namespace starrocks {
 
@@ -416,7 +407,7 @@ TEST_F(BaseCompactionTest, overwrite_recalculates_cumulative_point) {
         ASSERT_OK(writer->flush());
         ASSIGN_OR_ABORT(auto rowset, writer->build());
         ASSERT_FALSE(rowset->is_overlapped());
-        ASSERT_OK(tablet->overwrite_rowset(rowset, version));
+        tablet->overwrite_rowset(rowset, version);
         tablet->calculate_cumulative_point();
         EXPECT_EQ(version + 1, tablet->cumulative_layer_point());
     }
@@ -451,7 +442,7 @@ TEST_F(BaseCompactionTest, overwritten_overlapping_rowset_can_be_cumulatively_co
     ASSERT_OK(writer->flush());
     ASSIGN_OR_ABORT(auto rowset, writer->build());
     ASSERT_EQ(2, rowset->num_segments());
-    ASSERT_OK(tablet->overwrite_rowset(rowset, 2));
+    tablet->overwrite_rowset(rowset, 2);
     ASSERT_EQ(Version(0, 2), rowset->version());
 
     auto check_rows = [&] {
@@ -461,7 +452,7 @@ TEST_F(BaseCompactionTest, overwritten_overlapping_rowset_can_be_cumulatively_co
         params.skip_aggregation = false;
         ASSERT_OK(reader.prepare());
         ASSERT_OK(reader.open(params));
-        auto chunk = ChunkFactory::new_chunk(schema, 1024);
+        auto chunk = ChunkHelper::new_chunk(schema, 1024);
         size_t count = 0;
         while (true) {
             chunk->reset();

@@ -676,20 +676,8 @@ void Tablet::overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     }
     Version rowset_version(0, version);
     rowset->make_visible(rowset_version);
-<<<<<<< HEAD
-=======
-
-    // Like add_inc_rowset, save the rowset meta, now visible, over the committed one the load saved. The tablet meta
-    // takes the overwrite at its next checkpoint only: a restart before it would load the rowset as the one of an
-    // unpublished transaction and the tablet without the versions it overwrites. Loading the visible rowset meta puts
-    // the rowset back into the tablet and drops the rowsets it covers (see DataDir::load).
-    RowsetMetaPB rowset_meta_pb;
-    rowset->rowset_meta()->get_full_meta_pb(&rowset_meta_pb, rowset->rowset_meta()->skip_tablet_schema());
-    RETURN_IF_ERROR(RowsetMetaManager::save(data_dir()->get_meta(), tablet_uid(), rowset_meta_pb));
-
     // The old cumulative point describes the rowsets being replaced.
     set_cumulative_layer_point(kInvalidCumulativePoint);
->>>>>>> 11cf399 ([BugFix] Respect segment overlap after online optimize version overwrite (#83411))
     modify_rowsets_without_lock({rowset}, origin_rowsets, nullptr);
 }
 

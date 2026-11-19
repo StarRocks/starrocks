@@ -36,12 +36,9 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
-<<<<<<< HEAD
-#include "testutil/assert.h"
-=======
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
->>>>>>> 11cf399 ([BugFix] Respect segment overlap after online optimize version overwrite (#83411))
+#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -258,7 +255,7 @@ public:
         ASSERT_OK(RowsetFactory::create_rowset_writer(context, &writer));
         auto schema = ChunkHelper::convert_schema(_tablet_schema);
         for (int segment = 0; segment < 2; ++segment) {
-            auto chunk = ChunkFactory::new_chunk(schema, 2);
+            auto chunk = ChunkHelper::new_chunk(schema, 2);
             for (int i = 1; i <= 2; ++i) {
                 int32_t key = i + (overlapping ? 0 : segment * 2);
                 chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(key));
@@ -270,7 +267,7 @@ public:
         }
         ASSIGN_OR_ABORT(auto source, writer->build());
         ASSERT_EQ(2, source->num_segments());
-        ASSERT_OK(tablet->overwrite_rowset(source, 2));
+        tablet->overwrite_rowset(source, 2);
         ASSERT_EQ(Version(0, 2), source->version());
 
         create_rowset_writer_context(&context, 3);
@@ -298,7 +295,7 @@ public:
         params.skip_aggregation = false;
         ASSERT_OK(reader.prepare());
         ASSERT_OK(reader.open(params));
-        auto chunk = ChunkFactory::new_chunk(schema, 4);
+        auto chunk = ChunkHelper::new_chunk(schema, 4);
         int rows = 0;
         while (true) {
             chunk->reset();
