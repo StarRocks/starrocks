@@ -21,6 +21,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergPartitionKey;
 import com.starrocks.catalog.IcebergTable;
@@ -88,6 +89,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnPosition;
 import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropPartitionColumnClause;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -187,6 +189,7 @@ import org.apache.iceberg.util.TableScanUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
@@ -216,6 +219,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ENABLE_DISTRIBUTED_PLAN_LOAD_DATA_FILE_COLUMN_STATISTICS_WITH_EQ_DELETE;
@@ -4731,6 +4735,29 @@ public class IcebergMetadataTest extends TableTestBase {
             tableScanUtilMock.verify(() -> TableScanUtil.splitFiles(Mockito.any(), Mockito.eq(128L)),
                     Mockito.times(1));
         }
+    }
+
+    private CreateTableStmt buildIcebergCreateTableStmt(String dbName, String tableName,
+                                                        Map<String, String> properties) {
+        CreateTableStmt stmt = new CreateTableStmt(
+                false,
+                false,
+                new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME, dbName, tableName)),
+                        null, NodePosition.ZERO),
+                Lists.newArrayList(
+                        new ColumnDef("c1", new TypeDef(TypeFactory.createType(PrimitiveType.INT)))),
+                "iceberg",
+                null,
+                null,
+                null,
+                properties == null ? new HashMap<>() : properties,
+                new HashMap<>(),
+                null);
+        List<Column> columns = stmt.getColumnDefs().stream()
+                .map(def -> ColumnBuilder.buildGeneratedColumn(null, def))
+                .collect(Collectors.toList());
+        stmt.setColumns(columns);
+        return stmt;
     }
 
     @Test
