@@ -260,7 +260,7 @@ The following examples assume you have created a database named `test` in your S
 
 ### Read data using Flink SQL
 
-1. In your Flink cluster, create a table named `flink_test` based on the schema of the source StarRocks table (which is `score_board` in this example). In the table creation command, you must configure the read task properties, including the information about the Flink connector, the source StarRock database, and the source StarRocks table.
+1. In your Flink cluster, create a table named `flink_test` based on the schema of the source StarRocks table (which is `score_board` in this example). In the table creation command, you must configure the read task properties, including the information about the Flink connector, the source StarRocks database, and the source StarRocks table.
 
    ```SQL
    CREATE TABLE flink_test
