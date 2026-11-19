@@ -185,16 +185,6 @@ static Status run_inline(std::vector<std::function<Status()>>& tasks, const Remo
     return Status::OK();
 }
 
-// The predicate tree of the segment metadata filter that Rowset::read applies with |options|, or nullptr when it
-// applies none. Rowset::read skips a segment this filter excludes before loading it.
-static const PredicateTree* metadata_prune_tree(const RowsetReadOptions& options) {
-    if (!config::enable_lake_segment_metadata_filter || options.pred_tree_for_zone_map.empty() ||
-        options.tablet_schema == nullptr) {
-        return nullptr;
-    }
-    return &options.pred_tree_for_zone_map;
-}
-
 // Opens the segments of all |rowsets|, one task per segment, and puts them in metadata order whatever order the tasks
 // finish in. With |in_parallel| the tasks run at once on the load segment thread pool
 // (lake_scan_parallel_segment_open), otherwise one after another on this thread. A segment whose footer is already
@@ -930,11 +920,13 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
             }
             // lake_scan_warm_index: the splits share these segments, and the state keeps the warm handles until the
             // last split that holds it is done.
-            RowsetReadOptions classic_read_options;
-            LakeIOOptions classic_io_options;
-            RETURN_IF_ERROR(
-                    init_rowset_read_options_for_split(read_params, &classic_read_options, &classic_io_options));
-            warm_index_pages(classic_state.get(), read_params, classic_read_options, classic_io_options);
+            if (should_warm_index_pages(read_params.reader_type)) {
+                RowsetReadOptions classic_read_options;
+                LakeIOOptions classic_io_options;
+                RETURN_IF_ERROR(
+                        init_rowset_read_options_for_split(read_params, &classic_read_options, &classic_io_options));
+                warm_index_pages(classic_state.get(), read_params, classic_read_options, classic_io_options);
+            }
         }
 
         pipeline::Morsels morsels;
@@ -1207,8 +1199,8 @@ void TabletReader::warm_index_pages(PreparedTabletReadState* state, const Tablet
             read_cids.push_back(field->id());
         }
     }
-    warm_prepared_indexes(state, *options.tablet_schema, predicate_cids, read_cids, metadata_prune_tree(options),
-                          lake_io_opts,
+    warm_prepared_indexes(state, *options.tablet_schema, predicate_cids, read_cids,
+                          SegmentMetadataFilter::filter_tree(options), lake_io_opts,
                           params.runtime_state != nullptr ? &params.runtime_state->cancelled_ref() : nullptr, &_stats);
 }
 
@@ -1655,8 +1647,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         RETURN_IF_ERROR(open_rowset_segments(
                 _rowsets, rs_opts.lake_io_opts,
                 should_open_segments_in_parallel(params.reader_type) || config::enable_load_segment_parallel,
-                is_cancelled, &_stats, &state->rowset_segments, &cached_rowsets, metadata_prune_tree(rs_opts),
-                rs_opts.tablet_schema.get()));
+                is_cancelled, &_stats, &state->rowset_segments, &cached_rowsets,
+                SegmentMetadataFilter::filter_tree(rs_opts), rs_opts.tablet_schema.get()));
         RETURN_IF_ERROR(check_cancelled(params, _tablet_metadata->id()));
         warm_index_pages(state, params, rs_opts, rs_opts.lake_io_opts);
     }

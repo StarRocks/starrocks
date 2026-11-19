@@ -14,7 +14,9 @@
 
 #include "storage/lake/segment_metadata_filter.h"
 
+#include "common/config_lake_fwd.h"
 #include "storage/datum_variant.h"
+#include "storage/rowset/rowset_options.h"
 #include "storage/sort_key_bounds.h"
 #include "storage_primitive/column_predicate_factory.h"
 #include "storage_primitive/zone_map_detail.h"
@@ -87,6 +89,14 @@ struct MetadataPruner {
 };
 
 } // namespace
+
+const PredicateTree* SegmentMetadataFilter::filter_tree(const RowsetReadOptions& options) {
+    if (!config::enable_lake_segment_metadata_filter || options.pred_tree_for_zone_map.empty() ||
+        options.tablet_schema == nullptr) {
+        return nullptr;
+    }
+    return &options.pred_tree_for_zone_map;
+}
 
 bool SegmentMetadataFilter::may_contain(const SegmentMetadataPB& segment_meta,
                                         const PredicateTree& pred_tree_for_zone_map,

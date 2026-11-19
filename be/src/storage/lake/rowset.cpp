@@ -596,8 +596,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
 
     // Check if segment metadata filter can be used.
     // Apply metadata filter BEFORE loading segments to avoid loading unnecessary segment footers.
-    bool use_metadata_filter = config::enable_lake_segment_metadata_filter && metadata().segment_metas_size() > 0 &&
-                               !options.pred_tree_for_zone_map.empty() && options.tablet_schema != nullptr;
+    bool use_metadata_filter =
+            SegmentMetadataFilter::filter_tree(options) != nullptr && metadata().segment_metas_size() > 0;
 
     std::unordered_set<int> skip_segment_idxs;
     if (use_metadata_filter) {
