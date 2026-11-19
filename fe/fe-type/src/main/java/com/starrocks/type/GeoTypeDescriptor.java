@@ -14,18 +14,23 @@
 
 package com.starrocks.type;
 
+import com.google.gson.annotations.SerializedName;
+
 import java.util.Objects;
 
 /**
  * Immutable semantic type metadata; column representation belongs to the column/transport layer.
  * <p>
- * A plain class rather than a record: FE's GSON version cannot read a record back, which persisting this descriptor
- * in FE metadata will need.
+ * A plain class rather than a record: FE's GSON version cannot read a record back from FE metadata.
  */
 public final class GeoTypeDescriptor {
+    @SerializedName(value = "logicalType")
     private final LogicalType logicalType;
+    @SerializedName(value = "edgeAlgorithm")
     private final EdgeAlgorithm edgeAlgorithm;
+    @SerializedName(value = "crs")
     private final String crs;
+    @SerializedName(value = "srid")
     private final Integer srid;
 
     public enum LogicalType {
