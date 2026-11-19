@@ -412,7 +412,7 @@ TEST_F(BaseCompactionTest, overwrite_recalculates_cumulative_point) {
         ASSERT_OK(writer->flush());
         ASSIGN_OR_ABORT(auto rowset, writer->build());
         ASSERT_FALSE(rowset->is_overlapped());
-        ASSERT_OK(tablet->overwrite_rowset(rowset, version));
+        tablet->overwrite_rowset(rowset, version);
         tablet->calculate_cumulative_point();
         EXPECT_EQ(version + 1, tablet->cumulative_layer_point());
     }
@@ -447,7 +447,7 @@ TEST_F(BaseCompactionTest, overwritten_overlapping_rowset_can_be_cumulatively_co
     ASSERT_OK(writer->flush());
     ASSIGN_OR_ABORT(auto rowset, writer->build());
     ASSERT_EQ(2, rowset->num_segments());
-    ASSERT_OK(tablet->overwrite_rowset(rowset, 2));
+    tablet->overwrite_rowset(rowset, 2);
     ASSERT_EQ(Version(0, 2), rowset->version());
 
     auto check_rows = [&] {

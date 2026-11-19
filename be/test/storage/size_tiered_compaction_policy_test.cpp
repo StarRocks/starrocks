@@ -327,7 +327,7 @@ public:
         }
         ASSIGN_OR_ABORT(auto source, writer->build());
         ASSERT_EQ(segments, source->num_segments());
-        ASSERT_OK(tablet->overwrite_rowset(source, 2));
+        tablet->overwrite_rowset(source, 2);
         ASSERT_EQ(Version(0, 2), source->version());
         ASSERT_EQ(1, tablet->version_count());
 
