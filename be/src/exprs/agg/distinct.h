@@ -442,25 +442,7 @@ public:
                 agg_state.set.prefetch_hash(cache[prefetch_index].hash_value);
                 prefetch_index++;
             }
-<<<<<<< HEAD
-        };
-
-        if constexpr (IsSlice<T>) {
-            const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-            if (data_column->is_large_binary()) {
-                const auto& container_data = down_cast<const LargeBinaryColumn*>(data_column)->get_proxy_data();
-                build_and_update(container_data);
-            } else {
-                const auto& container_data = down_cast<const BinaryColumn*>(data_column)->get_proxy_data();
-                build_and_update(container_data);
-            }
-        } else {
-            const auto* column = down_cast<const ColumnType*>(ColumnHelper::get_data_column(columns[0]));
-            const auto container_data = GetContainer<LT>::get_data(column);
-            build_and_update(container_data);
-=======
             agg_state.update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
->>>>>>> 9bc4fbe ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
         }
     }
 
@@ -491,25 +473,7 @@ public:
                 cache[prefetch_index].agg_state->set.prefetch_hash(cache[prefetch_index].hash_value);
                 prefetch_index++;
             }
-<<<<<<< HEAD
-        };
-
-        if constexpr (IsSlice<T>) {
-            const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-            if (data_column->is_large_binary()) {
-                const auto& container_data = down_cast<const LargeBinaryColumn*>(data_column)->get_proxy_data();
-                build_and_update(container_data);
-            } else {
-                const auto& container_data = down_cast<const BinaryColumn*>(data_column)->get_proxy_data();
-                build_and_update(container_data);
-            }
-        } else {
-            const auto* column = down_cast<const ColumnType*>(ColumnHelper::get_data_column(columns[0]));
-            const auto container_data = GetContainer<LT>::get_data(column);
-            build_and_update(container_data);
-=======
             cache[i].agg_state->update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
->>>>>>> 9bc4fbe ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
         }
     }
 

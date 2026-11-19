@@ -18,11 +18,8 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "gtest/gtest.h"
-<<<<<<< HEAD
 #include "gutil/casts.h"
 #include "testutil/assert.h"
-=======
->>>>>>> 9bc4fbe ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
 #include "testutil/column_test_helper.h"
 
 namespace starrocks {
@@ -106,7 +103,6 @@ TEST_F(ColumnHelperTest, get_null_column) {
     ASSERT_EQ(null_column->get_name(), "integral-1");
 }
 
-<<<<<<< HEAD
 // Verify update_nested_has_null recurses into STRUCT subfield columns.
 // Mirrors the post-write step a STRUCT-returning Java UDF goes through:
 // the Java side memcpys raw null bytes into subfield bitmaps without touching
@@ -135,7 +131,8 @@ TEST_F(ColumnHelperTest, update_nested_has_null_struct) {
 
     EXPECT_TRUE(a_col->has_null());
     EXPECT_FALSE(b_col->has_null());
-=======
+}
+
 // GetContainer::get_data
 TEST_F(ColumnHelperTest, get_container_fixed_length) {
     auto col = ColumnTestHelper::build_column<int32_t>({1, 2, 3});
@@ -186,7 +183,6 @@ TEST_F(ColumnHelperTest, get_container_get_data_with_row_nullable) {
     EXPECT_EQ(GetContainer<TYPE_INT>::get_data(col.get(), 0), 10);
     EXPECT_EQ(GetContainer<TYPE_INT>::get_data(col.get(), 1), 20);
     EXPECT_EQ(GetContainer<TYPE_INT>::get_data(col.get(), 2), 30);
->>>>>>> 9bc4fbe ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
 }
 
 } // namespace starrocks
