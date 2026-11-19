@@ -50,7 +50,6 @@ import com.starrocks.thrift.TListMaterializedViewStatusResult;
 import com.starrocks.thrift.TMaterializedViewStatus;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TUserIdentity;
-import com.starrocks.thrift.TUserRoles;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -58,7 +57,6 @@ import org.apache.thrift.TException;
 import org.apache.thrift.meta_data.FieldValueMetaData;
 import org.sparkproject.guava.base.Strings;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -141,12 +139,7 @@ public class MaterializedViewsSystemTable extends SystemTable {
         final List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
 
         ConnectContext context = Preconditions.checkNotNull(ConnectContext.get(), "not a valid connection");
-        TUserIdentity userIdentity = UserIdentityUtils.toThrift(context.getCurrentUserIdentity());
-        if (context.getCurrentRoleIds() != null) {
-            TUserRoles userRoles = new TUserRoles();
-            userRoles.setRole_id_list(new ArrayList<>(context.getCurrentRoleIds()));
-            userIdentity.setCurrent_role_ids(userRoles);
-        }
+        TUserIdentity userIdentity = UserIdentityUtils.callerToThrift(context);
         TGetTablesParams params = new TGetTablesParams();
         params.setCurrent_user_ident(userIdentity);
         params.setType(MATERIALIZED_VIEW);
@@ -233,7 +226,7 @@ public class MaterializedViewsSystemTable extends SystemTable {
         // database privs should be checked in analysis phrase
         long limit = params.isSetLimit() ? params.getLimit() : -1;
         if (params.isSetCurrent_user_ident()) {
-            context.setAuthInfoFromThrift(params.getCurrent_user_ident());
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.getCurrent_user_ident());
         } else {
             UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
             context.setCurrentUserIdentity(currentUser);
