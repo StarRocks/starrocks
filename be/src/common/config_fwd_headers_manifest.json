@@ -486,6 +486,8 @@
         "get_txn_status_internal_sec",
         "max_consumer_num_per_group",
         "max_pulsar_consumer_num_per_group",
+        "routine_load_kafka_consumer_pool_size",
+        "routine_load_kafka_fetch_queue_backoff_ms",
         "routine_load_kafka_timeout_second",
         "routine_load_pulsar_timeout_second",
         "dependency_librdkafka_debug_enable",
