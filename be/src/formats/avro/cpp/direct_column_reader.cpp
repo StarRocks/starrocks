@@ -328,24 +328,15 @@ private:
         int64_t from = decoder.decodeLong();
         TimestampValue to{};
         switch (_value_node->logicalType().type()) {
-<<<<<<< HEAD
-        case avro::LogicalType::TIMESTAMP_MILLIS:
-            to.from_unixtime(from / 1000, (from % 1000) * 1000, _timezone);
-            column->append(to);
-            return Status::OK();
-        case avro::LogicalType::TIMESTAMP_MICROS:
-            to.from_unixtime(from / 1000000, from % 1000000, _timezone);
-=======
         case avro::LogicalType::TIMESTAMP_MILLIS: {
             auto [second, microsecond] = AvroUtils::split_epoch_to_second_and_micros(from, 1000);
-            to.from_unixtime_with_offset(second, microsecond, _offset_cache.offset_in_bound_zone(second));
+            to.from_unixtime(second, microsecond, _timezone);
             column->append(to);
             return Status::OK();
         }
         case avro::LogicalType::TIMESTAMP_MICROS: {
             auto [second, microsecond] = AvroUtils::split_epoch_to_second_and_micros(from, 1000000);
-            to.from_unixtime_with_offset(second, microsecond, _offset_cache.offset_in_bound_zone(second));
->>>>>>> 090f507 ([BugFix][RB-1712] Keep instants before 1970 when VARIANT and Avro split epoch microseconds (#83729))
+            to.from_unixtime(second, microsecond, _timezone);
             column->append(to);
             return Status::OK();
         }

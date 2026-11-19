@@ -736,8 +736,6 @@ static std::string float_to_json_string_impl(FloatType value) {
     return result;
 }
 
-<<<<<<< HEAD:be/src/util/variant.cpp
-=======
 // Splits microseconds since the epoch into whole seconds and a non-negative microsecond part, so that instants
 // before 1970 keep their value: -1 us is (-1 s, 999999 us), not (0 s, -1 us).
 static TimestampValue timestamp_from_epoch_micros(int64_t micros) {
@@ -752,14 +750,6 @@ static TimestampValue timestamp_from_epoch_micros(int64_t micros) {
     return tsv;
 }
 
-// Formats an instant given in nanoseconds since the epoch; the fraction keeps up to nine digits, without trailing zeros.
-static std::string format_timestamp_nanos(int64_t nanos, const char* format, const cctz::time_zone& zone) {
-    const std::chrono::time_point<std::chrono::system_clock, std::chrono::nanoseconds> instant{
-            std::chrono::nanoseconds(nanos)};
-    return cctz::format(format, instant, zone);
-}
-
->>>>>>> 090f507 ([BugFix][RB-1712] Keep instants before 1970 when VARIANT and Avro split epoch microseconds (#83729)):be/src/types/variant.cpp
 Status VariantUtil::variant_to_json(const VariantMetadata& metadata, const VariantValue& variant,
                                     std::stringstream& json_str, cctz::time_zone timezone) {
     switch (variant.type()) {

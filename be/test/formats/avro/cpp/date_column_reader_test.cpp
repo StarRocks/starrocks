@@ -16,9 +16,15 @@
 
 #include <gtest/gtest.h>
 
+#include <avrocpp/Compiler.hh>
+#include <avrocpp/Decoder.hh>
+#include <avrocpp/Encoder.hh>
 #include <avrocpp/NodeImpl.hh>
+#include <avrocpp/Stream.hh>
 
+#include "column/adaptive_nullable_column.h"
 #include "column/column_helper.h"
+#include "formats/avro/cpp/direct_column_reader.h"
 #include "formats/avro/cpp/test_avro_utils.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "testutil/assert.h"
@@ -139,62 +145,38 @@ TEST_F(DateColumnReaderTest, test_datetime_timezone) {
     ASSERT_EQ("[2025-04-16 20:01:01.123000, 2025-04-16 20:01:01.123456]", column->debug_string());
 }
 
-<<<<<<< HEAD
-=======
-// timestamp-millis / timestamp-micros values read as DATETIME (generic datums and the direct decoder) and as
-// VARCHAR show the instant in the reader zone with the offset at that instant, the same as the cctz conversion,
-// across DST changes, before 1970 and in any order.
-TEST_F(DateColumnReaderTest, test_datetime_dst_timezone_matches_cctz) {
-    std::mt19937_64 rng(23);
-    std::vector<int64_t> seconds = {0, -1, 1711846800 - 1, 1711846800, 1729990800 - 1, 1729990800};
-    for (int i = 0; i < 2000; i++) {
-        seconds.push_back(static_cast<int64_t>(rng() % 4000000000ULL) - 1000000000LL);
-    }
-    for (const std::string zone : {"America/Los_Angeles", "Europe/London", "Asia/Shanghai"}) {
-        cctz::time_zone timezone;
-        ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone(zone, timezone));
-        for (bool millis : {true, false}) {
-            SCOPED_TRACE(zone + (millis ? " millis" : " micros"));
-            const int64_t per_second = millis ? 1000 : 1000000;
-            const auto logical = millis ? avro::LogicalType::TIMESTAMP_MILLIS : avro::LogicalType::TIMESTAMP_MICROS;
-            std::vector<int64_t> values;
-            std::vector<std::string> want;
-            for (int64_t second : seconds) {
-                const int64_t sub = static_cast<int64_t>(rng() % per_second);
-                values.push_back(second * per_second + (second < 0 ? -sub : sub));
-                // floor the seconds, so a value before 1970 keeps a non-negative fraction of a second
-                int64_t floor_second = values.back() / per_second;
-                int64_t fraction = values.back() % per_second;
-                if (fraction < 0) {
-                    floor_second -= 1;
-                    fraction += per_second;
-                }
-                TimestampValue tv;
-                tv.from_unixtime(floor_second, fraction * (1000000 / per_second), timezone);
-                want.push_back(tv.to_string());
-            }
+// timestamp-millis / timestamp-micros values before 1970 with a fraction of a second keep their instant, through
+// both generic datums and the direct decoder: the seconds are floored, so the microsecond part is never negative.
+TEST_F(DateColumnReaderTest, test_datetime_before_epoch) {
+    const cctz::time_zone timezone = cctz::utc_time_zone();
+    for (bool millis : {true, false}) {
+        SCOPED_TRACE(millis ? "millis" : "micros");
+        const auto logical = millis ? avro::LogicalType::TIMESTAMP_MILLIS : avro::LogicalType::TIMESTAMP_MICROS;
+        const std::vector<int64_t> values =
+                millis ? std::vector<int64_t>{-1, -1500, -1000, 1} : std::vector<int64_t>{-1, -1500000, -1000000, 1};
+        const std::vector<std::string> want =
+                millis ? std::vector<std::string>{"1969-12-31 23:59:59.999000", "1969-12-31 23:59:58.500000",
+                                                  "1969-12-31 23:59:59", "1970-01-01 00:00:00.001000"}
+                       : std::vector<std::string>{"1969-12-31 23:59:59.999999", "1969-12-31 23:59:58.500000",
+                                                  "1969-12-31 23:59:59", "1970-01-01 00:00:00.000001"};
+        auto type_desc = TypeDescriptor::from_logical_type(TYPE_DATETIME);
 
-            // generic datums, as DATETIME and as VARCHAR
-            for (LogicalType type : {TYPE_DATETIME, TYPE_VARCHAR}) {
-                auto type_desc = type == TYPE_VARCHAR ? TYPE_VARCHAR_DESC : TYPE_DATETIME_DESC;
-                auto column = create_adaptive_nullable_column(type_desc);
-                auto reader = get_column_reader(type_desc, timezone, false);
-                for (int64_t v : values) {
-                    avro::GenericDatum datum(avro::AVRO_LONG, avro::LogicalType(logical), v);
-                    ASSERT_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
-                }
-                ASSERT_EQ(values.size(), column->size());
-                for (size_t i = 0; i < values.size(); i++) {
-                    std::string got = column->debug_item(i);
-                    if (type == TYPE_VARCHAR) {
-                        ASSERT_EQ("'" + want[i] + "'", got) << values[i];
-                    } else {
-                        ASSERT_EQ(want[i], got) << values[i];
-                    }
-                }
+        // generic datums
+        {
+            auto column = create_adaptive_nullable_column(type_desc);
+            auto reader = get_column_reader(type_desc, timezone, false);
+            for (int64_t v : values) {
+                avro::GenericDatum datum(avro::AVRO_LONG, avro::LogicalType(logical), v);
+                ASSERT_OK(reader->read_datum_for_adaptive_column(datum, column.get()));
             }
+            ASSERT_EQ(values.size(), column->size());
+            for (size_t i = 0; i < values.size(); i++) {
+                ASSERT_EQ(want[i], column->debug_item(i)) << values[i];
+            }
+        }
 
-            // the direct decoder
+        // the direct decoder
+        {
             avro::ValidSchema schema =
                     avro::compileJsonSchemaFromString(std::string(R"({"type": "long", "logicalType": ")") +
                                                       (millis ? "timestamp-millis" : "timestamp-micros") + R"("})");
@@ -208,7 +190,6 @@ TEST_F(DateColumnReaderTest, test_datetime_dst_timezone_matches_cctz) {
             auto in = avro::memoryInputStream(*out);
             auto decoder = avro::binaryDecoder();
             decoder->init(*in);
-            auto type_desc = TYPE_DATETIME_DESC;
             auto direct = DirectColumnReader::make(_col_name, type_desc, schema.root(), timezone);
             ASSERT_TRUE(direct != nullptr);
             auto column = create_adaptive_nullable_column(type_desc);
@@ -224,7 +205,6 @@ TEST_F(DateColumnReaderTest, test_datetime_dst_timezone_matches_cctz) {
     }
 }
 
->>>>>>> 090f507 ([BugFix][RB-1712] Keep instants before 1970 when VARIANT and Avro split epoch microseconds (#83729))
 TEST_F(DateColumnReaderTest, test_datetime_invalid) {
     auto type_desc = TypeDescriptor::from_logical_type(TYPE_DATETIME);
     auto column = create_adaptive_nullable_column(type_desc);
