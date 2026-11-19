@@ -879,18 +879,19 @@ Paimon テーブルのスキーマを表示するには、次のいずれかの�
 
 ### 計画されたスキャンサイズの確認
 
-`EXPLAIN`、`EXPLAIN VERBOSE`、`EXPLAIN COSTS` は、各 Paimon スキャンノードの候補ファイルのメトリクスを表示します。
+`EXPLAIN VERBOSE` と `EXPLAIN COSTS` は、各 Paimon スキャンノードの候補ファイルのメトリクスを表示します。通常の `EXPLAIN` では、このブロックは表示されません。
 
 ```text
 0:PaimonScanNode
    ...
-   cardinality=10
    avgRowSize=2.0
    Paimon Scan Metrics:
      splits=2
      data_files=3
      data_file_bytes=12000000000
      data_file_rows=9000000000
+   limit: 10
+   cardinality: 10
 ```
 
 これらのメトリクスは、Paimon プランナーによるパーティションとファイルのプルーニング、および計画時の LIMIT によるプルーニング後に選択された split を集計します。

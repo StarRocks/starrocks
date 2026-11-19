@@ -96,6 +96,9 @@ public class PaimonScanNodeTest {
                 node.computeStatistics(Statistics.builder().setOutputRowCount(10).build());
                 node.setLimit(10);
                 assertScanMetrics(node, 2, 3, 12_000_000_000L, 9_000_000_000L);
+                String costs = node.getCostExplain("", "  ");
+                Assertions.assertTrue(costs.contains("cardinality: 10\n"), costs);
+                Assertions.assertTrue(costs.contains("limit: 10\n"), costs);
                 Assertions.assertEquals(rawConvertible ? 12 : 2, node.getScanRangeLocations(0).size());
                 for (TScanRangeLocations range : node.getScanRangeLocations(0)) {
                     THdfsScanRange hdfsRange = range.getScan_range().getHdfs_scan_range();
@@ -166,7 +169,10 @@ public class PaimonScanNodeTest {
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
         PaimonScanNode node = new PaimonScanNode(new PlanNodeId(0), desc, "PaimonScanNode");
-        Assertions.assertFalse(node.getNodeExplainString("  ", TExplainLevel.NORMAL).contains("Paimon Scan Metrics:"));
+        for (String explain : List.of(node.getExplainString("", "  ", TExplainLevel.NORMAL),
+                node.getVerboseExplain("", "  "), node.getCostExplain("", "  "))) {
+            Assertions.assertFalse(explain.contains("Paimon Scan Metrics:"), explain);
+        }
         node.setupScanRangeLocations(desc, null, 10);
         return node;
     }
@@ -184,8 +190,10 @@ public class PaimonScanNodeTest {
     }
 
     private static void assertScanMetrics(PaimonScanNode node, long splits, long files, long bytes, long rows) {
-        for (TExplainLevel level : TExplainLevel.values()) {
-            String explain = node.getNodeExplainString("  ", level);
+        String normal = node.getExplainString("", "  ", TExplainLevel.NORMAL);
+        Assertions.assertFalse(normal.contains("Paimon Scan Metrics:"), normal);
+        // COSTS delegates to the verbose node details; exercise the actual rendered paths.
+        for (String explain : List.of(node.getVerboseExplain("", "  "), node.getCostExplain("", "  "))) {
             Assertions.assertTrue(explain.contains("Paimon Scan Metrics:\n"), explain);
             Assertions.assertTrue(explain.contains("  splits=" + splits + "\n"), explain);
             Assertions.assertTrue(explain.contains("  data_files=" + files + "\n"), explain);

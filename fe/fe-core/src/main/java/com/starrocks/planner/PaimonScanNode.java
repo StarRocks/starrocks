@@ -452,15 +452,15 @@ public class PaimonScanNode extends ScanNode {
 
         output.append(prefix).append(String.format("avgRowSize=%s\n", avgRowSize));
 
-        if (scanSplitCount >= 0) {
-            output.append(prefix).append("Paimon Scan Metrics:\n");
-            output.append(prefix).append("  splits=").append(scanSplitCount).append("\n");
-            output.append(prefix).append("  data_files=").append(scanDataFileCount).append("\n");
-            output.append(prefix).append("  data_file_bytes=").append(scanDataFileBytes).append("\n");
-            output.append(prefix).append("  data_file_rows=").append(scanDataFileRows).append("\n");
-        }
-
         if (detailLevel == TExplainLevel.VERBOSE) {
+            if (scanSplitCount >= 0) {
+                output.append(prefix).append("Paimon Scan Metrics:\n");
+                output.append(prefix).append("  splits=").append(scanSplitCount).append("\n");
+                output.append(prefix).append("  data_files=").append(scanDataFileCount).append("\n");
+                output.append(prefix).append("  data_file_bytes=").append(scanDataFileBytes).append("\n");
+                output.append(prefix).append("  data_file_rows=").append(scanDataFileRows).append("\n");
+            }
+
             HdfsScanNode.appendDataCacheOptionsInExplain(output, prefix, dataCacheOptions);
 
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {

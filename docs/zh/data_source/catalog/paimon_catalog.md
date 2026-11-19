@@ -879,18 +879,19 @@ DROP DATABASE IF EXISTS paimon_catalog_fs.ddl_demo;
 
 ### 查看计划扫描的数据量
 
-`EXPLAIN`、`EXPLAIN VERBOSE` 和 `EXPLAIN COSTS` 会为每个 Paimon 扫描节点显示候选文件指标：
+`EXPLAIN VERBOSE` 和 `EXPLAIN COSTS` 会为每个 Paimon 扫描节点显示候选文件指标，普通 `EXPLAIN` 不显示该指标块：
 
 ```text
 0:PaimonScanNode
    ...
-   cardinality=10
    avgRowSize=2.0
    Paimon Scan Metrics:
      splits=2
      data_files=3
      data_file_bytes=12000000000
      data_file_rows=9000000000
+   limit: 10
+   cardinality: 10
 ```
 
 这些指标统计 Paimon 规划器完成分区裁剪、文件裁剪以及规划阶段的 LIMIT 裁剪后选中的 split。

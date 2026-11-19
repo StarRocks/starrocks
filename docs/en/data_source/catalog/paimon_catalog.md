@@ -879,19 +879,20 @@ You can use one of the following syntaxes to view the schema of a Paimon table:
 
 ### Inspect the planned scan size
 
-`EXPLAIN`, `EXPLAIN VERBOSE`, and `EXPLAIN COSTS` include candidate file metrics
-for each Paimon scan node:
+`EXPLAIN VERBOSE` and `EXPLAIN COSTS` include candidate file metrics for each
+Paimon scan node. Plain `EXPLAIN` omits this block:
 
 ```text
 0:PaimonScanNode
    ...
-   cardinality=10
    avgRowSize=2.0
    Paimon Scan Metrics:
      splits=2
      data_files=3
      data_file_bytes=12000000000
      data_file_rows=9000000000
+   limit: 10
+   cardinality: 10
 ```
 
 These metrics summarize the splits selected by Paimon's planner, after its
