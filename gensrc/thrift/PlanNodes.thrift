@@ -405,6 +405,11 @@ struct TIcebergDeleteFile {
     // Set for a position delete file whose every row references the data file of this scan
     // range, so the BE reads only its pos column.
     6: optional bool references_only_data_file
+    // Blob range for Iceberg v3 deletion vectors (file_format = PUFFIN, file_content = POSITION_DELETES).
+    // Byte length of the deletion-vector-v1 blob, including its length prefix and checksum.
+    7: optional i64 content_size_in_bytes
+    // Byte offset of the deletion-vector-v1 blob within its container.
+    8: optional i64 content_offset
 }
 
 struct TPaimonDeletionFile {

@@ -224,17 +224,30 @@ Status CacheSelectScanner::_fetch_textfile() {
     return _write_disk_ranges(_shared_buffered_input_stream, _cache_input_stream, disk_ranges);
 }
 
-// for iceberg delete files, we fetch an entire file directly
 Status CacheSelectScanner::_fetch_iceberg_delete_files() {
     for (const auto* delete_file : _scanner_ctx->table_specific.iceberg_delete_files) {
-        RETURN_IF_ERROR(_write_entire_file(delete_file->full_path, delete_file->length));
+        int64_t offset = 0;
+        int64_t length = delete_file->length;
+        if (delete_file->file_format == THdfsFileFormat::PUFFIN) {
+            if (!delete_file->__isset.content_offset || !delete_file->__isset.content_size_in_bytes) {
+                return Status::InvalidArgument("Iceberg deletion vector is missing content offset or size");
+            }
+            offset = delete_file->content_offset;
+            length = delete_file->content_size_in_bytes;
+            if (offset < 0 || length <= 0 || delete_file->length < 0 || offset > delete_file->length ||
+                length > delete_file->length - offset) {
+                return Status::InvalidArgument("Invalid Iceberg deletion vector content range");
+            }
+        }
+        RETURN_IF_ERROR(_write_file_range(delete_file->full_path, delete_file->length, offset, length));
     }
 
     _app_stats.iceberg_delete_files_per_scan += _scanner_ctx->table_specific.iceberg_delete_files.size();
     return Status::OK();
 }
 
-Status CacheSelectScanner::_write_entire_file(const std::string& file_path, size_t file_size) {
+Status CacheSelectScanner::_write_file_range(const std::string& file_path, int64_t file_size, int64_t offset,
+                                             int64_t length) {
     formats::FileInputStreamOptions options{};
     options.fs = _scanner_ctx->fs;
     options.file_path = file_path;
@@ -249,7 +262,7 @@ Status CacheSelectScanner::_write_entire_file(const std::string& file_path, size
                      formats::create_random_access_file(shared_buffered_input_stream, cache_input_stream, options));
 
     std::vector<DiskRange> disk_ranges{};
-    disk_ranges.emplace_back(0, file_size);
+    disk_ranges.emplace_back(offset, length);
 
     return _write_disk_ranges(shared_buffered_input_stream, cache_input_stream, disk_ranges);
 }

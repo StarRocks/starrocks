@@ -85,12 +85,17 @@ class IcebergDeleteBuilder {
 public:
     explicit IcebergDeleteBuilder(IcebergDeleteBuilderContext ctx);
 
-    // Publishes the ICEBERG_V2_MOR counters of every position delete file read, once.
+    // Publishes the ICEBERG_V2_MOR counters of every position delete file or deletion vector read, once.
     ~IcebergDeleteBuilder();
 
     Status build_orc(const TIcebergDeleteFile& delete_file) const;
 
     Status build_parquet(const TIcebergDeleteFile& delete_file) const;
+
+    Status build_deletion_vector(const TIcebergDeleteFile& delete_file) const;
+
+    // Exposed for testing.
+    static Status parse_deletion_vector_blob(const uint8_t* blob, int64_t content_size, DeletionBitmap* bitmap);
 
     // Reads a position delete file in its own format when the FE sent it, else in `data_file_format`: a delete file
     // may have another format than its data file (write.delete.format.default).
@@ -102,11 +107,11 @@ private:
     Status build(const TIcebergDeleteFile& delete_file, const std::string& format) const;
 
     StatusOr<std::unique_ptr<RandomAccessFile>> open_random_access_file(
-            const TIcebergDeleteFile& delete_file, FormatScannerStats& fs_stats, FormatScannerStats& app_stats,
-            std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
+            const TIcebergDeleteFile& delete_file, int64_t offset, int64_t size, FormatScannerStats& fs_stats,
+            FormatScannerStats& app_stats, std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
             std::shared_ptr<CacheInputStream>& cache_input_stream) const;
 
-    // IO of the position delete files read so far. Publishing counters per delete file costs a
+    // IO of the position delete files and deletion vectors read so far. Publishing counters per delete file costs a
     // few percent of the scan when a data file carries many small delete files.
     struct PositionDeleteIoStats;
     void accumulate_position_delete_io(

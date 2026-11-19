@@ -36,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -58,7 +59,7 @@ public class DeleteAnalyzerTest {
 
     @Test
     public void testIcebergDeleteBasic() {
-        String sql = "DELETE FROM iceberg0.unpartitioned_db.t0 WHERE id = 1";
+        String sql = "DELETE FROM iceberg0.unpartitioned_db.t0_v2 WHERE id = 1";
         DeleteStmt deleteStmt = (DeleteStmt) SqlParser.parse(
                 sql, connectContext.getSessionVariable().getSqlMode()).get(0);
 
@@ -70,8 +71,20 @@ public class DeleteAnalyzerTest {
     }
 
     @Test
+    public void testIcebergV3DeleteFailsBeforeBuildingQuery() {
+        String sql = "DELETE FROM iceberg0.unpartitioned_db.t0 WHERE id = 1";
+        DeleteStmt deleteStmt = (DeleteStmt) SqlParser.parse(
+                sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+
+        SemanticException exception = assertThrows(SemanticException.class,
+                () -> DeleteAnalyzer.analyze(deleteStmt, connectContext));
+        assertTrue(exception.getMessage().contains("writing deletion vectors is not supported"));
+        assertNull(deleteStmt.getQueryStatement());
+    }
+
+    @Test
     public void testIcebergDeleteWithoutWhereClause() {
-        String sql = "DELETE FROM iceberg0.unpartitioned_db.t0";
+        String sql = "DELETE FROM iceberg0.unpartitioned_db.t0_v2";
         DeleteStmt deleteStmt = (DeleteStmt) SqlParser.parse(
                 sql, connectContext.getSessionVariable().getSqlMode()).get(0);
 
@@ -82,7 +95,7 @@ public class DeleteAnalyzerTest {
 
     @Test
     public void testIcebergDeleteWithPartition() {
-        String sql = "DELETE FROM iceberg0.partitioned_db.t1 PARTITION(p_date = '2023-01-01') WHERE id = 1";
+        String sql = "DELETE FROM iceberg0.partitioned_db.t1_v2 PARTITION(p_date = '2023-01-01') WHERE id = 1";
         DeleteStmt deleteStmt = (DeleteStmt) SqlParser.parse(
                 sql, connectContext.getSessionVariable().getSqlMode()).get(0);
 
@@ -93,8 +106,8 @@ public class DeleteAnalyzerTest {
 
     @Test
     public void testIcebergDeleteWithUsingClause() {
-        String sql = "DELETE FROM iceberg0.unpartitioned_db.t0 USING iceberg0.unpartitioned_db.t0 AS s " +
-                "WHERE t0.id = s.id";
+        String sql = "DELETE FROM iceberg0.unpartitioned_db.t0_v2 USING iceberg0.unpartitioned_db.t0_v2 AS s " +
+                "WHERE t0_v2.id = s.id";
         DeleteStmt deleteStmt = (DeleteStmt) SqlParser.parse(
                 sql, connectContext.getSessionVariable().getSqlMode()).get(0);
 
@@ -106,7 +119,7 @@ public class DeleteAnalyzerTest {
 
     @Test
     public void testIcebergDeleteWithCTEs() {
-        String sql = "WITH cte AS (SELECT id FROM iceberg0.unpartitioned_db.t0) DELETE FROM iceberg0.unpartitioned_db.t0 " +
+        String sql = "WITH cte AS (SELECT id FROM iceberg0.unpartitioned_db.t0_v2) DELETE FROM iceberg0.unpartitioned_db.t0_v2 " +
                 "WHERE id IN (SELECT id FROM cte)";
         DeleteStmt deleteStmt = (DeleteStmt) SqlParser.parse(
                 sql, connectContext.getSessionVariable().getSqlMode()).get(0);
@@ -118,7 +131,7 @@ public class DeleteAnalyzerTest {
 
     @Test
     public void testIcebergDeleteOnBranch() {
-        String sql = "DELETE FROM iceberg0.unpartitioned_db.t0 FOR VERSION AS OF no_such_branch WHERE id = 1";
+        String sql = "DELETE FROM iceberg0.unpartitioned_db.t0_v2 FOR VERSION AS OF no_such_branch WHERE id = 1";
         DeleteStmt deleteStmt = (DeleteStmt) SqlParser.parse(
                 sql, connectContext.getSessionVariable().getSqlMode()).get(0);
         assertEquals("no_such_branch", deleteStmt.getTargetBranch());
@@ -130,7 +143,7 @@ public class DeleteAnalyzerTest {
 
     @Test
     public void testIcebergDeleteConvertsToSelectFileAndPos() {
-        String sql = "DELETE FROM iceberg0.unpartitioned_db.t0 WHERE id = 1";
+        String sql = "DELETE FROM iceberg0.unpartitioned_db.t0_v2 WHERE id = 1";
         DeleteStmt deleteStmt = (DeleteStmt) SqlParser.parse(
                 sql, connectContext.getSessionVariable().getSqlMode()).get(0);
 

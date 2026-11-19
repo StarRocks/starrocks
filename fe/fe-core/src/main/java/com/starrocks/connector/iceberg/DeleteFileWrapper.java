@@ -53,12 +53,14 @@ public class DeleteFileWrapper implements DeleteFile {
 
         DeleteFileWrapper that = (DeleteFileWrapper) o;
 
-        return deleteFile.path().toString().equals(that.deleteFile.path().toString());
+        // DVs can share a Puffin path; contentOffset (null for non-DV deletes) makes them distinct.
+        return deleteFile.path().toString().equals(that.deleteFile.path().toString())
+                && Objects.equals(deleteFile.contentOffset(), that.deleteFile.contentOffset());
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(deleteFile.path());
+        return Objects.hash(deleteFile.path().toString(), deleteFile.contentOffset());
     }
 
     @Override
