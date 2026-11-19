@@ -1307,11 +1307,8 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         // aggregate
         List<Expr> groupKeys = node.getGroupByKeys();
         List<FunctionCallExpr> aggFunctions = node.getRewrittenAggFunctions();
-<<<<<<< HEAD
         QueryTransformer queryTransformer = new QueryTransformer(columnRefFactory, session, cteContext,
                 mvTransformerContext);
-=======
-        QueryTransformer queryTransformer = new QueryTransformer(transformerContext);
         OptExprBuilder input = queryPlan.getRootBuilder();
 
         // Every pivot value gets agg(CASE WHEN <pivot columns> = <value> THEN <argument> END) with the same argument of
@@ -1332,7 +1329,6 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             input = queryTransformer.project(input, projected);
         }
 
->>>>>>> 731a46d16ed... [BugFix][RB-1380] Plan a subquery in a PIVOT measure once instead of once per pivot value (#69684)
         OptExprBuilder builder = queryTransformer.aggregate(
                 input, groupKeys, aggFunctions, null, ImmutableList.of());
 
