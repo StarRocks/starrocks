@@ -328,14 +328,18 @@ private:
         int64_t from = decoder.decodeLong();
         TimestampValue to{};
         switch (_value_node->logicalType().type()) {
-        case avro::LogicalType::TIMESTAMP_MILLIS:
-            to.from_unixtime(from / 1000, (from % 1000) * 1000, _timezone);
+        case avro::LogicalType::TIMESTAMP_MILLIS: {
+            auto [second, microsecond] = AvroUtils::split_epoch_to_second_and_micros(from, 1000);
+            to.from_unixtime(second, microsecond, _timezone);
             column->append(to);
             return Status::OK();
-        case avro::LogicalType::TIMESTAMP_MICROS:
-            to.from_unixtime(from / 1000000, from % 1000000, _timezone);
+        }
+        case avro::LogicalType::TIMESTAMP_MICROS: {
+            auto [second, microsecond] = AvroUtils::split_epoch_to_second_and_micros(from, 1000000);
+            to.from_unixtime(second, microsecond, _timezone);
             column->append(to);
             return Status::OK();
+        }
         default:
             return Status::NotSupported(
                     fmt::format("Logical type of {} is {}. column: {}", avro::toString(_value_node->type()),

@@ -736,6 +736,20 @@ static std::string float_to_json_string_impl(FloatType value) {
     return result;
 }
 
+// Splits microseconds since the epoch into whole seconds and a non-negative microsecond part, so that instants
+// before 1970 keep their value: -1 us is (-1 s, 999999 us), not (0 s, -1 us).
+static TimestampValue timestamp_from_epoch_micros(int64_t micros) {
+    int64_t seconds = micros / 1000000;
+    int64_t microseconds = micros % 1000000;
+    if (microseconds < 0) {
+        seconds -= 1;
+        microseconds += 1000000;
+    }
+    TimestampValue tsv{};
+    tsv.from_unix_second(seconds, microseconds);
+    return tsv;
+}
+
 Status VariantUtil::variant_to_json(const VariantMetadata& metadata, const VariantValue& variant,
                                     std::stringstream& json_str, cctz::time_zone timezone) {
     switch (variant.type()) {
@@ -823,16 +837,14 @@ Status VariantUtil::variant_to_json(const VariantMetadata& metadata, const Varia
     }
     case VariantType::TIMESTAMP_TZ: {
         ASSIGN_OR_RETURN(const int64_t timestamp_micros, variant.get_timestamp_micros());
-        TimestampValue tsv{};
-        tsv.from_unix_second(timestamp_micros / 1000000, timestamp_micros % 1000000);
+        const TimestampValue tsv = timestamp_from_epoch_micros(timestamp_micros);
         std::string timestamp_str = timestamp::to_string_with_timezone<false, false>(tsv.timestamp(), timezone);
         append_quoted_string(json_str, timestamp_str);
         break;
     }
     case VariantType::TIMESTAMP_NTZ: {
         ASSIGN_OR_RETURN(const int64_t timestamp_micros, variant.get_timestamp_micros_ntz());
-        TimestampValue tsv{};
-        tsv.from_unix_second(timestamp_micros / 1000000, timestamp_micros % 1000000);
+        const TimestampValue tsv = timestamp_from_epoch_micros(timestamp_micros);
         std::string timestamp_str = tsv.to_string(false);
         append_quoted_string(json_str, timestamp_str);
         break;

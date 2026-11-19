@@ -55,8 +55,6 @@ protected:
     }
 };
 
-<<<<<<< HEAD
-=======
 // A const column may report size 1 for a chunk of N rows; the row count comes from a non-const column (RB-1379).
 TEST_F(ColumnHelperTest, num_packed_rows_with_size_one_const) {
     auto const_data = Int32Column::create();
@@ -81,18 +79,6 @@ TEST_F(ColumnHelperTest, num_packed_rows_with_size_one_const) {
     ASSERT_EQ(1, num_rows);
 }
 
-TEST_F(ColumnHelperTest, mark_binary_columns_skips_const_null) {
-    const auto binary_type = TYPE_VARBINARY_DESC;
-    for (const auto& type : {binary_type, TypeDescriptor::create_array_type(binary_type)}) {
-        ColumnPtr column = ColumnHelper::create_const_null_column(1);
-        ColumnHelper::mark_binary_columns(column, type);
-        EXPECT_TRUE(column->only_null());
-        EXPECT_TRUE(column->is_null(0));
-        EXPECT_EQ(1, column->size());
-    }
-}
-
->>>>>>> 37e75d9 ([BugFix][RB-1379] Take the CASE row count from the chunk instead of the first WHEN column (#83614))
 TEST_F(ColumnHelperTest, cast_to_nullable_column) {
     auto col = ColumnHelper::cast_to_nullable_column(create_column());
     ASSERT_TRUE(col->is_nullable());

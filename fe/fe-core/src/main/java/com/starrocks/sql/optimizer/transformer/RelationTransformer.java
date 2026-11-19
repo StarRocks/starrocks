@@ -875,9 +875,35 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
 
         builder = addOrderByLimit(builder, node);
 
+        List<ColumnRefOperator> outputColumns = logicalPlan.getOutputColumn();
         if (node.isAssertRows()) {
             LogicalAssertOneRowOperator assertOneRowOperator = LogicalAssertOneRowOperator.createLessEqOne("");
             builder = builder.withNewRoot(assertOneRowOperator);
+
+            // AssertOneRow fills a NULL row when its input is empty, so every column it outputs is nullable and none
+            // of them is a known constant any more. Re-expose the non-nullable ones as new nullable columns, otherwise
+            // an operator above (e.g. max) is planned for a non-nullable input and reads the NULL row as a value; the
+            // new expression mapping also drops the constant mapping of the subquery.
+            Map<ColumnRefOperator, ScalarOperator> projections = new HashMap<>();
+            List<ColumnRefOperator> nullableOutputColumns = new ArrayList<>();
+            boolean needsProjection = false;
+            for (ColumnRefOperator column : outputColumns) {
+                ColumnRefOperator nullableColumn = column;
+                if (!column.isNullable()) {
+                    nullableColumn = columnRefFactory.create(column.getName(), column.getType(), true);
+                    needsProjection = true;
+                }
+                projections.put(nullableColumn, column);
+                nullableOutputColumns.add(nullableColumn);
+            }
+            ExpressionMapping nullableMapping = new ExpressionMapping(node.getScope(), nullableOutputColumns);
+            if (needsProjection) {
+                builder = new OptExprBuilder(new LogicalProjectOperator(projections), Collections.singletonList(builder),
+                        nullableMapping);
+            } else {
+                builder = new OptExprBuilder(assertOneRowOperator, builder.getInputs(), nullableMapping);
+            }
+            outputColumns = nullableOutputColumns;
         }
         // store opt expression to ast map if sub-query's type is supported.
         OperatorType operatorType = subQueryOptExpression.getOp().getOpType();
@@ -886,7 +912,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             this.mvTransformerContext.registerOpAST(subQueryOptExpression.getOp(), node.getQueryStatement());
         }
 
-        return new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
+        return new LogicalPlan(builder, outputColumns, logicalPlan.getCorrelation());
     }
 
     @Override
