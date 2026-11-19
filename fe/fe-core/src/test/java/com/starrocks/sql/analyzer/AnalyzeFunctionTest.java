@@ -44,8 +44,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 
 public class AnalyzeFunctionTest {
     private static final ScalarType CRS84_GEOGRAPHY = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
-            new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
-                    GeoTypeDescriptor.CoordinateSystem.SPHERICAL, GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL,
+            new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY, GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL,
                     "OGC:CRS84", 4326));
 
     @BeforeAll
@@ -587,7 +586,7 @@ public class AnalyzeFunctionTest {
         ScalarType type = (ScalarType) call.getType();
         Assertions.assertEquals(PrimitiveType.GEOGRAPHY, type.getPrimitiveType());
         Assertions.assertEquals(new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
-                GeoTypeDescriptor.CoordinateSystem.SPHERICAL, GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL,
+                GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL,
                 "OGC:CRS84", 4326), type.getGeoDescriptor());
         analyzeFail("select H3_FromGeo(ST_GeomFromText('POINT (0 0)', 'EPSG:4326'), 3)",
                 "No matching function with signature: h3_fromgeo");

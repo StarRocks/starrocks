@@ -17,14 +17,9 @@ package com.starrocks.type;
 import java.util.Objects;
 
 /** Immutable semantic type metadata; column representation belongs to the column/transport layer. */
-public record GeoTypeDescriptor(LogicalType logicalType, CoordinateSystem coordinateSystem,
-                                EdgeAlgorithm edgeAlgorithm, String crs, Integer srid) {
+public record GeoTypeDescriptor(LogicalType logicalType, EdgeAlgorithm edgeAlgorithm, String crs, Integer srid) {
     public enum LogicalType {
         UNKNOWN, GEOGRAPHY, GEOMETRY
-    }
-
-    public enum CoordinateSystem {
-        UNKNOWN, SPHERICAL, CARTESIAN
     }
 
     public enum EdgeAlgorithm {
@@ -33,14 +28,12 @@ public record GeoTypeDescriptor(LogicalType logicalType, CoordinateSystem coordi
 
     public GeoTypeDescriptor {
         Objects.requireNonNull(logicalType);
-        Objects.requireNonNull(coordinateSystem);
         Objects.requireNonNull(edgeAlgorithm);
         Objects.requireNonNull(crs);
     }
 
     public static GeoTypeDescriptor geometry(String crs) {
-        return new GeoTypeDescriptor(LogicalType.GEOMETRY, CoordinateSystem.CARTESIAN,
-                EdgeAlgorithm.PLANAR, crs, deriveSrid(crs));
+        return new GeoTypeDescriptor(LogicalType.GEOMETRY, EdgeAlgorithm.PLANAR, crs, deriveSrid(crs));
     }
 
     public void validate(PrimitiveType primitive) {
@@ -55,7 +48,6 @@ public record GeoTypeDescriptor(LogicalType logicalType, CoordinateSystem coordi
         boolean sphericalEdge = edgeAlgorithm != EdgeAlgorithm.UNKNOWN && edgeAlgorithm != EdgeAlgorithm.PLANAR;
         if ((primitive != PrimitiveType.GEOGRAPHY && primitive != PrimitiveType.GEOMETRY)
                 || logicalType != (geography ? LogicalType.GEOGRAPHY : LogicalType.GEOMETRY)
-                || coordinateSystem != (geography ? CoordinateSystem.SPHERICAL : CoordinateSystem.CARTESIAN)
                 || (geography ? !sphericalEdge : edgeAlgorithm != EdgeAlgorithm.PLANAR)) {
             throw new IllegalArgumentException("Native geo primitive conflicts with its semantic descriptor");
         }
@@ -63,8 +55,7 @@ public record GeoTypeDescriptor(LogicalType logicalType, CoordinateSystem coordi
 
     public boolean isSemanticallyCompatible(GeoTypeDescriptor other) {
         return other != null && !crs.isEmpty() && logicalType == other.logicalType
-                && coordinateSystem == other.coordinateSystem && edgeAlgorithm == other.edgeAlgorithm
-                && crs.equals(other.crs);
+                && edgeAlgorithm == other.edgeAlgorithm && crs.equals(other.crs);
     }
 
     private static Integer deriveSrid(String crs) {
