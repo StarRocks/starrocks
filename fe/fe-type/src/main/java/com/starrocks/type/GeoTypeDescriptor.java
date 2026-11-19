@@ -32,6 +32,10 @@ public record GeoTypeDescriptor(LogicalType logicalType, EdgeAlgorithm edgeAlgor
         Objects.requireNonNull(crs);
     }
 
+    public static GeoTypeDescriptor geography(String crs) {
+        return new GeoTypeDescriptor(LogicalType.GEOGRAPHY, EdgeAlgorithm.SPHERICAL, crs, deriveSrid(crs));
+    }
+
     public static GeoTypeDescriptor geometry(String crs) {
         return new GeoTypeDescriptor(LogicalType.GEOMETRY, EdgeAlgorithm.PLANAR, crs, deriveSrid(crs));
     }

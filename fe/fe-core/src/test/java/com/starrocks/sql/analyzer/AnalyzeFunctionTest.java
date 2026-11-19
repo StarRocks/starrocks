@@ -24,6 +24,7 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.GeoType;
 import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
@@ -43,9 +44,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeWithoutTestView;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 
 public class AnalyzeFunctionTest {
-    private static final ScalarType CRS84_GEOGRAPHY = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
-            new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY, GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL,
-                    "OGC:CRS84", 4326));
+    private static final ScalarType CRS84_GEOGRAPHY = GeoType.createGeographyType("OGC:CRS84");
 
     @BeforeAll
     public static void beforeClass() throws Exception {
