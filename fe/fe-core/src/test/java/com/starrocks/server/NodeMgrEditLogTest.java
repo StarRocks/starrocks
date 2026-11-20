@@ -557,6 +557,24 @@ public class NodeMgrEditLogTest {
     }
 
     @Test
+    public void testModifyFrontendHostNotExistAmongFrontends() throws Exception {
+        // 1. Add a frontend whose host differs from the one to modify
+        masterNodeMgr.addFrontend(FrontendNodeType.FOLLOWER, "192.168.1.100", 9010);
+
+        // 2. Execute modifyFrontendHost operation and expect DdlException
+        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("192.168.1.500", "192.168.1.600");
+        DdlException exception = Assertions.assertThrows(DdlException.class, () -> {
+            masterNodeMgr.modifyFrontendHost(clause);
+        });
+        Assertions.assertTrue(exception.getMessage().contains("frontend [192.168.1.500] not found"));
+
+        // 3. Verify state remains unchanged
+        List<Frontend> frontends = masterNodeMgr.getAllFrontends();
+        Assertions.assertEquals(1, frontends.size());
+        Assertions.assertEquals("192.168.1.100", frontends.get(0).getHost());
+    }
+
+    @Test
     public void testModifyFrontendHostDuplicateHost() throws Exception {
         // 1. Add two frontends
         masterNodeMgr.addFrontend(FrontendNodeType.FOLLOWER, "192.168.1.100", 9010);
@@ -580,6 +598,26 @@ public class NodeMgrEditLogTest {
         hostSet.add(frontends.get(1).getHost());
         Assertions.assertTrue(hostSet.contains("192.168.1.100"));
         Assertions.assertTrue(hostSet.contains("192.168.1.101"));
+    }
+
+    @Test
+    public void testModifyFrontendHostUnresolvableSrcHost() throws Exception {
+        // 1. Add a frontend registered under a host that no longer resolves
+        String unresolvableHost = "old-fe.invalid";
+        String newHost = "192.168.1.200";
+
+        // addFrontend resolves the host, so register it as a replayed frontend instead
+        masterNodeMgr.replayAddFrontend(new Frontend(FrontendNodeType.FOLLOWER, "old_fe", unresolvableHost, 9010));
+
+        // 2. Execute modifyFrontendHost operation
+        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause(unresolvableHost, newHost);
+        masterNodeMgr.modifyFrontendHost(clause);
+
+        // 3. Verify the same frontend is renamed
+        List<Frontend> frontends = masterNodeMgr.getAllFrontends();
+        Assertions.assertEquals(1, frontends.size());
+        Assertions.assertEquals(newHost, frontends.get(0).getHost());
+        Assertions.assertEquals("old_fe", frontends.get(0).getNodeName());
     }
 
     @Test
