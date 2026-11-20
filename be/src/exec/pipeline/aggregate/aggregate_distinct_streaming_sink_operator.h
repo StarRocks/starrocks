@@ -64,6 +64,8 @@ private:
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::LIMITED
     Status _push_chunk_by_limited_memory(const ChunkPtr& chunk, const size_t chunk_size);
 
+    void _publish_hash_table_memory_usage();
+
     // It is used to perform aggregation algorithms shared by
     // AggregateDistinctStreamingSourceOperator. It is
     // - prepared at SinkOperator::prepare(),
@@ -73,6 +75,8 @@ private:
     // Whether prev operator has no output
     bool _is_finished = false;
     LimitedMemAggState _limited_mem_state;
+    // Hash table memory usage measured right before the table was last handed to the source.
+    int64_t _handed_off_hash_table_memory_usage = 0;
     DECLARE_ONCE_DETECTOR(_set_finishing_once);
 };
 
