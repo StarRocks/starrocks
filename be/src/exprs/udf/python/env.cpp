@@ -279,6 +279,7 @@ StatusOr<std::shared_ptr<PyWorker>> PyWorkerManager::_acquire_worker(int32_t dri
     }
     std::shared_ptr<PyWorker> worker;
     {
+<<<<<<< HEAD
         // try to find a worker from pool
         std::lock_guard guard(_mutex);
         auto& workers = _processes[driver_id];
@@ -290,6 +291,40 @@ StatusOr<std::shared_ptr<PyWorker>> PyWorkerManager::_acquire_worker(int32_t dri
                 worker->touch();
                 worker->add_client();
             }
+=======
+        std::unique_lock lock(_mutex);
+        const auto limit = static_cast<size_t>(std::max(1, config::python_worker_max_per_driver));
+        while (true) {
+            auto& workers = _processes[driver_id];
+            auto dead_begin = std::partition(workers.begin(), workers.end(),
+                                             [](const std::shared_ptr<PyWorker>& w) { return !w->is_dead(); });
+            dead_workers.insert(dead_workers.end(), std::make_move_iterator(dead_begin),
+                                std::make_move_iterator(workers.end()));
+            workers.erase(dead_begin, workers.end());
+
+            // Prefer the worker with the fewest connected stubs. Start another one instead while
+            // every worker is in use and the driver is below its limit.
+            auto least_used = std::min_element(workers.begin(), workers.end(), [](const auto& a, const auto& b) {
+                return a->num_clients() < b->num_clients();
+            });
+            auto starting = _num_starting.find(driver_id);
+            size_t num_starting = starting == _num_starting.end() ? 0 : starting->second;
+            bool below_limit = workers.size() + num_starting < limit;
+            if (least_used != workers.end() && ((*least_used)->num_clients() == 0 || !below_limit)) {
+                // Take the worker while holding the lock, so that cleanup_expired_worker cannot
+                // expire it before the caller connects.
+                worker = *least_used;
+                worker->touch();
+                worker->add_client();
+                break;
+            }
+            if (below_limit) {
+                ++_num_starting[driver_id];
+                break;
+            }
+            // Every allowed worker is still starting: wait for one instead of exceeding the limit.
+            _worker_started.wait(lock);
+>>>>>>> 19710e6 ([Enhancement] Spread Python UDF stubs across a driver's worker processes (#82776))
         }
     }
     if (worker && worker->is_dead()) {
