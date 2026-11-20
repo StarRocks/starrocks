@@ -17,6 +17,7 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <limits>
 
 #include "base/string/slice.h"
@@ -3738,6 +3739,88 @@ TEST_F(VectorizedCastExprTest, variant_cast_to_json_from_rebuilt_shredded_row) {
     auto str = field->get_string();
     ASSERT_TRUE(str.ok());
     EXPECT_EQ(long_value, str->to_string());
+}
+
+// A scalar VARIANT casts to the same JSON scalar, not to a JSON string of its text, and a variant null casts to SQL
+// NULL, also under a throwing cast.
+TEST_F(VectorizedCastExprTest, variant_scalar_cast_to_json_keeps_json_type) {
+    const std::vector<std::string> inputs = {"1", "true", "1.5", R"("s")", "null", R"({"a":null})"};
+    auto variant_col = VariantColumn::create();
+    for (const auto& text : inputs) {
+        auto encoded = VariantEncoder::encode_json_text_to_variant(text);
+        ASSERT_TRUE(encoded.ok()) << encoded.status();
+        variant_col->append(&encoded.value());
+    }
+    for (const bool allow_throw : {false, true}) {
+        ColumnPtr result;
+        ASSERT_NO_THROW(
+                result = cast_from_variant(gen_type_desc(TPrimitiveType::JSON), variant_col->clone(), allow_throw));
+        ASSERT_EQ(inputs.size(), result->size());
+        const auto json_at = [&](size_t row) {
+            const JsonValue* json = result->get(row).get_json();
+            return json == nullptr ? std::string("<null>") : json->to_string_uncheck();
+        };
+        EXPECT_EQ("1", json_at(0));
+        EXPECT_TRUE(result->get(0).get_json()->get_int().ok());
+        EXPECT_EQ("true", json_at(1));
+        EXPECT_TRUE(result->get(1).get_json()->get_bool().ok());
+        EXPECT_EQ("1.5", json_at(2));
+        EXPECT_EQ(R"("s")", json_at(3));
+        EXPECT_TRUE(result->is_null(4));
+        EXPECT_EQ(R"({"a": null})", json_at(5));
+    }
+}
+
+// A DOUBLE VARIANT casts to the same double in JSON. The JSON parser built a number at the end of its input digit by
+// digit, which turned 0.3 into the next double up.
+TEST_F(VectorizedCastExprTest, variant_double_cast_to_json_keeps_exact_value) {
+    const std::vector<double> values = {0.3, -0.3, 0.7, 1e-5, 123.456, 1e300, 5e-324, -0.0};
+    auto variant_col = VariantColumn::create();
+    for (double d : values) {
+        auto json = JsonValue::from_double(d);
+        auto encoded = VariantEncoder::encode_json_to_variant(json);
+        ASSERT_TRUE(encoded.ok()) << encoded.status();
+        variant_col->append(&encoded.value());
+    }
+    ColumnPtr result = cast_from_variant(gen_type_desc(TPrimitiveType::JSON), std::move(variant_col));
+    ASSERT_EQ(values.size(), result->size());
+    for (size_t i = 0; i < values.size(); ++i) {
+        const JsonValue* json = result->get(i).get_json();
+        ASSERT_NE(nullptr, json) << i;
+        auto d = json->get_double();
+        ASSERT_TRUE(d.ok()) << i << ": " << json->to_string_uncheck();
+        EXPECT_EQ(values[i], d.value()) << i << ": " << json->to_string_uncheck();
+    }
+}
+
+// A NaN DOUBLE has no JSON form and prints as null; it casts like CAST(DOUBLE AS JSON) does: SQL NULL, or an error
+// under a throwing cast. Only a variant null is always SQL NULL.
+TEST_F(VectorizedCastExprTest, variant_nan_cast_to_json_follows_double_cast) {
+    const auto make_column = [](bool nan) {
+        auto variant_col = VariantColumn::create();
+        if (nan) {
+            const double value = std::numeric_limits<double>::quiet_NaN();
+            std::string bytes(1 + sizeof(double), '\0');
+            bytes[0] = static_cast<char>(static_cast<uint8_t>(VariantType::DOUBLE) << 2);
+            memcpy(bytes.data() + 1, &value, sizeof(value)); // little-endian host
+            VariantRowValue row(VariantMetadata::kEmptyMetadata, bytes);
+            variant_col->append(&row);
+        } else {
+            auto encoded = VariantEncoder::encode_json_text_to_variant("null");
+            EXPECT_TRUE(encoded.ok()) << encoded.status();
+            variant_col->append(&encoded.value());
+        }
+        return variant_col;
+    };
+    const TTypeDesc json_type = gen_type_desc(TPrimitiveType::JSON);
+    ColumnPtr nan_result = cast_from_variant(json_type, make_column(true));
+    ASSERT_EQ(1, nan_result->size());
+    EXPECT_TRUE(nan_result->is_null(0));
+    EXPECT_FALSE(cast_from_variant_error(json_type, make_column(true)).empty());
+
+    ColumnPtr null_result = cast_from_variant(json_type, make_column(false), true);
+    ASSERT_EQ(1, null_result->size());
+    EXPECT_TRUE(null_result->is_null(0));
 }
 
 } // namespace starrocks

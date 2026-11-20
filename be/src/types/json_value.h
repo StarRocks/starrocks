@@ -124,6 +124,18 @@ public:
     static StatusOr<JsonValue> parse(const Slice& src);
     // Try to parse it as JSON object, otherwise consider it as a string
     static StatusOr<JsonValue> parse_json_or_string(const Slice& src);
+<<<<<<< HEAD
+=======
+    // Parse `src` as one JSON text of any kind, including a bare scalar such as 1, true or null.
+    static StatusOr<JsonValue> parse_json_text(const Slice& src);
+    // Effective JSON nesting-depth cap from config (json_max_parse_nesting_depth), with a built-in
+    // fallback (1024) so it is never silently disabled. Single source of truth shared by the
+    // velocypack parse path (parse_options_from_config) and the simdjson ingest path (SimdJsonConverter).
+    static int max_nesting_depth();
+    // Build velocypack parse options from config (applies json_max_parse_nesting_depth). Shared by
+    // every JSON parse entrypoint so the nesting-depth cap stays uniform and honors the config.
+    static vpack::Options parse_options_from_config();
+>>>>>>> 36091cd ([BugFix][RB-1573] Count variant nulls in count(VARIANT) and keep scalar types in CAST(VARIANT AS JSON) (#83939))
 
     ////////////////// serialization  //////////////////////
     size_t serialize(uint8_t* dst) const;
