@@ -56,6 +56,27 @@ TEST_F(VarBinaryConverterTest, test_read_varbinary) {
 }
 
 // NOLINTNEXTLINE
+TEST_F(VarBinaryConverterTest, test_read_varbinary_non_null_terminated_slice) {
+    auto conv = csv::get_converter(_type, false);
+    auto col = ColumnHelper::create_column(_type, false);
+
+    // Simulate slices pointing into a contiguous CSV line buffer without NUL terminators at slice end:
+    // 1) Leading space followed by ',' after the slice -> previously read ',' and fell back to raw " ZWZnaGlq"!
+    const std::string csv_buf1 = " ZWZnaGlq,next_column";
+    Slice slice1(csv_buf1.data(), 9); // " ZWZnaGlq"
+    EXPECT_TRUE(conv->read_string(col.get(), slice1, Converter::Options()));
+
+    // 2) 4 leading spaces followed by "AAAA" after the slice -> previously decoded "AAAA" from next column!
+    const std::string csv_buf2 = "    YWJjZA==AAAA";
+    Slice slice2(csv_buf2.data(), 12); // "    YWJjZA=="
+    EXPECT_TRUE(conv->read_string(col.get(), slice2, Converter::Options()));
+
+    ASSERT_EQ(2, col->size());
+    EXPECT_EQ(Slice("efghij"), col->get(0).get_slice());
+    EXPECT_EQ(Slice("abcd"), col->get(1).get_slice());
+}
+
+// NOLINTNEXTLINE
 TEST_F(VarBinaryConverterTest, test_read_varbinary_fallback) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);
@@ -96,13 +117,14 @@ TEST_F(VarBinaryConverterTest, test_read_large_binary02) {
 TEST_F(VarBinaryConverterTest, test_write_string) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);
-    (void)col->append_strings(std::vector<Slice>{"aaaaaaaaaaaa", "bbbbbbbb", "", "ccccc"});
+    (void)col->append_strings(std::vector<Slice>{"aaaaaaaaaaaa", "bbbbbbbb", "", "ccccc", ""});
 
     formats::FormattedOutputStreamString buff;
     EXPECT_TRUE(conv->write_string(&buff, *col, 0, Converter::Options()).ok());
     EXPECT_TRUE(conv->write_string(&buff, *col, 1, Converter::Options()).ok());
     EXPECT_TRUE(conv->write_string(&buff, *col, 2, Converter::Options()).ok());
     EXPECT_TRUE(conv->write_string(&buff, *col, 3, Converter::Options()).ok());
+    EXPECT_TRUE(conv->write_string(&buff, *col, 4, Converter::Options()).ok());
     EXPECT_TRUE(buff.finalize().ok());
     EXPECT_EQ("YWFhYWFhYWFhYWFhYmJiYmJiYmI=Y2NjY2M=", buff.as_string());
 
@@ -111,9 +133,18 @@ TEST_F(VarBinaryConverterTest, test_write_string) {
     EXPECT_TRUE(conv->write_quoted_string(&buff2, *col, 1, Converter::Options()).ok());
     EXPECT_TRUE(conv->write_quoted_string(&buff2, *col, 2, Converter::Options()).ok());
     EXPECT_TRUE(conv->write_quoted_string(&buff2, *col, 3, Converter::Options()).ok());
+    EXPECT_TRUE(conv->write_quoted_string(&buff2, *col, 4, Converter::Options()).ok());
 
     EXPECT_TRUE(buff2.finalize().ok());
-    EXPECT_EQ("\"YWFhYWFhYWFhYWFh\"\"YmJiYmJiYmI=\"\"\"\"Y2NjY2M=\"", buff2.as_string());
+    EXPECT_EQ("\"YWFhYWFhYWFhYWFh\"\"YmJiYmJiYmI=\"\"\"\"Y2NjY2M=\"\"\"", buff2.as_string());
+
+    // All-empty column where BinaryColumn's byte buffer is empty (offsets[row] == bytes.size() == 0).
+    auto empty_col = ColumnHelper::create_column(_type, false);
+    empty_col->append_default();
+    formats::FormattedOutputStreamString buff3;
+    EXPECT_TRUE(conv->write_string(&buff3, *empty_col, 0, Converter::Options()).ok());
+    EXPECT_TRUE(buff3.finalize().ok());
+    EXPECT_EQ("", buff3.as_string());
 }
 
 } // namespace starrocks::csv

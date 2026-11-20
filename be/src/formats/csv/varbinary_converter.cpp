@@ -14,11 +14,11 @@
 
 #include "formats/csv/varbinary_converter.h"
 
-#include <iostream>
+#include <string>
 
 #include "base/base64.h"
+#include "base/container/raw_container.h"
 #include "base/string/string_parser.hpp"
-#include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "common/config_scan_io_fwd.h"
 #include "gutil/strings/escaping.h"
@@ -30,19 +30,18 @@ namespace starrocks::csv {
 Status VarBinaryConverter::write_string(formats::FormattedOutputStream* os, const Column& column, size_t row_num,
                                         const Options& options) const {
     auto* binary = down_cast<const BinaryColumn*>(&column);
-    auto& bytes = binary->get_immutable_bytes();
-    auto& offsets = binary->get_offset();
     // TODO: support binary type config later
 
-    Slice str(&bytes[offsets[row_num]], offsets[row_num + 1] - offsets[row_num]);
-    auto byte_length = offsets[row_num + 1] - offsets[row_num];
+    Slice str = binary->get_slice(row_num);
+    size_t byte_length = str.size;
 
-    int buf_size = (size_t)(4.0 * ceil((double)byte_length / 3.0)) + 1;
-    auto buf = new uint8_t[buf_size];
-    DeferOp defer([&]() { delete[] buf; });
+    size_t buf_size = ((byte_length + 2) / 3) * 4;
+    std::string buf;
+    raw::make_room(&buf, buf_size);
 
-    int encoded_len = base64_encode2((unsigned char*)str.data, byte_length, buf);
-    return os->write(Slice(buf, encoded_len));
+    size_t encoded_len = base64_encode2(reinterpret_cast<const unsigned char*>(str.data), byte_length,
+                                        reinterpret_cast<unsigned char*>(buf.data()));
+    return os->write(Slice(buf.data(), encoded_len));
 }
 
 Status VarBinaryConverter::write_quoted_string(formats::FormattedOutputStream* os, const Column& column, size_t row_num,
@@ -65,12 +64,12 @@ bool VarBinaryConverter::read_string(Column* column, const Slice& s, const Optio
         return true;
     }
 
-    auto buf = new char[s.size + 3];
-    DeferOp defer([&]() { delete[] buf; });
+    std::string buf;
+    raw::make_room(&buf, s.size - start);
 
-    int r = base64_decode2(s.data + start, s.size, buf);
-    char* data = buf;
-    int len = r;
+    int64_t r = base64_decode2(s.data + start, s.size - start, buf.data());
+    char* data = buf.data();
+    int64_t len = r;
 
     if (r == -1) { // fallback if decode failed
         data = data_ptr;

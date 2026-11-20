@@ -674,6 +674,8 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_base64(FunctionContext* context, 
 
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> builder(size);
+    std::vector<char> raw_buf;
+    std::vector<char> encoded_buf;
 
     for (int row = 0; row < size; ++row) {
         if (viewer.is_null(row)) {
@@ -681,24 +683,21 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_base64(FunctionContext* context, 
             continue;
         }
         BitmapValue* bitmap = viewer.value(row);
-        int byteSize = bitmap->get_size_in_bytes();
-        std::unique_ptr<char[]> buf;
-        buf.reset(new char[byteSize]);
-
-        int len = (size_t)(4.0 * ceil((double)byteSize / 3.0)) + 1;
-        std::unique_ptr<char[]> p;
-        p.reset(new char[len]);
-        memset(p.get(), 0, len);
-
-        bitmap->write((char*)buf.get());
-
-        int resLen = base64_encode2((unsigned char*)buf.get(), byteSize, (unsigned char*)p.get());
-
-        if (resLen < 0) {
-            builder.append_null();
-            continue;
+        size_t byte_size = bitmap->get_size_in_bytes();
+        if (raw_buf.size() < byte_size) {
+            raw_buf.resize(byte_size);
         }
-        builder.append(Slice(p.get(), resLen));
+
+        size_t len = ((byte_size + 2) / 3) * 4;
+        if (encoded_buf.size() < len) {
+            encoded_buf.resize(len);
+        }
+
+        bitmap->write(raw_buf.data());
+
+        size_t res_len = base64_encode2(reinterpret_cast<const unsigned char*>(raw_buf.data()), byte_size,
+                                        reinterpret_cast<unsigned char*>(encoded_buf.data()));
+        builder.append(Slice(encoded_buf.data(), res_len));
     }
     return builder.build(ColumnHelper::is_all_const(columns));
 }
