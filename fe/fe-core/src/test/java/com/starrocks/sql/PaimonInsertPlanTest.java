@@ -227,6 +227,18 @@ public class PaimonInsertPlanTest extends PlanTestBase {
     }
 
     @Test
+    public void testOverwriteModeUsesCurrentSessionWhenReplanned() throws Exception {
+        connectContext.getSessionVariable().setDynamicOverwrite(true);
+        Planned initial = plan("insert overwrite " + target("target") + " values ('2026-10-29', 1, 'a')");
+        Assertions.assertEquals(DYNAMIC, initial.sink().getPaimonSinkExtra().getOverwriteMode());
+
+        connectContext.getSessionVariable().setDynamicOverwrite(false);
+        ExecPlan replanned = StatementPlanner.plan(initial.statement(), connectContext);
+        PaimonTableSink sink = (PaimonTableSink) replanned.getTopFragment().getSink();
+        Assertions.assertEquals(FULL, sink.getPaimonSinkExtra().getOverwriteMode());
+    }
+
+    @Test
     public void testFixedBucketsKeepParallelNativeOwnerRouting() throws Exception {
         Planned fixed = plan("insert into " + target("fixed")
                 + " select cast('2026-10-29' as date), v1, cast(v2 as varchar) from t0 limit 5");

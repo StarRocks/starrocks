@@ -710,7 +710,9 @@ public class InsertPlanner {
                         isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable());
             } else if (targetTable instanceof PaimonTable paimonTable) {
                 try {
-                    PaimonSinkExtra extra = PaimonSinkExtra.from(paimonTable, paimonOverwriteMode(insertStmt),
+                    TPaimonOverwriteMode overwriteMode = paimonOverwriteMode(insertStmt, paimonTable,
+                            session.getSessionVariable());
+                    PaimonSinkExtra extra = PaimonSinkExtra.from(paimonTable, overwriteMode,
                             PaimonUtils.getStaticPartitionValues(insertStmt, paimonTable),
                             PaimonUtils.getWriteOperationId(session), session.getSessionVariable().getTimeZone());
                     dataSink = new PaimonTableSink(paimonTable, tupleDesc, extra);
@@ -1390,14 +1392,16 @@ public class InsertPlanner {
         return root.withNewRoot(new LogicalProjectOperator(projection));
     }
 
-    private static TPaimonOverwriteMode paimonOverwriteMode(InsertStmt insertStmt) {
+    private static TPaimonOverwriteMode paimonOverwriteMode(InsertStmt insertStmt, PaimonTable table,
+                                                          SessionVariable sessionVariable) {
         if (!insertStmt.isOverwrite()) {
             return TPaimonOverwriteMode.APPEND;
         }
         if (insertStmt.isStaticKeyPartitionInsert()) {
             return TPaimonOverwriteMode.STATIC;
         }
-        return insertStmt.isDynamicOverwrite() ? TPaimonOverwriteMode.DYNAMIC : TPaimonOverwriteMode.FULL;
+        return !table.isUnPartitioned() && sessionVariable.isDynamicOverwrite()
+                ? TPaimonOverwriteMode.DYNAMIC : TPaimonOverwriteMode.FULL;
     }
 
     private OptExprBuilder fillKeyPartitionsColumn(ColumnRefFactory columnRefFactory,

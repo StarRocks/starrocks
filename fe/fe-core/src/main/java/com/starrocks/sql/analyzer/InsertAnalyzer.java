@@ -478,10 +478,6 @@ public class InsertAnalyzer {
         if (insertStmt.isSpecifyPartitionNames()) {
             throw new SemanticException("Paimon writes require partition column values, not partition names");
         }
-        if (insertStmt.isOverwrite() && !insertStmt.isStaticKeyPartitionInsert()
-                && !table.isUnPartitioned() && session.getSessionVariable().isDynamicOverwrite()) {
-            insertStmt.setIsDynamicOverwrite(true);
-        }
     }
 
     private static void analyzeProperties(InsertStmt insertStmt, ConnectContext session) {
