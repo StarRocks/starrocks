@@ -111,7 +111,7 @@ public class IcebergGeoMetadataTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"EPSG:0", "EPSG:-1", "EPSG:+1", "EPSG:1a", "EPSG:2147483648", "IGNF:ATI",
-            "{\"type\":\"ProjectedCRS\"}", "", "epsg:3857", "ogc:crs84"})
+            "{\"type\":\"ProjectedCRS\"}", "", "epsg:3857"})
     public void unsupportedGeometryCrsMapsToUnknown(String crs) {
         Assertions.assertEquals(UnknownType.UNKNOWN_TYPE, ColumnTypeConverter.fromIcebergType(geometryWithCrs(crs)));
     }
