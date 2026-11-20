@@ -1,0 +1,19 @@
+-- name: test_refresh_external_table_unknown_db
+create database db_${uuid0};
+-- result:
+-- !result
+REFRESH EXTERNAL TABLE default_catalog.not_exist_db_for_refresh.not_exist_tbl;
+-- result:
+E: (5501, "Getting analyzing error. Detail message: Unknown database 'not_exist_db_for_refresh'.")
+-- !result
+REFRESH EXTERNAL TABLE not_exist_db_for_refresh.not_exist_tbl;
+-- result:
+E: (5501, "Getting analyzing error. Detail message: Unknown database 'not_exist_db_for_refresh'.")
+-- !result
+REFRESH EXTERNAL TABLE default_catalog.db_${uuid0}.not_exist_tbl;
+-- result:
+E: (5502, "Getting analyzing error. Detail message: Unknown table 'not_exist_tbl'.")
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
