@@ -29,13 +29,25 @@ import java.util.Set;
 public class SetRoleExecutor {
 
     private static long getValidRoleId(AuthorizationMgr manager, Set<Long> roleIdsForUser, String roleName,
-                                       UserIdentity userIdentity) throws StarRocksException {
+                                       ConnectContext context) throws StarRocksException {
         Long id = manager.getRoleIdByNameAllowNull(roleName);
         if (id == null) {
             throw new StarRocksException("Cannot find role " + roleName);
         }
 
         if (!roleIdsForUser.contains(id)) {
+            UserIdentity userIdentity = context.getCurrentUserIdentity();
+            // A role granted to one of the user's groups is held, but SET ROLE does not choose it:
+            // it is always active. Say so, instead of claiming the user does not have it.
+            if (context.getGroups() != null) {
+                for (String group : context.getGroups()) {
+                    if (manager.getRoleIdListByGroup(group).contains(id)) {
+                        throw new StarRocksException("Role " + roleName + " is granted to group " + group + " of " +
+                                userIdentity + ". A role granted to a group is always active and cannot be " +
+                                "chosen by SET ROLE");
+                    }
+                }
+            }
             throw new StarRocksException("Role " + roleName + " is not granted to " + userIdentity.toString());
         }
         return id;
@@ -56,13 +68,13 @@ public class SetRoleExecutor {
 
             // SET ROLE ALL EXCEPT
             for (String roleName : stmt.getRoles()) {
-                roleIds.remove(getValidRoleId(manager, roleIdsForUser, roleName, user));
+                roleIds.remove(getValidRoleId(manager, roleIdsForUser, roleName, context));
             }
         } else {
             // set role 'role1', 'role2'
             roleIds = new HashSet<>();
             for (String roleName : stmt.getRoles()) {
-                roleIds.add(getValidRoleId(manager, roleIdsForUser, roleName, user));
+                roleIds.add(getValidRoleId(manager, roleIdsForUser, roleName, context));
             }
         }
         context.setCurrentRoleIds(roleIds);
