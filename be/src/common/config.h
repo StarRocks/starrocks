@@ -915,6 +915,13 @@ CONF_mBool(lake_scan_parallel_segment_open, "true");
 // window. 0 starts each segment's read-ahead only when its turn comes.
 CONF_mInt32(lake_scan_read_ahead_segments, "16");
 
+// The cache blocks the query scans of a node may have asked for ahead of their reads and not read yet, all scans
+// together: the blocks remote_prefetch_window_blocks lets each segment reader keep ahead, and those of the segments
+// lake_scan_read_ahead_segments starts early. While the node holds this many, a window asks for no more blocks and a
+// tablet scan starts no next segment early; their reads fetch what they need as they reach it. The blocks a read is
+// about to consume are always fetched. Concurrent scans may take it a little past the limit. 0 means no limit.
+CONF_mInt64(lake_scan_read_ahead_max_blocks, "2048");
+
 // Fragment thread pool
 CONF_Int32(fragment_pool_thread_num_min, "64");
 CONF_Int32(fragment_pool_thread_num_max, "4096");
