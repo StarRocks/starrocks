@@ -1,0 +1,110 @@
+-- name: test_paimon_ctas_append
+function: create_paimon_ddl_catalog("paimon_ctas_${uuid0}", "${uuid0}")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'native';
+-- result:
+-- !result
+create database paimon_ctas_${uuid0}.writer_db;
+-- result:
+-- !result
+create table paimon_ctas_${uuid0}.writer_db.copied_rows (id, p)
+partition by (p) properties ('bucket'='-1', 'file.format'='parquet')
+as select 1, cast(null as date) union all select 2, cast('2026-11-01' as date);
+-- result:
+-- !result
+[ORDER]select id, p from paimon_ctas_${uuid0}.writer_db.copied_rows order by id;
+-- result:
+1	None
+2	2026-11-01
+-- !result
+create table if not exists paimon_ctas_${uuid0}.writer_db.copied_rows
+properties ('bucket'='-1', 'file.format'='parquet') as select 3 as id;
+-- result:
+-- !result
+select count(*) from paimon_ctas_${uuid0}.writer_db.copied_rows;
+-- result:
+2
+-- !result
+create table paimon_ctas_${uuid0}.writer_db.empty_rows
+properties ('bucket'='-1', 'file.format'='parquet') as select 1 as id where false;
+-- result:
+-- !result
+select count(*) from paimon_ctas_${uuid0}.writer_db.empty_rows;
+-- result:
+0
+-- !result
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db.empty_rows;
+  drop table if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db.copied_rows;
+  drop database if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_ctas_${paimon_ddl_warehouse_id};
+} END CLEANUP
+
+-- name: test_paimon_ctas_primary_key
+function: create_paimon_ddl_catalog("paimon_ctas_${uuid0}", "${uuid0}")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'native';
+-- result:
+-- !result
+set pipeline_dop = 4;
+-- result:
+-- !result
+create database paimon_ctas_${uuid0}.writer_db;
+-- result:
+-- !result
+create table paimon_ctas_${uuid0}.writer_db.pk_rows primary key (id)
+properties ('bucket'='4', 'file.format'='parquet')
+as select if(generate_series > 0, generate_series, null) as id, 'value' as payload
+from table(generate_series(1, 8));
+-- result:
+-- !result
+[ORDER]select count(*), min(id), max(id) from paimon_ctas_${uuid0}.writer_db.pk_rows;
+-- result:
+8	1	8
+-- !result
+set paimon_reader_mode = 'jni';
+-- result:
+-- !result
+[ORDER]select count(*), min(id), max(id) from paimon_ctas_${uuid0}.writer_db.pk_rows;
+-- result:
+8	1	8
+-- !result
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db.pk_rows;
+  drop database if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_ctas_${paimon_ddl_warehouse_id};
+} END CLEANUP
+
+-- name: test_paimon_ctas_retains_table_on_write_failure
+function: create_paimon_ddl_catalog("paimon_ctas_${uuid0}", "${uuid0}")
+-- result:
+None
+-- !result
+create database paimon_ctas_${uuid0}.writer_db;
+-- result:
+-- !result
+create table paimon_ctas_${uuid0}.writer_db.failed_rows
+properties ('bucket'='-1', 'file.format'='orc') as select 1 as id;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Paimon writes currently support only Parquet data files.')
+-- !result
+select count(*) from paimon_ctas_${uuid0}.writer_db.failed_rows;
+-- result:
+0
+-- !result
+select count(*) from paimon_ctas_${uuid0}.writer_db.`failed_rows$snapshots`;
+-- result:
+0
+-- !result
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db.failed_rows;
+  drop database if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_ctas_${paimon_ddl_warehouse_id};
+} END CLEANUP

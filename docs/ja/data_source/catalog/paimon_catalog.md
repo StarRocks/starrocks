@@ -25,7 +25,7 @@ Paimon クラスターで SQL ワークロードを成功させるには、StarR
 
 ## 使用上の注意
 
-Paimon catalog では、データのクエリ、Paimon データベースとテーブルの作成・削除、および INSERT INTO と INSERT OVERWRITE による書き込みができます。UPDATE、DELETE、CREATE TABLE LIKE、CREATE TABLE AS SELECT はサポートされていません。
+Paimon catalog では、データのクエリ、Paimon データベースとテーブルの作成・削除、および INSERT INTO、INSERT OVERWRITE、CREATE TABLE AS SELECT による書き込みができます。UPDATE、DELETE、CREATE TABLE LIKE はサポートされていません。
 
 ## Paimon to StarRocks data types
 
@@ -792,7 +792,19 @@ PROPERTIES (
 
 - `DISTRIBUTED BY`、`ORDER BY`、`ROLLUP`、生成列、集約列、`AUTO_INCREMENT` はサポートされていません。
 - NULL 以外の列デフォルト値はサポートされていません。
-- `CREATE TABLE LIKE`、`CREATE TABLE AS SELECT`、および `UPDATE`、`DELETE` によるデータの書き込みはサポートされていません。
+- `CREATE TABLE LIKE` および `UPDATE`、`DELETE` によるデータの書き込みはサポートされていません。
+
+### CREATE TABLE AS SELECT
+
+[CREATE TABLE AS SELECT](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) はクエリから対象列を推論して Paimon テーブルを作成し、`INSERT INTO` と同じ規則でクエリ結果を書き込みます。必要に応じて、パーティション列、主キー、テーブルプロパティを文で指定します。
+
+```SQL
+CREATE TABLE paimon_catalog.write_db.orders_copy
+PROPERTIES ("bucket" = "-1", "file.format" = "parquet")
+AS SELECT id, amount FROM paimon_catalog.write_db.orders;
+```
+
+テーブルの作成とスナップショットの公開は別々の操作です。テーブル作成後に書き込みが失敗した場合、StarRocks は対象テーブルを保持します。テーブルを削除したり文を再実行したりする前に、スナップショットを確認してください。`IF NOT EXISTS` を指定すると、既存の対象テーブルは変更されません。Paimon の CTAS は明示的なトランザクションの外で実行してください。
 
 ### DROP TABLE
 

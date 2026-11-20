@@ -2377,9 +2377,9 @@ public class QueryAnalyzer {
         }
 
         private void preResolveInsertTarget(InsertStmt statement, boolean paimonOnly) {
-            if (!statement.isForCTAS() && !statement.useTableFunctionAsTargetTable()
-                    && !statement.useBlackHoleTableAsTargetTable()) {
-                preResolveExternalWriteTarget(statement.getTableRef(), true, paimonOnly);
+            if (!statement.useTableFunctionAsTargetTable() && !statement.useBlackHoleTableAsTargetTable()) {
+                // The CTAS write is planned after CREATE TABLE. Resolve its Paimon UUID before locking.
+                preResolveExternalWriteTarget(statement.getTableRef(), true, paimonOnly || statement.isForCTAS());
             }
         }
 
@@ -2627,8 +2627,7 @@ public class QueryAnalyzer {
             // An internal target's metadata is deliberately not touched here -- that is the object the lock
             // is taken for. An external one is pre-resolved, because the lock covers nothing about it and
             // resolving it under the lock only binds the hold time to that catalog. Not for the targets
-            // that are not catalog objects at all: a CTAS target does not exist yet, and files() / blackhole
-            // are built from the statement rather than looked up.
+            // that are built from the statement, such as files() and blackhole.
             preResolveInsertTarget(statement, false);
             if (statement.getQueryStatement() != null) {
                 visit(statement.getQueryStatement());

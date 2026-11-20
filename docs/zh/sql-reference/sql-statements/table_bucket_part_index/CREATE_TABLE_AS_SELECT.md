@@ -63,9 +63,9 @@ CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原�
 
 ## 注意事项
 
-- 使用 CTAS 语句创建的新表需满足如下条件：
-  - `ENGINE` 类型为 `OLAP`。
+- 要创建 Paimon 目标表，请使用 Paimon catalog 中的全限定表名。支持的选项和失败时的行为请参见 [Paimon CTAS](../../../data_source/catalog/paimon_catalog.md#create-table-as-select)。
 
+- OLAP 目标表采用以下默认设置。
   - 表类型默认为明细表，您也可以在 `key_desc` 中指定为主键表。
 
   - 排序列为前三列且这三列类型的存储空间不能超过 36 个字节。
