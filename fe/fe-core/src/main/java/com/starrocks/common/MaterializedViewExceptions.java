@@ -104,7 +104,6 @@ public class MaterializedViewExceptions {
     @VisibleForTesting
     static final Map<String, Boolean> BREAKING_REASON_RECOVERED_BY_FORCE = Map.of(
             INACTIVE_REASON_FOR_INCREMENTAL_BREAKING, true,
-            INACTIVE_REASON_FOR_BASELINE_UNREACHABLE, true,
             INACTIVE_REASON_FOR_MV_SCHEMA_MISMATCH, false);
 
     public static boolean isRecoveredByForceRefresh(String inactiveReason) {

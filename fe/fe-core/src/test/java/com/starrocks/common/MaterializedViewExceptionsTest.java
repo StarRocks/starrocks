@@ -119,11 +119,9 @@ public class MaterializedViewExceptionsTest {
     }
 
     @Test
-    public void testForceRefreshRecoversOnlyABrokenOrUnreachableBaseline() {
+    public void testForceRefreshRecoversOnlyABrokenBaseline() {
         assertTrue(MaterializedViewExceptions.isRecoveredByForceRefresh(
                 MaterializedViewExceptions.inactiveReasonForIncrementalBreaking("mv1")));
-        assertTrue(MaterializedViewExceptions.isRecoveredByForceRefresh(
-                MaterializedViewExceptions.INACTIVE_REASON_FOR_BASELINE_UNREACHABLE + "mv1"));
         assertFalse(MaterializedViewExceptions.isRecoveredByForceRefresh(
                 MaterializedViewExceptions.INACTIVE_REASON_FOR_MV_SCHEMA_MISMATCH + "mv1"));
         assertFalse(MaterializedViewExceptions.isRecoveredByForceRefresh(

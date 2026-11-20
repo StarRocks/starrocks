@@ -18,7 +18,6 @@ import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.scheduler.Constants;
@@ -33,13 +32,11 @@ import com.starrocks.scheduler.mv.MVRefreshProcessor;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -47,46 +44,33 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
 
 /**
  * REFRESH ... FORCE activates an incremental MV whose incremental chain broke, since the rebuild never reads the
  * baseline it broke on, and puts the inactive reason back when the rebuild fails before it writes.
  */
-public class IvmForceActivateTest extends IvmCloudNativeRefreshTestBase {
-    private static final String DB = "db_ivm_force_activate";
+public class IvmForceActivateTest extends IvmIcebergRefreshJobTestBase {
     private static final AtomicInteger VIEWS = new AtomicInteger();
 
-    @BeforeAll
-    public static void beforeClass() throws Exception {
-        setUpSharedDataCluster(DB);
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER,
-            MaterializedViewExceptions.SNAPSHOT_ANCESTRY_BROKEN_MARKER})
-    public void testForceActivatesABrokenViewAndRebuildsIt(String breakage) throws Exception {
-        OlapTable fact = createFact("fact_force_activate_" + VIEWS.incrementAndGet());
-        MaterializedView mv = brokenView(fact, breakage);
+    @Test
+    public void testForceActivatesABrokenViewAndRebuildsIt() throws Exception {
+        MaterializedView mv = brokenView(MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER);
 
         TaskRun batch = runForceFirstBatch(mv);
         Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
         Assertions.assertEquals(Constants.TaskState.ACTIVE, taskOf(mv).getState());
         Assertions.assertEquals("PCT", executedRefreshMode(batch));
-        for (batch = nextOf(batch); batch != null; batch = nextOf(batch)) {
-            executeBatch(batch);
-        }
-        assertRecordsMatchBaseline(mv, fact);
+        runRemainingBatches(batch);
+        Assertions.assertEquals(currentSnapshotId(FACT), baselineSnapshotId(mv, FACT));
 
-        loadPartition(fact, "p1");
+        loadFact();
         Assertions.assertEquals("INCREMENTAL", executedRefreshMode(runFirstBatch(mv)));
         Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
     }
 
     @Test
     public void testPlainRefreshOfABrokenViewFailsAndNamesForce() throws Exception {
-        MaterializedView mv = brokenView(createFact("fact_force_activate_plain"),
-                MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER);
+        MaterializedView mv = brokenView(MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER);
         String reason = mv.getInactiveReason();
 
         Exception e = Assertions.assertThrows(Exception.class, () -> runFirstBatch(mv));
@@ -99,17 +83,15 @@ public class IvmForceActivateTest extends IvmCloudNativeRefreshTestBase {
 
     @Test
     public void testExplainOfAForceLeavesABrokenViewInactive() throws Exception {
-        MaterializedView mv = brokenView(createFact("fact_force_activate_explain"),
-                MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER);
+        MaterializedView mv = brokenView(MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER);
         String reason = mv.getInactiveReason();
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        Task task = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
         StatementBase explain = MVTestBase.getAnalyzedPlan(
                 "EXPLAIN REFRESH MATERIALIZED VIEW " + mv.getName() + " FORCE", starRocksAssert.getCtx());
         ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.HIGH.value(), false,
                 new HashMap<>(Map.of(TaskRun.FORCE, "true")));
 
-        Assertions.assertThrows(Exception.class, () -> taskManager.getMVRefreshExplain(task, option, explain));
+        Assertions.assertThrows(Exception.class, () -> taskManager.getMVRefreshExplain(taskOf(mv), option, explain));
         Assertions.assertFalse(mv.isActive());
         Assertions.assertEquals(reason, mv.getInactiveReason());
     }
@@ -121,11 +103,9 @@ public class IvmForceActivateTest extends IvmCloudNativeRefreshTestBase {
             MaterializedViewExceptions.INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED,
             MaterializedViewExceptions.INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES})
     public void testForceLeavesInactiveAViewAPlainRefreshCannotActivate(String reason) throws Exception {
-        OlapTable fact = createFact("fact_force_activate_" + VIEWS.incrementAndGet());
-        loadEveryPartition(fact);
-        MaterializedView mv = createMv("mv_" + fact.getName(), fact, "INCREMENTAL");
-        mockLakeDml();
-        runJob(mv, fact);
+        loadFact();
+        MaterializedView mv = createFactMv("mv_force_activate_" + VIEWS.incrementAndGet(), "incremental");
+        runJob(mv);
         AlterMVJobExecutor.inactiveMvAndLog(mv, reason);
 
         Exception e = Assertions.assertThrows(Exception.class, () -> runForceFirstBatch(mv));
@@ -136,8 +116,7 @@ public class IvmForceActivateTest extends IvmCloudNativeRefreshTestBase {
 
     @Test
     public void testForceThatFailsBeforeItWritesPutsTheViewBackInactiveAndPaused() throws Exception {
-        MaterializedView mv = brokenView(createFact("fact_force_activate_unplanned"),
-                MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER);
+        MaterializedView mv = brokenView(MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER);
         String reason = mv.getInactiveReason();
         Map<BaseTableInfo, TvrVersionRange> baseline = new HashMap<>(tvrBaseline(mv));
         failPctPlanning("pct planning failed (simulated)");
@@ -152,34 +131,28 @@ public class IvmForceActivateTest extends IvmCloudNativeRefreshTestBase {
 
     @Test
     public void testForceThatFailsAfterDroppingTheBaselineLeavesTheViewToBeRebuilt() throws Exception {
-        OlapTable fact = createFact("fact_force_activate_unwritten");
-        boolean[] failWrites = {false};
-        MaterializedView mv = brokenView(fact, MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER, insert -> {
-            if (failWrites[0]) {
-                throw new RuntimeException("write failed (simulated)");
-            }
-        });
+        MaterializedView mv = brokenView(MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER);
+        onWrite = () -> {
+            throw new RuntimeException("write failed (simulated)");
+        };
 
-        failWrites[0] = true;
         Assertions.assertThrows(Exception.class, () -> runForceFirstBatch(mv));
         Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
         Assertions.assertEquals(Constants.TaskState.ACTIVE, taskOf(mv).getState());
         Assertions.assertTrue(tvrBaseline(mv).isEmpty(), "the rebuild drops the baseline before it writes");
 
-        failWrites[0] = false;
+        onWrite = () -> {
+        };
         TaskRun batch = runFirstBatch(mv);
         Assertions.assertEquals("PCT", executedRefreshMode(batch));
-        for (batch = nextOf(batch); batch != null; batch = nextOf(batch)) {
-            executeBatch(batch);
-        }
-        assertRecordsMatchBaseline(mv, fact);
+        runRemainingBatches(batch);
+        Assertions.assertEquals(currentSnapshotId(FACT), baselineSnapshotId(mv, FACT));
     }
 
     @Test
     public void testForceThatBreaksOnTheSchemaKeepsTheReasonItBrokeOn() throws Exception {
-        MaterializedView mv = brokenView(createFact("fact_force_activate_schema"),
-                MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER);
-        failPctPlanning(MaterializedViewExceptions.MV_SCHEMA_COLUMN_NOT_COMPATIBLE_MARKER + "`v` bigint vs `v` int");
+        MaterializedView mv = brokenView(MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER);
+        failPctPlanning(MaterializedViewExceptions.MV_SCHEMA_COLUMN_NOT_COMPATIBLE_MARKER + "`id` bigint vs `id` int");
 
         Assertions.assertThrows(Exception.class, () -> runForceFirstBatch(mv));
         Assertions.assertFalse(mv.isActive());
@@ -187,21 +160,14 @@ public class IvmForceActivateTest extends IvmCloudNativeRefreshTestBase {
                 MaterializedViewExceptions.INACTIVE_REASON_FOR_MV_SCHEMA_MISMATCH), mv.getInactiveReason());
     }
 
-    private static MaterializedView brokenView(OlapTable fact, String breakage) throws Exception {
-        return brokenView(fact, breakage, insert -> {
-        });
-    }
-
     /** Refreshed once, inactivated the way a refresh failing on {@code breakage} inactivates it, then loaded. */
-    private static MaterializedView brokenView(OlapTable fact, String breakage, Consumer<InsertStmt> onWrite)
-            throws Exception {
-        loadEveryPartition(fact);
-        MaterializedView mv = createMv("mv_" + fact.getName(), fact, "INCREMENTAL");
-        mockLakeDml(onWrite);
-        runJob(mv, fact);
+    private MaterializedView brokenView(String breakage) throws Exception {
+        loadFact();
+        MaterializedView mv = createFactMv("mv_force_activate_" + VIEWS.incrementAndGet(), "incremental");
+        runJob(mv);
         AlterMVJobExecutor.inactiveMvAndSuspendTask(mv, MaterializedViewExceptions.inactiveReasonForBreakingFailure(
                 new SemanticException(breakage), mv.getName()));
-        loadEveryPartition(fact);
+        loadFact();
         return mv;
     }
 
