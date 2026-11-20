@@ -37,7 +37,6 @@ package com.starrocks.http.action;
 import com.google.common.base.Strings;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -174,30 +173,25 @@ public class WebBaseAction extends BaseAction {
 
         // cookie is invalid.
         try {
-            // Only the authenticated UserIdentity is used below: the session keeps just that
-            // identity, and the NODE check runs on a context holding the user's own roles. A NODE
-            // privilege that comes only from a role an LDAP or security-integration group maps
-            // to is therefore not honored for the Web UI.
+            // Authenticate onto the context the NODE check below uses, so the roles an LDAP or
+            // security-integration group maps to are present on it. Authenticating onto a throwaway
+            // context and copying only the UserIdentity across would leave that check looking at
+            // user-owned roles alone, and deny a user whose NODE privilege comes from a group.
             ConnectContext ctx = new ConnectContext(null);
             ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
             ctx.setRemoteIP(request.getHostString());
             checkCredential(ctx, parseAuthCredentials(request));
-            UserIdentity currentUser = ctx.getCurrentUserIdentity();
 
             if (needAdmin()) {
                 try {
-                    ConnectContext context = new ConnectContext();
-                    context.setCurrentUserIdentity(currentUser);
-                    context.setCurrentRoleIds(currentUser);
-
-                    Authorizer.checkSystemAction(context, PrivilegeType.NODE);
+                    Authorizer.checkSystemAction(ctx, PrivilegeType.NODE);
                 } catch (AccessDeniedException e) {
                     checkAdminRole(ctx);
                 }
             }
             request.setAuthorized(true);
             SessionValue value = new SessionValue();
-            value.currentUser = currentUser;
+            value.connectContext = ctx;
             addSession(request, response, value);
 
             ctx.setQueryId(UUIDUtil.genUUID());
@@ -224,16 +218,9 @@ public class WebBaseAction extends BaseAction {
 
             try {
                 try {
-                    ConnectContext context = new ConnectContext();
-                    context.setCurrentUserIdentity(sessionValue.currentUser);
-                    context.setCurrentRoleIds(sessionValue.currentUser);
-                    Authorizer.checkSystemAction(context, PrivilegeType.NODE);
+                    Authorizer.checkSystemAction(sessionValue.connectContext, PrivilegeType.NODE);
                 } catch (AccessDeniedException e) {
-                    // The session keeps only the user, not the groups it logged in with, so this
-                    // counts the roles granted to the user and the roles they inherit.
-                    ConnectContext adminCheckContext = new ConnectContext();
-                    adminCheckContext.setCurrentUserIdentity(sessionValue.currentUser);
-                    checkAdminRole(adminCheckContext);
+                    checkAdminRole(sessionValue.connectContext);
                 }
                 authorized = true;
             } catch (AccessDeniedException e) {
@@ -245,12 +232,14 @@ public class WebBaseAction extends BaseAction {
                 request.setAuthorized(true);
 
                 ConnectContext ctx = new ConnectContext(null);
-                ctx.setQualifiedUser(sessionValue.currentUser.getUser());
+                ctx.setQualifiedUser(sessionValue.connectContext.getCurrentUserIdentity().getUser());
                 ctx.setQueryId(UUIDUtil.genUUID());
                 ctx.setRemoteIP(request.getHostString());
-                ctx.setCurrentUserIdentity(sessionValue.currentUser);
+                ctx.setCurrentUserIdentity(sessionValue.connectContext.getCurrentUserIdentity());
                 ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-                ctx.setCurrentRoleIds(sessionValue.currentUser);
+                ctx.setCurrentRoleIds(sessionValue.connectContext.getCurrentRoleIds());
+                // Group-mapped roles and Ranger evaluate the groups; the stored context already resolved them.
+                ctx.setGroups(sessionValue.connectContext.getGroups());
 
                 ctx.setThreadLocalInfo();
                 return true;

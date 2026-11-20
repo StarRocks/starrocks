@@ -19,7 +19,7 @@ package com.starrocks.http;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import com.starrocks.catalog.UserIdentity;
+import com.starrocks.qe.ConnectContext;
 
 import java.util.concurrent.TimeUnit;
 
@@ -32,7 +32,7 @@ public final class HttpAuthManager {
     private static HttpAuthManager instance = new HttpAuthManager();
 
     public static class SessionValue {
-        public UserIdentity currentUser;
+        public ConnectContext connectContext;
     }
 
     // session_id => session value
