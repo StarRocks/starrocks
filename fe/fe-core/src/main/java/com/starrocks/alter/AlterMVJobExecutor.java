@@ -64,6 +64,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
+import com.starrocks.sql.analyzer.SavedSqlGeoValidator;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -918,6 +919,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         // analyze this ast
         ConnectContext connectContext = context == null ? ConnectContext.buildInner() : context;
         Analyzer.analyze(queryStatement, connectContext);
+        SavedSqlGeoValidator.validate(queryStatement);
 
         List<SlotRef> slots = Lists.newArrayList();
         addColumnExpr.collect(SlotRef.class, slots);
@@ -1182,6 +1184,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
         ConnectContext connectContext = context == null ? ConnectContext.buildInner() : context;
         Analyzer.analyze(queryStatement, connectContext);
+        SavedSqlGeoValidator.validate(queryStatement);
 
         // fast schema evolution
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
