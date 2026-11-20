@@ -137,6 +137,15 @@ public abstract class MVTimelinessArbiter {
             return isQueryRewrite;
         }
 
+        /**
+         * Whether a candidate MV may be judged by what its owner tolerates for queries: its staleness and its
+         * query_rewrite_consistency. Not when the rewritten statement refreshes another MV: that refresh records
+         * the base versions it consumed, so whatever the candidate lacks would be kept as fresh.
+         */
+        public boolean toleratesStaleMv() {
+            return isQueryRewrite && (optimizerContext == null || !optimizerContext.isMaterializedViewRefresh());
+        }
+
         /** Whether internal base tables are read without their READ lock: query rewrite, or an unlocked refresh. */
         public boolean readsBaseTablesUnlocked() {
             return isQueryRewrite || !lockBaseTables;
