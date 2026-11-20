@@ -2301,6 +2301,10 @@ public class EditLog {
         logJsonObject(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, job);
     }
 
+    public void logUpdateTabletReshardJob(TabletReshardJob snapshot, WALApplier applier) {
+        logJsonObject(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, snapshot, applier);
+    }
+
     public void logRemoveTabletReshardJob(long jobId) {
         logJsonObject(OperationType.OP_REMOVE_TABLET_RESHARD_JOB_LOG, new RemoveTabletReshardJobLog(jobId));
     }
