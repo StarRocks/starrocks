@@ -143,7 +143,7 @@ TEST_F(VariantRowValueTest, FloatToJson) {
         VariantRowValue variant{std::string_view(float_metadata), std::string_view(float_value)};
         auto json = variant.to_json();
         ASSERT_TRUE(json.ok());
-        EXPECT_EQ("1.23456794e+09", *json);
+        EXPECT_EQ("1.234568e+09", *json);
     }
 
     // Test double
@@ -499,6 +499,43 @@ TEST_F(VariantRowValueTest, ToJsonMicrosecondTimestampsBeforeEpoch) {
     EXPECT_EQ(R"("1969-12-31 23:59:58.5+00:00")", to_json(VariantType::TIMESTAMP_TZ, -1500000));
     EXPECT_EQ(R"("1969-12-31 23:59:59")", to_json(VariantType::TIMESTAMP_NTZ, -1000000));
     EXPECT_EQ(R"("1970-01-01 00:00:00.000001+00:00")", to_json(VariantType::TIMESTAMP_TZ, 1));
+}
+
+// FLOAT and DOUBLE print the shortest text that parses back to the same value, not max_digits10 digits.
+TEST_F(VariantRowValueTest, ToJsonFloatingPointUsesShortestRoundTrip) {
+    const auto to_json = [](VariantType type, const void* value, size_t size) {
+        std::string bytes(1 + size, '\0');
+        bytes[0] = static_cast<char>(static_cast<uint8_t>(type) << 2);
+        memcpy(bytes.data() + 1, value, size); // little-endian host
+        VariantRowValue row(VariantMetadata::kEmptyMetadata, bytes);
+        auto json = row.to_json(cctz::utc_time_zone());
+        EXPECT_TRUE(json.ok()) << json.status();
+        return json.value_or("");
+    };
+    const auto double_json = [&](double d) { return to_json(VariantType::DOUBLE, &d, sizeof(d)); };
+    const auto float_json = [&](float f) { return to_json(VariantType::FLOAT, &f, sizeof(f)); };
+
+    EXPECT_EQ("1e+300", double_json(1e300));
+    EXPECT_EQ("0.1", double_json(0.1));
+    EXPECT_EQ("1.0000000000000002", double_json(1.0000000000000002));
+    EXPECT_EQ("-2.5", double_json(-2.5));
+    EXPECT_EQ("100.0", double_json(100.0));
+    EXPECT_EQ("9007199254740992.0", double_json(9007199254740992.0));
+    EXPECT_EQ("1.8446744073709552e+19", double_json(18446744073709551616.0));
+    EXPECT_EQ("1e+17", double_json(1e17));
+    EXPECT_EQ("10000000000000000.0", double_json(1e16));
+    EXPECT_EQ("0.0001", double_json(1e-4));
+    EXPECT_EQ("1e-05", double_json(1e-5));
+    EXPECT_EQ("0.0", double_json(0.0));
+    EXPECT_EQ("-0.0", double_json(-0.0));
+    EXPECT_EQ("5e-324", double_json(std::numeric_limits<double>::denorm_min()));
+    EXPECT_EQ("1.7976931348623157e+308", double_json(std::numeric_limits<double>::max()));
+    EXPECT_EQ("null", double_json(std::numeric_limits<double>::quiet_NaN()));
+    EXPECT_EQ("0.1", float_json(0.1f));
+    EXPECT_EQ("3.4028235e+38", float_json(std::numeric_limits<float>::max()));
+    EXPECT_EQ("1.0", float_json(1.0f));
+    EXPECT_EQ("100000000.0", float_json(1e8f));
+    EXPECT_EQ("1e+09", float_json(1e9f));
 }
 
 TEST_F(VariantRowValueTest, CopyAssignment) {
