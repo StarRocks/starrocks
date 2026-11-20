@@ -1202,7 +1202,6 @@ public class FunctionAnalyzer {
                 fn = fn.copy();
                 fn.setRetType(ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
                         new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
-                                GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
                                 GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326)));
             }
         } else if (FunctionSet.ST_CENTROID.equalsIgnoreCase(fnName) && argumentTypes.length == 1 &&
