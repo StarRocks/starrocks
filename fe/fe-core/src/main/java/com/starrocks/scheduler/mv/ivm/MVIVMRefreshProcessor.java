@@ -67,10 +67,23 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.PCellSortedSet;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.common.PCellUtils;
+import com.starrocks.sql.optimizer.QueryMaterializationContext;
+import com.starrocks.sql.optimizer.rule.ivm.agg.IvmAggregatePlanChoice;
+>>>>>>> 9681196363a... [BugFix][RB-1754] Record IVM refresh versions only once the write is visible (#70422)
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.transaction.GlobalTransactionMgr;
+<<<<<<< HEAD
 import org.apache.commons.collections4.CollectionUtils;
+=======
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
+import org.apache.commons.collections4.ListUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
+>>>>>>> 9681196363a... [BugFix][RB-1754] Record IVM refresh versions only once the write is visible (#70422)
 
 import java.util.Collection;
 import java.util.List;
@@ -93,8 +106,15 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
     // Per-call buffer: stores TVR deltas computed in getProcessExecPlan(), consumed in execProcessExecPlan().
     // NOT the editlog-persisted temp map (that is AsyncRefreshContext.tempBaseTableInfoTvrDeltaMap).
     private final Map<BaseTableInfo, TvrVersionRange> stagedTvrDeltaMap = Maps.newConcurrentMap();
+<<<<<<< HEAD
     // whether the next task run is needed
     private boolean hasNextTaskRun = false;
+=======
+    // What this run selected from each base table in getProcessExecPlan(), handed back once the run succeeds.
+    private final TaskRunDeltaSelections selections = new TaskRunDeltaSelections();
+    // Whether this run's write became visible in time: only then does the run record its versions and freshness.
+    private boolean writeVisible = true;
+>>>>>>> 9681196363a... [BugFix][RB-1754] Record IVM refresh versions only once the write is visible (#70422)
 
     public MVIVMRefreshProcessor(Database db, MaterializedView mv,
                                  MvTaskRunContext mvContext,
@@ -111,7 +131,13 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         // Reset per-call buffer to prevent accumulation across retries within the same task run
         // (processor instance is reused by retryProcessTaskRun).
         this.stagedTvrDeltaMap.clear();
+<<<<<<< HEAD
         waitForCommittedMvTransactionsVisible();
+=======
+        this.selections.clear();
+        this.writeVisible = true;
+        long visibilityWaitMs = waitForCommittedMvTransactionsVisible();
+>>>>>>> 9681196363a... [BugFix][RB-1754] Record IVM refresh versions only once the write is visible (#70422)
         mvPctRefreshSynchronizer.syncAndCheckPCTPartitions();
 
         // collect change snapshots
@@ -137,8 +163,17 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                 .allMatch(TvrVersionRange::isEmpty);
         if (isTaskRunSkipped) {
             logger.info("No base table has changed, skip the refresh for materialized view: {}", mv.getName());
+<<<<<<< HEAD
             // No base-table change means the MV is confirmed fresh as of this run's start.
             confirmFreshness();
+=======
+            // The run ends as skipped, for which the task run does not call confirmFreshness, so it is called here. An
+            // EXPLAIN only plans.
+            if (!mvContext.isExplain()) {
+                recordVersionsLeftUnrecorded();
+                confirmFreshness(null);
+            }
+>>>>>>> 9681196363a... [BugFix][RB-1754] Record IVM refresh versions only once the write is visible (#70422)
             // Every delta here is a point range (from == to): the window records that the
             // bookmark had caught up with the base table head.
             recordImvSourceRangesOnTaskRun();
@@ -200,7 +235,72 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
             } while (txnMgr.existCommittedTxns(db.getId(), mv.getId(), null));
         }
         logger.info("Waited {} ms for the committed transactions of materialized view {} to become visible",
+<<<<<<< HEAD
                 System.currentTimeMillis() - startMs, mv.getName());
+=======
+                waitedMs, mv.getName());
+        return waitedMs;
+    }
+
+    /**
+     * The insert may return once its write is committed, before it is visible. Queries take an MV partition as fresh
+     * when the version map records the base versions it was refreshed to, so the run records them, and the view's
+     * freshness, only once the write is visible. A run that waits in vain leaves them to a later refresh.
+     */
+    private boolean waitForWriteVisible(long txnId) {
+        TransactionState txn = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionState(db.getId(), txnId);
+        if (txn == null || (txn.getTransactionStatus() != TransactionStatus.COMMITTED
+                && txn.getTransactionStatus() != TransactionStatus.VISIBLE)) {
+            return true;
+        }
+        long timeoutMs = Config.mv_incremental_refresh_wait_visible_timeout_ms;
+        long startMs = System.currentTimeMillis();
+        try (Timer ignored = Tracers.watchScope("MVRefreshWaitWriteVisible")) {
+            // The latch is released once the publish has updated the partitions, not when the status turns VISIBLE.
+            while (!txn.waitTransactionVisible(100, TimeUnit.MILLISECONDS)) {
+                boolean killed = mvContext.getTaskRun() != null && mvContext.getTaskRun().isKilled();
+                if (killed || System.currentTimeMillis() - startMs >= timeoutMs) {
+                    logger.warn("The write of materialized view {} in transaction {} is not visible after {} ms, see " +
+                                    "mv_incremental_refresh_wait_visible_timeout_ms; its versions are left to a later " +
+                                    "refresh, and queries take the partitions it wrote as stale until then",
+                            mv.getName(), txnId, System.currentTimeMillis() - startMs);
+                    return false;
+                }
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * A run whose write was not visible in time left its versions unrecorded, and a run that reads no change has no
+     * write to record them with. No base table changed since the view's last write, which is visible by now (waited
+     * for above), so the partitions the version map still takes as changed hold the base tables as they are.
+     */
+    private void recordVersionsLeftUnrecorded() {
+        try (Timer ignored = Tracers.watchScope("MVRefreshRecordVersionsLeftUnrecorded")) {
+            mvPctRefreshSynchronizer.updatePCTToRefreshMetas(/* skipBatchFilter */ true);
+            if (PCellUtils.isNotEmpty(pctMVToRefreshedPartitions)) {
+                updatePCTMeta(null, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions, Maps.newHashMap());
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to record the versions left unrecorded for materialized view: {}, error: {}",
+                    mv.getName(), e.getMessage(), e);
+        }
+    }
+
+    /** Recorded where the source ranges are, for the same reason: planning can no longer fail. */
+    private void recordRoundOnTaskRun(long visibilityWaitMs, IvmAggregatePlanChoice choice) {
+        updateTaskRunStatus(status -> {
+            MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
+            extraMessage.setImvVisibilityWaitMs(visibilityWaitMs);
+            extraMessage.setImvAggregateMaintenance(choice == null ? null : new IvmAggregateMaintenance(
+                    choice.strategy().name(), choice.reason().name(), choice.unprovable()));
+        });
+>>>>>>> 9681196363a... [BugFix][RB-1754] Record IVM refresh versions only once the write is visible (#70422)
     }
 
     /**
@@ -270,8 +370,12 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                 executor.executePlan(execPlan, insertStmt);
             }
 
-            try (Timer ignored = Tracers.watchScope("MVRefreshUpdateMeta")) {
-                updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions, Maps.newHashMap());
+            writeVisible = waitForWriteVisible(insertStmt.getTxnId());
+            if (writeVisible) {
+                try (Timer ignored = Tracers.watchScope("MVRefreshUpdateMeta")) {
+                    updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions,
+                            Maps.newHashMap());
+                }
             }
 
             return Constants.TaskRunState.SUCCESS;
@@ -499,6 +603,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         return new AdaptiveDelta(result, hasNext);
     }
 
+<<<<<<< HEAD
     @VisibleForTesting
     static final class AdaptiveDelta {
         final TvrTableDelta delta;
@@ -507,6 +612,21 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         AdaptiveDelta(TvrTableDelta delta, boolean hasNext) {
             this.delta = delta;
             this.hasNext = hasNext;
+=======
+    /**
+     * Hands the selections of this run back to their selectors, and confirms the view fresh as of the time they give.
+     * When the run wrote the time with its version meta, this finds it confirmed and writes nothing. Otherwise, as for
+     * a run that found no table changed, the time is written here.
+     *
+     * @param executedMode the refresh mode the run executed; null for a run that committed nothing, which leaves the
+     *                     mode of the last run that did
+     */
+    private void confirmFreshness(MaterializedView.RefreshMode executedMode) {
+        selections.onTaskRunSuccess();
+        OptionalLong freshnessTime = selections.freshnessTime();
+        if (freshnessTime.isPresent() && writeVisible) {
+            new MVVersionManager(mv, mvContext, executedMode).confirmFreshnessAt(freshnessTime.getAsLong());
+>>>>>>> 9681196363a... [BugFix][RB-1754] Record IVM refresh versions only once the write is visible (#70422)
         }
     }
 
