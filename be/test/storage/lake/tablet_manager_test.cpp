@@ -20,6 +20,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstring>
 #include <fstream>
 #include <limits>
 #include <map>
@@ -34,11 +35,15 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
 #include "storage/lake/tablet_reshard.h"
+#include "storage/lake/transactions.h"
+#include "storage/lake/txn_vlog_format.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
+#include "storage/protobuf_file.h"
 #include "storage/rowset/segment.h"
+#include "storage/storage_engine.h"
 #include "storage/tablet_schema.h"
 #include "storage/utils.h"
 #include "test_util.h"
@@ -411,6 +416,371 @@ TEST_F(LakeTabletManagerTest, read_legacy_format_written_without_checksum) {
     ASSERT_OK(log_res2.status());
     EXPECT_EQ(log_res2.value()->tablet_id(), tablet_id2);
     EXPECT_EQ(log_res2.value()->txn_id(), 100);
+}
+
+TEST_F(LakeTabletManagerTest, txn_vlog_group_preserves_statement_metadata_and_rejects_old_reader) {
+    // The general checksum switch must not make the new group format look like a plain TxnLogPB.
+    lake::ConfigResetGuard<bool> checksum_guard(&config::lake_enable_protobuf_file_checksum, false);
+    const auto tablet_id = next_id();
+    const auto txn_id = next_id();
+    auto first = std::make_shared<TxnLog>();
+    first->set_tablet_id(tablet_id);
+    first->set_txn_id(txn_id);
+    first->mutable_load_id()->set_hi(11);
+    first->mutable_load_id()->set_lo(0);
+    auto* partial = first->mutable_op_write();
+    partial->mutable_txn_meta()->add_partial_update_column_unique_ids(1);
+    partial->mutable_txn_meta()->add_partial_rowset_footers()->set_position(10);
+    // Exercise legacy-array normalization too: the sources need not have been written by this BE.
+    partial->mutable_rowset()->add_deprecated_segments("delete.dat");
+    partial->mutable_rowset()->set_num_rows(0);
+    partial->add_deprecated_rewrite_segments("rewrite.dat");
+    partial->add_deprecated_dels("delete.del");
+    partial->add_del_op_offsets(0);
+    auto second = std::make_shared<TxnLog>();
+    second->set_tablet_id(tablet_id);
+    second->set_txn_id(txn_id);
+    second->mutable_load_id()->set_hi(22);
+    second->mutable_load_id()->set_lo(0);
+    auto* full = second->mutable_op_write();
+    full->mutable_rowset()->set_num_rows(1);
+    auto* segment = full->mutable_rowset()->add_segment_metas();
+    segment->set_filename("insert.dat");
+    segment->set_segment_idx(0);
+    segment->set_num_rows(1);
+    const auto original_first = first->SerializeAsString();
+    const auto original_second = second->SerializeAsString();
+
+    // The group goes to a file of its own: the legacy file of the version, and its metacache entry, stay as
+    // they were, so no cached copy of either file can turn stale.
+    ASSERT_OK(_tablet_manager->put_txn_vlog(second, 2));
+    ASSERT_OK(_tablet_manager->put_txn_vlog_group({first, second}, 2));
+    const auto legacy_path = _tablet_manager->txn_vlog_location(tablet_id, 2);
+    EXPECT_NE(nullptr, _tablet_manager->metacache()->lookup_txn_log(legacy_path));
+    _tablet_manager->metacache()->prune();
+    ASSIGN_OR_ABORT(auto legacy, _tablet_manager->get_txn_vlog(legacy_path, false));
+    EXPECT_EQ(22, legacy->load_id().hi());
+    const auto path = _tablet_manager->txn_vlog_group_location(tablet_id, 2);
+    EXPECT_EQ(original_first, first->SerializeAsString());
+    EXPECT_EQ(original_second, second->SerializeAsString());
+    ASSIGN_OR_ABORT(auto logs, _tablet_manager->get_txn_vlog_group(path, false));
+    ASSERT_EQ(2, logs.size());
+    EXPECT_EQ(11, logs[0]->load_id().hi());
+    EXPECT_EQ(22, logs[1]->load_id().hi());
+    EXPECT_TRUE(logs[0]->op_write().has_txn_meta());
+    EXPECT_FALSE(logs[1]->op_write().has_txn_meta());
+    ASSERT_EQ(1, logs[0]->op_write().rewrite_segments_meta_size());
+    EXPECT_EQ("rewrite.dat", logs[0]->op_write().rewrite_segments_meta(0).name());
+    ASSERT_EQ(1, logs[0]->op_write().rowset().segment_metas_size());
+    EXPECT_EQ("delete.dat", logs[0]->op_write().rowset().segment_metas(0).filename());
+    ASSERT_EQ(1, logs[0]->op_write().del_op_offsets_size());
+    EXPECT_EQ(0, logs[0]->op_write().del_op_offsets(0));
+    EXPECT_EQ(0, logs[1]->op_write().rowset().segment_metas(0).segment_idx());
+    // The old read path must fail before a reshard conversion could turn an empty parsed log into
+    // a no-op for the target tablet. It must never return only the first statement.
+    EXPECT_TRUE(_tablet_manager->get_txn_vlog(path, false).status().is_corruption());
+}
+
+TEST_F(LakeTabletManagerTest, txn_vlog_group_reads_both_legacy_single_log_formats) {
+    lake::ConfigResetGuard<bool> checksum_guard(&config::lake_enable_protobuf_file_checksum, false);
+    for (bool checksum : {false, true}) {
+        config::lake_enable_protobuf_file_checksum = checksum;
+        auto log = std::make_shared<TxnLog>();
+        log->set_tablet_id(next_id());
+        log->set_txn_id(next_id());
+        // Legacy vlogs can hold non-write operations; a one-entry group must preserve that API.
+        log->mutable_op_compaction()->set_compact_version(1);
+        ASSERT_OK(_tablet_manager->put_txn_vlog_group({log}, 2));
+        _tablet_manager->metacache()->prune();
+        const auto path = _tablet_manager->txn_vlog_location(log->tablet_id(), 2);
+        ASSIGN_OR_ABORT(auto old_read, _tablet_manager->get_txn_vlog(path, false));
+        ASSIGN_OR_ABORT(auto group_read, _tablet_manager->get_txn_vlog_group(path, false));
+        ASSERT_EQ(1, group_read.size());
+        EXPECT_EQ(log->SerializeAsString(), old_read->SerializeAsString());
+        EXPECT_EQ(log->SerializeAsString(), group_read[0]->SerializeAsString());
+    }
+}
+
+TEST_F(LakeTabletManagerTest, txn_vlog_group_rejects_incomplete_or_inconsistent_groups) {
+    lake::ConfigResetGuard<bool> clear_cache_guard(&config::lake_clear_corrupted_cache_meta, false);
+    const auto tablet_id = next_id();
+    auto first = std::make_shared<TxnLog>();
+    first->set_tablet_id(tablet_id);
+    first->set_txn_id(next_id());
+    first->mutable_op_write()->mutable_rowset()->set_num_rows(0);
+    auto second = std::make_shared<TxnLog>(*first);
+    EXPECT_TRUE(_tablet_manager->put_txn_vlog_group({}, 2).is_invalid_argument());
+    EXPECT_TRUE(_tablet_manager->put_txn_vlog_group({nullptr}, 2).is_invalid_argument());
+    second->set_tablet_id(tablet_id + 1);
+    EXPECT_TRUE(_tablet_manager->put_txn_vlog_group({first, second}, 2).is_invalid_argument());
+    second->set_tablet_id(tablet_id);
+    second->set_txn_id(first->txn_id() + 1);
+    EXPECT_TRUE(_tablet_manager->put_txn_vlog_group({first, second}, 2).is_invalid_argument());
+    second->set_txn_id(first->txn_id());
+    second->mutable_op_compaction();
+    EXPECT_TRUE(_tablet_manager->put_txn_vlog_group({first, second}, 2).is_invalid_argument());
+    second->clear_op_compaction();
+
+    ASSERT_OK(_tablet_manager->put_txn_vlog_group({first, second}, 2));
+    const auto path = _tablet_manager->txn_vlog_group_location(tablet_id, 2);
+    ASSIGN_OR_ABORT(auto file, FileSystem::Default()->new_random_access_file(path));
+    ASSIGN_OR_ABORT(auto content, file->read_all());
+    ASSERT_GE(content.size(), sizeof(uint64_t));
+    uint64_t magic = 0;
+    std::memcpy(&magic, content.data(), sizeof(magic));
+    CombinedTxnLogPB invalid;
+    ASSERT_OK(ProtobufFileWithHeader(path, magic).save(invalid));
+    EXPECT_TRUE(_tablet_manager->get_txn_vlog_group(path, false).status().is_corruption());
+    invalid.add_txn_logs()->CopyFrom(*first);
+    invalid.add_txn_logs()->CopyFrom(*second);
+    invalid.mutable_txn_logs(1)->clear_txn_id();
+    ASSERT_OK(ProtobufFileWithHeader(path, magic).save(invalid));
+    EXPECT_TRUE(_tablet_manager->get_txn_vlog_group(path, false).status().is_corruption());
+    invalid.mutable_txn_logs(1)->set_txn_id(first->txn_id() + 1);
+    ASSERT_OK(ProtobufFileWithHeader(path, magic).save(invalid));
+    EXPECT_TRUE(_tablet_manager->get_txn_vlog_group(path, false).status().is_corruption());
+}
+
+TEST_F(LakeTabletManagerTest, txn_vlog_group_checksum_detects_corrupt_payload) {
+    lake::ConfigResetGuard<bool> clear_cache_guard(&config::lake_clear_corrupted_cache_meta, false);
+    auto log = std::make_shared<TxnLog>();
+    log->set_tablet_id(next_id());
+    log->set_txn_id(next_id());
+    log->mutable_op_write()->mutable_rowset()->set_num_rows(1);
+    ASSERT_OK(_tablet_manager->put_txn_vlog_group({log, log}, 2));
+    const auto path = _tablet_manager->txn_vlog_group_location(log->tablet_id(), 2);
+    auto fs = FileSystem::Default();
+    ASSIGN_OR_ABORT(auto file, fs->new_random_access_file(path));
+    ASSIGN_OR_ABORT(auto content, file->read_all());
+    ASSERT_FALSE(content.empty());
+    content.back() ^= 1;
+    WritableFileOptions opts{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    ASSIGN_OR_ABORT(auto writer, fs->new_writable_file(opts, path));
+    ASSERT_OK(writer->append(content));
+    ASSERT_OK(writer->close());
+    auto result = _tablet_manager->get_txn_vlog_group(path, false);
+    ASSERT_TRUE(result.status().is_corruption()) << result.status();
+    EXPECT_THAT(result.status().to_string(), ::testing::HasSubstr("checksum"));
+}
+
+TEST_F(LakeTabletManagerTest, txn_log_inspection_reads_group_in_both_modes) {
+    auto first = std::make_shared<TxnLog>();
+    first->set_tablet_id(next_id());
+    first->set_txn_id(next_id());
+    first->mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("first.dat");
+    first->mutable_op_write()->mutable_txn_meta()->add_partial_update_column_unique_ids(1);
+    auto second = std::make_shared<TxnLog>(*first);
+    second->mutable_op_write()->clear_txn_meta();
+    second->mutable_op_write()->mutable_rowset()->mutable_segment_metas(0)->set_filename("second.dat");
+    ASSERT_OK(_tablet_manager->put_txn_vlog_group({first, second}, 2));
+    const auto path = _tablet_manager->txn_vlog_group_location(first->tablet_id(), 2);
+    ASSIGN_OR_ABORT(auto file, FileSystem::Default()->new_random_access_file(path));
+    ASSIGN_OR_ABORT(auto content, file->read_all());
+    for (auto mode : {lake::TxnLogInspectionMode::SINGLE, lake::TxnLogInspectionMode::COMBINED}) {
+        ASSIGN_OR_ABORT(auto message, lake::decode_txn_log_for_inspection(content, mode));
+        EXPECT_EQ(CombinedTxnLogPB::descriptor(), message->GetDescriptor());
+        CombinedTxnLogPB group;
+        ASSERT_TRUE(group.ParseFromString(message->SerializeAsString()));
+        ASSERT_EQ(2, group.txn_logs_size());
+        EXPECT_EQ("first.dat", group.txn_logs(0).op_write().rowset().segment_metas(0).filename());
+        EXPECT_TRUE(group.txn_logs(0).op_write().has_txn_meta());
+        EXPECT_EQ("second.dat", group.txn_logs(1).op_write().rowset().segment_metas(0).filename());
+        EXPECT_FALSE(group.txn_logs(1).op_write().has_txn_meta());
+    }
+}
+
+TEST_F(LakeTabletManagerTest, txn_log_inspection_preserves_legacy_plain_and_header_formats) {
+    TxnLogPB single;
+    single.set_tablet_id(next_id());
+    single.set_txn_id(next_id());
+    single.mutable_op_write()->mutable_rowset()->add_deprecated_segments("legacy.dat");
+    CombinedTxnLogPB combined;
+    combined.add_txn_logs()->CopyFrom(single);
+    combined.add_txn_logs()->CopyFrom(single);
+    const auto path = _tablet_manager->txn_vlog_location(single.tablet_id(), 2);
+    for (auto mode : {lake::TxnLogInspectionMode::SINGLE, lake::TxnLogInspectionMode::COMBINED}) {
+        const google::protobuf::Message& expected = mode == lake::TxnLogInspectionMode::SINGLE
+                                                            ? static_cast<const google::protobuf::Message&>(single)
+                                                            : static_cast<const google::protobuf::Message&>(combined);
+        for (bool checksum : {false, true}) {
+            if (checksum) {
+                ASSERT_OK(ProtobufFileWithHeader(path, LAKE_META_HEADER_MAGIC_NUMBER).save(expected));
+            } else {
+                ASSERT_OK(ProtobufFile(path).save(expected));
+            }
+            ASSIGN_OR_ABORT(auto file, FileSystem::Default()->new_random_access_file(path));
+            ASSIGN_OR_ABORT(auto content, file->read_all());
+            ASSIGN_OR_ABORT(auto message, lake::decode_txn_log_for_inspection(content, mode));
+            EXPECT_EQ(expected.GetDescriptor(), message->GetDescriptor());
+            // Inspection retains deprecated fields, unlike the publishing reader's normalization.
+            EXPECT_EQ(expected.SerializeAsString(), message->SerializeAsString());
+        }
+    }
+}
+
+TEST_F(LakeTabletManagerTest, txn_log_inspection_rejects_corrupt_and_truncated_headers) {
+    TxnLogPB single;
+    single.set_tablet_id(next_id());
+    single.set_txn_id(next_id());
+    CombinedTxnLogPB combined;
+    combined.add_txn_logs()->CopyFrom(single);
+    combined.add_txn_logs()->CopyFrom(single);
+    const auto path = _tablet_manager->txn_vlog_location(single.tablet_id(), 2);
+    for (auto mode : {lake::TxnLogInspectionMode::SINGLE, lake::TxnLogInspectionMode::COMBINED}) {
+        for (bool grouped : {false, true}) {
+            const google::protobuf::Message& input = grouped || mode == lake::TxnLogInspectionMode::COMBINED
+                                                             ? static_cast<const google::protobuf::Message&>(combined)
+                                                             : static_cast<const google::protobuf::Message&>(single);
+            ASSERT_OK(ProtobufFileWithHeader(path, grouped ? lake::kTxnVlogGroupMagic : LAKE_META_HEADER_MAGIC_NUMBER)
+                              .save(input));
+            ASSIGN_OR_ABORT(auto file, FileSystem::Default()->new_random_access_file(path));
+            ASSIGN_OR_ABORT(auto content, file->read_all());
+            ASSERT_FALSE(content.empty());
+            auto damaged = content;
+            damaged.back() ^= 1;
+            auto corrupt = lake::decode_txn_log_for_inspection(damaged, mode);
+            ASSERT_TRUE(corrupt.status().is_corruption()) << corrupt.status();
+            EXPECT_THAT(corrupt.status().to_string(), ::testing::HasSubstr("checksum"));
+            content.pop_back();
+            EXPECT_TRUE(lake::decode_txn_log_for_inspection(content, mode).status().is_corruption());
+            EXPECT_TRUE(lake::decode_txn_log_for_inspection(std::string_view{}, mode).status().is_corruption());
+        }
+    }
+}
+
+TEST_F(LakeTabletManagerTest, txn_vlog_group_rereads_after_corrupted_cache_drop) {
+    lake::ConfigResetGuard<bool> clear_cache_guard(&config::lake_clear_corrupted_cache_meta, true);
+    auto log = std::make_shared<TxnLog>();
+    log->set_tablet_id(next_id());
+    log->set_txn_id(next_id());
+    log->mutable_op_write()->mutable_rowset()->set_num_rows(1);
+    ASSERT_OK(_tablet_manager->put_txn_vlog_group({log, log}, 2));
+    const auto path = _tablet_manager->txn_vlog_group_location(log->tablet_id(), 2);
+    auto fs = FileSystem::Default();
+    ASSIGN_OR_ABORT(auto file, fs->new_random_access_file(path));
+    ASSIGN_OR_ABORT(auto intact, file->read_all());
+    auto damaged = intact;
+    ASSERT_FALSE(damaged.empty());
+    damaged.back() ^= 1;
+    auto overwrite = [&](const std::string& content) -> Status {
+        WritableFileOptions opts{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_RETURN(auto writer, fs->new_writable_file(opts, path));
+        RETURN_IF_ERROR(writer->append(content));
+        return writer->close();
+    };
+    bool restore_on_drop = false;
+    int cache_drops = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_txn_log_handler");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_txn_log_handler", [&](void* arg) {
+        ++cache_drops;
+        // The local filesystem has no cache. Restoring the intact object stands in for a cache
+        // drop exposing the healthy remote copy; leaving it damaged tests the bounded retry.
+        *static_cast<Status*>(arg) = restore_on_drop ? overwrite(intact) : Status::OK();
+    });
+    for (bool restore : {false, true}) {
+        restore_on_drop = restore;
+        cache_drops = 0;
+        ASSERT_OK(overwrite(damaged));
+        auto result = _tablet_manager->get_txn_vlog_group(path, false);
+        EXPECT_EQ(1, cache_drops);
+        if (restore) {
+            ASSERT_OK(result.status());
+            ASSERT_EQ(2, result->size());
+            EXPECT_EQ(log->txn_id(), result->front()->txn_id());
+        } else {
+            EXPECT_TRUE(result.status().is_corruption()) << result.status();
+        }
+    }
+}
+
+// Bytes that pass their checksum and still fail validation are wrong as written: report them without dropping
+// the cached copy and reading the same bytes again. A headerless legacy log has no checksum, so its validation
+// failure may still be a damaged cached copy and keeps going through the corruption handler.
+TEST_F(LakeTabletManagerTest, txn_vlog_group_validation_failure_skips_cache_recovery) {
+    lake::ConfigResetGuard<bool> clear_cache_guard(&config::lake_clear_corrupted_cache_meta, true);
+    int cache_drops = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_txn_log_handler");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_txn_log_handler", [&](void* arg) {
+        ++cache_drops;
+        *static_cast<Status*>(arg) = Status::OK();
+    });
+
+    TxnLogPB statement;
+    statement.set_tablet_id(next_id());
+    statement.set_txn_id(next_id());
+    statement.mutable_op_write()->mutable_rowset()->set_num_rows(1);
+    CombinedTxnLogPB mismatched;
+    mismatched.add_txn_logs()->CopyFrom(statement);
+    mismatched.add_txn_logs()->CopyFrom(statement);
+    mismatched.mutable_txn_logs(1)->set_txn_id(statement.txn_id() + 1);
+    const auto group_path = _tablet_manager->txn_vlog_group_location(statement.tablet_id(), 2);
+    ASSERT_OK(ProtobufFileWithHeader(group_path, lake::kTxnVlogGroupMagic).save(mismatched));
+    auto group = _tablet_manager->get_txn_vlog_group(group_path, false);
+    EXPECT_TRUE(group.status().is_corruption()) << group.status();
+    EXPECT_EQ(0, cache_drops);
+
+    TxnLogPB without_ids;
+    without_ids.mutable_op_write()->mutable_rowset()->set_num_rows(1);
+    const auto legacy_path = _tablet_manager->txn_vlog_location(statement.tablet_id(), 2);
+    ASSERT_OK(ProtobufFile(legacy_path).save(without_ids));
+    auto legacy = _tablet_manager->get_txn_vlog_group(legacy_path, false);
+    EXPECT_TRUE(legacy.status().is_corruption()) << legacy.status();
+    EXPECT_EQ(1, cache_drops);
+}
+
+// A version log is the legacy file when there is one. publish_log_version never adds a group next to it, but
+// should two writers still race, every reader takes the same file.
+TEST_F(LakeTabletManagerTest, txn_vlog_group_read_prefers_the_legacy_file) {
+    const int64_t tablet_id = next_id();
+    auto first = std::make_shared<TxnLog>();
+    first->set_tablet_id(tablet_id);
+    first->set_txn_id(next_id());
+    first->mutable_load_id()->set_hi(1);
+    first->mutable_load_id()->set_lo(0);
+    first->mutable_op_write()->mutable_rowset()->set_num_rows(1);
+    auto second = std::make_shared<TxnLog>(*first);
+    second->mutable_load_id()->set_hi(2);
+    auto merged = std::make_shared<TxnLog>(*first);
+    merged->clear_load_id();
+    merged->mutable_op_write()->mutable_rowset()->set_num_rows(2);
+
+    ASSERT_OK(_tablet_manager->put_txn_vlog_group({first, second}, 2));
+    EXPECT_TRUE(fs::path_exist(_tablet_manager->txn_vlog_group_location(tablet_id, 2)));
+    ASSERT_OK(_tablet_manager->put_txn_vlog(merged, 2));
+    _tablet_manager->metacache()->prune();
+    std::string read_path;
+    ASSIGN_OR_ABORT(auto logs, _tablet_manager->get_txn_vlog_group(tablet_id, 2, &read_path));
+    EXPECT_EQ(_tablet_manager->txn_vlog_location(tablet_id, 2), read_path);
+    ASSERT_EQ(1, logs.size());
+    EXPECT_EQ(2, logs[0]->op_write().rowset().num_rows());
+
+    // A damaged legacy file gives way to the group next to it.
+    {
+        WritableFileOptions opts{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_ABORT(auto writer, FileSystem::Default()->new_writable_file(
+                                             opts, _tablet_manager->txn_vlog_location(tablet_id, 2)));
+        ASSERT_OK(writer->append("damaged"));
+        ASSERT_OK(writer->close());
+    }
+    _tablet_manager->metacache()->prune();
+    ASSIGN_OR_ABORT(logs, _tablet_manager->get_txn_vlog_group(tablet_id, 2, &read_path));
+    EXPECT_EQ(_tablet_manager->txn_vlog_group_location(tablet_id, 2), read_path);
+    ASSERT_EQ(2, logs.size());
+
+    // With neither file the read reports the legacy one, as it did before statement groups existed.
+    auto missing = _tablet_manager->get_txn_vlog_group(tablet_id, 3, &read_path);
+    EXPECT_TRUE(missing.status().is_not_found()) << missing.status();
+    EXPECT_EQ(_tablet_manager->txn_vlog_location(tablet_id, 3), read_path);
+    auto legacy_missing = _tablet_manager->get_txn_vlog(_tablet_manager->txn_vlog_location(tablet_id, 3), false);
+    EXPECT_EQ(legacy_missing.status().message(), missing.status().message());
 }
 
 // NOLINTNEXTLINE
