@@ -1,0 +1,7 @@
+-- name: test_refresh_external_table_name_parts
+-- A table name has at most three parts: catalog.db.table. Longer names must be rejected
+-- by the parser instead of silently dropping the middle parts.
+REFRESH EXTERNAL TABLE default_catalog.not_exist_db1.not_exist_db2.not_exist_tbl;
+REFRESH EXTERNAL TABLE not_exist_catalog.not_exist_db1.not_exist_db2.not_exist_tbl;
+REFRESH EXTERNAL TABLE a.b.c.d.e;
+REFRESH EXTERNAL TABLE not_exist_catalog.not_exist_db1.not_exist_db2.not_exist_tbl PARTITION("p1", "p2");
