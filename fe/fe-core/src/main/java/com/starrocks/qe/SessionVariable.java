@@ -655,6 +655,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_REWRITE_MONOTONIC_MINMAX = "cbo_rewrite_monotonic_minmax_aggregation";
 
     public static final String CBO_ENABLE_PARALLEL_PREPARE_METADATA = "enable_parallel_prepare_metadata";
+    public static final String CBO_ENABLE_PARALLEL_PREFETCH_MV_BASE_TABLE_METADATA =
+            "enable_parallel_prefetch_mv_base_table_metadata";
 
     public static final String SKEW_JOIN_RAND_RANGE = "skew_join_rand_range";
     public static final String ENABLE_STATS_TO_OPTIMIZE_SKEW_JOIN = "enable_stats_to_optimize_skew_join";
@@ -3499,6 +3501,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_ENABLE_PARALLEL_PREPARE_METADATA)
     private boolean enableParallelPrepareMetadata = false;
 
+    // Prefetch external base table metadata of related mvs in parallel before mv rewrite validity checks.
+    @VarAttr(name = CBO_ENABLE_PARALLEL_PREFETCH_MV_BASE_TABLE_METADATA)
+    private boolean enableParallelPrefetchMvBaseTableMetadata = false;
+
     // The percentage of rows that need to be contained in MCVs so that MCV propagation through operators is enabled
     // while losing bucket information. Lowering this threshold can lead to worse plans.
     @VarAttr(name = MCV_ROW_PERCENTAGE_PROPAGATION_THRESHOLD, flag = VariableMgr.INVISIBLE)
@@ -3544,6 +3550,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableParallelPrepareMetadata(boolean enableParallelPrepareMetadata) {
         this.enableParallelPrepareMetadata = enableParallelPrepareMetadata;
+    }
+
+    public boolean enableParallelPrefetchMvBaseTableMetadata() {
+        return enableParallelPrefetchMvBaseTableMetadata;
+    }
+
+    public void setEnableParallelPrefetchMvBaseTableMetadata(boolean enableParallelPrefetchMvBaseTableMetadata) {
+        this.enableParallelPrefetchMvBaseTableMetadata = enableParallelPrefetchMvBaseTableMetadata;
     }
 
     public void setAnnParams(String annParams) {

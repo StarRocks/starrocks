@@ -788,6 +788,8 @@ public class MvRewritePreprocessor {
         // choose all valid mvs and filter mvs that cannot be rewritten for the query
         int maxRelatedMVsLimit = connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
         long timeoutMs = getPrepareTimeoutMsPerMV(connectContext, Math.min(relatedMVs.size(), maxRelatedMVsLimit));
+        // warm the query-level metadata cache for the base tables the validity check below resolves one by one
+        prefetchBaseTablesForExtraTablesCheck(queryTables, relatedMVs);
         // to make unit test more stable, force build mv plan in unit test
         // NOTE: validating an mv may resolve all of its base tables, which can be remote metadata calls for
         // external catalogs, so the shared preprocess deadline is checked before each mv.
@@ -808,6 +810,48 @@ public class MvRewritePreprocessor {
 
         // choose max config related mvs for mv rewrite to avoid too much optimize time
         return chooseBestRelatedMVsByCorrelations(queryTables, validMVs, queryOptExpression, maxRelatedMVsLimit);
+    }
+
+    @VisibleForTesting
+    public void prefetchBaseTablesForExtraTablesCheck(Set<Table> queryTables,
+                                                      List<MaterializedViewWrapper> relatedMVs) {
+        if (CollectionUtils.isEmpty(queryTables) || CollectionUtils.isEmpty(relatedMVs) ||
+                !connectContext.getSessionVariable().enableParallelPrefetchMvBaseTableMetadata()) {
+            return;
+        }
+        Set<BaseTableInfo> baseTableInfos = Sets.newLinkedHashSet();
+        for (MaterializedViewWrapper wrapper : relatedMVs) {
+            MaterializedView mv = wrapper.getMV();
+            // mirror the early returns of isMVValidToRewriteQuery / canMVRewriteIfMVHasExtraTables
+            if (!mv.isActive() || mv.getRefreshMode().isIncrementalOrAuto() || !mv.isEnableRewrite() ||
+                    mv.hasForeignKeyConstraints() || isCachedPlanInvalid(mv)) {
+                continue;
+            }
+            for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
+                if (baseTableInfo.isInternalCatalog() || queryTables.stream().anyMatch(baseTableInfo::matchTable)) {
+                    continue;
+                }
+                baseTableInfos.add(baseTableInfo);
+            }
+        }
+        // the validity check below skips all mvs once the preprocess deadline is expired, so there is
+        // nothing to warm; otherwise only wait for the prefetch as long as the remaining budget allows
+        if (baseTableInfos.isEmpty() || preprocessDeadline.isExpired()) {
+            return;
+        }
+        try (Timer ignored = Tracers.watchScope("MVPrefetchBaseTables")) {
+            MvBaseTableMetadataPrefetcher.prefetchBaseTables(baseTableInfos, connectContext,
+                    preprocessDeadline.remainingMs());
+        } catch (Exception e) {
+            // prefetch is best effort: the validity check resolves the tables again on a miss
+            LOG.warn("Prefetch mv base tables failed, base tables will be resolved sequentially", e);
+        }
+    }
+
+    private static boolean isCachedPlanInvalid(MaterializedView mv) {
+        List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContextIfLoaded(mv);
+        return CollectionUtils.isNotEmpty(planContexts) &&
+                planContexts.stream().noneMatch(MvPlanContext::isValidMvPlan);
     }
 
     @VisibleForTesting

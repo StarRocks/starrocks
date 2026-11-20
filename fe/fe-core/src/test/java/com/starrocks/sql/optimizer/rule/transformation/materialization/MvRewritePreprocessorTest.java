@@ -29,6 +29,7 @@ import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
@@ -37,6 +38,7 @@ import com.starrocks.sql.common.PCellNone;
 import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MaterializationContext;
+import com.starrocks.sql.optimizer.MvBaseTableMetadataPrefetcher;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -79,6 +81,7 @@ import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -1896,6 +1899,101 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                     System.out.println(cacheStats2);
                     Assertions.assertFalse(Strings.isNullOrEmpty(cacheStats2));
                 });
+    }
+
+    @Test
+    public void testPrefetchBaseTablesForExtraTablesCheck() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view prefetch_valid_mv distributed by random " +
+                "as select k1, count(v1) as cnt from t1 group by k1");
+        starRocksAssert.withMaterializedView("create materialized view prefetch_invalid_mv distributed by random " +
+                "as select count(distinct cnt) from (select count(v1) as cnt from t1 group by k1) t");
+        try {
+            MaterializedView validMv = getMv(DB_NAME, "prefetch_valid_mv");
+            MaterializedView invalidMv = getMv(DB_NAME, "prefetch_invalid_mv");
+            long timeoutMs = connectContext.getSessionVariable().getOptimizerExecuteTimeout();
+            // load both plans before faking base tables below, so the plan builds see the real definitions
+            CachingMvPlanContextBuilder builder = CachingMvPlanContextBuilder.getInstance();
+            Assertions.assertTrue(builder.getOrLoadPlanContext(validMv, timeoutMs).stream()
+                    .anyMatch(MvPlanContext::isValidMvPlan));
+            Assertions.assertTrue(builder.getOrLoadPlanContext(invalidMv, timeoutMs).stream()
+                    .noneMatch(MvPlanContext::isValidMvPlan));
+
+            BaseTableInfo externalView = new BaseTableInfo("ext_catalog", "ext_db", "v1", "v1-id");
+            BaseTableInfo externalTable = new BaseTableInfo("ext_catalog", "ext_db", "t9", "t9-id");
+            BaseTableInfo invalidMvOnlyTable = new BaseTableInfo("ext_catalog", "ext_db", "only_invalid", "oi-id");
+            long validMvId = validMv.getId();
+            long invalidMvId = invalidMv.getId();
+
+            Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor("select * from t1");
+            MvRewritePreprocessor preprocessor = result.first;
+            Set<Table> queryTables = MvUtils.getAllTables(result.second).stream().collect(Collectors.toSet());
+            List<MaterializedViewWrapper> relatedMVs = List.of(MaterializedViewWrapper.create(validMv, 0),
+                    MaterializedViewWrapper.create(invalidMv, 0));
+
+            // pretend the mvs also depend on external objects, one of them referenced twice
+            new MockUp<MaterializedView>() {
+                @Mock
+                public List<BaseTableInfo> getBaseTableInfos(Invocation invocation) {
+                    List<BaseTableInfo> baseTableInfos = Lists.newArrayList((List<BaseTableInfo>) invocation.proceed());
+                    MaterializedView invoked = invocation.getInvokedInstance();
+                    if (invoked.getId() == validMvId) {
+                        baseTableInfos.add(externalView);
+                        baseTableInfos.add(externalTable);
+                        baseTableInfos.add(externalView);
+                    } else if (invoked.getId() == invalidMvId) {
+                        baseTableInfos.add(invalidMvOnlyTable);
+                    }
+                    return baseTableInfos;
+                }
+            };
+            List<Collection<BaseTableInfo>> prefetched = new CopyOnWriteArrayList<>();
+            List<Long> timeouts = new CopyOnWriteArrayList<>();
+            new MockUp<MvBaseTableMetadataPrefetcher>() {
+                @Mock
+                public void prefetchBaseTables(Collection<BaseTableInfo> baseTableInfos, ConnectContext session,
+                                               long timeoutMs) {
+                    prefetched.add(Lists.newArrayList(baseTableInfos));
+                    timeouts.add(timeoutMs);
+                }
+            };
+
+            boolean previous = connectContext.getSessionVariable().enableParallelPrefetchMvBaseTableMetadata();
+            try {
+                // disabled: nothing is prefetched
+                connectContext.getSessionVariable().setEnableParallelPrefetchMvBaseTableMetadata(false);
+                preprocessor.prefetchBaseTablesForExtraTablesCheck(queryTables, relatedMVs);
+                Assertions.assertTrue(prefetched.isEmpty());
+
+                connectContext.getSessionVariable().setEnableParallelPrefetchMvBaseTableMetadata(true);
+                // the extra-tables check is skipped when the query has no tables, so nothing to prefetch
+                preprocessor.prefetchBaseTablesForExtraTablesCheck(Set.of(), relatedMVs);
+                Assertions.assertTrue(prefetched.isEmpty());
+
+                // enabled: only the valid mv's external base tables, once each; internal t1 and the invalid
+                // mv's tables are not prefetched
+                preprocessor.prefetchBaseTablesForExtraTablesCheck(queryTables, relatedMVs);
+                Assertions.assertEquals(1, prefetched.size());
+                Assertions.assertEquals(List.of(externalView, externalTable), prefetched.get(0));
+                // no preprocess time limit: the prefetch is not timeboxed
+                Assertions.assertEquals(Long.MAX_VALUE, timeouts.get(0));
+
+                // with a preprocess time limit the prefetch waits at most for the remaining budget
+                preprocessor.setPreprocessDeadline(MvRewritePreprocessor.PreprocessDeadline.start(60_000));
+                preprocessor.prefetchBaseTablesForExtraTablesCheck(queryTables, relatedMVs);
+                Assertions.assertEquals(2, prefetched.size());
+                Assertions.assertTrue(timeouts.get(1) > 0 && timeouts.get(1) <= 60_000);
+
+                // an expired deadline skips the validity checks, so nothing is prefetched
+                preprocessor.setPreprocessDeadline(MvRewritePreprocessor.PreprocessDeadline.start(0));
+                preprocessor.prefetchBaseTablesForExtraTablesCheck(queryTables, relatedMVs);
+                Assertions.assertEquals(2, prefetched.size());
+            } finally {
+                connectContext.getSessionVariable().setEnableParallelPrefetchMvBaseTableMetadata(previous);
+            }
+        } finally {
+            starRocksAssert.dropMaterializedView("prefetch_valid_mv");
+            starRocksAssert.dropMaterializedView("prefetch_invalid_mv");
+        }
     }
 
     @Test
