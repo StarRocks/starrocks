@@ -26,11 +26,11 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Map;
 
-public class LogicalIcebergMetadataScanOperator extends LogicalScanOperator {
+public class LogicalMetadataScanOperator extends LogicalScanOperator {
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
     private boolean isTransformed;
 
-    public LogicalIcebergMetadataScanOperator(Table table,
+    public LogicalMetadataScanOperator(Table table,
                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                       Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                       long limit,
@@ -38,13 +38,13 @@ public class LogicalIcebergMetadataScanOperator extends LogicalScanOperator {
         this(table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate, TvrTableSnapshot.empty());
     }
 
-    public LogicalIcebergMetadataScanOperator(Table table,
+    public LogicalMetadataScanOperator(Table table,
                                               Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                               Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                               long limit,
                                               ScalarOperator predicate,
                                               TvrVersionRange versionRange) {
-        super(OperatorType.LOGICAL_ICEBERG_METADATA_SCAN,
+        super(OperatorType.LOGICAL_METADATA_SCAN,
                 table,
                 colRefToColumnMetaMap,
                 columnMetaToColRefMap,
@@ -55,8 +55,8 @@ public class LogicalIcebergMetadataScanOperator extends LogicalScanOperator {
 
     }
 
-    private LogicalIcebergMetadataScanOperator() {
-        super(OperatorType.LOGICAL_ICEBERG_METADATA_SCAN);
+    private LogicalMetadataScanOperator() {
+        super(OperatorType.LOGICAL_METADATA_SCAN);
     }
 
     public ScanOperatorPredicates getScanOperatorPredicates() {
@@ -77,19 +77,19 @@ public class LogicalIcebergMetadataScanOperator extends LogicalScanOperator {
 
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitLogicalIcebergMetadataScan(this, context);
+        return visitor.visitLogicalMetadataScan(this, context);
     }
 
     public static class Builder
-            extends LogicalScanOperator.Builder<LogicalIcebergMetadataScanOperator, LogicalIcebergMetadataScanOperator.Builder> {
+            extends LogicalScanOperator.Builder<LogicalMetadataScanOperator, LogicalMetadataScanOperator.Builder> {
 
         @Override
-        protected LogicalIcebergMetadataScanOperator newInstance() {
-            return new LogicalIcebergMetadataScanOperator();
+        protected LogicalMetadataScanOperator newInstance() {
+            return new LogicalMetadataScanOperator();
         }
 
         @Override
-        public LogicalIcebergMetadataScanOperator.Builder withOperator(LogicalIcebergMetadataScanOperator scanOperator) {
+        public LogicalMetadataScanOperator.Builder withOperator(LogicalMetadataScanOperator scanOperator) {
             super.withOperator(scanOperator);
             builder.predicates = scanOperator.predicates;
             builder.isTransformed = scanOperator.isTransformed;

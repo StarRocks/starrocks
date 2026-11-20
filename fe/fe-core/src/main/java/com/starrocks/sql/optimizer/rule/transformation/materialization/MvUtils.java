@@ -37,7 +37,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.common.tvr.TvrTableDelta;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.RangeUtils;
@@ -243,15 +243,17 @@ public class MvUtils {
      * <p>
      * A query period reaches the plan in one of two shapes, the same two that
      * {@link com.starrocks.sql.analyzer.AnalyzerUtils#prohibitTimeTravelQuery} has to handle on the
-     * definition side: connectors that resolve the version themselves carry a delta range on the scan,
+     * definition side: connectors that resolve the version themselves carry a non-snapshot range on the scan,
      * while a MySQL temporal read keeps the clause verbatim on the operator and leaves its range at the
      * default. An ordinary read carries a {@link com.starrocks.common.tvr.TvrTableSnapshot} of the
-     * table's current version, so only a query period produces a delta range on a freshly transformed plan.
+     * table's current version. Connector-specific version ranges may also carry a branch identity,
+     * which must not become eligible for main-state MV rewrites.
      */
     public static boolean containsTimeTravelScan(OptExpression root) {
         if (root.getOp() instanceof LogicalScanOperator) {
             LogicalScanOperator scanOperator = (LogicalScanOperator) root.getOp();
-            if (scanOperator.getTvrVersionRange() instanceof TvrTableDelta) {
+            if (scanOperator.getTvrVersionRange() != null
+                    && !(scanOperator.getTvrVersionRange() instanceof TvrTableSnapshot)) {
                 return true;
             }
             return scanOperator instanceof LogicalMysqlScanOperator

@@ -28,6 +28,7 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.paimon.PaimonReaderSelector;
 import com.starrocks.connector.paimon.PaimonReaderSelector.Reader;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
+import com.starrocks.connector.paimon.PaimonScanRangeParams;
 import com.starrocks.connector.paimon.PaimonSplitUtils;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
 import com.starrocks.credential.CloudConfiguration;
@@ -79,7 +80,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 public class PaimonScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(PaimonScanNode.class);
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
-    private final PaimonTable paimonTable;
+    private PaimonTable paimonTable;
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
     private CloudConfiguration cloudConfiguration = null;
@@ -141,12 +142,13 @@ public class PaimonScanNode extends ScanNode {
     public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate, long limit) {
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
-        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
+        Map<Integer, String> columnNames = tupleDescriptor.getSlots().stream()
+                .collect(Collectors.toMap(slot -> slot.getId().asInt(), slot -> slot.getColumn().getName()));
+        GetRemoteFilesParams params = new PaimonScanRangeParams(GetRemoteFilesParams.newBuilder()
                 .setPredicate(predicate)
                 .setFieldNames(fieldNames)
                 .setTableVersionRange(tvrVersionRange)
-                .setLimit(limit)
-                .build();
+                .setLimit(limit), columnNames);
         List<RemoteFileInfo> fileInfos;
         try (Timer ignored = Tracers.watchScope(EXTERNAL, paimonTable.getCatalogTableName() + ".getPaimonRemoteFileInfos")) {
             fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(paimonTable, params);
@@ -154,6 +156,14 @@ public class PaimonScanNode extends ScanNode {
 
         PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
         PaimonSplitsInfo splitsInfo = remoteFileDesc.getPaimonSplitsInfo();
+        if (splitsInfo.getNativeTable() != null) {
+            // Use the same branch/schema/options for reader selection and BE serialization.
+            // Each scan needs its own table id: descriptor tables deduplicate by id, while
+            // aliases of one catalog table may read different branches or snapshots.
+            paimonTable = new PaimonTable(paimonTable.getCatalogName(), paimonTable.getCatalogDBName(),
+                    paimonTable.getCatalogTableName(), paimonTable.getFullSchema(), splitsInfo.getNativeTable());
+            tupleDescriptor.setTable(paimonTable);
+        }
         String predicateInfo = encodeObjectToString(splitsInfo.getPredicate());
         List<Split> splits = splitsInfo.getPaimonSplits();
         computeScanMetrics(splits);

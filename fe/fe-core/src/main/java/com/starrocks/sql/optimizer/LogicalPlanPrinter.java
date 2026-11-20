@@ -497,7 +497,7 @@ public class LogicalPlanPrinter {
         }
 
         @Override
-        public OperatorStr visitPhysicalIcebergMetadataScan(OptExpression optExpression, Integer step) {
+        public OperatorStr visitPhysicalMetadataScan(OptExpression optExpression, Integer step) {
             return visitScanCommon(optExpression, step, "ICEBERG METADATA SCAN");
         }
 
