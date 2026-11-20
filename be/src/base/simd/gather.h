@@ -69,26 +69,28 @@ struct SIMDGather {
     static void gather(TB* b, const int16_t* a, const TC* c, size_t buckets, int num_rows) {
         int i = 0;
 #ifdef __AVX2__
-        if (buckets < max_process_size) {
-            // gather will collect data of size sizeof(int32)
-            // we only need the lower 16 bits
-            // eg:
-            // a = [0x12 0x34 0x56 0x78 0x9a 0x...]
-            // gather (a, [0,1,2,3], 2) will be:
-            // [0x12 0x32 0x56 0x78] [0x56 0x78 0x9a..0.] [....]
-            // use will use mask to get lower 16 bits
-            // [0x12 0x32 0x00 0x00] [0x56 0x78 0x00 0x00] [....]
-            __m256i mask = _mm256_set1_epi32(0xFFFF);
+        if (buckets > 0 && buckets < max_process_size && num_rows >= 8) {
+            // _mm256_i32gather_epi32 loads 4 bytes starting at a + c[k]. To avoid reading 2 bytes past
+            // a + buckets when c[k] == buckets - 1, pre-fill lanes with a[buckets - 1] and only gather
+            // lanes where c[k] < buckets - 1, then arithmetic sign-extend the lower 16 bits of each
+            // 32-bit lane to match the scalar tail and non-AVX2 paths.
+            const int32_t last_bucket = static_cast<int32_t>(buckets - 1);
+            const __m256i last_idx = _mm256_set1_epi32(last_bucket);
+            const __m256i last_val = _mm256_set1_epi32(static_cast<int32_t>(a[last_bucket]));
             for (; i + 8 <= num_rows; i += 8) {
                 __m256i loaded = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(c));
-                __m256i gathered = _mm256_i32gather_epi32((int32_t*)a, loaded, 2);
-                gathered = _mm256_and_si256(gathered, mask);
-                _mm256_storeu_si256(reinterpret_cast<__m256i*>(b), gathered);
+                __m256i gather_mask = _mm256_cmpgt_epi32(last_idx, loaded);
+                __m256i gathered = _mm256_mask_i32gather_epi32(last_val, reinterpret_cast<const int32_t*>(a), loaded,
+                                                               gather_mask, 2);
+                __m256i extended = _mm256_srai_epi32(_mm256_slli_epi32(gathered, 16), 16);
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(b), extended);
                 c += 8;
                 b += 8;
             }
             _mm256_zeroupper();
         }
+#else
+        (void)buckets;
 #endif
         for (; i < num_rows; i++) {
             *b = a[*c];

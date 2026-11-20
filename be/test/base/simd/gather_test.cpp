@@ -15,6 +15,8 @@
 #include "base/simd/gather.h"
 
 #include <gtest/gtest.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -141,27 +143,51 @@ void check_filtered(size_t num_rows, FilterPattern pattern = FilterPattern::Modu
 
 template <typename TB, typename TC>
 void check_int16_buckets(size_t buckets, size_t num_rows) {
-    // One padding element: the AVX2 path loads 4 bytes per int16 slot, so the last slot is over-read by 2 bytes.
-    // Values stay non-negative (dictionary codes): the AVX2 path zero-extends while the scalar tail sign-extends.
-    constexpr size_t kSlots = 1000;
-    std::vector<int16_t> a(kSlots + 1, 0);
-    for (size_t i = 0; i < kSlots; ++i) {
-        a[i] = static_cast<int16_t>((i * 131) % 32768);
+    const size_t kBuckets = (buckets > 0 && buckets < SIMDGather::max_process_size) ? buckets : 1000;
+    // Exact kBuckets allocation without trailing padding so any 2-byte over-read on index == kBuckets - 1 is caught.
+    std::vector<int16_t> source(kBuckets);
+    for (size_t i = 0; i < kBuckets; ++i) {
+        // Mix positive and negative int16_t values across the full int16_t range.
+        source[i] = static_cast<int16_t>(static_cast<int32_t>((i * 131) % 65536) - 32768);
     }
+    source[0] = -1;
+    if (kBuckets > 1) source[1] = -32768;
+    if (kBuckets > 2) source[2] = -12345;
+    if (kBuckets > 3) source[3] = 32767;
+    source[kBuckets - 1] = -12345;
+
     std::mt19937 rng(4242 + num_rows);
-    std::uniform_int_distribution<uint32_t> dist(0, kSlots - 1);
+    std::uniform_int_distribution<uint32_t> dist(0, kBuckets - 1);
     std::vector<TC> c(num_rows);
     for (auto& v : c) {
         v = static_cast<TC>(dist(rng));
     }
-    std::vector<TB> b(num_rows + kGuard, static_cast<TB>(-1));
-    SIMDGather::gather(b.data(), a.data(), c.data(), buckets, static_cast<int>(num_rows));
+    // Deterministically exercise negative values and the last bucket (kBuckets - 1) in both the AVX2 body and scalar tail.
+    const TC special_indices[] = {
+            static_cast<TC>(0),
+            static_cast<TC>(std::min<size_t>(1, kBuckets - 1)),
+            static_cast<TC>(std::min<size_t>(2, kBuckets - 1)),
+            static_cast<TC>(kBuckets - 1),
+    };
+    for (size_t i = 0; i < std::min<size_t>(num_rows, 4); ++i) {
+        c[i] = special_indices[i];
+    }
+    if (num_rows >= 8) {
+        for (size_t i = 0; i < 4 && (num_rows - 1 - i) >= 4; ++i) {
+            c[num_rows - 1 - i] = special_indices[i];
+        }
+    }
+
+    constexpr TB kSentinel = static_cast<TB>(0x5A5A5A5Au);
+    std::vector<TB> b(num_rows + kGuard, kSentinel);
+    SIMDGather::gather(b.data(), source.data(), c.data(), buckets, static_cast<int>(num_rows));
 
     for (size_t i = 0; i < num_rows; ++i) {
-        ASSERT_EQ(static_cast<TB>(a[c[i]]), b[i]) << "buckets=" << buckets << " num_rows=" << num_rows << " i=" << i;
+        ASSERT_EQ(static_cast<TB>(source[c[i]]), b[i])
+                << "buckets=" << buckets << " num_rows=" << num_rows << " i=" << i;
     }
     for (size_t i = num_rows; i < b.size(); ++i) {
-        ASSERT_EQ(static_cast<TB>(-1), b[i]) << "write past the end";
+        ASSERT_EQ(kSentinel, b[i]) << "write past the end";
     }
 }
 
@@ -218,6 +244,108 @@ PARALLEL_TEST(GatherTest, int16_buckets) {
             check_int16_buckets<uint32_t, int32_t>(buckets, n);
             check_int16_buckets<int32_t, uint32_t>(buckets, n);
             check_int16_buckets<int32_t, int32_t>(buckets, n);
+        }
+    }
+}
+
+PARALLEL_TEST(GatherTest, Int16SourceOverload) {
+    // Hardware guard-page check: place `source` of exact size `kBuckets` at the end of a mapped page immediately
+    // before a PROT_NONE page so any 2-byte over-read on `index == kBuckets - 1` faults even when ASan does not
+    // instrument the AVX2 vpgatherdd instruction.
+    const long page_size = sysconf(_SC_PAGESIZE);
+    if (page_size > 0) {
+        constexpr size_t kBuckets = 64;
+        const size_t map_len = static_cast<size_t>(page_size) * 2;
+        void* mapping = mmap(nullptr, map_len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        ASSERT_NE(MAP_FAILED, mapping);
+        auto* page0 = static_cast<uint8_t*>(mapping);
+        auto* page1 = page0 + page_size;
+        ASSERT_EQ(0, mprotect(page1, static_cast<size_t>(page_size), PROT_NONE));
+
+        auto* guarded_source = reinterpret_cast<int16_t*>(page1) - kBuckets;
+        for (size_t i = 0; i < kBuckets; ++i) {
+            guarded_source[i] = static_cast<int16_t>(-32768 + static_cast<int32_t>(i * 511));
+        }
+        guarded_source[0] = -1;
+        guarded_source[1] = -32768;
+        guarded_source[2] = -12345;
+        guarded_source[kBuckets - 1] = -12345;
+
+        constexpr size_t kRows = 29; // 24 rows in AVX2 body + 5 rows in scalar tail
+        std::vector<int32_t> indexes(kRows);
+        for (size_t i = 0; i < kRows; ++i) {
+            indexes[i] = static_cast<int32_t>((i % 2 == 0) ? (kBuckets - 1) : (i % kBuckets));
+        }
+        std::vector<int32_t> out_avx2(kRows, 0);
+        std::vector<int32_t> out_scalar(kRows, 0);
+        SIMDGather::gather(out_avx2.data(), guarded_source, indexes.data(), kBuckets, static_cast<int>(kRows));
+        SIMDGather::gather(out_scalar.data(), guarded_source, indexes.data(), SIMDGather::max_process_size,
+                           static_cast<int>(kRows));
+
+        for (size_t i = 0; i < kRows; ++i) {
+            ASSERT_EQ(static_cast<int32_t>(guarded_source[indexes[i]]), out_avx2[i]) << "i=" << i;
+            ASSERT_EQ(out_scalar[i], out_avx2[i]) << "i=" << i;
+        }
+
+        ASSERT_EQ(0, munmap(mapping, map_len));
+    }
+
+    for (size_t buckets : {size_t(1), size_t(64), size_t(1000), size_t(SIMDGather::max_process_size)}) {
+        for (size_t n : {size_t(0), size_t(1), size_t(7), size_t(8), size_t(9), size_t(15), size_t(16), size_t(17),
+                         size_t(31), size_t(32), size_t(33), size_t(100)}) {
+            check_int16_buckets<uint32_t, uint32_t>(buckets, n);
+            check_int16_buckets<uint32_t, int32_t>(buckets, n);
+            check_int16_buckets<int32_t, uint32_t>(buckets, n);
+            check_int16_buckets<int32_t, int32_t>(buckets, n);
+        }
+    }
+
+    // GlobalDictCodeColumnIterator convention: `_local_to_global` points to `map.data() + 1` so index -1 is valid
+    // for NULL dictionary codes while `buckets` is `map.size() - 1`.
+    {
+        constexpr size_t kBuckets = 16;
+        std::vector<int16_t> backing(kBuckets + 1);
+        backing[0] = -1; // _local_to_global[-1]
+        int16_t* local_to_global = backing.data() + 1;
+        for (size_t i = 0; i < kBuckets; ++i) {
+            local_to_global[i] = static_cast<int16_t>(-1000 + static_cast<int32_t>(i * 123));
+        }
+        local_to_global[kBuckets - 1] = -32768;
+
+        constexpr size_t kRows = 19;
+        std::vector<int32_t> codes(kRows);
+        for (size_t i = 0; i < kRows; ++i) {
+            if (i % 3 == 0) {
+                codes[i] = -1;
+            } else if (i % 3 == 1) {
+                codes[i] = static_cast<int32_t>(kBuckets - 1);
+            } else {
+                codes[i] = static_cast<int32_t>(i % kBuckets);
+            }
+        }
+        std::vector<int32_t> out(kRows, 0);
+        SIMDGather::gather(out.data(), local_to_global, codes.data(), kBuckets, static_cast<int>(kRows));
+        for (size_t i = 0; i < kRows; ++i) {
+            ASSERT_EQ(static_cast<int32_t>(local_to_global[codes[i]]), out[i]) << "i=" << i;
+        }
+    }
+
+    // Single-bucket edge case (kBuckets == 1, 2-byte source buffer) with negative int16_t values.
+    for (int16_t val : {int16_t(-1), int16_t(-32768), int16_t(-12345), int16_t(0), int16_t(32767)}) {
+        std::vector<int16_t> single_source(1, val);
+        for (size_t n : {size_t(0), size_t(1), size_t(7), size_t(8), size_t(9), size_t(15), size_t(16), size_t(19)}) {
+            std::vector<uint32_t> idx_u32(n, 0);
+            std::vector<int32_t> idx_i32(n, 0);
+            std::vector<int32_t> dst_i32(n, 0x5A5A5A5A);
+            std::vector<uint32_t> dst_u32(n, 0x5A5A5A5Au);
+
+            SIMDGather::gather(dst_i32.data(), single_source.data(), idx_i32.data(), 1, static_cast<int>(n));
+            SIMDGather::gather(dst_u32.data(), single_source.data(), idx_u32.data(), 1, static_cast<int>(n));
+
+            for (size_t i = 0; i < n; ++i) {
+                ASSERT_EQ(static_cast<int32_t>(val), dst_i32[i]) << "val=" << val << " n=" << n << " i=" << i;
+                ASSERT_EQ(static_cast<uint32_t>(val), dst_u32[i]) << "val=" << val << " n=" << n << " i=" << i;
+            }
         }
     }
 }
