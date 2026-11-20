@@ -1427,7 +1427,8 @@ static void run_date_or_datetime_case_when_test() {
         // Mode 2: nullable THEN0 with has_null() == true (exercises nullable fallback path)
         // Mode 3: non-canonical boolean WHEN bytes (0x80 and 0xff in raw BooleanColumn buffer via MockExpr)
         // Mode 4: ConstColumn WHEN on last branch (verifies SIMD path unpacks ConstColumn vs scalar fallback)
-        for (int mode : {0, 1, 2, 3, 4}) {
+        // Mode 5: NullableColumn WHEN with has_null() == false and non-canonical truthy bytes (0x02, 0x80, 0xff)
+        for (int mode : {0, 1, 2, 3, 4, 5}) {
             SCOPED_TRACE(mode);
             TExprNode node;
             node.opcode = TExprOpcode::ADD;
@@ -1445,6 +1446,7 @@ static void run_date_or_datetime_case_when_test() {
             expr->set_type(TypeDescriptor(LT));
 
             BooleanColumn::MutablePtr const_when_data;
+            const uint8_t non_canonical_truthy[3] = {0x02, 0x80, 0xff};
             for (int b = 0; b < arity; ++b) {
                 ColumnPtr when_col;
                 if (mode == 4 && b == arity - 1) {
@@ -1457,16 +1459,23 @@ static void run_date_or_datetime_case_when_test() {
                     when_bytes.resize(kNumRows);
                     for (size_t i = 0; i < kNumRows; ++i) {
                         const int winner = static_cast<int>(i % (arity + 1));
-                        const bool hit = (winner == b) || (mode == 3 && winner == b - 1);
+                        const bool hit = (winner == b) || ((mode == 3 || mode == 5) && winner == b - 1);
                         if (!hit) {
                             when_bytes[i] = 0;
                         } else if (mode == 3) {
                             when_bytes[i] = ((i + b) & 1) ? 0x80 : 0xff;
+                        } else if (mode == 5) {
+                            when_bytes[i] = non_canonical_truthy[(i + b) % 3];
                         } else {
                             when_bytes[i] = 1;
                         }
                     }
-                    when_col = std::move(raw_when);
+                    if (mode == 5) {
+                        auto null_map = NullColumn::create(kNumRows, 0);
+                        when_col = NullableColumn::create(std::move(raw_when), std::move(null_map));
+                    } else {
+                        when_col = std::move(raw_when);
+                    }
                 }
                 expr->add_child(pool.add(new MockExpr(TypeDescriptor(TYPE_BOOLEAN), std::move(when_col))));
 
