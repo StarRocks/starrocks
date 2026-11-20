@@ -24,6 +24,7 @@ import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshPinState;
 import com.starrocks.scheduler.mv.pct.PCTPartitionTopology;
 import com.starrocks.scheduler.mv.pct.PCTRefreshScope;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.plan.ExecPlan;
 
 import java.util.Map;
@@ -61,6 +62,7 @@ public class MvTaskRunContext extends TaskRunContext {
     }
 
     private PCTPartitionTopology partitionTopology;
+    private PCellSortedSet retentionRefusedMvCells = PCellSortedSet.of();
     private PCTRefreshScope refreshScope;
 
     private String nextPartitionStart = null;
@@ -109,6 +111,18 @@ public class MvTaskRunContext extends TaskRunContext {
 
     public void setPartitionTopology(PCTPartitionTopology partitionTopology) {
         this.partitionTopology = partitionTopology;
+    }
+
+    /**
+     * Mv cells the base tables imply but retention refuses to create, so a row landing in one has no mv
+     * partition to go to. Published by partition sync; empty when the mv has no retention.
+     */
+    public PCellSortedSet getRetentionRefusedMvCells() {
+        return retentionRefusedMvCells;
+    }
+
+    public void setRetentionRefusedMvCells(PCellSortedSet retentionRefusedMvCells) {
+        this.retentionRefusedMvCells = retentionRefusedMvCells;
     }
 
     public PCTRefreshScope getRefreshScope() {
