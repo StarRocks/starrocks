@@ -1620,7 +1620,10 @@ public class FunctionAnalyzer {
         if (fnName.equals(FunctionSet.COUNT) && isDistinct) {
             // Compatible with the logic of the original search function "count distinct"
             // TODO: fix how we equal count distinct.
-            fn = ExprUtils.getBuiltinFunction(FunctionSet.COUNT, new Type[] { argumentTypes[0] },
+            // count(VARIANT) is only for plain counting: there is no distinct aggregate over VARIANT, so count
+            // distinct keeps casting a VARIANT argument to VARCHAR as it did before the VARIANT overload existed.
+            Type distinctArgType = argumentTypes[0].isVariantType() ? VarcharType.VARCHAR : argumentTypes[0];
+            fn = ExprUtils.getBuiltinFunction(FunctionSet.COUNT, new Type[] { distinctArgType },
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         } else if (fnName.equals(FunctionSet.EXCHANGE_BYTES) || fnName.equals(FunctionSet.EXCHANGE_SPEED)) {
             fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);

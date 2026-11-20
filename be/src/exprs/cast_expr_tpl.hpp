@@ -229,13 +229,21 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column, const cctz::time_zone& zone)
                 if (!st.ok()) {
                     overflow = true;
                 } else {
-                    auto parsed = JsonValue::parse_json_or_string(ss.str());
+                    // variant_to_json writes JSON text, so a number, a boolean or a null must stay one instead of
+                    // becoming a JSON string, which is what parse_json_or_string makes of a bare scalar.
+                    auto parsed = JsonValue::parse_json_text(ss.str());
                     if (parsed.ok()) {
                         value = parsed.value();
                     } else {
                         overflow = true;
                     }
                 }
+            }
+            if (!overflow && value.is_null() && row_ref.get_value().type() == VariantType::NULL_TYPE) {
+                // A variant null converts to SQL NULL, as it does for every other cast target. A NaN or infinite
+                // FLOAT/DOUBLE also prints as null, but it takes the path below like CAST(DOUBLE AS JSON) does.
+                builder.append_null();
+                continue;
             }
         } else {
             if constexpr (AllowThrowException) {
