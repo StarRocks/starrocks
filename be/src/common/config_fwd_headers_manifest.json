@@ -414,6 +414,7 @@
         "report_python_worker_error",
         "python_worker_reuse",
         "python_worker_expire_time_sec",
+        "python_worker_max_per_driver",
         "python_udf_rpc_timeout_ms"
       ]
     },
