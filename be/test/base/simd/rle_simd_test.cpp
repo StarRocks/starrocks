@@ -27,7 +27,7 @@ namespace starrocks {
 
 // Sizes chosen to exercise every code path: empty, < SIMD width, one full vector,
 // multiple vectors with unroll, vectors + tail, large enough to defeat unroll.
-static const std::vector<int32_t> kRleTestSizes = {0,  1,  3,  4,  7,  8,   15,  16,   17,  31,
+static const std::vector<int32_t> kRleTestSizes = {0,  1,  3,  4,  7,  8,   15,  16,  17,  31,
                                                    32, 33, 63, 64, 65, 127, 128, 257, 1024};
 
 // ----------------------------------------------------------------------------
@@ -126,6 +126,22 @@ PARALLEL_TEST(RleSimdTest, simd_minmax_int32) {
         simd_minmax_int32_default(data.data(), n, def_min, def_max);
         ASSERT_EQ(def_min, expected_min) << "n=" << n;
         ASSERT_EQ(def_max, expected_max) << "n=" << n;
+
+#if defined(__x86_64__)
+        if (__builtin_cpu_supports("avx2")) {
+            int32_t avx2_min = 0, avx2_max = 0;
+            simd_minmax_int32_avx2(data.data(), n, avx2_min, avx2_max);
+            ASSERT_EQ(avx2_min, expected_min) << "n=" << n;
+            ASSERT_EQ(avx2_max, expected_max) << "n=" << n;
+        }
+        if (__builtin_cpu_supports("avx512f") && __builtin_cpu_supports("avx512vl") &&
+            __builtin_cpu_supports("avx512bw") && __builtin_cpu_supports("avx512vbmi2")) {
+            int32_t avx512_min = 0, avx512_max = 0;
+            simd_minmax_int32_avx512(data.data(), n, avx512_min, avx512_max);
+            ASSERT_EQ(avx512_min, expected_min) << "n=" << n;
+            ASSERT_EQ(avx512_max, expected_max) << "n=" << n;
+        }
+#endif
     }
 
     // Edge: all identical, signed extremes, negatives.
@@ -174,8 +190,7 @@ PARALLEL_TEST(RleSimdTest, simd_minmax_template_type_safety) {
         std::vector<uint32_t> data(n);
         for (int32_t i = 0; i < n; ++i) {
             // Mix values below and above INT32_MAX (0x7fffffff).
-            data[i] =
-                    (i % 2 == 0) ? static_cast<uint32_t>(10 + i) : (0x80000000u + static_cast<uint32_t>(i * 100));
+            data[i] = (i % 2 == 0) ? static_cast<uint32_t>(10 + i) : (0x80000000u + static_cast<uint32_t>(i * 100));
         }
         uint32_t got_min = 0, got_max = 0;
         simd_minmax<uint32_t>(data.data(), n, got_min, got_max);
@@ -349,6 +364,20 @@ PARALLEL_TEST(RleSimdTest, simd_widen_int8_to_int32) {
             ASSERT_EQ(dest[i], static_cast<int32_t>(src[i])) << "n=" << n << " i=" << i;
         }
         ASSERT_EQ(dest.back(), static_cast<int32_t>(0xDEADBEEFu)) << "n=" << n;
+
+#if defined(__x86_64__)
+        if (__builtin_cpu_supports("avx2")) {
+            std::vector<int32_t> avx2_dest(static_cast<size_t>(n) + 1, static_cast<int32_t>(0xDEADBEEFu));
+            simd_widen_int8_to_int32_avx2(avx2_dest.data(), src.data(), n);
+            ASSERT_EQ(avx2_dest, dest) << "n=" << n;
+        }
+        if (__builtin_cpu_supports("avx512f") && __builtin_cpu_supports("avx512vl") &&
+            __builtin_cpu_supports("avx512bw") && __builtin_cpu_supports("avx512vbmi2")) {
+            std::vector<int32_t> avx512_dest(static_cast<size_t>(n) + 1, static_cast<int32_t>(0xDEADBEEFu));
+            simd_widen_int8_to_int32_avx512(avx512_dest.data(), src.data(), n);
+            ASSERT_EQ(avx512_dest, dest) << "n=" << n;
+        }
+#endif
     }
     // Sign-extension on the extreme negative explicitly.
     {
@@ -388,6 +417,20 @@ PARALLEL_TEST(RleSimdTest, simd_widen_int16_to_int32) {
             ASSERT_EQ(dest[i], static_cast<int32_t>(src[i])) << "n=" << n << " i=" << i;
         }
         ASSERT_EQ(dest.back(), static_cast<int32_t>(0xDEADBEEFu)) << "n=" << n;
+
+#if defined(__x86_64__)
+        if (__builtin_cpu_supports("avx2")) {
+            std::vector<int32_t> avx2_dest(static_cast<size_t>(n) + 1, static_cast<int32_t>(0xDEADBEEFu));
+            simd_widen_int16_to_int32_avx2(avx2_dest.data(), src.data(), n);
+            ASSERT_EQ(avx2_dest, dest) << "n=" << n;
+        }
+        if (__builtin_cpu_supports("avx512f") && __builtin_cpu_supports("avx512vl") &&
+            __builtin_cpu_supports("avx512bw") && __builtin_cpu_supports("avx512vbmi2")) {
+            std::vector<int32_t> avx512_dest(static_cast<size_t>(n) + 1, static_cast<int32_t>(0xDEADBEEFu));
+            simd_widen_int16_to_int32_avx512(avx512_dest.data(), src.data(), n);
+            ASSERT_EQ(avx512_dest, dest) << "n=" << n;
+        }
+#endif
     }
     {
         int16_t src[8] = {-32768, -1, 0, 1, 32767, -16000, 16000, -2};

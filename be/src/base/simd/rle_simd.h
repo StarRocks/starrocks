@@ -89,10 +89,18 @@ MFV_AUTOVEC_STATIC(void simd_widen_int16_to_int32_default(int32_t* __restrict de
 })
 
 // ============================================================================
-// Public dispatchers. Implementations and their hand-rolled MFV_AVX2 /
-// MFV_AVX512F helpers live in rle_simd.cpp so intrinsic headers stay out of
-// the inclusion graph for callers.
+// Public dispatchers and target-specific kernels. Implementations live in
+// rle_simd.cpp so intrinsic headers stay out of the inclusion graph for callers.
 // ============================================================================
+
+#if defined(__x86_64__)
+void simd_minmax_int32_avx2(const int32_t* __restrict data, int32_t count, int32_t& out_min, int32_t& out_max);
+void simd_minmax_int32_avx512(const int32_t* __restrict data, int32_t count, int32_t& out_min, int32_t& out_max);
+void simd_widen_int8_to_int32_avx2(int32_t* __restrict dest, const int8_t* __restrict src, int32_t count);
+void simd_widen_int8_to_int32_avx512(int32_t* __restrict dest, const int8_t* __restrict src, int32_t count);
+void simd_widen_int16_to_int32_avx2(int32_t* __restrict dest, const int16_t* __restrict src, int32_t count);
+void simd_widen_int16_to_int32_avx512(int32_t* __restrict dest, const int16_t* __restrict src, int32_t count);
+#endif
 
 void simd_minmax_int32(const int32_t* __restrict data, int32_t count, int32_t& out_min, int32_t& out_max);
 
