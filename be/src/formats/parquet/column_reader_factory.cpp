@@ -14,12 +14,9 @@
 
 #include "formats/parquet/column_reader_factory.h"
 
-<<<<<<< HEAD
-=======
 #include <algorithm>
 #include <optional>
 
->>>>>>> 7ab8698 ([Enhancement] Read nested Iceberg GEOGRAPHY columns in BE (backport #83406) (#83443))
 #include "base/failpoint/fail_point.h"
 #include "column/column_helper.h"
 #include "column/datum_convert.h"

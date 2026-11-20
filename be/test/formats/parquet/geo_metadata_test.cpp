@@ -748,28 +748,16 @@ TEST(GeoMetadataTest, GeoLeavesDoNotUseRowGroupOrPageIndexMinMax) {
         const TypeDescriptor type = TypeDescriptor::create_varchar_type(1024);
         std::vector<std::string> min_values;
         std::vector<std::string> max_values;
-<<<<<<< HEAD
         auto status = StatisticsHelper::get_min_max_value(&metadata, type, &column, field, min_values, max_values);
-        EXPECT_EQ(kind == 2, status.ok()) << status;
-        EXPECT_EQ(kind == 2 ? 1 : 0, min_values.size());
-        EXPECT_EQ(kind == 2 ? 1 : 0, max_values.size());
-=======
-        auto status = StatisticsHelper::get_min_max_value(&metadata, TYPE_VARCHAR_DESC, &column, field, min_values,
-                                                          max_values);
         EXPECT_EQ(kind >= 2, status.ok()) << status;
         EXPECT_EQ(kind >= 2 ? 1 : 0, min_values.size());
         EXPECT_EQ(kind >= 2 ? 1 : 0, max_values.size());
->>>>>>> 7ab8698 ([Enhancement] Read nested Iceberg GEOGRAPHY columns in BE (backport #83406) (#83443))
 
         tparquet::ColumnChunk chunk;
         chunk.__set_meta_data(column);
         ColumnReaderOptions options{};
         options.file_meta_data = &metadata;
-<<<<<<< HEAD
-        ScalarColumnReader reader(field, &chunk, &type, options);
-=======
-        ScalarColumnReader reader(field, &chunk, kind == 3 ? &geography : &TYPE_VARCHAR_DESC, options);
->>>>>>> 7ab8698 ([Enhancement] Read nested Iceberg GEOGRAPHY columns in BE (backport #83406) (#83443))
+        ScalarColumnReader reader(field, &chunk, kind == 3 ? &geography : &type, options);
         ObjectPool pool;
         auto* predicate =
                 pool.add(new_column_eq_predicate_from_datum(get_type_info(TYPE_VARCHAR), 1, Datum(Slice("a"))));
