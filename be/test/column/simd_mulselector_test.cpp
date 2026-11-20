@@ -293,4 +293,101 @@ PARALLEL_TEST(SIMDMultiSelectorTest, TestVarVar) {
             TYPE_DATETIME>();
     // clang-format on
 }
+
+template <LogicalType TYPE>
+void test_disjoint16_subchunk_boundaries_for_type() {
+    using SelectVec = typename SIMD_muti_selector<TYPE>::SelectVec;
+    using Container = typename SIMD_muti_selector<TYPE>::Container;
+    using SelectorContainer = typename BooleanColumn::Container;
+    using CppType = typename SIMD_muti_selector<TYPE>::CppType;
+
+    constexpr int kWhenSize = 4;
+    constexpr int kListSize = kWhenSize + 1;
+
+    // Test exact multiples of 16 (N = 16, N = 32) across sub-chunk granularity (2, 4, 8 rows per sub-chunk).
+    for (int test_size : {16, 32}) {
+        for (int sub_granularity : {2, 4, 8}) {
+            for (ConstMode cm : {ConstMode::kAllVar, ConstMode::kAllConst, ConstMode::kAlternatingConstVar,
+                                 ConstMode::kVarThenConstElse, ConstMode::kConstThenVarElse}) {
+                SelectorContainer selectors[kWhenSize];
+                SelectVec select_vecs[kWhenSize];
+                for (int b = 0; b < kWhenSize; ++b) {
+                    selectors[b].resize(test_size);
+                    for (int r = 0; r < test_size; ++r) {
+                        int sub_idx = (r / sub_granularity) % 5;
+                        if (sub_idx == 0) {
+                            // Sub-chunk has 0 active WHEN winners (all ELSE)
+                            selectors[b][r] = 0;
+                        } else if (sub_idx <= 3) {
+                            // Sub-chunk has exactly 1 active WHEN winner (branch sub_idx - 1), plus overlapping later branch
+                            selectors[b][r] = (b == sub_idx - 1 || b == kWhenSize - 1) ? 1 : 0;
+                        } else {
+                            // Sub-chunk has multiple active WHEN winners + ELSE
+                            selectors[b][r] = (((r + b) % 3) == 0) ? 1 : 0;
+                        }
+                    }
+                    select_vecs[b] = selectors[b].data();
+                }
+
+                std::vector<bool> is_const(kListSize, false);
+                Container data_values[kListSize];
+                const Container* select_lists[kListSize];
+                for (int i = 0; i < kListSize; ++i) {
+                    if (cm == ConstMode::kAllConst) {
+                        is_const[i] = true;
+                    } else if (cm == ConstMode::kAlternatingConstVar) {
+                        is_const[i] = (i % 2 == 1);
+                    } else if (cm == ConstMode::kVarThenConstElse) {
+                        is_const[i] = (i == kWhenSize);
+                    } else if (cm == ConstMode::kConstThenVarElse) {
+                        is_const[i] = (i < kWhenSize);
+                    }
+                    data_values[i].resize(is_const[i] ? 1 : test_size);
+                    for (size_t r = 0; r < data_values[i].size(); ++r) {
+                        data_values[i][r] = RandomGenerator<CppType, 128>::next_value();
+                    }
+                    inject_special_values<TYPE>(data_values[i], i);
+                    select_lists[i] = &data_values[i];
+                }
+
+                Container dst(test_size);
+                Container expected(test_size);
+                std::memset(dst.data(), 0xCD, test_size * sizeof(CppType));
+                for (int r = 0; r < test_size; ++r) {
+                    int idx = 0;
+                    while (idx < kWhenSize && !select_vecs[idx][r]) {
+                        ++idx;
+                    }
+                    expected[r] = is_const[idx] ? (*select_lists[idx])[0] : (*select_lists[idx])[r];
+                }
+
+                SIMD_muti_selector<TYPE>::multi_select_if(select_vecs, kWhenSize, dst, select_lists, kListSize,
+                                                          is_const, test_size);
+                ASSERT_EQ(0, std::memcmp(expected.data(), dst.data(), test_size * sizeof(CppType)))
+                        << "type=" << static_cast<int>(TYPE) << " n=" << test_size
+                        << " sub_granularity=" << sub_granularity;
+            }
+        }
+    }
+}
+
+template <LogicalType... TYPE>
+void test_disjoint16_subchunk_boundaries_all() {
+    (test_disjoint16_subchunk_boundaries_for_type<TYPE>(), ...);
+}
+
+PARALLEL_TEST(SIMDMultiSelectorTest, ExactMultiplesOf16AndDisjointSubChunks) {
+    // clang-format off
+    test_disjoint16_subchunk_boundaries_all<TYPE_TINYINT,
+                                            TYPE_SMALLINT,
+                                            TYPE_INT,
+                                            TYPE_BIGINT,
+                                            TYPE_DECIMAL32,
+                                            TYPE_DECIMAL64,
+                                            TYPE_FLOAT,
+                                            TYPE_DOUBLE,
+                                            TYPE_DATE,
+                                            TYPE_DATETIME>();
+    // clang-format on
+}
 } // namespace starrocks

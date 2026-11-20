@@ -383,7 +383,7 @@ size_t ArrayColumn::filter_range(const Filter& filter, size_t from, size_t to) {
 
     constexpr size_t kBatchSize = /*width of NEON registers*/ 128 / 8;
 
-    while (check_offset + kBatchSize < to) {
+    while (check_offset + kBatchSize <= to) {
         uint8x16_t f = vld1q_u8(f_data + check_offset);
         // nibble_mask holds 4 bits per row: 0xf where the row is kept, 0x0 otherwise.
         uint64_t nibble_mask = SIMD::get_nibble_mask(vtstq_u8(f, f));

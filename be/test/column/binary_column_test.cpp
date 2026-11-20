@@ -593,6 +593,69 @@ PARALLEL_TEST(BinaryColumnTest, test_filter_range_noncanonical_bytes) {
     }
 }
 
+// Explicit boundary test for exact multiples of 16 (N = 16, N = 32) where the final 16-row batch
+// hits start_offset + kBatchSize == to on ARM64 NEON.
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnTest, test_filter_range_exact_multiples_of_16) {
+    for (size_t from : {size_t(0), size_t(3)}) {
+        for (size_t batch_rows : {size_t(16), size_t(32)}) {
+            const size_t n = from + batch_rows;
+            // Pattern 0: all-0 in [from, n)
+            // Pattern 1: all-1 in [from, n)
+            // Pattern 2: first 16 dropped, second 16 all-kept (for batch_rows == 32, exercises all-hit fast path
+            //            with result_offset < start_offset on the final 16-row batch where start_offset + 16 == to)
+            // Pattern 3: first 16 mixed, final 16 mixed
+            for (int pat = 0; pat < 4; ++pat) {
+                for (bool large_offsets : {false, true}) {
+                    std::vector<std::string> inputs(n);
+                    Filter filter(n, 1);
+                    std::vector<std::string> expected;
+                    for (size_t i = 0; i < n; ++i) {
+                        inputs[i] = (i % 5 == 0) ? "" : ("val_" + std::to_string(i) + "_payload");
+                        if (i < from) {
+                            expected.push_back(inputs[i]);
+                            continue;
+                        }
+                        const size_t rel = i - from;
+                        if (pat == 0) {
+                            filter[i] = 0;
+                        } else if (pat == 1) {
+                            filter[i] = 1;
+                        } else if (pat == 2) {
+                            filter[i] = (batch_rows == 32) ? (rel >= 16 ? 1 : 0) : (rel >= 8 ? 1 : 0);
+                        } else {
+                            filter[i] = ((rel % 3) != 1) ? 1 : 0;
+                        }
+                        if (filter[i] != 0) {
+                            expected.push_back(inputs[i]);
+                        }
+                    }
+
+                    auto col = BinaryColumn::create();
+                    for (const auto& s : inputs) {
+                        col->append(Slice(s));
+                    }
+                    if (large_offsets) {
+                        col->get_offset().ensure_width_for_value(static_cast<uint64_t>(UINT32_MAX) + 1);
+                        ASSERT_TRUE(col->get_offset().is_large());
+                    }
+
+                    size_t ret = col->filter_range(filter, from, n);
+                    ASSERT_EQ(expected.size(), ret)
+                            << "from=" << from << " batch_rows=" << batch_rows << " pat=" << pat;
+                    ASSERT_EQ(expected.size(), col->size())
+                            << "from=" << from << " batch_rows=" << batch_rows << " pat=" << pat;
+                    for (size_t i = 0; i < expected.size(); ++i) {
+                        ASSERT_EQ(expected[i], col->get_slice(i).to_string())
+                                << "from=" << from << " batch_rows=" << batch_rows << " pat=" << pat << " i=" << i;
+                    }
+                    ASSERT_EQ(col->get_offset().back(), col->get_bytes().size());
+                }
+            }
+        }
+    }
+}
+
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_resize) {
     auto c = BinaryColumn::create();

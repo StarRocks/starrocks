@@ -964,7 +964,7 @@ size_t BinaryColumn::filter_range(const Filter& filter, size_t from, size_t to) 
         const uint8_t* f_data = filter.data();
         constexpr size_t kBatchSize = 128 / (8 * sizeof(uint8_t));
 
-        while (start_offset + kBatchSize < to) {
+        while (start_offset + kBatchSize <= to) {
             uint8x16_t f = vld1q_u8(f_data + start_offset);
             uint64_t nibble_mask = SIMD::get_nibble_mask(vtstq_u8(f, f));
 
