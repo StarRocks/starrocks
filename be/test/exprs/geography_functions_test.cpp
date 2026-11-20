@@ -4787,17 +4787,10 @@ TEST_F(geographyFunctionsTest, h3BoundaryDirectWkbRetainsDescriptorAndNullPreced
         if (variant == 0) type = TypeDescriptor(TYPE_BIGINT);
         if (variant == 1) type.geo_type.reset();
         if (variant == 2) type.geo_type->logical_type = GEO_LOGICAL_TYPE_GEOMETRY;
-<<<<<<< HEAD
-        if (variant == 3) type.geo_type->coordinate_system = GEO_COORDINATE_SYSTEM_CARTESIAN;
-        if (variant == 4) type.geo_type->edge_algorithm = GEO_EDGE_ALGORITHM_PLANAR;
-        if (variant == 5) type.geo_type->crs = "EPSG:4326";
-        std::unique_ptr<FunctionContext> context(
-                FunctionContext::create_test_context({TypeDescriptor(TYPE_BIGINT)}, type));
-=======
         if (variant == 3) type.geo_type->edge_algorithm = GEO_EDGE_ALGORITHM_PLANAR;
         if (variant == 4) type.geo_type->crs = "EPSG:4326";
-        std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context({TYPE_BIGINT_DESC}, type));
->>>>>>> c2c3fae ([Refactor] Stop keeping the GEO coordinate system in the BE descriptor (backport #83690) (#83727))
+        std::unique_ptr<FunctionContext> context(
+                FunctionContext::create_test_context({TypeDescriptor(TYPE_BIGINT)}, type));
         auto actual = GeoFunctions::h3_to_boundary(context.get(), {invalid_cell});
         ASSERT_FALSE(actual.ok());
         EXPECT_TRUE(actual.status().is_not_supported());
