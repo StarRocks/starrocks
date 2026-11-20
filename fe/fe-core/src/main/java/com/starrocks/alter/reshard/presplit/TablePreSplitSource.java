@@ -436,10 +436,12 @@ final class TablePreSplitSource implements InsertPreSplitSource {
             Authorizer.checkTableAction(context, normalized.getCatalog(), normalized.getDb(),
                     normalized.getTbl(), PrivilegeType.SELECT);
         }
-        if (Authorizer.getRowAccessPolicy(context, normalized) != null) {
+        // Only asks whether a policy exists; the statement's own analysis applies it, and that lookup is the
+        // one an auditing controller (Ranger) records.
+        if (Authorizer.getRowAccessPolicyWithoutAudit(context, normalized) != null) {
             return false;
         }
-        Map<String, Expr> masking = Authorizer.getColumnMaskingPolicy(
+        Map<String, Expr> masking = Authorizer.getColumnMaskingPolicyWithoutAudit(
                 context, normalized, source.sourceTable().getBaseSchema());
         return masking == null || masking.isEmpty();
     }
