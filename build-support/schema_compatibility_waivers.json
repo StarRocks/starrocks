@@ -9,16 +9,5 @@
     "reason": "Reviewed compatibility exception after a multi-release deprecation window.",
     "owner": "engprod"
   },
-  "waivers": [
-    {
-      "path": "gensrc/proto/types.proto",
-      "container_or_method": "GeoStorageDescPB",
-      "field_number": 3,
-      "field_name": "validation_state",
-      "rule": "field_deleted",
-      "base_signature": "optional GeoValidationStatePB validation_state = 3",
-      "reason": "Native GEO is unreleased; validation_state was written but never read, and every row's WKB is checked by the consuming kernel. Remove this waiver once the comparison base no longer has the field.",
-      "owner": "trueeyu"
-    }
-  ]
+  "waivers": []
 }
