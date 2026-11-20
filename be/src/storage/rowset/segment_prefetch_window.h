@@ -39,7 +39,10 @@ struct OlapReaderStatistics;
 // scheduler's decision. It never guesses: only pages the reader will read (per the ordinal index and the
 // scan range) are warmed, and a page leaves the window once the reader has passed its last row. The page
 // list is produced incrementally, so the window's memory does not grow with the segment. All windows of a node
-// together keep at most lake_scan_read_ahead_max_blocks blocks ahead; beyond that the reads fetch what they reach.
+// together keep at most lake_scan_read_ahead_max_blocks blocks ahead, and share that limit equally: while it is set, a
+// window keeps at most the limit divided by the windows reading ahead (at least one block). A window that holds more
+// than its share, because more windows started after it, asks for no more until its reader has consumed the excess.
+// Beyond that the reads fetch what they reach.
 class SegmentPrefetchWindow {
 public:
     struct Column {
@@ -111,7 +114,10 @@ private:
     void settle(Cursor* c);
     // Reads `columns` ahead from `start_row` on.
     void add_cursors(const std::vector<Column>& columns, rowid_t start_row);
-    void submit(size_t cursor_idx, rowid_t row);
+    // Asks for the next blocks of `cursor_idx`, keeping the window within `limit` blocks.
+    void submit(size_t cursor_idx, rowid_t row, size_t limit);
+    // The blocks the window may keep ahead now: `_ahead_limit`, or less, its share of lake_scan_read_ahead_max_blocks.
+    size_t share() const;
     // Adds `blocks` (may be negative) to the blocks this window, and the node, hold ahead.
     void hold(int64_t blocks);
     // `urgent`: pages a read is about to consume, fetched in parallel as a demand rather than as read-ahead.

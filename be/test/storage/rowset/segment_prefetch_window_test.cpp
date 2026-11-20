@@ -247,11 +247,52 @@ TEST_F(SegmentPrefetchWindowTest, disabled_window_releases_node_blocks) {
     // Several pages ahead, so that passing the first one leaves blocks held.
     ASSERT_GT(_stream.warms.size(), 2u);
     EXPECT_EQ(base + 64, node.value());
+    auto& windows = StorageMetrics::instance()->lake_scan_read_ahead_windows;
+    const int64_t reading = windows.value();
     _stream.supported = false;
     window->advance(_pages[1].first);
     EXPECT_TRUE(window->disabled());
     EXPECT_EQ(0u, window->ahead_blocks());
     EXPECT_EQ(base, node.value());
+    // It no longer takes a share of the node limit, and is not counted twice when it goes away.
+    EXPECT_EQ(reading - 1, windows.value());
+    window.reset();
+    EXPECT_EQ(reading - 1, windows.value());
+}
+
+// The segment readers that read ahead share lake_scan_read_ahead_max_blocks equally, whichever asks first; one that reads
+// ahead alone keeps its own window again.
+TEST_F(SegmentPrefetchWindowTest, node_limit_is_shared_equally) {
+    auto& node = StorageMetrics::instance()->lake_scan_read_ahead_blocks;
+    auto& windows = StorageMetrics::instance()->lake_scan_read_ahead_windows;
+    auto& capped = StorageMetrics::instance()->lake_scan_read_ahead_capped_total;
+    ASSERT_EQ(0, node.value());
+    ASSERT_EQ(0, windows.value());
+    const int64_t old_limit = config::lake_scan_read_ahead_max_blocks;
+    DeferOp restore([&] { config::lake_scan_read_ahead_max_blocks = old_limit; });
+    config::lake_scan_read_ahead_max_blocks = 8;
+
+    SparseRange<> range(0, kRows);
+    auto first = make_window(&range, 0, 8);
+    auto second = make_window(&range, 0, 8);
+    EXPECT_EQ(2, windows.value());
+    // The first to ask takes its share, not all the node has left.
+    const int64_t capped_before = capped.value();
+    first->advance(0);
+    EXPECT_EQ(4u, first->ahead_blocks());
+    EXPECT_GT(capped.value(), capped_before);
+    second->advance(0);
+    EXPECT_EQ(4u, second->ahead_blocks());
+    EXPECT_EQ(8, node.value());
+
+    second.reset();
+    EXPECT_EQ(1, windows.value());
+    EXPECT_EQ(4, node.value());
+    first->advance(0);
+    EXPECT_EQ(8u, first->ahead_blocks());
+    first.reset();
+    EXPECT_EQ(0, windows.value());
+    EXPECT_EQ(0, node.value());
 }
 
 // Once the reader is past a page, its warm-up is withdrawn and the window moves on.

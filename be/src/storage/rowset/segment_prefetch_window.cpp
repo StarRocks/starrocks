@@ -53,11 +53,24 @@ SegmentPrefetchWindow::SegmentPrefetchWindow(std::vector<Column> columns, const 
           _late_read_ahead_ratio(late_read_ahead_ratio),
           _block_size(std::max<int64_t>(1, static_cast<int64_t>(block_size))),
           _stats(stats) {
+    StorageMetrics::instance()->lake_scan_read_ahead_windows.increment(1);
     add_cursors(columns, start_row);
 }
 
 SegmentPrefetchWindow::~SegmentPrefetchWindow() {
     hold(-static_cast<int64_t>(_ahead_blocks));
+    if (!_disabled) {
+        StorageMetrics::instance()->lake_scan_read_ahead_windows.increment(-1);
+    }
+}
+
+size_t SegmentPrefetchWindow::share() const {
+    const int64_t node_limit = config::lake_scan_read_ahead_max_blocks;
+    if (node_limit <= 0) {
+        return _ahead_limit;
+    }
+    const int64_t windows = std::max<int64_t>(1, StorageMetrics::instance()->lake_scan_read_ahead_windows.value());
+    return std::min(_ahead_limit, static_cast<size_t>(std::max<int64_t>(1, node_limit / windows)));
 }
 
 void SegmentPrefetchWindow::hold(int64_t blocks) {
@@ -122,6 +135,7 @@ bool SegmentPrefetchWindow::warm(io::SeekableInputStream* file, int64_t offset, 
         // that cannot warm at all will not start to, so stop asking.
         VLOG(2) << "stop warming " << file->filename() << ": " << res.status();
         _disabled = true;
+        StorageMetrics::instance()->lake_scan_read_ahead_windows.increment(-1);
         _inflight.clear();
         hold(-static_cast<int64_t>(_ahead_blocks));
         _row_batch.clear();
@@ -132,7 +146,7 @@ bool SegmentPrefetchWindow::warm(io::SeekableInputStream* file, int64_t offset, 
     return true;
 }
 
-void SegmentPrefetchWindow::submit(size_t cursor_idx, rowid_t row) {
+void SegmentPrefetchWindow::submit(size_t cursor_idx, rowid_t row, size_t limit) {
     Cursor& c = _cursors[cursor_idx];
     const PagePointer pp = c.page.page();
     const rowid_t begin_row = static_cast<rowid_t>(c.page.first_ordinal());
@@ -167,7 +181,7 @@ void SegmentPrefetchWindow::submit(size_t cursor_idx, rowid_t row) {
     // and the rest follows once the reader has released enough blocks.
     const int64_t from_block = std::max(first_block, c.last_block + 1);
     const int64_t budget =
-            std::min(static_cast<int64_t>(_ahead_limit) - static_cast<int64_t>(_ahead_blocks), node_blocks_left());
+            std::min(static_cast<int64_t>(limit) - static_cast<int64_t>(_ahead_blocks), node_blocks_left());
     const int64_t to_block = std::min(last_block, from_block + std::max<int64_t>(budget, 1) - 1);
     const int64_t warm_begin = std::max(begin, from_block * _block_size);
     const int64_t warm_end = std::min(end, (to_block + 1) * _block_size);
@@ -199,7 +213,8 @@ void SegmentPrefetchWindow::advance(rowid_t row) {
     });
     _inflight.erase(consumed, _inflight.end());
 
-    while (_ahead_blocks < _ahead_limit && !_disabled) {
+    const size_t limit = share();
+    while (!_disabled) {
         size_t next = _cursors.size();
         for (size_t i = 0; i < _cursors.size(); ++i) {
             if (!_cursors[i].done &&
@@ -207,10 +222,20 @@ void SegmentPrefetchWindow::advance(rowid_t row) {
                 next = i;
             }
         }
-        if (next == _cursors.size() || !node_has_room()) {
+        if (next == _cursors.size()) {
             break;
         }
-        submit(next, row);
+        if (_ahead_blocks >= limit) {
+            if (limit < _ahead_limit) {
+                // Held to its share of the node limit.
+                StorageMetrics::instance()->lake_scan_read_ahead_capped_total.increment(1);
+            }
+            break;
+        }
+        if (!node_has_room()) {
+            break;
+        }
+        submit(next, row, limit);
     }
 }
 
