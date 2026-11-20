@@ -18,6 +18,8 @@
 #include <chrono>
 #include <future>
 #include <map>
+#include <numeric>
+#include <tuple>
 
 #include "common/thread/threadpool.h"
 #include "storage/lake/compaction_scheduler.h"
@@ -25,6 +27,7 @@
 #include "storage/lake/tablet_merge_admission.h"
 #include "storage/lake/tablet_parallel_compaction_manager.h"
 #include "storage/lake/tablet_reshard_test_base.h"
+#include "storage/tablet_range.h"
 
 namespace starrocks {
 
@@ -662,10 +665,10 @@ void strip_segment_bounds(SegmentMetadataPB* sm, BoundDamage damage) {
         sm->mutable_deprecated_sort_key_max()->clear_values();
         break;
     case BoundDamage::kMinUnknownVersion:
-        damage_encoded_bound(sm, /*min=*/true, 0, 0x02);
+        damage_encoded_bound(sm, /*min=*/true, 0, 0x03);
         break;
     case BoundDamage::kMaxUnknownVersion:
-        damage_encoded_bound(sm, /*min=*/false, 0, 0x02);
+        damage_encoded_bound(sm, /*min=*/false, 0, 0x03);
         break;
     case BoundDamage::kMinBadHeader:
         damage_encoded_bound(sm, /*min=*/true, 3, 0xFF);
@@ -5216,6 +5219,328 @@ TEST_F(LakeTabletReshardTest, split_a_varchar_sort_key_tablet_end_to_end) {
                 << "child " << child_id << " holds a disproportionate share of the rows";
     }
     EXPECT_EQ(kNumRows, total) << "the split must conserve every row across its children";
+}
+
+namespace {
+// k1, k2, v of a row of the long-key fixture below.
+using LongKeyRow = std::tuple<std::string, int64_t, int32_t>;
+
+// A 50-byte k1: 40 bytes every row shares, then the zero-padded row number. The value budget of a stored sort key
+// bound is 36 bytes, so every bound a writer stores for such rows is cut inside the shared prefix.
+std::string long_shared_prefix_key(int64_t n) {
+    return std::string(40, 'p') + fmt::format("{:010d}", n);
+}
+
+// DUP_KEYS, sort key (k1 VARCHAR(64), k2 BIGINT), value v INT.
+void set_long_varchar_sort_key_schema(TabletMetadataPB* metadata, int64_t schema_id) {
+    auto* schema = metadata->mutable_schema();
+    schema->set_keys_type(DUP_KEYS);
+    schema->set_id(schema_id);
+    schema->set_num_short_key_columns(1);
+    schema->set_num_rows_per_row_block(65535);
+    auto* k1 = schema->add_column();
+    k1->set_unique_id(1);
+    k1->set_name("k1");
+    k1->set_type("VARCHAR");
+    k1->set_is_key(true);
+    k1->set_is_nullable(false);
+    k1->set_length(64);
+    k1->set_index_length(4);
+    auto* k2 = schema->add_column();
+    k2->set_unique_id(2);
+    k2->set_name("k2");
+    k2->set_type("BIGINT");
+    k2->set_is_key(true);
+    k2->set_is_nullable(false);
+    k2->set_length(8);
+    k2->set_index_length(8);
+    auto* v = schema->add_column();
+    v->set_unique_id(3);
+    v->set_name("v");
+    v->set_type("INT");
+    v->set_is_key(false);
+    v->set_is_nullable(false);
+    v->set_aggregation("NONE");
+    schema->add_sort_key_idxes(0);
+    schema->add_sort_key_idxes(1);
+}
+
+// Writes `rows` to the tablet as one load through a delta writer and publishes it on top of *version, which is
+// then the published version.
+Status load_long_key_rows(lake::TabletManager* tablet_manager, MemTracker* mem_tracker,
+                          const TabletMetadataPB& metadata, const TabletSchemaCSPtr& tablet_schema,
+                          const std::shared_ptr<Schema>& schema, const std::vector<LongKeyRow>& rows,
+                          int64_t* version) {
+    auto k1 = BinaryColumn::create();
+    auto k2 = Int64Column::create();
+    auto v = Int32Column::create();
+    for (const auto& [key1, key2, value] : rows) {
+        k1->append(Slice(key1));
+        k2->append(key2);
+        v->append(value);
+    }
+    Chunk chunk({std::move(k1), std::move(k2), std::move(v)}, schema);
+    std::vector<uint32_t> indexes(rows.size());
+    std::iota(indexes.begin(), indexes.end(), 0);
+    const int64_t txn_id = next_id();
+    RuntimeProfile profile("truncated-sort-key-bounds-load");
+    ASSIGN_OR_RETURN(auto delta_writer, lake::DeltaWriterBuilder()
+                                                .set_tablet_manager(tablet_manager)
+                                                .set_tablet_id(metadata.id())
+                                                .set_txn_id(txn_id)
+                                                .set_partition_id(next_id())
+                                                .set_mem_tracker(mem_tracker)
+                                                .set_schema_id(metadata.schema().id())
+                                                .set_tablet_schema(tablet_schema)
+                                                .set_profile(&profile)
+                                                .build());
+    RETURN_IF_ERROR(delta_writer->open());
+    RETURN_IF_ERROR(delta_writer->write(chunk, indexes.data(), indexes.size()));
+    RETURN_IF_ERROR(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(txn_id);
+    txn_info.set_txn_type(TXN_NORMAL);
+    txn_info.set_commit_time(1);
+    ASSIGN_OR_RETURN(
+            auto published,
+            lake::publish_version(tablet_manager, lake::PublishTabletInfo(metadata.id()), *version, *version + 1,
+                                  std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt));
+    *version = published->version();
+    return Status::OK();
+}
+
+// Every row of the tablet, sorted.
+std::vector<LongKeyRow> read_long_key_rows(lake::TabletManager* tablet_manager, const TabletMetadataPtr& tablet,
+                                           const Schema& schema) {
+    auto reader = std::make_shared<lake::TabletReader>(tablet_manager, tablet, schema);
+    CHECK_OK(reader->prepare());
+    CHECK_OK(reader->open(TabletReaderParams()));
+    std::vector<LongKeyRow> rows;
+    auto chunk = ChunkFactory::new_chunk(schema, 128);
+    while (true) {
+        chunk->reset();
+        auto st = reader->get_next(chunk.get());
+        if (st.is_end_of_file()) break;
+        CHECK_OK(st);
+        for (size_t i = 0; i < chunk->num_rows(); ++i) {
+            auto row = chunk->get(i);
+            rows.emplace_back(row[0].get_slice().to_string(), row[1].get_int64(), row[2].get_int32());
+        }
+    }
+    std::sort(rows.begin(), rows.end());
+    return rows;
+}
+
+// Metadata of an empty tablet with the long-key schema.
+TabletMetadataPtr make_long_key_metadata(int64_t tablet_id, int64_t schema_id) {
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(1);
+    metadata->set_next_rowset_id(1);
+    set_long_varchar_sort_key_schema(metadata.get(), schema_id);
+    return metadata;
+}
+
+// Three loads of 100 rows each, one segment per load, written on top of `metadata`: load L holds the rows
+// n = 100 * L .. 100 * L + 99, whose k1 is make_k1(L, n). Returns the schema through *schema and the published
+// version through *version.
+constexpr int kLongKeyRowsPerLoad = 100;
+void load_three_long_key_loads(lake::TabletManager* tablet_manager, MemTracker* mem_tracker,
+                               const TabletMetadataPB& metadata,
+                               const std::function<std::string(int, int64_t)>& make_k1, std::shared_ptr<Schema>* schema,
+                               int64_t* version) {
+    auto tablet_schema = TabletSchema::create(metadata.schema());
+    *schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
+    *version = 1;
+    for (int load = 0; load < 3; ++load) {
+        std::vector<LongKeyRow> rows;
+        for (int i = 0; i < kLongKeyRowsPerLoad; ++i) {
+            const int64_t n = load * kLongKeyRowsPerLoad + i;
+            rows.emplace_back(make_k1(load, n), n, static_cast<int32_t>(n * 10));
+        }
+        ASSERT_OK(load_long_key_rows(tablet_manager, mem_tracker, metadata, tablet_schema, *schema, rows, version));
+    }
+}
+
+// Reads the source and both children: the source holds all its rows, every row a child holds is in the child's range
+// (`in_range(child, k1, k2)`), neither child is empty, and the children together hold the source rows exactly once.
+void check_split_children_hold_source_rows(lake::TabletManager* tablet_manager, const TabletMetadataPtr& source,
+                                           const Schema& schema,
+                                           const std::unordered_map<int64_t, TabletMetadataPtr>& published,
+                                           const std::vector<int64_t>& children,
+                                           const std::function<bool(int64_t, const std::string&, int64_t)>& in_range) {
+    const auto source_rows = read_long_key_rows(tablet_manager, source, schema);
+    ASSERT_EQ(3 * kLongKeyRowsPerLoad, source_rows.size());
+    std::vector<LongKeyRow> union_rows;
+    for (int64_t child : children) {
+        const auto rows = read_long_key_rows(tablet_manager, published.at(child), schema);
+        EXPECT_FALSE(rows.empty()) << child;
+        for (const auto& [k1, k2, v] : rows) {
+            EXPECT_TRUE(in_range(child, k1, k2))
+                    << "child " << child << " holds a row outside its range: " << k1 << ", " << k2;
+        }
+        union_rows.insert(union_rows.end(), rows.begin(), rows.end());
+    }
+    std::sort(union_rows.begin(), union_rows.end());
+    EXPECT_EQ(source_rows, union_rows) << "the children must hold every row of the source exactly once";
+}
+} // namespace
+
+// Rows written by the real writer with keys over the value budget get truncated stored bounds: every segment's
+// stored range is [36-byte prefix, its successor], which straddles a boundary inside the data even for the loads
+// whose rows all lie on one side of it. The split must still give every row to exactly one child.
+TEST_F(LakeTabletReshardTest, SplitWithTruncatedSortKeyBoundsKeepsAllRows) {
+    const int64_t tablet_id = next_id();
+    const int64_t left = next_id();
+    const int64_t right = next_id();
+    for (int64_t id : {tablet_id, left, right}) prepare_tablet_dirs(id);
+
+    auto metadata = make_long_key_metadata(tablet_id, next_id());
+    ASSERT_OK(put_tablet_metadata(metadata));
+
+    // Three loads, one segment each: rows 0-99, 100-199 and 200-299.
+    std::shared_ptr<Schema> schema;
+    int64_t version = 1;
+    ASSERT_NO_FATAL_FAILURE(load_three_long_key_loads(
+            _tablet_manager.get(), _mem_tracker.get(), *metadata,
+            [](int, int64_t n) { return long_shared_prefix_key(n); }, &schema, &version));
+
+    // The FE-supplied boundary lies inside the second load: (key 150, 150).
+    const std::pair<std::string, int64_t> boundary_key{long_shared_prefix_key(150), 150};
+    VariantTuple boundary;
+    boundary.append(DatumVariant(get_type_info(LogicalType::TYPE_VARCHAR), Datum(Slice(boundary_key.first))));
+    boundary.append(DatumVariant(get_type_info(LogicalType::TYPE_BIGINT), Datum(boundary_key.second)));
+    TuplePB boundary_pb;
+    boundary.to_proto(&boundary_pb);
+
+    ASSIGN_OR_ABORT(auto source, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    ASSERT_EQ(3, source->rowsets_size());
+    for (const auto& rowset : source->rowsets()) {
+        ASSERT_EQ(1, rowset.segment_metas_size());
+        const auto& segment = rowset.segment_metas(0);
+        // The writer stored both bounds in format version 2, cut to the budget ...
+        ASSERT_FALSE(segment.sort_key_min_encoded().empty());
+        ASSERT_FALSE(segment.sort_key_max_encoded().empty());
+        EXPECT_EQ(2, segment.sort_key_min_encoded()[0]);
+        EXPECT_EQ(2, segment.sort_key_max_encoded()[0]);
+        VariantTuple min;
+        VariantTuple max;
+        SortKeyBoundsExactness exactness;
+        ASSERT_OK(decode_segment_sort_key_bounds(segment, &min, &max, &exactness));
+        EXPECT_TRUE(exactness.min_truncated);
+        EXPECT_TRUE(exactness.max_truncated);
+        // ... so every segment's stored range straddles the boundary, whatever side its rows are on.
+        EXPECT_LT(min.compare(boundary), 0);
+        EXPECT_GT(max.compare(boundary), 0);
+    }
+
+    ReshardingTabletInfoPB request;
+    auto* split = request.mutable_splitting_tablet_info();
+    split->set_old_tablet_id(tablet_id);
+    split->add_new_tablet_ids(left);
+    split->add_new_tablet_ids(right);
+    auto* lower_range = split->add_new_tablet_ranges();
+    *lower_range->mutable_upper_bound() = boundary_pb;
+    lower_range->set_upper_bound_included(false);
+    auto* upper_range = split->add_new_tablet_ranges();
+    *upper_range->mutable_lower_bound() = boundary_pb;
+    upper_range->set_lower_bound_included(true);
+    TxnInfoPB split_txn;
+    split_txn.set_txn_id(next_id());
+    split_txn.set_commit_time(1);
+    split_txn.set_gtid(1);
+    std::unordered_map<int64_t, TabletMetadataPtr> published;
+    std::unordered_map<int64_t, TabletRangePB> ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, version, version + 1, split_txn, false,
+                                              published, ranges));
+    ASSERT_TRUE(published.contains(left)) << "the split fell back to an identical tablet";
+    ASSERT_TRUE(published.contains(right)) << "the split fell back to an identical tablet";
+
+    check_split_children_hold_source_rows(_tablet_manager.get(), source, *schema, published, {left, right},
+                                          [&](int64_t child, const std::string& k1, int64_t k2) {
+                                              const bool below_boundary = child == left;
+                                              return below_boundary == (std::make_pair(k1, k2) < boundary_key);
+                                          });
+}
+
+// The data-driven split (no FE boundaries) can take its boundary from a truncated stored bound. Each load's k1 starts
+// with its own letter and then follows the 50-byte key above, so each segment's bounds are cut inside its own keys
+// and lie between the segments' data: [a..., a...q] [b..., b...q] [c..., c...q]. Sampling is turned off, which leaves
+// the segment bounds as the only boundary candidates; the planner then cuts at the third segment's stored minimum,
+// a 36-byte prefix padded with NULL that is no row's key. The children must still hold every row exactly once, each
+// row in its child's range.
+TEST_F(LakeTabletReshardTest, DataDrivenSplitAtTruncatedSortKeyBoundKeepsAllRows) {
+    const int32_t saved_max_samples = config::sort_key_max_samples_per_tablet;
+    DeferOp restore_max_samples([&] { config::sort_key_max_samples_per_tablet = saved_max_samples; });
+    config::sort_key_max_samples_per_tablet = 0;
+
+    const int64_t tablet_id = next_id();
+    const int64_t left = next_id();
+    const int64_t right = next_id();
+    for (int64_t id : {tablet_id, left, right}) prepare_tablet_dirs(id);
+
+    auto metadata = make_long_key_metadata(tablet_id, next_id());
+    ASSERT_OK(put_tablet_metadata(metadata));
+
+    std::shared_ptr<Schema> schema;
+    int64_t version = 1;
+    ASSERT_NO_FATAL_FAILURE(load_three_long_key_loads(
+            _tablet_manager.get(), _mem_tracker.get(), *metadata,
+            [](int load, int64_t n) { return static_cast<char>('a' + load) + long_shared_prefix_key(n); }, &schema,
+            &version));
+    ASSIGN_OR_ABORT(auto source, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    ASSERT_EQ(3, source->rowsets_size());
+    VariantTuple third_min;
+    {
+        VariantTuple third_max;
+        SortKeyBoundsExactness exactness;
+        ASSERT_OK(decode_segment_sort_key_bounds(source->rowsets(2).segment_metas(0), &third_min, &third_max,
+                                                 &exactness));
+        ASSERT_TRUE(exactness.min_truncated);
+        ASSERT_EQ(1u, third_min.size());
+        ASSERT_EQ("c" + std::string(35, 'p'), third_min[0].value().get_slice().to_string());
+    }
+
+    ReshardingTabletInfoPB request;
+    auto* split = request.mutable_splitting_tablet_info();
+    split->set_old_tablet_id(tablet_id);
+    split->add_new_tablet_ids(left);
+    split->add_new_tablet_ids(right);
+    TxnInfoPB split_txn;
+    split_txn.set_txn_id(next_id());
+    split_txn.set_commit_time(1);
+    split_txn.set_gtid(1);
+    std::unordered_map<int64_t, TabletMetadataPtr> published;
+    std::unordered_map<int64_t, TabletRangePB> ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, version, version + 1, split_txn, false,
+                                              published, ranges));
+    ASSERT_TRUE(published.contains(left)) << "the split fell back to an identical tablet";
+    ASSERT_TRUE(published.contains(right)) << "the split fell back to an identical tablet";
+
+    // The boundary is the third segment's stored minimum, padded with NULL to the sort key.
+    const TabletRangePB& left_range = published.at(left)->range();
+    ASSERT_TRUE(left_range.has_upper_bound());
+    EXPECT_EQ(left_range.upper_bound().SerializeAsString(),
+              published.at(right)->range().lower_bound().SerializeAsString());
+    VariantTuple boundary;
+    ASSERT_OK(boundary.from_proto(left_range.upper_bound()));
+    ASSERT_EQ(2u, boundary.size());
+    EXPECT_EQ(0, boundary[0].compare(third_min[0]));
+    EXPECT_TRUE(boundary[1].value().is_null());
+
+    std::unordered_map<int64_t, TabletRange> child_ranges;
+    for (int64_t child : {left, right}) {
+        ASSERT_OK(child_ranges[child].from_proto(published.at(child)->range()));
+    }
+    check_split_children_hold_source_rows(
+            _tablet_manager.get(), source, *schema, published, {left, right},
+            [&](int64_t child, const std::string& k1, int64_t k2) {
+                VariantTuple key;
+                key.append(DatumVariant(get_type_info(LogicalType::TYPE_VARCHAR), Datum(Slice(k1))));
+                key.append(DatumVariant(get_type_info(LogicalType::TYPE_BIGINT), Datum(k2)));
+                return child_ranges.at(child).contains(key);
+            });
 }
 
 // ---------------------------------------------------------------------------
