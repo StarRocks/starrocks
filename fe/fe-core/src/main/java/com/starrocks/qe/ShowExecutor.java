@@ -1125,7 +1125,7 @@ public class ShowExecutor {
                     try {
                         TListConnectionRequest request = new TListConnectionRequest();
                         TAuthInfo tAuthInfo = new TAuthInfo();
-                        tAuthInfo.setCurrent_user_ident(UserIdentityUtils.toThrift(context.getCurrentUserIdentity()));
+                        tAuthInfo.setCurrent_user_ident(UserIdentityUtils.callerToThrift(context));
                         request.setAuth_info(tAuthInfo);
                         request.setFor_user(statement.getForUser());
                         request.setShow_full(statement.showFull());
