@@ -1396,7 +1396,14 @@ public class FunctionSet {
                 false, false, false));
 
         for (Type t : SUPPORTED_TYPES) {
-            if (t.isFunctionType() || t.isVariantType()) {
+            if (t.isFunctionType()) {
+                continue;
+            }
+            if (t.isVariantType()) {
+                // Only count: without it count(v) casts v to VARCHAR, which turns a variant null into a SQL NULL
+                // and drops it from the count, although `v IS NULL` is false.
+                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.COUNT,
+                        Lists.newArrayList(t), IntegerType.BIGINT, IntegerType.BIGINT, false, true, true));
                 continue;
             }
             if (t.isNull()) {
