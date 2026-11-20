@@ -151,6 +151,13 @@ public:
     // Adds what the column files have read since the last flush to the stats; close() flushes the rest.
     void flush_io_stats();
 
+    // Prepares the read (as the first get_next would) and asks for the first blocks of the read-ahead window.
+    Status start_read_ahead(bool* started) override;
+    size_t read_ahead_blocks() const override {
+        return _prefetch_window != nullptr ? _prefetch_window->ahead_blocks() : 0;
+    }
+    bool read_ahead_done() const override { return _prefetch_window == nullptr || _prefetch_window->exhausted(); }
+
     // Public entry point used by the segment_seek_range_to_rowid_range() /
     // segment_seek_ranges_to_rowid_ranges() free functions. The caller
     // must ensure the segment's short-key index has already been loaded; this
@@ -647,6 +654,9 @@ private:
     int _reserve_chunk_size = 0;
 
     bool _inited = false;
+    // Set when start_read_ahead() failed to initialize the reader, which may have left it partly initialized: _init()
+    // returns it instead of initializing again.
+    Status _read_ahead_init_status;
     // Until the first get_next after the iterator was opened or reused returns.
     bool _first_chunk_pending = true;
     bool _one_time_setup_done = false;
@@ -1013,6 +1023,7 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
 }
 
 Status SegmentIterator::_init() {
+    RETURN_IF_ERROR(_read_ahead_init_status);
     auto st = _init_internal();
     if (st.is_not_found()) {
         // NOTE: this may cause the metric increasing twice the call path is from segment::open.
@@ -1054,6 +1065,7 @@ Status SegmentIterator::reset_for_reuse(const SegmentReadOptions& options) {
     _reserve_chunk_size =
             static_cast<int32_t>(std::min(static_cast<uint32_t>(options.chunk_size), _segment->num_rows()));
     _inited = false;
+    _read_ahead_init_status = Status::OK();
     return Status::OK();
 }
 
@@ -1177,6 +1189,42 @@ Status SegmentIterator::_init_scan_range_and_context() {
         }
     }
     _init_prefetch_window(0);
+    return Status::OK();
+}
+
+Status SegmentIterator::start_read_ahead(bool* started) {
+    if (!_inited) {
+        Status st = _init();
+        if (!st.ok()) {
+            // The read returns this status when the reader's turn comes. An end of file (e.g. every row deleted) only
+            // means there is nothing to read, so the readers after it may still start.
+            _read_ahead_init_status = st;
+            *started = st.is_end_of_file();
+            return st.is_end_of_file() ? Status::OK() : st;
+        }
+        _inited = true;
+    }
+    // Apply the runtime filters that arrived while the readers before it were read, as the first read does, so that a
+    // segment they exclude fetches nothing. A failure is returned when the reader's turn comes (see _init()).
+    if (Status st = _try_to_update_ranges_by_runtime_filter(); !st.ok()) {
+        _read_ahead_init_status = st;
+        _inited = false;
+        return st;
+    }
+    // A reader with nothing left to read has nothing to fetch either; one without a window does not read ahead.
+    if (!_range_iter.has_more()) {
+        *started = true;
+        return Status::OK();
+    }
+    *started = _prefetch_window != nullptr && !_prefetch_window->disabled();
+    if (*started) {
+        _prefetch_window->advance(_range_iter.begin());
+        // The first warm-up finds out whether the file can warm at all; one that cannot disables the window.
+        *started = !_prefetch_window->disabled();
+    }
+    if (*started) {
+        _opts.stats->segment_read_ahead_started++;
+    }
     return Status::OK();
 }
 
@@ -5238,6 +5286,7 @@ void SegmentIterator::close() {
     }
     _one_time_setup_done = false;
     _inited = false;
+    _read_ahead_init_status = Status::OK();
 }
 
 // put the field that has predicated on it ahead of those without one, for handle late
