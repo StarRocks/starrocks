@@ -198,13 +198,14 @@ public class AnalyzeFunctionTest {
             analyzeFail("select [" + String.format(constructor, "NULL") + "]", NESTED_GEO_ERROR);
             String source = " from (select " + String.format(constructor, "if(v1 IS NULL, NULL, 'POINT (1 2)')")
                     + " g, v1 id from t0) t";
-            for (String expr : List.of("[[g]]", "map{'a': g}", "map{g: 'a'}", "row([g])", "named_struct('a', [g])",
+            for (String expr : List.of("[[g]]", "map{'a': g}", "row([g])", "named_struct('a', [g])",
                     "array_agg(g)", "max_by([g], id)", "map_agg(id, g)",
                     "array_distinct([g])", "array_sort([g])", "array_contains([g], g)", "[g] = [g]",
                     "ST_AsText([g][1])", "cardinality([g])", "array_contains([], g)", "array_position([], g)",
                     "array_contains(NULL, g)")) {
                 analyzeFail("select " + expr + source, NESTED_GEO_ERROR);
             }
+            analyzeFail("select map{g: 'a'}" + source, "Map key doesn't support type: ");
             for (String query : List.of("select [g]" + source + " union all select [g]" + source,
                     "with c as (select [g] a" + source + ") select cardinality(a) from c",
                     "select cardinality(a) from (select [g] a" + source + ") s",
@@ -235,10 +236,12 @@ public class AnalyzeFunctionTest {
         for (String geo : List.of("ST_GeogFromText('POINT (1 2)')", "ST_GeomFromText('POINT (1 2)', 'EPSG:3857')")) {
             for (String expr : List.of("array_sortby(x -> g, [1])", "array_map(x -> g, [1])",
                     "array_filter(x -> g, [1])", "any_match(x -> g, [1])", "all_match(x -> g, [1])",
-                    "map_apply((k,v) -> (k,g), map{1:2})", "transform_keys((k,v) -> g, map{1:2})",
+                    "map_apply((k,v) -> (k,g), map{1:2})",
                     "transform_values((k,v) -> g, map{1:2})")) {
                 analyzeFail("select cardinality(" + expr + ") from (select " + geo + " g) t", NESTED_GEO_ERROR);
             }
+            analyzeFail("select cardinality(transform_keys((k,v) -> g, map{1:2})) from (select " + geo + " g) t",
+                    "Map key doesn't support type: ");
         }
     }
 

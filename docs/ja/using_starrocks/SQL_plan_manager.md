@@ -302,7 +302,9 @@ SQL Plan Manager 関数は、SQL Plan Manager 内のプレースホルダー関�
 - `_spm_const_var(placeholdID)`: 単一の定数値をマークするために使用されます。
 - `_spm_const_list(placeholdID)`: 複数の定数値をマークするために使用され、通常は IN 条件内の複数の定数値をマークするために使用されます。
 - `_spm_const_range(placeholdID, min, max)`: 単一の定数値をマークするために使用されますが、定数値が指定された範囲 '[min, max]' 内にある必要があります。
-- `_spm_const_num(placeholdID, value...)`: 単一の定数値をマークするために使用されますが、定数値が指定された列挙 'value...' の値である必要があります。
+- `_spm_const_enum(placeholdID, value...)`: 単一の定数値をマークするために使用されますが、定数値が指定された列挙 'value...' の値である必要があります。
+
+`_spm_const_range` と `_spm_const_enum` は、`GEOGRAPHY`、`GEOMETRY`、およびこれらを含む型を受け付けません。
 
 'placeholdID' は整数であり、パラメータの一意の識別子として使用され、ベースラインをバインドし、プランを生成する際に使用されます。
 

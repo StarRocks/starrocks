@@ -194,6 +194,9 @@ public class TypeManager {
     }
 
     private static Type getCompatibleTypeForBetweenAndIn(Type t1, Type t2, boolean isBetween) {
+        if (t1.hasNestedGeoType() || t2.hasNestedGeoType()) {
+            return InvalidType.INVALID;
+        }
         // if predicate is 'IN' and one type is string ,another type is not float
         // we choose string or decimal as cmpType according to session variable cboEqBaseType
         if (!isBetween) {
@@ -271,6 +274,9 @@ public class TypeManager {
     }
 
     public static Type getCompatibleTypeForBinary(boolean isRangeCompare, Type type1, Type type2) {
+        if (type1.hasNestedGeoType() || type2.hasNestedGeoType()) {
+            return InvalidType.INVALID;
+        }
         // 1. Many join on-clause use string = int predicate, follow mysql will cast to double, but
         //    starrocks cast to double will lose precision, the predicate result will error
         // 2. Why only support equivalence and unequivalence expression cast to string? Because string order is different
