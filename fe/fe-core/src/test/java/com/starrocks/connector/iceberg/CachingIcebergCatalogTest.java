@@ -37,6 +37,7 @@ import mockit.Verifications;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
+import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.MetadataTableType;
 import org.apache.iceberg.MetadataTableUtils;
@@ -439,6 +440,26 @@ public class CachingIcebergCatalogTest {
         Map<String, DataFile> found = cachingIcebergCatalog.findCachedDataFiles(manifest, Set.of("/data/a.parquet"));
         Assertions.assertNotNull(found);
         Assertions.assertEquals(Set.of("/data/a.parquet"), found.keySet());
+    }
+
+    private static DeleteFile manifestEntryDeleteFile(String path, long pos) {
+        DeleteFile file = Mockito.mock(DeleteFile.class);
+        Mockito.when(file.path()).thenReturn(path);
+        Mockito.when(file.pos()).thenReturn(pos);
+        return file;
+    }
+
+    // A delete manifest can list the same delete file twice (committed twice, then merged into one manifest):
+    // both live entries must stay in the cached set, or it never matches the manifest's live file count.
+    @Test
+    public void testDuplicateLiveEntriesKeptInCachedDeleteFiles() {
+        Set<DeleteFile> cached = Sets.newConcurrentHashSet();
+        cached.add(DeleteFileWrapper.wrap(manifestEntryDeleteFile("/data/d.parquet", 0L)));
+        cached.add(DeleteFileWrapper.wrap(manifestEntryDeleteFile("/data/e.parquet", 1L)));
+        cached.add(DeleteFileWrapper.wrap(manifestEntryDeleteFile("/data/d.parquet", 2L)));
+        // the same entry wrapped again is still one element
+        cached.add(DeleteFileWrapper.wrap(manifestEntryDeleteFile("/data/d.parquet", 0L)));
+        Assertions.assertEquals(3, cached.size());
     }
 
     @Test
