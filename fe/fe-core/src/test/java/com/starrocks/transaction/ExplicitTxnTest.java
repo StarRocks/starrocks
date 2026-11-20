@@ -42,6 +42,7 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.OriginStatement;
@@ -67,6 +68,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -755,6 +757,75 @@ public class ExplicitTxnTest {
         Assertions.assertEquals((long) queryTimeoutS * 1000L, capturedTimeoutMs[0],
                 "query_timeout (" + queryTimeoutS + "s) must be passed to retryCommitOnRateLimitExceeded "
                         + "as milliseconds, got " + capturedTimeoutMs[0]);
+    }
+
+    @Test
+    public void testExplicitDeleteLoadJobFollowsTransactionOutcome() throws Exception {
+        // The real commit allocates a GTID on the FE leader.
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public VisibleStateWaiter retryCommitOnRateLimitExceeded(Invocation invocation,
+                    Database database, long txnId, List<TabletCommitInfo> commitInfos, List<TabletFailInfo> failInfos,
+                    TxnCommitAttachment attachment, long timeoutMs) throws StarRocksException {
+                VisibleStateWaiter waiter = invocation.proceed(database, txnId, commitInfos, failInfos, attachment, timeoutMs);
+                // Publish synchronously because this fixture does not run the publish-version daemon.
+                GlobalTransactionMgr txnMgr = invocation.getInvokedInstance();
+                txnMgr.finishTransaction(database.getId(), txnId, new HashSet<>());
+                return waiter;
+            }
+        };
+
+        DefaultCoordinator coordinator = mock(DefaultCoordinator.class);
+        when(coordinator.isDone()).thenReturn(true);
+        when(coordinator.getExecStatus()).thenReturn(Status.OK);
+        when(coordinator.getLoadCounters()).thenReturn(Map.of(LoadEtlTask.DPP_NORMAL_ALL, "1"));
+
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        GlobalTransactionMgr txnMgr = globalStateMgr.getGlobalTransactionMgr();
+        Database database = globalStateMgr.getLocalMetastore().getDb("db1");
+        Table table = globalStateMgr.getLocalMetastore().getTable("db1", "tbl1");
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(globalStateMgr);
+        context.setQualifiedUser("u1");
+        context.setCurrentUserIdentity(new UserIdentity("u1", "%"));
+        DeleteStmt delete = (DeleteStmt) SqlParser.parseSingleStatement(
+                "delete from db1.tbl1 where c1 = 1", context.getSessionVariable().getSqlMode());
+
+        for (JobState expected : List.of(JobState.FINISHED, JobState.CANCELLED)) {
+            String label = "explicit-delete-" + expected.name();
+            TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, label));
+            long txnId = context.getTxnId();
+            context.setExecutionId(new TUniqueId(31, txnId));
+            txnMgr.registerExplicitTransactionState(txnId, database.getId());
+            try {
+                ExplicitTxnState explicit = txnMgr.activateExplicitTransactionTable(txnId, database.getId(), table.getId());
+                explicit.addTransactionItem(TransactionStmtExecutor.load(
+                        database, table, new ExecPlan(), delete, delete.getOrigStmt(), context, coordinator));
+                LoadJob job = globalStateMgr.getLoadMgr().getLoadJobs(label).get(0);
+                Assertions.assertEquals(JobState.LOADING, job.getState());
+
+                if (expected == JobState.FINISHED) {
+                    TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
+                    Assertions.assertEquals(TransactionStatus.VISIBLE,
+                            txnMgr.getTransactionState(database.getId(), txnId).getTransactionStatus());
+                } else {
+                    TransactionStmtExecutor.rollbackStmt(context, new RollbackStmt(NodePosition.ZERO));
+                    Assertions.assertEquals(TransactionStatus.ABORTED,
+                            txnMgr.getTransactionState(database.getId(), txnId).getTransactionStatus());
+                }
+                Assertions.assertFalse(context.getState().isError(), context.getState().getErrorMessage());
+                Assertions.assertEquals(expected, job.getState());
+            } finally {
+                cleanupExplicitState(txnMgr, txnMgr.getTransactionState(database.getId(), txnId));
+            }
+        }
     }
 
     @Test
