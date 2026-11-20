@@ -105,12 +105,17 @@ public class DataFileWrapper implements DataFile {
 
         DataFileWrapper that = (DataFileWrapper) o;
 
-        return dataFile.path().toString().equals(that.dataFile.path().toString());
+        // pos() is the entry's row in its manifest: a manifest can list the same file twice (a file committed twice
+        // and then merged into one manifest), and Iceberg plans it once per entry. Keeping both entries keeps the
+        // cached set in step with the manifest's live entry count, which the read side checks.
+        return dataFile.path().toString().equals(that.dataFile.path().toString())
+                && Objects.equals(dataFile.pos(), that.dataFile.pos());
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(dataFile.path());
+        // path() is a CharSequence; hash its string form so it stays consistent with equals().
+        return Objects.hash(dataFile.path().toString(), dataFile.pos());
     }
 
     @Override
