@@ -95,13 +95,16 @@ private:
 
     Status _get_existing_files_from_local(const std::string& local_path, std::vector<std::string>* local_files);
 
+    // List the remote snapshot dir into `files`, keyed by name without the md5 suffix. If `has_manifest` is
+    // not null, it is set to whether the dir holds the snapshot manifest (which `files` never includes).
     Status _get_existing_files_from_remote(BrokerServiceConnection& client, const std::string& remote_path,
                                            const std::map<std::string, std::string>& broker_prop,
-                                           std::map<std::string, FileStat>* files);
+                                           std::map<std::string, FileStat>* files, bool* has_manifest = nullptr);
 
     Status _get_existing_files_from_remote_without_broker(const std::unique_ptr<FileSystem>& fs,
                                                           const std::string& remote_path,
-                                                          std::map<std::string, FileStat>* files);
+                                                          std::map<std::string, FileStat>* files,
+                                                          bool* has_manifest = nullptr);
 
     Status _rename_remote_file(BrokerServiceConnection& client, const std::string& orig_name,
                                const std::string& new_name, const std::map<std::string, std::string>& broker_prop);
@@ -127,16 +130,15 @@ private:
     Status _write_snapshot_manifest(FileSystem* fs, const std::string& remote_dir,
                                     const std::vector<std::string>& file_names);
 
-    // Read the tablet's remote snapshot manifest. Sets *found to false (and returns OK) when the
-    // manifest is absent, which keeps snapshots taken before this feature on the legacy path.
-    Status _read_snapshot_manifest(FileSystem* fs, const std::string& remote_dir, std::vector<std::string>* file_names,
-                                   bool* found);
+    // Read the tablet's remote snapshot manifest. Only called when the listing shows the manifest, so
+    // any failure here is an error.
+    Status _read_snapshot_manifest(FileSystem* fs, const std::string& remote_dir, std::vector<std::string>* file_names);
 
     // Read the tablet's manifest and check the remote listing against it: every name recorded in
     // the manifest must be present (per-file content integrity is covered separately by the md5
-    // check at download time). No-op (OK) when the manifest is absent (legacy snapshot).
+    // check at download time). No-op (OK) when the listing has no manifest (legacy snapshot).
     Status _verify_snapshot_manifest(FileSystem* fs, const std::string& remote_path,
-                                     const std::map<std::string, FileStat>& remote_files);
+                                     const std::map<std::string, FileStat>& remote_files, bool has_manifest);
 
 private:
     ExecEnv* _env;
