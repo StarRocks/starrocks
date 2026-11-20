@@ -33,8 +33,7 @@ using apache::thrift::protocol::TCompactProtocol;
 using apache::thrift::transport::TMemoryBuffer;
 
 GeoColumnDescriptor geography() {
-    return {GeoTypeDescriptor{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL, GEO_EDGE_ALGORITHM_SPHERICAL,
-                              "OGC:CRS84", std::nullopt}};
+    return {GeoTypeDescriptor{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", std::nullopt}};
 }
 
 template <typename Protocol = TBinaryProtocol, typename Thrift>
@@ -76,7 +75,6 @@ TEST(GeoTypeDescriptorTest, AllAlgorithmsRoundTrip) {
         desc.type.edge_algorithm = algorithm;
         if (algorithm == GEO_EDGE_ALGORITHM_PLANAR) {
             desc.type.logical_type = GEO_LOGICAL_TYPE_GEOMETRY;
-            desc.type.coordinate_system = GEO_COORDINATE_SYSTEM_CARTESIAN;
         }
         desc.type.srid = 4326;
         check_round_trip(desc.type);
@@ -161,6 +159,33 @@ TEST(GeoTypeDescriptorTest, MissingFieldsNormalizeWithoutGuessingSemantics) {
     unset.crs = "OGC:CRS84";
     EXPECT_EQ(GeoTypeDescriptor{}, GeoTypeDescriptor::from_thrift(unset));
     EXPECT_FALSE(is_geo_compute_compatible({}, {}));
+}
+
+TEST(GeoTypeDescriptorTest, WireCoordinateSystemFollowsLogicalType) {
+    // The descriptor no longer keeps the coordinate system. It is still written for peers that require it.
+    auto type = geography().type;
+    EXPECT_TRUE(type.to_thrift().__isset.coordinate_system);
+    EXPECT_EQ(TGeoCoordinateSystem::SPHERICAL, type.to_thrift().coordinate_system);
+    EXPECT_EQ(GEO_COORDINATE_SYSTEM_SPHERICAL, type.to_protobuf().coordinate_system());
+    type.logical_type = GEO_LOGICAL_TYPE_GEOMETRY;
+    type.edge_algorithm = GEO_EDGE_ALGORITHM_PLANAR;
+    EXPECT_EQ(TGeoCoordinateSystem::CARTESIAN, type.to_thrift().coordinate_system);
+    EXPECT_EQ(GEO_COORDINATE_SYSTEM_CARTESIAN, type.to_protobuf().coordinate_system());
+    EXPECT_EQ(TGeoCoordinateSystem::UNKNOWN, GeoTypeDescriptor{}.to_thrift().coordinate_system);
+    EXPECT_EQ(GEO_COORDINATE_SYSTEM_UNKNOWN, GeoTypeDescriptor{}.to_protobuf().coordinate_system());
+
+    // A value sent by a peer is ignored, whether it is absent or disagrees with the logical type.
+    const auto expected = geography().type;
+    auto thrift = expected.to_thrift();
+    thrift.__set_coordinate_system(TGeoCoordinateSystem::CARTESIAN);
+    EXPECT_EQ(expected, GeoTypeDescriptor::from_thrift(thrift));
+    thrift.__isset.coordinate_system = false;
+    EXPECT_EQ(expected, GeoTypeDescriptor::from_thrift(thrift));
+    auto protobuf = expected.to_protobuf();
+    protobuf.set_coordinate_system(GEO_COORDINATE_SYSTEM_CARTESIAN);
+    EXPECT_EQ(expected, GeoTypeDescriptor::from_protobuf(protobuf));
+    protobuf.clear_coordinate_system();
+    EXPECT_EQ(expected, GeoTypeDescriptor::from_protobuf(protobuf));
 }
 
 TEST(GeoTypeDescriptorTest, SridRetainsMeaningfulPresence) {
@@ -294,19 +319,16 @@ TEST(GeoTypeDescriptorTest, ParsedSridIsNotTypeIdentity) {
 
 TEST(GeoTypeDescriptorTest, SemanticMismatchIsNotImplicitlyConverted) {
     const auto source = geography();
-    for (int field = 0; field < 4; ++field) {
+    for (int field = 0; field < 3; ++field) {
         auto target = source;
         switch (field) {
         case 0:
             target.type.logical_type = GEO_LOGICAL_TYPE_GEOMETRY;
             break;
         case 1:
-            target.type.coordinate_system = GEO_COORDINATE_SYSTEM_CARTESIAN;
-            break;
-        case 2:
             target.type.edge_algorithm = GEO_EDGE_ALGORITHM_KARNEY;
             break;
-        case 3:
+        case 2:
             target.type.crs = "EPSG:4326";
             break; // Not an axis-order-safe CRS84 alias.
         }

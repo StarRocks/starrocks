@@ -33,12 +33,11 @@ namespace starrocks::serde {
 namespace {
 
 GeoColumnDescriptor descriptor() {
-    return {{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84",
-             4326}};
+    return {{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326}};
 }
 
 GeoColumnDescriptor geometry_descriptor() {
-    return {{GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857}};
+    return {{GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857}};
 }
 
 std::string point() {

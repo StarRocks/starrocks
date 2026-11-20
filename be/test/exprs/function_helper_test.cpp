@@ -193,11 +193,9 @@ static const GeoColumn* check_geo_leaf(const Column* column, const GeoTypeDescri
 
 TEST_F(FunctionHelperTest, testCreateColumnSpecialTypes) {
     const auto geography = TypeDescriptor::create_geo_type(
-            TYPE_GEOGRAPHY, {GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL, GEO_EDGE_ALGORITHM_SPHERICAL,
-                             "OGC:CRS84", 4326});
+            TYPE_GEOGRAPHY, {GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326});
     const auto geometry = TypeDescriptor::create_geo_type(
-            TYPE_GEOMETRY,
-            {GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857});
+            TYPE_GEOMETRY, {GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857});
     for (const auto& type :
          {TypeDescriptor(TYPE_NULL),
           TypeDescriptor::create_map_type(TypeDescriptor(TYPE_UNKNOWN), TypeDescriptor(TYPE_UNKNOWN)),
@@ -239,7 +237,6 @@ protected:
         return TypeDescriptor::create_geo_type(
                 GetParam(),
                 {geography ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY,
-                 geography ? GEO_COORDINATE_SYSTEM_SPHERICAL : GEO_COORDINATE_SYSTEM_CARTESIAN,
                  geography ? GEO_EDGE_ALGORITHM_SPHERICAL : GEO_EDGE_ALGORITHM_PLANAR,
                  geography ? "OGC:CRS84" : "EPSG:3857", geography ? std::nullopt : std::optional<int32_t>(3857)});
     }

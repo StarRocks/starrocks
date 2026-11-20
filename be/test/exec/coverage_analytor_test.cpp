@@ -36,8 +36,8 @@
 namespace starrocks {
 namespace {
 TypeDescriptor coverage_type() {
-    return TypeDescriptor::create_geo_type(TYPE_GEOMETRY, {GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN,
-                                                           GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857});
+    return TypeDescriptor::create_geo_type(TYPE_GEOMETRY,
+                                           {GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857});
 }
 std::string bytes(const std::string& text) {
     WkbGeometry geometry;
