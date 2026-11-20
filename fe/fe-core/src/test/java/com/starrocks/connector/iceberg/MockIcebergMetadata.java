@@ -278,7 +278,7 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         Schema schema = new Schema(
                 required(3, "id", Types.IntegerType.get()),
                 required(4, "data", Types.StringType.get()),
-                required(5, "geo_col", Types.GeometryType.crs84()),
+                required(5, "geo_col", Types.GeometryType.of("IGNF:ATI")),
                 required(7, "geography_col", Types.GeographyType.crs84()),
                 required(6, "ts_nano_col", Types.StringType.get()));
         PartitionSpec spec = PartitionSpec.builderFor(schema).build();
