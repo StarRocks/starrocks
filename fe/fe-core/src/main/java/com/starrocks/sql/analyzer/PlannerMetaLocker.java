@@ -636,14 +636,20 @@ public class PlannerMetaLocker implements AutoCloseable {
         private void visitPolicyBodies(TableName name, Table table) {
             List<Expr> bodies = new ArrayList<>();
             try {
-                Expr rowAccess = Authorizer.getRowAccessPolicy(session, name);
+                // The analyzer's own lookup is the one that counts (and, under Ranger, the one audited).
+                Expr rowAccess = Authorizer.getRowAccessPolicyWithoutAudit(session, name);
                 if (rowAccess != null) {
                     bodies.add(rowAccess);
                 }
                 // The columns SecurityPolicyRewriteRule#buildView masks.
                 List<Column> columns = table.getBaseSchema().stream()
+<<<<<<< HEAD
                         .filter(c -> !c.getType().isUnknown()).toList();
                 Map<String, Expr> masking = Authorizer.getColumnMaskingPolicy(session, name, columns);
+=======
+                        .filter(c -> !c.getType().isUnknown()).filter(Column::isVisible).toList();
+                Map<String, Expr> masking = Authorizer.getColumnMaskingPolicyWithoutAudit(session, name, columns);
+>>>>>>> a4341b3 ([BugFix] Audit Ranger row-filter and masking hits, and keep the SELECT check when a scan is optimized away (#83212))
                 if (masking != null) {
                     bodies.addAll(masking.values());
                 }
