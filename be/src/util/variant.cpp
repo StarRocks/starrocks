@@ -21,11 +21,7 @@
 #include <boost/uuid/uuid_io.hpp>
 #include <charconv>
 #include <cstdint>
-<<<<<<< HEAD:be/src/util/variant.cpp
-=======
 #include <cstdlib>
-#include <ctime>
->>>>>>> 62fefa0 ([BugFix][RB-1273] Keep runtime bitset filters off VARIANT integer widening and print shortest round-trip doubles (#83859)):be/src/types/variant.cpp
 #include <iomanip>
 #include <string_view>
 

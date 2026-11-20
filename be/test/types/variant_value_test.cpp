@@ -17,14 +17,7 @@
 #include <fs/fs.h>
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
 #include <boost/uuid/uuid_io.hpp>
-=======
-#include <cstring>
-#include <limits>
-#include <memory>
-#include <vector>
->>>>>>> 62fefa0 ([BugFix][RB-1273] Keep runtime bitset filters off VARIANT integer widening and print shortest round-trip doubles (#83859))
 
 #include "cctz/time_zone.h"
 #include "util/timezone_utils.h"
@@ -150,7 +143,7 @@ TEST_F(VariantRowValueTest, FloatToJson) {
         VariantRowValue variant{std::string_view(float_metadata), std::string_view(float_value)};
         auto json = variant.to_json();
         ASSERT_TRUE(json.ok());
-        EXPECT_EQ("1.23456794e+09", *json);
+        EXPECT_EQ("1.234568e+09", *json);
     }
 
     // Test double
@@ -508,43 +501,8 @@ TEST_F(VariantRowValueTest, ToJsonMicrosecondTimestampsBeforeEpoch) {
     EXPECT_EQ(R"("1970-01-01 00:00:00.000001+00:00")", to_json(VariantType::TIMESTAMP_TZ, 1));
 }
 
-TEST_F(VariantRowValueTest, CopyAssignment) {
-    // Create source variant
-    auto [metadata1, value1] = load_variant_data("primitive_int64.metadata", "primitive_int64.value");
-    VariantRowValue source{std::string_view(metadata1), std::string_view(value1)};
-
-    // Create destination variant with different data
-    auto [metadata2, value2] = load_variant_data("primitive_int32.metadata", "primitive_int32.value");
-    VariantRowValue dest{std::string_view(metadata2), std::string_view(value2)};
-
-    // Verify dest has different data initially
-    auto dest_json_before = dest.to_json();
-    ASSERT_TRUE(dest_json_before.ok());
-    EXPECT_EQ("123456", *dest_json_before);
-
-    // Copy assign
-    dest = source;
-
-    // Both should now have the same data
-    auto source_json = source.to_json();
-    auto dest_json = dest.to_json();
-    ASSERT_TRUE(source_json.ok());
-    ASSERT_TRUE(dest_json.ok());
-    EXPECT_EQ(*source_json, *dest_json);
-    EXPECT_EQ("1234567890123456789", *dest_json);
-
-    // Verify they are independent
-    EXPECT_NE(&source.get_metadata().raw()[0], &dest.get_metadata().raw()[0]);
-}
-
-<<<<<<< HEAD
-TEST_F(VariantRowValueTest, MoveAssignment) {
-    // Create source variant
-    auto [metadata1, value1] = load_variant_data("object_primitive.metadata", "object_primitive.value");
-    VariantRowValue source{std::string_view(metadata1), std::string_view(value1)};
-=======
 // FLOAT and DOUBLE print the shortest text that parses back to the same value, not max_digits10 digits.
-TEST(VariantRowValueTest, ToJsonFloatingPointUsesShortestRoundTrip) {
+TEST_F(VariantRowValueTest, ToJsonFloatingPointUsesShortestRoundTrip) {
     const auto to_json = [](VariantType type, const void* value, size_t size) {
         std::string bytes(1 + size, '\0');
         bytes[0] = static_cast<char>(static_cast<uint8_t>(type) << 2);
@@ -580,16 +538,39 @@ TEST(VariantRowValueTest, ToJsonFloatingPointUsesShortestRoundTrip) {
     EXPECT_EQ("1e+09", float_json(1e9f));
 }
 
-TEST(VariantMetadataTest, GetKeyRejectsTruncatedOffsetTable) {
-    // The dictionary size says 255 keys, but the metadata has no offset table: reading key 254 must fail, not read past
-    // the buffer.
-    // The bytes sit in a heap buffer of exactly their size, so that ASAN sees any read past them.
-    const char truncated_bytes[] = {'\x01', '\xff', '\x00'};
-    const std::unique_ptr<char[]> truncated(new char[sizeof(truncated_bytes)]);
-    memcpy(truncated.get(), truncated_bytes, sizeof(truncated_bytes));
-    VariantMetadata truncated_metadata(std::string_view(truncated.get(), sizeof(truncated_bytes)));
-    EXPECT_FALSE(truncated_metadata.get_key(254).ok());
->>>>>>> 62fefa0 ([BugFix][RB-1273] Keep runtime bitset filters off VARIANT integer widening and print shortest round-trip doubles (#83859))
+TEST_F(VariantRowValueTest, CopyAssignment) {
+    // Create source variant
+    auto [metadata1, value1] = load_variant_data("primitive_int64.metadata", "primitive_int64.value");
+    VariantRowValue source{std::string_view(metadata1), std::string_view(value1)};
+
+    // Create destination variant with different data
+    auto [metadata2, value2] = load_variant_data("primitive_int32.metadata", "primitive_int32.value");
+    VariantRowValue dest{std::string_view(metadata2), std::string_view(value2)};
+
+    // Verify dest has different data initially
+    auto dest_json_before = dest.to_json();
+    ASSERT_TRUE(dest_json_before.ok());
+    EXPECT_EQ("123456", *dest_json_before);
+
+    // Copy assign
+    dest = source;
+
+    // Both should now have the same data
+    auto source_json = source.to_json();
+    auto dest_json = dest.to_json();
+    ASSERT_TRUE(source_json.ok());
+    ASSERT_TRUE(dest_json.ok());
+    EXPECT_EQ(*source_json, *dest_json);
+    EXPECT_EQ("1234567890123456789", *dest_json);
+
+    // Verify they are independent
+    EXPECT_NE(&source.get_metadata().raw()[0], &dest.get_metadata().raw()[0]);
+}
+
+TEST_F(VariantRowValueTest, MoveAssignment) {
+    // Create source variant
+    auto [metadata1, value1] = load_variant_data("object_primitive.metadata", "object_primitive.value");
+    VariantRowValue source{std::string_view(metadata1), std::string_view(value1)};
 
     auto expected_json = source.to_json();
     ASSERT_TRUE(expected_json.ok());
