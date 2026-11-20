@@ -27,7 +27,8 @@ namespace starrocks {
 
 // Sizes chosen to exercise every code path: empty, < SIMD width, one full vector,
 // multiple vectors with unroll, vectors + tail, large enough to defeat unroll.
-static const std::vector<int32_t> kRleTestSizes = {0, 1, 3, 7, 8, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 128, 257};
+static const std::vector<int32_t> kRleTestSizes = {0,  1,  3,  4,  7,  8,   15,  16,   17,  31,
+                                                   32, 33, 63, 64, 65, 127, 128, 257, 1024};
 
 // ----------------------------------------------------------------------------
 // simd_fill_int16 / simd_fill_int32 / SIMDUtils::simd_fill<T>
@@ -242,6 +243,51 @@ PARALLEL_TEST(RleSimdTest, simd_dict_gather_double) {
         }
         ASSERT_EQ(dest.back(), -9.5) << "n=" << n;
     }
+}
+
+template <typename DstT, typename SrcT, typename IdxT = uint32_t>
+static void test_simd_dict_gather_template(DstT sentinel) {
+    constexpr int32_t kDictSize = 137;
+    std::mt19937 rng(0xBADC0FFE);
+    std::uniform_int_distribution<int32_t> idx_dist(0, kDictSize - 1);
+
+    std::vector<SrcT> dict(kDictSize);
+    for (int32_t i = 0; i < kDictSize; ++i) {
+        dict[i] = static_cast<SrcT>(i * 17 - 500) + static_cast<SrcT>(0.25);
+    }
+
+    for (int32_t n : kRleTestSizes) {
+        std::vector<IdxT> indices(n);
+        for (auto& v : indices) v = static_cast<IdxT>(idx_dist(rng));
+
+        std::vector<DstT> dst(static_cast<size_t>(n) + 1, sentinel);
+        simd_dict_gather(dst.data(), dict.data(), indices.data(), n);
+
+        for (int32_t i = 0; i < n; ++i) {
+            ASSERT_EQ(dst[i], static_cast<DstT>(dict[indices[i]])) << "n=" << n << " i=" << i;
+        }
+        ASSERT_EQ(dst.back(), sentinel) << "n=" << n << " sentinel overwritten";
+    }
+}
+
+PARALLEL_TEST(RleSimdTest, simd_dict_gather_template_dispatch) {
+    // Same-type 4-byte and 8-byte fast paths (both uint32_t and int32_t index types)
+    test_simd_dict_gather_template<int32_t, int32_t, uint32_t>(static_cast<int32_t>(0x7F7F7F7F));
+    test_simd_dict_gather_template<int32_t, int32_t, int32_t>(static_cast<int32_t>(0x7F7F7F7F));
+    test_simd_dict_gather_template<uint32_t, uint32_t, uint32_t>(0xDEADBEEFu);
+    test_simd_dict_gather_template<int64_t, int64_t, uint32_t>(0x123456789ABCDEF0LL);
+    test_simd_dict_gather_template<uint64_t, uint64_t, uint32_t>(0xFEDCBA9876543210ULL);
+    test_simd_dict_gather_template<float, float, uint32_t>(-77.25f);
+    test_simd_dict_gather_template<float, float, int32_t>(-77.25f);
+    test_simd_dict_gather_template<double, double, uint32_t>(-99.125);
+    test_simd_dict_gather_template<double, double, int32_t>(-99.125);
+
+    // Cross-width and cross-category DstT != SrcT fallback paths (must convert, never corrupt memory)
+    test_simd_dict_gather_template<int64_t, int32_t, uint32_t>(0x1122334455667788LL);
+    test_simd_dict_gather_template<int32_t, int16_t, uint32_t>(0x13572468);
+    test_simd_dict_gather_template<double, float, uint32_t>(-123.75);
+    test_simd_dict_gather_template<float, int32_t, uint32_t>(-456.5f);
+    test_simd_dict_gather_template<double, int64_t, uint32_t>(-789.25);
 }
 
 // ----------------------------------------------------------------------------

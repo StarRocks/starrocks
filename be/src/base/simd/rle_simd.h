@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <type_traits>
 
 #include "base/simd/multi_version.h"
 
@@ -140,15 +141,28 @@ inline void simd_minmax(const T* __restrict data, int32_t count, T& out_min, T& 
 template <typename DstT, typename SrcT, typename IdxT>
 inline void simd_dict_gather(DstT* __restrict dst, const SrcT* __restrict dict, const IdxT* __restrict indices,
                              int32_t count) {
-    if constexpr (sizeof(IdxT) == 4 && sizeof(SrcT) == 4) {
-        simd_dict_gather_int32(reinterpret_cast<int32_t*>(dst), reinterpret_cast<const int32_t*>(dict),
-                               reinterpret_cast<const uint32_t*>(indices), count);
-    } else if constexpr (sizeof(IdxT) == 4 && sizeof(SrcT) == 8) {
-        simd_dict_gather_int64(reinterpret_cast<int64_t*>(dst), reinterpret_cast<const int64_t*>(dict),
-                               reinterpret_cast<const uint32_t*>(indices), count);
-    } else {
-        for (int32_t i = 0; i < count; ++i) dst[i] = dict[indices[i]];
+    using RawDstT = std::remove_cv_t<DstT>;
+    using RawSrcT = std::remove_cv_t<SrcT>;
+    if constexpr (sizeof(IdxT) == 4 && std::is_integral_v<IdxT> && sizeof(DstT) == sizeof(SrcT) &&
+                  std::is_trivially_copyable_v<DstT> && std::is_trivially_copyable_v<SrcT>) {
+        if constexpr (std::is_same_v<RawDstT, float> && std::is_same_v<RawSrcT, float>) {
+            simd_dict_gather_float(dst, dict, reinterpret_cast<const uint32_t*>(indices), count);
+            return;
+        } else if constexpr (std::is_same_v<RawDstT, double> && std::is_same_v<RawSrcT, double>) {
+            simd_dict_gather_double(dst, dict, reinterpret_cast<const uint32_t*>(indices), count);
+            return;
+        } else if constexpr (sizeof(SrcT) == 4 && std::is_integral_v<DstT> && std::is_integral_v<SrcT>) {
+            simd_dict_gather_int32(reinterpret_cast<int32_t*>(dst), reinterpret_cast<const int32_t*>(dict),
+                                   reinterpret_cast<const uint32_t*>(indices), count);
+            return;
+        } else if constexpr (sizeof(SrcT) == 8 && std::is_integral_v<DstT> && std::is_integral_v<SrcT>) {
+            simd_dict_gather_int64(reinterpret_cast<int64_t*>(dst), reinterpret_cast<const int64_t*>(dict),
+                                   reinterpret_cast<const uint32_t*>(indices), count);
+            return;
+        }
     }
+
+    for (int32_t i = 0; i < count; ++i) dst[i] = static_cast<DstT>(dict[indices[i]]);
 }
 
 } // namespace starrocks
