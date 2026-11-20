@@ -452,9 +452,24 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
     // Owned VariantTuples (not pointers) so step 1b can insert synthesized canonical
     // colocate boundaries that don't exist in any segment.
     std::vector<VariantTuple> ordered_boundary_values;
+    // A truncated bound is still a valid cut point, but its columns past the exact ones are not key values. When
+    // colocate-aware, a bound with fewer exact columns than the colocate prefix would give step 1b and the greedy
+    // loop a synthetic colocate prefix that no row has, so it is left out. Step 3 still distributes the segment over
+    // the ranges its [min, max] overlaps; a segment whose skipped bounds both lie below the smallest, or both above
+    // the largest, remaining boundary value overlaps none and adds nothing to the planner's estimates
+    // (apply_rowset_anchor still hands out its rowset's recorded statistics in full, evenly if no segment of the
+    // rowset has any weight).
+    const auto usable_bound = [colocate_column_count](bool truncated, size_t exact_columns) {
+        return !truncated || colocate_column_count <= 0 || exact_columns >= static_cast<size_t>(colocate_column_count);
+    };
     for (const auto& segment : segments) {
-        ordered_boundary_values.push_back(segment.min_key);
-        ordered_boundary_values.push_back(segment.max_key);
+        const auto& exactness = segment.bounds_exactness;
+        if (usable_bound(exactness.min_truncated, exactness.min_exact_columns)) {
+            ordered_boundary_values.push_back(segment.min_key);
+        }
+        if (usable_bound(exactness.max_truncated, exactness.max_exact_columns)) {
+            ordered_boundary_values.push_back(segment.max_key);
+        }
         for (const auto& sample : segment.sort_key_samples) {
             ordered_boundary_values.push_back(sample);
         }
@@ -883,12 +898,15 @@ Status build_segments_from_rowsets_impl(TabletManager* tablet_manager, const Tab
     // "Not enough split ranges available".
     //
     // Sound only where the segment's stored sort-key bounds and the tablet range speak the same key
-    // space at the same arity, which the arity equality below enforces: a segment written before a
+    // space at the same arity, which the arity check below enforces: a segment written before a
     // metadata-only trailing sort-key ADD stores a narrower tuple, which VariantTuple::compare
     // orders BELOW its padded form, so testing it against a current-arity range would exclude a
-    // segment that does hold in-range rows. Anything this test cannot decide -- an unbounded
-    // tablet, a missing or unparseable bound, a mismatched arity -- keeps the segment's full weight,
-    // i.e. exactly the behaviour of not doing this at all.
+    // segment that does hold in-range rows. The check reads the arity the bounds were taken from,
+    // never the decoded size: a bound truncated to the value budget decodes to fewer values, yet its
+    // minimum is still below and its maximum above every key of the segment, so intersecting the
+    // decoded bounds can only keep a segment, never drop one with in-range rows. Anything this test
+    // cannot decide -- an unbounded tablet, a missing or unparseable bound, a mismatched arity --
+    // keeps the segment's full weight, i.e. exactly the behaviour of not doing this at all.
     TabletRange weighting_range;
     size_t weighting_range_arity = 0;
     bool weight_by_range = false;
@@ -901,13 +919,12 @@ Status build_segments_from_rowsets_impl(TabletManager* tablet_manager, const Tab
                 weighting_range_arity > 0 && (lower_arity == 0 || upper_arity == 0 || lower_arity == upper_arity);
     }
     const auto sample_weight_of = [&](const SegmentMetadataPB& segment_meta) -> int64_t {
-        if (!weight_by_range || !has_segment_sort_key_bounds(segment_meta)) {
+        if (!weight_by_range || !segment_sort_key_bounds_have_arity(segment_meta, weighting_range_arity)) {
             return segment_meta.num_rows();
         }
         VariantTuple segment_min;
         VariantTuple segment_max;
-        if (!decode_segment_sort_key_bounds(segment_meta, &segment_min, &segment_max).ok() ||
-            segment_min.size() != weighting_range_arity || segment_max.size() != weighting_range_arity) {
+        if (!decode_segment_sort_key_bounds(segment_meta, &segment_min, &segment_max).ok()) {
             return segment_meta.num_rows();
         }
         // A segment spans the inclusive interval [min, max] -- the same range
@@ -952,7 +969,9 @@ Status build_segments_from_rowsets_impl(TabletManager* tablet_manager, const Tab
             const auto& segment_meta = rowset.segment_metas(meta_pos);
             SegmentSplitInfo segment;
             segment.source_id = rowset.id();
-            RETURN_IF_ERROR(decode_segment_sort_key_bounds(segment_meta, &segment.min_key, &segment.max_key));
+            // A truncated bound is conservative: only its leading exact columns are this segment's key values.
+            RETURN_IF_ERROR(decode_segment_sort_key_bounds(segment_meta, &segment.min_key, &segment.max_key,
+                                                           &segment.bounds_exactness));
             segment.num_rows = segment_meta.num_rows();
             segment.data_size = segment_meta.size();
 
@@ -1636,13 +1655,19 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> build_new_tablet
     // sort-key ADD stores narrower bounds and must not be pruned with them (see
     // can_prune_rowset_segments); it degrades to all-shared instead.
     const size_t sort_key_arity = raw_sort_key_arity(old_tablet_metadata->schema());
+    // With the sort key schema, ownership pads a bound truncated to the value budget with NULL to the sort-key
+    // arity, the form the boundary planner chose the new ranges from (see compute_rowset_segment_ownership). Both
+    // split-range computations have already materialized this schema for a tablet with rowsets. Without it the
+    // bounds are compared unpadded, which can keep a segment shared on more children but never drops one.
+    const auto sort_key_schema_or = materialize_sort_key_schema(old_tablet_metadata->schema());
+    const TabletSchema* sort_key_schema = sort_key_schema_or.ok() ? sort_key_schema_or.value().get() : nullptr;
     const int rowset_count = old_tablet_metadata->rowsets_size();
     std::vector<RowsetOwnership> rowset_ownership(rowset_count);
     std::vector<bool> rowset_prunable(rowset_count, false);
     for (int rowset_index = 0; rowset_index < rowset_count; ++rowset_index) {
         const auto& source_rowset = old_tablet_metadata->rowsets(rowset_index);
         if (!can_prune_rowset_segments(source_rowset, sort_key_arity)) continue;
-        auto ownership_or = compute_rowset_segment_ownership(source_rowset, parsed_new_tablet_ranges);
+        auto ownership_or = compute_rowset_segment_ownership(source_rowset, parsed_new_tablet_ranges, sort_key_schema);
         if (ownership_or.ok()) {
             rowset_ownership[rowset_index] = std::move(ownership_or.value());
             rowset_prunable[rowset_index] = true;
@@ -1841,14 +1866,20 @@ StatusOr<std::vector<TabletRange>> parse_tablet_ranges(const std::vector<TabletR
 }
 
 StatusOr<RowsetOwnership> compute_rowset_segment_ownership(const RowsetMetadataPB& rowset,
-                                                           const std::vector<TabletRangePB>& new_tablet_ranges) {
+                                                           const std::vector<TabletRangePB>& new_tablet_ranges,
+                                                           const TabletSchema* sort_key_schema) {
     ASSIGN_OR_RETURN(auto parsed_ranges, parse_tablet_ranges(new_tablet_ranges));
-    return compute_rowset_segment_ownership(rowset, parsed_ranges);
+    return compute_rowset_segment_ownership(rowset, parsed_ranges, sort_key_schema);
 }
 
 StatusOr<RowsetOwnership> compute_rowset_segment_ownership(const RowsetMetadataPB& rowset,
-                                                           const std::vector<TabletRange>& parsed_ranges) {
+                                                           const std::vector<TabletRange>& parsed_ranges,
+                                                           const TabletSchema* sort_key_schema) {
     const int new_tablet_count = static_cast<int>(parsed_ranges.size());
+    std::optional<SortKeyProjection> projection;
+    if (sort_key_schema != nullptr) {
+        ASSIGN_OR_RETURN(projection, SortKeyProjection::create(*sort_key_schema));
+    }
 
     RowsetOwnership ownership;
     ownership.segments.resize(rowset.segment_metas_size());
@@ -1860,6 +1891,18 @@ StatusOr<RowsetOwnership> compute_rowset_segment_ownership(const RowsetMetadataP
         // An unparseable key means we cannot reason about this rowset's geometry;
         // return non-OK so the caller degrades the whole rowset to all-shared.
         RETURN_IF_ERROR(decode_segment_sort_key_bounds(segment_meta, &segment_min_key, &segment_max_key));
+        // Compare the bounds in the form the boundary planner chose the new ranges from: padded with NULL to the
+        // sort-key arity. A truncated minimum (5, 'cut') that became a child's lower bound (5, 'cut', NULL) would
+        // otherwise sort below that bound and keep the segment, shared, on the child below, which holds none of its
+        // rows. Padding keeps both bounds valid because only bounds taken from a sort key of the current arity get
+        // here (can_prune_rowset_segments): a full-arity bound is unchanged, a truncated minimum padded with the NULL
+        // minimum stays <= every key of the segment, and a truncated maximum ends in a successor, so it sorts above
+        // every key of the segment before the padding is reached. Narrower bounds written before a trailing sort-key
+        // ADD, which padding would understate, never get here.
+        if (projection.has_value()) {
+            projection->project(&segment_min_key);
+            projection->project(&segment_max_key);
+        }
         // The segment spans the inclusive key interval [min, max].
         TabletRange segment_range(segment_min_key, segment_max_key, /*lower_bound_included=*/true,
                                   /*upper_bound_included=*/true);

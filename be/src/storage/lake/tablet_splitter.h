@@ -21,6 +21,7 @@
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/sort_key_bounds.h"
 #include "storage/variant_tuple.h"
 
 namespace starrocks {
@@ -42,6 +43,10 @@ struct SegmentSplitInfo {
     int64_t num_rows = 0;
     int64_t data_size = 0;
     uint32_t source_id = 0; // Optional: for per-source statistics tracking (e.g., rowset_id)
+    // Which of min_key / max_key were truncated when stored (see encode_stored_sort_key_bound), and for a truncated
+    // one how many leading columns are the segment's own key values: the rest of a truncated bound only keeps it a
+    // bound. SortKeyProjection's padding does not change these counts.
+    SortKeyBoundsExactness bounds_exactness;
 
     // Equal-row-interval samples of the sort key (NON-DECREASING) and the row
     // interval used to produce them, as produced by load_samples() below.
@@ -228,10 +233,16 @@ bool can_prune_rowset_segments(const RowsetMetadataPB& rowset, size_t sort_key_a
 //     against the same new_tablet_ranges should parse once via
 //     parse_tablet_ranges() and call this overload to avoid
 //     N redundant proto parses per rowset.
+//
+// If |sort_key_schema| is given, each segment's decoded bounds are first padded with NULL to its
+// sort-key arity, the form the boundary planner chose the new ranges from. The caller must pass only
+// rowsets whose bounds were taken from a sort key of that arity (can_prune_rowset_segments).
 StatusOr<RowsetOwnership> compute_rowset_segment_ownership(const RowsetMetadataPB& rowset,
-                                                           const std::vector<TabletRangePB>& new_tablet_ranges);
+                                                           const std::vector<TabletRangePB>& new_tablet_ranges,
+                                                           const TabletSchema* sort_key_schema = nullptr);
 StatusOr<RowsetOwnership> compute_rowset_segment_ownership(const RowsetMetadataPB& rowset,
-                                                           const std::vector<TabletRange>& parsed_ranges);
+                                                           const std::vector<TabletRange>& parsed_ranges,
+                                                           const TabletSchema* sort_key_schema = nullptr);
 
 // Parse a vector of TabletRangePB into TabletRange, returning the first
 // from_proto error encountered. Used by callers of compute_rowset_segment_

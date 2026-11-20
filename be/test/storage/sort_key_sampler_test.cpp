@@ -24,6 +24,7 @@
 #include "column/schema.h"
 #include "common/config.h"
 #include "fs/fs_memory.h"
+#include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/decimalv2_value.h"
 #include "storage/chunk_helper.h"
@@ -33,6 +34,7 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/seek_tuple.h"
+#include "storage/sort_key_bounds.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
 #include "storage/uint24.h"
@@ -702,6 +704,54 @@ protected:
         return std::move(segment_or.value());
     }
 
+    // |num_columns| BIGINT key columns (unique_ids 1..num_columns), all of them in the short key, every one holding i in
+    // row i. Sets _tablet_schema.
+    std::shared_ptr<Segment> write_bigint_key_segment(int num_columns, int64_t num_rows, uint32_t rows_per_block) {
+        std::vector<ColumnPB> columns;
+        for (int id = 1; id <= num_columns; ++id) {
+            ColumnPB column;
+            column.set_unique_id(id);
+            column.set_name(std::to_string(id));
+            column.set_type("BIGINT");
+            column.set_is_key(true);
+            column.set_is_nullable(false);
+            column.set_length(8);
+            column.set_index_length(8);
+            columns.push_back(column);
+        }
+        std::shared_ptr<TabletSchema> schema(TabletSchemaHelper::create_tablet_schema(columns, num_columns));
+        _tablet_schema = schema;
+
+        _fs = std::make_shared<MemoryFileSystem>();
+        const std::string dir = "/sort_key_sampler_test";
+        CHECK(_fs->create_dir(dir).ok());
+        SegmentWriterOptions opts;
+        opts.num_rows_per_block = rows_per_block;
+        std::string filename = strings::Substitute("$0/seg.dat", dir);
+        auto wfile_or = _fs->new_writable_file(filename);
+        CHECK(wfile_or.ok());
+        auto writer = std::make_unique<SegmentWriter>(std::move(wfile_or.value()), /*segment_id=*/0, schema, opts);
+        CHECK(writer->init(true).ok());
+
+        auto chunk_schema = ChunkHelper::convert_schema(schema);
+        auto chunk = ChunkHelper::new_chunk(chunk_schema, num_rows);
+        auto cols = chunk->columns();
+        for (int64_t i = 0; i < num_rows; ++i) {
+            for (auto& col : cols) {
+                col->as_mutable_ptr()->append_datum(Datum(i));
+            }
+        }
+        CHECK(writer->append_chunk(*chunk).ok());
+        uint64_t file_size = 0;
+        uint64_t index_size = 0;
+        uint64_t footer_position = 0;
+        CHECK(writer->finalize(&file_size, &index_size, &footer_position).ok());
+
+        auto segment_or = Segment::open(_fs, FileInfo{writer->segment_path()}, 0, schema);
+        CHECK(segment_or.ok()) << segment_or.status().to_string();
+        return std::move(segment_or.value());
+    }
+
     // Deletes the segment's file out from under it, so any read that reopens it (e.g.
     // new_segment_read_file) fails deterministically. Requires the fixture's own _fs, since
     // MemoryFileSystem has no truncate.
@@ -871,6 +921,52 @@ TEST_F(SortKeySamplerSegmentTest, path_a_zero_target_yields_no_samples) {
     EXPECT_TRUE(result.samples.empty());
     EXPECT_EQ(latency_samples_before, sort_key_sampling_short_key_index_latency_count())
             << "target <= 0 must return before the latency timer even starts";
+}
+
+// Five BIGINT sort key columns, all in the short key: 40 bytes of values, over the stored bound budget, so the stored
+// minimum keeps only the first four columns. The short key index still encodes the whole sort key, but its entry-0 ==
+// minimum check, which guards the index's integrity, rejects the truncated minimum and path A yields no samples. Path
+// B still samples the segment, so truncation only costs this segment the free path.
+TEST_F(SortKeySamplerSegmentTest, TruncatedMinUsesDataPagePath) {
+    constexpr int64_t kNumRows = 8192;
+    auto segment = write_bigint_key_segment(/*num_columns=*/5, kNumRows, /*rows_per_block=*/1024);
+    ASSERT_TRUE(segment->load_index().ok());
+    const Schema schema = ChunkHelper::convert_schema(_tablet_schema);
+    const std::vector<uint32_t> sort_key_idxes{0, 1, 2, 3, 4};
+    ASSERT_TRUE(short_key_index_encodes_full_sort_key(schema, sort_key_idxes, _tablet_schema->num_short_key_columns()));
+
+    VariantTuple true_min;
+    VariantTuple true_max;
+    for (size_t i = 0; i < sort_key_idxes.size(); ++i) {
+        true_min.emplace(get_type_info(TYPE_BIGINT), Datum(int64_t{0}));
+        true_max.emplace(get_type_info(TYPE_BIGINT), Datum(kNumRows - 1));
+    }
+    SegmentMetadataPB meta;
+    set_segment_sort_key_bounds(true_min, true_max, &meta);
+    VariantTuple stored_min;
+    VariantTuple stored_max;
+    SortKeyBoundsExactness exactness;
+    ASSERT_OK(decode_segment_sort_key_bounds(meta, &stored_min, &stored_max, &exactness));
+    ASSERT_TRUE(exactness.min_truncated);
+    ASSERT_EQ(4u, stored_min.size());
+
+    // The index itself is usable: given the true minimum, path A samples it.
+    ASSIGN_OR_ABORT(auto with_true_min, sample_sort_key_from_short_key_index(*segment, schema, sort_key_idxes, true_min,
+                                                                             stored_max, kNumRows, /*target=*/3));
+    EXPECT_FALSE(with_true_min.samples.empty());
+
+    ASSIGN_OR_ABORT(auto from_index, sample_sort_key_from_short_key_index(*segment, schema, sort_key_idxes, stored_min,
+                                                                          stored_max, kNumRows, /*target=*/3));
+    EXPECT_TRUE(from_index.samples.empty()) << "entry 0 must equal the stored minimum in full";
+
+    ASSIGN_OR_ABORT(auto from_data,
+                    sample_sort_key_from_segment_data(*segment, _tablet_schema, sort_key_idxes, kNumRows, stored_min,
+                                                      stored_max, /*target=*/3, /*fill_data_cache=*/false));
+    ASSERT_FALSE(from_data.samples.empty());
+    for (const auto& sample : from_data.samples) {
+        EXPECT_LE(stored_min.compare(sample), 0);
+        EXPECT_LT(sample.compare(stored_max), 0);
+    }
 }
 
 // ---------------------------------------------------------------------------
