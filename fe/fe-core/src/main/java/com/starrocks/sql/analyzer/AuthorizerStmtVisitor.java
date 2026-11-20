@@ -1737,8 +1737,18 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                 }
             } else if (statement.getGrantType() == GrantType.ROLE) {
                 AuthorizationMgr authorizationManager = context.getGlobalStateMgr().getAuthorizationMgr();
-                Set<String> roleNames =
-                        authorizationManager.getAllPredecessorRoleNamesByUser(context.getCurrentUserIdentity());
+                UserIdentity currentUser = context.getCurrentUserIdentity();
+                Set<String> roleNames;
+                if (currentUser.isEphemeral()) {
+                    // An ephemeral user (from a security integration) is not stored, so it has no
+                    // granted roles to look up. Its roles come from its groups and are on the session.
+                    roleNames = new HashSet<>();
+                    for (Long roleId : context.getCurrentRoleIds()) {
+                        roleNames.addAll(authorizationManager.getAllPredecessorRoleNames(roleId));
+                    }
+                } else {
+                    roleNames = authorizationManager.getAllPredecessorRoleNamesByUser(currentUser);
+                }
                 if (!roleNames.contains(statement.getGroupOrRole())) {
                     Authorizer.checkSystemAction(context, PrivilegeType.GRANT);
                 }
