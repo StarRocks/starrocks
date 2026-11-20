@@ -8991,8 +8991,13 @@ void run_parallel_compaction(TabletParallelCompactionManager* manager, TabletMan
     pool.release();
     ASSERT_TRUE(closure.wait_finish());
     ASSERT_EQ(0, response.failed_tablets_size());
-    ASSERT_EQ(0, manager->task_failure_total());
-    ASSERT_EQ(0, manager->subtask_failure_total());
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        ASSERT_EQ(created.value(), state->completed_subtasks.size());
+        for (const auto& context : state->completed_subtasks) {
+            ASSERT_OK(context->status);
+        }
+    }
     manager->cleanup_tablet(tablet_id, txn_id);
 
     ASSIGN_OR_ABORT(run->published, TEST_publish_single_version(tablet_mgr, tablet_id, tablet->version() + 1, txn_id));

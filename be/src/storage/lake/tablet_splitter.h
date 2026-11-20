@@ -22,11 +22,7 @@
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet_metadata.h"
-<<<<<<< HEAD
-=======
-#include "storage/pk_publish_config.h"
 #include "storage/sort_key_bounds.h"
->>>>>>> 6bf04e1ed0d... [BugFix][RB-1485] Cap the size of segment sort key bounds in lake tablet metadata (#70326)
 #include "storage/variant_tuple.h"
 
 namespace starrocks {

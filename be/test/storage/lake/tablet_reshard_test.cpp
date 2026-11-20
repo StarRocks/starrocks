@@ -5302,10 +5302,9 @@ Status load_long_key_rows(lake::TabletManager* tablet_manager, MemTracker* mem_t
     txn_info.set_txn_id(txn_id);
     txn_info.set_txn_type(TXN_NORMAL);
     txn_info.set_commit_time(1);
-    ASSIGN_OR_RETURN(
-            auto published,
-            lake::publish_version(tablet_manager, lake::PublishTabletInfo(metadata.id()), *version, *version + 1,
-                                  std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt));
+    ASSIGN_OR_RETURN(auto published,
+                     lake::publish_version(tablet_manager, lake::PublishTabletInfo(metadata.id()), *version,
+                                           *version + 1, std::span<const TxnInfoPB>(&txn_info, 1), false));
     *version = published->version();
     return Status::OK();
 }
