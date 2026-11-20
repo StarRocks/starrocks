@@ -215,6 +215,42 @@ public class AggTableTest extends PlanTestBase {
     }
 
     @Test
+    public void testDistinctAggOnValueColumn() throws Exception {
+        // v3 is a SUM column: unmerged parts of one stored value are different values to a DISTINCT aggregate.
+        int aggStage = connectContext.getSessionVariable().getNewPlannerAggStage();
+        try {
+            for (int stage : new int[] {0, 1}) {
+                connectContext.getSessionVariable().setNewPlanerAggStage(stage);
+                String plan = getFragmentPlan("select SUM(DISTINCT v3) from test_agg");
+                assertNotContains(plan, "PREAGGREGATION: ON");
+            }
+            connectContext.getSessionVariable().setNewPlanerAggStage(1);
+            assertTestAggOFF(getFragmentPlan("select SUM(DISTINCT v3) from test_agg"),
+                    "Aggregate function SUM with DISTINCT needs merged values");
+            // MAX / MIN ignore DISTINCT, so v1 (MAX) and v2 (MIN) can still skip the merge.
+            assertTestAggON(getFragmentPlan("select MAX(DISTINCT v1), MIN(DISTINCT v2) from test_agg"));
+        } finally {
+            connectContext.getSessionVariable().setNewPlanerAggStage(aggStage);
+        }
+    }
+
+    @Test
+    public void testSetOperationBranchDoesNotInheritAggregate() throws Exception {
+        // The constant GROUP BY of the first branch must not turn pre-aggregation on for the scan of the second.
+        String[] sqls = {
+                "select a from (select distinct 0 as a group by a union all select v3 from test_agg) s",
+                "select a from (select v3 as a from test_agg union all select distinct 0 as a group by a) s",
+                "select distinct 0 as a group by a except select v3 from test_agg",
+                "select distinct 0 as a group by a intersect select v3 from test_agg",
+        };
+        for (String sql : sqls) {
+            assertTestAggOFF(getFragmentPlan(sql), "None aggregate function");
+        }
+        // An aggregate inside a branch still turns pre-aggregation on for that branch.
+        assertTestAggON(getFragmentPlan("select distinct 0 as a group by a union all select MAX(v1) from test_agg"));
+    }
+
+    @Test
     public void testSplitTopNAgg() throws Exception {
         final SessionVariable sv = ConnectContext.get().getSessionVariable();
         sv.setEnableSplitTopNAgg(true);
