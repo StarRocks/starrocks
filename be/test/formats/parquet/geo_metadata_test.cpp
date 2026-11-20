@@ -919,17 +919,11 @@ TEST(GeoMetadataTest, NestedNativeGeoIsRejectedByComplexReader) {
         EXPECT_TRUE(reader.status().is_not_supported()) << reader.status();
     };
 
-<<<<<<< HEAD
-    expect_rejected(ColumnType::ARRAY, TypeDescriptor::create_array_type(geography));
-    expect_rejected(ColumnType::MAP, TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), geography));
-    expect_rejected(ColumnType::STRUCT, TypeDescriptor::create_struct_type({"shape"}, {geography}));
-=======
     for (const auto* type : {&geography, &geometry}) {
         expect_rejected(ColumnType::ARRAY, TypeDescriptor::create_array_type(*type));
         expect_rejected(ColumnType::MAP, TypeDescriptor::create_map_type(TYPE_INT_DESC, *type));
         expect_rejected(ColumnType::STRUCT, TypeDescriptor::create_struct_type({"shape"}, {*type}));
     }
->>>>>>> 1bf1ef3 ([Enhancement] Prepare scalar Iceberg GEOMETRY Parquet reads (backport #82785) (#83348))
 }
 
 TEST(GeoMetadataTest, NativeGeographyConverterPreservesNullsAndOwnership) {

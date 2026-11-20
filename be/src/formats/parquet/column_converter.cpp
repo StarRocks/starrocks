@@ -620,34 +620,8 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
             col_type != LogicalType::TYPE_VARBINARY) {
             need_convert = true;
         }
-<<<<<<< HEAD
-        if (col_type == TYPE_GEOGRAPHY) {
-            *converter = std::make_unique<BinaryToGeographyConverter>();
-=======
-        switch (col_type) {
-        case LogicalType::TYPE_DECIMALV2:
-            // All DecimalV2 use scale 9 as scale
-            *converter = std::make_unique<VarBinaryToDecimalConverter<TYPE_DECIMALV2>>(field.scale, 9);
-            break;
-        case LogicalType::TYPE_DECIMAL32:
-            *converter =
-                    std::make_unique<VarBinaryToDecimalConverter<TYPE_DECIMAL32>>(field.scale, typeDescriptor.scale);
-            break;
-        case LogicalType::TYPE_DECIMAL64:
-            *converter =
-                    std::make_unique<VarBinaryToDecimalConverter<TYPE_DECIMAL64>>(field.scale, typeDescriptor.scale);
-            break;
-        case LogicalType::TYPE_DECIMAL128:
-            *converter =
-                    std::make_unique<VarBinaryToDecimalConverter<TYPE_DECIMAL128>>(field.scale, typeDescriptor.scale);
-            break;
-        case LogicalType::TYPE_GEOGRAPHY:
-        case LogicalType::TYPE_GEOMETRY:
+        if (col_type == LogicalType::TYPE_GEOGRAPHY || col_type == LogicalType::TYPE_GEOMETRY) {
             *converter = std::make_unique<BinaryToGeoConverter>();
-            break;
-        default:
-            break;
->>>>>>> 1bf1ef3 ([Enhancement] Prepare scalar Iceberg GEOMETRY Parquet reads (backport #82785) (#83348))
         }
         break;
     }
