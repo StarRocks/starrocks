@@ -2,6 +2,7 @@
 keywords: ['xiugai'] 
 displayed_sidebar: docs
 description: "ALTER DATABASE configures the properties of the specified database."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER DATABASE

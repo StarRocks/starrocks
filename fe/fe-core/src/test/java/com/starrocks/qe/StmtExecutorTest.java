@@ -21,6 +21,7 @@ import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -36,7 +37,12 @@ import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.lake.LakeMetaVersionNotFoundException;
+import com.starrocks.listener.GlobalLoadJobListenerBus;
 import com.starrocks.load.DeleteMgr;
+import com.starrocks.load.EtlJobType;
+import com.starrocks.load.loadv2.InsertLoadJob;
+import com.starrocks.load.loadv2.InsertLoadTxnCallback;
+import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.mysql.MysqlSerializer;
@@ -89,7 +95,9 @@ import com.starrocks.transaction.PlainInsertOnEmptyPartitionsConflictException;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionCommitFailedException;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
+import com.starrocks.transaction.VisibleStateWaiter;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -108,8 +116,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
@@ -1250,6 +1260,202 @@ public class StmtExecutorTest {
                 "expected original sink error to propagate, got: " + ex.getMessage());
         // No FE transaction abort must be attempted for a table function (INSERT INTO FILES) sink.
         Assertions.assertEquals(0, abortCount.get());
+    }
+
+    @Test
+    public void testShadowRewriteWaitsForPublishOnlyForTheVisibleWaitTimeout(
+            @Mocked DefaultCoordinator coordinator, @Mocked InsertLoadJob loadJob) throws Exception {
+        // A shadow rewrite runs on the schema change scheduler thread, and its job waits for a committed rewrite
+        // on later scheduler ticks. A publish that does not finish must not keep that thread, and every other
+        // schema change behind it, until the INSERT deadline, even with sync publish on.
+        AtomicLong requestedWaitMs = new AtomicLong();
+        ConnectContext ctx = runInsertWhosePublishDoesNotFinish(true, coordinator, loadJob, requestedWaitMs);
+
+        Assertions.assertEquals(1000L, requestedWaitMs.get());
+        Assertions.assertEquals(MysqlStateType.OK, ctx.getState().getStateType());
+        Assertions.assertTrue(ctx.getState().getInfoMessage().contains("'status':'COMMITTED'"),
+                ctx.getState().getInfoMessage());
+    }
+
+    @Test
+    public void testInsertWaitsForPublishUntilItsDeadlineWithSyncPublish(
+            @Mocked DefaultCoordinator coordinator, @Mocked InsertLoadJob loadJob) throws Exception {
+        AtomicLong requestedWaitMs = new AtomicLong();
+        ConnectContext ctx = runInsertWhosePublishDoesNotFinish(false, coordinator, loadJob, requestedWaitMs);
+
+        // Sync publish keeps a plain INSERT waiting until its deadline, an hour away, not for the 1s visible wait.
+        Assertions.assertTrue(requestedWaitMs.get() > 3_500_000L, "requested publish wait " + requestedWaitMs.get());
+        Assertions.assertEquals(MysqlStateType.OK, ctx.getState().getStateType());
+    }
+
+    /**
+     * Runs an INSERT into an OLAP table whose transaction commits but never becomes visible, with sync publish on,
+     * an INSERT timeout of an hour and a visible wait timeout of one second. The faked waiter returns at once and
+     * adds every timeout it is asked to wait for to {@code requestedWaitMs}, which is therefore how long the INSERT
+     * would have waited for the publish.
+     */
+    private ConnectContext runInsertWhosePublishDoesNotFinish(boolean shadowRewrite, DefaultCoordinator coordinator,
+                                                              InsertLoadJob loadJob, AtomicLong requestedWaitMs)
+            throws Exception {
+        MetricRepo.init(); // handleDMLStmt bumps MetricRepo counters
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        UUID queryId = UUIDUtil.genUUID();
+        ctx.setQueryId(queryId);
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+        ctx.getSessionVariable().setInsertTimeoutS(3600);
+        ctx.getSessionVariable().setTransactionVisibleWaitTimeout(1);
+
+        long dbId = 10002L;
+        long txnId = 10003L;
+        InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement(
+                "INSERT INTO t0 SELECT 1", SqlModeHelper.MODE_DEFAULT);
+        stmt.setTxnId(txnId);
+        stmt.setShadowRewrite(shadowRewrite);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+        OlapTable targetTable = new OlapTable();
+        new MockUp<InsertStmt>() {
+            @Mock
+            public Table getTargetTable() {
+                return targetTable;
+            }
+        };
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(ConnectContext context, String catalogName, String dbName) {
+                return new Database(dbId, "publish_wait_db");
+            }
+        };
+
+        TransactionState txnState = new TransactionState(dbId, List.of(targetTable.getId()), txnId,
+                "publish_wait_label", null, TransactionState.LoadJobSourceType.INSERT_STREAMING, null, -1L,
+                3600_000L);
+        VisibleStateWaiter waiter = Deencapsulation.newInstance(VisibleStateWaiter.class, txnState);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return txnState;
+            }
+
+            @Mock
+            public VisibleStateWaiter retryCommitOnRateLimitExceeded(Database db, long transactionId,
+                                                                     List<TabletCommitInfo> tabletCommitInfos,
+                                                                     List<TabletFailInfo> tabletFailInfos,
+                                                                     TxnCommitAttachment txnCommitAttachment,
+                                                                     long timeoutMs) {
+                return waiter;
+            }
+
+            @Mock
+            public String getTxnPublishTimeoutDebugInfo(long dbId, long txnId) {
+                return "";
+            }
+        };
+        new MockUp<VisibleStateWaiter>() {
+            @Mock
+            public boolean await(long timeout, TimeUnit unit) {
+                requestedWaitMs.addAndGet(unit.toMillis(timeout));
+                return false;
+            }
+        };
+        // This FE stays the leader while the INSERT waits.
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean shouldStopPublishWaitAfterCommit() {
+                return false;
+            }
+        };
+        new MockUp<LoadMgr>() {
+            @Mock
+            public InsertLoadJob registerInsertLoadJob(String label, String dbName, long tableId, long txnId,
+                                                       String loadId, String user, EtlJobType jobType,
+                                                       long createTimestamp, LoadMgr.EstimateStats estimateStats,
+                                                       long timeout, long warehouseId, Coordinator coordinator,
+                                                       InsertLoadTxnCallback insertLoadTxnCallback) {
+                return loadJob;
+            }
+
+            @Mock
+            public void recordFinishedOrCancelledLoadJob(long jobId, EtlJobType jobType, String failMsg,
+                                                         String trackingUrl) {
+            }
+        };
+        new MockUp<GlobalLoadJobListenerBus>() {
+            @Mock
+            public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table,
+                                                      DmlType dmlType) {
+            }
+        };
+
+        ExecPlan execPlan = buildMinimalExecPlan(1);
+        new MockUp<DefaultCoordinator.Factory>() {
+            @Mock
+            public DefaultCoordinator createInsertScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                            List<ScanNode> scanNodes,
+                                                            TDescriptorTable descTable, ExecPlan plan) {
+                return coordinator;
+            }
+        };
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void setLoadJobType(com.starrocks.thrift.TLoadJobType loadJobType) {
+            }
+
+            @Mock
+            public void setLoadJobId(Long jobId) {
+            }
+
+            @Mock
+            public void exec() {
+            }
+
+            @Mock
+            public boolean join(int timeoutSecond) {
+                return true;
+            }
+
+            @Mock
+            public boolean isDone() {
+                return true;
+            }
+
+            @Mock
+            public Status getExecStatus() {
+                return new Status();
+            }
+
+            @Mock
+            public java.util.Map<String, String> getLoadCounters() {
+                HashMap<String, String> counters = new HashMap<>();
+                counters.put(LoadEtlTask.DPP_NORMAL_ALL, "1");
+                return counters;
+            }
+
+            @Mock
+            public List<com.starrocks.thrift.TTabletCommitInfo> getCommitInfos() {
+                return Collections.emptyList();
+            }
+
+            @Mock
+            public List<com.starrocks.thrift.TTabletFailInfo> getFailInfos() {
+                return Collections.emptyList();
+            }
+
+            @Mock
+            public String getTrackingUrl() {
+                return "";
+            }
+        };
+
+        boolean syncPublish = Config.enable_sync_publish;
+        Config.enable_sync_publish = true;
+        try {
+            executor.handleDMLStmt(execPlan, stmt);
+        } finally {
+            Config.enable_sync_publish = syncPublish;
+        }
+        return ctx;
     }
 
     @Test

@@ -53,6 +53,7 @@ In the final change summary or PR description, state which existing signals were
 - Commit messages: English, imperative, concise.
 - PR titles: `[BugFix] ...`, `[Feature] ...`, `[Enhancement] ...`, `[Refactor] ...`, `[UT] ...`, `[Doc] ...`, or `[Tool] ...`.
 - Fill the repository PR template completely, including behavior-change classification and test/docs checkboxes.
+- Keep every block of the template, including the final "Bugfix cherry-pick branch check" block, which is required on every PR. Always tick "I have checked the version labels..." in it.
 - Bug-fix PRs intended for branch backports must set the version checkboxes that drive auto-backporting.
 - When editing any file under `docs/`, read `docs/CLAUDE.md` for documentation-specific rules before making changes.
 

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks supports the following JSON comparison operators: <, <=, >, >=, =, and !=."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # JSON operators

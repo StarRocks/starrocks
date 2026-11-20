@@ -2,6 +2,7 @@
 keywords: ['xiugai'] 
 displayed_sidebar: docs
 description: "查看同步物化视图的构建状态。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW ALTER MATERIALIZED VIEW

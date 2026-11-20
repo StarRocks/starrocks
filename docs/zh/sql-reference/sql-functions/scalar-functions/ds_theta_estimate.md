@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回由序列化的 Apache DataSketches Theta 草图汇总的近似不同值计数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_theta_estimate

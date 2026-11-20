@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "How to create and use Duplicate Key tables (default StarRocks type) for storing raw logs and time-series data with configurable sort keys."
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 明细表

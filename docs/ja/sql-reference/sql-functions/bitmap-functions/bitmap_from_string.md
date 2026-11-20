@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "文字列をBITMAPに変換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_from_string

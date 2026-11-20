@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "be_threads provides information about the threads running on each BE node."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # be_threads

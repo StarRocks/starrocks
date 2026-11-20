@@ -78,7 +78,10 @@ public:
 
     void get_cache_status(rapidjson::Document* /*document*/) override {}
 
-    void set_capacity(size_t capacity) override { _capacity = capacity; }
+    size_t set_capacity(size_t capacity) override {
+        _capacity = capacity;
+        return 0;
+    }
 
     size_t get_capacity() const override { return _capacity; }
 

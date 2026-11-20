@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "2つのビットマップ列の間に交差する要素があるかどうかを計算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_has_any

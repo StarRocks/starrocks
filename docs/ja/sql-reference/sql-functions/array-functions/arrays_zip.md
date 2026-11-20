@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された配列をインデックスでマージし、入力配列のn番目の値をすべて含む構造体の配列にします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # arrays_zip

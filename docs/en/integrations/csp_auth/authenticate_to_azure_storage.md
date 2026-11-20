@@ -3,6 +3,7 @@ sidebar_position: 20
 displayed_sidebar: docs
 sidebar_label: Microsoft Azure Storage
 description: "How to configure StarRocks to authenticate with Azure Blob Storage and Azure Data Lake Storage."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Authenticate to Microsoft Azure Storage

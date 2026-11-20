@@ -16,6 +16,15 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <chrono>
+#include <future>
+#include <thread>
+#include <vector>
+
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
+
 namespace starrocks {
 
 class TabletSchemaMapTest : public testing::Test {
@@ -258,6 +267,86 @@ TEST_F(TabletSchemaMapTest, test_get_erase) {
     schema_map.erase(1);
     auto get_schema_3 = schema_map.get(1);
     ASSERT_TRUE(get_schema_3 == nullptr);
+}
+
+// emplace() checks the column unique ids of a cached schema after releasing the shard lock. The check reads every
+// column, and all tablets of a table share one shard, so under the lock it made concurrent scans of a wide table
+// queue up behind each other. contains() takes the same shard lock: call it from another thread while the check runs.
+TEST_F(TabletSchemaMapTest, test_emplace_checks_unique_id_outside_lock) {
+    TabletSchemaMap schema_map;
+    auto schema_pb = _gen_schema_pb(1, 8);
+    auto other_pb = _gen_schema_pb(1, 8);
+    other_pb.mutable_column(0)->set_unique_id(100);
+    auto [cached, inserted] = schema_map.emplace(schema_pb);
+    ASSERT_TRUE(inserted);
+
+    std::vector<std::future<bool>> probes;
+    SyncPoint::GetInstance()->SetCallBack("TabletSchemaMap::emplace:check_unique_id", [&](void* arg) {
+        if (arg != &schema_map) {
+            return;
+        }
+        probes.emplace_back(std::async(std::launch::async, [&schema_map]() { return schema_map.contains(1); }));
+        // Times out if the check runs under the shard lock.
+        EXPECT_EQ(std::future_status::ready, probes.back().wait_for(std::chrono::seconds(30)));
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletSchemaMap::emplace:check_unique_id");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // Passes the check: returns the cached schema.
+    auto [same, same_inserted] = schema_map.emplace(schema_pb);
+    EXPECT_FALSE(same_inserted);
+    EXPECT_EQ(cached.get(), same.get());
+
+    // Fails the check: returns a new schema built from |other_pb|.
+    auto [other, other_inserted] = schema_map.emplace(other_pb);
+    EXPECT_FALSE(other_inserted);
+    EXPECT_NE(cached.get(), other.get());
+    EXPECT_EQ(100, other->column(0).unique_id());
+
+    // The TabletSchemaPtr overload, failing the check: returns its argument.
+    TabletSchemaMap::TabletSchemaPtr other_schema = TabletSchema::create(other_pb);
+    auto [by_ptr, by_ptr_inserted] = schema_map.emplace(other_schema);
+    EXPECT_FALSE(by_ptr_inserted);
+    EXPECT_EQ(other_schema.get(), by_ptr.get());
+
+    ASSERT_EQ(3, probes.size());
+    for (auto& probe : probes) {
+        EXPECT_TRUE(probe.get());
+    }
+}
+
+// Concurrent emplace() calls, half of which fail the unique-id check. When the check fails, emplace() may hold the
+// last reference to the cached schema it looked up; dropping it runs the schema's destructor, which erases the map
+// entry under the shard lock, so emplace() must drop it after unlocking or it deadlocks.
+TEST_F(TabletSchemaMapTest, test_emplace_concurrent) {
+    TabletSchemaMap schema_map;
+    const auto schema_pb = _gen_schema_pb(1, 16);
+    auto other_pb = _gen_schema_pb(1, 16);
+    other_pb.mutable_column(0)->set_unique_id(1000);
+
+    std::atomic<int> wrong{0};
+    std::vector<std::thread> threads;
+    for (int t = 0; t < 8; ++t) {
+        threads.emplace_back([&, t]() {
+            for (int i = 0; i < 2000; ++i) {
+                const auto& pb = (t + i) % 2 == 0 ? schema_pb : other_pb;
+                auto schema = schema_map.emplace(pb).first;
+                if (schema == nullptr || schema->column(0).unique_id() != pb.column(0).unique_id()) {
+                    wrong.fetch_add(1);
+                }
+            }
+        });
+    }
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    EXPECT_EQ(0, wrong.load());
+    // Every schema is gone, and with it every map entry.
+    EXPECT_EQ(0, schema_map.stats().num_items);
+    EXPECT_EQ(0, schema_map.stats().memory_usage);
 }
 
 } // namespace starrocks

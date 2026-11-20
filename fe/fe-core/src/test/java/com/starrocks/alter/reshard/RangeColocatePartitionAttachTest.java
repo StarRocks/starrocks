@@ -716,8 +716,6 @@ public class RangeColocatePartitionAttachTest {
         job.setSampler(request -> SampleSet.EMPTY);
         Deencapsulation.invoke(job, "runPendingJob");
         Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
-        // The first round allocates the watershed and exposes the shadow index to loads.
-        Deencapsulation.invoke(job, "runWaitingTxnJob");
         new MockUp<LakeRangeRollupJob>() {
             @Mock
             public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) {

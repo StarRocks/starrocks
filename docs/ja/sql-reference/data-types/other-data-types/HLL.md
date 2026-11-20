@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "HLL は近似カウントディスティンクトに使用されます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # HLL (HyperLogLog)

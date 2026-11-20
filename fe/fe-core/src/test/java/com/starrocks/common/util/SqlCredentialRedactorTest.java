@@ -212,6 +212,45 @@ public class SqlCredentialRedactorTest {
     }
 
     @Test
+    public void testRedactIcebergCatalogCredentials() {
+        String sql = "CREATE EXTERNAL CATALOG iceberg_rest PROPERTIES (\n" +
+                "    \"type\" = \"iceberg\",\n" +
+                "    \"iceberg.catalog.type\" = \"rest\",\n" +
+                "    \"iceberg.catalog.uri\" = \"https://rest.example.com/catalog\",\n" +
+                "    \"iceberg.catalog.security\" = \"oauth2\",\n" +
+                "    \"iceberg.catalog.oauth2.server-uri\" = \"https://idp.example.com/oauth2/token\",\n" +
+                "    \"iceberg.catalog.oauth2.credential\" = \"client-id:oauth2-client-secret\",\n" +
+                "    'iceberg.catalog.oauth2.token' = 'oauth2-bearer-token',\n" +
+                "    \"ICEBERG.CATALOG.REST.ACCESS-KEY-ID\" = \"rest-access-key-id\",\n" +
+                "    \"iceberg.catalog.rest.secret-access-key\" = \"rest-secret-access-key\",\n" +
+                "    \"iceberg.catalog.jdbc.password\" = \"jdbc-password\",\n" +
+                "    \"iceberg.catalog.s3.access-key-id\" = \"s3-access-key-id\",\n" +
+                "    \"iceberg.catalog.s3.secret-access-key\" = \"s3-secret-access-key\",\n" +
+                "    \"iceberg.catalog.s3.session-token\" = \"s3-session-token\",\n" +
+                "    \"iceberg.catalog.gcs.oauth2.token\" = \"gcs-oauth2-token\",\n" +
+                "    \"iceberg.catalog.adls.sas-token.account.dfs.core.windows.net\" = \"adls-sas-token\",\n" +
+                "    \"iceberg.catalog.oauth2.scope\" = \"catalog-scope\"\n" +
+                ")";
+
+        Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(sql));
+        String redacted = SqlCredentialRedactor.redact(sql);
+        Assertions.assertFalse(redacted.contains("oauth2-client-secret"), "OAuth2 credential should be redacted");
+        Assertions.assertFalse(redacted.contains("client-id"), "OAuth2 credential should be redacted");
+        Assertions.assertFalse(redacted.contains("oauth2-bearer-token"), "OAuth2 token should be redacted");
+        Assertions.assertFalse(redacted.contains("rest-access-key-id"), "REST SigV4 access key should be redacted");
+        Assertions.assertFalse(redacted.contains("rest-secret-access-key"), "REST SigV4 secret key should be redacted");
+        Assertions.assertFalse(redacted.contains("jdbc-password"), "JDBC password should be redacted");
+        Assertions.assertFalse(redacted.contains("s3-access-key-id"), "S3FileIO access key should be redacted");
+        Assertions.assertFalse(redacted.contains("s3-secret-access-key"), "S3FileIO secret key should be redacted");
+        Assertions.assertFalse(redacted.contains("s3-session-token"), "S3FileIO session token should be redacted");
+        Assertions.assertFalse(redacted.contains("gcs-oauth2-token"), "GCSFileIO token should be redacted");
+        Assertions.assertFalse(redacted.contains("adls-sas-token"), "ADLSFileIO SAS token should be redacted");
+        Assertions.assertTrue(redacted.contains("https://rest.example.com/catalog"), "Catalog URI should remain");
+        Assertions.assertTrue(redacted.contains("https://idp.example.com/oauth2/token"), "OAuth2 server URI should remain");
+        Assertions.assertTrue(redacted.contains("catalog-scope"), "OAuth2 scope should remain");
+    }
+
+    @Test
     public void testRedactHdfsCredentials() {
         String sql = "LOAD LABEL test_load\n" +
                 "(\n" +

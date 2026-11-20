@@ -29,7 +29,6 @@ namespace starrocks {
 // Callers supply declared enum values and decide which semantics an operation supports.
 struct GeoTypeDescriptor {
     GeoLogicalTypePB logical_type = GEO_LOGICAL_TYPE_UNKNOWN;
-    GeoCoordinateSystemPB coordinate_system = GEO_COORDINATE_SYSTEM_UNKNOWN;
     GeoEdgeAlgorithmPB edge_algorithm = GEO_EDGE_ALGORITHM_UNKNOWN;
     std::string crs;
     std::optional<int32_t> srid;

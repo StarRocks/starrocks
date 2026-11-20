@@ -65,7 +65,7 @@ a_b	3
 a b	4
 a.b	5
 -- !result
-function: print_hit_materialized_views("select k, v from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_int")
+function: print_hit_materialized_views("select k, v from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_int", "mv_int")
 -- result:
 mv_int
 -- !result
@@ -91,7 +91,7 @@ select k, v from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_int order by k;
 set enable_materialized_view_rewrite = true;
 -- result:
 -- !result
-function: print_hit_materialized_views("select s, v from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_str")
+function: print_hit_materialized_views("select s, v from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_str", "mv_str")
 -- result:
 mv_str
 -- !result

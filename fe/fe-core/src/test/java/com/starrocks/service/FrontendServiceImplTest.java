@@ -33,6 +33,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
@@ -62,6 +63,7 @@ import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -126,6 +128,8 @@ import com.starrocks.thrift.TPlanFragmentExecParams;
 import com.starrocks.thrift.TPrivilegeRequirement;
 import com.starrocks.thrift.TRefreshConnectionsRequest;
 import com.starrocks.thrift.TRefreshConnectionsResponse;
+import com.starrocks.thrift.TRefreshTableRequest;
+import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TStatus;
@@ -221,6 +225,33 @@ public class FrontendServiceImplTest {
         TImmutablePartitionRequest request = new TImmutablePartitionRequest();
         TImmutablePartitionResult partition = impl.updateImmutablePartition(request);
         Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+    }
+
+    @Test
+    public void testRefreshTableInvalidateOnlyLoadsNothing() throws TException {
+        List<String> invalidated = new ArrayList<>();
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public void invalidateCachedTable(String catalogName, String dbName, String tableName) {
+                invalidated.add(catalogName + "." + dbName + "." + tableName);
+            }
+        };
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public void refreshExternalTable(ConnectContext context, TableName tableName, List<String> partitions) {
+                Assertions.fail("an invalidate-only request must not refresh the table");
+            }
+        };
+
+        TRefreshTableRequest request = new TRefreshTableRequest();
+        request.setCatalog_name("c");
+        request.setDb_name("d");
+        request.setTable_name("t");
+        request.setInvalidate_only(true);
+        TRefreshTableResponse response = new FrontendServiceImpl(exeEnv).refreshTable(request);
+
+        Assertions.assertEquals(TStatusCode.OK, response.getStatus().getStatus_code());
+        Assertions.assertEquals(List.of("c.d.t"), invalidated);
     }
 
     @Test

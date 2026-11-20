@@ -3,6 +3,7 @@ displayed_sidebar: docs
 sidebar_position: 4
 description: "Prometheus 和 Grafana 可视化监控 StarRocks 集群运行情况和性能指标。"
 keywords: ['jian kong']
+products: [oss, enterprise, anywhere]
 ---
 
 # 使用 Prometheus 和 Grafana 监控报警

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "fe_metrics provides information about the metrics of each FE node."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # fe_metrics

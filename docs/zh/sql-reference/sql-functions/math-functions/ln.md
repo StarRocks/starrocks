@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "计算参数x的自然对数（以e为底）。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ln, dlog1, log

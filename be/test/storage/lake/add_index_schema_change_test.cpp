@@ -58,6 +58,7 @@
 #include "storage/rowset/bloom_filter_index_writer.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
 #include "storage_primitive/column_predicate.h"
@@ -1179,6 +1180,80 @@ TEST_F(AddIndexSchemaChangeTest, idg_backed_bloom_filter_smoke) {
     SparseRange<> empty_ranges;
     auto* reader = const_cast<ColumnReader*>(reader_const);
     ASSERT_OK(reader->ngram_bloom_filter(empty_predicates, &empty_ranges, ix_opts));
+}
+
+// A .idx file that tablet metadata still references can be gone: a vacuum racing
+// a query on an old version, or a downgrade and re-upgrade that reclaimed it. An
+// IDG index only accelerates the scan, so both read paths must take the missing
+// file as "no IDG index" for the segment -- no bitmap iterator, no bloom-filter
+// pruning -- instead of failing the query.
+TEST_F(AddIndexSchemaChangeTest, idg_missing_index_file_reads_as_no_index) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    const int nrows = 5;
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, nrows);
+
+    auto meta = versioned_at(base_tablet_id, version).metadata();
+    ASSERT_TRUE(meta != nullptr && meta->rowsets_size() > 0);
+    ASSERT_GT(meta->rowsets(0).segment_metas_size(), 0);
+    const auto& segment_meta = meta->rowsets(0).segment_metas(0);
+    FileInfo seg_fi{.path = _tablet_manager->segment_location(base_tablet_id, segment_meta.filename())};
+    if (segment_meta.has_size()) {
+        seg_fi.size = segment_meta.size();
+    }
+    if (segment_meta.has_encryption_meta()) {
+        seg_fi.encryption_meta = segment_meta.encryption_meta();
+    }
+    if (segment_meta.has_bundle_file_offset()) {
+        seg_fi.bundle_file_offset = segment_meta.bundle_file_offset();
+    }
+    size_t footer_hint = 16 * 1024;
+    ASSIGN_OR_ABORT(auto segment, _tablet_manager->load_segment(seg_fi, /*segment_id=*/0, &footer_hint,
+                                                                LakeIOOptions{.fill_data_cache = false},
+                                                                /*fill_meta_cache=*/true, base_schema));
+
+    // An IDG entry for both flavors whose .idx file does not exist.
+    IndexDeltaGroupEntry entry;
+    entry.index_file = "missing_" + std::to_string(next_id()) + ".idx";
+    entry.version = version;
+    entry.keys.push_back({_c1_uid, IndexType::BITMAP});
+    entry.keys.push_back({_c2_uid, IndexType::NGRAMBF});
+    auto loader = std::make_shared<StubIdgLoaderForReadPath>(IndexDeltaGroupList{entry});
+
+    OlapReaderStatistics stats;
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(seg_fi.path));
+    ASSIGN_OR_ABORT(auto rfile, fs->new_random_access_file(seg_fi));
+    IndexReadOptions ix_opts;
+    ix_opts.read_file = rfile->stream().get();
+    ix_opts.stats = &stats;
+    ix_opts.use_page_cache = false;
+    ix_opts.idg_loader = loader;
+    ix_opts.tablet_id = base_tablet_id;
+    ix_opts.segment_id = 0;
+    ix_opts.query_version = version;
+    const int64_t missing_before = StorageMetrics::instance()->lake_idg_files_missing_total.value();
+
+    // Bitmap: no iterator, as for a column that has no bitmap index.
+    ix_opts.col_unique_id = _c1_uid;
+    auto* c1_reader = const_cast<ColumnReader*>(segment->column_with_uid(_c1_uid));
+    ASSERT_TRUE(c1_reader != nullptr);
+    BitmapIndexIterator* iter = nullptr;
+    ASSERT_OK(c1_reader->new_bitmap_index_iterator(ix_opts, &iter));
+    ASSERT_TRUE(iter == nullptr);
+
+    // Bloom filter: nothing to prune with, so every row range survives. With no
+    // predicate a bloom filter that was read would have pruned every page.
+    ix_opts.col_unique_id = _c2_uid;
+    auto* c2_reader = const_cast<ColumnReader*>(segment->column_with_uid(_c2_uid));
+    ASSERT_TRUE(c2_reader != nullptr);
+    std::vector<const ColumnPredicate*> no_predicates;
+    SparseRange<> ranges(0, nrows);
+    ASSERT_OK(c2_reader->ngram_bloom_filter(no_predicates, &ranges, ix_opts));
+    ASSERT_EQ(nrows, static_cast<int>(ranges.span_size()));
+
+    ASSERT_EQ(missing_before + 2, StorageMetrics::instance()->lake_idg_files_missing_total.value());
 }
 
 // Regression for the IDG bloom-filter build-vs-read granularity mismatch.

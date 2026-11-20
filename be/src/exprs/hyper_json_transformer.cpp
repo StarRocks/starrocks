@@ -387,29 +387,7 @@ Status HyperJsonTransformer::_cast(const MergeTask& task, const ColumnPtr& col) 
 
 Status HyperJsonTransformer::_to_json(const MergeTask& task, const ColumnPtr& col) {
     DCHECK(task.to_json);
-    const auto merge_func = flat_json::JSON_MERGE_FUNC.at(task.src_type);
-    // The merge functions take a nullable source and add a keyed value to an open object.
-    ColumnPtr src = NullableColumn::wrap_if_necessary(col);
-    auto json = JsonColumn::create();
-    auto nulls = NullColumn::create();
-    json->reserve(src->size());
-    nulls->reserve(src->size());
-    constexpr const char* kKey = "v";
-    vpack::Builder builder;
-    for (size_t row = 0; row < src->size(); row++) {
-        if (src->is_null(row)) {
-            json->append_default();
-            nulls->append(1);
-            continue;
-        }
-        builder.clear();
-        builder.openObject();
-        merge_func(&builder, kKey, src.get(), row);
-        builder.close();
-        json->append(JsonValue(builder.slice().get(kKey)));
-        nulls->append(0);
-    }
-    auto res = NullableColumn::create(std::move(json), std::move(nulls));
+    auto res = flat_json::flat_column_to_json(col, task.src_type);
     res->set_delete_state(col->delete_state());
     _dst_columns[task.dst_index] = std::move(res);
     return Status::OK();

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回原生 GEO 值中面分量的边界长度。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Perimeter

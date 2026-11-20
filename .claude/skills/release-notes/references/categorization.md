@@ -21,17 +21,48 @@ StarRocks PR titles start with a bracketed type prefix (enforced by
 If a PR has no recognizable prefix, fall back to its labels and `body_excerpt` to decide,
 and flag it for reviewer confirmation (see below).
 
+## Security (cross-cutting)
+
+Like Behavior Changes, `Security` overrides the table above. It holds:
+
+- upgrades of third-party dependencies (libraries, the JDK, base images, bundled tools), the
+  usual reason for which is a reported vulnerability;
+- fixes of a vulnerability in StarRocks itself: injection, cross-site scripting, an
+  access-control bypass, a credential or secret that is exposed.
+
+Write the CVE IDs first, in brackets, when the PR names them, and the component's new
+version: "[CVE-2026-59902] Bumped Netty to 4.1.137.Final." Without a CVE ID: "Bumped
+ZooKeeper to 3.9.6." StarRocks' own components (StarOS, StarMgr, Starlet, StarCache) are not
+third-party: file their upgrades by what they change, usually under Bug fixes.
+
+Use `### Security` only where the file's most recent patch section has it (see `format.md`);
+elsewhere these entries go under `### Bug fixes`. Never move an existing `### Security`
+entry to another subsection.
+
 ## Behavior Changes (cross-cutting)
 
 `Behavior Changes` is **not** a title prefix — it is a cross-cutting category that overrides
 the table above. Promote an entry to `### Behavior Changes` when the change alters
-**existing observable behavior**, regardless of whether the PR was `[BugFix]` or
-`[Enhancement]`. Signals:
+**existing behavior that was correct and that users could rely on**, regardless of whether
+the PR was `[BugFix]` or `[Enhancement]`: a changed default, a removed or renamed option,
+valid input that is now rejected, a new limit, a deliberate change of semantics.
 
-- The **`behavior_changed` label** on the PR. Treat this as authoritative: a PR carrying
-  `behavior_changed` MUST appear in the release notes under `### Behavior Changes` and must
-  never be silently dropped during curation. (These are the entries most often missed in
-  hand-written drafts.)
+**A correction is not a behavior change**, even though output differs after the upgrade: a
+wrong or invalid result that is now right (or now NULL, or now an error), a crash or hang
+that is now an error, a late or misleading error that is now a clear one. Those stay in
+`### Bug fixes`. When such a fix changes what a query returns, its entry says that the
+previous results were wrong and that results change after the upgrade. In semantic
+versioning, behavior (breaking) changes belong in major releases; a patch release fixes
+bugs.
+
+Signals:
+
+- The **`behavior_changed` label** on the PR. A PR carrying `behavior_changed` MUST appear
+  in the release notes and must never be silently dropped during curation. (These are the
+  entries most often missed in hand-written drafts.) Put it under `### Behavior Changes`,
+  unless all it does is correct wrong behavior as above: then keep it under
+  `### Bug fixes` and add it to the "Needs reviewer confirmation" list ("labeled
+  `behavior_changed`, kept as a bug fix: it corrects wrong results").
 - Title/body mentions: changed **default value**, changed **syntax**/parsing, changed
   **type conversion** or display, a **policy** now enabled/disabled by default, a
   feature **removed**, or upgrade/downgrade **compatibility**.

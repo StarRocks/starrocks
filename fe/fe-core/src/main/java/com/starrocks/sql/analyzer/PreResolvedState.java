@@ -60,11 +60,9 @@ public final class PreResolvedState {
     }
 
     /**
-     * A DML's write target in an external catalog. The pre-pass resolves the tables a statement reads and leaves
-     * the target to the locked analyzer, which is right for an internal target, the object the lock protects. An
-     * external target is not in {@code PlannerMetaLocker}'s lock set, so the lock never made its metadata stable;
-     * and connector metadata is snapshotted per query id ({@code MetadataMgr#getOptionalMetadata}), so a second
-     * resolve reads the same answer. Handing the table over therefore needs no "still current" check. Taken once.
+     * A DML's pre-resolved external write target. The planner lock protects internal table metadata;
+     * connector metadata is scoped to the query instead. INSERT keeps the target for both FILES()
+     * schema pushdown and target analysis. Other DML analyzers take it once.
      */
     public static final Slot<Table> WRITE_TARGET = new Slot<>("write target");
 

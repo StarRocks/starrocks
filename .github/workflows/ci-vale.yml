@@ -80,6 +80,13 @@ jobs:
         env:
           CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         run: |
+          # pull_request_target runs this file from main for PRs against every
+          # branch, but the Vale config comes from the PR's own tree, and
+          # branches cut before Vale was added (3.3 and older) do not have one.
+          if [ ! -f docs/.vale.ini ]; then
+            echo "::notice::docs/.vale.ini does not exist on this branch; skipping Vale."
+            exit 0
+          fi
           # CHANGED_FILES is space-separated; pass as shell word-split args.
           # File names in docs/ are not expected to contain spaces.
           # shellcheck disable=SC2086

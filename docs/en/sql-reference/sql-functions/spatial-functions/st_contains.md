@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Tests whether a polygon strictly contains a point."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Contains

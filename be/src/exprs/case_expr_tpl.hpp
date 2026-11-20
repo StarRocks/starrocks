@@ -308,7 +308,14 @@ protected:
         then_compacted.emplace_back(0);
         then_sizes.emplace_back(0);
 
-        size_t size = when_columns[0]->size();
+        // See _row_count. A compacted THEN only holds the rows its branch owns, so it does not take part.
+        Columns full_length_inputs(when_columns);
+        for (size_t c = 0; c < then_columns.size(); ++c) {
+            if (then_compacted[c] == 0) {
+                full_length_inputs.emplace_back(then_columns[c]);
+            }
+        }
+        const size_t size = _row_count(chunk, full_length_inputs, when_columns[0]);
 
         bool when_columns_has_null = false;
         for (ColumnPtr& column : when_columns) {
@@ -474,6 +481,20 @@ protected:
             return ColumnHelper::create_const_null_column(num_rows);
         }
         return _children[_children.size() - 1]->evaluate_checked(context, chunk);
+    }
+
+    // The number of rows of the result. The row-wise and the SIMD paths build a non-const column even when all
+    // inputs are const, so this must be the real row count, never a packed one. An input may be a const column of
+    // size 1 for a chunk of N rows (CASE evaluates its children directly, and only ExprContext::evaluate resizes a
+    // const result), so taking the size of the first WHEN made CASE return one row for N rows (RB-1379). Use the
+    // chunk's row count; a chunk without columns reports 0 rows, so then fall back to a non-const input, which
+    // always has all N rows, or to the first WHEN as before when all inputs are const.
+    static size_t _row_count(const Chunk* chunk, const Columns& inputs, const ColumnPtr& first_when) {
+        if (chunk != nullptr && chunk->num_columns() > 0) {
+            return chunk->num_rows();
+        }
+        auto [all_const, packed_rows] = ColumnHelper::num_packed_rows(inputs);
+        return all_const ? first_when->size() : packed_rows;
     }
 
     // owned = when AND remaining, with null treated as false (same semantics as count_true_with_notnull).
@@ -746,7 +767,10 @@ private:
             return Column::mutate(std::move(else_column));
         }
         then_columns.emplace_back(else_column);
-        size_t size = when_columns[0]->size();
+        Columns inputs(when_columns);
+        inputs.insert(inputs.end(), then_columns.begin(), then_columns.end());
+        inputs.emplace_back(case_column);
+        const size_t size = this->_row_count(chunk, inputs, when_columns[0]);
         if constexpr (kRowWiseAppendResult || lt_is_row_wise_append<WhenType>) {
             // construct result column
             bool res_nullable = false;

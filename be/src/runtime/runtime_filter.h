@@ -1821,6 +1821,9 @@ public:
     CppType min_value() const { return _min_value; }
     CppType max_value() const { return _max_value; }
     size_t value_interval() const { return _value_interval(_max_value); }
+    // Bytes of a bitset covering [min, min + span], i.e. (span + 1 + 7) / 8 written so it cannot wrap:
+    // span is max - min in size_t and reaches 2^64 - 1 for a full-domain BIGINT range.
+    static size_t num_bytes_for_span(size_t span) { return span / 8 + 1; }
     size_t size() const { return _bitset.size(); }
     const uint8_t* data() const { return _bitset.data(); }
     uint8_t* data() { return _bitset.data(); }

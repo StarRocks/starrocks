@@ -123,6 +123,11 @@ public class BackupRestoreAnalyzer {
                                 "`Config.enable_backup_materialized_view=false`", tbl.getName());
                         continue;
                     }
+                    if (isIncrementalOrAutoMv(tbl)) {
+                        LOG.info("Skip backup materialized view: {} because its refresh mode is {}", tbl.getName(),
+                                ((MaterializedView) tbl).getCurrentRefreshMode());
+                        continue;
+                    }
                     if (tbl.isTemporaryTable()) {
                         continue;
                     }
@@ -487,6 +492,11 @@ public class BackupRestoreAnalyzer {
         tableIdToTableRefMap.put(tbl.getId(), tableRef);
         if (tbl.isMaterializedView()) {
             MaterializedView mv = (MaterializedView) tbl;
+            if (isIncrementalOrAutoMv(mv)) {
+                throw new SemanticException(String.format("Materialized view %s can not be backed up because its " +
+                        "refresh_mode is %s. Recreate it after restoring its base tables", mv.getName(),
+                        mv.getCurrentRefreshMode()), tableRef.getPos());
+            }
             // check its base tables exist for materialized view.
             List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
             for (BaseTableInfo baseTableInfo : baseTableInfos) {
@@ -520,6 +530,12 @@ public class BackupRestoreAnalyzer {
         } else {
             throw new SemanticException("Duplicated table: " + tableName, tableRef.getPos());
         }
+    }
+
+    /** RESTORE cannot line an incremental MV's TVR baseline up with the restored data, so these MVs stay out. */
+    public static boolean isIncrementalOrAutoMv(Table table) {
+        return table != null && table.isMaterializedView()
+                && ((MaterializedView) table).getCurrentRefreshMode().isIncrementalOrAuto();
     }
 
     public static long setPropTimeout(String value, long defaultTimeout) {

@@ -99,7 +99,11 @@ static StatusOr<LogicalType> choose_common_logical_type(LogicalType lhs, Logical
         return TYPE_VARIANT;
     }
     if (is_float_type(lhs) || is_float_type(rhs)) {
-        return TYPE_DOUBLE;
+        // Widening to DOUBLE would change the variant type of the other side's values: an integer 7 would read back
+        // as the double 7.0 and a FLOAT 0.1 as 0.10000000149011612, and a BIGINT above 2^53 would be rounded. A path
+        // must read the same whether or not its files were shredded, so hoist both sides to VARIANT, which keeps the
+        // type of each value, like a decimal scale mismatch does.
+        return TYPE_VARIANT;
     }
     return wider_integer_type(lhs, rhs);
 }

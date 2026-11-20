@@ -24,6 +24,7 @@ import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
@@ -430,6 +431,8 @@ public class CompactionSchedulerTest {
     @Test
     public void testDeferredPriorityCompactionWaitsForRetryDeadline() {
         OlapTable table = new LakeTable();
+        table.setId(2);
+        table.addPartition(new Partition(10, 3, "p", new MaterializedIndex(), null));
         table.setState(OlapTable.OlapTableState.ROLLUP);
         String oldSelector = Config.lake_compaction_selector;
         Config.lake_compaction_selector = "ScoreSelector";
@@ -472,7 +475,16 @@ public class CompactionSchedulerTest {
         Assertions.assertTrue(compactionManager.choosePartitionsToCompact(Set.of()).isEmpty());
 
         // Past the deadline the retained request is selected again.
-        compactionManager.getStatistics(partition).setNextCompactionTime(System.currentTimeMillis() - 1);
+        compactionManager.getStatistics(partition).setAlterCompactionRetryTime(System.currentTimeMillis() - 1);
+        selected = compactionManager.choosePartitionsToCompact(Set.of());
+        Assertions.assertEquals(1, selected.size());
+        Assertions.assertEquals(PartitionStatistics.CompactionPriority.MANUAL_COMPACT, selected.get(0).getPriority());
+
+        // A retry can be skipped just before the rollup ends. Clear that pause after the state change.
+        Assertions.assertNull(compactionScheduler.startCompaction(selected.get(0), info));
+        Assertions.assertTrue(compactionManager.choosePartitionsToCompact(Set.of()).isEmpty());
+        table.setState(OlapTable.OlapTableState.NORMAL);
+        compactionManager.resumeCompactionAfterAlter(1, table);
         selected = compactionManager.choosePartitionsToCompact(Set.of());
         Assertions.assertEquals(1, selected.size());
         Assertions.assertEquals(PartitionStatistics.CompactionPriority.MANUAL_COMPACT, selected.get(0).getPriority());
@@ -1507,8 +1519,8 @@ public class CompactionSchedulerTest {
         Mockito.when(otherTable.getTxnId()).thenReturn(105L);
         compactionScheduler.getRunningCompactions().put(new PartitionIdentifier(dbId, otherTableId, 6), otherTable);
 
-        Set<Long> ignoredTxnIds =
-                compactionScheduler.cancelPreviousCompactions(endTransactionId, dbId, tableId, includePartitionIds);
+        Set<Long> ignoredTxnIds = compactionScheduler.cancelPreviousCompactions(endTransactionId, dbId, tableId,
+                includePartitionIds, includePartitionIds);
 
         // Only the uncommitted compactions on included, pre-watermark partitions are aborted, except the
         // reshard's own UNSHARE.
@@ -1524,6 +1536,49 @@ public class CompactionSchedulerTest {
         // Compactions on not-included partitions (of this table, <= watermark) are returned so the caller
         // can skip waiting for them; the different-table and > watermark ones are not.
         Assertions.assertEquals(Sets.newHashSet(103L, 104L), ignoredTxnIds);
+    }
+
+    @Test
+    public void testCancelPreviousCompactionsKeepsIncludedPartitionsOutsideAbortSet() {
+        CompactionMgr compactionManager = new CompactionMgr();
+        CompactionScheduler compactionScheduler = new CompactionScheduler(compactionManager, null, globalTransactionMgr,
+                globalStateMgr, "");
+
+        long dbId = 100L;
+        long tableId = 200L;
+        long endTransactionId = 2000L;
+        // Partitions 1 and 2 are being resharded, but only 1 may have its compactions aborted; 3 is not being
+        // resharded. The committed and UNSHARE cases of an abortable partition are covered by the test above.
+        Set<Long> includePartitionIds = Sets.newHashSet(1L, 2L);
+        Set<Long> abortPartitionIds = Sets.newHashSet(1L);
+
+        // Included and abortable, uncommitted, <= watermark -> abort.
+        CompactionJob abortable = Mockito.mock(CompactionJob.class);
+        Mockito.when(abortable.getTxnId()).thenReturn(101L);
+        Mockito.when(abortable.transactionHasCommitted()).thenReturn(false);
+        compactionScheduler.getRunningCompactions().put(new PartitionIdentifier(dbId, tableId, 1), abortable);
+
+        // Included but not abortable, uncommitted, <= watermark -> keep and leave it to the previous-transactions
+        // wait, so its txn id is not returned.
+        CompactionJob kept = Mockito.mock(CompactionJob.class);
+        Mockito.when(kept.getTxnId()).thenReturn(102L);
+        Mockito.when(kept.transactionHasCommitted()).thenReturn(false);
+        compactionScheduler.getRunningCompactions().put(new PartitionIdentifier(dbId, tableId, 2), kept);
+
+        // Not-included partition, uncommitted, <= watermark -> not cancelled, txn id returned.
+        CompactionJob otherPartition = Mockito.mock(CompactionJob.class);
+        Mockito.when(otherPartition.getTxnId()).thenReturn(106L);
+        compactionScheduler.getRunningCompactions().put(new PartitionIdentifier(dbId, tableId, 3), otherPartition);
+
+        Set<Long> ignoredTxnIds = compactionScheduler.cancelPreviousCompactions(endTransactionId, dbId, tableId,
+                includePartitionIds, abortPartitionIds);
+
+        Mockito.verify(abortable).abort();
+        Mockito.verify(kept, Mockito.never()).abort();
+        Mockito.verify(otherPartition, Mockito.never()).abort();
+
+        // Only the not-included partition's compaction is excluded from the wait; the kept ones are waited on.
+        Assertions.assertEquals(Sets.newHashSet(106L), ignoredTxnIds);
     }
 
     @Test
