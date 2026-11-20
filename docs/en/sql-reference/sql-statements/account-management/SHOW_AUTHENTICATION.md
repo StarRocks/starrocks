@@ -12,6 +12,8 @@ SHOW AUTHENTICATION displays the authentication information of the current user 
 All users have the privilege to view their own authentication information. Only users with the `user_admin` role can view the authentication information of all users or the authentication information of specified users.
 :::
 
+A user that logs in through a security integration is not created in StarRocks: StarRocks creates a virtual user for its session. Such a user can view its own authentication information with `SHOW AUTHENTICATION` without `FOR`. It cannot be specified in `FOR USERNAME`, which accepts only users created in StarRocks, and it is not returned by `SHOW ALL AUTHENTICATION`.
+
 ## Syntax
 
 ```SQL
@@ -36,8 +38,8 @@ SHOW [ALL] AUTHENTICATION [FOR USERNAME]
 | **Field**         | **Description**                                              |
 | ----------------- | ------------------------------------------------------------ |
 | UserIdentity      | The user identity.                                           |
-| Password          | Whether a password is used to log in to the StarRocks cluster.<ul><li>`Yes`: A password is used.</li><li>`No`: No password is used.</li></ul> |
-| AuthPlugin        | The interface that is used for authentication. Valid values: `MYSQL_NATIVE_PASSWORD` and `AUTHENTICATION_LDAP_SIMPLE`. If no interface is used, `NULL` is returned. |
+| Password          | Whether a password is used to log in to the StarRocks cluster.<ul><li>`Yes`: A password is used.</li><li>`No`: No password is used.</li></ul>For a user that logs in through a security integration, `No` is returned, because StarRocks does not store its password. |
+| AuthPlugin        | The interface that is used for authentication. Valid values: `MYSQL_NATIVE_PASSWORD` and `AUTHENTICATION_LDAP_SIMPLE`. If no interface is used, `NULL` is returned. For a user that logs in through a security integration, the name of that security integration is returned. |
 | UserForAuthPlugin | The name of the user using the LDAP or Kerberos authentication. If no authentication is used, `NULL` is returned. |
 
 ## Examples
@@ -74,4 +76,15 @@ SHOW AUTHENTICATION FOR root;
 +--------------+----------+------------+-------------------+
 | 'root'@'%'   | Yes      | NULL       | NULL              |
 +--------------+----------+------------+-------------------+
+```
+
+Example 4: Display the authentication information of the current user, who logs in through the security integration `ldap_si`.
+
+```Plain
+SHOW AUTHENTICATION;
++------------------------+----------+------------+-------------------+
+| UserIdentity           | Password | AuthPlugin | UserForAuthPlugin |
++------------------------+----------+------------+-------------------+
+| 'alice'@'192.168.1.10' | No       | ldap_si    | NULL              |
++------------------------+----------+------------+-------------------+
 ```

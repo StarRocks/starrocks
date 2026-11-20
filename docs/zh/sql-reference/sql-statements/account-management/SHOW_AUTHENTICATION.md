@@ -16,6 +16,8 @@ products: [oss, enterprise, cloud, anywhere]
 
 :::
 
+通过安全集成登录的用户不会在 StarRocks 中创建：StarRocks 只在会话中为其创建一个虚拟用户。这类用户可以用不带 `FOR` 的 `SHOW AUTHENTICATION` 查看自己的认证信息，但不能在 `FOR USERNAME` 中指定（它只接受在 StarRocks 中创建的用户），`SHOW ALL AUTHENTICATION` 也不会返回这类用户。
+
 ## 语法
 
 ```SQL
@@ -40,8 +42,8 @@ SHOW [ALL] AUTHENTICATION [FOR USERNAME]
 | **字段**          | **说明**                                                     |
 | ----------------- | ------------------------------------------------------------ |
 | UserIdentity      | 用户标识。                                                   |
-| Password          | 是否使用密码登录到 StarRocks 集群。<ul><li>`Yes`：使用密码登录。</li><li>`No`：不使用密码登录。</li></ul> |
-| AuthPlugin        | 使用的认证接口，包括 `MYSQL_NATIVE_PASSWORD` 和 `AUTHENTICATION_LDAP_SIMPLE`。如未使用认证接口，则返回 `NULL`。 |
+| Password          | 是否使用密码登录到 StarRocks 集群。<ul><li>`Yes`：使用密码登录。</li><li>`No`：不使用密码登录。</li></ul>通过安全集成登录的用户返回 `No`，因为 StarRocks 不保存其密码。 |
+| AuthPlugin        | 使用的认证接口，包括 `MYSQL_NATIVE_PASSWORD` 和 `AUTHENTICATION_LDAP_SIMPLE`。如未使用认证接口，则返回 `NULL`。通过安全集成登录的用户返回该安全集成的名称。 |
 | UserForAuthPlugin | 使用 LDAP 或 Kerberos 认证的用户名称。如未使用认证，则返回 `NULL`。 |
 
 ## 示例
@@ -78,4 +80,15 @@ SHOW AUTHENTICATION FOR root;
 +--------------+----------+------------+-------------------+
 | 'root'@'%'   | Yes      | NULL       | NULL              |
 +--------------+----------+------------+-------------------+
+```
+
+示例四：当前用户通过安全集成 `ldap_si` 登录，查看其认证信息。
+
+```Plain
+SHOW AUTHENTICATION;
++------------------------+----------+------------+-------------------+
+| UserIdentity           | Password | AuthPlugin | UserForAuthPlugin |
++------------------------+----------+------------+-------------------+
+| 'alice'@'192.168.1.10' | No       | ldap_si    | NULL              |
++------------------------+----------+------------+-------------------+
 ```
