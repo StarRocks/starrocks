@@ -515,6 +515,8 @@ StarRocks v4.1 引入了 `refresh_mode` 参数，用于控制物化视图的刷�
 
 增量刷新仅支持基表的追加（append-only）操作。如果在基表上执行了不支持的操作（如 `UPDATE`、`MERGE` 或 `OVERWRITE`），当 `refresh_mode` 设置为 `INCREMENTAL` 时，物化视图刷新将失败。
 
+如果刷新因上述非追加变更（例如 `OVERWRITE`、删除分区、快照过期或替换基表）而失败，StarRocks 会将该物化视图置为 Inactive 并暂停其刷新任务，避免任务继续执行注定失败的刷新。此时物化视图的 `is_active` 变为 `false`，[SHOW MATERIALIZED VIEWS](SHOW_MATERIALIZED_VIEW.md) 和 `information_schema.materialized_views` 中的 `inactive_reason` 为 `incremental refresh broken by non-append-only base change: <mv_name>`。StarRocks 不会自动重新激活此类物化视图。如需恢复刷新，请删除并重建该物化视图。
+
 当前支持以下增量刷新操作符：
 
 | 操作符                          | 是否支持增量刷新                                                                                                   |
