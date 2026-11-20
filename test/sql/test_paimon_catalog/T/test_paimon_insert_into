@@ -19,7 +19,6 @@ function: assert_query_error_contains("insert into paimon_write_${uuid0}.writer_
 function: create_paimon_ddl_catalog("paimon_write_reader_${uuid0}", "${uuid0}")
 set paimon_reader_mode = 'jni';
 [ORDER]select id, p, value from paimon_write_reader_${uuid0}.writer_db.append_rows order by id;
-function: assert_query_error_contains("insert overwrite paimon_write_${uuid0}.writer_db.append_rows values (7, 'a', 'seven')", "Only support insert overwrite")
 function: assert_query_error_contains("create table paimon_write_${uuid0}.writer_db.deferred_ctas as select 1 as id", "Paimon CREATE TABLE AS SELECT is not supported")
 CLEANUP {
   set catalog default_catalog;

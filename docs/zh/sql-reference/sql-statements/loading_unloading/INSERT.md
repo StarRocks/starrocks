@@ -85,7 +85,7 @@ INSERT statements support configuring PROPERTIES from v3.4.0 onwards.
 
 当覆盖整个分区表时，新数据会替换对应分区中的数据。但未涉及的分区会保留，而不会被清空或删除。如果新数据对应不存在的分区，系统会自动创建该分区。
 
-Dynamic Overwrite 语义默认禁用。如需启用，需要将系统变量 `dynamic_overwrite` 设置为 `true`。该变量仅适用于 StarRocks 内表。对 Iceberg 表执行 INSERT OVERWRITE 时，无论该变量如何设置，始终只覆盖写入了新数据的分区。
+默认禁用动态覆盖。将 `dynamic_overwrite` 设置为 `true` 可为 StarRocks 内表启用动态覆盖。对 Paimon 分区表执行 `INSERT OVERWRITE` 时，如果省略 `PARTITION` 子句，也可以通过该变量启用动态覆盖。对 Iceberg 表执行 `INSERT OVERWRITE` 时，无论该变量如何设置，始终只覆盖写入了新数据的分区。
 
 在当前 Session 中启用 Dynamic Overwrite:
 
