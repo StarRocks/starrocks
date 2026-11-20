@@ -210,7 +210,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
             Table table, ScalarOperator operator, boolean enableCollectColumnStats) {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
         Metadata metadata = deltaLakeTable.getDeltaMetadata();
-        Engine engine = deltaLakeTable.getDeltaEngine();
+        DeltaLakeEngine engine = (DeltaLakeEngine) deltaLakeTable.getDeltaEngine();
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
 
         StructType schema = metadata.getSchema();
@@ -224,7 +224,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         ScanBuilderImpl scanBuilder = (ScanBuilderImpl) snapshot.getScanBuilder(engine);
         ScanImpl scan = (ScanImpl) scanBuilder.withFilter(engine, deltaLakePredicate).build();
         long estimateRowSize = table.getColumns().stream().mapToInt(column -> column.getType().getTypeSize()).sum();
-        return new CloseableIterator<>() {
+        return engine.withFileSystemAccess(new CloseableIterator<>() {
             CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches;
             CloseableIterator<Row> scanFileRows;
             boolean hasMore = true;
@@ -289,7 +289,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                     hasMore = false;
                 }
             }
-        };
+        });
     }
 
     private RemoteFileInfoSource buildRemoteInfoSource(Table table, GetRemoteFilesParams params) {
