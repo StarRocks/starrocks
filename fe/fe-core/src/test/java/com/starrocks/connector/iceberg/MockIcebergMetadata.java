@@ -274,7 +274,19 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                 Types.NestedField.optional(6, "ts_nano_col", Types.TimestampNanoType.withoutZone()),
                 Types.NestedField.optional(8, "locations", Types.ListType.ofOptional(9, Types.StructType.of(
                         Types.NestedField.optional(10, "shape", Types.GeographyType.crs84()),
-                        Types.NestedField.optional(11, "label", Types.StringType.get())))));
+                        Types.NestedField.optional(11, "label", Types.StringType.get())))),
+                Types.NestedField.optional(12, "geom_scalar", Types.GeometryType.crs84()),
+                Types.NestedField.optional(13, "geom_array", Types.ListType.ofOptional(14, Types.GeometryType.crs84())),
+                Types.NestedField.optional(15, "geom_map",
+                        Types.MapType.ofOptional(16, 17, Types.IntegerType.get(), Types.GeometryType.of("EPSG:3857"))),
+                Types.NestedField.optional(18, "geom_struct", Types.StructType.of(
+                        Types.NestedField.optional(19, "shape", Types.GeometryType.of("EPSG:3857")),
+                        Types.NestedField.optional(20, "label", Types.StringType.get()))),
+                Types.NestedField.optional(21, "geom_locations", Types.ListType.ofOptional(22, Types.StructType.of(
+                        Types.NestedField.optional(23, "shape", Types.GeometryType.crs84()),
+                        Types.NestedField.optional(24, "label", Types.StringType.get())))),
+                Types.NestedField.optional(25, "bad_geom_array",
+                        Types.ListType.ofOptional(26, Types.GeometryType.of("IGNF:ATI"))));
         List<Column> schemas = addMetaColumns(IcebergApiConverter.toFullSchemas(schema));
         PartitionSpec spec = PartitionSpec.builderFor(schema).build();
         TestTables.TestTable baseTable = TestTables.create(
