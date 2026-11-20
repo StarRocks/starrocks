@@ -60,22 +60,82 @@ MFV_AUTOVEC_STATIC(void simd_minmax_int32_default(const int32_t* __restrict data
 
 MFV_AUTOVEC_STATIC(void simd_dict_gather_int32_default(int32_t* __restrict dest, const int32_t* __restrict dict,
                                                        const uint32_t* __restrict indices, int32_t count) {
-    for (int32_t i = 0; i < count; ++i) dest[i] = dict[indices[i]];
+    int32_t i = 0;
+    for (; i + 4 <= count; i += 4) {
+        const uint32_t idx0 = indices[i];
+        const uint32_t idx1 = indices[i + 1];
+        const uint32_t idx2 = indices[i + 2];
+        const uint32_t idx3 = indices[i + 3];
+        const int32_t v0 = dict[idx0];
+        const int32_t v1 = dict[idx1];
+        const int32_t v2 = dict[idx2];
+        const int32_t v3 = dict[idx3];
+        dest[i] = v0;
+        dest[i + 1] = v1;
+        dest[i + 2] = v2;
+        dest[i + 3] = v3;
+    }
+    for (; i < count; ++i) dest[i] = dict[indices[i]];
 })
 
 MFV_AUTOVEC_STATIC(void simd_dict_gather_int64_default(int64_t* __restrict dest, const int64_t* __restrict dict,
                                                        const uint32_t* __restrict indices, int32_t count) {
-    for (int32_t i = 0; i < count; ++i) dest[i] = dict[indices[i]];
+    int32_t i = 0;
+    for (; i + 4 <= count; i += 4) {
+        const uint32_t idx0 = indices[i];
+        const uint32_t idx1 = indices[i + 1];
+        const uint32_t idx2 = indices[i + 2];
+        const uint32_t idx3 = indices[i + 3];
+        const int64_t v0 = dict[idx0];
+        const int64_t v1 = dict[idx1];
+        const int64_t v2 = dict[idx2];
+        const int64_t v3 = dict[idx3];
+        dest[i] = v0;
+        dest[i + 1] = v1;
+        dest[i + 2] = v2;
+        dest[i + 3] = v3;
+    }
+    for (; i < count; ++i) dest[i] = dict[indices[i]];
 })
 
 MFV_AUTOVEC_STATIC(void simd_dict_gather_float_default(float* __restrict dest, const float* __restrict dict,
                                                        const uint32_t* __restrict indices, int32_t count) {
-    for (int32_t i = 0; i < count; ++i) dest[i] = dict[indices[i]];
+    int32_t i = 0;
+    for (; i + 4 <= count; i += 4) {
+        const uint32_t idx0 = indices[i];
+        const uint32_t idx1 = indices[i + 1];
+        const uint32_t idx2 = indices[i + 2];
+        const uint32_t idx3 = indices[i + 3];
+        const float v0 = dict[idx0];
+        const float v1 = dict[idx1];
+        const float v2 = dict[idx2];
+        const float v3 = dict[idx3];
+        dest[i] = v0;
+        dest[i + 1] = v1;
+        dest[i + 2] = v2;
+        dest[i + 3] = v3;
+    }
+    for (; i < count; ++i) dest[i] = dict[indices[i]];
 })
 
 MFV_AUTOVEC_STATIC(void simd_dict_gather_double_default(double* __restrict dest, const double* __restrict dict,
                                                         const uint32_t* __restrict indices, int32_t count) {
-    for (int32_t i = 0; i < count; ++i) dest[i] = dict[indices[i]];
+    int32_t i = 0;
+    for (; i + 4 <= count; i += 4) {
+        const uint32_t idx0 = indices[i];
+        const uint32_t idx1 = indices[i + 1];
+        const uint32_t idx2 = indices[i + 2];
+        const uint32_t idx3 = indices[i + 3];
+        const double v0 = dict[idx0];
+        const double v1 = dict[idx1];
+        const double v2 = dict[idx2];
+        const double v3 = dict[idx3];
+        dest[i] = v0;
+        dest[i + 1] = v1;
+        dest[i + 2] = v2;
+        dest[i + 3] = v3;
+    }
+    for (; i < count; ++i) dest[i] = dict[indices[i]];
 })
 
 MFV_AUTOVEC_STATIC(void simd_widen_int8_to_int32_default(int32_t* __restrict dest, const int8_t* __restrict src,
@@ -168,7 +228,22 @@ inline void simd_dict_gather(DstT* __restrict dst, const SrcT* __restrict dict, 
         }
     }
 
-    for (int32_t i = 0; i < count; ++i) dst[i] = static_cast<DstT>(dict[indices[i]]);
+    int32_t i = 0;
+    for (; i + 4 <= count; i += 4) {
+        const IdxT idx0 = indices[i];
+        const IdxT idx1 = indices[i + 1];
+        const IdxT idx2 = indices[i + 2];
+        const IdxT idx3 = indices[i + 3];
+        const DstT v0 = static_cast<DstT>(dict[idx0]);
+        const DstT v1 = static_cast<DstT>(dict[idx1]);
+        const DstT v2 = static_cast<DstT>(dict[idx2]);
+        const DstT v3 = static_cast<DstT>(dict[idx3]);
+        dst[i] = v0;
+        dst[i + 1] = v1;
+        dst[i + 2] = v2;
+        dst[i + 3] = v3;
+    }
+    for (; i < count; ++i) dst[i] = static_cast<DstT>(dict[indices[i]]);
 }
 
 } // namespace starrocks
