@@ -329,4 +329,37 @@ public class ConstantOperatorTest {
             Assertions.assertEquals(-10, var2.distance(var1));
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCharAndVarcharWithOneValueHashAlike() {
+        // equals() treats CHAR and VARCHAR as one type, so hashCode() has to as well
+        ConstantOperator asChar = ConstantOperator.createChar("abc%", new CharType(4));
+        ConstantOperator asVarchar = ConstantOperator.createVarchar("abc%");
+        Assertions.assertEquals(asChar, asVarchar);
+        Assertions.assertEquals(asChar.hashCode(), asVarchar.hashCode());
+    }
+
+    @Test
+    public void testCompareToNegativeZero() {
+        // #80066: -0.0 and +0.0 must compare equal (IEEE-754), matching the BE's runtime evaluation.
+        // Double.compare used to order -0.0 below +0.0, which made the FE fold "-0.0 = 0.0" to false
+        // and "-0.0 < 0" to true.
+        Assertions.assertEquals(0,
+                ConstantOperator.createDouble(-0.0).compareTo(ConstantOperator.createDouble(0.0)));
+        Assertions.assertEquals(0,
+                ConstantOperator.createDouble(0.0).compareTo(ConstantOperator.createDouble(-0.0)));
+        Assertions.assertEquals(0,
+                ConstantOperator.createFloat(-0.0).compareTo(ConstantOperator.createFloat(0.0)));
+
+        // Ordering of ordinary values is unchanged.
+        Assertions.assertTrue(
+                ConstantOperator.createDouble(-1.0).compareTo(ConstantOperator.createDouble(0.0)) < 0);
+        Assertions.assertTrue(
+                ConstantOperator.createDouble(2.0).compareTo(ConstantOperator.createDouble(1.0)) > 0);
+        Assertions.assertEquals(0,
+                ConstantOperator.createDouble(1.5).compareTo(ConstantOperator.createDouble(1.5)));
+    }
+>>>>>>> 576d9cf ([BugFix] Fold DOUBLE/FLOAT comparisons with IEEE-754 semantics for negative zero (#82545))
 }
