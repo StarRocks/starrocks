@@ -19,10 +19,13 @@
 // __xfer_bufptrs with a different access than its forward declaration (a hard error on gcc 14).
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 
+#include <brpc/controller.h>
 #include <brpc/server.h>
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <mutex>
+#include <new>
 #include <thread>
 
 #include "base/compression/block_compression.h"
@@ -494,6 +497,183 @@ TEST_F(ExchangeSinkOperatorTest, shuffle_buffer_flush_disabled_by_session_variab
     EXPECT_EQ(COUNTER_VALUE(harness.counter("ShuffleBufferFlushRows")), 0);
     EXPECT_EQ(sink->num_buffered_shuffle_rows_for_testing(), chunk_size * num_pushes);
 }
+
+class RecordingExchangeService : public PInternalService {
+public:
+    struct Request {
+        PTransmitChunkParams params;
+        std::string attachment;
+    };
+
+    void transmit_chunk(google::protobuf::RpcController* controller, const PTransmitChunkParams* request,
+                        PTransmitChunkResult* response, google::protobuf::Closure* done) override {
+        const bool has_chunks = request->chunks_size() > 0;
+        if (has_chunks) {
+            auto* brpc_controller = static_cast<brpc::Controller*>(controller);
+            std::lock_guard lock(_mutex);
+            _requests.push_back({*request, brpc_controller->request_attachment().to_string()});
+        }
+        response->mutable_status()->set_status_code(0);
+        done->Run();
+        if (has_chunks) {
+            received.count_down();
+        }
+    }
+
+    std::vector<Request> requests() {
+        std::lock_guard lock(_mutex);
+        return _requests;
+    }
+
+    CountDownLatch received{1};
+
+private:
+    std::mutex _mutex;
+    std::vector<Request> _requests;
+};
+
+class ExchangeSerializationFailureTest : public ExchangeSinkOperatorTest, public ::testing::WithParamInterface<bool> {
+public:
+    void SetUp() override {
+        ExchangeSinkOperatorTest::SetUp();
+        ASSERT_EQ(_server.AddService(&_service, brpc::SERVER_DOESNT_OWN_SERVICE), 0);
+        ASSERT_EQ(_server.Start(0, nullptr), 0);
+        _server_started = true;
+
+        TNetworkAddress address;
+        address.__set_hostname("127.0.0.1");
+        address.__set_port(_server.listen_address().port);
+        TUniqueId destination_id;
+        destination_id.__set_hi(0);
+        destination_id.__set_lo(12345);
+        _destination.__set_fragment_instance_id(destination_id);
+        _destination.__set_brpc_server(address);
+        _destinations = {_destination};
+        _sink_buffer = std::make_shared<SinkBuffer>(_fragment_context.get(), _destinations, false);
+        _fragment_context->prepare_pass_through_chunk_buffer();
+
+        // RANDOM with two driver sequences exercises the per-channel request path.
+        const bool shuffle = GetParam();
+        _factory = std::make_shared<ExchangeSinkOperatorFactory>(
+                0, 0, _sink_buffer, shuffle ? TPartitionType::RANDOM : TPartitionType::UNPARTITIONED, _destinations,
+                shuffle, shuffle ? 2 : 1, 0, 0, std::vector<ExprContext*>(), false, false, _fragment_context.get(),
+                std::vector<int32_t>(), std::vector<TBucketProperty>());
+        _factory->set_runtime_state(_runtime_state.get());
+        _op = _factory->create(1, 0);
+        ASSERT_OK(_op->prepare(_runtime_state.get()));
+        ASSERT_OK(_op->prepare_local_state(_runtime_state.get()));
+        sink()->set_compress_codec_for_testing(nullptr);
+
+        _previous_batch_bytes = config::max_transmit_batched_bytes;
+        config::max_transmit_batched_bytes = 1024 * 1024;
+        _batch_bytes_changed = true;
+    }
+
+    void TearDown() override {
+        if (_op != nullptr) {
+            if (!_cancelled) {
+                sink()->set_cancelled(_runtime_state.get());
+            }
+            _op->close(_runtime_state.get());
+        }
+        if (_server_started) {
+            _server.Stop(0);
+            _server.Join();
+            _fragment_context->destroy_pass_through_chunk_buffer();
+        }
+        if (_batch_bytes_changed) {
+            config::max_transmit_batched_bytes = _previous_batch_bytes;
+        }
+        ExchangeSinkOperatorTest::TearDown();
+    }
+
+protected:
+    ExchangeSinkOperator* sink() { return down_cast<ExchangeSinkOperator*>(_op.get()); }
+
+    void finish_and_check(int expected_chunks) {
+        ASSERT_OK(sink()->set_finishing(_runtime_state.get()));
+        // Let the receiver inspect the request before cancellation can abort the RPC.
+        ASSERT_TRUE(_service.received.wait_for(std::chrono::seconds(10)));
+        _cancelled = true;
+        ASSERT_OK(sink()->set_cancelled(_runtime_state.get()));
+
+        const auto requests = _service.requests();
+        ASSERT_EQ(requests.size(), 1);
+        const auto& request = requests.front();
+        EXPECT_EQ(request.params.chunks_size(), expected_chunks);
+        EXPECT_EQ(request.params.driver_sequences_size(), GetParam() ? expected_chunks : 0);
+        size_t data_bytes = 0;
+        for (const auto& chunk : request.params.chunks()) {
+            EXPECT_EQ(chunk.compress_type(), CompressionTypePB::NO_COMPRESSION);
+            EXPECT_GT(chunk.data_size(), 0);
+            data_bytes += chunk.data_size();
+        }
+        EXPECT_EQ(request.attachment.size(), data_bytes);
+    }
+
+private:
+    brpc::Server _server;
+    RecordingExchangeService _service;
+    OperatorPtr _op;
+    int64_t _previous_batch_bytes = 0;
+    bool _server_started = false;
+    bool _batch_bytes_changed = false;
+    bool _cancelled = false;
+};
+
+TEST_P(ExchangeSerializationFailureTest, serialization_oom_keeps_buffered_chunks) {
+    ASSERT_OK(sink()->push_chunk(_runtime_state.get(), make_chunk()));
+    auto* sync = SyncPoint::GetInstance();
+    const std::string point = "ExchangeSinkOperator::serialize_chunk";
+    sync->SetCallBack(point, [](void*) { throw std::bad_alloc(); });
+    sync->EnableProcessing();
+    DeferOp restore([&] {
+        sync->DisableProcessing();
+        sync->ClearCallBack(point);
+        sync->ClearTrace();
+    });
+
+    const auto status = sink()->push_chunk(_runtime_state.get(), make_chunk());
+    EXPECT_TRUE(status.is_mem_limit_exceeded()) << status.to_string();
+    finish_and_check(1);
+}
+
+TEST_P(ExchangeSerializationFailureTest, append_oom_keeps_buffered_chunks_and_driver_sequences) {
+    ASSERT_OK(sink()->push_chunk(_runtime_state.get(), make_chunk()));
+    auto* sync = SyncPoint::GetInstance();
+    const std::string point = "ExchangeSinkOperator::append_serialized_chunk";
+    sync->SetCallBack(point, [](void*) { throw std::bad_alloc(); });
+    sync->EnableProcessing();
+    DeferOp restore([&] {
+        sync->DisableProcessing();
+        sync->ClearCallBack(point);
+        sync->ClearTrace();
+    });
+
+    const auto status = sink()->push_chunk(_runtime_state.get(), make_chunk());
+    EXPECT_TRUE(status.is_mem_limit_exceeded()) << status.to_string();
+    finish_and_check(1);
+}
+
+TEST_P(ExchangeSerializationFailureTest, compression_error_keeps_buffered_chunks) {
+    ASSERT_OK(sink()->push_chunk(_runtime_state.get(), make_chunk()));
+    sink()->set_compress_codec_for_testing(&_overflow_codec);
+    const bool previous = config::enable_rpc_compress_overflow_skip;
+    DeferOp restore([&] { config::enable_rpc_compress_overflow_skip = previous; });
+    config::enable_rpc_compress_overflow_skip = false;
+
+    const auto status = sink()->push_chunk(_runtime_state.get(), make_chunk());
+    EXPECT_TRUE(status.is_internal_error()) << status.to_string();
+    finish_and_check(1);
+}
+
+TEST_P(ExchangeSerializationFailureTest, successful_serialization_keeps_all_chunks) {
+    ASSERT_OK(sink()->push_chunk(_runtime_state.get(), make_chunk()));
+    ASSERT_OK(sink()->push_chunk(_runtime_state.get(), make_chunk()));
+    finish_and_check(2);
+}
+
+INSTANTIATE_TEST_SUITE_P(ExchangeRequestPaths, ExchangeSerializationFailureTest, ::testing::Bool());
 
 // A brpc PInternalService whose transmit_chunk blocks until explicitly released, so the client-side
 // RPC stays in-flight. This lets us assert that cancel_one_sinker() aborts outstanding RPCs actively
