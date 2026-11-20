@@ -34,7 +34,7 @@ cast(sql_expr AS JSON)
 
 - `sql_data_type`: JSON 値を変換したい SQL データ型。STRING、VARCHAR、CHAR、BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、DOUBLE、FLOAT のみがサポートされています。
 
-- `sql_expr`: JSON 値に変換したい SQL 値を表す式。このパラメータは、`sql_data_type` パラメータでサポートされているすべての SQL データ型をサポートします。
+- `sql_expr`: JSON 値に変換したい SQL 値を表す式。このパラメータは、`sql_data_type` パラメータでサポートされているすべての SQL データ型をサポートします。また、要素、値、フィールドがこれらの型、DECIMAL (DECIMAL32、DECIMAL64、DECIMAL128)、DATE、DATETIME、JSON、またはネストされた ARRAY、MAP、STRUCT 型であり、MAP のキーが文字列または整数である ARRAY、MAP、STRUCT 値もサポートします。
 
 ## Return value
 
@@ -49,6 +49,8 @@ cast(sql_expr AS JSON)
   - SQL 値が JSON でサポートされている精度を超える場合、キャスト関数は算術オーバーフローを防ぐために `NULL` を返します。
 
   - SQL 値が `NULL` の場合、キャスト関数は SQL 値 `NULL` を JSON 値の `NULL` に変換しません。戻り値は依然として SQL 値の `NULL` です。
+
+  - ARRAY、MAP、STRUCT 値は [to_json](./to_json.md) と同じ方法で変換されます。ARRAY は JSON 配列に、MAP または STRUCT は JSON オブジェクトになります。`NULL` の要素、値、フィールドは JSON の `null` になります。これらに含まれる BOOLEAN、LARGEINT、DECIMAL 値は、単一の値をキャストする場合と同様に、JSON のブール値と JSON 数値になります。たとえば、`cast([1, 2] AS JSON)` は `[1, 2]` を返し、`cast(map{'a': 1.5} AS JSON)` は `{"a": 1.5}` を返します。
 
 - JSON から SQL への変換
 
