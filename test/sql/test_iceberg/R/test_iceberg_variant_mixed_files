@@ -67,7 +67,7 @@ alter table plain execute add_files(location='oss://${oss_bucket}/test_iceberg_v
 -- !result
 select count(*), count(v), min(id), max(id) from mixed;
 -- result:
-276	273	1	405
+276	275	1	405
 -- !result
 function: assert_equal_result("select id, cast(v as string) from mixed order by id", "select id, cast(v as string) from plain order by id")
 -- result:

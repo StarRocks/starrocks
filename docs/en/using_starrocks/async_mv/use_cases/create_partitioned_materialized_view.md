@@ -111,7 +111,7 @@ You can create a materialized view whose partitions correspond to the partitions
 
   ```SQL
   CREATE MATERIALIZED VIEW par_mv1
-  REFRESH ASYNC
+  REFRESH ON_CHANGE
   PARTITION BY datekey
   AS 
   SELECT 
@@ -132,7 +132,7 @@ You can create a materialized view whose partitions correspond to the partitions
 
   ```SQL
   CREATE MATERIALIZED VIEW par_mv2
-  REFRESH ASYNC
+  REFRESH ON_CHANGE
   PARTITION BY str2date(datekey, '%Y-%m-%d')
   AS 
   SELECT 
@@ -159,7 +159,7 @@ You can create a materialized view whose partitioning granularity is larger than
 
   ```SQL
   CREATE MATERIALIZED VIEW par_mv3
-  REFRESH ASYNC
+  REFRESH ON_CHANGE
   PARTITION BY date_trunc('month', datekey)
   AS 
   SELECT 
@@ -184,7 +184,7 @@ You can create a materialized view whose partitioning granularity is larger than
 
   ```SQL
   CREATE MATERIALIZED VIEW par_mv4
-  REFRESH ASYNC
+  REFRESH ON_CHANGE
   PARTITION BY date_trunc('month', mv_datekey)
   AS 
   SELECT 
@@ -215,7 +215,7 @@ Example:
 
 ```SQL
 CREATE MATERIALIZED VIEW par_mv5
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PARTITION BY date_trunc('day', mv_datekey)
 AS 
 SELECT 
@@ -237,7 +237,7 @@ This feature is supported from v3.3 onwards.
 ```SQL
 -- Connect tables with JOIN.
 CREATE MATERIALIZED VIEW par_mv6
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PARTITION BY datekey
 AS SELECT 
   par_tbl1.datekey,
@@ -250,7 +250,7 @@ GROUP BY par_tbl1.datekey, t1k1, t2k1;
 
 -- Connect tables with UNION.
 CREATE MATERIALIZED VIEW par_mv7
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PARTITION BY datekey
 AS SELECT 
   par_tbl1.datekey,
@@ -352,8 +352,8 @@ To achieve these goals, you must consider the following aspects when creating a 
 
 - **Refresh strategy**
 
-  - Materialized views with automatic refresh strategies (`REFRESH ASYNC`) are automatically refreshed each time the base table data changes.
-  - Materialized views with regular refresh strategies (`REFRESH ASYNC [START (<start_time>)] EVERY (INTERVAL <interval>)`) are refreshed regularly at the interval defined.
+  - Materialized views with automatic refresh strategies (`REFRESH ON_CHANGE`) are automatically refreshed each time the base table data changes.
+  - Materialized views with regular refresh strategies (`REFRESH SCHEDULE [START (<start_time>)] EVERY (INTERVAL <interval>)`) are refreshed regularly at the interval defined.
 
   :::note
 
@@ -367,7 +367,7 @@ The following example creates a partitioned materialized view `par_mv8`. If Star
 
 ```SQL
 CREATE MATERIALIZED VIEW par_mv8
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PARTITION BY datekey
 PROPERTIES(
   "partition_ttl_number" = "2",

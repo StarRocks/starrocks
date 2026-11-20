@@ -908,6 +908,13 @@ CONF_mBool(enable_lake_prepared_split_pre_refinement, "true");
 // and the other readers keep following enable_load_segment_parallel.
 CONF_mBool(lake_scan_parallel_segment_open, "true");
 
+// When a query scan reads a tablet's segments one after another (a tablet not split across scan tasks), the next
+// segments start fetching the first blocks they will read while the current one is still read, once it has asked for
+// all of its own: up to this many segments ahead. A next segment starts only while they all hold fewer than
+// remote_prefetch_window_blocks blocks not read yet, so the segment started last can take that to about twice the
+// window. 0 starts each segment's read-ahead only when its turn comes.
+CONF_mInt32(lake_scan_read_ahead_segments, "16");
+
 // Fragment thread pool
 CONF_Int32(fragment_pool_thread_num_min, "64");
 CONF_Int32(fragment_pool_thread_num_max, "4096");
@@ -1842,14 +1849,17 @@ CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 CONF_mBool(experimental_lake_ignore_pk_consistency_check, "false");
 // Persist the in-transaction upsert/delete order (op_offset) for shared-data PK del files.
-// DISABLED by default for downgrade safety: when on, a correctly-interleaved load can persist a
-// del file that references a key still live in the same rowset (the re-upsert wins). A pre-fix BE
-// (rollback, or a not-yet-upgraded node / cross-version OpReplication target) treats deletes as
-// "after all segments" and would erase that key on index rebuild while the delvec keeps it live,
-// turning a benign "missing row" into a duplicate primary key. Leaving op_offset unset keeps the
-// whole apply/persist/rebuild chain on the legacy "delete after all segments" path. Enabled by
-// default; set it to false before rolling back to (or running a mixed cluster with) a pre-fix BE so
-// the legacy path is used and no incompatible on-disk state is written.
+// When off, deletes apply after all segments of the load, so a key the load deletes and then
+// upserts again is deleted if the delete and the upsert are flushed separately. A table with a
+// separate sort key keeps the order either way (pk_preserve_txn_delete_order_enabled).
+// Downgrade safety: when on, a correctly-interleaved load can persist a del file that references a
+// key still live in the same rowset (the re-upsert wins). A pre-fix BE (rollback, or a
+// not-yet-upgraded node / cross-version OpReplication target) treats deletes as "after all
+// segments" and would erase that key on index rebuild while the delvec keeps it live, turning a
+// benign "missing row" into a duplicate primary key. Leaving op_offset unset keeps the whole
+// apply/persist/rebuild chain on the legacy "delete after all segments" path. Enabled by default;
+// set it to false before rolling back to (or running a mixed cluster with) a pre-fix BE so the
+// legacy path is used and no incompatible on-disk state is written.
 CONF_mBool(lake_enable_pk_preserve_txn_delete_order, "true");
 // Whether a Primary Key publish reads the base segments it needs through the segment metacache
 // (TabletManager::load_segment) instead of a static Segment::open. This covers every base-segment
@@ -2574,6 +2584,10 @@ CONF_Strings(python_envs, "");
 CONF_Bool(report_python_worker_error, "true");
 CONF_Bool(python_worker_reuse, "true");
 CONF_Int32(python_worker_expire_time_sec, "300");
+// The most local Python worker processes one pipeline driver uses. A driver's call stubs (one per
+// concurrent UDF call, e.g. per scan IO task) are spread over these workers, and since each worker
+// runs Python under its own GIL, this bounds how many Python UDF calls of a driver run in parallel.
+CONF_mInt32(python_worker_max_per_driver, "3");
 // Timeout (ms) for the Arrow Flight call to a Python UDF worker (local or external service_url).
 // Applied as the gRPC deadline on the DoExchange stream, so a dead/unreachable/hung worker fails
 // the query instead of hanging forever. Note it bounds the whole stream's lifetime, so set it above

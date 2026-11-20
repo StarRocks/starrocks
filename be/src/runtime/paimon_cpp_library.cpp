@@ -27,9 +27,9 @@ PaimonCppLibrary& PaimonCppLibrary::instance() {
 }
 
 StatusOr<void*> PaimonCppLibrary::get_symbol(Capability capability) {
-    static constexpr std::array<const char*, 3> names = {"starrocks_paimon_create_scanner",
-                                                         "starrocks_paimon_create_sink_v1",
-                                                         "starrocks_paimon_bucket_calculator_v1"};
+    static constexpr std::array<const char*, 4> names = {
+            "starrocks_paimon_create_scanner", "starrocks_paimon_create_sink_v1",
+            "starrocks_paimon_bucket_calculator_v1", "starrocks_paimon_create_global_index_scanner"};
     auto& cached = _symbols[static_cast<size_t>(capability)];
     void* symbol = cached.load(std::memory_order_acquire);
     if (symbol != nullptr) return symbol;

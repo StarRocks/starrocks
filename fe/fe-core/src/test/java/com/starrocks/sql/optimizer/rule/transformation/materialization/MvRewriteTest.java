@@ -932,7 +932,7 @@ public class MvRewriteTest extends MVTestBase {
                         String mvName = "mv_q15";
                         createAndRefreshMv("CREATE MATERIALIZED VIEW `mv_q15`\n" +
                                 "DISTRIBUTED BY HASH(`gender`) BUCKETS 2\n" +
-                                "REFRESH ASYNC\n" +
+                                "REFRESH ON_CHANGE\n" +
                                 "AS \n" +
                                 "SELECT \n" +
                                 "    CAST((`d_user`->'gender') AS string) AS `gender`, \n" +
@@ -953,7 +953,7 @@ public class MvRewriteTest extends MVTestBase {
                         String mvName = "mv_q16";
                         createAndRefreshMv("CREATE MATERIALIZED VIEW `mv_q16`\n" +
                                 "DISTRIBUTED BY HASH(`gender`) BUCKETS 2\n" +
-                                "REFRESH ASYNC\n" +
+                                "REFRESH ON_CHANGE\n" +
                                 "AS \n" +
                                 "SELECT \n" +
                                 "    CAST((`d_user`->'gender') AS string) AS `gender`, \n" +
@@ -1374,7 +1374,7 @@ public class MvRewriteTest extends MVTestBase {
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv1\n" +
                 "               PARTITION BY k1\n" +
                 "               DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                "               REFRESH ASYNC\n" +
+                "               REFRESH ON_CHANGE\n" +
                 "               PROPERTIES(\n" +
                 "               \"partition_ttl_number\"=\"4\",\n" +
                 "               \"auto_refresh_partitions_limit\"=\"4\"\n" +
@@ -1412,7 +1412,7 @@ public class MvRewriteTest extends MVTestBase {
             String mvName = "mv_test_map_element";
             createAndRefreshMv("CREATE MATERIALIZED VIEW \n" + mvName +
                     "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                    "REFRESH ASYNC \n" +
+                    "REFRESH ON_CHANGE \n" +
                     "AS SELECT k1, element_at(v1, 'k1') as col1, sum(v3) as sum_v3 \n" +
                     "FROM test_map_array\n" +
                     "GROUP BY k1, element_at(v1, 'k1') ");
@@ -1439,7 +1439,7 @@ public class MvRewriteTest extends MVTestBase {
             String mvName = "mv_test_array_element";
             createAndRefreshMv("CREATE MATERIALIZED VIEW \n" + mvName +
                     "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                    "REFRESH ASYNC \n" +
+                    "REFRESH ON_CHANGE \n" +
                     "AS SELECT k1, element_at(v2, 1) as col1, sum(v3) as sum_v3 \n" +
                     "FROM test_map_array\n" +
                     "GROUP BY k1, element_at(v2, 1) ");
@@ -1465,7 +1465,7 @@ public class MvRewriteTest extends MVTestBase {
             String mvName = "mv_test_array_slice";
             createAndRefreshMv("CREATE MATERIALIZED VIEW \n" + mvName +
                     "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                    "REFRESH ASYNC \n" +
+                    "REFRESH ON_CHANGE \n" +
                     "AS SELECT k1, array_slice(v2, 1, 1) as col1, sum(v3) as sum_v3 \n" +
                     "FROM test_map_array\n" +
                     "GROUP BY k1, array_slice(v2, 1, 1) ");
@@ -1495,7 +1495,7 @@ public class MvRewriteTest extends MVTestBase {
             String mvName = "mv_projection_const";
             createAndRefreshMv("CREATE MATERIALIZED VIEW \n" + mvName +
                     "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                    "REFRESH ASYNC \n" +
+                    "REFRESH ON_CHANGE \n" +
                     "AS SELECT k1, k2, v3 " +
                     "FROM " + tableName);
             {
@@ -1510,7 +1510,7 @@ public class MvRewriteTest extends MVTestBase {
             String mvName = "mv_aggregation_projection_const";
             createAndRefreshMv("CREATE MATERIALIZED VIEW \n" + mvName +
                     "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                    "REFRESH ASYNC \n" +
+                    "REFRESH ON_CHANGE \n" +
                     "AS SELECT k1, sum(v3) as sum_v3 \n" +
                     "FROM " + tableName + "\n" +
                     "GROUP BY k1");
@@ -1579,7 +1579,7 @@ public class MvRewriteTest extends MVTestBase {
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
                 "PARTITION BY k1\n" +
                 "DISTRIBUTED BY HASH(v1) BUCKETS 10\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS SELECT a.k1, a.v1,sum(a.v1) as sum_v1 \n" +
                 "FROM test_partition_tbl1 as a \n" +
                 "join test_partition_tbl2 as b " +
@@ -1637,7 +1637,7 @@ public class MvRewriteTest extends MVTestBase {
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
                 "PARTITION BY a_k1\n" +
                 "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS SELECT a.k1 as a_k1, b.k1 as b_k1, " +
                 "a.v1 as a_v1, b.v1 as b_v1,sum(a.v1) as sum_v1 \n" +
                 "FROM test_partition_tbl1 as a \n" +
@@ -1721,7 +1721,7 @@ public class MvRewriteTest extends MVTestBase {
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
                 "PARTITION BY a_k1\n" +
                 "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS SELECT a.k1 as a_k1, a.v1 as a_v1, a.v2 as a_v2, " +
                 "b.k1 as b_k1, b.v1 as b_v1, b.v2 as b_v2 \n" +
                 "FROM test_partition_tbl1 as a \n" +
@@ -1759,7 +1759,7 @@ public class MvRewriteTest extends MVTestBase {
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
                 "PARTITION BY a_k1\n" +
                 "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS SELECT a.k1 as a_k1, a.v1 as a_v1, a.v2 as a_v2, " +
                 "b.k1 as b_k1, b.v1 as b_v1, b.v2 as b_v2 \n" +
                 "FROM test_partition_tbl1 as a \n" +
@@ -1788,7 +1788,7 @@ public class MvRewriteTest extends MVTestBase {
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
                 "PARTITION BY a_k1\n" +
                 "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS SELECT a.k1 as a_k1, a.v1 as a_v1, a.v2 as a_v2, " +
                 "b.k1 as b_k1, b.v1 as b_v1, b.v2 as b_v2 \n" +
                 "FROM test_partition_tbl1 as a \n" +
@@ -2224,7 +2224,7 @@ public class MvRewriteTest extends MVTestBase {
                 "CREATE MATERIALIZED VIEW `mv1` (`event_id`, `event_time`, `event_time1`)\n" +
                         "PARTITION BY (`event_time`)\n" +
                         "DISTRIBUTED BY HASH(`event_id`) BUCKETS 1\n" +
-                        "REFRESH ASYNC\n" +
+                        "REFRESH ON_CHANGE\n" +
                         "PROPERTIES (\n" +
                         "\"replicated_storage\" = \"true\",\n" +
                         "\"partition_refresh_number\" = \"2\",\n" +

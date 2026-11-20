@@ -333,3 +333,6 @@ The cases cover append writes, column mapping, static partitions, empty input,
 fixed buckets, primary-key full-row upserts, and nested/VARIANT values. Independent
 catalogs and the JNI reader verify visibility of the committed append and
 primary-key data. Every case has a `CLEANUP` block for the objects it creates.
+
+`test_paimon_insert_overwrite` covers full, static partition, and dynamic
+partition overwrites, including empty input and independent JNI readback.

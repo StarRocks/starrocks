@@ -138,7 +138,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタの主キーテーブルにおいて、1 つのトランザクション内での UPSERT と DELETE の順序を保持するかどうか。1 つのロードトランザクションに同一キーの `DELETE` とそれ以降の再 `UPSERT` が含まれる場合、有効にすると再 UPSERT が優先されます（共有なしクラスタの動作と一致）。デフォルトで有効です。ダウングレードの安全性のため、この修正をサポートしない BE バージョンにロールバックする（または混在クラスタで実行する）前に `false` に設定してください。有効にすると、この修正をサポートしないバージョンにロールバックした BE が誤って解釈しうるオンディスクメタデータをロードが永続化し、主キーの重複を引き起こす可能性があります。無効の場合、DELETE は従来の動作（トランザクション内のすべての UPSERT の後に適用）にフォールバックします。
+- 説明: 共有データクラスタの主キーテーブルにおいて、1 つのトランザクション内での UPSERT と DELETE の順序を保持するかどうか。1 つのロードトランザクションに同一キーの `DELETE` とそれ以降の再 `UPSERT` が含まれる場合、有効にすると再 UPSERT が優先されます（共有なしクラスタの動作と一致）。デフォルトで有効です。ダウングレードの安全性のため、この修正をサポートしない BE バージョンにロールバックする（または混在クラスタで実行する）前に `false` に設定してください。有効にすると、この修正をサポートしないバージョンにロールバックした BE が誤って解釈しうるオンディスクメタデータをロードが永続化し、主キーの重複を引き起こす可能性があります。無効の場合、DELETE は従来の動作（トランザクション内のすべての UPSERT の後に適用）にフォールバックします。1 つのロードで同じキーを DELETE してから再度 UPSERT し、その DELETE と UPSERT が別々にフラッシュされる場合（大量データのロードなど）、そのキーは最終的に削除され、UPSERT は失われます。ソートキー（`ORDER BY`）が主キーと異なる主キーテーブルでは、この設定にかかわらず常に順序が保持されます。
 - 導入バージョン: v4.1.4
 
 ### lake_enable_protobuf_file_checksum
@@ -352,6 +352,14 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 単位: -
 - 変更可能: はい
 - 説明: 共有データクラスタのクエリスキャン（分割の有無を問わない）が Tablet の Segment を開いた後、次に読むインデックスページを非同期でウォームアップするかどうか。対象は各 Segment の短キーインデックス、述語列の zone map と bloom filter のルートページ、読み取り列の ordinal index のルートページです。スキャンはウォームアップの完了を待たず、失敗した場合は通常どおり読み取ります。Segment メタデータフィルター（`enable_lake_segment_metadata_filter`）によってスキャン対象から除外された Segment はウォームアップしません。この項目はクエリにのみ適用され、リモート I/O スケジューラー（`remote_io_scheduler_enable`）が有効な場合にのみ効果があります。`lake_scan_parallel_segment_open` とは独立しています。ウォームアップの状況はクエリプロファイルの `TabletPrepareIndexWarmSegments`、`TabletPrepareIndexWarmRanges`、`TabletPrepareIndexWarmBlocks`、`TabletPrepareIndexWarmSkipped`、`TabletPrepareIndexWarmPrunedSegments` に記録されます。
+
+### lake_scan_read_ahead_segments
+
+- デフォルト: 16
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: リモート IO スケジューラーが有効な場合、Tablet の Segment を順番に読む lake クエリスキャン（Tablet が複数のスキャンタスクに分割されていない場合）は、現在の Segment が自身のブロックをすべて要求し終えると、現在の Segment を読みながら後続の Segment の先頭ブロックの取得を開始します。先読みする Segment はこの値までです。それらが要求済みで未読のブロックの合計が `remote_prefetch_window_blocks` 個のキャッシュブロック未満のときにのみ次の Segment の先読みを開始するため、最後に開始した Segment によって合計がウィンドウの約 2 倍に達することがあります。`0` を指定すると無効になり、各 Segment は自分の順番が来たときに先読みを開始します。分割スキャン、取り込み、Compaction には影響しません。クエリプロファイルの SegmentReadAheadStarted に記録されます。
 - 導入バージョン: -
 
 ### lake_segment_metadata_cache_limit_percent

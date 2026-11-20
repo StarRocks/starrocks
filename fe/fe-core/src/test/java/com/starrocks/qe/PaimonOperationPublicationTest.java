@@ -55,6 +55,7 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TPaimonCommitInfo;
+import com.starrocks.thrift.TPaimonOverwriteMode;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TStatus;
@@ -80,6 +81,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.starrocks.thrift.TPaimonOverwriteMode.APPEND;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -112,7 +114,7 @@ public class PaimonOperationPublicationTest {
     @Test
     public void testEmptyAppendReachesContextualFinish() throws Exception {
         // Empty appends are connector-confirmed no-ops, not OLAP transaction aborts.
-        for (String mode : List.of("APPEND")) {
+        for (TPaimonOverwriteMode mode : List.of(APPEND)) {
             try (Fixture fixture = new Fixture(mode, 0, 0)) {
                 doAnswer(invocation -> {
                     fixture.operation.transition(PaimonSinkExtra.PublicationState.WRITING,
@@ -136,7 +138,7 @@ public class PaimonOperationPublicationTest {
 
     @Test
     public void testFilteredRowsAbortNativeOperationWithoutFeTransaction() throws Exception {
-        try (Fixture fixture = new Fixture("APPEND", 0, 1)) {
+        try (Fixture fixture = new Fixture(APPEND, 0, 1)) {
             fixture.executor.handleDMLStmt(fixture.plan, fixture.statement);
 
             assertEquals(QueryState.MysqlStateType.ERR, fixture.queryState.getStateType());
@@ -151,7 +153,7 @@ public class PaimonOperationPublicationTest {
 
     @Test
     public void testExecutionFailureAbortsWithNativePayloadAndContext() throws Exception {
-        try (Fixture fixture = new Fixture("APPEND", 0, 0)) {
+        try (Fixture fixture = new Fixture(APPEND, 0, 0)) {
             doThrow(new IllegalStateException("native writer failed")).when(fixture.coordinator).exec();
 
             Exception failure = assertThrows(Exception.class,
@@ -166,7 +168,7 @@ public class PaimonOperationPublicationTest {
 
     @Test
     public void testCoordinatorCreationFailureHasNullSafeAbort() throws Exception {
-        try (Fixture fixture = new Fixture("APPEND", 0, 0)) {
+        try (Fixture fixture = new Fixture(APPEND, 0, 0)) {
             fixture.schedulerFailure = new IllegalStateException("scheduler unavailable");
 
             assertThrows(Exception.class, () -> fixture.executor.handleDMLStmt(fixture.plan, fixture.statement));
@@ -178,7 +180,7 @@ public class PaimonOperationPublicationTest {
 
     @Test
     public void testUnknownCommitPreservesCauseAndIsNeverAborted() throws Exception {
-        try (Fixture fixture = new Fixture("APPEND", 0, 0)) {
+        try (Fixture fixture = new Fixture(APPEND, 0, 0)) {
             PaimonCommitUnknownException unknown = new PaimonCommitUnknownException(
                     fixture.operation.getOperationId(), new IllegalStateException("snapshot response was lost"));
             doAnswer(invocation -> {
@@ -207,7 +209,7 @@ public class PaimonOperationPublicationTest {
 
     @Test
     public void testUnconfirmedFinishDoesNotAcknowledgeVisible() throws Exception {
-        try (Fixture fixture = new Fixture("APPEND", 0, 0)) {
+        try (Fixture fixture = new Fixture(APPEND, 0, 0)) {
             assertThrows(StarRocksException.class,
                     () -> fixture.executor.handleDMLStmt(fixture.plan, fixture.statement));
             assertEquals(QueryState.MysqlStateType.ERR, fixture.queryState.getStateType());
@@ -218,7 +220,7 @@ public class PaimonOperationPublicationTest {
 
     @Test
     public void testMissingMetadataCannotAcknowledgeVisible() throws Exception {
-        try (Fixture fixture = new Fixture("APPEND", 0, 0)) {
+        try (Fixture fixture = new Fixture(APPEND, 0, 0)) {
             MetadataMgr unavailable = metadata(null);
             doAnswer(invocation -> {
                 unavailable.finishSink("p", "db", "t", fixture.profile.getSinkCommitInfos(), null,
@@ -238,7 +240,7 @@ public class PaimonOperationPublicationTest {
 
     @Test
     public void testMissingZeroRowDriverBlocksEmptyAppend() {
-        PaimonSinkExtra operation = operation("APPEND");
+        PaimonSinkExtra operation = operation(APPEND);
         QueryRuntimeProfile profile = profile(operation, 2);
         FragmentInstanceExecState execution = execution(INSTANCE_ID);
         TSinkCommitInfo first = marker(operation, INSTANCE_ID, 0, 0);
@@ -252,7 +254,7 @@ public class PaimonOperationPublicationTest {
 
     @Test
     public void testEmptyReportCannotSatisfyAnEmptyAppend() {
-        PaimonSinkExtra operation = operation("APPEND");
+        PaimonSinkExtra operation = operation(APPEND);
         QueryRuntimeProfile profile = profile(operation, 1);
         assertThrows(StarRocksConnectorException.class,
                 () -> profile.buildLoadInformationUpdates(execution(INSTANCE_ID), report(INSTANCE_ID, List.of()))
@@ -262,7 +264,7 @@ public class PaimonOperationPublicationTest {
 
     @Test
     public void testSourceOnlyFragmentNeedsNoProducerAndAllSinkDriversDo() {
-        PaimonSinkExtra operation = operation("APPEND");
+        PaimonSinkExtra operation = operation(APPEND);
         QueryRuntimeProfile profile = profile(operation, 2);
         TUniqueId sourceId = new TUniqueId(1, 3);
         profile.buildLoadInformationUpdates(execution(sourceId), report(sourceId, List.of())).forEach(Runnable::run);
@@ -275,7 +277,7 @@ public class PaimonOperationPublicationTest {
 
     @Test
     public void testPreparedRowsMustMatchLoadCounters() {
-        PaimonSinkExtra operation = operation("APPEND");
+        PaimonSinkExtra operation = operation(APPEND);
         QueryRuntimeProfile profile = profile(operation, 1);
         profile.buildLoadInformationUpdates(execution(INSTANCE_ID), report(INSTANCE_ID,
                 List.of(marker(operation, INSTANCE_ID, 0, 1)))).forEach(Runnable::run);
@@ -284,7 +286,7 @@ public class PaimonOperationPublicationTest {
 
     @Test
     public void testMalformedCounterDoesNotDiscardNativeAbortPayload() {
-        PaimonSinkExtra operation = operation("APPEND");
+        PaimonSinkExtra operation = operation(APPEND);
         QueryRuntimeProfile profile = profile(operation, 1);
         TSinkCommitInfo marker = marker(operation, INSTANCE_ID, 0, 0);
         TReportExecStatusParams report = report(INSTANCE_ID, List.of(marker));
@@ -300,7 +302,7 @@ public class PaimonOperationPublicationTest {
 
     @Test
     public void testCoordinatorRejectsMalformedReportBeforeRetiringInstance() {
-        PaimonSinkExtra operation = operation("APPEND");
+        PaimonSinkExtra operation = operation(APPEND);
         QueryRuntimeProfile profile = profile(operation, 1);
         profile.attachInstances(List.of(INSTANCE_ID));
         FragmentInstanceExecState execution = execution(INSTANCE_ID);
@@ -343,7 +345,7 @@ public class PaimonOperationPublicationTest {
         };
         MetadataMgr metadata = metadata(connector);
         assertSame(unknown, assertThrows(PaimonCommitUnknownException.class,
-                () -> metadata.finishSink("p", "db", "t", List.of(), null, operation("APPEND"), null)));
+                () -> metadata.finishSink("p", "db", "t", List.of(), null, operation(APPEND), null)));
         assertTrue(unknown.getCause() instanceof IllegalStateException);
     }
 
@@ -372,7 +374,7 @@ public class PaimonOperationPublicationTest {
         };
     }
 
-    private static PaimonSinkExtra operation(String mode) {
+    private static PaimonSinkExtra operation(TPaimonOverwriteMode mode) {
         Schema.Builder builder = Schema.newBuilder().column("id", DataTypes.INT()).column("dt", DataTypes.STRING())
                 .partitionKeys("dt");
         Schema schema = builder.build();
@@ -446,7 +448,7 @@ public class PaimonOperationPublicationTest {
         private final MockedConstruction<DefaultCoordinator.Factory> factory;
         private RuntimeException schedulerFailure;
 
-        private Fixture(String mode, long rows, long filteredRows) throws Exception {
+        private Fixture(TPaimonOverwriteMode mode, long rows, long filteredRows) throws Exception {
             MetricRepo.init();
             GlobalStateMgr state = mock(GlobalStateMgr.class);
             when(state.getMetadataMgr()).thenReturn(metadata);
@@ -471,8 +473,9 @@ public class PaimonOperationPublicationTest {
             profile.buildLoadInformationUpdates(execution(INSTANCE_ID), report(INSTANCE_ID,
                     List.of(marker(operation, INSTANCE_ID, 0, rows)))).forEach(Runnable::run);
             TableRef target = new TableRef(QualifiedName.of(List.of("p", "db", "t")), null, NodePosition.ZERO);
-            statement = new InsertStmt(target, null, null, null, mock(QueryStatement.class), !mode.equals("APPEND"),
+            statement = new InsertStmt(target, null, null, null, mock(QueryStatement.class), mode != APPEND,
                     Map.of(), NodePosition.ZERO);
+            assertEquals(operation.isOverwrite(), statement.isOverwrite());
             statement.setTargetTable(new Table(Table.TableType.PAIMON));
             statement.setOrigStmt(new OriginStatement("insert into p.db.t select 1", 0));
             PlanFragment fragment = mock(PlanFragment.class);

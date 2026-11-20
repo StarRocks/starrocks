@@ -131,7 +131,7 @@ public class AnalyzeShowTest {
         String sql = "SHOW AUTHENTICATION;";
         ShowAuthenticationStmt stmt = (ShowAuthenticationStmt) analyzeSuccess(sql);
         Assertions.assertFalse(stmt.isAll());
-        Assertions.assertEquals("root", stmt.getUser().getUser());
+        Assertions.assertNull(stmt.getUser());
 
         sql = "SHOW ALL AUTHENTICATION;";
         stmt = (ShowAuthenticationStmt) analyzeSuccess(sql);
@@ -140,6 +140,7 @@ public class AnalyzeShowTest {
 
         sql = "SHOW AUTHENTICATION FOR xx";
         analyzeFail(sql, "cannot find user 'xx'@'%'!");
+        analyzeFail(sql, "it can view its own authentication information with SHOW AUTHENTICATION without FOR");
 
         ConnectContext context = AnalyzeTestUtil.getConnectContext();
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
