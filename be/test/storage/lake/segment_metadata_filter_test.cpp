@@ -853,7 +853,7 @@ TEST_F(SegmentMetadataFilterTest, CorruptEncodedBoundsMayContain) {
     };
 
     // A format version this binary does not know means the segment has no bounds at all.
-    for (const std::string& corrupt : {std::string("garbage"), std::string(), with_byte(0, '\x02')}) {
+    for (const std::string& corrupt : {std::string("garbage"), std::string(), with_byte(0, '\x03')}) {
         for (const bool corrupt_min : {true, false}) {
             const SegmentMetadataPB meta = damage_one_side(corrupt, corrupt_min);
             EXPECT_FALSE(has_segment_sort_key_bounds(meta))
@@ -878,6 +878,95 @@ TEST_F(SegmentMetadataFilterTest, CorruptEncodedBoundsMayContain) {
                     << (corrupt_min ? "min " : "max ") << meta.ShortDebugString();
         }
     }
+}
+
+// Bounds stored through the writer's path are truncated to a byte budget: the stored minimum is a prefix of the true
+// minimum and the stored maximum a successor, so pruning, which reads only the leading column, must keep every segment
+// that holds a matching row.
+TEST_F(SegmentMetadataFilterTest, TruncatedLeadingStringIsConservative) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_num_short_key_columns(1);
+    auto* c0 = schema_pb.add_column();
+    c0->set_unique_id(0);
+    c0->set_name("c0");
+    c0->set_type("VARCHAR");
+    c0->set_length(128);
+    c0->set_is_key(true);
+    c0->set_is_nullable(false);
+    schema_pb.add_sort_key_idxes(0);
+    auto varchar_schema = TabletSchema::create(schema_pb);
+
+    const std::string true_min = "m" + std::string(40, 'a');
+    const std::string true_max = "m" + std::string(40, 'z');
+    VariantTuple min;
+    min.append(DatumVariant(get_type_info(TYPE_VARCHAR), Datum(Slice(true_min))));
+    VariantTuple max;
+    max.append(DatumVariant(get_type_info(TYPE_VARCHAR), Datum(Slice(true_max))));
+    SegmentMetadataPB meta;
+    set_segment_sort_key_bounds(min, max, &meta);
+    meta.set_num_rows(100);
+
+    // Both bounds were cut, as the expectations below rely on.
+    DatumVariant stored_min;
+    DatumVariant stored_max;
+    ASSERT_OK(decode_segment_leading_sort_key_bounds(meta, &stored_min, &stored_max));
+    ASSERT_EQ("m" + std::string(35, 'a'), stored_min.value().get_slice().to_string());
+    ASSERT_EQ("m" + std::string(34, 'z') + "{", stored_max.value().get_slice().to_string());
+
+    const auto type = get_type_info(TYPE_VARCHAR);
+    auto may_contain = [&](const ColumnPredicate* pred) {
+        PredicateTree pred_tree = create_pred_tree_with_column_pred(pred);
+        return SegmentMetadataFilter::may_contain(meta, pred_tree, *varchar_schema);
+    };
+    auto check = [&](const std::string& name, ColumnPredicate* raw, bool expected) {
+        std::unique_ptr<ColumnPredicate> pred(raw);
+        EXPECT_EQ(expected, may_contain(pred.get())) << name;
+    };
+
+    check("= true min", new_column_eq_predicate(type, 0, true_min), true);
+    check("= true max", new_column_eq_predicate(type, 0, true_max), true);
+    check("= inside envelope below true min", new_column_eq_predicate(type, 0, "m" + std::string(38, 'a')), true);
+    check("< true min + b", new_column_lt_predicate(type, 0, true_min + "b"), true);
+    check("> m + 40 y", new_column_gt_predicate(type, 0, "m" + std::string(40, 'y')), true);
+    check("IN {true max}", new_column_in_predicate(type, 0, std::vector<std::string>{true_max}), true);
+    check("!= true min", new_column_ne_predicate(type, 0, true_min), true);
+
+    check("= m + 20 a", new_column_eq_predicate(type, 0, "m" + std::string(20, 'a')), false);
+    check("= l", new_column_eq_predicate(type, 0, "l"), false);
+    check("> n", new_column_gt_predicate(type, 0, "n"), false);
+}
+
+// Truncation that drops trailing sort key columns leaves the leading column exact.
+TEST_F(SegmentMetadataFilterTest, DroppedTrailingColumnsKeepLeadingExact) {
+    VariantTuple min;
+    VariantTuple max;
+    min.append(DatumVariant(get_type_info(TYPE_INT), Datum(int32_t(7))));
+    max.append(DatumVariant(get_type_info(TYPE_INT), Datum(int32_t(7))));
+    for (int i = 0; i < 6; ++i) {
+        min.append(DatumVariant(get_type_info(TYPE_BIGINT), Datum(int64_t(1000 + i))));
+        max.append(DatumVariant(get_type_info(TYPE_BIGINT), Datum(int64_t(2000 + i))));
+    }
+    SegmentMetadataPB meta;
+    set_segment_sort_key_bounds(min, max, &meta);
+    meta.set_num_rows(100);
+
+    // 4 + 6 * 8 bytes exceed the budget, so the stored bounds have fewer columns than the sort key.
+    VariantTuple stored_min;
+    VariantTuple stored_max;
+    ASSERT_OK(decode_segment_sort_key_bounds(meta, &stored_min, &stored_max));
+    ASSERT_LT(stored_min.size(), 7);
+    ASSERT_LT(stored_max.size(), 7);
+
+    const auto type = get_type_info(TYPE_INT);
+    auto may_contain = [&](const char* value) {
+        std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(type, 0, value));
+        PredicateTree pred_tree = create_pred_tree_with_column_pred(pred.get());
+        return SegmentMetadataFilter::may_contain(meta, pred_tree, *_tablet_schema);
+    };
+    EXPECT_TRUE(may_contain("7"));
+    EXPECT_FALSE(may_contain("6"));
+    EXPECT_FALSE(may_contain("8"));
 }
 
 } // namespace starrocks::lake
