@@ -1737,8 +1737,13 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                 }
             } else if (statement.getGrantType() == GrantType.ROLE) {
                 AuthorizationMgr authorizationManager = context.getGlobalStateMgr().getAuthorizationMgr();
-                Set<String> roleNames =
-                        authorizationManager.getAllPredecessorRoleNamesByUser(context.getCurrentUserIdentity());
+                // The roles the user holds include those granted to its groups, not only those
+                // granted to the user.
+                Set<String> roleNames = new HashSet<>();
+                for (Long roleId : authorizationManager.getApplicableRoleIds(
+                        context.getCurrentUserIdentity(), context.getGroups(), context.getCurrentRoleIds())) {
+                    roleNames.addAll(authorizationManager.getAllPredecessorRoleNames(roleId));
+                }
                 if (!roleNames.contains(statement.getGroupOrRole())) {
                     Authorizer.checkSystemAction(context, PrivilegeType.GRANT);
                 }

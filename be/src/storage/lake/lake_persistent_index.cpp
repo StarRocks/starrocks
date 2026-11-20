@@ -1119,6 +1119,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         // segment never needs it; after a tablet merge, which orders the rowsets of a version by uid, a rowset
         // with a larger id may have been replayed first.
         if ((_memtable->max_rss_rowid() >> 32) > too_old) {
+            TRACE_COUNTER_INCREMENT("soak_pk_merge_delete_lookup_cnt", 1);
             // Never join here: load_one and these lookups share the PK execution pool.
             return parallel_get(&get_runner, out->keys.size(), out->keys.data(), too_old, &out->filter_words);
         }

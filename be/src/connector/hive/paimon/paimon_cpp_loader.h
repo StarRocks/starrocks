@@ -42,4 +42,7 @@ StatusOr<HdfsScanner*> create_paimon_cpp_scanner();
 std::unique_ptr<connector::ConnectorSink> create_paimon_cpp_chunk_sink(
         std::shared_ptr<connector::PaimonChunkSinkContext> context, int32_t driver_id);
 
+// Creates the Paimon Global Index scanner through the same optional shim.
+StatusOr<HdfsScanner*> create_paimon_global_index_scanner();
+
 } // namespace starrocks

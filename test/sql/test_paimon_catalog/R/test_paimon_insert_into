@@ -70,10 +70,6 @@ set paimon_reader_mode = 'jni';
 6	omitted	None
 7	None	null partition
 -- !result
-function: assert_query_error_contains("insert overwrite paimon_write_${uuid0}.writer_db.append_rows values (7, 'a', 'seven')", "Only support insert overwrite")
--- result:
-None
--- !result
 function: assert_query_error_contains("create table paimon_write_${uuid0}.writer_db.deferred_ctas as select 1 as id", "Paimon CREATE TABLE AS SELECT is not supported")
 -- result:
 None

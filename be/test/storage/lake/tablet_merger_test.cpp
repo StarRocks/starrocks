@@ -6711,6 +6711,27 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_affine_modern_source_live_reuse
     EXPECT_EQ(static_cast<uint64_t>(1) << 32, modern->max_rss_rowid());
 }
 
+TEST_F(LakeTabletMergerTest, test_tablet_merging_force_index_rebuild_failpoint) {
+    constexpr char kFailpoint[] = "soak_pk_merge_force_index_rebuild";
+    const int64_t rebuild_before = merge_index_rebuild_total();
+    ScopedLogCapture log;
+    set_failpoint_mode(kFailpoint, FailPointTriggerModeType::ENABLE);
+    DeferOp disable([&] { set_failpoint_mode(kFailpoint, FailPointTriggerModeType::DISABLE); });
+
+    ASSIGN_OR_ABORT(auto result, publish_metadata_only_merge_fixture(MetadataOnlyMergeShape::kPrivate));
+    ASSERT_EQ(2, result.source_sst_filenames.size());
+    EXPECT_EQ(rebuild_before + 1, merge_index_rebuild_total());
+    expect_affine_sst_fallback_orphans(result);
+    for (const auto& orphan : result.published.at(result.target_tablet_id).orphan_files()) {
+        if (result.source_sst_filenames.contains(orphan.name())) {
+            EXPECT_TRUE(orphan.shared()) << orphan.name();
+        }
+    }
+    EXPECT_TRUE(log.contains(
+            fmt::format("tablet merge into {} rebuilds the primary key index:", result.target_tablet_id), kFailpoint));
+    expect_metadata_merge_lifecycle(result, {{10, 100}, {60, 600}}, {{10, 1010}}, {60});
+}
+
 // The first source's modern SST has watermark 2 while the source references RSSID 1 only, which the SST owns. The
 // merge carries it with owner 1 translated and the watermark lowered to RSSID 1, every row of it covered.
 TEST_F(LakeTabletMergerTest, test_tablet_merging_affine_modern_watermark_above_the_run_is_lowered) {

@@ -134,7 +134,7 @@ public class MvRewritePartitionTest extends MVTestBase {
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv1\n" +
                         " PARTITION BY k1\n" +
                         " DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                        " REFRESH ASYNC\n" +
+                        " REFRESH ON_CHANGE\n" +
                         " PROPERTIES(\n" +
                         " \"partition_ttl_number\"=\"5\",\n" +
                         " \"auto_refresh_partitions_limit\"=\"4\"\n" +
@@ -195,7 +195,7 @@ public class MvRewritePartitionTest extends MVTestBase {
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv1\n" +
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                        "REFRESH ASYNC\n" +
+                        "REFRESH ON_CHANGE\n" +
                         "   AS SELECT k1, v1, v2, sum(v1) as sum_v1 FROM test_partition_tbl1 group by k1, v1, v2;");
         // should not be rollup
         {
@@ -257,7 +257,7 @@ public class MvRewritePartitionTest extends MVTestBase {
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv2\n" +
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                        "REFRESH ASYNC\n" +
+                        "REFRESH ON_CHANGE\n" +
                         "   AS SELECT a.k1, a.v1, a.v2, b.v1 as b_v1, sum(a.v1) as sum_v1 " +
                         "FROM test_partition_tbl1 as a join test_partition_tbl2 as b on a.k1=b.k1 " +
                         "group by a.k1, a.v1, a.v2, b.v1;");
@@ -323,7 +323,7 @@ public class MvRewritePartitionTest extends MVTestBase {
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv2\n" +
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                        "REFRESH ASYNC\n" +
+                        "REFRESH ON_CHANGE\n" +
                         "AS SELECT a.k1, a.v1, a.v2, b.v1 as b_v1, sum(a.v1) as sum_v1 " +
                         "FROM test_partition_tbl1 as a left join test_partition_tbl2 as b on a.k1=b.k1 " +
                         "group by a.k1, a.v1, a.v2, b.v1;");
@@ -386,7 +386,7 @@ public class MvRewritePartitionTest extends MVTestBase {
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv2\n" +
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                        "REFRESH ASYNC\n" +
+                        "REFRESH ON_CHANGE\n" +
                         "   AS SELECT a.k1, a.v1, a.v2, b.v1 as b_v1, sum(a.v1) as sum_v1 " +
                         "FROM test_partition_tbl_not_null1 as a left join test_partition_tbl_not_null2 as b on a.k1=b.k1 " +
                         "group by a.k1, a.v1, a.v2, b.v1;");
@@ -449,7 +449,7 @@ public class MvRewritePartitionTest extends MVTestBase {
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv2\n" +
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                        "REFRESH ASYNC\n" +
+                        "REFRESH ON_CHANGE\n" +
                         "AS SELECT a.k1, b.k1 as b_k1, a.v1, a.v2, b.v1 as b_v1, sum(a.v1) as sum_v1 " +
                         "FROM test_partition_tbl1 as a left join test_partition_tbl2 as b on a.k1=b.k1 " +
                         "group by a.k1, a.v1, a.v2, b.k1, b.v1;");

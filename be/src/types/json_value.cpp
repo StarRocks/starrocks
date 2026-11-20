@@ -136,6 +136,39 @@ StatusOr<JsonValue> JsonValue::parse_json_or_string(const Slice& src) {
     return Status::OK();
 }
 
+StatusOr<JsonValue> JsonValue::parse_json_text(const Slice& src) {
+    if (src.size > kJSONLengthLimit) {
+        return Status::NotSupported("JSON string exceed maximum length 16MB");
+    }
+    try {
+        // The velocypack parser builds a number that ends the input digit by digit instead of converting it as a
+        // whole, so a bare 0.3 comes back as the next double. A trailing space sends it through the exact
+        // conversion; only a bare scalar can end without a closing bracket or quote, and it is short.
+        std::string padded;
+        Slice text = src;
+        if (!src.empty()) {
+            const char last = src.get_data()[src.get_size() - 1];
+            if (last != '}' && last != ']' && last != '"') {
+                padded.reserve(src.get_size() + 1);
+                padded.append(src.get_data(), src.get_size());
+                padded.push_back(' ');
+                text = Slice(padded);
+            }
+        }
+        vpack::Exception error(vpack::Exception::InternalError);
+        vpack::Options options = parse_options_from_config();
+        auto b = vpack::Parser::tryFromJson(text.get_data(), text.get_size(), &error, &options);
+        if (b == nullptr) {
+            return fromVPackException(error);
+        }
+        JsonValue res;
+        res.assign(*b);
+        return res;
+    } catch (const vpack::Exception& e) {
+        return fromVPackException(e);
+    }
+}
+
 Status JsonValue::parse(const Slice& src, JsonValue* out) {
     ASSIGN_OR_RETURN(auto json_value, parse_json_or_string(src));
     *out = std::move(json_value);

@@ -126,6 +126,7 @@ public class DataCacheSelectExecutor {
         context.setQualifiedUser(connectContext.getQualifiedUser());
         context.setCurrentUserIdentity(connectContext.getCurrentUserIdentity());
         context.setCurrentRoleIds(connectContext.getCurrentRoleIds());
+        context.setGroups(connectContext.getGroups());
         context.setAuditEventBuilder(connectContext.getAuditEventBuilder());
         context.setResourceGroup(connectContext.getResourceGroup());
         context.setSessionId(connectContext.getSessionId());

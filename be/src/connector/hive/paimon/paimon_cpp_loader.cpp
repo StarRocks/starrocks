@@ -24,17 +24,20 @@ namespace {
 
 template <typename Fn>
 StatusOr<Fn> load_capability(PaimonCppLibrary::Capability capability, const char* symbol, bool reader) {
+    const char* capability_name = capability == PaimonCppLibrary::Capability::GLOBAL_INDEX_SCANNER
+                                          ? "global index reader"
+                                          : (reader ? "reader" : "native writer v1");
     auto result = PaimonCppLibrary::instance().get_symbol(capability);
     if (!result.ok()) {
         if (result.status().is_not_supported()) {
             return Status::NotSupported(fmt::format(
                     "Paimon shim lacks {} capability ({}). Install the matching BE's paimon-cpp-lib package: {}",
-                    reader ? "reader" : "native writer v1", symbol, result.status().message()));
+                    capability_name, symbol, result.status().message()));
         }
-        return Status::InternalError(
-                fmt::format("Paimon native {} is unavailable: {}. Install the matching BE's paimon-cpp-lib package.{}",
-                            reader ? "reader" : "writer", result.status().message(),
-                            reader ? " Set paimon_reader_mode=JNI to use the JNI reader instead." : ""));
+        return Status::InternalError(fmt::format(
+                "Paimon native {} is unavailable: {}. Install the matching BE's paimon-cpp-lib package.{}",
+                capability == PaimonCppLibrary::Capability::SINK ? "writer" : capability_name,
+                result.status().message(), reader ? " Set paimon_reader_mode=JNI to use the JNI reader instead." : ""));
     }
     return reinterpret_cast<Fn>(result.value());
 }
@@ -80,6 +83,13 @@ StatusOr<HdfsScanner*> create_paimon_cpp_scanner() {
     ASSIGN_OR_RETURN(auto fn,
                      load_capability<StarRocksPaimonCreateScannerFn>(PaimonCppLibrary::Capability::SCANNER,
                                                                      STARROCKS_PAIMON_CREATE_SCANNER_SYMBOL, true));
+    return fn();
+}
+
+StatusOr<HdfsScanner*> create_paimon_global_index_scanner() {
+    ASSIGN_OR_RETURN(auto fn, load_capability<StarRocksPaimonCreateGlobalIndexScannerFn>(
+                                      PaimonCppLibrary::Capability::GLOBAL_INDEX_SCANNER,
+                                      STARROCKS_PAIMON_CREATE_GLOBAL_INDEX_SCANNER_SYMBOL, false));
     return fn();
 }
 

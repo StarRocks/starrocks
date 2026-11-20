@@ -51,6 +51,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.concurrent.lock.SnapshotCopyValidator;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorType;
+import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -1032,6 +1033,10 @@ public class QueryAnalyzer {
         public Scope visitTable(TableRelation node, Scope outerScope) {
             TableName tableName = node.getResolveTableName();
             Table table = node.getTable();
+            if (table instanceof MetadataTable metadata
+                    && metadata.isInternalOnly() && !session.isMetadataContext()) {
+                throw new SemanticException("This metadata relation is only available to internal collection queries");
+            }
 
             ImmutableList.Builder<Field> fields = ImmutableList.builder();
             ImmutableMap.Builder<Field, Column> columns = ImmutableMap.builder();

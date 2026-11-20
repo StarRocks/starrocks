@@ -56,6 +56,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorSinkShuffleMode;
 import com.starrocks.connector.ConnectorSinkSortScope;
 import com.starrocks.connector.PlanMode;
+import com.starrocks.connector.paimon.PaimonGlobalIndexMode;
 import com.starrocks.datacache.DataCachePopulateMode;
 import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.persist.gson.GsonUtils;
@@ -859,6 +860,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_FILE_PAGECACHE = "enable_file_pagecache";
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
     public static final String PAIMON_FORCE_JNI_READER = "paimon_force_jni_reader";
+    public static final String PAIMON_GLOBAL_INDEX_MODE = "paimon_global_index_mode";
     public static final String PAIMON_READER_MODE = "paimon_reader_mode";
     public static final String AVRO_USE_JNI_READER = "avro_use_jni_reader";
     public static final String ENABLE_DYNAMIC_PRUNE_SCAN_RANGE = "enable_dynamic_prune_scan_range";
@@ -3109,6 +3111,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PAIMON_FORCE_JNI_READER)
     private boolean paimonForceJNIReader = false;
 
+    @VariableMgr.VarAttr(name = PAIMON_GLOBAL_INDEX_MODE)
+    private String paimonGlobalIndexMode = PaimonGlobalIndexMode.LOCAL.modeName();
+
     @VariableMgr.VarAttr(name = PAIMON_READER_MODE)
     private String paimonReaderMode = PaimonReaderMode.AUTO.name();
 
@@ -4068,6 +4073,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return hudiMORForceJNIReader;
     }
 
+    public PaimonGlobalIndexMode getPaimonGlobalIndexMode() {
+        return PaimonGlobalIndexMode.fromName(paimonGlobalIndexMode);
+    }
+
+    public void setPaimonGlobalIndexMode(String mode) {
+        paimonGlobalIndexMode = PaimonGlobalIndexMode.fromName(mode).modeName();
+    }
+
     public boolean getPaimonForceJNIReader() {
         return paimonForceJNIReader;
     }
@@ -4426,7 +4439,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return queryMemLimit;
     }
 
-    void copyQueryResourcePolicyFrom(SessionVariable caller) {
+    public void copyQueryResourcePolicyFrom(SessionVariable caller) {
         queryMemLimit = caller.queryMemLimit;
         maxExecMemByte = caller.maxExecMemByte;
         resourceGroup = caller.resourceGroup;
@@ -4688,6 +4701,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getExchangeInstanceParallel() {
         return exchangeInstanceParallel;
+    }
+
+    public void setChunkSize(int chunkSize) {
+        this.chunkSize = chunkSize;
     }
 
     public int getChunkSize() {

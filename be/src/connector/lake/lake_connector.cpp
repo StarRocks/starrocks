@@ -1627,6 +1627,8 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _segment_first_chunk_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "SegmentFirstChunks", TUnit::UNIT, io_statistics_name);
     _segment_first_chunk_timer = ADD_CHILD_TIMER(_runtime_profile, "SegmentFirstChunkTime", io_statistics_name);
+    _segment_read_ahead_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "SegmentReadAheadStarted", TUnit::UNIT, io_statistics_name);
     _remote_prefetch_block_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "RemotePrefetchBlocks", TUnit::UNIT, io_statistics_name);
     _remote_prefetch_rejected_block_counter =
@@ -1866,6 +1868,7 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_remote_io_fill_join_counter, reader_stats.remote_io_fill_joins);
     COUNTER_UPDATE(_segment_first_chunk_counter, reader_stats.segment_first_chunks);
     COUNTER_UPDATE(_segment_first_chunk_timer, reader_stats.segment_first_chunk_ns);
+    COUNTER_UPDATE(_segment_read_ahead_counter, reader_stats.segment_read_ahead_started);
     COUNTER_UPDATE(_remote_prefetch_block_counter, reader_stats.remote_prefetch_blocks);
     COUNTER_UPDATE(_remote_prefetch_rejected_block_counter, reader_stats.remote_prefetch_rejected_blocks);
     COUNTER_UPDATE(_remote_prefetch_range_counter, reader_stats.remote_prefetch_ranges);
