@@ -110,10 +110,11 @@ StatusOr<AIProviderHttpRequest> OpenAICompatibleProvider::build_request(const AI
     std::string media_uri;
     const char* media_part_type = "image_url";
     if (request.media != nullptr) {
+        if (request.media->referenced_url) return Status::NotSupported("AI provider does not support referenced URLs");
         if (request.capability != AICapability::CHAT) {
             return Status::NotSupported("OpenAI-compatible embedding does not support FILE input");
         }
-        if (request.media->mime_type == "video/mp4") {
+        if (request.media->is_video()) {
             if (!_supports_video) return Status::NotSupported("AI protocol does not support video input");
             media_part_type = "video_url";
         }

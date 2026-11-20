@@ -83,7 +83,8 @@ StatusOr<AIProviderHttpRequest> DashScopeMultimodalProvider::build_request(const
     std::string_view content = request.prompt;
     const char* content_key = "text";
     if (request.media != nullptr) {
-        if (request.media->mime_type == "video/mp4") {
+        if (request.media->referenced_url) return Status::NotSupported("AI provider does not support referenced URLs");
+        if (request.media->is_video()) {
             return Status::NotSupported("DashScope multimodal protocol does not support inline video input");
         }
         // One SQL row represents one modality, never an implicit text/image fusion.
