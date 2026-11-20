@@ -473,8 +473,9 @@ public class PaimonOperationPublicationTest {
             profile.buildLoadInformationUpdates(execution(INSTANCE_ID), report(INSTANCE_ID,
                     List.of(marker(operation, INSTANCE_ID, 0, rows)))).forEach(Runnable::run);
             TableRef target = new TableRef(QualifiedName.of(List.of("p", "db", "t")), null, NodePosition.ZERO);
-            statement = new InsertStmt(target, null, null, null, mock(QueryStatement.class), !mode.equals("APPEND"),
+            statement = new InsertStmt(target, null, null, null, mock(QueryStatement.class), mode != APPEND,
                     Map.of(), NodePosition.ZERO);
+            assertEquals(operation.isOverwrite(), statement.isOverwrite());
             statement.setTargetTable(new Table(Table.TableType.PAIMON));
             statement.setOrigStmt(new OriginStatement("insert into p.db.t select 1", 0));
             PlanFragment fragment = mock(PlanFragment.class);

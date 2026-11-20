@@ -18,8 +18,12 @@
 #include <arrow/c/bridge.h>
 #include <gtest/gtest.h>
 #include <paimon/bucket/bucket_id_calculator.h>
+#include <paimon/commit_context.h>
 #include <paimon/commit_message.h>
+#include <paimon/file_store_commit.h>
 #include <paimon/memory/memory_pool.h>
+#include <parquet/column_reader.h>
+#include <parquet/file_reader.h>
 
 #include <chrono>
 #include <filesystem>
@@ -78,36 +82,40 @@ protected:
         ASSERT_OK(fs->delete_dir_recursive(root));
     }
 
-    std::shared_ptr<connector::PaimonChunkSinkContext> context(bool fixed = false, bool partitioned = false) {
+    std::shared_ptr<connector::PaimonChunkSinkContext> context(bool fixed = false, bool partitioned = false,
+                                                               bool primary_key = false) {
         auto ctx = std::make_shared<connector::PaimonChunkSinkContext>();
         auto& sink = ctx->sink;
+        const int bucket_count = primary_key ? 1 : (fixed ? 8 : -1);
+        const std::vector<std::string> primary_keys =
+                primary_key ? std::vector<std::string>{"id"} : std::vector<std::string>{};
         sink.__set_writer_protocol_version(1);
         sink.__set_location(root);
         sink.__set_table_identity("db.table");
         sink.__set_schema_id(0);
         sink.__set_column_names(partitioned ? std::vector<std::string>{"id", "p"} : std::vector<std::string>{"id"});
         sink.__set_partition_columns(partitioned ? std::vector<std::string>{"p"} : std::vector<std::string>{});
-        sink.__set_bucket_columns({}); // Public append-table default: hash an empty key row.
-        sink.__set_primary_key_columns({});
-        sink.__set_bucket_count(fixed ? 8 : -1);
-        sink.__set_options({{"bucket", fixed ? "8" : "-1"}, {"file.format", "parquet"}});
+        sink.__set_bucket_columns(primary_keys); // Append tables default to an empty bucket key.
+        sink.__set_primary_key_columns(primary_keys);
+        sink.__set_bucket_count(bucket_count);
+        sink.__set_options({{"bucket", std::to_string(bucket_count)}, {"file.format", "parquet"}});
         sink.__set_commit_user("starrocks-unit-test");
         sink.__set_operation_id("op-1");
         sink.__set_overwrite_mode("APPEND");
         sink.__set_time_zone("UTC");
         sink.__set_cloud_configuration(TCloudConfiguration{});
-        if (fixed) {
+        if (bucket_count > 0) {
             sink.__set_routing_bucket_slot_id(99);
             sink.__set_bucket_routed(true);
         }
-        const std::string fields = partitioned
-                                           ? R"({"id":0,"name":"id","type":"INT"},{"id":1,"name":"p","type":"STRING"})"
-                                           : R"({"id":0,"name":"id","type":"INT"})";
-        const std::string schema = "{\"version\":3,\"id\":0,\"fields\":[" + fields +
-                                   "],\"highestFieldId\":" + (partitioned ? "1" : "0") +
-                                   ",\"partitionKeys\":" + (partitioned ? "[\"p\"]" : "[]") +
-                                   ",\"primaryKeys\":[],\"options\":{\"bucket\":\"" + (fixed ? "8" : "-1") +
-                                   "\",\"file.format\":\"parquet\"},\"timeMillis\":0}";
+        std::string fields =
+                primary_key ? R"({"id":0,"name":"id","type":"INT NOT NULL"})" : R"({"id":0,"name":"id","type":"INT"})";
+        if (partitioned) fields += R"(,{"id":1,"name":"p","type":"STRING"})";
+        const std::string schema =
+                "{\"version\":3,\"id\":0,\"fields\":[" + fields + "],\"highestFieldId\":" + (partitioned ? "1" : "0") +
+                ",\"partitionKeys\":" + (partitioned ? "[\"p\"]" : "[]") +
+                ",\"primaryKeys\":" + (primary_key ? "[\"id\"]" : "[]") + ",\"options\":{\"bucket\":\"" +
+                std::to_string(bucket_count) + "\",\"file.format\":\"parquet\"},\"timeMillis\":0}";
         sink.__set_schema_json(schema);
         WritableFileOptions writable_options;
         writable_options.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
@@ -187,6 +195,57 @@ TEST_F(PaimonChunkSinkTest, WriteModesPrepareNativeFiles) {
         ASSERT_TRUE(await(sink));
         ASSERT_OK(sink.status());
     }
+}
+
+TEST_F(PaimonChunkSinkTest, PrimaryKeyAppendContinuesSequenceAndOverwriteStartsFresh) {
+    auto ctx = context(true, false, true);
+    ctx->sink.__isset.overwrite_mode = false;
+    auto prepare = [&](TPaimonOverwriteMode::type mode, int64_t& sequence) {
+        ctx->sink.__set_write_mode(mode);
+        auto rows = chunk({1});
+        auto route = Int32Column::create();
+        route->append(0); // A single fixed bucket always routes to bucket 0.
+        rows->append_column(std::move(route), 99);
+        const auto previous_reports = state.sink_commit_infos().size();
+        connector::PaimonChunkSink sink(ctx, 0);
+        ASSERT_OK(sink.init(nullptr, &profile, &manager));
+        ASSERT_OK(sink.add(rows));
+        ASSERT_OK(sink.finish());
+        ASSERT_TRUE(await(sink));
+        ASSERT_OK(sink.status());
+        ASSERT_EQ(previous_reports + 1, state.sink_commit_infos().size());
+        const auto& files = state.sink_commit_infos().back().paimon_commit_info.owned_files;
+        ASSERT_EQ(1, files.size());
+        auto file = parquet::ParquetFileReader::OpenFile(files.front(), false);
+        const int index = file->metadata()->schema()->ColumnIndex("_SEQUENCE_NUMBER");
+        ASSERT_GE(index, 0);
+        auto column = file->RowGroup(0)->Column(index);
+        ASSERT_EQ(parquet::Type::INT64, column->type());
+        int64_t values_read = 0;
+        auto* reader = static_cast<parquet::Int64Reader*>(column.get());
+        ASSERT_EQ(1, reader->ReadBatch(1, nullptr, nullptr, &sequence, &values_read));
+        ASSERT_EQ(1, values_read);
+    };
+
+    int64_t original_sequence = 0;
+    ASSERT_NO_FATAL_FAILURE(prepare(TPaimonOverwriteMode::APPEND, original_sequence));
+    const auto& info = state.sink_commit_infos().back().paimon_commit_info;
+    auto messages = paimon::CommitMessage::DeserializeList(info.serializer_version, info.commit_messages.data(),
+                                                           info.commit_messages.size(), paimon::GetDefaultPool());
+    ASSERT_TRUE(messages.ok()) << messages.status().ToString();
+    auto commit_context = paimon::CommitContextBuilder(root, ctx->sink.commit_user).Finish();
+    ASSERT_TRUE(commit_context.ok()) << commit_context.status().ToString();
+    auto committer = paimon::FileStoreCommit::Create(std::move(commit_context).value());
+    ASSERT_TRUE(committer.ok()) << committer.status().ToString();
+    auto status = committer.value()->Commit(messages.value());
+    ASSERT_TRUE(status.ok()) << status.ToString();
+
+    int64_t append_sequence = 0;
+    int64_t overwrite_sequence = 0;
+    ASSERT_NO_FATAL_FAILURE(prepare(TPaimonOverwriteMode::APPEND, append_sequence));
+    ASSERT_NO_FATAL_FAILURE(prepare(TPaimonOverwriteMode::FULL, overwrite_sequence));
+    EXPECT_EQ(original_sequence + 1, append_sequence);
+    EXPECT_EQ(original_sequence, overwrite_sequence);
 }
 
 TEST_F(PaimonChunkSinkTest, RejectsConflictingOverwriteModes) {
