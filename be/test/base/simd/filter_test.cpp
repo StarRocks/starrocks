@@ -515,6 +515,119 @@ PARALLEL_TEST(SimdFilterTest, randomized_differential_fuzz) {
     }
 }
 
+PARALLEL_TEST(SimdFilterTest, padded_capacity_contract_and_leading_all_ones_in_place) {
+    static_assert(SIMD::Filter::kFilterSimdStorePadBytes == 64);
+
+    auto run_for_type = [](auto canary) {
+        using T = decltype(canary);
+        constexpr size_t kPadElems = SIMD::Filter::kFilterSimdStorePadBytes / sizeof(T);
+        constexpr size_t kCanaryElems = 8;
+
+        for (size_t from : {size_t(0), size_t(1), size_t(7), size_t(16), size_t(32)}) {
+            for (size_t count : {size_t(0), size_t(1), size_t(15), size_t(16), size_t(17), size_t(31), size_t(32),
+                                 size_t(33), size_t(48), size_t(64), size_t(73)}) {
+                const size_t to = from + count;
+                std::vector<T> src(to);
+                for (size_t i = 0; i < to; ++i) {
+                    src[i] = static_cast<T>(i * 2654435761ull + 17);
+                }
+
+                for (int pat = 0; pat < 8; ++pat) {
+                    std::vector<uint8_t> sel(to, 0);
+                    std::vector<T> expected;
+                    for (size_t i = from; i < to; ++i) {
+                        const size_t rel = i - from;
+                        bool keep = false;
+                        switch (pat) {
+                        case 0:
+                            keep = false;
+                            break;
+                        case 1:
+                            keep = true;
+                            break;
+                        case 2:
+                            keep = (rel == 0);
+                            break;
+                        case 3:
+                            keep = (rel + 1 == count);
+                            break;
+                        case 4:
+                            keep = ((rel & 1u) == 0);
+                            break;
+                        case 5:
+                            keep = ((rel & 3u) != 0);
+                            break;
+                        case 6:
+                            keep = ((rel & 15u) < 6);
+                            break;
+                        case 7:
+                            // Leading all-1 batches (32 elements) followed by mixed survivors.
+                            keep = (rel < 32) || (((rel * 7 + 3) % 5) < 2);
+                            break;
+                        }
+                        if (keep) {
+                            sel[i] = (rel & 1u) ? 0x80 : 1;
+                            expected.push_back(src[i]);
+                        }
+                    }
+
+                    const size_t selected_count = expected.size();
+                    const size_t padded_end = from + selected_count + kPadElems;
+
+                    // 1. Out-of-place buffer sized to from + selected_count + kPadElems + kCanaryElems:
+                    //    canaries immediately after the 64-byte padding must never be corrupted.
+                    {
+                        std::vector<T> dst(padded_end + kCanaryElems, canary);
+                        size_t ret = SIMD::Filter::filter_range(dst.data(), src.data(), sel.data(), from, to);
+                        ASSERT_EQ(from + selected_count, ret);
+                        for (size_t i = 0; i < from; ++i) {
+                            ASSERT_EQ(canary, dst[i]) << "Prefix corrupted at i=" << i;
+                        }
+                        for (size_t i = 0; i < selected_count; ++i) {
+                            ASSERT_EQ(expected[i], dst[from + i]) << "Compacted mismatch at i=" << i;
+                        }
+                        for (size_t i = padded_end; i < padded_end + kCanaryElems; ++i) {
+                            ASSERT_EQ(canary, dst[i]) << "Canary after 64B store padding corrupted at i=" << i
+                                                      << " pat=" << pat << " from=" << from << " count=" << count;
+                        }
+                    }
+
+                    // 2. Exact ASAN allocation sized to std::min(to, from + selected_count + kPadElems).
+                    {
+                        const size_t tight_cap = std::min(to, padded_end);
+                        std::vector<T> dst_tight(tight_cap, canary);
+                        size_t ret = SIMD::Filter::filter_range(dst_tight.data(), src.data(), sel.data(), from, to);
+                        ASSERT_EQ(from + selected_count, ret);
+                        for (size_t i = 0; i < selected_count; ++i) {
+                            ASSERT_EQ(expected[i], dst_tight[from + i]);
+                        }
+                    }
+
+                    // 3. In-place (dst == src) including leading all-1 batches (pat == 1 and pat == 7).
+                    {
+                        std::vector<T> in_place(to + kCanaryElems, canary);
+                        std::copy(src.begin(), src.end(), in_place.begin());
+                        size_t ret = SIMD::Filter::filter_range(in_place.data(), in_place.data(), sel.data(), from, to);
+                        ASSERT_EQ(from + selected_count, ret);
+                        for (size_t i = 0; i < from; ++i) {
+                            ASSERT_EQ(src[i], in_place[i]) << "In-place prefix corrupted at i=" << i;
+                        }
+                        for (size_t i = 0; i < selected_count; ++i) {
+                            ASSERT_EQ(expected[i], in_place[from + i]) << "In-place mismatch at i=" << i;
+                        }
+                        for (size_t i = to; i < to + kCanaryElems; ++i) {
+                            ASSERT_EQ(canary, in_place[i]) << "In-place tail canary corrupted at i=" << i;
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    run_for_type(uint32_t{0xDEADBEEFu});
+    run_for_type(uint64_t{0xDEADBEEFCAFEBABEull});
+}
+
 #if defined(__ARM_NEON) && defined(__aarch64__)
 // Gate G2 note: 128-bit SVE2 svcompact_u32/u64 kernels were evaluated on Arm Neoverse-V2 (c4a) and pruned
 // because 4-pipe NEON vqtbl1q_u8 LUT compaction (compress_neon_w4/w8) outperformed 1-pipe 128-bit COMPACT.
