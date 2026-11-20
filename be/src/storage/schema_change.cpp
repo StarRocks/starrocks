@@ -584,6 +584,11 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
             continue;
         }
 
+        if (auto st = _chunk_changer->fill_generated_columns(new_chunk); !st.ok()) {
+            LOG(WARNING) << alter_msg_header() << "fill generated columns failed: " << st.message();
+            return st;
+        }
+
         ChunkHelper::padding_char_columns(char_field_indexes, new_schema, new_tablet->tablet_schema(), new_chunk.get());
 
         auto res = mem_table->insert(*new_chunk, selective->data(), 0, new_chunk->num_rows());
@@ -789,11 +794,6 @@ Status SchemaChangeHandler::_do_process_alter_tablet(const TAlterTabletReqV2& re
     }
 
     if (request.__isset.materialized_column_req && request.materialized_column_req.mc_exprs.size() != 0) {
-        // Currently, a schema change task for generated column is just
-        // ADD/DROP/MODIFY a single generated column, so it is impossible
-        // that sc_sorting == true, for generated column can not be a KEY.
-        DCHECK_EQ(sc_params.sc_sorting, false);
-
         chunk_changer->init_runtime_state(request.materialized_column_req.query_options,
                                           request.materialized_column_req.query_globals);
 

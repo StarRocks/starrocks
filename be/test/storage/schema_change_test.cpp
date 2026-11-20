@@ -14,6 +14,7 @@
 
 #include "storage/schema_change.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "column/datum_convert.h"
@@ -25,6 +26,7 @@
 #include "storage/convert_helper.h"
 #include "storage/delta_writer.h"
 #include "storage/rowset/rowset_factory.h"
+#include "storage/rowset/segment.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
@@ -32,6 +34,7 @@
 #include "testutil/column_test_helper.h"
 #include "testutil/schema_test_helper.h"
 #include "testutil/tablet_test_helper.h"
+#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/logging.h"
 
@@ -921,6 +924,482 @@ TEST_F(SchemaChangeTest, overlapping_direct_schema_change) {
 
     (void)_tablet_mgr->drop_tablet(base_tablet_id);
     (void)_tablet_mgr->drop_tablet(new_tablet_id);
+}
+
+namespace {
+TabletSchemaPB order_schema(const std::string& type, int changed_column, KeysType keys_type = AGG_KEYS) {
+    auto pb = SchemaTestHelper::gen_schema_pb_of_dup(TYPE_INT, 0, 3, 2);
+    pb.set_keys_type(keys_type);
+    for (int i = 0; i < 3; ++i) {
+        auto* col = pb.mutable_column(i);
+        col->set_length(4);
+        col->set_aggregation(i < 2 || keys_type == DUP_KEYS ? "NONE" : "SUM");
+    }
+    auto* col = pb.mutable_column(changed_column);
+    col->set_type(type);
+    col->set_length(type == "VARCHAR" || type == "CHAR" ? 32 : 16);
+    if (type == "DECIMAL32" || type == "DECIMAL64" || type == "DECIMAL128") {
+        col->set_precision(8);
+        col->set_frac(2);
+    }
+    return pb;
+}
+
+void check_order_dispatch(const TabletSchemaPB& before, const TabletSchemaPB& after, bool expected_sorting) {
+    auto base = TabletSchema::create(before);
+    auto target = TabletSchema::create(after);
+    ChunkChanger changer(target);
+    bool sorting = false;
+    bool directly = false;
+    ASSERT_OK(
+            SchemaChangeUtils::parse_request(base, target, &changer, {}, nullptr, false, &sorting, &directly, nullptr));
+    EXPECT_EQ(expected_sorting, sorting);
+    if (expected_sorting) {
+        EXPECT_FALSE(directly);
+    }
+}
+} // namespace
+
+TEST_F(SchemaChangeTest, order_changing_key_conversions) {
+    for (const auto& types : std::vector<std::pair<std::string, std::string>>{
+                 {"TINYINT", "VARCHAR"},   {"SMALLINT", "VARCHAR"},  {"INT", "VARCHAR"},
+                 {"BIGINT", "VARCHAR"},    {"LARGEINT", "VARCHAR"},  {"DECIMAL_V2", "VARCHAR"},
+                 {"DECIMAL32", "VARCHAR"}, {"DECIMAL64", "VARCHAR"}, {"DECIMAL128", "VARCHAR"},
+                 {"VARCHAR", "DECIMAL32"}, {"VARCHAR", "DECIMAL64"}, {"VARCHAR", "DECIMAL128"},
+                 {"VARCHAR", "TINYINT"},   {"VARCHAR", "SMALLINT"},  {"VARCHAR", "INT"},
+                 {"VARCHAR", "BIGINT"},    {"VARCHAR", "LARGEINT"},  {"VARCHAR", "DATE"},
+                 {"INT", "DATE"},          {"DATETIME", "DATE"}}) {
+        SCOPED_TRACE(types.first + " -> " + types.second);
+        for (int position : {0, 1, 2}) {
+            for (bool change_short_keys : {false, true}) {
+                auto keys_type = position == 2 ? DUP_KEYS : AGG_KEYS;
+                auto before = order_schema(types.first, position, keys_type);
+                auto after = order_schema(types.second, position, keys_type);
+                if (change_short_keys) after.set_num_short_key_columns(1);
+                check_order_dispatch(before, after, position < 2);
+            }
+        }
+    }
+}
+
+TEST_F(SchemaChangeTest, order_preserving_key_conversions) {
+    const std::vector<std::string> integers{"TINYINT", "SMALLINT", "INT", "BIGINT", "LARGEINT"};
+    for (int i = 0; i < integers.size(); ++i) {
+        for (int j = i; j < integers.size(); ++j) {
+            SCOPED_TRACE(integers[i] + " -> " + integers[j]);
+            check_order_dispatch(order_schema(integers[i], 0), order_schema(integers[j], 0), false);
+        }
+    }
+    for (const auto& types : std::vector<std::pair<std::string, std::string>>{
+                 {"DATE", "DATETIME"}, {"CHAR", "VARCHAR"}, {"CHAR", "CHAR"}, {"VARCHAR", "VARCHAR"}}) {
+        auto before = order_schema(types.first, 0);
+        auto after = order_schema(types.second, 0);
+        after.mutable_column(0)->set_length(64);
+        after.mutable_column(0)->set_is_nullable(true);
+        before.mutable_column(0)->set_is_nullable(false);
+        check_order_dispatch(before, after, false);
+    }
+    const std::vector<std::pair<std::string, int>> decimals{{"DECIMAL32", 9}, {"DECIMAL64", 18}, {"DECIMAL128", 38}};
+    for (int i = 0; i < decimals.size(); ++i) {
+        for (int j = 0; j < decimals.size(); ++j) {
+            for (int scale_increase : {0, 1}) {
+                auto before = order_schema(decimals[i].first, 0);
+                auto after = order_schema(decimals[j].first, 0);
+                before.mutable_column(0)->set_precision(std::min(decimals[i].second, decimals[j].second) - 1);
+                before.mutable_column(0)->set_frac(2);
+                after.mutable_column(0)->set_precision(decimals[j].second);
+                after.mutable_column(0)->set_frac(2 + scale_increase);
+                check_order_dispatch(before, after, false);
+            }
+        }
+    }
+    auto before = order_schema("DECIMAL_V2", 0);
+    auto after = order_schema("DECIMAL128", 0);
+    after.mutable_column(0)->set_precision(27);
+    after.mutable_column(0)->set_frac(9);
+    check_order_dispatch(before, after, false);
+}
+
+TEST_F(SchemaChangeTest, order_conversion_uses_sort_keys) {
+    auto before = order_schema("BIGINT", 2, DUP_KEYS);
+    auto after = order_schema("VARCHAR", 2, DUP_KEYS);
+    before.add_sort_key_idxes(2);
+    before.add_sort_key_idxes(0);
+    after.add_sort_key_idxes(2);
+    after.add_sort_key_idxes(0);
+    check_order_dispatch(before, after, true);
+    before = order_schema("BIGINT", 0, DUP_KEYS);
+    after = order_schema("VARCHAR", 0, DUP_KEYS);
+    before.add_sort_key_idxes(1);
+    after.add_sort_key_idxes(1);
+    before.set_num_short_key_columns(1);
+    after.set_num_short_key_columns(1);
+    check_order_dispatch(before, after, false);
+
+    // A benign earlier conversion must not hide a later order-changing one.
+    before = order_schema("BIGINT", 1);
+    after = order_schema("VARCHAR", 1);
+    after.mutable_column(0)->set_type("BIGINT");
+    check_order_dispatch(before, after, true);
+
+    // Losing time within the last DUP sort key preserves order; a following key does not.
+    for (int position : {0, 1}) {
+        check_order_dispatch(order_schema("DATETIME", position, DUP_KEYS), order_schema("DATE", position, DUP_KEYS),
+                             position == 0);
+    }
+}
+
+TEST_F(SchemaChangeTest, historical_key_conversion_order) {
+    const TTabletId base_id = 1415101;
+    const TTabletId target_id = 1415102;
+    const Version version(2, 2);
+    for (bool target : {false, true}) {
+        auto req = TabletTestHelper::gen_create_tablet_req(target ? target_id : base_id, TKeysType::AGG_KEYS,
+                                                           TStorageType::COLUMN);
+        if (target) req.__set_base_tablet_id(base_id);
+        add_key_column(&req, "k1", target ? TPrimitiveType::VARCHAR : TPrimitiveType::BIGINT);
+        add_key_column(&req, "k2", TPrimitiveType::INT);
+        add_value_column(&req, "v", TPrimitiveType::BIGINT, TKeysType::AGG_KEYS);
+        if (target) {
+            req.tablet_schema.columns[0].column_type.__set_len(32);
+            req.tablet_schema.__set_short_key_column_count(1);
+        }
+        ASSERT_OK(_storage_engine->create_tablet(req));
+    }
+    auto base = _tablet_mgr->get_tablet(base_id);
+    auto target = _tablet_mgr->get_tablet(target_id);
+    DeferOp cleanup([&] {
+        (void)_tablet_mgr->drop_tablet(base_id);
+        (void)_tablet_mgr->drop_tablet(target_id);
+    });
+    auto chunk = ChunkHelper::new_chunk(*base->tablet_schema()->schema(), 16384);
+    for (int64_t k1 : {9, 10, 90, 100}) {
+        for (int32_t k2 = 0; k2 < 4096; ++k2) {
+            chunk->get_column_by_index(0)->as_mutable_raw_ptr()->append_datum(Datum(k1));
+            chunk->get_column_by_index(1)->as_mutable_raw_ptr()->append_datum(Datum(k2));
+            chunk->get_column_by_index(2)->as_mutable_raw_ptr()->append_datum(Datum(int64_t{1}));
+        }
+    }
+    auto writer = TabletTestHelper::create_rowset_writer(*base, next_rowset_id(), version);
+    ASSERT_OK(writer->add_chunk(*chunk));
+    ASSERT_OK(writer->flush());
+    auto rowset = writer->build();
+    ASSERT_OK(rowset.status());
+    ASSERT_OK(base->add_rowset(*rowset, false));
+
+    SchemaChangeHandler handler;
+    ASSERT_OK(handler.process_alter_tablet(gen_alter_tablet_req(base_id, target_id, version)));
+    auto converted = target->get_rowset_by_version(version);
+    ASSERT_NE(nullptr, converted);
+    ASSERT_OK(converted->load());
+    ASSERT_EQ(1, converted->num_segments());
+    std::vector<std::string> short_keys;
+    ASSERT_OK(converted->segments()[0]->get_short_key_index(&short_keys));
+    ASSERT_GT(short_keys.size(), 4);
+    EXPECT_TRUE(std::is_sorted(short_keys.begin(), short_keys.end()));
+    auto iters = TabletTestHelper::create_segment_iterators(*target, version, &_stats);
+    ASSERT_EQ(1, iters.size());
+    auto result = ChunkHelper::new_chunk(*target->tablet_schema()->schema(), 4096);
+    std::vector<std::string> expected{"10", "100", "9", "90"};
+    size_t count = 0;
+    while (true) {
+        result->reset();
+        auto st = iters[0]->get_next(result.get());
+        if (st.is_end_of_file()) break;
+        ASSERT_OK(st);
+        for (size_t i = 0; i < result->num_rows(); ++i, ++count) {
+            ASSERT_LT(count, 16384);
+            ASSERT_EQ(expected[count / 4096], result->get_column_by_index(0)->get(i).get_slice().to_string());
+            EXPECT_EQ(count % 4096, result->get_column_by_index(1)->get(i).get_int32());
+            EXPECT_EQ(1, result->get_column_by_index(2)->get(i).get_int64());
+        }
+    }
+    EXPECT_EQ(16384, count);
+    iters[0]->close();
+}
+
+TEST_F(SchemaChangeTest, order_conversion_comparator_evidence) {
+    auto check = [&](TabletSchemaPB before, TabletSchemaPB after, const std::vector<std::string>& values,
+                     bool strictly_ordered) {
+        auto base = TabletSchema::create(before);
+        auto target = TabletSchema::create(after);
+        auto base_schema = ChunkHelper::convert_schema(base);
+        auto target_schema = ChunkHelper::convert_schema(target);
+        ChunkChanger changer(target);
+        bool sorting = false, directly = false;
+        ASSERT_OK(SchemaChangeUtils::parse_request(base, target, &changer, {}, nullptr, false, &sorting, &directly,
+                                                   nullptr));
+        ChunkPtr input = ChunkHelper::new_chunk(base_schema, values.size() + 1);
+        for (int i = -1; i < static_cast<int>(values.size()); ++i) {
+            Datum value;
+            if (i >= 0) {
+                ASSERT_OK(datum_from_string(base_schema.field(0)->type().get(), &value, values[i], &_mem_pool));
+            }
+            input->get_column_by_index(0)->as_mutable_raw_ptr()->append_datum(value);
+            input->get_column_by_index(1)->as_mutable_raw_ptr()->append_datum(Datum(int32_t(values.size() - i)));
+            input->get_column_by_index(2)->as_mutable_raw_ptr()->append_datum(Datum(int32_t{1}));
+        }
+        ChunkPtr output = ChunkHelper::new_chunk(target_schema, input->num_rows());
+        ASSERT_TRUE(changer.change_chunk_v2(input, output, base_schema, target_schema, &_mem_pool));
+        bool preserves = true;
+        for (int i = 1; i < input->num_rows(); ++i) {
+            ASSERT_LT(input->get_column_by_index(0)->compare_at(i - 1, i, *input->get_column_by_index(0), -1), 0);
+            preserves &= output->get_column_by_index(0)->compare_at(i - 1, i, *output->get_column_by_index(0), -1) < 0;
+        }
+        EXPECT_EQ(strictly_ordered, preserves);
+        EXPECT_EQ(!strictly_ordered, sorting);
+    };
+    const std::vector<std::string> ints{"TINYINT", "SMALLINT", "INT", "BIGINT", "LARGEINT"};
+    const std::vector<std::vector<std::string>> limits{{"-128", "-1", "0", "1", "127"},
+                                                       {"-32768", "-1", "0", "1", "32767"},
+                                                       {"-2147483648", "-1", "0", "1", "2147483647"},
+                                                       {"-9223372036854775808", "-1", "0", "1", "9223372036854775807"}};
+    for (int i = 0; i < limits.size(); ++i) {
+        for (int j = i + 1; j < ints.size(); ++j) {
+            SCOPED_TRACE(ints[i] + " -> " + ints[j]);
+            check(order_schema(ints[i], 0), order_schema(ints[j], 0), limits[i], true);
+        }
+        if (i < 3) check(order_schema(ints[i], 0), order_schema("DOUBLE", 0), limits[i], true);
+    }
+    check(order_schema("CHAR", 0), order_schema("VARCHAR", 0), {"", "a", "aa", "z"}, true);
+    auto wider_string = order_schema("VARCHAR", 0);
+    wider_string.mutable_column(0)->set_length(64);
+    check(order_schema("VARCHAR", 0), wider_string, {"", "a", "aa", "z"}, true);
+    check(order_schema("DATE", 0), order_schema("DATETIME", 0), {"1000-01-01", "2000-02-29", "9999-12-31"}, true);
+    check(order_schema("BIGINT", 0), order_schema("DOUBLE", 0), {"9007199254740992", "9007199254740993"}, false);
+    check(order_schema("FLOAT", 0), order_schema("DOUBLE", 0), {"0.0000001", "0.0000002"}, false);
+    check(order_schema("BIGINT", 0), order_schema("VARCHAR", 0), {"9", "10", "90", "100"}, false);
+    check(order_schema("VARCHAR", 0), order_schema("BIGINT", 0), {"10", "100", "9", "90", "bad"}, false);
+    check(order_schema("INT", 0), order_schema("DATE", 0), {"691231", "700101"}, false);
+    check(order_schema("DATETIME", 0), order_schema("DATE", 0), {"2026-11-17 01:00:00", "2026-11-17 02:00:00"}, false);
+    for (const auto& type : {"DECIMAL32", "DECIMAL64", "DECIMAL128"}) {
+        auto before = order_schema(type, 0);
+        before.mutable_column(0)->set_precision(8);
+        before.mutable_column(0)->set_frac(2);
+        auto after = order_schema("DECIMAL128", 0);
+        after.mutable_column(0)->set_precision(38);
+        after.mutable_column(0)->set_frac(9);
+        check(before, after, {"-999999.99", "-0.01", "0", "0.01", "999999.99"}, true);
+        for (const auto& target_type : {"DECIMAL32", "DECIMAL64", "DECIMAL128"}) {
+            auto exact_target = order_schema(target_type, 0);
+            exact_target.mutable_column(0)->set_precision(9);
+            exact_target.mutable_column(0)->set_frac(3);
+            check(before, exact_target, {"-999999.99", "-0.01", "0", "0.01", "999999.99"}, true);
+        }
+        after = order_schema("VARCHAR", 0);
+        check(before, after, {"9.00", "10.00"}, false);
+        check(after, before, {"10.00", "100.00", "9.00"}, false);
+    }
+    auto before = order_schema("DECIMAL_V2", 0);
+    auto after = order_schema("DECIMAL128", 0);
+    after.mutable_column(0)->set_precision(27);
+    after.mutable_column(0)->set_frac(9);
+    check(before, after, {"-999999999999999999.999999999", "-0.000000001", "0", "999999999999999999.999999999"}, true);
+}
+
+TEST_F(SchemaChangeTest, historical_key_conversion_order_and_aggregation) {
+    TTabletId next_id = 1415200;
+    for (bool strings : {false, true}) {
+        const TTabletId base_id = next_id++;
+        const TTabletId target_id = next_id++;
+        const Version version(2, 2);
+        for (bool target : {false, true}) {
+            auto req = TabletTestHelper::gen_create_tablet_req(target ? target_id : base_id, TKeysType::AGG_KEYS,
+                                                               TStorageType::COLUMN);
+            if (target) req.__set_base_tablet_id(base_id);
+            auto type = strings ? (target ? TPrimitiveType::BIGINT : TPrimitiveType::VARCHAR)
+                                : (target ? TPrimitiveType::DATE : TPrimitiveType::DATETIME);
+            add_key_column(&req, "k1", type);
+            add_key_column(&req, "k2", TPrimitiveType::INT);
+            add_value_column(&req, "v", TPrimitiveType::BIGINT, TKeysType::AGG_KEYS);
+            req.tablet_schema.columns[0].__set_is_allow_null(true);
+            if (type == TPrimitiveType::VARCHAR) req.tablet_schema.columns[0].column_type.__set_len(32);
+            req.tablet_schema.__set_short_key_column_count(1);
+            ASSERT_OK(_storage_engine->create_tablet(req));
+        }
+        auto base = _tablet_mgr->get_tablet(base_id);
+        auto target = _tablet_mgr->get_tablet(target_id);
+        DeferOp cleanup([&] {
+            (void)_tablet_mgr->drop_tablet(base_id);
+            (void)_tablet_mgr->drop_tablet(target_id);
+        });
+        std::vector<std::string> keys =
+                strings ? std::vector<std::string>{"01", "1", "bad"}
+                        : std::vector<std::string>{"2026-11-17 01:00:00", "2026-11-17 02:00:00", "2026-11-18 00:00:00"};
+        auto chunk = ChunkHelper::new_chunk(*base->tablet_schema()->schema(), 12288);
+        auto field_type = get_type_info(base->tablet_schema()->column(0));
+        for (const auto& text : keys) {
+            Datum key;
+            ASSERT_OK(datum_from_string(field_type.get(), &key, text, &_mem_pool));
+            for (int32_t suffix = 0; suffix < 4096; ++suffix) {
+                chunk->get_column_by_index(0)->as_mutable_raw_ptr()->append_datum(key);
+                chunk->get_column_by_index(1)->as_mutable_raw_ptr()->append_datum(Datum(suffix));
+                chunk->get_column_by_index(2)->as_mutable_raw_ptr()->append_datum(Datum(int64_t{1}));
+            }
+        }
+        auto writer = TabletTestHelper::create_rowset_writer(*base, next_rowset_id(), version);
+        ASSERT_OK(writer->add_chunk(*chunk));
+        ASSERT_OK(writer->flush());
+        auto rowset = writer->build();
+        ASSERT_OK(rowset.status());
+        ASSERT_OK(base->add_rowset(*rowset, false));
+        SchemaChangeHandler handler;
+        ASSERT_OK(handler.process_alter_tablet(gen_alter_tablet_req(base_id, target_id, version)));
+        auto converted = target->get_rowset_by_version(version);
+        ASSERT_NE(nullptr, converted);
+        ASSERT_EQ(8192, converted->num_rows());
+        ASSERT_OK(converted->load());
+        ASSERT_EQ(1, converted->num_segments());
+        std::vector<std::string> short_keys;
+        ASSERT_OK(converted->segments()[0]->get_short_key_index(&short_keys));
+        EXPECT_TRUE(std::is_sorted(short_keys.begin(), short_keys.end()));
+        auto iters = TabletTestHelper::create_segment_iterators(*target, version, &_stats);
+        ASSERT_EQ(1, iters.size());
+        auto result = ChunkHelper::new_chunk(*target->tablet_schema()->schema(), 4096);
+        size_t count = 0;
+        while (true) {
+            result->reset();
+            auto st = iters[0]->get_next(result.get());
+            if (st.is_end_of_file()) break;
+            ASSERT_OK(st);
+            for (size_t i = 0; i < result->num_rows(); ++i, ++count) {
+                ASSERT_LT(count, 8192);
+                auto key = result->get_column_by_index(0)->get(i);
+                if (strings) {
+                    ASSERT_EQ(count < 4096, key.is_null());
+                    if (!key.is_null()) {
+                        ASSERT_EQ(1, key.get_int64());
+                    }
+                } else {
+                    ASSERT_EQ(count < 4096 ? "2026-11-17" : "2026-11-18", key.get_date().to_string());
+                }
+                ASSERT_EQ(count % 4096, result->get_column_by_index(1)->get(i).get_int32());
+                const bool merged_group = strings ? count >= 4096 : count < 4096;
+                ASSERT_EQ(merged_group ? 2 : 1, result->get_column_by_index(2)->get(i).get_int64());
+            }
+        }
+        EXPECT_EQ(8192, count);
+        iters[0]->close();
+    }
+}
+
+TEST_F(SchemaChangeTest, sorted_key_conversion_generated_columns) {
+    TTabletId next_id = 1415300;
+    for (int mode = 0; mode < 4; ++mode) {
+        SCOPED_TRACE(mode); // ADD, MODIFY, constant NULL, invalid target index.
+        const auto base_id = next_id++;
+        const auto target_id = next_id++;
+        const Version version(2, 2);
+        for (bool target : {false, true}) {
+            auto req = TabletTestHelper::gen_create_tablet_req(target ? target_id : base_id, TKeysType::DUP_KEYS,
+                                                               TStorageType::COLUMN);
+            if (target) req.__set_base_tablet_id(base_id);
+            add_key_column(&req, "k", target ? TPrimitiveType::VARCHAR : TPrimitiveType::BIGINT);
+            if (target) req.tablet_schema.columns[0].column_type.__set_len(32);
+            add_value_column(&req, "v", TPrimitiveType::INT);
+            req.tablet_schema.columns.back().__set_is_allow_null(true);
+            if (target || mode == 1) {
+                add_value_column(&req, "g", TPrimitiveType::INT);
+                req.tablet_schema.columns.back().__set_is_allow_null(true);
+            }
+            req.tablet_schema.__set_short_key_column_count(1);
+            ASSERT_OK(_storage_engine->create_tablet(req));
+        }
+        DeferOp cleanup([&] {
+            (void)_tablet_mgr->drop_tablet(base_id);
+            (void)_tablet_mgr->drop_tablet(target_id);
+        });
+        auto base = _tablet_mgr->get_tablet(base_id);
+        auto target = _tablet_mgr->get_tablet(target_id);
+        auto chunk = ChunkHelper::new_chunk(*base->tablet_schema()->schema(), 4);
+        const std::vector<int64_t> keys{9, 10, 90, 100};
+        for (size_t i = 0; i < keys.size(); ++i) {
+            chunk->get_column_by_index(0)->as_mutable_raw_ptr()->append_datum(Datum(keys[i]));
+            chunk->get_column_by_index(1)->as_mutable_raw_ptr()->append_datum(
+                    i == 1 ? Datum() : Datum(static_cast<int32_t>(i + 1)));
+            if (mode == 1) chunk->get_column_by_index(2)->as_mutable_raw_ptr()->append_datum(Datum(int32_t{99}));
+        }
+        auto writer = TabletTestHelper::create_rowset_writer(*base, next_rowset_id(), version);
+        ASSERT_OK(writer->add_chunk(*chunk));
+        ASSERT_OK(writer->flush());
+        auto rowset = writer->build();
+        ASSERT_OK(rowset.status());
+        ASSERT_OK(base->add_rowset(*rowset, false));
+
+        TExprNode node;
+        node.__set_node_type(mode == 2 ? TExprNodeType::NULL_LITERAL : TExprNodeType::SLOT_REF);
+        node.__set_type(gen_type_desc(TPrimitiveType::INT));
+        node.__set_num_children(0);
+        node.__set_is_nullable(true);
+        if (mode != 2) {
+            TSlotRef slot;
+            slot.__set_slot_id(1);
+            slot.__set_tuple_id(0);
+            node.__set_slot_ref(slot);
+        }
+        TExpr expr;
+        expr.__set_nodes({node});
+        TAlterTabletMaterializedColumnReq materialized;
+        materialized.__set_query_options(TQueryOptions());
+        materialized.__set_query_globals(TQueryGlobals());
+        materialized.__set_mc_exprs({{mode == 3 ? 3 : 2, expr}});
+        auto request = gen_alter_tablet_req(base_id, target_id, version);
+        request.__set_materialized_column_req(materialized);
+        SchemaChangeHandler handler;
+        auto status = handler.process_alter_tablet(request);
+        if (mode == 3) {
+            ASSERT_FALSE(status.ok());
+            EXPECT_NE(std::string::npos, status.message().find("generated column index out of range"));
+            EXPECT_EQ(TABLET_NOTREADY, target->tablet_state());
+            continue;
+        }
+        ASSERT_OK(status);
+        auto iters = TabletTestHelper::create_segment_iterators(*target, version, &_stats);
+        ASSERT_EQ(1, iters.size());
+        auto result = ChunkHelper::new_chunk(*target->tablet_schema()->schema(), 4);
+        ASSERT_OK(iters[0]->get_next(result.get()));
+        ASSERT_EQ(4, result->num_rows());
+        const std::vector<std::string> expected_keys{"10", "100", "9", "90"};
+        const std::vector<int32_t> expected_values{0, 4, 1, 3};
+        for (size_t i = 0; i < 4; ++i) {
+            EXPECT_EQ(expected_keys[i], result->get_column_by_index(0)->get(i).get_slice().to_string());
+            const auto value = result->get_column_by_index(2)->get(i);
+            ASSERT_EQ(mode == 2 || i == 0, value.is_null());
+            if (!value.is_null()) {
+                EXPECT_EQ(expected_values[i], value.get_int32());
+            }
+        }
+        result->reset();
+        EXPECT_TRUE(iters[0]->get_next(result.get()).is_end_of_file());
+        iters[0]->close();
+    }
+}
+
+TEST_F(SchemaChangeTest, order_conversion_exact_and_lossy_numeric) {
+    for (const auto& type : {"TINYINT", "SMALLINT", "INT"}) {
+        check_order_dispatch(order_schema(type, 0), order_schema("DOUBLE", 0), false);
+    }
+    for (const auto& type : {"BIGINT", "FLOAT"}) {
+        check_order_dispatch(order_schema(type, 0), order_schema("DOUBLE", 0), true);
+        check_order_dispatch(order_schema(type, 1, DUP_KEYS), order_schema("DOUBLE", 1, DUP_KEYS), false);
+    }
+    auto before = order_schema("VARCHAR", 0);
+    auto after = order_schema("BIGINT", 0);
+    before.mutable_column(0)->set_is_nullable(false);
+    after.mutable_column(0)->set_is_nullable(false);
+    auto base = TabletSchema::create(before);
+    auto target = TabletSchema::create(after);
+    ChunkChanger changer(target);
+    bool sorting = false, directly = false;
+    ASSERT_OK(
+            SchemaChangeUtils::parse_request(base, target, &changer, {}, nullptr, false, &sorting, &directly, nullptr));
+    EXPECT_TRUE(sorting);
+    ChunkPtr input = ChunkHelper::new_chunk(*base->schema(), 1);
+    input->get_column_by_index(0)->as_mutable_raw_ptr()->append_datum(Datum(Slice("bad")));
+    input->get_column_by_index(1)->as_mutable_raw_ptr()->append_datum(Datum(int32_t{1}));
+    input->get_column_by_index(2)->as_mutable_raw_ptr()->append_datum(Datum(int32_t{1}));
+    ChunkPtr output = ChunkHelper::new_chunk(*target->schema(), 1);
+    EXPECT_FALSE(changer.change_chunk_v2(input, output, *base->schema(), *target->schema(), &_mem_pool));
 }
 
 } // namespace starrocks
