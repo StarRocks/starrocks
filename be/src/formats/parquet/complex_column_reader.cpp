@@ -188,6 +188,11 @@ static bool can_delegate_across_integer_widening(const std::vector<const ColumnP
             break;
         case PredicateType::kInList:
         case PredicateType::kNotInList:
+            // A runtime bitset filter is an index-only IN whose convert_to() supports only its own type, and whose
+            // values() enumerates every integer between its min and max. Keep it on the same-type path.
+            if (predicate->is_index_filter_only()) {
+                return false;
+            }
             literals = predicate->values();
             if (literals.empty()) {
                 return false;
