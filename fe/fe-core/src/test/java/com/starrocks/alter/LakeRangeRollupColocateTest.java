@@ -897,8 +897,6 @@ public class LakeRangeRollupColocateTest {
 
     /** Runs a WAITING_TXN job to RUNNING: the loads before the watershed are reported finished. */
     private static void runWaitingTxnJobToRunning(LakeRangeRollupJob job) throws Exception {
-        // The first round allocates the watershed and exposes the shadow index to loads.
-        job.runWaitingTxnJob();
         new MockUp<LakeRangeRollupJob>() {
             @Mock
             public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) {

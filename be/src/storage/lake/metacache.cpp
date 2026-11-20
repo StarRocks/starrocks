@@ -262,10 +262,12 @@ std::shared_ptr<const TabletSchema> Metacache::lookup_tablet_schema(const Metaca
     }
 }
 
-std::shared_ptr<Segment> Metacache::lookup_segment(const MetacacheKey& key) {
+std::shared_ptr<Segment> Metacache::lookup_segment(const MetacacheKey& key, bool count) {
     auto handle = _segment_metadata_cache->lookup(CacheKey(key.view()));
     if (handle == nullptr) {
-        g_segment_cache_miss << 1;
+        if (count) {
+            g_segment_cache_miss << 1;
+        }
         return nullptr;
     }
     DeferOp defer([this, handle]() { _segment_metadata_cache->release(handle); });
@@ -275,14 +277,22 @@ std::shared_ptr<Segment> Metacache::lookup_segment(const MetacacheKey& key) {
     if (segment == nullptr) {
         return nullptr;
     }
-    g_segment_cache_hit << 1;
+    if (count) {
+        g_segment_cache_hit << 1;
+    }
     return *segment;
 }
 
-std::shared_ptr<const DelVector> Metacache::lookup_delvec(const MetacacheKey& key) {
+void Metacache::count_segment_hit() {
+    g_segment_cache_hit << 1;
+}
+
+std::shared_ptr<const DelVector> Metacache::lookup_delvec(const MetacacheKey& key, bool count_stats) {
     auto handle = _segment_metadata_cache->lookup(CacheKey(key.view()));
     if (handle == nullptr) {
-        g_dv_cache_miss << 1;
+        if (count_stats) {
+            g_dv_cache_miss << 1;
+        }
         return nullptr;
     }
     DeferOp defer([this, handle]() { _segment_metadata_cache->release(handle); });
@@ -290,7 +300,9 @@ std::shared_ptr<const DelVector> Metacache::lookup_delvec(const MetacacheKey& ke
     try {
         auto value = static_cast<CacheValue*>(_segment_metadata_cache->value(handle));
         auto delvec = std::get<std::shared_ptr<const DelVector>>(*value);
-        g_dv_cache_hit << 1;
+        if (count_stats) {
+            g_dv_cache_hit << 1;
+        }
         return delvec;
     } catch (const std::bad_variant_access& e) {
         return nullptr;
@@ -404,21 +416,21 @@ void Metacache::erase(const MetacacheKey& key) {
     _segment_metadata_cache->erase(CacheKey(key.view()));
 }
 
-void Metacache::update_capacity(Cache* cache, size_t new_capacity) {
+size_t Metacache::update_capacity(Cache* cache, size_t new_capacity) {
+    // An absolute set, not a delta from a separately read capacity: the config update hooks and the background
+    // adjustment both resize these caches, and two deltas computed from the same old capacity would add up.
     size_t old_capacity = cache->get_capacity();
-    int64_t delta = (int64_t)new_capacity - (int64_t)old_capacity;
-    if (delta != 0) {
-        (void)cache->adjust_capacity(delta);
-        VLOG(5) << "Changed metadache capacity from " << old_capacity << " to " << cache->get_capacity();
-    }
+    size_t evicted = cache->set_capacity(new_capacity);
+    VLOG(5) << "Changed metadache capacity from " << old_capacity << " to " << new_capacity;
+    return evicted;
 }
 
-void Metacache::update_tablet_metadata_capacity(size_t new_capacity) {
-    update_capacity(_tablet_metadata_cache.get(), new_capacity);
+size_t Metacache::update_tablet_metadata_capacity(size_t new_capacity) {
+    return update_capacity(_tablet_metadata_cache.get(), new_capacity);
 }
 
-void Metacache::update_segment_metadata_capacity(size_t new_capacity) {
-    update_capacity(_segment_metadata_cache.get(), new_capacity);
+size_t Metacache::update_segment_metadata_capacity(size_t new_capacity) {
+    return update_capacity(_segment_metadata_cache.get(), new_capacity);
 }
 
 void Metacache::prune() {
@@ -440,6 +452,14 @@ size_t Metacache::segment_metadata_memory_usage() const {
 
 size_t Metacache::segment_metadata_capacity() const {
     return _segment_metadata_cache->get_capacity();
+}
+
+std::vector<size_t> Metacache::tablet_metadata_shard_memory_usages() const {
+    return _tablet_metadata_cache->get_shard_memory_usages();
+}
+
+std::vector<size_t> Metacache::segment_metadata_shard_memory_usages() const {
+    return _segment_metadata_cache->get_shard_memory_usages();
 }
 
 } // namespace starrocks::lake

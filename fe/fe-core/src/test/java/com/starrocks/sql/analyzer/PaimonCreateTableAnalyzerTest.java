@@ -29,7 +29,6 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
@@ -38,7 +37,6 @@ import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.parser.SqlParser;
 import mockit.Expectations;
 import org.apache.paimon.catalog.Catalog;
@@ -235,10 +233,11 @@ public class PaimonCreateTableAnalyzerTest {
                     catalog.getTable(Identifier.create("ddl_sql", "append_demo")).rowType().getFieldNames());
             Assertions.assertThrows(DdlException.class, () -> executeDdl("drop database paimon_ddl.ddl_sql force"));
             InsertStmt insert = (InsertStmt) SqlParser.parse(
-                    "insert into paimon_ddl.ddl_sql.append_demo values (1, 'blocked', '2026-11-02')", 0L).get(0);
-            UnsupportedException error = Assertions.assertThrows(UnsupportedException.class,
-                    () -> StatementPlanner.plan(insert, context));
-            Assertions.assertTrue(error.getMessage().contains("Only support insert"), error.getMessage());
+                    "insert into paimon_ddl.ddl_sql.append_demo values (1, 'insertable', '2026-11-02')", 0L).get(0);
+            InsertAnalyzer.analyze(insert, context);
+            Assertions.assertTrue(insert.getTargetTable().isPaimonTable());
+            Assertions.assertEquals(List.of("id", "payload", "dt"),
+                    insert.getTargetTable().getBaseSchema().stream().map(column -> column.getName()).toList());
             Assertions.assertEquals(DmlStmt.INVALID_TXN_ID, insert.getTxnId());
             executeDdl("drop table if exists paimon_ddl.ddl_sql.append_demo");
             executeDdl("drop table if exists paimon_ddl.ddl_sql.append_demo");
@@ -302,7 +301,7 @@ public class PaimonCreateTableAnalyzerTest {
     }
 
     @Test
-    public void testLikeAndInsertRemainUnsupported() {
+    public void testLikeRemainsUnsupported() {
         MetadataMgr metadata = GlobalStateMgr.getCurrentState().getMetadataMgr();
         new Expectations(metadata) {
             {
@@ -317,13 +316,6 @@ public class PaimonCreateTableAnalyzerTest {
             SemanticException error = Assertions.assertThrows(SemanticException.class,
                     () -> CreateTableLikeAnalyzer.analyze(like, context));
             Assertions.assertTrue(error.getMessage().contains("CREATE_TABLE_LIKE"), error.getMessage());
-        }
-        for (String mode : List.of("into", "overwrite")) {
-            InsertStmt insert = (InsertStmt) SqlParser.parse(
-                    "insert " + mode + " paimon_ddl.db.source values (1)", 0L).get(0);
-            UnsupportedException error = Assertions.assertThrows(UnsupportedException.class,
-                    () -> InsertAnalyzer.analyze(insert, context));
-            Assertions.assertTrue(error.getMessage().contains("Only support insert"), error.getMessage());
         }
     }
 

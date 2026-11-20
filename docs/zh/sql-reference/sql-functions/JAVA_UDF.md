@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "从 v2.2.0 起，使用 Java 编写用户定义函数来扩展 StarRocks 功能。"
 sidebar_position: 0.9
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Java UDF

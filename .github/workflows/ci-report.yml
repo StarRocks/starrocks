@@ -167,13 +167,33 @@ jobs:
               -f state=success -f context="Fe Cover Checker" -f description="Skipped: [UT]/[Doc] PR or synced from CelerData" >/dev/null \
               || echo "::warning::Failed to post the skipped coverage status"
           elif [[ "${BASE_REF}" == "main" && "$size" == 0 ]]; then
-            cd ${GITHUB_WORKSPACE}
-            rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
-            export JAVA_HOME=/var/local/env/jdk1.8.0_202;
-            export PATH=$JAVA_HOME/bin:$PATH;
-            java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
-              --cover /var/local/env/empty_cov_result --github-token ${{ secrets.GITHUB_TOKEN }} \
-              --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
+            # No FE UT report. The "empty" fixture is an old full report: it gives 0 / 0 to a PR
+            # without fe-core source changes, but a PR with such changes gets its new lines matched
+            # against old code, a made-up result. Report those as not computed instead.
+            export GH_TOKEN=${{ secrets.GITHUB_TOKEN }}
+            fe_src_files=$(gh api --paginate "repos/${REPO}/pulls/${PR_NUMBER}/files?per_page=100" \
+              --jq '.[].filename | select(startswith("fe/fe-core/src/main/java/") and endswith(".java"))')
+            if [[ -n "${fe_src_files}" ]]; then
+              msg="FE UT produced no report for this commit, so coverage was not computed"
+              echo "::error::${msg}. Coverage is checked once FE UT runs."
+              gh api "repos/${REPO}/statuses/${HEAD_SHA}" \
+                -f state=failure -f context="Fe Cover Checker" -f description="${msg}" >/dev/null
+              # Replace an earlier report so it does not read as the result for this commit.
+              body=$(printf '#### [FE Incremental Coverage Report]\n\n:x: **fail** : %s (%s). Coverage is checked once FE UT runs.\n' "${msg}" "${HEAD_SHA::10}")
+              for id in $(gh api --paginate "repos/${REPO}/issues/${PR_NUMBER}/comments?per_page=100" \
+                  --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("#### [FE Incremental Coverage Report]"))) | .id'); do
+                gh api -X PATCH "repos/${REPO}/issues/comments/${id}" -f body="${body}" >/dev/null \
+                  || echo "::warning::Failed to update coverage comment ${id}"
+              done
+            else
+              cd ${GITHUB_WORKSPACE}
+              rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
+              export JAVA_HOME=/var/local/env/jdk1.8.0_202;
+              export PATH=$JAVA_HOME/bin:$PATH;
+              java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
+                --cover /var/local/env/empty_cov_result --github-token ${{ secrets.GITHUB_TOKEN }} \
+                --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
+            fi
           fi
 
       - name: Publish UT Report

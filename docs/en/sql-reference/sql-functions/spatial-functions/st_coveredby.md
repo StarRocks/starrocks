@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Tests whether a point is covered by a polygon, including its boundary."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_CoveredBy

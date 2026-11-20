@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 20
 description: "StarRocks の FE および BE プロセスの CPU とメモリのフレームグラフを収集・可視化し、パフォーマンスのボトルネックを診断します。"
+products: [oss, enterprise, anywhere]
 ---
 
 # プロセスプロファイル (Proc Profile)

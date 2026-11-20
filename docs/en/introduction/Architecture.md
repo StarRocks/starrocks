@@ -2,19 +2,18 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "StarRocks has a simple architecture."
+products: [oss, enterprise, cloud]
 ---
-import QSOverview from '../_assets/commonMarkdown/quickstart-overview-tip.mdx'
-import EditionSpecificFeature from '../_assets/commonMarkdown/Edition_Specific_Feature.mdx'
 
 # Architecture
 
-StarRocks has a simple architecture. The entire system consists of only two types of components; frontends and backends. The frontend nodes are called **FE**s. There are two types of backend nodes, **BE**s, and **CN**s (Compute Nodes). BEs are deployed when local storage for data is used, and CNs are deployed when data is stored on object storage or HDFS. StarRocks does not rely on any external components, simplifying deployment and maintenance. Nodes can be horizontally scaled without service downtime. In addition, StarRocks has a replica mechanism for metadata and service data, which increases data reliability and efficiently prevents single points of failure (SPOFs).
+StarRocks has a simple architecture. The entire system consists of only two types of components: frontends and backends. The frontend nodes are called **FE**s. There are two types of backend nodes: **BE**s and **CN**s (Compute Nodes). BEs are deployed when local storage for data is used, and CNs are deployed when data is stored on object storage or HDFS. StarRocks does not rely on any external components, simplifying deployment and maintenance. Nodes can be horizontally scaled without service downtime. In addition, StarRocks has a replica mechanism for metadata and service data, which increases data reliability and efficiently prevents single points of failure (SPOFs).
 
 StarRocks is compatible with MySQL protocols and supports standard SQL. Users can easily connect to StarRocks from MySQL clients to gain instant and valuable insights.
 
 ## Architecture choices
 
-StarRocks supports shared-nothing (Each BE has a portion of the data on its local storage) and shared-data (all data on object storage or HDFS and each CN has only cache on local storage). You can decide where the data is stored based on your needs. 
+StarRocks supports shared-nothing (each BE has a portion of the data on its local storage) and shared-data (all data on object storage or HDFS and each CN has only cache on local storage). You can decide where the data is stored based on your needs.
 
 ![Architecture choices](../_assets/architecture_choices.png)
 
@@ -22,9 +21,9 @@ StarRocks supports shared-nothing (Each BE has a portion of the data on its loca
 
 Local storage provides improved query latency for real-time queries.
 
-As a typical massively parallel processing (MPP) database StarRocks supports the shared-nothing architecture. In this architecture, BEs are responsible for both data storage and computation. Direct access to local data on the BE mode allows for local computation, avoiding data transfer and data copying, and providing ultra-fast query and analytics performance. This architecture supports multi-replica data storage, enhancing the cluster's ability to handle high concurrency queries and ensuring data reliability. It is well-suited for scenarios that pursue optimal query performance.
+As a typical massively parallel processing (MPP) database, StarRocks supports the shared-nothing architecture. In this architecture, BEs are responsible for both data storage and computation. Direct access to local data on the BE node allows for local computation, avoiding data transfer and data copying, and providing ultra-fast query and analytics performance. This architecture supports multi-replica data storage, enhancing the cluster's ability to handle high concurrency queries and ensuring data reliability. It is well-suited for scenarios that pursue optimal query performance.
 
-![shared-data-arch](../_assets/shared-nothing.png)
+![shared-nothing-arch](../_assets/shared-nothing.png)
 
 #### Nodes
 
@@ -35,13 +34,13 @@ In the shared-nothing architecture, StarRocks consists of two types of nodes: FE
 
 ##### FE
 
-FEs are responsible for metadata management, client connection management, query planning, and query scheduling. Each FE uses BDB JE (Berkeley DB Java Edition) to store and maintain a complete copy of the metadata in its memory, ensuring consistent services across all FEs. FEs can work as the leader, followers, and observers. If the leader node crashes, with followers electing a leader based on the Raft protocol.
+FEs are responsible for metadata management, client connection management, query planning, and query scheduling. Each FE uses BDB JE (Berkeley DB Java Edition) to store and maintain a complete copy of the metadata in its memory, ensuring consistent services across all FEs. FEs can work as the leader, followers, and observers. If the leader node crashes, the followers elect a new leader through the replication and election mechanism of BDB JE.
 
 | **FE Role** | **Metadata management**                                                                                                                                                                                                                                                                                                                                                                                                | **Leader election**                |
 | ----------- |------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------| ---------------------------------- |
-| Leader      | The leader FE reads and writes metadata. Follower and observer FEs can only read metadata. They route metadata write requests to the leader FE. The leader FE updates the metadata and then uses the Raft protocol to synchronize the metadata changes to the follower and observer FEs. Data writes are considered successful only after the metadata changes are synchronized to more than half of the follower FEs. | The leader FE, technically speaking, is also a follower node and is elected from follower FEs. To perform leader election, more than half of the follower FEs in the cluster must be active. When the leader FE fails, follower FEs will start another round of leader election. |
+| Leader      | The leader FE reads and writes metadata. Follower and observer FEs can only read metadata. They route metadata write requests to the leader FE. The leader FE updates the metadata and then uses BDB JE replication to synchronize the metadata changes to the follower and observer FEs. Data writes are considered successful only after the metadata changes are synchronized to more than half of the follower FEs. | The leader FE, technically speaking, is also a follower node and is elected from follower FEs. To perform leader election, more than half of the follower FEs in the cluster must be active. When the leader FE fails, follower FEs will start another round of leader election. |
 | Follower    | Followers can only read metadata. They synchronize and replay logs from the leader FE to update metadata.                                                                                                                                                                                                                                                                                                              | Followers participate in leader election, which requires more than half of the followers in the cluster be active. |
-| Observer   | Observers synchronize and replay logs from the leader FE to update metadata.                                                                                                                                                                                                                                                                                                                                           | Observers are mainly used to increase the query concurrency of the cluster. Observers do not participate in leader election and therefore, will not add leader selection pressure to the cluster.|
+| Observer   | Observers synchronize and replay logs from the leader FE to update metadata.                                                                                                                                                                                                                                                                                                                                           | Observers are mainly used to increase the query concurrency of the cluster. Observers do not participate in leader election and therefore, will not add leader election pressure to the cluster.|
 
 ##### BE
 
@@ -53,9 +52,9 @@ BEs are responsible for data storage and SQL execution.
 
 ### Shared-data
 
-Object storage and HDFS provide cost, reliability, and scalability benefits. In addition to the scalability of storage, CN nodes can be added and removed without the need to rebalance data since storage and compute are separate. 
+Object storage and HDFS provide cost, reliability, and scalability benefits. In addition to the scalability of storage, CN nodes can be added and removed without copying data since storage and compute are separate. When CN nodes are added or removed, tablets are reassigned among CN nodes without moving the data in the remote storage, and the Data Cache of the CN nodes that take over the tablets is initially cold. Balancing tablets onto newly added CN nodes is controlled by the FE parameter `lake_enable_balance_tablets_between_workers`, which is enabled by default from v3.5.6 and v4.0 onwards.
 
-In the shared-data architecture, BEs are replaced with "compute nodes (CNs)" which are responsible only for data compute tasks and caching hot data. Data is stored in low-cost and reliable remote storage systems such as Amazon S3, Google Cloud Storage, Azure Blob Storage, MinIO, etc. When the cache is hit, query performance is comparable to that of the shared-nothing architecture. CN nodes can be added or removed on demand within seconds. This architecture reduces storage cost, ensures better resource isolation, and high elasticity and scalability.
+In the shared-data architecture, BEs are replaced with "compute nodes (CNs)" which are responsible only for data compute tasks and caching hot data. Data is stored in low-cost and reliable remote storage systems such as Amazon S3, Google Cloud Storage, Azure Blob Storage, MinIO, etc. When the cache is hit, query performance is comparable to that of the shared-nothing architecture. CN nodes can be added or removed on demand within seconds. This architecture reduces storage cost, ensures better resource isolation, and provides high elasticity and scalability.
 
 The shared-data architecture maintains as simple an architecture as its shared-nothing counterpart. It consists of only two types of nodes: FE and CN. The only difference is users have to provision backend object storage.
 
@@ -92,7 +91,7 @@ This section lists the differences of features supported in shared-nothing and s
 | Feature                                              | Shared-nothing | Shared-data     |
 | ---------------------------------------------------- | -------------- | --------------- |
 | Conditional Update                                   | v2.5+          | v3.1+           |
-| Partial Update Column mode                           | v3.1           | To be supported |
+| Partial Update Column mode                           | v3.1           | v3.3.1+         |
 | Partial Update Row mode                              | v2.3+          | v3.1+           |
 | Partial update with Conditional Update               | v3.1+          | v3.4.1+         |
 | Primary Key Index Persistence                        | v2.3+          | v3.2+           |
@@ -133,6 +132,23 @@ This section lists the differences of features supported in shared-nothing and s
 | Query Cache                                          | v2.5+          | v3.4+           |
 | Rollup and Synchronous Materialized view             | v1.x+          | v3.3+           |
 
-<EditionSpecificFeature />
+### Data Protection
 
-<QSOverview />
+| Feature                                              | Shared-nothing | Shared-data     |
+| ---------------------------------------------------- | -------------- | --------------- |
+| Backup & Restore                                     | v1.x+          | Not applicable  |
+| BE/CN Blacklist                                      | v3.3+          | v4.0+           |
+| Cross-cluster Data Migration Tool                    | v3.3+          | Not applicable  |
+| Cluster Snapshot                                     | Not applicable | v3.4.2+         |
+
+### Security and Authentication
+
+| Feature                                              | Shared-nothing | Shared-data     |
+| ---------------------------------------------------- | -------------- | --------------- |
+| Kerberos Support on HDFS                             | Not applicable | v3.2+           |
+
+---
+---
+## Learn by doing
+
+Try the [Quick Starts](../quick_start/quick_start.mdx) to get an overview of using StarRocks with realistic scenarios.

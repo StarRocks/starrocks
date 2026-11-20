@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ARRAY_CUM_SUM関数は配列内の要素の累積和を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_cum_sum

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Information schema placeholder view not implemented in StarRocks."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # schema_privileges

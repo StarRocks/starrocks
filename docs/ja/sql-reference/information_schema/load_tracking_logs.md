@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "load_tracking_logsはロードジョブのエラーログを提供します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # load_tracking_logs
@@ -18,6 +19,7 @@ description: "load_tracking_logsはロードジョブのエラーログを提供
 | LABEL         | ロードジョブのラベル。                     |
 | DATABASE_NAME | ロードジョブが属するデータベース。         |
 | TRACKING_LOG  | ロードジョブのエラー (あれば)。            |
+| TYPE          | ロードジョブのタイプ。例: `BROKER`、`INSERT`、`ROUTINE_LOAD`、`STREAM_LOAD`。 |
 
 :::tip
 ビュー `load_tracking_logs` をクエリするには、`JOB_ID` または `LABEL` でフィルタリングする必要があります。

@@ -339,27 +339,27 @@ public class TabletReshardConcurrencyTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
-    public void failedCleaningLogRetriesBeforeCleanup(boolean merge) throws Exception {
+    public void failedCleaningLogLeavesJobRunning(boolean merge) throws Exception {
         TabletReshardJob pending = job(merge, partitions.get(0));
         mgr.addTabletReshardJob(pending);
         AtomicBoolean fail = new AtomicBoolean(true);
+        AtomicInteger runningRuns = new AtomicInteger();
         AtomicInteger cleaningRuns = new AtomicInteger();
         AtomicInteger installations = new AtomicInteger();
-        List<String> payloads = new ArrayList<>();
         new MockUp<EditLog>() {
             @Mock
-            public void logUpdateTabletReshardJob(TabletReshardJob logged) {
-                payloads.add(GsonUtils.GSON.toJson(logged));
+            public void logUpdateTabletReshardJob(Invocation invocation, TabletReshardJob logged, WALApplier applier) {
                 if (fail.get()) {
-                    throw new IllegalStateException("injected CLEANING WAL failure");
+                    throw new EditLogException("injected CLEANING WAL failure");
                 }
+                invocation.proceed();
             }
         };
         new MockUp<SplitTabletJob>() {
             @Mock
             protected void runRunningJob() {
-                installations.incrementAndGet();
-                pending.setJobState(TabletReshardJob.JobState.CLEANING);
+                runningRuns.incrementAndGet();
+                pending.journalCleaningThenInstall(pending.newCleaningRecord(), installations::incrementAndGet);
             }
             @Mock
             protected void runCleaningJob() {
@@ -369,8 +369,8 @@ public class TabletReshardConcurrencyTest {
         new MockUp<MergeTabletJob>() {
             @Mock
             protected void runRunningJob() {
-                installations.incrementAndGet();
-                pending.setJobState(TabletReshardJob.JobState.CLEANING);
+                runningRuns.incrementAndGet();
+                pending.journalCleaningThenInstall(pending.newCleaningRecord(), installations::incrementAndGet);
             }
             @Mock
             protected void runCleaningJob() {
@@ -380,17 +380,19 @@ public class TabletReshardConcurrencyTest {
         pending.jobState = TabletReshardJob.JobState.RUNNING;
         pending.run();
         pending.run();
+        // Nothing of CLEANING took effect: the job repeats its RUNNING step until the record is durable.
+        assertEquals(TabletReshardJob.JobState.RUNNING, pending.getJobState());
         assertFalse(pending.isLayoutReady());
-        assertEquals(0, cleaningRuns.get(), "cleanup must wait for a successful frozen CLEANING log retry");
-        assertEquals(2, payloads.size());
-        assertEquals(payloads.get(0), payloads.get(1));
+        assertEquals(2, runningRuns.get());
+        assertEquals(0, installations.get(), "the layout must not be installed before its CLEANING record is durable");
+        assertEquals(0, cleaningRuns.get());
         fail.set(false);
         pending.run();
-        assertEquals(1, cleaningRuns.get());
+        assertEquals(TabletReshardJob.JobState.CLEANING, pending.getJobState());
         assertTrue(pending.isLayoutReady());
-        assertEquals(3, payloads.size());
-        assertEquals(payloads.get(0), payloads.get(2));
-        assertEquals(1, installations.get(), "failed CLEANING WAL must not repeat index installation");
+        assertEquals(3, runningRuns.get());
+        assertEquals(1, installations.get());
+        assertEquals(1, cleaningRuns.get());
     }
 
     @Test
@@ -618,12 +620,14 @@ public class TabletReshardConcurrencyTest {
         JournalTask task = queue.poll(5, TimeUnit.SECONDS);
         assertNotNull(task);
         try {
-            assertEquals(TabletReshardJob.JobState.CLEANING, pending.getJobState());
+            // The state changes only once the CLEANING record is durable.
+            assertEquals(TabletReshardJob.JobState.PENDING, pending.getJobState());
             assertFalse(pending.isLayoutReady());
         } finally {
             task.markSucceed();
         }
         transition.get(5, TimeUnit.SECONDS);
+        assertEquals(TabletReshardJob.JobState.CLEANING, pending.getJobState());
         assertTrue(pending.isLayoutReady());
         pending.jobState = TabletReshardJob.JobState.ABORTING;
         assertFalse(pending.isLayoutReady());

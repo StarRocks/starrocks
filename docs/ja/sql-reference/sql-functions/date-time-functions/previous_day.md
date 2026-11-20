@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "入力された日付より前に来る指定された曜日の最初の日を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # previous_day

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the sum of distinct values in expr, equivalent to sum(distinct expr)."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # multi_distinct_sum

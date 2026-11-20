@@ -2,6 +2,7 @@
 sidebar_position: 110
 displayed_sidebar: docs
 description: "How to use the StarRocks Flink connector to continuously load data from Apache Flink into StarRocks, supporting DataStream API, Table API & SQL, and Python API."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Continuously load data from Apache Flink®

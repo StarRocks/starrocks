@@ -562,6 +562,21 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     if (hdfs_scan_node.__isset.can_use_any_column) {
         _scanner_ctx.format_scan_context.options.can_use_any_column = hdfs_scan_node.can_use_any_column;
     }
+    // The placeholder is never a partition column of the FE, so a materialized slot that is the source of an Iceberg
+    // partition transform is a column the query reads (a file stores it as data).
+    if (_scanner_ctx.format_scan_context.options.can_use_any_column) {
+        if (auto* iceberg_table = dynamic_cast<const IcebergTableDescriptor*>(_scanner_ctx.hive_table)) {
+            std::unordered_set<std::string> source_names;
+            for (const auto& name : iceberg_table->partition_source_column_names()) {
+                source_names.insert(_scanner_ctx.formatted_name(name));
+            }
+            for (auto* slot : _scanner_ctx.materialize_slots) {
+                if (source_names.contains(_scanner_ctx.formatted_name(slot->col_name()))) {
+                    _scanner_ctx.format_scan_context.options.any_column_queried_slots.insert(slot->id());
+                }
+            }
+        }
+    }
     if (hdfs_scan_node.__isset.can_use_count_opt) {
         _scanner_ctx.format_scan_context.options.use_count_opt = hdfs_scan_node.can_use_count_opt;
     }

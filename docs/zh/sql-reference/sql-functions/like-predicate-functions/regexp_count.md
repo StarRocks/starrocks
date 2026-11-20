@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "计算正则表达式在目标字符串中出现的次数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # regexp_count

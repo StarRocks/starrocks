@@ -32,6 +32,13 @@ alter plan advisor add select count(*) from (select * from iceberg_catalog_${uui
 -- function: assert_explain_contains("select count(*) from (select * from iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew t1 join (select * from iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew where c1 = 'f') t2 on t1.c2 = t2.c2 where t1.c1 = 'a') t", "RightChildEstimationErrorTuningGuide")
 set enable_plan_advisor_blacklist=true;
 truncate plan advisor;
-drop table iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew;
+drop table iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew force;
 drop database iceberg_catalog_${uuid0}.iceberg_db_${uuid0};
 drop catalog iceberg_catalog_${uuid0};
+
+CLEANUP {
+drop table if exists iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew force;
+drop database if exists iceberg_catalog_${uuid0}.iceberg_db_${uuid0};
+set catalog default_catalog;
+drop catalog if exists iceberg_catalog_${uuid0};
+} END CLEANUP

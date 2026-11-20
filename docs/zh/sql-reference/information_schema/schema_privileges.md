@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 中未实现的信息架构占位符视图。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # schema_privileges

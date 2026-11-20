@@ -2,6 +2,7 @@
 sidebar_position: 70
 displayed_sidebar: docs
 description: "通过 INSERT 语句向 StarRocks 导入数据：INSERT VALUES、INSERT INTO SELECT 和动态覆盖。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 通过 INSERT 语句导入数据
@@ -649,7 +650,7 @@ REJECTED_RECORD_PATH: NULL
 
 | FE 配置项                          | 说明                                                         |
 | ---------------------------------- | ------------------------------------------------------------ |
-| insert_load_default_timeout_second | INSERT 导入作业的超时时间，单位为秒。如果当前 INSERT 导入作业在该参数设定的时间内未完成则会被系统取消，状态为 CANCELLED。目前仅支持通过该参数为所有 INSERT 导入作业统一设定超时时间，不支持为单独的导入作业设置超时时间。默认为 3600 秒（1 小时）。如果导入作业无法在规定时间内完成，您可以通过调整该参数延长超时时间。 |
+| insert_load_default_timeout_second | 已弃用。该参数不控制 INSERT 导入作业的超时时间。请使用 Session 变量 `insert_timeout`。 |
 
 - **Session 变量**
 

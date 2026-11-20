@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "materialized_view_refresh_jobs はマテリアライズドビューのリフレッシュに関するジョブレベルの情報を提供します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # materialized_view_refresh_jobs

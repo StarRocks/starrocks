@@ -459,6 +459,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
         taskConsumeSecond = stmt.getTaskConsumeSecond();
         taskTimeoutSecond = stmt.getTaskTimeoutSecond();
+        // remembers which settings were given under a descriptive name, to report them under that name
+        jobProperties.putAll(stmt.getDescriptivePropertyValues());
 
         // set warehouse
         Map<String, String> prop = stmt.getJobProperties();
@@ -998,14 +1000,15 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             throw new MetaNotFoundException("table " + this.tableId + " does not exist");
         }
 
+        StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
+        TExecPlanFragmentParams planParams = null;
+        StreamLoadTask streamLoadTask;
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
             StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(this);
             info.setTxnId(txnId);
-            StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
 
-            TExecPlanFragmentParams planParams = null;
             Coordinator coord = null;
             if (Config.enable_pipeline_routine_load && beId != RoutineLoadTaskInfo.INVALID_BE_ID) {
                 // Run this routine load task on the pipeline engine. Reuse LoadPlanner (ROUTINE_LOAD)
@@ -1075,20 +1078,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             // Register the task only after planning succeeded, so a plan failure (schema change in
             // flight, no available replica, pinned BE unavailable, ...) does not leave an orphan
             // StreamLoadTask registered in StreamLoadMgr.
-            StreamLoadTask streamLoadTask = streamLoadManager.createLoadTaskWithoutLock(db, table, label, "", "",
+            streamLoadTask = streamLoadManager.createLoadTaskWithoutLock(db, table, label, "", "",
                     taskTimeoutSecond * 1000, true, computeResource);
             streamLoadTask.setTxnId(txnId);
             streamLoadTask.setLabel(label);
             streamLoadTask.setTUniqueId(loadId);
-            streamLoadManager.addLoadTask(streamLoadTask);
             streamLoadTask.setCoordinator(coord);
 
             QeProcessorImpl.INSTANCE.registerQuery(loadId, coord);
-
-            LOG.info(new LogBuilder("routine load task create stream load task success").
-                    add("transactionId", txnId).
-                    add("label", label).
-                    add("streamLoadTaskId", streamLoadTask.getId()));
 
             TransactionState txnState =
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(db.getId(), txnId);
@@ -1099,11 +1096,21 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             planParams.setImport_label(txnState.getLabel());
             planParams.setDb_name(db.getFullName());
             planParams.setLoad_job_id(txnId);
-
-            return planParams;
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
+
+        // Register the task after releasing the table lock. addLoadTask waits for the StreamLoadMgr write lock, whose
+        // holder may wait for this table's lock (aborting a transaction takes it); with a table writer queued behind
+        // the READ lock held here, neither could proceed.
+        streamLoadManager.addLoadTask(streamLoadTask);
+
+        LOG.info(new LogBuilder("routine load task create stream load task success").
+                add("transactionId", txnId).
+                add("label", label).
+                add("streamLoadTaskId", streamLoadTask.getId()));
+
+        return planParams;
     }
 
     // if task not exists, before aborted will reset the txn attachment to null, task will not be updated
@@ -1912,9 +1919,35 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         jobProperties.put("desireTaskConcurrentNum", String.valueOf(desireTaskConcurrentNum));
         jobProperties.put("taskConsumeSecond", String.valueOf(taskConsumeSecond));
         jobProperties.put("taskTimeoutSecond", String.valueOf(taskTimeoutSecond));
+        // A job with a setting given under a descriptive name also reports the settings in effect under the descriptive
+        // names, see RoutineLoadPropertyNames; the output of any other job stays as it was. A job runs durations in
+        // whole seconds.
+        if (RoutineLoadPropertyNames.hasDescriptiveValues(this.jobProperties)) {
+            jobProperties.put("loadInterval", taskSchedIntervalS + "s");
+            jobProperties.put("maxConsumeDuration", taskConsumeSecond + "s");
+            jobProperties.put("loadTimeout", taskTimeoutSecond + "s");
+            jobProperties.put("maxConcurrency", String.valueOf(desireTaskConcurrentNum));
+            jobProperties.put("maxErrorRows", String.valueOf(maxErrorNum));
+            jobProperties.put("errorWindowRows",
+                    String.valueOf(maxBatchRows * RoutineLoadPropertyNames.ERROR_WINDOW_ROWS_PER_BATCH_ROW));
+        }
         jobProperties.putAll(this.jobProperties);
+        // the stored descriptive values keep the user's spelling for SHOW CREATE; the settings in effect are above
+        RoutineLoadPropertyNames.LEGACY_NAMES.keySet().forEach(jobProperties::remove);
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
         return gson.toJson(jobProperties);
+    }
+
+    // Emits a setting under the descriptive name when the user gave it that way, otherwise under the legacy name, so a
+    // job created with legacy names still produces a statement that an older FE accepts.
+    private void appendAliasedPropertySql(StringBuilder sb, String descriptiveName, long legacyValue) {
+        String value = RoutineLoadPropertyNames.matchingDescriptiveValue(jobProperties, descriptiveName, legacyValue);
+        if (value != null) {
+            sb.append("\"").append(descriptiveName).append("\"=\"").append(value).append("\",\n");
+        } else {
+            sb.append("\"").append(RoutineLoadPropertyNames.LEGACY_NAMES.get(descriptiveName)).append("\"=\"");
+            sb.append(legacyValue).append("\",\n");
+        }
     }
 
     private static String columnDescsToSql(List<ImportColumnDesc> columnDescs) {
@@ -1943,26 +1976,16 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     public String jobPropertiesToSql() {
         StringBuilder sb = new StringBuilder();
         sb.append("(\n");
-        sb.append("\"").append(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY).append("\"=\"");
-        sb.append(desireTaskConcurrentNum).append("\",\n");
-
-        sb.append("\"").append(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY).append("\"=\"");
-        sb.append(maxErrorNum).append("\",\n");
+        appendAliasedPropertySql(sb, RoutineLoadPropertyNames.MAX_CONCURRENCY, desireTaskConcurrentNum);
+        appendAliasedPropertySql(sb, RoutineLoadPropertyNames.MAX_ERROR_ROWS, maxErrorNum);
 
         sb.append("\"").append(CreateRoutineLoadStmt.MAX_FILTER_RATIO_PROPERTY).append("\"=\"");
         sb.append(maxFilterRatio).append("\",\n");
 
-        sb.append("\"").append(CreateRoutineLoadStmt.MAX_BATCH_INTERVAL_SEC_PROPERTY).append("\"=\"");
-        sb.append(taskSchedIntervalS).append("\",\n");
-
-        sb.append("\"").append(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY).append("\"=\"");
-        sb.append(maxBatchRows).append("\",\n");
-
-        sb.append("\"").append(CreateRoutineLoadStmt.TASK_CONSUME_SECOND).append("\"=\"");
-        sb.append(taskConsumeSecond).append("\",\n");
-
-        sb.append("\"").append(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND).append("\"=\"");
-        sb.append(taskTimeoutSecond).append("\",\n");
+        appendAliasedPropertySql(sb, RoutineLoadPropertyNames.LOAD_INTERVAL, taskSchedIntervalS);
+        appendAliasedPropertySql(sb, RoutineLoadPropertyNames.ERROR_WINDOW_ROWS, maxBatchRows);
+        appendAliasedPropertySql(sb, RoutineLoadPropertyNames.MAX_CONSUME_DURATION, taskConsumeSecond);
+        appendAliasedPropertySql(sb, RoutineLoadPropertyNames.LOAD_TIMEOUT, taskTimeoutSecond);
 
         sb.append("\"").append(CreateRoutineLoadStmt.FORMAT).append("\"=\"");
         sb.append(getFormat()).append("\",\n");
@@ -2259,6 +2282,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             }
         }
 
+        // A setting changed through its legacy name is reported under that name from now on; one changed through a
+        // descriptive name carries both, and its descriptive value is stored below.
+        RoutineLoadPropertyNames.forgetReplacedDescriptiveValues(jobProperties, this.jobProperties);
         this.jobProperties.putAll(copiedJobProperties);
     }
 

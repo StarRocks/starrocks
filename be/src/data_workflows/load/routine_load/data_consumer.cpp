@@ -34,6 +34,7 @@
 
 #include "data_workflows/load/routine_load/data_consumer.h"
 
+#include <algorithm>
 #include <functional>
 #include <string>
 #include <vector>
@@ -52,6 +53,9 @@
 #include "platform/small_file_mgr.h"
 
 namespace starrocks {
+
+// the largest fetch.queue.backoff.ms librdkafka accepts
+static constexpr int32_t MAX_KAFKA_FETCH_QUEUE_BACKOFF_MS = 300000;
 
 // init kafka consumer will only set common configs such as
 // brokers, groupid
@@ -113,6 +117,15 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
     RETURN_IF_ERROR(set_conf("auto.offset.reset", "error"));
     if (config::dependency_librdkafka_debug_enable) {
         RETURN_IF_ERROR(set_conf("debug", config::dependency_librdkafka_debug));
+    }
+    // Once the local queue is over queued.min.messages or queued.max.messages.kbytes, librdkafka holds off the next
+    // fetch of a partition for fetch.queue.backoff.ms and does not fetch earlier when the load drains the queue: with
+    // its default of 1000 ms, a consumer that reads faster waits for the rest of the second. The job's own
+    // fetch.queue.backoff.ms, set below, overrides this one.
+    _fetch_queue_backoff_ms = config::routine_load_kafka_fetch_queue_backoff_ms;
+    if (_fetch_queue_backoff_ms >= 0) {
+        RETURN_IF_ERROR(set_conf("fetch.queue.backoff.ms",
+                                 std::to_string(std::min(_fetch_queue_backoff_ms, MAX_KAFKA_FETCH_QUEUE_BACKOFF_MS))));
     }
 
     for (auto& item : ctx->kafka_info->properties) {
@@ -469,6 +482,10 @@ Status KafkaDataConsumer::reset() {
     _cancelled = false;
     DCHECK(!_k_consumer->closed());
     _k_consumer->unassign();
+    // unassign() stops the fetchers but leaves the messages they have already fetched in the consumer queue, where
+    // librdkafka drops them as outdated only when the queue is polled. Nobody polls a pooled consumer, so poll once
+    // here: otherwise an idle consumer keeps up to queued.max.messages.kbytes (64 MB by default) of them.
+    std::unique_ptr<RdKafka::Message> outdated(_k_consumer->consume(0 /* timeout, ms */));
     _assigned_partition_count = 0;
     _eof_partitions.clear();
     _k_event_cb.reset_error_msg();
@@ -508,6 +525,10 @@ bool KafkaDataConsumer::match(StreamLoadContext* ctx) {
         return false;
     }
     if (_brokers != ctx->kafka_info->brokers || _topic != ctx->kafka_info->topic) {
+        return false;
+    }
+    // once routine_load_kafka_fetch_queue_backoff_ms changes, the tasks get consumers created with the new value
+    if (_fetch_queue_backoff_ms != config::routine_load_kafka_fetch_queue_backoff_ms) {
         return false;
     }
     // check properties

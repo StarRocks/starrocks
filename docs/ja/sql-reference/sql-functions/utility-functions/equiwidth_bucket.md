@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "等幅ヒストグラムのバケットを計算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # equiwidth_bucket

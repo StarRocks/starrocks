@@ -3,6 +3,7 @@ sidebar_position: 120
 displayed_sidebar: docs
 keywords: ['compaction']
 description: "How to manage and monitor compaction for shared-data clusters in StarRocks."
+products: [oss, enterprise, anywhere]
 ---
 
 # Compaction for Shared-data Clusters
@@ -19,7 +20,7 @@ Each data loading operation in StarRocks generates a new version of data files. 
 
 The *Compaction Score* reflects the merging status of data files in a partition. A higher score indicates lower merging progress, meaning the partition has more unmerged data file versions. FE maintains Compaction Score information for each partition, including the Max Compaction Score (the highest score among all tablets in the partition).
 
-If a partition's Max Compaction Score is below the FE parameter `lake_compaction_score_selector_min_score` (default: 10), compaction for that partition is considered complete. A Max Compaction Score exceeding 100 indicates an unhealthy compaction state. When the score exceeds the FE parameter `lake_ingest_slowdown_threshold` (default: 100), the system slows down data loading transaction commits for the partition. If it surpasses `lake_compaction_score_upper_bound` (default: 2000), the system rejects import transactions for the partition.
+If a partition's Max Compaction Score is below the FE parameter `lake_compaction_score_selector_min_score` (default: 10), that partition is normally no longer eligible for automatic compaction. This does not mean all delete marks have been removed. A Max Compaction Score exceeding 100 indicates an unhealthy compaction state. When the score exceeds the FE parameter `lake_ingest_slowdown_threshold` (default: 100), the system slows down data loading transaction commits for the partition. If it surpasses `lake_compaction_score_upper_bound` (default: 2000), the system rejects import transactions for the partition.
 
 ### Calculation Rules
 
@@ -40,11 +41,87 @@ For shared-data clusters, StarRocks introduces a new FE-controlled compaction me
 5. Result Collection: FE aggregates subtask results and commits the compaction transaction.
 6. Publish: FE publishes the successfully committed compaction transaction.
 
+## Base Compaction for Primary Key tables {/* #primary-key-base-compaction */}
+
+This section describes Base Compaction for Primary Key tables in shared-data clusters. Ordinary Cumulative Compaction selects Rowsets using the size-tiered policy, primarily to merge small files. Base Compaction considers all Rowsets in a tablet and prioritizes rewriting those with more deleted rows to remove obsolete data and shrink delete vectors. Tables whose existing keys are repeatedly updated or deleted can therefore need Base Compaction even while small-file compaction continues.
+
+### Version support {/* #primary-key-base-compaction-versions */}
+
+| Version | Automatic PK Base Compaction | Manual PK Base Compaction | Time windows and minimum intervals for lake Base Compaction |
+| --- | --- | --- | --- |
+| v4.1.0–v4.1.3 | Not supported. | PK Base Compaction is not supported; ordinary compaction can still be triggered manually. | Not supported. |
+| v4.1.4–v4.1.6 | Checks the delete ratio or delete-row count after dispatch, without a separate automatic-trigger switch. | Supported without meeting the automatic delete thresholds. | Not supported. |
+| v4.1.7 and later 4.1 releases | Controlled by `lake_pk_compaction_base_enable_delete_trigger`, which defaults to `false`. | Supported regardless of that switch and the delete thresholds. | Not supported. |
+| v4.2 | Controlled by the same switch, which defaults to `false`. | Supported, and bypasses automatic Base Compaction time windows and minimum intervals. | Supported; see [Time controls](#base-compaction-time-controls). |
+
+PK Base Compaction is supported from v4.1.4. The `lake_pk_compaction_base_enable_delete_trigger` switch added in v4.1.7 **only controls automatic Base Compaction triggered by deletes**. It does not disable manual Base Compaction or ordinary Cumulative Compaction.
+
+### Automatic triggering {/* #automatic-base-compaction */}
+
+FE still schedules automatic compaction by partition, using Compaction Score to select candidates by default. After a task reaches a CN, the CN decides whether to select Base Compaction for each tablet. Reaching a delete threshold does not independently schedule a task in FE and does not guarantee immediate execution.
+
+From v4.1.7, first set the CN parameter `lake_pk_compaction_base_enable_delete_trigger` to `true` to enable the following checks. In v4.1.4–v4.1.6, this switch does not exist and the checks apply directly:
+
+- The tablet's aggregate delete ratio, `sum(num_dels) / sum(num_rows)`, is greater than or equal to `lake_pk_compaction_base_delete_ratio_threshold`, which defaults to `0.5`.
+- The tablet's total delete-row count, `sum(num_dels)`, is greater than or equal to `lake_pk_compaction_base_delete_rows_threshold`, which defaults to `10000000`.
+
+Meeting **either** threshold allows Base Compaction selection. The statistics cover all current Rowsets in the tablet and include delete marks on old rows replaced by updates. A tablet without deleted rows uses ordinary compaction selection. In versions that support [time controls](#base-compaction-time-controls), automatic Base Compaction must also satisfy the time window and minimum interval.
+
+For example, from v4.1.7 you can dynamically enable automatic triggering by deletes:
+
+```sql
+UPDATE information_schema.be_configs
+SET VALUE = 'true'
+WHERE NAME = 'lake_pk_compaction_base_enable_delete_trigger';
+```
+
+For parameter definitions, see the [BE parameter reference](../configuration/BE_parameters/shared_lake_other.md#lake_pk_compaction_base_enable_delete_trigger). A large tablet under continuous updates can reach the absolute delete-row threshold again soon after compaction. Evaluate the cost of repeated data rewrites before enabling it.
+
+### Manual triggering {/* #manual-base-compaction */}
+
+Run `ALTER TABLE ... COMPACT` on the target table or partitions to request manual compaction; no additional `BASE` keyword is needed. For SQL examples, see [Manually trigger compaction tasks](#manually-trigger-compaction-tasks).
+
+- From v4.1.4, a manual request can select Base Compaction when the tablet has deleted rows, without meeting either automatic delete threshold.
+- From v4.1.7, manual Base Compaction remains available even when `lake_pk_compaction_base_enable_delete_trigger = false`.
+- In versions that support time controls, manual requests also bypass the forbidden time window and minimum interval for automatic Base Compaction.
+- A tablet without deleted rows falls back to ordinary compaction selection, which might find no eligible inputs.
+
+Manual requests are asynchronous: a successful SQL response means the request was submitted, not that compaction finished. Scheduling and resource limits still apply, and one request does not guarantee that the entire tablet is compacted.
+
+### Input selection and resource cost {/* #base-compaction-inputs */}
+
+Base Compaction selects Rowsets in descending order of their **absolute delete-row count**, rather than their delete ratio. All Rowsets are candidates, so delete-free Rowsets can also be merged if the budget allows.
+
+A selection is limited by `lake_pk_compaction_max_input_rowsets` (default: `500`) and an estimated retained-data budget of `max(update_compaction_result_bytes, total tablet data size × update_compaction_ratio_threshold)`. The latter parameters default to `1 GiB` and `0.5`, respectively. Because selection operates on whole Rowsets, the final Rowset can make the estimate exceed the budget. The budget is also not a limit on actual bytes read. These input limits apply to both automatic and manual Base Compaction, so a single execution might not remove every delete mark.
+
+### Time controls {/* #base-compaction-time-controls */}
+
+The following controls are supported from v4.2. **The 4.1 series does not support these restrictions for shared-data tables**:
+
+- The table property [`base_compaction_forbidden_time_ranges`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#forbid-base-compaction) specifies when **automatic Base Compaction is forbidden**; other times are allowed. In the 4.1 series, FE rejects this property for shared-data tables.
+- The CN parameter [`base_compaction_interval_seconds_since_last_operation`](../configuration/BE_parameters/stats_storage.md#base_compaction_interval_seconds_since_last_operation), default `86400` seconds, sets the minimum interval for selecting another automatic Base Compaction after a successful Base Compaction on the same tablet. It is not a daily schedule. No interval is enforced when there is no recorded Base Compaction time or the value is less than or equal to `0`. This parameter predates v4.1, but does not limit shared-data PK Base Compaction in the 4.1 series.
+
+For example, only in versions that support these controls, you can forbid automatic Base Compaction every day from 08:00 (inclusive) to 21:00 (exclusive):
+
+```sql
+ALTER TABLE example_db.pk_table SET (
+    "base_compaction_forbidden_time_ranges" = "* 8-20 * * *"
+);
+```
+
+These controls apply only to automatic Base Compaction. Ordinary Cumulative Compaction can continue, and manual `ALTER TABLE ... COMPACT` requests bypass the restrictions.
+
+### Verify the result {/* #verify-base-compaction */}
+
+Use `SHOW PROC '/compactions'` and `information_schema.be_cloud_native_compactions`, described in [View compaction tasks](#view-compaction-tasks), to inspect asynchronous task status and execution details. Compaction Score is a scheduling signal and cannot by itself prove that all delete marks have been removed.
+
+Base Compaction consumes CN CPU, memory, and object-storage read/write resources. Start with a manual request for one partition and observe the cost. Historical data versions can remain after compaction because of retention policies. Reclaiming those versions also depends on AutoVacuum and [`lake_autovacuum_grace_period_minutes`](../configuration/FE_parameters/shared_lake_other.md#lake_autovacuum_grace_period_minutes); task completion does not mean all object-storage space is reclaimed immediately.
+
 ## Manage compaction
 
 ### View compaction scores
 
-- You can view the compaction scores of partitions in a specific table by using the SHOW PROC statement. Typically, you only need to focus on the `MaxCS` field. If `MaxCS` is below 10, compaction is considered complete. If `MaxCS` is above 100, the Compaction Score is relatively high. If `MaxCS` exceeds 500, the Compaction Score is very high and manual intervention may be required.
+- You can view the compaction scores of partitions in a specific table by using the SHOW PROC statement. Typically, you only need to focus on the `MaxCS` field. With default scheduling settings, a partition whose `MaxCS` is below 10 is normally no longer eligible for automatic compaction; this does not mean all delete marks have been removed. If `MaxCS` is above 100, the Compaction Score is relatively high. If `MaxCS` exceeds 500, the Compaction Score is very high and manual intervention may be required.
 
   ```Plain
   SHOW PARTITIONS FROM <table_name>
@@ -235,16 +312,16 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "-1");
 - Introduced in: v3.1.0
 
 ```SQL
-ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_tables" = "11111;22222");
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "11111;22222");
 ```
 
-##### lake_compaction_disable_tables
+##### lake_compaction_disable_ids
 
 - Default：""
 - Type：String
 - Unit：-
 - Is mutable：Yes
-- Description：Disable compaction for certain tables. This will not affect compaction that has started. The value of this item is table ID. Multiple values are separated by ';'.
+- Description：Disable compaction for certain tables or partitions. This will not affect compaction that has started. The value of this item is table ID or partition ID. Multiple values are separated by ';'. In versions earlier than v3.4.5 and v3.5.0, this item is named `lake_compaction_disable_tables` and supports only table IDs. The old name is still accepted as an alias.
 - Introduced in：v3.2.7
 
 #### CN parameters
@@ -305,6 +382,8 @@ WHERE name = "compact_threads";
 - Introduced in: -
 
 ### Manually trigger compaction tasks
+
+The following statements submit manual requests asynchronously. Shared-data PK Base Compaction is supported from v4.1.4. From v4.1.7, setting the automatic delete-trigger switch to `false` does not affect manual requests. Tablets without deleted rows fall back to ordinary compaction selection. For details, see [Base Compaction for Primary Key tables](#primary-key-base-compaction).
 
 ```SQL
 -- Trigger compaction for the whole table.

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Aggregation function, used to calculate the bitmap intersection after grouping."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_intersect

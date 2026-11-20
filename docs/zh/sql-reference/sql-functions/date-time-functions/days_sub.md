@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从给定日期或日期时间中减去指定的天数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # days_sub

@@ -4,6 +4,7 @@ sidebar_position: 40
 description: "Quick start guide for querying Apache Iceberg data lakes with StarRocks."
 toc_max_heading_level: 2
 keywords: [ 'iceberg' ]
+products: [oss]
 ---
 
 import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.mdx'
@@ -236,7 +237,7 @@ FROM demo.nyc.taxis;
 
 ### Verify that the data is stored in object storage
 
-When you added and used the external catalog, Starrocks started using MinIO as the object store for the `demo.nyc.taxis`
+When you added and used the external catalog, StarRocks started using MinIO as the object store for the `demo.nyc.taxis`
 table. If you navigate to http://localhost:9001 and then navigate through the Object Browser menu to
 `warehouse/nyc/taxis/` you can confirm that StarRocks is using MinIO for the storage.
 

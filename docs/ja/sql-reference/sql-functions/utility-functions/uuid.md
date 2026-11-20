@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ランダムなUUIDをVARCHAR型で返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # uuid

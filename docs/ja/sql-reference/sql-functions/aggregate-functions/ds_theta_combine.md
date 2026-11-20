@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "複数行のシリアライズされた Apache DataSketches Theta スケッチを単一の和集合コンパクトスケッチにマージし、VARBINARY として返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_theta_combine

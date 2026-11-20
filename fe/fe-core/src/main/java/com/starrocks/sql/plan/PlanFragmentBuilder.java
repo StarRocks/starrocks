@@ -3957,6 +3957,16 @@ public class PlanFragmentBuilder {
             for (TupleId id : inputFragment.getPlanRoot().getTupleIds()) {
                 context.getDescTbl().getTupleDesc(id).getSlots().forEach(s -> s.setIsNullable(true));
             }
+            // The tuples of the plan root do not always hold the slots the assert passes through (e.g. an exchange
+            // over an aggregation), so also mark the slot behind every input column. Otherwise an operator above is
+            // planned for a non-nullable input and reads the filled NULL row as a value. Use the input columns: the
+            // output columns of the assert may already be those of a projection merged into it.
+            ColumnRefSet inputColumns = optExpression.inputAt(0).getOutputColumns();
+            context.getColRefToExpr().forEach((column, expr) -> {
+                if (inputColumns.contains(column) && expr instanceof SlotRef slotRef && slotRef.getDesc() != null) {
+                    slotRef.getDesc().setIsNullable(true);
+                }
+            });
 
             PhysicalAssertOneRowOperator assertOneRow = (PhysicalAssertOneRowOperator) optExpression.getOp();
             AssertNumRowsNode node =

@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
@@ -182,6 +183,19 @@ public class SubfieldAccessPathNormalizer {
         public Optional<AccessPath> visitSubfield(SubfieldOperator subfieldOperator,
                                                   List<Optional<AccessPath>> childAccessPaths) {
             return childAccessPaths.get(0).map(parent -> parent.appendFieldNames(subfieldOperator.getFieldNames()));
+        }
+
+        // `variant_col IS [NOT] NULL` only needs the outer null mask of the column. Like array_length, it
+        // reads the structure and not the data, so it reuses the OFFSET path type: /v/OFFSET. Any other use
+        // of the column adds the bare column path, which clears this child and falls back to a full read.
+        @Override
+        public Optional<AccessPath> visitIsNullPredicate(IsNullPredicateOperator predicate,
+                                                         List<Optional<AccessPath>> childrenAccessPaths) {
+            if (!SubfieldExpressionCollector.isVariantColumnNullCheck(predicate)) {
+                return Optional.empty();
+            }
+            return childrenAccessPaths.get(0)
+                    .map(p -> p.appendPath(ColumnAccessPath.PATH_PLACEHOLDER, TAccessPathType.OFFSET));
         }
 
         @Override

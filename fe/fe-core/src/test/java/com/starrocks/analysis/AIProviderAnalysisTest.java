@@ -196,7 +196,7 @@ public class AIProviderAnalysisTest {
         p.put("protocol", "gemini");
         SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
                 AIProviderAnalyzer.analyze(create("chat", p), context()));
-        Assertions.assertTrue(ex.getMessage().contains("invalid AI provider protocol"), ex.getMessage());
+        Assertions.assertTrue(ex.getMessage().contains("unsupported AI provider protocol 'gemini'"), ex.getMessage());
 
         Map<String, String> empty = validChat();
         empty.put("protocol", "");

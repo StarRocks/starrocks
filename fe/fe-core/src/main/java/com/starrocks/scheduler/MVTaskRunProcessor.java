@@ -42,6 +42,7 @@ import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
+import com.starrocks.scheduler.mv.MVRefreshPinState;
 import com.starrocks.scheduler.mv.MVRefreshProcessor;
 import com.starrocks.scheduler.mv.MVRefreshProcessorFactory;
 import com.starrocks.scheduler.mv.MVTraceUtils;
@@ -261,6 +262,7 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         // get exec plan
         mvTaskRunContext.getRefreshRuntimeState().reset();
         mvTaskRunContext.setIsExplain(true);
+        mvTaskRunContext.setPinState(MVRefreshPinState.forExplain(mv));
         MVRefreshProcessor.ProcessExecPlan processExecPlan =
                 mvRefreshProcessor.getProcessExecPlan(mvTaskRunContext);
         if (processExecPlan == null || processExecPlan.state() != Constants.TaskRunState.SUCCESS) {

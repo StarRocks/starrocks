@@ -16,6 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+#include <optional>
+
 #include "base/testutil/assert.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
@@ -30,6 +33,7 @@
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
+#include "runtime/runtime_filter.h"
 #include "storage_primitive/column_predicate_factory.h"
 #include "storage_primitive/predicate_tree/predicate_tree_fwd.h"
 #include "types/type_descriptor.h"
@@ -569,7 +573,8 @@ static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_variant_reader(
 }
 
 static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_variant_reader_with_commit_operation_hint(
-        tparquet::RowGroup& rg, ColumnReaderOptions& opts, ParquetField& root_field) {
+        tparquet::RowGroup& rg, ColumnReaderOptions& opts, ParquetField& root_field, bool null_only = false,
+        std::optional<int64_t> metadata_null_count = std::nullopt) {
     auto scalar_field = [](std::string name, tparquet::Type::type physical_type, int column_index) {
         ParquetField field;
         field.name = std::move(name);
@@ -632,14 +637,70 @@ static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_variant_reader_with
                                             : (i == 6 || i == 8) ? tparquet::Type::INT32 : tparquet::Type::BYTE_ARRAY);
         chunk.meta_data.data_page_offset = i * 10;
         chunk.meta_data.total_compressed_size = 1;
+        if (i == 0 && metadata_null_count.has_value()) {
+            tparquet::Statistics stats;
+            stats.__set_null_count(*metadata_null_count);
+            chunk.meta_data.__set_statistics(stats);
+        }
         rg.columns.emplace_back(std::move(chunk));
     }
     rg.__set_num_rows(5);
     opts.row_group_meta = &rg;
 
     VariantShreddedReadHints hints;
-    RETURN_IF_ERROR(hints.add_path("commit.operation"));
+    if (null_only) {
+        hints.null_only = true;
+    } else {
+        RETURN_IF_ERROR(hints.add_path("commit.operation"));
+    }
     return ColumnReaderFactory::create_variant_column_reader(opts, &root_field, hints);
+}
+
+static std::vector<int64_t> collect_io_range_offsets(ColumnReader* reader) {
+    std::vector<SharedBufferedInputStream::IORange> ranges;
+    int64_t end_offset = 0;
+    reader->collect_column_io_range(&ranges, &end_offset, ColumnIOType::PAGES, true);
+    std::vector<int64_t> offsets;
+    offsets.reserve(ranges.size());
+    for (const auto& range : ranges) {
+        offsets.push_back(range.offset);
+    }
+    return offsets;
+}
+
+// `v IS [NOT] NULL`: only the metadata column (it carries the outer null mask) is read.
+TEST(VariantShreddedPruningTest, NullOnlyCollectIORangeReadsMetadataOnly) {
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    ParquetField root_field;
+    ASSIGN_OR_ABORT(auto reader,
+                    make_shredded_variant_reader_with_commit_operation_hint(rg, opts, root_field, true, 2));
+    EXPECT_EQ(std::vector<int64_t>{0}, collect_io_range_offsets(reader.get()));
+}
+
+// Without null_count statistics the null mask still has to be read.
+TEST(VariantShreddedPruningTest, NullOnlyCollectIORangeWithoutStatsReadsMetadata) {
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    ParquetField root_field;
+    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader_with_commit_operation_hint(rg, opts, root_field, true));
+    EXPECT_EQ(std::vector<int64_t>{0}, collect_io_range_offsets(reader.get()));
+}
+
+// null_count == 0 on the metadata column: no row is null, nothing is read, and read_range fills an all
+// non-null mask over placeholder rows.
+TEST(VariantShreddedPruningTest, NullOnlyNoNullReadsNothing) {
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    ParquetField root_field;
+    ASSIGN_OR_ABORT(auto reader,
+                    make_shredded_variant_reader_with_commit_operation_hint(rg, opts, root_field, true, 0));
+    EXPECT_TRUE(collect_io_range_offsets(reader.get()).empty());
+
+    ColumnPtr dst = NullableColumn::create(VariantColumn::create(), NullColumn::create());
+    ASSERT_OK(reader->read_range(Range<uint64_t>(0, 5), nullptr, dst));
+    ASSERT_EQ(5u, dst->size());
+    EXPECT_FALSE(dst->has_null());
 }
 
 TEST(VariantShreddedPruningTest, CollectIORangeSkipsUnrequestedSiblings) {
@@ -1024,6 +1085,124 @@ TEST(VariantZoneMapTest, ZoneMapReaderSkipsDecimalToBigintPredicateDelegation) {
     auto row_group_result = zm_reader.row_group_zone_map_filter({pred}, CompoundNodeType::AND, 0, 5);
     ASSERT_OK(row_group_result);
     EXPECT_FALSE(row_group_result.value());
+}
+
+// Writers shred small integers in a narrow type; a BIGINT virtual slot (get_variant_int) still uses the INT32 leaf
+// statistics [20,24] when every literal fits INT32.
+TEST(VariantZoneMapTest, ZoneMapReaderDelegatesBigintPredicateToNarrowerIntegerLeaf) {
+    auto file_meta = make_minimal_file_meta();
+    ASSERT_NE(file_meta, nullptr);
+
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    opts.file_meta_data = file_meta.get();
+    ParquetField root_field;
+    ASSIGN_OR_ABORT(auto reader,
+                    make_shredded_variant_reader(rg, opts, root_field, /*stats_on_age_chunk=*/true,
+                                                 /*age_value_all_null=*/false, /*include_age_value=*/false));
+    auto* vr = down_cast<VariantColumnReader*>(reader.get());
+
+    auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));
+    ASSERT_OK(path);
+    VariantVirtualZoneMapReader zm_reader(vr, *path, TYPE_BIGINT_DESC);
+
+    ObjectPool pool;
+    TypeInfoPtr ti = get_type_info(LogicalType::TYPE_BIGINT);
+    const auto filtered = [&](const ColumnPredicate* pred) {
+        auto result = zm_reader.row_group_zone_map_filter({pred}, CompoundNodeType::AND, 0, 5);
+        EXPECT_TRUE(result.ok()) << result.status();
+        return result.value_or(false);
+    };
+    EXPECT_TRUE(filtered(pool.add(new_column_gt_predicate_from_datum(ti, 0, Datum(int64_t(100))))));
+    EXPECT_FALSE(filtered(pool.add(new_column_gt_predicate_from_datum(ti, 0, Datum(int64_t(10))))));
+    EXPECT_TRUE(filtered(pool.add(new_column_eq_predicate_from_datum(ti, 0, Datum(int64_t(25))))));
+    EXPECT_FALSE(filtered(pool.add(new_column_eq_predicate_from_datum(ti, 0, Datum(int64_t(22))))));
+    EXPECT_TRUE(
+            filtered(pool.add(new_column_in_predicate_from_datum(ti, 0, {Datum(int64_t(100)), Datum(int64_t(200))}))));
+    EXPECT_FALSE(
+            filtered(pool.add(new_column_in_predicate_from_datum(ti, 0, {Datum(int64_t(100)), Datum(int64_t(21))}))));
+}
+
+// A literal outside the INT32 leaf range would wrap when converted to the leaf type: 2^32 + 20 becomes 20, and
+// "age < 20" would wrongly skip a row group whose every row satisfies "age < 2^32 + 20". Such predicates must not be
+// delegated.
+TEST(VariantZoneMapTest, ZoneMapReaderSkipsBigintPredicateWhoseLiteralDoesNotFitLeaf) {
+    auto file_meta = make_minimal_file_meta();
+    ASSERT_NE(file_meta, nullptr);
+
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    opts.file_meta_data = file_meta.get();
+    ParquetField root_field;
+    ASSIGN_OR_ABORT(auto reader,
+                    make_shredded_variant_reader(rg, opts, root_field, /*stats_on_age_chunk=*/true,
+                                                 /*age_value_all_null=*/false, /*include_age_value=*/false));
+    auto* vr = down_cast<VariantColumnReader*>(reader.get());
+
+    auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));
+    ASSERT_OK(path);
+    VariantVirtualZoneMapReader zm_reader(vr, *path, TYPE_BIGINT_DESC);
+
+    ObjectPool pool;
+    TypeInfoPtr ti = get_type_info(LogicalType::TYPE_BIGINT);
+    const int64_t wraps_to_20 = (int64_t(1) << 32) + 20;
+    for (const ColumnPredicate* pred :
+         {static_cast<const ColumnPredicate*>(pool.add(new_column_lt_predicate_from_datum(ti, 0, Datum(wraps_to_20)))),
+          static_cast<const ColumnPredicate*>(
+                  pool.add(new_column_in_predicate_from_datum(ti, 0, {Datum(int64_t(100)), Datum(wraps_to_20)})))}) {
+        const ColumnReader* leaf_reader = nullptr;
+        std::vector<const ColumnPredicate*> rewritten_predicates;
+        EXPECT_FALSE(zm_reader._prepare_delegate_predicates({pred}, &pool, 5, &leaf_reader, &rewritten_predicates));
+        auto result = zm_reader.row_group_zone_map_filter({pred}, CompoundNodeType::AND, 0, 5);
+        ASSERT_OK(result);
+        EXPECT_FALSE(result.value());
+    }
+}
+
+// A runtime bitset filter on the BIGINT virtual slot is an index-only IN: its convert_to() supports only BIGINT and
+// its values() walks every integer between its min and max. It must stay off the integer widening path, both for a
+// value inside the INT32 leaf statistics [20,24] and for a bitset ending at INT64_MAX, where enumerating would
+// overflow.
+TEST(VariantZoneMapTest, ZoneMapReaderSkipsRuntimeBitsetPredicateAcrossIntegerWidening) {
+    auto file_meta = make_minimal_file_meta();
+    ASSERT_NE(file_meta, nullptr);
+
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    opts.file_meta_data = file_meta.get();
+    ParquetField root_field;
+    ASSIGN_OR_ABORT(auto reader,
+                    make_shredded_variant_reader(rg, opts, root_field, /*stats_on_age_chunk=*/true,
+                                                 /*age_value_all_null=*/false, /*include_age_value=*/false));
+    auto* vr = down_cast<VariantColumnReader*>(reader.get());
+
+    auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));
+    ASSERT_OK(path);
+    VariantVirtualZoneMapReader zm_reader(vr, *path, TYPE_BIGINT_DESC);
+
+    ObjectPool pool;
+    TypeInfoPtr ti = get_type_info(LogicalType::TYPE_BIGINT);
+    const auto make_bitset_pred = [&](int64_t min_value, int64_t max_value, const std::vector<int64_t>& values) {
+        Bitset<TYPE_BIGINT> bitset;
+        bitset.set_min_max(min_value, max_value);
+        bitset.init();
+        for (int64_t value : values) {
+            bitset.insert(value);
+        }
+        ColumnPredicate* pred = pool.add(new_bitset_in_predicate(ti, 0, bitset));
+        pred->set_index_filter_only(true);
+        return static_cast<const ColumnPredicate*>(pred);
+    };
+    const int64_t max = std::numeric_limits<int64_t>::max();
+    for (const ColumnPredicate* pred : {make_bitset_pred(21, 21, {21}), make_bitset_pred(max, max, {max})}) {
+        ASSERT_EQ(PredicateType::kInList, pred->type());
+        const ColumnReader* leaf_reader = nullptr;
+        std::vector<const ColumnPredicate*> rewritten_predicates;
+        EXPECT_FALSE(zm_reader._prepare_delegate_predicates({pred}, &pool, 5, &leaf_reader, &rewritten_predicates));
+        auto result = zm_reader.row_group_zone_map_filter({pred}, CompoundNodeType::AND, 0, 5);
+        ASSERT_OK(result);
+        EXPECT_FALSE(result.value());
+    }
 }
 
 TEST(VariantZoneMapTest, ZoneMapReaderSkipsPushdownWhenPredicateRewriteFails) {

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "How to use hybrid row-column storage in StarRocks for high-concurrency point queries and partial column updates with analytical query efficiency."
 sidebar_position: 60
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../_assets/commonMarkdown/_beta.mdx'
@@ -20,7 +21,13 @@ import Beta from '../_assets/commonMarkdown/_beta.mdx'
 
    ![img](../_assets/table_design/hybrid_table.png)
 
-- 场景：支持逐行和逐列存储的用户场景，但会产生额外的存储成本。<ul><li>逐行存储的用户场景：</li><ul><li>基于主键的高并发点查询。</li><li>查询由少量字段组成的表中的大多数字段。</li><li>部分列更新（更具体地说，需要更新多个列和少量数据行）</li></ul><li>逐列存储的用户场景：复杂数据分析。</li></ul>
+- 场景：支持逐行和逐列存储的用户场景，但会产生额外的存储成本。
+
+  - 逐行存储的用户场景：
+    - 基于主键的高并发点查询。
+    - 查询由少量字段组成的表中的大多数字段。
+    - 部分列更新（更具体地说，需要更新多个列和少量数据行）
+  - 逐列存储的用户场景：复杂数据分析。
 
 **列式存储**
 
@@ -28,7 +35,10 @@ import Beta from '../_assets/commonMarkdown/_beta.mdx'
 
   ![img](../_assets/table_design/columnar_table.png)
 
-- 场景：复杂数据分析。<ul><li>对海量数据集进行复杂查询和分析，例如聚合分析和多表连接查询。</li><li>表由许多字段组成（如宽表），但对这些表的查询仅涉及少数列。</li></ul>
+- 场景：复杂数据分析。
+
+  - 对海量数据集进行复杂查询和分析，例如聚合分析和多表连接查询。
+  - 表由许多字段组成（如宽表），但对这些表的查询仅涉及少数列。
 
 ## 基本用法
 
