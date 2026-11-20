@@ -1542,7 +1542,6 @@ RowsetMetadataPB make_rowset_with_bounds_truncated_to_one_of_three_columns() {
     return rowset;
 }
 
-constexpr int64_t kVarcharKeySchemaId = 14851;
 constexpr int64_t kVarcharBigintBigintKeySchemaId = 14852;
 constexpr int64_t kIntVarcharIntKeySchemaId = 14853;
 
@@ -1636,73 +1635,6 @@ TEST(TabletSplitterTest, ColocateSynthesisSkipsInexactTruncatedBounds) {
         ASSERT_EQ(1u, boundaries.size());
         EXPECT_EQ(tuple_debug_string(make_vbb_tuple("z", 1, 1)), tuple_debug_string(boundaries[0]));
     }
-}
-
-// Truncated bounds widen a segment's envelope past its keys. Here the stored minimum of a one-row segment falls below
-// the parent's range, so the existing geometry gives the row to no child at all. The statistics are estimates, so a
-// rowset with a truncated bound shares them evenly among its emitted children instead of failing the split. The same
-// geometry from exact bounds still fails: there it means the metadata is wrong.
-TEST(TabletSplitterTest, ProjectRowsetStatsFallsBackForTruncatedBounds) {
-    const std::string lower(40, 'x');
-    const std::string middle(45, 'x');
-    const std::string cut_min(36, 'x');
-    const std::string successor = std::string(35, 'x') + "y";
-    // Parent [x40, +inf); the rowset's only row is x50, in the right child.
-    auto make_metadata = [&](const VariantTuple& min, const VariantTuple& max) {
-        auto m = make_dup_keys_metadata_with_key_types({"VARCHAR"}, kVarcharKeySchemaId);
-        *m->mutable_range() = make_varchar_range_pb(lower, std::nullopt);
-        auto* rowset = m->add_rowsets();
-        rowset->set_id(1);
-        rowset->set_num_rows(1);
-        rowset->set_data_size(1000);
-        rowset->set_num_dels(1);
-        add_segment_with_stored_bounds(rowset, min, max, /*num_rows=*/1, /*size=*/1000);
-        return m;
-    };
-    const auto external =
-            make_ranges({make_varchar_range_pb(lower, middle), make_varchar_range_pb(middle, std::nullopt)});
-
-    const std::string key(50, 'x');
-    auto truncated = make_metadata(make_varchar_tuple(key), make_varchar_tuple(key));
-    VariantTuple stored_min;
-    VariantTuple stored_max;
-    SortKeyBoundsExactness exactness;
-    ASSERT_OK(decode_segment_sort_key_bounds(truncated->rowsets(0).segment_metas(0), &stored_min, &stored_max,
-                                             &exactness));
-    ASSERT_TRUE(exactness.min_truncated);
-    ASSERT_TRUE(exactness.max_truncated);
-    ASSERT_EQ(tuple_debug_string(make_varchar_tuple(cut_min)), tuple_debug_string(stored_min));
-    ASSERT_EQ(tuple_debug_string(make_varchar_tuple(successor)), tuple_debug_string(stored_max));
-
-    std::vector<TabletRangeInfo> ranges;
-    ASSERT_OK(compute_split_ranges_from_external_boundaries(/*tablet_manager=*/nullptr, truncated, external, &ranges));
-    ASSERT_EQ(2u, ranges.size());
-    ASSERT_TRUE(ranges[0].rowset_stats.contains(1));
-    ASSERT_TRUE(ranges[1].rowset_stats.contains(1));
-    const auto& left = ranges[0].rowset_stats.at(1);
-    const auto& right = ranges[1].rowset_stats.at(1);
-    EXPECT_EQ(1, left.num_rows + right.num_rows);
-    EXPECT_EQ(1000, left.data_size + right.data_size);
-    EXPECT_EQ(1, left.num_dels + right.num_dels);
-    EXPECT_LE(std::max(left.num_rows, right.num_rows) - std::min(left.num_rows, right.num_rows), 1);
-    EXPECT_EQ(500, left.data_size);
-    EXPECT_LE(std::max(left.num_dels, right.num_dels) - std::min(left.num_dels, right.num_dels), 1);
-
-    // The same declaration with exact bounds: identical decoded tuples, identical geometry.
-    auto exact = make_metadata(make_varchar_tuple(cut_min), make_varchar_tuple(successor));
-    VariantTuple exact_min;
-    VariantTuple exact_max;
-    SortKeyBoundsExactness exact_exactness;
-    ASSERT_OK(decode_segment_sort_key_bounds(exact->rowsets(0).segment_metas(0), &exact_min, &exact_max,
-                                             &exact_exactness));
-    ASSERT_FALSE(exact_exactness.min_truncated);
-    ASSERT_FALSE(exact_exactness.max_truncated);
-    ASSERT_EQ(tuple_debug_string(stored_min), tuple_debug_string(exact_min));
-    ASSERT_EQ(tuple_debug_string(stored_max), tuple_debug_string(exact_max));
-    std::vector<TabletRangeInfo> exact_ranges;
-    auto st = compute_split_ranges_from_external_boundaries(/*tablet_manager=*/nullptr, exact, external, &exact_ranges);
-    EXPECT_TRUE(st.is_corruption()) << st;
-    EXPECT_NE(std::string_view::npos, st.message().find("zero emitted weight")) << st;
 }
 
 // Truncation only widens a segment's [min, max], so ownership keeps a segment on every child that holds one of its
@@ -2693,7 +2625,7 @@ protected:
             CHECK_OK(wfile_or.status());
             SegmentWriter writer(std::move(wfile_or.value()), /*segment_id=*/0, tablet_schema, SegmentWriterOptions());
             CHECK_OK(writer.init());
-            auto chunk = ChunkFactory::new_chunk(chunk_schema, num_rows);
+            auto chunk = ChunkHelper::new_chunk(chunk_schema, num_rows);
             auto cols = chunk->columns();
             for (int64_t k = key_start; k < key_start + num_rows; ++k) {
                 cols[0]->as_mutable_ptr()->append_datum(Datum(k));
@@ -3023,8 +2955,6 @@ TEST_F(SortKeySamplingSplitterTest, an_out_of_range_segment_does_not_starve_the_
     }
 }
 
-<<<<<<< HEAD
-=======
 // The same layout under a wide sort key whose stored bounds are truncated: with (k BIGINT, s VARCHAR, x INT) and a
 // 40-byte s, each stored bound decodes to (k, cut s or its successor), two columns of the sort key's three. The
 // weighting must accept bounds cut from the tablet's sort key by the arity they were cut from, not by their decoded
@@ -3070,30 +3000,6 @@ TEST_F(SortKeySamplingSplitterTest, an_out_of_range_segment_with_truncated_bound
     }
 }
 
-// Duplicate physical slices must not be handed a share of the sample budget. insert_physical_slice
-// emits only the FIRST declaration of a (filename, bundle_file_offset), so any share allocated to a
-// later duplicate is spent on nothing -- and with 50 duplicates against a 2-way target of 64, the two
-// slices that are actually emitted are left with about one sample between them instead of about 64.
-//
-// Asserting the published sample count is what discriminates: the split itself still succeeds either
-// way here (two distinct key runs give coarse boundaries), so only the sample density reveals the
-// stranded budget.
-TEST_F(SortKeySamplingSplitterTest, duplicate_physical_slices_do_not_strand_the_sample_budget) {
-    auto metadata = write_duplicate_slice_declarations(/*duplicates=*/50, /*rows_per_segment=*/2000);
-    const int64_t before_samples = sort_key_sampling_samples_count();
-
-    std::vector<TabletRangeInfo> ranges;
-    ASSERT_OK(get_tablet_split_ranges(_tablet_manager.get(), metadata, 2, &ranges));
-    ASSERT_EQ(2u, ranges.size());
-    EXPECT_TRUE(ranges_are_ordered_and_gapless(ranges));
-
-    // The two emitted slices split a target of 32 * 2 == 64 between them once the duplicates stop
-    // taking a cut. With the duplicates weighted, their combined share rounds to roughly one sample.
-    EXPECT_GT(sort_key_sampling_samples_count() - before_samples, 10)
-            << "the emitted slices were starved by shares allocated to duplicate declarations";
-}
-
->>>>>>> bf8def1 ([BugFix] Cap the size of segment sort key bounds in lake tablet metadata (#83993))
 // More segments than the tablet's sample target is the shape an independently floored share lost
 // entirely: at the default cap a 2-way split targets 32 * 2 == 64 samples, so 65 equally sized
 // segments each floored to 64/65 == 0, no rowset passed rowset_wants_samples, and the tablet was

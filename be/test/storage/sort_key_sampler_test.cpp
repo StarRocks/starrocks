@@ -734,7 +734,7 @@ protected:
         CHECK(writer->init(true).ok());
 
         auto chunk_schema = ChunkHelper::convert_schema(schema);
-        auto chunk = ChunkFactory::new_chunk(chunk_schema, num_rows);
+        auto chunk = ChunkHelper::new_chunk(chunk_schema, num_rows);
         auto cols = chunk->columns();
         for (int64_t i = 0; i < num_rows; ++i) {
             for (auto& col : cols) {

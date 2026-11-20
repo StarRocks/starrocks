@@ -43,18 +43,10 @@ struct SegmentSplitInfo {
     int64_t num_rows = 0;
     int64_t data_size = 0;
     uint32_t source_id = 0; // Optional: for per-source statistics tracking (e.g., rowset_id)
-<<<<<<< HEAD
-=======
-    // Position of this segment in its rowset's segment_metas. Together with source_id it identifies
-    // the segment, which source_id alone cannot -- that names the ROWSET. Set by the split boundary
-    // planner so the per-child statistics projection can find the samples already computed for a
-    // segment instead of re-deriving them; -1 means "not from a per-segment metadata walk".
-    int32_t segment_meta_pos = -1;
     // Which of min_key / max_key were truncated when stored (see encode_stored_sort_key_bound), and for a truncated
     // one how many leading columns are the segment's own key values: the rest of a truncated bound only keeps it a
     // bound. SortKeyProjection's padding does not change these counts.
     SortKeyBoundsExactness bounds_exactness;
->>>>>>> bf8def1 ([BugFix] Cap the size of segment sort key bounds in lake tablet metadata (#83993))
 
     // Equal-row-interval samples of the sort key (NON-DECREASING) and the row
     // interval used to produce them, as produced by load_samples() below.

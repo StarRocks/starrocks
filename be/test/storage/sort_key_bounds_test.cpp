@@ -25,12 +25,6 @@
 #include <utility>
 #include <vector>
 
-<<<<<<< HEAD
-=======
-#include "base/decimal_types.h"
-#include "base/string/utf8_check.h"
-#include "base/testutil/assert.h"
->>>>>>> bf8def1 ([BugFix] Cap the size of segment sort key bounds in lake tablet metadata (#83993))
 #include "gen_cpp/lake_types.pb.h"
 #include "runtime/decimalv2_value.h"
 #include "runtime/time_types.h"
@@ -40,6 +34,8 @@
 #include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"
+#include "util/decimal_types.h"
+#include "util/utf8_check.h"
 
 namespace starrocks {
 

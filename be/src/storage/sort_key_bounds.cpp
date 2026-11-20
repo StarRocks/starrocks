@@ -22,36 +22,24 @@
 #include <utility>
 #include <vector>
 
-<<<<<<< HEAD
-=======
-#include "base/decimal_types.h"
-#include "base/string/utf8.h"
-#include "base/string/utf8_check.h"
->>>>>>> bf8def1 ([BugFix] Cap the size of segment sort key bounds in lake tablet metadata (#83993))
 #include "column/datum_convert.h"
 #include "common/logging.h"
 #include "common/statusor.h"
 #include "fmt/format.h"
 #include "gen_cpp/lake_types.pb.h"
-<<<<<<< HEAD
+#include "gutil/utf/utf.h"
+#include "runtime/decimalv2_value.h"
+#include "runtime/time_types.h"
 #include "storage/key_coder.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/type_traits.h"
 #include "storage/types.h"
-#include "types/logical_type.h"
-#include "util/decimal_types.h"
-=======
-#include "gutil/utf/utf.h"
-#include "storage_primitive/key_coder.h"
-#include "storage_primitive/primary_key_encoder.h"
 #include "types/date_value.h"
-#include "types/decimalv2_value.h"
 #include "types/logical_type.h"
-#include "types/storage_type_traits.h"
-#include "types/time_types.h"
 #include "types/timestamp_value.h"
-#include "types/type_info.h"
->>>>>>> bf8def1 ([BugFix] Cap the size of segment sort key bounds in lake tablet metadata (#83993))
+#include "util/decimal_types.h"
+#include "util/utf8.h"
+#include "util/utf8_check.h"
 
 namespace starrocks {
 
@@ -120,7 +108,6 @@ bool is_valid_decimal(LogicalType type, int precision, int scale) {
     return precision >= 1 && precision <= max_decimal_precision(type) && scale >= 0 && scale <= precision;
 }
 
-<<<<<<< HEAD
 // This branch's KeyCoder has no full encoding for a 256-bit integer and decodes every BOOLEAN as true, so the codec
 // handles those two types itself. The bytes are the KeyCoder full ascending encoding of later versions, which read
 // these bounds as well: a BOOLEAN is one byte, 0 or 1; a 256-bit integer is 32 bytes, big-endian, sign bit flipped.
@@ -157,11 +144,11 @@ Status decode_boolean(Slice* in, Datum* out) {
     out->set(static_cast<uint8_t>((*in)[0]) != 0);
     in->remove_prefix(1);
     return Status::OK();
-=======
+}
+
 // The DATE or DATETIME value the TuplePB text round trip yields.
 Status normalize_date_or_datetime(TypeInfo* type_info, const Datum& datum, Datum* normalized) {
     return datum_from_string(type_info, normalized, datum_to_string(type_info, datum), nullptr);
->>>>>>> bf8def1 ([BugFix] Cap the size of segment sort key bounds in lake tablet metadata (#83993))
 }
 
 Status encode_value(const DatumVariant& value, std::string* out) {
@@ -425,7 +412,7 @@ size_t payload_size(const DatumVariant& value) {
 }
 
 // The widest fixed-width value fits the budget alone, so a fixed-width column that does not fit is never column 0.
-static_assert(sizeof(StorageCppType<TYPE_DECIMAL256>) <= kSortKeyBoundPayloadBudget);
+static_assert(sizeof(CppTypeTraits<TYPE_DECIMAL256>::CppType) <= kSortKeyBoundPayloadBudget);
 
 // Strings are cut and incremented in units, taken from the start of the string: a unit is a valid UTF-8 code point,
 // or else a single byte. A valid code point is never split, whether or not the rest of the string is valid UTF-8.

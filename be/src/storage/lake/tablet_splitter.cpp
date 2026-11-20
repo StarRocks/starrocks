@@ -456,17 +456,13 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
     // colocate-aware, a bound with fewer exact columns than the colocate prefix would give step 1b and the greedy
     // loop a synthetic colocate prefix that no row has, so it is left out. Step 3 still distributes the segment over
     // the ranges its [min, max] overlaps; a segment whose skipped bounds both lie below the smallest, or both above
-    // the largest, remaining boundary value overlaps none and adds nothing to the planner's estimates (the per-child
-    // statistics are recomputed by project_rowset_stats).
+    // the largest, remaining boundary value overlaps none and adds nothing to the planner's estimates
+    // (apply_rowset_anchor still hands out its rowset's recorded statistics in full, evenly if no segment of the
+    // rowset has any weight).
     const auto usable_bound = [colocate_column_count](bool truncated, size_t exact_columns) {
         return !truncated || colocate_column_count <= 0 || exact_columns >= static_cast<size_t>(colocate_column_count);
     };
     for (const auto& segment : segments) {
-<<<<<<< HEAD
-        ordered_boundary_values.push_back(segment.min_key);
-        ordered_boundary_values.push_back(segment.max_key);
-=======
-        RETURN_IF_ERROR(consume_metadata_visits(budget, 2 + segment.sort_key_samples.size(), "boundary values"));
         const auto& exactness = segment.bounds_exactness;
         if (usable_bound(exactness.min_truncated, exactness.min_exact_columns)) {
             ordered_boundary_values.push_back(segment.min_key);
@@ -474,7 +470,6 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
         if (usable_bound(exactness.max_truncated, exactness.max_exact_columns)) {
             ordered_boundary_values.push_back(segment.max_key);
         }
->>>>>>> bf8def1 ([BugFix] Cap the size of segment sort key bounds in lake tablet metadata (#83993))
         for (const auto& sample : segment.sort_key_samples) {
             ordered_boundary_values.push_back(sample);
         }
@@ -903,26 +898,15 @@ Status build_segments_from_rowsets_impl(TabletManager* tablet_manager, const Tab
     // "Not enough split ranges available".
     //
     // Sound only where the segment's stored sort-key bounds and the tablet range speak the same key
-<<<<<<< HEAD
-    // space at the same arity, which the arity equality below enforces: a segment written before a
+    // space at the same arity, which the arity check below enforces: a segment written before a
     // metadata-only trailing sort-key ADD stores a narrower tuple, which VariantTuple::compare
     // orders BELOW its padded form, so testing it against a current-arity range would exclude a
-    // segment that does hold in-range rows. Anything this test cannot decide -- an unbounded
-    // tablet, a missing or unparseable bound, a mismatched arity -- keeps the segment's full weight,
-    // i.e. exactly the behaviour of not doing this at all.
-=======
-    // space at the same arity. get_tablet_split_ranges_impl has already rejected the one keys_type
-    // where they do not (PRIMARY_KEYS with a separate sort key routes in primary-key space), and the
-    // arity check below covers the rest: a segment written before a metadata-only trailing
-    // sort-key ADD stores a narrower tuple, which VariantTuple::compare orders BELOW its padded
-    // form, so testing it against a current-arity range would exclude a segment that does hold
-    // in-range rows. The check reads the arity the bounds were taken from, never the decoded size:
-    // a bound truncated to the value budget decodes to fewer values, yet its minimum is still below
-    // and its maximum above every key of the segment, so intersecting the decoded bounds can only
-    // keep a segment, never drop one with in-range rows. Anything this test cannot decide -- an
-    // unbounded tablet, a missing or unparseable bound, a mismatched arity -- keeps the segment's
-    // full weight, i.e. exactly the behaviour of not doing this at all.
->>>>>>> bf8def1 ([BugFix] Cap the size of segment sort key bounds in lake tablet metadata (#83993))
+    // segment that does hold in-range rows. The check reads the arity the bounds were taken from,
+    // never the decoded size: a bound truncated to the value budget decodes to fewer values, yet its
+    // minimum is still below and its maximum above every key of the segment, so intersecting the
+    // decoded bounds can only keep a segment, never drop one with in-range rows. Anything this test
+    // cannot decide -- an unbounded tablet, a missing or unparseable bound, a mismatched arity --
+    // keeps the segment's full weight, i.e. exactly the behaviour of not doing this at all.
     TabletRange weighting_range;
     size_t weighting_range_arity = 0;
     bool weight_by_range = false;
@@ -985,18 +969,11 @@ Status build_segments_from_rowsets_impl(TabletManager* tablet_manager, const Tab
             const auto& segment_meta = rowset.segment_metas(meta_pos);
             SegmentSplitInfo segment;
             segment.source_id = rowset.id();
-<<<<<<< HEAD
-            RETURN_IF_ERROR(decode_segment_sort_key_bounds(segment_meta, &segment.min_key, &segment.max_key));
+            // A truncated bound is conservative: only its leading exact columns are this segment's key values.
+            RETURN_IF_ERROR(decode_segment_sort_key_bounds(segment_meta, &segment.min_key, &segment.max_key,
+                                                           &segment.bounds_exactness));
             segment.num_rows = segment_meta.num_rows();
             segment.data_size = segment_meta.size();
-=======
-            segment.segment_meta_pos = meta_pos;
-            // A truncated bound is conservative: only its leading exact columns are this segment's key values.
-            RETURN_IF_ERROR(
-                    decode_segment_sort_key_bounds(sm, &segment.min_key, &segment.max_key, &segment.bounds_exactness));
-            segment.num_rows = sm.num_rows();
-            segment.data_size = sm.size();
->>>>>>> bf8def1 ([BugFix] Cap the size of segment sort key bounds in lake tablet metadata (#83993))
 
             const size_t index = rowset_flat_index + static_cast<size_t>(meta_pos);
             const int64_t short_key_target = index < sample_budget.size() ? sample_budget[index] : 0;
@@ -1570,277 +1547,6 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
     return Status::OK();
 }
 
-<<<<<<< HEAD
-=======
-// (source_id, segment_meta_pos) -> a segment the boundary planner already sampled. source_id alone
-// names the ROWSET, so it cannot identify a segment on its own.
-using SampledSegmentIndex = std::map<std::pair<uint32_t, int32_t>, const SegmentSplitInfo*>;
-
-Status project_rowset_stats(const TabletMetadataPB& source, const std::vector<TabletRange>& parsed_ranges,
-                            const std::vector<RowsetOwnership>& ownership, const std::vector<bool>& rowset_prunable,
-                            SplitMetadataVisitBudget* budget, std::vector<TabletRangeInfo>* split_ranges,
-                            RowsetEmissionMask* emission, const SampledSegmentIndex& sampled_by_segment) {
-    const size_t child_count = parsed_ranges.size();
-    RETURN_IF_ERROR(budget->consume(source.rowsets_size(), "projector rowsets"));
-    emission->resize(source.rowsets_size());
-    ASSIGN_OR_RETURN(const auto schema, materialize_sort_key_schema(source.schema()));
-    const bool separate_sort = schema->keys_type() == PRIMARY_KEYS && schema->has_separate_sort_key();
-    ASSIGN_OR_RETURN(const auto projection, SortKeyProjection::create(*schema));
-    TabletRange source_range;
-    RETURN_IF_ERROR(source_range.from_proto(source.range()));
-    for (int r = 0; r < source.rowsets_size(); ++r) {
-        const auto& rowset = source.rowsets(r);
-        RETURN_IF_ERROR(budget->consume(child_count, "projector intersections"));
-        ASSIGN_OR_RETURN(auto anchor, rowset_anchor(rowset));
-        TabletRange effective;
-        RETURN_IF_ERROR(effective.from_proto(rowset.has_range() ? rowset.range() : source.range()));
-        auto& emit = (*emission)[r];
-        emit.assign(child_count, false);
-        std::vector<int64_t> row_weights(child_count, 0), byte_weights(child_count, 0);
-        std::vector<int64_t> rows(child_count, 0), bytes(child_count, 0), dels(child_count, 0);
-        bool has_truncated_bound = false;
-        for (size_t c = 0; c < child_count; ++c) {
-            ASSIGN_OR_RETURN(auto intersection, effective.intersect(parsed_ranges[c]));
-            emit[c] = !intersection.is_empty();
-            if (emit[c] && rowset_prunable[r]) {
-                emit[c] = false;
-                for (const auto& segment : ownership[r].segments) {
-                    RETURN_IF_ERROR(budget->consume(1, "projector segment ownership"));
-                    if (segment.keep[c]) {
-                        emit[c] = true;
-                        break;
-                    }
-                }
-            }
-        }
-        if (std::none_of(emit.begin(), emit.end(), [](bool value) { return value; })) {
-            return Status::Corruption("tablet split rowset has no emitted child");
-        }
-        if (separate_sort || rowset.segment_metas_size() == 0) {
-            for (size_t c = 0; c < child_count; ++c) row_weights[c] = byte_weights[c] = emit[c] ? 1 : 0;
-        } else {
-            // Only this rowset's segment/sample weights are live. Include sinks outside
-            // its effective range, so clipping never donates out-of-range samples to a child.
-            std::vector<SegmentSplitInfo> segments;
-            for (int meta_pos = 0; meta_pos < rowset.segment_metas_size(); ++meta_pos) {
-                const auto& sm = rowset.segment_metas(meta_pos);
-                // One visit per segment declaration. Nothing is charged for samples: they are not
-                // read from metadata (metadata sort-key samples are no longer written) but copied
-                // from the boundary planner, which already charged for taking them. This still does
-                // NOT open segments -- these weights only apportion FE statistics between children.
-                RETURN_IF_ERROR(budget->consume(1, "projector segment declaration"));
-                if (sm.has_num_rows() && sm.num_rows() == 0) continue;
-                SegmentSplitInfo segment;
-                SortKeyBoundsExactness exactness;
-                RETURN_IF_ERROR(decode_segment_sort_key_bounds(sm, &segment.min_key, &segment.max_key, &exactness));
-                has_truncated_bound |= exactness.min_truncated || exactness.max_truncated;
-                segment.num_rows = sm.num_rows();
-                segment.data_size = sm.size();
-                // Samples the planner already computed for THIS segment, if any. They arrive
-                // already lifted onto the current sort key; project() only pads a short tuple, so
-                // the projection below is a no-op on them rather than a second transformation.
-                if (auto it = sampled_by_segment.find(std::make_pair(rowset.id(), meta_pos));
-                    it != sampled_by_segment.end()) {
-                    segment.sort_key_samples = it->second->sort_key_samples;
-                    segment.sort_key_sample_row_interval = it->second->sort_key_sample_row_interval;
-                }
-                projection.project(&segment.min_key);
-                projection.project(&segment.max_key);
-                for (auto& sample : segment.sort_key_samples) projection.project(&sample);
-                segments.push_back(std::move(segment));
-            }
-            if (segments.empty()) {
-                for (size_t c = 0; c < child_count; ++c) row_weights[c] = byte_weights[c] = emit[c] ? 1 : 0;
-            } else {
-                VariantTuple lo = segments.front().min_key, hi = segments.front().max_key;
-                for (const auto& segment : segments) {
-                    if (segment.min_key.compare(lo) < 0) lo = segment.min_key;
-                    if (segment.max_key.compare(hi) > 0) hi = segment.max_key;
-                }
-                RETURN_IF_ERROR(budget->consume(2, "projector envelope"));
-                std::vector<VariantTuple> cuts{lo, hi};
-                auto add_cut = [&](const VariantTuple& cut) -> Status {
-                    if (cut.compare(lo) > 0 && cut.compare(hi) < 0) {
-                        RETURN_IF_ERROR(budget->consume(1, "projector cut"));
-                        cuts.push_back(cut);
-                    }
-                    return Status::OK();
-                };
-                if (!effective.is_minimum()) RETURN_IF_ERROR(add_cut(effective.lower_bound()));
-                if (!effective.is_maximum()) RETURN_IF_ERROR(add_cut(effective.upper_bound()));
-                for (const auto& range : parsed_ranges) {
-                    if (!range.is_minimum()) RETURN_IF_ERROR(add_cut(range.lower_bound()));
-                    if (!range.is_maximum()) RETURN_IF_ERROR(add_cut(range.upper_bound()));
-                }
-                std::sort(cuts.begin(), cuts.end());
-                cuts.erase(std::unique(cuts.begin(), cuts.end()), cuts.end());
-                std::vector<RangeInfo> distribution;
-                std::vector<int> destinations;
-                const size_t interval_count = std::max<size_t>(1, cuts.size() - 1);
-                for (size_t i = 0; i < interval_count; ++i) {
-                    auto& range = distribution.emplace_back();
-                    range.min = cuts[i];
-                    range.max = cuts[std::min(i + 1, cuts.size() - 1)];
-                    int destination = -1;
-                    for (size_t c = 0; c < child_count; ++c) {
-                        RETURN_IF_ERROR(budget->consume(1, "projector interval intersection"));
-                        if (emit[c] && effective.contains(range.min) && parsed_ranges[c].contains(range.min)) {
-                            destination = c;
-                            break;
-                        }
-                    }
-                    destinations.push_back(destination);
-                }
-                // The physical maximum can itself belong to the next child (or to a
-                // sink at an excluded parent edge). Give that point its own last bucket
-                // only when its owner differs, preserving the ordinary interval weights.
-                int endpoint_destination = -1;
-                for (size_t c = 0; c < child_count; ++c) {
-                    RETURN_IF_ERROR(budget->consume(1, "projector endpoint intersection"));
-                    if (emit[c] && effective.contains(hi) && parsed_ranges[c].contains(hi)) {
-                        endpoint_destination = c;
-                        break;
-                    }
-                }
-                if (endpoint_destination != destinations.back()) {
-                    RETURN_IF_ERROR(budget->consume(1, "projector endpoint bucket"));
-                    auto& endpoint = distribution.emplace_back();
-                    endpoint.min = hi;
-                    endpoint.max = hi;
-                    destinations.push_back(endpoint_destination);
-                }
-                for (const auto& segment : segments) {
-                    RETURN_IF_ERROR(distribute_segment_to_ranges(segment, distribution, false, budget));
-                }
-                for (size_t i = 0; i < distribution.size(); ++i) {
-                    if (destinations[i] < 0) continue;
-                    row_weights[destinations[i]] += distribution[i].num_rows;
-                    byte_weights[destinations[i]] += distribution[i].data_size;
-                }
-            }
-        }
-        const auto positive = [](int64_t weight) { return weight > 0; };
-        if (anchor.data_size > 0 && std::none_of(byte_weights.begin(), byte_weights.end(), positive) &&
-            std::any_of(row_weights.begin(), row_weights.end(), positive)) {
-            byte_weights = row_weights;
-        }
-        const bool zero_row_weight =
-                anchor.num_rows > 0 && std::none_of(row_weights.begin(), row_weights.end(), positive);
-        const bool zero_byte_weight =
-                anchor.data_size > 0 && std::none_of(byte_weights.begin(), byte_weights.end(), positive);
-        if (zero_row_weight || zero_byte_weight) {
-            const bool same_source_range =
-                    effective.lower_bound() == source_range.lower_bound() &&
-                    effective.upper_bound() == source_range.upper_bound() &&
-                    (effective.is_minimum() ||
-                     effective.lower_bound_included() == source_range.lower_bound_included()) &&
-                    (effective.is_maximum() || effective.upper_bound_included() == source_range.upper_bound_included());
-            const bool all_shared = std::all_of(rowset.segment_metas().begin(), rowset.segment_metas().end(),
-                                                [](const auto& segment) { return segment.shared(); });
-            // A truncated bound widens its segment's envelope past its keys, so the geometry can hand the rowset's
-            // whole weight to ranges no emitted child owns. The statistics are estimates: share them out as below.
-            if (!has_truncated_bound &&
-                (!rowset.has_range() || rowset.segment_metas_size() == 0 || !same_source_range || !all_shared)) {
-                return Status::Corruption("tablet split positive rowset anchor has zero emitted weight");
-            }
-            // A split cross-publish hands every child the parent load's whole rowset: every segment shared,
-            // the child's range, and stats divided by the split count whatever the keys. A child whose range
-            // holds none of the load's rows ends up here with positive stats and no physical weight. The
-            // rowset reads empty and goes to the children it is emitted to as it is, so share the stats that have
-            // no weight out evenly among them, as the cross-publish did; the split does not wait for a compaction
-            // to rewrite the rowset.
-            for (size_t c = 0; c < child_count; ++c) {
-                if (zero_row_weight) row_weights[c] = emit[c] ? 1 : 0;
-                if (zero_byte_weight) byte_weights[c] = emit[c] ? 1 : 0;
-            }
-        }
-        tablet_reshard_helper::allocate_proportionally(anchor.num_rows, row_weights, &rows);
-        tablet_reshard_helper::allocate_proportionally(anchor.data_size, byte_weights, &bytes);
-        auto delete_weights = std::move(row_weights);
-        if (anchor.num_dels > 0 && std::none_of(delete_weights.begin(), delete_weights.end(), positive)) {
-            // Row counts are estimates but deletes are exact. Integer geometry can assign every
-            // physical row to clipped sink ranges while this rowset is emitted only to later
-            // children. Restrict the deterministic fallback to those emitted children so none of
-            // the delete anchor is allocated to a child that will drop the rowset below.
-            for (size_t c = 0; c < child_count; ++c) delete_weights[c] = emit[c] ? 1 : 0;
-        }
-        tablet_reshard_helper::allocate_proportionally(anchor.num_dels, delete_weights, &dels);
-        for (size_t c = 0; c < child_count; ++c) {
-            if (emit[c]) (*split_ranges)[c].rowset_stats[rowset.id()] = {rows[c], bytes[c], dels[c]};
-        }
-    }
-    return Status::OK();
-}
-
-// |sampled| is optional: when the caller has already had the boundary planner sample these segments,
-// pass it and the per-child weights below are computed from those samples instead of from coarse
-// bounds alone. The planner's segments are used to ENRICH this function's own per-rowset segment set,
-// never to replace it -- the planner deduplicates physical slices tablet-wide and drops zero-row
-// segments, so substituting its list would move the weights for reasons that have nothing to do with
-// samples. Paths that produce no sampled segments (FE-supplied external boundaries, and the
-// primary-key index paths) pass nullptr and keep the coarse weighting.
-Status prepare_split_projection(const TabletMetadataPB& source, SplitMetadataVisitBudget* budget,
-                                std::vector<TabletRangeInfo>* split_ranges, std::vector<RowsetOwnership>* ownership,
-                                std::vector<bool>* prunable, RowsetEmissionMask* emission,
-                                const std::vector<SegmentSplitInfo>* sampled = nullptr) {
-    SampledSegmentIndex sampled_by_segment;
-    if (sampled != nullptr) {
-        for (const auto& s : *sampled) {
-            if (s.segment_meta_pos >= 0) {
-                sampled_by_segment.emplace(std::make_pair(s.source_id, s.segment_meta_pos), &s);
-            }
-        }
-    }
-    RETURN_IF_ERROR(budget->consume(split_ranges->size() + source.rowsets_size(), "projection shape"));
-    std::vector<TabletRange> ranges(split_ranges->size());
-    for (size_t c = 0; c < split_ranges->size(); ++c) RETURN_IF_ERROR(ranges[c].from_proto((*split_ranges)[c].range));
-    ASSIGN_OR_RETURN(const auto schema, materialize_sort_key_schema(source.schema()));
-    const bool compatible = !(schema->keys_type() == PRIMARY_KEYS && schema->has_separate_sort_key());
-    ownership->resize(source.rowsets_size());
-    prunable->assign(source.rowsets_size(), false);
-    for (int r = 0; r < source.rowsets_size(); ++r) {
-        const auto& rowset = source.rowsets(r);
-        if (!compatible || rowset.segment_metas_size() == 0 || rowset.del_files_size() != 0 ||
-            !can_prune_rowset_segments(rowset, raw_sort_key_arity(source.schema())))
-            continue;
-        for (int i = 0; i < rowset.segment_metas_size(); ++i) {
-            RETURN_IF_ERROR(budget->consume(ranges.size(), "ownership intersections"));
-        }
-        ASSIGN_OR_RETURN((*ownership)[r], compute_rowset_segment_ownership(rowset, ranges, schema.get()));
-        (*prunable)[r] = true;
-    }
-    return project_rowset_stats(source, ranges, *ownership, *prunable, budget, split_ranges, emission,
-                                sampled_by_segment);
-}
-
-void erase_omitted_rowset_state(const RowsetMetadataPB& rowset, TabletMetadataPB* child) {
-    auto erase = [&](uint32_t rssid) {
-        if (child->has_delvec_meta()) child->mutable_delvec_meta()->mutable_delvecs()->erase(rssid);
-        if (child->has_dcg_meta()) child->mutable_dcg_meta()->mutable_dcgs()->erase(rssid);
-        if (child->has_idg_meta()) child->mutable_idg_meta()->mutable_idgs()->erase(rssid);
-    };
-    if (rowset.segment_metas_size() == 0) erase(rowset.id());
-    for (const auto& segment : rowset.segment_metas()) erase(rowset.id() + segment.segment_idx());
-    child->mutable_rowset_to_schema()->erase(rowset.id());
-}
-
-void prune_unreferenced_delvec_files(TabletMetadataPB* child) {
-    if (!child->has_delvec_meta()) return;
-    std::unordered_set<int64_t> versions;
-    for (const auto& [rssid, page] : child->delvec_meta().delvecs()) versions.insert(page.version());
-    for (const auto& sst : child->sstable_meta().sstables()) {
-        if (sst.has_delvec()) versions.insert(sst.delvec().version());
-    }
-    auto* files = child->mutable_delvec_meta()->mutable_version_to_file();
-    for (auto it = files->begin(); it != files->end();) {
-        if (versions.contains(it->first))
-            ++it;
-        else
-            it = files->erase(it);
-    }
-}
-
->>>>>>> bf8def1 ([BugFix] Cap the size of segment sort key bounds in lake tablet metadata (#83993))
 // Build K new-tablet metadata entries from a pre-computed split_ranges vector.
 // Source-agnostic: the caller decides how split_ranges was produced (data-driven
 // boundary search, FE-supplied external boundaries, or any future variant). Each
@@ -1949,13 +1655,19 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> build_new_tablet
     // sort-key ADD stores narrower bounds and must not be pruned with them (see
     // can_prune_rowset_segments); it degrades to all-shared instead.
     const size_t sort_key_arity = raw_sort_key_arity(old_tablet_metadata->schema());
+    // With the sort key schema, ownership pads a bound truncated to the value budget with NULL to the sort-key
+    // arity, the form the boundary planner chose the new ranges from (see compute_rowset_segment_ownership). Both
+    // split-range computations have already materialized this schema for a tablet with rowsets. Without it the
+    // bounds are compared unpadded, which can keep a segment shared on more children but never drops one.
+    const auto sort_key_schema_or = materialize_sort_key_schema(old_tablet_metadata->schema());
+    const TabletSchema* sort_key_schema = sort_key_schema_or.ok() ? sort_key_schema_or.value().get() : nullptr;
     const int rowset_count = old_tablet_metadata->rowsets_size();
     std::vector<RowsetOwnership> rowset_ownership(rowset_count);
     std::vector<bool> rowset_prunable(rowset_count, false);
     for (int rowset_index = 0; rowset_index < rowset_count; ++rowset_index) {
         const auto& source_rowset = old_tablet_metadata->rowsets(rowset_index);
         if (!can_prune_rowset_segments(source_rowset, sort_key_arity)) continue;
-        auto ownership_or = compute_rowset_segment_ownership(source_rowset, parsed_new_tablet_ranges);
+        auto ownership_or = compute_rowset_segment_ownership(source_rowset, parsed_new_tablet_ranges, sort_key_schema);
         if (ownership_or.ok()) {
             rowset_ownership[rowset_index] = std::move(ownership_or.value());
             rowset_prunable[rowset_index] = true;
