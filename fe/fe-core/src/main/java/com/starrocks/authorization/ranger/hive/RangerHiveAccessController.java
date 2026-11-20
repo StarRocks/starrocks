@@ -14,20 +14,15 @@
 
 package com.starrocks.authorization.ranger.hive;
 
-import com.google.common.collect.Maps;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.authorization.RejectedRecordsRowAccessPolicy;
 import com.starrocks.authorization.ranger.RangerAccessController;
 import com.starrocks.authorization.ranger.RangerAccessResourceBuilder;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.TableName;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.expression.Expr;
+import org.apache.ranger.plugin.policyengine.RangerAccessResourceImpl;
 
-import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 public class RangerHiveAccessController extends RangerAccessController {
     // Value of RangerHiveCatalogProperties.CATALOG_PREFIX_ENABLED on this catalog; null = follow the FE config.
@@ -102,34 +97,18 @@ public class RangerHiveAccessController extends RangerAccessController {
     }
 
     @Override
-    public Map<String, Expr> getColumnMaskingPolicy(ConnectContext context, TableName tableName, List<Column> columns) {
-        Map<String, Expr> maskingExprMap = Maps.newHashMap();
-        for (Column column : columns) {
-            Expr columnMaskingExpression = getColumnMaskingExpression(resourceOf(tableName.getCatalog(), tableName.getDb())
-                    .setTable(tableName.getTbl())
-                    .setColumn(column.getName())
-                    .build(), column, context);
-            if (columnMaskingExpression != null) {
-                maskingExprMap.put(column.getName(), columnMaskingExpression);
-            }
-        }
-
-        return maskingExprMap;
+    protected RangerAccessResourceImpl tableResource(TableName tableName) {
+        return resourceOf(tableName.getCatalog(), tableName.getDb())
+                .setTable(tableName.getTbl())
+                .build();
     }
 
     @Override
-    public Expr getRowAccessPolicy(ConnectContext context, TableName tableName) {
-        // Ranger-Hive governs Hive-catalog tables, not the internal
-        // `_statistics_.rejected_records`. The helper's catalog guard
-        // means this call is a cheap no-op for Hive tables; the branch
-        // is defensive against future clusters that mount `_statistics_`
-        // through a Hive-like controller.
-        if (RejectedRecordsRowAccessPolicy.matches(tableName)) {
-            return RejectedRecordsRowAccessPolicy.buildPolicy(context, tableName);
-        }
-        return getRowAccessExpression(resourceOf(tableName.getCatalog(), tableName.getDb())
+    protected RangerAccessResourceImpl columnResource(TableName tableName, String column) {
+        return resourceOf(tableName.getCatalog(), tableName.getDb())
                 .setTable(tableName.getTbl())
-                .build(), context);
+                .setColumn(column)
+                .build();
     }
 
     @Override
