@@ -892,9 +892,11 @@ static void verify_if_expr_date_or_datetime() {
         // Mode 2: var/const non-null
         // Mode 3: const/const non-null
         // Mode 4: nullable lhs with unselected null at row 0 (verifies SIMD branch returns NullableColumn)
-        for (int mode : {0, 1, 2, 3, 4}) {
-            auto cond_col = BooleanColumn::create();
-            auto& cond_data = cond_col->get_data();
+        // Mode 5: nullable cond (has_null() == false) with non-canonical truthy bytes (0x02, 0x80, 0xFF)
+        // Mode 6: nullable cond (has_null() == true) with non-canonical truthy bytes (0x02, 0x80, 0xFF)
+        for (int mode : {0, 1, 2, 3, 4, 5, 6}) {
+            auto raw_cond_col = BooleanColumn::create();
+            auto& cond_data = raw_cond_col->get_data();
             cond_data.resize(n);
             for (int r = 0; r < n; ++r) {
                 if (mode == 4 && r == 0) {
@@ -902,6 +904,20 @@ static void verify_if_expr_date_or_datetime() {
                 } else {
                     cond_data[r] = ((r % 3) != 0) ? truthy_bytes[r % 3] : 0x00;
                 }
+            }
+            const auto expected_cond_data = cond_data;
+
+            ColumnPtr cond_col = raw_cond_col;
+            if (mode == 5 || mode == 6) {
+                auto cond_nulls = NullColumn::create(n, 0);
+                if (mode == 6) {
+                    for (int r = 0; r < n; r += 5) {
+                        cond_nulls->get_data()[r] = 1;
+                    }
+                }
+                auto nullable_cond = NullableColumn::create(std::move(raw_cond_col), std::move(cond_nulls));
+                nullable_cond->update_has_null();
+                cond_col = std::move(nullable_cond);
             }
 
             const CppType lhs_const_val = make_test_value_for_if<Type>(777);
@@ -963,7 +979,8 @@ static void verify_if_expr_date_or_datetime() {
             ColumnViewer<Type> viewer(res);
             for (int r = 0; r < n; ++r) {
                 ASSERT_FALSE(viewer.is_null(r)) << "mode=" << mode << " r=" << r;
-                const bool take_lhs = (cond_data[r] != 0);
+                const bool cond_is_null = (mode == 6) && ((r % 5) == 0);
+                const bool take_lhs = !cond_is_null && (expected_cond_data[r] != 0);
                 CppType expected;
                 if (take_lhs) {
                     expected = (mode == 1 || mode == 3) ? lhs_const_val : make_test_value_for_if<Type>(100 + r);
