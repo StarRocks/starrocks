@@ -76,9 +76,11 @@ CONF_mInt32(lake_scan_read_ahead_segments, "16");
 
 // The cache blocks the query scans of a node may have asked for ahead of their reads and not read yet, all scans
 // together: the blocks remote_prefetch_window_blocks lets each segment reader keep ahead, and those of the segments
-// lake_scan_read_ahead_segments starts early. While the node holds this many, a window asks for no more blocks and a
-// tablet scan starts no next segment early; their reads fetch what they need as they reach it. The blocks a read is
-// about to consume are always fetched. Concurrent scans may take it a little past the limit. 0 means no limit.
+// lake_scan_read_ahead_segments starts early. The windows reading ahead share it equally: each keeps at most the limit
+// divided by their number (at least one block), so a scan that starts later still gets its share. While the node holds
+// this many, a window asks for no more blocks and a tablet scan starts no next segment early; their reads fetch what
+// they need as they reach it. The blocks a read is about to consume are always fetched. Concurrent scans may take it a
+// little past the limit. 0 means no limit.
 CONF_mInt64(lake_scan_read_ahead_max_blocks, "2048");
 
 // Whether to use accurate row count for lake primary key tablets by reading delete vectors from object storage.
