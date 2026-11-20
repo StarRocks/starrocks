@@ -88,15 +88,15 @@ alter table api_shred execute add_files(location='oss://${oss_bucket}/test_icebe
 -- !result
 select count(*), count(v), min(id), max(id) from shred;
 -- result:
-276	273	1	405
+276	275	1	405
 -- !result
 select count(*), count(v), min(id), max(id) from noshred;
 -- result:
-276	273	1	405
+276	275	1	405
 -- !result
 select count(*), count(v), min(id), max(id) from api_shred;
 -- result:
-276	273	1	405
+276	275	1	405
 -- !result
 select id, cast(v as string) from shred where id < 100 order by id;
 -- result:
