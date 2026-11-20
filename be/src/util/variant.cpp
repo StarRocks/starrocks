@@ -21,6 +21,11 @@
 #include <boost/uuid/uuid_io.hpp>
 #include <charconv>
 #include <cstdint>
+<<<<<<< HEAD:be/src/util/variant.cpp
+=======
+#include <cstdlib>
+#include <ctime>
+>>>>>>> 62fefa0 ([BugFix][RB-1273] Keep runtime bitset filters off VARIANT integer widening and print shortest round-trip doubles (#83859)):be/src/types/variant.cpp
 #include <iomanip>
 #include <string_view>
 
@@ -718,16 +723,26 @@ static std::string float_to_json_string_impl(FloatType value) {
         return "null";
     }
 
-    char buffer[32];
-    int precision = std::is_same_v<FloatType, float> ? std::numeric_limits<float>::max_digits10
-                                                     : std::numeric_limits<double>::max_digits10;
-
-    auto [ptr, ec] = std::to_chars(buffer, buffer + sizeof(buffer), value, std::chars_format::general, precision);
-    if (ec != std::errc()) {
+    // Print the shortest digits that parse back to the same value: a fixed max_digits10 precision prints digits the
+    // value never had, such as 1.0000000000000001e+300 for 1e300. Choose between fixed and scientific notation as
+    // "%.{max_digits10}g" does, so 2^64 stays 1.8446744073709552e+19 and 100 stays 100.0.
+    constexpr int kMaxDigits = std::is_same_v<FloatType, float> ? std::numeric_limits<float>::max_digits10
+                                                                : std::numeric_limits<double>::max_digits10;
+    char buffer[64];
+    auto [sci_end, sci_ec] = std::to_chars(buffer, buffer + sizeof(buffer), value, std::chars_format::scientific);
+    if (sci_ec != std::errc()) {
         return "null";
     }
-
-    std::string result(buffer, ptr - buffer);
+    std::string result(buffer, sci_end - buffer);
+    const size_t e_pos = result.find('e');
+    const int exponent = e_pos == std::string::npos ? 0 : std::atoi(result.c_str() + e_pos + 1);
+    if (exponent >= -4 && exponent < kMaxDigits) {
+        auto [fixed_end, fixed_ec] = std::to_chars(buffer, buffer + sizeof(buffer), value, std::chars_format::fixed);
+        if (fixed_ec != std::errc()) {
+            return "null";
+        }
+        result.assign(buffer, fixed_end - buffer);
+    }
     if (result.find('.') == std::string::npos && result.find('e') == std::string::npos &&
         result.find('E') == std::string::npos) {
         result += ".0";
