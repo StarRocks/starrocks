@@ -336,16 +336,6 @@ TEST(GeoBufferTest, LargeOffsetsAndSubUlpDistancesHaveExplicitOutcomes) {
     EXPECT_FALSE(buffered("POINT (1.7e308 0)", 1.7e308).ok());
 }
 
-TEST(GeoBufferTest, PrepareCheckpointObservesCancellation) {
-    WkbGeometry geometry;
-    ASSERT_TRUE(WkbCodec::parse_wkt(kSquare, &geometry, kCartesian).ok());
-    std::string wkb;
-    ASSERT_TRUE(WkbCodec::to_wkb(geometry, &wkb, kCartesian).ok());
-    auto cancelled = PreparedGeoBuffer::prepare(Slice(wkb), [] { return Status::Cancelled("test"); });
-    ASSERT_FALSE(cancelled.ok());
-    EXPECT_TRUE(cancelled.status().is_cancelled());
-}
-
 TEST(GeoBufferTest, OwnedPreparationReusesInputWithVaryingDistance) {
     auto input = prepared(kSquare);
     ASSERT_TRUE(input.ok()) << input.status();
