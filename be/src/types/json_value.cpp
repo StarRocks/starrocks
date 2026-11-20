@@ -141,8 +141,7 @@ StatusOr<JsonValue> JsonValue::parse_json_text(const Slice& src) {
             }
         }
         vpack::Exception error(vpack::Exception::InternalError);
-        vpack::Options options = parse_options_from_config();
-        auto b = vpack::Parser::tryFromJson(text.get_data(), text.get_size(), &error, &options);
+        auto b = vpack::Parser::tryFromJson(text.get_data(), text.get_size(), &error);
         if (b == nullptr) {
             return fromVPackException(error);
         }
