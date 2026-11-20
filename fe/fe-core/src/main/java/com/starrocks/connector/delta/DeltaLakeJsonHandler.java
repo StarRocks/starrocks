@@ -34,8 +34,6 @@ import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.CloseableIterator;
 import io.delta.kernel.utils.FileStatus;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
 import java.io.BufferedReader;
@@ -72,24 +70,15 @@ public class DeltaLakeJsonHandler extends DefaultJsonHandler {
     public static List<JsonNode> readJsonFile(String filePath, Configuration hadoopConf) throws IOException {
         try (Timer ignored = Tracers.watchScope(Tracers.get(), EXTERNAL, "DeltaLakeJsonHandler.readParseJsonFile")) {
             Path readFilePath = new Path(filePath);
-            FileSystem fs = readFilePath.getFileSystem(hadoopConf);
-            FSDataInputStream stream = null;
-            BufferedReader fileReader;
-            try {
-                stream = fs.open(readFilePath);
-                fileReader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8));
-            } catch (Exception e) {
-                Utils.closeCloseablesSilently(stream); // close it avoid leaking resources
-                throw e;
+            try (BufferedReader fileReader = new BufferedReader(new InputStreamReader(
+                    readFilePath.getFileSystem(hadoopConf).open(readFilePath), StandardCharsets.UTF_8))) {
+                List<JsonNode> jsonNodeList = Lists.newArrayList();
+                String readline;
+                while ((readline = fileReader.readLine()) != null) {
+                    jsonNodeList.add(parseJsonToJsonNode(readline));
+                }
+                return jsonNodeList;
             }
-            List<JsonNode> jsonNodeList = Lists.newArrayList();
-            String readline;
-            while ((readline = fileReader.readLine()) != null) {
-                jsonNodeList.add(parseJsonToJsonNode(readline));
-            }
-
-            Utils.closeCloseables(fileReader);
-            return jsonNodeList;
         }
     }
 
