@@ -39,6 +39,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.ArrayList;
@@ -74,11 +75,12 @@ public class LoadProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
-        // merge load job from load and loadManager
+        // merge load job from load and loadManager. SHOW PROC needs OPERATE, so every job is listed, but only
+        // in full where the caller may read the rows it loads; with the rule off, every job in full, as before it.
         LinkedList<List<Comparable>> loadJobInfos = Lists.newLinkedList();
         loadJobInfos.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobInfosByDb(db.getId(), null,
                 false,
-                null));
+                null, ConnectContext.get()));
         int counter = 0;
         Iterator<List<Comparable>> iterator = loadJobInfos.descendingIterator();
         while (iterator.hasNext()) {

@@ -168,6 +168,26 @@ public class AddFilesProcedureTest {
     }
 
     @Test
+    public void testExecuteRefusesAnEncryptedTable(@Mocked IcebergHiveCatalog catalog) {
+        // add_files registers files written elsewhere, outside the sinks that give an encrypted table's files
+        // their per-file keys, so they would be committed with no key_metadata into a table declared encrypted.
+        Table table = Mockito.mock(Table.class);
+        Mockito.when(table.properties()).thenReturn(Map.of("encryption.key-id", "my-kms-key"));
+        Mockito.when(table.name()).thenReturn("db.enc_tbl");
+        Mockito.when(table.spec()).thenReturn(PartitionSpec.unpartitioned());
+        IcebergTableProcedureContext context = createMockContext(table, catalog);
+
+        Map<String, ConstantOperator> args = new HashMap<>();
+        args.put("location", ConstantOperator.createVarchar("/test/location"));
+        args.put("file_format", ConstantOperator.createVarchar("parquet"));
+
+        StarRocksConnectorException exception = assertThrows(StarRocksConnectorException.class,
+                () -> AddFilesProcedure.getInstance().execute(context, args));
+        assertTrue(exception.getMessage().contains("not supported on encrypted Iceberg table db.enc_tbl"),
+                exception.getMessage());
+    }
+
+    @Test
     public void testExecuteWithNonIdentityPartitioning(@Mocked IcebergHiveCatalog catalog) {
         AddFilesProcedure procedure = AddFilesProcedure.getInstance();
 

@@ -56,7 +56,6 @@ static void init_avro_value(std::string schema_path, AvroHelper& avro_helper) {
 
 TEST_F(AvroAddNumericColumnTest, test_add_number) {
     auto column = FixedLengthColumn<float>::create();
-    TypeDescriptor t(TYPE_FLOAT);
     std::string schema_path = "./be/test/formats/test_data/avro/single_float_schema.json";
     AvroHelper avro_helper;
     init_avro_value(schema_path, avro_helper);
@@ -68,7 +67,7 @@ TEST_F(AvroAddNumericColumnTest, test_add_number) {
 
     avro_value_set_float(&avro_helper.avro_val, 3.14);
 
-    auto st = add_numeric_column<float>(column.get(), t, "f_float", avro_helper.avro_val);
+    auto st = add_numeric_column<float>(column.get(), TYPE_FLOAT_DESC, "f_float", avro_helper.avro_val);
     ASSERT_TRUE(st.ok());
 
     ASSERT_EQ("[3.14]", column->debug_string());
@@ -76,7 +75,6 @@ TEST_F(AvroAddNumericColumnTest, test_add_number) {
 
 TEST_F(AvroAddNumericColumnTest, test_add_string) {
     auto column = FixedLengthColumn<float>::create();
-    TypeDescriptor t(TYPE_FLOAT);
     std::string schema_path = "./be/test/formats/test_data/avro/single_string_schema.json";
     AvroHelper avro_helper;
     init_avro_value(schema_path, avro_helper);
@@ -88,7 +86,7 @@ TEST_F(AvroAddNumericColumnTest, test_add_string) {
 
     avro_value_set_string(&avro_helper.avro_val, "3.14");
 
-    auto st = add_numeric_column<float>(column.get(), t, "f_string", avro_helper.avro_val);
+    auto st = add_numeric_column<float>(column.get(), TYPE_FLOAT_DESC, "f_string", avro_helper.avro_val);
     ASSERT_TRUE(st.ok());
 
     ASSERT_EQ("[3.14]", column->debug_string());
@@ -96,7 +94,6 @@ TEST_F(AvroAddNumericColumnTest, test_add_string) {
 
 TEST_F(AvroAddNumericColumnTest, test_add_boolean) {
     auto column = FixedLengthColumn<int8_t>::create();
-    TypeDescriptor t(TYPE_BOOLEAN);
     std::string schema_path = "./be/test/formats/test_data/avro/single_boolean_schema.json";
     AvroHelper avro_helper;
     init_avro_value(schema_path, avro_helper);
@@ -108,7 +105,7 @@ TEST_F(AvroAddNumericColumnTest, test_add_boolean) {
 
     avro_value_set_boolean(&avro_helper.avro_val, 1);
 
-    auto st = add_numeric_column<int8_t>(column.get(), t, "f_boolean", avro_helper.avro_val);
+    auto st = add_numeric_column<int8_t>(column.get(), TYPE_BOOLEAN_DESC, "f_boolean", avro_helper.avro_val);
     ASSERT_TRUE(st.ok());
 
     ASSERT_EQ("[1]", column->debug_string());
@@ -116,7 +113,6 @@ TEST_F(AvroAddNumericColumnTest, test_add_boolean) {
 
 TEST_F(AvroAddNumericColumnTest, test_add_invalid) {
     auto column = FixedLengthColumn<float>::create();
-    TypeDescriptor t(TYPE_FLOAT);
     std::string schema_path = "./be/test/exec/test_data/avro_scanner/avro_nest_schema.json";
     AvroHelper avro_helper;
     init_avro_value(schema_path, avro_helper);
@@ -141,13 +137,12 @@ TEST_F(AvroAddNumericColumnTest, test_add_invalid) {
         avro_value_set_double(&double_value, 1.234567);
     }
 
-    auto st = add_numeric_column<float>(column.get(), t, "fobject", avro_helper.avro_val);
+    auto st = add_numeric_column<float>(column.get(), TYPE_FLOAT_DESC, "fobject", avro_helper.avro_val);
     ASSERT_TRUE(st.is_invalid_argument());
 }
 
 TEST_F(AvroAddNumericColumnTest, test_add_int_overflow) {
     auto column = FixedLengthColumn<int32_t>::create();
-    TypeDescriptor t(TYPE_INT);
     std::string schema_path = "./be/test/formats/test_data/avro/single_long_schema.json";
     AvroHelper avro_helper;
     init_avro_value(schema_path, avro_helper);
@@ -159,13 +154,12 @@ TEST_F(AvroAddNumericColumnTest, test_add_int_overflow) {
 
     avro_value_set_long(&avro_helper.avro_val, 2147483648);
 
-    auto st = add_numeric_column<int32_t>(column.get(), t, "f_bigint", avro_helper.avro_val);
+    auto st = add_numeric_column<int32_t>(column.get(), TYPE_INT_DESC, "f_bigint", avro_helper.avro_val);
     ASSERT_TRUE(st.is_invalid_argument());
 }
 
 TEST_F(AvroAddNumericColumnTest, test_add_int64_lowerbound) {
     auto column = FixedLengthColumn<int64_t>::create();
-    TypeDescriptor t(TYPE_BIGINT);
     std::string schema_path = "./be/test/formats/test_data/avro/single_long_schema.json";
     AvroHelper avro_helper;
     init_avro_value(schema_path, avro_helper);
@@ -175,7 +169,7 @@ TEST_F(AvroAddNumericColumnTest, test_add_int64_lowerbound) {
         avro_value_decref(&avro_helper.avro_val);
     });
     avro_value_set_long(&avro_helper.avro_val, -9223372036854775808ULL);
-    auto st = add_numeric_column<int64_t>(column.get(), t, "f_int64", avro_helper.avro_val);
+    auto st = add_numeric_column<int64_t>(column.get(), TYPE_BIGINT_DESC, "f_int64", avro_helper.avro_val);
     ASSERT_TRUE(st.ok());
 
     ASSERT_EQ("[-9223372036854775808]", column->debug_string());
@@ -195,38 +189,34 @@ TEST_F(AvroAddNumericColumnTest, test_add_int) {
 
     {
         const auto column = FixedLengthColumn<int32_t>::create();
-        const TypeDescriptor desc(TYPE_INT);
-        const auto st = add_numeric_column<int32_t>(column.get(), desc, "f_int", avro_helper.avro_val);
+        const auto st = add_numeric_column<int32_t>(column.get(), TYPE_INT_DESC, "f_int", avro_helper.avro_val);
         ASSERT_TRUE(st.ok());
         ASSERT_EQ("[2147483647]", column->debug_string());
     }
 
     {
         const auto column = FixedLengthColumn<int16_t>::create();
-        const TypeDescriptor desc(TYPE_SMALLINT);
-        const auto st = add_numeric_column<int16_t>(column.get(), desc, "f_smallint", avro_helper.avro_val);
+        const auto st =
+                add_numeric_column<int16_t>(column.get(), TYPE_SMALLINT_DESC, "f_smallint", avro_helper.avro_val);
         ASSERT_TRUE(st.is_invalid_argument());
     }
 
     {
         const auto column = FixedLengthColumn<int64_t>::create();
-        const TypeDescriptor desc(TYPE_BIGINT);
-        const auto st = add_numeric_column<int64_t>(column.get(), desc, "f_bigint", avro_helper.avro_val);
+        const auto st = add_numeric_column<int64_t>(column.get(), TYPE_BIGINT_DESC, "f_bigint", avro_helper.avro_val);
         ASSERT_TRUE(st.ok());
         ASSERT_EQ("[2147483647]", column->debug_string());
     }
 
     {
         const auto column = FixedLengthColumn<double>::create();
-        const TypeDescriptor desc(TYPE_DOUBLE);
-        const auto st = add_numeric_column<double>(column.get(), desc, "f_double", avro_helper.avro_val);
+        const auto st = add_numeric_column<double>(column.get(), TYPE_DOUBLE_DESC, "f_double", avro_helper.avro_val);
         ASSERT_TRUE(st.ok());
     }
 
     {
         const auto column = FixedLengthColumn<float>::create();
-        const TypeDescriptor desc(TYPE_FLOAT);
-        const auto st = add_numeric_column<float>(column.get(), desc, "f_float", avro_helper.avro_val);
+        const auto st = add_numeric_column<float>(column.get(), TYPE_FLOAT_DESC, "f_float", avro_helper.avro_val);
         ASSERT_TRUE(st.ok());
     }
 }

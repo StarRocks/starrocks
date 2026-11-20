@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns a specified number of characters from the left side of a string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # left

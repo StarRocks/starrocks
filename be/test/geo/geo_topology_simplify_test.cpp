@@ -44,7 +44,7 @@ StatusOr<std::string> encoded(std::string_view wkt) {
 StatusOr<std::unique_ptr<PreparedGeoTopologySimplify>> prepared(std::string_view wkt,
                                                                 size_t work = kGeoTopologySimplifyMaxWork) {
     ASSIGN_OR_RETURN(auto wkb, encoded(wkt));
-    return PreparedGeoTopologySimplify::prepare(Slice(wkb), {}, work);
+    return PreparedGeoTopologySimplify::prepare(Slice(wkb), work);
 }
 StatusOr<WkbGeometry> simplified(std::string_view wkt, double tolerance) {
     ASSIGN_OR_RETURN(auto input, prepared(wkt));
@@ -412,23 +412,6 @@ TEST(GeoTopologySimplifyTest, LowerReaderLimitKeepsDefaultBehaviorAndBoundsDecla
     ASSERT_TRUE(malicious.ok());
     (*malicious)[5] = static_cast<char>(0xff);
     EXPECT_FALSE(WkbCodec::parse_wkb_bounded(Slice(*malicious), &output, 10, kCartesian).ok());
-}
-
-TEST(GeoTopologySimplifyTest, CheckpointPreservesCancellationAndMemoryErrors) {
-    auto source = encoded(kSquare);
-    ASSERT_TRUE(source.ok());
-    auto cancelled =
-            PreparedGeoTopologySimplify::prepare(Slice(*source), [] { return Status::Cancelled("cancel probe"); });
-    EXPECT_FALSE(cancelled.ok());
-    EXPECT_TRUE(cancelled.status().is_cancelled());
-    auto model = prepared(kSquare);
-    ASSERT_TRUE(model.ok());
-    auto memory = model.value()->simplify(1, [] { return Status::MemoryLimitExceeded("memory probe"); });
-    EXPECT_TRUE(memory.status().is_mem_limit_exceeded());
-    int checks = 0;
-    auto interrupted = model.value()->simplify(
-            1, [&] { return ++checks == 3 ? Status::Cancelled("middle probe") : Status::OK(); });
-    EXPECT_TRUE(interrupted.status().is_cancelled());
 }
 
 TEST(GeoTopologySimplifyTest, ImmutablePreparedInputSupportsConcurrentVaryingCalls) {

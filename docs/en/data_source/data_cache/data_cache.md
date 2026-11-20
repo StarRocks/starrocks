@@ -2,6 +2,7 @@
 sidebar_position: 10
 displayed_sidebar: docs
 description: "Understand the core principles of Data Cache and how to accelerate data queries with Data Cache."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Data Cache
@@ -169,7 +170,8 @@ You can check whether a query hits Data Cache by analyzing the following metrics
 
 - `DataCacheReadBytes`: the size of data that the system reads directly from the memory and disks.
 - `DataCacheWriteBytes`: the size of data loaded from the remote storage system to the memory and disks.
-- `BytesRead`: the total amount of data that is read, including data that the system reads from the remote storage system, and its memory and disks.
+- `AppIOBytesRead`: the total amount of data that is read, including data that the system reads from the remote storage system, and its memory and disks.
+- `FSIOBytesRead`: the size of data that the system reads from the remote storage system.
 
 Example 1: In this example, the system reads a large amount of data (7.65 GB) from the remote storage system and only a few data (518.73 MB) from the disks. This means that few Block Caches were hit.
 
@@ -191,12 +193,9 @@ Example 1: In this example, the system reads a large amount of data (7.65 GB) fr
  - DataCacheWriteTimer: 23.467ms
    - __MAX_OF_DataCacheWriteTimer: 62.280ms
    - __MIN_OF_DataCacheWriteTimer: 0ns
- - BufferUnplugCount: 15
-   - __MAX_OF_BufferUnplugCount: 2
-   - __MIN_OF_BufferUnplugCount: 0
- - BytesRead: 7.65 GB
-   - __MAX_OF_BytesRead: 64.39 MB
-   - __MIN_OF_BytesRead: 0.00
+ - FSIOBytesRead: 7.65 GB
+   - __MAX_OF_FSIOBytesRead: 64.39 MB
+   - __MIN_OF_FSIOBytesRead: 0.00
 ```
 
 Example 2: In this example, the system reads a large amount of data (46.08 GB) from data cache and no data from the remote storage system, which means it reads data only from Block Cache.
@@ -215,12 +214,9 @@ Table: lineitem
 - DataCacheWriteBytes: 0.00 
 - DataCacheWriteCounter: 0
 - DataCacheWriteTimer: 0ns
-- BufferUnplugCount: 1.231K (1231)
- - __MAX_OF_BufferUnplugCount: 81
- - __MIN_OF_BufferUnplugCount: 35
-- BytesRead: 46.08 GB
- - __MAX_OF_BytesRead: 194.99 MB
- - __MIN_OF_BytesRead: 81.25 MB
+- AppIOBytesRead: 46.08 GB
+ - __MAX_OF_AppIOBytesRead: 194.99 MB
+ - __MIN_OF_AppIOBytesRead: 81.25 MB
 ```
 
 ## I/O Adaptor
@@ -261,12 +257,12 @@ UPDATE be_configs SET VALUE="2T" WHERE NAME="datacache_disk_size";
 
 ### Automatic Scaling
 
-StarRocks currently supports automatic scaling of disk capacity. If you do not specify the cache disk path and capacity limit in the BE configuration, automatic scaling is enabled by default.
+StarRocks currently supports automatic scaling of disk capacity. Automatic scaling is enabled by default. If you specify `datacache_disk_size`, automatic scaling remains enabled and uses that value as the upper limit of the cache capacity.
 
 You can also enable automatic scaling by adding the following configuration item to the configuration file and restarting the BE or CN process:
 
 ```Plain
-datacache_auto_adjust_enable=true
+enable_datacache_disk_auto_adjust=true
 ```
 
 After automatic scaling is enabled:
@@ -315,10 +311,10 @@ You can configure Data Cache using the following system variables and parameters
 - [datacache_enable](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_enable)
 - [datacache_mem_size](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_mem_size)
 - [datacache_disk_size](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_size)
-- [datacache_auto_adjust_enable](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_auto_adjust_enable)
-- [datacache_disk_high_level](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_high_level)
-- [datacache_disk_safe_level](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_safe_level)
-- [datacache_disk_low_level](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_low_level)
+- [enable_datacache_disk_auto_adjust](../../administration/configuration/BE_parameters/BE_parameters.md#enable_datacache_disk_auto_adjust)
+- [disk_high_level](../../administration/configuration/BE_parameters/BE_parameters.md#disk_high_level)
+- [disk_safe_level](../../administration/configuration/BE_parameters/BE_parameters.md#disk_safe_level)
+- [disk_low_level](../../administration/configuration/BE_parameters/BE_parameters.md#disk_low_level)
 - [datacache_disk_adjust_interval_seconds](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_adjust_interval_seconds)
 - [datacache_disk_idle_seconds_for_expansion](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_idle_seconds_for_expansion)
 - [datacache_min_disk_quota_for_adjustment](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_min_disk_quota_for_adjustment)

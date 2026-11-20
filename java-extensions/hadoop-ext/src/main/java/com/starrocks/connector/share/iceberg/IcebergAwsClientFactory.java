@@ -21,6 +21,7 @@ import org.apache.iceberg.aws.s3.S3FileIOProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
@@ -266,13 +267,11 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
                                                                  boolean useWebIdentityProfile, String accessKey,
                                                                  String secretKey, String sessionToken) {
         if (useAWSSDKDefaultBehavior) {
-            return DefaultCredentialsProvider.builder().build();
+            return SharedProviders.DEFAULT;
         } else if (useInstanceProfile) {
-            return InstanceProfileCredentialsProvider.builder().build();
+            return SharedProviders.INSTANCE_PROFILE;
         } else if (useWebIdentityProfile) {
-            return WebIdentityTokenFileCredentialsProvider.builder()
-                    .asyncCredentialUpdateEnabled(true)
-                    .build();
+            return SharedProviders.WEB_IDENTITY;
         } else if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
             if (!sessionToken.isEmpty()) {
                 return StaticCredentialsProvider.create(AwsSessionCredentials.create(accessKey, secretKey, sessionToken));
@@ -282,7 +281,43 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         } else {
             LOG.info("User didn't configure any credentials in Iceberg catalog, " +
                     "we will use AWS DefaultCredentialsProvider instead");
-            return DefaultCredentialsProvider.builder().build();
+            return SharedProviders.DEFAULT;
+        }
+    }
+
+    // The machine-level providers resolve the same credentials for every client in the process, but each
+    // instance keeps its own cache: one per S3 client meant one IMDS (or token file) fetch per client, and
+    // a FileIO is built per table on the FE and per deserialized table on every BE metadata scanner, which
+    // overloaded IMDS on large tables. One instance per process, created on first use. An SDK client closes
+    // the provider it was given when it is closed, so the shared one is handed out behind a wrapper that is
+    // not closeable (see OverwriteAwsDefaultCredentialsProvider for the "Connection pool shut down" this
+    // otherwise causes).
+    private static final class SharedProviders {
+        private static final AwsCredentialsProvider DEFAULT =
+                new NonClosingCredentialsProvider(DefaultCredentialsProvider.builder().build());
+        private static final AwsCredentialsProvider INSTANCE_PROFILE =
+                new NonClosingCredentialsProvider(InstanceProfileCredentialsProvider.builder().build());
+        private static final AwsCredentialsProvider WEB_IDENTITY =
+                new NonClosingCredentialsProvider(WebIdentityTokenFileCredentialsProvider.builder()
+                        .asyncCredentialUpdateEnabled(true)
+                        .build());
+    }
+
+    static final class NonClosingCredentialsProvider implements AwsCredentialsProvider {
+        private final AwsCredentialsProvider delegate;
+
+        NonClosingCredentialsProvider(AwsCredentialsProvider delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public AwsCredentials resolveCredentials() {
+            return delegate.resolveCredentials();
+        }
+
+        @Override
+        public String toString() {
+            return delegate.toString();
         }
     }
 

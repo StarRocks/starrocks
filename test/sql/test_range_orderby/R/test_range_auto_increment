@@ -1,0 +1,243 @@
+-- name: test_range_auto_increment @cloud
+set enable_range_distribution = true;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (
+    k1 int not null,
+    k2 int not null,
+    id bigint not null auto_increment,
+    v int
+)
+duplicate key(k1, k2)
+order by(k1, k2)
+properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t (k1, k2, v) values (1, 1, 10), (1, 2, 20), (2, 1, 30), (2, 2, 40), (3, 1, 50), (3, 2, 60);
+-- result:
+-- !result
+create table ref (
+    k1 int,
+    k2 int,
+    id bigint,
+    v int
+)
+duplicate key(k1)
+distributed by hash(k1) buckets 1
+properties('replication_num' = '1');
+-- result:
+-- !result
+insert into ref select k1, k2, id, v from t;
+-- result:
+-- !result
+select count(*) from t where id > 0;
+-- result:
+6
+-- !result
+create materialized view mv_noid as select k2, k1, v from t;
+-- result:
+-- !result
+function: wait_materialized_view_finish()
+-- result:
+None
+-- !result
+select k2, k1, v from mv_noid [_SYNC_MV_] order by k2, k1;
+-- result:
+1	1	10
+1	2	30
+1	3	50
+2	1	20
+2	2	40
+2	3	60
+-- !result
+select count(*) from t join ref using (k1, k2, id, v);
+-- result:
+6
+-- !result
+select count(*) from t;
+-- result:
+6
+-- !result
+select count(*) from ref;
+-- result:
+6
+-- !result
+alter table t add rollup r_noid(k2, k1, v) order by (k2);
+-- result:
+-- !result
+function: wait_alter_table_finish("ROLLUP", 8)
+-- result:
+None
+-- !result
+select count(*) from t join ref using (k1, k2, id, v);
+-- result:
+6
+-- !result
+select count(*) from t;
+-- result:
+6
+-- !result
+select count(*) from ref;
+-- result:
+6
+-- !result
+insert into t (k1, k2, v) values (100, 100, 100);
+-- result:
+-- !result
+select count(*) from t where k1 = 100 and id > 0;
+-- result:
+1
+-- !result
+select count(distinct id) = count(*) from t;
+-- result:
+1
+-- !result
+select count(*) from mv_noid [_SYNC_MV_] where k1 = 100;
+-- result:
+1
+-- !result
+create materialized view mv_where as select k1, k2, id from t where id > 0;
+-- result:
+-- !result
+function: wait_materialized_view_finish()
+-- result:
+None
+-- !result
+insert into t (k1, k2, v) values (101, 101, 101), (102, 102, 102);
+-- result:
+-- !result
+select count(*) from mv_where [_SYNC_MV_];
+-- result:
+9
+-- !result
+select count(*) from t where id > 0;
+-- result:
+9
+-- !result
+create materialized view mv_sum as select k2, sum(id) from t group by k2;
+-- result:
+E: (1064, 'Column[mv_sum_id] of range synchronous materialized view[mv_sum] cannot be computed from AUTO_INCREMENT column[id]')
+-- !result
+truncate table ref;
+-- result:
+-- !result
+insert into ref select k1, k2, id, v from t;
+-- result:
+-- !result
+alter table t add rollup r_id(k2, id) order by (k2, id);
+-- result:
+-- !result
+function: wait_alter_table_finish("ROLLUP", 8)
+-- result:
+None
+-- !result
+select count(*) from t join ref using (k1, k2, id, v);
+-- result:
+9
+-- !result
+select count(*) from t;
+-- result:
+9
+-- !result
+select count(*) from ref;
+-- result:
+9
+-- !result
+select count(*) from r_id [_SYNC_MV_];
+-- result:
+9
+-- !result
+select count(*) from (select k2, id from r_id [_SYNC_MV_] except select k2, id from ref) a;
+-- result:
+0
+-- !result
+select count(*) from (select k2, id from ref except select k2, id from r_id [_SYNC_MV_]) b;
+-- result:
+0
+-- !result
+create table t2 (
+    k1 int not null,
+    k2 int not null,
+    id bigint not null auto_increment,
+    v int
+)
+duplicate key(k1, k2)
+order by(k1, k2)
+properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t2 (k1, k2, v) values (1, 1, 10), (1, 2, 20), (2, 1, 30), (2, 2, 40), (3, 1, 50), (3, 2, 60);
+-- result:
+-- !result
+create table ref2 (
+    k1 int,
+    k2 int,
+    id bigint,
+    v int
+)
+duplicate key(k1)
+distributed by hash(k1) buckets 1
+properties('replication_num' = '1');
+-- result:
+-- !result
+insert into ref2 select k1, k2, id, v from t2;
+-- result:
+-- !result
+alter table t2 order by (id, k1);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select count(*) from t2 join ref2 using (k1, k2, id, v);
+-- result:
+6
+-- !result
+select count(*) from t2;
+-- result:
+6
+-- !result
+select count(*) from ref2;
+-- result:
+6
+-- !result
+select sort_key from information_schema.tables_config
+    where table_schema = 'db_${uuid0}' and table_name = 't2';
+-- result:
+`id`, `k1`
+-- !result
+insert into t2 (k1, k2, v) values (100, 100, 100);
+-- result:
+-- !result
+select count(*) from t2 where k1 = 100 and id > 0;
+-- result:
+1
+-- !result
+select count(distinct id) = count(*) from t2;
+-- result:
+1
+-- !result
+create table t4 (
+    k1 int not null,
+    id bigint not null auto_increment,
+    v int
+)
+primary key(k1)
+order by(k1)
+properties('replication_num' = '1');
+-- result:
+-- !result
+alter table t4 order by (k1);
+-- result:
+E: (1064, 'Modifying sort key (ALTER TABLE ... ORDER BY) is not supported on a range-distribution PRIMARY KEY table with a non-key AUTO_INCREMENT column, because a partial update during the rewrite could give a new row a different AUTO_INCREMENT value in the rewritten data.')
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

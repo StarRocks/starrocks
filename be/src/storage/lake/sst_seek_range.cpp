@@ -40,6 +40,17 @@ bool SstSeekRange::full_contains(const PersistentIndexSstableRangePB& range) con
     return true;
 }
 
+bool SstSeekRange::contains(const Slice& key) const {
+    const auto* cmp = sstable::BytewiseComparator();
+    if (!seek_key.empty() && cmp->Compare(key, Slice(seek_key)) < 0) {
+        return false;
+    }
+    if (!stop_key.empty() && cmp->Compare(key, Slice(stop_key)) >= 0) {
+        return false;
+    }
+    return true;
+}
+
 SstSeekRange& SstSeekRange::operator&=(const SstSeekRange& rhs) {
     const auto* cmp = sstable::BytewiseComparator();
 
@@ -55,6 +66,17 @@ SstSeekRange& SstSeekRange::operator&=(const SstSeekRange& rhs) {
         stop_key = rhs.stop_key;
     }
     return *this;
+}
+
+bool sstable_has_usable_range(const PersistentIndexSstablePB& sst) {
+    return sst.has_range() && sst.range().has_start_key() && sst.range().has_end_key();
+}
+
+bool sstable_needs_rewrite(const PersistentIndexSstablePB& sst, const SstSeekRange* tablet_range) {
+    if (sst.shared() || !sstable_has_usable_range(sst)) {
+        return true;
+    }
+    return tablet_range != nullptr && !tablet_range->full_contains(sst.range());
 }
 
 } // namespace starrocks::lake

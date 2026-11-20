@@ -21,7 +21,9 @@ import org.apache.iceberg.aws.AwsClientProperties;
 import org.apache.iceberg.aws.s3.S3FileIOProperties;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import software.amazon.awssdk.identity.spi.IdentityProvider;
 import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
 
 import java.net.URI;
 import java.util.HashMap;
@@ -68,6 +70,30 @@ public class IcebergAwsClientFactoryTest {
         factory = new IcebergAwsClientFactory();
         factory.initialize(properties);
         Assertions.assertNotNull(factory.s3());
+    }
+
+    @Test
+    public void testMachineCredentialsProviderIsSharedAndNotClosedWithClient() {
+        for (String key : new String[] {CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE,
+                CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR}) {
+            Map<String, String> properties = new HashMap<>();
+            properties.put(key, "true");
+            properties.put(CloudConfigurationConstants.AWS_S3_REGION, "us-west-1");
+            IcebergAwsClientFactory f1 = new IcebergAwsClientFactory();
+            f1.initialize(properties);
+            IcebergAwsClientFactory f2 = new IcebergAwsClientFactory();
+            f2.initialize(properties);
+            S3Client c1 = f1.s3();
+            S3Client c2 = f2.s3();
+            IdentityProvider<?> p1 = c1.serviceClientConfiguration().credentialsProvider();
+            IdentityProvider<?> p2 = c2.serviceClientConfiguration().credentialsProvider();
+            // one provider (one IMDS credential cache) per process, not one per client
+            Assertions.assertSame(p1, p2, key);
+            // a client closes an AutoCloseable provider with itself, which would break every other client
+            Assertions.assertFalse(p1 instanceof AutoCloseable, key);
+            c1.close();
+            c2.close();
+        }
     }
 
     @Test

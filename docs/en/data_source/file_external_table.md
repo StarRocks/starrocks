@@ -2,6 +2,7 @@
 sidebar_position: 40
 displayed_sidebar: docs
 description: "File external table is a special type of external table."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # File external table

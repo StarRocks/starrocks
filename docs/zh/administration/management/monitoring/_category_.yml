@@ -3,5 +3,5 @@ label: 'Monitor and Alert'
 collapsible: true
 collapsed: true
 link:
-  id: monitoring
-  type: doc
+  type: generated-index
+  slug: /administration/management/monitoring

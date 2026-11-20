@@ -501,6 +501,17 @@ if [[ -d $TP_SOURCE_DIR/$RE2_SOURCE ]] ; then
     echo "Finished patching $RE2_SOURCE"
 fi
 
+# grpc patch to release cancelled reclaimers without memory pressure
+if [[ -d "$TP_SOURCE_DIR/$GRPC_SOURCE" ]] ; then
+    cd "$TP_SOURCE_DIR/$GRPC_SOURCE" || exit 1
+    if [ ! -f "$PATCHED_MARK.reclaimer_queue_leak" ] && [ "$GRPC_SOURCE" = "grpc-1.43.0" ]; then
+        apply_patch -p1 "$TP_PATCH_DIR/grpc-1.43.0-reclaimer-queue-leak.patch"
+        touch "$PATCHED_MARK.reclaimer_queue_leak"
+    fi
+    cd -
+    echo "Finished patching $GRPC_SOURCE"
+fi
+
 # libevent patch
 if [[ -d $TP_SOURCE_DIR/$LIBEVENT_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$LIBEVENT_SOURCE
@@ -737,6 +748,14 @@ if [[ -d $TP_SOURCE_DIR/$VPACK_SOURCE ]] ; then
         # cap parser nesting depth so deeply nested JSON fails instead of overflowing the stack
         apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0-nesting-depth.patch
         touch $PATCHED_MARK
+    fi
+    # Keep this fix independent of the mark on previously patched sources.
+    if [ ! -f $PATCHED_MARK.append_double_buffer ] && [ $VPACK_SOURCE = "velocypack-XYZ1.0" ]; then
+        # Earlier revisions included this fix in velocypack-XYZ1.0.patch.
+        if ! patch --dry-run --force --reverse -p1 < "$TP_PATCH_DIR/velocypack-XYZ1.0-append-double-buffer.patch" >/dev/null 2>&1; then
+            apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0-append-double-buffer.patch
+        fi
+        touch $PATCHED_MARK.append_double_buffer
     fi
     cd -
     echo "Finished patching $VPACK_SOURCE"

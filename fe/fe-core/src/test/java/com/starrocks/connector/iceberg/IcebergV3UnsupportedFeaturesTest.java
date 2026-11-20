@@ -32,6 +32,7 @@ import org.apache.iceberg.FileMetadata;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.encryption.PlaintextEncryptionManager;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.ContentFileUtil;
 import org.junit.jupiter.api.Assertions;
@@ -183,7 +184,7 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
     public void testUnsupportedIcebergTypeReturnsUnknown() {
         // Unsupported V3 types should degrade to UNKNOWN_TYPE, not throw.
         // The query analyzer will reject queries on these columns at analysis time.
-        Assertions.assertTrue(fromIcebergType(Types.GeometryType.crs84()).isUnknown());
+        Assertions.assertTrue(fromIcebergType(Types.GeometryType.of("IGNF:ATI")).isUnknown());
         Assertions.assertTrue(fromIcebergType(Types.FixedType.ofLength(16)).isUnknown());
     }
 
@@ -204,6 +205,8 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
         Assertions.assertTrue(fromIcebergType(Types.VariantType.get()).isVariantType());
         Assertions.assertEquals(PrimitiveType.GEOGRAPHY,
                 fromIcebergType(Types.GeographyType.crs84()).getPrimitiveType());
+        Assertions.assertEquals(PrimitiveType.GEOMETRY,
+                fromIcebergType(Types.GeometryType.crs84()).getPrimitiveType());
     }
 
     @Test
@@ -231,7 +234,7 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
     public void testToFullSchemasDegradesToUnknownForUnsupportedType() {
         // Unsupported V3 types should degrade to UNKNOWN_TYPE, not throw,
         // so that queries not involving the column still work.
-        Types.NestedField field = Types.NestedField.optional(1, "geo_col", Types.GeometryType.crs84());
+        Types.NestedField field = Types.NestedField.optional(1, "geo_col", Types.GeometryType.of("IGNF:ATI"));
         Schema schema = new Schema(field);
 
         List<Column> columns = IcebergApiConverter.toFullSchemas(schema);
@@ -291,17 +294,26 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
         encryptionProps.put("encryption.key-id", "my-key");
         when(encryptedTable.properties()).thenReturn(encryptionProps);
         when(encryptedTable.name()).thenReturn("encrypted_table");
+        // The catalog hands back a plaintext manager: it declares encryption but will not apply it.
+        // Reading Parquet Modular Encryption is now supported, so the refusal is no longer "the table
+        // is encrypted" -- it is "this catalog will not honour the encryption the table declares", and
+        // no key could be recovered for such a table.
+        when(encryptedTable.encryption()).thenReturn(PlaintextEncryptionManager.instance());
 
         StarRocksConnectorException ex = Assertions.assertThrows(
                 StarRocksConnectorException.class,
                 () -> IcebergMetadata.checkUnsupportedEncryption(encryptedTable));
-        Assertions.assertTrue(ex.getMessage().contains("encryption is not supported"),
-                "Expected encryption error, got: " + ex.getMessage());
+        Assertions.assertTrue(ex.getMessage().contains("cannot read"),
+                "Expected an unsupported-catalog error, got: " + ex.getMessage());
     }
 
     @Test
-    public void testEncryptionKeysInMetadataFailsFast() {
-        // Test the TableMetadata.encryptionKeys() check path (lines 692-694)
+    public void testEncryptionKeysInMetadataAloneNoLongerRefuses() {
+        // Behaviour change, asserted rather than dropped. This used to refuse any table whose metadata
+        // carried encryption keys. It no longer does: the KEK list is the normal state of a Standard/PME
+        // encrypted table, which is now readable, and Iceberg keys "is this table encrypted" off the
+        // encryption.key-id property (EncryptionUtil.createEncryptionManager returns the plaintext
+        // manager when it is absent), not off the presence of that list.
         org.apache.iceberg.BaseTable baseTable = mock(org.apache.iceberg.BaseTable.class);
         Map<String, String> emptyProps = new HashMap<>();
         when(baseTable.properties()).thenReturn(emptyProps);
@@ -314,11 +326,8 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
         when(metadata.encryptionKeys()).thenReturn(
                 Lists.newArrayList(mock(org.apache.iceberg.encryption.EncryptedKey.class)));
 
-        StarRocksConnectorException ex = Assertions.assertThrows(
-                StarRocksConnectorException.class,
-                () -> IcebergMetadata.checkUnsupportedEncryption(baseTable));
-        Assertions.assertTrue(ex.getMessage().contains("encryption is not supported"),
-                "Expected encryption error, got: " + ex.getMessage());
+        // No encryption.key-id on this table, so nothing to refuse.
+        IcebergMetadata.checkUnsupportedEncryption(baseTable);
     }
 
     @Test

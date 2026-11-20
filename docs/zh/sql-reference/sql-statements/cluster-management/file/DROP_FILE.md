@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP FILE 删除保存在数据库中的文件。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP FILE

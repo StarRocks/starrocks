@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns a JSON array of all materialized views that reference a given base table."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # inspect_related_mv

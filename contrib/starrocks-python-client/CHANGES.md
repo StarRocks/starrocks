@@ -3,14 +3,26 @@ Version history
 
 **Unreleased**
 
-- Stop autogenerate from resetting an unmanaged `bucket_size` on RANDOM-distributed tables to a hardcoded 4 GiB default; StarRocks 4.0+ defaults to 1 GiB (by @chris-celerdata)
+**1.3.5**
+
+- Stop autogenerate from resetting an unmanaged `bucket_size` on RANDOM-distributed tables to a hardcoded 4 GiB default; StarRocks 4.0+ defaults to 1 GiB (#80015 by @chris-celerdata)
 - Reflect `TIME` and `VARIANT` columns instead of returning `NullType` (#77259 by @rad-pat)
+- Reflect `colocate_with` for materialized views from the MV DDL (#77619 by @chris-celerdata)
+- Detect `run_mode` via the privilege-free `@@run_mode` variable, falling back to `ADMIN SHOW FRONTEND CONFIG` on older servers (#79873 by @chris-celerdata)
+- Support the `ON_CHANGE` refresh keyword that StarRocks 26.2 introduced for
+  base-table-change-triggered materialized views, which rejects the bare `ASYNC` it replaces.
+  Reflection accepts either spelling and keeps reporting `ASYNC`, Alembic autogenerate treats
+  them as the same refresh mode, and DDL is emitted with the keyword the connected server
+  accepts, so one metadata definition works against every supported release. The scheduled
+  mode (`ASYNC EVERY(...)`) is unchanged. (#81635)
 - Add the `starrocks_temp_view_schema` Alembic option (`context.configure(...)`) to designate
   the schema in which the transient view used to canonicalize view/MV definitions is created.
   Lets a locked-down migration user be granted the required privileges on a single schema
   (e.g. the same one as `version_table_schema`) instead of on every schema that holds a view.
+  (#77276 by @chris-celerdata)
 - Coalesce multiple `ADD`/`DROP COLUMN` autogenerate operations on a table into a single `ALTER TABLE` statement via the `combine_column_alters` rewriter, avoiding StarRocks in-progress schema-change failures (#78647 by @chris-celerdata)
 - Add opt-in `starrocks_wait_for_schema_change` to block until a column schema-change job reaches a terminal state (#78647 by @chris-celerdata)
+- Support RANGE distribution (StarRocks 4.1+, opt-in via `enable_range_distribution` on 4.1; the shared-data default from #76543): reflect it as `RANGE`, accept `starrocks_distributed_by="RANGE"` (compiled by omitting `DISTRIBUTED BY`), and stop autogenerate from raising on RANGE-distributed tables whose metadata leaves `DISTRIBUTED BY` unset (#80014 by @chris-celerdata)
 
 **1.3.4**
 

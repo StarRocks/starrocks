@@ -26,7 +26,19 @@ add_executable(orchestration_test
     fragment_mgr_test.cpp
     orchestration_metrics_test.cpp
     query_orchestrator_test.cpp
+    runtime_filter_delivery_test.cpp
+    runtime_filter_worker_test.cpp
     stream_load_orchestrator_test.cpp
 )
 target_link_libraries(orchestration_test Orchestration ${TEST_LINK_LIBS})
 set_target_properties(orchestration_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+
+# fragment_mgr_test.cpp supplies no-op PlanFragmentExecutor methods. Keep these
+# cancellation regressions separate so they link the real executor implementation.
+add_executable(stream_load_cancel_test
+    ${BE_TEST_MACOS_LINK_STUBS}
+    orchestration_test_main.cpp
+    stream_load_cancel_test.cpp
+)
+target_link_libraries(stream_load_cancel_test Orchestration ${TEST_LINK_LIBS})
+set_target_properties(stream_load_cancel_test PROPERTIES COMPILE_FLAGS "-fno-access-control")

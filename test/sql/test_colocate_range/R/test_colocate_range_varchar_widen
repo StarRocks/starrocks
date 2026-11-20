@@ -1,0 +1,61 @@
+-- name: test_colocate_range_varchar_widen @cloud
+set enable_range_distribution = true;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t_all (k1 varchar(10) not null, k2 varchar(10) not null, p int not null, v int)
+    duplicate key(k1, k2, p)
+    partition by range(p) (partition p1 values less than ('100'), partition p2 values less than ('200'))
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_all_${uuid0}');
+-- result:
+-- !result
+create table t_prefix (k1 varchar(10) not null, k2 varchar(10) not null, v int)
+    duplicate key(k1, k2)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_prefix_${uuid0}:k1');
+-- result:
+-- !result
+alter table t_all modify column k1 varchar(20) key not null;
+-- result:
+E: (1064, 'Can not modify colocate column[k1] for colocate table. index[t_all]')
+-- !result
+alter table t_prefix modify column k1 varchar(20) key not null;
+-- result:
+E: (1064, 'Can not modify colocate column[k1] for colocate table. index[t_prefix]')
+-- !result
+alter table t_prefix modify column k2 varchar(20) key not null;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select character_maximum_length from information_schema.columns where table_schema = 'db_${uuid0}' and table_name = 't_prefix' and column_name = 'k2';
+-- result:
+20
+-- !result
+alter table t_all add partition p3 values less than ('300');
+-- result:
+-- !result
+insert into t_all values ('a', 'b', 250, 1);
+-- result:
+-- !result
+select count(*) from t_all where p = 250;
+-- result:
+1
+-- !result
+drop table t_all;
+-- result:
+-- !result
+drop table t_prefix;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

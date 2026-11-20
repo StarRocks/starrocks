@@ -74,6 +74,12 @@ public class InvalidOlapTableStateException extends DdlException {
                         FeConstants.DOCUMENT_SHOW_ALTER,
                         FeConstants.DOCUMENT_SHOW_ALTER_MATERIALIZED_VIEW);
                 break;
+            case TABLET_RESHARD:
+                errorPrompt = String.format("A tablet split or merge is in progress on the table %s. " +
+                                "Please wait until the current operation completes. " +
+                                "To check the status of the operation, query information_schema.tablet_reshard_jobs",
+                        table);
+                break;
             default:
                 errorPrompt = String.format("The table %s is currently in state %s", table, state.name());
                 break;

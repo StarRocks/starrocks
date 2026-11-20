@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts the first letter of each word in a string to uppercase and the remaining characters to lowercase."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # initcap

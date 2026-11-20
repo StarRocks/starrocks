@@ -17,12 +17,21 @@ package com.starrocks.common.util;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.InternalErrorCode;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetailQueue;
+import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.SqlParser;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.logging.log4j.core.impl.ThrowableProxy;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -130,5 +139,114 @@ public class LogUtilTest {
         String output = LogUtil.getUnwoundExceptionMessage(circular);
         Assertions.assertTrue(output.contains("circular"));
         Assertions.assertFalse(output.contains("\n")); // only one layer, not an infinite chain
+    }
+
+    @Test
+    public void testDesensitizeDropsMessagesKeepsTypesAndFrames() {
+        boolean prev = Config.enable_sql_desensitize_in_log;
+        Exception e = new IllegalStateException("outer SECRET", new DdlException("inner SECRET"));
+        try {
+            Config.enable_sql_desensitize_in_log = false;
+            Assertions.assertSame(e, LogUtil.desensitize(e));
+            Assertions.assertEquals("SECRET", LogUtil.desensitizeText("SECRET"));
+
+            Config.enable_sql_desensitize_in_log = true;
+            Assertions.assertFalse(LogUtil.desensitizeText("SECRET").contains("SECRET"));
+            Throwable d = LogUtil.desensitize(e);
+            // log4j renders a throwable from its class and message, so the original type must be in the message
+            Assertions.assertEquals(IllegalStateException.class.getName(), d.getMessage());
+            Assertions.assertArrayEquals(e.getStackTrace(), d.getStackTrace());
+            Assertions.assertEquals(DdlException.class.getName(), d.getCause().getMessage());
+            String rendered = new ThrowableProxy(d).getExtendedStackTraceAsString();
+            Assertions.assertTrue(rendered.contains(IllegalStateException.class.getName()), rendered);
+            Assertions.assertTrue(rendered.contains(DdlException.class.getName()), rendered);
+            Assertions.assertFalse(rendered.contains("SECRET"), rendered);
+        } finally {
+            Config.enable_sql_desensitize_in_log = prev;
+        }
+    }
+
+    @Test
+    public void testDesensitizeKeepsSuppressed() {
+        boolean prev = Config.enable_sql_desensitize_in_log;
+        // e.g. a planning failure carrying the lock re-acquire timeout; the suppressed one refers back to it
+        Exception e = new IllegalStateException("plan SECRET");
+        Exception suppressed = new IllegalArgumentException("lock SECRET");
+        e.addSuppressed(suppressed);
+        suppressed.initCause(e);
+        try {
+            Config.enable_sql_desensitize_in_log = true;
+            Throwable d = LogUtil.desensitize(e);
+            Assertions.assertEquals(1, d.getSuppressed().length);
+            Throwable s = d.getSuppressed()[0];
+            Assertions.assertEquals(IllegalArgumentException.class.getName(), s.getMessage());
+            Assertions.assertArrayEquals(suppressed.getStackTrace(), s.getStackTrace());
+            Assertions.assertNull(s.getCause());
+            String rendered = new ThrowableProxy(d).getExtendedStackTraceAsString();
+            Assertions.assertTrue(rendered.contains("Suppressed:"), rendered);
+            Assertions.assertTrue(rendered.contains(IllegalArgumentException.class.getName()), rendered);
+            Assertions.assertFalse(rendered.contains("SECRET"), rendered);
+        } finally {
+            Config.enable_sql_desensitize_in_log = prev;
+        }
+    }
+
+    @Test
+    public void testDesensitizeMessageKeepsTypeAndErrorCode() {
+        boolean prev = Config.enable_sql_desensitize_in_log;
+        StarRocksException internal = new StarRocksException(InternalErrorCode.REPLICA_FEW_ERR, "tablet SECRET");
+        StarRocksException coded = new StarRocksException(ErrorCode.ERR_BAD_TABLE_ERROR, "SECRET_T");
+        ErrorReportException reported = ErrorReportException.report(ErrorCode.ERR_BAD_TABLE_ERROR, "SECRET_T");
+        Exception plain = new IllegalStateException("plain SECRET");
+        try {
+            Config.enable_sql_desensitize_in_log = false;
+            Assertions.assertEquals("tablet SECRET", LogUtil.desensitizeMessage(internal));
+            Assertions.assertEquals(reported.getMessage(), LogUtil.desensitizeMessage(reported));
+            Assertions.assertEquals(plain.toString(), LogUtil.desensitizeToString(plain));
+
+            Config.enable_sql_desensitize_in_log = true;
+            Assertions.assertEquals(StarRocksException.class.getName() + "(REPLICA_FEW_ERR): <desensitized>",
+                    LogUtil.desensitizeMessage(internal));
+            Assertions.assertEquals(StarRocksException.class.getName() + "(ERR_BAD_TABLE_ERROR): <desensitized>",
+                    LogUtil.desensitizeMessage(coded));
+            Assertions.assertEquals(ErrorReportException.class.getName() + "(ERR_BAD_TABLE_ERROR): <desensitized>",
+                    LogUtil.desensitizeMessage(reported));
+            Assertions.assertEquals(IllegalStateException.class.getName() + ": <desensitized>",
+                    LogUtil.desensitizeMessage(plain));
+            Assertions.assertEquals(IllegalStateException.class.getName() + ": <desensitized>",
+                    LogUtil.desensitizeToString(plain));
+        } finally {
+            Config.enable_sql_desensitize_in_log = prev;
+        }
+    }
+
+    @Test
+    public void testRedactSqlForLog() throws Exception {
+        boolean prev = Config.enable_sql_desensitize_in_log;
+        String sql = "SELECT * FROM FILES(\"path\"=\"s3://b/f.parquet\", \"aws.s3.secret_key\"=\"SK_SECRET\") "
+                + "WHERE c = 'LIT_SECRET'";
+        StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        try {
+            Config.enable_sql_desensitize_in_log = false;
+            Assertions.assertEquals(SqlCredentialRedactor.redact(sql), LogUtil.redactSqlForLog(sql, stmt));
+            Assertions.assertEquals(sql, LogUtil.desensitizeSql(sql, stmt));
+
+            Config.enable_sql_desensitize_in_log = true;
+            String logged = LogUtil.redactSqlForLog(sql, stmt);
+            Assertions.assertTrue(logged.contains("= ?"), logged);
+            Assertions.assertFalse(logged.contains("SECRET"), logged);
+            Assertions.assertEquals("<desensitized>", LogUtil.redactSqlForLog(sql, null));
+
+            // formatting runs on failure paths and must not replace the original failure with its own
+            new MockUp<AstToSQLBuilder>() {
+                @Mock
+                public String toDesensitizedSQL(StatementBase statement) {
+                    throw new AssertionError("format failed");
+                }
+            };
+            Assertions.assertEquals("<desensitized>", LogUtil.redactSqlForLog(sql, stmt));
+        } finally {
+            Config.enable_sql_desensitize_in_log = prev;
+        }
     }
 }

@@ -48,7 +48,16 @@ public class IcebergMetadataScannerFactory implements ScannerFactory {
                     loadClass = "com.starrocks.connector.iceberg.IcebergManifestsTableScanner";
                     break;
                 case "files":
+                case "all_data_files":
+                case "all_delete_files":
                     loadClass = "com.starrocks.connector.iceberg.IcebergFilesTableScanner";
+                    break;
+                case "entries":
+                case "all_entries":
+                    loadClass = "com.starrocks.connector.iceberg.IcebergEntriesTableScanner";
+                    break;
+                case "all_manifests":
+                    loadClass = "com.starrocks.connector.iceberg.IcebergAllManifestsTableScanner";
                     break;
                 case "partitions":
                     loadClass = "com.starrocks.connector.iceberg.IcebergPartitionsTableScanner";

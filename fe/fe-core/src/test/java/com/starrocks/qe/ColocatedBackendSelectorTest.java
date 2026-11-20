@@ -373,8 +373,10 @@ public class ColocatedBackendSelectorTest {
                 4L, allNodes.get(4L)
         );
 
+        // CIRCULAR resolves the backup through the overridden selectBackupWorker(long)
         WorkerProvider workerProvider =
-                new DefaultSharedDataWorkerProvider(allNodes, availableNodes, WarehouseManager.DEFAULT_RESOURCE) {
+                new DefaultSharedDataWorkerProvider(allNodes, availableNodes, WarehouseManager.DEFAULT_RESOURCE,
+                        SessionVariableConstants.BlacklistBackupRoutingPolicy.CIRCULAR) {
                     @Override
                     public long selectBackupWorker(long workerId) {
                         // Map unavailable nodes to available backup nodes
@@ -499,8 +501,9 @@ public class ColocatedBackendSelectorTest {
         ImmutableMap<Long, ComputeNode> availableNodes = ImmutableMap.of();
 
         // Create a mock WorkerProvider that supports backup node selection but returns no backup
+        // CIRCULAR resolves the backup through the overridden selectBackupWorker(long)
         WorkerProvider noBackupWorkerProvider = new DefaultSharedDataWorkerProvider(allNodes, availableNodes,
-                WarehouseManager.DEFAULT_RESOURCE) {
+                WarehouseManager.DEFAULT_RESOURCE, SessionVariableConstants.BlacklistBackupRoutingPolicy.CIRCULAR) {
             @Override
             public long selectBackupWorker(long workerId) {
                 // No backup available

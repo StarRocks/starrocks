@@ -118,13 +118,30 @@ TEST_F(ExecFactoryTest, test_file_scan_node_mapping) {
     assert_node_instance<ConnectorScanNode>(make_file_scan_node(true));
 }
 
-TEST_F(ExecFactoryTest, test_unsupported_node_type) {
-    TPlanNode tnode = make_base_plan_node(TPlanNodeType::CSV_SCAN_NODE);
+TEST_F(ExecFactoryTest, grouped_lake_node_preserves_type_and_is_collected) {
+    auto tnode = make_base_plan_node(TPlanNodeType::LAKE_GROUPED_SCAN_NODE);
+    TLakeScanNode lake;
+    lake.__set_tuple_id(_tuple_id);
+    tnode.__set_lake_scan_node(lake);
     ExecNode* node = nullptr;
-    Status st = ExecFactory::create_vectorized_node(&_runtime_state, &_object_pool, tnode, *_desc_tbl, &node);
-    ASSERT_ERROR(st);
-    ASSERT_TRUE(st.is_internal_error());
-    ASSERT_NE(st.message().find("Vectorized engine not support node"), std::string::npos);
+    ASSERT_OK(ExecFactory::create_vectorized_node(&_runtime_state, &_object_pool, tnode, *_desc_tbl, &node));
+    ASSERT_NE(nullptr, dynamic_cast<ConnectorScanNode*>(node));
+    EXPECT_EQ(TPlanNodeType::LAKE_GROUPED_SCAN_NODE, node->type());
+    std::vector<ExecNode*> scans;
+    node->collect_scan_nodes(&scans);
+    ASSERT_EQ(1, scans.size());
+    EXPECT_EQ(node, scans[0]);
+}
+
+TEST_F(ExecFactoryTest, test_unsupported_node_type) {
+    for (auto type : {TPlanNodeType::CSV_SCAN_NODE, static_cast<TPlanNodeType::type>(999)}) {
+        TPlanNode tnode = make_base_plan_node(type);
+        ExecNode* node = nullptr;
+        Status st = ExecFactory::create_vectorized_node(&_runtime_state, &_object_pool, tnode, *_desc_tbl, &node);
+        ASSERT_ERROR(st);
+        ASSERT_TRUE(st.is_internal_error());
+        ASSERT_NE(st.message().find("Vectorized engine not support node"), std::string::npos);
+    }
 }
 
 TEST_F(ExecFactoryTest, test_stream_scan_node_rejected) {

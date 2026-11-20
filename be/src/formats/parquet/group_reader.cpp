@@ -20,6 +20,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <unordered_set>
 #include <utility>
 
@@ -58,6 +59,7 @@ namespace starrocks::parquet {
 GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, SkipRowsContextPtr skip_rows_ctx,
                          int64_t row_group_first_row)
         : _row_group_first_row(row_group_first_row), _skip_rows_ctx(std::move(skip_rows_ctx)), _param(param) {
+    _row_group_number = row_group_number;
     _row_group_metadata = &_param.file_metadata->t_metadata().row_groups[row_group_number];
     _column_materializer = std::make_unique<ColumnMaterializer>(_param, &_column_readers);
     _variant = std::make_unique<VariantProjectionHandler>(this, _param, _row_group_metadata);
@@ -311,9 +313,13 @@ StatusOr<bool> GroupReader::_evaluate_compound_predicates(const Range<uint64_t>&
 
     // Append side columns to active_chunk so compound conjuncts referencing
     // partition / not-existed / extended slots can be evaluated correctly.
+    // get_next() appends them again for the output, so this evaluation-only
+    // copy must not consume the file min/max values the output still has to emit.
     if (state.active_chunk->num_rows() > 0) {
-        RETURN_IF_ERROR(
-                _param.scan_ctx->append_side_columns_to_chunk(&state.active_chunk, state.active_chunk->num_rows()));
+        auto saved_min_max_value_cursors = _param.scan_ctx->min_max_value_cursors;
+        Status st = _param.scan_ctx->append_side_columns_to_chunk(&state.active_chunk, state.active_chunk->num_rows());
+        _param.scan_ctx->min_max_value_cursors = std::move(saved_min_max_value_cursors);
+        RETURN_IF_ERROR(st);
     }
 
     // Finalize all active columns to logical form before compound conjunct eval.
@@ -586,10 +592,14 @@ Status GroupReader::_create_column_readers() {
     opts.stats = _param.stats;
     opts.file = _param.file;
     opts.row_group_meta = _row_group_metadata;
+    opts.row_group_ordinal = _row_group_number;
     opts.first_row_index = _row_group_first_row;
     opts.modification_time = _param.modification_time;
     opts.file_size = _param.file_size;
     opts.datacache_options = _param.datacache_options;
+    // PME: the per-file DEK is not cached with the footer, so it has to reach the decryptor
+    // from the scan range on every scan.
+    opts.parquet_encryption_info = _param.scan_ctx->parquet_encryption_info;
 
     // Setup variant handler (idempotent: no-op when no variant virtual columns exist).
     RETURN_IF_ERROR(_variant->setup_readers());
@@ -697,6 +707,24 @@ Status GroupReader::_create_column_readers() {
     return Status::OK();
 }
 
+namespace {
+// The FE sends the single path /<col>/OFFSET when a column is used only through its length (cardinality,
+// array_length); any other use of the column adds paths, which the FE merges into a wider one.
+bool is_offsets_only_access(const FormatScanContext* scan_ctx, std::string_view col_name) {
+    if (scan_ctx == nullptr) {
+        return false;
+    }
+    for (const auto& path : scan_ctx->column_access_paths) {
+        if (path == nullptr || !path->is_root() || path->path() != col_name) {
+            continue;
+        }
+        return path->children().size() == 1 && path->children()[0]->is_offset() &&
+               path->children()[0]->children().empty();
+    }
+    return false;
+}
+} // namespace
+
 StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderParam::Column& column) {
     std::unique_ptr<ColumnReader> column_reader = nullptr;
     const auto* schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.idx_in_parquet);
@@ -712,10 +740,16 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderPa
             ASSIGN_OR_RETURN(column_reader, ColumnReaderFactory::create_variant_column_reader(_column_reader_opts,
                                                                                               schema_node, hints));
         } else {
-            // t_lake_schema_field is nullptr outside the Iceberg (field id) path.
-            ASSIGN_OR_RETURN(column_reader,
-                             ColumnReaderFactory::create(_column_reader_opts, schema_node, column.slot_type(),
-                                                         column.t_lake_schema_field));
+            if (schema_node != nullptr && is_offsets_only_access(_param.scan_ctx, column.slot_desc->col_name())) {
+                ASSIGN_OR_RETURN(column_reader, ColumnReaderFactory::create_array_offsets_only(
+                                                        _column_reader_opts, schema_node, column.slot_type()));
+            }
+            if (column_reader == nullptr) {
+                // t_lake_schema_field is nullptr outside the Iceberg (field id) path.
+                ASSIGN_OR_RETURN(column_reader,
+                                 ColumnReaderFactory::create(_column_reader_opts, schema_node, column.slot_type(),
+                                                             column.t_lake_schema_field));
+            }
         }
         auto* global_dictmaps = _param.scan_ctx->global_dictmaps;
         if (global_dictmaps->contains(column.slot_id())) {

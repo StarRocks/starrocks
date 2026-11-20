@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
@@ -143,6 +144,9 @@ public class DropPartitionTest {
         partition = table.getPartition("p20210202");
         Assertions.assertFalse(replicaList.isEmpty());
         Assertions.assertNull(partition);
+        // a user's force drop keeps nothing: the next recycle bin pass erases the partition
+        Assertions.assertEquals(0,
+                GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionInfo(partitionId).getRetentionPeriod());
         String recoverPartitionSql = "recover partition p20210202 from test.tbl1";
         RecoverPartitionStmt recoverPartitionStmt =
                 (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(recoverPartitionSql, connectContext);
@@ -311,5 +315,48 @@ public class DropPartitionTest {
         Assertions.assertFalse(GlobalStateMgr.getCurrentState().getRecycleBin().getPartitions(table.getId()).isEmpty());
         // but partition has been removed from inner state
         Assertions.assertNull(partition);
+    }
+
+    @Test
+    public void testTTLDropPartitionKeepsTabletsForRetentionPeriod() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+        Partition partition = table.getPartition("p20210201");
+        long partitionId = partition.getId();
+        long tabletId = partition.getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().get(0).getId();
+
+        // every partition of tbl1 is outside this condition
+        String alterSql = "alter table test.tbl1 set ('partition_retention_condition' = " +
+                "'d1 >= current_date() - interval 1 month')";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
+        DDLStmtExecutor.execute(alterTableStmt, connectContext);
+        GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler()
+                .executePartitionTTLForTable(db.getId(), table.getId());
+        Assertions.assertNull(table.getPartition("p20210201"));
+
+        // the partition is non-recoverable, but kept for partition_recycle_retention_period_secs
+        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
+        RecyclePartitionInfo recycled = recycleBin.getRecyclePartitionInfo(partitionId);
+        Assertions.assertNotNull(recycled);
+        Assertions.assertFalse(recycled.isRecoverable());
+        Assertions.assertEquals(Config.partition_recycle_retention_period_secs, recycled.getRetentionPeriod());
+        String recoverPartitionSql = "recover partition p20210201 from test.tbl1";
+        RecoverPartitionStmt recoverPartitionStmt =
+                (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(recoverPartitionSql, connectContext);
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "No partition named 'p20210201' in recycle bin that belongs to table 'tbl1'",
+                () -> GlobalStateMgr.getCurrentState().getLocalMetastore().recoverPartition(recoverPartitionStmt));
+
+        // a recycle bin pass within the retention period keeps the tablets
+        long now = System.currentTimeMillis();
+        recycleBin.erasePartition(now);
+        Assertions.assertNotNull(recycleBin.getRecyclePartitionInfo(partitionId));
+        Assertions.assertFalse(
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId).isEmpty());
+
+        // once the retention period has passed, the partition is erased
+        waitPartitionClearFinished(partitionId, now + recycled.getRetentionPeriod() * 1000L + 1000L);
+        Assertions.assertTrue(
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId).isEmpty());
     }
 }

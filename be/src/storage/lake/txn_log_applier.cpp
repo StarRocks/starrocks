@@ -35,6 +35,7 @@
 #include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/primary_key_manager.h"
+#include "storage/lake/replication_schema_utils.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
@@ -454,6 +455,10 @@ public:
             // then we can retry again.
             // 1. unload index first
             _index_entry->value().unload();
+            // The entry outlives this publish when another holder still references it, so it must not stay
+            // charged for the memory the unload just freed.
+            _tablet.primary_key_mgr()->index_cache().update_object_size(_index_entry,
+                                                                        _index_entry->value().memory_usage());
             // 2. and then release guard
             _guard.reset(nullptr);
             // 3. remove index from cache to save resource
@@ -485,6 +490,9 @@ public:
     }
 
     Status apply(const TxnLogPB& log) override {
+        if (log.has_op_replication()) {
+            RETURN_IF_ERROR(validate_normalized_replication_schema(log.op_replication(), *_metadata));
+        }
         // Tablet id check for cross publish
         if (log.tablet_id() != _metadata->id()) {
             return Status::InternalError("Tablet id in txn log and metadata are not the same");
@@ -647,10 +655,11 @@ private:
     Status recover() {
         TRACE_COUNTER_SCOPE_LATENCY_US("primary_key_recover");
         LOG(INFO) << "Primary Key recover begin, tablet_id: " << _tablet.id() << " base_ver: " << _base_version;
-        // release and remove index entry's reference
-        _tablet.primary_key_mgr()->release_primary_index_cache(_index_entry);
-        _guard.reset(nullptr);
-        _index_entry = nullptr;
+        // Unload the index before letting go of it, as a failed publish does: this publish may already
+        // have written to it, and recovery cannot remove it from the cache while another holder still
+        // references it. The retry must then reload the index from the metadata instead of working on
+        // top of this attempt's writes.
+        handle_failure();
         // rebuild delvec and pk index
         LakePrimaryKeyRecover recover(&_builder, &_tablet, _metadata);
         RETURN_IF_ERROR(recover.recover());
@@ -950,6 +959,10 @@ private:
                 _is_lake_replication = true;
 
                 const auto& copied_tablet_meta = op_replication.tablet_metadata();
+                if (op_replication.normalize_rowset_schema()) {
+                    *_metadata->mutable_rowset_to_schema() = copied_tablet_meta.rowset_to_schema();
+                    *_metadata->mutable_historical_schemas() = copied_tablet_meta.historical_schemas();
+                }
                 _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
                 _metadata->mutable_dcg_meta()->CopyFrom(copied_tablet_meta.dcg_meta());
                 _metadata->mutable_sstable_meta()->CopyFrom(copied_tablet_meta.sstable_meta());
@@ -967,7 +980,7 @@ private:
                 }
                 collect_rowset_referenced_files(_metadata->rowsets(), &new_referenced_rowset_files);
                 for (auto&& old_rowset : old_rowsets) {
-                    if (new_rowset_ids.contains(old_rowset.id())) {
+                    if (!op_replication.normalize_rowset_schema() && new_rowset_ids.contains(old_rowset.id())) {
                         continue;
                     }
                     add_unreferenced_rowset_files_to_compaction_inputs(
@@ -1096,6 +1109,9 @@ public:
     }
 
     Status apply(const TxnLogPB& log) override {
+        if (log.has_op_replication()) {
+            RETURN_IF_ERROR(validate_normalized_replication_schema(log.op_replication(), *_metadata));
+        }
         // Tablet id check for cross publish
         if (log.tablet_id() != _metadata->id()) {
             return Status::InternalError("Tablet id in txn log and metadata are not the same");
@@ -1397,6 +1413,23 @@ private:
         trim_partial_compaction_last_input_rowset(_metadata, op_compaction, last_input_rowset);
 
         const auto end_input_pos = pre_input_pos + 1;
+
+        // No read finds the IDG entries of the input segments any more: their rssids leave the tablet.
+        // Rewritten segments build the indexes declared by their output schema inline. Segments kept by partial
+        // compaction move into the output rowset under new rssids and read without the index until a later compaction
+        // rewrites them under an indexed schema, since nothing moves their entries to the new rssids. Retire the
+        // entries as the PK path does in MetaFileBuilder::apply_opcompaction; otherwise idg_meta keeps
+        // their .idx files referenced and vacuum never reclaims them.
+        if (_metadata->has_idg_meta()) {
+            std::unordered_set<uint32_t> input_rssids;
+            for (auto iter = first_input_pos; iter != end_input_pos; ++iter) {
+                for (int i = 0; i < iter->segment_metas_size(); ++i) {
+                    input_rssids.insert(get_rssid(*iter, i));
+                }
+            }
+            retire_idg_entries(_metadata.get(), input_rssids);
+        }
+
         for (auto iter = first_input_pos; iter != end_input_pos; ++iter) {
             if (iter != last_input_pos) {
                 // Drop the delete_predicate before archiving into compaction_inputs; it is consumed
@@ -1555,6 +1588,10 @@ private:
             if (op_replication.has_tablet_metadata()) {
                 // Lake replication (replication from shared-data cluster) with tablet metadata provided.
                 const auto& copied_tablet_meta = op_replication.tablet_metadata();
+                if (op_replication.normalize_rowset_schema()) {
+                    *_metadata->mutable_rowset_to_schema() = copied_tablet_meta.rowset_to_schema();
+                    *_metadata->mutable_historical_schemas() = copied_tablet_meta.historical_schemas();
+                }
                 _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
                 _metadata->mutable_dcg_meta()->CopyFrom(copied_tablet_meta.dcg_meta());
                 if (copied_tablet_meta.has_idg_meta()) {
@@ -1570,7 +1607,7 @@ private:
                 }
                 collect_rowset_referenced_files(_metadata->rowsets(), &new_referenced_rowset_files);
                 for (auto&& old_rowset : old_rowsets) {
-                    if (new_rowset_ids.contains(old_rowset.id())) {
+                    if (!op_replication.normalize_rowset_schema() && new_rowset_ids.contains(old_rowset.id())) {
                         continue;
                     }
                     add_unreferenced_rowset_files_to_compaction_inputs(

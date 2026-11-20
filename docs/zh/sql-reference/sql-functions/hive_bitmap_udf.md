@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Hive Bitmap UDF提供可在Hive中直接使用的UDF，用于生成Bitmap和执行Bitmap运算。"
 sidebar_position: 0.9
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Hive Bitmap UDF

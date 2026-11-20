@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Calculates whether the input value is in the bitmap column, and returns a Boolean value."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_contains

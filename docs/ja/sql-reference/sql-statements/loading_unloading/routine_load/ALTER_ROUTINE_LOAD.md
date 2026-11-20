@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "PAUSED 状態の Routine Load ジョブを変更します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER ROUTINE LOAD
@@ -58,13 +59,17 @@ FROM data_source
 
   以下のパラメータのみ変更可能です:
 
-  - `desired_concurrent_number`
+  - `desired_concurrent_number` または `max_concurrency`
 
-  - `max_error_number`
+  - `max_error_number` または `max_error_rows`
 
-  - `max_batch_interval`
+  - `max_batch_interval` または `load_interval`
 
-  - `max_batch_rows`
+  - `max_batch_rows` または `error_window_rows`
+
+  - `task_consume_second` または `max_consume_duration`
+
+  - `task_timeout_second` または `load_timeout`
 
   - `max_batch_size`
 

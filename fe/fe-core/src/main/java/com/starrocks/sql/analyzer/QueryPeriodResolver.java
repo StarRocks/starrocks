@@ -161,7 +161,7 @@ public class QueryPeriodResolver {
         // resolves a snapshot, not only when the schema id differs: partition evolution can change the
         // spec while leaving the schema id unchanged, and the descriptor/partition metadata must then
         // still reflect the snapshot rather than the current spec.
-        Map<Integer, PartitionSpec> snapshotSpecs = IcebergMetadata.getSnapshotSpecs(nativeTable, snapshotId.get());
+        Map<Integer, PartitionSpec> snapshotSpecs = IcebergMetadata.getSnapshotSpecs(icebergTable, snapshotId.get());
         return icebergTable.withReadMetadata(snapshotSchema, snapshotSpecs);
     }
 }

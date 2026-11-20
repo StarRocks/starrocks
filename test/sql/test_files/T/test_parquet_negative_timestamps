@@ -1,0 +1,51 @@
+-- name: test_parquet_negative_timestamps
+
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 cp --force ./sql/test_files/parquet_format/negative_timestamps.parquet oss://${oss_bucket}/test_files/parquet_format/${uuid0}/negative_timestamps.parquet >/dev/null
+
+create table imported (
+    id int, local_ms datetime, utc_ms datetime, local_us datetime, utc_us datetime,
+    local_ns datetime, utc_ns datetime
+) distributed by hash(id) buckets 1 properties ("replication_num" = "1");
+
+set time_zone = "UTC";
+insert into imported select * from files(
+    "path" = "oss://${oss_bucket}/test_files/parquet_format/${uuid0}/negative_timestamps.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+[ORDER]select * from imported order by id;
+[ORDER]select id, cast(local_ms as date), cast(local_us as date), cast(local_ns as date),
+    cast(utc_ms as date), cast(utc_us as date), cast(utc_ns as date) from imported order by id;
+truncate table imported;
+
+set time_zone = "Asia/Shanghai";
+insert into imported select * from files(
+    "path" = "oss://${oss_bucket}/test_files/parquet_format/${uuid0}/negative_timestamps.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+[ORDER]select * from imported order by id;
+[ORDER]select id, cast(local_ms as date), cast(local_us as date), cast(local_ns as date),
+    cast(utc_ms as date), cast(utc_us as date), cast(utc_ns as date) from imported order by id;
+truncate table imported;
+
+set time_zone = "America/Los_Angeles";
+insert into imported select * from files(
+    "path" = "oss://${oss_bucket}/test_files/parquet_format/${uuid0}/negative_timestamps.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+[ORDER]select * from imported order by id;
+[ORDER]select id, cast(local_ms as date), cast(local_us as date), cast(local_ns as date),
+    cast(utc_ms as date), cast(utc_us as date), cast(utc_ns as date) from imported order by id;
+truncate table imported;
+
+set time_zone = DEFAULT;
+drop database db_${uuid0};
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/parquet_format/${uuid0}/ >/dev/null

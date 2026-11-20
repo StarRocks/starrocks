@@ -28,6 +28,7 @@
 #include "gen_cpp/Partitions_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 #include "types/datum.h"
 
 namespace starrocks::pipeline {
@@ -146,12 +147,7 @@ TEST_F(ExchangeBucketAwareTest, test_exchange_bucket_aware) {
     ASSERT_OK(exchange_sink->prepare(_runtime_state.get()));
 
     auto chunk = std::make_shared<Chunk>();
-    auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
-    col->append_datum(Datum(1));
-    col->append_datum(Datum(2));
-    col->append_datum(Datum(3));
-    col->append_nulls(1);
-    col->append_datum(Datum(4));
+    auto col = ColumnTestHelper::build_nullable_column<int32_t>({1, 2, 3, 0, 4}, {0, 0, 0, 1, 0});
 
     std::vector<uint32_t> hash_values(col->size());
     col->murmur_hash3_x86_32(hash_values.data(), 0, col->size());

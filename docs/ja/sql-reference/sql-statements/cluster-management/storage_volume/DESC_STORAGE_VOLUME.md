@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DESC STORAGE VOLUME は、ストレージボリュームを説明します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DESC STORAGE VOLUME
@@ -30,7 +31,7 @@ DESC[RIBE] STORAGE VOLUME <storage_volume_name>
 | **Return** | **Description**                                              |
 | ---------- | ------------------------------------------------------------ |
 | Name       | ストレージボリュームの名前。                                 |
-| Type       | リモートストレージシステムのタイプ。有効な値: `S3` および `AZBLOB`。 |
+| Type       | リモートストレージシステムのタイプ。有効な値: `S3`、`HDFS`、`AZBLOB`、`ADLS2`、および `GS`。 |
 | IsDefault  | ストレージボリュームがデフォルトのストレージボリュームかどうか。 |
 | Location   | リモートストレージシステムの場所。                           |
 | Params     | リモートストレージシステムにアクセスするための認証情報。     |

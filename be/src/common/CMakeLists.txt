@@ -52,6 +52,7 @@ set(COMMON_FILES
   util/stack_trace_mutex.cpp
   util/table_metrics.cpp
   util/thrift_client_cache.cpp
+  util/thrift_key_redaction.cpp
   util/thrift_client.cpp
   util/thrift_server.cpp
   util/thrift_util.cpp
@@ -59,13 +60,28 @@ set(COMMON_FILES
 )
 
 if (APPLE)
-    list(APPEND COMMON_FILES tracer_mac_shim.cpp)
+    list(APPEND COMMON_FILES
+        tracer_mac_shim.cpp
+        system/cpu_info_darwin.cpp
+    )
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    list(APPEND COMMON_FILES
+        tracer.cpp
+        system/cpu_info_linux.cpp
+    )
 else()
-    list(APPEND COMMON_FILES tracer.cpp)
+    message(FATAL_ERROR "CpuInfo supports only Linux and Darwin")
 endif()
 
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-    list(APPEND COMMON_FILES util/minidump.cpp)
+    list(APPEND COMMON_FILES
+        util/minidump.cpp
+        system/cpu_info_x86.cpp
+    )
+elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
+    list(APPEND COMMON_FILES system/cpu_info_arm64.cpp)
+else()
+    message(FATAL_ERROR "CpuInfo supports only x86 and aarch64")
 endif()
 
 ADD_BE_LIB(Common

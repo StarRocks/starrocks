@@ -17,6 +17,7 @@ package com.starrocks.planner;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
+import com.starrocks.connector.iceberg.IcebergEncryption;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
@@ -26,6 +27,7 @@ import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TIcebergTableSink;
+import com.starrocks.thrift.TParquetEncryptionInfo;
 import org.apache.iceberg.Table;
 
 import static com.starrocks.sql.ast.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
@@ -34,6 +36,7 @@ import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION;
 
 public class IcebergTableSink extends DataSink {
+
     public final static int ICEBERG_SINK_MAX_DOP = 32;
     protected final TupleDescriptor desc;
     private final long targetTableId;
@@ -46,6 +49,10 @@ public class IcebergTableSink extends DataSink {
     private final String tableIdentifier;
     private final CloudConfiguration cloudConfiguration;
     private String targetBranch;
+
+    // FE->BE encryption signal, or null when the table is not encrypted. Algorithm and key length
+    // only -- BE generates the per-file DEK and returns it at commit. See initEncryption().
+    private TParquetEncryptionInfo encryptionInfo;
 
     public IcebergTableSink(IcebergTable icebergTable, TupleDescriptor desc, boolean isStaticPartitionSink,
                             SessionVariable sessionVariable, String targetBranch) {
@@ -66,6 +73,15 @@ public class IcebergTableSink extends DataSink {
 
         String catalogName = icebergTable.getCatalogName();
         this.cloudConfiguration = IcebergUtil.getVendedCloudConfiguration(catalogName, icebergTable);
+
+        // Initialize encryption if table is encrypted
+        initEncryption(nativeTable);
+    }
+
+    private void initEncryption(Table nativeTable) {
+        // Shared with IcebergDeleteSink and IcebergRowDeltaSink so the three write paths cannot drift.
+        // Also runs the unsupported-catalog gate, failing the statement at planning.
+        this.encryptionInfo = IcebergEncryption.writeSignalOrNull(nativeTable, tableIdentifier);
     }
 
     public String getTargetBranch() {
@@ -99,6 +115,10 @@ public class IcebergTableSink extends DataSink {
         TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
         cloudConfiguration.toThrift(tCloudConfiguration);
         tIcebergTableSink.setCloud_configuration(tCloudConfiguration);
+
+        if (encryptionInfo != null) {
+            tIcebergTableSink.setParquet_encryption_info(encryptionInfo);
+        }
 
         tDataSink.setIceberg_table_sink(tIcebergTableSink);
         return tDataSink;

@@ -251,7 +251,7 @@ TEST(DictEncodingReadTest, BinaryDestinationTypeGuard) {
         faststring backing;
         setup_slice_dict_decoder(&decoder, &inner_decoder, &backing);
 
-        auto dst = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+        auto dst = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
         auto filter = std::make_unique<uint8_t[]>(count);
         memset(filter.get(), 0x01, count);
         filter[0] = 0;
@@ -266,7 +266,7 @@ TEST(DictEncodingReadTest, BinaryDestinationTypeGuard) {
         faststring backing;
         setup_slice_dict_decoder(&decoder, &inner_decoder, &backing);
 
-        auto dst = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+        auto dst = ColumnHelper::create_column(TYPE_INT_DESC, true);
         auto filter = std::make_unique<uint8_t[]>(count);
         memset(filter.get(), 0x01, count);
         auto st = decoder.next_batch(count, ColumnContentType::VALUE, dst.get(), filter.get());
@@ -290,7 +290,7 @@ TEST(DictEncodingReadTest, BinaryDestinationTypeGuard) {
         // num_ranges > 2 routes to next_value_batch_with_nulls() rather than the row-by-row fallback.
         infos.num_ranges = count / 2;
 
-        auto dst = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+        auto dst = ColumnHelper::create_column(TYPE_INT_DESC, true);
         auto filter = std::make_unique<uint8_t[]>(count);
         memset(filter.get(), 0x01, count);
         auto st = decoder.next_batch_with_nulls(count, infos, ColumnContentType::VALUE, dst.get(), filter.get());
@@ -318,7 +318,7 @@ TEST(DictEncodingReadTest, FilterExcludedRowsAreMarkedNull) {
         faststring backing;
         setup_slice_dict_decoder(&decoder, &inner_decoder, &backing);
 
-        auto dst = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+        auto dst = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
         auto filter = std::make_unique<uint8_t[]>(count);
         memset(filter.get(), 0x01, count);
         const std::vector<size_t> excluded = {3, 50, 99};
@@ -373,7 +373,7 @@ TEST(DictEncodingReadTest, FilterExcludedRowsAreMarkedNull) {
         }
         filter[10] = 0;
 
-        auto dst = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+        auto dst = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
         ASSERT_OK(decoder.next_batch_with_nulls(count, infos, ColumnContentType::VALUE, dst.get(), filter.get()));
 
         auto* nullable = down_cast<NullableColumn*>(dst.get());
@@ -467,6 +467,24 @@ TEST(DictEncodingTest, FixedLengthValuesWithNulls) {
                 check_fixed_dict_with_nulls<double>(null_pct, trailing_nulls, batch_size);
                 check_fixed_dict_with_nulls<int96_t>(null_pct, trailing_nulls, batch_size);
             }
+        }
+    }
+}
+
+TEST(DictEncodingTest, AssignDataWithNullsSparseAndTrailingNulls) {
+    DictDecoder<int32_t> decoder;
+    for (size_t count :
+         {size_t{0}, size_t{15}, size_t{16}, size_t{17}, size_t{31}, size_t{32}, size_t{33}, size_t{64}, size_t{128}}) {
+        const bool is_dense = (1 >= count / 10);
+        for (size_t pos = 0; pos < count; ++pos) {
+            std::vector<uint8_t> nulls(count, 1);
+            nulls[pos] = 0;
+            // Dense expansion (base/simd/expand.h:31-38) requires src to remain readable at index num_valid.
+            // Sparse scatter path is kept unpadded to verify its guarded tail never over-reads.
+            std::vector<int32_t> src = is_dense ? std::vector<int32_t>{4242, 0} : std::vector<int32_t>{4242};
+            std::vector<int32_t> dst(count, -1);
+            decoder.assign_data_with_nulls<int32_t>(count, 1, nulls.data(), src.data(), dst.data());
+            EXPECT_EQ(4242, dst[pos]) << "count=" << count << " pos=" << pos;
         }
     }
 }

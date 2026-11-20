@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "StarRocks でBlock Cache Warmup を使用して、クエリ前にリモートストレージデータをローカルキャッシュにプロアクティブにロード。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Block Cache のウォームアップ

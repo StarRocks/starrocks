@@ -94,9 +94,8 @@ TEST_F(FloatConverterTest, test_read_string_invalid_value) {
 // which is the correctly rounded result rather than bad data, and is stored.
 // NOLINTNEXTLINE
 TEST_F(FloatConverterTest, test_read_string_out_of_range) {
-    TypeDescriptor float_type(TYPE_FLOAT);
-    auto float_conv = csv::get_converter(float_type, false);
-    auto float_col = ColumnHelper::create_column(float_type, false);
+    auto float_conv = csv::get_converter(TYPE_FLOAT_DESC, false);
+    auto float_col = ColumnHelper::create_column(TYPE_FLOAT_DESC, false);
 
     // Above FLT_MAX (~3.40282e+38), still representable as a double.
     EXPECT_FALSE(float_conv->read_string(float_col.get(), "3.4e+39", Converter::Options()));
@@ -159,9 +158,8 @@ TEST_F(FloatConverterTest, test_double_write_string) {
 }
 
 TEST_F(FloatConverterTest, test_float_write_string) {
-    TypeDescriptor type(TYPE_FLOAT);
-    auto conv = csv::get_converter(type, false);
-    auto col = ColumnHelper::create_column(type, false);
+    auto conv = csv::get_converter(TYPE_FLOAT_DESC, false);
+    auto col = ColumnHelper::create_column(TYPE_FLOAT_DESC, false);
     col->append_datum((float)7.092579e+08);
     formats::FormattedOutputStreamString buff;
     ASSERT_TRUE(conv->write_string(&buff, *col, 0, Converter::Options()).ok());

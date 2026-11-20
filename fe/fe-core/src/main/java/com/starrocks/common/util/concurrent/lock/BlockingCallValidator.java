@@ -16,6 +16,8 @@ package com.starrocks.common.util.concurrent.lock;
 
 import com.starrocks.common.util.concurrent.lock.LockInvariantViolations.Mode;
 
+import java.util.Iterator;
+
 /**
  * Enforces the second half of the metadata-lock contract:
  *
@@ -228,27 +230,30 @@ public class BlockingCallValidator {
      * overloads, a lambda inside it, or an inner class of the HMS client are all the same top-level
      * class and all get skipped.
      *
-     * <p>Walks the stack, so it runs only once a violation has already been established.
+     * <p>Walks the stack (lazily, see {@link LockInvariantViolations#STACK_WALKER}), so it runs only once a
+     * violation has already been established.
      */
     private static String callerOfTheGuard() {
-        String transportClass = null;
-        for (StackTraceElement frame : Thread.currentThread().getStackTrace()) {
-            String className = frame.getClassName();
-            if (className.startsWith("java.") || className.startsWith("jdk.")
-                    || className.startsWith(LockInvariantViolations.LOCK_PACKAGE)) {
-                continue;
+        return LockInvariantViolations.STACK_WALKER.walk(frames -> {
+            String transportClass = null;
+            for (Iterator<StackWalker.StackFrame> it = frames.iterator(); it.hasNext(); ) {
+                StackWalker.StackFrame frame = it.next();
+                String className = frame.getClassName();
+                if (LockInvariantViolations.isJdkOrLockLayer(className)) {
+                    continue;
+                }
+                String topLevel = topLevelClass(className);
+                if (transportClass == null) {
+                    transportClass = topLevel;
+                    continue;
+                }
+                if (topLevel.equals(transportClass)) {
+                    continue;
+                }
+                return LockInvariantViolations.siteOf(frame);
             }
-            String topLevel = topLevelClass(className);
-            if (transportClass == null) {
-                transportClass = topLevel;
-                continue;
-            }
-            if (topLevel.equals(transportClass)) {
-                continue;
-            }
-            return className + "." + frame.getMethodName() + ":" + frame.getLineNumber();
-        }
-        return LockInvariantViolations.UNKNOWN_SITE;
+            return LockInvariantViolations.UNKNOWN_SITE;
+        });
     }
 
     /** {@code Foo$Bar$1} and {@code Foo} are the same layer for the purpose of skipping. */

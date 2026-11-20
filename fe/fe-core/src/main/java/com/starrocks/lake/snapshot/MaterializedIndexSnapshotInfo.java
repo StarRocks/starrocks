@@ -14,7 +14,10 @@
 
 package com.starrocks.lake.snapshot;
 
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+
+import java.util.List;
 
 public class MaterializedIndexSnapshotInfo {
     @SerializedName(value = "indexId")
@@ -22,8 +25,21 @@ public class MaterializedIndexSnapshotInfo {
     @SerializedName(value = "shardGroupId")
     public final long shardGroupId;
 
+    @SerializedName(value = "tabletIds")
+    public final List<Long> tabletIds;
+
+    // Snapshot-time state. A shadow index may have become NORMAL by the time vacuum runs.
+    @SerializedName(value = "isShadow")
+    public final boolean isShadow;
+
     public MaterializedIndexSnapshotInfo(long indexId, long shardGroupId) {
+        this(indexId, shardGroupId, Lists.newArrayList(), false);
+    }
+
+    public MaterializedIndexSnapshotInfo(long indexId, long shardGroupId, List<Long> tabletIds, boolean isShadow) {
         this.indexId = indexId;
         this.shardGroupId = shardGroupId;
+        this.tabletIds = tabletIds;
+        this.isShadow = isShadow;
     }
 }

@@ -43,7 +43,7 @@ GeoCoordinateList coordinates(const std::vector<WkbCoordinate>& input) {
 
 GeoParseStatus spherical_polygon(const WkbGeometry& geometry, GeoPolygon* output) {
     GeoCoordinateListList rings;
-    for (const auto& ring : geometry.rings) rings.add(new GeoCoordinateList(coordinates(ring)));
+    for (const auto& ring : geometry.rings) rings.add(coordinates(ring));
     return output->from_coords(rings);
 }
 
@@ -52,7 +52,7 @@ bool spherical_polygon_has_valid_hole_relationships(const WkbGeometry& geometry)
     holes.reserve(geometry.rings.size() > 1 ? geometry.rings.size() - 1 : 0);
     for (size_t i = 1; i < geometry.rings.size(); ++i) {
         GeoCoordinateListList ring;
-        ring.add(new GeoCoordinateList(coordinates(geometry.rings[i])));
+        ring.add(coordinates(geometry.rings[i]));
         auto hole = std::make_unique<GeoPolygon>();
         if (hole->from_coords(ring) != GEO_PARSE_OK) return false;
         for (const auto& previous : holes) {

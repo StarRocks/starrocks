@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Docker-based development environment setup for building StarRocks using the official starrocks/dev-env-ubuntu image with pre-installed toolchains."
+products: [oss]
 ---
 
 # Setup development environment with Docker

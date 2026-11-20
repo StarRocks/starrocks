@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 2.0：Primary Key テーブル GA、Stream/Broker/Routine Load サポート、外部テーブル、ストレージレイヤーへの式プッシュダウン。"
+products: [oss]
 ---
 
 # StarRocks version 2.0

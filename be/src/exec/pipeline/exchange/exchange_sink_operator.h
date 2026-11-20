@@ -114,7 +114,7 @@ private:
         // ref olap_scan_node.cpp release_large_columns
         return sz > get_factory()->runtime_state()->chunk_size() * 512;
     }
-    void _calc_hash_values_and_bucket_ids();
+    void _compute_hash_values_and_bucket_ids();
 
 private:
     class Channel;

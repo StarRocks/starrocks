@@ -1,0 +1,32 @@
+-- name: test_glm_mv_rename_bucket_shuffle
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t1 (
+  c1 int not null,
+  c2 varchar(50) null,
+  c3 tinyint null
+) duplicate key(c1) distributed by hash(c1) buckets 3 properties("replication_num" = "1");
+
+create materialized view mv1 distributed by hash(c1) buckets 3 refresh manual properties("replication_num" = "1")
+as select c1, c2, c3 from t1;
+
+insert into t1 values (1, 'a', 1), (2, 'b', 2), (3, 'c', 3), (4, 'd', 3), (5, 'e', null), (6, 'f', 2);
+refresh materialized view mv1 with sync mode;
+
+-- The query is answered by mv1: the MV rewrite renames the scan's bucket column c1 right above the scan,
+-- and `c1 in (select ...)` is a bucket-shuffle join on c1. With the cost gate off, global late
+-- materialization defers c1 below the rename and fetches it back only under the renamed id, so the
+-- join's probe-side distribution named a column nothing produced: "Cannot convert ColumnRefOperator
+-- to Expr". The EXISTS supplies the LIMIT that turns late materialization on.
+set enable_global_late_materialization_cost_based = false;
+function: assert_explain_contains('select c3 = (select max(c1) from t1 x2), c3 in (select c3 from t1 x3), c1 not in (select c1 from t1 x4), exists (select c1 from t1 x5) from t1', 'mv1')
+select c3 = (select max(c1) from t1 x2), c3 in (select c3 from t1 x3), c1 not in (select c1 from t1 x4), exists (select c1 from t1 x5) from t1 order by 1, 2, 3, 4;
+select c3 = (select max(c1) from t1 x2), c3 in (select c3 from t1 x3), c1 in (select c1 from t1 x4), exists (select c1 from t1 x5) from t1 order by 1, 2, 3, 4;
+
+-- reference: default cost gate
+set enable_global_late_materialization_cost_based = true;
+select c3 = (select max(c1) from t1 x2), c3 in (select c3 from t1 x3), c1 not in (select c1 from t1 x4), exists (select c1 from t1 x5) from t1 order by 1, 2, 3, 4;
+select c3 = (select max(c1) from t1 x2), c3 in (select c3 from t1 x3), c1 in (select c1 from t1 x4), exists (select c1 from t1 x5) from t1 order by 1, 2, 3, 4;
+
+drop database db_${uuid0} force;

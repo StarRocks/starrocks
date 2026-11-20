@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "character_sets 标识可用的字符集。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # character_sets

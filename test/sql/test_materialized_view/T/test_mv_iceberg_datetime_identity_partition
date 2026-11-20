@@ -1,0 +1,52 @@
+-- name: test_mv_iceberg_datetime_identity_partition
+
+-- An Iceberg identity partition on a DATETIME column carries no granularity, and the view gave each
+-- value a one-day range [v, v + 1 day). Two values on the same day then overlap, and every refresh of a
+-- view partitioned on the column, directly or by date_trunc, failed with "is intersected with range"
+-- or "Partition ranges overlap". The view stayed empty.
+
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+create database mv_iceberg_${uuid0}.sql_test_db_${uuid0};
+
+create table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_dt (v int, dt datetime) partition by (dt);
+insert into mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_dt values
+    (1, '2026-01-01 00:03:11'), (2, '2026-01-01 08:00:00'), (3, '2026-01-01 08:00:01'), (4, '2026-01-02 09:00:00');
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- One view partition per base value.
+create materialized view mv_identity partition by dt distributed by hash(v) buckets 1
+refresh deferred manual properties ("replication_num" = "1")
+as select v, dt from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_dt;
+refresh materialized view mv_identity with sync mode;
+select count(*) from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 'mv_identity';
+select v, dt from mv_identity order by v;
+
+-- Base values rolled up into days.
+create materialized view mv_day partition by date_trunc('day', dt) distributed by hash(v) buckets 1
+refresh deferred manual properties ("replication_num" = "1")
+as select v, dt from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_dt;
+refresh materialized view mv_day with sync mode;
+select count(*) from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 'mv_day';
+select v, dt from mv_day order by v;
+
+-- A new value inside an existing day is picked up by the next refresh.
+insert into mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_dt values (5, '2026-01-02 23:59:59');
+refresh materialized view mv_identity with sync mode;
+refresh materialized view mv_day with sync mode;
+select v, dt from mv_identity order by v;
+select v, dt from mv_day order by v;
+
+drop materialized view mv_identity;
+drop materialized view mv_day;
+drop database db_${uuid0} force;
+drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_dt force;
+drop database mv_iceberg_${uuid0}.sql_test_db_${uuid0} force;
+drop catalog mv_iceberg_${uuid0};

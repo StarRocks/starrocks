@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "自 v3.2.8 起，使用标签对 BE 节点分组并指定数据副本分布位置。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 使用标签管理 BE 节点

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回给定日期对应的年份和周数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # yearweek

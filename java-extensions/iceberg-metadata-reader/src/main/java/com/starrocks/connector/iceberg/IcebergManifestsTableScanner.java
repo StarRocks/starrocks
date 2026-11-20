@@ -29,7 +29,7 @@ import java.util.List;
 import java.util.Map;
 
 public class IcebergManifestsTableScanner extends AbstractIcebergMetadataScanner {
-    private Iterator<ManifestFile> reader;
+    protected Iterator<ManifestFile> reader;
     private Map<Integer, PartitionSpec> partitionSpecsById;
 
     public IcebergManifestsTableScanner(int fetchSize, Map<String, String> params) {
@@ -75,7 +75,7 @@ public class IcebergManifestsTableScanner extends AbstractIcebergMetadataScanner
         }
     }
 
-    private Object get(String columnName, ManifestFile file) {
+    protected Object get(String columnName, ManifestFile file) {
         switch (columnName) {
             case "path":
                 return file.path();
@@ -97,6 +97,8 @@ public class IcebergManifestsTableScanner extends AbstractIcebergMetadataScanner
                 return file.deletedFilesCount();
             case "deleted_rows_count":
                 return file.deletedRowsCount();
+            case "content":
+                return file.content().id();
             case "partitions":
                 return buildPartitionSummaries(file.partitions(), partitionSpecsById.get(file.partitionSpecId()));
             default:

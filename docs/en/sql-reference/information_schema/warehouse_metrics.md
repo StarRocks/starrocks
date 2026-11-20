@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "warehouse_metrics provides information about the metrics of each warehouse."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # warehouse_metrics

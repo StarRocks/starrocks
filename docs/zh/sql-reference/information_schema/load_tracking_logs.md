@@ -1,11 +1,14 @@
 ---
 displayed_sidebar: docs
 description: "load_tracking_logs 提供导入作业的错误日志。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # load_tracking_logs
 
 提供导入作业相关的错误信息。此视图自 StarRocks v3.0 起支持。
+
+导入作业的错误日志中可能包含被拒绝的数据行，因此只有对该作业的每一张目标表都拥有 SELECT 权限的用户，才能通过 `load_tracking_logs` 查看该日志。对每一张目标表拥有其他权限，或者拥有 OPERATE 权限的用户，能看到该作业，但 `TRACKING_LOG` 为 NULL。`root` 用户可以查看所有错误日志。目标表已被删除的导入作业，其错误日志仅对 `root` 用户可见。
 
 `load_tracking_logs` 提供以下字段：
 
@@ -16,6 +19,7 @@ description: "load_tracking_logs 提供导入作业的错误日志。"
 | LABEL         | 导入作业的 Label。               |
 | DATABASE_NAME | 导入作业所属的数据库名称。       |
 | TRACKING_LOG  | 导入作业的错误日志信息（如有）。 |
+| TYPE          | 导入作业的类型，例如 `BROKER`、`INSERT`、`ROUTINE_LOAD` 或 `STREAM_LOAD`。 |
 
 :::tip
 查询 `load_tracking_logs` 视图时，您需要根据 `JOB_ID` 或 `LABEL` 进行过滤。

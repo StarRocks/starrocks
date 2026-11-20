@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Creates a MAP value from the given pair of key item array and value item array."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # map_from_arrays

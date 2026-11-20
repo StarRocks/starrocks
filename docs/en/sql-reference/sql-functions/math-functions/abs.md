@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the absolute value of the numeric value x."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # abs

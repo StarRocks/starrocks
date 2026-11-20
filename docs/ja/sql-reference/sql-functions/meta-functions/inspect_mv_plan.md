@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "マテリアライズドビューの論理プランを文字列で返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # inspect_mv_plan

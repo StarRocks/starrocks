@@ -38,7 +38,6 @@ import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.Explain;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
@@ -229,7 +228,7 @@ public class AIProjectPlanTest extends PlanTestBase {
                 TAIProjectNode project = findOnlyAIProjectThriftNode(plan).getAi_project_node();
                 TExpr expression = findOnlyAIExpression(project.getSlot_map());
                 TExprNode call = expression.getNodes().get(0);
-                Assertions.assertEquals(embedding ? 200004 : 200002, call.getFn().getId());
+                Assertions.assertEquals(embedding ? 200003 : 200001, call.getFn().getId());
                 Assertions.assertEquals(embedding ? 4 : 5, call.getNum_children());
                 String configId = call.getAi_provider_id();
                 Assertions.assertEquals(configId, call.getAi_provider_id());
@@ -439,20 +438,6 @@ public class AIProjectPlanTest extends PlanTestBase {
     }
 
     @Test
-    public void testProviderAlwaysRequiresADefaultModel() throws Exception {
-        String configuredModel = AIProviderTestUtil.chatProperty("model");
-        AIProviderTestUtil.setChatProperty("model", "");
-        try {
-            Assertions.assertThrows(SemanticException.class,
-                    () -> getExecPlan("select ai_complete('explicit-model', k1) from t7"));
-            Assertions.assertThrows(SemanticException.class,
-                    () -> getExecPlan("select ai_complete(k1) from t7"));
-        } finally {
-            AIProviderTestUtil.setChatProperty("model", configuredModel);
-        }
-    }
-
-    @Test
     public void testExplainContainsOnlySemanticArgumentsAndNoConfiguration() throws Exception {
         ExecPlan execPlan = getExecPlan("select ai_complete(k1) from t7");
         String optimizerExplain = Explain.toString(execPlan.getPhysicalPlan(), execPlan.getOutputColumns());
@@ -619,7 +604,7 @@ public class AIProjectPlanTest extends PlanTestBase {
             Assertions.assertFalse(getExecPlan(
                     "select ai_complete(v3) from tprimary1 where pk1 = 20").isShortCircuit());
             Assertions.assertTrue(getExecPlan(
-                    "select ai_query(v3, parse_json('{}')) from tprimary1 where pk1 = 20").isShortCircuit());
+                    "select lower(v3) from tprimary1 where pk1 = 20").isShortCircuit());
         } finally {
             connectContext.getSessionVariable().setEnableShortCircuit(shortCircuitEnabled);
         }

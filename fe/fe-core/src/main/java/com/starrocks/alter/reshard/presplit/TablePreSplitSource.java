@@ -19,8 +19,11 @@ import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
@@ -34,6 +37,7 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
@@ -47,16 +51,21 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * INSERT-from-table pre-split source. Matches a single plain {@link TableRelation} — rejecting
- * FILES() sources and any source-slice modifier (partition / tablet / replica / hint / sample /
- * time-travel / GTID). The source may be an internal OLAP table or any base table an external
- * catalog serves (Hive, Iceberg, Paimon, Delta Lake, Hudi, JDBC, Elasticsearch, ...); views are
- * excluded. {@link #prepare} resolves the source, re-checks the user's SELECT privilege and rejects
+ * FILES() sources and any source-slice modifier (temporary or key-valued partition / partition
+ * predicate / tablet / replica / hint / sample / time-travel / GTID); a plain partition-name list is
+ * accepted and the sample is restricted to those partitions. The source may be an internal OLAP table or any
+ * base table an external catalog serves (Hive, Iceberg, Paimon, Delta Lake, Hudi, JDBC, Elasticsearch, ...); views are
+ * excluded. {@link #prepare} resolves the source, declines a non-OLAP one that names partitions or feeds a
+ * materialized view, re-checks the user's SELECT privilege and rejects
  * row-access / column-masking policies, gates the WHERE predicate, maps the projection onto the
  * target, computing a generated sampled column from the source columns its definition reads and
  * admitting a safe computed projection, and builds an {@link InsertFromTableScanContext}. The flow
@@ -97,6 +106,14 @@ final class TablePreSplitSource implements InsertPreSplitSource {
         TableRelation sourceRelation = (TableRelation) selectRelation.getRelation();
         ResolvedSource resolvedSource = resolveSourceTable(sourceRelation, context);
         if (resolvedSource == null) {
+            return null;
+        }
+        // Only an internal OLAP source can be sampled from a partition list: the planner drops the list on any other
+        // scan (a materialized view refresh gives one to a JDBC base table), so the sampler would read the whole
+        // external table. A view's refresh samples only an internal OLAP base table: every refresh batch would
+        // otherwise pay a whole-source external scan.
+        if (!(resolvedSource.sourceTable() instanceof OlapTable)
+                && (!partitionNames(sourceRelation).isEmpty() || target instanceof MaterializedView)) {
             return null;
         }
         if (!sourceAuthorizedAndPolicyFree(resolvedSource, context)) {
@@ -142,7 +159,7 @@ final class TablePreSplitSource implements InsertPreSplitSource {
         Map<String, String> targetToSource = resolved.targetToSource();
         // Sized last: for an external source this reads connector metadata, so only a load that
         // passed every other gate -- the SELECT re-check included -- pays for it.
-        Estimates estimates = sourceEstimates(resolvedSource.sourceTable(), context);
+        Estimates estimates = sourceEstimates(resolvedSource.sourceTable(), partitionNames(sourceRelation), context);
         if (!(resolvedSource.sourceTable() instanceof OlapTable)
                 && (estimates.totalBytes() == 0L || estimates.totalRows() == 0L)) {
             // An unsized external source would be sampled at rate 1.0 -- a second full scan of the
@@ -172,15 +189,17 @@ final class TablePreSplitSource implements InsertPreSplitSource {
     }
 
     /**
-     * Rejects any source-slice modifier on the FROM-clause table relation.
-     * Each modifier (explicit partition / tablet / replica selection, table
-     * hints such as {@code _META_}/{@code _BINLOG_}/{@code _SYNC_MV_}, table
-     * sampling, time-travel, and GTID) would make the sampler observe a
-     * different row-set than a plain full scan, so pre-split is skipped.
+     * Rejects any source-slice modifier on the FROM-clause table relation the sampler cannot repeat.
+     * Each such modifier (a temporary or key-valued partition selection, a partition predicate,
+     * tablet / replica selection, table hints such as {@code _META_}/{@code _BINLOG_}/{@code _SYNC_MV_},
+     * table sampling, time-travel, and GTID) would make the sampler observe a different row-set than
+     * the load reads, so pre-split is skipped. A plain partition-name list is accepted: the sampler
+     * names the same partitions in its own scan.
      * Over-rejection is safe: every accessor that exposes a modifier is checked.
      */
     private static boolean isPlainTableReference(TableRelation relation) {
-        return relation.getPartitionNames() == null
+        return isPlainPartitionList(relation.getPartitionNames())
+                && relation.getPartitionPredicate() == null
                 && (relation.getTabletIds() == null || relation.getTabletIds().isEmpty())
                 && (relation.getReplicaIds() == null || relation.getReplicaIds().isEmpty())
                 && (relation.getTableHints() == null || relation.getTableHints().isEmpty())
@@ -189,6 +208,12 @@ final class TablePreSplitSource implements InsertPreSplitSource {
                 && relation.getQueryPeriodString() == null
                 && relation.getTvrVersionRange() == null
                 && relation.getGtid() == 0;
+    }
+
+    /** No partition slice, or a non-empty list of formal partition names the sampler can name in its own scan. */
+    private static boolean isPlainPartitionList(PartitionRef partitionRef) {
+        return partitionRef == null || (!partitionRef.isTemp() && !partitionRef.isKeyPartitionNames()
+                && !partitionRef.getPartitionNames().isEmpty());
     }
 
     /**
@@ -226,8 +251,22 @@ final class TablePreSplitSource implements InsertPreSplitSource {
         String sourceFromSql = (CatalogMgr.isInternalCatalog(normalized.getCatalog())
                 ? "" : SqlUtils.getIdentSql(normalized.getCatalog()) + ".")
                 + SqlUtils.getIdentSql(normalized.getDb()) + "." + SqlUtils.getIdentSql(normalized.getTbl())
+                + partitionClauseSql(partitionNames(sourceRelation))
                 + (sourceAlias != null ? " " + SqlUtils.getIdentSql(sourceAlias) : "");
         return new ResolvedSource(table, normalized, sourceAlias, sourceFromSql);
+    }
+
+    private static List<String> partitionNames(TableRelation relation) {
+        PartitionRef partitionRef = relation.getPartitionNames();
+        return partitionRef == null ? List.of() : partitionRef.getPartitionNames();
+    }
+
+    private static String partitionClauseSql(List<String> partitionNames) {
+        if (partitionNames.isEmpty()) {
+            return "";
+        }
+        return " PARTITION (" + partitionNames.stream()
+                .map(SqlUtils::getIdentSql).collect(Collectors.joining(", ")) + ")";
     }
 
     /**
@@ -247,8 +286,14 @@ final class TablePreSplitSource implements InsertPreSplitSource {
                 && sourceTable.getType() != Table.TableType.SCHEMA;
     }
 
-    static Estimates sourceEstimates(Table sourceTable, ConnectContext context) {
+    /**
+     * @param partitionNames the partitions the scan is restricted to; empty means the whole table
+     */
+    static Estimates sourceEstimates(Table sourceTable, List<String> partitionNames, ConnectContext context) {
         if (sourceTable instanceof OlapTable olapTable) {
+            if (!partitionNames.isEmpty()) {
+                return partitionEstimates(olapTable, partitionNames);
+            }
             return new Estimates(Math.max(0L, olapTable.getDataSize()), Math.max(0L, olapTable.getRowCount()));
         }
         if (sourceTable instanceof IcebergTable icebergTable) {
@@ -260,6 +305,30 @@ final class TablePreSplitSource implements InsertPreSplitSource {
             }
         }
         return connectorStatisticsEstimates(sourceTable, context);
+    }
+
+    /**
+     * Sizes the named partitions with the table-wide semantics: bytes cover every visible index (as
+     * {@link OlapTable#getDataSize}), rows only the queryable base index the sampler scans (as
+     * {@link OlapTable#getRowCount}, unlike {@link Partition#getRowCount}). A name repeated in
+     * {@code PARTITION (p1, p1)} is scanned once, so partitions are counted by id; a name that does not
+     * resolve was already rejected by the analyzer.
+     */
+    private static Estimates partitionEstimates(OlapTable olapTable, List<String> partitionNames) {
+        Set<Long> seen = new HashSet<>();
+        long bytes = 0L;
+        long rows = 0L;
+        for (String name : partitionNames) {
+            Partition partition = olapTable.getPartition(name, false);
+            if (partition == null || !seen.add(partition.getId())) {
+                continue;
+            }
+            bytes += partition.getDataSize();
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                rows += physicalPartition.getQueryableBaseIndex().getRowCount();
+            }
+        }
+        return new Estimates(Math.max(0L, bytes), Math.max(0L, rows));
     }
 
     /**

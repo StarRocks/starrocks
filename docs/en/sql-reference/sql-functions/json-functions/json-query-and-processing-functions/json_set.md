@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Inserts or updates data in a JSON document at one or more specified JSON paths and returns the modified JSON document."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # json_set

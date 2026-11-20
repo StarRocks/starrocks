@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "be_metricsは各BEノードのメトリックに関する情報を提供します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # be_metrics
