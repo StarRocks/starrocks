@@ -17,10 +17,12 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.DefaultExpr;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.IndexParams;
 import com.starrocks.catalog.IndexParams.IndexParamItem;
 import com.starrocks.catalog.IndexParams.IndexParamType;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -35,6 +37,11 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
@@ -42,6 +49,7 @@ import com.starrocks.type.Type;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -463,6 +471,64 @@ public class IndexAnalyzer {
                 .collect(Collectors.toMap(entry -> entry.getKey().toLowerCase(), entry -> entry.getValue().toLowerCase()));
         properties.clear();
         properties.putAll(lowerProperties);
+    }
+
+    // A PK partial update gives the omitted columns of new-key rows their default, and an invalid vector fails the
+    // vector index check only at publish, where it blocks the tablet. Returns the error if such a column is omitted.
+    public static Optional<String> findPartialUpdateVectorIndexError(OlapTable table,
+                                                                     Collection<String> writtenColumns) {
+        if (table.getKeysType() != KeysType.PRIMARY_KEYS) {
+            return Optional.empty();
+        }
+        Set<String> written = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        written.addAll(writtenColumns);
+        for (Index index : table.getIndexes()) {
+            if (index.getIndexType() != IndexDef.IndexType.VECTOR) {
+                continue;
+            }
+            for (ColumnId columnId : index.getColumns()) {
+                Column column = table.getIdToColumn().get(columnId);
+                if (column != null && !written.contains(column.getName()) && !isValidVectorDefault(column, index)) {
+                    return Optional.of(String.format("Partial update of table %s must include vector index column %s: "
+                            + "rows with new keys would get an empty vector, which the vector index rejects. "
+                            + "Use UPDATE to change existing rows only.", table.getName(), column.getName()));
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    // Whether the column's default is a vector the index accepts, as BE checks it: `dim` elements, and unit length
+    // when the index expects normalized input (cosine_similarity with is_vector_normed).
+    private static boolean isValidVectorDefault(Column column, Index index) {
+        DefaultExpr defaultExpr = column.getDefaultExpr();
+        Expr expr = defaultExpr == null ? null : defaultExpr.obtainExpr();
+        if (!(expr instanceof ArrayExpr)) {
+            return false;
+        }
+        List<Expr> elements = expr.getChildren();
+        Map<String, String> properties = index.getProperties();
+        String dim = getPropertyIgnoreCase(properties, CommonIndexParamKey.DIM.name());
+        if (dim == null || elements.size() != Integer.parseInt(dim)) {
+            return false;
+        }
+        boolean normalized = "true".equalsIgnoreCase(
+                getPropertyIgnoreCase(properties, CommonIndexParamKey.IS_VECTOR_NORMED.name()))
+                && "cosine_similarity".equalsIgnoreCase(
+                getPropertyIgnoreCase(properties, CommonIndexParamKey.METRIC_TYPE.name()));
+        if (!normalized) {
+            return true;
+        }
+        double sumOfSquares = 0;
+        for (Expr element : elements) {
+            Expr value = element instanceof CastExpr ? element.getChild(0) : element;
+            if (!(value instanceof LiteralExpr) || value instanceof NullLiteral) {
+                return false;
+            }
+            double v = ((LiteralExpr) value).getDoubleValue();
+            sumOfSquares += v * v;
+        }
+        return Math.abs(sumOfSquares - 1) <= 1e-3;
     }
 
     /**
