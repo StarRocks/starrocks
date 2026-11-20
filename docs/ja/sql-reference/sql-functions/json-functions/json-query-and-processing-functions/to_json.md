@@ -27,6 +27,8 @@ to_json(any_value)
 
 `any_value`: 変換したい Map または Struct 式。入力値が無効な場合、エラーが返されます。Map または Struct 値の各キーと値のペアの値は nullable です。最後の例を参照してください。
 
+入力内のどの階層でも `GEOGRAPHY` と `GEOMETRY` はサポートされません。これらの型の NULL 値も含みます。JSON に地理空間値の WKT を含めるには、Map または Struct を作成する前に値を `ST_AsText` で変換します。
+
 ## 戻り値
 
 JSON 値を返します。
