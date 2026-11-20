@@ -585,7 +585,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 continue;
             }
 
-            if (replica.getLastFailedVersion() > 0) {
+            if (replica.getLastFailedVersion() > 0 || (replica.needFurtherRepair()
+                    && !replica.isVersionCompleteForFurtherRepair(visibleVersion))) {
                 continue;
             }
 
@@ -689,7 +690,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 continue;
             }
 
-            if (replica.getLastFailedVersion() <= 0 && replica.getVersion() >= visibleVersion) {
+            if (replica.isVersionCompleteForFurtherRepair(visibleVersion)) {
                 // skip healthy replica
                 continue;
             }
@@ -821,7 +822,14 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     }
 
     public boolean deleteReplica(Replica replica) {
-        return tablet.deleteReplicaByBackendId(replica.getBackendId());
+        boolean deleted = tablet.deleteReplicaByBackendId(replica.getBackendId());
+        if (deleted && replicaNum > 0 && tablet.getImmutableReplicas().size() <= replicaNum) {
+            // The source has left the tablet; the migration handoff is now complete.
+            for (Replica remaining : tablet.getImmutableReplicas()) {
+                remaining.setNeedFurtherRepair(false);
+            }
+        }
+        return deleted;
     }
 
     public CloneTask createCloneReplicaAndTask() throws SchedException {
@@ -1208,15 +1216,19 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         }
 
         if (this.type == Type.BALANCE) {
-            long partitionVisibleVersion = partition.getVisibleVersion();
-            if (replica.getVersion() < partitionVisibleVersion) {
-                // see comment 'needFurtherRepair' of Replica for explanation.
-                // no need to persist this info. If FE restart, just do it again.
-                replica.setNeedFurtherRepair(true);
+            if (Config.enable_sync_publish || beVisibleVersion < partition.getVisibleVersion()
+                    || replica.getLastFailedVersion() > 0) {
+                // Pin the target through source retirement, including a momentary catch-up.
+                // Do not renew the existing twenty-minute repair deadline.
+                if (!replica.needFurtherRepair()) {
+                    replica.setNeedFurtherRepair(true);
+                }
             }
-        } else {
+        } else if (!Config.enable_sync_publish || !replica.needFurtherRepair()
+                || tablet.getImmutableReplicas().size() <= replicationNum) {
             replica.setNeedFurtherRepair(false);
         }
+        replica.updateFurtherRepairVersion(beVisibleVersion);
 
         ReplicaPersistInfo info = ReplicaPersistInfo.createForClone(dbId, tblId, physicalPartitionId, indexId,
                 tabletId, destBackendId, replica.getId(),
@@ -1238,8 +1250,9 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             // so, we keep it state unchanged, and log update replica
             GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info, wal -> {});
         }
-        return String.format("version:%d min_readable_version:%d", reportedTablet.getVersion(),
-                reportedTablet.getMin_readable_version());
+        return String.format("version:%d min_readable_version:%d readable_version:%d need_further_repair:%s",
+                reportedTablet.getVersion(), reportedTablet.getMin_readable_version(),
+                beVisibleVersion, replica.needFurtherRepair());
     }
 
     /**

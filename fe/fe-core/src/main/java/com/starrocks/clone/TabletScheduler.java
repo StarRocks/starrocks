@@ -1272,7 +1272,7 @@ public class TabletScheduler extends LeaderDaemon {
 
     private boolean deleteReplicaWithFailedVersion(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
         for (Replica replica : tabletCtx.getReplicas()) {
-            if (replica.getLastFailedVersion() > 0) {
+            if (replica.getLastFailedVersion() > 0 && (force || !replica.needFurtherRepair())) {
                 deleteReplicaInternal(tabletCtx, replica, "version incomplete", force);
                 return true;
             }
@@ -1282,7 +1282,7 @@ public class TabletScheduler extends LeaderDaemon {
 
     private boolean deleteReplicaWithLowerVersion(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
         for (Replica replica : tabletCtx.getReplicas()) {
-            if (!replica
+            if ((force || !replica.needFurtherRepair()) && !replica
                     .checkVersionCatchUp(tabletCtx.getVisibleVersion(), false)) {
                 deleteReplicaInternal(tabletCtx, replica, "lower version", force);
                 return true;
@@ -1328,7 +1328,7 @@ public class TabletScheduler extends LeaderDaemon {
             return false;
         }
         Replica chosenReplica = tabletCtx.getTablet().getReplicaById(id);
-        if (chosenReplica != null) {
+        if (chosenReplica != null && (force || !chosenReplica.needFurtherRepair())) {
             deleteReplicaInternal(tabletCtx, chosenReplica, "src replica of rebalance", force);
             return true;
         }
@@ -1349,6 +1349,9 @@ public class TabletScheduler extends LeaderDaemon {
         Replica chosenReplica = null;
         double maxScore = 0;
         for (Replica replica : replicas) {
+            if (!force && replica.needFurtherRepair()) {
+                continue;
+            }
             BackendLoadStatistic beStatistic = statistic.getBackendLoadStatistic(replica.getBackendId());
             if (beStatistic == null) {
                 continue;
@@ -1423,10 +1426,43 @@ public class TabletScheduler extends LeaderDaemon {
         }
     }
 
+    static boolean hasEnoughMigrationReplacementReplicas(TabletSchedCtx tabletCtx, Replica deleting,
+                                                          long visibleVersion, SystemInfoService infoService) {
+        if (tabletCtx.getReplicas().stream().noneMatch(Replica::needFurtherRepair)) {
+            return true;
+        }
+        Set<String> healthyHosts = new HashSet<>();
+        for (Replica peer : tabletCtx.getReplicas()) {
+            if (peer.getId() == deleting.getId() || peer.isBad()
+                    || peer.getState() != ReplicaState.NORMAL
+                    || !peer.isVersionCompleteForFurtherRepair(visibleVersion)) {
+                continue;
+            }
+            Backend backend = infoService.getBackend(peer.getBackendId());
+            if (backend != null && backend.isAvailable() && !backend.isDiskDecommissioned(peer.getPathHash())) {
+                healthyHosts.add(backend.getHost());
+            }
+        }
+        return tabletCtx.getReplicaNum() > 0 && healthyHosts.size() >= tabletCtx.getReplicaNum();
+    }
+
     protected void deleteReplicaInternal(TabletSchedCtx tabletCtx, Replica replica, String reason, boolean force)
             throws SchedException {
         if (Config.tablet_sched_always_force_decommission_replica) {
             force = true;
+        }
+        if (!force && tabletCtx.getReplicas().stream().anyMatch(Replica::needFurtherRepair)) {
+            // Recheck under the table write lock, including final deletion after the txn watermark.
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getDbIncludeRecycleBin(tabletCtx.getDbId());
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTableIncludeRecycleBin(db, tabletCtx.getTblId());
+            PhysicalPartition partition = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getPhysicalPartitionIncludeRecycleBin(table, tabletCtx.getPhysicalPartitionId());
+            if (partition == null || !hasEnoughMigrationReplacementReplicas(tabletCtx, replica,
+                    partition.getVisibleVersion(), GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo())) {
+                throw new SchedException(Status.SCHEDULE_RETRY, "wait for migration replacement replicas to catch up");
+            }
         }
         /*
          * Before deleting a replica, we should make sure that there is no running txn on it
