@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
@@ -880,5 +881,55 @@ public class IcebergManifestCacheStatsTest extends TableTestBase {
         Assertions.assertEquals(List.of("/path/to/data-id-0.parquet", "/path/to/data-id-0.parquet"),
                 sortedLocations(planTasks(catalog, table, Expressions.equal("id", 5))));
         Assertions.assertEquals(expected, sortedLocations(planTasksWithStats(catalog, table, List.of("id"))));
+    }
+
+    @Test
+    public void testDeleteManifestWithDuplicateLiveEntriesIsCached() throws IOException {
+        Schema schema = new Schema(List.of(Types.NestedField.required(1, "id", Types.IntegerType.get())));
+        Table table = create(schema, PartitionSpec.unpartitioned(), "t_dup_deletes", 2);
+        // merge the delete manifests of the two row deltas below into one
+        table.updateProperties().set("commit.manifest.min-count-to-merge", "2").commit();
+        table.newAppend().appendFile(DataFiles.builder(PartitionSpec.unpartitioned())
+                .withPath("/path/to/dup-deletes-data.parquet")
+                .withFileSizeInBytes(10)
+                .withRecordCount(10)
+                .build()).commit();
+        DeleteFile deletes = FileMetadata.deleteFileBuilder(PartitionSpec.unpartitioned())
+                .ofPositionDeletes()
+                .withPath("/path/to/dup-deletes-pos.parquet")
+                .withFormat(FileFormat.PARQUET)
+                .withFileSizeInBytes(10)
+                .withRecordCount(1)
+                .build();
+        // a retried commit: the same delete file is committed twice
+        table.newRowDelta().addDeletes(deletes).commit();
+        table.newRowDelta().addDeletes(deletes).commit();
+
+        List<ManifestFile> manifests = table.currentSnapshot().deleteManifests(table.io());
+        Assertions.assertEquals(1, manifests.size());
+        ManifestFile manifest = manifests.get(0);
+        Assertions.assertEquals(2, manifest.existingFilesCount() + manifest.addedFilesCount());
+
+        int expected;
+        try (CloseableIterable<FileScanTask> tasks = table.newScan().planFiles()) {
+            List<FileScanTask> list = Lists.newArrayList(tasks);
+            Assertions.assertEquals(1, list.size());
+            expected = list.get(0).deletes().size();
+        }
+        Assertions.assertEquals(2, expected);
+
+        CachingIcebergCatalog catalog = newCatalog(Map.of());
+        com.github.benmanes.caffeine.cache.Cache<String, Set<DeleteFile>> deleteFileCache =
+                Deencapsulation.getField(catalog, "deleteFileCache");
+        // cold: reads the manifest and fills the cache; warm: must be served from the complete cache entry
+        for (int i = 0; i < 3; i++) {
+            List<FileScanTask> tasks = planTasks(catalog, table, Expressions.alwaysTrue());
+            Assertions.assertEquals(1, tasks.size());
+            Assertions.assertEquals(expected, tasks.get(0).deletes().size(), "plan " + i);
+            Set<DeleteFile> cached =
+                    deleteFileCache.getIfPresent(manifest.path());
+            Assertions.assertNotNull(cached, "plan " + i + " left no cache entry");
+            Assertions.assertEquals(2, cached.size(), "plan " + i + " left an incomplete cache entry");
+        }
     }
 }
