@@ -55,13 +55,13 @@ namespace {
 
 constexpr int32_t kCrs84Srid = 4326;
 
-// The storage dimension label is not checked: kernels decode each row's own WKB header and reject Z/M rows.
+// Row dimensions are not part of the descriptor: kernels decode each row's own WKB header and reject Z/M rows.
 Status check_geography_boundary(const GeoColumn& column) {
     const auto& descriptor = column.descriptor();
     const auto& type = descriptor.type;
     if (type.logical_type != GEO_LOGICAL_TYPE_GEOGRAPHY || type.coordinate_system != GEO_COORDINATE_SYSTEM_SPHERICAL ||
         type.edge_algorithm != GEO_EDGE_ALGORITHM_SPHERICAL || type.crs != "OGC:CRS84" ||
-        (type.srid.has_value() && type.srid.value() != kCrs84Srid) || descriptor.storage.encoding != GEO_ENCODING_WKB) {
+        (type.srid.has_value() && type.srid.value() != kCrs84Srid)) {
         return Status::NotSupported("Unsupported GEOGRAPHY SQL boundary descriptor");
     }
     return Status::OK();
@@ -82,8 +82,7 @@ Status check_geometry_boundary(const GeoColumn& column) {
     const auto& descriptor = column.descriptor();
     const auto& type = descriptor.type;
     if (type.logical_type != GEO_LOGICAL_TYPE_GEOMETRY || type.coordinate_system != GEO_COORDINATE_SYSTEM_CARTESIAN ||
-        type.edge_algorithm != GEO_EDGE_ALGORITHM_PLANAR || type.crs.empty() || type.srid != derive_srid(type.crs) ||
-        descriptor.storage.encoding != GEO_ENCODING_WKB) {
+        type.edge_algorithm != GEO_EDGE_ALGORITHM_PLANAR || type.crs.empty() || type.srid != derive_srid(type.crs)) {
         return Status::NotSupported("Unsupported GEOMETRY SQL boundary descriptor");
     }
     return Status::OK();
@@ -105,7 +104,6 @@ StatusOr<GeoInput> geo_input(const ColumnPtr& column) {
     const Column* source = constant ? down_cast<const ConstColumn*>(column.get())->data_column().get() : column.get();
     const auto* nullable = source->is_nullable() ? down_cast<const NullableColumn*>(source) : nullptr;
     const auto* geo = down_cast<const GeoColumn*>(nullable ? nullable->data_column().get() : source);
-    // The storage dimension is a producer claim; kernels decode each row's own WKB header and reject Z/M rows.
     if constexpr (Type == TYPE_GEOGRAPHY) {
         RETURN_IF_ERROR(check_geography_boundary(*geo));
     } else {
@@ -1170,7 +1168,7 @@ StatusOr<MutableColumnPtr> create_geography_result(FunctionContext* context) {
     if (type.type != TYPE_GEOGRAPHY || !type.geo_type.has_value()) {
         return Status::NotSupported("GEOGRAPHY constructor requires semantic type metadata");
     }
-    GeoColumnDescriptor descriptor{type.geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}};
+    GeoColumnDescriptor descriptor{type.geo_type.value()};
     auto data = GeoColumn::create(std::move(descriptor));
     RETURN_IF_ERROR(check_geography_boundary(*data));
     return NullableColumn::create(std::move(data), NullColumn::create());
@@ -1181,7 +1179,7 @@ StatusOr<MutableColumnPtr> create_geometry_result(FunctionContext* context) {
     if (type.type != TYPE_GEOMETRY || !type.geo_type.has_value()) {
         return Status::NotSupported("GEOMETRY constructor requires semantic type metadata");
     }
-    GeoColumnDescriptor descriptor{type.geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}};
+    GeoColumnDescriptor descriptor{type.geo_type.value()};
     auto data = GeoColumn::create(std::move(descriptor));
     RETURN_IF_ERROR(check_geometry_boundary(*data));
     return NullableColumn::create(std::move(data), NullColumn::create());
@@ -1557,7 +1555,7 @@ StatusOr<MutableColumnPtr> create_centroid_result(FunctionContext* context) {
     if (type.type != Type || !type.geo_type.has_value()) {
         return Status::NotSupported("ST_Centroid requires native GEO return metadata");
     }
-    GeoColumnDescriptor descriptor{type.geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}};
+    GeoColumnDescriptor descriptor{type.geo_type.value()};
     auto data = GeoColumn::create(std::move(descriptor));
     if constexpr (Type == TYPE_GEOGRAPHY) {
         RETURN_IF_ERROR(check_geography_boundary(*data));
