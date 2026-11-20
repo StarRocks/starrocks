@@ -18,6 +18,7 @@
 #include <memory>
 
 #include "column/chunk.h"
+#include "common/logging.h"
 
 namespace starrocks {
 
@@ -97,6 +98,10 @@ private:
     const size_t _read_ahead_budget;
     // One past the last child whose read-ahead has started.
     size_t _read_ahead_end = 0;
+    // EXPERIMENT ONLY (not for merge): peak children started ahead and not read yet, and peak blocks they held.
+    size_t _probe_peak_ahead = 0;
+    size_t _probe_peak_held = 0;
+    bool _probe_enabled = false;
 };
 
 inline void UnionIterator::_read_ahead() {
@@ -125,6 +130,9 @@ inline void UnionIterator::_read_ahead() {
             return;
         }
         held += child->read_ahead_blocks();
+        _probe_enabled = true;
+        _probe_peak_ahead = std::max(_probe_peak_ahead, _read_ahead_end - _cur_idx - 1);
+        _probe_peak_held = std::max(_probe_peak_held, held);
         if (!child->read_ahead_done()) {
             return;
         }
@@ -186,6 +194,11 @@ inline Status UnionIterator::do_get_next(Chunk* chunk, std::vector<uint64_t>* rs
 }
 
 inline void UnionIterator::close() {
+    if (_probe_enabled) {
+        LOG(INFO) << "C8_PROBE peak_ahead=" << _probe_peak_ahead << " peak_held_blocks=" << _probe_peak_held
+                  << " children=" << _children.size() << " limit=" << _read_ahead_budget;
+        _probe_enabled = false;
+    }
     for (auto& ptr : _children) {
         if (ptr != nullptr) {
             ptr->close();
