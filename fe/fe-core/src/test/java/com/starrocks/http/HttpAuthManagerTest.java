@@ -16,6 +16,7 @@ package com.starrocks.http;
 
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.http.HttpAuthManager.SessionValue;
+import com.starrocks.qe.ConnectContext;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -27,11 +28,15 @@ public class HttpAuthManagerTest {
         String sessionId = "test_session_id";
         String username = "test-user";
         SessionValue sessionValue = new SessionValue();
-        sessionValue.currentUser = UserIdentity.createAnalyzedUserIdentWithIp(username, "%");
+        UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(username, "%");
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(currentUser);
+        sessionValue.connectContext = context;
+
         authMgr.addSessionValue(sessionId, sessionValue);
         Assertions.assertEquals(1, authMgr.getAuthSessions().size());
-        System.out.println("username in test: " + authMgr.getSessionValue(sessionId).currentUser);
-        Assertions.assertEquals(username, authMgr.getSessionValue(sessionId).currentUser.getUser());
+        System.out.println("username in test: " + authMgr.getSessionValue(sessionId).connectContext.getCurrentUserIdentity());
+        Assertions.assertEquals(username, authMgr.getSessionValue(sessionId).connectContext.getCurrentUserIdentity().getUser());
 
         String noExistSession = "no-exist-session-id";
         Assertions.assertNull(authMgr.getSessionValue(noExistSession));
