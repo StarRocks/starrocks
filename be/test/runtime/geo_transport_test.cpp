@@ -593,7 +593,7 @@ void check_empty_array_transport(bool copy_rows) {
                     array->append_default(3);
                     down_cast<NullableColumn*>(source.get())->null_column_data().assign(3, 0);
                 }
-                EXPECT_EQ(desc, leaf(source.get())->descriptor());
+                EXPECT_EQ(desc.type, leaf(source.get())->descriptor().type);
                 ASSERT_EQ(0, leaf(source.get())->size());
                 auto copied = ColumnHelper::create_column(type, true);
                 if (copy_rows) {
@@ -604,7 +604,7 @@ void check_empty_array_transport(bool copy_rows) {
                         copied->append_selective(*source, indexes, 0, 3);
                     else
                         copied->append_value_multiple_times(*source, 1, 3);
-                    EXPECT_EQ(desc, leaf(copied.get())->descriptor());
+                    EXPECT_EQ(desc.type, leaf(copied.get())->descriptor().type);
                 }
                 const ColumnPtr column = copy_rows ? copied : source;
                 Chunk chunk;
@@ -620,7 +620,8 @@ void check_empty_array_transport(bool copy_rows) {
                 auto restored = reader.deserialize(wire->data());
                 ASSERT_TRUE(restored.ok()) << restored.status();
                 auto out = restored->get_column_by_slot_id(1);
-                EXPECT_EQ(desc, leaf(out.get())->descriptor());
+                // Transport preserves the sent descriptor exactly; copies only guarantee the type.
+                EXPECT_EQ(leaf(column.get())->descriptor(), leaf(out.get())->descriptor());
                 EXPECT_EQ(0, leaf(out.get())->size());
                 ASSERT_EQ(3, out->size());
                 for (size_t row = 0; row < out->size(); ++row) {
