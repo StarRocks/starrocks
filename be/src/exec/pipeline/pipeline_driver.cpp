@@ -169,7 +169,14 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
                 if (!desc->skip_wait()) {
                     _global_rf_descriptors.emplace_back(desc);
 #ifdef FIU_ENABLE
-                    FAIL_POINT_TRIGGER_EXECUTE(global_runtime_filter_sync_A, { desc->barrier.arrive_A(); });
+                    // Bounded, so that a filter that never reaches this descriptor cannot hang the fragment prepare.
+                    FAIL_POINT_TRIGGER_EXECUTE(global_runtime_filter_sync_A, {
+                        if (!desc->barrier.arrive_A(std::chrono::seconds(10))) {
+                            LOG(WARNING) << "global_runtime_filter_sync_A: the runtime filter did not arrive in 10s, "
+                                            "filter_id="
+                                         << desc->filter_id();
+                        }
+                    });
 #endif
                     desc->add_observer(_runtime_state, &_observer);
                 }
