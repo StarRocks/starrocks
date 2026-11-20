@@ -19,15 +19,14 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -185,8 +184,7 @@ public class MVActiveChecker extends LeaderDaemon {
     }
 
     private static boolean executeActivate(MaterializedView mv, String dbName) {
-        String mvFullName =
-                new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, mv.getName()).toString();
+        String mvFullName = ParseUtil.backquote(dbName) + "." + ParseUtil.backquote(mv.getName());
         String sql = String.format("ALTER MATERIALIZED VIEW %s active", mvFullName);
         LOG.info("[MVActiveChecker] Start to activate MV {} because of its inactive reason: {}",
                 mvFullName, mv.getInactiveReason());

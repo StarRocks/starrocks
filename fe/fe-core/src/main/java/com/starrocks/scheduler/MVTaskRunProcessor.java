@@ -151,7 +151,7 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
             String errorMsg = String.format("Materialized view: %s/%d is not active due to %s.",
                     mv.getName(), mvId, mv.getInactiveReason());
             if (MaterializedViewExceptions.isRecoveredByForceRefresh(mv.getInactiveReason())) {
-                errorMsg += " " + MaterializedViewExceptions.recoverByRebuildHint(mv.getName());
+                errorMsg += " " + MaterializedViewExceptions.recoverByRebuildHint(db.getFullName(), mv.getName());
             }
             logger.warn(errorMsg);
             mvMetricsEntity.increaseRefreshJobStatus(Constants.TaskRunState.FAILED);
