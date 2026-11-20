@@ -767,4 +767,23 @@ public class SetTest extends PlanTestBase {
                 + "         1 | 10.0\n"
                 + "         7 | 70.0");
     }
+
+    @Test
+    public void testExceptWithEmptyRightKeepsDistinct() throws Exception {
+        // RB-1053: once the right side of EXCEPT is pruned as empty, the remaining side must still be de-duplicated.
+        String plan = getFragmentPlan("select v1 from t0 except select v1 from t0 where 1 = 0");
+        assertContains(plan, "AGGREGATE");
+        assertContains(plan, "AGGREGATE (update finalize)\n  |  group by: 7: v1");
+        assertNotContains(plan, "EXCEPT");
+
+        plan = getFragmentPlan("select v1, v2 from t0 except select v4, v5 from t1 where 1 = 0 limit 2");
+        assertContains(plan, "group by:");
+        assertContains(plan, "limit: 2");
+
+        // the outer IS NULL is pushed into the right side, whose column is NOT NULL, so the right side becomes empty
+        plan = getFragmentPlan("select * from (select t1b from test_all_type except " +
+                "select t1b from test_all_type_not_null) s where t1b is null");
+        assertContains(plan, "AGGREGATE");
+        assertNotContains(plan, "EXCEPT");
+    }
 }
