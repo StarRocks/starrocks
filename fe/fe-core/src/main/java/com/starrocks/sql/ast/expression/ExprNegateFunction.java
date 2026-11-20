@@ -45,7 +45,9 @@ public final class ExprNegateFunction {
     public static Expr negate(Expr expr) {
         Preconditions.checkNotNull(expr, "expression cannot be null");
         if (expr instanceof BinaryPredicate) {
-            return negateBinaryPredicate((BinaryPredicate) expr);
+            // A compound predicate negates its operands without asking isSupportNegate first, so an
+            // operator with no opposite (EQ_FOR_NULL) must fall back to NOT here instead of throwing.
+            return isSupportNegate(expr) ? negateBinaryPredicate((BinaryPredicate) expr) : defaultNegate(expr);
         } else if (expr instanceof CompoundPredicate) {
             return negateCompoundPredicate((CompoundPredicate) expr);
         } else if (expr instanceof LargeInPredicate) {

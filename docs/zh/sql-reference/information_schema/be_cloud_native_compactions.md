@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "be_cloud_native_compactions 提供存算分离集群 CN 上运行的 Compaction 事务信息。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # be_cloud_native_compactions

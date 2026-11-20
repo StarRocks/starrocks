@@ -37,6 +37,9 @@ public class FormatOptions {
 
     private boolean printActualSelectItem = true;
 
+    // CTE column lists may be copied from the query's derived names, which carry the original expression text
+    private boolean hideCteColumnNames = false;
+
     private boolean printLevelCompound = true;
 
     private boolean enableHints = true;
@@ -84,6 +87,10 @@ public class FormatOptions {
 
     public boolean isPrintActualSelectItem() {
         return printActualSelectItem;
+    }
+
+    public boolean isHideCteColumnNames() {
+        return hideCteColumnNames;
     }
 
     public boolean isPrintLevelCompound() {
@@ -140,6 +147,11 @@ public class FormatOptions {
 
     public FormatOptions setPrintActualSelectItem(boolean printActualSelectItem) {
         this.printActualSelectItem = printActualSelectItem;
+        return this;
+    }
+
+    public FormatOptions setHideCteColumnNames(boolean hideCteColumnNames) {
+        this.hideCteColumnNames = hideCteColumnNames;
         return this;
     }
 

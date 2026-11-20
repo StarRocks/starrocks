@@ -288,6 +288,12 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
         metadataOfTable(table).invalidateTableForRead(srDbName, table);
     }
 
+    // The table type is unknown without loading the table, and invalidating does no I/O, so ask every connector.
+    @Override
+    public void invalidateCachedTable(String dbName, String tableName) {
+        metadataMap.values().forEach(metadata -> metadata.invalidateCachedTable(dbName, tableName));
+    }
+
     @Override
     public boolean dbExists(ConnectContext context, String dbName) {
         return hiveMetadata.dbExists(context, dbName);

@@ -26,6 +26,7 @@ set(SERVICE_BE_FILES
     starrocks_be.cpp
     arrow_flight_sql_service.cpp
     arrow_flight_auth_server_middleware.cpp
+    arrow_flight_call_header_utils.cpp
 )
 
 if (NOT APPLE)

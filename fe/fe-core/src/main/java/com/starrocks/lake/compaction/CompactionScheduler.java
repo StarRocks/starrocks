@@ -380,10 +380,12 @@ public class CompactionScheduler extends Daemon {
             //     txn vlogs over [alter_version + 1, commit_version). A compaction only writes the visible (base)
             //     index tablets, so a compaction version inside that range has no rollup vlog and the rollup
             //     publish fails on every retry, wedging the job forever (RB-320).
+            // An alter that still waits for earlier transactions when a partition starts rejecting commits is
+            // cancelled (LakeAlterWaitGuard), allowing compaction to resume when the table returns to NORMAL.
             if (table != null && (table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE
                     || table.getState() == OlapTable.OlapTableState.ROLLUP)) {
                 long retryAfterMs = Config.lake_compaction_interval_ms_on_failure;
-                compactionManager.enableCompactionAfter(partitionIdentifier, retryAfterMs);
+                compactionManager.deferCompactionForAlter(partitionIdentifier, retryAfterMs);
                 logCompactionSkippedByAlter(db, table, partitionStatisticsSnapshot, retryAfterMs);
                 return null;
             }
@@ -771,12 +773,18 @@ public class CompactionScheduler extends Daemon {
      * the given table for a tablet-reshard CLEANING phase, so it does not have to wait for slow
      * compaction before cleaning up.
      *
-     * <p>For a compaction on an included physical partition ({@code includePartitionIds}, e.g. the
-     * partitions a reshard job is resharding), an uncommitted pre-reshard compaction is aborted (it is
-     * dropped when it is cross-published to the child tablets anyway, so aborting loses nothing). An
-     * already-committed compaction has taken a partition version and must still publish so its version
-     * cross-publishes onto the child tablets, hence it is left running for the previous-transactions wait
-     * to drain.
+     * <p>For a compaction on a physical partition in {@code abortPartitionIds} (a subset of
+     * {@code includePartitionIds}, e.g. the partitions where a split job really split a tablet), an
+     * uncommitted pre-reshard compaction is aborted (it is dropped when it is cross-published to the
+     * child tablets anyway, so aborting loses nothing). An already-committed compaction has taken a
+     * partition version and must still publish so its version cross-publishes onto the child tablets,
+     * hence it is left running for the previous-transactions wait to drain.
+     *
+     * <p>A compaction on a partition in {@code includePartitionIds} but NOT in {@code abortPartitionIds}
+     * is left running and its txn id is not returned, so the previous-transactions wait drains it. A
+     * caller leaves out a partition whose compaction stays valid through the reshard, such as one where
+     * every tablet was kept as an identical tablet: the compaction commits against the indexes it
+     * registered when it began and publishes onto the identical tablets.
      *
      * <p>A compaction on a partition NOT in {@code includePartitionIds} is unaffected by the reshard: it
      * is neither cancelled nor needs to be waited on. Its txn id is returned so the caller can exclude
@@ -799,7 +807,7 @@ public class CompactionScheduler extends Daemon {
      * @return the txn ids of compactions on partitions not in {@code includePartitionIds}.
      */
     public Set<Long> cancelPreviousCompactions(long endTransactionId, long dbId, long tableId,
-                                               Set<Long> includePartitionIds) {
+                                               Set<Long> includePartitionIds, Set<Long> abortPartitionIds) {
         Set<Long> ignoredTxnIds = new HashSet<>();
         for (Map.Entry<PartitionIdentifier, CompactionJob> entry : runningCompactions.entrySet()) {
             PartitionIdentifier partition = entry.getKey();
@@ -810,6 +818,9 @@ public class CompactionScheduler extends Daemon {
             }
             if (!includePartitionIds.contains(partition.getPartitionId())) {
                 ignoredTxnIds.add(job.getTxnId());
+                continue;
+            }
+            if (!abortPartitionIds.contains(partition.getPartitionId())) {
                 continue;
             }
             boolean reshardOwnUnshare = job.isUnshare() && job.getPartition().isUnsharing();

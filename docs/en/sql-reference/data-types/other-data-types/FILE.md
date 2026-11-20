@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "FILE is a read-only scalar type that references a file, or a byte range of a file, through a fixed set of fields."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'

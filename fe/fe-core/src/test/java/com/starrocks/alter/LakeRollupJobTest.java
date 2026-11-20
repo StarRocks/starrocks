@@ -32,6 +32,9 @@ import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.Utils;
+import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.lake.compaction.PartitionIdentifier;
+import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
@@ -434,6 +437,72 @@ public class LakeRollupJobTest {
         Assertions.assertEquals(AlterJobV2.JobState.PENDING, lakeRollupJob3.getJobState());
     }
 
+    /**
+     * StarRocksTest#12647: the base table does not compact while the rollup waits for earlier transactions. Once a
+     * partition's compaction score is above lake_compaction_score_upper_bound, every commit into it is rejected, the
+     * commits of those transactions included, so the job is cancelled and the table is NORMAL again.
+     */
+    @Test
+    public void testCancelledWhileWaitingTxnOnceCommitsAreRejected() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_table_rejecting\n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    k3 int\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values [('2022-02-01'),('2022-02-16'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3;");
+        LakeRollupJob job = createJob(
+                "create materialized view mv_rejecting as select k2, k1 from base_table_rejecting order by k2;");
+        OlapTable baseTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(DB).getTable("base_table_rejecting");
+        long txnId = ConcurrentLoad.begin(db, baseTable);
+        job.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+
+        PhysicalPartition physicalPartition = baseTable.getAllPhysicalPartitions().iterator().next();
+        long externalPinVersion = physicalPartition.getVisibleVersion();
+        physicalPartition.setMinRetainVersion(externalPinVersion);
+        PartitionIdentifier partition =
+                new PartitionIdentifier(job.getDbId(), baseTable.getId(), physicalPartition.getId());
+        CompactionMgr compactionMgr = GlobalStateMgr.getCurrentState().getCompactionMgr();
+        boolean oldSlowdown = Config.lake_enable_ingest_slowdown;
+        long oldUpperBound = Config.lake_compaction_score_upper_bound;
+        Config.lake_enable_ingest_slowdown = true;
+        Config.lake_compaction_score_upper_bound = 100;
+        try {
+            // At the bound commits still go through, and the job keeps waiting.
+            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
+                    System.currentTimeMillis(), new Quantiles(1.0, 1.0, 100.0));
+            job.runWaitingTxnJob();
+            Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+
+            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
+                    System.currentTimeMillis(), new Quantiles(1.0, 1.0, 101.0));
+            // Run the job as the rollup handler does: for a rollup, the handler returns the table to NORMAL once the
+            // job is done (MaterializedViewHandler#onJobDone), not the job's own cancel.
+            MaterializedViewHandler rollupHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
+            rollupHandler.addAlterJobV2(job);
+            rollupHandler.runAfterLeaseValid();
+            Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+            Assertions.assertTrue(job.errMsg.contains("partition " + physicalPartition.getId()), job.errMsg);
+            Assertions.assertTrue(job.errMsg.contains("lake_compaction_score_upper_bound 100"), job.errMsg);
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, baseTable.getState());
+            Assertions.assertEquals(externalPinVersion, physicalPartition.getMinRetainVersion());
+        } finally {
+            physicalPartition.setMinRetainVersion(0);
+            GlobalStateMgr.getCurrentState().getRollupHandler().clearJobs();
+            Config.lake_enable_ingest_slowdown = oldSlowdown;
+            Config.lake_compaction_score_upper_bound = oldUpperBound;
+            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
+                    System.currentTimeMillis(), new Quantiles(0.0, 0.0, 0.0));
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(db.getId(), txnId, "test done");
+        }
+    }
+
     @Test
     public void testLightWeightTabletCreationSkipsSendTask() throws Exception {
         starRocksAssert.withTable("CREATE TABLE base_table_lw\n" +
@@ -689,7 +758,10 @@ public class LakeRollupJobTest {
         Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
         Assertions.assertTrue(job.rollupBatchTask.getTaskNum() > 0);
 
+        PhysicalPartition partition = baseTable.getPhysicalPartitions().iterator().next();
+        Assertions.assertEquals(partition.getVisibleVersion(), partition.getMinRetainVersion());
         Assertions.assertTrue(job.cancel("cancel"));
+        Assertions.assertEquals(0, partition.getMinRetainVersion());
 
         Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
         assertPruned(job);

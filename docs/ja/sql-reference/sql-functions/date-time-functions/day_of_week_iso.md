@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された日付のISO標準の曜日を1から7の範囲の整数で返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # dayofweek_iso

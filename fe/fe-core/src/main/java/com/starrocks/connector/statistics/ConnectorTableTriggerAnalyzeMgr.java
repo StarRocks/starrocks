@@ -25,6 +25,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.ColumnStatsMeta;
+import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
@@ -121,6 +123,8 @@ public class ConnectorTableTriggerAnalyzeMgr {
         }
 
         Set<String> analyzeColumns = Sets.newHashSet();
+        LocalDateTime now = LocalDateTime.now();
+        ExternalBasicStatsMeta statsMeta = null;
         Triple<String, Database, Table> tableTriple = null;
         boolean tableExist = false;
         String tableUUID = null;
@@ -136,6 +140,9 @@ public class ConnectorTableTriggerAnalyzeMgr {
                     }
                     tableExist = true;
                     tableUUID = columnKey.tableUUID;
+                    statsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalTableBasicStatsMeta(
+                            tableTriple.getLeft(), tableTriple.getMiddle().getFullName(),
+                            tableTriple.getRight().getName());
                 } catch (Exception e) {
                     LOG.warn("[ExternalStats] trigger skip | table_uuid={} reason=table_not_found", columnKey.tableUUID);
                     return;
@@ -149,7 +156,7 @@ public class ConnectorTableTriggerAnalyzeMgr {
             } else {
                 // check column stats last update time
                 ConnectorTableColumnStats columnStatsValue = columnStatsOptional.get();
-                LocalDateTime lastUpdateTime = parseUpdateTime(columnStatsValue.getUpdateTime());
+                LocalDateTime lastUpdateTime = lastCollectionTime(statsMeta, columnKey.column, columnStatsValue);
                 if (lastUpdateTime == null) {
                     // No usable timestamp, so there is no interval this column can be inside: it is due.
                     // Letting the parse throw instead would abandon the whole table - every other column in
@@ -163,7 +170,7 @@ public class ConnectorTableTriggerAnalyzeMgr {
                 long timeInterval = rowCount < Config.connector_table_query_trigger_analyze_small_table_rows ?
                         Config.connector_table_query_trigger_analyze_small_table_interval :
                         Config.connector_table_query_trigger_analyze_large_table_interval;
-                if (!lastUpdateTime.plusSeconds(timeInterval).isAfter(LocalDateTime.now())) {
+                if (!lastUpdateTime.plusSeconds(timeInterval).isAfter(now)) {
                     analyzeColumns.add(columnKey.column);
                 }
             }
@@ -267,6 +274,20 @@ public class ConnectorTableTriggerAnalyzeMgr {
         synchronized (triggeredColumns) {
             return triggeredColumns.size();
         }
+    }
+
+    // When the column was last collected. Taken from the stats meta first, like native tables do: it is stamped
+    // with LocalDateTime.now() in the FE JVM zone, the same zone as the now() it is compared with here. The
+    // update_time of the statistics rows is written by SQL now() in the statistics session's time_zone (global,
+    // or the background warehouse's override), which can differ from the JVM zone and would shift the interval
+    // by that difference. The rows are only the fallback, for a column the meta does not know about.
+    private static LocalDateTime lastCollectionTime(ExternalBasicStatsMeta statsMeta, String column,
+                                                    ConnectorTableColumnStats columnStats) {
+        ColumnStatsMeta columnStatsMeta = statsMeta == null ? null : statsMeta.getColumnStatsMeta(column);
+        if (columnStatsMeta != null && columnStatsMeta.getUpdateTime() != null) {
+            return columnStatsMeta.getUpdateTime();
+        }
+        return parseUpdateTime(columnStats.getUpdateTime());
     }
 
     // The recorded collection time, or null when there is none or it cannot be read.

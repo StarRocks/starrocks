@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "计算两个日期表达式的天数差（expr1 − expr2），精确到天。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # days_diff

@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "共有なし StarRocks クラスタを手動でデプロイする方法（BE がストレージとコンピューティングの両方を担当）。"
+products: [oss]
 ---
 
 import ManualPrep from '../_assets/deployment/manual_prep.mdx'
@@ -307,7 +308,7 @@ BEノードは共有なしクラスタにのみ追加でき、CNノードは共�
    > **注意**
    >
    > - 上記のコマンドを使用して、1 回に 1 つの Follower FE ノードを追加できます。
-   > - Observer FE ノードを追加したい場合は、`ALTER SYSTEM ADD OBSERVER "<fe_address>:<edit_log_port>"=` を実行します。詳細な手順については、[ALTER SYSTEM - FE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md)を参照してください。
+   > - Observer FE ノードを追加したい場合は、`ALTER SYSTEM ADD OBSERVER "<fe_address>:<edit_log_port>"` を実行します。詳細な手順については、[ALTER SYSTEM - FE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md)を参照してください。
 
 3. 新しい FE インスタンスでターミナルを起動し、メタデータストレージ用の専用ディレクトリを作成し、StarRocks FE デプロイメントファイルを保存しているディレクトリに移動し、FE 設定ファイル **fe/conf/fe.conf** を修正します。詳細な手順については、[ステップ 1: Leader FE ノードを起動する](#ステップ-1-leader-fe-ノードを起動する)を参照してください。基本的には、FE ノードを起動するためのコマンドを除いて、ステップ 1 の手順を繰り返すことができます。
 

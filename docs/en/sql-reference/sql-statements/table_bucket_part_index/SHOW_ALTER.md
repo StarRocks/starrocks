@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Shows the execution status of ongoing ALTER TABLE operations including column changes, schema optimization, and rollup index changes."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW ALTER TABLE

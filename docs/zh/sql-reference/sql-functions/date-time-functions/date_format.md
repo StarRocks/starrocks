@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将日期按照指定的格式转化为字符串。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # date_format

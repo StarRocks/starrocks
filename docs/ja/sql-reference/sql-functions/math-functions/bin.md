@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "入力をバイナリに変換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bin

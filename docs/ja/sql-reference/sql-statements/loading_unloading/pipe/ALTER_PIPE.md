@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "パイプのプロパティ設定を変更します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER PIPE

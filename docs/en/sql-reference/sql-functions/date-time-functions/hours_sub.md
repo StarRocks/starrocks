@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Reduces the specified date and time by a specified number of hours."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # hours_sub

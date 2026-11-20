@@ -471,4 +471,22 @@ TEST(DictEncodingTest, FixedLengthValuesWithNulls) {
     }
 }
 
+TEST(DictEncodingTest, AssignDataWithNullsSparseAndTrailingNulls) {
+    DictDecoder<int32_t> decoder;
+    for (size_t count :
+         {size_t{0}, size_t{15}, size_t{16}, size_t{17}, size_t{31}, size_t{32}, size_t{33}, size_t{64}, size_t{128}}) {
+        const bool is_dense = (1 >= count / 10);
+        for (size_t pos = 0; pos < count; ++pos) {
+            std::vector<uint8_t> nulls(count, 1);
+            nulls[pos] = 0;
+            // Dense expansion (base/simd/expand.h:31-38) requires src to remain readable at index num_valid.
+            // Sparse scatter path is kept unpadded to verify its guarded tail never over-reads.
+            std::vector<int32_t> src = is_dense ? std::vector<int32_t>{4242, 0} : std::vector<int32_t>{4242};
+            std::vector<int32_t> dst(count, -1);
+            decoder.assign_data_with_nulls<int32_t>(count, 1, nulls.data(), src.data(), dst.data());
+            EXPECT_EQ(4242, dst[pos]) << "count=" << count << " pos=" << pos;
+        }
+    }
+}
+
 } // namespace starrocks::parquet

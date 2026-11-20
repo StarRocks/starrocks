@@ -24,6 +24,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableOperation;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
@@ -314,6 +316,12 @@ public class DeleteAnalyzer {
         }
 
         if (!(table instanceof OlapTable && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS)) {
+            // Such a DELETE runs as a DeleteMgr job that begins and commits a transaction of its own. Inside an
+            // explicit transaction it would take effect at once, and ROLLBACK could not undo it.
+            if (session.getTxnId() != 0) {
+                ErrorReport.reportSemanticException(
+                        ErrorCode.ERR_EXPLICIT_TXN_DELETE_ON_NON_PRIMARY_KEY_TABLE, table.getName());
+            }
             if (table instanceof OlapTable && Config.enable_non_primary_key_delete_warning) {
                 deleteStatement.setOkInfoMessage(buildNonPrimaryKeyDeleteInfo((OlapTable) table));
             }

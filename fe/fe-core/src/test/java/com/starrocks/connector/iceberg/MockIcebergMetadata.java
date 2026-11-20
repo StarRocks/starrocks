@@ -49,7 +49,6 @@ import com.starrocks.type.MapType;
 import com.starrocks.type.StringType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
-import com.starrocks.type.UnknownType;
 import com.starrocks.type.VarcharType;
 import com.starrocks.type.VariantType;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
@@ -267,20 +266,28 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         MOCK_TABLE_MAP.putIfAbsent(MOCKED_UNPARTITIONED_DB_NAME, new CaseInsensitiveMap<>());
         Map<String, IcebergTableInfo> icebergTableInfoMap = MOCK_TABLE_MAP.get(MOCKED_UNPARTITIONED_DB_NAME);
 
-        List<Column> schemas = ImmutableList.of(
-                new Column("id", IntegerType.INT, true),
-                new Column("data", StringType.STRING, true),
-                new Column("geo_col", UnknownType.UNKNOWN_TYPE, true),
-                new Column("geography_col", UnknownType.UNKNOWN_TYPE, true),
-                new Column("ts_nano_col", UnknownType.UNKNOWN_TYPE, true));
-        schemas = addMetaColumns(schemas);
-
         Schema schema = new Schema(
-                required(3, "id", Types.IntegerType.get()),
-                required(4, "data", Types.StringType.get()),
-                required(5, "geo_col", Types.GeometryType.crs84()),
-                required(7, "geography_col", Types.GeographyType.crs84()),
-                required(6, "ts_nano_col", Types.StringType.get()));
+                Types.NestedField.optional(3, "id", Types.IntegerType.get()),
+                Types.NestedField.optional(4, "data", Types.StringType.get()),
+                Types.NestedField.optional(5, "geo_col", Types.GeometryType.of("IGNF:ATI")),
+                Types.NestedField.optional(7, "geography_col", Types.GeographyType.crs84()),
+                Types.NestedField.optional(6, "ts_nano_col", Types.TimestampNanoType.withoutZone()),
+                Types.NestedField.optional(8, "locations", Types.ListType.ofOptional(9, Types.StructType.of(
+                        Types.NestedField.optional(10, "shape", Types.GeographyType.crs84()),
+                        Types.NestedField.optional(11, "label", Types.StringType.get())))),
+                Types.NestedField.optional(12, "geom_scalar", Types.GeometryType.crs84()),
+                Types.NestedField.optional(13, "geom_array", Types.ListType.ofOptional(14, Types.GeometryType.crs84())),
+                Types.NestedField.optional(15, "geom_map",
+                        Types.MapType.ofOptional(16, 17, Types.IntegerType.get(), Types.GeometryType.of("EPSG:3857"))),
+                Types.NestedField.optional(18, "geom_struct", Types.StructType.of(
+                        Types.NestedField.optional(19, "shape", Types.GeometryType.of("EPSG:3857")),
+                        Types.NestedField.optional(20, "label", Types.StringType.get()))),
+                Types.NestedField.optional(21, "geom_locations", Types.ListType.ofOptional(22, Types.StructType.of(
+                        Types.NestedField.optional(23, "shape", Types.GeometryType.crs84()),
+                        Types.NestedField.optional(24, "label", Types.StringType.get())))),
+                Types.NestedField.optional(25, "bad_geom_array",
+                        Types.ListType.ofOptional(26, Types.GeometryType.of("IGNF:ATI"))));
+        List<Column> schemas = addMetaColumns(IcebergApiConverter.toFullSchemas(schema));
         PartitionSpec spec = PartitionSpec.builderFor(schema).build();
         TestTables.TestTable baseTable = TestTables.create(
                 new File(getStarRocksHome() + "/" + MOCKED_UNPARTITIONED_DB_NAME + "/" +
@@ -841,6 +848,23 @@ public class MockIcebergMetadata implements ConnectorMetadata {
             return new IcebergView(1, MOCKED_ICEBERG_CATALOG_NAME, dbName, viewName, schema,
                     "SELECT 1 as id, 'data' as data, CAST('2024-01-01' as DATE) as date", MOCKED_ICEBERG_CATALOG_NAME, dbName,
                     "view_location", Maps.newHashMap());
+        }
+        // A view defined by Spark/Trino whose body refers to one relation alias with different cases.
+        if (dbName.equalsIgnoreCase("view_db") && viewName.equalsIgnoreCase("mixed_case_alias_view")) {
+            List<Column> schema = Lists.newArrayList(
+                    new Column("id", IntegerType.INT),
+                    new Column("data", StringType.STRING));
+            String def = "SELECT t.id, T.data FROM " + MOCKED_ICEBERG_CATALOG_NAME + "."
+                    + MOCKED_UNPARTITIONED_DB_NAME + "." + MOCKED_UNPARTITIONED_TABLE_NAME0 + " T";
+            return new IcebergView(1, MOCKED_ICEBERG_CATALOG_NAME, dbName, viewName, schema,
+                    def, MOCKED_ICEBERG_CATALOG_NAME, dbName, "view_location", Maps.newHashMap());
+        }
+        // A view that reads a StarRocks native view, see IcebergViewCaseInsensitiveAliasTest.
+        if (dbName.equalsIgnoreCase("view_db") && viewName.equalsIgnoreCase("native_view_reader")) {
+            List<Column> schema = Lists.newArrayList(new Column("v1", IntegerType.BIGINT));
+            return new IcebergView(1, MOCKED_ICEBERG_CATALOG_NAME, dbName, viewName, schema,
+                    "SELECT v1 FROM default_catalog.test.case_sensitive_alias_view",
+                    MOCKED_ICEBERG_CATALOG_NAME, dbName, "view_location", Maps.newHashMap());
         }
         // A pair of mutually-referencing views (cyc_a -> cyc_b -> cyc_a) used to verify cyclic
         // connector-view detection. Each lookup mints a *fresh* id, mirroring
