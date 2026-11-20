@@ -384,7 +384,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                         + "INCREMENTAL materialized views %s "
                         + "(DELETE / OVERWRITE / DROP PARTITION / snapshot expiration / table replacement). %s",
                 mv.getName(), reasonFragment, MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER,
-                MaterializedViewExceptions.recoverByRebuildHint(mv.getName()));
+                MaterializedViewExceptions.recoverByRebuildHint(db.getFullName(), mv.getName()));
     }
 
     public TvrTableDelta getBaseTableMaxChangedDelta(BaseTableSnapshotInfo snapshotInfo,

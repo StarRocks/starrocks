@@ -75,7 +75,7 @@ public class IvmForceActivateTest extends IvmIcebergRefreshJobTestBase {
 
         Exception e = Assertions.assertThrows(Exception.class, () -> runFirstBatch(mv));
         Assertions.assertTrue(e.getMessage().contains("is not active"), e.getMessage());
-        Assertions.assertTrue(e.getMessage().contains("REFRESH MATERIALIZED VIEW " + mv.getName() + " FORCE"),
+        Assertions.assertTrue(e.getMessage().contains("REFRESH MATERIALIZED VIEW `test`.`" + mv.getName() + "` FORCE"),
                 e.getMessage());
         Assertions.assertFalse(mv.isActive());
         Assertions.assertEquals(reason, mv.getInactiveReason());

@@ -15,6 +15,7 @@
 package com.starrocks.common;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.MVInactiveException;
 import org.apache.commons.lang3.StringUtils;
@@ -111,9 +112,9 @@ public class MaterializedViewExceptions {
                 .anyMatch(entry -> entry.getValue() && inactiveReason.startsWith(entry.getKey()));
     }
 
-    public static String recoverByRebuildHint(String mvName) {
-        return String.format("Drop and recreate the materialized view, or run REFRESH MATERIALIZED VIEW %s FORCE, "
-                + "to recover.", mvName);
+    public static String recoverByRebuildHint(String dbName, String mvName) {
+        return String.format("Drop and recreate the materialized view, or run REFRESH MATERIALIZED VIEW %s.%s FORCE, "
+                + "to recover.", ParseUtil.backquote(dbName), ParseUtil.backquote(mvName));
     }
 
     // Canonical marker for a permanently-breaking (non-append-only) base change. MVIVMRefreshProcessor builds
