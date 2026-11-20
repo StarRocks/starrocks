@@ -70,7 +70,7 @@ public class LimitPruneTabletsRule extends TransformationRule {
             }
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 long version = physicalPartition.getVisibleVersion();
-                MaterializedIndex index = physicalPartition.getQueryableIndex(olapScanOperator.getSelectedIndexMetaId());
+                MaterializedIndex index = physicalPartition.getLatestIndex(olapScanOperator.getSelectedIndexMetaId());
                 if (index == null) {
                     continue;
                 }

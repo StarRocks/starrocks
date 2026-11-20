@@ -1,0 +1,17 @@
+-- name: test_refresh_external_table_name_parts
+REFRESH EXTERNAL TABLE default_catalog.not_exist_db1.not_exist_db2.not_exist_tbl;
+-- result:
+E: (1064, "Getting syntax error from line 1, column 23 to line 1, column 67. Detail message: Invalid table name format 'default_catalog.not_exist_db1.not_exist_db2.not_exist_tbl'.")
+-- !result
+REFRESH EXTERNAL TABLE not_exist_catalog.not_exist_db1.not_exist_db2.not_exist_tbl;
+-- result:
+E: (1064, "Getting syntax error from line 1, column 23 to line 1, column 69. Detail message: Invalid table name format 'not_exist_catalog.not_exist_db1.not_exist_db2.not_exist_tbl'.")
+-- !result
+REFRESH EXTERNAL TABLE a.b.c.d.e;
+-- result:
+E: (1064, "Getting syntax error from line 1, column 23 to line 1, column 31. Detail message: Invalid table name format 'a.b.c.d.e'.")
+-- !result
+REFRESH EXTERNAL TABLE not_exist_catalog.not_exist_db1.not_exist_db2.not_exist_tbl PARTITION("p1", "p2");
+-- result:
+E: (1064, "Getting syntax error from line 1, column 23 to line 1, column 69. Detail message: Invalid table name format 'not_exist_catalog.not_exist_db1.not_exist_db2.not_exist_tbl'.")
+-- !result

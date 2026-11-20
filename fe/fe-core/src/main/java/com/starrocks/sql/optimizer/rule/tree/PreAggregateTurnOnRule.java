@@ -100,6 +100,32 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
             return null;
         }
 
+        // The aggregate above a set operation refers to the set operation's own output columns, so nothing
+        // it records applies to the scans of a branch. All branches also used to share the one mutable
+        // context: an aggregate in one branch ("Only save the recently aggregate") stayed in it for the next
+        // branch, and a constant GROUP BY there switched pre-aggregation on for a scan of a UNIQUE / AGGREGATE
+        // KEY table that nothing aggregates, which then returned unmerged row versions. Each branch starts
+        // from an empty context, so only an aggregate inside that branch can turn pre-aggregation on.
+        @Override
+        public Void visitPhysicalUnion(OptExpression optExpression, PreAggregationContext context) {
+            return visitSetOperation(optExpression);
+        }
+
+        @Override
+        public Void visitPhysicalExcept(OptExpression optExpression, PreAggregationContext context) {
+            return visitSetOperation(optExpression);
+        }
+
+        @Override
+        public Void visitPhysicalIntersect(OptExpression optExpression, PreAggregationContext context) {
+            return visitSetOperation(optExpression);
+        }
+
+        private Void visitSetOperation(OptExpression optExpression) {
+            optExpression.getInputs().forEach(o -> process(o, new PreAggregationContext()));
+            return null;
+        }
+
         public Void process(OptExpression opt, PreAggregationContext context) {
             if (opt.getOp().getProjection() != null) {
                 rewriteProject(opt, context);
@@ -348,6 +374,14 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
                 // aggregate over a JSON subfield of an AGGREGATE KEY table. Key columns never get here; they
                 // are handled by the caller.
                 scan.setTurnOffReason("Column " + column.getName() + " has no aggregate type");
+                return true;
+            }
+            // A DISTINCT aggregate must see the merged values: two unmerged parts of one SUM value (10 and 11
+            // for a stored 21) are different values to it. Only MAX / MIN give the same answer either way.
+            if (queryAggFunc.isDistinct() && !FunctionSet.MAX.equalsIgnoreCase(queryAggFuncName) &&
+                    !FunctionSet.MIN.equalsIgnoreCase(queryAggFuncName)) {
+                scan.setTurnOffReason("Aggregate function " + queryAggFuncName.toUpperCase() +
+                        " with DISTINCT needs merged values");
                 return true;
             }
             if (FunctionSet.HLL_UNION_AGG.equalsIgnoreCase(queryAggFuncName) ||

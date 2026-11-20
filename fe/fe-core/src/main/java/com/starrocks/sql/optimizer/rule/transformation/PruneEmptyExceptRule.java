@@ -21,7 +21,9 @@ import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
@@ -41,9 +43,11 @@ case1:
    Empty  Child1  Child2
 
 case2:
-       Except
-      /      \     ->  Child1
-   Child1    Empty
+       Except                Distinct (group by all output columns)
+      /      \     ->           |
+   Child1    Empty            Child1
+
+EXCEPT returns distinct rows, so `A EXCEPT empty` is `DISTINCT A`, not `A`.
  */
 public class PruneEmptyExceptRule extends TransformationRule {
     public PruneEmptyExceptRule() {
@@ -97,7 +101,13 @@ public class PruneEmptyExceptRule extends TransformationRule {
         }
 
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projectMap);
-        return Lists.newArrayList(OptExpression.create(projectOperator, newInputs));
+        // Keep the de-duplication of EXCEPT: dropping it returned every duplicate row of the remaining child
+        // (RB-1053). The limit and predicate of the EXCEPT, if any, apply to its distinct rows.
+        List<ColumnRefOperator> outputColumns = exceptOperator.getOutputColumnRefOp();
+        LogicalAggregationOperator distinct = new LogicalAggregationOperator(AggType.GLOBAL, outputColumns,
+                outputColumns, Maps.newHashMap(), false, exceptOperator.getLimit(), exceptOperator.getPredicate());
+        return Lists.newArrayList(OptExpression.create(distinct,
+                OptExpression.create(projectOperator, newInputs)));
 
     }
 }
