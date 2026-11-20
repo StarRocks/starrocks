@@ -110,7 +110,14 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `desired_concurrent_number`
 
 **Required**: No\
-**Description**:  The expected task parallelism of a single Routine Load job. Default value: `3`. The actual task parallelism is determined by the minimum value of the multiple parameters: `min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`. <ul><li>`alive_be_number`: the number of alive BE nodes.</li><li>`partition_number`: the number of partitions to be consumed.</li><li>`desired_concurrent_number`: the expected task parallelism of a single Routine Load  job. Default value: `3`.</li><li>`max_routine_load_task_concurrent_num`: the default maximum task parallelism of a Routine Load job, which is `5`. See [FE dynamic parameter](../../../../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters).</li></ul>The maximum actual task parallelism is determined by either the number of alive BE nodes or the number of partitions to be consumed.<br/>
+**Description**:  The expected task parallelism of a single Routine Load job. Default value: `3`. The actual task parallelism is determined by the minimum value of the multiple parameters: `min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`.
+
+- `alive_be_number`: the number of alive BE nodes.
+- `partition_number`: the number of partitions to be consumed.
+- `desired_concurrent_number`: the expected task parallelism of a single Routine Load  job. Default value: `3`.
+- `max_routine_load_task_concurrent_num`: the default maximum task parallelism of a Routine Load job, which is `5`. See [FE dynamic parameter](../../../../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters).
+
+The maximum actual task parallelism is determined by either the number of alive BE nodes or the number of partitions to be consumed.
 
 #### `max_batch_interval`
 
@@ -125,12 +132,20 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `max_error_number`
 
 **Required**: No\
-**Description**:  The maximum number of error data rows allowed within an error detection window. If the number of error data rows exceeds this value, the load job will pause. You can execute [SHOW ROUTINE LOAD](SHOW_ROUTINE_LOAD.md)  and view the error logs by using `ErrorLogUrls`. After that, you can correct the error in Kafka according to the error logs. The default value is `0`, which means error rows are not allowed. <br />**NOTE** <br /> <ul><li>The last batch of tasks will **succeed** before the load job pauses when there are too many error data rows. That is, the qualified data will be loaded, and the unqualified data will be filtered. If you don't want to filter too many unqualified data rows, set parameter `max_filter_ratio`. </li><li>Error data rows do not include data rows that are filtered out by the WHERE clause.</li><li>This parameter, along with the next parameter `max_filter_ratio`, controls the maximum number of error data records. When `max_filter_ratio` is not set, the value of this parameter takes effect. When `max_filter_ratio` is set, the load job pauses as soon as the number of error data record reaches either the threshold set by this parameter or the `max_filter_ratio` parameter.</li></ul>
+**Description**:  The maximum number of error data rows allowed within an error detection window. If the number of error data rows exceeds this value, the load job will pause. You can execute [SHOW ROUTINE LOAD](SHOW_ROUTINE_LOAD.md)  and view the error logs by using `ErrorLogUrls`. After that, you can correct the error in Kafka according to the error logs. The default value is `0`, which means error rows are not allowed. <br />**NOTE**
+
+- The last batch of tasks will **succeed** before the load job pauses when there are too many error data rows. That is, the qualified data will be loaded, and the unqualified data will be filtered. If you don't want to filter too many unqualified data rows, set parameter `max_filter_ratio`.
+- Error data rows do not include data rows that are filtered out by the WHERE clause.
+- This parameter, along with the next parameter `max_filter_ratio`, controls the maximum number of error data records. When `max_filter_ratio` is not set, the value of this parameter takes effect. When `max_filter_ratio` is set, the load job pauses as soon as the number of error data record reaches either the threshold set by this parameter or the `max_filter_ratio` parameter.
 
 #### `max_filter_ratio`
 
 **Required**: No\
-**Description**: The maximum error tolerance of the load job. The error tolerance is the maximum percentage of data records that can be filtered out due to inadequate data quality in all data records requested by the load job. Valid values: `0` to `1`. Default value: `1` (That means it won't actually take effect).<br/>We recommend that you set it to `0`. This way, if unqualified data records are detected, the load job pauses, thereby ensuring data correctness.<br/>If you want to ignore unqualified data records, you can set this parameter to a value greater than `0`. This way, the load job can succeed even if the data file contains unqualified data records.  <br/>**NOTE**<br/><ul><li>The last batch of tasks will **fail** when there are too many error data rows larger than `max_filter_ratio`. It's a bit **different** with the effect of `max_error_number`.</li><li>Unqualified data records do not include data records that are filtered out by the WHERE clause.</li><li>This parameter, along with the last parameter `max_error_number`, controls the maximum number of error data records. When this parameter is not set (It works the same as setting `max_filter_ratio = 1`), the value of the `max_error_number` parameter takes effect. When this parameter is set, the load job pauses as soon as the number of error data records reaches either the threshold set by this parameter or the `max_error_number` parameter.</li></ul>
+**Description**: The maximum error tolerance of the load job. The error tolerance is the maximum percentage of data records that can be filtered out due to inadequate data quality in all data records requested by the load job. Valid values: `0` to `1`. Default value: `1` (That means it won't actually take effect).<br/>We recommend that you set it to `0`. This way, if unqualified data records are detected, the load job pauses, thereby ensuring data correctness.<br/>If you want to ignore unqualified data records, you can set this parameter to a value greater than `0`. This way, the load job can succeed even if the data file contains unqualified data records.  <br/>**NOTE**
+
+- The last batch of tasks will **fail** when there are too many error data rows larger than `max_filter_ratio`. It's a bit **different** with the effect of `max_error_number`.
+- Unqualified data records do not include data records that are filtered out by the WHERE clause.
+- This parameter, along with the last parameter `max_error_number`, controls the maximum number of error data records. When this parameter is not set (It works the same as setting `max_filter_ratio = 1`), the value of the `max_error_number` parameter takes effect. When this parameter is set, the load job pauses as soon as the number of error data records reaches either the threshold set by this parameter or the `max_error_number` parameter.
 
 #### `strict_mode`      
 
@@ -140,7 +155,13 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `log_rejected_record_num`
 
 **Required**: No\
-**Description**:  Specifies the maximum number of unqualified data rows that can be logged. This parameter is supported from v3.1 onwards. Valid values: `0`, `-1`, and any non-zero positive integer. Default value: `0`.<ul><li>The value `0` specifies that data rows that are filtered out will not be logged.</li><li>The value `-1` specifies that all data rows that are filtered out will be logged.</li><li>A non-zero positive integer such as `n` specifies that up to `n` data rows that are filtered out can be logged on each BE.</li></ul>You can access all the unqualified data rows that are filtered out in the load job by navigating to the path returned in the `REJECTED_RECORD_PATH` field from the query against the `information_schema.loads` view. 
+**Description**:  Specifies the maximum number of unqualified data rows that can be logged. This parameter is supported from v3.1 onwards. Valid values: `0`, `-1`, and any non-zero positive integer. Default value: `0`.
+
+- The value `0` specifies that data rows that are filtered out will not be logged.
+- The value `-1` specifies that all data rows that are filtered out will be logged.
+- A non-zero positive integer such as `n` specifies that up to `n` data rows that are filtered out can be logged on each BE.
+
+You can access all the unqualified data rows that are filtered out in the load job by navigating to the path returned in the `REJECTED_RECORD_PATH` field from the query against the `information_schema.loads` view.
 
 #### `timezone`    
 
@@ -175,7 +196,10 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `escape`
 
 **Required**: No\
-**Description**:  Specifies the character that is used to escape various special characters, such as row separators, column separators, escape characters, and `enclose`-specified characters, which are then considered by StarRocks to be common characters and are parsed as part of the field values in which they reside. Type: single-byte character. Default value: `NONE`. The most prevalent character is slash (`\`), which must be written as double slashes (`\\`) in SQL statements.<br />**NOTE**<br />The character specified by `escape` is applied to both inside and outside of each pair of `enclose`-specified characters.<br />Two examples are as follows:<br /><ul><li>When you set `enclose` to `"` and `escape` to `\`, StarRocks parses `"say \"Hello world\""` into `say "Hello world"`.</li><li>Assume that the column separator is comma (`,`). When you set `escape` to `\`, StarRocks parses `a, b\, c` into two separate field values: `a` and `b, c`.</li></ul> 
+**Description**:  Specifies the character that is used to escape various special characters, such as row separators, column separators, escape characters, and `enclose`-specified characters, which are then considered by StarRocks to be common characters and are parsed as part of the field values in which they reside. Type: single-byte character. Default value: `NONE`. The most prevalent character is slash (`\`), which must be written as double slashes (`\\`) in SQL statements.<br />**NOTE**<br />The character specified by `escape` is applied to both inside and outside of each pair of `enclose`-specified characters.<br />Two examples are as follows:
+
+- When you set `enclose` to `"` and `escape` to `\`, StarRocks parses `"say \"Hello world\""` into `say "Hello world"`.
+- Assume that the column separator is comma (`,`). When you set `escape` to `\`, StarRocks parses `a, b\, c` into two separate field values: `a` and `b, c`.
 
 #### `strip_outer_array`
 
@@ -195,17 +219,28 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `task_consume_second`
 
 **Required**: No\
-**Description**:  The maximum time for each Routine Load task within the specified Routine Load job to consume data. Unit: second. Unlike the [FE dynamic parameters](../../../../administration/configuration/FE_parameters/FE_parameters.md) `routine_load_task_consume_second` (which applies to all Routine Load jobs within the cluster), this parameter is specific to an individual Routine Load job, which is more flexible. This parameter is supported since v3.1.0.<ul> <li>When `task_consume_second` and `task_timeout_second` are not configured, StarRocks uses the FE dynamic parameters `routine_load_task_consume_second` and `routine_load_task_timeout_second` to control the load behavior.</li> <li>When only `task_consume_second` is configured, the default value for `task_timeout_second` is calculated as `task_consume_second` * 4.</li> <li>When only `task_timeout_second` is configured, the default value for `task_consume_second` is calculated as `task_timeout_second`/4.</li> </ul> 
+**Description**:  The maximum time for each Routine Load task within the specified Routine Load job to consume data. Unit: second. Unlike the [FE dynamic parameters](../../../../administration/configuration/FE_parameters/FE_parameters.md) `routine_load_task_consume_second` (which applies to all Routine Load jobs within the cluster), this parameter is specific to an individual Routine Load job, which is more flexible. This parameter is supported since v3.1.0.
+
+- When `task_consume_second` and `task_timeout_second` are not configured, StarRocks uses the FE dynamic parameters `routine_load_task_consume_second` and `routine_load_task_timeout_second` to control the load behavior.
+- When only `task_consume_second` is configured, the default value for `task_timeout_second` is calculated as `task_consume_second` * 4.
+- When only `task_timeout_second` is configured, the default value for `task_consume_second` is calculated as `task_timeout_second`/4.
 
 #### `task_timeout_second`
 
 **Required**: No\
-**Description**: The timeout duration for each Routine Load task within the specified Routine Load job. Unit: second. Unlike the [FE dynamic parameter](../../../../administration/configuration/FE_parameters/FE_parameters.md) `routine_load_task_timeout_second` (which applies to all Routine Load jobs within the cluster), this parameter is specific to an individual Routine Load job, which is more flexible. This parameter is supported since v3.1.0. <ul> <li>When `task_consume_second` and `task_timeout_second` are not configured, StarRocks uses the FE dynamic parameters `routine_load_task_consume_second` and `routine_load_task_timeout_second` to control the load behavior.</li> <li>When only `task_timeout_second` is configured, the default value for `task_consume_second` is calculated as `task_timeout_second`/4.</li> <li>When only `task_consume_second` is configured, the default value for `task_timeout_second` is calculated as `task_consume_second` * 4.</li> </ul>
+**Description**: The timeout duration for each Routine Load task within the specified Routine Load job. Unit: second. Unlike the [FE dynamic parameter](../../../../administration/configuration/FE_parameters/FE_parameters.md) `routine_load_task_timeout_second` (which applies to all Routine Load jobs within the cluster), this parameter is specific to an individual Routine Load job, which is more flexible. This parameter is supported since v3.1.0.
+
+- When `task_consume_second` and `task_timeout_second` are not configured, StarRocks uses the FE dynamic parameters `routine_load_task_consume_second` and `routine_load_task_timeout_second` to control the load behavior.
+- When only `task_timeout_second` is configured, the default value for `task_consume_second` is calculated as `task_timeout_second`/4.
+- When only `task_consume_second` is configured, the default value for `task_timeout_second` is calculated as `task_consume_second` * 4.
 
 #### `pause_on_fatal_parse_error`
 
 **Required**: No\
-**Description**:  Specifies whether to automatically pause the job upon encountering unrecoverable data parsing errors. Valid values: `true` and `false`. Default value: `false`. This parameter is supported since v3.3.12/v3.4.2. <br />Such parsing errors are typically caused by illegal data formats, such as:<ul><li>Importing a JSON array without setting `strip_outer_array`.</li><li>Importing JSON data, but the Kafka message contains illegal JSON, such as `abcd`.</li></ul> 
+**Description**:  Specifies whether to automatically pause the job upon encountering unrecoverable data parsing errors. Valid values: `true` and `false`. Default value: `false`. This parameter is supported since v3.3.12/v3.4.2. <br />Such parsing errors are typically caused by illegal data formats, such as:
+
+- Importing a JSON array without setting `strip_outer_array`.
+- Importing JSON data, but the Kafka message contains illegal JSON, such as `abcd`.
 
 
 #### `data_source`, `data_source_properties`
@@ -243,7 +278,13 @@ The properties of the data source.
 #### `kafka_offsets`
 
 **Required**: No\
-**Description**:  The starting offset from which to consume data in a Kafka partition as specified in `kafka_partitions`. If this property is not specified, the Routine Load job consumes data starting from the latest offsets in `kafka_partitions`. Valid values:<ul><li>A specific offset: consumes data starting from a specific offset.</li><li>`OFFSET_BEGINNING`: consumes data starting from the earliest offset possible.</li><li>`OFFSET_END`: consumes data starting from the latest offset.</li></ul> Multiple starting offsets are separated by commas (,), for example, `"kafka_offsets" = "1000, OFFSET_BEGINNING, OFFSET_END, 2000"`.
+**Description**:  The starting offset from which to consume data in a Kafka partition as specified in `kafka_partitions`. If this property is not specified, the Routine Load job consumes data starting from the latest offsets in `kafka_partitions`. Valid values:
+
+- A specific offset: consumes data starting from a specific offset.
+- `OFFSET_BEGINNING`: consumes data starting from the earliest offset possible.
+- `OFFSET_END`: consumes data starting from the latest offset.
+
+Multiple starting offsets are separated by commas (,), for example, `"kafka_offsets" = "1000, OFFSET_BEGINNING, OFFSET_END, 2000"`.
 
 #### `property.kafka_default_offsets`
 
