@@ -157,6 +157,25 @@ public:
 
     ZoneMapPB* segment_zone_map() const { return _segment_zone_map.get(); }
 
+    // Where the root pages of this column's indexes are, copied from the footer when the reader is created. Unlike
+    // the index metas, which loading an index releases, these stay valid for the reader's lifetime, so a reader may
+    // look at them while another thread loads the index. A root that is not the sole data page of its index sits
+    // right after that index's other pages. A size of 0 means the column has no such index.
+    struct IndexRootPages {
+        PagePointer ordinal;
+        bool ordinal_root_is_data = true;
+        PagePointer zone_map;
+        bool zone_map_root_is_data = true;
+        PagePointer bloom_filter;
+        bool bloom_filter_root_is_data = true;
+    };
+    const IndexRootPages& index_root_pages() const { return _index_root_pages; }
+
+    // Observe only successfully published index loads. These readers are immutable after load;
+    // do not inspect the index metas, which the loading thread may already have released.
+    bool has_loaded_ordinal_index() const;
+    bool has_loaded_zone_map_index() const;
+
     PagePointer get_dict_page_pointer() const { return _dict_page_pointer; }
     LogicalType column_type() const { return _column_type; }
     int32_t column_length() const { return _column_length; }
@@ -219,6 +238,8 @@ public:
 
     bool is_flat_json() const { return _is_flat_json; }
     bool has_remain_json() const { return _has_remain; }
+    // Value stats of a JSON-typed flat JSON sub-column, nullptr when the segment has none.
+    const JsonValueStatsPB* json_value_stats() const { return _json_value_stats.get(); }
 
     // Return the pointer to the remain filter if it exists, otherwise return nullptr.
     const BloomFilter* get_remain_filter() const { return _remain_filter ? _remain_filter.get() : nullptr; }
@@ -296,6 +317,7 @@ private:
     [[maybe_unused]] LogicalType _column_child_type = TYPE_UNKNOWN;
     int32_t _column_length = 0; // Original column length from segment footer
     PagePointer _dict_page_pointer;
+    IndexRootPages _index_root_pages;
     // Read side of the per-column ZSTD compression dictionary. Copied from
     // ColumnMetaPB.zstd_compression_dict_page in _init (size 0 when the column has none).
     // The DDict is built once per (segment, column) and then referenced on every
@@ -363,6 +385,7 @@ private:
     bool _is_flat_json = false;
     bool _has_remain = false;
     std::unique_ptr<BloomFilter> _remain_filter;
+    std::unique_ptr<JsonValueStatsPB> _json_value_stats;
 
     // only used for inverted index load
     OnceFlag _inverted_index_load_once;

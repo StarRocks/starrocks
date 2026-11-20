@@ -3,6 +3,7 @@ displayed_sidebar: docs
 keywords: ['profile', 'query', 'metric']
 sidebar_position: 80
 description: "Reference for all raw metrics emitted by StarRocks Query Profile, organized by operator type."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Query Profile Metrics
@@ -244,7 +245,8 @@ It's similar to OLAP_SCAN operator but used for scan external tables like Iceber
 | DataSourceType | Data source type, can be HiveDataSource, ESDataSource, and so on. | 
 | Table | Table name. | 
 | TabletCount | Number of tablets. | 
-| MorselsCount | Number of morsels. | 
+| MorselsCount | Number of morsels, including root clip tasks and generated I/O children for grouped lake scans. |
+| RangeClipTasks | Number of grouped lake root range-clip tasks successfully opened, reported under `DataSource`. Counted once per validated root, including roots that return no rows or only publish physical rowid children. Children, segment reads and reader reopens do not add to this count. |
 | Predicates | Predicate expression. | 
 | PredicatesPartition | Predicate expression applied to partitions. | 
 | SharedScan | Whether the `enable_shared_scan` Session variable is enabled. | 
@@ -263,6 +265,8 @@ It's similar to OLAP_SCAN operator but used for scan external tables like Iceber
 | RuntimeFilterEvalTime | Time spent evaluating join runtime filters against decoded rows inside the Parquet reader. | 
 | RuntimeFilterInputRows | Number of rows fed into the Parquet reader's join runtime filter evaluation. | 
 | RuntimeFilterOutputRows | Number of rows surviving the Parquet reader's join runtime filter evaluation. A large gap from `RuntimeFilterInputRows` means the filter dropped rows before lazy columns were materialized. | 
+| ScanRangesPrunedByPartitionValue | Number of scan ranges skipped before they are read because a predicate or an arrived join runtime filter rejects their identity partition values. |
+| ScanRangesPrunedByFileStats | Number of scan ranges skipped before their data file is opened because the file-level min/max values from the Iceberg manifest show that no row can satisfy a predicate or an arrived runtime filter (join or Top-N). Parquet and ORC files only. |
 | PaimonFSAppIOCount | Number of valid read attempts received by the Paimon file-system adapter. It is the sum of sequential, positional, and asynchronous reads. |
 | PaimonFSAppIOBytes | Bytes returned successfully by reads at the Paimon file-system adapter boundary. |
 | PaimonFSAppIOTime | End-to-end time of reads at the Paimon file-system adapter boundary. |
@@ -312,6 +316,7 @@ Typical scenarios that can make Exchange Operator the bottleneck of a query:
 | ShuffleBufferFlushRows | Number of rows sent by these early flushes. |
 | ShuffleBufferReleasedChunks | Number of partial chunks released after an early flush because the memory they still held exceeded half of `exchange_sink_buffer_flush_threshold_bytes`. |
 | PeakSerializedChunkBytes | Size of the largest serialized chunk before compression. |
+| PeakRequestBytes | Size of the largest request sent over the network, after compression if it applies. `BytesSent / RequestSent` gives the average request size. Passthrough data is not counted. |
 | SinkBufferPeakMemoryUsage | Peak memory of the requests waiting to be sent or in flight in the sink buffer. |
 | SinkBufferMemoryLimit | Memory limit of the sink buffer. By default, it is `sink_buffer_mem_limit_per_driver` multiplied by the number of destinations. When it is reached, the sink stops accepting data until requests complete. |
 | SinkBufferPeakInFlightRpcNum | Peak number of RPCs in flight at the same time. |

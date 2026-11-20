@@ -649,6 +649,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
 
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedPartition();
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedTable();
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromExternalDroppedPartition();
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearExpiredAnalyzeStatus();
         GlobalStateMgr.getCurrentState().getQueryHistoryMgr().clearExpiredQueryHistory();
 

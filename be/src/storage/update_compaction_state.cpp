@@ -15,11 +15,11 @@
 #include "storage/update_compaction_state.h"
 
 #include "column/chunk_factory.h"
-#include "common/config_exec_fwd.h"
 #include "common/stack_util.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
+#include "storage/pk_vector_chunk_size.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
@@ -85,7 +85,8 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
 
     RowsetReleaseGuard guard(rowset->shared_from_this());
     OlapReaderStatistics stats;
-    auto res = rowset->get_segment_iterators2(pkey_schema, schema, MetaLoadMode::NONE, 0, &stats);
+    auto res = rowset->get_segment_iterators2(pkey_schema, schema, MetaLoadMode::NONE, 0, &stats,
+                                              get_pk_vector_chunk_size());
     if (!res.ok()) {
         return res.status();
     }
@@ -98,7 +99,7 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
 
     // only hold pkey, so can use larger chunk size
     ChunkUniquePtr chunk_shared_ptr;
-    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkFactory::new_chunk(pkey_schema, config::vector_chunk_size));
+    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkFactory::new_chunk(pkey_schema, get_pk_vector_chunk_size()));
     auto chunk = chunk_shared_ptr.get();
 
     auto itr = itrs[segment_id].get();

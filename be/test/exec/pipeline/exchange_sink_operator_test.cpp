@@ -12,6 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// The whole starrocks_test_objs target is compiled with -fno-access-control, which already
+// grants this test access to the private members it touches. Do not add `#define private public`
+// here: this is the first header the TU pulls in, so the macro also rewrites the access
+// specifiers of libstdc++'s own headers, and <sstream> then redeclares basic_stringbuf's
+// __xfer_bufptrs with a different access than its forward declaration (a hard error on gcc 14).
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 
 #include <brpc/server.h>
@@ -575,6 +580,7 @@ TEST_F(SinkBufferCancelTest, cancel_aborts_inflight_rpc) {
     ASSERT_OK(stub->reset_channel());
 
     auto request = make_request(dest_id, port, stub);
+    request.attachment.append(std::string(1000, 'x'));
     ASSERT_OK(buffer->add_request(request));
 
     // Wait until the server has actually received the RPC, guaranteeing it is in-flight.
@@ -590,14 +596,17 @@ TEST_F(SinkBufferCancelTest, cancel_aborts_inflight_rpc) {
         auto* mem_limit = profile.get_counter("SinkBufferMemoryLimit");
         auto* peak_in_flight = profile.get_counter("SinkBufferPeakInFlightRpcNum");
         auto* peak_requests = profile.get_counter("SinkBufferPeakRequestNum");
+        auto* peak_request_bytes = profile.get_counter("PeakRequestBytes");
         ASSERT_NE(peak_mem, nullptr);
         ASSERT_NE(mem_limit, nullptr);
         ASSERT_NE(peak_in_flight, nullptr);
         ASSERT_NE(peak_requests, nullptr);
+        ASSERT_NE(peak_request_bytes, nullptr);
         EXPECT_EQ(COUNTER_VALUE(peak_mem), 128);
         EXPECT_EQ(COUNTER_VALUE(mem_limit), config::sink_buffer_mem_limit_per_driver);
         EXPECT_EQ(COUNTER_VALUE(peak_in_flight), 1);
         EXPECT_EQ(COUNTER_VALUE(peak_requests), 1);
+        EXPECT_EQ(COUNTER_VALUE(peak_request_bytes), 1000);
     }
 
     const auto cancel_start = std::chrono::steady_clock::now();

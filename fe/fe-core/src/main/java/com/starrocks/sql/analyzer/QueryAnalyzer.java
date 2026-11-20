@@ -22,6 +22,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.authorization.SecurityPolicyRewriteRule;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ConnectorView;
 import com.starrocks.catalog.Database;
@@ -31,6 +32,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
@@ -46,7 +48,9 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.concurrent.lock.SnapshotCopyValidator;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -186,6 +190,10 @@ public class QueryAnalyzer {
      */
     public void analyzeExternalTablesOnly(StatementBase node, boolean refreshFilesystemExternalTables) {
         new ExternalTablesOnlyVisitor(refreshFilesystemExternalTables).process(node);
+    }
+
+    public void preResolvePaimonInsertTarget(InsertStmt statement) {
+        new ExternalTablesOnlyVisitor(false).preResolveInsertTarget(statement, true);
     }
 
     public void analyze(StatementBase node, Scope parent) {
@@ -1688,12 +1696,23 @@ public class QueryAnalyzer {
                 throw new CyclicViewException(
                         "View " + node.getName() + " contains a cycle in its definition");
             }
+            ConnectContext aliasContext = ConnectContext.get();
             boolean isRelationAliasCaseInSensitive = false;
-            if (ConnectContext.get() != null) {
-                isRelationAliasCaseInSensitive = ConnectContext.get().isRelationAliasCaseInsensitive();
-                // For hive view, relation alias is case-insensitive
-                if (node.getView().isHiveView()) {
-                    ConnectContext.get().setRelationAliasCaseInSensitive(true);
+            Boolean aliasModeOutsideConnectorView = null;
+            if (aliasContext != null) {
+                isRelationAliasCaseInSensitive = aliasContext.isRelationAliasCaseInsensitive();
+                aliasModeOutsideConnectorView = aliasContext.getRelationAliasCaseInsensitiveOutsideConnectorView();
+                if (node.getView().isConnectorView()) {
+                    // Views defined by external engines (Hive, Spark, Trino) resolve relation aliases
+                    // case-insensitively
+                    if (aliasModeOutsideConnectorView == null) {
+                        aliasContext.setRelationAliasCaseInsensitiveOutsideConnectorView(
+                                isRelationAliasCaseInSensitive);
+                    }
+                    aliasContext.setRelationAliasCaseInSensitive(true);
+                } else if (aliasModeOutsideConnectorView != null) {
+                    // A native view keeps the alias rule of the query that references the connector view
+                    aliasContext.setRelationAliasCaseInSensitive(aliasModeOutsideConnectorView);
                 }
             }
             Scope queryOutputScope;
@@ -1708,8 +1727,9 @@ public class QueryAnalyzer {
                         "function(s) or definer/invoker of view lack rights to use them: " + e.getMessage(), e);
             } finally {
                 viewExpansionStack.remove(viewKey);
-                if (ConnectContext.get() != null && node.getView().isHiveView()) {
-                    ConnectContext.get().setRelationAliasCaseInSensitive(isRelationAliasCaseInSensitive);
+                if (aliasContext != null) {
+                    aliasContext.setRelationAliasCaseInSensitive(isRelationAliasCaseInSensitive);
+                    aliasContext.setRelationAliasCaseInsensitiveOutsideConnectorView(aliasModeOutsideConnectorView);
                 }
             }
 
@@ -1820,6 +1840,10 @@ public class QueryAnalyzer {
             ArrayList<Field> fields = new ArrayList<>();
             for (int fieldIdx = 0; fieldIdx < outputSize; ++fieldIdx) {
                 Field oldField = leftChildScope.getRelationFields().getFieldByIndex(fieldIdx);
+                if ((outputTypes[fieldIdx].isGeoType() || outputTypes[fieldIdx].hasNestedGeoType()) &&
+                        !(node instanceof UnionRelation && node.getQualifier().equals(SetQualifier.ALL))) {
+                    throw new SemanticException("%s not support set operation", outputTypes[fieldIdx]);
+                }
                 fields.add(new Field(oldField.getName(), outputTypes[fieldIdx], oldField.getRelationAlias(),
                         oldField.getOriginExpression(), true, nullables.get(fieldIdx)));
             }
@@ -2344,6 +2368,17 @@ public class QueryAnalyzer {
          * error at the same place.
          */
         private void preResolveExternalWriteTarget(TableRef tableRef) {
+            preResolveExternalWriteTarget(tableRef, false, false);
+        }
+
+        private void preResolveInsertTarget(InsertStmt statement, boolean paimonOnly) {
+            if (!statement.isForCTAS() && !statement.useTableFunctionAsTargetTable()
+                    && !statement.useBlackHoleTableAsTargetTable()) {
+                preResolveExternalWriteTarget(statement.getTableRef(), true, paimonOnly);
+            }
+        }
+
+        private void preResolveExternalWriteTarget(TableRef tableRef, boolean insertTarget, boolean paimonOnly) {
             if (tableRef == null) {
                 return;
             }
@@ -2359,14 +2394,27 @@ public class QueryAnalyzer {
                     || CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
                 return;
             }
+            if (paimonOnly) {
+                Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(tableName.getCatalog());
+                if (catalog == null || !ConnectorType.PAIMON.getName().equalsIgnoreCase(catalog.getType())) {
+                    return;
+                }
+            }
             try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
-                Table table = metadataMgr.getTable(session, tableName.getCatalog(), tableName.getDb(),
-                        tableName.getTbl());
+                Table table;
+                try {
+                    table = metadataMgr.getTable(session, tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+                } catch (RuntimeException e) {
+                    // Leave lookup errors to the analyzer so it can report them in the usual way.
+                    return;
+                }
+                if (insertTarget && table instanceof PaimonTable paimonTable && paimonTable.supportInsert()) {
+                    // Capture the schema and identity from one native table before entering the metadata lock.
+                    table = paimonTable.copyForWrite();
+                }
                 if (table != null) {
                     session.getPreResolvedState().put(PreResolvedState.WRITE_TARGET, tableName, table);
                 }
-            } catch (RuntimeException e) {
-                // left to the locked analyzer, which reports it the way it always has
             }
         }
 
@@ -2576,10 +2624,7 @@ public class QueryAnalyzer {
             // resolving it under the lock only binds the hold time to that catalog. Not for the targets
             // that are not catalog objects at all: a CTAS target does not exist yet, and files() / blackhole
             // are built from the statement rather than looked up.
-            if (!statement.isForCTAS() && !statement.useTableFunctionAsTargetTable()
-                    && !statement.useBlackHoleTableAsTargetTable()) {
-                preResolveExternalWriteTarget(statement.getTableRef());
-            }
+            preResolveInsertTarget(statement, false);
             if (statement.getQueryStatement() != null) {
                 visit(statement.getQueryStatement());
             }
@@ -2824,7 +2869,12 @@ public class QueryAnalyzer {
                         Preconditions.checkState(mvTable instanceof OlapTable);
                         // Add read lock to avoid concurrent problems.
                         OlapTable mvOlapTable = new OlapTable(mvTable.getType());
-                        ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
+                        // Known: PlannerMetaLocker does not collect a [_SYNC_MV_] relation, so this copies the
+                        // base table without its lock. Tracked as 2-g in the FE lock todo, fixed on its own.
+                        try (SnapshotCopyValidator.KnownViolation known = SnapshotCopyValidator.exemptKnownViolation(
+                                "[_SYNC_MV_] relation is not in the planner lock set (2-g)")) {
+                            ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
+                        }
                         // Copy the necessary olap table meta to avoid changing original meta;
                         mvOlapTable.setBaseIndexMetaId(materializedIndex.second.getIndexMetaId());
                         // The selected index can give same-named columns different key or aggregate properties.

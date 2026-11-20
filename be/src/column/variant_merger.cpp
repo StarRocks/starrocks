@@ -99,7 +99,11 @@ static StatusOr<LogicalType> choose_common_logical_type(LogicalType lhs, Logical
         return TYPE_VARIANT;
     }
     if (is_float_type(lhs) || is_float_type(rhs)) {
-        return TYPE_DOUBLE;
+        // Widening to DOUBLE would change the variant type of the other side's values: an integer 7 would read back
+        // as the double 7.0 and a FLOAT 0.1 as 0.10000000149011612, and a BIGINT above 2^53 would be rounded. A path
+        // must read the same whether or not its files were shredded, so hoist both sides to VARIANT, which keeps the
+        // type of each value, like a decimal scale mismatch does.
+        return TYPE_VARIANT;
     }
     return wider_integer_type(lhs, rhs);
 }
@@ -214,6 +218,8 @@ static StatusOr<MutableColumnPtr> cast_variant_column_to_scalar(const Column& sr
     const bool is_const = src_col.is_constant();
     VariantRowRef row_ref;
     VariantRowValue row_buffer;
+    TzOffsetCache offset_cache;
+    offset_cache.bind(zone);
     for (size_t i = 0; i < src_col.size(); ++i) {
         if (src_col.is_null(i)) {
             builder.append_null();
@@ -221,7 +227,7 @@ static StatusOr<MutableColumnPtr> cast_variant_column_to_scalar(const Column& sr
         }
         size_t variant_row = is_const ? 0 : i;
         if (variant_col->try_get_row_ref(variant_row, &row_ref)) {
-            Status cast_status = VariantRowConverter::cast_to<ResultType, false>(row_ref, zone, builder);
+            Status cast_status = VariantRowConverter::cast_to<ResultType, false>(row_ref, zone, builder, &offset_cache);
             RETURN_IF_ERROR(cast_status);
             continue;
         }
@@ -230,7 +236,8 @@ static StatusOr<MutableColumnPtr> cast_variant_column_to_scalar(const Column& sr
             builder.append_null();
             continue;
         }
-        Status cast_status = VariantRowConverter::cast_to<ResultType, false>(row->as_ref(), zone, builder);
+        Status cast_status =
+                VariantRowConverter::cast_to<ResultType, false>(row->as_ref(), zone, builder, &offset_cache);
         RETURN_IF_ERROR(cast_status);
     }
     return builder.build(false);

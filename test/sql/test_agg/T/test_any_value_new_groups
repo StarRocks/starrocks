@@ -1,0 +1,56 @@
+-- name: test_any_value_new_groups
+-- any_value is fed only the rows that created a group. It must still return a value that is in the group,
+-- skip NULL inputs while a non-NULL one exists, cover the NULL-key group, and work in every agg phase.
+CREATE DATABASE db_${uuid0};
+USE db_${uuid0};
+
+-- g decides v and s; v is NULL for every 5th group; w is NULL on some rows of a group only.
+CREATE TABLE t (
+    k int NOT NULL,
+    g int NULL,
+    v int NULL,
+    s varchar(20) NULL,
+    w int NULL
+) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 4 PROPERTIES('replication_num' = '1');
+
+INSERT INTO t
+SELECT x,
+       if(x % 1000 = 7, NULL, x % 1000),
+       if(x % 5 = 0, NULL, (x % 1000) % 13),
+       concat('s', (x % 1000) % 17),
+       if(x % 3 = 0, NULL, (x % 1000) % 11)
+FROM TABLE(generate_series(1, 200000)) AS r(x);
+
+-- any_value must agree with min on a column the group key decides, including the NULL-key group.
+SELECT count(*), sum(if(a_v <=> m_v, 0, 1)), sum(if(a_s <=> m_s, 0, 1)), sum(if(a_w <=> m_w, 0, 1)), sum(if(g IS NULL, 1, 0))
+FROM (SELECT g, any_value(v) a_v, min(v) m_v, any_value(s) a_s, min(s) m_s, any_value(w) a_w, min(w) m_w
+      FROM t GROUP BY g) x;
+-- w has NULL rows in every group but also a non-NULL value: any_value must not return NULL.
+SELECT count(*) FROM (SELECT g, any_value(w) a FROM t GROUP BY g) x WHERE a IS NULL;
+
+-- Two-phase aggregation: the second phase merges any_value's intermediate results.
+SET new_planner_agg_stage = 2;
+SET streaming_preaggregation_mode = 'force_preaggregation';
+SELECT count(*), sum(if(a_v <=> m_v, 0, 1)), sum(if(a_s <=> m_s, 0, 1)), sum(if(a_w <=> m_w, 0, 1))
+FROM (SELECT g, any_value(v) a_v, min(v) m_v, any_value(s) a_s, min(s) m_s, any_value(w) a_w, min(w) m_w
+      FROM t GROUP BY g) x;
+SET streaming_preaggregation_mode = 'force_streaming';
+SELECT count(*), sum(if(a_v <=> m_v, 0, 1)), sum(if(a_s <=> m_s, 0, 1)), sum(if(a_w <=> m_w, 0, 1))
+FROM (SELECT g, any_value(v) a_v, min(v) m_v, any_value(s) a_s, min(s) m_s, any_value(w) a_w, min(w) m_w
+      FROM t GROUP BY g) x;
+SET streaming_preaggregation_mode = 'auto';
+
+-- Many groups spread over many chunks, with a multi-column (serialized) key.
+SELECT count(*), sum(if(a <=> m, 0, 1))
+FROM (SELECT k % 50000 AS kk, s, any_value(k % 50000 + 1) a, min(k % 50000 + 1) m FROM t GROUP BY k % 50000, s) x;
+
+-- Spilled aggregation restores and merges the states.
+SET enable_spill = true;
+SET spill_mode = 'force';
+SELECT count(*), sum(if(a_v <=> m_v, 0, 1)), sum(if(a_s <=> m_s, 0, 1)), sum(if(a_w <=> m_w, 0, 1))
+FROM (SELECT g, any_value(v) a_v, min(v) m_v, any_value(s) a_s, min(s) m_s, any_value(w) a_w, min(w) m_w
+      FROM t GROUP BY g) x;
+SELECT count(*), sum(if(a <=> m, 0, 1))
+FROM (SELECT k % 50000 AS kk, s, any_value(k % 50000 + 1) a, min(k % 50000 + 1) m FROM t GROUP BY k % 50000, s) x;
+
+DROP DATABASE db_${uuid0};

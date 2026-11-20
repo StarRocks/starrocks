@@ -59,7 +59,7 @@ TEST(SchemaScannerCoreTest, InitRejectsInvalidParameters) {
 
 TEST(SchemaScannerCoreTest, InitCreatesSlotDescriptors) {
     SchemaScanner::ColumnDesc columns[] = {
-            {"ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+            {"ID", TYPE_BIGINT_DESC, sizeof(int64_t), false},
             {"NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
     };
     TestSchemaScanner scanner(columns, 2);

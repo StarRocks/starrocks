@@ -95,10 +95,7 @@ TEST(ColumnSortCoreTest, materialize_column_by_permutation_single_reorders_value
 
     materialize_column_by_permutation_single(output.get(), input.get(), perm);
 
-    ASSERT_EQ(3, output->size());
-    EXPECT_EQ(30, output->get(0).get_int32());
-    EXPECT_EQ(10, output->get(1).get_int32());
-    EXPECT_EQ(20, output->get(2).get_int32());
+    ASSERT_EQ("[30, 10, 20]", output->debug_string());
 }
 
 // Regression test for https://github.com/StarRocks/starrocks/issues/77374

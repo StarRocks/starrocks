@@ -70,6 +70,7 @@ public class PartitionsMetaSystemTable {
                         .column("MAX_VI_BUILT_VERSION", IntegerType.BIGINT)
                         .column("LAST_UPDATE_TIME", DateType.DATETIME)
                         .column("LAST_ACCESS_TIME", DateType.DATETIME)
+                        .column("VACUUM_VERSION", IntegerType.BIGINT)
                         .build(), TSchemaTableType.SCH_PARTITIONS_META);
     }
 }

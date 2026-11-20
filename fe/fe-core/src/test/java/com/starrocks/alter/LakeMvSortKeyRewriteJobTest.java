@@ -15,6 +15,7 @@
 package com.starrocks.alter;
 
 import com.starrocks.alter.LakeOnlineRewriteJobBase.PendingPartitionPlan;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -24,10 +25,12 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.gson.GsonUtils;
@@ -35,8 +38,16 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AlterMVClauseAnalyzerVisitor;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.ReorderColumnsClause;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -45,6 +56,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -73,6 +85,7 @@ public class LakeMvSortKeyRewriteJobTest {
     private static final long DB_ID = 30001L;
     private static final long MV_ID = 30002L;
     private static final String MV_NAME = "mv_sortkey_refresh_test";
+    private static final String SWAPPED_MV_NAME = "mv_sortkey_swapped_in";
 
     // Real MV, registered under GlobalStateMgr so onReplayReconcile's ensureMvStateSchemaChangeOnReplay
     // can resolve and mutate it via getTable()/AutoCloseableLock -- but with no live TaskManager /
@@ -147,7 +160,7 @@ public class LakeMvSortKeyRewriteJobTest {
                     70001L, baseIndex, baseIndex.getShardGroupId(), "p0", 1024L, MV_NAME, null);
 
             job.beforeShadowBuild();
-            assertEquals(2, job.selectRequestedTabletCount(plan, 3));
+            assertEquals(2, job.selectRequestedTabletCount(plan, 3, 0L));
             job.afterJobSettled(false);
 
             InOrder inOrder = inOrder(coord);
@@ -395,6 +408,72 @@ public class LakeMvSortKeyRewriteJobTest {
         jobNoMv.setRefreshWasActiveAtSubmit(true);
         assertDoesNotThrow(jobNoMv::beforeShadowBuild);
         assertDoesNotThrow(() -> jobNoMv.afterJobSettled(false));
+    }
+
+    /** A shared-data asynchronous materialized view (k1, k2, v1) keyed on (k1, k2), hash distributed on k1 or by range. */
+    private static MaterializedView lakeMv(long id, KeysType keysType, boolean hashDistributed) {
+        List<Column> columns = new ArrayList<>();
+        for (String keyName : List.of("k1", "k2")) {
+            Column key = new Column(keyName, IntegerType.INT);
+            key.setIsKey(true);
+            columns.add(key);
+        }
+        columns.add(new Column("v1", IntegerType.INT));
+        DistributionInfo distributionInfo = hashDistributed
+                ? new HashDistributionInfo(1, List.of(columns.get(0))) : new RangeDistributionInfo();
+        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        refreshScheme.setType(MaterializedViewRefreshType.ASYNC);
+        MaterializedView mv = new LakeMaterializedView(id, DB_ID, SWAPPED_MV_NAME, columns, keysType,
+                new SinglePartitionInfo(), distributionInfo, refreshScheme);
+        mv.setIndexMeta(id + 1, SWAPPED_MV_NAME, columns, 0, 0, (short) 2, TStorageType.COLUMN, keysType);
+        mv.setBaseIndexMetaId(id + 1);
+        return mv;
+    }
+
+    /**
+     * ALTER MATERIALIZED VIEW ... ORDER BY (k2, k1) is analyzed while its name belongs to a range distributed duplicate
+     * key materialized view, and SWAP WITH then gives the name to {@code swappedIn}, a member of the colocate group
+     * {@code colocateWith}. The statement is checked again on {@code swappedIn} under its lock and rejected with the
+     * message analyzing it there gives, before any job is registered.
+     */
+    private static void assertSwappedInMvRejected(MaterializedView swappedIn, String colocateWith,
+                                                  String expectedMessage) throws Exception {
+        ReorderColumnsClause clause = new ReorderColumnsClause(List.of("k2", "k1"), null, null, NodePosition.ZERO);
+        new AlterMVClauseAnalyzerVisitor(lakeMv(MV_ID + 10, KeysType.DUP_KEYS, false)).analyze(null, clause);
+
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        colocateTableIndex.addTableToGroup(DB_ID, swappedIn, colocateWith,
+                new ColocateTableIndex.GroupId(DB_ID, swappedIn.getId()), true);
+        swappedIn.setColocateGroup(colocateWith);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_ID);
+        db.registerTableUnlocked(swappedIn);
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        Set<Long> jobIdsBefore = new HashSet<>(handler.getAlterJobsV2().keySet());
+        try {
+            AlterMaterializedViewStmt stmt = new AlterMaterializedViewStmt(new TableRef(
+                    QualifiedName.of(List.of(db.getFullName(), SWAPPED_MV_NAME)), null, NodePosition.ZERO),
+                    clause, NodePosition.ZERO);
+            SemanticException ex = assertThrows(SemanticException.class,
+                    () -> new AlterMVJobExecutor().process(stmt, null));
+            assertEquals(expectedMessage, ex.getDetailMsg());
+            assertEquals(jobIdsBefore, handler.getAlterJobsV2().keySet());
+            assertEquals(OlapTable.OlapTableState.NORMAL, swappedIn.getState());
+        } finally {
+            colocateTableIndex.removeTable(swappedIn.getId(), swappedIn, true);
+        }
+    }
+
+    @Test
+    public void testExecutorRejectsSwappedInHashColocateMaterializedView() throws Exception {
+        assertSwappedInMvRejected(lakeMv(MV_ID + 20, KeysType.DUP_KEYS, true), "g_swapped_in_hash",
+                "ALTER MATERIALIZED VIEW ... ORDER BY is only supported on range-distributed materialized views");
+    }
+
+    @Test
+    public void testExecutorRejectsSwappedInRangeColocatePrimaryKeyMaterializedView() throws Exception {
+        // The keys-type rule rejects it before the colocate prefix rule would look at its sort key.
+        assertSwappedInMvRejected(lakeMv(MV_ID + 30, KeysType.PRIMARY_KEYS, false), "g_swapped_in_pk:k1",
+                "ALTER MATERIALIZED VIEW ... ORDER BY is not supported for PRIMARY_KEYS materialized views");
     }
 
     @Test

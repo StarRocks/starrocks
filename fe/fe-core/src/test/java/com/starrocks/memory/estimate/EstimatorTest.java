@@ -29,6 +29,7 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -54,9 +55,10 @@ class EstimatorTest {
 
     @AfterEach
     void tearDown() {
-        // Clear registries after each test
+        // Restore the class-load defaults so later tests in this JVM see what production sees
         Estimator.CUSTOM_ESTIMATORS.clear();
         Estimator.SHALLOW_MEMORY_CLASS_NAMES.clear();
+        Estimator.registerDefaultEstimators();
     }
 
     // ==================== Null and Basic Tests ====================
@@ -1598,6 +1600,156 @@ class EstimatorTest {
         // Verify SharedData is not counted
         long normalSize = Estimator.estimate(container);
         assertTrue(sizeWithoutShared < normalSize);
+    }
+
+    // ==================== Sampling bias tests ====================
+
+    @Test
+    void testSampledNullSlotsWeighZero() {
+        // Two thirds of the slots are null, interleaved: dropping the sampled nulls would extrapolate the
+        // non-null third over the whole array and triple its payload.
+        byte[][] array = new byte[1000][];
+        for (int i = 0; i < array.length; i += 3) {
+            array[i] = new byte[100];
+        }
+        // 20 samples at step 50: 7 of them land on a non-null slot, close to the real third
+        long expected = GraphLayout.parseInstance((Object) array).totalSize();
+        long estimated = Estimator.estimate(array, 20);
+        assertTrue(Math.abs(estimated - expected) <= expected * 0.1, "estimated=" + estimated + " expected=" + expected);
+    }
+
+    @Test
+    void testSparseArrayWithOnlyFirstSampleNonNull() {
+        // The non-null slots are clustered at the front, so of the sampled positions (0, 51, 102, ...) only the
+        // first holds a value. It is the only evidence for the 51 non-null slots, not a shared overhead.
+        byte[][] array = new byte[1024][];
+        for (int i = 0; i < 51; i++) {
+            array[i] = new byte[4096];
+        }
+        long expected = GraphLayout.parseInstance((Object) array).totalSize();
+        long estimated = Estimator.estimate(array, 20);
+        assertTrue(Math.abs(estimated - expected) <= expected * 0.1, "estimated=" + estimated + " expected=" + expected);
+    }
+
+    @Test
+    void testSparseArrayWithSeveralNonNullSamples() {
+        // 100 of 1000 slots hold a value; of the 20 sampled positions (0, 50, 100, ...) two are non-null. The
+        // non-null share of the sample, not the full length, is what the non-null samples stand for.
+        byte[][] array = new byte[1000][];
+        for (int i = 0; i < 100; i++) {
+            array[i] = new byte[4096];
+        }
+        long expected = GraphLayout.parseInstance((Object) array).totalSize();
+        long estimated = Estimator.estimate(array, 20);
+        assertTrue(Math.abs(estimated - expected) <= expected * 0.1, "estimated=" + estimated + " expected=" + expected);
+    }
+
+    @Test
+    void testSparseElementsSharingOneObjectChargedOnce() {
+        // every seventh slot holds an element (3 of the 20 samples at step 150); every element references one
+        // 100 KB array
+        SharedData shared = new SharedData();
+        shared.largeArray = new int[25_000];
+        ObjectWithSharedData[] array = new ObjectWithSharedData[3000];
+        for (int i = 0; i < array.length; i += 7) {
+            ObjectWithSharedData o = new ObjectWithSharedData();
+            o.sharedData = shared;
+            array[i] = o;
+        }
+        Estimator.registerDefaultEstimators();
+        long expected = GraphLayout.parseInstance((Object) array).totalSize();
+        long estimated = Estimator.estimate(array, 20);
+        assertTrue(Math.abs(estimated - expected) <= expected * 0.1, "estimated=" + estimated + " expected=" + expected);
+    }
+
+    @Test
+    void testObjectsSharedByElementsChargedOnce() {
+        // every element references one 100 KB array; it exists once
+        SharedData shared = new SharedData();
+        shared.largeArray = new int[25_000];
+        List<ObjectWithSharedData> list = new ArrayList<>();
+        for (int i = 0; i < 1000; i++) {
+            ObjectWithSharedData o = new ObjectWithSharedData();
+            o.sharedData = shared;
+            list.add(o);
+        }
+        Estimator.registerDefaultEstimators();
+        long expected = GraphLayout.parseInstance(list).totalSize();
+        long estimated = Estimator.estimate(list, 3);
+        assertTrue(Math.abs(estimated - expected) <= expected * 0.1, "estimated=" + estimated + " expected=" + expected);
+    }
+
+    @Test
+    void testOptionalValueCounted() {
+        Holder holder = new Holder();
+        holder.value = Optional.of(new boolean[1024]);
+        assertTrue(Estimator.estimate(holder) >= 1024 + Estimator.ARRAY_HEADER_SIZE);
+    }
+
+    static class Holder {
+        Optional<boolean[]> value;
+    }
+
+    @Test
+    void testGuavaImmutableMapEntriesCounted() {
+        // Guava's entries keep key and value in java.util.AbstractMap.SimpleImmutableEntry fields, which the
+        // FE cannot read reflectively; they must still be charged.
+        Map<Integer, int[]> map = com.google.common.collect.ImmutableMap.of(1000, new int[1000], 2000, new int[1000]);
+        Estimator.registerDefaultEstimators();
+        long expected = GraphLayout.parseInstance(map).totalSize();
+        long estimated = Estimator.estimate(map);
+        assertTrue(estimated >= 2 * 4000, "estimated=" + estimated);
+        assertTrue(Math.abs(estimated - expected) <= expected * 0.1, "estimated=" + estimated + " expected=" + expected);
+        Map.Entry<Integer, int[]> entry = new java.util.AbstractMap.SimpleImmutableEntry<>(1000, new int[1000]);
+        assertTrue(Estimator.estimate(entry) >= 4000);
+    }
+
+    @Test
+    void testGuavaMapIndexingAListChargedOnce() {
+        // TableMetadata-style: a list of objects plus an id -> object map over the same objects
+        List<int[]> list = new ArrayList<>();
+        com.google.common.collect.ImmutableMap.Builder<Integer, int[]> byId = com.google.common.collect.ImmutableMap.builder();
+        for (int i = 0; i < 200; i++) {
+            int[] value = new int[250];
+            list.add(value);
+            byId.put(1000 + i, value);
+        }
+        Object[] both = new Object[] {list, byId.build()};
+        Estimator.registerDefaultEstimators();
+        long expected = GraphLayout.parseInstance(both).totalSize();
+        long estimated = Estimator.estimate(both);
+        assertTrue(Math.abs(estimated - expected) <= expected * 0.1, "estimated=" + estimated + " expected=" + expected);
+    }
+
+    @Test
+    void testCachedBoxesAreFree() {
+        Estimator.registerDefaultEstimators();
+        assertEquals(0, Estimator.estimate(Integer.valueOf(7)));
+        assertEquals(0, Estimator.estimate(Long.valueOf(0)));
+        assertEquals(0, Estimator.estimate(Boolean.TRUE));
+        assertEquals(Estimator.shallow(Integer.valueOf(100_000)), Estimator.estimate(Integer.valueOf(100_000)));
+        assertEquals(Estimator.shallow(Long.valueOf(-129)), Estimator.estimate(Long.valueOf(-129)));
+    }
+
+    @Test
+    @SuppressWarnings({"deprecation", "removal"})
+    void testUncachedSmallBoxesAreCharged() {
+        Estimator.registerDefaultEstimators();
+        Long ownLong = new Long(0);
+        Integer ownInt = new Integer(7);
+        Boolean ownBool = new Boolean(true);
+        Byte ownByte = new Byte((byte) 1);
+        assertEquals(Estimator.shallow(ownLong), Estimator.estimate(ownLong));
+        assertEquals(Estimator.shallow(ownInt), Estimator.estimate(ownInt));
+        assertEquals(Estimator.shallow(ownBool), Estimator.estimate(ownBool));
+        assertEquals(Estimator.shallow(ownByte), Estimator.estimate(ownByte));
+    }
+
+    @Test
+    void testEstimateAllSharesVisited() {
+        int[] shared = new int[1000];
+        long one = Estimator.estimate(shared);
+        assertEquals(one, Estimator.estimateAll(Set.of(), shared, shared));
     }
 
     // Helper classes for ignore classes tests

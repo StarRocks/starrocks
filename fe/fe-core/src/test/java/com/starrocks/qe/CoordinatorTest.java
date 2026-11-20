@@ -36,8 +36,12 @@ import com.starrocks.planner.TupleId;
 import com.starrocks.proto.AIExecutionStatisticsPB;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PQueryStatistics;
+import com.starrocks.qe.scheduler.QueryRuntimeProfile;
+import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.qe.scheduler.dag.ExecutionSchedule;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
+import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryStatement;
@@ -49,14 +53,20 @@ import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TReportAuditStatisticsParams;
+import com.starrocks.thrift.TReportExecStatusParams;
+import com.starrocks.thrift.TRuntimeProfileTree;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.commons.compress.utils.Lists;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -66,11 +76,22 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class CoordinatorTest extends PlanTestBase {
     ConnectContext ctx;
@@ -96,6 +117,180 @@ public class CoordinatorTest extends PlanTestBase {
                 new PlanFragment(new PlanFragmentId(1), new EmptySetNode(new PlanNodeId(1), tupleIdArrayList),
                         new DataPartition(TPartitionType.RANDOM));
         return fragment;
+    }
+
+    @Test
+    public void testStatusOnlyReportsDoNotWaitForDeployment() throws Exception {
+        for (boolean done : new boolean[] {false, true}) {
+            assertReportDuringDeployment(done, false, false, false);
+        }
+    }
+
+    @Test
+    public void testLoadChannelReportRetainsDeploymentLock() throws Exception {
+        assertReportDuringDeployment(false, true, false, false);
+    }
+
+    @Test
+    public void testPreparedLoadUpdatesRetainDeploymentLock() throws Exception {
+        assertReportDuringDeployment(true, false, true, false);
+    }
+
+    @Test
+    public void testLoadChannelProfileFailureStillFinishesInstance() throws Exception {
+        assertReportDuringDeployment(true, true, false, true);
+    }
+
+    @Test
+    public void testLoadInformationFailureStillFinishesInstance() throws Exception {
+        assertReportDuringDeployment(true, false, true, true);
+    }
+
+    private void assertReportDuringDeployment(boolean done, boolean loadChannel, boolean loadInformation,
+                                             boolean failLoadUpdate) throws Exception {
+        ExecutionDAG dag = mock(ExecutionDAG.class);
+        FragmentInstanceExecState execState = mock(FragmentInstanceExecState.class);
+        QueryRuntimeProfile profile = mock(QueryRuntimeProfile.class);
+        Runnable loadUpdate = mock(Runnable.class);
+        AtomicBoolean loadUpdateHeldLock = new AtomicBoolean();
+        ReentrantLock deploymentLock = Deencapsulation.getField(coordinator, "lock");
+        Deencapsulation.setField(coordinator, "executionDAG", dag);
+        Deencapsulation.setField(coordinator, "queryProfile", profile);
+        CountDownLatch reporting = new CountDownLatch(1);
+        when(dag.getExecution(0)).thenReturn(execState);
+        when(execState.updateExecStatus(any())).thenAnswer(call -> {
+            reporting.countDown();
+            return true;
+        });
+        when(execState.getState()).thenReturn(FragmentInstanceExecState.State.FINISHED);
+        when(execState.isFinished()).thenReturn(true);
+        TReportExecStatusParams params = new TReportExecStatusParams()
+                .setBackend_num(0).setFragment_instance_id(new TUniqueId(1, 2))
+                .setStatus(new TStatus(TStatusCode.OK)).setDone(done);
+        if (loadChannel) {
+            params.setLoad_channel_profile(new TRuntimeProfileTree());
+            if (failLoadUpdate) {
+                doThrow(new IllegalStateException("load channel profile update failed"))
+                        .when(profile).updateLoadChannelProfile(params);
+            }
+        }
+        if (loadInformation) {
+            // The coordinator must honor work prepared by the profile without knowing its fields.
+            when(profile.buildLoadInformationUpdates(execState, params))
+                    .thenReturn(Collections.singletonList(loadUpdate));
+            doAnswer(call -> {
+                loadUpdateHeldLock.set(deploymentLock.isHeldByCurrentThread());
+                if (failLoadUpdate) {
+                    throw new IllegalStateException("load information update failed");
+                }
+                return null;
+            }).when(loadUpdate).run();
+        }
+        ExecutorService worker = Executors.newSingleThreadExecutor();
+        deploymentLock.lock();
+        try {
+            Future<?> report = worker.submit(() -> coordinator.updateFragmentExecStatus(params));
+            Assertions.assertTrue(reporting.await(5, TimeUnit.SECONDS));
+            if (loadChannel || loadInformation) {
+                Awaitility.await().alias("load report waiting for the deployment lock")
+                        .atMost(5, TimeUnit.SECONDS).until(deploymentLock::hasQueuedThreads);
+                verify(profile, never()).updateLoadChannelProfile(any());
+                verify(loadUpdate, never()).run();
+                deploymentLock.unlock();
+            }
+            report.get(5, TimeUnit.SECONDS);
+            if (loadChannel || loadInformation) {
+                Assertions.assertFalse(deploymentLock.isLocked(), "load updates must release the coordinator lock");
+            }
+            verify(profile).updateProfile(execState, params);
+            verify(execState).updateRunningProfile(params);
+            if (done) {
+                verify(profile).buildLoadInformationUpdates(execState, params);
+                verify(profile).finishInstance(params.getFragment_instance_id());
+            }
+            if (loadChannel) {
+                verify(profile).updateLoadChannelProfile(params);
+            }
+            if (loadInformation) {
+                verify(loadUpdate).run();
+                Assertions.assertTrue(loadUpdateHeldLock.get(), "prepared load updates must execute under the lock");
+            }
+        } finally {
+            if (deploymentLock.isHeldByCurrentThread()) {
+                deploymentLock.unlock();
+            }
+            worker.shutdownNow();
+            Assertions.assertTrue(worker.awaitTermination(5, TimeUnit.SECONDS));
+        }
+    }
+
+    @Test
+    public void testCancellationDuringPreparationPreventsDeployment() throws Exception {
+        ctx.setNeedQueued(false);
+        ExecutionSchedule schedule = mock(ExecutionSchedule.class);
+        ResultReceiver receiver = mock(ResultReceiver.class);
+        Deencapsulation.setField(coordinator, "scheduler", schedule);
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void prepareExec() {
+                // Cancellation can arrive before prepareResultSink publishes the receiver.
+                coordinator.cancel(PPlanFragmentCancelReason.USER_CANCEL, "cancel during preparation");
+                Deencapsulation.setField(coordinator, "receiver", receiver);
+            }
+        };
+
+        StarRocksException error = Assertions.assertThrows(StarRocksException.class, coordinator::exec);
+        Assertions.assertTrue(error.getMessage().contains("cancel during preparation"));
+        Assertions.assertTrue(coordinator.getExecStatus().isCancelled());
+        verify(receiver).cancel();
+        verify(schedule, never()).prepareSchedule(any(), any(), any());
+        verify(schedule, never()).schedule(any());
+        verify(schedule, never()).continueSchedule(any());
+    }
+
+    @Test
+    public void testCancellationWhileWaitingForDeploymentLock() throws Exception {
+        ctx.setNeedQueued(false);
+        ExecutionSchedule schedule = mock(ExecutionSchedule.class);
+        Deencapsulation.setField(coordinator, "scheduler", schedule);
+        CountDownLatch prepared = new CountDownLatch(1);
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void prepareExec() {
+                prepared.countDown();
+            }
+        };
+        ReentrantLock deploymentLock = Deencapsulation.getField(coordinator, "lock");
+        ExecutorService worker = Executors.newSingleThreadExecutor();
+        deploymentLock.lock();
+        try {
+            Future<?> execution = worker.submit(() -> {
+                coordinator.exec();
+                return null;
+            });
+            Assertions.assertTrue(prepared.await(5, TimeUnit.SECONDS));
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (!deploymentLock.hasQueuedThreads() && System.nanoTime() < deadline) {
+                Thread.sleep(1);
+            }
+            Assertions.assertTrue(deploymentLock.hasQueuedThreads(), "deployment must be waiting for the lock");
+            coordinator.cancel(PPlanFragmentCancelReason.USER_CANCEL, "cancel before deployment lock");
+            deploymentLock.unlock();
+
+            ExecutionException error = Assertions.assertThrows(ExecutionException.class,
+                    () -> execution.get(5, TimeUnit.SECONDS));
+            Assertions.assertInstanceOf(StarRocksException.class, error.getCause());
+            Assertions.assertTrue(error.getCause().getMessage().contains("cancel before deployment lock"));
+            verify(schedule, never()).prepareSchedule(any(), any(), any());
+            verify(schedule, never()).schedule(any());
+            verify(schedule, never()).continueSchedule(any());
+        } finally {
+            if (deploymentLock.isHeldByCurrentThread()) {
+                deploymentLock.unlock();
+            }
+            worker.shutdownNow();
+            Assertions.assertTrue(worker.awaitTermination(5, TimeUnit.SECONDS));
+        }
     }
 
     @Test

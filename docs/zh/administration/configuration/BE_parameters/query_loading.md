@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "BE configuration parameters for query execution and data loading."
 sidebar_label: "查询引擎和导入导出"
 keywords: ['Canshu']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -144,7 +145,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：请求/秒
 - 有效值：正整数
 - 是否动态：是
-- 描述：每个 BE 中按端点、凭证和 capability 分桶的文本向量 HTTP attempt 准入速率。适用于 SYSTEM 和 AI provider 指定的向量调用，包括重试。该限制独立于 `ai_function_rate_limit_qps_chat`，同时仍受进程级 `ai_function_max_inflight` 限制。可调小以遵守提供商配额或控制出站负载；仅在提供商和 BE 均有容量时调大。运行时修改实时生效，无需重启 BE。
+- 描述：每个 BE 中按端点、凭证和 capability 分桶的文本向量 HTTP attempt 准入速率。该限制独立于 `ai_function_rate_limit_qps_chat`，同时仍受进程级 `ai_function_max_inflight` 限制。可调小以遵守提供商配额或控制出站负载；仅在提供商和 BE 均有容量时调大。运行时修改实时生效，无需重启 BE。
 - 引入版本：-
 
 ### ai_function_max_inflight
@@ -173,6 +174,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：-
 - 是否动态：是
 - 描述：根据 L2 驻留情况控制聚合哈希表的软件预取。仅当桶数组溢出 L2 时才会启用预取，即当 `bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio` 时，其中 L2 大小在运行时检测（若检测失败则回退为 1 MiB）。在此阈值以下，哈希表驻留于 L2 中，此时预取会导致净损耗。在每个核心运行多个驱动程序且竞争激烈的部署环境中，应降低该比率——此时每个哈希表实际占用的 L2 空间小于名义上的每核心大小；将其提高至 1.0 以上会延迟预取，直到哈希表远超 L2 容量。另请参阅 `agg_hash_map_prefetch_dist`。
+- 引入版本：-
+
+### arrow_io_thread_pool_size
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Apache Arrow 进程级 I/O 线程池的线程数，Arrow 的异步 I/O 任务都在这个线程池中执行。设为 `0` 时沿用 Arrow 启动时自行确定的大小：环境变量 `ARROW_IO_THREADS` 为正整数时取该值，否则为 8。设为大于 `0` 的值时，该值优先于 `ARROW_IO_THREADS`。取值范围为 [0, 32768]。修改后立即生效，无需重启：调大时立即为排队中的任务启动新线程；调小时，多出的线程在完成手头的任务后退出。改回 `0` 即恢复为 Arrow 启动时确定的大小。如果配置文件中的值超出取值范围，BE 会打印告警日志，并保留 Arrow 自行确定的大小。
 - 引入版本：-
 
 ### clear_udf_cache_when_start
@@ -223,6 +233,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：控制是否为 Flat Json 数据进行 Compaction。
 - 引入版本：v3.3.3
+
+### enable_compaction_flat_json_mixed_inputs
+
+- 默认值：True
+- 类型：Bool
+- 单位：
+- 是否动态：是
+- 描述：当参与 Compaction 的 segment 中，JSON 列一部分以 Flat JSON 存储、一部分以完整 JSON 存储时，是否把完整 JSON 的 segment 按其他 segment 的 Flat JSON 布局读出，且所有子列都使用 JSON 类型。这样输出可以边读边写，不必把整个 segment 缓存在内存中。JSON 类型的子列会记录其值的类型和范围，之后的 Compaction 可以据此改用能精确保存所有值的类型。仅在 `enable_compaction_flat_json` 为 `true` 且表开启了 Flat JSON 时生效。
+- 引入版本：-
+
+### enable_compaction_flat_json_partial_paths
+
+- 默认值：True
+- 类型：Bool
+- 单位：
+- 是否动态：是
+- 描述：Flat JSON 的 Compaction 中，某个子列只在部分输入 segment 中存在时，如果包含它的行数足够多（`json_flat_sparsity_factor`），是否在输出中保留这个子列。不含该子列的 segment 从其剩余 JSON 中提供对应的值；若这样的 segment 可能在剩余 JSON 中存有该值，该子列使用 JSON 类型。关闭时，Compaction 只保留所有输入 segment 都有的子列，任一输入 segment 未拍平的 key 都存入剩余 JSON。仅在 `enable_compaction_flat_json` 为 `true` 时生效。
+- 引入版本：-
 
 ### enable_default_value_column_zonemap_filter
 
@@ -387,6 +415,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：发起 Hedged Read 请求前需要等待多少毫秒。例如，假设该参数设置为 `30`，那么如果一个 Read 任务未能在 30 毫秒内返回结果，则 HDFS 客户端会立即发起一个 Hedged Read，从目标数据块的副本上读取数据。该参数对应 HDFS 集群配置文件 **hdfs-site.xml** 中的 `dfs.client.hedged.read.threshold.millis` 参数。
 - 引入版本：v3.0
 
+### iceberg_metadata_table_cache_capacity
+
+- 默认值：128
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Iceberg 元数据表（例如 `t$files`、`t$partitions`）的 JNI 扫描器在单个 BE 或 CN 节点上保留的空闲的已反序列化 Iceberg 表的最大数量。同一个查询的所有扫描任务共享一份反序列化后的表，而不是每个任务各自反序列化一份，因此 JVM 堆内存占用与并发扫描任务数无关。60 秒未被使用的表会被释放。取值小于或等于 `0` 时，之后开始的扫描不再共享。
+- 引入版本：-
+
 ### io_coalesce_adaptive_lazy_active
 
 - 默认值：true
@@ -440,6 +477,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：控制 Flat JSON 时，同名列的占比阈值，当同名列占比低于该值时不进行提取，默认为 0.9。该参数仅在 `enable_json_flat` 为 `true` 时生效。
 - 引入版本：v3.3.0
+
+### json_max_parse_nesting_depth
+
+- 默认值：1024
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：解析 JSON（例如 `parse_json`、`CAST AS JSON` 以及 JSON 列导入）时允许的最大对象/数组嵌套深度。解析器每层嵌套递归一次，若不加限制，超深文档会耗尽线程栈并导致 BE 崩溃。嵌套深度超过该值的输入会返回数据质量错误。正值表示生效的上限；设置为 `0` 或负数时保留内置默认值（1024），而非关闭该检查。
+- 引入版本：v4.2.0
 
 ### lake_tablet_ignore_invalid_delete_predicate
 
@@ -756,6 +802,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：BufferControlBlock 释放数据的等待时间。
 - 引入版本：-
 
+### runtime_filter_worker_thread_num
+
+- 默认值：4
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：每个 BE 上用于合并和投递 Global Runtime Filter 的线程数。同一个 Runtime Filter 的所有事件由同一个线程处理，不同的 Runtime Filter 分散到各个线程。取值小于或等于 `1` 时只使用一个线程。
+- 引入版本：-
+
 ### scan_context_gc_interval_min
 
 - 默认值：5
@@ -763,6 +818,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：Minutes
 - 是否动态：是
 - 描述：Scan Context 的清理间隔。
+- 引入版本：-
+
+### scan_credential_refresh_rpc_timeout_ms
+
+- 默认值：10000
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：当为扫描下发的凭证（Iceberg REST Catalog 的 vended credentials）即将过期时，扫描向其 Coordinator FE 请求续期凭证的 RPC 超时时间。该 RPC 不重试：失败或超时后，扫描继续使用当前凭证，并在一分钟后再次请求。取值小于或等于 `0` 时，之后开始的扫描不再续期，始终使用下发时的凭证。
 - 引入版本：-
 
 ### scanner_row_num
@@ -1114,6 +1178,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：-
 - 是否动态：是
 - 描述：执行导入 Sink 最终关闭（Close）操作的线程数上限。存算分离集群下，该操作会向对象存储写入合并事务日志；放在这个线程池中执行，可以避免慢写入阻塞 Pipeline 的 Poller 线程和执行线程。线程全部繁忙时，后续的关闭操作在线程池队列中排队。队列长度不受限制，不会丢弃任何关闭操作。取值必须大于 0。支持运行时修改，无需重启 BE 或 CN。降低上限不会中断正在执行的关闭操作。初始化时会预启动一个线程并在空闲时保留；其余线程空闲 500 ms 后可退出。
+- 引入版本：-
+
+### enable_put_combinded_txn_log_parallel
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，是否并行写入导入的合并事务日志。导入 Sink 关闭时，会为本次导入涉及的每个分区向对象存储写入一份合并事务日志。设置为 `true` 时，这些写入在专用线程池中并发执行（线程数上限由 `put_combined_txn_log_thread_pool_num_max` 控制，默认为 `64`）；设置为 `false` 时，逐个分区依次写入。两种方式下，导入都会等待所有写入完成，任一写入失败则导入失败。
+- 引入版本：-
+
+### put_combined_txn_log_thread_pool_num_max
+
+- 默认值：64
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，向对象存储写入合并事务日志的线程池的线程数上限。`enable_put_combinded_txn_log_parallel` 设置为 `true` 时，一次导入涉及的各分区的合并事务日志在该线程池中并发写入。线程全部繁忙时，后续写入在线程池队列中排队，队列长度不受限制。支持运行时修改，无需重启 BE 或 CN。取值小于或等于 `0` 时按 `1` 处理。降低上限不会中断正在执行的写入。线程空闲 500 ms 后退出。
 - 引入版本：-
 
 ### enable_rejected_record_sync
@@ -1528,6 +1610,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：否
 - 描述：BE 在请求未提供显式超时时使用的 Pulsar 相关 routine load 操作的默认超时（秒）。具体地，`PInternalServiceImplBase::get_pulsar_info` 将该值乘以 1000，形成以毫秒为单位的超时值，传递给用于获取 Pulsar 分区元数据和 backlog 的 routine load 任务执行器方法。增大该值可在 Pulsar 响应较慢时减少超时失败，但会延长故障检测时间；减小该值可在 broker 响应慢时更快失败。与用于 Kafka 的 `routine_load_kafka_timeout_second` 类似。
 - 引入版本：v3.2.0
+
+### routine_load_kafka_consumer_pool_size
+
+- 默认值：64
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：BE 为 routine load 保留的空闲 consumer 的最大数量，作业的下一个任务或下一轮可以复用它们的连接，而不必新建。Kafka 和 Pulsar 的 consumer 共用这个池子和这个上限。池满时关闭空闲最久的 consumer；空闲超过 10 分钟的 consumer 也会被关闭。默认值可容纳每个 BE 16 个 routine load 任务（`max_routine_load_task_num_per_be`）、每个任务最多 3 个 consumer（`max_consumer_num_per_group`）。
+- 引入版本：-
+
+### routine_load_kafka_fetch_queue_backoff_ms
+
+- 默认值：10
+- 类型：Int
+- 单位：毫秒
+- 是否动态：是
+- 描述：Routine Load 的 Kafka consumer 本地消息队列超过 librdkafka 的队列阈值（`queued.min.messages` 或 `queued.max.messages.kbytes`）后，等待多久再拉取该分区。该值作为 `fetch.queue.backoff.ms` 传给 librdkafka，librdkafka 自身的默认值为 1000 ms。队列被消费完时 librdkafka 不会提前拉取，因此等待时间较长时，消费较快的 consumer 会空等剩余的时间，降低 Routine Load 的吞吐。Routine Load 作业的 `property.fetch.queue.backoff.ms` 属性优先于该配置项。设为负数时使用 librdkafka 的默认值，大于 300000 时按 300000 处理。不要设为 `0`：设为 `0` 时，队列超过阈值期间 librdkafka 的 broker 线程会忙等轮询，占用 CPU。修改后，Routine Load 任务会改用按新值创建的 consumer。
+- 引入版本：-
 
 ### routine_load_kafka_timeout_second
 

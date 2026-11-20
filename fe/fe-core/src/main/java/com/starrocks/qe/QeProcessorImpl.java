@@ -42,6 +42,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.connector.iceberg.IcebergEncryption;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.qe.scheduler.Coordinator;
@@ -285,7 +286,7 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
             LOG.debug("ReportExecStatus(): fragment_instance_id={}, query_id={}, backend num: {}, ip: {}",
                     DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id),
                     params.backend_num, beAddr);
-            LOG.trace("params: {}", params);
+            LOG.trace("params: {}", IcebergEncryption.redactKeysForLog(params));
         }
         final TReportExecStatusResult result = new TReportExecStatusResult();
         final QueryInfo info = coordinatorMap.get(params.query_id);
@@ -358,7 +359,7 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
                 LOG.debug("ReportExecStatus(): fragment_instance_id={}, query_id={}, backend num: {}, ip: {}",
                         DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id),
                         params.backend_num, beAddr);
-                LOG.debug("params: {}", params);
+                LOG.debug("params: {}", IcebergEncryption.redactKeysForLog(params));
             }
             TReportExecStatusResult result = new TReportExecStatusResult();
             final QueryInfo info = coordinatorMap.get(params.query_id);

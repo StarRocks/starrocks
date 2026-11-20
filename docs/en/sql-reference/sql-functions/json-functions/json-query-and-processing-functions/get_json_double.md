@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Extracts a floating-point value from a JSON string at the specified path."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # get_json_double

@@ -231,3 +231,18 @@ select * from iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_p
 
 drop table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date force;
 drop table hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date force;
+
+CLEANUP {
+drop table if exists iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_tinyint force;
+drop table if exists iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date force;
+drop table if exists iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date_string force;
+drop table if exists iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date_month force;
+drop table if exists iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_unpar force;
+drop table if exists hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_tinyint force;
+drop table if exists hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date force;
+drop table if exists hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date_string force;
+drop database if exists iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0};
+set catalog default_catalog;
+drop catalog if exists iceberg_add_files_${uuid0};
+drop catalog if exists hive_add_files_${uuid0};
+} END CLEANUP

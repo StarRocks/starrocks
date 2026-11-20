@@ -420,6 +420,8 @@ MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bo
 struct ColumnBuilder {
     template <LogicalType ltype>
     MutableColumnPtr operator()(const TypeDescriptor& type_desc, size_t size) {
+        // ARRAY/MAP/STRUCT are built recursively from type_desc.children by the caller and never
+        // reach this dispatch; getting here with one means the caller lost the children.
         if constexpr (ltype == TYPE_UNKNOWN || ltype == TYPE_NULL || ltype == TYPE_BINARY || ltype == TYPE_DECIMAL ||
                       lt_is_collection<ltype>) {
             LOG(FATAL) << "Unsupported column type" << ltype;
@@ -505,12 +507,14 @@ std::pair<bool, size_t> ColumnHelper::num_packed_rows(const Columns& columns) {
         return {false, 0};
     }
 
-    bool all_const = is_all_const(columns);
-    if (!all_const) {
-        return {all_const, columns[0]->size()};
+    // A const column may report size 1 for a chunk of N rows (it is resized only where ExprContext::evaluate
+    // returns it), so take the row count from a non-const column: those always have all N rows.
+    for (const auto& column : columns) {
+        if (!column->is_constant()) {
+            return {false, column->size()};
+        }
     }
-
-    return {all_const, 1};
+    return {true, 1};
 }
 
 std::pair<bool, size_t> ColumnHelper::num_packed_rows(const Column* column) {

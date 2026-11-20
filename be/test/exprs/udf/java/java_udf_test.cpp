@@ -158,8 +158,7 @@ TEST_F(JavaUDFTest, test_time_convert) {
     jobject time_obj = _env->NewObject(time_class, constructor, hour, minute, seconds);
     _env->SetObjectArrayElement(time_array, 0, time_obj);
 
-    TypeDescriptor time_desc(TYPE_TIME);
-    auto result_column = ColumnHelper::create_column(time_desc, true);
+    auto result_column = ColumnHelper::create_column(TYPE_TIME_DESC, true);
 
     auto& helper = JVMFunctionHelper::getInstance();
     ASSERT_OK(helper.get_result_from_boxed_array(TYPE_TIME, result_column.get(), time_array, 1));
@@ -238,7 +237,7 @@ TEST_F(JavaUDFTest, get_result_from_boxed_array_date) {
     // index 1 stays null
     _env->SetObjectArrayElement(arr, 2, ld2);
 
-    auto result = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+    auto result = ColumnHelper::create_column(TYPE_DATE_DESC, true);
     ASSERT_OK(helper.get_result_from_boxed_array(TYPE_DATE, result.get(), arr, 3));
     // Java memcpys the null buffer directly; mirror the production path
     // (java_function_call_expr.cpp::get_boxed_result) and refresh _has_null.
@@ -268,7 +267,7 @@ TEST_F(JavaUDFTest, get_result_from_boxed_array_datetime) {
     _env->SetObjectArrayElement(arr, 0, ldt0);
     _env->SetObjectArrayElement(arr, 2, ldt2);
 
-    auto result = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    auto result = ColumnHelper::create_column(TYPE_DATETIME_DESC, true);
     ASSERT_OK(helper.get_result_from_boxed_array(TYPE_DATETIME, result.get(), arr, 3));
     down_cast<NullableColumn*>(result.get())->update_has_null();
     ASSERT_EQ(result->size(), 3);
@@ -318,8 +317,7 @@ TEST_F(JavaUDFTest, get_result_from_boxed_array_decimal_dispatch) {
 // signature is wired and the dispatch keeps the non-DECIMAL fast path intact.
 TEST_F(JavaUDFTest, get_result_from_boxed_array_with_function_context) {
     auto& helper = JVMFunctionHelper::getInstance();
-    TypeDescriptor td(TYPE_INT);
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context({td}, td));
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context({TYPE_INT_DESC}, TYPE_INT_DESC));
 
     // Integer[] { 1, 2, 3 } via valueOf.
     jclass integer_cls = JVMHelper::getInstance().int32_t_class();
@@ -333,7 +331,7 @@ TEST_F(JavaUDFTest, get_result_from_boxed_array_with_function_context) {
         _env->DeleteLocalRef(boxed);
     }
 
-    auto result = ColumnHelper::create_column(td, true);
+    auto result = ColumnHelper::create_column(TYPE_INT_DESC, true);
     helper.get_result_from_boxed_array(ctx.get(), TYPE_INT, result.get(), arr, 3);
     EXPECT_FALSE(ctx->has_error());
     ASSERT_EQ(result->size(), 3);

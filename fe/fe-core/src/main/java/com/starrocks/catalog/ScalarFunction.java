@@ -47,6 +47,7 @@ import com.starrocks.type.Type;
 import org.apache.logging.log4j.util.Strings;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -186,11 +187,12 @@ public class ScalarFunction extends Function {
         newFn.setFunctionId(this.getFunctionId());
         newFn.setChecksum(this.getChecksum());
         newFn.setBinaryType(this.getBinaryType());
-        newFn.setAiModelSource(this.getAiModelSource());
         newFn.setHasVarArgs(this.hasVarArgs());
         newFn.setId(this.getId());
         newFn.setUserVisible(this.isUserVisible());
         newFn.setAggStateDesc(this.getAggStateDesc());
+        newFn.setArgNames(this.getArgNames() == null ? null : Arrays.asList(this.getArgNames()));
+        newFn.setDefaultNamedArgs(this.getDefaultNamedArgs());
         return newFn;
     }
 

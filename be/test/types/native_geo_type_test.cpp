@@ -25,13 +25,9 @@ GeoColumnDescriptor descriptor(LogicalType primitive) {
     GeoColumnDescriptor result;
     bool geography = primitive == TYPE_GEOGRAPHY;
     result.type.logical_type = geography ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY;
-    result.type.coordinate_system = geography ? GEO_COORDINATE_SYSTEM_SPHERICAL : GEO_COORDINATE_SYSTEM_CARTESIAN;
     result.type.edge_algorithm = geography ? GEO_EDGE_ALGORITHM_SPHERICAL : GEO_EDGE_ALGORITHM_PLANAR;
     result.type.crs = "OGC:CRS84";
     result.type.srid = 4326;
-    result.storage.encoding = GEO_ENCODING_WKB;
-    result.storage.dimension = GEO_DIMENSION_XY;
-    result.storage.validation_state = GEO_VALIDATION_STATE_UNVALIDATED;
     return result;
 }
 
@@ -70,11 +66,21 @@ TEST(NativeGeoTypeTest, OptionalSemanticMetadata) {
             EXPECT_FALSE(type.is_assignable(type));
         }
     }
-    auto type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, {});
+    auto type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, descriptor(TYPE_GEOGRAPHY).type);
     EXPECT_TRUE(TypeDescriptor::from_thrift(type.to_thrift()).geo_type.has_value());
     EXPECT_TRUE(TypeDescriptor::from_protobuf(type.to_protobuf()).geo_type.has_value());
     EXPECT_NE(TypeDescriptor(TYPE_GEOGRAPHY), type);
 }
+
+#ifndef NDEBUG
+TEST(NativeGeoTypeDeathTest, GeoTypeRequiresMatchingDescriptor) {
+    testing::FLAGS_gtest_death_test_style = "threadsafe";
+    const auto geography = descriptor(TYPE_GEOGRAPHY).type;
+    EXPECT_DEATH((void)TypeDescriptor::create_geo_type(TYPE_INT, geography), "Check failed");
+    EXPECT_DEATH((void)TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, GeoTypeDescriptor{}), "Check failed");
+    EXPECT_DEATH((void)TypeDescriptor::create_geo_type(TYPE_GEOMETRY, geography), "Check failed");
+}
+#endif
 
 TEST(NativeGeoTypeTest, ConversionDoesNotValidateSemantics) {
     // FE validates the type; consumers decide which edge algorithms they support.
@@ -101,11 +107,8 @@ TEST(NativeGeoTypeTest, SemanticMetadataHasValueSemantics) {
 TEST(NativeGeoTypeTest, ColumnRepresentationIsSeparateFromType) {
     auto column = descriptor(TYPE_GEOGRAPHY);
     auto type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, column.type);
-    // A column reuses the semantic value, and transports its representation separately.
+    // A column reuses the semantic value and transports nothing else.
     column.type = *type.geo_type;
-    column.storage.dimension = GEO_DIMENSION_XYZ;
-    column.storage.validation_state = GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED;
-    EXPECT_EQ(column, GeoColumnDescriptor::from_thrift(column.to_thrift()));
     EXPECT_EQ(column, GeoColumnDescriptor::from_protobuf(column.to_protobuf()));
     auto thrift = type.to_thrift();
     thrift.types[0].scalar_type.__set_geo(column.type.to_thrift());
@@ -123,9 +126,9 @@ TEST(NativeGeoTypeTest, ColumnRepresentationIsSeparateFromType) {
 TEST(NativeGeoTypeTest, FrontendWireFixture) {
     // FE serializes semantic metadata directly in PScalarType.geo.
     const std::string_view wire(
-            "\x0a\x1c\x08\x00\x12\x18\x08\x1e\x2a\x14\x08\x01\x10\x01\x18\x01\x22\x09\x4f\x47\x43\x3a\x43\x52"
-            "\x53\x38\x34\x28\xe6\x21",
-            30);
+            "\x0a\x1a\x08\x00\x12\x16\x08\x1e\x2a\x12\x08\x01\x10\x01\x1a\x09\x4f\x47\x43\x3a\x43\x52\x53\x38"
+            "\x34\x20\xe6\x21",
+            28);
     PTypeDesc proto;
     ASSERT_TRUE(proto.ParseFromArray(wire.data(), wire.size()));
     auto expected = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, descriptor(TYPE_GEOGRAPHY).type);

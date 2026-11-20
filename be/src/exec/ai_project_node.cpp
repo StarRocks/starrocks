@@ -14,8 +14,6 @@
 
 #include "exec/ai_project_node.h"
 
-#include <algorithm>
-#include <cctype>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -25,6 +23,7 @@
 #include <utility>
 
 #include "exec/pipeline/ai/ai_project_operator.h"
+#include "exec/pipeline/ai/ai_provider_config_parser.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -41,21 +40,10 @@ namespace starrocks {
 
 namespace {
 
-constexpr std::string_view kSystemChatConfigId = "__system_chat__";
-constexpr std::string_view kSystemEmbeddingConfigId = "__system_embedding__";
-constexpr std::string_view kOpenAICompatibleProvider = "openai_compatible";
 constexpr std::string_view kInvalidAIProjectPlan = "Invalid AI project plan";
 
 Status invalid_ai_project_plan() {
     return Status::InvalidArgument(kInvalidAIProjectPlan);
-}
-
-bool contains_control_character(std::string_view value) {
-    return std::any_of(value.begin(), value.end(), [](unsigned char c) { return c <= 0x1f || c == 0x7f; });
-}
-
-bool is_non_blank(std::string_view value) {
-    return std::any_of(value.begin(), value.end(), [](unsigned char c) { return std::isspace(c) == 0; });
 }
 
 size_t count_ai_expressions(const Expr* expr) {
@@ -104,8 +92,8 @@ Status AIProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
 
     const TAIProjectNode& thrift_project = tnode.ai_project_node;
-    if (!thrift_project.__isset.slot_map || !thrift_project.__isset.ai_model_configs ||
-        thrift_project.slot_map.empty() || thrift_project.ai_model_configs.empty()) {
+    if (!thrift_project.__isset.slot_map || !thrift_project.__isset.ai_provider_mapping ||
+        thrift_project.slot_map.empty() || thrift_project.ai_provider_mapping.empty()) {
         return invalid_ai_project_plan();
     }
 
@@ -118,51 +106,9 @@ Status AIProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
 
     pipeline::AIProjectModelConfigs configs;
-    for (const auto& [id, model_config] : thrift_project.ai_model_configs) {
-        if (!is_non_blank(id) || contains_control_character(id) ||
-            model_config.__isset.chat == model_config.__isset.embedding) {
-            return invalid_ai_project_plan();
-        }
-        const auto capability = model_config.__isset.chat ? AICapability::CHAT : AICapability::TEXT_EMBEDDING;
-        const TAIEndpointConfig& endpoint = model_config.__isset.chat ? model_config.chat : model_config.embedding;
-        if (!endpoint.__isset.endpoint || !endpoint.__isset.model || !endpoint.__isset.provider ||
-            !is_non_blank(endpoint.endpoint) || contains_control_character(endpoint.endpoint) ||
-            !validate_ai_protocol(endpoint.provider, capability).ok() || contains_control_character(endpoint.model)) {
-            return invalid_ai_project_plan();
-        }
-        const auto source = model_config.__isset.source ? model_config.source : TAIModelSource::SYSTEM;
-        if (source == TAIModelSource::SYSTEM) {
-            // Preserve the legacy SYSTEM wire shape, never infer an object route from its key.
-            if (endpoint.__isset.api_key || endpoint.__isset.timeout_ms || endpoint.__isset.dimensions ||
-                id != (capability == AICapability::CHAT ? kSystemChatConfigId : kSystemEmbeddingConfigId)) {
-                return invalid_ai_project_plan();
-            }
-        } else if (source == TAIModelSource::PROVIDER) {
-            if (endpoint.provider != kOpenAICompatibleProvider || id == kSystemChatConfigId ||
-                id == kSystemEmbeddingConfigId || !is_non_blank(endpoint.model) ||
-                (endpoint.__isset.api_key && contains_control_character(endpoint.api_key)) ||
-                (endpoint.__isset.timeout_ms && endpoint.timeout_ms <= 0) ||
-                (endpoint.__isset.dimensions &&
-                 (capability != AICapability::TEXT_EMBEDDING || endpoint.dimensions <= 0))) {
-                return invalid_ai_project_plan();
-            }
-        } else {
-            // Unknown sources must never become Provider routes.
-            return invalid_ai_project_plan();
-        }
-        configs.emplace(id,
-                        pipeline::AIProjectModelConfig{
-                                .endpoint = endpoint.endpoint,
-                                .model = endpoint.model,
-                                .api_key = endpoint.__isset.api_key ? endpoint.api_key : std::string{},
-                                .capability = capability,
-                                .source = source,
-                                .timeout_ms = endpoint.__isset.timeout_ms ? std::optional<int64_t>(endpoint.timeout_ms)
-                                                                          : std::nullopt,
-                                .dimensions = endpoint.__isset.dimensions ? std::optional<int32_t>(endpoint.dimensions)
-                                                                          : std::nullopt,
-                                .protocol = endpoint.provider,
-                        });
+    for (const auto& [id, provider] : thrift_project.ai_provider_mapping) {
+        ASSIGN_OR_RETURN(auto config, pipeline::AIProviderConfigParser::parse(id, provider));
+        configs.emplace(id, std::move(config));
     }
 
     pipeline::AIProjectProjectionSpec projection_spec(state, {}, {}, std::move(configs));
@@ -201,16 +147,14 @@ Status AIProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
         if (ai_expr == nullptr || count_ai_expressions(root) != 1 || ai_expr->type() != slot_desc->type()) {
             return invalid_ai_project_plan();
         }
-        const auto route = projection_spec.model_configs().find(ai_expr->model_config_id());
-        if (route == projection_spec.model_configs().end() || route->second.capability != ai_expr->capability() ||
-            route->second.source != ai_expr->model_source() ||
-            (ai_expr->requires_default_model() && !is_non_blank(route->second.model))) {
+        const auto route = projection_spec.model_configs().find(ai_expr->provider_id());
+        if (route == projection_spec.model_configs().end() || route->second.capability != ai_expr->capability()) {
             return invalid_ai_project_plan();
         }
         output.kind = pipeline::AIProjectOutputKind::AI;
         ai_output_slots.emplace(slot_id);
         has_ai_output = true;
-        used_configs.emplace(ai_expr->model_config_id());
+        used_configs.emplace(ai_expr->provider_id());
     }
 
     if (!has_ai_output || used_configs.size() != projection_spec.model_configs().size()) {

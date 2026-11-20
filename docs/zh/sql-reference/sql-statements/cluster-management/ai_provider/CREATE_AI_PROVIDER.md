@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
-description: "将外部 AI 服务 provider（embedding 或 rerank）注册为 SQL 管理的集群元数据。"
+description: "将 chat、embedding 或 rerank 类型的外部 AI 服务注册为集群中的 AI Provider。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE AI PROVIDER
@@ -9,7 +10,7 @@ description: "将外部 AI 服务 provider（embedding 或 rerank）注册为 SQ
 并按**类型各自保留一个默认值**：
 
 - `embedding`——OpenAI 兼容的 `/v1/embeddings` 端点，供 semantic-context 模块在 `CONTEXT UPSERT`
-  写入和 `query_text` 检索时计算 embedding，也供 [ai_custom_embedding](../../../sql-functions/ai-functions/ai_custom_functions.md) 使用。
+  写入和 `query_text` 检索时计算 embedding，也供 [ai_embed](../../../sql-functions/ai-functions/ai_text_functions.md#ai_embed) 使用。
 - `rerank`——Cohere 兼容的 `/rerank` 端点（Cohere / Jina / Voyage / OpenRouter / 本地 TEI），供
   `/api/context/search` 可选的 cross-encoder 第二阶段重排使用。
 - `chat`——chat / completion 端点（OpenAI Chat Completions 或 Anthropic Messages）。
@@ -17,14 +18,16 @@ description: "将外部 AI 服务 provider（embedding 或 rerank）注册为 SQ
 每个 provider 还通过 `protocol` 属性声明其端点使用的**协议**。省略时按类型取默认值：`embedding` 和 `chat`
 为 `openai`，`rerank` 为 `cohere`。
 
-[ai_custom_query](../../../sql-functions/ai-functions/ai_custom_functions.md) 和 [ai_custom_embedding](../../../sql-functions/ai-functions/ai_custom_functions.md) 当前要求 `openai` 协议。使用其他已注册协议调用这些函数时，会在查询规划阶段报错。
-
 provider 对象（含 `api_key` 属性）持久化在 FE 元数据 journal 与 image 中，重启和升级后凭证仍保留。
 这些设置没有 `fe.conf` 开关。
 
 > **注意**
 >
 > 任何能读取 FE meta image / BDB journal 目录的人都能看到 `api_key`；请用文件系统权限保护这些文件。
+
+创建 `protocol = "openai"` 的 Provider。无论是否配置 API key，端点均支持 HTTP 和 HTTPS。非空 key 生成 `Authorization: Bearer ...` 请求头。URL 格式、控制字符、DNS 和地址校验仍然生效。请使用可信端点和允许向外传输的数据。
+
+使用 `SET <provider_name> AS DEFAULT AI PROVIDER` 设置默认值。若对应默认 Provider 未设置，隐式调用在 FE 报错，`EXPLAIN` 也会报错。每个执行计划固定所选 Provider 的配置快照；ALTER 和默认值切换影响重新规划的查询，预处理语句每次 `EXECUTE` 都根据当前元数据重新规划。
 
 ## 权限
 
@@ -39,7 +42,7 @@ TYPE { embedding | rerank | chat }
 PROPERTIES (
     "endpoint"   = "<url>",
     "model"      = "<model_name>"
-    [, "protocol" = "{ openai | anthropic | cohere }" ]
+    [, "protocol" = "{ openai | anthropic | cohere | dashscope }" ]
     [, "dimensions" = "<int>" ]      -- 仅 embedding
     [, "max_documents" = "<int>" ]   -- 仅 rerank（可选）
     [, "deadline_ms" = "<int>" ]     -- 仅 rerank（可选）
@@ -63,7 +66,7 @@ PROPERTIES (
 | --------------- | -------------- | ---- | ------------------------------------------------------------------------------------ |
 | `endpoint`      | 全部           | 是   | HTTP(S) 端点 URL，必须以 `http://` 或 `https://` 开头。                               |
 | `model`         | 全部           | 是   | 请求体 `model` 字段的模型名（如 `text-embedding-3-small`、`cohere/rerank-4-fast`）。 |
-| `protocol`      | 全部           | 否   | 端点使用的协议：`openai`、`anthropic` 或 `cohere`。默认值：`embedding` 和 `chat` 为 `openai`，`rerank` 为 `cohere`。|
+| `protocol`      | 全部           | 否   | 端点使用的协议：`openai`、`anthropic`、`cohere` 或 `dashscope`。默认值：`embedding` 和 `chat` 为 `openai`，`rerank` 为 `cohere`。|
 | `dimensions`    | embedding      | 否   | embedding 向量维度（正整数）。必须与 provider 输出及向量索引维度一致。                |
 | `max_documents` | rerank         | 否   | 每次 rerank 请求发送的最大文档数（正整数；默认 1000）。                               |
 | `deadline_ms`   | rerank         | 否   | 整个 rerank 调用（含所有重试）的总时间预算（毫秒，正整数；默认 10000）。用于限制慢/不可达的 rerank 服务最多拖慢搜索多久,超过后降级为融合排序。超时不重试,仅连接失败或 HTTP 5xx 才重试。 |

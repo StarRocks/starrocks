@@ -1,0 +1,36 @@
+-- name: test_native_geo_distance_point_fast_path
+SELECT id, ST_Distance(ST_GeomFromWKB(UNHEX(wkb),'EPSG:4326'),ST_GeomFromText('POINT (3 4)','EPSG:4326')), ST_Distance(ST_GeogFromWKB(UNHEX(wkb)),ST_GeogFromWKB(UNHEX(wkb))) FROM (SELECT 1 AS id, '010100000000000000000000000000000000000000' AS wkb UNION ALL SELECT 2,'000000000140080000000000004010000000000000' UNION ALL SELECT 3,NULL UNION ALL SELECT 4,'0101000000000000000000F87F000000000000F87F') points ORDER BY id;
+-- result:
+1	5.0	0.0
+2	0.0	0.0
+3	None	None
+4	None	None
+-- !result
+SELECT ST_Distance(ST_GeomFromText('POINT (0 0)','EPSG:4326'),ST_GeomFromText('POINT (3 4)','EPSG:4326')), ST_Distance(ST_GeogFromText('POINT (0 0)'),ST_GeogFromText('POINT (1 0)')) BETWEEN 111195.10117748 AND 111195.10117749;
+-- result:
+5.0	1
+-- !result
+SELECT ST_Distance(ST_GeomFromText('POINT EMPTY','EPSG:4326'),ST_GeomFromText('POINT (0 0)','EPSG:4326')), ST_Distance(ST_GeogFromText('POINT (0 0)'),ST_GeogFromText('POINT EMPTY')), ST_Distance(ST_GeomFromWKB(CAST(NULL AS VARBINARY),'EPSG:4326'),ST_GeomFromText('POINT (0 0)','EPSG:4326'));
+-- result:
+None	None	None
+-- !result
+SELECT ST_Distance(ST_GeomFromText('POINT (0 1)','EPSG:4326'),ST_GeomFromText('LINESTRING (-1 0,1 0)','EPSG:4326')), ST_Distance(ST_GeogFromText('POINT (0 1)'),ST_GeogFromText('LINESTRING (-1 0,1 0)')) BETWEEN 111195.10 AND 111195.11;
+-- result:
+1.0	1
+-- !result
+function: assert_query_error_contains("SELECT ST_Distance(ST_GeogFromText('POINT (0 0)'),ST_GeogFromText('POLYGON EMPTY'))", "ST_Distance supports POINT/POINT and POINT with LINESTRING/MULTILINESTRING inputs")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT ST_DWithin(ST_GeogFromText('POINT (0 0)'),ST_GeogFromText('POINT (1 1)'),0)", "ST_DWithin supports only POINT with LINESTRING/MULTILINESTRING inputs")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT ST_Distance(ST_GeomFromText('POINT (0 0)','EPSG:4326'),ST_GeomFromText('POLYGON EMPTY','EPSG:4326'))", "ST_Distance supports POINT/POINT and POINT with LINESTRING/MULTILINESTRING inputs")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT ST_DWithin(ST_GeomFromText('POINT (0 0)','EPSG:4326'),ST_GeomFromText('POINT (1 1)','EPSG:4326'),0)", "ST_DWithin supports only POINT with LINESTRING/MULTILINESTRING inputs")
+-- result:
+None
+-- !result

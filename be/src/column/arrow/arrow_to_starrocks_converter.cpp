@@ -26,6 +26,7 @@
 #include "arrow/type_fwd.h"
 #include "arrow/type_traits.h"
 #include "base/decimal_types.h"
+#include "base/time/tz_offset_cache.h"
 #include "base/utility/pred_guard.h"
 #include "column/array_column.h"
 #include "column/arrow/arrow_to_json_converter.h"
@@ -698,13 +699,12 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
         }
     }
 
-    static bool convert_one_datetime(CppType& datum, int64_t second, int64_t microsecond, const cctz::time_zone& ctz) {
+    // offset_cache is bound to the zone the value is shown in.
+    static bool convert_one_datetime(CppType& datum, int64_t second, int64_t microsecond, TzOffsetCache* offset_cache) {
         static_assert(at_is_datetime<AT>, "Invalid arrow type");
 
         DateTimeValue dtv;
-        if (UNLIKELY(!dtv.from_unixtime(second, microsecond, ctz))) {
-            return true;
-        }
+        dtv.from_unixtime_with_offset(second, microsecond, offset_cache->offset_in_bound_zone(second));
         if constexpr (lt_is_date<LT>) {
             datum.from_date(dtv.year(), dtv.month(), dtv.day());
         } else if constexpr (lt_is_datetime<LT>) {
@@ -712,6 +712,24 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                                  dtv.microsecond());
         }
         return false;
+    }
+
+    template <int64_t units_per_second>
+    static bool convert_subsecond_datetime(CppType& datum, int64_t timestamp, TzOffsetCache* offset_cache) {
+        int64_t second = timestamp / units_per_second;
+        int64_t fraction = timestamp % units_per_second;
+        // Civil-time conversion requires a nonnegative fraction, including before the Unix epoch.
+        if (fraction < 0) {
+            --second;
+            fraction += units_per_second;
+        }
+        int64_t microsecond;
+        if constexpr (units_per_second <= 1000000) {
+            microsecond = fraction * (1000000 / units_per_second);
+        } else {
+            microsecond = fraction / (units_per_second / 1000000);
+        }
+        return convert_one_datetime(datum, second, microsecond, offset_cache);
     }
 
     static void fill_null(CppType* data, int num_elements, const uint8_t* null_data) {
@@ -735,6 +753,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
 
     static Status convert_datetime_from_second(CppType* data, const ArrowCppType* arrow_data, int num_elements,
                                                const cctz::time_zone& ctz, [[maybe_unused]] const uint8_t* null_data) {
+        TzOffsetCache offset_cache;
+        offset_cache.bind(ctz);
         for (int i = 0; i < num_elements; ++i) {
             if constexpr (is_nullable) {
                 if (null_data[i] == DATUM_NULL) {
@@ -742,7 +762,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 }
             }
 
-            if (convert_one_datetime(data[i], arrow_data[i], 0, ctz)) {
+            if (convert_one_datetime(data[i], arrow_data[i], 0, &offset_cache)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }
@@ -752,6 +772,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
     static Status convert_datetime_from_milisecond(CppType* data, const ArrowCppType* arrow_data, int num_elements,
                                                    const cctz::time_zone& ctz,
                                                    [[maybe_unused]] const uint8_t* null_data) {
+        TzOffsetCache offset_cache;
+        offset_cache.bind(ctz);
         for (int i = 0; i < num_elements; ++i) {
             if constexpr (is_nullable) {
                 if (null_data[i] == DATUM_NULL) {
@@ -759,7 +781,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 }
             }
 
-            if (convert_one_datetime(data[i], arrow_data[i] / 1000, arrow_data[i] % 1000 * 1000, ctz)) {
+            if (convert_subsecond_datetime<1000>(data[i], arrow_data[i], &offset_cache)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }
@@ -769,6 +791,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
     static Status convert_datetime_from_microsecond(CppType* data, const ArrowCppType* arrow_data, int num_elements,
                                                     const cctz::time_zone& ctz,
                                                     [[maybe_unused]] const uint8_t* null_data) {
+        TzOffsetCache offset_cache;
+        offset_cache.bind(ctz);
         for (int i = 0; i < num_elements; ++i) {
             if constexpr (is_nullable) {
                 if (null_data[i] == DATUM_NULL) {
@@ -776,7 +800,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 }
             }
 
-            if (convert_one_datetime(data[i], arrow_data[i] / 1000000, arrow_data[i] % 1000000, ctz)) {
+            if (convert_subsecond_datetime<1000000>(data[i], arrow_data[i], &offset_cache)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }
@@ -786,6 +810,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
     static Status convert_datetime_from_nanosecond(CppType* data, const ArrowCppType* arrow_data, int num_elements,
                                                    const cctz::time_zone& ctz,
                                                    [[maybe_unused]] const uint8_t* null_data) {
+        TzOffsetCache offset_cache;
+        offset_cache.bind(ctz);
         for (int i = 0; i < num_elements; ++i) {
             if constexpr (is_nullable) {
                 if (null_data[i] == DATUM_NULL) {
@@ -793,7 +819,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 }
             }
 
-            if (convert_one_datetime(data[i], arrow_data[i] / 1000000000, arrow_data[i] % 1000000000 / 1000, ctz)) {
+            if (convert_subsecond_datetime<1000000000>(data[i], arrow_data[i], &offset_cache)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }
@@ -1065,18 +1091,24 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StructGurad<LT>> {
         for (size_t i = 0; i < conv_func->field_names.size(); i++) {
             const auto& child_name = conv_func->field_names[i];
             ASSIGN_OR_RETURN(auto* child_col, struct_col->field_column_raw_ptr(child_name));
-            auto child_array = struct_array->GetFieldByName(child_name);
+            const auto child_index = struct_array->struct_type()->GetFieldIndex(child_name);
 
-            if (child_array == nullptr) {
+            if (child_index < 0) {
                 // default null
                 DCHECK(child_col->is_nullable());
                 child_col->append_nulls(num_elements);
                 continue;
             }
 
-            RETURN_IF_ERROR(convert_arrow_array_to_column(conv_func->children[i].get(), num_elements, child_array.get(),
-                                                          child_col, array_start_idx, chunk_start_idx, chunk_filter,
-                                                          ctx));
+            // A child's own validity does not include its parent's. Merge both so converters
+            // skip values hidden by a NULL struct, including nested VARIANT payloads.
+            auto child_array = struct_array->GetFlattenedField(child_index);
+            if (!child_array.ok()) {
+                return Status::InternalError(child_array.status().ToString());
+            }
+            RETURN_IF_ERROR(convert_arrow_array_to_column(conv_func->children[i].get(), num_elements,
+                                                          child_array->get(), child_col, array_start_idx,
+                                                          chunk_start_idx, chunk_filter, ctx));
         }
 
         return Status::OK();

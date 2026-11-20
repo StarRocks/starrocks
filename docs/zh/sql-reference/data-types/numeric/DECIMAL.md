@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DECIMAL(P[,S]) 是高精度定点数值类型，P 代表精度，S 代表刻度。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DECIMAL

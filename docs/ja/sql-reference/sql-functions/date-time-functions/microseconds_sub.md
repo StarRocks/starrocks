@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "日付値からマイクロ秒単位の時間間隔を減算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # microseconds_sub

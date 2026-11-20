@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /*
  *                                    Intersect
@@ -62,8 +63,12 @@ public class IntersectAddDistinctRule extends TransformationRule {
         LogicalIntersectOperator intersect = (LogicalIntersectOperator) intersectOpt.getOp();
         OptExpression childOpt = intersectOpt.inputAt(child);
 
+        // A child can output the same column twice (SELECT c, c AS p ... INTERSECT ...). Grouping by it once is the
+        // same distinct; grouping by it twice put one slot twice into the aggregation's output tuple, which the BE
+        // rejected ("slot_id already exists", "build chunk meta error") or crashed on in convert_hash_set_to_chunk.
         LogicalAggregationOperator agg = new LogicalAggregationOperator(AggType.GLOBAL,
-                Lists.newArrayList(intersect.getChildOutputColumns().get(child)), Maps.newHashMap());
+                intersect.getChildOutputColumns().get(child).stream().distinct().collect(Collectors.toList()),
+                Maps.newHashMap());
 
         OptExpression aggOpt = OptExpression.create(agg, childOpt);
         calculateStatistics(aggOpt, context);

@@ -3,12 +3,11 @@ displayed_sidebar: docs
 sidebar_position: 20
 sidebar_label: "Privilege Items"
 description: "Privileges granted to a user or role determine which operations the user or role can perform on certain objects."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Privileges supported by StarRocks
 
-import PrivCreateWarehouse from '../../../_assets/commonMarkdown/priv_create_warehouse.mdx'
-import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 
 Privileges granted to a user or role determine which operations the user or role can perform on certain objects. Privileges can be used to implement fine-grained access control to safeguard data security.
 
@@ -24,15 +23,30 @@ This section describes privileges that are available on different objects.
 
 ### SYSTEM
 
-<PrivCreateWarehouse />
+| Privilege               | Description                                                  |
+| ----------------------- | ------------------------------------------------------------ |
+| NODE                    | Operates nodes, such as adding, deleting, or decommissioning nodes. To ensure cluster security, this privilege cannot be directly granted to users or roles. The `cluster_admin` role has this privilege. |
+| GRANT                   | Creates a user or role, alters a user or role, or grants privileges to a user or role. This privilege cannot be directly granted to users or roles. The `user_admin` role has this privilege. |
+| CREATE RESOURCE GROUP   | Creates a resource group.                                    |
+| CREATE RESOURCE         | Creates resources for Spark Load jobs or external tables.    |
+| CREATE EXTERNAL CATALOG | Creates an external catalog.                                 |
+| PLUGIN                  | Installs or uninstalls a plugin.                             |
+| REPOSITORY              | Creates, deletes, or views repositories.                     |
+| BLACKLIST               | Creates, deletes, or displays SQL blacklists and BE Blacklist. |
+| FILE                    | Creates, deletes, or views files.                            |
+| OPERATE                 | Manages replicas, configuration items, variables, and transactions. |
+| CREATE GLOBAL FUNCTION  | Creates a global UDF.                                        |
+| CREATE STORAGE VOLUME   | Creates a storage volume for a remote storage system.        |
+| SECURITY                | Creates or manages security integrations and group providers. |
 
-### AI FUNCTION / AI PROVIDER
+### AI FUNCTION / AI PROVIDER {/* #ai-function-privileges */}
 
-| Privilege | Description |
-| --- | --- |
-| USAGE | Uses the specified public AI function family or provider. `ON ALL AI FUNCTIONS` and `ON ALL AI PROVIDERS` grant usage across the respective object type, including future objects. Function and provider privileges remain independent. |
+| Object | Privilege | Purpose |
+| --- | --- | --- |
+| AI FUNCTION | USAGE | Use the specified AI function. |
+| AI PROVIDER | USAGE | Use the specified AI Provider. |
 
-SYSTEM functions keep their existing configuration route and do not require a provider grant. Provider CREATE, ALTER, DROP, SET DEFAULT, SHOW, and DESC still require SYSTEM OPERATE; USAGE does not authorize those management operations.
+> Note: Calling an AI function requires USAGE on both the function and the selected Provider, including the default Provider. Managing Providers requires SYSTEM OPERATE.
 
 
 ### RESOURCE GROUP
@@ -141,8 +155,6 @@ SYSTEM functions keep their existing configuration route and do not require a pr
 | DROP      | Drops a storage volume.                                                             |
 | USAGE     | Describes a storage volume.                                                          |
 | ALL       | Has all the above privileges on a storage volume.                                   |
-
-<PrivWarehouse />
 
 ## Upgrade notes
 

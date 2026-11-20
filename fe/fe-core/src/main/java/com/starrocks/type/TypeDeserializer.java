@@ -136,7 +136,7 @@ public class TypeDeserializer {
         Preconditions.checkState(node.isSetScalar_type());
         TScalarType scalarType = node.getScalar_type();
         if (scalarType.isSetGeo()) {
-            return ScalarType.createGeoType(fromThrift(scalarType.getType()), GeoTypeSerde.fromThrift(scalarType.geo));
+            return new GeoType(fromThrift(scalarType.getType()), GeoTypeSerde.fromThrift(scalarType.geo));
         }
         Preconditions.checkArgument(scalarType.getType() != TPrimitiveType.GEOGRAPHY
                         && scalarType.getType() != TPrimitiveType.GEOMETRY,
@@ -227,7 +227,7 @@ public class TypeDeserializer {
     public static ScalarType createType(PScalarType ptype) {
         TPrimitiveType tPrimitiveType = TPrimitiveType.findByValue(ptype.type);
         if (ptype.geo != null) {
-            return ScalarType.createGeoType(fromThrift(tPrimitiveType), GeoTypeSerde.fromProtobuf(ptype.geo));
+            return new GeoType(fromThrift(tPrimitiveType), GeoTypeSerde.fromProtobuf(ptype.geo));
         }
         Preconditions.checkArgument(tPrimitiveType != TPrimitiveType.GEOGRAPHY && tPrimitiveType != TPrimitiveType.GEOMETRY,
                 "Native geo primitives require a geo descriptor");

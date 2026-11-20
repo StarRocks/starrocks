@@ -210,7 +210,7 @@ void VariantPathReader::_try_match_typed(const VariantPath* path) {
 
     // No typed match. Check whether the leading object-key prefix of the query
     // path is a strict parent of any shredded path.  If so, the remain at that
-    // prefix is incomplete (typed children were shredded out), and _seek_base
+    // prefix is incomplete (typed children were shredded out), and _seek_base_view
     // would return stale/partial data — Layer 2 must be skipped.
     //
     // This check applies regardless of whether array segments follow the object-key
@@ -260,7 +260,7 @@ VariantReadResult VariantPathReader::_read_typed_row(size_t row) {
     return drill_down_column(typed_col, typed_row, type_desc, suffix);
 }
 
-bool VariantPathReader::_seek_base(size_t row, VariantRowValue* out) {
+bool VariantPathReader::_seek_base_view(size_t row, VariantRowRef* out) {
     if (!_col->has_metadata_column() || !_col->has_remain_value()) {
         return false;
     }
@@ -282,65 +282,73 @@ bool VariantPathReader::_seek_base(size_t row, VariantRowValue* out) {
     if (!field.ok()) {
         return false;
     }
-    *out = std::move(field).value().to_owned();
+    *out = std::move(field).value();
     return true;
 }
 
-VariantReadResult VariantPathReader::_read_full(size_t row) {
+VariantReadState VariantPathReader::_read_full_view(size_t row, VariantRowRef* out, VariantRowValue* buffer) {
     VariantRowRef variant_ref;
-    if (_col->try_get_row_ref(row, &variant_ref)) {
-        DCHECK(_path != nullptr);
-        auto field = VariantPath::seek_view(variant_ref, *_path, _seg_offset);
-        if (!field.ok()) {
-            return VariantReadResult{.state = VariantReadState::kMissing};
+    if (!_col->try_get_row_ref(row, &variant_ref)) {
+        const VariantRowValue* variant = _col->get_row_value(row, buffer);
+        if (variant == nullptr) {
+            return VariantReadState::kMissing;
         }
-        return VariantReadResult{.state = VariantReadState::kValue, .value = std::move(field).value().to_owned()};
+        variant_ref = variant->as_ref();
     }
-
-    VariantRowValue variant_buffer;
-    const VariantRowValue* variant = _col->get_row_value(row, &variant_buffer);
-    if (variant == nullptr) {
-        return VariantReadResult{.state = VariantReadState::kMissing};
-    }
-    variant_ref = variant->as_ref();
     DCHECK(_path != nullptr);
     auto field = VariantPath::seek_view(variant_ref, *_path, _seg_offset);
     if (!field.ok()) {
-        return VariantReadResult{.state = VariantReadState::kMissing};
+        return VariantReadState::kMissing;
     }
-    return VariantReadResult{.state = VariantReadState::kValue, .value = std::move(field).value().to_owned()};
+    *out = std::move(field).value();
+    return VariantReadState::kValue;
 }
 
-VariantReadResult VariantPathReader::read_row(size_t row) {
+VariantReadState VariantPathReader::read_row_view(size_t row, VariantRowRef* out, VariantRowValue* buffer) {
     DCHECK(_path != nullptr);
 
     if (_match_index >= 0) {
-        return _read_typed_row(row);
+        // A typed value has to be encoded into variant bytes anyway, so it is always owned.
+        VariantReadResult typed = _read_typed_row(row);
+        if (typed.state == VariantReadState::kValue) {
+            *buffer = std::move(typed.value);
+            *out = buffer->as_ref();
+        }
+        return typed.state;
     }
 
     // Root path ("$"): the remain payload is always incomplete because typed columns
     // were shredded out.  Skip Layer 2 and go directly to full materialisation.
     if (_seg_offset >= _path->segments.size()) {
-        return _read_full(row);
+        return _read_full_view(row, out, buffer);
     }
 
     // Layer 2: base remain-payload seek.
     // When no shredded path is a child of the query path, the remain is the sole
-    // source for this path.  _seek_base success → return the value; failure →
+    // source for this path.  _seek_base_view success → return the value; failure →
     // the path simply does not exist (no typed column can contribute it either).
     // When a shredded path IS a child of the query path (_has_typed_child), the
     // remain at this prefix is incomplete, so skip Layer 2 and fall through to
     // full materialisation which merges typed columns and remain correctly.
     if (!_has_typed_child) {
-        VariantRowValue base_field;
-        if (_seek_base(row, &base_field)) {
-            return VariantReadResult{.state = VariantReadState::kValue, .value = std::move(base_field)};
-        }
-        return VariantReadResult{.state = VariantReadState::kMissing};
+        return _seek_base_view(row, out) ? VariantReadState::kValue : VariantReadState::kMissing;
     }
 
     // Layer 3: full row materialisation + seek.
-    return _read_full(row);
+    return _read_full_view(row, out, buffer);
+}
+
+VariantReadResult VariantPathReader::read_row(size_t row) {
+    if (_match_index >= 0) {
+        return _read_typed_row(row);
+    }
+    VariantRowRef field;
+    VariantRowValue buffer;
+    VariantReadState state = read_row_view(row, &field, &buffer);
+    if (state != VariantReadState::kValue) {
+        return VariantReadResult{.state = state};
+    }
+    return VariantReadResult{.state = VariantReadState::kValue, .value = field.to_owned()};
 }
 
 } // namespace starrocks

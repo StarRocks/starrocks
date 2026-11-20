@@ -24,6 +24,7 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "exprs/mock_vectorized_expr.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -73,8 +74,7 @@ TEST_F(GinFunctionsTest, tokenizeTest) {
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         Columns columns;
 
-        auto tokenizer = BinaryColumn::create();
-        tokenizer->append("error_tokenizer");
+        auto tokenizer = ColumnTestHelper::build_column<Slice>({"error_tokenizer"});
         columns.emplace_back(ConstColumn::create(tokenizer));
 
         ctx->set_constant_columns(columns);
@@ -113,10 +113,7 @@ TEST_F(GinFunctionsTest, tokenizeConstantEmptyValueIsNullForEveryRow) {
 
 // The column case must keep producing one row of tokens per input row.
 TEST_F(GinFunctionsTest, tokenizeColumnValueKeepsOneRowPerInputRow) {
-    auto values = BinaryColumn::create();
-    values->append("hello world");
-    values->append("");
-    values->append("Today is saturday");
+    auto values = ColumnTestHelper::build_column<Slice>({"hello world", "", "Today is saturday"});
     ColumnPtr value_column = std::move(values);
 
     auto result = tokenize_or_die(const_varchar("english", 3), value_column, false);

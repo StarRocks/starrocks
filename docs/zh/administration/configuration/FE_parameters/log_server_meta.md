@@ -3,6 +3,7 @@ sidebar_position: 10
 displayed_sidebar: docs
 description: "FE configuration parameters for logging, server settings, and metadata management."
 sidebar_label: "日志、服务器和元数据"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE 配置 - 日志、服务器和元数据
@@ -327,7 +328,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否启用 profile 日志。启用此功能后，FE 会将每个查询的 profile 日志（由 `ProfileManager` 生成的序列化 `queryDetail` JSON）写入 profile 日志接收器。此日志记录仅在 `enable_collect_query_detail_info` 也启用时执行；当 `enable_profile_log_compress` 启用时，JSON 可能会在日志记录前进行 gzip 压缩。Profile 日志文件由 `profile_log_dir`、`profile_log_roll_num`、`profile_log_roll_interval` 管理，并根据 `profile_log_delete_age` 进行轮转/删除（支持 `7d`、`10h`、`60m`、`120s` 等格式）。禁用此功能会停止写入 profile 日志（减少磁盘 I/O、压缩 CPU 和存储使用）。
+- 描述: 是否启用 profile 日志。启用此功能后，FE 会将每个查询的 profile 日志（由 `ProfileManager` 生成的序列化 `queryDetail` JSON）写入 profile 日志接收器。此日志记录仅在 `enable_collect_query_detail_info` 也启用时执行。Profile 日志文件由 `profile_log_dir`、`profile_log_roll_num`、`profile_log_roll_interval` 管理，并根据 `profile_log_delete_age` 进行轮转/删除（支持 `7d`、`10h`、`60m`、`120s` 等格式）。禁用此功能会停止写入 profile 日志（减少磁盘 I/O、压缩 CPU 和存储使用）。
 - 引入版本: v3.2.5
 
 ### `enable_qe_slow_log`
@@ -437,6 +438,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: No
 - 描述: 为内部 appender (`fe.internal.log`) 保留的轮转 FE 内部日志文件的最大数量。此值用作 Log4j DefaultRolloverStrategy `max` 属性；当发生轮转时，StarRocks 最多保留 `internal_log_roll_num` 个归档文件并删除旧文件（也受 `internal_log_delete_age` 控制）。较低的值会减少磁盘使用，但会缩短日志历史记录；较高的值会保留更多的历史内部日志。此项与 `internal_log_dir`、`internal_log_roll_interval` 和 `internal_roll_maxsize` 协同工作。
 - 引入版本: v3.2.4
+
+### `lock_blocking_call_validation_mode`
+
+- 默认值: warn
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 当 FE 在持有元数据锁期间访问外部系统（例如 Hive Metastore、JDBC 数据源、Iceberg REST Catalog 或 Thrift 对端）时的处理方式。此时锁的持有时长等于该外部系统的往返时延，所有等待同一把锁的操作都要为此付出代价。该检查位于 FE 自身代码中发起网络请求之前的最后一层，因此缓存命中不会触发它，报出的每一条违规都是真实发出的请求。有效值：`off`（不检查）、`warn`（打印带违规调用方堆栈的日志，调用继续执行）、`error`（拒绝该调用）。无法识别的取值按 `warn` 处理。与 `lock_target_validation_mode` 不同，该检查在运行正常的集群上也会报出违规，因为它覆盖的调用点仍在迁移过程中；因此 `warn` 的作用是把这些调用点变成可按传输类型聚合的日志，只有在这些日志干净之后才适合收紧为 `error`。`warn` 模式下每条违规以单行输出，带 `LOCK_INVARIANT_VIOLATION` 标记及 `kind=blocking_call_under_lock` 字段；日志量由 `lock_invariant_violation_log_interval_ms` 控制。
+- 引入版本: v26.2
+
+### `lock_invariant_violation_log_interval_ms`
+
+- 默认值: 10000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 同一调用点输出锁不变量违规日志的最小间隔。限流按调用点进行而非全局限流，因此高频违规的调用点不会把其他调用点挤出日志。排查问题时可设置为 `0`，输出全部违规记录。仅在 `lock_target_validation_mode`、`lock_blocking_call_validation_mode` 或 `lock_snapshot_copy_validation_mode` 为 `warn` 时生效。
+- 引入版本: v26.2
+
+### `lock_snapshot_copy_validation_mode`
+
+- 默认值: warn
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 当某个线程在既未持有表的读锁或写锁、也未持有其所在数据库的读锁或写锁的情况下，为查询规划复制内表或物化视图时，FE 的处理方式。复制会读取该表当前的分区和索引元数据，而 DDL、INSERT OVERWRITE 和元数据回放都会在写锁下原地修改这些元数据，因此不持锁的复制可能导致语句因 `ConcurrentModificationException` 失败，或基于从未完整发布过的元数据生成计划。有效值：`off`（不检查）、`warn`（打印带复制调用方堆栈的违规日志，复制继续执行）、`error`（拒绝该复制）。无法识别的取值按 `warn` 处理。`warn` 模式下每条违规以单行输出，带 `LOCK_INVARIANT_VIOLATION` 标记及 `kind=snapshot_copy_without_lock` 字段；日志量由 `lock_invariant_violation_log_interval_ms` 控制。
+- 引入版本: v26.2
+
+### `lock_target_validation_mode`
+
+- 默认值: warn
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 当 FE 对非 Internal Catalog 所有的对象（例如来自 External Catalog 的数据库，或占位的表 ID）请求元数据锁时的处理方式。这类标识符并不指向锁管理器能够保护的任何对象：它要么永远不会与其他锁冲突，要么与同类的所有锁冲突。有效值：`off`（不检查）、`warn`（打印带堆栈的违规日志，操作继续执行）、`error`（拒绝该操作）。无法识别的取值按 `warn` 处理。由于该参数可动态修改，集群可以先以 `warn` 运行，确认日志干净后再收紧为 `error`，无需重启。`warn` 模式下每条违规以单行输出，带 `LOCK_INVARIANT_VIOLATION` 标记并附带违规调用方的堆栈；日志量由 `lock_invariant_violation_log_interval_ms` 控制。
+- 引入版本: v26.2
 
 ### `log_cleaner_audit_log_min_retention_days`
 
@@ -580,7 +617,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：毫秒
 - 是否动态：是
 - 描述：写入 `fe.profile.log` 的查询最小延迟（毫秒）。仅当查询执行时间大于或等于该值时才记录 profile。设为 0 表示记录所有 profile（无阈值）。设为正数可仅记录较慢的查询以降低日志量。
-- 引入版本：-
+- 引入版本：v4.2.0
 
 ### `profile_log_roll_file_index`
 
@@ -615,7 +652,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: MB
 - 是否可变: No
-- 描述: 设置触发 FE profile 日志文件基于大小轮转的大小阈值（以兆字节为单位）。此值由 Log4j RollingFile SizeBasedTriggeringPolicy 用于 `ProfileFile` appender；当 profile 日志超过 `profile_log_roll_size_mb` 时，它将被轮转。当达到 `profile_log_roll_interval` 时，也可以按时间进行轮转——任一条件都会触发轮转。结合 `profile_log_roll_num` 和 `profile_log_delete_age`，此项控制保留多少历史 profile 文件以及何时删除旧文件。轮转文件的压缩由 `enable_profile_log_compress` 控制。
+- 描述: 设置触发 FE profile 日志文件基于大小轮转的大小阈值（以兆字节为单位）。此值由 Log4j RollingFile SizeBasedTriggeringPolicy 用于 `ProfileFile` appender；当 profile 日志超过 `profile_log_roll_size_mb` 时，它将被轮转。当达到 `profile_log_roll_interval` 时，也可以按时间进行轮转——任一条件都会触发轮转。结合 `profile_log_roll_num` 和 `profile_log_delete_age`，此项控制保留多少历史 profile 文件以及何时删除旧文件。
 - 引入版本: v3.2.5
 
 ### `qe_slow_log_ms`
@@ -751,7 +788,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: String
 - 单位: -
 - 是否可变: No
-- 描述: 系统日志条目分类的严重性级别。有效值：`INFO`、`WARN`、`ERROR` 和 `FATAL`。
+- 描述: 系统日志条目分类的严重性级别。有效值：`DEBUG`、`INFO`、`WARN`、`ERROR` 和 `FATAL`。
 - 引入版本: -
 
 ### `sys_log_roll_file_index`
@@ -798,7 +835,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: String[]
 - 单位: -
 - 是否可变: No
-- 描述: StarRocks 为其生成系统日志的模块。如果此参数设置为 `org.apache.starrocks.catalog`，则 StarRocks 仅为 catalog 模块生成系统日志。模块名称用逗号 (,) 和空格分隔。
+- 描述: 除 `sys_log_level` 指定级别的日志外，StarRocks 还为其生成 DEBUG 级别系统日志的模块。如果此参数设置为 `com.starrocks.catalog`，则 StarRocks 还会为 catalog 模块生成 DEBUG 级别的系统日志。模块名称用逗号 (,) 和空格分隔。
 - 引入版本: -
 
 ### `sys_log_warn_modules`
@@ -973,7 +1010,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: No
-- 引入版本: v4.2.0
+- 引入版本: v4.1.3
 - 描述: 是否对大部分外部 FE HTTP 接口启用 Basic Auth。凭证通过 `AuthenticationHandler.authenticate()` 校验，因此 LDAP / security integration 在 HTTP 路径上的工作方式与 MySQL 协议一致。以下接口始终豁免:
   - 公开探针 / 可观测性: `/api/bootstrap`、`/api/oauth2`。
   - 由 handler 自行通过 IP 白名单或 token 鉴权的对等 FE / 控制面端点: `/image`、`/check`、`/journal_id`、`/info`、`/role`、`/static`、`/api/get_small_file`。
@@ -1019,6 +1056,69 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: No
 - 描述: FE 节点中 HTTPS 服务器监听的端口。
 - 引入版本: v4.0
+
+### `ssl_keystore_type`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: FE SSL 和 HTTPS 使用的 keystore 类型。如果该值为空，StarRocks 会自动尝试 JVM 默认 keystore 类型、JKS 和 PKCS12。如需使用 BCFKS 等其他 keystore 格式，需要显式设置该参数。
+- 引入版本: -
+
+### `ssl_keystore_provider`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 加载 SSL keystore 时使用的安全 provider。留空表示使用 JVM 选择的 provider。当配置的 keystore 类型必须由特定 provider 加载时，例如 `BCFIPS`，需要设置该参数。
+- 引入版本: -
+
+### `ssl_truststore_type`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: MySQL SSL 使用的 truststore 类型。如果该值为空，StarRocks 会自动尝试 JVM 默认 keystore 类型、JKS 和 PKCS12。如需使用 BCFKS 等其他 truststore 格式，需要显式设置该参数。
+- 引入版本: -
+
+### `ssl_truststore_provider`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 加载 MySQL SSL truststore 时使用的安全 provider。留空表示使用 JVM 选择的 provider。当配置的 truststore 类型必须由特定 provider 加载时，例如 `BCFIPS`，需要设置该参数。
+- 引入版本: -
+
+### `ssl_security_provider_class`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: StarRocks 加载 SSL keystore 或 truststore 前注册的安全 provider 类。如果所需 provider 已由 JVM 注册，可以留空。
+- 引入版本: -
+
+### `ssl_security_provider_name`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 期望使用的安全 provider 名称。如果设置该值且同名 provider 已存在，StarRocks 会复用该 provider。如果 StarRocks 注册 `ssl_security_provider_class`，注册后的 provider 名称必须与该值匹配。
+- 引入版本: -
+
+### `ssl_security_provider_path`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 安全 provider JAR 的路径。多个路径可以使用系统路径分隔符分隔。如果 provider 类已在 FE classpath 中，可以留空。
+- 引入版本: -
 
 ### `max_mysql_service_task_threads_num`
 
@@ -1084,6 +1184,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   1. `select version();`
   2. 握手包版本
   3. 全局变量 `version` 的值 (`show variables like 'version';`)
+- 引入版本: -
+
+### `mysql_service_compression_enabled`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: FE 是否在连接握手中提供 MySQL 压缩协议（zlib 和 zstd）。只有请求压缩的客户端才会使用压缩传输，例如 `mysql --compression-algorithms=zstd` 或 JDBC `useCompression=true`；其他客户端不受影响。设置为 `false` 时，FE 不再提供压缩。修改仅对新建连接生效。
 - 引入版本: -
 
 ### `mysql_service_io_threads_num`
@@ -1485,7 +1594,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 在为日志条目创建日志文件之前可以写入的元数据日志条目的最大数量。此参数用于控制日志文件的大小。新的日志文件写入 BDBJE 数据库。
+- 描述: 在为日志条目创建日志文件之前可以写入的元数据日志条目的最大数量。此参数用于控制日志文件的大小。新的日志文件写入 BDBJE 数据库。此参数同时决定生成元数据镜像（Checkpoint）的频率，因为 Checkpoint 只覆盖已经滚动完成的日志文件中的日志条目。
 - 引入版本: -
 
 ### `edit_log_type`
@@ -1513,6 +1622,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: Yes
 - 描述: FE 全局异步调度线程池中的线程数，用于处理来自 Connector 写入路径的 “refresh other FE” 后台任务。这些线程仅负责调度后台刷新任务，不会直接向其他 FE 发送刷新 RPC。修改后可在运行中的 FE 上动态生效，无需重启。
+- 引入版本: -
+
+### `iceberg_commit_invalidate_other_fe_timeout_ms`
+
+- 默认值: 3000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: Iceberg 表提交（INSERT、INSERT OVERWRITE、DELETE、UPDATE、MERGE 或 compaction）返回前，等待其他 FE 删除该表缓存的最长时间，使语句返回后在任意 FE 上查询都能看到这次提交。在该时间内没有响应的 FE 由后台刷新更新。滚动升级期间，旧版本的 FE 会改为刷新该表，因此一次提交最多可能等待这么久。设置为 0 或更小的值表示不等待。
 - 引入版本: -
 
 ### `refresh_other_fe_rpc_executor_thread_num`
@@ -1747,7 +1865,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: 毫秒
 - 是否可变: Yes
 - 描述: Follower 和 Observer FE 重新判断自身元数据是否仍足够新、能否继续提供读服务的时间间隔，判断标准见 `meta_delay_toleration_second`。取值会被限制在 [10, 5000] 范围内。该检查运行在独立线程上，而不是元数据回放线程上，因此当某条日志回放耗时很久时（例如回放操作正在等待数据库锁），节点仍能及时停止用陈旧的元数据提供服务。
-- 引入版本: v4.2
+- 引入版本: v4.1.6, v4.2
 
 ### `metadata_replay_stuck_warn_threshold_second`
 
@@ -1756,7 +1874,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: 秒
 - 是否可变: Yes
 - 描述: 单条元数据日志的回放耗时超过该值时，会在 **fe.log** 中记录一条回放卡住的日志，并附带回放线程的堆栈，便于定位阻塞元数据回放的原因。设置为 `0` 表示关闭该日志。
-- 引入版本: v4.2
+- 引入版本: v4.1.6, v4.2
 
 ### `meta_dir`
 

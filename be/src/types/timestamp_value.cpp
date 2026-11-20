@@ -886,6 +886,17 @@ void TimestampValue::from_unixtime(int64_t second, int64_t microsecond, const cc
     return;
 }
 
+void TimestampValue::from_unixtime_with_offset(int64_t second, int64_t microsecond, int64_t offset) {
+    // Near or outside years 1..9999 (time zone offsets stay within a day), keep cctz's calendar as from_unixtime does.
+    if (UNLIKELY(second < timestamp::MIN_CIVIL_UNIX_SECOND + 2 * SECS_PER_DAY ||
+                 second > timestamp::MAX_CIVIL_UNIX_SECOND - 2 * SECS_PER_DAY)) {
+        from_unixtime(second, microsecond, cctz::fixed_time_zone(cctz::seconds(offset)));
+        return;
+    }
+    from_unix_second(second + offset);
+    _timestamp += microsecond;
+}
+
 void TimestampValue::from_unix_second(int64_t second, int64_t microsecond) {
     second += timestamp::UNIX_EPOCH_SECONDS;
     JulianDate day = second / SECS_PER_DAY;

@@ -3,6 +3,7 @@ sidebar_position: 10
 displayed_sidebar: docs
 sidebar_label: "Logging, Server, and Metadata"
 description: "FE configuration parameters for logging, server settings, and metadata management."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE Configuration - Logging, Server, and Metadata
@@ -327,7 +328,7 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable profile logging. When this feature is enabled, the FE writes per-query profile logs (the serialized `queryDetail` JSON produced by `ProfileManager`) to the profile log sink. This logging is performed only if `enable_collect_query_detail_info` is also enabled; when `enable_profile_log_compress` is enabled, the JSON may be gzipped before logging. Profile log files are managed by `profile_log_dir`, `profile_log_roll_num`, `profile_log_roll_interval` and rotated/deleted according to `profile_log_delete_age` (supports formats like `7d`, `10h`, `60m`, `120s`). Disabling this feature stops writing profile logs (reducing disk I/O, compression CPU and storage usage). Which queries are logged can be further filtered by `profile_log_latency_threshold_ms`.
+- Description: Whether to enable profile logging. When this feature is enabled, the FE writes per-query profile logs (the serialized `queryDetail` JSON produced by `ProfileManager`) to the profile log sink. This logging is performed only if `enable_collect_query_detail_info` is also enabled. Profile log files are managed by `profile_log_dir`, `profile_log_roll_num`, `profile_log_roll_interval` and rotated/deleted according to `profile_log_delete_age` (supports formats like `7d`, `10h`, `60m`, `120s`). Disabling this feature stops writing profile logs (reducing disk I/O, compression CPU and storage usage). Which queries are logged can be further filtered by `profile_log_latency_threshold_ms`.
 - Introduced in: v3.2.5
 
 ### `enable_qe_slow_log`
@@ -437,6 +438,42 @@ This topic introduces the following types of FE configurations:
 - Is mutable: No
 - Description: Maximum number of rolled internal FE log files to retain for the internal appender (`fe.internal.log`). This value is used as the Log4j DefaultRolloverStrategy `max` attribute; when rollovers occur, StarRocks keeps up to `internal_log_roll_num` archived files and removes older ones (also governed by `internal_log_delete_age`). A lower value reduces disk usage but shortens log history; a higher value preserves more historical internal logs. This item works together with `internal_log_dir`, `internal_log_roll_interval`, and `internal_roll_maxsize`.
 - Introduced in: v3.2.4
+
+### `lock_blocking_call_validation_mode`
+
+- Default: warn
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: How the FE reacts when it contacts an external system, such as a Hive Metastore, a JDBC source, an Iceberg REST catalog, or a thrift peer, while holding an FE metadata lock. The lock's hold time then becomes that external system's round-trip time, and every operation waiting on the same lock pays it. The check is placed at the last layer the FE owns before a network request is issued, so a cache hit never reaches it and every reported violation is a request that really went out. Valid values: `off` (do not check), `warn` (log the violation with the offending caller's stack trace and let the call proceed), and `error` (refuse the call). Any unrecognized value behaves as `warn`. Unlike `lock_target_validation_mode`, this check is expected to report violations on a cluster that is behaving normally, because the call sites it covers are still being migrated; `warn` therefore turns them into a log you can aggregate by transport, and `error` is only appropriate once those logs are clean. In `warn` mode each violation is logged on a single line tagged `LOCK_INVARIANT_VIOLATION` with `kind=blocking_call_under_lock`; log volume is governed by `lock_invariant_violation_log_interval_ms`.
+- Introduced in: v26.2
+
+### `lock_invariant_violation_log_interval_ms`
+
+- Default: 10000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Minimum interval between lock-invariant violation log lines emitted from the same call site. Throttling is per call site rather than global, so a frequently violating site does not crowd the others out of the log. Set this to `0` to log every violation while investigating. Only has an effect when `lock_target_validation_mode`, `lock_blocking_call_validation_mode` or `lock_snapshot_copy_validation_mode` is `warn`.
+- Introduced in: v26.2
+
+### `lock_snapshot_copy_validation_mode`
+
+- Default: warn
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: How the FE reacts when a thread takes a planning copy of a native table or materialized view while holding neither that table's read or write lock nor its database's read or write lock. The copy reads the table's live partition and index metadata, which DDL, INSERT OVERWRITE and metadata replay modify in place under the write lock, so an unlocked copy can fail the statement with a `ConcurrentModificationException` or plan off metadata that was never published as a whole. Valid values: `off` (do not check), `warn` (log the violation with the copying caller's stack trace and let the copy proceed), and `error` (refuse the copy). Any unrecognized value behaves as `warn`. In `warn` mode each violation is logged on a single line tagged `LOCK_INVARIANT_VIOLATION` with `kind=snapshot_copy_without_lock`; log volume is governed by `lock_invariant_violation_log_interval_ms`.
+- Introduced in: v26.2
+
+### `lock_target_validation_mode`
+
+- Default: warn
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: How the FE reacts when a metadata lock is requested on an object the internal catalog does not own, such as a database from an external catalog or a placeholder table ID. Such an identifier names nothing the lock manager can protect: it either never collides with another lock, or collides with every other lock of its kind. Valid values: `off` (do not check), `warn` (log the violation with a stack trace and let the operation proceed), and `error` (refuse the operation). Any unrecognized value behaves as `warn`. Because this item is mutable, a cluster can run at `warn`, confirm that its logs stay clean, and then tighten to `error` without a restart. In `warn` mode each violation is logged on a single line tagged `LOCK_INVARIANT_VIOLATION`, carrying the offending caller's stack trace; log volume is governed by `lock_invariant_violation_log_interval_ms`.
+- Introduced in: v26.2
 
 ### `log_cleaner_audit_log_min_retention_days`
 
@@ -580,7 +617,7 @@ This topic introduces the following types of FE configurations:
 - Unit: Milliseconds
 - Is mutable: Yes
 - Description: Minimum query latency (in milliseconds) for a profile to be written to `fe.profile.log`. Only queries whose execution time is greater than or equal to this value are logged. Set to 0 to log all profiles (no threshold). Use a positive value to reduce log volume by logging only slower queries.
-- Introduced in: -
+- Introduced in: v4.2.0
 
 
 ### `profile_log_roll_file_index`
@@ -616,7 +653,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: MB
 - Is mutable: No
-- Description: Sets the size threshold (in megabytes) that triggers a size-based rollover of the FE profile log file. This value is used by the Log4j RollingFile SizeBasedTriggeringPolicy for the `ProfileFile` appender; when a profile log exceeds `profile_log_roll_size_mb` it will be rotated. Rotation can also occur by time when `profile_log_roll_interval` is reached — either condition will trigger rollover. Combined with `profile_log_roll_num` and `profile_log_delete_age`, this item controls how many historical profile files are retained and when old files are deleted. Compression of rotated files is controlled by `enable_profile_log_compress`.
+- Description: Sets the size threshold (in megabytes) that triggers a size-based rollover of the FE profile log file. This value is used by the Log4j RollingFile SizeBasedTriggeringPolicy for the `ProfileFile` appender; when a profile log exceeds `profile_log_roll_size_mb` it will be rotated. Rotation can also occur by time when `profile_log_roll_interval` is reached — either condition will trigger rollover. Combined with `profile_log_roll_num` and `profile_log_delete_age`, this item controls how many historical profile files are retained and when old files are deleted.
 - Introduced in: v3.2.5
 
 ### `qe_slow_log_ms`
@@ -752,7 +789,7 @@ This topic introduces the following types of FE configurations:
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The severity levels into which system log entries are classified. Valid values: `INFO`, `WARN`, `ERROR`, and `FATAL`.
+- Description: The severity levels into which system log entries are classified. Valid values: `DEBUG`, `INFO`, `WARN`, `ERROR`, and `FATAL`.
 - Introduced in: -
 
 ### `sys_log_roll_file_index`
@@ -799,7 +836,7 @@ This topic introduces the following types of FE configurations:
 - Type: String[]
 - Unit: -
 - Is mutable: No
-- Description: The modules for which StarRocks generates system logs. If this parameter is set to `org.apache.starrocks.catalog`, StarRocks generates system logs only for the catalog module. Separate the module names with a comma (,) and a space.
+- Description: The modules for which StarRocks generates DEBUG-level system logs, in addition to the logs at the level specified by `sys_log_level`. If this parameter is set to `com.starrocks.catalog`, StarRocks also generates DEBUG-level system logs for the catalog module. Separate the module names with a comma (,) and a space.
 - Introduced in: -
 
 ### `sys_log_warn_modules`
@@ -974,7 +1011,7 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Introduced in: v4.2.0
+- Introduced in: v4.1.3
 - Description: When true, most external FE HTTP endpoints require HTTP Basic Auth. Credentials are validated against the user store via `AuthenticationHandler.authenticate()`, so LDAP / security-integration login works on the HTTP path the same way it does for the MySQL protocol. The following are exempt:
   - Public probes / observability: `/api/bootstrap`, `/api/oauth2`.
   - Peer-FE / control-plane paths that are IP-whitelisted or token-gated inside the handler: `/image`, `/check`, `/journal_id`, `/info`, `/role`, `/static`, `/api/get_small_file`.
@@ -1020,6 +1057,69 @@ This topic introduces the following types of FE configurations:
 - Is mutable: No
 - Description: The port on which the HTTPS server in the FE node listens.
 - Introduced in: v4.0
+
+### `ssl_keystore_type`
+
+- Default: `""`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The keystore type used by FE SSL and HTTPS. If this value is empty, StarRocks automatically tries the JVM default keystore type, JKS, and PKCS12. Set this value explicitly for other keystore formats, such as BCFKS.
+- Introduced in: -
+
+### `ssl_keystore_provider`
+
+- Default: `""`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The security provider used to load the SSL keystore. Leave it empty to use the provider selected by the JVM. Set this value when the configured keystore type must be loaded by a specific provider, such as `BCFIPS`.
+- Introduced in: -
+
+### `ssl_truststore_type`
+
+- Default: `""`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The truststore type used by MySQL SSL. If this value is empty, StarRocks automatically tries the JVM default keystore type, JKS, and PKCS12. Set this value explicitly for other truststore formats, such as BCFKS.
+- Introduced in: -
+
+### `ssl_truststore_provider`
+
+- Default: `""`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The security provider used to load the SSL truststore for MySQL SSL. Leave it empty to use the provider selected by the JVM. Set this value when the configured truststore type must be loaded by a specific provider, such as `BCFIPS`.
+- Introduced in: -
+
+### `ssl_security_provider_class`
+
+- Default: `""`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The security provider class registered before StarRocks loads the SSL keystore or truststore. Leave it empty if the required provider is already registered by the JVM.
+- Introduced in: -
+
+### `ssl_security_provider_name`
+
+- Default: `""`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The expected security provider name. If this value is set and a provider with the same name already exists, StarRocks reuses it. If StarRocks registers `ssl_security_provider_class`, the registered provider name must match this value.
+- Introduced in: -
+
+### `ssl_security_provider_path`
+
+- Default: `""`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The path of the security provider JAR. Multiple paths can be separated by the system path separator. Leave it empty if the provider class is already available in the FE classpath.
+- Introduced in: -
 
 ### `max_mysql_service_task_threads_num`
 
@@ -1085,6 +1185,15 @@ This topic introduces the following types of FE configurations:
   1. `select version();`
   2. Handshake packet version
   3. Value of the global variable `version` (`show variables like 'version';`)
+- Introduced in: -
+
+### `mysql_service_compression_enabled`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the FE offers the MySQL compressed protocol (zlib and zstd) in the connection handshake. Only clients that request compression get compressed traffic, for example `mysql --compression-algorithms=zstd` or JDBC `useCompression=true`; other clients are unaffected. When set to `false`, the FE stops offering compression. A change applies to new connections only.
 - Introduced in: -
 
 ### `mysql_service_io_threads_num`
@@ -1486,7 +1595,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of metadata log entries that can be written before a log file is created for these log entries. This parameter is used to control the size of log files. The new log file is written to the BDBJE database.
+- Description: The maximum number of metadata log entries that can be written before a log file is created for these log entries. This parameter is used to control the size of log files. The new log file is written to the BDBJE database. This parameter also controls how often a metadata image (checkpoint) can be created, because a checkpoint only covers log entries in log files that have already been rolled.
 - Introduced in: -
 
 ### `edit_log_type`
@@ -1514,6 +1623,15 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: The number of threads in the FE-global dispatch executor for asynchronous "refresh other FE" jobs. These threads only schedule background refresh tasks from connector write paths. They do not send peer FE refresh RPCs directly. Changes take effect on running FEs without restart.
+- Introduced in: -
+
+### `iceberg_commit_invalidate_other_fe_timeout_ms`
+
+- Default: 3000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The maximum time a commit to an Iceberg table (INSERT, INSERT OVERWRITE, DELETE, UPDATE, MERGE, or compaction) waits for the other FEs to drop their cached copy of the table, so that a query on any FE sees the commit once the statement returns. An FE that does not respond in time is left to the background refresh. During a rolling upgrade, an FE of an earlier version refreshes the table instead, so a commit can wait up to this long. Set it to 0 or less to disable the wait.
 - Introduced in: -
 
 ### `refresh_other_fe_rpc_executor_thread_num`
@@ -1748,7 +1866,7 @@ This topic introduces the following types of FE configurations:
 - Unit: Milliseconds
 - Is mutable: Yes
 - Description: The interval at which a Follower or Observer FE re-evaluates whether its metadata is still fresh enough to serve reads, as defined by `meta_delay_toleration_second`. Values outside the range [10, 5000] are clamped. This check runs on a dedicated thread rather than on the metadata replay thread, so that the node still stops serving stale metadata while a single journal entry is taking a long time to apply, for example when a replay operation is waiting for a database lock.
-- Introduced in: v4.2
+- Introduced in: v4.1.6, v4.2
 
 ### `metadata_replay_stuck_warn_threshold_second`
 
@@ -1757,7 +1875,7 @@ This topic introduces the following types of FE configurations:
 - Unit: Seconds
 - Is mutable: Yes
 - Description: A metadata journal entry that has been applying for longer than this duration is reported in **fe.log** as a stuck replay, together with the stack of the replay thread, so that you can identify what is blocking metadata replay. Set this item to `0` to disable the report.
-- Introduced in: v4.2
+- Introduced in: v4.1.6, v4.2
 
 ### `meta_dir`
 

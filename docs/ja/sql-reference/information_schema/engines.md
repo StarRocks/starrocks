@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "enginesはStarRocksで実装されていないプレースホルダービューです。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # engines

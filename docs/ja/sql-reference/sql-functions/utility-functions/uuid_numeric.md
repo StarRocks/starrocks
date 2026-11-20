@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ランダムなUUIDをLARGEINT型で返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # uuid_numeric

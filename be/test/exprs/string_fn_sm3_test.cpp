@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include "exprs/string_functions.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -23,8 +24,7 @@ TEST_F(StringFunctionSm3Test, abcA1Test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
 
     Columns columns;
-    auto str = BinaryColumn::create();
-    str->append("abc");
+    auto str = ColumnTestHelper::build_column<Slice>({"abc"});
     columns.emplace_back(std::move(str));
 
     ColumnPtr result = StringFunctions::sm3(ctx.get(), columns).value();
@@ -38,8 +38,8 @@ TEST_F(StringFunctionSm3Test, abcA2Test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
 
     Columns columns;
-    auto str = BinaryColumn::create();
-    str->append("abcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd");
+    auto str =
+            ColumnTestHelper::build_column<Slice>({"abcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd"});
     columns.emplace_back(std::move(str));
 
     ColumnPtr result = StringFunctions::sm3(ctx.get(), columns).value();
@@ -53,8 +53,8 @@ TEST_F(StringFunctionSm3Test, abcConstTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
 
     Columns columns;
-    auto str = BinaryColumn::create();
-    str->append("abcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd");
+    auto str =
+            ColumnTestHelper::build_column<Slice>({"abcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd"});
     columns.emplace_back(ConstColumn::create(std::move(str), 1));
     ColumnPtr result = StringFunctions::sm3(ctx.get(), columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(ColumnHelper::as_raw_column<ConstColumn>(result)->data_column());

@@ -37,6 +37,7 @@
 #include <functional>
 #include <memory>
 #include <thread>
+#include <utility>
 
 #include "base/concurrency/stopwatch.hpp"
 #include "base/uid_util.h"
@@ -132,9 +133,9 @@ void RoutineLoadTaskExecutor::stop() {
     _task_map.clear();
 }
 
-Status RoutineLoadTaskExecutor::get_kafka_partition_meta(const PKafkaMetaProxyRequest& request,
-                                                         std::vector<int32_t>* partition_ids, int timeout_ms,
-                                                         std::string* group_id) {
+Status RoutineLoadTaskExecutor::get_kafka_partition_meta(
+        const PKafkaMetaProxyRequest& request, std::vector<int32_t>* partition_ids, int timeout_ms,
+        std::string* group_id, std::vector<std::shared_ptr<DataConsumer>>* evicted_consumers) {
     DCHECK(request.has_kafka_info());
 
     // This context is meaningless, just for unifing the interface
@@ -168,15 +169,17 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_meta(const PKafkaMetaProxyRe
     Status st = std::static_pointer_cast<KafkaDataConsumer>(consumer)->get_partition_meta(partition_ids, timeout_ms);
     // if get partition meta failed, should not return consumer because the KafkaConsumer may be closed.
     if (st.ok()) {
-        _data_consumer_pool.return_consumer(consumer);
+        for (auto& evicted : _data_consumer_pool.return_consumer(consumer)) {
+            evicted_consumers->push_back(std::move(evicted));
+        }
     }
     return st;
 }
 
-Status RoutineLoadTaskExecutor::get_kafka_partition_offset(const PKafkaOffsetProxyRequest& request,
-                                                           std::vector<int64_t>* beginning_offsets,
-                                                           std::vector<int64_t>* latest_offsets, int timeout_ms,
-                                                           std::string* group_id) {
+Status RoutineLoadTaskExecutor::get_kafka_partition_offset(
+        const PKafkaOffsetProxyRequest& request, std::vector<int64_t>* beginning_offsets,
+        std::vector<int64_t>* latest_offsets, int timeout_ms, std::string* group_id,
+        std::vector<std::shared_ptr<DataConsumer>>* evicted_consumers) {
     DCHECK(request.has_kafka_info());
 
     // This context is meaningless, just for unifing the interface
@@ -218,14 +221,17 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_offset(const PKafkaOffsetPro
     Status st = std::static_pointer_cast<KafkaDataConsumer>(consumer)->get_partition_offset(
             &partition_ids, beginning_offsets, latest_offsets, timeout_ms);
     if (st.ok()) {
-        _data_consumer_pool.return_consumer(consumer);
+        for (auto& evicted : _data_consumer_pool.return_consumer(consumer)) {
+            evicted_consumers->push_back(std::move(evicted));
+        }
     }
     return st;
 }
 
 #ifndef __APPLE__
-Status RoutineLoadTaskExecutor::get_pulsar_partition_meta(const PPulsarMetaProxyRequest& request,
-                                                          std::vector<std::string>* partitions) {
+Status RoutineLoadTaskExecutor::get_pulsar_partition_meta(
+        const PPulsarMetaProxyRequest& request, std::vector<std::string>* partitions,
+        std::vector<std::shared_ptr<DataConsumer>>* evicted_consumers) {
     DCHECK(request.has_pulsar_info());
 
     // This context is meaningless, just for unifing the interface
@@ -253,15 +259,18 @@ Status RoutineLoadTaskExecutor::get_pulsar_partition_meta(const PPulsarMetaProxy
 
     Status st = std::static_pointer_cast<PulsarDataConsumer>(consumer)->get_topic_partition(partitions);
     if (st.ok()) {
-        _data_consumer_pool.return_consumer(consumer);
+        for (auto& evicted : _data_consumer_pool.return_consumer(consumer)) {
+            evicted_consumers->push_back(std::move(evicted));
+        }
     }
     return st;
 }
 #endif
 
 #ifndef __APPLE__
-Status RoutineLoadTaskExecutor::get_pulsar_partition_backlog(const PPulsarBacklogProxyRequest& request,
-                                                             std::vector<int64_t>* backlog_num) {
+Status RoutineLoadTaskExecutor::get_pulsar_partition_backlog(
+        const PPulsarBacklogProxyRequest& request, std::vector<int64_t>* backlog_num,
+        std::vector<std::shared_ptr<DataConsumer>>* evicted_consumers) {
     DCHECK(request.has_pulsar_info());
 
     // This context is meaningless, just for unifing the interface
@@ -305,7 +314,9 @@ Status RoutineLoadTaskExecutor::get_pulsar_partition_backlog(const PPulsarBacklo
     }
 
     if (st.ok()) {
-        _data_consumer_pool.return_consumer(consumer);
+        for (auto& evicted : _data_consumer_pool.return_consumer(consumer)) {
+            evicted_consumers->push_back(std::move(evicted));
+        }
     }
 
     return Status::OK();
@@ -485,7 +496,9 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
 
     // return the consumer back to pool
     // call this before commit txn, in case the next task can come very fast
-    consumer_pool->return_consumers(consumer_grp.get());
+    // Keep evicted consumers alive through commit/rollback and the completion callback. Their close may wait for
+    // another job's pending Kafka offset commit, which must not delay this task's transaction handling.
+    auto evicted_consumers = consumer_pool->return_consumers(consumer_grp.get());
 
     // commit txn
     HANDLE_ERROR(_stream_load_executor->commit_txn(ctx), "commit failed")
@@ -509,7 +522,9 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
             // So just print a warning
             LOG(WARNING) << st.message();
         }
-        _data_consumer_pool.return_consumer(consumer);
+        for (auto& evicted : _data_consumer_pool.return_consumer(consumer)) {
+            evicted_consumers.push_back(std::move(evicted));
+        }
 
     } break;
     case TLoadSourceType::PULSAR: {
@@ -543,7 +558,9 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
             }
 
             // return consumer
-            _data_consumer_pool.return_consumer(consumer);
+            for (auto& evicted : _data_consumer_pool.return_consumer(consumer)) {
+                evicted_consumers.push_back(std::move(evicted));
+            }
         }
 #endif
     } break;

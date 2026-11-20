@@ -1,11 +1,14 @@
 ---
 displayed_sidebar: docs
 description: "loadsはロードジョブの結果を提供します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ロード
 
 `loads` はロードジョブの結果を提供します。このビューは StarRocks v3.1 以降でサポートされています。
+
+`loads` は、ロードジョブのすべてのロード先テーブルに対して少なくとも 1 つの権限を持つユーザー、または OPERATE 権限を持つユーザーに、そのジョブを表示します。すべてのロード先テーブルに対する SELECT 権限がない場合、ロードされたデータが分かる可能性のあるフィールドは表示されません。`TRACKING_SQL`、`REJECTED_RECORD_PATH`、`PROPERTIES` は NULL になり、`ERROR_MSG` は Broker Load と INSERT ジョブでは失敗タイプ (例: `type:ETL_QUALITY_UNSATISFIED`) のみを保持し、その他のジョブでは NULL になります。`RUNTIME_DETAILS` にはロード ID、BE ノード、トランザクションのエラーメッセージが含まれません。`root` ユーザーはすべてのロードジョブの完全な情報を参照できます。ロード先テーブルが削除されたロードジョブは、`root` ユーザーにのみ完全な情報が表示され、OPERATE 権限を持つユーザーには上記のフィールドを除いた情報が表示されます。
 
 `loads` には以下のフィールドが提供されています:
 
@@ -20,7 +23,7 @@ description: "loadsはロードジョブの結果を提供します。"
 | WAREHOUSE            | ロードジョブが属するウェアハウス。                 |
 | STATE                | ロードジョブの状態。 有効な値:<ul><li>`PENDING`/`BEGIN`: ロードジョブが作成された。</li><li>`QUEUEING`/`BEFORE_LOAD`: ロードジョブがスケジュール待ちのキューにある。</li><li>`LOADING`: ロードジョブが実行中。</li><li>`PREPARING`: トランザクションが事前コミットされている。</li><li>`PREPARED`: トランザクションが事前コミットされた。</li><li>`COMMITED`: トランザクションがコミットされた。</li><li>`FINISHED`: ロードジョブが成功した。</li><li>`CANCELLED`: ロードジョブが失敗した。</li></ul> |
 | PROGRESS             | ロードジョブの ETL ステージと LOADING ステージの進捗。 |
-| TYPE                 | ロードジョブのタイプ。 Broker Load の場合、返される値は `BROKER`。INSERT の場合、返される値は `INSERT`。Stream Load の場合、返される値は `STREAM`。Routine Load の場合、返される値は `ROUTINE`。 |
+| TYPE                 | ロードジョブのタイプ。 Broker Load の場合、返される値は `BROKER`。INSERT の場合、返される値は `INSERT`。Spark Load の場合、返される値は `SPARK`。Stream Load の場合、返される値は `STREAM_LOAD`。Routine Load の場合、返される値は `ROUTINE_LOAD`。 |
 | PRIORITY             | ロードジョブの優先度。 有効な値: `HIGHEST`, `HIGH`, `NORMAL`, `LOW`, `LOWEST`。 |
 | SCAN_ROWS            | スキャンされたデータ行の数。                    |
 | SCAN_BYTES           | スキャンされたバイト数。                        |

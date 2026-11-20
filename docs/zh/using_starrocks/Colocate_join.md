@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "How to use Colocate Join in StarRocks to perform joins locally without network data transmission by co-locating joined table data."
 sidebar_position: 40
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Colocate Join

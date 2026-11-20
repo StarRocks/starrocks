@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从 JSON 文档中删除一个或多个指定 JSON 路径的数据。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # json_remove

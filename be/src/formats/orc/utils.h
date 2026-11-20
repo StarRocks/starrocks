@@ -14,9 +14,13 @@
 
 #pragma once
 
+#include <algorithm>
+#include <limits>
 #include <orc/OrcFile.hh>
 #include <utility>
+#include <vector>
 
+#include "base/time/tz_offset_cache.h"
 #include "cache/scan/shared_buffered_input_stream.h"
 #include "cctz/civil_time.h"
 #include "cctz/time_zone.h"
@@ -91,17 +95,70 @@ public:
         tv->from_timestamp(tp.year(), tp.month(), tp.day(), tp.hour(), tp.minute(), tp.second(),
                            nanoseconds / NANOSECS_PER_USEC);
     }
-    static void orc_ts_to_native_ts(TimestampValue* tv, const cctz::time_zone& tz, int64_t tzoffset, int64_t seconds,
-                                    int64_t nanoseconds, bool is_instant) {
-        if (seconds >= 0) {
-            seconds = is_instant ? seconds + tzoffset : seconds;
+    // An instant is shown in `tz` with the offset in effect at that instant (daylight saving time included), as the
+    // parquet reader does.
+    static void orc_ts_to_native_ts(TimestampValue* tv, const cctz::time_zone& tz, int64_t seconds, int64_t nanoseconds,
+                                    bool is_instant) {
+        if (is_instant) {
+            // cctz's offset over its full range, as the batch path (TzOffsetCache) uses: no clamp at year 2262.
+            orc_instant_to_native_ts(tv, tz, seconds, nanoseconds,
+                                     tz.lookup_offset(CCTZ_UNIX_EPOCH + cctz::seconds(seconds)).offset);
+        } else if (seconds >= 0) {
             orc_ts_to_native_ts_after_unix_epoch(tv, seconds, nanoseconds);
         } else {
-            if (is_instant) {
-                orc_ts_to_native_ts_before_unix_epoch(tv, tz, seconds, nanoseconds);
-            } else {
-                orc_ts_to_native_ts_before_unix_epoch(tv, cctz::utc_time_zone(), seconds, nanoseconds);
+            orc_ts_to_native_ts_before_unix_epoch(tv, cctz::utc_time_zone(), seconds, nanoseconds);
+        }
+    }
+
+    // An instant with the offset of `tz` at it already known. The fast split into days and time needs a local time
+    // at or after 1970-01-01 00:00; earlier ones (including the first hours after the epoch in zones west of UTC)
+    // take the cctz conversion.
+    static void orc_instant_to_native_ts(TimestampValue* tv, const cctz::time_zone& tz, int64_t seconds,
+                                         int64_t nanoseconds, int64_t offset) {
+        if (seconds + offset >= 0) {
+            orc_ts_to_native_ts_after_unix_epoch(tv, seconds + offset, nanoseconds);
+        } else {
+            orc_ts_to_native_ts_before_unix_epoch(tv, tz, seconds, nanoseconds);
+        }
+    }
+
+    // Batch form of orc_ts_to_native_ts for instants: out[i] from seconds[i] and nanoseconds[i] (nanoseconds may be
+    // nullptr for 0), skipping rows with is_null[i] != 0 (is_null may be nullptr). offset_cache and offsets_buf are
+    // owned by one reader; when the batch lies within one offset window, as for a zone without daylight saving time,
+    // every value gets one constant added.
+    static void orc_instants_to_native_ts(TimestampValue* out, const cctz::time_zone& tz, const int64_t* seconds,
+                                          const int64_t* nanoseconds, const uint8_t* is_null, size_t n,
+                                          TzOffsetCache* offset_cache, std::vector<int64_t>* offsets_buf) {
+        int64_t lo = std::numeric_limits<int64_t>::max();
+        int64_t hi = std::numeric_limits<int64_t>::min();
+        for (size_t i = 0; i < n; i++) {
+            if (is_null == nullptr || !is_null[i]) {
+                lo = std::min(lo, seconds[i]);
+                hi = std::max(hi, seconds[i]);
             }
+        }
+        if (lo > hi) {
+            return;
+        }
+        int64_t uniform_offset;
+        // One offset for the batch, and every value at or after 1970-01-01 00:00 in the zone: one constant added.
+        if (offset_cache->uniform_offset_for_unix(lo, hi, tz, &uniform_offset) && lo + uniform_offset >= 0) {
+            for (size_t i = 0; i < n; i++) {
+                if (is_null == nullptr || !is_null[i]) {
+                    orc_ts_to_native_ts_after_unix_epoch(&out[i], seconds[i] + uniform_offset,
+                                                         nanoseconds != nullptr ? nanoseconds[i] : 0);
+                }
+            }
+            return;
+        }
+        offsets_buf->resize(n);
+        int64_t* offsets = offsets_buf->data();
+        offset_cache->offsets_for_unix(seconds, is_null, n, tz, offsets);
+        for (size_t i = 0; i < n; i++) {
+            if (is_null != nullptr && is_null[i]) {
+                continue;
+            }
+            orc_instant_to_native_ts(&out[i], tz, seconds[i], nanoseconds != nullptr ? nanoseconds[i] : 0, offsets[i]);
         }
     }
 

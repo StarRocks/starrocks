@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+
 namespace starrocks {
 enum OverflowMode {
     // We don't check overflow in this mode
@@ -40,4 +43,11 @@ template <OverflowMode mode>
 inline constexpr bool error_if_overflow = false;
 template <>
 inline constexpr bool error_if_overflow<OverflowMode::REPORT_ERROR> = true;
+
+// Under REPORT_ERROR a decimal kernel can be given the null flags of its input rows (nullptr: no null rows).
+// The data slot of a null row is undefined, e.g. "" after NULLIF or a value left by an upstream expression, so
+// an overflow found in it must not raise an error: the row's result is NULL anyway.
+inline bool is_null_input_row(const uint8_t* input_nulls, size_t row) {
+    return input_nulls != nullptr && input_nulls[row] != 0;
+}
 } // namespace starrocks

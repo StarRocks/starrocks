@@ -238,6 +238,12 @@ class TestMVRefreshParser:
             ("REFRESH SCHEDULE START(\"2024-01-01 10:00:00\") EVERY(INTERVAL 1 HOUR)",
              {"refresh_moment": None, "refresh_type": "ASYNC START(\"2024-01-01 10:00:00\") EVERY(INTERVAL 1 HOUR)"}),
             ("refresh schedule every(interval 5 minute)", {"refresh_moment": None, "refresh_type": "ASYNC every(interval 5 minute)"}),
+            # StarRocks 26.2+ renders the untimed asynchronous refresh as ON_CHANGE, including
+            # for views created before the rename. Canonicalized to ASYNC for the same reason.
+            ("REFRESH ON_CHANGE", {"refresh_moment": None, "refresh_type": "ASYNC"}),
+            ("REFRESH DEFERRED ON_CHANGE", {"refresh_moment": "DEFERRED", "refresh_type": "ASYNC"}),
+            ("REFRESH IMMEDIATE ON_CHANGE", {"refresh_moment": "IMMEDIATE", "refresh_type": "ASYNC"}),
+            ("refresh on_change", {"refresh_moment": None, "refresh_type": "ASYNC"}),
         ]
     )
     def test_correct_clauses(self, clause, expected):

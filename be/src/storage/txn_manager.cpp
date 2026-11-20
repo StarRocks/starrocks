@@ -348,7 +348,7 @@ Status TxnManager::publish_overwrite_txn(TPartitionId partition_id, const Tablet
             return st;
         }
     } else {
-        tablet->overwrite_rowset(rowset, version);
+        RETURN_IF_ERROR(tablet->overwrite_rowset(rowset, version));
         VLOG(2) << "publish overwrite txn. txn_id: " << transaction_id << ", partition_id: " << partition_id
                 << ", tablet_id: " << tablet->tablet_id() << ", schema_hash: " << tablet->schema_hash()
                 << ", rowset_id: " << rowset->rowset_id() << ", version: " << rowset->version();

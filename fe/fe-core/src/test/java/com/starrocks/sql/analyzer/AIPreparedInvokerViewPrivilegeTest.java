@@ -15,7 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.common.Config;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
@@ -31,6 +30,7 @@ import com.starrocks.sql.plan.PlanTestNoneDBBase;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.utframe.AIProviderTestUtil;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
@@ -50,12 +50,12 @@ public class AIPreparedInvokerViewPrivilegeTest extends PlanTestNoneDBBase {
 
     @BeforeAll
     public static void setUpObjects() throws Exception {
-        previousEndpoint = Config.ai_default_chat_endpoint;
-        previousModel = Config.ai_default_chat_model;
-        previousProvider = Config.ai_default_chat_provider;
-        Config.ai_default_chat_endpoint = "https://models.example.test/v1/chat/completions";
-        Config.ai_default_chat_model = "rbac-model";
-        Config.ai_default_chat_provider = "openai_compatible";
+        previousEndpoint = AIProviderTestUtil.chatProperty("endpoint");
+        previousModel = AIProviderTestUtil.chatProperty("model");
+        previousProvider = AIProviderTestUtil.chatProperty("protocol");
+        AIProviderTestUtil.setChatProperty("endpoint", "https://models.example.test/v1/chat/completions");
+        AIProviderTestUtil.setChatProperty("model", "rbac-model");
+        AIProviderTestUtil.setChatProperty("protocol", "openai");
         starRocksAssert.withDatabase(DATABASE).useDatabase(DATABASE);
         starRocksAssert.withTable("CREATE TABLE prompts (id BIGINT, prompt VARCHAR(100)) "
                 + "PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num'='1')");
@@ -65,14 +65,15 @@ public class AIPreparedInvokerViewPrivilegeTest extends PlanTestNoneDBBase {
 
     @AfterAll
     public static void restoreConfiguration() {
-        Config.ai_default_chat_endpoint = previousEndpoint;
-        Config.ai_default_chat_model = previousModel;
-        Config.ai_default_chat_provider = previousProvider;
+        AIProviderTestUtil.setChatProperty("endpoint", previousEndpoint);
+        AIProviderTestUtil.setChatProperty("model", previousModel);
+        AIProviderTestUtil.setChatProperty("protocol", previousProvider);
     }
 
     @Test
     public void testPreparedInvokerChecksCurrentViewAndExecutedSnapshot() throws Exception {
         executeAsRoot("CREATE USER " + USER);
+        executeAsRoot("GRANT USAGE ON AI PROVIDER test_default_chat TO " + USER);
         ConnectContext caller = UtFrameUtils.initCtxForNewPrivilege(new UserIdentity(USER, "%"));
         caller.setCurrentRoleIds(Set.of());
         caller.setDatabase(DATABASE);

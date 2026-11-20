@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts a WKT (Well Known Text) to a corresponding polygon memory form."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Polygon,ST_PolyFromText,ST_PolygonFromText

@@ -163,13 +163,16 @@ public:
         return n;
     }
 
+    void init_state(AggDataPtr __restrict state, int32_t n) const {
+        this->data(state).is_init = true;
+        this->data(state).reset(n);
+    }
+
     void init_state_if_necessary(FunctionContext* ctx, AggDataPtr __restrict state) const {
         if (this->data(state).is_init) {
             return;
         }
-        this->data(state).is_init = true;
-        int32_t n = get_n_value(ctx);
-        this->data(state).reset(n);
+        init_state(state, get_n_value(ctx));
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
@@ -201,7 +204,14 @@ public:
         std::memcpy(&count, bytes.data + start, sizeof(uint32_t));
         start += sizeof(uint32_t);
 
-        init_state_if_necessary(ctx, state);
+        // A state that never saw a row carries n = 0 and no values.
+        if (n_encoded <= 0) {
+            return;
+        }
+        // Take n from the state: <fn>_state_merge/_state_union run merge() without the call's constant arguments.
+        if (!this->data(state).is_init) {
+            init_state(state, n_encoded);
+        }
 
         std::vector<CppType> values;
         values.reserve(count);

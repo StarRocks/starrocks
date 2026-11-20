@@ -86,7 +86,11 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, ExprConte
                    ctx->current_common_sub_expr_ids.find(id) == ctx->current_common_sub_expr_ids.end();
         });
 
-        if (is_independent) {
+        // An extracted expression is evaluated for every row of the chunk before the lambda, including rows whose
+        // array is empty or NULL and never run the lambda. With ALLOW_THROW_EXCEPTION it could then fail the query
+        // on such a row, so it stays inside the lambda. The traversal still runs: callers use the collected
+        // lambda argument and common sub expression ids.
+        if (is_independent && !state->query_options().allow_throw_exception) {
             SlotId slot_id = ctx->next_slot_id++;
 #ifdef DEBUG
             expr_ctx->root()->for_each_slot_id([new_slot_id = slot_id](SlotId slot_id) {

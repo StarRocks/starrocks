@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.util.ProfilingExecPlan;
@@ -34,15 +35,13 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SlotId;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.Explain;
+import com.starrocks.sql.analyzer.AIFunctionProviderResolver;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.common.AIModelConfigs;
-import com.starrocks.sql.common.AIModelConfigs.SystemChatConfig;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
@@ -50,7 +49,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
-import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TExplainLevel;
 
 import java.util.ArrayList;
@@ -98,10 +96,13 @@ public class ExecPlan {
     private long useBaseline = -1;
 
     private Set<Long> duplicatedLakeScanTableIds;
-    // Captured lazily only for plans containing an AIProject.
-    private SystemChatConfig systemChatConfig;
-    private Map<String, AIModelConfigs.ModelConfig> aiModelConfigs;
-    private Map<String, String> aiProviderConfigIds;
+
+    // A column-subset INSERT into a primary key table that this plan runs as a plain insert (missing
+    // columns filled with defaults, no partial update) because no transaction had ever committed to
+    // its target partitions when it was planned. The commit re-checks that assumption; see
+    // InsertTxnCommitAttachment. Lives on the plan, not the statement: the planner may re-analyze and
+    // re-plan the same InsertStmt, and the flag must describe this plan only.
+    private boolean plainInsertOnEmptyPartitions = false;
 
     @VisibleForTesting
     public ExecPlan() {
@@ -132,6 +133,14 @@ public class ExecPlan {
         this.isShortCircuit = false;
     }
 
+    public void setPlainInsertOnEmptyPartitions(boolean plainInsertOnEmptyPartitions) {
+        this.plainInsertOnEmptyPartitions = plainInsertOnEmptyPartitions;
+    }
+
+    public boolean isPlainInsertOnEmptyPartitions() {
+        return plainInsertOnEmptyPartitions;
+    }
+
     public ConnectContext getConnectContext() {
         return connectContext;
     }
@@ -140,69 +149,28 @@ public class ExecPlan {
         return scanNodes;
     }
 
-    SystemChatConfig getOrCreateSystemChatConfig() {
-        if (systemChatConfig == null) {
-            systemChatConfig = AIModelConfigs.systemChatSnapshot(
-                    AIModelConfigs.DefaultModelRequirement.OPTIONAL);
-        }
-        return systemChatConfig;
-    }
-
-    // Bind only physical AIProject calls. Rebuilt plans independently capture the current metadata.
-    Map<String, AIModelConfigs.ModelConfig> bindAIModelConfigs(Map<SlotId, Expr> projectMap) {
-        if (aiModelConfigs == null) {
-            aiModelConfigs = new HashMap<>();
-        }
-        Map<String, AIModelConfigs.ModelConfig> usedConfigs = new HashMap<>();
+    // Bind only physical AIProject calls. Rebuilt plans independently capture current metadata.
+    Map<String, AIProvider> bindAIProviders(Map<SlotId, Expr> projectMap) {
+        Map<String, AIProvider> usedProviders = new HashMap<>();
         for (Map.Entry<SlotId, Expr> entry : projectMap.entrySet()) {
             if (!(entry.getValue() instanceof FunctionCallExpr call)
-                    || call.getFn() == null || !call.getFn().isAi()) {
+                    || call.getFn() == null || !call.getFn().isAI()) {
+                // ignore none AI functions
                 continue;
             }
-            String id;
-            AIModelConfigs.ModelConfig config;
-            if (call.getFn().getAiModelSource() == TAIModelSource.PROVIDER) {
-                String name = AIModelConfigs.providerName(call.getChild(AIModelConfigs.getProviderArgument(call.getFn())));
-                id = aiProviderConfigIds == null ? null : aiProviderConfigIds.get(name);
-                if (id == null) {
-                    AIProvider provider = GlobalStateMgr.getCurrentState().getAIProviderMgr().getProvider(name);
-                    if (provider == null) {
-                        throw new SemanticException("AI provider '" + name + "' does not exist", call.getPos());
-                    }
-                    try {
-                        Authorizer.checkAIProviderAction(connectContext, provider, PrivilegeType.USAGE);
-                    } catch (AccessDeniedException e) {
-                        AccessDeniedException.reportAccessDenied(null, connectContext.getCurrentUserIdentity(),
-                                connectContext.getCurrentRoleIds(), PrivilegeType.USAGE.name(), "AI PROVIDER", name);
-                    }
-                    config = AIModelConfigs.fromProvider(provider);
-                } else {
-                    config = aiModelConfigs.get(id);
-                }
-                boolean embedding = AIModelConfigs.isTextEmbedding(call.getFn());
-                if (!(embedding ? "TEXT_EMBEDDING" : "CHAT").equals(config.capability())) {
-                    throw new SemanticException("AI provider '" + name + "' requires type "
-                            + (embedding ? "EMBEDDING" : "CHAT"), call.getPos());
-                }
-                if (id == null) {
-                    if (aiProviderConfigIds == null) {
-                        aiProviderConfigIds = new HashMap<>();
-                    }
-                    // The wire only needs a plan-local correlation key, never a name or registry identity.
-                    id = "provider:" + aiProviderConfigIds.size();
-                    aiProviderConfigIds.put(name, id);
-                    aiModelConfigs.put(id, config);
-                }
-                entry.setValue(call.withAiModelConfigId(id));
-            } else {
-                id = AIModelConfigs.systemConfigId(call.getFn());
-                config = aiModelConfigs.computeIfAbsent(id, key -> AIModelConfigs.SYSTEM_CHAT_CONFIG_ID.equals(key)
-                        ? AIModelConfigs.fromSystemChat(getOrCreateSystemChatConfig())
-                        : AIModelConfigs.systemEmbeddingSnapshot(AIModelConfigs.DefaultModelRequirement.OPTIONAL));
+            AIProvider provider = AIFunctionProviderResolver.resolveProvider(
+                    connectContext.getGlobalStateMgr().getAIProviderMgr(), call);
+
+            try {
+                Authorizer.checkAIProviderAction(connectContext, provider, PrivilegeType.USAGE);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(null, connectContext.getCurrentUserIdentity(),
+                        connectContext.getCurrentRoleIds(), PrivilegeType.USAGE.name(), "AI PROVIDER", provider.getName());
             }
-            usedConfigs.put(id, config);
+            usedProviders.put(provider.getId(), new AIProvider(provider));
+            entry.setValue(call.withAIProviderId(provider.getId()));
         }
-        return Map.copyOf(usedConfigs);
+        return Map.copyOf(usedProviders);
     }
 
     // Lake (cloud-native) table ids scanned by >=2 scan operators in this plan (self-join / multi-scan of one
@@ -370,6 +338,21 @@ public class ExecPlan {
     }
 
     public String getExplainString(TExplainLevel level) {
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx != null && ctx.getSessionVariable().isEnableDesensitizeExplain()) {
+            return ExprToSql.withDigestedLiterals(() -> renderExplainString(level));
+        }
+        return renderExplainString(level);
+    }
+
+    // Plan text written to logs: literals are digested under enable_sql_desensitize_in_log.
+    public String getExplainStringForLog(TExplainLevel level) {
+        return Config.enable_sql_desensitize_in_log
+                ? ExprToSql.withDigestedLiterals(() -> getExplainString(level))
+                : getExplainString(level);
+    }
+
+    private String renderExplainString(TExplainLevel level) {
         StringBuilder str = new StringBuilder();
 
         if (level == TExplainLevel.VERBOSE || level == TExplainLevel.COSTS) {

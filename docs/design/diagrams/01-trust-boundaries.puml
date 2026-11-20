@@ -1,0 +1,42 @@
+@startuml
+' Source of truth for 01-trust-boundaries.png -- see ../README.md to regenerate.
+!pragma layout smetana
+skinparam defaultFontName Helvetica
+skinparam shadowing false
+title Components and trust boundaries
+
+rectangle "FE (JVM)" as FE {
+  rectangle "planner / sink\ndecides encryption,\nreads key_metadata" as FEC
+  rectangle "Iceberg library\nencrypts manifests,\nowns the KEK chain" as ICE
+}
+
+rectangle "BE (C++)" as BE {
+  rectangle "Parquet writer\ngenerates the per-file DEK\n(RAND_bytes)" as BEW
+  rectangle "Parquet reader\nfooter + page decryption" as BER
+}
+
+rectangle "Object store" as OBJ
+rectangle "KMS\ntable master key" as KMS
+rectangle "Iceberg catalog\nmetadata.json" as CAT
+
+BEW --> FEC : PLAINTEXT DEK + AAD prefix\n(at file commit)
+FEC --> BER : PLAINTEXT DEK + AAD prefix\n(per scan range)
+FEC --> ICE : data file + key_metadata
+ICE --> KMS : wrap / unwrap the KEK\nONCE PER KEK, not per file
+ICE --> CAT : encryption-keys list
+BEW --> OBJ : PME-encrypted Parquet
+BER --> OBJ : read encrypted footer + pages
+ICE --> OBJ : AES-GCM-stream manifests
+
+note bottom of BE
+  The BE never contacts the KMS. It generates the
+  data key and applies Parquet Modular Encryption;
+  all key management is FE-side.
+end note
+
+note right of FEC
+  The plaintext DEK crosses the FE<->BE boundary in
+  BOTH directions, so confidentiality on that hop
+  depends on the internal RPC being protected.
+end note
+@enduml

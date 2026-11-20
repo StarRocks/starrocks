@@ -1,0 +1,12 @@
+-- name: test_cast_constant_map
+WITH t AS (
+    SELECT generate_series AS id, CAST(parse_json('{"1":7}') AS MAP<INT,INT>) AS m
+    FROM TABLE(generate_series(1,4))
+)
+SELECT CAST(m AS MAP<BIGINT,INT>) AS m FROM t;
+-- result:
+{1:7}
+{1:7}
+{1:7}
+{1:7}
+-- !result

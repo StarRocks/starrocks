@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "How to upgrade a StarRocks cluster to a newer version."
+products: [oss]
 ---
 
 # Upgrade StarRocks
@@ -13,7 +14,7 @@ This topic describes how to upgrade your StarRocks cluster.
 :::important
 Before upgrading StarRocks you should:
 
-- Read the [release notes](https://docs.starrocks.io/releasenotes/release-3.5/) for the StarRocks version that you are upgrading to, and all versions between the current version and the target version and:
+- Read the [release notes](../../release_notes/release_notes.md) for the StarRocks version that you are upgrading to, and all versions between the current version and the target version and:
   - Make notes of any behavior changes within StarRocks
   - Make notes of any changes with integrations between StarRocks and external systems used for importing, exporting, visualization, etc
 - Verify the [deployment prerequisites](../preparation/deployment_prerequisites.md) for the target version. For example, StarRocks 3.5.x requires JDK 17 and StarRocks 3.4.x on Ubuntu requires JDK 11.
@@ -52,7 +53,7 @@ The version of StarRocks is represented by three numbers in the form **Major.Min
 > 1. Run [ALTER SYSTEM CREATE IMAGE](../../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) to create a new image.
 > 2. Wait for the new image to be synchronized to all Follower FEs.
 >
-> You can check whether the image file has been synchronized by viewing the log file **fe.log** of the Leader FE. A record of log like "push image.* from subdir [] to other nodes. totally xx nodes, push successful xx nodes" suggests that the image file has been successfully synchronized.
+> You can check whether the image file has been synchronized by viewing the log file **fe.log** of the Leader FE. A record of log like "push image.* from subdir [] to other nodes. totally xx nodes, push succeeded xx nodes" suggests that the image file has been successfully synchronized.
 
 ### Upgrade procedure
 
