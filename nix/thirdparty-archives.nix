@@ -84,10 +84,10 @@ let
       md5 = "209348e50b24dbbdec6d961059c2fc92";
       sha256 = "1nrjix26whh3ichgdxc0d3bdbmz312ra74rv3hkjmq1k9q6v45c6";
     };
-    "CRoaring-4.2.1.tar.gz" = {
-      url = "https://github.com/RoaringBitmap/CRoaring/archive/refs/tags/v4.2.1.tar.gz";
-      md5 = "00667266a60709978368cf867fb3a3aa";
-      sha256 = "0k57qjcia19di0z1ll7rw9dwcn5l5qq3gqx902y0vjdqks77451m";
+    "CRoaring-5.3.2.tar.gz" = {
+      url = "https://github.com/RoaringBitmap/CRoaring/archive/refs/tags/v5.3.2.tar.gz";
+      md5 = "3ade54623962834928130ca1b3eaad1a";
+      sha256 = "026d6ikrrdy61snwq2r8lmzlypny9h8cz4jgizq6vkam4rxsdszq";
     };
     "curl-8.16.0.tar.gz" = {
       url = "https://curl.se/download/curl-8.16.0.tar.gz";
@@ -507,7 +507,7 @@ let
       "s2geometry-0.9.0.tar.gz"
       "h3-4.5.0-1b536c34225191ba24a75a840f634d4a48c3b206.tar.gz"
       "bitshuffle-0.5.1.tar.gz"
-      "CRoaring-4.2.1.tar.gz"
+      "CRoaring-5.3.2.tar.gz"
       "jemalloc-5.3.0.tar.bz2"
       "cctz-2.3.tar.gz"
       "fmt-10.2.1.zip"
@@ -582,7 +582,7 @@ let
       "s2geometry-0.9.0.tar.gz"
       "h3-4.5.0-1b536c34225191ba24a75a840f634d4a48c3b206.tar.gz"
       "bitshuffle-0.5.1.tar.gz"
-      "CRoaring-4.2.1.tar.gz"
+      "CRoaring-5.3.2.tar.gz"
       "jemalloc-5.3.0.tar.bz2"
       "cctz-2.3.tar.gz"
       "fmt-10.2.1.zip"
@@ -656,7 +656,7 @@ let
       "s2geometry-0.9.0.tar.gz"
       "h3-4.5.0-1b536c34225191ba24a75a840f634d4a48c3b206.tar.gz"
       "bitshuffle-0.5.1.tar.gz"
-      "CRoaring-4.2.1.tar.gz"
+      "CRoaring-5.3.2.tar.gz"
       "jemalloc-5.3.0.tar.bz2"
       "cctz-2.3.tar.gz"
       "fmt-10.2.1.zip"
