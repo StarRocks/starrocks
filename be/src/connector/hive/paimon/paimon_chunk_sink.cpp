@@ -196,7 +196,27 @@ private:
     arrow::ProxyMemoryPool _delegate;
 };
 
-Status validate_contract(const TPaimonTableSink& sink) {
+StatusOr<TPaimonOverwriteMode::type> resolve_overwrite_mode(const TPaimonTableSink& sink) {
+    const auto& names = _TPaimonOverwriteMode_VALUES_TO_NAMES;
+    if (sink.__isset.write_mode) {
+        auto it = names.find(sink.write_mode);
+        if (it == names.end()) {
+            return Status::InvalidArgument("Unknown Paimon overwrite mode");
+        }
+        if (sink.__isset.overwrite_mode && sink.overwrite_mode != it->second) {
+            return Status::InvalidArgument("Conflicting Paimon overwrite modes");
+        }
+        return sink.write_mode;
+    }
+    for (const auto& [mode, name] : names) {
+        if (sink.overwrite_mode == name) {
+            return static_cast<TPaimonOverwriteMode::type>(mode);
+        }
+    }
+    return Status::InvalidArgument("Unknown Paimon overwrite mode");
+}
+
+StatusOr<TPaimonOverwriteMode::type> validate_contract(const TPaimonTableSink& sink) {
     if (!sink.__isset.writer_protocol_version || sink.writer_protocol_version != 1) {
         return Status::NotSupported("Paimon writer protocol must be 1; upgrade FE and BE together");
     }
@@ -208,12 +228,10 @@ Status validate_contract(const TPaimonTableSink& sink) {
         return Status::InvalidArgument("Paimon sink is missing its frozen table/schema contract");
     }
     if (!sink.__isset.operation_id || sink.operation_id.empty() || !sink.__isset.commit_user ||
-        sink.commit_user.empty() || !sink.__isset.overwrite_mode) {
+        sink.commit_user.empty() || (!sink.__isset.write_mode && !sink.__isset.overwrite_mode)) {
         return Status::InvalidArgument("Paimon sink is missing its operation/commit identity");
     }
-    if (sink.overwrite_mode != "APPEND") {
-        return Status::InvalidArgument("Unknown Paimon overwrite mode");
-    }
+    ASSIGN_OR_RETURN(auto write_mode, resolve_overwrite_mode(sink));
     if (sink.bucket_count == 0 || sink.bucket_count < -1 ||
         (!sink.primary_key_columns.empty() && sink.bucket_count <= 0)) {
         return Status::NotSupported("Paimon writes require fixed PK buckets or fixed/unaware append buckets");
@@ -229,7 +247,7 @@ Status validate_contract(const TPaimonTableSink& sink) {
             return Status::NotSupported("Paimon cross-partition primary-key writes are not supported");
         }
     }
-    return Status::OK();
+    return write_mode;
 }
 
 // SDK Arrow erases CHAR/VARCHAR/BINARY length. Reattach those bounds from the already-validated
@@ -802,7 +820,7 @@ public:
             return Status::InvalidArgument(
                     "Paimon sink requires runtime, bounded executor, profile and memory manager");
         }
-        RETURN_IF_ERROR(validate_contract(context->sink));
+        ASSIGN_OR_RETURN(write_mode, validate_contract(context->sink));
         if (context->output_exprs.size() != context->sink.column_names.size()) {
             return Status::InvalidArgument("Paimon sink output must contain every native field in schema order");
         }
@@ -884,7 +902,8 @@ public:
         builder.WithMemoryPool(native_pool)
                 .WithFileSystem(native_fs)
                 .WithExecutor(native_executor)
-                .WithIgnorePreviousFiles(context->sink.primary_key_columns.empty())
+                .WithIgnorePreviousFiles(write_mode != TPaimonOverwriteMode::APPEND ||
+                                         context->sink.primary_key_columns.empty())
                 .WithStreamingMode(false)
                 .SetWriteBufferSpillThreadNumber(0)
                 .SetOptions(options);
@@ -1154,6 +1173,7 @@ public:
 
     std::shared_ptr<PaimonChunkSinkContext> context;
     int32_t driver_id;
+    TPaimonOverwriteMode::type write_mode = TPaimonOverwriteMode::APPEND;
     ObjectPool expr_pool;
     std::vector<ExprContext*> exprs;
     std::shared_ptr<FileSystem> fs; // Own credential-configured SR filesystem for every borrowed SDK use.
