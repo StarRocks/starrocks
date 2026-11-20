@@ -774,6 +774,48 @@ public class Explain {
             return new OperatorStr(sb.toString(), context.step,
                     buildChildOperatorStr(optExpression, context.step));
         }
+
+        // The defaults of these visitors end in visit(), which dispatches again and recurses forever.
+        @Override
+        public OperatorStr visitPhysicalScan(OptExpression optExpression, ExplainContext context) {
+            return visitUnhandled(optExpression, context);
+        }
+
+        @Override
+        public OperatorStr visitPhysicalRawValues(OptExpression optExpression, ExplainContext context) {
+            return visitUnhandled(optExpression, context);
+        }
+
+        @Override
+        public OperatorStr visitPhysicalFetch(OptExpression optExpression, ExplainContext context) {
+            return visitUnhandled(optExpression, context);
+        }
+
+        @Override
+        public OperatorStr visitPhysicalLookUp(OptExpression optExpression, ExplainContext context) {
+            return visitUnhandled(optExpression, context);
+        }
+
+        private OperatorStr visitUnhandled(OptExpression optExpression, ExplainContext context) {
+            PhysicalOperator op = (PhysicalOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder("- ")
+                    .append(op.getOpType().name().replaceFirst("^PHYSICAL_", "").replace('_', '-'));
+            if (op instanceof PhysicalScanOperator scan) {
+                sb.append(" [").append(scan.getTable().getName()).append("]")
+                        .append(buildOutputColumns(scan,
+                                "[" + scan.getOutputColumns().stream().map(EXPR_PRINTER::print)
+                                        .collect(Collectors.joining(", ")) + "]"));
+            } else {
+                sb.append(buildOutputColumns(op, ""));
+            }
+            sb.append("\n");
+            // LookUp carries no statistics
+            if (optExpression.getStatistics() != null) {
+                buildCostEstimate(sb, optExpression, context.step);
+            }
+            buildCommonProperty(sb, op, context.step);
+            return new OperatorStr(sb.toString(), context.step, buildChildOperatorStr(optExpression, context.step));
+        }
     }
 
     private void buildCostEstimate(StringBuilder sb, OptExpression optExpression, int step) {
