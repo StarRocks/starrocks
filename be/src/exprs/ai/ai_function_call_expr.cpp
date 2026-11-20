@@ -530,7 +530,7 @@ StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext
             batch.rows.emplace_back(AIFunctionRowInput{.action = AIFunctionRowAction::TERMINAL_ROW_FAILURE});
             continue;
         }
-        std::optional<AIMediaInput> media;
+        std::shared_ptr<const AIMediaInput> media;
         if (spec.file_argument >= 0) {
             ASSIGN_OR_RETURN(auto file, FileRowRef::from_datum(columns[spec.file_argument]->get(row)));
             auto prepared = create_ai_media(file, max_input_file_bytes);
@@ -541,7 +541,7 @@ StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext
                 batch.rows.emplace_back(AIFunctionRowInput{.action = AIFunctionRowAction::TERMINAL_ROW_FAILURE});
                 continue;
             }
-            media.emplace(std::move(prepared).value());
+            media = std::make_shared<const AIMediaInput>(std::move(prepared).value());
         }
         auto input_value = [&](size_t input_index) -> std::string {
             if (input_index >= spec.input_count) {

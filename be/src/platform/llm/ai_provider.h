@@ -36,7 +36,7 @@ class TAIProvider;
 
 enum class AIProviderProtocol {
     OPENAI,
-    DASHSCOPE_MULTIMODAL,
+    DASHSCOPE,
 };
 
 // Query-plan snapshot. Provider credentials belong to this query. Never print this object.
@@ -60,10 +60,9 @@ struct AIChatRequest {
     std::string_view model;
     std::string_view api_key;
     std::string_view prompt;
-    const AIProviderOptions* options = nullptr;
+    std::shared_ptr<const AIProviderOptions> options;
     AICapability capability = AICapability::CHAT;
-    // Borrowed only for the synchronous build_request call.
-    const AIMediaInput* media = nullptr;
+    std::shared_ptr<const AIMediaInput> media;
 };
 
 struct AIProviderHttpRequest {

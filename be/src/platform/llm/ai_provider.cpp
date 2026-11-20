@@ -19,7 +19,7 @@
 #include <charconv>
 
 #include "gen_cpp/PlanNodes_types.h"
-#include "platform/llm/dashscope_multimodal_provider.h"
+#include "platform/llm/dashscope_provider.h"
 #include "platform/llm/openai_compatible_provider.h"
 
 namespace starrocks {
@@ -75,10 +75,16 @@ StatusOr<AIProviderConfig> AIProviderConfig::parse(std::string_view id, const TA
     config.endpoint = get("endpoint");
     config.model = get("model");
     config.api_key = get("api_key");
-    if (provider.protocol != TAIProviderProtocol::OPENAI) {
+    switch (provider.protocol) {
+    case TAIProviderProtocol::OPENAI:
+        config.protocol = AIProviderProtocol::OPENAI;
+        break;
+    case TAIProviderProtocol::DASHSCOPE:
+        config.protocol = AIProviderProtocol::DASHSCOPE;
+        break;
+    default:
         return Status::NotSupported("AI provider protocol is not supported");
     }
-    config.protocol = AIProviderProtocol::OPENAI;
     RETURN_IF_ERROR(validate_ai_http_url(config.endpoint));
     if (!is_non_blank(config.model) || contains_control_character(config.model) ||
         contains_control_character(config.api_key)) {
@@ -93,11 +99,8 @@ StatusOr<AIProviderConfig> AIProviderConfig::parse(std::string_view id, const TA
 }
 
 Status validate_ai_protocol(AIProviderProtocol protocol, AICapability capability) {
-    if (protocol == AIProviderProtocol::OPENAI &&
+    if ((protocol == AIProviderProtocol::OPENAI || protocol == AIProviderProtocol::DASHSCOPE) &&
         (capability == AICapability::CHAT || capability == AICapability::EMBEDDING)) {
-        return Status::OK();
-    }
-    if (protocol == AIProviderProtocol::DASHSCOPE_MULTIMODAL && capability == AICapability::EMBEDDING) {
         return Status::OK();
     }
     return Status::NotSupported("AI protocol does not support the requested capability");
@@ -105,10 +108,13 @@ Status validate_ai_protocol(AIProviderProtocol protocol, AICapability capability
 
 StatusOr<std::unique_ptr<AIProvider>> create_ai_provider(const AIProviderConfig& config) {
     RETURN_IF_ERROR(validate_ai_protocol(config.protocol, config.capability));
-    if (config.protocol == AIProviderProtocol::DASHSCOPE_MULTIMODAL) {
-        return std::unique_ptr<AIProvider>(std::make_unique<DashScopeMultimodalProvider>());
+    if (config.protocol == AIProviderProtocol::DASHSCOPE) {
+        return DashScopeProvider::create(config);
     }
-    return std::unique_ptr<AIProvider>(std::make_unique<OpenAICompatibleProvider>());
+    if (config.protocol == AIProviderProtocol::OPENAI) {
+        return OpenAICompatibleProvider::create(config);
+    }
+    return Status::NotSupported("AI provider protocol is not supported");
 }
 
 std::optional<AIProviderErrorCode> parse_ai_provider_error_code(std::string_view identifier) {

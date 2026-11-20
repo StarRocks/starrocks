@@ -16,7 +16,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -43,7 +42,8 @@ struct AIFunctionRowInput {
     AIFunctionRowAction action = AIFunctionRowAction::SQL_NULL;
     std::string model;
     std::string prompt;
-    std::optional<AIMediaInput> media;
+    // media null means it's none multimodel
+    std::shared_ptr<const AIMediaInput> media;
 };
 
 struct AIFunctionInputBatch {

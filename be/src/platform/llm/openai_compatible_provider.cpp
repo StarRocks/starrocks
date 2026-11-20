@@ -22,11 +22,11 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace starrocks {
 namespace {
 
-constexpr std::string_view kSystemPrompt = "You are a helpful assistant.";
 using RequestWriter = rapidjson::Writer<rapidjson::StringBuffer, rapidjson::UTF8<>, rapidjson::UTF8<>,
                                         rapidjson::CrtAllocator, rapidjson::kWriteValidateEncodingFlag>;
 
@@ -69,13 +69,77 @@ rapidjson::Type json_type(AIProviderOptionKind kind) {
     return rapidjson::kNullType;
 }
 
-bool has_invalid_api_key_byte(std::string_view api_key) {
-    for (unsigned char byte : api_key) {
-        if (byte <= 0x1f || byte == 0x7f) {
-            return true;
+Status write_chat_messages(const AIChatRequest& request, RequestWriter& writer) {
+    std::string encoded_media;
+    rapidjson::Document messages(rapidjson::kArrayType);
+    auto& allocator = messages.GetAllocator();
+    rapidjson::Value system(rapidjson::kObjectType);
+    system.AddMember("role", "system", allocator);
+    system.AddMember("content", "You are a helpful assistant.", allocator);
+    messages.PushBack(system, allocator);
+
+    const auto prompt =
+            rapidjson::StringRef(request.prompt.empty() ? "" : request.prompt.data(), request.prompt.size());
+    rapidjson::Value user(rapidjson::kObjectType);
+    user.AddMember("role", "user", allocator);
+    if (!request.media) {
+        user.AddMember("content", prompt, allocator);
+    } else {
+        const auto& media = *request.media;
+        std::string_view uri;
+        if (media.referenced_url) {
+            if (!media.is_image() && !media.is_video()) {
+                return Status::NotSupported("OpenAI-compatible chat supports URLs for images and videos");
+            }
+            if (media.inline_bytes || media.referenced_url->empty()) return invalid_request();
+            uri = *media.referenced_url;
+        } else {
+            ASSIGN_OR_RETURN(encoded_media, encode_ai_media_data_uri(media));
+            uri = encoded_media;
+        }
+
+        rapidjson::Value content(rapidjson::kArrayType);
+        rapidjson::Value text(rapidjson::kObjectType);
+        text.AddMember("type", "text", allocator);
+        text.AddMember("text", prompt, allocator);
+        content.PushBack(text, allocator);
+
+        const auto type = rapidjson::StringRef(media.is_video() ? "video_url" : "image_url");
+        rapidjson::Value url(rapidjson::kObjectType);
+        url.AddMember("url", rapidjson::StringRef(uri.data(), uri.size()), allocator);
+        rapidjson::Value part(rapidjson::kObjectType);
+        part.AddMember("type", type, allocator);
+        part.AddMember(type, url, allocator);
+        content.PushBack(part, allocator);
+        user.AddMember("content", content, allocator);
+    }
+    messages.PushBack(user, allocator);
+    if (!writer.Key("messages") || !messages.Accept(writer)) return invalid_request();
+    return Status::OK();
+}
+
+Status write_options(const AIChatRequest& request, std::optional<int32_t> default_embedding_dimensions,
+                     RequestWriter& writer) {
+    if (request.options) {
+        for (const auto& option : request.options->members()) {
+            const bool reserved = option.key == "model" ||
+                                  (request.capability == AICapability::CHAT &&
+                                   (option.key == "messages" || option.key == "stream")) ||
+                                  (request.capability == AICapability::EMBEDDING &&
+                                   (option.key == "input" || option.key == "encoding_format"));
+            if (reserved || !writer.Key(option.key.data(), option.key.size()) ||
+                !writer.RawValue(option.serialized_json.data(), option.serialized_json.size(),
+                                 json_type(option.kind))) {
+                return invalid_request();
+            }
+            if (option.key == "dimensions") default_embedding_dimensions.reset();
         }
     }
-    return false;
+    if (request.capability == AICapability::EMBEDDING && default_embedding_dimensions &&
+        (!writer.Key("dimensions") || !writer.Int(*default_embedding_dimensions))) {
+        return invalid_request();
+    }
+    return Status::OK();
 }
 
 std::optional<AIProviderErrorCode> classify_member(const rapidjson::Value& envelope, const char* name) {
@@ -99,28 +163,13 @@ AIProviderErrorCode classify_error(const rapidjson::Value& envelope) {
 
 } // namespace
 
+StatusOr<std::unique_ptr<AIProvider>> OpenAICompatibleProvider::create(const AIProviderConfig& config) {
+    return std::unique_ptr<AIProvider>(std::make_unique<OpenAICompatibleProvider>(config.dimensions));
+}
+
 StatusOr<AIProviderHttpRequest> OpenAICompatibleProvider::build_request(const AIChatRequest& request) const {
     if (request.model.empty()) {
         return Status::InvalidArgument("AI provider model is empty");
-    }
-    if (has_invalid_api_key_byte(request.api_key)) {
-        return Status::InvalidArgument("AI provider API key is invalid");
-    }
-
-    std::string media_uri;
-    const char* media_part_type = "image_url";
-    if (request.media != nullptr) {
-        if (request.media->referenced_url) return Status::NotSupported("AI provider does not support referenced URLs");
-        if (request.capability != AICapability::CHAT) {
-            return Status::NotSupported("OpenAI-compatible embedding does not support FILE input");
-        }
-        if (request.media->is_video()) {
-            if (!_supports_video) return Status::NotSupported("AI protocol does not support video input");
-            media_part_type = "video_url";
-        }
-        auto encoded = encode_ai_media_data_uri(*request.media);
-        if (!encoded.ok()) return encoded.status();
-        media_uri = std::move(*encoded);
     }
 
     rapidjson::StringBuffer buffer;
@@ -130,27 +179,11 @@ StatusOr<AIProviderHttpRequest> OpenAICompatibleProvider::build_request(const AI
     }
     switch (request.capability) {
     case AICapability::CHAT:
-        if (!writer.Key("messages") || !writer.StartArray() || !writer.StartObject() || !writer.Key("role") ||
-            !writer.String("system") || !writer.Key("content") ||
-            !writer.String(kSystemPrompt.data(), kSystemPrompt.size()) || !writer.EndObject() ||
-            !writer.StartObject() || !writer.Key("role") || !writer.String("user") || !writer.Key("content")) {
-            return invalid_request();
-        }
-        if (request.media == nullptr) {
-            if (!writer.String(request.prompt.data(), request.prompt.size())) return invalid_request();
-        } else if (!writer.StartArray() || !writer.StartObject() || !writer.Key("type") || !writer.String("text") ||
-                   !writer.Key("text") || !writer.String(request.prompt.data(), request.prompt.size()) ||
-                   !writer.EndObject() || !writer.StartObject() || !writer.Key("type") ||
-                   !writer.String(media_part_type) || !writer.Key(media_part_type) || !writer.StartObject() ||
-                   !writer.Key("url") || !writer.String(media_uri.data(), media_uri.size()) || !writer.EndObject() ||
-                   !writer.EndObject() || !writer.EndArray()) {
-            return invalid_request();
-        }
-        if (!writer.EndObject() || !writer.EndArray() || !writer.Key("stream") || !writer.Bool(false)) {
-            return invalid_request();
-        }
+        RETURN_IF_ERROR(write_chat_messages(request, writer));
+        if (!writer.Key("stream") || !writer.Bool(false)) return invalid_request();
         break;
     case AICapability::EMBEDDING:
+        if (request.media) return Status::NotSupported("OpenAI-compatible embedding does not support FILE input");
         if (!writer.Key("input") || !writer.String(request.prompt.data(), request.prompt.size()) ||
             !writer.Key("encoding_format") || !writer.String("float")) {
             return invalid_request();
@@ -160,30 +193,15 @@ StatusOr<AIProviderHttpRequest> OpenAICompatibleProvider::build_request(const AI
         return invalid_request();
     }
 
-    if (request.options != nullptr) {
-        for (const auto& option : request.options->members()) {
-            const bool reserved = option.key == "model" ||
-                                  (request.capability == AICapability::CHAT &&
-                                   (option.key == "messages" || option.key == "stream")) ||
-                                  (request.capability == AICapability::EMBEDDING &&
-                                   (option.key == "input" || option.key == "encoding_format"));
-            if (reserved || !writer.Key(option.key.data(), option.key.size()) ||
-                !writer.RawValue(option.serialized_json.data(), option.serialized_json.size(),
-                                 json_type(option.kind))) {
-                return invalid_request();
-            }
-        }
-    }
+    RETURN_IF_ERROR(write_options(request, _default_embedding_dimensions, writer));
     if (!writer.EndObject() || !writer.IsComplete()) {
         return invalid_request();
     }
 
     AIProviderHttpRequest result;
-    result.url.assign(request.endpoint.data(), request.endpoint.size());
-    result.headers = {
-            AIHttpHeader{.name = "Content-Type", .value = "application/json"},
-            AIHttpHeader{.name = "Accept", .value = "application/json"},
-    };
+    result.url = request.endpoint;
+    result.headers = {{.name = "Content-Type", .value = "application/json"},
+                      {.name = "Accept", .value = "application/json"}};
     if (!request.api_key.empty()) {
         result.headers.emplace_back(
                 AIHttpHeader{.name = "Authorization", .value = "Bearer " + std::string(request.api_key)});
