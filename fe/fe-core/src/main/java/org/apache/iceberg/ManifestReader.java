@@ -41,8 +41,6 @@ import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.relocated.com.google.common.collect.Sets;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.PartitionSet;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.Collection;
@@ -51,7 +49,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 import static org.apache.iceberg.expressions.Expressions.alwaysTrue;
@@ -59,8 +56,6 @@ import static org.apache.iceberg.expressions.Expressions.alwaysTrue;
 // copy from https://github.com/apache/iceberg/blob/apache-iceberg-1.10.0/core/src/main/java/org/apache/iceberg/ManifestReader.java
 public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         implements CloseableIterable<F> {
-    private static final Logger LOG = LogManager.getLogger(ManifestReader.class);
-
     static final ImmutableList<String> ALL_COLUMNS = ImmutableList.of("*");
 
     private static final Set<String> STATS_COLUMNS =
@@ -301,42 +296,17 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         // while missing a file, letting an incomplete entry pass the read-side size check.
         Set<DataFile> tmpDataFiles = ConcurrentHashMap.newKeySet();
         Set<DeleteFile> tmpDeleteFiles = ConcurrentHashMap.newKeySet();
-<<<<<<< HEAD
         if (shouldCacheDataFiles) {
             final Set<Integer> requestedColumnIds =
                     identifierFieldIds != null && !identifierFieldIds.isEmpty() ? identifierFieldIds : null;
-=======
-        // Compact statistics: copies without statistics are wrapped once the whole manifest has been read.
-        final ManifestColumnStats.Builder statsBuilder = shouldCacheDataFiles && dataFileCacheWithMetrics ?
-                ManifestColumnStats.builder(identifierFieldIds, cacheStatsCandidateRanks, cacheStatsColumnLimit,
-                        cacheStatsExpectedFileCount, cacheStatsTruncatedTypes) : null;
-        Map<Integer, DataFile> tmpStatslessDataFiles = new ConcurrentHashMap<>();
-        // live data entries read, to log a fill that does not match the manifest
-        AtomicInteger liveDataEntries = new AtomicInteger();
-        if (statsBuilder != null) {
->>>>>>> c6f0b72 ([BugFix][RB-1509] Keep duplicate live entries of an Iceberg manifest in the data file cache (#83916))
             entries = CloseableIterable.transform(entries,
                     entry -> {
                         if (entry.isLive()) {
-                            liveDataEntries.incrementAndGet();
                             DataFile dataFile = (DataFile) entry.file();
-<<<<<<< HEAD
                             DataFile copiedDataFile = dataFileCacheWithMetrics ?
                                     dataFile.copyWithStats(requestedColumnIds) :
                                     dataFile.copyWithoutStats();
                             tmpDataFiles.add(DataFileWrapper.wrap(copiedDataFile));
-=======
-                            tmpStatslessDataFiles.put(statsBuilder.add(dataFile), dataFile.copyWithoutStats());
-                        }
-                        return entry;
-                    });
-        } else if (shouldCacheDataFiles) {
-            entries = CloseableIterable.transform(entries,
-                    entry -> {
-                        if (entry.isLive()) {
-                            liveDataEntries.incrementAndGet();
-                            tmpDataFiles.add(DataFileWrapper.wrap(((DataFile) entry.file()).copyWithoutStats()));
->>>>>>> c6f0b72 ([BugFix][RB-1509] Keep duplicate live entries of an Iceberg manifest in the data file cache (#83916))
                         }
                         return entry;
                     });
@@ -385,7 +355,6 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
                 try {
                     if (fullyConsumed.get()) {
                         if (!tmpDataFiles.isEmpty()) {
-                            logDataFileCacheFill(liveDataEntries.get(), tmpDataFiles);
                             dataFileCache.put(file.location(), tmpDataFiles); // to recalculate the weight
                         }
                         if (!tmpDeleteFiles.isEmpty()) {
@@ -397,17 +366,6 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
                 }
             }
         };
-    }
-
-    // Records a fill whose size differs from the manifest's declared live file count, which the read side will drop;
-    // a fill happens once per cache miss, so this stays rare. Only counts are compared: no extra memory per fill.
-    private void logDataFileCacheFill(int liveEntries, Set<DataFile> files) {
-        // cacheStatsExpectedFileCount is the manifest's added + existing file count, 0 when unknown
-        int declared = cacheStatsExpectedFileCount;
-        if (declared > 0 && (liveEntries != declared || files.size() != declared)) {
-            LOG.warn("Iceberg manifest cache fill for {} does not match the manifest: read {} live entries, "
-                    + "cached {} files, manifest declares {}", file.location(), liveEntries, files.size(), declared);
-        }
     }
 
     private boolean shouldCacheDataFiles() {
