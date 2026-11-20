@@ -384,7 +384,7 @@ public class DeltaLakeReadLifecycleTest {
                 Assertions.assertFalse(active());
                 Assertions.assertEquals(0, fs.openStreams);
             } finally {
-                metastore.releaseCaches();
+                metastore.invalidateAll();
             }
         }
     }
