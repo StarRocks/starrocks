@@ -24,8 +24,8 @@
 #include "column/struct_column.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
+#include "exprs/mock_vectorized_expr.h"
 #include "testutil/column_test_helper.h"
-#include "testutil/type_test_helper.h"
 
 namespace starrocks {
 namespace {
