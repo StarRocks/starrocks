@@ -214,8 +214,9 @@ message SegmentMetadataPB {
     // bundled and standalone segments. Readers still use offset 0; replication uses this flag
     // to distinguish that physical file from a shared bundle object.
     optional bool synthetic_bundle_file_offset = 14 [default=false];
-    // The exact first and last sort key of the segment, in the encoding documented in
-    // be/src/storage/sort_key_bounds.h. Both are set or both are unset.
+    // The first and last sort key of the segment, possibly truncated to a byte budget (format
+    // version 2: the min is then a lower bound and the max an upper bound of the segment's keys),
+    // in the encoding documented in be/src/storage/sort_key_bounds.h. Both are set or both are unset.
     optional bytes sort_key_min_encoded = 15;
     optional bytes sort_key_max_encoded = 16;
 }
