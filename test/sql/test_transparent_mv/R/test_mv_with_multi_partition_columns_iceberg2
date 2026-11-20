@@ -526,16 +526,16 @@ SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years order by l
 DROP MATERIALIZED VIEW test_years;
 -- result:
 -- !result
-drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_days;
+drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_days force;
 -- result:
 -- !result
-drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_months;
+drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_months force;
 -- result:
 -- !result
-drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years;
+drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years force;
 -- result:
 -- !result
-drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t1;
+drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t1 force;
 -- result:
 -- !result
 drop database mv_iceberg_${uuid0}.sql_test_db_${uuid0} force;
@@ -544,3 +544,13 @@ drop database mv_iceberg_${uuid0}.sql_test_db_${uuid0} force;
 drop database db_${uuid0} force;
 -- result:
 -- !result
+CLEANUP {
+drop database if exists default_catalog.db_${uuid0} force;
+drop table if exists mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_days force;
+drop table if exists mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_months force;
+drop table if exists mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years force;
+drop table if exists mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t1 force;
+drop database if exists mv_iceberg_${uuid0}.sql_test_db_${uuid0};
+set catalog default_catalog;
+drop catalog if exists mv_iceberg_${uuid0};
+} END CLEANUP
