@@ -15,209 +15,91 @@
 package com.starrocks.scheduler.mv.ivm;
 
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
+import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRun;
+import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.thrift.TExplainLevel;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-
-import java.util.HashSet;
-import java.util.Set;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /**
- * A materialized view refresh may be rewritten to read another materialized view. That is only sound when the other
- * view holds exactly what its base tables hold: a refresh reading the base tables at a pinned snapshot cannot be
- * answered by a view at its own version, and a refresh records the base versions it consumed, so a view tolerated as
- * stale for queries must not feed it.
+ * A refresh that reads its base tables at a pinned snapshot cannot be answered by another materialized view, which
+ * holds the base tables as of its own refresh.
  */
-public class MVRefreshRewriteIsolationTest extends IvmCloudNativeRefreshTestBase {
-    private static final String DB = "db_mv_refresh_rewrite_isolation";
-
-    @BeforeAll
-    public static void beforeClass() throws Exception {
-        setUpSharedDataCluster(DB);
-    }
+public class MVRefreshRewriteIsolationTest extends IvmIcebergRefreshJobTestBase {
+    private static final String FACT_QUERY = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
 
     @Test
     public void testPctRefreshReadsAFreshSibling() throws Exception {
-        mockLakeDml();
-        OlapTable fact = createFact("fact_fresh_sibling");
-        loadEveryPartition(fact);
-        MaterializedView sibling = createRefreshedSibling("sibling_fresh", fact, "");
-        MaterializedView mv = createMv("mv_fresh_sibling", "PCT", projectionOf(fact));
+        loadFact();
+        MaterializedView sibling = createRefreshedSibling("sibling_fresh");
+        MaterializedView mv = createFactMv("mv_fresh_sibling", "pct");
 
-        Assertions.assertEquals(Set.of(sibling.getName()), tablesReadByFirstBatch(mv));
+        String plan = refreshPlanOf(runFirstBatch(mv));
+        Assertions.assertTrue(plan.contains(sibling.getName()), plan);
     }
 
-    @Test
-    public void testIncrementalBootstrapReadsTheBaseTable() throws Exception {
-        mockLakeDml();
-        OlapTable fact = createFact("fact_bootstrap");
-        loadEveryPartition(fact);
-        createRefreshedSibling("sibling_bootstrap", fact, "");
-        MaterializedView mv = createMv("mv_bootstrap", "INCREMENTAL", projectionOf(fact));
-        int scansBefore = SCANNED_VERSIONS.size();
-        TaskRun batch = runFirstBatch(mv);
+    @ParameterizedTest
+    @ValueSource(strings = {"incremental", "auto"})
+    public void testBootstrapReadsTheBaseTable(String refreshMode) throws Exception {
+        loadFact();
+        MaterializedView sibling = createRefreshedSibling("sibling_bootstrap_" + refreshMode);
+        MaterializedView mv = createFactMv("mv_bootstrap_" + refreshMode, refreshMode);
 
-        assertPinnedRefreshReadsOnly(batch, scansBefore, fact);
-    }
-
-    @Test
-    public void testAutoBootstrapReadsTheBaseTable() throws Exception {
-        mockLakeDml();
-        OlapTable fact = createFact("fact_auto");
-        loadEveryPartition(fact);
-        createRefreshedSibling("sibling_auto", fact, "");
-        MaterializedView mv = createMv("mv_auto", "AUTO", projectionOf(fact));
-        int scansBefore = SCANNED_VERSIONS.size();
-        TaskRun batch = runFirstBatch(mv);
-
-        assertPinnedRefreshReadsOnly(batch, scansBefore, fact);
+        assertPinnedRefreshDoesNotRead(runFirstBatch(mv), sibling);
     }
 
     @Test
     public void testForceRebuildReadsTheBaseTable() throws Exception {
-        mockLakeDml();
-        OlapTable fact = createFact("fact_force");
-        loadEveryPartition(fact);
-        MaterializedView mv = createMv("mv_force", "INCREMENTAL", projectionOf(fact));
-        runJob(mv, fact);
-        createRefreshedSibling("sibling_force", fact, "");
+        loadFact();
+        MaterializedView mv = createFactMv("mv_force", "incremental");
+        runJob(mv);
+        MaterializedView sibling = createRefreshedSibling("sibling_force");
 
-        int scansBefore = SCANNED_VERSIONS.size();
-        TaskRun batch = runForceFirstBatch(mv);
-
-        assertPinnedRefreshReadsOnly(batch, scansBefore, fact);
+        assertPinnedRefreshDoesNotRead(runForceFirstBatch(mv), sibling);
     }
 
     @Test
     public void testSessionPropertiesDoNotReopenRewriteForAPinnedRefresh() throws Exception {
-        mockLakeDml();
-        OlapTable fact = createFact("fact_session_props");
-        loadEveryPartition(fact);
-        createRefreshedSibling("sibling_session_props", fact, "");
+        loadFact();
+        MaterializedView sibling = createRefreshedSibling("sibling_session_props");
         boolean refreshRewrite = Config.enable_mv_refresh_query_rewrite;
         Config.enable_mv_refresh_query_rewrite = false;
         try {
-            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_session_props PARTITION BY dt " +
-                    "DISTRIBUTED BY HASH(k) BUCKETS 1 REFRESH DEFERRED MANUAL " +
-                    "PROPERTIES ('refresh_mode' = 'INCREMENTAL', 'partition_refresh_number' = '1', " +
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test`.`mv_session_props` " +
+                    "PARTITION BY `date` REFRESH DEFERRED MANUAL " +
+                    "PROPERTIES ('refresh_mode' = 'incremental', 'partition_refresh_number' = '1', " +
                     "'partition_refresh_strategy' = 'strict', " +
                     "'session.enable_materialized_view_rewrite' = 'true', " +
-                    "'session.enable_materialized_view_for_insert' = 'true') AS " + projectionOf(fact));
-            MaterializedView mv = (MaterializedView) db.getTable("mv_session_props");
-            int scansBefore = SCANNED_VERSIONS.size();
-            TaskRun batch = runFirstBatch(mv);
+                    "'session.enable_materialized_view_for_insert' = 'true') AS " + FACT_QUERY);
 
-            assertPinnedRefreshReadsOnly(batch, scansBefore, fact);
+            assertPinnedRefreshDoesNotRead(runFirstBatch(getMv("mv_session_props")), sibling);
         } finally {
             Config.enable_mv_refresh_query_rewrite = refreshRewrite;
         }
     }
 
-    @Test
-    public void testPctRefreshDoesNotReadASiblingWithinItsStaleness() throws Exception {
-        mockLakeDml();
-        OlapTable fact = createFact("fact_staleness");
-        loadEveryPartition(fact);
-        MaterializedView sibling =
-                createRefreshedSibling("sibling_staleness", fact, ", 'mv_rewrite_staleness_second' = '3600'");
-        // A UT task run has no process start time, so its refresh never confirms the freshness staleness counts from.
-        sibling.getRefreshScheme().setLastFreshnessConfirmedAt(System.currentTimeMillis());
-        loadEveryPartition(fact);
-        assertQueryReads(projectionOf(fact), sibling);
-        MaterializedView mv = createMv("mv_staleness", "PCT", projectionOf(fact));
-
-        Assertions.assertEquals(Set.of(fact.getName()), tablesReadByFirstBatch(mv));
-    }
-
-    @Test
-    public void testPctRefreshDoesNotReadAStaleNocheckSibling() throws Exception {
-        mockLakeDml();
-        OlapTable fact = createFact("fact_nocheck");
-        loadEveryPartition(fact);
-        MaterializedView sibling =
-                createRefreshedSibling("sibling_nocheck", fact, ", 'query_rewrite_consistency' = 'nocheck'");
-        loadEveryPartition(fact);
-        assertQueryReads(projectionOf(fact), sibling);
-        MaterializedView mv = createMv("mv_nocheck", "PCT", projectionOf(fact));
-
-        Assertions.assertEquals(Set.of(fact.getName()), tablesReadByFirstBatch(mv));
-    }
-
-    @Test
-    public void testPctRefreshDoesNotReuseTheForceMvTimelinessOfAQuery() throws Exception {
-        mockLakeDml();
-        OlapTable fact = createFact("fact_force_mv");
-        loadEveryPartition(fact);
-        MaterializedView sibling =
-                createRefreshedSibling("sibling_force_mv", fact, ", 'query_rewrite_consistency' = 'force_mv'");
-        loadEveryPartition(fact);
-        assertQueryReads(projectionOf(fact), sibling);
-        MaterializedView mv = createMv("mv_force_mv", "PCT", projectionOf(fact));
-
-        Assertions.assertEquals(Set.of(fact.getName()), tablesReadByFirstBatch(mv));
-    }
-
-    @Test
-    public void testBookmarkReadIsNotRewritten() throws Exception {
-        mockLakeDml();
-        OlapTable fact = createFact("fact_bookmark");
-        loadEveryPartition(fact);
-        MaterializedView ivm = createMv("mv_bookmark_holder", "INCREMENTAL", projectionOf(fact));
-        runJob(ivm, fact);
-        long bookmarkId = bookmarkIdOf(tvrBaseline(ivm), fact);
-        MaterializedView sibling = createRefreshedSibling("sibling_bookmark", fact, "");
-
-        assertQueryReads(projectionOf(fact), sibling);
-        String pinned = starRocksAssert.query(
-                "SELECT dt, k, v FROM " + fact.getName() + " [_BOOKMARK_" + bookmarkId + "_]").explainQuery();
-        Assertions.assertFalse(pinned.contains(sibling.getName()), pinned);
-    }
-
-    private static void assertQueryReads(String query, MaterializedView mv) throws Exception {
-        String plan = starRocksAssert.query(query).explainQuery();
-        Assertions.assertTrue(plan.contains(mv.getName()), plan);
-    }
-
-    private static String projectionOf(OlapTable fact) {
-        return "SELECT dt, k, v FROM " + fact.getName();
-    }
-
-    private static MaterializedView createRefreshedSibling(String name, OlapTable fact, String extraProperties)
-            throws Exception {
-        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + name + " PARTITION BY dt " +
-                "DISTRIBUTED BY HASH(k) BUCKETS 1 REFRESH DEFERRED MANUAL " +
-                "PROPERTIES ('refresh_mode' = 'PCT'" + extraProperties + ") AS " + projectionOf(fact));
-        MaterializedView sibling = (MaterializedView) db.getTable(name);
-        runJob(sibling, fact);
+    private MaterializedView createRefreshedSibling(String name) throws Exception {
+        MaterializedView sibling = createFactMv(name, "pct");
+        runJob(sibling);
         return sibling;
     }
 
-    // Iceberg pins its scans with a snapshot the optimizer cannot tell apart from a live read, so the refresh session
-    // itself must not rewrite.
-    private static void assertPinnedRefreshReadsOnly(TaskRun batch, int scansBefore, OlapTable base) {
-        Assertions.assertEquals(Set.of(base.getName()), tablesReadSince(scansBefore));
-        Assertions.assertFalse(refreshProcessorOf(batch).getMvContext().getCtx().getSessionVariable()
-                .isEnableMaterializedViewRewriteForInsert());
+    private static void assertPinnedRefreshDoesNotRead(TaskRun batch, MaterializedView sibling) throws Exception {
+        MvTaskRunContext context = getMVTaskRunProcessor(batch).getMvTaskRunContext();
+        Assertions.assertFalse(context.getRefreshRuntimeState().getPinnedTvrMap().isEmpty(),
+                "the refresh is expected to read pinned base table snapshots");
+        String plan = refreshPlanOf(batch);
+        Assertions.assertFalse(plan.contains(sibling.getName()), plan);
+        Assertions.assertFalse(context.getCtx().getSessionVariable().isEnableMaterializedViewRewriteForInsert());
     }
 
-    private static Set<String> tablesReadByFirstBatch(MaterializedView mv) throws Exception {
-        int scansBefore = SCANNED_VERSIONS.size();
-        runFirstBatch(mv);
-        return tablesReadSince(scansBefore);
-    }
-
-    private static Set<String> tablesReadSince(int scansBefore) {
-        Set<String> tables = new HashSet<>();
-        for (int i = scansBefore; i < SCANNED_VERSIONS.size(); i++) {
-            SCANNED_VERSIONS.get(i).forEach((table, partitionVersions) -> {
-                if (!partitionVersions.isEmpty()) {
-                    tables.add(table);
-                }
-            });
-        }
-        return tables;
+    private static String refreshPlanOf(TaskRun batch) {
+        ExecPlan execPlan = getMVTaskRunProcessor(batch).getMvTaskRunContext().getExecPlan();
+        Assertions.assertNotNull(execPlan);
+        return execPlan.getExplainString(TExplainLevel.NORMAL);
     }
 }

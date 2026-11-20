@@ -173,11 +173,7 @@ public class MvRefreshArbiter {
             return Optional.of(false);
         } else {
             Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfExternalTable(baseTable,
-<<<<<<< HEAD
-                    queryRewriteParams.isQueryRewrite());
-=======
-                    queryRewriteParams.toleratesStaleMv(), pinnedVersionRange);
->>>>>>> 635de426fe8... [BugFix][RB-709] Do not answer pinned reads or MV refreshes with a stale materialized view (#66699)
+                    queryRewriteParams.toleratesStaleMv());
             if (baseUpdatedPartitionNames == null) {
                 return Optional.empty();
             }
@@ -234,11 +230,7 @@ public class MvRefreshArbiter {
             baseTableUpdateInfo.addToRefreshPartitionNames(updatedPCellSet);
         } else {
             Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfExternalTable(baseTable,
-<<<<<<< HEAD
-                    queryRewriteParams.isQueryRewrite());
-=======
-                    queryRewriteParams.toleratesStaleMv(), pinnedVersionRange);
->>>>>>> 635de426fe8... [BugFix][RB-709] Do not answer pinned reads or MV refreshes with a stale materialized view (#66699)
+                    queryRewriteParams.toleratesStaleMv());
             if (baseUpdatedPartitionNames == null) {
                 return null;
             }
