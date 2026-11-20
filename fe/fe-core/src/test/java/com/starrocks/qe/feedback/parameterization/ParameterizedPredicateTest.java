@@ -486,15 +486,42 @@ public class ParameterizedPredicateTest {
     }
 
     @Test
-    public void testParameterizedMode() {
-        ScanNode scanNode = createScanNode(null);
-        Assertions.assertFalse(scanNode.isEnableParameterizedMode());
+    public void testScanNodeEqualsIgnoresRangeConstants() {
+        ScanNode narrow = createScanNode(createBinaryPredicate(colRef1, BinaryType.GE, ConstantOperator.createInt(10)));
+        ScanNode wide = createScanNode(createBinaryPredicate(colRef1, BinaryType.GE, ConstantOperator.createInt(1)));
 
-        scanNode.enableParameterizedMode();
-        Assertions.assertTrue(scanNode.isEnableParameterizedMode());
+        Assertions.assertEquals(narrow, wide);
+        Assertions.assertEquals(wide, narrow);
+        Assertions.assertEquals(narrow.hashCode(), wide.hashCode());
 
-        scanNode.disableParameterizedMode();
-        Assertions.assertFalse(scanNode.isEnableParameterizedMode());
+        // [10, +inf) is enclosed by [1, +inf), but not the other way around
+        Assertions.assertTrue(narrow.isCoveredBy(wide));
+        Assertions.assertFalse(wide.isCoveredBy(narrow));
+    }
+
+    @Test
+    public void testScanNodeNotEqualsOnDifferentColumns() {
+        ScanNode intColNode = createScanNode(
+                createBinaryPredicate(colRef1, BinaryType.GE, ConstantOperator.createInt(10)));
+        ScanNode bigintColNode = createScanNode(
+                createBinaryPredicate(colRef3, BinaryType.GE, ConstantOperator.createBigint(10)));
+
+        Assertions.assertNotEquals(intColNode, bigintColNode);
+        Assertions.assertNotEquals(bigintColNode, intColNode);
+        Assertions.assertFalse(intColNode.isCoveredBy(bigintColNode));
+        Assertions.assertFalse(bigintColNode.isCoveredBy(intColNode));
+    }
+
+    @Test
+    public void testScanNodeWithoutRangePredicate() {
+        ScanNode noPredicate = createScanNode(null);
+        ScanNode rangePredicate = createScanNode(
+                createBinaryPredicate(colRef1, BinaryType.GE, ConstantOperator.createInt(10)));
+
+        Assertions.assertEquals(noPredicate, createScanNode(null));
+        Assertions.assertTrue(noPredicate.isCoveredBy(createScanNode(null)));
+        Assertions.assertNotEquals(noPredicate, rangePredicate);
+        Assertions.assertNotEquals(rangePredicate, noPredicate);
     }
 
     @Test
