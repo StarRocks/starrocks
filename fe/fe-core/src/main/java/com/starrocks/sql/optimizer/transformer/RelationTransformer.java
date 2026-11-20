@@ -65,11 +65,7 @@ import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.PivotAggregation;
->>>>>>> b6668e3 ([BugFix][RB-1380] Plan a subquery in a PIVOT measure once instead of once per pivot value (#83780))
 import com.starrocks.sql.ast.PivotRelation;
 import com.starrocks.sql.ast.QueryPeriod;
 import com.starrocks.sql.ast.QueryRelation;
