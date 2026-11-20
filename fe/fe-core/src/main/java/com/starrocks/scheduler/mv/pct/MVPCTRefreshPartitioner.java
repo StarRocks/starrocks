@@ -57,12 +57,6 @@ import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.common.PartitionDiff;
-import com.starrocks.sql.common.PartitionNameSetMap;
-import com.starrocks.sql.common.SyncPartitionUtils;
->>>>>>> 617734faa54... [Enhancement][RB-556] Look up partitions instead of scanning partition lists per partition (#70305)
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
@@ -186,54 +180,6 @@ public abstract class MVPCTRefreshPartitioner {
     }
 
     /**
-<<<<<<< HEAD
-=======
-     * Runs before sync drops anything, on the mv partitions it would drop and add back empty over base rows that still
-     * exist, as renaming a base partition does. Only a refresh that writes just what changed cannot fill them again.
-     */
-    public void setRecreatedPartitionsCheck(Consumer<PCellSortedSet> recreatedPartitionsCheck) {
-        this.recreatedPartitionsCheck = recreatedPartitionsCheck;
-    }
-
-    protected final void checkRecreatedPartitions(PCellSortedSet deletes, PCellSortedSet adds) {
-        PCellSortedSet recreated = PCellSortedSet.of();
-        Set<String> expired = null;
-        PartitionNameSetMap coveringAdds = SyncPartitionUtils.intersectSortedRanges(
-                List.copyOf(deletes.getPartitions()), List.copyOf(adds.getPartitions()));
-        for (PCellWithName dropped : deletes.getPartitions()) {
-            Set<String> covering = coveringAdds.get(dropped.name());
-            if (covering.isEmpty()) {
-                continue;
-            }
-            // An expired partition whose range comes back unchanged comes back expired, so retention drops it either way.
-            // Judged on the existing partitions: retention cannot judge an add before the drops, since pruning merges
-            // the add's range with the equal range of the partition it replaces.
-            if (covering.stream().allMatch(added -> adds.getPCell(added).equals(dropped.cell()))) {
-                if (expired == null) {
-                    expired = getExpiredPartitionsByRetention();
-                }
-                if (expired.contains(dropped.name())) {
-                    continue;
-                }
-            }
-            recreated.add(dropped);
-        }
-        if (!recreated.isEmpty()) {
-            recreatedPartitionsCheck.accept(recreated);
-        }
-    }
-
-    private Set<String> getExpiredPartitionsByRetention() {
-        String retentionCondition = mv.getTableProperty().getPartitionRetentionCondition();
-        if (Strings.isNullOrEmpty(retentionCondition)) {
-            return Set.of();
-        }
-        List<String> expired = getExpiredPartitionsByRetentionCondition(db, mv, retentionCondition);
-        return expired == null ? Set.of() : Set.copyOf(expired);
-    }
-
-    /**
->>>>>>> 617734faa54... [Enhancement][RB-556] Look up partitions instead of scanning partition lists per partition (#70305)
      * Generate partition predicate for mv refresh according ref base table changed partitions.
      *
      * @param refBaseTable:               ref base table to check.
