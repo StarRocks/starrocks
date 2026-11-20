@@ -567,6 +567,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // --------------------------- Limitations for Materialized View ------------------------------------ //
     public static final String OPTIMIZER_MATERIALIZED_VIEW_TIMELIMIT = "optimizer_materialized_view_timelimit";
+    public static final String OPTIMIZER_MATERIALIZED_VIEW_PREPROCESS_TIMELIMIT =
+            "optimizer_materialized_view_preprocess_timelimit";
     public static final String CBO_MATERIALIZED_VIEW_REWRITE_RULE_OUTPUT_LIMIT =
             "cbo_materialized_view_rewrite_rule_output_limit";
     public static final String CBO_MATERIALIZED_VIEW_REWRITE_CANDIDATE_LIMIT =
@@ -2078,6 +2080,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = OPTIMIZER_MATERIALIZED_VIEW_TIMELIMIT)
     private long optimizerMaterializedViewTimeLimitMillis = 1000;
+
+    /**
+     * Time budget (in milliseconds) for choosing SPJG candidate MVs (MVChooseCandidates) in the MV rewrite
+     * preprocessor. Once exhausted, the remaining related MVs are skipped without being validated, and the
+     * MVs validated so far are kept as candidates and prepared as usual.
+     * - positive: use the given value. It only takes effect if it is less than new_planner_optimize_timeout.
+     * - 0 (default) or negative: no limit
+     */
+    @VariableMgr.VarAttr(name = OPTIMIZER_MATERIALIZED_VIEW_PREPROCESS_TIMELIMIT)
+    private long optimizerMaterializedViewPreprocessTimeLimitMillis = 0;
 
     @VariableMgr.VarAttr(name = ENABLE_QUERY_DUMP)
     private boolean enableQueryDump = false;
@@ -5126,6 +5138,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setOptimizerMaterializedViewTimeLimitMillis(long millis) {
         this.optimizerMaterializedViewTimeLimitMillis = millis;
+    }
+
+    public long getOptimizerMaterializedViewPreprocessTimeLimitMillis() {
+        return optimizerMaterializedViewPreprocessTimeLimitMillis;
+    }
+
+    public void setOptimizerMaterializedViewPreprocessTimeLimitMillis(long millis) {
+        this.optimizerMaterializedViewPreprocessTimeLimitMillis = millis;
     }
 
     public boolean getEnableGroupbyUseOutputAlias() {
