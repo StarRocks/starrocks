@@ -103,6 +103,7 @@ import java.util.Stack;
 import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nonnull;
@@ -595,7 +596,10 @@ public abstract class FileSystem extends Configured
         }
 
         String disableCacheName = String.format("fs.%s.impl.disable.cache", scheme);
-        if (conf.getBoolean(disableCacheName, false)) {
+        // StarRocks: a Configuration carrying a credential fingerprint is keyed on it in the cache, so the
+        // disable flag - set for readers whose cache key ignores the credential - no longer applies.
+        if (conf.getBoolean(disableCacheName, false)
+                && HadoopExt.getInstance().getCredentialFingerprint(conf).isEmpty()) {
             LOGGER.debug("Bypassing cache to create filesystem {}", uri);
             return createFileSystem(uri, conf);
         }
@@ -3776,8 +3780,6 @@ public abstract class FileSystem extends Configured
         private final Set<Key> toAutoClose = new HashSet<>();
 
         /**
-<<<<<<< HEAD
-=======
          * StarRocks: last access time (ms) of every cached entry whose key carries a credential fingerprint
          * ({@link HadoopExt#HADOOP_DYNAMIC_CREDENTIAL_PREFIX}). A vended credential rotates, so each rotation
          * is a new key; without eviction the map would grow with every token. Explicit access scopes
@@ -3806,7 +3808,6 @@ public abstract class FileSystem extends Configured
         }
 
         /**
->>>>>>> b3ea3f5 ([BugFix] Reclaim idle Azure filesystem clients in Delta Lake (#83557))
          * Semaphore used to serialize creation of new FS instances.
          */
         private final Semaphore creatorPermits;
@@ -3868,9 +3869,12 @@ public abstract class FileSystem extends Configured
         private FileSystem getInternal(URI uri, Configuration conf, Key key)
                 throws IOException {
             FileSystem fs;
+            List<FileSystem> toClose;
             synchronized (this) {
-                fs = map.get(key);
+                fs = getAndTouch(key);
+                toClose = evictIdleCredentialEntries();
             }
+            closeEvicted(toClose);
             if (fs != null) {
                 return fs;
             }
@@ -3885,7 +3889,7 @@ public abstract class FileSystem extends Configured
                 // See if FS was instantiated by another thread while waiting
                 // for the permit.
                 synchronized (this) {
-                    fs = map.get(key);
+                    fs = getAndTouch(key);
                 }
                 if (fs != null) {
                     LOGGER.debug("Filesystem {} created while awaiting semaphore", uri);
@@ -3920,6 +3924,9 @@ public abstract class FileSystem extends Configured
                         // insert the new file system into the map
                         fs.key = key;
                         map.put(key, fs);
+                        if (key.isEvictable()) {
+                            credentialLastAccessMs.put(key, System.currentTimeMillis());
+                        }
                         if (conf.getBoolean(
                                 FS_AUTOMATIC_CLOSE_KEY, FS_AUTOMATIC_CLOSE_DEFAULT)) {
                             toAutoClose.add(key);
@@ -3953,8 +3960,6 @@ public abstract class FileSystem extends Configured
             return discardedInstances.get();
         }
 
-<<<<<<< HEAD
-=======
         /**
          * Must be called with the Cache lock held.
          */
@@ -4046,11 +4051,11 @@ public abstract class FileSystem extends Configured
             closeEvicted(toClose);
         }
 
->>>>>>> b3ea3f5 ([BugFix] Reclaim idle Azure filesystem clients in Delta Lake (#83557))
         synchronized void remove(Key key, FileSystem fs) {
             FileSystem cachedFs = map.remove(key);
             if (fs == cachedFs) {
                 toAutoClose.remove(key);
+                credentialLastAccessMs.remove(key);
             } else if (cachedFs != null) {
                 map.put(key, cachedFs);
             }
@@ -4090,6 +4095,7 @@ public abstract class FileSystem extends Configured
                 //remove from cache
                 map.remove(key);
                 toAutoClose.remove(key);
+                credentialLastAccessMs.remove(key);
 
                 if (fs != null) {
                     try {
@@ -4097,6 +4103,18 @@ public abstract class FileSystem extends Configured
                     } catch (IOException ioe) {
                         exceptions.add(ioe);
                     }
+                }
+            }
+
+            // StarRocks: evicted instances waiting to be closed were all cached with fs.automatic.close
+            // honored at insertion; close them with the rest.
+            List<PendingClose> pending = new ArrayList<>(pendingClose);
+            pendingClose.clear();
+            for (PendingClose p : pending) {
+                try {
+                    p.fs.close();
+                } catch (IOException ioe) {
+                    exceptions.add(ioe);
                 }
             }
 
@@ -4150,6 +4168,8 @@ public abstract class FileSystem extends Configured
             final UserGroupInformation ugi;
             final long unique;   // an artificial way to make a key unique
             final String cloudConf;
+            // StarRocks: credential fingerprint entries (HadoopExt.HADOOP_DYNAMIC_CREDENTIAL_PREFIX); "" when none.
+            final String credFingerprint;
 
             Key(URI uri, Configuration conf) throws IOException {
                 this(uri, conf, 0);
@@ -4165,11 +4185,16 @@ public abstract class FileSystem extends Configured
                 this.ugi = UserGroupInformation.getCurrentUser();
 
                 this.cloudConf = HadoopExt.getInstance().getCloudConfString(conf);
+                this.credFingerprint = HadoopExt.getInstance().getCredentialFingerprint(conf);
+            }
+
+            boolean isEvictable() {
+                return unique == 0 && !credFingerprint.isEmpty();
             }
 
             @Override
             public int hashCode() {
-                return (scheme + authority + cloudConf).hashCode() + ugi.hashCode() + (int) unique;
+                return (scheme + authority + cloudConf + credFingerprint).hashCode() + ugi.hashCode() + (int) unique;
             }
 
             static boolean isEqual(Object a, Object b) {
@@ -4186,6 +4211,7 @@ public abstract class FileSystem extends Configured
                     return isEqual(this.scheme, that.scheme)
                             && isEqual(this.authority, that.authority)
                             && isEqual(this.cloudConf, that.cloudConf)
+                            && isEqual(this.credFingerprint, that.credFingerprint)
                             && isEqual(this.ugi, that.ugi)
                             && (this.unique == that.unique);
                 }
@@ -4194,7 +4220,8 @@ public abstract class FileSystem extends Configured
 
             @Override
             public String toString() {
-                return "(ugi = " + ugi.toString() + ", cloudConf = " + cloudConf + ")@" + scheme + "://" + authority;
+                return "(ugi = " + ugi.toString() + ", cloudConf = " + cloudConf + ", credFingerprint = " + credFingerprint
+                        + ")@" + scheme + "://" + authority;
             }
         }
     }

@@ -26,7 +26,6 @@ import com.starrocks.connector.hive.IHiveMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.data.FilteredColumnarBatch;
-import io.delta.kernel.engine.FileReadResult;
 import io.delta.kernel.internal.ScanBuilderImpl;
 import io.delta.kernel.internal.ScanImpl;
 import io.delta.kernel.internal.SnapshotImpl;
@@ -323,12 +322,12 @@ public class DeltaLakeReadLifecycleTest {
         FileStatus status = FileStatus.of(path(local), Files.size(local), 0);
         int expectedRows = -1;
         for (boolean cached : new boolean[] {false, true}) {
-            try (CloseableIterator<FileReadResult> rows = engine(false).withFileSystemAccess(
+            try (CloseableIterator<ColumnarBatch> rows = engine(false).withFileSystemAccess(
                     engine(cached).getParquetHandler().readParquetFiles(
                         Utils.singletonCloseableIterator(status), LogReplay.getAddRemoveReadSchema(true), Optional.empty()))) {
                 int count = 0;
                 while (rows.hasNext()) {
-                    count += rows.next().getData().getSize();
+                    count += rows.next().getSize();
                 }
                 Assertions.assertTrue(count > 0);
                 if (expectedRows >= 0) {
@@ -384,7 +383,7 @@ public class DeltaLakeReadLifecycleTest {
                 Assertions.assertFalse(active());
                 Assertions.assertEquals(0, fs.openStreams);
             } finally {
-                metastore.releaseCaches();
+                metastore.invalidateAll();
             }
         }
     }
@@ -468,8 +467,8 @@ public class DeltaLakeReadLifecycleTest {
         Mockito.when(table.getColumns()).thenReturn(List.of());
         Mockito.when(metadata.getSchema()).thenReturn(new StructType());
         Mockito.when(metadata.getPartitionColNames()).thenReturn(Set.of());
-        Mockito.when(snapshot.getScanBuilder()).thenReturn(builder);
-        Mockito.when(builder.withFilter(Mockito.any())).thenReturn(builder);
+        Mockito.when(snapshot.getScanBuilder(engine)).thenReturn(builder);
+        Mockito.when(builder.withFilter(Mockito.eq(engine), Mockito.any())).thenReturn(builder);
         Mockito.when(builder.build()).thenReturn(scan);
         Mockito.when(scan.getScanFiles(engine, true)).thenAnswer(invocation -> {
             CloseableIterator<ColumnarBatch> rows = engine.getJsonHandler().readJsonFiles(
@@ -568,7 +567,7 @@ public class DeltaLakeReadLifecycleTest {
         java.nio.file.Path local = java.nio.file.Path.of(getClass().getClassLoader().getResource(
                 "connector/deltalake/00000000000000000030.checkpoint.parquet").toURI());
         FileStatus status = FileStatus.of(path(local), Files.size(local), 0);
-        try (CloseableIterator<FileReadResult> rows = engine(false).withFileSystemAccess(
+        try (CloseableIterator<ColumnarBatch> rows = engine(false).withFileSystemAccess(
                 engine(false).getParquetHandler().readParquetFiles(
                     Utils.singletonCloseableIterator(status), LogReplay.getAddRemoveReadSchema(true), Optional.empty()))) {
             Assertions.assertTrue(rows.hasNext());
@@ -579,7 +578,7 @@ public class DeltaLakeReadLifecycleTest {
             Assertions.assertFalse(fs.closed);
             int count = 0;
             while (rows.hasNext()) {
-                count += rows.next().getData().getSize();
+                count += rows.next().getSize();
             }
             Assertions.assertTrue(count > 0);
             Assertions.assertFalse(active());
@@ -603,7 +602,7 @@ public class DeltaLakeReadLifecycleTest {
                 Assertions.assertFalse(active());
                 Assertions.assertEquals(0, fs.openStreams);
             }
-            try (CloseableIterator<FileReadResult> rows = engine(false).withFileSystemAccess(
+            try (CloseableIterator<ColumnarBatch> rows = engine(false).withFileSystemAccess(
                     engine(cached).getParquetHandler().readParquetFiles(
                         Utils.singletonCloseableIterator(FileStatus.of(path, 3, 0)),
                         LogReplay.getAddRemoveReadSchema(true), Optional.empty()))) {
