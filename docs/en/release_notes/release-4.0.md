@@ -25,6 +25,62 @@ products: [oss]
 
 :::
 
+## 4.0.18
+
+Release Date: November 13, 2026
+
+### Improvements
+
+- Reduced metadata copying in shared-data Primary Key compaction by caching base-version metadata in the delete vector loader and skipping the `TabletMetadataPB` deep copy on a metacache hit. [#71905](https://github.com/StarRocks/starrocks/pull/71905) [#73071](https://github.com/StarRocks/starrocks/pull/73071)
+- Upgraded StarMgr and Starlet to v4.0.10. [#81507](https://github.com/StarRocks/starrocks/pull/81507)
+- Upgraded the FE ZooKeeper dependency to 3.9.6 for CVE-2026-59739, CVE-2026-59969, and CVE-2026-79993. [#81292](https://github.com/StarRocks/starrocks/pull/81292)
+- Buffered pass-through chunks are now accounted in query and process memory. [#80910](https://github.com/StarRocks/starrocks/pull/80910)
+- Lake compaction read buffers are now bounded by the per-worker memory budget. [#80229](https://github.com/StarRocks/starrocks/pull/80229)
+- The number of shards per batched `getShardInfo` call is now bounded. [#81197](https://github.com/StarRocks/starrocks/pull/81197)
+- Level `-1` rowset selection in Primary Key compaction is now bounded. [#80471](https://github.com/StarRocks/starrocks/pull/80471)
+
+### Bug fixes
+
+The following issues have been fixed:
+
+- Pass-through exchange kept appending chunks after the receiver was cancelled, and a use-after-free on `PassThroughChannel`. [#76603](https://github.com/StarRocks/starrocks/pull/76603) [#77088](https://github.com/StarRocks/starrocks/pull/77088)
+- Queries with several reused CTEs failed with `no executable plan for this sql` when the force-inline limit was hit, and a force-reused CTE that outputs one column under two names could crash the BE. [#77018](https://github.com/StarRocks/starrocks/pull/77018) [#80158](https://github.com/StarRocks/starrocks/pull/80158)
+- `SELECT DISTINCT` ordering by a column that the `DISTINCT` drops is now rejected. [#77217](https://github.com/StarRocks/starrocks/pull/77217)
+- Partition pruning issues: the NULL partition was dropped when pruning with a deduced partition predicate, and `IS NULL` on a partition key was looked up at the type minimum instead of below it. [#77596](https://github.com/StarRocks/starrocks/pull/77596) [#79257](https://github.com/StarRocks/starrocks/pull/79257)
+- Planner failures on a slot with no parent tuple, on order-by hints when the TopN filter probes a column-less slot, on unregistered dict operators in the scalar shuttle, and on an equality filter over a `VARBINARY` column. [#78050](https://github.com/StarRocks/starrocks/pull/78050) [#78527](https://github.com/StarRocks/starrocks/pull/78527) [#79310](https://github.com/StarRocks/starrocks/pull/79310) [#81310](https://github.com/StarRocks/starrocks/pull/81310)
+- Global dictionary issues: the dictionary was not invalidated after fast schema evolution, derived dictionaries were folded incorrectly, relaxed dictionaries were merged in signed byte order, and global dictionary expressions were lost when skew join v2 replaced the shuffle exchanges. [#78599](https://github.com/StarRocks/starrocks/pull/78599) [#78633](https://github.com/StarRocks/starrocks/pull/78633) [#78659](https://github.com/StarRocks/starrocks/pull/78659) [#78672](https://github.com/StarRocks/starrocks/pull/78672)
+- The BE aborted on an out-of-range vector-search query vector, on `DISTINCT` aggregation over a `PERCENTILE` value, on JSON numbers above `INT64_MAX`, and on an `array_generate` range too large to hold. These are now rejected or handled without aborting. [#78658](https://github.com/StarRocks/starrocks/pull/78658) [#78795](https://github.com/StarRocks/starrocks/pull/78795) [#78969](https://github.com/StarRocks/starrocks/pull/78969) [#80205](https://github.com/StarRocks/starrocks/pull/80205)
+- Driver partitioning was not aligned across `EXCEPT`/`INTERSECT` and hash join inputs, bucket shuffle join inputs the sender had already aligned were re-partitioned, and bucket properties were not carried with the partition type of a pipeline source. [#78920](https://github.com/StarRocks/starrocks/pull/78920) [#79769](https://github.com/StarRocks/starrocks/pull/79769) [#80099](https://github.com/StarRocks/starrocks/pull/80099)
+- Compaction crashed with SIGFPE when a vector-index rowset reported a negative `data_disk_size`. [#78959](https://github.com/StarRocks/starrocks/pull/78959)
+- ASOF join temporal conditions that do not compare the two sides are now rejected. [#79049](https://github.com/StarRocks/starrocks/pull/79049)
+- The `generate_series` arguments of the skew-join salt table were in the wrong order. [#79268](https://github.com/StarRocks/starrocks/pull/79268)
+- Spill issues: a failed spill append or partition split was lost, a queued spill data task ran when the spill channel was closed, a spiller's flush-all callback could run twice, and the spillable aggregate source did not guard against a released spiller. [#79457](https://github.com/StarRocks/starrocks/pull/79457) [#80252](https://github.com/StarRocks/starrocks/pull/80252) [#81134](https://github.com/StarRocks/starrocks/pull/81134) [#81199](https://github.com/StarRocks/starrocks/pull/81199)
+- Struct fields of aggregates were rejected in `GROUP BY` checks. [#79649](https://github.com/StarRocks/starrocks/pull/79649)
+- A Java UDAF merge that could not wrap its states returned NULL instead of failing. [#80098](https://github.com/StarRocks/starrocks/pull/80098)
+- Flat JSON issues: compaction did not keep scalar flat JSON sub-columns when it derived its read layout, so every compaction merged flat JSON back into whole JSON, and the path derivation trie was unbounded, which made loading JSON whose key names are data slow and memory-hungry. [#80295](https://github.com/StarRocks/starrocks/pull/80295) [#80316](https://github.com/StarRocks/starrocks/pull/80316)
+- An assertion on `append_selective_to` compared a selection with the wrong column size. [#80324](https://github.com/StarRocks/starrocks/pull/80324)
+- `tokenize()` returned one row for a constant argument instead of one row per input row. [#80337](https://github.com/StarRocks/starrocks/pull/80337)
+- Credentials in task run definitions archived to `task_run_history` are now masked. [#80447](https://github.com/StarRocks/starrocks/pull/80447)
+- `MIN` and `MAX` of a single-column LIST partition column were read off partition definitions and could return a value that no row holds. The previous results were wrong, so results change after the upgrade. [#80558](https://github.com/StarRocks/starrocks/pull/80558)
+- A query failed or crashed the BE when the scan predicate builder folded away the only conjunct on a scanned column, for example `WHERE b > 'X' OR c NOT IN ('Y', NULL)`. [#80572](https://github.com/StarRocks/starrocks/pull/80572)
+- The Iceberg REST catalog user agent is now built without `NodeMgr`, which fixes an NPE on the checkpoint thread. [#80660](https://github.com/StarRocks/starrocks/pull/80660)
+- `map_agg` with a decimal key aborted the BE. [#80673](https://github.com/StarRocks/starrocks/pull/80673)
+- A cast of a constant JSON or VARIANT value to MAP returned a one-row column, so aggregates such as `count()` over it returned wrong values and filters on it could abort the BE. The previous results were wrong, so results change after the upgrade. [#80679](https://github.com/StarRocks/starrocks/pull/80679)
+- With JSON subfield pruning on (the default), functions over `j->'$'` on a flat JSON column returned NULL for every row. The previous results were wrong, so results change after the upgrade. [#80772](https://github.com/StarRocks/starrocks/pull/80772)
+- The brpc future timeout contract was broken, which cancelled every EXPORT shortly after it started. [#80783](https://github.com/StarRocks/starrocks/pull/80783)
+- A memory leak when an agg-state combinator batch-destroyed, and a data race on a min/max runtime filter's bounds. [#81054](https://github.com/StarRocks/starrocks/pull/81054) [#81138](https://github.com/StarRocks/starrocks/pull/81138)
+- Iceberg issues: equality deletes were not scoped to their partition, several read-correctness issues (unknown transforms, ORC field ids, promoted bounds, unknown type, default values), follow-up read issues (unknown transforms in `SHOW CREATE TABLE`, `TIME`/`TIMESTAMPTZ` defaults, missing struct subfields, filters on default columns), reads and inserts on tables with partition evolution, and a column without a write-default was not written as NULL. [#81139](https://github.com/StarRocks/starrocks/pull/81139) [#81257](https://github.com/StarRocks/starrocks/pull/81257) [#81311](https://github.com/StarRocks/starrocks/pull/81311) [#81401](https://github.com/StarRocks/starrocks/pull/81401) [#81362](https://github.com/StarRocks/starrocks/pull/81362)
+- Materialized view (MV) refresh issues: MV partitions affected by a dropped base partition were not refreshed when they fell into a later refresh batch or outside a partial refresh range, and after the MV's version map was reset (for example, by an inactivation, a recreated base table, or `REFRESH ON_CHANGE`), MV partitions over emptied base partitions were not refreshed. Such MVs could keep stale rows, which the next refresh corrects. [#81187](https://github.com/StarRocks/starrocks/pull/81187) [#81192](https://github.com/StarRocks/starrocks/pull/81192)
+- Shared-data Primary Key recover issues: other lookups in the same publish still read the delete vectors that recover discarded, a multi-statement transaction's batch apply was not recovered on a Primary Key inconsistency, and del files inherited by compaction were replayed after recover. These could leave two live rows for one key. [#81204](https://github.com/StarRocks/starrocks/pull/81204) [#81206](https://github.com/StarRocks/starrocks/pull/81206) [#81250](https://github.com/StarRocks/starrocks/pull/81250)
+- `bool_or` did not handle NULLs in its intermediate column when merging, for example when aggregate spill is forced. [#81237](https://github.com/StarRocks/starrocks/pull/81237)
+- The time zone direction of Trino `TIMESTAMP WITH TIME ZONE` literals was swapped. The previous results were wrong, so results change after the upgrade. [#81256](https://github.com/StarRocks/starrocks/pull/81256)
+- The `Can not active materialized view` message was lost when activation failed. [#81258](https://github.com/StarRocks/starrocks/pull/81258)
+- `CAST` from a double or float to `DECIMAL` returned different last digits on aarch64 than on x86. Results on aarch64 change after the upgrade. [#81261](https://github.com/StarRocks/starrocks/pull/81261)
+- `convert_tz` returned an invalid value when the result left the `DATETIME` range. It now returns NULL, so results change after the upgrade. [#81264](https://github.com/StarRocks/starrocks/pull/81264)
+- Concurrent queries failed to re-plan when a shared-data schema change swapped indexes, because `lastSchemaUpdateTime` was bumped too late. [#81363](https://github.com/StarRocks/starrocks/pull/81363)
+- `SELECT` could not be granted on views and materialized views in the Ranger service definition. [#81400](https://github.com/StarRocks/starrocks/pull/81400)
+- `UnionToValuesRule` ignored the order of values outputs when merging a union. [#81420](https://github.com/StarRocks/starrocks/pull/81420)
+
 ## 4.0.17
 
 Release Date: October 24, 2026
