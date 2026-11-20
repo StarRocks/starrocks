@@ -18,6 +18,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.View;
@@ -39,6 +40,7 @@ import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
@@ -465,6 +467,32 @@ public class PlannerMetaLocker implements AutoCloseable {
         return new Pair<>(db, table);
     }
 
+    /**
+     * The base table behind a {@code [_SYNC_MV_]} relation, found the way {@code QueryAnalyzer} finds it: by the
+     * index name, among the indexes of the database's olap tables. Null when nothing matches -- the analyzer reports
+     * that -- or when the table is not a lock target.
+     *
+     * <p>Like {@link #resolveTable} this runs before the lock is taken. The lock does not keep an index name from
+     * moving to another table, but {@code StatementPlanner#copyOlapTablesAndUnlock} resolves the names again once
+     * it holds the lock and fails the statement when they no longer match; and with the base table locked, its
+     * indexes cannot change under the planner.
+     */
+    private static Pair<Database, Table> resolveSyncMVBaseTable(ConnectContext session, TableName indexName) {
+        TableName qualified = qualify(session, indexName);
+        if (qualified == null || !CatalogMgr.isInternalCatalog(qualified.getCatalog())) {
+            return null;
+        }
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(qualified.getDb());
+        if (db == null) {
+            return null;
+        }
+        Pair<Table, MaterializedIndexMeta> index = db.getMaterializedViewIndex(qualified.getTbl());
+        if (index == null || index.first == null || !index.first.isMetaLockTarget()) {
+            return null;
+        }
+        return new Pair<>(db, index.first);
+    }
+
     private static class TableCollector extends AstTraverser<Void, Void> {
         private final ConnectContext session;
 
@@ -604,7 +632,20 @@ public class PlannerMetaLocker implements AutoCloseable {
 
         @Override
         public Void visitSelect(SelectRelation node, Void context) {
-            withCtes(node.getCteRelations(), () -> super.visitSelect(node, context));
+            withCtes(node.getCteRelations(), () -> {
+                super.visitSelect(node, context);
+                // super walks the select list as the output expressions analysis fills in. Before analysis they
+                // are not there yet, and a subquery in the select list -- the only place a table is read in a
+                // SELECT without FROM -- would be missed: planned on the slow path by re-locking, and analyzed
+                // without its lock, which matters for a [_SYNC_MV_] read, copied by the analyzer itself.
+                if (node.getOutputExpression() == null && node.getSelectList() != null) {
+                    for (SelectListItem item : node.getSelectList().getItems()) {
+                        if (item.getExpr() != null) {
+                            visit(item.getExpr(), context);
+                        }
+                    }
+                }
+            });
             return null;
         }
 
@@ -657,6 +698,14 @@ public class PlannerMetaLocker implements AutoCloseable {
                 return null;
             }
             noteExternalTablePolicy(node);
+            if (node.isSyncMVQuery()) {
+                // [_SYNC_MV_] names a materialized index, not a table: resolving it as a table finds nothing, which
+                // left the base table the analyzer copies out of the lock set -- copied unlocked on the fast path,
+                // and failing the coverage check in StatementPlanner#copyOlapTablesAndUnlock on the slow one.
+                // A base table is never a view, and policies are not applied to a [_SYNC_MV_] read.
+                put(resolveSyncMVBaseTable(session, node.getName()));
+                return null;
+            }
             Pair<Database, Table> dbAndTable = resolveTable(session, node.getName());
             put(dbAndTable);
             if (dbAndTable == null) {

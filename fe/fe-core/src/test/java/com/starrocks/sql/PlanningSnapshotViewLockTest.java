@@ -62,6 +62,9 @@ public class PlanningSnapshotViewLockTest extends ConnectorPlanTestBase {
     private static final String CONNECTOR_TABLE = "hive0.partitioned_db.lineitem_par";
     private static final String VIEW = "test.v_snapshot_lock";
     private static final String NESTED_VIEW = "test.v_snapshot_lock_outer";
+    // A [_SYNC_MV_] read names the index, not its base table, and the analyzer copies the base table itself.
+    private static final String SYNC_MV_BASE = "t_sync_mv_snapshot_lock";
+    private static final String SYNC_MV = "mv_sync_snapshot_lock";
 
     private final Set<String> copied = new CopyOnWriteArraySet<>();
     private final List<String> copiedWithoutLock = new CopyOnWriteArrayList<>();
@@ -70,6 +73,11 @@ public class PlanningSnapshotViewLockTest extends ConnectorPlanTestBase {
     public static void createViews() throws Exception {
         starRocksAssert.withView("CREATE VIEW " + VIEW + " AS SELECT v1, v2, v3 FROM test.t0");
         starRocksAssert.withView("CREATE VIEW " + NESTED_VIEW + " AS SELECT v1, v2, v3 FROM " + VIEW);
+        starRocksAssert.useDatabase("test");
+        starRocksAssert.withTable("CREATE TABLE " + SYNC_MV_BASE + " (k1 INT NOT NULL, k2 INT NOT NULL, v1 INT) "
+                + "DUPLICATE KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1')");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + SYNC_MV
+                + " AS SELECT k1, sum(v1) FROM " + SYNC_MV_BASE + " GROUP BY k1");
     }
 
     @BeforeEach
@@ -108,7 +116,7 @@ public class PlanningSnapshotViewLockTest extends ConnectorPlanTestBase {
 
     private void assertNothingLeftLocked(String sql) {
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
-        for (String name : List.of("t0", "t1", "tprimary", "v_snapshot_lock", "v_snapshot_lock_outer")) {
+        for (String name : List.of("t0", "t1", "tprimary", "v_snapshot_lock", "v_snapshot_lock_outer", SYNC_MV_BASE)) {
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", name);
             Assertions.assertFalse(lockManager.isOwnedByCurrentThread(table.getId(), LockType.READ),
                     name + " is still read-locked after planning: " + sql);
@@ -293,6 +301,48 @@ public class PlanningSnapshotViewLockTest extends ConnectorPlanTestBase {
             throw new RuntimeException(e);
         }
         Assertions.assertNull(failure.get(), String.valueOf(failure.get()));
+    }
+
+    /** The analyzer copies the base table behind a [_SYNC_MV_] read: the lock taken before analysis has to cover it. */
+    @Test
+    public void testSyncMVReadLocksItsBaseTable() throws Exception {
+        AtomicInteger reLocks = countReLocks();
+        assertEveryCopyWasLockedOf("SELECT count(*) FROM test." + SYNC_MV + " [_SYNC_MV_]", SYNC_MV_BASE);
+        Assertions.assertEquals(0, reLocks.get());
+    }
+
+    /**
+     * #81799: in a SELECT without FROM, the tables are read only by the subqueries of the select list. They are
+     * locked before analysis, so the statement is not planned by taking the whole set again -- where the base table
+     * of the [_SYNC_MV_] read used to be missing and failed it with "dropped or replaced".
+     */
+    @Test
+    public void testSyncMVReadInTheSelectListOfASelectWithoutFrom() throws Exception {
+        AtomicInteger reLocks = countReLocks();
+        assertEveryCopyWasLockedOf("SELECT (SELECT count(*) FROM test." + SYNC_MV + " [_SYNC_MV_]) = "
+                + "(SELECT count(*) FROM test.t1)", SYNC_MV_BASE);
+        Assertions.assertEquals(0, reLocks.get());
+    }
+
+    /**
+     * When the whole set is taken again, the names are resolved again under the lock, and they have to cover every
+     * table the statement copies -- the base table of a [_SYNC_MV_] read included. Pretend the lock taken before
+     * analysis covered nothing, as in {@link #testATableAnalysisBroughtInIsLockedByTakingTheWholeSetAgain}.
+     */
+    @Test
+    public void testSyncMVReadIsCoveredWhenTheWholeSetIsTakenAgain() throws Exception {
+        new MockUp<PlannerMetaLocker>() {
+            @Mock
+            public PlannerMetaLocker forTablesNotLockedOf(Invocation invocation, ConnectContext session,
+                                                          StatementBase analyzedStatement) {
+                PlannerMetaLocker locker = invocation.getInvokedInstance();
+                return locker.forAllTablesOf(session, analyzedStatement);
+            }
+        };
+        AtomicInteger reLocks = countReLocks();
+        assertEveryCopyWasLockedOf("SELECT * FROM test.t1 WHERE v4 = "
+                + "(SELECT count(*) FROM test." + SYNC_MV + " [_SYNC_MV_])", SYNC_MV_BASE);
+        Assertions.assertEquals(1, reLocks.get());
     }
 
     /** A view does not take the whole set again: the lock taken before analysis already covers its base tables. */
