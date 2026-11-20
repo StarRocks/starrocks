@@ -466,10 +466,12 @@ public class FunctionSet {
     public static final String ARRAY_REMOVE = "array_remove";
     public static final String ARRAY_FILTER = "array_filter";
     public static final String ARRAY_SORTBY = "array_sortby";
+    public static final String ARRAY_TOP_N = "array_top_n";
     public static final String ANY_MATCH = "any_match";
     public static final String ALL_MATCH = "all_match";
 
     public static final String ARRAY_GENERATE = "array_generate";
+    public static final String ARRAY_REPEAT = "array_repeat";
 
     public static final String ARRAY_TO_BITMAP = "array_to_bitmap";
     public static final String ARRAY_FLATTEN = "array_flatten";
