@@ -192,11 +192,16 @@ static const GeoColumn* check_geo_leaf(const Column* column, const GeoTypeDescri
 }
 
 TEST_F(FunctionHelperTest, testCreateColumnSpecialTypes) {
+    const auto geography = TypeDescriptor::create_geo_type(
+            TYPE_GEOGRAPHY, {GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL, GEO_EDGE_ALGORITHM_SPHERICAL,
+                             "OGC:CRS84", 4326});
+    const auto geometry = TypeDescriptor::create_geo_type(
+            TYPE_GEOMETRY,
+            {GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857});
     for (const auto& type :
          {TypeDescriptor(TYPE_NULL),
           TypeDescriptor::create_map_type(TypeDescriptor(TYPE_UNKNOWN), TypeDescriptor(TYPE_UNKNOWN)),
-          TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 35, 7), TypeDescriptor(TYPE_GEOGRAPHY),
-          TypeDescriptor(TYPE_GEOMETRY)}) {
+          TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 35, 7), geography, geometry}) {
         for (bool nullable : {false, true}) {
             auto column = FunctionHelper::create_column(type, nullable);
             EXPECT_EQ(nullable, column->is_nullable());
@@ -214,7 +219,7 @@ TEST_F(FunctionHelperTest, testCreateColumnSpecialTypes) {
                 EXPECT_EQ(35, down_cast<Decimal128Column*>(data)->precision());
                 EXPECT_EQ(7, down_cast<Decimal128Column*>(data)->scale());
             } else {
-                check_geo_leaf(column.get(), {});
+                check_geo_leaf(column.get(), *type.geo_type);
             }
             column->check_or_die();
         }
@@ -349,16 +354,18 @@ protected:
             auto wrong = ColumnHelper::create_column(wrong_type, false);
             auto intermediate = ColumnHelper::create_column(map_type, false);
             function->convert_to_serialize_format(ctx.get(), {keys, source}, source->size(), intermediate);
+#ifndef NDEBUG
+            testing::FLAGS_gtest_death_test_style = "threadsafe";
             if (path < 2) {
                 auto wrong_ctx = context(wrong_type, {TypeDescriptor(KT), wrong_type.children[1]});
                 auto wrong_state = ManagedAggrState::create(wrong_ctx.get(), function);
                 const Column* columns[] = {keys.get(), source.get()};
                 if (path == 0)
-                    EXPECT_THROW(function->update(wrong_ctx.get(), columns, wrong_state->state(), 0),
-                                 std::invalid_argument);
+                    EXPECT_DEATH(function->update(wrong_ctx.get(), columns, wrong_state->state(), 0),
+                                 "descriptor mismatch");
                 else
-                    EXPECT_THROW(function->merge(wrong_ctx.get(), intermediate.get(), wrong_state->state(), 0),
-                                 std::invalid_argument);
+                    EXPECT_DEATH(function->merge(wrong_ctx.get(), intermediate.get(), wrong_state->state(), 0),
+                                 "descriptor mismatch");
             } else {
                 auto* data = reinterpret_cast<MapAggState<KT>*>(state->state());
                 data->value_column->append(*source, 0, 1);
@@ -367,12 +374,13 @@ protected:
                 else
                     data->hash_map.emplace(Slice("b"), 0);
                 if (path == 3)
-                    EXPECT_THROW(function->finalize_to_column(ctx.get(), state->state(), wrong.get()),
-                                 std::invalid_argument);
+                    EXPECT_DEATH(function->finalize_to_column(ctx.get(), state->state(), wrong.get()),
+                                 "descriptor mismatch");
                 else
-                    EXPECT_THROW(function->serialize_to_column(ctx.get(), state->state(), wrong.get()),
-                                 std::invalid_argument);
+                    EXPECT_DEATH(function->serialize_to_column(ctx.get(), state->state(), wrong.get()),
+                                 "descriptor mismatch");
             }
+#endif
         }
     }
     void check_array_conversion() {
@@ -416,9 +424,12 @@ protected:
             while (!leaf->children.empty()) leaf = &leaf->children[0];
             leaf->geo_type->crs = "custom:incompatible";
             auto wrong = ColumnHelper::create_column(wrong_type, true);
+#ifndef NDEBUG
+            testing::FLAGS_gtest_death_test_style = "threadsafe";
             auto source = physical_input(arg, 0);
-            EXPECT_THROW(function->convert_to_serialize_format(ctx.get(), {source}, source->size(), wrong),
-                         std::invalid_argument);
+            EXPECT_DEATH(function->convert_to_serialize_format(ctx.get(), {source}, source->size(), wrong),
+                         "descriptor mismatch");
+#endif
         }
     }
     void check_aggregate(const char* name) {
@@ -478,8 +489,11 @@ TEST_P(GeoFunctionHelperTest, CreateColumns) {
     EXPECT_EQ(point, check_geo_leaf(result.get(), *type.geo_type)->get_wkb(0).to_string());
     auto other = type;
     other.geo_type->crs = "custom:incompatible";
+#ifndef NDEBUG
+    testing::FLAGS_gtest_death_test_style = "threadsafe";
     auto incompatible = ColumnHelper::create_column(other, false);
-    EXPECT_THROW(incompatible->append(*result), std::invalid_argument);
+    EXPECT_DEATH(incompatible->append(*result), "descriptor mismatch");
+#endif
 }
 
 TEST_P(GeoFunctionHelperTest, ArrayAgg) {

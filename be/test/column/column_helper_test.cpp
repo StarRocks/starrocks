@@ -348,6 +348,20 @@ TEST_F(ColumnHelperTest, update_nested_has_null_struct) {
     EXPECT_FALSE(b_col->has_null());
 }
 
+#ifndef NDEBUG
+TEST(ColumnHelperDeathTest, create_geo_requires_descriptor) {
+    testing::FLAGS_gtest_death_test_style = "threadsafe";
+    for (const auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
+        EXPECT_DEATH((void)ColumnHelper::create_column(TypeDescriptor(primitive), false), "geo_type");
+        TypeDescriptor mismatched(primitive);
+        mismatched.geo_type = GeoTypeDescriptor{};
+        mismatched.geo_type->logical_type =
+                primitive == TYPE_GEOGRAPHY ? GEO_LOGICAL_TYPE_GEOMETRY : GEO_LOGICAL_TYPE_GEOGRAPHY;
+        EXPECT_DEATH((void)ColumnHelper::create_column(mismatched, false), "Check failed");
+    }
+}
+#endif
+
 TEST_F(ColumnHelperTest, create_geo_placeholder_and_copy) {
     for (const auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
         const auto type = geo_type(primitive);
@@ -376,28 +390,6 @@ TEST_F(ColumnHelperTest, create_geo_placeholder_and_copy) {
         ASSERT_NE(nullptr, destination_geo);
         EXPECT_EQ(geo->descriptor(), destination_geo->descriptor());
         EXPECT_EQ("payload", destination_geo->get_wkb(0).to_string());
-    }
-}
-
-TEST_F(ColumnHelperTest, create_geo_does_not_infer_metadata) {
-    for (const auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
-        TypeDescriptor type(primitive);
-        auto absent = ColumnHelper::create_column(type, false);
-        const auto* absent_geo = dynamic_cast<const GeoColumn*>(absent.get());
-        ASSERT_NE(nullptr, absent_geo);
-        const auto& descriptor = absent_geo->descriptor().type;
-        EXPECT_EQ(GEO_LOGICAL_TYPE_UNKNOWN, descriptor.logical_type);
-        EXPECT_EQ(GEO_COORDINATE_SYSTEM_UNKNOWN, descriptor.coordinate_system);
-        EXPECT_EQ(GEO_EDGE_ALGORITHM_UNKNOWN, descriptor.edge_algorithm);
-        EXPECT_TRUE(descriptor.crs.empty());
-        EXPECT_FALSE(descriptor.srid.has_value());
-
-        type.geo_type = GeoTypeDescriptor{};
-        auto empty = ColumnHelper::create_column(type, false);
-        const auto* empty_geo = dynamic_cast<const GeoColumn*>(empty.get());
-        ASSERT_NE(nullptr, empty_geo);
-        EXPECT_EQ(*type.geo_type, empty_geo->descriptor().type);
-        EXPECT_EQ(GEO_LOGICAL_TYPE_UNKNOWN, empty_geo->descriptor().type.logical_type);
     }
 }
 

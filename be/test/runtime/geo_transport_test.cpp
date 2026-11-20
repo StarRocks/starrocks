@@ -635,7 +635,9 @@ TEST(GeoTransportTest, EmptyArrayCopiesPreserveStorageThroughTransport) {
     check_empty_array_transport(true);
 }
 
-TEST(GeoTransportTest, RejectsConflictingReceiverPrimitive) {
+#ifndef NDEBUG
+TEST(GeoTransportDeathTest, RejectsConflictingReceiverPrimitive) {
+    testing::FLAGS_gtest_death_test_style = "threadsafe";
     auto column = GeoColumn::create(descriptor());
     column->append_wkb(Slice(point()));
     Chunk chunk;
@@ -650,8 +652,9 @@ TEST(GeoTransportTest, RejectsConflictingReceiverPrimitive) {
     meta.slot_id_to_index[1] = 0;
     ProtobufChunkDeserializer reader(meta);
     // The typed column constructor rejects inconsistent metadata before decoding.
-    EXPECT_THROW((void)reader.deserialize(wire->data()), std::invalid_argument);
+    EXPECT_DEATH((void)reader.deserialize(wire->data()), "Check failed");
 }
+#endif
 
 // Opt-in reproducible microbenchmark; report timings, never enforce machine-dependent thresholds.
 TEST(GeoTransportTest, DISABLED_TransportBenchmark) {
