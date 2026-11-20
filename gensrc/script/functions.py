@@ -236,6 +236,9 @@ vectorized_functions = [
     [10358, '__iceberg_transform_bucket', True, False, 'INT', ['DECIMAL128', 'INT'], 'MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL128>'],
 
 
+    [10360, '__paimon_bucket', False, False, 'INT', ['VARCHAR', 'ANY_STRUCT'], 'PaimonFunctions::bucket',
+     'PaimonFunctions::prepare', 'PaimonFunctions::close'],
+
     # 20xxx: bit functions
     [20010, 'bitand', True, False, 'TINYINT', ['TINYINT', 'TINYINT'], "BitFunctions::bitAnd<TYPE_TINYINT>"],
     [20011, 'bitand', True, False, 'SMALLINT', ['SMALLINT', 'SMALLINT'], "BitFunctions::bitAnd<TYPE_SMALLINT>"],
