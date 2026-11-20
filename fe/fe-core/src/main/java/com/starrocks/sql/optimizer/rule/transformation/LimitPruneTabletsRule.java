@@ -30,7 +30,9 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 // For SQL select * from table limit x, we could only query a few of tablets
 public class LimitPruneTabletsRule extends TransformationRule {
@@ -40,13 +42,49 @@ public class LimitPruneTabletsRule extends TransformationRule {
 
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
-        LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) input.getOp();
+        return canPruneByLimit((LogicalOlapScanOperator) input.getOp());
+    }
+
+    // Whether the scan may read only the first tablets whose rows cover its limit. DistributionPruneRule keeps such a
+    // narrowed tablet set instead of restoring every tablet, see there.
+    static boolean canPruneByLimit(LogicalOlapScanOperator olapScanOperator) {
         OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
         // For other key models, Other key models where the number of tablet rows does not
         // represent the true number of rows of data (need sorted aggregation)
         return olapTable.getKeysType() == KeysType.DUP_KEYS && olapScanOperator.getPredicate() == null &&
                 olapScanOperator.hasLimit() &&
                 olapScanOperator.getHintsTabletIds().isEmpty() && !olapTable.hasDelete();
+    }
+
+    // Whether the selected tablets of the scan hold at least as many rows as its limit, i.e. the set is one this rule
+    // would keep.
+    static boolean selectedTabletsCoverLimit(LogicalOlapScanOperator olapScanOperator) {
+        OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
+        Set<Long> selected = new HashSet<>(olapScanOperator.getSelectedTabletId());
+        long limit = olapScanOperator.getLimit();
+        long totalRow = 0;
+        for (Long partitionId : olapScanOperator.getSelectedPartitionId()) {
+            Partition partition = olapTable.getPartition(partitionId);
+            if (partition == null) {
+                continue;
+            }
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                long version = physicalPartition.getVisibleVersion();
+                MaterializedIndex index = physicalPartition.getQueryableIndex(olapScanOperator.getSelectedIndexMetaId());
+                if (index == null) {
+                    continue;
+                }
+                for (Tablet tablet : index.getTablets()) {
+                    if (selected.contains(tablet.getId())) {
+                        totalRow += tablet.getRowCount(version);
+                        if (totalRow >= limit) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     @Override
