@@ -251,7 +251,7 @@ StatusOr<bool> RawColumnReader::_row_group_zone_map_filter(const std::vector<con
         if (st.ok()) {
             st = StatisticsHelper::decode_min_max_into_columns(min_column, max_column, min_values, max_values,
                                                                null_pages, col_type, get_column_parquet_field(),
-                                                               _opts.timezone);
+                                                               _opts.timezone, legacy_calendar());
             RETURN_IF(!st.ok(), filtered);
 
             zone_map_detail = ZoneMapDetail{min_column->get(0), max_column->get(0), has_null};
@@ -319,9 +319,9 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
 
     MutableColumnPtr min_column = ColumnHelper::create_column(col_type, true);
     MutableColumnPtr max_column = ColumnHelper::create_column(col_type, true);
-    auto st = StatisticsHelper::decode_min_max_into_columns(min_column, max_column, column_index.min_values,
-                                                            column_index.max_values, null_pages, col_type,
-                                                            get_column_parquet_field(), _opts.timezone);
+    auto st = StatisticsHelper::decode_min_max_into_columns(
+            min_column, max_column, column_index.min_values, column_index.max_values, null_pages, col_type,
+            get_column_parquet_field(), _opts.timezone, legacy_calendar());
     if (!st.ok()) {
         // swallow error status
         LOG(INFO) << "Error when decode min/max statistics, type " << col_type.debug_string();
