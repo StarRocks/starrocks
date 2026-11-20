@@ -14,6 +14,7 @@
 
 package com.starrocks.authorization.ranger.hive;
 
+<<<<<<< HEAD
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
@@ -22,10 +23,17 @@ import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.authorization.ranger.RangerAccessController;
 import com.starrocks.catalog.Column;
 import com.starrocks.qe.ConnectContext;
+=======
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.authorization.ranger.RangerAccessController;
+import com.starrocks.authorization.ranger.RangerAccessResourceBuilder;
+import com.starrocks.catalog.TableName;
+import com.starrocks.qe.ConnectContext;
+import org.apache.ranger.plugin.policyengine.RangerAccessResourceImpl;
+>>>>>>> a4341b3 ([BugFix] Audit Ranger row-filter and masking hits, and keep the SELECT check when a scan is optimized away (#83212))
 
-import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 public class RangerHiveAccessController extends RangerAccessController {
     public RangerHiveAccessController(String serviceName) {
@@ -92,6 +100,7 @@ public class RangerHiveAccessController extends RangerAccessController {
     }
 
     @Override
+<<<<<<< HEAD
     public Map<String, Expr> getColumnMaskingPolicy(ConnectContext context, TableName tableName, List<Column> columns) {
         Map<String, Expr> maskingExprMap = Maps.newHashMap();
         for (Column column : columns) {
@@ -112,8 +121,20 @@ public class RangerHiveAccessController extends RangerAccessController {
     public Expr getRowAccessPolicy(ConnectContext context, TableName tableName) {
         return getRowAccessExpression(RangerHiveResource.builder()
                 .setDatabase(tableName.getDb())
+=======
+    protected RangerAccessResourceImpl tableResource(TableName tableName) {
+        return resourceOf(tableName.getCatalog(), tableName.getDb())
                 .setTable(tableName.getTbl())
-                .build(), context);
+                .build();
+    }
+
+    @Override
+    protected RangerAccessResourceImpl columnResource(TableName tableName, String column) {
+        return resourceOf(tableName.getCatalog(), tableName.getDb())
+>>>>>>> a4341b3 ([BugFix] Audit Ranger row-filter and masking hits, and keep the SELECT check when a scan is optimized away (#83212))
+                .setTable(tableName.getTbl())
+                .setColumn(column)
+                .build();
     }
 
     @Override

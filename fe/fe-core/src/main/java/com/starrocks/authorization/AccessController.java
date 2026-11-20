@@ -189,6 +189,43 @@ public interface AccessController {
         return null;
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * The two lookups above for a caller that only wants to know what the policies read -- the planner's unlocked
+     * pre-pass, which locks the tables a policy references and then leaves applying it to the analyzer. A controller
+     * that audits a policy lookup (Ranger records a policy hit as an audit event) must not audit these, or the one
+     * query is audited twice. The defaults forward to the lookups above, which audit nothing.
+     */
+    default Map<String, Expr> getColumnMaskingPolicyWithoutAudit(ConnectContext context, TableName tableName,
+                                                                 List<Column> columns) {
+        return getColumnMaskingPolicy(context, tableName, columns);
+    }
+
+    default Expr getRowAccessPolicyWithoutAudit(ConnectContext context, TableName tableName) {
+        return getRowAccessPolicy(context, tableName);
+    }
+
+    /**
+     * Whether a row access or column masking policy may apply to {@code tableName}, answered without asking the
+     * catalog. The planner resolves an external table before the meta lock is taken when this says yes, so that the
+     * tables its policies read can be locked; a controller that serves policies must not say no for a table it may
+     * have one for. The default matches the default lookups above, which have none.
+     */
+    default boolean mayHavePolicy(ConnectContext context, TableName tableName) {
+        return false;
+    }
+
+    /**
+     * Called by the unlocked analysis pre-pass for each external table it resolved, before the meta lock is
+     * taken. A controller whose {@link #getColumnMaskingPolicy} / {@link #getRowAccessPolicy} would otherwise
+     * ask the catalog again -- under the lock, since those run during analysis -- can do that asking here. Must
+     * not change the outcome of either lookup, nor throw: anything it cannot do is left to them.
+     */
+    default void preResolvePolicyTarget(ConnectContext context, TableName tableName, Table table) {
+    }
+
+>>>>>>> a4341b3 ([BugFix] Audit Ranger row-filter and masking hits, and keep the SELECT check when a scan is optimized away (#83212))
     default void checkWarehouseAction(ConnectContext context, String name, PrivilegeType privilegeType)
             throws AccessDeniedException {
         throw new AccessDeniedException();

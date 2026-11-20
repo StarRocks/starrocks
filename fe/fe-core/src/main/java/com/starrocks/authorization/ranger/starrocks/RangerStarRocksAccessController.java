@@ -14,24 +14,27 @@
 
 package com.starrocks.authorization.ranger.starrocks;
 
+<<<<<<< HEAD
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
+=======
+>>>>>>> a4341b3 ([BugFix] Audit Ranger row-filter and masking hits, and keep the SELECT check when a scan is optimized away (#83212))
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.authorization.ranger.RangerAccessController;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.UserIdentity;
+=======
+>>>>>>> a4341b3 ([BugFix] Audit Ranger row-filter and masking hits, and keep the SELECT check when a scan is optimized away (#83212))
 import com.starrocks.sql.ast.pipe.PipeName;
-
-import java.util.List;
-import java.util.Map;
+import org.apache.ranger.plugin.policyengine.RangerAccessResourceImpl;
 
 import static java.util.Locale.ENGLISH;
 
@@ -448,6 +451,7 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     }
 
     @Override
+<<<<<<< HEAD
     public Map<String, Expr> getColumnMaskingPolicy(ConnectContext context, TableName tableName, List<Column> columns) {
         Map<String, Expr> maskingExprMap = Maps.newHashMap();
         for (Column column : columns) {
@@ -468,10 +472,24 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     @Override
     public Expr getRowAccessPolicy(ConnectContext context, TableName tableName) {
         return getRowAccessExpression(RangerStarRocksResource.builder()
+=======
+    protected RangerAccessResourceImpl tableResource(TableName tableName) {
+        return RangerStarRocksResource.builder()
+>>>>>>> a4341b3 ([BugFix] Audit Ranger row-filter and masking hits, and keep the SELECT check when a scan is optimized away (#83212))
                 .setCatalog(tableName.getCatalog())
                 .setDatabase(tableName.getDb())
                 .setTable(tableName.getTbl())
-                .build(), context);
+                .build();
+    }
+
+    @Override
+    protected RangerAccessResourceImpl columnResource(TableName tableName, String column) {
+        return RangerStarRocksResource.builder()
+                .setCatalog(tableName.getCatalog())
+                .setDatabase(tableName.getDb())
+                .setTable(tableName.getTbl())
+                .setColumn(column)
+                .build();
     }
 
     @Override
