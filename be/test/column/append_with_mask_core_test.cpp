@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "base/simd/filter.h"
+#include "column/adaptive_nullable_column.h"
 #include "column/append_with_mask.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -827,6 +828,109 @@ TEST(AppendWithMaskCoreTest, tightlyReservedDestinationAndNullableMaskedAppendWi
                 }
             }
         }
+    }
+}
+
+TEST(AppendWithMaskCoreTest, appendAdaptiveNullableColumnToNullableColumn) {
+    // 1. Materialised AdaptiveNullableColumn with mixed NULL and non-NULL rows
+    {
+        auto src = AdaptiveNullableColumn::create(Int32Column::create(), NullColumn::create());
+        src->append_datum(Datum(static_cast<int32_t>(10)));
+        src->append_nulls(1);
+        src->append_datum(Datum(static_cast<int32_t>(30)));
+        src->append_nulls(1);
+        src->append_datum(Datum(static_cast<int32_t>(50)));
+        ASSERT_EQ(AdaptiveNullableColumn::State::kMaterialized, src->state());
+
+        const uint8_t partial_mask[] = {1, 1, 0, 1, 1};
+        auto pos_dst = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        ASSERT_TRUE(append_with_mask<true>(pos_dst.get(), *src, partial_mask, 5).ok());
+        ASSERT_EQ(4u, pos_dst->size());
+        EXPECT_TRUE(pos_dst->has_null());
+        EXPECT_FALSE(pos_dst->is_null(0));
+        EXPECT_EQ(10, pos_dst->get(0).get_int32());
+        EXPECT_TRUE(pos_dst->is_null(1));
+        EXPECT_TRUE(pos_dst->is_null(2));
+        EXPECT_FALSE(pos_dst->is_null(3));
+        EXPECT_EQ(50, pos_dst->get(3).get_int32());
+
+        const uint8_t neg_mask[] = {1, 0, 1, 0, 0};
+        auto neg_dst = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        ASSERT_TRUE(append_with_mask<false>(neg_dst.get(), *src, neg_mask, 5).ok());
+        ASSERT_EQ(3u, neg_dst->size());
+        EXPECT_TRUE(neg_dst->has_null());
+        EXPECT_TRUE(neg_dst->is_null(0));
+        EXPECT_TRUE(neg_dst->is_null(1));
+        EXPECT_FALSE(neg_dst->is_null(2));
+        EXPECT_EQ(50, neg_dst->get(2).get_int32());
+    }
+
+    // 2. Unmaterialised AdaptiveNullableColumn in State::kNotConstant
+    {
+        auto src = AdaptiveNullableColumn::create(Int32Column::create(), NullColumn::create());
+        src->append_datum(Datum(static_cast<int32_t>(100)));
+        src->append_datum(Datum(static_cast<int32_t>(200)));
+        src->append_datum(Datum(static_cast<int32_t>(300)));
+        src->append_datum(Datum(static_cast<int32_t>(400)));
+        ASSERT_EQ(AdaptiveNullableColumn::State::kNotConstant, src->state());
+
+        const uint8_t partial_mask[] = {0, 1, 0, 1};
+        auto partial_dst = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        ASSERT_TRUE(append_with_mask<true>(partial_dst.get(), *src, partial_mask, 4).ok());
+        ASSERT_EQ(2u, partial_dst->size());
+        EXPECT_FALSE(partial_dst->has_null());
+        EXPECT_EQ(200, partial_dst->get(0).get_int32());
+        EXPECT_EQ(400, partial_dst->get(1).get_int32());
+    }
+
+    // 3. Unmaterialised AdaptiveNullableColumn in State::kNotConstant with all-selected mask
+    {
+        auto src = AdaptiveNullableColumn::create(Int32Column::create(), NullColumn::create());
+        src->append_datum(Datum(static_cast<int32_t>(7)));
+        src->append_datum(Datum(static_cast<int32_t>(8)));
+        src->append_datum(Datum(static_cast<int32_t>(9)));
+        ASSERT_EQ(AdaptiveNullableColumn::State::kNotConstant, src->state());
+
+        const uint8_t all_mask[] = {1, 1, 1};
+        auto all_dst = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        ASSERT_TRUE(append_with_mask<true>(all_dst.get(), *src, all_mask, 3).ok());
+        ASSERT_EQ(3u, all_dst->size());
+        EXPECT_FALSE(all_dst->has_null());
+        EXPECT_EQ(7, all_dst->get(0).get_int32());
+        EXPECT_EQ(8, all_dst->get(1).get_int32());
+        EXPECT_EQ(9, all_dst->get(2).get_int32());
+    }
+
+    // 4. Unmaterialised AdaptiveNullableColumn in State::kConstant
+    {
+        auto src = AdaptiveNullableColumn::create(Int32Column::create(), NullColumn::create());
+        src->append_default_not_null_value();
+        src->append_default_not_null_value();
+        src->append_default_not_null_value();
+        ASSERT_EQ(AdaptiveNullableColumn::State::kConstant, src->state());
+
+        const uint8_t mask[] = {1, 0, 1};
+        auto dst = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask, 3).ok());
+        ASSERT_EQ(2u, dst->size());
+        EXPECT_FALSE(dst->has_null());
+        EXPECT_FALSE(dst->is_null(0));
+        EXPECT_FALSE(dst->is_null(1));
+    }
+
+    // 5. Unmaterialised AdaptiveNullableColumn in State::kNull
+    {
+        auto src = AdaptiveNullableColumn::create(Int32Column::create(), NullColumn::create());
+        src->append_nulls(4);
+        ASSERT_EQ(AdaptiveNullableColumn::State::kNull, src->state());
+
+        const uint8_t mask[] = {1, 0, 1, 0};
+        auto dst = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask, 4).ok());
+        ASSERT_EQ(2u, dst->size());
+        EXPECT_TRUE(dst->has_null());
+        EXPECT_TRUE(dst->is_null(0));
+        EXPECT_TRUE(dst->is_null(1));
     }
 }
 

@@ -53,7 +53,7 @@ const TargetColumn* AppendWithMaskVisitor<PositiveSelect>::try_down_cast(const D
     if (typeid(_src) == typeid(*dst_column)) {
         return static_cast<const TargetColumn*>(&_src);
     }
-    if (_src.is_constant() || _src.is_nullable() || _src.is_view()) {
+    if (_src.is_constant() || (!std::is_same_v<TargetColumn, NullableColumn> && _src.is_nullable()) || _src.is_view()) {
         return nullptr;
     }
     return dynamic_cast<const TargetColumn*>(&_src);
@@ -78,6 +78,9 @@ Status AppendWithMaskVisitor<PositiveSelect>::do_visit(NullableColumn* column) {
     }
 
     const auto* src_column = try_down_cast<NullableColumn>(column);
+    if (src_column != nullptr) {
+        src_column->materialized_nullable();
+    }
     bool is_view_src = _src.is_view() || (src_column != nullptr && src_column->data_column()->is_view());
 
     if (selected == _count && !is_view_src) {
