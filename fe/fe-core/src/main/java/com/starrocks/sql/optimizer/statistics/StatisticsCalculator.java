@@ -361,7 +361,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     columnNames);
         } else {
             columnStatisticList = GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorTableStatistics(table,
-                    columnNames).stream().map(ConnectorTableColumnStats::getColumnStatistic).collect(Collectors.toList());
+                    columnNames, optimizerContext.getOptimizerOptions().isQueryTriggerAnalyzeEnabled()).stream()
+                    .map(ConnectorTableColumnStats::getColumnStatistic).collect(Collectors.toList());
             histogramStatistics = GlobalStateMgr.getCurrentState().getStatisticStorage().
                     getConnectorHistogramStatistics(table, columnNames);
         }

@@ -118,6 +118,9 @@ public class ColumnPrivilege {
             optimizerOptions.disableRule(RuleType.GP_SINGLE_TABLE_MV_REWRITE);
             optimizerOptions.disableRule(RuleType.GP_MULTI_TABLE_MV_REWRITE);
             optimizerOptions.disableRule(RuleType.GP_PRUNE_EMPTY_OPERATOR);
+            // The statement is not authorized yet: looking up statistics here must not queue an analyze for
+            // its tables. The planning that follows a passed check queues it as usual.
+            optimizerOptions.setQueryTriggerAnalyzeEnabled(false);
             // Prune without the IVM rewrite: it needs the MV state-column bindings only InsertPlanner sets up, and it
             // changes how an IVM refresh scans its base tables, not which of their columns it reads. The optimizer also
             // detaches the query MV context, which carries what the statement's own planning still has to read.
