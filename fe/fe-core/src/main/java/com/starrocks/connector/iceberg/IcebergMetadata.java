@@ -369,6 +369,8 @@ public class IcebergMetadata implements ConnectorMetadata {
             properties.put(COMMENT, comment);
         }
         Map<String, String> createTableProperties = IcebergApiConverter.rebuildCreateTableProperties(properties);
+        // checked after the rebuild, so SR aliases are checked under the native key they resolve to
+        createTableProperties.forEach(IcebergApiConverter::checkWriteProperty);
         SortOrder sortOrder = IcebergApiConverter.toIcebergSortOrder(schema, stmt.getOrderByElements());
 
         return icebergCatalog.createTable(context, dbName, tableName, schema, partitionSpec, tableLocation,
