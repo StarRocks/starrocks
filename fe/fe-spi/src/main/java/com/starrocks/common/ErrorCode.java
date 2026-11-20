@@ -300,6 +300,10 @@ public enum ErrorCode {
     ERR_CHANGE_TO_SSL_CONNECTION_FAILED(5400, new byte[] {'X', 'X', '0', '0', '0'},
             "Failed to change to SSL connection"),
     ERR_FORWARD_TOO_MANY_TIMES(5401, new byte[] {'X', 'X', '0', '0', '0'}, "forward too many times %d"),
+    // SQLSTATE 08007 is the standard "transaction resolution unknown".
+    ERR_FORWARD_RESULT_UNKNOWN(5402, new byte[] {'0', '8', '0', '0', '7'},
+            "Lost the connection to the leader FE after forwarding the statement to it (%s). " +
+                    "The statement may or may not have been applied; check before running it again"),
 
     /**
      * 5500 - 5599: DDL operation failure

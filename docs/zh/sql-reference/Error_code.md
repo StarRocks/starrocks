@@ -149,3 +149,4 @@ products: [oss, enterprise, cloud, anywhere]
 |5070|指定的操作被禁止了。|
 |5071|动态分区副本数应该大于0。|
 |5072|动态分区副本值不是有效的数字。|
+|5402|Follower FE 已将语句转发给 Leader FE，但在收到结果前与 Leader 的连接断开，语句可能已执行，也可能未执行（SQLSTATE `08007`）。重新执行前请先确认语句的结果。|

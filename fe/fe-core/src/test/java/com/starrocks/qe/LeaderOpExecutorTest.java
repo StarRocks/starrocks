@@ -19,10 +19,12 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -33,10 +35,20 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.utframe.MockGenericPool;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
+import org.apache.commons.pool2.impl.GenericKeyedObjectPoolConfig;
 import org.apache.thrift.TException;
+import org.apache.thrift.transport.TTransportException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class LeaderOpExecutorTest {
     private static ConnectContext connectContext;
@@ -155,5 +167,133 @@ public class LeaderOpExecutorTest {
         TMasterOpRequest request = executor.createTMasterOpRequest(connectContext, 1);
         Assertions.assertEquals(catalog, request.getCatalog());
         Assertions.assertEquals(database, request.getDb());
+    }
+
+    /**
+     * A forwarded statement whose connection breaks after the leader received it must not be sent again:
+     * the leader may already be running it. The leader here is a real socket that resets every connection
+     * once a request has arrived, so the follower side is the real pool and the real thrift call.
+     */
+    @Test
+    public void testForwardIsNotResentAfterTheConnectionBreaks() throws Exception {
+        try (ResettingLeader leader = new ResettingLeader()) {
+            ThriftConnectionPool<FrontendService.Client> savedPool = ThriftConnectionPool.frontendPool;
+            ThriftConnectionPool.frontendPool = realFrontendPool();
+            try {
+                StatementBase stmt = UtFrameUtils.parseStmtWithNewParser("insert into d1.t1 select * from d1.t1",
+                        connectContext);
+                LeaderOpExecutor executor = new LeaderOpExecutor(Pair.create("127.0.0.1", leader.port()), stmt,
+                        stmt.getOrigStmt(), connectContext, RedirectStatus.FORWARD_NO_SYNC, false);
+                Assertions.assertThrows(TTransportException.class, executor::execute);
+                Assertions.assertEquals(1, leader.requests());
+            } finally {
+                ThriftConnectionPool.frontendPool = savedPool;
+            }
+        }
+    }
+
+    /**
+     * When the connection to the leader breaks after a statement was forwarded, the client must be told
+     * that the statement may have been applied, not that it failed.
+     */
+    @Test
+    public void testBrokenForwardIsReportedAsResultUnknown() throws Exception {
+        try (ResettingLeader leader = new ResettingLeader()) {
+            ConnectContext ctx = executeForwarded(leader.port());
+            Assertions.assertTrue(ctx.getState().isError());
+            Assertions.assertEquals(ErrorCode.ERR_FORWARD_RESULT_UNKNOWN, ctx.getState().getErrorCode(),
+                    ctx.getState().getErrorMessage());
+            Assertions.assertEquals("08007", new String(ctx.getState().getErrorCode().getSqlState()));
+            Assertions.assertTrue(ctx.getState().getErrorMessage().contains("may or may not have been applied"),
+                    ctx.getState().getErrorMessage());
+            Assertions.assertEquals(1, leader.requests());
+        }
+    }
+
+    /**
+     * A statement that could not be sent at all did not reach the leader, so it stays an ordinary failure.
+     */
+    @Test
+    public void testForwardThatCannotConnectIsReportedAsFailed() throws Exception {
+        int closedPort;
+        try (ServerSocket probe = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            closedPort = probe.getLocalPort();
+        }
+        ConnectContext ctx = executeForwarded(closedPort);
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertNotEquals(ErrorCode.ERR_FORWARD_RESULT_UNKNOWN, ctx.getState().getErrorCode());
+        Assertions.assertTrue(ctx.getState().getErrorMessage().contains("Connection refused"),
+                ctx.getState().getErrorMessage());
+    }
+
+    private static ConnectContext executeForwarded(int leaderPort) throws Exception {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public boolean isForwardToLeader() {
+                return true;
+            }
+        };
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Pair<String, Integer> getLeaderIpAndRpcPort() {
+                return Pair.create("127.0.0.1", leaderPort);
+            }
+        };
+        ThriftConnectionPool<FrontendService.Client> savedPool = ThriftConnectionPool.frontendPool;
+        ThriftConnectionPool.frontendPool = realFrontendPool();
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ctx.setQueryId(UUIDUtil.genUUID());
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+            ctx.setThreadLocalInfo();
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser("insert into d1.t1 select * from d1.t1", ctx);
+            new StmtExecutor(ctx, stmt).execute();
+            return ctx;
+        } finally {
+            ThriftConnectionPool.frontendPool = savedPool;
+        }
+    }
+
+    private static ThriftConnectionPool<FrontendService.Client> realFrontendPool() {
+        return new ThriftConnectionPool<>("FrontendService", new GenericKeyedObjectPoolConfig(), 5000);
+    }
+
+    /**
+     * A stand-in leader that accepts connections, waits for a request to arrive, counts it and then closes
+     * the connection with a reset, as a leader that dies or a network that drops the connection would.
+     */
+    private static class ResettingLeader implements AutoCloseable {
+        private final ServerSocket server = new ServerSocket(0, 50, InetAddress.getLoopbackAddress());
+        private final AtomicInteger requests = new AtomicInteger();
+
+        ResettingLeader() throws IOException {
+            Thread acceptor = new Thread(() -> {
+                while (!server.isClosed()) {
+                    try (Socket socket = server.accept()) {
+                        if (socket.getInputStream().read(new byte[65536]) > 0) {
+                            requests.incrementAndGet();
+                        }
+                        socket.setSoLinger(true, 0);
+                    } catch (IOException e) {
+                        return;
+                    }
+                }
+            }, "resetting-leader");
+            acceptor.setDaemon(true);
+            acceptor.start();
+        }
+
+        int port() {
+            return server.getLocalPort();
+        }
+
+        int requests() {
+            return requests.get();
+        }
+
+        @Override
+        public void close() throws IOException {
+            server.close();
+        }
     }
 }
