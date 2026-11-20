@@ -407,6 +407,40 @@ public class CachingIcebergCatalogTest {
         Assertions.assertNull(cachingIcebergCatalog.findCachedDataFiles(manifest, wanted));
     }
 
+    private static DataFile manifestEntryFile(String path, long pos) {
+        DataFile file = Mockito.mock(DataFile.class);
+        Mockito.when(file.path()).thenReturn(path);
+        Mockito.when(file.pos()).thenReturn(pos);
+        Mockito.when(file.specId()).thenReturn(0);
+        return file;
+    }
+
+    // A manifest can list the same data file twice (a file committed twice, then merged into one manifest):
+    // both live entries must stay in the cached set, or it never matches the manifest's live file count.
+    @Test
+    public void testDuplicateLiveEntriesKeptInCachedDataFiles(@Mocked IcebergCatalog icebergCatalog) {
+        Set<DataFile> cached = Sets.newConcurrentHashSet();
+        cached.add(DataFileWrapper.wrap(manifestEntryFile("/data/a.parquet", 0L)));
+        cached.add(DataFileWrapper.wrap(manifestEntryFile("/data/b.parquet", 1L)));
+        cached.add(DataFileWrapper.wrap(manifestEntryFile("/data/a.parquet", 2L)));
+        // the same entry wrapped again is still one element
+        cached.add(DataFileWrapper.wrap(manifestEntryFile("/data/a.parquet", 0L)));
+        Assertions.assertEquals(3, cached.size());
+
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        Cache<String, Set<DataFile>> dataFileCache = Deencapsulation.getField(cachingIcebergCatalog, "dataFileCache");
+        ManifestFile manifest = Mockito.mock(ManifestFile.class);
+        Mockito.when(manifest.path()).thenReturn("/metadata/m2.avro");
+        Mockito.when(manifest.partitionSpecId()).thenReturn(0);
+        Mockito.when(manifest.addedFilesCount()).thenReturn(1);
+        Mockito.when(manifest.existingFilesCount()).thenReturn(2);
+        dataFileCache.put("/metadata/m2.avro", cached);
+        Map<String, DataFile> found = cachingIcebergCatalog.findCachedDataFiles(manifest, Set.of("/data/a.parquet"));
+        Assertions.assertNotNull(found);
+        Assertions.assertEquals(Set.of("/data/a.parquet"), found.keySet());
+    }
+
     @Test
     public void testInvalidateCache(@Mocked IcebergCatalog icebergCatalog) {
         Table nativeTable = createBaseTableWithManifests(1, 1);
