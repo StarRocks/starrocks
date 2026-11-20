@@ -199,7 +199,7 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
     [IMMEDIATE | DEFERRED]
 -- refresh_scheme
     [ON_CHANGE
-     | [ASYNC | SCHEDULE] [START (<start_time>)] EVERY (INTERVAL <refresh_interval>)
+     | {ASYNC | SCHEDULE} [START (<start_time>)] EVERY (INTERVAL <refresh_interval>)
      | MANUAL]
 ]
 -- partition_expression
