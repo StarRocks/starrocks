@@ -18,9 +18,11 @@ namespace starrocks {
 
 const std::vector<CpuInfo::FlagMapping>& CpuInfo::_flag_mappings() {
     static const std::vector<FlagMapping> mappings = {
-            {"ssse3", CpuInfo::SSSE3},     {"sse4_1", CpuInfo::SSE4_1},     {"sse4_2", CpuInfo::SSE4_2},
-            {"popcnt", CpuInfo::POPCNT},   {"avx", CpuInfo::AVX},           {"avx2", CpuInfo::AVX2},
-            {"avx512f", CpuInfo::AVX512F}, {"avx512bw", CpuInfo::AVX512BW},
+            {"ssse3", CpuInfo::SSSE3},       {"sse4_1", CpuInfo::SSE4_1},
+            {"sse4_2", CpuInfo::SSE4_2},     {"popcnt", CpuInfo::POPCNT},
+            {"avx", CpuInfo::AVX},           {"avx2", CpuInfo::AVX2},
+            {"avx512f", CpuInfo::AVX512F},   {"avx512bw", CpuInfo::AVX512BW},
+            {"avx512vl", CpuInfo::AVX512VL}, {"avx512vbmi2", CpuInfo::AVX512VBMI2},
     };
     return mappings;
 }
@@ -49,6 +51,12 @@ int64_t CpuInfo::_compiled_hardware_flags() {
 #endif
 #if defined(__AVX512BW__)
     flags |= AVX512BW;
+#endif
+#if defined(__AVX512VL__)
+    flags |= AVX512VL;
+#endif
+#if defined(__AVX512VBMI2__)
+    flags |= AVX512VBMI2;
 #endif
 #endif
     return flags;
