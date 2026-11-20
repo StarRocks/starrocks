@@ -35,9 +35,6 @@ import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Invocation;
-import mockit.Mock;
-import mockit.MockUp;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.function.Executable;
@@ -90,14 +87,6 @@ class SavedSqlGeoValidatorTest {
     @ParameterizedTest
     @ValueSource(strings = {"ST_GeogFromText(wkt)", "ST_GeomFromText(wkt,'EPSG:3857')"})
     void checksWriteBoundaries(String geo) throws Exception {
-        new MockUp<ExpressionAnalyzer.Visitor>() {
-            @Mock
-            public Void visit(Invocation invocation, ParseNode node, Scope scope) {
-                ExpressionAnalyzer.Visitor visitor = invocation.getInvokedInstance();
-                return node.accept(visitor, scope);
-            }
-        };
-
         String suffix = geo.startsWith("ST_Geog") ? "gg" : "gm";
         String view = "v_" + suffix;
         String mvName = "am_" + suffix;
