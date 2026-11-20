@@ -79,6 +79,8 @@ public class SerializableTable implements Table, Serializable, HasTableOperation
     private final Map<String, SnapshotRef> refs;
 
     private transient volatile LocationProvider lazyLocationProvider;
+    // Not serialized, so the split keeps the format older BEs can read: built on first use instead.
+    private transient volatile FileIO lazyNormalizingIO = null;
 
     private transient volatile Table lazyTable = null;
     private transient volatile Schema lazySchema = null;
@@ -129,7 +131,10 @@ public class SerializableTable implements Table, Serializable, HasTableOperation
                     }
 
                     TableOperations ops =
-                            new StaticTableOperations(metadataFileLocation, io);
+                            new StaticTableOperations(metadataFileLocation, io());
+                    // StaticTableOperations.current() loads the metadata without synchronization, and the table
+                    // can be shared by concurrent scan tasks: load it before publishing the table.
+                    ops.current();
                     this.lazyTable = newTable(ops, name);
                 }
             }
@@ -227,9 +232,19 @@ public class SerializableTable implements Table, Serializable, HasTableOperation
         return lazyTable().sortOrders();
     }
 
+    // The FE strips IcebergCachingFileIO, which normalizes Azure paths, before serializing the table, so the
+    // metadata scanners on the BE get the bare IO. Wrap it here so every read through this table -- the
+    // metadata json, manifest lists and manifests -- has its abfss://...blob.core.windows.net paths rewritten.
     @Override
     public FileIO io() {
-        return io;
+        if (lazyNormalizingIO == null) {
+            synchronized (this) {
+                if (lazyNormalizingIO == null) {
+                    this.lazyNormalizingIO = new AzurePathNormalizingFileIO(io);
+                }
+            }
+        }
+        return lazyNormalizingIO;
     }
 
     @Override
@@ -393,12 +408,16 @@ public class SerializableTable implements Table, Serializable, HasTableOperation
         return (StaticTableOperations) ((BaseTable) lazyTable()).operations();
     }
 
-    private static class SerializableConfSupplier implements SerializableSupplier<Configuration> {
+    // Public for IcebergCachingFileIO, whose in-memory configuration supplier is replaced by this one when
+    // serialized: the class must be one the BE can load. serialVersionUID pins the value the JVM computed
+    // before the class was made public, so FE and BE of different versions still read each other's splits.
+    public static class SerializableConfSupplier implements SerializableSupplier<Configuration> {
+        private static final long serialVersionUID = -6427790099069926131L;
 
         private final Map<String, String> confAsMap;
         private transient volatile Configuration conf = null;
 
-        SerializableConfSupplier(Configuration conf) {
+        public SerializableConfSupplier(Configuration conf) {
             this.confAsMap = new HashMap<>(conf.size());
             conf.forEach(entry -> confAsMap.put(entry.getKey(), entry.getValue()));
         }

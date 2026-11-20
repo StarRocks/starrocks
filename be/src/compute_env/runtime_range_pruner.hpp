@@ -145,7 +145,7 @@ struct RuntimeColumnPredicateBuilder {
                 auto add_predicate = [&](ColumnPtr bound, TExprOpcode::type opcode) -> Status {
                     TExprNode node;
                     node.node_type = TExprNodeType::BINARY_PRED;
-                    node.type = TypeDescriptor(TYPE_BOOLEAN).to_thrift();
+                    node.type = TYPE_BOOLEAN_DESC.to_thrift();
                     node.child_type = to_thrift(ltype);
                     node.__set_opcode(opcode);
 

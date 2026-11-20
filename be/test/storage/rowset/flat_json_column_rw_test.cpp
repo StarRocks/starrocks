@@ -14,9 +14,11 @@
 
 #include <gtest/gtest.h>
 #include <lz4/lz4.h>
+#include <velocypack/vpack.h>
 
 #include <algorithm>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <vector>
 
@@ -2562,6 +2564,122 @@ TEST_F(FlatJsonColumnRWTest, testSegmentWriterIteratorWithMixedDataTypes) {
             ASSERT_OK(column_iter->next_batch(&count, column.get()));
             ASSERT_EQ(column->size(), json_strings.size());
             ASSERT_EQ(result, column->debug_string()) << fmt::format("field={} type={}", field_name, field_type);
+        }
+    }
+}
+
+// A path the flattener stores as a VARCHAR sub-column holds JSON strings. Reading it through a JSON-typed
+// extended column must hand those strings back as JSON strings -- one that reads like JSON text included --
+// and must not cast the sub-column to JSON, which parses such a string into an object. Numeric sub-columns read
+// as JSON keep their numbers. (Every row holds every path: a sparse path or a JSON null would keep it out of
+// the scalar sub-columns this test is about.)
+TEST_F(FlatJsonColumnRWTest, testJsonTypedExtendedColumnOverScalarSubColumns) {
+    TabletSchemaPB schema_pb;
+    {
+        ColumnPB* json_column = schema_pb.add_column();
+        json_column->set_unique_id(0);
+        json_column->set_name("json_col");
+        json_column->set_type("json");
+        json_column->set_is_nullable(true);
+    }
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    std::vector<std::string> json_strings = {
+            R"({"s": "{\"a\":1}", "n": 1, "d": 1.5})",
+            R"({"s": "[1,2]", "n": -2, "d": 2.5})",
+            R"({"s": "plain", "n": 3, "d": 3.5})",
+            R"({"s": "", "n": 4, "d": 4.5})",
+    };
+
+    std::string file_name = TEST_DIR + "/test_json_typed_extended_column.data";
+    auto fs = std::make_shared<MemoryFileSystem>();
+    ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
+    {
+        SegmentWriterOptions opts;
+        opts.flat_json_config = std::make_shared<FlatJsonConfig>();
+        opts.flat_json_config->set_flat_json_enabled(true);
+        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(file_name));
+        auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), 0, tablet_schema, opts);
+        ASSERT_OK(segment_writer->init());
+        auto json_column = JsonColumn::create();
+        for (const auto& json_str : json_strings) {
+            JsonValue json_value;
+            ASSERT_OK(JsonValue::parse(json_str, &json_value));
+            json_column->append(&json_value);
+        }
+        SchemaPtr chunk_schema = std::make_shared<Schema>(tablet_schema->schema());
+        auto chunk = std::make_shared<Chunk>(Columns{json_column}, chunk_schema);
+        ASSERT_OK(segment_writer->append_chunk(*chunk));
+        uint64_t index_size, segment_file_size;
+        ASSERT_OK(segment_writer->finalize_columns(&index_size));
+        ASSERT_OK(segment_writer->finalize_footer(&segment_file_size));
+    }
+
+    ASSIGN_OR_ABORT(auto segment, Segment::open(fs, FileInfo{file_name}, 0, tablet_schema));
+    {
+        // The shape this test needs: every path is a scalar sub-column. Assert it so the test fails loudly if
+        // the flattener changes instead of silently no longer reaching the conversion.
+        const auto* reader = segment->column_with_uid(0);
+        ASSERT_TRUE(reader != nullptr);
+        ASSERT_TRUE(reader->is_flat_json());
+        std::map<std::string, LogicalType> types;
+        for (const auto& sub : *reader->sub_readers()) {
+            types[sub->name()] = sub->column_type();
+        }
+        ASSERT_EQ(TYPE_VARCHAR, types["s"]);
+        ASSERT_EQ(TYPE_BIGINT, types["n"]);
+        ASSERT_EQ(TYPE_DOUBLE, types["d"]);
+    }
+
+    OlapReaderStatistics reader_stats;
+    ColumnIteratorOptions column_opts;
+    column_opts.stats = &reader_stats;
+    ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(file_name));
+    column_opts.read_file = read_file.get();
+
+    auto read_as_json = [&](const std::string& field) -> MutableColumnPtr {
+        ASSIGN_OR_ABORT(auto path, ColumnAccessPath::create(TAccessPathType::FIELD, "$", 0));
+        ColumnAccessPath::insert_json_path(path.get(), TYPE_JSON, field);
+        TabletColumn col(STORAGE_AGGREGATE_NONE, TYPE_JSON, true);
+        col.set_unique_id(123);
+        col.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), 0));
+        ASSIGN_OR_ABORT(auto column_iter, segment->new_column_iterator_or_default(col, path.get()));
+        CHECK_OK(column_iter->init(column_opts));
+        CHECK_OK(column_iter->seek_to_first());
+        size_t count = json_strings.size();
+        auto column = ColumnHelper::create_column(TypeDescriptor::create_json_type(), true);
+        CHECK_OK(column_iter->next_batch(&count, column.get()));
+        CHECK_EQ(json_strings.size(), column->size());
+        return column;
+    };
+
+    {
+        auto column = read_as_json("s");
+        const std::vector<std::string> expected{R"({"a":1})", "[1,2]", "plain", ""};
+        for (size_t i = 0; i < expected.size(); ++i) {
+            vpack::Slice slice = column->get(i).get_json()->to_vslice();
+            EXPECT_TRUE(slice.isString()) << "row " << i << ": " << column->get(i).get_json()->to_string_uncheck();
+            if (slice.isString()) {
+                EXPECT_EQ(expected[i], slice.copyString());
+            }
+        }
+    }
+    {
+        auto column = read_as_json("n");
+        const std::vector<int64_t> expected{1, -2, 3, 4};
+        for (size_t i = 0; i < expected.size(); ++i) {
+            vpack::Slice slice = column->get(i).get_json()->to_vslice();
+            ASSERT_TRUE(slice.isInteger()) << "row " << i;
+            EXPECT_EQ(expected[i], slice.getInt());
+        }
+    }
+    {
+        auto column = read_as_json("d");
+        const std::vector<double> expected{1.5, 2.5, 3.5, 4.5};
+        for (size_t i = 0; i < expected.size(); ++i) {
+            vpack::Slice slice = column->get(i).get_json()->to_vslice();
+            ASSERT_TRUE(slice.isDouble()) << "row " << i;
+            EXPECT_EQ(expected[i], slice.getDouble());
         }
     }
 }

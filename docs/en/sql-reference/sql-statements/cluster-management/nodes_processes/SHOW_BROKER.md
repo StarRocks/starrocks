@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW BROKER views the information of all brokers that have been added to the StarRocks cluster."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW BROKER

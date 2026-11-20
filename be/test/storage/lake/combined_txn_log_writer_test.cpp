@@ -21,6 +21,7 @@
 
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
+#include "common/config_ingest_fwd.h"
 #include "gen_cpp/lake_types.pb.h"
 
 namespace starrocks::lake {
@@ -112,6 +113,11 @@ TEST_F(WriteCombinedTxnLogTest, test_complete_combined_txn_log_passes_coverage) 
 
     trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
     fp->setMode(trigger_mode);
+}
+
+// Loads write their combined txn logs through write_combined_txn_log_parallel unless this is turned off.
+TEST_F(WriteCombinedTxnLogTest, test_put_combined_txn_log_parallel_by_default) {
+    ASSERT_TRUE(config::enable_put_combinded_txn_log_parallel);
 }
 
 } // namespace starrocks::lake

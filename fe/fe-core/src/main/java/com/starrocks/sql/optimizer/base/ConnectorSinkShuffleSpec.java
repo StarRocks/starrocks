@@ -16,14 +16,17 @@ package com.starrocks.sql.optimizer.base;
 
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorSinkShuffleMode;
+import com.starrocks.planner.DataSink;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.InsertPartitionEstimator;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -47,9 +50,13 @@ import java.util.Optional;
  *       refs directly.</li>
  * </ul>
  *
+ * <p>Paimon's fixed-bucket layout requires an actual native bucket calculation,
+ * followed by a mandatory exchange. Its spec installs that routing after physical
+ * planning rather than approximating the native bucket with raw SQL key hashes.
+ *
  * <p>InsertPlanner dispatches via {@link #forTable(Table)}; non-eligible tables
- * (OlapTable, TableFunctionTable, Paimon, ...) return {@link Optional#empty()}
- * and the planner falls back to its existing connector-specific code paths.
+ * (OlapTable, TableFunctionTable, ...) return {@link Optional#empty()} and the
+ * planner falls back to its existing connector-specific code paths.
  */
 public interface ConnectorSinkShuffleSpec {
 
@@ -69,6 +76,10 @@ public interface ConnectorSinkShuffleSpec {
                               ColumnRefFactory columnRefFactory,
                               OptExpression root,
                               ColumnRefSet requiredColumns);
+
+    /** Complete the write distribution once the physical plan and sink are available. */
+    default void applyToExecPlan(ExecPlan plan, DataSink sink) {
+    }
 
     /**
      * Optional sort property override (Iceberg may want host-level sort by the
@@ -155,6 +166,9 @@ public interface ConnectorSinkShuffleSpec {
         }
         if (table instanceof HiveTable) {
             return Optional.of(new HiveSinkShuffleSpec((HiveTable) table));
+        }
+        if (table instanceof PaimonTable) {
+            return Optional.of(new PaimonSinkShuffleSpec((PaimonTable) table));
         }
         return Optional.empty();
     }

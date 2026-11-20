@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CHAR(M)"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CHAR

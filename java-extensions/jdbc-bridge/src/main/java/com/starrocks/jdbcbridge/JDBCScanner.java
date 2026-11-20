@@ -58,6 +58,8 @@ public class JDBCScanner {
 
     private String driverLocation;
     private HikariDataSource dataSource;
+    private DataSourceCache.DataSourceCacheItem cacheItem;
+    private String cacheKeyInUse;
     private JDBCScanContext scanContext;
     private Connection connection;
     private PreparedStatement statement;
@@ -85,8 +87,11 @@ public class JDBCScanner {
     public void open() throws Exception {
         String cacheKey = computeCacheKey(scanContext.getUser(), scanContext.getPassword(), scanContext.getJdbcURL());
         URL driverURL = new File(driverLocation).toURI().toURL();
-        DataSourceCache.DataSourceCacheItem cacheItem = DataSourceCache.getInstance().getSource(cacheKey, () -> {
-            ClassLoader classLoader = URLClassLoader.newInstance(new URL[] {driverURL});
+        DataSourceCache cache = DataSourceCache.getInstance();
+        // The pool stays marked in use until close(), so the idle evictor never closes it under a running scan.
+        cacheItem = cache.acquire(cacheKey, () -> {
+            ClassLoader classLoader = cache.getDriverClassLoader(driverLocation,
+                    () -> URLClassLoader.newInstance(new URL[] {driverURL}));
             Thread.currentThread().setContextClassLoader(classLoader);
             HikariConfig config = new HikariConfig();
             config.setDriverClassName(scanContext.getDriverClassName());
@@ -108,11 +113,28 @@ public class JDBCScanner {
             // hikari doesn't support user-provided class loader, we should save them ourselves to ensure that
             // the classes of result data are loaded by the same class loader, otherwise we may encounter
             // ArrayStoreException in getNextChunk
-            return new DataSourceCache.DataSourceCacheItem(hikariDataSource, classLoader);
+            // Expire on the BE-provided idle timeout, not on hikariDataSource.getIdleTimeout(), which
+            // HikariCP may have reset to 0.
+            return new DataSourceCache.DataSourceCacheItem(hikariDataSource, classLoader,
+                    scanContext.getConnectionIdleTimeoutMs());
         });
+        cacheKeyInUse = cacheKey;
         dataSource = cacheItem.getHikariDataSource();
         classLoader = cacheItem.getClassLoader();
 
+        try {
+            openResultSet();
+        } catch (Exception e) {
+            try {
+                close();
+            } catch (Exception closeError) {
+                e.addSuppressed(closeError);
+            }
+            throw e;
+        }
+    }
+
+    private void openResultSet() throws Exception {
         connection = dataSource.getConnection();
         initOracleSessionTimeZoneIfNeeded();
         connection.setAutoCommit(false);
@@ -332,14 +354,25 @@ public class JDBCScanner {
     }
 
     public void close() throws Exception {
-        if (resultSet != null) {
-            resultSet.close();
-        }
-        if (statement != null) {
-            statement.close();
-        }
-        if (connection != null) {
-            connection.close();
+        try {
+            if (resultSet != null) {
+                resultSet.close();
+                resultSet = null;
+            }
+            if (statement != null) {
+                statement.close();
+                statement = null;
+            }
+            if (connection != null) {
+                connection.close();
+                connection = null;
+            }
+        } finally {
+            if (cacheItem != null) {
+                DataSourceCache.getInstance().release(cacheKeyInUse, cacheItem);
+                cacheItem = null;
+                cacheKeyInUse = null;
+            }
         }
     }
 

@@ -907,13 +907,19 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
     private OptExpression rewriteOptExpression(OptExpression optExpression, Operator newOp, ColumnRefSet outputs) {
         // rewrite logical property, update output columns
         LogicalProperty property = optExpression.getLogicalProperty();
-        if (outputs.containsAny(property.getOutputColumns())) {
+        final ColumnRefSet rewrittenOutputs = outputs.clone();
+        DecodeInfo decodeInfo = context.operatorDecodeInfo.get(optExpression.getOp());
+        if (decodeInfo != null) {
+            // Intermediate aggregates can use dictionary references before their results become string outputs.
+            rewrittenOutputs.union(decodeInfo.inProgressStringAggregations);
+        }
+        if (rewrittenOutputs.containsAny(property.getOutputColumns())) {
             LogicalProperty newProperty = new LogicalProperty(property);
             ColumnRefSet outputColumns = property.getOutputColumns();
             final ColumnRefSet rewritesOutputColumns = new ColumnRefSet();
             // For string column rewrite to dictionary column, other columns remain unchanged
             outputColumns.getStream().map(factory::getColumnRef)
-                    .map(c -> outputs.contains(c) ? context.stringRefToDictRefMap.getOrDefault(c, c) : c)
+                    .map(c -> rewrittenOutputs.contains(c) ? context.stringRefToDictRefMap.getOrDefault(c, c) : c)
                     .forEach(rewritesOutputColumns::union);
             newProperty.setOutputColumns(rewritesOutputColumns);
             property = newProperty;

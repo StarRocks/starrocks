@@ -267,6 +267,9 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
         // Tells the CN its delta writers only see PART of each tablet's rows, so their txn logs must
         // not be cached under the per-tablet metacache key that publish consults first.
         request.mutable_lake_tablet_params()->set_multi_node_write(_parent->_enable_multi_node_write);
+        if (_parent->_has_flat_json_config) {
+            request.mutable_lake_tablet_params()->mutable_flat_json_config()->CopyFrom(_parent->_flat_json_config);
+        }
     }
     request.set_is_replicated_storage(_parent->_enable_replicated_storage);
     request.set_node_id(_node_id);

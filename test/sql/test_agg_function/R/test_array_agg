@@ -1818,7 +1818,7 @@ select array_agg(map(2,3)) from ss;
 -- !result
 select array_agg(distinct map(2,3)) from ss;
 -- result:
-E: (1064, 'Unknown error')
+E: (1064, 'array_agg(distinct) does not support type MAP<TINYINT,TINYINT>')
 -- !result
 select array_agg(null);
 -- result:

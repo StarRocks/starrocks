@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "暂停或重新启动 Pipe 的导入作业执行。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SUSPEND or RESUME PIPE

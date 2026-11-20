@@ -99,7 +99,8 @@ enum TPlanNodeType {
   BENCHMARK_SCAN_NODE = 42,
   LAKE_CACHE_STATS_SCAN_NODE = 43,
   ENFORCE_UNIQUE_ROW_LOCATOR_NODE = 44,
-  AI_PROJECT_NODE = 45
+  AI_PROJECT_NODE = 45,
+  LAKE_GROUPED_SCAN_NODE = 46
 }
 
 // phases of an execution node
@@ -401,6 +402,9 @@ struct TIcebergDeleteFile {
     // encrypted table is itself encrypted and carries its OWN per-file key, so it cannot reuse
     // the data file's key in THdfsScanRange.parquet_encryption_info (field 46).
     5: optional TParquetEncryptionInfo parquet_encryption_info
+    // Set for a position delete file whose every row references the data file of this scan
+    // range, so the BE reads only its pos column.
+    6: optional bool references_only_data_file
 }
 
 struct TPaimonDeletionFile {
@@ -584,6 +588,13 @@ struct TBenchmarkScanRange {
 struct TScanRangeExt {
 }
 
+// Query-local clip; never persisted in tablet metadata.
+struct TGroupedRangeTask {
+  1: optional i32 group_id
+  2: optional Types.TTabletRange key_range
+  3: optional list<i32> sort_key_unique_ids
+}
+
 // Specification of an individual data range which is held in its entirety
 // by a storage server
 struct TScanRange {
@@ -600,6 +611,8 @@ struct TScanRange {
 
   40: optional TBenchmarkScanRange benchmark_scan_range
   41: optional TScanRangeExt ext
+
+  52: optional TGroupedRangeTask grouped_range_task
 }
 
 struct TMySQLScanNode {
@@ -713,7 +726,7 @@ struct TSchemaScanNode {
 enum TAccessPathType {
     ROOT,       // ROOT
     KEY,        // MAP KEY
-    OFFSET,     // ARRAY/MAP OFFSET
+    OFFSET,     // ARRAY/MAP OFFSET; on a VARIANT column: only the outer null mask (`v IS [NOT] NULL`)
     FIELD,      // STRUCT FIELD
     INDEX,      // ARRAY/MAP INDEX-AT POSITION DATA
     ALL,        // ARRAY/MAP ALL DATA
@@ -1663,7 +1676,8 @@ enum TAIProviderType {
 enum TAIProviderProtocol {
   OPENAI = 0,
   ANTHROPIC = 1,
-  COHERE = 2
+  COHERE = 2,
+  DASHSCOPE = 3
 }
 
 struct TAIProvider {

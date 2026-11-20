@@ -1,0 +1,158 @@
+-- name: test_dynamic_overwrite_into_merged_partition
+create database test_merge_dyn_ow_${uuid0};
+-- result:
+-- !result
+use test_merge_dyn_ow_${uuid0};
+-- result:
+-- !result
+create table t(dt date not null, k int not null, v int) duplicate key(dt, k) partition by date_trunc('day', dt) distributed by hash(k) buckets 2 properties("replication_num"="1");
+-- result:
+-- !result
+insert into t values ('2026-01-01', 1, 101), ('2026-01-01', 2, 102), ('2026-01-02', 1, 201), ('2026-01-03', 1, 301), ('2026-02-03', 1, 2301);
+-- result:
+-- !result
+alter table t partition by date_trunc('month', dt) between '2026-01-01' and '2026-01-31';
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+function: print_query_columns("show partitions from t", "PartitionName", "Range")
+-- result:
+p202601	[types: [DATE]; keys: [2026-01-01]; ..types: [DATE]; keys: [2026-02-01]; )
+p20260203	[types: [DATE]; keys: [2026-02-03]; ..types: [DATE]; keys: [2026-02-04]; )
+-- !result
+set dynamic_overwrite = true;
+-- result:
+-- !result
+insert overwrite t values ('2026-01-01', 1, 9001), ('2026-01-01', 2, 9002);
+-- result:
+-- !result
+set dynamic_overwrite = false;
+-- result:
+-- !result
+function: print_query_columns("show partitions from t", "PartitionName", "Range")
+-- result:
+p202601	[types: [DATE]; keys: [2026-01-01]; ..types: [DATE]; keys: [2026-02-01]; )
+p20260203	[types: [DATE]; keys: [2026-02-03]; ..types: [DATE]; keys: [2026-02-04]; )
+-- !result
+select * from t order by dt, k;
+-- result:
+2026-01-01	1	9001
+2026-01-01	2	9002
+2026-02-03	1	2301
+-- !result
+select count(*), sum(v) from t where dt = '2026-01-01';
+-- result:
+2	18003
+-- !result
+set dynamic_overwrite = true;
+-- result:
+-- !result
+insert overwrite t values ('2026-01-15', 1, 9151), ('2026-02-03', 1, 9231), ('2026-03-05', 1, 9351);
+-- result:
+-- !result
+set dynamic_overwrite = false;
+-- result:
+-- !result
+function: print_query_columns("show partitions from t", "PartitionName", "Range")
+-- result:
+p202601	[types: [DATE]; keys: [2026-01-01]; ..types: [DATE]; keys: [2026-02-01]; )
+p20260203	[types: [DATE]; keys: [2026-02-03]; ..types: [DATE]; keys: [2026-02-04]; )
+p20260305	[types: [DATE]; keys: [2026-03-05]; ..types: [DATE]; keys: [2026-03-06]; )
+-- !result
+select * from t order by dt, k;
+-- result:
+2026-01-15	1	9151
+2026-02-03	1	9231
+2026-03-05	1	9351
+-- !result
+select dt, count(*), sum(v) from t where dt in ('2026-01-01', '2026-01-15', '2026-02-03', '2026-03-05') group by dt order by dt;
+-- result:
+2026-01-15	1	9151
+2026-02-03	1	9231
+2026-03-05	1	9351
+-- !result
+drop database test_merge_dyn_ow_${uuid0};
+-- result:
+-- !result
+-- name: test_dynamic_overwrite_into_merged_partition_pk
+create database test_merge_dyn_ow_pk_${uuid0};
+-- result:
+-- !result
+use test_merge_dyn_ow_pk_${uuid0};
+-- result:
+-- !result
+create table t(dt date not null, k int not null, v int) primary key(dt, k) partition by date_trunc('day', dt) distributed by hash(k) buckets 2 properties("replication_num"="1");
+-- result:
+-- !result
+insert into t values ('2026-01-01', 1, 101), ('2026-01-01', 2, 102), ('2026-01-02', 1, 201), ('2026-01-03', 1, 301), ('2026-02-03', 1, 2301);
+-- result:
+-- !result
+alter table t partition by date_trunc('month', dt) between '2026-01-01' and '2026-01-31';
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+function: print_query_columns("show partitions from t", "PartitionName", "Range")
+-- result:
+p202601	[types: [DATE]; keys: [2026-01-01]; ..types: [DATE]; keys: [2026-02-01]; )
+p20260203	[types: [DATE]; keys: [2026-02-03]; ..types: [DATE]; keys: [2026-02-04]; )
+-- !result
+set dynamic_overwrite = true;
+-- result:
+-- !result
+insert overwrite t values ('2026-01-01', 1, 9001), ('2026-01-01', 2, 9002);
+-- result:
+-- !result
+set dynamic_overwrite = false;
+-- result:
+-- !result
+function: print_query_columns("show partitions from t", "PartitionName", "Range")
+-- result:
+p202601	[types: [DATE]; keys: [2026-01-01]; ..types: [DATE]; keys: [2026-02-01]; )
+p20260203	[types: [DATE]; keys: [2026-02-03]; ..types: [DATE]; keys: [2026-02-04]; )
+-- !result
+select * from t order by dt, k;
+-- result:
+2026-01-01	1	9001
+2026-01-01	2	9002
+2026-02-03	1	2301
+-- !result
+select count(*), sum(v) from t where dt = '2026-01-01';
+-- result:
+2	18003
+-- !result
+set dynamic_overwrite = true;
+-- result:
+-- !result
+insert overwrite t values ('2026-01-15', 1, 9151), ('2026-02-03', 1, 9231), ('2026-03-05', 1, 9351);
+-- result:
+-- !result
+set dynamic_overwrite = false;
+-- result:
+-- !result
+function: print_query_columns("show partitions from t", "PartitionName", "Range")
+-- result:
+p202601	[types: [DATE]; keys: [2026-01-01]; ..types: [DATE]; keys: [2026-02-01]; )
+p20260203	[types: [DATE]; keys: [2026-02-03]; ..types: [DATE]; keys: [2026-02-04]; )
+p20260305	[types: [DATE]; keys: [2026-03-05]; ..types: [DATE]; keys: [2026-03-06]; )
+-- !result
+select * from t order by dt, k;
+-- result:
+2026-01-15	1	9151
+2026-02-03	1	9231
+2026-03-05	1	9351
+-- !result
+select dt, count(*), sum(v) from t where dt in ('2026-01-01', '2026-01-15', '2026-02-03', '2026-03-05') group by dt order by dt;
+-- result:
+2026-01-15	1	9151
+2026-02-03	1	9231
+2026-03-05	1	9351
+-- !result
+drop database test_merge_dyn_ow_pk_${uuid0};
+-- result:
+-- !result

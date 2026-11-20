@@ -28,17 +28,18 @@
 #include "compute_env/compute_env.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/load/load_stream_mgr.h"
 #include "compute_env/load/stream_context_mgr.h"
 #include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/stream_load_context_handle.h"
+#include "compute_env/load/stream_load_pipe_attachment.h"
 #include "compute_env/pipeline/driver_limiter.h"
+#include "compute_env/query/query_remote_read.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
 #include "connector_primitive/data_source_provider.h"
 #include "data_sink/exchange/data_stream_sender.h"
-#include "data_sink/result/result_sink.h"
-#include "data_sink/tablet/olap_table_sink.h"
 #include "data_workflows/load/batch_write/batch_write_mgr.h"
 #include "exec/capture_version_node.h"
 #include "exec/cross_join_node.h"
@@ -47,7 +48,6 @@
 #include "exec/exec_factory.h"
 #include "exec/hash_join_node.h"
 #include "exec/lookup_node.h"
-#include "exec/olap_scan_node.h"
 #include "exec/pipeline/adaptive/collect_stats_event.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -72,6 +72,7 @@
 #include "gutil/map_util.h"
 #include "runtime/descriptors.h"
 #include "runtime/descriptors_ext.h"
+#include "runtime/fragment_attachment.h"
 #include "runtime/runtime_filter_query_lifecycle.h"
 
 namespace starrocks::orchestration {
@@ -614,6 +615,55 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
 Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
     const TExecPlanFragmentParams& unique_request = request.unique();
+    if (request.common().query_options.query_type == TQueryType::LOAD) {
+        std::vector<std::unique_ptr<FragmentAttachment>> attachments;
+        auto bind_pipes = [&](const std::vector<TScanRangeParams>& scan_ranges) -> Status {
+            for (const auto& scan_range : scan_ranges) {
+                if (!scan_range.scan_range.__isset.broker_scan_range) {
+                    continue;
+                }
+                const auto& broker_range = scan_range.scan_range.broker_scan_range;
+                // Channel and merge-commit inputs are prepared below with StreamLoadContextHandle.
+                if (broker_range.__isset.channel_id) {
+                    continue;
+                }
+                for (const auto& range : broker_range.ranges) {
+                    if (range.file_type != TFileType::FILE_STREAM) {
+                        continue;
+                    }
+                    auto pipe = exec_env->load_stream_mgr()->get(range.load_id);
+                    if (pipe == nullptr) {
+                        auto status = Status::InternalError("Invalid or outdated load id " + print_id(range.load_id));
+                        for (const auto& attachment : attachments) {
+                            attachment->close(status);
+                        }
+                        return status;
+                    }
+                    attachments.emplace_back(std::make_unique<StreamLoadPipeAttachment>(std::move(pipe)));
+                }
+            }
+            return Status::OK();
+        };
+        for (const auto& [node_id, scan_ranges] : unique_request.params.per_node_scan_ranges) {
+            if (request.per_driver_seq_scan_ranges_of_node(node_id).empty()) {
+                RETURN_IF_ERROR(bind_pipes(scan_ranges));
+            }
+        }
+        if (unique_request.params.__isset.node_to_per_driver_seq_scan_ranges) {
+            for (const auto& [node_id, per_driver_ranges] : unique_request.params.node_to_per_driver_seq_scan_ranges) {
+                for (const auto& [driver_seq, scan_ranges] : per_driver_ranges) {
+                    RETURN_IF_ERROR(bind_pipes(scan_ranges));
+                }
+            }
+        }
+        // FE creates one input mode per fragment: existing BE-local pipes or channel inputs.
+        // Channel-only fragments fall through to StreamLoadContextHandle preparation below.
+        if (!attachments.empty()) {
+            _fragment_ctx->set_fragment_attachments(std::move(attachments));
+            return Status::OK();
+        }
+    }
+
     if (!unique_request.params.__isset.node_to_per_driver_seq_scan_ranges) {
         return Status::OK();
     }
@@ -739,6 +789,7 @@ bool FragmentExecutor::is_final_sink_type(TDataSinkType::type type) {
     case TDataSinkType::ICEBERG_DELETE_SINK:
     case TDataSinkType::ICEBERG_ROW_DELTA_SINK:
     case TDataSinkType::HIVE_TABLE_SINK:
+    case TDataSinkType::PAIMON_TABLE_SINK:
     case TDataSinkType::TABLE_FUNCTION_TABLE_SINK:
     case TDataSinkType::EXPORT_SINK:
     case TDataSinkType::BLACKHOLE_TABLE_SINK:
@@ -974,6 +1025,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
         auto mem_tracker = _fragment_ctx->runtime_state()->instance_mem_tracker();
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+        // The tablet metadata, schemas and indexes read to plan the scans are this query's remote reads.
+        ScopedRemoteReadContext remote_read_scope(query_remote_read_context(_fragment_ctx->runtime_state()));
 
         RETURN_IF_ERROR(_prepare_global_dict(request));
         RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
@@ -983,6 +1036,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
         auto mem_tracker = _fragment_ctx->runtime_state()->instance_mem_tracker();
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+        ScopedRemoteReadContext remote_read_scope(query_remote_read_context(_fragment_ctx->runtime_state()));
 
         RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
         RETURN_IF_ERROR(_prepare_stream_load_pipe(exec_env, request));
@@ -1043,11 +1097,12 @@ void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
     }
 }
 
-Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
+Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, TExecPlanFragmentParams&& request,
                                                         TExecPlanFragmentResult* response) {
     DCHECK(!request.__isset.fragment);
     DCHECK(request.__isset.params);
-    const TPlanFragmentExecParams& params = request.params;
+    // The scan ranges are moved into the morsels below.
+    TPlanFragmentExecParams& params = request.params;
     const TUniqueId& query_id = params.query_id;
     const TUniqueId& instance_id = params.fragment_instance_id;
 
@@ -1067,7 +1122,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
     std::unordered_set<int> notify_ids;
     std::vector<int32_t> closed_scan_nodes;
 
-    for (const auto& [node_id, scan_ranges] : params.per_node_scan_ranges) {
+    for (auto& [node_id, scan_ranges] : params.per_node_scan_ranges) {
         if (scan_ranges.size() == 0) continue;
         auto iter = fragment_ctx->morsel_queue_factories().find(node_id);
         if (iter == fragment_ctx->morsel_queue_factories().end()) {
@@ -1085,7 +1140,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
         RETURN_IF_ERROR(FragmentExecutor::add_scan_ranges_partition_values(runtime_state, scan_ranges));
         pipeline::Morsels morsels;
         bool has_more_morsel = false;
-        pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &has_more_morsel);
+        pipeline::ScanMorsel::build_scan_morsels(node_id, std::move(scan_ranges), true, &morsels, &has_more_morsel);
         RETURN_IF_ERROR(morsel_queue_factory->append_morsels(0, std::move(morsels)));
         morsel_queue_factory->set_has_more_scan_ranges(has_more_morsel);
         notify_ids.insert(node_id);
@@ -1096,7 +1151,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
     }
 
     if (params.__isset.node_to_per_driver_seq_scan_ranges) {
-        for (const auto& [node_id, per_driver_scan_ranges] : params.node_to_per_driver_seq_scan_ranges) {
+        for (auto& [node_id, per_driver_scan_ranges] : params.node_to_per_driver_seq_scan_ranges) {
             auto iter = fragment_ctx->morsel_queue_factories().find(node_id);
             if (iter == fragment_ctx->morsel_queue_factories().end()) {
                 return Status::InternalError(
@@ -1111,12 +1166,13 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
             }
 
             bool has_more_morsel = has_more_per_driver_seq_scan_ranges(per_driver_scan_ranges);
-            for (const auto& [driver_seq, scan_ranges] : per_driver_scan_ranges) {
+            for (auto& [driver_seq, scan_ranges] : per_driver_scan_ranges) {
                 if (scan_ranges.size() == 0) continue;
                 RETURN_IF_ERROR(FragmentExecutor::add_scan_ranges_partition_values(runtime_state, scan_ranges));
                 pipeline::Morsels morsels;
                 [[maybe_unused]] bool local_has_more;
-                pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &local_has_more);
+                pipeline::ScanMorsel::build_scan_morsels(node_id, std::move(scan_ranges), true, &morsels,
+                                                         &local_has_more);
                 RETURN_IF_ERROR(morsel_queue_factory->append_morsels(driver_seq, std::move(morsels)));
             }
             morsel_queue_factory->set_has_more_scan_ranges(has_more_morsel);

@@ -54,6 +54,13 @@ struct TBackendInfo {
     10: optional i64 mem_limit_bytes
 
     11: optional Types.TPort arrow_flight_port
+
+    // Enterprise-only fields start at 50, reserve some fields for upstream StarRocks so a sync
+    // never collides on ordinals.
+    // The node handles the lake ADD/DROP INDEX fast path (TAlterTabletReqV2.only_add_index /
+    // only_drop_index). FE sends that request only to nodes that report this: a node that predates
+    // the fast path ignores the flags and rewrites the tablet into itself, duplicating its rows.
+    50: optional bool support_lake_index_fast_path
 }
 
 struct THeartbeatResult {

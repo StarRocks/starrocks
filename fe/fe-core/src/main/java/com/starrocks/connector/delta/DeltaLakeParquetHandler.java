@@ -64,10 +64,13 @@ public class DeltaLakeParquetHandler extends DefaultParquetHandler {
                     batchReader.read(FileStatus.of(filePath, fileSize, modificationTime), physicalSchema, Optional.empty());
 
             List<ColumnarBatch> result = Lists.newArrayList();
-            while (currentFileReader != null && currentFileReader.hasNext()) {
-                result.add(currentFileReader.next());
+            try {
+                while (currentFileReader != null && currentFileReader.hasNext()) {
+                    result.add(currentFileReader.next());
+                }
+            } finally {
+                Utils.closeCloseables(currentFileReader);
             }
-            Utils.closeCloseables(currentFileReader);
             return result;
         }
     }

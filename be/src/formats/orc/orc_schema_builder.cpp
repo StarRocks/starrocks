@@ -73,12 +73,12 @@ static Status get_orc_type_from_scalar_type(const orc::Type* typ, TypeDescriptor
 
     case orc::TypeKind::STRING:
         // orc STRING type's length is 0, so we use VARCHAR(MAX_VARCHAR_LENGTH).
-        *desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        *desc = TYPE_VARCHAR_DESC;
         break;
 
     case orc::TypeKind::BINARY:
         // orc BINARY type's length is 0, so we use VARCHAR(MAX_VARCHAR_LENGTH).
-        *desc = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        *desc = TYPE_VARBINARY_DESC;
         break;
 
     case orc::TypeKind::TIMESTAMP:
@@ -111,7 +111,7 @@ static Status get_orc_type_from_scalar_type(const orc::Type* typ, TypeDescriptor
 
     default:
         // treat other type as varchar.
-        *desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        *desc = TYPE_VARCHAR_DESC;
     }
     return Status::OK();
 }
@@ -173,7 +173,7 @@ static Status get_orc_type_from_struct(const orc::Type* typ, TypeDescriptor* des
 }
 
 static Status get_orc_type_from_union(const orc::Type* typ, TypeDescriptor* desc) {
-    *desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    *desc = TYPE_VARCHAR_DESC;
     return Status::OK();
 }
 

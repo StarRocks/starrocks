@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Calculates the cardinality of a single HLL type value."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # hll_cardinality

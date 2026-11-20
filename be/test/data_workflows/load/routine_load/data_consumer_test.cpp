@@ -14,11 +14,22 @@
 
 #include "data_workflows/load/routine_load/data_consumer.h"
 
-#include <gtest/gtest.h>
+#include <chrono>
+#include <map>
+#include <thread>
+#include <vector>
 
+#include "gtest/gtest.h"
+
+// Routine load dependencies.
+#include "base/concurrency/stopwatch.hpp"
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
+#include "common/config_ingest_fwd.h"
 #include "data_workflows/load/routine_load/data_consumer_group.h"
 #include "exec/exec_env.h"
+#include "librdkafka/rdkafka.h"
+#include "librdkafka/rdkafka_mock.h"
 #include "runtime/byte_buffer.h"
 
 #ifndef __APPLE__
@@ -28,6 +39,382 @@
 namespace starrocks {
 
 class KafkaDataConsumerTest : public testing::Test {};
+
+// Exercise the public consumer API against librdkafka's in-process mock broker.
+// A small receiving queue hands off message ownership to the test immediately.
+class KafkaDataConsumerEofTest : public testing::Test {
+protected:
+    void SetUp() override {
+        std::string error;
+        std::unique_ptr<RdKafka::Conf> conf(RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL));
+        ASSERT_EQ(RdKafka::Conf::CONF_OK, conf->set("test.mock.num.brokers", "1", error));
+        ASSERT_EQ(RdKafka::Conf::CONF_OK, conf->set("log_level", "0", error));
+        ASSERT_EQ(RdKafka::Conf::CONF_OK, conf->set("linger.ms", "0", error));
+        ASSERT_EQ(RdKafka::Conf::CONF_OK, conf->set("batch.num.messages", "1", error));
+        _producer.reset(RdKafka::Producer::create(conf.get(), error));
+        ASSERT_NE(nullptr, _producer) << error;
+        auto* cluster = rd_kafka_handle_mock_cluster(_producer->c_ptr());
+        ASSERT_NE(nullptr, cluster);
+        ASSERT_EQ(RD_KAFKA_RESP_ERR_NO_ERROR, rd_kafka_mock_topic_create(cluster, _topic.c_str(), 3, 1));
+
+        TKafkaLoadInfo info;
+        info.brokers = rd_kafka_mock_cluster_bootstraps(cluster);
+        info.topic = _topic;
+        info.properties = {{"group.id", "routine-load-eof-test"}, {"enable.auto.commit", "false"},
+                           {"fetch.wait.max.ms", "10"},           {"fetch.message.max.bytes", "1024"},
+                           {"queued.min.messages", "100000"},     {"queued.max.messages.kbytes", "64"},
+                           {"fetch.queue.backoff.ms", "10"}};
+        _context = std::make_unique<StreamLoadContext>(nullptr);
+        _context->kafka_info = std::make_unique<KafkaLoadInfo>(info);
+        _consumer = std::make_unique<KafkaDataConsumer>(_context.get());
+        ASSERT_OK(_consumer->init(_context.get()));
+    }
+
+    RdKafka::ErrorCode produce(int32_t partition, int count) {
+        std::string payload(1024, 'x');
+        for (int i = 0; i < count; ++i) {
+            auto error = _producer->produce(_topic, partition, RdKafka::Producer::RK_MSG_COPY, payload.data(),
+                                            payload.size(), nullptr, 0, 0, nullptr);
+            if (error != RdKafka::ERR_NO_ERROR) {
+                return error;
+            }
+        }
+        return _producer->flush(10000);
+    }
+
+    struct BatchResult {
+        Status status;
+        std::map<int32_t, int> data_rows;
+        std::map<int32_t, int> eof_events;
+        bool data_after_eof = false;
+        RdKafka::ErrorCode produce_error = RdKafka::ERR_NO_ERROR;
+    };
+
+    BatchResult consume_batch(const std::map<int32_t, int64_t>& offsets, int records_after_first_eof = 0) {
+        BatchResult result;
+        result.status = _consumer->assign_topic_partitions(offsets, _topic, _context.get());
+        if (!result.status.ok()) {
+            return result;
+        }
+        TimedBlockingQueue<RdKafka::Message*> queue(1);
+        std::thread worker([&] {
+            result.status = _consumer->group_consume(&queue, 30000);
+            queue.shutdown();
+        });
+        RdKafka::Message* raw_message;
+        while (queue.blocking_get(&raw_message)) {
+            std::unique_ptr<RdKafka::Message> message(raw_message);
+            const int32_t partition = message->partition();
+            if (message->err() == RdKafka::ERR_NO_ERROR) {
+                ++result.data_rows[partition];
+                if (partition == 0 && result.eof_events[0] > 0) {
+                    result.data_after_eof = true;
+                }
+                // Keep the other partition backlogged while the caught-up
+                // partition produces EOF -> data -> EOF through the real SDK.
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            } else if (message->err() == RdKafka::ERR__PARTITION_EOF) {
+                ++result.eof_events[partition];
+                if (records_after_first_eof > 0 && partition == 0 && result.eof_events[0] == 1) {
+                    result.produce_error = produce(0, records_after_first_eof);
+                    if (result.produce_error != RdKafka::ERR_NO_ERROR) {
+                        queue.shutdown();
+                    }
+                }
+            }
+        }
+        worker.join();
+        return result;
+    }
+
+    const std::string _topic = "routine_load_eof_test";
+    std::unique_ptr<RdKafka::Producer> _producer;
+    std::unique_ptr<StreamLoadContext> _context;
+    std::unique_ptr<KafkaDataConsumer> _consumer;
+};
+
+TEST_F(KafkaDataConsumerEofTest, repeated_eof_does_not_stop_another_partition) {
+    constexpr int backlog = 2000;
+    ASSERT_EQ(RdKafka::ERR_NO_ERROR, produce(1, backlog));
+    auto result = consume_batch({{0, 0}, {1, 0}}, 1);
+    ASSERT_OK(result.status);
+    ASSERT_EQ(RdKafka::ERR_NO_ERROR, result.produce_error);
+    ASSERT_TRUE(result.data_after_eof);
+    ASSERT_GE(result.eof_events[0], 2);
+    EXPECT_EQ(backlog, result.data_rows[1]);
+    EXPECT_EQ(1, result.eof_events[1]);
+}
+
+TEST_F(KafkaDataConsumerEofTest, new_data_clears_a_partitions_previous_eof) {
+    ASSERT_EQ(RdKafka::ERR_NO_ERROR, produce(1, 1000));
+    auto result = consume_batch({{0, 0}, {1, 0}}, 2000);
+    ASSERT_OK(result.status);
+    ASSERT_EQ(RdKafka::ERR_NO_ERROR, result.produce_error);
+    ASSERT_TRUE(result.data_after_eof);
+    EXPECT_EQ(2000, result.data_rows[0]);
+    EXPECT_EQ(1000, result.data_rows[1]);
+    EXPECT_GE(result.eof_events[0], 2);
+    EXPECT_EQ(1, result.eof_events[1]);
+}
+
+TEST_F(KafkaDataConsumerEofTest, reassign_starts_with_clean_eof_state) {
+    auto first = consume_batch({{0, 0}});
+    ASSERT_OK(first.status);
+    ASSERT_EQ(1, first.eof_events[0]);
+
+    ASSERT_EQ(RdKafka::ERR_NO_ERROR, produce(2, 2000));
+    auto second = consume_batch({{1, 0}, {2, 0}});
+    ASSERT_OK(second.status);
+    EXPECT_EQ(2000, second.data_rows[2]);
+    EXPECT_EQ(1, second.eof_events[1]);
+    EXPECT_EQ(1, second.eof_events[2]);
+}
+
+TEST_F(KafkaDataConsumerEofTest, reset_allows_reuse_after_cancel_and_eof) {
+    auto first = consume_batch({{0, 0}});
+    ASSERT_OK(first.status);
+    ASSERT_EQ(1, first.eof_events[0]);
+    ASSERT_OK(_consumer->cancel(_context.get()));
+    ASSERT_OK(_consumer->reset());
+
+    ASSERT_EQ(RdKafka::ERR_NO_ERROR, produce(1, 10));
+    auto second = consume_batch({{1, 0}});
+    ASSERT_OK(second.status);
+    EXPECT_EQ(10, second.data_rows[1]);
+    EXPECT_EQ(1, second.eof_events[1]);
+}
+
+TEST_F(KafkaDataConsumerEofTest, cancelled_batch_does_not_enqueue_and_reset_resumes_consumption) {
+    ASSERT_EQ(RdKafka::ERR_NO_ERROR, produce(0, 1));
+    ASSERT_OK(_consumer->assign_topic_partitions({{0, 0}}, _topic, _context.get()));
+    ASSERT_OK(_consumer->cancel(_context.get()));
+
+    // Allow the data and EOF to fit if cancellation regresses, so the
+    // assertion reports unexpected messages instead of blocking the test.
+    TimedBlockingQueue<RdKafka::Message*> queue(2);
+    auto status = _consumer->group_consume(&queue, 30000);
+    queue.shutdown();
+    int queued_messages = 0;
+    RdKafka::Message* raw_message;
+    while (queue.blocking_get(&raw_message)) {
+        std::unique_ptr<RdKafka::Message> message(raw_message);
+        ++queued_messages;
+    }
+    ASSERT_OK(status);
+    EXPECT_EQ(0, queued_messages);
+
+    ASSERT_OK(_consumer->reset());
+    auto resumed = consume_batch({{0, 0}});
+    ASSERT_OK(resumed.status);
+    EXPECT_EQ(1, resumed.data_rows[0]);
+    EXPECT_EQ(1, resumed.eof_events[0]);
+}
+
+TEST_F(KafkaDataConsumerEofTest, topic_authorization_failure_returns_error_without_eof) {
+    ASSERT_EQ(RdKafka::ERR_NO_ERROR, produce(0, 1));
+    auto* cluster = rd_kafka_handle_mock_cluster(_producer->c_ptr());
+    ASSERT_NE(nullptr, cluster);
+    // Inject before assign so the error cannot race the first Fetch request.
+    rd_kafka_mock_push_request_errors(cluster, 1 /* Fetch */, 1, RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED);
+
+    auto result = consume_batch({{0, 0}});
+    ASSERT_FALSE(result.status.ok());
+    EXPECT_NE(std::string::npos, result.status.to_string().find("READ permission"));
+    EXPECT_TRUE(result.data_rows.empty());
+    EXPECT_TRUE(result.eof_events.empty());
+}
+
+TEST_F(KafkaDataConsumerEofTest, closed_queue_keeps_message_ownership_with_consumer) {
+    ASSERT_OK(_consumer->assign_topic_partitions({{0, 0}}, _topic, _context.get()));
+    TimedBlockingQueue<RdKafka::Message*> queue(1);
+    queue.shutdown();
+    ASSERT_OK(_consumer->group_consume(&queue, 30000));
+    RdKafka::Message* message = nullptr;
+    EXPECT_FALSE(queue.blocking_get(&message));
+    EXPECT_EQ(nullptr, message);
+}
+
+// A partition the consumer does not know makes it refresh the topic metadata once and query again, because a pooled
+// consumer misses the partitions added since its last refresh. A partition the topic really lacks still fails, and
+// fails fast rather than after the timeout.
+TEST_F(KafkaDataConsumerEofTest, partition_offset_of_a_missing_partition_fails_after_a_metadata_refresh) {
+    ASSERT_EQ(RdKafka::ERR_NO_ERROR, produce(0, 3));
+    std::vector<int32_t> partitions{0, 7};
+    std::vector<int64_t> beginning_offsets;
+    std::vector<int64_t> latest_offsets;
+    MonotonicStopWatch watch;
+    watch.start();
+    auto status = _consumer->get_partition_offset(&partitions, &beginning_offsets, &latest_offsets, 30000);
+    ASSERT_FALSE(status.ok());
+    EXPECT_NE(std::string::npos, status.to_string().find("failed to get offset of partition: 7")) << status;
+    EXPECT_NE(std::string::npos, status.to_string().find("Unknown partition")) << status;
+    EXPECT_LT(watch.elapsed_time() / 1000 / 1000, 10000);
+    ASSERT_EQ(1, latest_offsets.size());
+    EXPECT_EQ(0, beginning_offsets[0]);
+    EXPECT_EQ(3, latest_offsets[0]);
+}
+
+// The case the refresh is for: a consumer answers "Unknown partition" from its metadata cache until librdkafka
+// refreshes it, for example after partitions were added to the topic. The mock broker cannot add partitions, so here
+// the consumer caches the topic as missing before the topic is created. The offset query must refresh the metadata
+// once and find the partitions.
+TEST_F(KafkaDataConsumerEofTest, partition_offset_is_found_after_refreshing_stale_metadata) {
+    auto* cluster = rd_kafka_handle_mock_cluster(_producer->c_ptr());
+    ASSERT_NE(nullptr, cluster);
+    const std::string topic = "routine_load_late_topic";
+    TKafkaLoadInfo info;
+    info.brokers = rd_kafka_mock_cluster_bootstraps(cluster);
+    info.topic = topic;
+    info.properties = {{"group.id", "routine-load-late-topic-test"}, {"enable.auto.commit", "false"}};
+    auto context = std::make_unique<StreamLoadContext>(nullptr);
+    context->kafka_info = std::make_unique<KafkaLoadInfo>(info);
+    auto consumer = std::make_unique<KafkaDataConsumer>(context.get());
+    ASSERT_OK(consumer->init(context.get()));
+
+    std::vector<int32_t> partitions{0};
+    std::vector<int64_t> beginning_offsets;
+    std::vector<int64_t> latest_offsets;
+    ASSERT_FALSE(consumer->get_partition_offset(&partitions, &beginning_offsets, &latest_offsets, 10000).ok());
+
+    ASSERT_EQ(RD_KAFKA_RESP_ERR_NO_ERROR, rd_kafka_mock_topic_create(cluster, topic.c_str(), 2, 1));
+    partitions = {0, 1};
+    beginning_offsets.clear();
+    latest_offsets.clear();
+    ASSERT_OK(consumer->get_partition_offset(&partitions, &beginning_offsets, &latest_offsets, 10000));
+    EXPECT_EQ((std::vector<int64_t>{0, 0}), beginning_offsets);
+    EXPECT_EQ((std::vector<int64_t>{0, 0}), latest_offsets);
+}
+
+// Querying the metadata creates the consumer's topic object, which consuming the topic then reuses. An offset out of
+// range must still fail the consumption, as auto.offset.reset=error asks, rather than jump to the end of the partition
+// and skip what is there.
+TEST_F(KafkaDataConsumerEofTest, out_of_range_offset_fails_after_a_metadata_query) {
+    ASSERT_EQ(RdKafka::ERR_NO_ERROR, produce(0, 3));
+    std::vector<int32_t> partitions;
+    ASSERT_OK(_consumer->get_partition_meta(&partitions, 10000));
+    ASSERT_EQ(3, partitions.size());
+
+    auto result = consume_batch({{0, 100}});
+    ASSERT_FALSE(result.status.ok());
+    EXPECT_NE(std::string::npos, result.status.to_string().find("out of range")) << result.status;
+    EXPECT_TRUE(result.data_rows.empty());
+    EXPECT_TRUE(result.eof_events.empty());
+}
+
+struct TimedRead {
+    Status status;
+    int rows = 0;
+    int64_t elapsed_ms = 0;
+};
+
+// Reads a partition from its beginning to its end with a new consumer of the given job properties.
+static TimedRead read_partition_to_end(const std::string& brokers, const std::string& topic, int32_t partition,
+                                       const std::map<std::string, std::string>& properties) {
+    TKafkaLoadInfo info;
+    info.brokers = brokers;
+    info.topic = topic;
+    info.properties = properties;
+    StreamLoadContext context(nullptr);
+    context.kafka_info = std::make_unique<KafkaLoadInfo>(info);
+    KafkaDataConsumer consumer(&context);
+    TimedRead read;
+    read.status = consumer.init(&context);
+    if (!read.status.ok()) {
+        return read;
+    }
+    const auto started = std::chrono::steady_clock::now();
+    read.status = consumer.assign_topic_partitions({{partition, 0}}, topic, &context);
+    if (!read.status.ok()) {
+        return read;
+    }
+    TimedBlockingQueue<RdKafka::Message*> queue(1);
+    std::thread worker([&] {
+        read.status = consumer.group_consume(&queue, 30000);
+        queue.shutdown();
+    });
+    RdKafka::Message* raw_message;
+    while (queue.blocking_get(&raw_message)) {
+        std::unique_ptr<RdKafka::Message> message(raw_message);
+        if (message->err() == RdKafka::ERR_NO_ERROR) {
+            ++read.rows;
+        }
+    }
+    worker.join();
+    read.elapsed_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
+    return read;
+}
+
+// One 1 KB message per fetch, after which the local queue is over queued.max.messages.kbytes, so librdkafka holds off
+// the next fetch for fetch.queue.backoff.ms. With librdkafka's default of 1000 ms, reading 10 messages takes about 6 s;
+// with 10 ms, about 0.1 s.
+static const std::map<std::string, std::string> kQueueFullAfterEachFetch = {
+        {"group.id", "routine-load-fetch-backoff-test"},
+        {"enable.auto.commit", "false"},
+        {"fetch.wait.max.ms", "10"},
+        {"fetch.message.max.bytes", "1024"},
+        {"queued.max.messages.kbytes", "1"}};
+
+TEST_F(KafkaDataConsumerEofTest, full_local_queue_is_fetched_again_after_the_configured_backoff) {
+    ASSERT_EQ(RdKafka::ERR_NO_ERROR, produce(1, 10));
+    auto read = read_partition_to_end(_context->kafka_info->brokers, _topic, 1, kQueueFullAfterEachFetch);
+    ASSERT_OK(read.status);
+    EXPECT_EQ(10, read.rows);
+    EXPECT_LT(read.elapsed_ms, 3000);
+}
+
+TEST_F(KafkaDataConsumerEofTest, job_fetch_queue_backoff_overrides_the_config) {
+    ASSERT_EQ(RdKafka::ERR_NO_ERROR, produce(1, 10));
+    const int32_t configured = config::routine_load_kafka_fetch_queue_backoff_ms;
+    DeferOp restore([configured] { config::routine_load_kafka_fetch_queue_backoff_ms = configured; });
+    config::routine_load_kafka_fetch_queue_backoff_ms = 1000;
+    auto properties = kQueueFullAfterEachFetch;
+    properties["fetch.queue.backoff.ms"] = "10";
+    auto read = read_partition_to_end(_context->kafka_info->brokers, _topic, 1, properties);
+    ASSERT_OK(read.status);
+    EXPECT_EQ(10, read.rows);
+    EXPECT_LT(read.elapsed_ms, 3000);
+}
+
+// A consumer keeps the backoff it was created with, so the pool hands the next tasks only consumers created after a
+// change.
+TEST_F(KafkaDataConsumerEofTest, consumer_created_with_another_fetch_queue_backoff_is_not_reused) {
+    const int32_t configured = config::routine_load_kafka_fetch_queue_backoff_ms;
+    DeferOp restore([configured] { config::routine_load_kafka_fetch_queue_backoff_ms = configured; });
+    _context->load_src_type = TLoadSourceType::KAFKA;
+    EXPECT_TRUE(_consumer->match(_context.get()));
+    config::routine_load_kafka_fetch_queue_backoff_ms = configured + 1;
+    EXPECT_FALSE(_consumer->match(_context.get()));
+    config::routine_load_kafka_fetch_queue_backoff_ms = configured;
+    EXPECT_TRUE(_consumer->match(_context.get()));
+}
+
+// The number of ops, mostly fetched messages, waiting in the queue that the consumer polls.
+static size_t consumer_queue_length(RdKafka::KafkaConsumer* consumer) {
+    rd_kafka_queue_t* queue = rd_kafka_queue_get_consumer(consumer->c_ptr());
+    const size_t length = rd_kafka_queue_length(queue);
+    rd_kafka_queue_destroy(queue);
+    return length;
+}
+
+// Nobody polls a pooled consumer, so reset() has to drop what the fetchers left in its queue: librdkafka keeps the
+// messages of an assignment that has ended until the next poll.
+TEST_F(KafkaDataConsumerEofTest, reset_drops_the_messages_fetched_for_the_last_assignment) {
+    ASSERT_EQ(RdKafka::ERR_NO_ERROR, produce(1, 200));
+    ASSERT_OK(_consumer->assign_topic_partitions({{1, 0}}, _topic, _context.get()));
+    // The task reads one message and stops, while the fetcher goes on filling the local queue.
+    std::unique_ptr<RdKafka::Message> message(_consumer->_k_consumer->consume(10000));
+    ASSERT_EQ(RdKafka::ERR_NO_ERROR, message->err());
+    constexpr size_t prefetched = 32;
+    for (int i = 0; i < 1000 && consumer_queue_length(_consumer->_k_consumer) < prefetched; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    ASSERT_GE(consumer_queue_length(_consumer->_k_consumer), prefetched);
+
+    ASSERT_OK(_consumer->reset());
+    // The barrier of the stopped fetcher and a fetch in flight may still arrive after the poll.
+    EXPECT_LT(consumer_queue_length(_consumer->_k_consumer), prefetched / 2);
+}
 
 // A minimal RdKafka::Message stand-in for build_kafka_message_meta: only the fields the builder reads
 // (partition/offset/timestamp/key/headers) are backed; the rest of the librdkafka interface returns

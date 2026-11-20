@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW ANALYZE STATUS views the status of collection tasks."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW ANALYZE STATUS

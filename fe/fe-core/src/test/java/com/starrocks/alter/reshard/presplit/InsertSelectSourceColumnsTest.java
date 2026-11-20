@@ -2104,9 +2104,30 @@ public class InsertSelectSourceColumnsTest {
     }
 
     @Test
-    public void matchesSourceAliasWithDbQualifierReturnsFalse() {
-        // alias in scope, but slot carries a spurious db qualifier -> false
+    public void matchesSourceAliasWithMatchingDbQualifierMatches() {
+        // After analysis a slot of FROM db1.src AS s is qualified as db1.s: the source's db under the alias.
         TableName slotTbl = new TableName(null, "db1", "s");
+        Assertions.assertTrue(
+                InsertSelectSourceColumns.matchesSource(slotTbl, SRC_NAME, "s"));
+    }
+
+    @Test
+    public void matchesSourceAliasWithDifferentDbQualifierReturnsFalse() {
+        TableName slotTbl = new TableName(null, "db2", "s");
+        Assertions.assertFalse(
+                InsertSelectSourceColumns.matchesSource(slotTbl, SRC_NAME, "s"));
+    }
+
+    @Test
+    public void matchesSourceAliasWithMatchingCatalogAndDbQualifierMatches() {
+        TableName slotTbl = new TableName("cat", "db1", "s");
+        Assertions.assertTrue(
+                InsertSelectSourceColumns.matchesSource(slotTbl, SRC_NAME, "s"));
+    }
+
+    @Test
+    public void matchesSourceAliasWithDifferentCatalogQualifierReturnsFalse() {
+        TableName slotTbl = new TableName("other_cat", "db1", "s");
         Assertions.assertFalse(
                 InsertSelectSourceColumns.matchesSource(slotTbl, SRC_NAME, "s"));
     }

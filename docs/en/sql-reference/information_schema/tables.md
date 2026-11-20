@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "tables provides information about tables."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # tables

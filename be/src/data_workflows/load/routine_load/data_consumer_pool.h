@@ -34,10 +34,13 @@
 
 #pragma once
 
+#include <atomic>
 #include <ctime>
+#include <list>
 #include <memory>
 #include <mutex>
 #include <thread>
+#include <vector>
 
 #include "data_workflows/load/routine_load/data_consumer.h"
 
@@ -48,16 +51,12 @@ class DataConsumerGroup;
 class Status;
 
 // DataConsumerPool saves all available data consumer
-// to be reused
+// to be reused. Its capacity is config::routine_load_kafka_consumer_pool_size.
 class DataConsumerPool {
 public:
-    DataConsumerPool(int64_t max_pool_size)
-            : _is_closed(std::make_shared<bool>(false)), _max_pool_size(max_pool_size) {}
+    DataConsumerPool() = default;
 
-    ~DataConsumerPool() {
-        std::unique_lock<std::mutex> l(_lock);
-        *_is_closed = true;
-    }
+    ~DataConsumerPool() { stop(); }
 
     void stop();
 
@@ -68,20 +67,23 @@ public:
     // get several consumers and put them into group
     Status get_consumer_grp(StreamLoadContext* ctx, std::shared_ptr<DataConsumerGroup>* ret);
 
-    // return the consumer to the pool
-    void return_consumer(const std::shared_ptr<DataConsumer>& consumer);
-    // return the consumers in consumer group to the pool
-    void return_consumers(DataConsumerGroup* grp);
+    // Return the consumer to the pool; a full pool evicts the consumer idle for the longest to make room.
+    // Task/RPC callers keep the evicted consumers alive until their transaction/callback or response is handled,
+    // since closing them can wait for the brokers. A disabled pool also returns the unpooled incoming consumer.
+    [[nodiscard]] std::vector<std::shared_ptr<DataConsumer>> return_consumer(
+            const std::shared_ptr<DataConsumer>& consumer);
+    // Return the group to the pool and transfer ownership of all evicted consumers to the caller.
+    [[nodiscard]] std::vector<std::shared_ptr<DataConsumer>> return_consumers(DataConsumerGroup* grp);
 
+    // start the background worker that closes the consumers idle for too long
     void start_bg_worker();
 
 private:
     void _clean_idle_consumer_bg();
 
     std::mutex _lock;
-    std::shared_ptr<bool> _is_closed;
+    std::atomic<bool> _is_closed{false};
     std::list<std::shared_ptr<DataConsumer>> _pool;
-    int64_t _max_pool_size;
 
     std::thread _clean_idle_consumer_thread;
 };

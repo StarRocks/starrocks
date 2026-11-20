@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "StarRocks クラスタをより新しいバージョンにアップグレードする方法。"
+products: [oss]
 ---
 
 # StarRocks のアップグレード
@@ -13,7 +14,7 @@ description: "StarRocks クラスタをより新しいバージョンにアッ�
 :::important
 StarRocks をアップグレードする前に以下を行ってください:
 
-- アップグレードする StarRocks バージョンと、現在のバージョンからターゲットバージョンまでのすべてのバージョンの [リリースノート](https://docs.starrocks.io/releasenotes/release-3.5/) を読み、以下を確認してください:
+- アップグレードする StarRocks バージョンと、現在のバージョンからターゲットバージョンまでのすべてのバージョンの [リリースノート](../../release_notes/release_notes.md) を読み、以下を確認してください:
   - StarRocks 内の動作変更をメモする
   - StarRocks と外部システム（インポート、エクスポート、可視化などに使用される）との統合に関する変更をメモする
 - ターゲットバージョンの [デプロイ前提条件](../preparation/deployment_prerequisites.md) を確認してください。例えば、StarRocks 3.5.x は JDK 17 を必要とし、Ubuntu 上の StarRocks 3.4.x は JDK 11 を必要とします。
@@ -52,7 +53,7 @@ StarRocks のバージョンは、**Major.Minor.Patch** の形式で表され、
 > 1. [ALTER SYSTEM CREATE IMAGE](../../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) を実行して新しいイメージを作成します。
 > 2. 新しいイメージがすべての Follower FE に同期されるのを待ちます。
 >
-> イメージファイルが同期されたかどうかは、Leader FE のログファイル **fe.log** を確認することで確認できます。"push image.* from subdir [] to other nodes. totally xx nodes, push successful xx nodes" のようなログ記録があれば、イメージファイルが正常に同期されたことを示しています。
+> イメージファイルが同期されたかどうかは、Leader FE のログファイル **fe.log** を確認することで確認できます。"push image.* from subdir [] to other nodes. totally xx nodes, push succeeded xx nodes" のようなログ記録があれば、イメージファイルが正常に同期されたことを示しています。
 
 ### アップグレード手順
 

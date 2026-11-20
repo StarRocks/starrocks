@@ -18,6 +18,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.planner.OlapTableSink;
+import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.SessionVariable;
@@ -98,6 +100,15 @@ public class InsertPlannerShadowRewriteSubsetTest extends PlanTestBase {
         return null;
     }
 
+    private static OlapTableSink findOlapTableSink(ExecPlan plan) {
+        for (PlanFragment fragment : plan.getFragments()) {
+            if (fragment.getSink() instanceof OlapTableSink) {
+                return (OlapTableSink) fragment.getSink();
+            }
+        }
+        return null;
+    }
+
     private static ExecPlan planShadowRewriteSubsetInsert(OlapTable table, String sql, long targetWriteIndexId)
             throws Exception {
         List<StatementBase> stmts = SqlParser.parse(sql, new SessionVariable());
@@ -156,5 +167,46 @@ public class InsertPlannerShadowRewriteSubsetTest extends PlanTestBase {
         List<String> targetIndexColumns = table.getIndexMetaByMetaId(shadowMetaId).getSchema()
                 .stream().map(Column::getName).toList();
         Assertions.assertFalse(targetIndexColumns.contains("k1"), "k1 must not be in the target rollup index");
+    }
+
+    @Test
+    public void testShadowRewriteSubsetWithoutAutoIncrementColumnDropsSlot() throws Exception {
+        starRocksAssert.withTable("create table d_shadow_autoinc (k1 int not null, k2 int not null,"
+                + " id bigint not null auto_increment)\n"
+                + "duplicate key(k1) distributed by hash(k1) buckets 1\n"
+                + "properties('replication_num' = '1')");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "d_shadow_autoinc");
+        List<Column> base = table.getSchemaByIndexMetaId(table.getBaseIndexMetaId());
+        long shadowMetaId = registerSubsetRollupIndex(table, "r_sub_autoinc", List.of(base.get(0), base.get(1)));
+
+        ExecPlan plan = planShadowRewriteSubsetInsert(table,
+                "insert into d_shadow_autoinc (k1, k2) select k1, k2 from d_shadow_autoinc", shadowMetaId);
+
+        OlapTableSink sink = findOlapTableSink(plan);
+        Assertions.assertNotNull(sink);
+        Assertions.assertEquals(-1, sink.toThrift().getOlap_table_sink().getAuto_increment_slot_id());
+        Assertions.assertTrue(slotOf(sink.getTupleDescriptor(), "id").getIsNullable(),
+                "the id slot must be nullable when the write does not store it");
+    }
+
+    @Test
+    public void testShadowRewriteSubsetWithAutoIncrementColumnKeepsSlot() throws Exception {
+        starRocksAssert.withTable("create table d_shadow_autoinc_kept (k1 int not null, k2 int not null,"
+                + " id bigint not null auto_increment)\n"
+                + "duplicate key(k1) distributed by hash(k1) buckets 1\n"
+                + "properties('replication_num' = '1')");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "d_shadow_autoinc_kept");
+        List<Column> base = table.getSchemaByIndexMetaId(table.getBaseIndexMetaId());
+        long shadowMetaId = registerSubsetRollupIndex(table, "r_sub_autoinc_kept", List.of(base.get(0), base.get(2)));
+
+        ExecPlan plan = planShadowRewriteSubsetInsert(table,
+                "insert into d_shadow_autoinc_kept (k1, id) select k1, id from d_shadow_autoinc_kept", shadowMetaId);
+
+        OlapTableSink sink = findOlapTableSink(plan);
+        Assertions.assertNotNull(sink);
+        int idSlotId = slotOf(sink.getTupleDescriptor(), "id").getId().asInt();
+        Assertions.assertEquals(idSlotId, sink.toThrift().getOlap_table_sink().getAuto_increment_slot_id());
     }
 }

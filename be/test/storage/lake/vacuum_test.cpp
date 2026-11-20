@@ -44,7 +44,13 @@
 #include "test_util.h"
 
 #if defined(ADDRESS_SANITIZER)
+// clang's compiler-rt ships this header; gcc's libsanitizer exports the symbol but not the
+// header, so declare it ourselves there.
+#if __has_include(<sanitizer/allocator_interface.h>)
 #include <sanitizer/allocator_interface.h>
+#else
+extern "C" size_t __sanitizer_get_current_allocated_bytes(void);
+#endif
 #elif STARROCKS_ENABLE_JEMALLOC_MEM_HOOK
 #include "jemalloc/jemalloc.h"
 #endif
@@ -71,6 +77,29 @@ static std::optional<int64_t> allocated_bytes() {
 // Forward-declare internal helper exposed for testing (defined in vacuum.cpp).
 int64_t calculate_retry_delay(int64_t last_delay, int64_t base, int64_t max_retries);
 
+namespace {
+
+// Like Starlet, tablets have distinct virtual roots for the same partition's files. Symlinks below
+// let the local filesystem serve these aliases, while real_location() returns the shared object key.
+class StarletStyleLocationProvider final : public LocationProvider {
+public:
+    explicit StarletStyleLocationProvider(std::string partition_dir) : _partition_dir(std::move(partition_dir)) {}
+
+    std::string root_location(int64_t tablet_id) const override {
+        return join_path(_partition_dir, std::to_string(tablet_id));
+    }
+
+    StatusOr<std::string> real_location(const std::string& path) const override {
+        auto suffix = path.find('/', _partition_dir.size() + 1);
+        return suffix == std::string::npos ? _partition_dir : _partition_dir + path.substr(suffix);
+    }
+
+private:
+    const std::string _partition_dir;
+};
+
+} // namespace
+
 struct VacuumTestArg {
     int64_t min_batch_size;
 };
@@ -85,12 +114,20 @@ public:
     }
 
     void TearDown() override {
+        remove_tablet_aliases();
         remove_test_dir_ignore_error();
         _tablet_mgr->prune_metacache();
     }
 
 protected:
     constexpr static const char* const kTestDir = "./lake_vacuum_test";
+
+    void remove_tablet_aliases() {
+        for (const auto& path : _tablet_aliases) {
+            (void)unlink(path.c_str());
+        }
+        _tablet_aliases.clear();
+    }
 
     void create_data_file(const std::string& name) {
         auto full_path = join_path(join_path(kTestDir, kSegmentDirectoryName), name);
@@ -136,7 +173,425 @@ protected:
             ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas));
         }
     }
+
+    void use_starlet_style_locations(const std::vector<int64_t>& tablet_ids) {
+        auto provider = std::make_shared<StarletStyleLocationProvider>(kTestDir);
+        for (auto tablet_id : tablet_ids) {
+            ASSERT_EQ(0, symlink(".", provider->root_location(tablet_id).c_str()));
+            _tablet_aliases.push_back(provider->root_location(tablet_id));
+        }
+        _tablet_mgr->TEST_set_location_provider(std::move(provider));
+    }
+
+    void put_empty_metadata(const std::vector<int64_t>& tablet_ids, int64_t first_version, int64_t last_version) {
+        for (auto tablet_id : tablet_ids) {
+            for (auto version = first_version; version <= last_version; ++version) {
+                auto metadata = std::make_shared<TabletMetadataPB>();
+                metadata->set_id(tablet_id);
+                metadata->set_version(version);
+                metadata->set_commit_time(1000);
+                metadata->set_prev_garbage_version(version - 1);
+                ASSERT_OK(_tablet_mgr->put_tablet_metadata(metadata));
+            }
+        }
+    }
+
+    void put_cached_bundles(const std::vector<int64_t>& tablet_ids, int64_t first_version, int64_t last_version) {
+        for (auto version = first_version; version <= last_version; ++version) {
+            std::map<int64_t, TabletMetadataPB> metadatas;
+            for (auto tablet_id : tablet_ids) {
+                auto& metadata = metadatas[tablet_id];
+                metadata.set_id(tablet_id);
+                metadata.set_version(version);
+                metadata.set_commit_time(1000);
+                metadata.set_prev_garbage_version(version - 1);
+            }
+            ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(metadatas));
+            for (auto tablet_id : tablet_ids) {
+                ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version, false));
+                ASSERT_OK(_tablet_mgr->cache_tablet_metadata(metadata));
+            }
+        }
+    }
+
+    std::vector<std::string> _tablet_aliases;
 };
+
+TEST_P(LakeVacuumTest, combined_txn_log_shares_cache_and_delete_evicts_it) {
+    use_starlet_style_locations({500, 501});
+    CombinedTxnLogPB combined;
+    for (auto tablet_id : {500, 501}) {
+        auto* log = combined.add_txn_logs();
+        log->set_tablet_id(tablet_id);
+        log->set_txn_id(100);
+        log->set_partition_id(10);
+    }
+    ASSERT_OK(_tablet_mgr->put_combined_txn_log(combined));
+    for (const auto& log : combined.txn_logs()) {
+        _tablet_mgr->metacache()->cache_txn_log(
+                MetacacheKey::txn_log(_tablet_mgr->txn_log_location(log.tablet_id(), log.txn_id())),
+                std::make_shared<TxnLogPB>(log));
+    }
+    auto path = _tablet_mgr->combined_txn_log_location(500, 100);
+    auto other_path = _tablet_mgr->combined_txn_log_location(501, 100);
+    ASSERT_NE(path, other_path);
+    ASSIGN_OR_ABORT(auto key, _tablet_mgr->location_provider()->real_location(path));
+    ASSIGN_OR_ABORT(auto other_key, _tablet_mgr->location_provider()->real_location(other_path));
+    ASSERT_EQ(key, other_key);
+    auto* cache = _tablet_mgr->metacache();
+
+    ASSERT_OK(_tablet_mgr->get_combined_txn_log(path, false));
+    ASSERT_EQ(nullptr, cache->lookup_combined_txn_log(MetacacheKey::TEST_from_string(key)));
+    ASSIGN_OR_ABORT(auto first, _tablet_mgr->get_combined_txn_log(path));
+    ASSERT_EQ(first, cache->lookup_combined_txn_log(MetacacheKey::TEST_from_string(key)));
+    EXPECT_EQ(nullptr, cache->lookup_combined_txn_log(MetacacheKey::TEST_from_string(path)));
+    EXPECT_EQ(nullptr, cache->lookup_combined_txn_log(MetacacheKey::TEST_from_string(other_path)));
+
+    // A storage read would now fail. Both aliases must still return the same cached object.
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFileWithHeader::load::corruption", [](void* arg) {
+        *static_cast<Status*>(arg) = Status::IOError("unexpected storage read on cache hit");
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    ASSIGN_OR_ABORT(auto second, _tablet_mgr->get_combined_txn_log(path));
+    ASSIGN_OR_ABORT(auto other, _tablet_mgr->get_combined_txn_log(other_path));
+    EXPECT_EQ(first, second);
+    EXPECT_EQ(first, other);
+    SyncPoint::GetInstance()->ClearAllCallBacks();
+    SyncPoint::GetInstance()->DisableProcessing();
+
+    DeleteTxnLogRequest request;
+    DeleteTxnLogResponse response;
+    request.add_tablet_ids(501);
+    auto* info = request.add_txn_infos();
+    info->set_txn_id(100);
+    info->set_combined_txn_log(true);
+    delete_txn_log(_tablet_mgr.get(), request, &response);
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
+    EXPECT_FALSE(file_exist(combined_txn_log_filename(100)));
+    EXPECT_EQ(nullptr, cache->lookup_combined_txn_log(MetacacheKey::TEST_from_string(key)));
+    EXPECT_EQ(nullptr, cache->lookup_combined_txn_log(MetacacheKey::TEST_from_string(path)));
+    EXPECT_EQ(nullptr, cache->lookup_combined_txn_log(MetacacheKey::TEST_from_string(other_path)));
+    EXPECT_EQ(nullptr, cache->lookup_txn_log(MetacacheKey::txn_log(_tablet_mgr->txn_log_location(501, 100))));
+}
+
+TEST_P(LakeVacuumTest, vacuum_evicts_non_anchor_metadata) {
+    // Cover the one-shot vacuum and the incremental protocol's commit path.
+    for (bool incremental : {false, true}) {
+        SCOPED_TRACE(incremental);
+        remove_tablet_aliases();
+        clear_and_init_test_dir();
+        _tablet_mgr->prune_metacache();
+        use_starlet_style_locations({500, 501});
+        put_empty_metadata({500, 501}, 1, 3);
+        for (auto tablet_id : {500, 501}) {
+            ASSERT_NE(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(MetacacheKey::tablet_metadata(
+                                       _tablet_mgr->tablet_metadata_location(tablet_id, 1))));
+        }
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_partition_id(10);
+        request.set_min_retain_version(3);
+        request.set_grace_timestamp(2000);
+        request.add_retain_versions(2);
+        for (auto tablet_id : {500, 501}) {
+            auto* info = request.add_tablet_infos();
+            info->set_tablet_id(tablet_id);
+            info->set_min_version(1);
+        }
+        if (incremental) {
+            request.set_max_versions_per_round(100);
+            vacuum(_tablet_mgr.get(), request, &response);
+            ASSERT_EQ(0, response.status().status_code()) << response.status().DebugString();
+            request.mutable_vacuum_state()->CopyFrom(response.vacuum_state());
+            response.Clear();
+        }
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_EQ(0, response.status().status_code()) << response.status().DebugString();
+        for (auto tablet_id : {500, 501}) {
+            EXPECT_FALSE(file_exist(tablet_metadata_filename(tablet_id, 1)));
+            EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(MetacacheKey::tablet_metadata(
+                                       _tablet_mgr->tablet_metadata_location(tablet_id, 1))));
+            for (auto retained_version : {2, 3}) {
+                EXPECT_TRUE(file_exist(tablet_metadata_filename(tablet_id, retained_version)));
+                EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(MetacacheKey::tablet_metadata(
+                                           _tablet_mgr->tablet_metadata_location(tablet_id, retained_version))));
+            }
+        }
+    }
+}
+
+TEST_P(LakeVacuumTest, vacuum_full_evicts_non_anchor_metadata) {
+    use_starlet_style_locations({500, 501});
+    put_empty_metadata({500, 501}, 1, 3);
+    VacuumFullRequest request;
+    VacuumFullResponse response;
+    request.set_partition_id(10);
+    request.set_tablet_id(500);
+    request.set_min_active_txn_id(1);
+    request.set_grace_timestamp(2000);
+    request.set_min_check_version(1);
+    request.set_max_check_version(3);
+    request.add_retain_versions(2);
+    vacuum_full(_tablet_mgr.get(), request, &response);
+    ASSERT_EQ(0, response.status().status_code()) << response.status().DebugString();
+    for (auto tablet_id : {500, 501}) {
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(tablet_id, 1)));
+        EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
+                                   MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(tablet_id, 1))));
+        for (auto retained_version : {2, 3}) {
+            EXPECT_TRUE(file_exist(tablet_metadata_filename(tablet_id, retained_version)));
+            EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(MetacacheKey::tablet_metadata(
+                                       _tablet_mgr->tablet_metadata_location(tablet_id, retained_version))));
+        }
+    }
+}
+
+TEST_P(LakeVacuumTest, vacuum_evicts_bundled_metadata) {
+    for (bool incremental : {false, true}) {
+        SCOPED_TRACE(incremental);
+        remove_tablet_aliases();
+        clear_and_init_test_dir();
+        _tablet_mgr->prune_metacache();
+        use_starlet_style_locations({500, 501});
+        put_cached_bundles({500, 501}, 2, 4);
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_partition_id(10);
+        request.set_min_retain_version(4);
+        request.set_grace_timestamp(2000);
+        request.set_enable_file_bundling(true);
+        request.add_retain_versions(3);
+        for (auto tablet_id : {500, 501}) {
+            auto* info = request.add_tablet_infos();
+            info->set_tablet_id(tablet_id);
+            info->set_min_version(2);
+        }
+        if (incremental) {
+            request.set_max_versions_per_round(100);
+            vacuum(_tablet_mgr.get(), request, &response);
+            ASSERT_EQ(0, response.status().status_code()) << response.status().DebugString();
+            request.mutable_vacuum_state()->CopyFrom(response.vacuum_state());
+            response.Clear();
+        }
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_EQ(0, response.status().status_code()) << response.status().DebugString();
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 2)));
+        for (auto tablet_id : {500, 501}) {
+            EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(MetacacheKey::tablet_metadata(
+                                       _tablet_mgr->tablet_metadata_location(tablet_id, 2))));
+            for (auto version : {3, 4}) {
+                EXPECT_TRUE(file_exist(tablet_metadata_filename(0, version)));
+                EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(MetacacheKey::tablet_metadata(
+                                           _tablet_mgr->tablet_metadata_location(tablet_id, version))));
+            }
+        }
+    }
+}
+
+TEST_P(LakeVacuumTest, vacuum_full_evicts_bundled_metadata) {
+    use_starlet_style_locations({500, 501});
+    put_cached_bundles({500, 501}, 2, 4);
+    VacuumFullRequest request;
+    VacuumFullResponse response;
+    request.set_partition_id(10);
+    request.set_tablet_id(500);
+    request.set_min_active_txn_id(1);
+    request.set_grace_timestamp(2000);
+    request.set_min_check_version(2);
+    request.set_max_check_version(4);
+    request.add_retain_versions(3);
+    vacuum_full(_tablet_mgr.get(), request, &response);
+    ASSERT_EQ(0, response.status().status_code()) << response.status().DebugString();
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 2)));
+    for (auto tablet_id : {500, 501}) {
+        EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
+                                   MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(tablet_id, 2))));
+        for (auto version : {3, 4}) {
+            EXPECT_TRUE(file_exist(tablet_metadata_filename(0, version)));
+            EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(MetacacheKey::tablet_metadata(
+                                       _tablet_mgr->tablet_metadata_location(tablet_id, version))));
+        }
+    }
+}
+
+TEST_P(LakeVacuumTest, delete_txn_log_evicts_both_request_formats) {
+    use_starlet_style_locations({500, 501});
+    for (bool use_txn_infos : {false, true}) {
+        SCOPED_TRACE(use_txn_infos);
+        DeleteTxnLogRequest request;
+        DeleteTxnLogResponse response;
+        for (auto tablet_id : {500, 501}) {
+            request.add_tablet_ids(tablet_id);
+            for (auto txn_id : {100, 101}) {
+                auto log = std::make_shared<TxnLogPB>();
+                log->set_tablet_id(tablet_id);
+                log->set_txn_id(txn_id);
+                ASSERT_OK(_tablet_mgr->put_txn_log(log));
+                ASSERT_NE(nullptr, _tablet_mgr->metacache()->lookup_txn_log(
+                                           MetacacheKey::txn_log(_tablet_mgr->txn_log_location(tablet_id, txn_id))));
+            }
+        }
+        if (use_txn_infos) {
+            request.add_txn_infos()->set_txn_id(100);
+        } else {
+            request.add_txn_ids(100);
+        }
+        delete_txn_log(_tablet_mgr.get(), request, &response);
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
+        for (auto tablet_id : {500, 501}) {
+            EXPECT_FALSE(file_exist(txn_log_filename(tablet_id, 100)));
+            EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_txn_log(
+                                       MetacacheKey::txn_log(_tablet_mgr->txn_log_location(tablet_id, 100))));
+            EXPECT_TRUE(file_exist(txn_log_filename(tablet_id, 101)));
+            EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_txn_log(
+                                       MetacacheKey::txn_log(_tablet_mgr->txn_log_location(tablet_id, 101))));
+        }
+    }
+}
+
+TEST_P(LakeVacuumTest, delete_tablets_evicts_metadata_and_txn_logs) {
+    use_starlet_style_locations({500, 501});
+    put_empty_metadata({500, 501}, 1, 2);
+    CombinedTxnLogPB combined;
+    for (auto tablet_id : {500, 501}) {
+        auto log = std::make_shared<TxnLogPB>();
+        log->set_tablet_id(tablet_id);
+        log->set_txn_id(100);
+        log->set_partition_id(10);
+        ASSERT_OK(_tablet_mgr->put_txn_log(log));
+        ASSERT_OK(_tablet_mgr->put_txn_log(log, _tablet_mgr->txn_slog_location(tablet_id, 100)));
+        ASSERT_OK(_tablet_mgr->put_txn_log(log, _tablet_mgr->txn_vlog_location(tablet_id, 2)));
+        combined.add_txn_logs()->CopyFrom(*log);
+    }
+    ASSERT_OK(_tablet_mgr->put_combined_txn_log(combined));
+    // Combined writers cache individual tablet logs without creating individual log files.
+    for (auto& log : *combined.mutable_txn_logs()) {
+        log.set_txn_id(101);
+        _tablet_mgr->metacache()->cache_txn_log(
+                MetacacheKey::txn_log(_tablet_mgr->txn_log_location(log.tablet_id(), 101)),
+                std::make_shared<TxnLogPB>(log));
+    }
+    ASSERT_OK(_tablet_mgr->put_combined_txn_log(combined));
+    auto combined_path = _tablet_mgr->combined_txn_log_location(500, 100);
+    ASSERT_OK(_tablet_mgr->get_combined_txn_log(combined_path));
+    ASSIGN_OR_ABORT(auto combined_key, _tablet_mgr->location_provider()->real_location(combined_path));
+
+    DeleteTabletRequest request;
+    DeleteTabletResponse response;
+    request.add_tablet_ids(500);
+    delete_tablets(_tablet_mgr.get(), request, &response);
+    ASSERT_EQ(0, response.status().status_code()) << response.status().DebugString();
+    // The combined log and tablet 501 must survive a partial drop.
+    EXPECT_TRUE(file_exist(combined_txn_log_filename(100)));
+    EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_combined_txn_log(MetacacheKey::TEST_from_string(combined_key)));
+    EXPECT_NE(nullptr, _tablet_mgr->get_latest_cached_tablet_metadata(501));
+    EXPECT_EQ(nullptr,
+              _tablet_mgr->metacache()->lookup_txn_log(MetacacheKey::txn_log(_tablet_mgr->txn_log_location(500, 101))));
+    EXPECT_NE(nullptr,
+              _tablet_mgr->metacache()->lookup_txn_log(MetacacheKey::txn_log(_tablet_mgr->txn_log_location(501, 101))));
+    EXPECT_EQ(nullptr, _tablet_mgr->get_latest_cached_tablet_metadata(500));
+    for (auto version : {1, 2}) {
+        EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
+                                   MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(500, version))));
+    }
+    for (const auto& path : {_tablet_mgr->txn_log_location(500, 100), _tablet_mgr->txn_slog_location(500, 100),
+                             _tablet_mgr->txn_vlog_location(500, 2)}) {
+        EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_txn_log(MetacacheKey::txn_log(path)));
+        EXPECT_TRUE(FileSystem::Default()->path_exists(path).is_not_found());
+    }
+
+    request.add_tablet_ids(501);
+    response.Clear();
+    delete_tablets(_tablet_mgr.get(), request, &response);
+    ASSERT_EQ(0, response.status().status_code()) << response.status().DebugString();
+    EXPECT_FALSE(file_exist(combined_txn_log_filename(100)));
+    EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_combined_txn_log(MetacacheKey::TEST_from_string(combined_key)));
+    EXPECT_EQ(nullptr, _tablet_mgr->get_latest_cached_tablet_metadata(501));
+    EXPECT_EQ(nullptr,
+              _tablet_mgr->metacache()->lookup_txn_log(MetacacheKey::txn_log(_tablet_mgr->txn_log_location(501, 101))));
+    for (auto version : {1, 2}) {
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(501, version)));
+        EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
+                                   MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(501, version))));
+    }
+    for (const auto& path : {_tablet_mgr->txn_log_location(501, 100), _tablet_mgr->txn_slog_location(501, 100),
+                             _tablet_mgr->txn_vlog_location(501, 2)}) {
+        EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_txn_log(MetacacheKey::txn_log(path)));
+        EXPECT_TRUE(FileSystem::Default()->path_exists(path).is_not_found());
+    }
+}
+
+TEST_P(LakeVacuumTest, delete_tablets_evicts_bundled_metadata) {
+    use_starlet_style_locations({500, 501});
+    put_empty_bundles({500, 501}, 2, 3);
+    for (auto tablet_id : {500, 501}) {
+        for (auto version : {2, 3}) {
+            ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version, false));
+            ASSERT_OK(_tablet_mgr->cache_tablet_metadata(metadata));
+        }
+        ASSERT_NE(nullptr, _tablet_mgr->get_latest_cached_tablet_metadata(tablet_id));
+    }
+    DeleteTabletRequest request;
+    DeleteTabletResponse response;
+    request.add_tablet_ids(500);
+    delete_tablets(_tablet_mgr.get(), request, &response);
+    ASSERT_EQ(0, response.status().status_code()) << response.status().DebugString();
+    for (auto version : {2, 3}) {
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, version)));
+        EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
+                                   MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(500, version))));
+        EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
+                                   MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(501, version))));
+    }
+    EXPECT_EQ(nullptr, _tablet_mgr->get_latest_cached_tablet_metadata(500));
+    EXPECT_NE(nullptr, _tablet_mgr->get_latest_cached_tablet_metadata(501));
+
+    request.add_tablet_ids(501);
+    response.Clear();
+    delete_tablets(_tablet_mgr.get(), request, &response);
+    ASSERT_EQ(0, response.status().status_code()) << response.status().DebugString();
+    for (auto version : {2, 3}) {
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, version)));
+        EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
+                                   MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(501, version))));
+    }
+    EXPECT_EQ(nullptr, _tablet_mgr->get_latest_cached_tablet_metadata(501));
+}
+
+TEST_P(LakeVacuumTest, delete_tablets_evicts_bundled_metadata_after_partial_failure) {
+    use_starlet_style_locations({500, 501});
+    put_cached_bundles({500, 501}, 2, 3);
+    auto old_batch_size = config::lake_vacuum_min_batch_delete_size;
+    config::lake_vacuum_min_batch_delete_size = 1;
+    int attempts = 0;
+    SyncPoint::GetInstance()->SetCallBack("PosixFileSystem::delete_file", [&](void* arg) {
+        if (attempts++ > 0) {
+            *static_cast<Status*>(arg) = Status::IOError("injected failure after first bundle deletion");
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp restore([&] {
+        config::lake_vacuum_min_batch_delete_size = old_batch_size;
+        SyncPoint::GetInstance()->ClearCallBack("PosixFileSystem::delete_file");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    DeleteTabletRequest request;
+    DeleteTabletResponse response;
+    request.add_tablet_ids(500);
+    request.add_tablet_ids(501);
+    delete_tablets(_tablet_mgr.get(), request, &response);
+    ASSERT_NE(0, response.status().status_code());
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 2)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 3)));
+    for (auto tablet_id : {500, 501}) {
+        EXPECT_EQ(nullptr, _tablet_mgr->get_latest_cached_tablet_metadata(tablet_id));
+        for (auto version : {2, 3}) {
+            EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(MetacacheKey::tablet_metadata(
+                                       _tablet_mgr->tablet_metadata_location(tablet_id, version))));
+        }
+    }
+}
 
 // NOLINTNEXTLINE
 TEST_P(LakeVacuumTest, test_vacuum_1) {
@@ -2068,7 +2523,8 @@ TEST_P(LakeVacuumTest, test_delete_tablets_reads_cached_metadata_of_tablet_absen
             ]
         }
         )DEL");
-    _tablet_mgr->metacache()->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(701, 4), cached);
+    _tablet_mgr->metacache()->cache_tablet_metadata(
+            MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(701, 4)), cached);
 
     DeleteTabletRequest request;
     request.add_tablet_ids(701);
@@ -2123,7 +2579,8 @@ TEST_P(LakeVacuumTest, test_delete_tablets_unknown_version_keeps_shared_files) {
             ]
         }
         )DEL");
-    _tablet_mgr->metacache()->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 3), cached_v3);
+    _tablet_mgr->metacache()->cache_tablet_metadata(
+            MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 3)), cached_v3);
 
     DeleteTabletRequest request;
     request.add_tablet_ids(600);
@@ -3492,6 +3949,282 @@ TEST_P(LakeVacuumTest, test_vacuum_version_control) {
         EXPECT_TRUE(file_exist("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b582.dat"));
         EXPECT_TRUE(file_exist("0000000000011111_9ae981b3-7d4b-49e9-9723-d7f752686155.sst"));
         EXPECT_TRUE(file_exist("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b583.dat"));
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_bundle_snapshot_references) {
+    const std::string prefix = "0000000000000100_00000000-0000-0000-0000-000000000001";
+    const std::string segment = prefix + ".dat";
+    const std::string vi = prefix + "_701_100.vi";
+    const std::string del = prefix + ".del";
+    const std::string delvec = prefix + ".delvec";
+    const std::string dcg = prefix + "_dcg.dat";
+    const std::string idg = prefix + ".idx";
+    const std::string sst = prefix + ".sst";
+    const std::vector<std::string> snapshot_files{segment, vi, del, delvec, dcg, idg, sst};
+    const std::string garbage = "0000000000000101_00000000-0000-0000-0000-000000000002.dat";
+
+    for (bool incremental : {false, true}) {
+        for (bool retain_snapshot : {false, true}) {
+            SCOPED_TRACE(testing::Message() << "incremental=" << incremental << " snapshot=" << retain_snapshot);
+            clear_and_init_test_dir();
+            _tablet_mgr->prune_metacache();
+            for (const auto& file : snapshot_files) {
+                create_data_file(file);
+            }
+            create_data_file(garbage);
+
+            for (int64_t version = 2; version <= 6; ++version) {
+                std::map<int64_t, TabletMetadataPB> metas;
+                for (int64_t tablet_id : {700, 701}) {
+                    auto& meta = metas[tablet_id];
+                    meta.set_id(tablet_id);
+                    meta.set_version(version);
+                    meta.set_commit_time(1000);
+                    meta.set_prev_garbage_version(version == 2 ? 0 : version - 1);
+                    meta.mutable_schema()->set_id(1);
+                    meta.mutable_schema()->set_keys_type(DUP_KEYS);
+                }
+                // Tablet 700 stops using its pieces before the snapshot at v4. Tablet 701
+                // still references the same physical files at v4 and removes its pieces at v5.
+                if (version == 3 || version == 5) {
+                    auto& meta = metas[version == 3 ? 700 : 701];
+                    auto* rowset = meta.add_compaction_inputs();
+                    rowset->set_version(2);
+                    rowset->set_data_size(64);
+                    auto* seg = rowset->add_segment_metas();
+                    seg->set_filename(segment);
+                    seg->set_bundle_file_offset(version == 3 ? 0 : 4096);
+                    seg->set_segment_vector_index_uid(701);
+                    seg->add_vector_index_ids(100);
+                    for (const auto& file : {del, delvec, dcg, idg, sst}) {
+                        auto* orphan = meta.add_orphan_files();
+                        orphan->set_name(file);
+                        orphan->set_version(2);
+                        orphan->set_shared(true);
+                        orphan->set_size(8);
+                    }
+                }
+                if (version == 3) {
+                    auto* orphan = metas[700].add_orphan_files();
+                    orphan->set_name(garbage);
+                    orphan->set_shared(true);
+                    orphan->set_version(2);
+                    orphan->set_size(7);
+                }
+                if (version == 4) {
+                    auto& meta = metas[701];
+                    auto* rowset = meta.add_rowsets();
+                    rowset->set_version(2);
+                    auto* seg = rowset->add_segment_metas();
+                    seg->set_filename(segment);
+                    seg->set_segment_vector_index_uid(701);
+                    seg->add_vector_index_ids(100);
+                    // A retained reference can predate the flags marking a file shared.
+                    rowset->add_del_files()->set_name(del);
+                    (*meta.mutable_delvec_meta()->mutable_version_to_file())[2].set_name(delvec);
+                    (*meta.mutable_dcg_meta()->mutable_dcgs())[0].add_column_files(dcg);
+                    (*meta.mutable_idg_meta()->mutable_idgs())[0].add_entries()->set_index_file(idg);
+                    meta.mutable_sstable_meta()->add_sstables()->set_filename(sst);
+                }
+                ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(metas));
+            }
+
+            VacuumRequest request;
+            request.set_min_retain_version(6);
+            request.set_grace_timestamp(4000000000);
+            request.set_min_active_txn_id(1000000);
+            request.set_delete_txn_log(false);
+            request.set_enable_file_bundling(true);
+            request.set_enable_shared_file_cleanup(true);
+            for (int64_t tablet_id : {700, 701}) {
+                auto* info = request.add_tablet_infos();
+                info->set_tablet_id(tablet_id);
+                info->set_min_version(2);
+            }
+            if (retain_snapshot) {
+                auto* snapshot = request.add_retain_snapshots();
+                snapshot->set_version(4);
+                snapshot->add_tablet_ids(700);
+                snapshot->add_tablet_ids(701);
+            }
+            if (incremental) {
+                request.set_max_versions_per_round(100);
+                // First discard the newer garbage metadata, then reclaim the older band.
+                // The snapshot must protect the bundle even after the v5 garbage is gone.
+                auto* state = request.mutable_vacuum_state();
+                state->set_to_delete_low(5);
+                state->set_to_delete_high(6);
+                state->set_pass_start_version(6);
+                VacuumResponse response;
+                vacuum(_tablet_mgr.get(), request, &response);
+                ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+                EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 5)));
+                state->set_to_delete_low(2);
+                state->set_to_delete_high(5);
+            }
+            VacuumResponse response;
+            vacuum(_tablet_mgr.get(), request, &response);
+            ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+            for (const auto& file : snapshot_files) {
+                EXPECT_EQ(retain_snapshot, file_exist(file)) << file;
+            }
+            EXPECT_FALSE(file_exist(garbage));
+            EXPECT_EQ(retain_snapshot, file_exist(tablet_metadata_filename(0, 4)));
+            EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 6)));
+        }
+    }
+}
+
+// The snapshot belongs to an older generation, absent from the current vacuum tablet set.
+TEST_P(LakeVacuumTest, test_vacuum_snapshot_tablets_and_failure_before_deletion) {
+    const std::string shared = "0000000000000100_00000000-0000-0000-0000-000000000001.dat";
+    const std::string ordinary = "0000000000000101_00000000-0000-0000-0000-000000000002.dat";
+    class AliasedLocationProvider : public FixedLocationProvider {
+    public:
+        explicit AliasedLocationProvider(std::string root) : FixedLocationProvider(std::move(root)) {}
+        std::string root_location(int64_t tablet_id) const override {
+            // Different URI spellings can address the same partition, as with StarOS tablet aliases.
+            return FixedLocationProvider::root_location(tablet_id) + (tablet_id == 600 ? "/." : "");
+        }
+    };
+    auto location_provider = std::make_shared<AliasedLocationProvider>(kTestDir);
+    TabletManager snapshot_tablet_mgr(location_provider, _primary_key_mgr.get(), 1024 * 1024, 1024 * 1024);
+    for (bool incremental : {false, true}) {
+        // Success, missing snapshot, I/O failure, deadline expires during the snapshot read.
+        for (int failure = 0; failure < 4; ++failure) {
+            SCOPED_TRACE(testing::Message() << "incremental=" << incremental << " failure=" << failure);
+            clear_and_init_test_dir();
+            _tablet_mgr->prune_metacache();
+            snapshot_tablet_mgr.prune_metacache();
+            create_data_file(shared);
+            create_data_file(ordinary);
+            auto snapshot = std::make_shared<TabletMetadataPB>();
+            snapshot->set_id(600);
+            snapshot->set_version(4);
+            // The old reference predates the shared flag.
+            snapshot->add_rowsets()->add_segment_metas()->set_filename(shared);
+            if (failure != 1) {
+                ASSERT_OK(_tablet_mgr->put_tablet_metadata(snapshot));
+            }
+            for (int64_t tablet_id : {700, 701}) {
+                for (int64_t version : {3, 6}) {
+                    // The reshard child 701 has no version before 6.
+                    if (tablet_id == 701 && version == 3) continue;
+                    auto meta = std::make_shared<TabletMetadataPB>();
+                    meta->set_id(tablet_id);
+                    meta->set_version(version);
+                    meta->set_commit_time(1000);
+                    if (tablet_id == 700 && version == 6) meta->set_prev_garbage_version(3);
+                    if (tablet_id == 700 && version == 3) {
+                        auto* garbage = meta->add_orphan_files();
+                        garbage->set_name(shared);
+                        garbage->set_shared(true);
+                        garbage->set_version(2);
+                        garbage = meta->add_orphan_files();
+                        garbage->set_name(ordinary);
+                        garbage->set_version(2);
+                    }
+                    ASSERT_OK(_tablet_mgr->put_tablet_metadata(meta));
+                }
+            }
+            bool snapshot_read = false;
+            SyncPoint::GetInstance()->SetCallBack("vacuum:read_snapshot_metadata", [&](void* arg) {
+                snapshot_read = true;
+                if (failure == 2) {
+                    *static_cast<StatusOr<TabletMetadataPtr>*>(arg) = Status::IOError("snapshot unavailable");
+                }
+            });
+            SyncPoint::GetInstance()->SetCallBack("vacuum:check_deadline", [&](void* arg) {
+                *static_cast<int64_t*>(arg) = (failure == 3 && snapshot_read) ? 2000000 : 1;
+            });
+            SyncPoint::GetInstance()->EnableProcessing();
+            DeferOp cleanup([] {
+                SyncPoint::GetInstance()->DisableProcessing();
+                SyncPoint::GetInstance()->ClearAllCallBacks();
+            });
+            VacuumRequest request;
+            request.set_min_retain_version(6);
+            request.set_grace_timestamp(4000000000);
+            request.set_delete_txn_log(false);
+            request.set_enable_shared_file_cleanup(true);
+            for (int64_t tablet_id : {700, 701}) {
+                request.add_tablet_infos()->set_tablet_id(tablet_id);
+            }
+            auto* retained = request.add_retain_snapshots();
+            retained->set_version(4);
+            retained->add_tablet_ids(600);
+            // Deduplication is harmless even when FE sends repeated references.
+            retained->add_tablet_ids(600);
+            // A committed-but-not-visible version has no mandatory metadata read.
+            request.add_retain_snapshots()->set_version(7);
+            if (incremental) {
+                request.set_max_versions_per_round(100);
+                auto* state = request.mutable_vacuum_state();
+                state->set_to_delete_low(2);
+                state->set_to_delete_high(6);
+                state->set_pass_start_version(6);
+            }
+            VacuumResponse response;
+            vacuum(&snapshot_tablet_mgr, request, &response, 1000000);
+            ASSERT_TRUE(snapshot_read);
+            EXPECT_EQ(failure == 0, response.status().status_code() == 0);
+            EXPECT_TRUE(file_exist(shared));
+            EXPECT_EQ(failure != 0, file_exist(ordinary));
+            EXPECT_EQ(failure != 0, file_exist(tablet_metadata_filename(700, 3)));
+        }
+    }
+}
+
+TEST_P(LakeVacuumTest, test_vacuum_retained_initial_metadata_and_ordinary_file) {
+    const std::string file = "0000000000000100_00000000-0000-0000-0000-000000000001.dat";
+    for (bool incremental : {false, true}) {
+        clear_and_init_test_dir();
+        _tablet_mgr->prune_metacache();
+        create_data_file(file);
+        auto initial = std::make_shared<TabletMetadataPB>();
+        initial->set_id(700);
+        initial->set_version(1);
+        initial->add_rowsets()->add_segment_metas()->set_filename(file);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(initial));
+        for (int64_t version : {2, 3}) {
+            std::map<int64_t, TabletMetadataPB> metas;
+            auto& meta = metas[700];
+            meta.set_id(700);
+            meta.set_version(version);
+            meta.set_commit_time(1000);
+            meta.set_prev_garbage_version(version == 3 ? 2 : 0);
+            meta.mutable_schema()->set_id(1);
+            meta.mutable_schema()->set_keys_type(DUP_KEYS);
+            if (version == 2) {
+                auto* orphan = meta.add_orphan_files();
+                orphan->set_name(file);
+                orphan->set_version(1);
+            }
+            ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(metas));
+        }
+        VacuumRequest request;
+        request.add_tablet_infos()->set_tablet_id(700);
+        request.set_min_retain_version(3);
+        request.set_grace_timestamp(4000000000);
+        request.set_delete_txn_log(false);
+        request.set_enable_file_bundling(true);
+        auto* snapshot = request.add_retain_snapshots();
+        snapshot->set_version(1);
+        snapshot->add_tablet_ids(700);
+        if (incremental) {
+            request.set_max_versions_per_round(100);
+            request.mutable_vacuum_state()->set_to_delete_low(1);
+            request.mutable_vacuum_state()->set_to_delete_high(3);
+            request.mutable_vacuum_state()->set_pass_start_version(3);
+        }
+        VacuumResponse response;
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_TRUE(file_exist(file));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(700, 1)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 2)));
     }
 }
 
@@ -5091,6 +5824,86 @@ TEST_P(LakeVacuumTest, test_incremental_shared_stepup_abandoned) {
     EXPECT_TRUE(file_exist(shared));
 }
 
+// FE sends a file-bundling partition's whole tablet set to one aggregator node, which holds few of its
+// tablets. Every metadata read of the vacuum, on the legacy path and in both incremental phases, must
+// resolve storage through the anchor tablet alone: resolving any other tablet would cost a StarMgr
+// GetShard RPC on a real cluster. The provider below serves only the anchor from the partition
+// directory, so a read that went through another tablet's location would also miss its metadata.
+TEST_P(LakeVacuumTest, test_bundled_vacuum_resolves_only_the_anchor) {
+    constexpr int64_t kAnchor = 31001;
+    constexpr int64_t kOther = 31002;
+    TabletSchemaPB schema;
+    schema.set_id(31000);
+    schema.set_keys_type(DUP_KEYS);
+    for (int64_t version = 2; version <= 5; version++) {
+        std::map<int64_t, TabletMetadataPB> bundle;
+        for (int64_t tablet_id : {kAnchor, kOther}) {
+            auto& metadata = bundle[tablet_id];
+            metadata.set_id(tablet_id);
+            metadata.set_version(version);
+            metadata.set_prev_garbage_version(version == 2 ? 0 : version - 1);
+            metadata.set_commit_time(1000 + version);
+            metadata.mutable_schema()->CopyFrom(schema);
+        }
+        ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(bundle));
+    }
+
+    auto location_provider =
+            std::make_shared<AnchorOnlyLocationProvider>(kTestDir, join_path(kTestDir, "unreachable"), kAnchor);
+    auto old_location_provider = _tablet_mgr->TEST_set_location_provider(location_provider);
+    DeferOp restore([&]() { _tablet_mgr->TEST_set_location_provider(std::move(old_location_provider)); });
+    _tablet_mgr->prune_metacache();
+
+    auto fill_request = [&](VacuumRequest* request, int64_t min_retain_version) {
+        request->set_partition_id(31000);
+        request->set_min_retain_version(min_retain_version);
+        request->set_grace_timestamp(4000000000);
+        request->set_enable_file_bundling(true);
+        request->set_enable_shared_file_cleanup(true);
+        for (int64_t tablet_id : {kAnchor, kOther}) {
+            auto* info = request->add_tablet_infos();
+            info->set_tablet_id(tablet_id);
+            info->set_min_version(2);
+        }
+    };
+
+    // Legacy one-shot path: version 3 is the retain boundary, so the bundle of version 2 is deleted.
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        fill_request(&request, 3);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 3)));
+    }
+
+    // Incremental protocol: a propose round, then a commit round that deletes the bundles below 5.
+    {
+        VacuumRequest propose_req;
+        VacuumResponse propose_resp;
+        fill_request(&propose_req, 5);
+        propose_req.set_max_versions_per_round(100);
+        vacuum(_tablet_mgr.get(), propose_req, &propose_resp);
+        ASSERT_EQ(0, propose_resp.status().status_code()) << propose_resp.status().error_msgs(0);
+        EXPECT_EQ(5, propose_resp.vacuum_state().to_delete_high());
+
+        VacuumRequest commit_req;
+        VacuumResponse commit_resp;
+        fill_request(&commit_req, 5);
+        commit_req.set_max_versions_per_round(100);
+        commit_req.mutable_vacuum_state()->CopyFrom(propose_resp.vacuum_state());
+        vacuum(_tablet_mgr.get(), commit_req, &commit_resp);
+        ASSERT_EQ(0, commit_resp.status().status_code()) << commit_resp.status().error_msgs(0);
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 3)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 4)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 5)));
+    }
+
+    auto outside = location_provider->resolved_outside_partition();
+    EXPECT_TRUE(outside.empty()) << outside.size() << " resolutions outside the anchor, first: " << outside.front();
+}
+
 INSTANTIATE_TEST_SUITE_P(LakeVacuumTest, LakeVacuumTest,
                          ::testing::Values(VacuumTestArg{1}, VacuumTestArg{3}, VacuumTestArg{100}));
 
@@ -5428,12 +6241,18 @@ TEST_P(LakeVacuumTest, test_vacuum_bundle_metadata) {
     tablet_metas_v3[601] = *t601_v3;
     ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v3));
     auto* metacache = _tablet_mgr->metacache();
-    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 1), t600_v1);
-    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 1), t601_v1);
-    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 2), t600_v2);
-    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 2), t601_v2);
-    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 3), t600_v3);
-    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 3), t601_v3);
+    metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 1)),
+                                     t600_v1);
+    metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 1)),
+                                     t601_v1);
+    metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 2)),
+                                     t600_v2);
+    metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 2)),
+                                     t601_v2);
+    metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 3)),
+                                     t600_v3);
+    metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 3)),
+                                     t601_v3);
 
     int64_t grace_timestamp = 1687331159;
 
@@ -5719,12 +6538,18 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
     tablet_metas_v3[601] = *t601_v3;
     ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v3));
     auto* metacache = _tablet_mgr->metacache();
-    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 1), t600_v1);
-    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 1), t601_v1);
-    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 2), t600_v2);
-    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 2), t601_v2);
-    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 3), t600_v3);
-    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 3), t601_v3);
+    metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 1)),
+                                     t600_v1);
+    metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 1)),
+                                     t601_v1);
+    metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 2)),
+                                     t600_v2);
+    metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 2)),
+                                     t601_v2);
+    metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 3)),
+                                     t600_v3);
+    metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 3)),
+                                     t601_v3);
 
     int64_t grace_timestamp = 1687331159;
 
@@ -6679,6 +7504,111 @@ TEST_P(LakeVacuumTest, test_delete_tablets_deletes_txnlog_data_when_fe_says_not_
 
     EXPECT_FALSE(file_exist(owned));
     EXPECT_FALSE(file_exist(txn_log_filename(900, 7001)));
+}
+
+TEST_P(LakeVacuumTest, test_delete_tablets_statement_vlog_group) {
+    const std::vector<std::string> files = {"00000000011659e4_99dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat",
+                                            "00000000011759e4_aadc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"};
+    for (bool is_range : {false, true}) {
+        TxnLogVector logs;
+        for (const auto& file : files) {
+            create_data_file(file);
+            auto log = std::make_shared<TxnLog>();
+            log->set_tablet_id(900);
+            log->set_txn_id(7002);
+            log->mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename(file);
+            logs.emplace_back(std::move(log));
+        }
+        ASSERT_OK(_tablet_mgr->put_txn_vlog_group(logs, 10));
+        ASSERT_TRUE(file_exist(txn_vlog_group_filename(900, 10)));
+
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(900);
+        request.set_is_range_distribution(is_range);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(0, response.status().status_code()) << response.status().DebugString();
+        EXPECT_FALSE(file_exist(txn_vlog_group_filename(900, 10)));
+        for (const auto& file : files) {
+            EXPECT_EQ(is_range, file_exist(file));
+        }
+    }
+}
+
+// A retry that straddled a writer-flag change can leave a damaged version log next to a valid one in the other
+// format. Whichever of the two is damaged, the drop deletes it without reading it, walks the valid one, and
+// succeeds. With both damaged nothing names the data files, so the drop fails and deletes nothing.
+TEST_P(LakeVacuumTest, test_delete_tablets_damaged_vlog_next_to_valid_counterpart) {
+    // Damaged files fail as written, without dropping cached blocks and reading them again.
+    ConfigResetGuard<bool> clear_cache_guard(&config::lake_clear_corrupted_cache_meta, false);
+    const int64_t tablet_id = 901;
+    const int64_t version = 10;
+    const auto legacy = txn_vlog_filename(tablet_id, version);
+    const auto group = txn_vlog_group_filename(tablet_id, version);
+    const std::vector<std::string> files = {"00000000011859e4_badc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat",
+                                            "00000000011959e4_cadc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"};
+    // Writes the two statements' version log in both formats, then overwrites the |damaged| files.
+    auto put_version_logs = [&](const std::vector<std::string>& damaged) {
+        TxnLogVector statements;
+        auto merged = std::make_shared<TxnLog>();
+        merged->set_tablet_id(tablet_id);
+        merged->set_txn_id(7003);
+        for (const auto& file : files) {
+            // A range-distributed drop keeps the data files of the round before.
+            if (!file_exist(file)) {
+                create_data_file(file);
+            }
+            auto log = std::make_shared<TxnLog>();
+            log->set_tablet_id(tablet_id);
+            log->set_txn_id(7003);
+            log->mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename(file);
+            statements.emplace_back(std::move(log));
+            merged->mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename(file);
+        }
+        ASSERT_OK(_tablet_mgr->put_txn_vlog_group(statements, version));
+        ASSERT_OK(_tablet_mgr->put_txn_vlog(merged, version));
+        ASSERT_TRUE(file_exist(group));
+        ASSERT_TRUE(file_exist(legacy));
+        for (const auto& name : damaged) {
+            WritableFileOptions opts{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+            ASSIGN_OR_ABORT(auto writer, FileSystem::Default()->new_writable_file(
+                                                 opts, join_path(join_path(kTestDir, kTxnLogDirectoryName), name)));
+            ASSERT_OK(writer->append("damaged"));
+            ASSERT_OK(writer->close());
+        }
+    };
+    auto drop = [&](bool is_range) {
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(tablet_id);
+        request.set_is_range_distribution(is_range);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        EXPECT_TRUE(response.has_status());
+        return response.status().status_code();
+    };
+
+    for (bool is_range : {false, true}) {
+        for (const auto& damaged : {group, legacy}) {
+            SCOPED_TRACE(damaged + (is_range ? " range" : " non-range"));
+            ASSERT_NO_FATAL_FAILURE(put_version_logs({damaged}));
+            ASSERT_EQ(0, drop(is_range));
+            EXPECT_FALSE(file_exist(group));
+            EXPECT_FALSE(file_exist(legacy));
+            // A range-distributed tablet keeps its data files: the tablets of a reshard may still read them.
+            for (const auto& file : files) {
+                EXPECT_EQ(is_range, file_exist(file)) << file;
+            }
+        }
+    }
+
+    ASSERT_NO_FATAL_FAILURE(put_version_logs({group, legacy}));
+    EXPECT_NE(0, drop(false));
+    EXPECT_TRUE(file_exist(group));
+    EXPECT_TRUE(file_exist(legacy));
+    for (const auto& file : files) {
+        EXPECT_TRUE(file_exist(file)) << file;
+    }
 }
 
 // An older FE does not send the field at all. BE then falls back to what it did before: the answer comes

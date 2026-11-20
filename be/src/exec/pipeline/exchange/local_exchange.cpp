@@ -28,6 +28,7 @@
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
+#include "runtime/bucket_aware_partition.h"
 
 namespace starrocks::pipeline {
 Status Partitioner::partition_chunk(const ChunkPtr& chunk, int32_t num_partitions,
@@ -128,11 +129,10 @@ Status ShufflePartitioner::shuffle_channel_ids(const ChunkPtr& chunk, int32_t nu
         }
     } else {
         _hash_values.assign(num_rows, 0);
-        // TODO, enhance it if we try to support more bucket functions.
         for (int i = 0; i < _partitions_columns.size(); ++i) {
-            DCHECK(_bucket_properties[i].bucket_func == TBucketFunction::MURMUR3_X86_32);
             _round_hashes.assign(num_rows, 0);
-            _partitions_columns[i]->murmur_hash3_x86_32(&_round_hashes[0], 0, num_rows);
+            bucket_hash_column(*_partitions_columns[i], _bucket_properties[i].bucket_func, _round_hashes.data(),
+                               num_rows);
             // carefully keep same with exchange node
             for (int j = 0; j < num_rows; j++) {
                 _hash_values[j] ^= _round_hashes[j];

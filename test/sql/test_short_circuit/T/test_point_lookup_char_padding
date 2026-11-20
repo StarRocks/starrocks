@@ -1,0 +1,23 @@
+-- name: test_point_lookup_char_padding @no_arrow_flight_sql @native
+-- A primary-key point lookup -- a short-circuit query, or dict_mapping -- reads values through
+-- TabletUpdates::get_column_values, which pads CHAR back to its declared width with '\0' because a partial
+-- update writes those values back to storage. The lookup returned them as they were: 'a' in a CHAR(18) came
+-- back as 'a' followed by seventeen '\0' and length 18. A scan strips the padding; a lookup must too.
+create database db_${uuid0};
+use db_${uuid0};
+create table t_col (id varchar(21) not null, c char(18), n int)
+primary key(id) distributed by hash(id) buckets 1 properties("replication_num" = "1");
+insert into t_col values ('1', 'a', 1), ('2', '', 2), ('3', null, 3), ('4', 'abcdefghijklmnopqr', 4);
+
+set enable_short_circuit = true;
+select c, length(c), hex(c) from t_col where id = '1';
+select c, length(c), hex(c) from t_col where id = '2';
+select c, length(c), hex(c) from t_col where id = '3';
+select c, length(c), hex(c) from t_col where id = '4';
+set enable_short_circuit = false;
+
+-- dict_mapping takes the same lookup path, with no session variable involved.
+select dict_mapping('db_${uuid0}.t_col', '1', 'c'), length(dict_mapping('db_${uuid0}.t_col', '1', 'c'));
+select dict_mapping('db_${uuid0}.t_col', '4', 'c'), length(dict_mapping('db_${uuid0}.t_col', '4', 'c'));
+select length(dict_mapping('db_${uuid0}.t_col', id, 'c')) from t_col order by id;
+drop database db_${uuid0};

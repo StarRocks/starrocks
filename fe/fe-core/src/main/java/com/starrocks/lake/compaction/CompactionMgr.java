@@ -17,6 +17,8 @@ package com.starrocks.lake.compaction;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.estimate.Estimator;
@@ -128,6 +130,8 @@ public class CompactionMgr implements MemoryTrackable {
                     Config.lake_compaction_disable_ids);
             GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
                 compactionScheduler.disableTableOrPartitionId(Config.lake_compaction_disable_ids);
+                compactionScheduler.updateCompactionAllowlist(
+                        Config.lake_compaction_admission_mode, Config.lake_compaction_allow_table_ids);
             });
             compactionScheduler.start();
         }
@@ -238,6 +242,27 @@ public class CompactionMgr implements MemoryTrackable {
         });
     }
 
+    // The scheduler holds the table READ lock while setting this deadline.
+    void deferCompactionForAlter(PartitionIdentifier partition, long delayMs) {
+        PartitionStatistics statistics = getStatistics(partition);
+        if (statistics != null) {
+            statistics.setAlterCompactionRetryTime(System.currentTimeMillis() + delayMs);
+        }
+    }
+
+    /**
+     * Clears only deadlines caused by an alter. Call after setting the table to NORMAL under its WRITE lock,
+     * which prevents the scheduler from seeing the old table state and restoring a just-cleared deadline.
+     */
+    public void resumeCompactionAfterAlter(long dbId, OlapTable table) {
+        for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
+            PartitionStatistics statistics = getStatistics(new PartitionIdentifier(dbId, table.getId(), partition.getId()));
+            if (statistics != null) {
+                statistics.setAlterCompactionRetryTime(0);
+            }
+        }
+    }
+
     void enableCompactionAfter(PartitionIdentifier partition, long delayMs) {
         PartitionStatistics statistics = partitionStatisticsHashMap.computeIfPresent(partition, (k, v) -> {
             // FE's follower nodes may have a different timestamp with the leader node.
@@ -273,7 +298,13 @@ public class CompactionMgr implements MemoryTrackable {
 
     public Set<Long> cancelPreviousCompactions(long endTransactionId, long dbId, long tableId,
                                                Set<Long> includePartitionIds) {
-        return compactionScheduler.cancelPreviousCompactions(endTransactionId, dbId, tableId, includePartitionIds);
+        return cancelPreviousCompactions(endTransactionId, dbId, tableId, includePartitionIds, includePartitionIds);
+    }
+
+    public Set<Long> cancelPreviousCompactions(long endTransactionId, long dbId, long tableId,
+                                               Set<Long> includePartitionIds, Set<Long> abortPartitionIds) {
+        return compactionScheduler.cancelPreviousCompactions(endTransactionId, dbId, tableId, includePartitionIds,
+                abortPartitionIds);
     }
 
     public boolean existCompaction(long txnId) {
@@ -312,7 +343,7 @@ public class CompactionMgr implements MemoryTrackable {
             }
             v.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
             // A new request runs on the next cycle even if the partition is cooling down.
-            v.setNextCompactionTime(0);
+            v.clearCompactionRetryTimes();
             return v;
         });
         LOG.info("Trigger manual compaction, {}", statistics);
@@ -333,7 +364,7 @@ public class CompactionMgr implements MemoryTrackable {
                 // A new request runs on the next cycle even if the partition is cooling down. SplitTabletJob
                 // re-triggers a pending UNSHARE on every reshard tick, so keep the retry deadline of a request
                 // that is already pending, or one the scheduler deferred would be retried every cycle.
-                v.setNextCompactionTime(0);
+                v.clearCompactionRetryTimes();
             }
             v.setPriority(PartitionStatistics.CompactionPriority.UNSHARE);
             return v;

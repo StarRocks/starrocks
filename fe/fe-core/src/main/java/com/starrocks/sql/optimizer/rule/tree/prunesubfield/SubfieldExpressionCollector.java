@@ -19,6 +19,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
@@ -36,6 +37,10 @@ public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Voi
     private Set<String> checkFunctions;
     private final boolean enableJsonCollect;
     private boolean forPushDownSubFiled;
+    // Collect `variant_col IS [NOT] NULL` as one expression instead of the bare variant column, so the
+    // access path normalizer can turn it into a null-mask-only read. Only the scan subfield pruning rule
+    // turns it on; the push-down rules must keep treating the predicate as an ordinary column use.
+    private boolean collectVariantNullCheck;
 
     public List<ScalarOperator> getComplexExpressions() {
         return complexExpressions;
@@ -63,6 +68,16 @@ public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Voi
         return collector;
     }
 
+    public SubfieldExpressionCollector enableVariantNullCheck() {
+        this.collectVariantNullCheck = true;
+        return this;
+    }
+
+    public static boolean isVariantColumnNullCheck(IsNullPredicateOperator predicate) {
+        ScalarOperator child = predicate.getChild(0);
+        return child.isColumnRef() && child.getType().isVariantType();
+    }
+
     @Override
     public Void visit(ScalarOperator scalarOperator, Void context) {
         for (ScalarOperator child : scalarOperator.getChildren()) {
@@ -78,6 +93,15 @@ public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Voi
             complexExpressions.add(variable);
         }
         return null;
+    }
+
+    @Override
+    public Void visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
+        if (collectVariantNullCheck && isVariantColumnNullCheck(predicate)) {
+            complexExpressions.add(predicate);
+            return null;
+        }
+        return visit(predicate, context);
     }
 
     @Override

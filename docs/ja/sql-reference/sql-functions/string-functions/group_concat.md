@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "グループ内の非NULL値を1つの文字列に結合します。セパレータはデフォルトで,です。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # group_concat

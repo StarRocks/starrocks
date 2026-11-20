@@ -33,6 +33,7 @@
 
 namespace starrocks {
 
+struct RangeGroupTask;
 class RuntimeProfile;
 class RuntimeState;
 
@@ -58,6 +59,9 @@ struct TabletReaderParams {
     enum class RangeEndOperation { LT = 0, LE, EQ };
 
     TabletReaderParams();
+
+    // Immutable query ownership clip, independent of the query range union.
+    std::shared_ptr<const RangeGroupTask> grouped_range_task;
 
     ReaderType reader_type = READER_QUERY;
 
@@ -97,6 +101,7 @@ struct TabletReaderParams {
     RowidRangeOptionPtr rowid_range_option = nullptr;
     ShortKeyRangesOptionPtr short_key_ranges_option = nullptr;
     std::shared_ptr<lake::PreparedTabletReadState> prepared_tablet_read_state = nullptr;
+    std::shared_ptr<lake::PreparedTabletReadState> classic_tablet_read_state = nullptr;
     std::shared_ptr<lake::PreparedSegmentReadState> prepared_segment_read_state = nullptr;
     size_t prepared_rowset_index = std::numeric_limits<size_t>::max();
     size_t prepared_segment_index = std::numeric_limits<size_t>::max();

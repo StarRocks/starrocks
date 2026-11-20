@@ -18,6 +18,7 @@
 #include "base/testutil/assert.h"
 #include "exprs/mock_vectorized_expr.h" // NOLINT
 #include "exprs/string_functions.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -109,8 +110,7 @@ TEST_F(StringFunctionTrimTest, trimCharTest) {
 
     {
         // The 2rd parameter must be const
-        auto remove_col = BinaryColumn::create();
-        remove_col->append("ab");
+        auto remove_col = ColumnTestHelper::build_column<Slice>({"ab"});
         ctx->set_constant_columns({nullptr, std::move(remove_col)});
         Status st = StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
         EXPECT_TRUE(st.is_invalid_argument());
@@ -354,8 +354,7 @@ TEST_F(StringFunctionTrimTest, trimStringPrepareErrorTest) {
     {
         // The 2nd parameter must be a constant literal
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-        auto remove_col = BinaryColumn::create();
-        remove_col->append("ab");
+        auto remove_col = ColumnTestHelper::build_column<Slice>({"ab"});
         ctx->set_constant_columns({nullptr, std::move(remove_col)});
         Status st = StringFunctions::trim_string_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
         EXPECT_TRUE(st.is_invalid_argument());

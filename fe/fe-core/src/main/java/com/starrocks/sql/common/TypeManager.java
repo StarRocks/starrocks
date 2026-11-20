@@ -194,6 +194,9 @@ public class TypeManager {
     }
 
     private static Type getCompatibleTypeForBetweenAndIn(Type t1, Type t2, boolean isBetween) {
+        if (t1.hasNestedGeoType() || t2.hasNestedGeoType()) {
+            return InvalidType.INVALID;
+        }
         // if predicate is 'IN' and one type is string ,another type is not float
         // we choose string or decimal as cmpType according to session variable cboEqBaseType
         if (!isBetween) {
@@ -205,7 +208,7 @@ public class TypeManager {
                 return getEquivalenceBaseType(t1, t2);
             }
         }
-        if (t1.isFileType() || t2.isFileType()) {
+        if (t1.isFileType() || t2.isFileType() || t1.isGeoType() || t2.isGeoType()) {
             return InvalidType.INVALID;
         }
         if (t1.getPrimitiveType() == PrimitiveType.NULL_TYPE) {
@@ -271,6 +274,9 @@ public class TypeManager {
     }
 
     public static Type getCompatibleTypeForBinary(boolean isRangeCompare, Type type1, Type type2) {
+        if (type1.hasNestedGeoType() || type2.hasNestedGeoType()) {
+            return InvalidType.INVALID;
+        }
         // 1. Many join on-clause use string = int predicate, follow mysql will cast to double, but
         //    starrocks cast to double will lose precision, the predicate result will error
         // 2. Why only support equivalence and unequivalence expression cast to string? Because string order is different
@@ -291,8 +297,8 @@ public class TypeManager {
             return TypeManager.getCommonSuperType(type1, type2);
         }
         if (type1.isComplexType() || type2.isComplexType() || type1.isOnlyMetricType() || type2.isOnlyMetricType() ||
-                type1.isFileType() || type2.isFileType()) {
-            // We don't support complex type (map/struct) for GT/LT predicate, and FILE is never comparable.
+                type1.isFileType() || type2.isFileType() || type1.isGeoType() || type2.isGeoType()) {
+            // We don't support complex type (map/struct) for GT/LT predicate, and FILE/geo types are never comparable.
             return InvalidType.INVALID;
         }
 
@@ -375,6 +381,10 @@ public class TypeManager {
                 }
             }
         }
+        // BE does not support geo values in CASE results or comparisons.
+        if (compatibleType.isGeoType()) {
+            return InvalidType.INVALID;
+        }
         if (compatibleType.isStringType()) {
             ScalarType resultType = (ScalarType) compatibleType;
             // If result type is varchar with length, it may cause the case when result type is not compatible.
@@ -391,6 +401,8 @@ public class TypeManager {
     public static boolean canCastTo(Type from, Type to) {
         if (from.isNull()) {
             return true;
+        } else if (from.isGeoType() || to.isGeoType()) {
+            return canCastGeoType(from, to);
         } else if (from.isStringType() && to.isBitmapType()) {
             return true;
         } else if (from.isScalarType() && to.isScalarType()) {
@@ -475,7 +487,7 @@ public class TypeManager {
         }
         if (from.isScalarType()) {
             PrimitiveType primitive = ((ScalarType) from).getPrimitiveType();
-            return primitive != PrimitiveType.HLL && primitive != PrimitiveType.BITMAP &&
+            return !from.isGeoType() && primitive != PrimitiveType.HLL && primitive != PrimitiveType.BITMAP &&
                     primitive != PrimitiveType.PERCENTILE && primitive != PrimitiveType.FUNCTION &&
                     primitive != PrimitiveType.VARBINARY;
         }
@@ -779,6 +791,13 @@ public class TypeManager {
 
     // TODO(mofei) Why call implicit cast in the explicit cast context
     public static boolean canCastTo(ScalarType type, ScalarType targetType) {
+        if (type.isGeoType() || targetType.isGeoType()) {
+            return canCastGeoType(type, targetType);
+        }
         return PrimitiveType.isImplicitCast(type.getPrimitiveType(), targetType.getPrimitiveType());
+    }
+
+    private static boolean canCastGeoType(Type from, Type to) {
+        return from.isNull() || from.equals(to);
     }
 }

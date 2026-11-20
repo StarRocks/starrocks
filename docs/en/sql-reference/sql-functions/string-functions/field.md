@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the index (position) of a value in a list of values."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # field

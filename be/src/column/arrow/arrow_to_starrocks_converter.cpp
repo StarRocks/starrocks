@@ -714,6 +714,24 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
         return false;
     }
 
+    template <int64_t units_per_second>
+    static bool convert_subsecond_datetime(CppType& datum, int64_t timestamp, TzOffsetCache* offset_cache) {
+        int64_t second = timestamp / units_per_second;
+        int64_t fraction = timestamp % units_per_second;
+        // Civil-time conversion requires a nonnegative fraction, including before the Unix epoch.
+        if (fraction < 0) {
+            --second;
+            fraction += units_per_second;
+        }
+        int64_t microsecond;
+        if constexpr (units_per_second <= 1000000) {
+            microsecond = fraction * (1000000 / units_per_second);
+        } else {
+            microsecond = fraction / (units_per_second / 1000000);
+        }
+        return convert_one_datetime(datum, second, microsecond, offset_cache);
+    }
+
     static void fill_null(CppType* data, int num_elements, const uint8_t* null_data) {
         for (int i = 0; i < num_elements; ++i) {
             if constexpr (is_nullable) {
@@ -763,7 +781,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 }
             }
 
-            if (convert_one_datetime(data[i], arrow_data[i] / 1000, arrow_data[i] % 1000 * 1000, &offset_cache)) {
+            if (convert_subsecond_datetime<1000>(data[i], arrow_data[i], &offset_cache)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }
@@ -782,7 +800,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 }
             }
 
-            if (convert_one_datetime(data[i], arrow_data[i] / 1000000, arrow_data[i] % 1000000, &offset_cache)) {
+            if (convert_subsecond_datetime<1000000>(data[i], arrow_data[i], &offset_cache)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }
@@ -801,8 +819,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 }
             }
 
-            if (convert_one_datetime(data[i], arrow_data[i] / 1000000000, arrow_data[i] % 1000000000 / 1000,
-                                     &offset_cache)) {
+            if (convert_subsecond_datetime<1000000000>(data[i], arrow_data[i], &offset_cache)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }
@@ -1074,18 +1091,24 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StructGurad<LT>> {
         for (size_t i = 0; i < conv_func->field_names.size(); i++) {
             const auto& child_name = conv_func->field_names[i];
             ASSIGN_OR_RETURN(auto* child_col, struct_col->field_column_raw_ptr(child_name));
-            auto child_array = struct_array->GetFieldByName(child_name);
+            const auto child_index = struct_array->struct_type()->GetFieldIndex(child_name);
 
-            if (child_array == nullptr) {
+            if (child_index < 0) {
                 // default null
                 DCHECK(child_col->is_nullable());
                 child_col->append_nulls(num_elements);
                 continue;
             }
 
-            RETURN_IF_ERROR(convert_arrow_array_to_column(conv_func->children[i].get(), num_elements, child_array.get(),
-                                                          child_col, array_start_idx, chunk_start_idx, chunk_filter,
-                                                          ctx));
+            // A child's own validity does not include its parent's. Merge both so converters
+            // skip values hidden by a NULL struct, including nested VARIANT payloads.
+            auto child_array = struct_array->GetFlattenedField(child_index);
+            if (!child_array.ok()) {
+                return Status::InternalError(child_array.status().ToString());
+            }
+            RETURN_IF_ERROR(convert_arrow_array_to_column(conv_func->children[i].get(), num_elements,
+                                                          child_array->get(), child_col, array_start_idx,
+                                                          chunk_start_idx, chunk_filter, ctx));
         }
 
         return Status::OK();

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts a string to upper-case."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # upper

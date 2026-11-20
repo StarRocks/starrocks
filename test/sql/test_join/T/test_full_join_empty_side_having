@@ -1,0 +1,26 @@
+-- name: test_full_join_empty_side_having
+
+-- A FULL OUTER JOIN with an empty side becomes a projection whose columns from that side are NULL
+-- constants. Grouped on such a column, the key is constant and PruneGroupByKeysRule removed it,
+-- writing the constant into the HAVING predicate in its place: `b.s <> a.s` became `NULL <> a.s`,
+-- with the constant on the left. Statistics estimation refuses that shape, and every such query failed
+-- with "Constant-cmp-Column not supported here". A HAVING that compares the two sides on its own is
+-- pushed below the aggregate earlier, so only one combined with an aggregate under OR stayed to fail.
+
+create table t_left (k int, s varchar(10), x double)
+duplicate key(k) distributed by hash(k) buckets 1 properties("replication_num" = "1");
+create table t_empty (k int, s varchar(10), v double)
+duplicate key(k) distributed by hash(k) buckets 1 properties("replication_num" = "1");
+insert into t_left values (1, 'x', 1), (2, 'y', 2), (3, NULL, 3);
+
+-- The comparison with the empty side's column is NULL, so OR leaves the aggregate condition to decide.
+select b.s, a.s, sum(a.x) from t_empty b full outer join t_left a on a.k = b.k
+group by b.s, a.s having b.s <> a.s or sum(a.x) > 1 order by a.s;
+select b.s, a.s, sum(a.x) from t_empty b full outer join t_left a on a.k = b.k
+group by b.s, a.s, b.v having round(coalesce(b.v, 0) - sum(a.x), 2) <> 0 or b.s <> a.s order by a.s;
+select a.s, b.s, count(*) from t_left a full outer join t_empty b on a.k = b.k
+group by a.s, b.s having a.s = b.s or count(*) > 0 order by a.s;
+-- The same with the constant comparison alone, and with the predicate in WHERE: these already worked.
+select b.s, a.s, count(*) from t_empty b full outer join t_left a on a.k = b.k
+group by b.s, a.s having b.s <> a.s order by a.s;
+select b.s, a.s from t_empty b full outer join t_left a on a.k = b.k where b.s <> a.s or a.x > 1 order by a.s;

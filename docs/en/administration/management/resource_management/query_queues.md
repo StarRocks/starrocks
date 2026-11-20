@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 20
 description: "From v2.5, StarRocks supports query queues."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Query queues
@@ -68,7 +69,7 @@ You can set the thresholds that trigger query queues via the following global se
 
 | **Variable**                        | **Default** | **Description**                                              |
 | ----------------------------------- | ----------- | ------------------------------------------------------------ |
-| query_queue_concurrency_limit       | 0           | The upper limit of concurrent queries on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed. |
+| query_queue_concurrency_limit       | 0           | The upper limit of concurrent queries. From v3.1.4 onwards, the number of running queries is counted by the Leader FE. In earlier versions, the limit applies to the number of running queries reported by each BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed. |
 | query_queue_mem_used_pct_limit      | 0           | The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed. Range: [0, 1] |
 | query_queue_cpu_used_permille_limit | 0           | The upper limit of CPU usage permille (CPU usage * 1000) on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed. Range: [0, 1000] |
 
@@ -85,11 +86,11 @@ From v3.1.4 onwards, you can set individual concurrency limits (`concurrency_lim
 
 | **Variable**       | **Default** | **Description**                                                                                                                                                                                                                                   |
 |--------------------|-------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| concurrency_limit  | 0           | The concurrency limit for the resource group on a single BE node. It takes effect only when it is set to greater than `0`.                                                                                                                        |
+| concurrency_limit  | 0           | The concurrency limit for the resource group. For resource group-level query queues, the number of running queries of the resource group is counted by the Leader FE. It takes effect only when it is set to greater than `0`.                                                                                                                        |
 | max_cpu_cores      | 0           | The CPU core limit for this resource group on a single BE node. It takes effect only when it is set to greater than `0`. Range: [0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` represents the average number of CPU cores across all BE nodes. |
 | mem_used_pct_limit | 0           | The memory usage percentage limit for this resource group on a single BE node. It takes effect only when it is set to greater than `0`. Range: [0, 1]                                                                                             |
 
-`mem_used_pct_limit` applies only to Query Queue v1. After Query Queue v2 is enabled (`enable_query_queue_v2` is set to `true`), this parameter no longer takes effect.
+Resource group-level query queues are implemented only by Query Queue v1. After Query Queue v2 is enabled (`enable_query_queue_v2` is set to `true`, which is the default from v4.1 onwards), `concurrency_limit`, `max_cpu_cores`, and `mem_used_pct_limit` of a resource group no longer cause queries to be queued. In this case, `max_cpu_cores` and `mem_used_pct_limit` have no effect. `concurrency_limit` is not enforced for a query only when `enable_group_level_query_queue` is set to `true` and the query itself is subject to the query queue (that is, the query queue is enabled for its query type). Otherwise, for example when `enable_group_level_query_queue` is `false` (default) or the query queue is disabled for the query type, a query that exceeds `concurrency_limit` on a BE node fails with the error `Exceed concurrency limit` instead of being queued.
 
 You can use SHOW USAGE RESOURCE GROUPS to view the resource usage information for each resource group on each BE node, as described in [View Resource Group Usage Information](./resource_group.md#view-resource-group-usage-information).
 
@@ -143,7 +144,7 @@ Query Queue v2 is enabled and tuned through FE configuration items. Changes to `
 | `query_queue_v2_mem_bytes_per_slot` | `0` | Per-slot memory target used by the memory-cost-based estimator (MBE). When `query_queue_slots_estimator_strategy` is `MBE`, the total slots are derived from the warehouse memory budget, and a query's slots are estimated from its total memory cost divided by this value, capped by `number_of_workers * max(1, pipeline_dop / 2)`. If it is non-positive, Query Queue V2 uses the average worker memory per core. |
 | `query_queue_v2_cpu_costs_per_slot` | `1000000000` | Per-slot CPU cost threshold used by the CPU-cost-based estimator (CBE) to estimate how many slots a query needs from its plan CPU cost. The scheduler computes slots as `ceil(plan_cpu_costs / query_queue_v2_cpu_costs_per_slot)` and clamps the result to the range `[1, min(totalSlots, number_of_workers * max(1, pipeline_dop / 2))]`. A non-positive value is normalized to `1`. Increasing this value reduces slots allocated per query (favoring fewer, larger-slot queries); decreasing it increases slots per query. |
 | `query_queue_mem_used_pct_limit` | `0` | A global session variable. The memory usage limit of a node, as a fraction of the memory limit of the node. While the process memory usage of any alive node reaches this value, new queries wait in the queue. Range: [0, 1]. `0` means no memory gating. See [Memory admission](#memory-admission). |
-| query_queue_concurrency_limit       | 0           | The upper limit of concurrent queries on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed. |
+| query_queue_concurrency_limit       | 0           | The upper limit of concurrent queries. The number of running queries is counted by the Leader FE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed. |
 
 :::note
 
@@ -160,7 +161,7 @@ Query Queue v2 represents BE resources as logical slots:
 
 ### Queuing logic
 
-When the number of slots required by a query exceeds the current number of remaining slots, the query waits in the queue. Query Queue v2 preferentially satisfies queries that require fewer slots, allowing small queries to obtain resources first and avoiding head-of-line blocking where a large query at the head of the queue blocks later small queries.
+When the number of slots required by a query exceeds the current number of remaining slots, the query waits in the queue. By default (`query_queue_v2_schedule_strategy` is `SWRR`), Query Queue v2 divides pending queries into categories by the number of slots they require, and selects queries from these categories by using the smooth weighted round-robin algorithm. Categories of queries that require fewer slots have higher weights, allowing small queries to obtain resources first and avoiding head-of-line blocking where a large query at the head of the queue blocks later small queries, while queries that require more slots are not starved. In versions earlier than v4.1.4, queries that require only one slot can also be admitted from an extra pool of small slots. If `query_queue_v2_schedule_strategy` is set to `SJF` (supported from v3.5.0 onwards), Query Queue v2 schedules short jobs first and uses aging to avoid starvation.
 
 The entire queuing logic is completed on FE, including setting the total number of cluster slots, estimating the number of slots required by a query, and deciding which query's slot requirement to satisfy first. Slot scheduling does not depend on the actual resource usage of BEs. The only input taken from actual usage is the optional memory usage limit `query_queue_mem_used_pct_limit`, which makes new queries wait while a node uses too much memory. See [Memory admission](#memory-admission).
 
@@ -263,8 +264,16 @@ Recommended process:
 The default value `0` means unlimited. Set it only when you need an absolute cap on the number of concurrently running queries:
 
 ```SQL
+SET GLOBAL query_queue_concurrency_limit = 8;
+```
+
+In editions that support multiple warehouses, you can instead set the cap for a specific warehouse:
+
+```SQL
 ALTER WAREHOUSE default_warehouse SET ("query_queue_concurrency_limit" = "8");
 ```
+
+StarRocks open source has only `default_warehouse` and does not support warehouse DDL statements such as ALTER WAREHOUSE (they fail with the error `Multi-Warehouse is not implemented`). Use the global variable instead.
 
 Use `query_queue_v2_concurrency_level` to tune resource capacity first. Use `query_queue_concurrency_limit` only when you need to explicitly limit the number of queries run at the same time.
 
@@ -369,7 +378,7 @@ You can check the FE audit log file **fe.audit.log**. The field `PendingTimeMs` 
 
 ### Monitoring metrics
 
-You can obtain metrics of query queues in StarRocks using the [Monitor and Alert](../monitoring/monitoring.md) feature. The following FE metrics are derived from the statistical data of each FE node.
+You can obtain metrics of query queues in StarRocks using the [Monitor and Alert](../monitoring/prometheus_grafana.md) feature. The following FE metrics are derived from the statistical data of each FE node.
 
 | Metric                                          | Unit | Type    | Description                                                    |
 | ----------------------------------------------- | ---- | ------- | -------------------------------------------------------------- |
@@ -379,6 +388,14 @@ You can obtain metrics of query queues in StarRocks using the [Monitor and Alert
 | starrocks_fe_resource_group_query_queue_total   | Count | Instantaneous | The total number of queries historically queued in this resource group (including those currently running). The `name` label indicates the name of the resource group. This metric is supported from v3.1.4 onwards. |
 | starrocks_fe_resource_group_query_queue_pending | Count | Instantaneous | The number of queries currently in the queue for this resource group. The `name` label indicates the name of the resource group. This metric is supported from v3.1.4 onwards. |
 | starrocks_fe_resource_group_query_queue_timeout | Count | Instantaneous | The number of queries that have timed out while in the queue for this resource group. The `name` label indicates the name of the resource group. This metric is supported from v3.1.4 onwards. |
+| starrocks_fe_query_queue_slot_pending           | Count | Instantaneous | The current number of slots required by the queries in the queue. This metric is reported only by the Leader FE and is supported from v3.4.0 onwards. |
+| starrocks_fe_query_queue_slot_running           | Count | Instantaneous | The current number of slots allocated to running queries. This metric is reported only by the Leader FE and is supported from v3.4.0 onwards. |
+| starrocks_fe_query_queue_v2_category_pending_slots | Count | Instantaneous | Query Queue v2: The current number of slots required by the queries in the queue for each category. The `category` label indicates the index of the category. This metric is reported only by the Leader FE and is supported from v3.4.0 onwards. |
+| starrocks_fe_query_queue_v2_category_running_slots | Count | Instantaneous | Query Queue v2: The current number of slots allocated to running queries for each category. The `category` label indicates the index of the category. This metric is reported only by the Leader FE and is supported from v3.4.0 onwards. |
+| starrocks_fe_query_queue_v2_category_total_allocated_slots | Count | Instantaneous | Query Queue v2: The total number of slots historically allocated for each category. The `category` label indicates the index of the category. This metric is reported only by the Leader FE and is supported from v3.4.0 onwards. |
+| starrocks_fe_query_queue_v2_category_weight     | - | Instantaneous | Query Queue v2: The weight of each category in the smooth weighted round-robin algorithm. The `category` label indicates the index of the category. This metric is reported only by the Leader FE and is supported from v3.4.0 onwards. |
+| starrocks_fe_query_queue_v2_category_min_slots  | Count | Instantaneous | Query Queue v2: The minimum number of slots required by the queries in each category. The `category` label indicates the index of the category. This metric is reported only by the Leader FE and is supported from v3.4.0 onwards. |
+| starrocks_fe_query_queue_v2_category_state      | - | Instantaneous | Query Queue v2: The current state of each category in the smooth weighted round-robin algorithm. The `category` label indicates the index of the category. This metric is reported only by the Leader FE and is supported from v3.4.0 onwards. |
 
 ### SHOW RUNNING QUERIES
 

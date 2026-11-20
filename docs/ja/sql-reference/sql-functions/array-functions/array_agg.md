@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ARRAY_AGG関数は列内の値を配列に集約し、ORDER BYで要素を並べ替えられます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_agg

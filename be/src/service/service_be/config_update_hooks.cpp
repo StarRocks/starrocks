@@ -54,6 +54,7 @@
 #include "common/thread/priority_thread_pool.hpp"
 #include "common/util/bthreads/executor.h"
 #include "compute_env/ai/ai_executor.h"
+#include "compute_env/arrow_io_thread_pool.h"
 #include "compute_env/compute_env.h"
 #include "compute_env/load_spill/load_spill_block_merge_executor.h"
 #include "compute_env/workgroup/scan_executor.h"
@@ -61,6 +62,7 @@
 #include "data_workflows/load/batch_write/batch_write_mgr.h"
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "exec/exec_env.h"
+#include "fs/remote_read_context.h"
 #include "runtime/memory/jemalloc_conf_updater.h"
 #include "runtime/runtime_env.h"
 #include "service/core_dump_resource_releaser.h"
@@ -68,6 +70,7 @@
 #include "storage/index/vector/vector_index_cache.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/memtable_flush_executor.h"
@@ -403,6 +406,13 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
         }
         return Status::OK();
     });
+    registry->register_callback("put_combined_txn_log_thread_pool_num_max", [=]() -> Status {
+        auto* thread_pool = runtime_env_ptr->put_combined_txn_log_thread_pool();
+        if (thread_pool != nullptr) {
+            return thread_pool->update_max_threads(std::max(1, config::put_combined_txn_log_thread_pool_num_max));
+        }
+        return Status::OK();
+    });
     registry->register_callback("parallel_clone_task_per_path", [=]() -> Status {
         exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE, config::parallel_clone_task_per_path);
         return Status::OK();
@@ -447,9 +457,28 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
                                                             std::max(1, config::update_tablet_meta_info_worker_count));
         return Status::OK();
     });
-    registry->register_callback("lake_metadata_cache_limit", [=]() -> Status {
+    registry->register_callback("lake_tablet_metadata_cache_limit_percent", [=]() -> Status {
         auto tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
-        if (tablet_mgr != nullptr) tablet_mgr->update_metacache_limit(config::lake_metadata_cache_limit);
+        if (tablet_mgr != nullptr) {
+            auto* metacache = tablet_mgr->metacache();
+            metacache->update_tablet_metadata_capacity(lake::metacache_capacity(
+                    runtime_env_ptr->process_mem_limit(), config::lake_tablet_metadata_cache_limit_percent));
+            LOG(INFO) << "Set lake_tablet_metadata_cache_limit_percent: "
+                      << config::lake_tablet_metadata_cache_limit_percent
+                      << ", tablet metadata cache capacity: " << metacache->tablet_metadata_capacity();
+        }
+        return Status::OK();
+    });
+    registry->register_callback("lake_segment_metadata_cache_limit_percent", [=]() -> Status {
+        auto tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
+        if (tablet_mgr != nullptr) {
+            auto* metacache = tablet_mgr->metacache();
+            metacache->update_segment_metadata_capacity(lake::metacache_capacity(
+                    runtime_env_ptr->process_mem_limit(), config::lake_segment_metadata_cache_limit_percent));
+            LOG(INFO) << "Set lake_segment_metadata_cache_limit_percent: "
+                      << config::lake_segment_metadata_cache_limit_percent
+                      << ", segment metadata cache capacity: " << metacache->segment_metadata_capacity();
+        }
         return Status::OK();
     });
     registry->register_callback("pk_index_parallel_execution_threadpool_max_threads", [=]() -> Status {
@@ -490,7 +519,20 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     });
 #ifdef USE_STAROS
     registry->register_callback("starlet_use_star_cache", [=]() -> Status {
+        if (remote_io_scheduler_enabled() && !config::starlet_use_star_cache) {
+            return Status::NotSupported(
+                    "starlet_use_star_cache cannot be turned off while the remote I/O scheduler is enabled; restart "
+                    "the node with remote_io_scheduler_enable=false first");
+        }
         update_staros_starcache();
+        return Status::OK();
+    });
+    registry->register_callback("io_coalesce_lake_read_enable", [=]() -> Status {
+        if (remote_io_scheduler_enabled() && config::io_coalesce_lake_read_enable) {
+            return Status::NotSupported(
+                    "io_coalesce_lake_read_enable stays off while the remote I/O scheduler is enabled; restart the "
+                    "node with remote_io_scheduler_enable=false to use it");
+        }
         return Status::OK();
     });
     registry->register_callback("starlet_star_cache_mem_size_percent", [=]() -> Status {
@@ -548,6 +590,9 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
                     config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores());
         }
         return Status::OK();
+    });
+    registry->register_callback("arrow_io_thread_pool_size", [=]() -> Status {
+        return apply_arrow_io_thread_pool_size(config::arrow_io_thread_pool_size);
     });
     registry->register_callback("enable_resource_group_cpu_borrowing", [=]() -> Status {
         LOG(INFO) << "set enable_resource_group_cpu_borrowing:" << config::enable_resource_group_cpu_borrowing;
@@ -632,7 +677,19 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
 
     UPDATE_STARLET_CONFIG(starlet_cache_thread_num, cachemgr_threadpool_size);
     UPDATE_STARLET_CONFIG(starlet_fs_stream_buffer_size_bytes, fs_stream_buffer_size_bytes);
-    UPDATE_STARLET_CONFIG(starlet_fs_read_prefetch_enable, fs_enable_buffer_prefetch);
+    registry->register_callback("starlet_fs_read_prefetch_enable", [=]() -> Status {
+        if (remote_io_scheduler_enabled() && config::starlet_fs_read_prefetch_enable) {
+            return Status::NotSupported(
+                    "starlet_fs_read_prefetch_enable stays off while the remote I/O scheduler is enabled; restart the "
+                    "node with remote_io_scheduler_enable=false to use it");
+        }
+        auto val = std::to_string(config::starlet_fs_read_prefetch_enable && !remote_io_scheduler_enabled());
+        if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_enable_buffer_prefetch", val).empty()) {
+            LOG(WARNING) << "Failed to update fs_enable_buffer_prefetch";
+            return Status::InvalidArgument("Failed to update starlet_fs_read_prefetch_enable.");
+        }
+        return Status::OK();
+    });
     UPDATE_STARLET_CONFIG(starlet_fs_read_prefetch_threadpool_size, fs_buffer_prefetch_threadpool_size);
     UPDATE_STARLET_CONFIG(starlet_fslib_s3client_nonread_max_retries, fslib_s3client_nonread_max_retries);
     UPDATE_STARLET_CONFIG(starlet_fslib_s3client_nonread_retry_scale_factor, fslib_s3client_nonread_retry_scale_factor);
@@ -658,7 +715,9 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     UPDATE_STARLET_CONFIG(starlet_fslib_azure_storage_max_single_part_size, fslib_azure_storage_max_single_part_size);
     UPDATE_STARLET_CONFIG(starlet_fslib_azure_storage_min_upload_part_size, fslib_azure_storage_min_upload_part_size);
     UPDATE_STARLET_CONFIG(s3_multipart_equal_part_size, fslib_s3_multipart_equal_part_size);
+    UPDATE_STARLET_CONFIG(remote_read_skip_contended_cache_writes, remote_read_skip_contended_cache_writes);
 #undef UPDATE_STARLET_CONFIG
+    registry->register_callback("remote_read_retain_prefetched_bytes", update_remote_read_retain_prefetched_bytes);
 
     // Registered by hand rather than through UPDATE_STARLET_CONFIG, which stringifies a numeric config.
     // The value reaching here already passed the config's enum check, so the update can only fail if

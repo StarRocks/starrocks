@@ -14,6 +14,8 @@
 
 package com.starrocks.alter;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.starrocks.alter.LakeOnlineRewriteJobBase.PendingPartitionPlan;
 import com.starrocks.alter.reshard.presplit.Estimates;
 import com.starrocks.alter.reshard.presplit.SampleSet;
@@ -41,7 +43,11 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
+import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.lake.compaction.PartitionIdentifier;
+import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.EditLogException;
 import com.starrocks.persist.OperationType;
@@ -49,7 +55,12 @@ import com.starrocks.persist.WALApplier;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
+import com.starrocks.proto.AggregatePublishVersionRequest;
+import com.starrocks.proto.TabletStatPB;
+import com.starrocks.proto.TxnInfoPB;
+import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
@@ -64,6 +75,7 @@ import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
+import com.starrocks.transaction.TransactionAlreadyCommitException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.type.IntegerType;
@@ -78,11 +90,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -283,16 +297,54 @@ public class LakeRangeRewriteSchemaChangeJobTest {
 
             Config.tablet_reshard_target_size = 1024;
             int expected = TabletPreSplitCoordinator.selectTabletCount(
-                    new Estimates(plan.partitionDataSize, 0L), activeComputeNodeCount);
+                    new Estimates(plan.partitionDataSize, 0L), activeComputeNodeCount, Config.tablet_reshard_target_size);
             Assertions.assertEquals(expected,
-                    job.selectRequestedTabletCount(plan, activeComputeNodeCount));
+                    job.selectRequestedTabletCount(plan, activeComputeNodeCount,
+                            table.getTabletReshardTargetSize()));
 
             Config.tablet_reshard_target_size = -1;
             Assertions.assertThrows(IllegalStateException.class,
-                    () -> job.selectRequestedTabletCount(plan, activeComputeNodeCount));
+                    () -> job.selectRequestedTabletCount(plan, activeComputeNodeCount,
+                            table.getTabletReshardTargetSize()));
         } finally {
             Config.tablet_reshard_target_size = oldTargetSize;
         }
+    }
+
+    @Test
+    public void testPlanPartitionShadowSizesAgainstTableTargetSize() throws Exception {
+        long oldTargetSize = Config.tablet_reshard_target_size;
+        long oneGiB = 1L << 30;
+        List<Long> receivedTargets = new ArrayList<>();
+        new MockUp<TabletPreSplitCoordinator>() {
+            @Mock
+            public int selectTabletCount(Estimates estimates, int activeComputeNodeCount, long targetSize) {
+                receivedTargets.add(targetSize);
+                return 1;
+            }
+        };
+        try {
+            Config.tablet_reshard_target_size = 10 * oneGiB;
+            PhysicalPartition partition = table.getPhysicalPartitions().iterator().next();
+            MaterializedIndex baseIndex = partition.getLatestIndex(table.getBaseIndexMetaId());
+            LakeRangeRewriteSchemaChangeJob job = newJob(stubSampler(List.of()));
+
+            job.planPartitionShadow(newPlanWithDataSize(partition, baseIndex, 10 * oneGiB), table, DB_NAME);
+            Assertions.assertEquals(List.of(10 * oneGiB), receivedTargets);
+
+            table.setTabletReshardTargetSize(oneGiB);
+            receivedTargets.clear();
+            job.planPartitionShadow(newPlanWithDataSize(partition, baseIndex, 10 * oneGiB), table, DB_NAME);
+            Assertions.assertEquals(List.of(oneGiB), receivedTargets);
+        } finally {
+            Config.tablet_reshard_target_size = oldTargetSize;
+        }
+    }
+
+    private PendingPartitionPlan newPlanWithDataSize(PhysicalPartition partition, MaterializedIndex baseIndex,
+                                                     long dataSize) {
+        return new PendingPartitionPlan(partition.getId(), baseIndex, baseIndex.getShardGroupId(),
+                table.getPartition(partition.getParentId()).getName(), dataSize, table.getName(), partition);
     }
 
     @Test
@@ -415,11 +467,128 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         Assertions.assertEquals(job.getTabletCount(physicalPartitionId),
                 job.getBoundaries(physicalPartitionId).size() + 1);
 
-        // 4. The shadow index is NOT yet exposed in the partition's catalog index map (exposure is
-        //    deferred to WAITING_TXN once the watershed is allocated).
+        // 4. The watershed is allocated and the shadow index is exposed in the partition's catalog index map with
+        //    visibleTxnId == watershedTxnId: transactions at/after the watershed see the shadow (and so
+        //    double-write it), transactions before it ignore it.
+        Assertions.assertTrue(job.getTransactionId().isPresent());
+        long watershedTxnId = job.getTransactionId().get();
         PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
-        Assertions.assertNull(physicalPartition.getIndex(job.getShadowIndexMetaId()),
-                "shadow index must not be in the partition catalog index map during PENDING");
+        MaterializedIndex exposed = physicalPartition.getLatestIndex(job.getShadowIndexMetaId());
+        Assertions.assertNotNull(exposed, "WAITING_TXN must expose the shadow index to the partition catalog map");
+        Assertions.assertEquals(MaterializedIndex.IndexState.SHADOW, exposed.getState());
+        Assertions.assertTrue(exposed.visibleForTransaction(watershedTxnId));
+        Assertions.assertFalse(exposed.visibleForTransaction(watershedTxnId - 1));
+
+        // 5. No watershed version captured yet (the drain has not been confirmed finished).
+        Assertions.assertNull(job.getWatershedVersion(physicalPartitionId));
+    }
+
+    /**
+     * A load planned right after the job enters WAITING_TXN gets a schema param listing the
+     * table's index metas and a partition param listing each partition's indexes, and the compute node rejects it
+     * unless the two agree. The shadow meta and the shadow index must therefore appear together, with the
+     * watershed, in the one WAITING_TXN journal entry.
+     */
+    @Test
+    public void testLoadPlannedRightAfterPendingMatchesSinkIndexes() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = newJob(stubSampler(diverseSample()));
+        ConcurrentLoad.assertSinkIndexesMatch(db, table);
+
+        List<AlterJobV2> journaled = new ArrayList<>();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logAlterJob(AlterJobV2 entry, WALApplier applier) {
+                journaled.add(entry);
+                applier.apply(entry);
+            }
+        };
+        job.runPendingJob();
+
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+        ConcurrentLoad.assertSinkIndexesMatch(db, table);
+        Assertions.assertEquals(1, journaled.size());
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, journaled.get(0).getJobState());
+        Assertions.assertTrue(journaled.get(0).getTransactionId().isPresent(),
+                "the WAITING_TXN entry must carry the watershed the exposed shadow index is visible from");
+    }
+
+    /**
+     * A job that sits in WAITING_TXN without a watershed can only have been journaled by older code, which exposed the
+     * shadow index on a later run. Nothing exposes it any more, so the job is cancelled instead of reaching RUNNING
+     * with loads that never wrote the shadow index.
+     */
+    @Test
+    public void testWaitingTxnWithoutWatershedIsCancelled() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = newJob(stubSampler(diverseSample()));
+        job.runPendingJob();
+        PhysicalPartition physicalPartition = table.getPhysicalPartitions().iterator().next();
+        List<Long> shadowTabletIds = job.getShadowIndex(physicalPartition.getId()).getTablets()
+                .stream().map(Tablet::getId).collect(Collectors.toList());
+        JsonObject entry = JsonParser.parseString(GsonUtils.GSON.toJson(job.copyForPersist())).getAsJsonObject();
+        entry.addProperty("watershedTxnId", -1L);
+        String text = entry.toString();
+
+        // Recover from the entry on a catalog without anything the live run installed.
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        physicalPartition.deleteMaterializedIndexByMetaId(job.getShadowIndexMetaId());
+        table.deleteIndexInfo(SchemaChangeHandler.SHADOW_NAME_PREFIX + table.getName());
+        shadowTabletIds.forEach(invertedIndex::deleteTablet);
+        table.setState(OlapTable.OlapTableState.NORMAL);
+        LakeRangeRewriteSchemaChangeJob replayed =
+                (LakeRangeRewriteSchemaChangeJob) GsonUtils.GSON.fromJson(text, AlterJobV2.class);
+        LakeRangeRewriteSchemaChangeJob inMemory =
+                (LakeRangeRewriteSchemaChangeJob) GsonUtils.GSON.fromJson(text, AlterJobV2.class);
+        inMemory.replay(replayed);
+        Assertions.assertNull(physicalPartition.getLatestIndex(job.getShadowIndexMetaId()));
+
+        AlterCancelException e = Assertions.assertThrows(AlterCancelException.class, inMemory::runWaitingTxnJob);
+        Assertions.assertTrue(e.getMessage().contains("watershed"), e.getMessage());
+        Assertions.assertNull(physicalPartition.getLatestIndex(job.getShadowIndexMetaId()),
+                "the shadow index must not be exposed to loads that began before it");
+
+        Assertions.assertTrue(inMemory.cancelImpl(e.getMessage()));
+        assertShadowCleanedUp(inMemory, physicalPartition.getId(), shadowTabletIds, 0);
+        Assertions.assertNull(table.getIndexMetaByMetaId(job.getShadowIndexMetaId()));
+        ConcurrentLoad.assertSinkIndexesMatch(db, table);
+    }
+
+    /**
+     * The WAITING_TXN entry fails to reach the journal: the job stays PENDING with no watershed and nothing on the
+     * table, and every shard the run built is dropped, so the next run starts clean.
+     */
+    @Test
+    public void testPendingJournalFailureLeavesNoWatershed() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = newJob(stubSampler(diverseSample()));
+        Set<Long> built = new HashSet<>();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logAlterJob(AlterJobV2 entry, WALApplier applier) {
+                for (LakeOnlineRewriteJobBase.PartitionRewriteState state
+                        : ((LakeOnlineRewriteJobBase) entry).partitionStates.values()) {
+                    state.shadowIndex.getTablets().forEach(tablet -> built.add(tablet.getId()));
+                }
+                throw new EditLogException("test journal rejected");
+            }
+        };
+        Set<Long> deleted = new HashSet<>();
+        new MockUp<StarOSAgent>(GlobalStateMgr.getCurrentState().getStarOSAgent().getClass()) {
+            @Mock
+            public void deleteShards(Set<Long> shardIds) {
+                deleted.addAll(shardIds);
+            }
+        };
+
+        Assertions.assertThrows(EditLogException.class, job::runPendingJob);
+
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
+        Assertions.assertTrue(job.getTransactionId().isEmpty());
+        Assertions.assertFalse(built.isEmpty());
+        Assertions.assertEquals(built, deleted);
+        PhysicalPartition physicalPartition = table.getPhysicalPartitions().iterator().next();
+        Assertions.assertNull(job.getShadowIndex(physicalPartition.getId()));
+        Assertions.assertNull(table.getIndexMetaByMetaId(job.getShadowIndexMetaId()));
+        Assertions.assertNull(physicalPartition.getLatestIndex(job.getShadowIndexMetaId()));
+        ConcurrentLoad.assertSinkIndexesMatch(db, table);
     }
 
     @Test
@@ -525,12 +694,15 @@ public class LakeRangeRewriteSchemaChangeJobTest {
                 .stream().map(Tablet::getId).collect(Collectors.toList());
 
         // Serialize the journaled job, then simulate FE recovery from a pre-change image: reset the
-        // table back to NORMAL and strip the shadow meta + inverted-index entries the live run added.
+        // table back to NORMAL and strip the shadow meta, the exposed shadow index and the inverted-index
+        // entries the live run added.
         AlterJobV2 persistCopy = job.copyForPersist();
         String text = GsonUtils.GSON.toJson(persistCopy);
 
         TabletInvertedIndex invertedIndex =
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+        physicalPartition.deleteMaterializedIndexByMetaId(job.getShadowIndexMetaId());
         table.deleteIndexInfo(SchemaChangeHandler.SHADOW_NAME_PREFIX + table.getName());
         for (long tabletId : shadowTabletIds) {
             invertedIndex.deleteTablet(tabletId);
@@ -557,14 +729,23 @@ public class LakeRangeRewriteSchemaChangeJobTest {
             Assertions.assertNotNull(invertedIndex.getTabletMeta(tabletId),
                     "replay must re-add the shadow tablets to the inverted index");
         }
+        // The entry carries the watershed, so the shadow index is exposed again together with the meta,
+        // visible from the watershed on.
+        Assertions.assertEquals(1, shadowIndexCount(table));
+        long watershedTxnId = job.getTransactionId().get();
+        MaterializedIndex reExposed = physicalPartition.getLatestIndex(job.getShadowIndexMetaId());
+        Assertions.assertTrue(reExposed.visibleForTransaction(watershedTxnId));
+        Assertions.assertFalse(reExposed.visibleForTransaction(watershedTxnId - 1));
+        ConcurrentLoad.assertSinkIndexesMatch(db, table);
 
-        // A second replay is a no-op: same meta, no double-added tablets.
+        // A second replay is a no-op: same meta, no double-added tablets or exposed index.
         inMemory.replay(replayed);
         Assertions.assertNotNull(table.getIndexMetaByMetaId(job.getShadowIndexMetaId()));
         Assertions.assertEquals(OlapTable.OlapTableState.SCHEMA_CHANGE, table.getState());
         for (long tabletId : shadowTabletIds) {
             Assertions.assertNotNull(invertedIndex.getTabletMeta(tabletId));
         }
+        Assertions.assertEquals(1, shadowIndexCount(table));
     }
 
     @Test
@@ -642,47 +823,9 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     }
 
     @Test
-    public void testEnterWaitingTxnAllocatesWatershedAndExposesShadow() throws Exception {
-        LakeRangeRewriteSchemaChangeJob job = newJob(stubSampler(diverseSample()));
-        job.runPendingJob();
-        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
-
-        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
-        PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
-        // Precondition: PENDING did not expose the shadow to the partition catalog index map.
-        Assertions.assertNull(physicalPartition.getLatestIndex(job.getShadowIndexMetaId()));
-
-        // First WAITING_TXN run: allocate the watershed and expose the shadow. The drain is not
-        // checked yet (no W captured), so stay in WAITING_TXN.
-        job.runWaitingTxnJob();
-        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
-
-        // The watershed was allocated.
-        Assertions.assertTrue(job.getTransactionId().isPresent());
-        long watershedTxnId = job.getTransactionId().get();
-        Assertions.assertTrue(watershedTxnId >= 0);
-
-        // The shadow MaterializedIndex is now exposed in the partition catalog index map with
-        // visibleTxnId == watershedTxnId, so post-watershed loads double-write it.
-        MaterializedIndex exposed = physicalPartition.getLatestIndex(job.getShadowIndexMetaId());
-        Assertions.assertNotNull(exposed, "WAITING_TXN must expose the shadow index to the partition catalog map");
-        Assertions.assertEquals(MaterializedIndex.IndexState.SHADOW, exposed.getState());
-        // visibleTxnId == watershedTxnId: transactions at/after the watershed see the shadow (and so
-        // double-write it), transactions before it ignore it.
-        Assertions.assertTrue(exposed.visibleForTransaction(watershedTxnId));
-        Assertions.assertFalse(exposed.visibleForTransaction(watershedTxnId - 1));
-
-        // No watershed version captured yet (the drain has not been confirmed finished).
-        Assertions.assertNull(job.getWatershedVersion(physicalPartitionId));
-    }
-
-    @Test
     public void testWaitingTxnStaysWhenPreviousLoadsUnfinished() throws Exception {
         LakeRangeRewriteSchemaChangeJob job = newJob(stubSampler(diverseSample()));
         job.runPendingJob();
-
-        // First WAITING_TXN run allocates the watershed and exposes the shadow.
-        job.runWaitingTxnJob();
         Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
 
         long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
@@ -702,13 +845,60 @@ public class LakeRangeRewriteSchemaChangeJobTest {
                 "W must not be captured before the drain is confirmed finished");
     }
 
+    /**
+     * StarRocksTest#12647: the table does not compact while the online rewrite waits for earlier transactions. Once a
+     * partition's compaction score is above lake_compaction_score_upper_bound, every commit into it is rejected, the
+     * commits of those transactions included, so the job is cancelled and the table is NORMAL again.
+     */
+    @Test
+    public void testWaitingTxnCancelledOnceCommitsAreRejected() throws Exception {
+        long txnId = ConcurrentLoad.begin(db, table);
+        LakeRangeRewriteSchemaChangeJob job = newJob(stubSampler(diverseSample()));
+        job.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+
+        PhysicalPartition physicalPartition = table.getPhysicalPartitions().iterator().next();
+        long externalPinVersion = physicalPartition.getVisibleVersion();
+        physicalPartition.setMinRetainVersion(externalPinVersion);
+        PartitionIdentifier partition =
+                new PartitionIdentifier(job.getDbId(), table.getId(), physicalPartition.getId());
+        CompactionMgr compactionMgr = GlobalStateMgr.getCurrentState().getCompactionMgr();
+        boolean oldSlowdown = Config.lake_enable_ingest_slowdown;
+        long oldUpperBound = Config.lake_compaction_score_upper_bound;
+        Config.lake_enable_ingest_slowdown = true;
+        Config.lake_compaction_score_upper_bound = 100;
+        try {
+            // At the bound commits still go through, and the job keeps waiting.
+            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
+                    System.currentTimeMillis(), new Quantiles(1.0, 1.0, 100.0));
+            job.runWaitingTxnJob();
+            Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+
+            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
+                    System.currentTimeMillis(), new Quantiles(1.0, 1.0, 101.0));
+            AlterCancelException e = Assertions.assertThrows(AlterCancelException.class, job::runWaitingTxnJob);
+            Assertions.assertTrue(e.getMessage().contains("partition " + physicalPartition.getId()), e.getMessage());
+            Assertions.assertTrue(e.getMessage().contains("lake_compaction_score_upper_bound 100"), e.getMessage());
+            Assertions.assertNull(job.getWatershedVersion(physicalPartition.getId()));
+
+            Assertions.assertTrue(job.cancel(e.getMessage()));
+            Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+            Assertions.assertEquals(externalPinVersion, physicalPartition.getMinRetainVersion());
+        } finally {
+            physicalPartition.setMinRetainVersion(0);
+            Config.lake_enable_ingest_slowdown = oldSlowdown;
+            Config.lake_compaction_score_upper_bound = oldUpperBound;
+            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
+                    System.currentTimeMillis(), new Quantiles(0.0, 0.0, 0.0));
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(db.getId(), txnId, "test done");
+        }
+    }
+
     @Test
     public void testWaitingTxnCapturesWatershedVersionAndTransitionsToRunning() throws Exception {
         LakeRangeRewriteSchemaChangeJob job = newJob(stubSampler(diverseSample()));
         job.runPendingJob();
-
-        // First WAITING_TXN run allocates the watershed and exposes the shadow.
-        job.runWaitingTxnJob();
         Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
 
         long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
@@ -733,7 +923,6 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     public void testWaitingTxnAnalysisExceptionCancelsJob() throws Exception {
         LakeRangeRewriteSchemaChangeJob job = newJob(stubSampler(diverseSample()));
         job.runPendingJob();
-        job.runWaitingTxnJob();
         Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
 
         new MockUp<LakeRangeRewriteSchemaChangeJob>() {
@@ -746,61 +935,11 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         Assertions.assertThrows(AlterCancelException.class, job::runWaitingTxnJob);
     }
 
-    @Test
-    public void testReplayWaitingTxnReExposesShadowAfterWatershed() throws Exception {
-        LakeRangeRewriteSchemaChangeJob job = newJob(stubSampler(diverseSample()));
-        job.runPendingJob();
-        // Allocate the watershed and expose the shadow on the live job.
-        job.runWaitingTxnJob();
-        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
-        long watershedTxnId = job.getTransactionId().get();
-
-        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
-        List<Long> shadowTabletIds = job.getShadowIndex(physicalPartitionId).getTablets()
-                .stream().map(Tablet::getId).collect(Collectors.toList());
-
-        // Snapshot the journaled (post-watershed) image.
-        AlterJobV2 persistCopy = job.copyForPersist();
-        String text = GsonUtils.GSON.toJson(persistCopy);
-
-        // Simulate FE recovery from a pre-exposure image: strip the shadow meta, the exposed index,
-        // the inverted-index entries, and reset the table to NORMAL.
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-        PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
-        physicalPartition.deleteMaterializedIndexByMetaId(job.getShadowIndexMetaId());
-        table.deleteIndexInfo(SchemaChangeHandler.SHADOW_NAME_PREFIX + table.getName());
-        for (long tabletId : shadowTabletIds) {
-            invertedIndex.deleteTablet(tabletId);
-        }
-        table.setState(OlapTable.OlapTableState.NORMAL);
-        Assertions.assertNull(physicalPartition.getLatestIndex(job.getShadowIndexMetaId()),
-                "precondition: shadow index exposure removed before replay");
-
-        LakeRangeRewriteSchemaChangeJob replayed =
-                (LakeRangeRewriteSchemaChangeJob) GsonUtils.GSON.fromJson(text, AlterJobV2.class);
-        LakeRangeRewriteSchemaChangeJob inMemory =
-                (LakeRangeRewriteSchemaChangeJob) GsonUtils.GSON.fromJson(text, AlterJobV2.class);
-        inMemory.replay(replayed);
-
-        // Replay re-exposes the shadow index to the partition catalog map with the journaled watershed.
-        MaterializedIndex reExposed = physicalPartition.getLatestIndex(job.getShadowIndexMetaId());
-        Assertions.assertNotNull(reExposed, "replay must re-expose the shadow index after the watershed");
-        Assertions.assertEquals(MaterializedIndex.IndexState.SHADOW, reExposed.getState());
-        Assertions.assertTrue(reExposed.visibleForTransaction(watershedTxnId));
-        Assertions.assertFalse(reExposed.visibleForTransaction(watershedTxnId - 1));
-
-        // A second replay is a no-op: the exposure is idempotent (no double-add crash).
-        inMemory.replay(replayed);
-        Assertions.assertNotNull(physicalPartition.getLatestIndex(job.getShadowIndexMetaId()));
-    }
-
-    /** Drive a job through PENDING + both WAITING_TXN runs into RUNNING with W captured. */
+    /** Drive a job through PENDING and WAITING_TXN into RUNNING with W captured. */
     private LakeRangeRewriteSchemaChangeJob jobInRunning() throws Exception {
         LakeRangeRewriteSchemaChangeJob job = newJob(stubSampler(diverseSample()));
         job.runPendingJob();
-        // First WAITING_TXN run allocates the watershed and exposes the shadow.
-        job.runWaitingTxnJob();
-        // Second run: prior loads finished -> capture W and transition to RUNNING.
+        // Prior loads finished -> capture W and transition to RUNNING.
         new MockUp<LakeRangeRewriteSchemaChangeJob>() {
             @Mock
             public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) {
@@ -839,7 +978,6 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         }
         LakeRangeRewriteSchemaChangeJob job = newJobFor(partitionedTable, stubSampler(diverseSample()));
         job.runPendingJob();
-        job.runWaitingTxnJob();
         new MockUp<LakeRangeRewriteSchemaChangeJob>() {
             @Mock
             public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) {
@@ -1331,6 +1469,46 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     }
 
     @Test
+    public void testRunningWaitsForTheRewritePublishAtMostOneSchedulerTick() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        // The rewrite INSERT runs on the scheduler thread, and the next tick checks a committed rewrite again, so it
+        // must wait for its publish at most one tick, even when the global tx_visible_wait_timeout is far longer.
+        SessionVariable globalDefault = GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable();
+        long globalVisibleWaitS = globalDefault.getTransactionVisibleWaitTimeout();
+        int schedulerIntervalMs = Config.alter_scheduler_interval_millisecond;
+        AtomicReference<Long> visibleWaitS = new AtomicReference<>();
+        job.setRewriteExecutor((context, insertStmt) ->
+                visibleWaitS.set(context.getSessionVariable().getTransactionVisibleWaitTimeout()));
+        try {
+            globalDefault.setTransactionVisibleWaitTimeout(3600);
+            Config.alter_scheduler_interval_millisecond = 3000;
+            job.runRunningJob();
+        } finally {
+            globalDefault.setTransactionVisibleWaitTimeout(globalVisibleWaitS);
+            Config.alter_scheduler_interval_millisecond = schedulerIntervalMs;
+        }
+        Assertions.assertEquals(3L, visibleWaitS.get());
+    }
+
+    @Test
+    public void testRunningWaitsForTheRewritePublishAtLeastOneSecond() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        // A scheduler interval under one second would round down to a zero-second wait, which returns the INSERT
+        // before even a fast publish can finish, so the rewrite still waits one second.
+        int schedulerIntervalMs = Config.alter_scheduler_interval_millisecond;
+        AtomicReference<Long> visibleWaitS = new AtomicReference<>();
+        job.setRewriteExecutor((context, insertStmt) ->
+                visibleWaitS.set(context.getSessionVariable().getTransactionVisibleWaitTimeout()));
+        try {
+            Config.alter_scheduler_interval_millisecond = 500;
+            job.runRunningJob();
+        } finally {
+            Config.alter_scheduler_interval_millisecond = schedulerIntervalMs;
+        }
+        Assertions.assertEquals(1L, visibleWaitS.get());
+    }
+
+    @Test
     public void testRunningResumePublishedSkipsAndTransitionsToFinishedRewriting() throws Exception {
         LakeRangeRewriteSchemaChangeJob job = jobInRunning();
         long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
@@ -1633,17 +1811,16 @@ public class LakeRangeRewriteSchemaChangeJobTest {
 
     /**
      * Helper: assert the shadow index is fully cleaned up after a cancel — no catalog exposure, no
-     * inverted-index entries, table state NORMAL, GC pin released.
+     * inverted-index entries, table state NORMAL, and the expected version retention pin.
      */
     private void assertShadowCleanedUp(LakeRangeRewriteSchemaChangeJob job, long physicalPartitionId,
-                                       List<Long> shadowTabletIds) {
+                                       List<Long> shadowTabletIds, long expectedPinVersion) {
         PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
         Assertions.assertNull(physicalPartition.getLatestIndex(job.getShadowIndexMetaId()),
                 "shadow index must be absent from the partition catalog map after cancel");
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState(),
                 "table state must be reset to NORMAL after cancel");
-        Assertions.assertEquals(0, physicalPartition.getMinRetainVersion(),
-                "GC pin must be released after cancel");
+        Assertions.assertEquals(expectedPinVersion, physicalPartition.getMinRetainVersion());
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (long tabletId : shadowTabletIds) {
             Assertions.assertNull(invertedIndex.getTabletMeta(tabletId),
@@ -1656,7 +1833,6 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         // Drive to WAITING_TXN (shadow exposed to catalog).
         LakeRangeRewriteSchemaChangeJob job = newJob(stubSampler(diverseSample()));
         job.runPendingJob();
-        job.runWaitingTxnJob(); // allocates watershed + exposes shadow
         Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
 
         long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
@@ -1670,7 +1846,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
 
         Assertions.assertTrue(cancelled, "cancelImpl must return true when not already cancelled/finished");
         Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
-        assertShadowCleanedUp(job, physicalPartitionId, shadowTabletIds);
+        assertShadowCleanedUp(job, physicalPartitionId, shadowTabletIds, 0);
     }
 
     @Test
@@ -1709,7 +1885,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         // The in-flight rewrite txn was aborted.
         Assertions.assertEquals(rewriteTxnId, abortedTxnId.get(),
                 "cancelImpl must abort the in-flight rewrite txn");
-        assertShadowCleanedUp(job, physicalPartitionId, shadowTabletIds);
+        assertShadowCleanedUp(job, physicalPartitionId, shadowTabletIds, 0);
     }
 
     @Test
@@ -1743,27 +1919,36 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     }
 
     @Test
-    public void testCancelInWaitingTxnBeforeShadowExposedIsClean() throws Exception {
-        // runPendingJob() transitions to WAITING_TXN but does not expose the shadow to the partition
-        // catalog map (exposure happens on the first runWaitingTxnJob run). So at this point the shadow
-        // meta and tablets are in the inverted index, but the shadow is NOT in the partition catalog map.
-        LakeRangeRewriteSchemaChangeJob job = newJob(stubSampler(diverseSample()));
-        job.runPendingJob();
-        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
-
+    public void testTimeoutWithACommittedRewriteTxnCancelsAndDropsShadow() throws Exception {
+        // The rewrite INSERT returns while its txn is still COMMITTED, so a publish that never finishes meets the job
+        // deadline in that state. That tick must still cancel the job and clean up, although the transaction manager
+        // refuses to abort a committed txn; the txn later publishes as a no-op.
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
         long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+        job.setRewriteTxnIdForTest(physicalPartitionId, 777L);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                TransactionState state = new TransactionState();
+                state.setTransactionStatus(TransactionStatus.COMMITTED);
+                return state;
+            }
+
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason)
+                    throws com.starrocks.common.StarRocksException {
+                throw new TransactionAlreadyCommitException("transaction " + transactionId + " is already committed");
+            }
+        };
         List<Long> shadowTabletIds = job.getShadowIndex(physicalPartitionId).getTablets()
                 .stream().map(Tablet::getId).collect(Collectors.toList());
-        // At this point the shadow IS in the inverted index but NOT in the partition catalog map.
-        Assertions.assertNull(table.getPhysicalPartition(physicalPartitionId)
-                .getLatestIndex(job.getShadowIndexMetaId()),
-                "precondition: shadow not yet in partition catalog map");
+        job.createTimeMs = System.currentTimeMillis() - job.timeoutMs - 1;
 
-        boolean cancelled = job.cancelImpl("cancel after PENDING");
+        job.run();
 
-        Assertions.assertTrue(cancelled);
         Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
-        assertShadowCleanedUp(job, physicalPartitionId, shadowTabletIds);
+        Assertions.assertTrue(job.errMsg.contains("Timeout"), job.errMsg);
+        assertShadowCleanedUp(job, physicalPartitionId, shadowTabletIds, 0);
     }
 
     @Test
@@ -1824,7 +2009,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         AtomicReference<Long> publishedCommitVersion = new AtomicReference<>();
         new MockUp<com.starrocks.lake.Utils>() {
             @Mock
-            public boolean noOpPublishForForceSkip(long jobId, String reason, long watershedTxnId, long watershedGtid,
+            public boolean noOpPublishForForceSkip(long jobId, String reason, long watershedTxnId, long commitGtid,
                                                    java.util.Map<Long, Long> commitVersionMap,
                                                    java.util.Map<Long, List<Tablet>> tabletsByPartition,
                                                    com.starrocks.warehouse.cngroup.ComputeResource cr,
@@ -1847,7 +2032,49 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         Assertions.assertEquals(physicalPartition.getVisibleVersion() + 1, physicalPartition.getNextVersion(),
                 "after force cancel the version chain must be dense (no hole)");
         // The shadow was then dropped.
-        assertShadowCleanedUp(job, physicalPartitionId, shadowTabletIds);
+        assertShadowCleanedUp(job, physicalPartitionId, shadowTabletIds, 0);
+    }
+
+    @Test
+    public void testForceCancelRefusedUntilEarlierLoadIsVisible() throws Exception {
+        // A load committed at C-1 and not yet finished on FE (it may already be published on BE), then the job
+        // reserved C. The force cancel must be refused before any no-op publish: otherwise the FE visible bump
+        // to C is skipped and C never becomes visible. Once the load is visible the force cancel goes through.
+        LakeRangeRewriteSchemaChangeJob job = jobInFinishedRewriting();
+        PhysicalPartition physicalPartition = table.getPhysicalPartitions().iterator().next();
+        long loadVersion = physicalPartition.getNextVersion();
+        physicalPartition.setNextVersion(loadVersion + 1);
+        job.setPublishExecutor(j -> false);
+        job.runFinishedRewritingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        long commitVersion = loadVersion + 1;
+        Assertions.assertEquals(commitVersion + 1, physicalPartition.getNextVersion());
+        Assertions.assertEquals(commitVersion - 2, physicalPartition.getVisibleVersion());
+
+        AtomicInteger noOpPublishes = new AtomicInteger();
+        new MockUp<com.starrocks.lake.Utils>() {
+            @Mock
+            public boolean noOpPublishForForceSkip(long jobId, String reason, long watershedTxnId, long watershedGtid,
+                                                   java.util.Map<Long, Long> commitVersionMap,
+                                                   java.util.Map<Long, List<Tablet>> tabletsByPartition,
+                                                   com.starrocks.warehouse.cngroup.ComputeResource cr,
+                                                   boolean useAggregatePublish) {
+                noOpPublishes.incrementAndGet();
+                return true;
+            }
+        };
+
+        Assertions.assertFalse(job.cancelImpl("force cancel", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        Assertions.assertFalse(job.isForceSkippedAtCommitted());
+        Assertions.assertEquals(0, noOpPublishes.get());
+
+        // The load finishes.
+        physicalPartition.setVisibleVersion(loadVersion, System.currentTimeMillis());
+        Assertions.assertTrue(job.cancelImpl("force cancel", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        Assertions.assertEquals(1, noOpPublishes.get());
+        Assertions.assertEquals(commitVersion, physicalPartition.getVisibleVersion());
     }
 
     @Test
@@ -1870,7 +2097,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         // Stub the no-op publish so the force-cancel succeeds without a backend.
         new MockUp<com.starrocks.lake.Utils>() {
             @Mock
-            public boolean noOpPublishForForceSkip(long jobId, String reason, long watershedTxnId, long watershedGtid,
+            public boolean noOpPublishForForceSkip(long jobId, String reason, long watershedTxnId, long commitGtid,
                                                    java.util.Map<Long, Long> commitVersionMap,
                                                    java.util.Map<Long, List<Tablet>> tabletsByPartition,
                                                    com.starrocks.warehouse.cngroup.ComputeResource cr,
@@ -1935,6 +2162,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         AtomicReference<Long> capturedRewriteTxnId = new AtomicReference<>();
         AtomicReference<Long> capturedAlterVersion = new AtomicReference<>();
         Map<Long, Boolean> capturedEmpty = new TreeMap<>();
+        List<Boolean> capturedRetry = new ArrayList<>();
         new MockUp<Utils>() {
             // Non-bundling path: both shadow and origin tablets go through the generic publishVersion.
             // The shadow publish is the one carrying a TXN_SHADOW_REWRITE TxnInfoPB; the origin no-op
@@ -1942,8 +2170,9 @@ public class LakeRangeRewriteSchemaChangeJobTest {
             @Mock
             public void publishVersion(List<Tablet> tablets, com.starrocks.proto.TxnInfoPB txnInfo,
                     long baseVersion, long newVersion, ComputeResource cr,
-                    boolean useAggregatePublish) {
+                    boolean useAggregatePublish, boolean isRetryPublish) {
                 if (txnInfo.txnType == com.starrocks.proto.TxnTypePB.TXN_SHADOW_REWRITE) {
+                    capturedRetry.add(isRetryPublish);
                     tablets.forEach(t -> publishedShadowTabletIds.add(t.getId()));
                     capturedEmpty.put(txnInfo.txnId, txnInfo.shadowRewriteSourceEmpty);
                     if (txnInfo.txnId == 123456L) {
@@ -1960,9 +2189,11 @@ public class LakeRangeRewriteSchemaChangeJobTest {
                     List<com.starrocks.proto.TxnInfoPB> txnInfos, long baseVersion, long newVersion,
                     java.util.Map<com.starrocks.system.ComputeNode, List<Long>> nodeToTablets,
                     ComputeResource cr,
-                    com.starrocks.proto.AggregatePublishVersionRequest req) {
+                    com.starrocks.proto.AggregatePublishVersionRequest req,
+                    boolean preferSharedInitialMetadata, boolean isRetryPublish) {
                 com.starrocks.proto.TxnInfoPB txnInfo = txnInfos.get(0);
                 if (txnInfo.txnType == com.starrocks.proto.TxnTypePB.TXN_SHADOW_REWRITE) {
+                    capturedRetry.add(isRetryPublish);
                     tablets.forEach(t -> publishedShadowTabletIds.add(t.getId()));
                     capturedEmpty.put(txnInfo.txnId, txnInfo.shadowRewriteSourceEmpty);
                     if (txnInfo.txnId == 123456L) {
@@ -2006,6 +2237,89 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         Assertions.assertEquals(7L, watershedVersion, "exercise the empty-at-W>1 publish path");
         Assertions.assertEquals(Map.of(123456L, true, 123457L, false), capturedEmpty,
                 "final TxnInfoPB must preserve both saved source-empty facts after eviction");
+        // One publish per partition, each a first attempt.
+        Assertions.assertEquals(List.of(false, false), capturedRetry);
+    }
+
+    /**
+     * A load that commits while the job rewrites the partitions takes a version below the one the job commits,
+     * so the gtid that labels the job's version must be drawn after the load's: when the job reserves the
+     * version in its first FINISHED_REWRITING round, and journaled with the reservation so that a new leader
+     * publishes the same gtid. The WAITING_TXN entry that allocates the watershed carries a gtid as well, so
+     * that an older FE resuming the job from it still publishes a positive one.
+     */
+    @Test
+    public void testCommitVersionGtid() throws Exception {
+        ConcurrentLoad.holdPublishDaemon();
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        // The load becomes visible before the rewrite transaction states below are faked for the job.
+        TransactionState load = ConcurrentLoad.commit(db, table);
+        ConcurrentLoad.makeVisible(db, load);
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+        job.setRewriteTxnIdForTest(physicalPartitionId, 123456L);
+        mockShadowRewriteTransaction(job.getTransactionId().get(), job.getWatershedVersion(physicalPartitionId));
+        job.setRewriteExecutor((context, insertStmt) -> { });
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        List<TxnInfoPB> publishedTxns = new CopyOnWriteArrayList<>();
+        List<Long> publishedVersions = new CopyOnWriteArrayList<>();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       ComputeResource computeResource, boolean useAggregatePublish,
+                                       boolean isRetryPublish) {
+                publishedTxns.add(txnInfo);
+                publishedVersions.add(newVersion);
+            }
+
+            @Mock
+            public void createSubRequestForAggregatePublish(List<Tablet> tablets, List<TxnInfoPB> txnInfos,
+                                                            long baseVersion, long newVersion,
+                                                            Map<ComputeNode, List<Long>> nodeToTablets,
+                                                            ComputeResource computeResource,
+                                                            AggregatePublishVersionRequest request,
+                                                            boolean preferSharedInitialMetadata,
+                                                            boolean isRetryPublish) {
+                publishedTxns.addAll(txnInfos);
+                publishedVersions.add(newVersion);
+            }
+
+            @Mock
+            public void sendAggregatePublishVersionRequest(AggregatePublishVersionRequest request, long baseVersion,
+                                                           ComputeResource computeResource,
+                                                           Map<Long, Double> compactionScores,
+                                                           Map<Long, TabletStatPB> tabletStats,
+                                                           List<VectorIndexBuildInfoPB> vectorIndexBuildInfos) {
+            }
+        };
+        job.setPublishExecutor(LakeOnlineRewriteJobBase::lakePublishVersion);
+        job.runFinishedRewritingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+
+        long loadVersion = ConcurrentLoad.versionIn(load, table, physicalPartitionId);
+        Assertions.assertFalse(publishedTxns.isEmpty());
+        Assertions.assertEquals(Set.of(loadVersion + 1), Set.copyOf(publishedVersions));
+        // The shadow tablets and the origin tablets advance to the same version under one gtid.
+        Set<Long> publishedGtids = publishedTxns.stream().map(txn -> txn.gtid).collect(Collectors.toSet());
+        Assertions.assertEquals(1, publishedGtids.size(), publishedGtids.toString());
+        long commitGtid = publishedGtids.iterator().next();
+        Assertions.assertTrue(load.getGlobalTransactionId() > 0);
+        Assertions.assertTrue(commitGtid > load.getGlobalTransactionId(),
+                "commit version gtid " + commitGtid + " is not after the gtid " + load.getGlobalTransactionId()
+                        + " of the load committed below it");
+
+        List<LakeRangeRewriteSchemaChangeJob> entries = readJournaledEntries(job.getJobId());
+        LakeRangeRewriteSchemaChangeJob watershedEntry = entries.stream()
+                .filter(entry -> entry.getJobState() == AlterJobV2.JobState.WAITING_TXN
+                        && entry.getTransactionId().isPresent())
+                .findFirst().orElseThrow();
+        Assertions.assertTrue(watershedEntry.commitGtid > 0);
+        // The last FINISHED_REWRITING entry is the one that reserved the commit version.
+        LakeRangeRewriteSchemaChangeJob reservationEntry = entries.stream()
+                .filter(entry -> entry.getJobState() == AlterJobV2.JobState.FINISHED_REWRITING)
+                .reduce((first, second) -> second).orElseThrow();
+        Assertions.assertEquals(commitGtid, reservationEntry.commitGtid);
     }
 
     @Test
@@ -2041,7 +2355,6 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         // Drive to WAITING_TXN (shadow exposed), then cancel, then replay the CANCELLED log entry.
         LakeRangeRewriteSchemaChangeJob job = newJob(stubSampler(diverseSample()));
         job.runPendingJob();
-        job.runWaitingTxnJob();
         job.cancelImpl("replay test cancel");
         Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
 
@@ -2062,7 +2375,9 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         MaterializedIndex shadowIdx = job.getShadowIndex(physicalPartitionId);
         physicalPartition.createRollupIndex(shadowIdx);
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
-        physicalPartition.setMinRetainVersion(5L);
+        // WAITING_TXN has not captured a rewrite version. A pre-existing pin belongs to another task.
+        long externalPinVersion = 5L;
+        physicalPartition.setMinRetainVersion(externalPinVersion);
         for (long tabletId : shadowTabletIds) {
             invertedIndex.addTablet(tabletId,
                     new TabletMeta(db.getId(), table.getId(),
@@ -2077,11 +2392,11 @@ public class LakeRangeRewriteSchemaChangeJobTest {
                 (LakeRangeRewriteSchemaChangeJob) GsonUtils.GSON.fromJson(text, AlterJobV2.class);
         inMemory.replay(replayed);
 
-        assertShadowCleanedUp(inMemory, physicalPartitionId, shadowTabletIds);
+        assertShadowCleanedUp(inMemory, physicalPartitionId, shadowTabletIds, externalPinVersion);
 
         // A second replay is a no-op: removing already-absent shadow state must not crash.
         inMemory.replay(replayed);
-        assertShadowCleanedUp(inMemory, physicalPartitionId, shadowTabletIds);
+        assertShadowCleanedUp(inMemory, physicalPartitionId, shadowTabletIds, externalPinVersion);
     }
 
     // ---- cross-state replay idempotency ------------------------------------------------
@@ -2378,6 +2693,25 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         protected String shadowKindLabel() {
             return "optimize";
         }
+
+        @Override
+        protected List<Column> getShadowRangeColumns() {
+            return List.of();
+        }
+
+        @Override
+        protected SampleSet sampleShadowSortKey(OlapTable table, String dbName, PendingPartitionPlan plan) {
+            return SampleSet.EMPTY;
+        }
+
+        @Override
+        protected void checkShadowColocatePrefix(OlapTable table) {
+        }
+
+        @Override
+        protected String rangeJobLogPrefix() {
+            return "seam stub job";
+        }
     }
 
     @Test
@@ -2566,8 +2900,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         // Empty partition -> a single full-range shadow tablet.
         Assertions.assertEquals(1, job.getTabletCount(physicalPartitionId));
 
-        // Allocate watershed + expose shadow, then drain finished -> capture W -> RUNNING.
-        job.runWaitingTxnJob();
+        // Drain finished -> capture W -> RUNNING.
         new MockUp<LakeRangeRewriteSchemaChangeJob>() {
             @Mock
             public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) {
@@ -3587,7 +3920,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
 
         Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
         assertPruned(job);
-        assertShadowCleanedUp(job, physicalPartitionId, shadowTabletIds);
+        assertShadowCleanedUp(job, physicalPartitionId, shadowTabletIds, 0);
         List<LakeRangeRewriteSchemaChangeJob> entries = readJournaledEntries(job.getJobId());
         for (LakeRangeRewriteSchemaChangeJob entry : entries) {
             assertHasPartitionStates(entry);
@@ -3629,7 +3962,10 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         // The follower starts from the catalog as it was before the rewrite.
         UtFrameUtils.PseudoImage initialImage = saveMetastore();
         LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        PhysicalPartition partition = table.getPhysicalPartitions().iterator().next();
+        Assertions.assertEquals(partition.getVisibleVersion(), partition.getMinRetainVersion());
         Assertions.assertTrue(job.cancel("cancel"));
+        Assertions.assertEquals(0, partition.getMinRetainVersion());
         List<LakeRangeRewriteSchemaChangeJob> entries = readJournaledEntries(job.getJobId());
 
         LocalMetastore followerMetastore = loadMetastore(initialImage);
@@ -3641,7 +3977,10 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         LakeRangeRewriteSchemaChangeJob retained = entries.get(0);
         assertHasPartitionStates(retained);
         Assertions.assertEquals(1, shadowIndexCount(followerTable));
+        PhysicalPartition followerPartition = followerTable.getPhysicalPartitions().iterator().next();
+        Assertions.assertEquals(followerPartition.getVisibleVersion(), followerPartition.getMinRetainVersion());
         replayOn(followerMetastore, followerHandler, entries.get(entries.size() - 1));
+        Assertions.assertEquals(0, followerPartition.getMinRetainVersion());
 
         // The CANCELLED replay drops the shadow index it reads from the entry; the prune comes after it.
         Assertions.assertSame(retained, followerHandler.getAlterJobsV2().get(job.getJobId()));
@@ -3747,7 +4086,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     public void testForceCancelWithPublishInFlightPrunesOncePublishCompletes() throws Exception {
         new MockUp<Utils>() {
             @Mock
-            public boolean noOpPublishForForceSkip(long jobId, String reason, long watershedTxnId, long watershedGtid,
+            public boolean noOpPublishForForceSkip(long jobId, String reason, long watershedTxnId, long commitGtid,
                                                    Map<Long, Long> commitVersionMap,
                                                    Map<Long, List<Tablet>> tabletsByPartition,
                                                    ComputeResource computeResource,

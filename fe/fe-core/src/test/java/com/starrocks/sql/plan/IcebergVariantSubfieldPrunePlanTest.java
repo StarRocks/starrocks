@@ -16,6 +16,7 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.thrift.TAccessPathType;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TPlan;
 import org.junit.jupiter.api.Assertions;
@@ -85,5 +86,41 @@ public class IcebergVariantSubfieldPrunePlanTest extends ConnectorPlanTestBase {
         List<TColumnAccessPath> topLevelChildren = root.getChildren();
         Assertions.assertEquals(3, topLevelChildren.size());
         Assertions.assertTrue(topLevelChildren.stream().anyMatch(child -> child.getChildren().size() == 1));
+    }
+
+    @Test
+    public void testVariantIsNullReadsOnlyNullMask() throws Exception {
+        connectContext.getSessionVariable().setCboPruneSubfield(true);
+
+        // Only the null check uses the column: the scan asks for the null mask alone.
+        String sql = "select count(*) from iceberg0.unpartitioned_db.variant_t0 where v is not null";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/v/OFFSET]");
+
+        ExecPlan execPlan = getExecPlan(sql);
+        IcebergScanNode scanNode = (IcebergScanNode) execPlan.getScanNodes().get(0);
+        TPlan thrift = scanNode.treeToThrift();
+        List<TColumnAccessPath> columnAccessPaths = thrift.getNodes().get(0).getHdfs_scan_node().getColumn_access_paths();
+        Assertions.assertEquals(1, columnAccessPaths.size());
+        Assertions.assertEquals(TAccessPathType.ROOT, columnAccessPaths.get(0).getType());
+        Assertions.assertEquals(1, columnAccessPaths.get(0).getChildrenSize());
+        Assertions.assertEquals(TAccessPathType.OFFSET, columnAccessPaths.get(0).getChildren().get(0).getType());
+
+        plan = getVerboseExplain("select count(*) from iceberg0.unpartitioned_db.variant_t0 where v is null");
+        assertContains(plan, "ColumnAccessPath: [/v/OFFSET]");
+    }
+
+    @Test
+    public void testVariantIsNullWithOtherUses() throws Exception {
+        connectContext.getSessionVariable().setCboPruneSubfield(true);
+
+        // The whole column is output: no access path, a full read.
+        String plan = getVerboseExplain("select v from iceberg0.unpartitioned_db.variant_t0 where v is not null");
+        assertNotContains(plan, "ColumnAccessPath");
+
+        // A subfield read next to the null check: both paths go down, the BE reads the leaf only.
+        plan = getVerboseExplain("select get_variant_int(v, '$.a') from iceberg0.unpartitioned_db.variant_t0 " +
+                "where v is null");
+        assertContains(plan, "ColumnAccessPath: [/v/OFFSET, /v/a(bigint(20))]");
     }
 }

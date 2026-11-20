@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "数値の自然対数（底 e）を計算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ln, dlog1, log

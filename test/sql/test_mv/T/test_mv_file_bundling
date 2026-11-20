@@ -1,0 +1,61 @@
+-- name: test_mv_file_bundling @cloud
+-- Test Point: A shared-data async MV enables file_bundling by default, and ALTER MATERIALIZED VIEW enables it on an MV created without it.
+-- Method: Refresh and query each MV before and after the switch, with new base data refreshed after it.
+-- Scope: CREATE / ALTER MATERIALIZED VIEW file_bundling, refresh and query on both tablet metadata formats.
+CREATE DATABASE mv_file_bundling_${uuid0};
+USE mv_file_bundling_${uuid0};
+
+CREATE TABLE t1 (
+    dt DATE,
+    k1 INT,
+    v1 INT
+)
+DUPLICATE KEY(dt, k1)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k1) BUCKETS 3
+PROPERTIES (
+    "replication_num" = "1"
+);
+INSERT INTO t1 VALUES ('2026-01-01', 1, 10), ('2026-01-01', 2, 20), ('2026-01-02', 1, 30);
+
+CREATE MATERIALIZED VIEW mv_default
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k1) BUCKETS 3
+REFRESH DEFERRED MANUAL
+AS SELECT dt, k1, SUM(v1) AS s FROM t1 GROUP BY dt, k1;
+function: assert_query_contains("show create materialized view mv_default", '"file_bundling" = "true"')
+
+CREATE MATERIALIZED VIEW mv_off
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k1) BUCKETS 3
+PROPERTIES (
+    "file_bundling" = "false"
+)
+REFRESH DEFERRED MANUAL
+AS SELECT dt, k1, SUM(v1) AS s FROM t1 GROUP BY dt, k1;
+function: assert_query_contains("show create materialized view mv_off", '"file_bundling" = "false"')
+
+REFRESH MATERIALIZED VIEW mv_default WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_off WITH SYNC MODE;
+SELECT * FROM mv_default ORDER BY dt, k1;
+SELECT * FROM mv_off ORDER BY dt, k1;
+
+ALTER MATERIALIZED VIEW mv_off SET ("file_bundling" = "true");
+function: wait_alter_table_finish()
+function: assert_query_contains("show create materialized view mv_off", '"file_bundling" = "true"')
+-- Data refreshed before the switch stays readable after its metadata is rewritten.
+SELECT * FROM mv_off ORDER BY dt, k1;
+-- Switching back is refused until the metadata written before the switch is vacuumed.
+function: assert_query_error_contains("ALTER MATERIALIZED VIEW mv_off SET ('file_bundling' = 'false')", "mixed metadata types")
+
+INSERT INTO t1 VALUES ('2026-01-02', 2, 40), ('2026-01-03', 1, 50);
+REFRESH MATERIALIZED VIEW mv_default WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_off WITH SYNC MODE;
+SELECT * FROM mv_default ORDER BY dt, k1;
+SELECT * FROM mv_off ORDER BY dt, k1;
+
+DROP DATABASE mv_file_bundling_${uuid0} FORCE;
+
+CLEANUP {
+    DROP DATABASE IF EXISTS mv_file_bundling_${uuid0} FORCE;
+} END CLEANUP

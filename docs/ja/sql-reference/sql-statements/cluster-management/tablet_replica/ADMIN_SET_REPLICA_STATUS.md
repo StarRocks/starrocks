@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ADMIN SET REPLICA STATUS は、指定されたレプリカのステータスを設定するために使用されます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ADMIN SET REPLICA STATUS
@@ -26,7 +27,7 @@ PROPERTIES ("key" = "value", ...)
 
 現在サポートされている属性は以下の通りです:
 
-"table_id": 必須。Tablet Id を指定します。
+"tablet_id": 必須。Tablet Id を指定します。
 
 "backend_id": 必須。Backend Id を指定します。
 

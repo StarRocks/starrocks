@@ -380,6 +380,49 @@ public class AlterMVReplayActivateTest extends MVTestBase {
     }
 
     /**
+     * The same for the startup activation: its check also runs outside any lock, after the coordinator has seen the
+     * mv still in the catalog, so a DROP replayed while the check is in flight must not be undone by it.
+     */
+    @Test
+    public void testADropDuringTheStartupActivationLeavesNoLinkBehind() throws Exception {
+        String mvName = "mv_startup_activate_dropped";
+        String mixedBase = "t_startup_activate_mixed_base";
+        starRocksAssert.withTable("CREATE TABLE " + mixedBase + " (l_orderkey int, v int) "
+                + "DISTRIBUTED BY HASH(l_orderkey) PROPERTIES('replication_num'='1')");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName + "\n"
+                + "DISTRIBUTED BY RANDOM\n"
+                + "REFRESH DEFERRED MANUAL\n"
+                + "AS SELECT a.l_orderkey, b.v FROM hive0.partitioned_db.lineitem_par a "
+                + "JOIN " + mixedBase + " b ON a.l_orderkey = b.l_orderkey;");
+        try {
+            MaterializedView mv = getMv(DB_NAME, mvName);
+            Table base = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(DB_NAME, mixedBase);
+            Assertions.assertTrue(mv.isActive());
+
+            installProbe();
+            probe.gate = new CountDownLatch(1);
+            // as after loading an image: handed over, then activated by its layer
+            mv.changeReloadState(-1);
+            mv.prepareForStartupActivation();
+            CompletableFuture<?> activation = mv.activateOnStartup();
+            Assertions.assertTrue(probe.gateEntered.await(30, TimeUnit.SECONDS),
+                    "the activation check never reached the connector, so nothing was in flight");
+
+            starRocksAssert.dropMaterializedView(mvName);
+            Assertions.assertFalse(base.getRelatedMaterializedViews().contains(mv.getMvId()));
+            probe.gate.countDown();
+            activation.get(30, TimeUnit.SECONDS);
+
+            Assertions.assertFalse(base.getRelatedMaterializedViews().contains(mv.getMvId()),
+                    "the startup activation re-linked a base table to a dropped MV");
+            Assertions.assertFalse(mv.isActive(), "the startup activation re-activated a dropped MV");
+        } finally {
+            starRocksAssert.ddl("DROP MATERIALIZED VIEW IF EXISTS " + mvName);
+            starRocksAssert.dropTable(mixedBase);
+        }
+    }
+
+    /**
      * The checkpoint thread must not depend on an external catalog at all: it adopts the journaled state
      * synchronously, derives nothing, and the image it writes carries the MV as active with the leader's
      * base tables.

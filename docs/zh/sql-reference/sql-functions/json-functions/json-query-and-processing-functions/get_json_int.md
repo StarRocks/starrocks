@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从 JSON 字符串中指定路径提取整数值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # get_json_int

@@ -208,7 +208,7 @@ public abstract class Type implements Cloneable {
     }
 
     public boolean isValidMapKeyType() {
-        return !isComplexType() && !isJsonType() && !isOnlyMetricType() && !isFunctionType();
+        return !isComplexType() && !isJsonType() && !isOnlyMetricType() && !isFunctionType() && !isGeoType();
     }
 
     public boolean canApplyToNumeric() {
@@ -409,6 +409,28 @@ public abstract class Type implements Cloneable {
 
     public boolean isGeoType() {
         return isScalarType(PrimitiveType.GEOGRAPHY) || isScalarType(PrimitiveType.GEOMETRY);
+    }
+
+    public boolean hasNestedGeoType() {
+        if (isArrayType()) {
+            Type item = ((ArrayType) this).getItemType();
+            return item.isGeoType() || item.hasNestedGeoType();
+        }
+        if (isMapType()) {
+            MapType map = (MapType) this;
+            return map.getKeyType().isGeoType() || map.getKeyType().hasNestedGeoType()
+                    || map.getValueType().isGeoType() || map.getValueType().hasNestedGeoType();
+        }
+        if (isStructType()) {
+            StructType struct = (StructType) this;
+            for (int i = 0; i < struct.getFields().size(); i++) {
+                Type field = struct.getFields().get(i).getType();
+                if (field.isGeoType() || field.hasNestedGeoType()) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     public boolean isPercentile() {

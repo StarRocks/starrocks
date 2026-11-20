@@ -40,6 +40,20 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class EditLogFailureVisibleTest {
 
+    @Test
+    public void outerScopeSurvivesClosedInnerGateUntilRollbackAndClosesOnce() {
+        EditLog editLog = new EditLog(new ArrayBlockingQueue<>(4), true);
+        EditLog.WalScope scope = editLog.openWalScope();
+        Assertions.assertEquals(1, editLog.inFlightForTest());
+        editLog.closeWalGate();
+        Assertions.assertThrows(EditLogException.class, () -> editLog.logJsonObject((short) 1, "pending"));
+        Assertions.assertEquals(1, editLog.inFlightForTest());
+        scope.close();
+        scope.close();
+        Assertions.assertEquals(0, editLog.inFlightForTest());
+        Assertions.assertThrows(EditLogException.class, editLog::openWalScope);
+    }
+
     // ---- write-admission gate ----
 
     @Test

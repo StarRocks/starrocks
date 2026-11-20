@@ -31,6 +31,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 
 public class ThreadPoolManagerTest {
 
@@ -254,6 +255,232 @@ public class ThreadPoolManagerTest {
         } finally {
             release.countDown();
             executor.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testScalingThreadPoolHandsTaskToIdleThread() throws InterruptedException {
+        ThreadPoolExecutor executor =
+                ThreadPoolManager.newDaemonScalingThreadPool(1, 4, "test_scaling_idle_pool", false);
+        ThreadPoolManager.ScalingQueue queue = (ThreadPoolManager.ScalingQueue) executor.getQueue();
+        try {
+            for (int i = 0; i < 20; i++) {
+                CountDownLatch done = new CountDownLatch(1);
+                executor.execute(done::countDown);
+                Assertions.assertTrue(done.await(10, TimeUnit.SECONDS));
+                // the next task is submitted only once the thread waits for it again
+                waitUntil(queue::hasWaitingConsumer);
+            }
+            // a fixed pool would have started a thread per task up to its size; this one reused the idle one
+            Assertions.assertEquals(1, executor.getLargestPoolSize());
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testScalingThreadPoolGrowsToMaxThenQueues() throws InterruptedException {
+        int maxThreads = 4;
+        int numTasks = maxThreads + 3;
+        ThreadPoolExecutor executor =
+                ThreadPoolManager.newDaemonScalingThreadPool(1, maxThreads, "test_scaling_max_pool", false);
+        CountDownLatch release = new CountDownLatch(1);
+        try {
+            Assertions.assertEquals(ThreadPoolManager.ForceQueuePolicy.class,
+                    executor.getRejectedExecutionHandler().getClass());
+            CountDownLatch started = new CountDownLatch(maxThreads);
+            CountDownLatch done = new CountDownLatch(numTasks);
+            Runnable blockingTask = () -> {
+                started.countDown();
+                try {
+                    release.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                done.countDown();
+            };
+
+            // blocking tasks each get a thread of their own, up to the maximum
+            for (int i = 0; i < maxThreads; i++) {
+                executor.execute(blockingTask);
+            }
+            Assertions.assertTrue(started.await(10, TimeUnit.SECONDS));
+            Assertions.assertEquals(maxThreads, executor.getPoolSize());
+
+            // with every thread busy, more tasks neither block the submitter nor get rejected: they wait
+            for (int i = maxThreads; i < numTasks; i++) {
+                executor.execute(blockingTask);
+            }
+            Assertions.assertEquals(maxThreads, executor.getPoolSize());
+            Assertions.assertEquals(numTasks - maxThreads, executor.getQueue().size());
+
+            release.countDown();
+            Assertions.assertTrue(done.await(10, TimeUnit.SECONDS));
+            Assertions.assertEquals(maxThreads, executor.getLargestPoolSize());
+        } finally {
+            release.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testScalingThreadPoolShrinksToCoreWhenIdle() throws InterruptedException {
+        int maxThreads = 4;
+        ThreadPoolExecutor executor = ThreadPoolManager.newDaemonScalingThreadPool(1, maxThreads,
+                100, TimeUnit.MILLISECONDS, "test_scaling_shrink_pool", false);
+        CountDownLatch release = new CountDownLatch(1);
+        try {
+            CountDownLatch started = new CountDownLatch(maxThreads);
+            for (int i = 0; i < maxThreads; i++) {
+                executor.execute(() -> {
+                    started.countDown();
+                    try {
+                        release.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
+            }
+            Assertions.assertTrue(started.await(10, TimeUnit.SECONDS));
+            release.countDown();
+
+            // the threads started for the burst exit once idle for the keep-alive time; the core thread
+            // stays, so a task queued at the maximum always has a thread to run it
+            waitUntil(() -> executor.getPoolSize() == 1);
+            Assertions.assertFalse(executor.allowsCoreThreadTimeOut());
+        } finally {
+            release.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testScalingThreadPoolRejectsAfterShutdown() {
+        ThreadPoolExecutor executor =
+                ThreadPoolManager.newDaemonScalingThreadPool(1, 4, "test_scaling_shutdown_pool", false);
+        executor.shutdown();
+        Assertions.assertThrows(RejectedExecutionException.class, () -> executor.execute(() -> {
+        }));
+        Assertions.assertEquals(0, executor.getQueue().size());
+    }
+
+    @Test
+    public void testSetScalingThreadPoolSize() {
+        ThreadPoolExecutor executor =
+                ThreadPoolManager.newDaemonScalingThreadPool(4, 16, "test_scaling_resize_pool", false);
+        try {
+            ThreadPoolManager.setScalingThreadPoolSize(executor, 4, 64);
+            Assertions.assertEquals(4, executor.getCorePoolSize());
+            Assertions.assertEquals(64, executor.getMaximumPoolSize());
+
+            // a maximum below the core size takes the core size down with it
+            ThreadPoolManager.setScalingThreadPoolSize(executor, 4, 2);
+            Assertions.assertEquals(2, executor.getCorePoolSize());
+            Assertions.assertEquals(2, executor.getMaximumPoolSize());
+
+            ThreadPoolManager.setScalingThreadPoolSize(executor, 4, 8);
+            Assertions.assertEquals(4, executor.getCorePoolSize());
+            Assertions.assertEquals(8, executor.getMaximumPoolSize());
+
+            // a non-positive maximum is ignored rather than thrown from the config refresh listener
+            ThreadPoolManager.setScalingThreadPoolSize(executor, 4, 0);
+            ThreadPoolManager.setScalingThreadPoolSize(executor, 4, -1);
+            Assertions.assertEquals(4, executor.getCorePoolSize());
+            Assertions.assertEquals(8, executor.getMaximumPoolSize());
+
+            // the pool keeps at least one core thread
+            ThreadPoolManager.setScalingThreadPoolSize(executor, 0, 8);
+            Assertions.assertEquals(1, executor.getCorePoolSize());
+            Assertions.assertEquals(8, executor.getMaximumPoolSize());
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testScalingThreadPoolNeedsACoreThread() {
+        // with no core thread, a task queued at the maximum could be left with no thread to run it
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> ThreadPoolManager.newDaemonScalingThreadPool(0, 4, "test_scaling_no_core_pool", false));
+    }
+
+    @Test
+    public void testRaisingScalingThreadPoolMaxStartsQueuedTasks() throws InterruptedException {
+        int oldMax = 2;
+        int newMax = 5;
+        ThreadPoolExecutor executor =
+                ThreadPoolManager.newDaemonScalingThreadPool(1, oldMax, "test_scaling_raise_pool", false);
+        CountDownLatch release = new CountDownLatch(1);
+        try {
+            CountDownLatch started = new CountDownLatch(newMax);
+            for (int i = 0; i < newMax; i++) {
+                executor.execute(() -> {
+                    started.countDown();
+                    try {
+                        release.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
+            }
+            waitUntil(() -> started.getCount() == newMax - oldMax);
+            Assertions.assertEquals(newMax - oldMax, executor.getQueue().size());
+
+            // nothing else is submitted: the tasks queued at the old maximum must start on their own
+            ThreadPoolManager.setScalingThreadPoolSize(executor, 1, newMax);
+            Assertions.assertTrue(started.await(10, TimeUnit.SECONDS));
+            Assertions.assertEquals(newMax, executor.getPoolSize());
+            Assertions.assertEquals(0, executor.getQueue().size());
+            Assertions.assertEquals(1, executor.getCorePoolSize());
+            Assertions.assertEquals(newMax, executor.getMaximumPoolSize());
+        } finally {
+            release.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testUnchangedResizeLetsIdleThreadsExit() throws InterruptedException {
+        int maxThreads = 4;
+        ThreadPoolExecutor executor = ThreadPoolManager.newDaemonScalingThreadPool(1, maxThreads,
+                500, TimeUnit.MILLISECONDS, "test_scaling_refresh_pool", false);
+        CountDownLatch release = new CountDownLatch(1);
+        try {
+            CountDownLatch started = new CountDownLatch(maxThreads);
+            for (int i = 0; i < maxThreads; i++) {
+                executor.execute(() -> {
+                    started.countDown();
+                    try {
+                        release.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
+            }
+            Assertions.assertTrue(started.await(10, TimeUnit.SECONDS));
+            release.countDown();
+
+            // The config refresh resizes the pool to the same size every 10 s. Done every 50 ms here, it must not
+            // keep the threads above the core alive: each still exits after its 500 ms keep-alive.
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            while (executor.getPoolSize() > 1 && System.nanoTime() < deadline) {
+                ThreadPoolManager.setScalingThreadPoolSize(executor, 1, maxThreads);
+                Thread.sleep(50);
+            }
+            Assertions.assertEquals(1, executor.getPoolSize());
+            Assertions.assertEquals(1, executor.getCorePoolSize());
+            Assertions.assertEquals(maxThreads, executor.getMaximumPoolSize());
+        } finally {
+            release.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    private static void waitUntil(BooleanSupplier condition) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (!condition.getAsBoolean()) {
+            Assertions.assertTrue(System.nanoTime() < deadline, "condition not met in 10 seconds");
+            Thread.sleep(1);
         }
     }
 }

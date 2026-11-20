@@ -64,6 +64,48 @@ public class ExpressionTest extends PlanTestBase {
                 + "  |  <slot 8> : 7: add + 3: v3\n"));
     }
 
+    // Different select-list items that translate to equal scalar operators share one output column
+    // (QueryTransformer.getOrCreateColumnRefOperator). Repeats of one Expr are already merged by ExpressionMapping,
+    // so they do not test it.
+    @Test
+    public void testEqualSelectExpressionsShareOneColumn() throws Exception {
+        // project(): one pattern is a CHAR(4) constant, the other a VARCHAR one; they are equal through matchesType()
+        assertContains(getFragmentPlan("select t1a like cast('abc%' as char(4)), t1a like 'abc%' from test_all_type"),
+                "OUTPUT EXPRS:11: expr | 11: expr");
+        // project(): AND is compared without regard to grouping
+        assertContains(getFragmentPlan("select (v1 > 1 and v2 > 2) and v3 > 3, v1 > 1 and (v2 > 2 and v3 > 3) from t0"),
+                "OUTPUT EXPRS:4: expr | 4: expr");
+        // projectForOrder(), without and with aggregation
+        assertContains(getFragmentPlan("select t1a like cast('abc%' as char(4)), t1a like 'abc%' from test_all_type " +
+                "order by t1b"), "OUTPUT EXPRS:11: expr | 11: expr");
+        assertContains(getFragmentPlan("select (v1 > 1 and v2 > 2) and v3 > 3, v1 > 1 and (v2 > 2 and v3 > 3) from t0 " +
+                "order by v1"), "OUTPUT EXPRS:4: expr | 4: expr");
+        assertContains(getFragmentPlan("select (sum(v1) > 1 and v2 > 2) and v2 < 9, sum(v1) > 1 and (v2 > 2 and v2 < 9) " +
+                "from t0 group by v2 order by v2"), "OUTPUT EXPRS:5: expr | 5: expr");
+    }
+
+    // A CHAR constant equals a VARCHAR one with the same value, so rules that keep constants in hash sets and maps
+    // treat the two alike: each query plans like its twin with only VARCHAR constants.
+    @Test
+    public void testCharConstantsPlanLikeEqualVarcharConstants() throws Exception {
+        String[][] twins = {
+                // InvertedCaseWhen: the CHAR branch also yields 'a'
+                {"select * from test_all_type where case when t1d = 1 then 'a' when t1d = 2 then cast('a' as char(1)) " +
+                        "else 'b' end = 'a'",
+                        "select * from test_all_type where case when t1d = 1 then 'a' when t1d = 2 then 'a' else 'b' end = 'a'"},
+                // InvertedCaseWhen: the second WHEN repeats the first, so it never matches
+                {"select * from test_all_type where case t1a when 'a' then 1 when cast('a' as char(1)) then 2 " +
+                        "else 3 end = 2",
+                        "select * from test_all_type where case t1a when 'a' then 1 when 'a' then 2 else 3 end = 2"},
+                // RangeExtractor: the two value sets intersect in 'a'
+                {"select * from test_all_type where t1a = 'a' and t1a in (cast('a' as char(1)), 'b')",
+                        "select * from test_all_type where t1a = 'a' and t1a in ('a', 'b')"},
+        };
+        for (String[] twin : twins) {
+            Assertions.assertEquals(getFragmentPlan(twin[1]), getFragmentPlan(twin[0]), twin[0]);
+        }
+    }
+
     @Test
     public void testReduceCast() throws Exception {
         String sql = "select t1a, t1b from test_all_type where t1c > 2000 + 1";
@@ -255,6 +297,87 @@ public class ExpressionTest extends PlanTestBase {
                 + "  |  <slot 12> : days_add(15: cast, 1)\n"
                 + "  |  <slot 13> : years_add(15: cast, 2)\n"
                 + "  |  <slot 14> : days_sub(15: cast, 3)\n"));
+    }
+
+    // seconds_add takes its amount as an INT, so a fraction of a second is added with microseconds_add
+    @Test
+    public void testIntervalWithFractionalSeconds() throws Exception {
+        String[][] cases = {
+                {"id_datetime + interval '0.5' second", "microseconds_add(8: id_datetime, 500000)"},
+                {"id_datetime + interval 1.5 second", "microseconds_add(seconds_add(8: id_datetime, 1), 500000)"},
+                {"id_datetime - interval 1.5 second", "microseconds_sub(seconds_sub(8: id_datetime, 1), 500000)"},
+                {"interval 1.5 second + id_datetime", "microseconds_add(seconds_add(8: id_datetime, 1), 500000)"},
+                {"id_datetime + interval -0.25 second", "microseconds_add(8: id_datetime, -250000)"},
+                {"id_datetime + interval -1.5 second", "microseconds_add(seconds_add(8: id_datetime, -1), -500000)"},
+                {"id_datetime + interval 0.000001 second", "microseconds_add(8: id_datetime, 1)"},
+                {"id_datetime + interval 1e0 second", "seconds_add(8: id_datetime, 1)"},
+                {"id_datetime + interval 0.5e0 second", "microseconds_add(8: id_datetime, 500000)"},
+                {"date_add(id_datetime, interval '3000.000001' second)",
+                        "microseconds_add(seconds_add(8: id_datetime, 3000), 1)"},
+                {"timestampadd(second, 2.5, id_datetime)", "microseconds_add(seconds_add(8: id_datetime, 2), 500000)"},
+                // the amount is still a number of seconds when it has a fraction of zero
+                {"id_datetime + interval '5.0' second", "seconds_add(8: id_datetime, 5)"},
+                {"id_datetime + interval 5.00 second", "seconds_add(8: id_datetime, 5)"},
+                // amounts without a fraction are as before
+                {"id_datetime + interval 2 second", "seconds_add(8: id_datetime, 2)"},
+                {"id_datetime + interval '2' second", "seconds_add(8: id_datetime, 2)"},
+                {"id_datetime - interval 2 second", "seconds_sub(8: id_datetime, 2)"},
+                // and the other calls on the same value are not merged with it
+                {"id_datetime + interval 1.5 second + interval 1 second",
+                        "seconds_add(microseconds_add(seconds_add(8: id_datetime, 1), 500000), 1)"},
+                {"id_datetime + interval 1.5 second + interval 250 millisecond",
+                        "milliseconds_add(microseconds_add(seconds_add(8: id_datetime, 1), 500000), 250)"},
+                // a constant expression is folded first
+                {"timestampadd(second, 0.25 + 0.25, id_datetime)", "microseconds_add(8: id_datetime, 500000)"},
+                {"id_datetime + interval cast('1.5' as decimal(10, 1)) second",
+                        "microseconds_add(seconds_add(8: id_datetime, 1), 500000)"},
+                {"date_sub(id_datetime, interval cast(3 as double) / 4 second)", "microseconds_sub(8: id_datetime, 750000)"},
+        };
+        for (String[] c : cases) {
+            String plan = getFragmentPlan("select " + c[0] + " from test_all_type");
+            assertContains(plan, c[1]);
+        }
+    }
+
+    @Test
+    public void testIntervalWithSecondsFinerThanMicroseconds() {
+        // DATETIME has no digits below microseconds
+        SemanticException e = assertThrows(SemanticException.class,
+                () -> getFragmentPlan("select id_datetime + interval 0.1234567 second from test_all_type"));
+        assertContains(e.getMessage(), "0.1234567");
+        assertThrows(SemanticException.class,
+                () -> getFragmentPlan("select id_datetime + interval '1.0000001' second from test_all_type"));
+        // also when the amount is a constant expression
+        assertThrows(SemanticException.class,
+                () -> getFragmentPlan("select timestampadd(second, 0.0000001 + 0, id_datetime) from test_all_type"));
+    }
+
+    // A literal amount is checked when the expression is analyzed, so a definition that uses it is refused when it is
+    // created, rather than each time it is used
+    @Test
+    public void testDefinitionWithSecondsFinerThanMicroseconds() {
+        Exception e = assertThrows(Exception.class, () -> starRocksAssert.withTable("CREATE TABLE t_interval_generated (\n" +
+                "  k1 INT NOT NULL,\n" +
+                "  ts DATETIME NOT NULL,\n" +
+                "  ts2 DATETIME NULL AS ts + INTERVAL 0.1234567 SECOND\n" +
+                ") DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1')"));
+        assertContains(e.getMessage(), "at most 6 decimals");
+
+        e = assertThrows(Exception.class, () -> starRocksAssert.withView(
+                "create view v_interval_finer as select id_datetime + interval '0.1234567' second from test_all_type"));
+        assertContains(e.getMessage(), "at most 6 decimals");
+    }
+
+    // An exponent describes a huge number in a few characters. Such amounts are refused or left to the INT cast,
+    // without spelling the number out.
+    @Test
+    public void testIntervalWithHugeExponentInSeconds() throws Exception {
+        SemanticException e = assertThrows(SemanticException.class,
+                () -> getFragmentPlan("select id_datetime + interval '1e-100000000' second from test_all_type"));
+        assertContains(e.getMessage(), "1E-100000000");
+
+        String plan = getFragmentPlan("select id_datetime + interval '1e100000000' second from test_all_type");
+        assertNotContains(plan, "microseconds_add");
     }
 
     @Test
@@ -1012,13 +1135,22 @@ public class ExpressionTest extends PlanTestBase {
         planFragment = getFragmentPlan(sql);
         assertContains(planFragment, "PREDICATES: 8: id_datetime = '2020-12-23 00:00:00'");
 
+        // years/months add/sub clamp to the month end and are not invertible: keep the predicate as is
         sql = "select t1a from test_all_type where years_sub(id_datetime, 2) = '2020-12-21'";
         planFragment = getFragmentPlan(sql);
-        assertContains(planFragment, "PREDICATES: 8: id_datetime = '2022-12-21 00:00:00'");
+        assertContains(planFragment, "PREDICATES: years_sub(8: id_datetime, 2) = '2020-12-21 00:00:00'");
 
-        sql = "select t1a from test_all_type where years_add(id_datetime, 2) = '2020-12-21'";
+        sql = "select t1a from test_all_type where years_add(id_datetime, 1) = '2025-02-28'";
         planFragment = getFragmentPlan(sql);
-        assertContains(planFragment, "PREDICATES: 8: id_datetime = '2018-12-21 00:00:00'");
+        assertContains(planFragment, "PREDICATES: years_add(8: id_datetime, 1) = '2025-02-28 00:00:00'");
+
+        sql = "select t1a from test_all_type where months_add(id_datetime, 1) = '2024-02-29'";
+        planFragment = getFragmentPlan(sql);
+        assertContains(planFragment, "PREDICATES: months_add(8: id_datetime, 1) = '2024-02-29 00:00:00'");
+
+        sql = "select t1a from test_all_type where date_add(id_datetime, interval 1 month) < '2024-02-29'";
+        planFragment = getFragmentPlan(sql);
+        assertContains(planFragment, "PREDICATES: months_add(8: id_datetime, 1) < '2024-02-29 00:00:00'");
     }
 
     @Test
@@ -1055,6 +1187,20 @@ public class ExpressionTest extends PlanTestBase {
         planFragment = getFragmentPlan(sql);
         Assertions.assertTrue(
                 planFragment.contains("PREDICATES: 1: v1 <= 2, 2: v2 IS NOT NULL, NOT (if(3: v3 > 2, FALSE, TRUE))"));
+    }
+
+    /** <=> has no opposite operator, so inside a negated AND/OR it must stay as NOT (a <=> b). */
+    @Test
+    public void testNotOverNullSafeEqualInCompound() throws Exception {
+        String plan = getFragmentPlan("select v1 from t0 where not (v1 <=> 1 and v2 = 2)");
+        assertContains(plan, "PREDICATES: (NOT (1: v1 <=> 1)) OR (2: v2 != 2)");
+
+        plan = getFragmentPlan("select v1 from t0 where not (v1 <=> v2 or v3 > 2)");
+        assertContains(plan, "NOT (1: v1 <=> 2: v2), 3: v3 <= 2");
+
+        plan = getFragmentPlan("select v1, count(*) from t0 group by v1 having not (v1 <=> 1 or count(*) = 2)");
+        assertContains(plan, "NOT (1: v1 <=> 1)");
+        assertContains(plan, "4: count != 2");
     }
 
     @Test
@@ -1802,9 +1948,15 @@ public class ExpressionTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "days_sub(CAST(2: v2 AS DATETIME), 6)");
 
+        // years/quarters/months clamp to the month end and do not compose: 2020-02-29 + 1 + 2 - 3 years = 2020-02-28
         sql = "select years_add(years_sub(years_sub(v2, -1), -2), -3) from t0";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "<slot 4> : CAST(2: v2 AS DATETIME)");
+        assertContains(plan, "years_add(years_sub(years_sub(CAST(2: v2 AS DATETIME), -1), -2), -3)");
+
+        sql = "select months_sub(months_add(v2, 1), 1), quarters_add(quarters_add(v2, 1), 1) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "months_sub(months_add(6: cast, 1), 1)");
+        assertContains(plan, "quarters_add(quarters_add(6: cast, 1), 1)");
 
         sql = "select date_add(date_add(date_sub(v2, -1), -2), -3) from t0";
         plan = getFragmentPlan(sql);

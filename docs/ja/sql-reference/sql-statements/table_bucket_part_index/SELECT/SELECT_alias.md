@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Aliases assign shorter or alternate names to tables, columns, or expressions in queries."
 sidebar_label: "Alias"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # エイリアス

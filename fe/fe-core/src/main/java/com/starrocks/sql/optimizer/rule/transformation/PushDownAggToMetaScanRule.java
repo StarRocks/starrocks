@@ -171,6 +171,12 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
                 // this variable is introduced to solve compatibility issues,
                 // see more details in the description of https://github.com/StarRocks/starrocks/pull/17619
                 copiedColumn.setType(IntegerType.BIGINT);
+            } else if (aggCall.getFnName().equals(FunctionSet.DICT_MERGE)) {
+                // The slot built from this column is sent to the backend with the column's type, and the
+                // meta reader produces a dict_merge column as ARRAY<VARCHAR>, not as the table column's
+                // VARCHAR. A one-phase aggregate sends that column through an exchange, and a receiver that
+                // decodes it with the VARCHAR layout fails or crashes.
+                copiedColumn.setType(columnType);
             }
             copiedColumn.setIsAllowNull(true);
             newScanColumnRefs.put(metaColumn, copiedColumn);

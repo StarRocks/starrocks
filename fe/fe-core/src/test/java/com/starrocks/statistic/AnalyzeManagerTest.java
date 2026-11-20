@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
 
 public class AnalyzeManagerTest extends PlanTestBase {
     @Test
@@ -88,5 +89,48 @@ public class AnalyzeManagerTest extends PlanTestBase {
         statisticAutoCollector = Deencapsulation.newInstance(StatisticAutoCollector.class);
         result = Deencapsulation.invoke(statisticAutoCollector, "checkoutAnalyzeTime", time);
         Assertions.assertTrue(result);
+    }
+
+    @Test
+    public void testCheckoutAnalyzeTimeIncludesBothEnds() {
+        String startTime = Config.statistic_auto_analyze_start_time;
+        String endTime = Config.statistic_auto_analyze_end_time;
+        StatisticAutoCollector collector = Deencapsulation.newInstance(StatisticAutoCollector.class);
+        try {
+            // The default window covers the whole day, including the last second before midnight.
+            Config.statistic_auto_analyze_start_time = "00:00:00";
+            Config.statistic_auto_analyze_end_time = "23:59:59";
+            for (LocalTime time : List.of(LocalTime.MIDNIGHT, LocalTime.of(12, 0),
+                    LocalTime.of(23, 59, 59), LocalTime.of(23, 59, 59, 500_000_000), LocalTime.MAX)) {
+                Assertions.assertTrue((boolean) Deencapsulation.invoke(collector, "checkoutAnalyzeTime", time),
+                        time.toString());
+            }
+
+            Config.statistic_auto_analyze_start_time = "06:00:00";
+            Config.statistic_auto_analyze_end_time = "17:00:00";
+            Assertions.assertTrue((boolean) Deencapsulation.invoke(collector, "checkoutAnalyzeTime",
+                    LocalTime.of(6, 0)));
+            Assertions.assertTrue((boolean) Deencapsulation.invoke(collector, "checkoutAnalyzeTime",
+                    LocalTime.of(17, 0, 0, 999_000_000)));
+            Assertions.assertFalse((boolean) Deencapsulation.invoke(collector, "checkoutAnalyzeTime",
+                    LocalTime.of(5, 59, 59, 999_000_000)));
+            Assertions.assertFalse((boolean) Deencapsulation.invoke(collector, "checkoutAnalyzeTime",
+                    LocalTime.of(17, 0, 1)));
+
+            // A window that crosses midnight.
+            Config.statistic_auto_analyze_start_time = "20:00:00";
+            Config.statistic_auto_analyze_end_time = "06:00:00";
+            for (LocalTime time : List.of(LocalTime.of(20, 0), LocalTime.MIDNIGHT, LocalTime.of(6, 0, 0, 500_000_000))) {
+                Assertions.assertTrue((boolean) Deencapsulation.invoke(collector, "checkoutAnalyzeTime", time),
+                        time.toString());
+            }
+            for (LocalTime time : List.of(LocalTime.of(19, 59, 59), LocalTime.of(6, 0, 1), LocalTime.of(12, 0))) {
+                Assertions.assertFalse((boolean) Deencapsulation.invoke(collector, "checkoutAnalyzeTime", time),
+                        time.toString());
+            }
+        } finally {
+            Config.statistic_auto_analyze_start_time = startTime;
+            Config.statistic_auto_analyze_end_time = endTime;
+        }
     }
 }

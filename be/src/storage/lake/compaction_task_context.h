@@ -181,7 +181,9 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     const int64_t version;
     const bool force_base_compaction;
     const bool skip_write_txnlog;
-    const bool is_unshare;
+    // Cleared when the tablet runs the UNSHARE of ALTER TABLE ... COMPACT as its manual compaction, see
+    // CompactionPolicy::runs_as_unshare.
+    bool is_unshare;
     bool allow_base_compaction = true;
     bool is_base_compaction = false;
     std::atomic<int64_t> start_time{0};

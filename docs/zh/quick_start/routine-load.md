@@ -2,12 +2,14 @@
 sidebar_position: 60
 description: Kafka Routine Load 使用存算分离存储
 displayed_sidebar: docs
+products: [oss]
 ---
 
 # 通过 Routine Load 向 StarRocks 存算分离集群导入 Kafka 数据
 
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 import SQL from '../_assets/quick-start/_SQL.mdx'
+import AIStorLicense from '../_assets/commonMarkdown/aistor_license.mdx'
 
 ## 关于 Routine Load
 
@@ -50,6 +52,10 @@ Routine load 是一种使用 Apache Kafka 或在本实验中使用 Redpanda，�
 
 `curl` 用于下载 Compose 文件和生成数据的脚本。通过在操作系统提示符下运行 `curl` 或 `curl.exe` 检查是否已安装 curl。如果未安装 curl，[在此获取 curl](https://curl.se/)。
 
+### MinIO AIStor 许可证
+
+本指南使用 MinIO AIStor 作为对象存储，它需要许可证。免费版许可证即可满足需求。获取许可证的说明将在本指南后面提供。
+
 ### Python
 
 需要 Python 3 和 Apache Kafka 的 Python 客户端 `kafka-python`。
@@ -87,7 +93,7 @@ Routine load 是一种使用 Apache Kafka 或在本实验中使用 Redpanda，�
 - 一个计算节点（CN）
 - 对象存储
 
-本指南使用 MinIO，它是兼容 S3 的对象存储提供商。MinIO 根据 GNU Affero 通用公共许可证提供。
+本指南使用 MinIO AIStor，它是兼容 S3 的对象存储。MinIO AIStor 需要许可证。
 
 ### 下载实验文件
 
@@ -106,6 +112,10 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 ```bash
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/routine-load-shared-data/gen.py
 ```
+
+### 获取 MinIO AIStor 许可证
+
+<AIStorLicense />
 
 ## 启动 StarRocks、MinIO 和 Redpanda
 
@@ -218,7 +228,7 @@ Empty set (0.04 sec)
 
 #### 创建一个 shared-data 存储卷
 
-早些时候，您在 MinIO 中创建了一个名为 `my-starrocks-volume` 的 bucket，并验证了 MinIO 有一个名为 `AAAAAAAAAAAAAAAAAAAA` 的访问密钥。以下 SQL 将使用访问密钥和密钥在 MionIO bucket 中创建一个存储卷。
+早些时候，您在 MinIO 中创建了一个名为 `my-starrocks-volume` 的 bucket，并验证了 MinIO 有一个名为 `AAAAAAAAAAAAAAAAAAAA` 的访问密钥。以下 SQL 将使用访问密钥和密钥在 MinIO bucket 中创建一个存储卷。
 
 ```sql
 CREATE STORAGE VOLUME s3_volume
@@ -731,7 +741,7 @@ Kafka 的代理连接信息。格式为 `<kafka_broker_name_or_ip>:<broker_ port
 
 在本教程中，您：
 
-- 在 Docker 中部署了 StarRocks、Reedpanda 和 Minio
+- 在 Docker 中部署了 StarRocks、Redpanda 和 Minio
 - 创建了一个 Routine Load 作业以从 Kafka 主题消费数据
 - 学习了如何配置使用 MinIO 的 StarRocks 存储卷
 
