@@ -59,6 +59,16 @@ public class DistributionPruneRule extends TransformationRule {
         if (result.equals(olapScanOperator.getSelectedTabletId())) {
             return Collections.emptyList();
         }
+        // LimitPruneTabletsRule, in the same rule set, may have narrowed the tablets to the first ones that cover the
+        // scan's limit. Keep such a subset while it is still valid: restoring every tablet here made the two rules undo
+        // each other forever wherever the rule set is applied iteratively, e.g. SELECT DISTINCT <constant> on a table
+        // with a materialized view never finished planning (RB-1226).
+        List<Long> selected = olapScanOperator.getSelectedTabletId();
+        if (selected != null && !selected.isEmpty() && LimitPruneTabletsRule.canPruneByLimit(olapScanOperator) &&
+                new HashSet<>(result).containsAll(selected) &&
+                LimitPruneTabletsRule.selectedTabletsCoverLimit(olapScanOperator)) {
+            return Collections.emptyList();
+        }
 
         LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
         return Lists.newArrayList(OptExpression.create(
