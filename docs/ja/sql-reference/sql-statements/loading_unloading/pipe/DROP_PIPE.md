@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "パイプと関連するジョブおよびメタデータを削除します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP PIPE

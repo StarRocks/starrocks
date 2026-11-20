@@ -81,6 +81,14 @@ function: print_hit_materialized_view("SELECT dt, sum(num) FROM mv_iceberg_${uui
 DROP MATERIALIZED VIEW non_partitioned_mv;
 DROP DATABASE db_${uuid0};
 set catalog mv_iceberg_${uuid0};
-DROP TABLE mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1;
+DROP TABLE mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 FORCE;
 DROP DATABASE mv_iceberg_db_${uuid0} FORCE;
 DROP CATALOG mv_iceberg_${uuid0};
+
+CLEANUP {
+drop database if exists default_catalog.db_${uuid0} force;
+drop table if exists mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 force;
+drop database if exists mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0};
+set catalog default_catalog;
+drop catalog if exists mv_iceberg_${uuid0};
+} END CLEANUP

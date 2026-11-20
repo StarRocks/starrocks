@@ -45,4 +45,13 @@ drop database cache_select_db_${uuid0};
 set catalog default_catalog;
 drop catalog hive_datacache_test_${uuid0};
 
-
+CLEANUP {
+drop task if exists cache_select;
+drop task if exists cache_select_where;
+drop table if exists hive_datacache_test_${uuid0}.cache_select_db_${uuid0}.t1 force;
+drop table if exists hive_datacache_test_${uuid0}.cache_select_db_${uuid0}.t1_orc force;
+drop table if exists hive_datacache_test_${uuid0}.cache_select_db_${uuid0}.t1_textfile force;
+drop database if exists hive_datacache_test_${uuid0}.cache_select_db_${uuid0};
+set catalog default_catalog;
+drop catalog if exists hive_datacache_test_${uuid0};
+} END CLEANUP

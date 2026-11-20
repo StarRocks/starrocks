@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "頻繁なロードジョブによるデータ圧縮遅延とバージョン上限超過の問題解決方法を紹介します。"
+products: [oss, enterprise]
 ---
 
 # データロードに関するよくある質問

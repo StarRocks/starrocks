@@ -14,8 +14,13 @@
 
 #include <gtest/gtest.h>
 
+#include "column/chunk.h"
+#include "column/column_helper.h"
+#include "column/const_column.h"
+#include "column/map_column.h"
 #include "common/object_pool.h"
 #include "exprs/cast_expr.h"
+#include "exprs/column_ref.h"
 
 namespace starrocks {
 
@@ -39,6 +44,21 @@ TypeDescriptor make_array_type(LogicalType elem_type) {
     return array_type;
 }
 
+const auto int_map_type = TypeDescriptor::create_map_type(TYPE_INT_DESC, TYPE_INT_DESC);
+const auto bigint_key_map_type = TypeDescriptor::create_map_type(TYPE_BIGINT_DESC, TYPE_INT_DESC);
+
+StatusOr<ColumnPtr> cast_map(ColumnPtr input) {
+    ObjectPool pool;
+    auto* input_expr = pool.add(new ColumnRef(int_map_type, 0));
+    auto* expr = VectorizedCastExprFactory::from_type(int_map_type, bigint_key_map_type, input_expr, &pool);
+    if (expr == nullptr) {
+        return Status::InternalError("Failed to create MAP cast expression");
+    }
+    Chunk chunk;
+    chunk.append_column(std::move(input), 0);
+    return expr->evaluate_checked(nullptr, &chunk);
+}
+
 } // namespace
 
 TEST(CastExprCoreTest, from_thrift_succeeds_for_primitive_cast) {
@@ -57,6 +77,45 @@ TEST(CastExprCoreTest, from_thrift_returns_null_for_unsupported_cast) {
     TExprNode node = make_cast_node(from, to);
     Expr* expr = VectorizedCastExprFactory::from_thrift(&pool, node);
     EXPECT_EQ(nullptr, expr);
+}
+
+TEST(CastExprCoreTest, map_cast_preserves_constant) {
+    auto input = ColumnHelper::create_column(int_map_type, false);
+    input->append_datum(DatumMap{{int32_t{1}, int32_t{7}}});
+    auto result = cast_map(ConstColumn::create(std::move(input), 4));
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(4, result.value()->size());
+    ASSERT_TRUE(result.value()->is_constant());
+
+    const auto* map = down_cast<const MapColumn*>(ColumnHelper::get_data_column(result.value().get()));
+    EXPECT_EQ(1, map->size());
+    EXPECT_EQ("{1:7}", map->debug_item(0));
+    EXPECT_NE(nullptr, dynamic_cast<const Int64Column*>(ColumnHelper::get_data_column(map->keys_column().get())));
+}
+
+TEST(CastExprCoreTest, map_cast_preserves_nullable_rows) {
+    auto input = ColumnHelper::create_column(int_map_type, true);
+    input->append_datum(DatumMap{{int32_t{1}, int32_t{7}}});
+    input->append_nulls(1);
+    input->append_datum(DatumMap{});
+    input->append_datum(DatumMap{{int32_t{2}, int32_t{9}}});
+    auto result = cast_map(std::move(input));
+    ASSERT_TRUE(result.ok()) << result.status();
+    const auto& output = result.value();
+    ASSERT_EQ(4, output->size());
+    EXPECT_FALSE(output->is_constant());
+    ASSERT_TRUE(output->is_nullable());
+    EXPECT_EQ("{1:7}", output->debug_item(0));
+    EXPECT_TRUE(output->is_null(1));
+    EXPECT_EQ("{}", output->debug_item(2));
+    EXPECT_EQ("{2:9}", output->debug_item(3));
+}
+
+TEST(CastExprCoreTest, map_cast_preserves_constant_null) {
+    auto result = cast_map(ColumnHelper::create_const_null_column(4));
+    ASSERT_TRUE(result.ok()) << result.status();
+    EXPECT_EQ(4, result.value()->size());
+    EXPECT_TRUE(result.value()->only_null());
 }
 
 } // namespace starrocks

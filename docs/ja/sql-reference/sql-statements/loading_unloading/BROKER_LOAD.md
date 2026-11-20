@@ -2,12 +2,12 @@
 displayed_sidebar: docs
 description: "Spark を使用したデータ前処理により大規模データのインポート性能を向上させます。"
 toc_max_heading_level: 5
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # BROKER LOAD
 
 import InsertPrivNote from '../../../_assets/commonMarkdown/insertPrivNote.mdx'
-import LoadWarehouse from '../../../_assets/commonMarkdown/load_warehouse.mdx'
 
 ## 説明
 
@@ -679,7 +679,10 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 - `partial_update_mode`
 
-  部分更新のモードを指定します。有効な値：`row` および `column`。<ul><li>値 `row`（デフォルト）は、行モードでの部分更新を意味し、多くの列と小さなバッチでのリアルタイム更新に適しています。</li><li>値 `column` は、列モードでの部分更新を意味し、少ない列と多くの行でのバッチ更新に適しています。このようなシナリオでは、列モードを有効にすると更新速度が速くなります。たとえば、100 列のテーブルで、すべての行に対して 10 列（全体の 10%）のみが更新される場合、列モードの更新速度は 10 倍速くなります。</li></ul>
+  部分更新のモードを指定します。有効な値：`row` および `column`。
+
+  - 値 `row`（デフォルト）は、行モードでの部分更新を意味し、多くの列と小さなバッチでのリアルタイム更新に適しています。
+  - 値 `column` は、列モードでの部分更新を意味し、少ない列と多くの行でのバッチ更新に適しています。このようなシナリオでは、列モードを有効にすると更新速度が速くなります。たとえば、100 列のテーブルで、すべての行に対して 10 列（全体の 10%）のみが更新される場合、列モードの更新速度は 10 倍速くなります。
 
 - `merge_condition`
 
@@ -710,8 +713,6 @@ StarRocks は v3.2.3 以降、JSON データのロードをサポートしてい
   JSON データの CDC エンベロープ形式を指定します。有効な値: `debezium`。デフォルト: 未設定（エンベロープなし）。`debezium` に設定すると、StarRocks は各 JSON メッセージを Debezium CDC イベントとして解析します。メッセージには `op` フィールド（`c`=insert、`u`=update、`d`=delete、`r`=スナップショット読み取り）と、`after` フィールド（c/u/r）または `before` フィールド（d）が含まれている必要があります。`payload` が `null` の tombstone メッセージはスキップされます。`format` が `json` の場合にのみ指定でき、`json_root` または `strip_outer_array` と同時に使用することはできません。
 
 JSON データをロードする際、各 JSON オブジェクトのサイズが 4 GB を超えないように注意してください。JSON データファイル内の個々の JSON オブジェクトが 4 GB を超える場合、「This parser can't support a document that big.」というエラーが報告されます。
-
-<LoadWarehouse />
 
 ## 列マッピング
 

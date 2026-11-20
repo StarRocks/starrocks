@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 20
 description: "How to create and manage bitmap indexes in StarRocks to accelerate equality and range queries on low-cardinality columns using bitmap data structures."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Bitmap indexes
@@ -59,7 +60,7 @@ The value range for `bitmap_max_filter_ratio` is 1-1000. If `bitmap_max_filter_r
 
 ### Queries that can be optimized
 
-Bitmap indexes are suitable for optimizing equality `=` queries, `[NOT] IN` range queries, `>`, `>=`, `<`, `<=` queries, and `IS NULL` queries. They are not suitable for optimizing `!=` and `[NOT] LIKE` queries.
+Bitmap indexes are suitable for optimizing equality `=` queries, `IN` range queries, `>`, `>=`, `<`, `<=` queries, and `IS NULL` queries. They are not suitable for optimizing `!=`, `NOT IN`, and `[NOT] LIKE` queries.
 
 ### Supported columns and data types
 

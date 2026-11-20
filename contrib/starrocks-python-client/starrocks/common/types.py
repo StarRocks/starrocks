@@ -26,6 +26,10 @@ class TableEngine:
 class TableDistribution:
     HASH = "HASH"
     RANDOM = "RANDOM"
+    # Range distribution (StarRocks 4.1+) has no DISTRIBUTED BY syntax: a table
+    # gets it by declaring a key type or ORDER BY and omitting DISTRIBUTED BY.
+    # "RANGE" is only a reflected value, and a marker users may set in metadata.
+    RANGE = "RANGE"
 
 
 class TableType:
@@ -143,12 +147,15 @@ class MVRefreshMoment:
 class MVRefreshType:
     """Supported StarRocks materialized view refresh schemes.
     """
+    # 26.2 renamed the untimed form of ASYNC to ON_CHANGE and rejects the old spelling.
     ASYNC = "ASYNC"
+    ON_CHANGE = "ON_CHANGE"
     MANUAL = "MANUAL"
     INCREMENTAL = "INCREMENTAL"
 
     ALLOWED_ITEMS = {
         ASYNC,
+        ON_CHANGE,
         MANUAL,
         INCREMENTAL,
     }

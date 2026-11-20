@@ -165,8 +165,7 @@ Status DefaultCumulativeBaseCompactionPolicy::_pick_rowsets_to_cumulative_compac
                 continue;
             }
         }
-        // meet already compaction rowset
-        if (!rowset->rowset_meta()->is_singleton_delta()) {
+        if (!rowset->rowset_meta()->is_singleton_delta() && !rowset->rowset_meta()->is_segments_overlapping()) {
             // 6-5,<4,3>|2-1 -> <4,3>
             if (_fit_compaction_condition(transient_rowsets, compaction_score)) {
                 *input_rowsets = transient_rowsets;

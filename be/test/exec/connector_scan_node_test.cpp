@@ -40,6 +40,7 @@
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
+#include "exec_primitive/pipeline/scan/dynamic_morsel_queue.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
@@ -688,6 +689,154 @@ TEST_F(ConnectorScanNodeTest, test_exec_factory_benchmark_scan_node) {
     ASSERT_EQ("default", scan->catalog_type());
 }
 
+// These controls exercise registration boundaries with prepared operators and empty real queues.
+// The asynchronous grouped fixture below separately covers reader and split-publication lifetimes.
+class ConnectorInputScopeTest : public ConnectorScanNodeTest {
+protected:
+    void init(bool shared_output = false, bool shared_queue = false, bool random_split = false) {
+        TQueryOptions options;
+        options.__set_connector_io_tasks_per_scan_operator(2);
+        state = create_runtime_state(options);
+        query = std::make_shared<pipeline::QueryContext>();
+        _mem_tracker = std::make_shared<MemTracker>(2L << 30, "connector input scope parent");
+        query->init_mem_tracker(1L << 30, _mem_tracker.get());
+        query->query_runtime_state().extend_query_lifetime();
+        query->attach_to_runtime_state(state.get());
+        auto* desc = create_table_desc(state.get(), {TypeDescriptor(TYPE_BIGINT)});
+        auto plan = create_tplan_node_cloud();
+        node = std::make_shared<ConnectorScanNode>(state->obj_pool(), *plan, *desc);
+        ASSERT_OK(node->init(*plan, state.get()));
+        node->enable_shared_scan(shared_output); // Buffer routing is fixed by the factory constructor.
+        if (shared_queue) {
+            queues = std::make_unique<pipeline::SharedMorselQueueFactory>(
+                    std::make_unique<pipeline::DynamicMorselQueue>(pipeline::Morsels{}, false), 2);
+        } else {
+            std::map<int, pipeline::MorselQueuePtr> individual_queues;
+            for (int driver = 0; driver < 2; ++driver) {
+                individual_queues[driver] = std::make_unique<pipeline::DynamicMorselQueue>(pipeline::Morsels{}, false);
+            }
+            queues = std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(individual_queues),
+                                                                              random_split, random_split);
+        }
+        factory = std::make_shared<pipeline::ConnectorScanOperatorFactory>(
+                1, node.get(), state.get(), 2,
+                std::make_unique<pipeline::DynamicChunkBufferLimiter>(64, 64, 1L << 26, 1));
+        factory->set_morsel_queue_factory(queues.get());
+        factory->set_degree_of_parallelism(2);
+        auto* arb = query->query_runtime_state().connector_scan_operator_mem_share_arbitrator();
+        factory->set_mem_share_arb(arb);
+        factory->set_scan_mem_limit(arb->scan_mem_limit);
+        factory->set_data_source_mem_bytes(connector::DataSourceProvider::MIN_DATA_SOURCE_MEM_BYTES);
+        factory->set_chunk_source_mem_bytes(connector::DataSourceProvider::MIN_DATA_SOURCE_MEM_BYTES);
+        ASSERT_OK(factory->prepare(state.get()));
+        std::unique_ptr<ThreadPool> pool;
+        ASSERT_OK(ThreadPoolBuilder("connector_input_scope").set_min_threads(0).set_max_threads(1).build(&pool));
+        executor = std::make_unique<workgroup::ScanExecutor>(
+                std::move(pool), std::make_unique<workgroup::PriorityScanTaskQueue>(100), &metrics);
+        executor->initialize(1);
+        op = std::static_pointer_cast<pipeline::ConnectorScanOperator>(factory->create(2, 1));
+        op->add_morsel_queue(queues->create(1));
+        op->set_scan_executor(executor.get());
+        op->set_query_ctx(query);
+        ASSERT_OK(op->prepare(state.get()));
+        ASSERT_TRUE(queues->create(1)->empty());
+        ASSERT_FALSE(queues->create(1)->has_more());
+        ASSERT_EQ(0, op->_num_running_io_tasks.load());
+        ASSERT_TRUE(op->_get_scan_status().ok());
+        ASSERT_TRUE(factory->get_chunk_buffer().empty(1));
+        ASSERT_TRUE(op->is_finished());
+    }
+    void TearDown() override {
+        if (executor != nullptr) executor->close();
+        if (op != nullptr) {
+            ASSERT_OK(op->set_finishing(state.get()));
+            op->close(state.get());
+        }
+        op.reset();
+        if (factory != nullptr) {
+            EXPECT_TRUE(factory->get_active_inputs().empty());
+            factory->close(state.get());
+        }
+        if (query != nullptr) {
+            EXPECT_EQ(0, query->connector_scan_mem_tracker()->consumption());
+            EXPECT_EQ(0, query->mem_tracker()->consumption());
+        }
+        factory.reset();
+        queues.reset();
+        ConnectorScanNodeTest::TearDown();
+    }
+    void check_foreign_source() {
+        factory->attach_shared_input(0, 0);
+        {
+            DeferOp detach([&] { factory->detach_shared_input(0, 0); });
+            EXPECT_FALSE(op->is_finished());
+        }
+        EXPECT_TRUE(op->is_finished());
+    }
+
+    std::shared_ptr<RuntimeState> state;
+    pipeline::QueryContextPtr query;
+    std::shared_ptr<ConnectorScanNode> node;
+    pipeline::MorselQueueFactoryPtr queues;
+    std::shared_ptr<pipeline::ConnectorScanOperatorFactory> factory;
+    pipeline::ScanExecutorMetrics metrics;
+    std::unique_ptr<workgroup::ScanExecutor> executor;
+    std::shared_ptr<pipeline::ConnectorScanOperator> op;
+};
+
+TEST_F(ConnectorInputScopeTest, OwnRegisteredSourcePreventsEos) {
+    init();
+    ASSERT_FALSE(HasFatalFailure());
+    const int last_slot = node->io_tasks_per_scan_operator() - 1;
+    factory->attach_shared_input(1, last_slot);
+    {
+        DeferOp detach([&] { factory->detach_shared_input(1, last_slot); });
+        EXPECT_FALSE(op->is_finished());
+    }
+    EXPECT_TRUE(op->is_finished());
+}
+
+TEST_F(ConnectorInputScopeTest, DirectOutputSharedQueueWaitsForForeignSource) {
+    init(false, true);
+    ASSERT_FALSE(HasFatalFailure());
+    check_foreign_source();
+}
+
+TEST_F(ConnectorInputScopeTest, SharedOutputWaitsForForeignSource) {
+    init(true, true);
+    ASSERT_FALSE(HasFatalFailure());
+    check_foreign_source();
+}
+
+TEST_F(ConnectorInputScopeTest, RandomSplitRoutingWaitsForForeignSource) {
+    init(false, false, true);
+    ASSERT_FALSE(HasFatalFailure());
+    check_foreign_source();
+}
+
+TEST_F(ConnectorInputScopeTest, UnknownQueueFactoryWaitsForForeignSource) {
+    init();
+    ASSERT_FALSE(HasFatalFailure());
+    factory->set_morsel_queue_factory(nullptr);
+    DeferOp restore([&] { factory->set_morsel_queue_factory(queues.get()); });
+    check_foreign_source();
+}
+
+TEST_F(ConnectorInputScopeTest, EmptyFinalChunkPreventsEos) {
+    init();
+    ASSERT_FALSE(HasFatalFailure());
+    auto final_chunk = std::make_shared<Chunk>();
+    final_chunk->owner_info().set_owner_id(77, true);
+    ASSERT_EQ(1, factory->get_chunk_buffer().put(1, final_chunk, nullptr));
+    EXPECT_FALSE(op->is_finished());
+    auto result = op->pull_chunk(state.get());
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_NE(nullptr, result.value());
+    EXPECT_TRUE(result.value()->is_empty());
+    EXPECT_TRUE(result.value()->owner_info().is_last_chunk());
+    EXPECT_TRUE(op->is_finished());
+}
+
 namespace {
 // Only leaf I/O is controlled here. Queue pickup, source retention, split publication,
 // buffer routing, status propagation and EOS all use the production implementation.
@@ -696,6 +845,8 @@ struct GroupedLeafIO {
     std::condition_variable cv;
     bool release_roots = false;
     bool release_children = false;
+    int blocked_driver = -1;
+    bool release_blocked_driver = false;
     Status root_status = Status::OK();
     Status child_status = Status::OK();
     int roots_entered = 0;
@@ -709,6 +860,7 @@ struct GroupedLeafIO {
     void release_all() {
         std::lock_guard lock(mutex);
         release_roots = release_children = true;
+        release_blocked_driver = true;
         cv.notify_all();
     }
 };
@@ -733,8 +885,11 @@ public:
         std::unique_lock lock(_io->mutex);
         ++(child ? _io->children_entered : _io->roots_entered);
         _io->cv.notify_all();
-        if (!_io->cv.wait_for(lock, std::chrono::seconds(10),
-                              [&] { return child ? _io->release_children : _io->release_roots; })) {
+        const int driver = runtime_membership_filter_eval_context.driver_sequence;
+        if (!_io->cv.wait_for(lock, std::chrono::seconds(10), [&] {
+                const bool released = child ? _io->release_children : _io->release_roots;
+                return released && (driver != _io->blocked_driver || _io->release_blocked_driver);
+            })) {
             return Status::InternalError("test leaf I/O latch timed out");
         }
         if (state->is_cancelled()) return Status::Cancelled("held grouped read cancelled");
@@ -954,10 +1109,11 @@ protected:
         std::unique_lock lock(io->mutex);
         return io->cv.wait_for(lock, std::chrono::seconds(5), predicate);
     }
-    bool wait_idle() {
+    bool wait_idle() { return wait_running_tasks(0); }
+    bool wait_running_tasks(int running_tasks) {
         auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
         while (std::chrono::steady_clock::now() < deadline) {
-            if (metrics.running_tasks.value() == 0 && metrics.pending_tasks.value() == 0) return true;
+            if (metrics.running_tasks.value() == running_tasks && metrics.pending_tasks.value() == 0) return true;
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
         return false;
@@ -1036,6 +1192,51 @@ protected:
     std::vector<std::shared_ptr<pipeline::ConnectorScanOperator>> ops;
     std::vector<TScanRange> roots;
 };
+
+TEST_F(GroupedConnectorLifecycleTest, CompletedOwnerDoesNotWaitForAnotherOwnersReader) {
+    init(2);
+    ASSERT_FALSE(HasFatalFailure());
+    {
+        std::lock_guard lock(io->mutex);
+        io->release_roots = io->release_children = true;
+        io->blocked_driver = 0;
+    }
+    ASSERT_TRUE(ops[0]->pull_chunk(state.get()).ok());
+    ASSERT_TRUE(wait_io([&] { return io->roots_entered == 1; }));
+
+    std::vector<int64_t> rows;
+    auto pull = [&]() {
+        auto result = ops[1]->pull_chunk(state.get());
+        EXPECT_TRUE(result.ok());
+        if (!result.ok()) return;
+        auto chunk = std::move(result).value();
+        if (chunk != nullptr && !chunk->is_empty()) {
+            rows.emplace_back(chunk->get_column_by_index(0)->get(0).get_int64());
+        }
+    };
+    pull();
+    ASSERT_TRUE(wait_io([&] { return io->closed >= 1; }));
+    ASSERT_TRUE(wait_running_tasks(1)); // Only driver 0's blocked root remains running.
+    pull();
+    ASSERT_TRUE(wait_io([&] { return io->closed == 3; }));
+    ASSERT_TRUE(wait_running_tasks(1));
+    const auto buffered = factory->get_chunk_buffer().size(1);
+    for (size_t i = 0; i < buffered; ++i) pull(); // Consume data and empty final/EOS chunks.
+    std::sort(rows.begin(), rows.end());
+    EXPECT_EQ((std::vector<int64_t>{101, 102}), rows);
+    EXPECT_TRUE(queues->create(1)->empty());
+    EXPECT_FALSE(queues->create(1)->has_more());
+    EXPECT_TRUE(factory->get_chunk_buffer().empty(1));
+    EXPECT_EQ(0, ops[1]->_num_running_io_tasks.load());
+    EXPECT_TRUE(ops[1]->_get_scan_status().ok());
+    for (int slot = 0; slot < node->io_tasks_per_scan_operator(); ++slot) {
+        EXPECT_FALSE(factory->get_active_inputs().contains(std::make_pair(1, slot)));
+    }
+    EXPECT_EQ(1, factory->get_active_inputs().size());
+    EXPECT_FALSE(ops[0]->is_finished());
+    EXPECT_TRUE(ops[1]->is_finished())
+            << "An exhausted direct owner must release its execution slot while another owner reads";
+}
 
 TEST_F(GroupedConnectorLifecycleTest, GroupedLastRootCanPublishChildrenBeforeEos) {
     init();

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns verbose metadata of a materialized view as a JSON string for debugging and inspection."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # inspect_mv_meta

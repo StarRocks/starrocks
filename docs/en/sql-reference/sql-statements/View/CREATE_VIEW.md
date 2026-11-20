@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CREATE VIEW creates a logical view."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE VIEW

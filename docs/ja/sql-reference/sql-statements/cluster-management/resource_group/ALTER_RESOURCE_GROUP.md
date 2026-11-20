@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ALTER RESOURCE GROUP は、リソースグループの設定を変更します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER RESOURCE GROUP

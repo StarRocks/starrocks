@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "StarRocks でサポートされるパーティション化とバケット化機能の参照: 式に基づくパーティション化、リストパーティション化、ランダムバケット化。"
 sidebar_position: 50
 sidebar_label: 機能サポート
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 機能サポート: データ分散

@@ -2,6 +2,7 @@
 sidebar_position: 40
 displayed_sidebar: docs
 description: "FAQ and troubleshooting guide for common Data Cache issues in StarRocks, including cache miss and performance problems."
+products: [oss, enterprise, anywhere]
 ---
 
 # Data Cache FAQ
@@ -74,7 +75,7 @@ Alternatively, you can manually enable Data Cache by configuring cache quota bas
 
 ```
 # disable Data Cache Automatic Adjustment
-datacache_auto_adjust_enable = false
+enable_datacache_disk_auto_adjust = false
 # Set Data Cache disk quota manually
 datacache_disk_size = 1T
 ```

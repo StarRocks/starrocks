@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "规划 StarRocks 生产集群的节点数、CPU、内存和存储资源配置。"
+products: [oss, enterprise]
 ---
 
 # 规划 StarRocks 集群
@@ -18,7 +19,7 @@ FE 节点主要负责元数据管理、客户端连接管理、查询计划和�
 
 对于 StarRocks 生产集群，建议您至少部署**三个** Follower FE 节点，以防止单点故障。Leader FE 会从 Follower FE 中自动选出。
 
-StarRocks 通过 Raft 协议跨 FE 节点管理元数据。StarRocks 从所有 Follower FE 节点中选出一个 Leader FE 节点。只有 Leader FE 节点可以写入元数据，其他 Follower FE 节点只能根据 Leader FE 节点的日志更新元数据。如果 Leader FE 节点掉线，只要超过半数的 Follower FE 节点存活，StarRocks 就会重新选举出一个新的 Leader FE 节点。
+StarRocks 通过 BDB JE（Berkeley DB Java Edition）的复制机制跨 FE 节点管理元数据。StarRocks 从所有 Follower FE 节点中选出一个 Leader FE 节点。只有 Leader FE 节点可以写入元数据，其他 Follower FE 节点只能根据 Leader FE 节点的日志更新元数据。如果 Leader FE 节点掉线，只要超过半数的 Follower FE 节点存活，StarRocks 就会重新选举出一个新的 Leader FE 节点。
 
 如果您的应用程序会产生高并发查询请求，您可以在集群中添加 Observer FE 节点。Observer FE 节点只负责处理查询请求，不会参与 Leader FE 节点的选举。
 
@@ -80,7 +81,7 @@ BE 节点所需的总存储空间 = 原始数据大小 * 数据副本数/数据�
 
 - 在 BE 节点上添加额外的存储卷
 
-  您还可以在已有 BE 节点上添加额外的存储卷。有关详细说明，请参阅 [扩容 StarRocks - 扩容 BE 集群](../../administration/management/Scale_up_down.md)。
+  您还可以在已有 BE 节点上添加额外的存储卷。为此，请将新存储卷的路径添加到 BE 配置项 [`storage_root_path`](../../administration/configuration/BE_parameters/stats_storage.md#storage_root_path) 中。
 
   添加额外的存储卷后，StarRocks 会自动重新平衡所有表中的数据。
 

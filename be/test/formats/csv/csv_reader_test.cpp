@@ -564,4 +564,41 @@ TEST_F(CSVReaderTest, test_more_rows_keeps_multichar_delimiter_cut_by_timed_out_
     expect_same_rows_across_timed_out_reads(options, data);
 }
 
+// At the end of the data, a multi-char row delimiter must still end the row (it was taken for data: "\r\n" stayed in
+// the last field, and "$$$" made the reader append delimiters until the buffer was full), and a column delimiter that
+// ends the data starts an empty last column (that column used to cover the column before it). Each case is read in
+// pieces of every size, from 1 byte (which cuts every delimiter) up to all of the data at once, and then in pieces
+// behind timed-out reads.
+TEST_F(CSVReaderTest, test_more_rows_delimiters_at_end_of_data) {
+    struct Case {
+        starrocks::CSVParseOptions options;
+        std::string data;
+        std::vector<std::vector<std::string>> rows;
+    };
+    const std::vector<Case> cases = {
+            {starrocks::CSVParseOptions("\r\n", "|", 0, false, 0, '"'), "a|\"b\"\r\nc|d\r\n", {{"a", "b"}, {"c", "d"}}},
+            {starrocks::CSVParseOptions("$$$", "|", 0, false, 0, '"'), "a|\"b\"$$$c|d$$$", {{"a", "b"}, {"c", "d"}}},
+            {starrocks::CSVParseOptions("\n", "@@", 0, false, 0, '"'), "a@@\"b\"@@", {{"a", "b", ""}}},
+            {starrocks::CSVParseOptions("\n", ",", 0, false, 0, '"'), "a,b,", {{"a", "b", ""}}},
+            {starrocks::CSVParseOptions("\n", ",", 0, false, 0, '"'), "a,\"x\"\"y\",", {{"a", "x\"y", ""}}},
+            {starrocks::CSVParseOptions("\n", ",", 0, false, '\\', 0), "a,b\\,c,", {{"a", "b,c", ""}}},
+            {starrocks::CSVParseOptions("\n", ",", 0, true, 0, '"'), "a,\"b\",  ", {{"a", "b", ""}}},
+    };
+    for (const auto& c : cases) {
+        for (size_t piece = 1; piece <= c.data.size(); ++piece) {
+            SCOPED_TRACE(c.data + " in pieces of " + std::to_string(piece));
+            StringCSVReader reader(c.options, c.data, piece);
+            std::vector<std::vector<std::string>> rows;
+            auto st = reader.read_all_rows(&rows);
+            EXPECT_TRUE(st.ok()) << st.to_string();
+            if (!st.ok()) {
+                continue;
+            }
+            EXPECT_EQ(c.rows, rows);
+        }
+        SCOPED_TRACE(c.data + " behind timed-out reads");
+        expect_same_rows_across_timed_out_reads(c.options, c.data);
+    }
+}
+
 } // namespace starrocks::csv

@@ -3,11 +3,11 @@ sidebar_position: 70
 displayed_sidebar: docs
 description: "StarRocks Iceberg Catalog のスナップショット、ブランチ、データメンテナンス、メタデータ管理プロシージャ。"
 keywords: ['iceberg', 'procedures', 'fast forward', 'cherry pick', 'expire snapshots', 'rewrite data files', 'add files', 'register table', 'rollback to snapshot', 'remove orphan files']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Iceberg Procedures
 
-import AutoMetaMaintenance from '../../../_assets/commonMarkdown/auto_meta_maintenance.mdx'
 
 StarRocks Iceberg catalog は、スナップショット管理、ブランチ管理、データメンテナンス、メタデータ管理、およびテーブル管理を含む、Iceberg テーブルを管理するためのさまざまなプロシージャをサポートしています。
 
@@ -316,8 +316,6 @@ EXECUTE rewrite_manifests()
 ALTER TABLE iceberg.sales.order
 EXECUTE rewrite_manifests()
 ```
-
-<AutoMetaMaintenance />
 
 ## テーブル管理
 

@@ -4,9 +4,9 @@ description: "如何在 StarRocks 存算分离集群中配置和使用 Data Cach
 sidebar_position: 20
 toc_max_heading_level: 2
 keywords: ['huan cun']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
-import CacheStats from '../../_assets/commonMarkdown/_cache_stats.mdx'
 
 # Data Cache
 
@@ -124,8 +124,6 @@ storage_root_path =
 
 - 如果云原生表的 `datacache.enable` 属性设置为 `false`，则不会为该表启用 Data Cache。
 - 如果云原生表的 `datacache.partition_duration` 属性设置为一个特定的时间范围，则超出该时间范围的数据将不会被缓存。
-
-<CacheStats />
 
 ## 已知问题
 

@@ -3,6 +3,7 @@ sidebar_position: 20
 displayed_sidebar: docs
 sidebar_label: "Authentication, Query, and Loading"
 description: "FE configuration parameters for authentication, query execution, and data loading."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE Configuration - Authentication, Query, and Loading
@@ -96,7 +97,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit:
 - Is mutable: Yes
-- Description: The maximum number of roles a user can have.
+- Description: The maximum number of roles a user can have, including the roles inherited through the roles granted to the user. This limit is checked when a role is granted to a user.
 - Introduced in: v3.0.0
 
 ### `ranger_hive_catalog_prefix_enabled`
@@ -299,6 +300,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refreshed immediately.
 - Introduced in: v3.2.3
 
+### `default_mv_refresh_mode`
+
+- Default: pct
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Deprecated and has no effect. A materialized view created without the `refresh_mode` property uses `PCT` and reports `PCT`, whatever this value is. To create an incremental materialized view, specify `refresh_mode` in its properties. Valid values are still `pct` and `incremental` (case-insensitive), so an existing setting is still accepted.
+- Introduced in: v4.1
+
 ### `dynamic_partition_check_interval_seconds`
 
 - Default: 600
@@ -350,7 +360,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable the BACKUP and RESTORE of asynchronous materialized views when backing up or restoring a specific database. If this item is set to `false`, StarRocks will skip backing up asynchronous materialized views.
+- Description: Whether BACKUP includes asynchronous materialized views when you do not specify them by name, that is, when you back up a whole database or use `ON (ALL MATERIALIZED VIEWS)`. If this item is set to `false`, StarRocks skips them, and `ON (ALL MATERIALIZED VIEWS)` backs up nothing. Asynchronous materialized views specified by name are backed up regardless of this item. This item does not affect RESTORE.
 - Introduced in: v3.2.0
 
 ### `enable_collect_full_statistic`
@@ -1250,7 +1260,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The timeout duration for the INSERT INTO statement that is used to load data.
+- Description: Deprecated. This item does not control the timeout of INSERT statements. Use the session variable `insert_timeout` instead.
 - Introduced in: -
 
 ### `label_clean_interval_second`
@@ -1450,6 +1460,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: Minutes
 - Is mutable: Yes
 - Description: The interval at which Routine Load jobs are automatically recovered.
+- Introduced in: -
+
+### `pipe_max_consecutive_failed_task_executions`
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of task executions in a row that can fail in a pipe. When more task executions than this fail in a row, the pipe changes to the `ERROR` state and stops loading data until you resume it. Each retry of a failed task counts as one execution. The count is reset when a task loads its files successfully, and when you run `ALTER PIPE <pipe_name> RESUME` or `ALTER PIPE <pipe_name> { RETRY ALL | RETRY FILE '<file_name>' }`. A failed task is retried up to 5 times. If you set this item to a value greater than 5, a task that still fails after its retries is given up: its files are marked as `ERROR`, you can load them again with `RETRY`, and the pipe goes on to the next files.
 - Introduced in: -
 
 ### `prepared_transaction_default_timeout_second`

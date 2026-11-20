@@ -2,6 +2,7 @@
 sidebar_position: 10
 displayed_sidebar: docs
 description: "How to use the StarRocks Kafka connector (Kafka Connect sink) to continuously load data from Apache Kafka topics into StarRocks with at-least-once semantics."
+products: [oss, enterprise, anywhere]
 ---
 
 # Load data using Kafka connector
@@ -331,7 +332,10 @@ The data is successfully loaded when the above result is returned.
 
 **Required**:  NO<br/>
 **Default value**: `row`<br/>
-**Description**: Specifies the mode for partial updates. Valid values: `row` and `column`. <ul><li> The value `row` (default) means partial updates in row mode, which is more suitable for real-time updates with many columns and small batches.</li><li>The value `column` means partial updates in column mode, which is more suitable for batch updates with few columns and many rows. In such scenarios, enabling the column mode offers faster update speeds. For example, in a table with 100 columns, if only 10 columns (10% of the total) are updated for all rows, the update speed of the column mode is 10 times faster.</li></ul>
+**Description**: Specifies the mode for partial updates. Valid values: `row` and `column`.
+
+- The value `row` (default) means partial updates in row mode, which is more suitable for real-time updates with many columns and small batches.
+- The value `column` means partial updates in column mode, which is more suitable for batch updates with few columns and many rows. In such scenarios, enabling the column mode offers faster update speeds. For example, in a table with 100 columns, if only 10 columns (10% of the total) are updated for all rows, the update speed of the column mode is 10 times faster.
 
 ## Usage Notes
 

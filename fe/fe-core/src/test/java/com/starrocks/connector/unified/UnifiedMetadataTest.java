@@ -29,6 +29,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetaPreparationItem;
@@ -58,6 +59,7 @@ import mockit.Mocked;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.wildfly.common.Assert;
 
 import java.util.HashMap;
@@ -253,6 +255,17 @@ public class UnifiedMetadataTest {
         unifiedMetadata.finishSink("test_db", "test_tbl", ImmutableList.of(), null);
         createTableStmt.setEngineName("hive");
         assertTrue(unifiedMetadata.createTable(connectContext, createTableStmt));
+    }
+
+    @Test
+    public void testInvalidateCachedTableReachesEveryConnector() {
+        // The table type is unknown without loading the table, so every connector drops its own copy
+        HiveMetadata hive = Mockito.mock(HiveMetadata.class);
+        ConnectorMetadata iceberg = Mockito.mock(ConnectorMetadata.class);
+        new UnifiedMetadata(ImmutableMap.of(HIVE, hive, ICEBERG, iceberg))
+                .invalidateCachedTable("test_db", "test_tbl");
+        Mockito.verify(hive).invalidateCachedTable("test_db", "test_tbl");
+        Mockito.verify(iceberg).invalidateCachedTable("test_db", "test_tbl");
     }
 
     @Test

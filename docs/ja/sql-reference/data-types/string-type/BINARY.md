@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "BINARY/VARBINARY はバイナリデータを格納するデータ型。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # BINARY/VARBINARY

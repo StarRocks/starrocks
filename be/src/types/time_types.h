@@ -587,9 +587,10 @@ std::string timestamp::to_string_with_timezone(Timestamp timestamp, const cctz::
     int64_t unix_seconds = (julian - date::UNIX_EPOCH_JULIAN) * SECS_PER_DAY + time_microseconds / USECS_PER_SEC;
     int64_t microseconds = time_microseconds % USECS_PER_SEC;
 
-    // Convert to time_point
-    auto time_point = std::chrono::system_clock::from_time_t(unix_seconds);
-    time_point += std::chrono::microseconds(microseconds);
+    // Convert to a time_point in microseconds: the clock's own resolution (nanoseconds on Linux) overflows outside of
+    // the years 1677 to 2262, which a timestamp can have.
+    const std::chrono::time_point<std::chrono::system_clock, std::chrono::microseconds> time_point{
+            std::chrono::microseconds(unix_seconds * USECS_PER_SEC + microseconds)};
 
     // Format the timestamp with timezone using cctz
     constexpr const char* base_format = use_iso8601_format ? "%Y-%m-%dT%H:%M:" : "%Y-%m-%d %H:%M:";

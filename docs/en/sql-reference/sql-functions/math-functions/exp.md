@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the value of e raised to the power of x."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # exp,dexp

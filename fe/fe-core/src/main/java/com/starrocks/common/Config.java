@@ -3548,6 +3548,13 @@ public class Config extends ConfigBase {
     public static int refresh_other_fe_rpc_executor_thread_num = 4;
 
     /**
+     * Max time a commit to an Iceberg table waits for the other FEs to drop their cached copy of the table,
+     * so that a query on any FE sees the commit once the statement returns. 0 or less disables the wait.
+     */
+    @ConfField(mutable = true)
+    public static int iceberg_commit_invalidate_other_fe_timeout_ms = 3000;
+
+    /**
      * Background refresh external table metadata interval in milliseconds.
      */
     @ConfField(mutable = true)
@@ -3713,6 +3720,15 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int iceberg_commit_queue_timeout_seconds = 300;
+
+    /**
+     * How many more times an Iceberg rewrite (rewrite_data_files) commit is retried, each time on a freshly
+     * loaded table, after Iceberg's own commit retries (table property commit.retry.num-retries) all lost to
+     * concurrent commits from other writers. Rounds back off exponentially from 1 second up to 30 seconds.
+     * 0 disables the extra retries.
+     */
+    @ConfField(mutable = true)
+    public static int iceberg_rewrite_commit_max_retries = 5;
 
     /**
      * The maximum number of pending commit operations per Iceberg table.
@@ -4056,6 +4072,14 @@ public class Config extends ConfigBase {
             + "the extra threads exit after 60 seconds idle. Calls wait in a queue once this many threads are busy. "
             + "Valid values: 1 or more; fe.conf and ADMIN SET FRONTEND CONFIG reject a value of 0 or less.")
     public static int starmgr_grpc_server_max_worker_threads = 1024;
+
+    @ConfField(mutable = false, comment = "Whether the shared-data gRPC channels in the FE, from StarMgr to the "
+            + "compute nodes and from the StarOS client to StarMgr, go through the HTTP proxy that the JVM proxy "
+            + "settings select, such as -Dhttps.proxyHost. These channels only connect cluster nodes, so by default "
+            + "they ignore the JVM proxy and connect directly. Read once at FE startup: StarMgr and the StarOS client "
+            + "build their channels at unrelated times, so a runtime change would reach some channels and not "
+            + "others. Default: false")
+    public static boolean starmgr_grpc_client_enable_http_proxy = false;
 
     @ConfField(mutable = true)
     public static int star_client_read_timeout_seconds = 15;
@@ -4792,6 +4816,10 @@ public class Config extends ConfigBase {
     public static int pipe_scheduler_interval_millis = 1000;
     @ConfField(mutable = true, comment = "default poll interval of pipe")
     public static int pipe_default_poll_interval_s = 60 * 5;
+    @ConfField(mutable = true, comment = "A pipe changes to ERROR and stops loading when more than this many " +
+            "task executions fail in a row. Retries of a failed task count as executions. A task that loads " +
+            "successfully, ALTER PIPE RESUME, and ALTER PIPE RETRY reset the count.")
+    public static int pipe_max_consecutive_failed_task_executions = 5;
 
     @ConfField(mutable = true)
     public static long mv_active_checker_interval_seconds = 60;
@@ -4860,7 +4888,8 @@ public class Config extends ConfigBase {
             "adaptive by default")
     public static String default_mv_partition_refresh_strategy = "adaptive";
 
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "Deprecated and has no effect: a materialized view created without "
+            + "the refresh_mode property is always PCT")
     public static String default_mv_refresh_mode = "pct";
 
     @ConfField(mutable = true, comment = "Check the schema of materialized view's base table strictly or not")
@@ -5547,21 +5576,19 @@ public class Config extends ConfigBase {
      * during pre-split so that splitting a small load across many compute nodes does not
      * carve tablets smaller than this value. Should be <= tablet_reshard_target_size.
      *
-     * <p>Also the floor under the target an under-provisioned index splits at -- an index holding
-     * fewer tablets than the bound aims at one tablet per slot in it, but never at less than this --
-     * so raising this to tune pre-split also delays that split. The bound is the warehouse's
-     * compute-node count capped by tablet_reshard_max_split_count, so lowering that configuration
-     * lowers both the width this rule aims for and the tablet count at which it stops. The adaptive walk
-     * floors its child count and will not act until a tablet is worth two whole targets; the slots that
-     * leaves unspent go afterwards to the largest tablets it left alone, and this value is also the
-     * smallest child that fill may cut.
+     * <p>Also the smallest tablet the adaptive split produces while it widens an under-provisioned index -- an
+     * index holding fewer tablets than the bound and less data than that many target sizes gets its free slots
+     * one child at a time, largest pieces first, among the tablets the size-based split does not already split,
+     * but never a child below this -- so raising this to tune pre-split also delays that split. The bound is the warehouse's
+     * compute-node count capped by tablet_reshard_max_split_count, so lowering that configuration lowers the
+     * tablet count at which it stops.
      *
-     * <p>That target never exceeds the table's own target size (the tablet_reshard_target_size table
-     * property of a range-distributed table that has one, else the tablet_reshard_target_size
-     * configuration), so a value at or above it turns the adaptive split off for that table.
+     * <p>A value at or above the table's own target size (the tablet_reshard_target_size table property of a
+     * range-distributed table that has one, else the tablet_reshard_target_size configuration) turns the
+     * adaptive split off for that table.
      */
-    @ConfField(mutable = true, comment = "Minimum size of a tablet produced by pre-split, and the lower "
-            + "bound on the target an under-provisioned index splits at and on the tablets it splits into. "
+    @ConfField(mutable = true, comment = "Minimum size of a tablet produced by pre-split, and the smallest "
+            + "tablet the adaptive split produces while it widens an under-provisioned index. "
             + "Should be no larger than tablet_reshard_target_size; setting it at or above a table's target size (its "
             + "tablet_reshard_target_size table property if it has one, else the tablet_reshard_target_size "
             + "configuration) disables the adaptive split for that table.")

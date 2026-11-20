@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Use asynchronous materialized views in StarRocks to accelerate queries against data lake tables (Iceberg, Hive, Hudi, Delta Lake) through transparent rewrite."
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # マテリアライズドビューによるデータレイククエリアクセラレーション
@@ -161,7 +162,7 @@ Hive メタデータキャッシュリフレッシュ機能を有効にするに
 **デフォルト**: 86400 (24 時間)<br/>
 **説明**: Hive メタデータキャッシュリフレッシュタスクの有効期限。アクセスされた Hive catalog に対して、指定された時間を超えてアクセスされていない場合、StarRocks はそのキャッシュされたメタデータのリフレッシュを停止します。アクセスされていない Hive catalog に対して、StarRocks はそのキャッシュされたメタデータをリフレッシュしません。単位：秒。
 
-v3.1.4 以降、StarRocks は Iceberg Catalog のパーティションレベルでのデータ変更を検出することをサポートしています。現在、Iceberg V1 テーブルのみがサポートされています。
+v3.1.4 以降、StarRocks は Iceberg Catalog のパーティションレベルでのデータ変更を検出することをサポートしています。
 
 ### external catalog ベースのマテリアライズドビューのクエリの書き換えを有効にする
 

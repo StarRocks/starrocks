@@ -123,16 +123,14 @@ public class ExecPlanAIProviderTest {
     @Test
     public void testFailedBindingsAreNotCachedAndDoNotConsumeConfigurationIds() {
         AIProviderMgr manager = Mockito.mock(AIProviderMgr.class);
-        AIProvider unsupported = provider("recoverable", AIProviderType.CHAT, "unsupported-model");
-        unsupported.mergeParams(Map.of("protocol", "anthropic"));
         Mockito.when(manager.getProvider("recoverable")).thenReturn(null,
-                provider("recoverable", AIProviderType.EMBEDDING, "embedding-model"), unsupported,
+                provider("recoverable", AIProviderType.EMBEDDING, "embedding-model"),
                 provider("recoverable", AIProviderType.CHAT, "recovered-model"));
         ExecPlan plan = new ExecPlan(connectContext, List.of(), null, List.of(), false);
         FunctionCallExpr original = call(chatTemplate, "recoverable");
         Map<SlotId, Expr> project = project(original);
         try (MockedStatic<GlobalStateMgr> ignored = mockProviderManager(manager)) {
-            for (String message : List.of("does not exist", "requires type CHAT", "not ANTHROPIC")) {
+            for (String message : List.of("does not exist", "requires type CHAT")) {
                 SemanticException error = Assertions.assertThrows(SemanticException.class,
                         () -> plan.bindAIProviders(project));
                 Assertions.assertTrue(error.getDetailMsg().contains(message), error.getDetailMsg());
@@ -144,7 +142,7 @@ public class ExecPlanAIProviderTest {
             Assertions.assertEquals(Set.of("registry-id-recoverable"), recovered.keySet());
             Assertions.assertEquals("recovered-model", recovered.get("registry-id-recoverable").getModel());
             Assertions.assertEquals("registry-id-recoverable", ((FunctionCallExpr) project.get(new SlotId(1))).getAIProviderId());
-            Mockito.verify(manager, Mockito.times(4)).getProvider("recoverable");
+            Mockito.verify(manager, Mockito.times(3)).getProvider("recoverable");
             Mockito.verifyNoMoreInteractions(manager);
         }
     }

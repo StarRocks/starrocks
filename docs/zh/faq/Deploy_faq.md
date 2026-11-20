@@ -2,6 +2,7 @@
 sidebar_position: 10
 displayed_sidebar: docs
 description: "StarRocks 部署常见问题及解决方案。"
+products: [oss, enterprise]
 ---
 
 # 部署常见问题

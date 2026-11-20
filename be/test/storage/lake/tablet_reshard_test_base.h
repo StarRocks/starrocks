@@ -242,8 +242,8 @@ protected:
             sm->set_segment_idx(i == 0 ? 0 : 7);
             sm->set_num_rows(50);
             sm->set_size(500);
-            *sm->mutable_sort_key_min() = generate_sort_key(i * 50);
-            *sm->mutable_sort_key_max() = generate_sort_key(i * 50 + 49);
+            *sm->mutable_deprecated_sort_key_min() = generate_sort_key(i * 50);
+            *sm->mutable_deprecated_sort_key_max() = generate_sort_key(i * 50 + 49);
         }
         return m;
     }
@@ -2726,8 +2726,9 @@ protected:
             segment->set_filename(spec.filename);
             segment->set_size(filesize);
             segment->set_num_rows(kRowsPerSegment);
-            segment->mutable_sort_key_min()->CopyFrom(generate_sort_key(spec.key_start));
-            segment->mutable_sort_key_max()->CopyFrom(generate_sort_key(spec.key_start + kRowsPerSegment - 1));
+            segment->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(spec.key_start));
+            segment->mutable_deprecated_sort_key_max()->CopyFrom(
+                    generate_sort_key(spec.key_start + kRowsPerSegment - 1));
         }
 
         DelVector low_delvec;
@@ -3196,8 +3197,8 @@ protected:
             segment->set_size(size);
             segment->set_num_rows(50);
             segment->set_segment_idx(i == 0 ? 0 : 7);
-            segment->mutable_sort_key_min()->CopyFrom(generate_sort_key(i * 50));
-            segment->mutable_sort_key_max()->CopyFrom(generate_sort_key(i * 50 + 49));
+            segment->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(i * 50));
+            segment->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(i * 50 + 49));
             rowset->set_data_size(rowset->data_size() + size);
         }
         if (primary_key) {

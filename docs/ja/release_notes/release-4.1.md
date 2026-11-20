@@ -1,9 +1,10 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 4.1 リリースノート：マルチテナントのレンジベース tablet 自動分割、大容量 tablet サポート（100 GB 目標）、Fast Schema Evolution V2 など..."
+products: [oss]
 ---
 
-# StarRocks バージョン 4.1 {#starrocks-version-41}
+# StarRocks バージョン 4.1 \{#starrocks-version-41}
 
 :::danger
 **コンテナイメージの問題（v4.1.0）**
@@ -19,11 +20,11 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
   v4.1 で導入された内部的なデータレイアウトの変更（tablet の分割および分散メカニズムに関連）により、v4.1 にアップグレードされたクラスタでは、以前のバージョンと完全には互換性のないメタデータおよびストレージ構造が生成される場合があります。そのため、v4.1 からのダウングレードは v4.0.6 以降にのみサポートされます。v4.0.6 より前のバージョンへのダウングレードはサポートされていません。これは、以前のバージョンが tablet のレイアウトおよび分散メタデータをどのように解釈するかに関する後方互換性の制約によるものです。
 :::
 
-## 4.1.7 {#417}
+## 4.1.7 \{#417}
 
 リリース日：2026年10月26日
 
-### 動作の変更 {#behavior-changes}
+### 動作の変更 \{#behavior-changes}
 
 - ローカル（共有なし）の主キーのインサートでは、デフォルトでイミュータブルな L1 および L2 の永続性インデックスファイルに対する重複キーのチェックが行われなくなりました。新しい BE 設定項目 `skip_pindex_l1_l2_check_in_insert` のデフォルトは `true` であり、L0（memtable）のチェックは常に実行されます。以前の動作に戻すには `false` に設定してください。[#81304](https://github.com/StarRocks/starrocks/pull/81304)
 - BE の JVM メトリクスはデフォルトで有効になりました（`enable_jvm_metrics` のデフォルトが `true` になりました）。これらは JVM が存在する場合にのみ収集されるため、有効にしても、JVM を他に必要としない BE 上で JVM が起動することはなくなりました。[#81113](https://github.com/StarRocks/starrocks/pull/81113) [#81074](https://github.com/StarRocks/starrocks/pull/81074)
@@ -35,7 +36,7 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - 設定項目やタスク定義が表示またはログに記録される箇所では、認証情報の値がマスクされます：`ADMIN SHOW FRONTEND CONFIG`、FE の `/variable` ページ、BE の `/varz`、`information_schema.be_configs`、`task_run_history` にアーカイブされるタスク実行定義、および FE と BE の HTTP ログに書き込まれるリクエスト URI とヘッダー。`ADMIN SET FRONTEND CONFIG`、FE の `/api/_set_config` エンドポイント、BE の `/api/update_config` エンドポイントを通じて設定された値も同様にマスクされます。[#80097](https://github.com/StarRocks/starrocks/pull/80097) [#80040](https://github.com/StarRocks/starrocks/pull/80040) [#80492](https://github.com/StarRocks/starrocks/pull/80492) [#80444](https://github.com/StarRocks/starrocks/pull/80444) [#80280](https://github.com/StarRocks/starrocks/pull/80280) [#80447](https://github.com/StarRocks/starrocks/pull/80447) [#80515](https://github.com/StarRocks/starrocks/pull/80515) [#80203](https://github.com/StarRocks/starrocks/pull/80203)
 - FE の HTTP エンドポイント `/service_id`、`/dump`、`/dump_starmgr` は管理者ユーザーが必要になりました。[#80749](https://github.com/StarRocks/starrocks/pull/80749) [#80701](https://github.com/StarRocks/starrocks/pull/80701)
 
-### 改善 {#improvements}
+### 改善 \{#improvements}
 
 - テーブルプロパティ `enable_statistic_auto_collect` を追加しました。`CREATE TABLE` または `ALTER TABLE` を使用して `false` に設定すると、自動統計収集の対象からテーブルを除外できます。データロードによってトリガーされる収集には影響しません。[#81027](https://github.com/StarRocks/starrocks/pull/81027)
 - 新しい FE 設定項目 `authentication_ldap_case_insensitive` を `true`（デフォルトは `false`）に設定することで、LDAP および Active Directory のユーザー名とグループ名を大文字小文字を区別せずにマッチングできるようになりました。[#79255](https://github.com/StarRocks/starrocks/pull/79255)
@@ -49,7 +50,7 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - Colocate の集計関数とウィンドウ関数を、range-colocate テーブルに対して計画できるようになりました。[#79946](https://github.com/StarRocks/starrocks/pull/79946)
 - メインブランチから tablet の事前分割の改善をバックポートしました。これには、サンプルベースの tablet の事前分割がスキャンするデータ量を制限する新しい FE 設定項目（`tablet_pre_split_data_tier_scan_byte_limit`、`tablet_pre_split_data_tier_min_scan_files`、`tablet_pre_split_data_tier_max_scan_files`、`tablet_pre_split_meta_tier_footer_read_parallelism`）が含まれます。[#79949](https://github.com/StarRocks/starrocks/pull/79949)
 
-### セキュリティ {#security}
+### セキュリティ \{#security}
 
 - pprof を release/20261012 にアップグレードしました。[#80439](https://github.com/StarRocks/starrocks/pull/80439)
 - lz4-java を 1.11.4 にアップグレードしました。[#80319](https://github.com/StarRocks/starrocks/pull/80319)
@@ -59,7 +60,7 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - `lookup_string` の引数は SQL インジェクションを防ぐためにエスケープされ、その内部クエリは呼び出し元のアイデンティティで実行されます。[#79991](https://github.com/StarRocks/starrocks/pull/79991) [#79959](https://github.com/StarRocks/starrocks/pull/79959)
 - FE の web コンソールは、`/system` ページや `/query` ページを含め、管理者やホストが提供した値およびテーブルセルを HTML エンコードするようになり、`/proc_profile` の `node` パラメーターを検証・エンコードするようになりました。[#80656](https://github.com/StarRocks/starrocks/pull/80656) [#80639](https://github.com/StarRocks/starrocks/pull/80639) [#80582](https://github.com/StarRocks/starrocks/pull/80582) [#80565](https://github.com/StarRocks/starrocks/pull/80565) [#80689](https://github.com/StarRocks/starrocks/pull/80689)
 
-### バグ修正 {#bug-fixes}
+### バグ修正 \{#bug-fixes}
 
 以下の問題が修正されました：
 
@@ -245,11 +246,11 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - 非正の `compact_threads` が拒否されず、CN をクラッシュさせていました。[#79641](https://github.com/StarRocks/starrocks/pull/79641)
 - `TableKeeper` が `jdk.jshell` をインポートしていました。[#79520](https://github.com/StarRocks/starrocks/pull/79520)
 
-## 4.1.6 {#416}
+## 4.1.6 \{#416}
 
 リリース日：2026年9月30日
 
-### 動作の変更 {#behavior-changes-1}
+### 動作の変更 \{#behavior-changes-1}
 
 - AWS SDK のデフォルト HTTP クライアントが Poco から SDK 自身のクライアントに戻されました：`enable_poco_client_for_aws_sdk` のデフォルトは `false` になります。以前の動作に戻すには `true` に設定してください。[#78375](https://github.com/StarRocks/starrocks/pull/78375)
 - オンラインの optimize table は、オプトインになりました：FE 設定 `enable_online_optimize_table` のデフォルトは `false` となり、この設定を有効にしない限り `ALTER TABLE ... DISTRIBUTED BY ...` は再び書き込みをブロックします。[#78206](https://github.com/StarRocks/starrocks/pull/78206)
@@ -279,7 +280,7 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - ショートキーインデックスページのジオメトリは、32 ビットオーバーフローなしで検証されるようになったため、破損したページフッターはラップしてヒープの範囲外書き込みを引き起こすのではなく、拒否されるようになりました。[#79048](https://github.com/StarRocks/starrocks/pull/79048)
 - TLS ハンドシェイクがタイムアウトした HTTPS リクエストは、接続済みとして扱われ同一ソケットで再試行されることがなくなりました。停滞したリクエストは、`connect_timeout` に加えて 2 回の受信タイムアウトではなく、およそ 1 回のタイムアウト後に失敗するようになりました。[#79369](https://github.com/StarRocks/starrocks/pull/79369)
 
-### 改善 {#improvements-1}
+### 改善 \{#improvements-1}
 
 - LDAP および Active Directory のグループが、ユーザーの `memberOf` 属性から解決できるようになったため、新しいディレクトリグループに対してクラスタ上で一致するグループプロバイダー設定が不要になりました。[#79254](https://github.com/StarRocks/starrocks/pull/79254)
 - 監査ログには、大まかな `ErrorCode` だけでなく、クエリのエラーメッセージも記録されるようになったため、構文エラー、不明なテーブル、権限エラーを `fe.log` に照合しなくても区別できるようになりました。[#78798](https://github.com/StarRocks/starrocks/pull/78798)
@@ -288,13 +289,13 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - タブレットの分割点は、専用のフルソートキーインデックスページではなく、セグメントの既存のインデックスから計算されるようになったため、分割されることのないテーブルはそのページの書き込みと保存のコストを負わなくなりました。[#79050](https://github.com/StarRocks/starrocks/pull/79050)
 - `/memz` は jemalloc 自体の統計オプションを受け付けるようになり、これにより稼働中の BE から arena ごとの dirty ページ数や muzzy ページ数、エクステントのサイズクラスの内訳にアクセスできるようになりました。[#79090](https://github.com/StarRocks/starrocks/pull/79090)
 
-### セキュリティ {#security-1}
+### セキュリティ \{#security-1}
 
 - [CVE-2026-55971] C++ バインディングの `THeaderTransport::untransform()` におけるヒープベースのバッファオーバーフローを修正するため、Apache Thrift を 0.24.0 にバンプしました。[#76922](https://github.com/StarRocks/starrocks/pull/76922)
 - [CVE-2026-42537, CVE-2026-59646] JDBC URL インジェクションによる RCE を修正するため Apache Ranger を 2.9.0 に、DTLS リアセンブラのバッファオーバーランを修正するため Bouncy Castle を 1.85 にバンプしました。[#79331](https://github.com/StarRocks/starrocks/pull/79331)
 - [CVE-2026-71290] Apache HttpClient5 を 5.6.4 にバンプしました。[#79538](https://github.com/StarRocks/starrocks/pull/79538)
 
-### バグ修正 {#bug-fixes-1}
+### バグ修正 \{#bug-fixes-1}
 
 以下の問題が修正されました：
 
@@ -384,11 +385,11 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - Arrow Flight SQL サービス用の FE クラスパスに LZ4 および ZSTD の Arrow IPC コーデックが欠落していた問題を修正しました。[#76921](https://github.com/StarRocks/starrocks/pull/76921)
 - StarOS、starlet、starcache を v4.1.4 にアップグレードしました。[#79429](https://github.com/StarRocks/starrocks/pull/79429)
 
-## 4.1.5 {#415}
+## 4.1.5 \{#415}
 
 リリース日：2026年9月8日
 
-### 改善項目 {#improvements-2}
+### 改善項目 \{#improvements-2}
 
 - 外部テーブルに対して `ANALYZE SAMPLE TABLE PREDICATE COLUMNS` をサポートしました。[#77243](https://github.com/StarRocks/starrocks/pull/77243)
 - サンプルベースの tablet 事前分割を拡張しました：非キー式、動的上書き一時パーティション、Iceberg および上書きロードをサポートします。[#77843](https://github.com/StarRocks/starrocks/pull/77843) [#77842](https://github.com/StarRocks/starrocks/pull/77842) [#77983](https://github.com/StarRocks/starrocks/pull/77983)
@@ -407,7 +408,7 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - ジョブ完了時にリシャード出力シャードの配置ピンを解放します。[#76945](https://github.com/StarRocks/starrocks/pull/76945)
 - StarOS を v4.1.2 にアップグレードしました。[#77657](https://github.com/StarRocks/starrocks/pull/77657)
 
-### セキュリティ {#security-2}
+### セキュリティ \{#security-2}
 
 - [CVE-2025-55163] `grpc-bom` を介して all の `io.grpc` アーティファクトを整合させ、`grpc-netty` が `grpc-core` に一致するようにしました。[#77171](https://github.com/StarRocks/starrocks/pull/77171)
 - [CVE-2026-59902] Netty を 4.1.137.Final にバンプしました。[#78287](https://github.com/StarRocks/starrocks/pull/78287)
@@ -415,7 +416,7 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - [CVE-2025-48924] Broker の `commons-lang3` を 3.20.0 にアップグレードし、未使用の `commons-lang` 2.6 および `commons-configuration` 1.6 を削除しました。[#77748](https://github.com/StarRocks/starrocks/pull/77748)
 - [CVE] 新しいリリースで pprof バイナリを再ビルドし、BE コンテナイメージから未使用の flamegraph ツールを削除しました。[#77846](https://github.com/StarRocks/starrocks/pull/77846)
 
-### バグ修正 {#bug-fixes-2}
+### バグ修正 \{#bug-fixes-2}
 
 以下の問題が修正されました：
 
@@ -497,11 +498,11 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - `dictionary_get` キーをキーサイズでシリアライズし、thrift プロセッサ内の例外をキャッチし、CTAS 用に `files()` のスキーマ推論をプランナーのメタロックの外に保つようにしました。[#78706](https://github.com/StarRocks/starrocks/pull/78706) [#78805](https://github.com/StarRocks/starrocks/pull/78805) [#78772](https://github.com/StarRocks/starrocks/pull/78772)
 - ファイルに末尾の改行がない場合に最後の conf 行を読み取る、設定 YAML パスを cwd に対して解決する、GCS アップロード閾値の BE 設定名を `gs` ではなく `gcs` にする、StarOS と Starlet を 4.1.3 にアップグレードする、廃止された設定の forward-header split とドキュメントファイル名内の紛れ込んだ U+200E を削除しました。[#78065](https://github.com/StarRocks/starrocks/pull/78065) [#77132](https://github.com/StarRocks/starrocks/pull/77132) [#78452](https://github.com/StarRocks/starrocks/pull/78452) [#78038](https://github.com/StarRocks/starrocks/pull/78038) [#78780](https://github.com/StarRocks/starrocks/pull/78780) [#78612](https://github.com/StarRocks/starrocks/pull/78612)
 
-## 4.1.4 {#414}
+## 4.1.4 \{#414}
 
 リリース日：2026 年 8 月 5 日
 
-### 動作の変更 {#behavior-changes-2}
+### 動作の変更 \{#behavior-changes-2}
 
 - 共有データモードにおいて、`TABLESAMPLE` / `SAMPLE` 句および `ANALYZE SAMPLE TABLE` が lake テーブルに対して有効になりました。以前はサンプルオプションが BE に到達せず、フルスキャンが実行されていました。[#71874](https://github.com/StarRocks/starrocks/pull/71874)
 - `ALTER TABLE` が `flat_json` 設定に加えた変更は、バージョン管理されたタスクを通じて BE ノードに伝播されるようになり、確実に反映されます。[#74747](https://github.com/StarRocks/starrocks/pull/74747)
@@ -527,7 +528,7 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - 完全な `STRUCT` 列を `ROLLUP`、`CUBE`、または `GROUPING SETS` と一緒に集計しても、プラン作成時に `usedStructFiledPos` エラーで失敗しなくなりました。[#76804](https://github.com/StarRocks/starrocks/pull/76804)
 - FE メモリの `Estimator` はコンテナのオーバーヘッドをカウントするようになり、Parquet スキャナはバッチサイズ全体ではなく制限されたチャンクサイズを使用して欠落列をパディングするようになったため、メモリ計上の精度が向上しました。[#75971](https://github.com/StarRocks/starrocks/pull/75971) [#75981](https://github.com/StarRocks/starrocks/pull/75981)
 
-### 改善 {#improvements-3}
+### 改善 \{#improvements-3}
 
 - Kafka/Pulsar のメッセージメタデータ（パーティション、オフセット、タイムスタンプなど）を公開するための `INCLUDE METADATA` 句を Routine Load でサポートするようになりました。[#73840](https://github.com/StarRocks/starrocks/pull/73840)
 - Routine Load メタデータエイリアスを省略可能にしました。[#76294](https://github.com/StarRocks/starrocks/pull/76294)
@@ -551,7 +552,7 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - レイク PK インデックス SSTable に世代バージョンを記録し、レイク Primary Key の publish 時に `op_write.seg_delvecs` を適用し、Compaction の publish バージョン競合解決時に出力セグメントフッターのオープンをスキップするようにしました。[#76208](https://github.com/StarRocks/starrocks/pull/76208) [#76474](https://github.com/StarRocks/starrocks/pull/76474) [#76657](https://github.com/StarRocks/starrocks/pull/76657)
 - 診断を補助するため、レイクロードおよび publish-version のパスにスタックトレースと詳細なトレースカウンタを追加しました。[#75901](https://github.com/StarRocks/starrocks/pull/75901) [#76810](https://github.com/StarRocks/starrocks/pull/76810)
 
-### セキュリティ {#security-3}
+### セキュリティ \{#security-3}
 
 - [CVE-2026-44891] STOMP サブフレームデコーダーにおけるメモリ枯渇（DoS）脆弱性を修正するため、Netty を 4.1.136.Final にバンプしました。[#76555](https://github.com/StarRocks/starrocks/pull/76555)
 - [CVE-2026-55971] [CVE-2026-43871] C++ バインディングにおけるヒープベースのバッファオーバーフローと無限ループの脆弱性を修正するため、Apache Thrift を 0.24.0 にバンプしました。[#76922](https://github.com/StarRocks/starrocks/pull/76922)
@@ -559,7 +560,7 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - [CVE-2011-4969] [CVE-2014-6071] 脆弱な jQuery 1.4.2（および他の jQuery XSS CVE）をバンドルしていた未使用の `avro-ipc` jar を除外しました。[#76270](https://github.com/StarRocks/starrocks/pull/76270)
 - [CVE-2024-29857] 修正済みのバージョンと並存していた古い脆弱な推移的依存関係（例：`bcprov-jdk15on` 1.70 や EOL の `okhttp` 2.x）を削除し、再発を防ぐために依存関係の禁止設定を追加しました。[#76097](https://github.com/StarRocks/starrocks/pull/76097)
 
-### バグ修正 {#bug-fixes-3}
+### バグ修正 \{#bug-fixes-3}
 
 以下の問題が修正されました：
 
@@ -609,11 +610,11 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - `ERROR_IF_OVERFLOW` 配下で min/max が空の場合に統計キャッシュのロードが失敗する問題を修正しました。[#76684](https://github.com/StarRocks/starrocks/pull/76684)
 - catalog 削除時の存在チェックを書き込みロック下でアトミックに行うようにしました。[#76778](https://github.com/StarRocks/starrocks/pull/76778)
 
-## 4.1.3 {#413}
+## 4.1.3 \{#413}
 
 リリース日：2026年7月14日
 
-### 動作の変更 {#behavior-changes-3}
+### 動作の変更 \{#behavior-changes-3}
 
 - `CTAS` は、明示的に宣言された `VARCHAR(N)` 列の長さを `VARCHAR(MAX)` に広げるのではなく、その長さを保持するようになりました。既存のテーブルには影響しません。`CTAS` で作成された新しいテーブルでは、以降の書き込みで宣言された長さが適用されます。[#73498](https://github.com/StarRocks/starrocks/pull/73498)
 - `OPERATE ON SYSTEM` 権限なしで `sys.fe_memory_usage` または `sys.fe_locks` をクエリした場合、紛らわしいノード検索失敗ではなく、明確なアクセス拒否エラーが返されるようになりました。[#73567](https://github.com/StarRocks/starrocks/pull/73567)
@@ -634,7 +635,7 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - 増分マテリアライズドビューが `bitmap_agg`、`hll_union`、`percentile_union`、`bitmap_union` の集計関数をサポートするようになり、正確な重複排除カウントおよびスケッチベースの集計を増分的に維持できるようになりました。[#75587](https://github.com/StarRocks/starrocks/pull/75587) [#75610](https://github.com/StarRocks/starrocks/pull/75610)
 - サンプルベースの tablet の事前分割における tablet 数が、均等分散のためにアクティブなコンピュートノード数の最も近い倍数に切り上げられるようになり、小規模ロードでの過度な断片化を避けるために最小 tablet サイズによって下限が設定されるようになりました。[#75360](https://github.com/StarRocks/starrocks/pull/75360) [#75584](https://github.com/StarRocks/starrocks/pull/75584)
 
-### 改善 {#improvements-4}
+### 改善 \{#improvements-4}
 
 - `ngram_search` 関数が非定数の needle 引数を受け付けるようになりました。[#74675](https://github.com/StarRocks/starrocks/pull/74675)
 - `enable_http_auth` FE 設定によって制御される HTTP 認証フレームワークを追加し、all 外部 HTTP エンドポイントでの認証および RBAC 強制をゲーティングします。[#73822](https://github.com/StarRocks/starrocks/pull/73822)
@@ -667,7 +668,7 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - Parquet スキャナ向けの式駆動型オンデマンド遅延列ロードにより、マルチブランチの `OR` クエリにおける不要な I/O を削減しました。[#74886](https://github.com/StarRocks/starrocks/pull/74886)
 - `ds_hll_count_distinct` / `DataSketchesHll` が、順序依存の HIP 推定器ではなく複合推定器を使用することで、安定したカーディナリティ推定を生成するようになりました。[#75053](https://github.com/StarRocks/starrocks/pull/75053)
 
-### セキュリティ {#security-4}
+### セキュリティ \{#security-4}
 
 - [CVE-2026-45416] [CVE-2026-44249] [CVE-2026-45673] SNI ハンドラのヒープ枯渇（DoS）、IPv6 サブネットフィルタのバイパス、および DNS キャッシュポイズニングを修正するため、Netty を4.1.135.Final にアップグレードしました。[#74668](https://github.com/StarRocks/starrocks/pull/74668)
 - [CVE-2026-54512] [CVE-2026-54513] 2つのデシリアライゼーション脆弱性を修正するため、`jackson-databind` を2.21.4 にアップグレードしました。[#75373](https://github.com/StarRocks/starrocks/pull/75373)
@@ -679,7 +680,7 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - `HyperLogLog::deserialize` が範囲外の `SPARSE` レジスタインデックスを受け入れてしまい、不正な入力によってヒープメモリが破損して BE がクラッシュする可能性があった問題を修正しました。[#75521](https://github.com/StarRocks/starrocks/pull/75521)
 - `bar()` が負の幅の値を拒否しない問題を修正しました。これにより、以前は無制限の文字列増大と BE のメモリ枯渇が許容されていました。[#75143](https://github.com/StarRocks/starrocks/pull/75143)
 
-### バグ修正 {#bug-fixes-4}
+### バグ修正 \{#bug-fixes-4}
 
 以下の問題が修正されました：
 
@@ -773,11 +774,11 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - `enable_statistic_collect_on_first_load` のテーブルレベルのオーバーライドは、グローバル設定で無効化されている場合に初回ロード時の統計情報収集を有効にできませんでした。[#74794](https://github.com/StarRocks/starrocks/pull/74794)
 - `PushDownNonGroupedAggregateBelowUnion` は、union ブランチに入力行がない場合、非 nullable と宣言されたタイプに対して nullable な出力を生成し、BE の `CHECK` の失敗を引き起こしていました。[#76101](https://github.com/StarRocks/starrocks/pull/76101)
 
-## 4.1.2 {#412}
+## 4.1.2 \{#412}
 
 リリース日：2026 年 6 月 18 日
 
-### 動作の変更 {#behavior-changes-4}
+### 動作の変更 \{#behavior-changes-4}
 
 - ユーザーが権限を持たないデータベースへの接続時、以前は ERROR 2013 で接続が閉じられていましたが、現在は適切な MySQL エラーパケットが返されるようになりました。[#70072](https://github.com/StarRocks/starrocks/pull/70072)
 - `SHOW FUNCTIONS` は、関数レベルの権限により関数を参照できるものの、関数作成スコープの権限を保持していないユーザーに対して、UDF ファイルおよびオブジェクトファイルのパスを `***` としてマスクするようになりました。[#73425](https://github.com/StarRocks/starrocks/pull/73425)
@@ -798,7 +799,7 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - IVM の適応型リフレッシュは、最初のデルタ特性がすでに `mv_max_rows_per_refresh` を超えている場合にデルタウィンドウを正しく制限するようになり、1 回のタスク実行でバックログ全体がリフレッシュされることを防ぐようになりました。[#74464](https://github.com/StarRocks/starrocks/pull/74464)
 - GROUP-BY のみのインクリメンタル MV（例：`SELECT k FROM t GROUP BY k`）は、`__ROW_ID__` を VARCHAR として正しくエンコードするようになり、2 回目のリフレッシュでのクラッシュが修正されました。[#74030](https://github.com/StarRocks/starrocks/pull/74030)
 
-### 改善 {#improvements-5}
+### 改善 \{#improvements-5}
 
 - Paimon ビューをサポートし、`CREATE`/`REPLACE`/`DROP`、`SHOW`/`DESC`、および外部 catalog からの Paimon ビューのクエリが可能になりました。Paimon ビュー内のテーブル参照は、`default_catalog` ではなく Paimon の catalog に対して解決されるようになりました。[#56058](https://github.com/StarRocks/starrocks/pull/56058) [#70217](https://github.com/StarRocks/starrocks/pull/70217)
 - スキーマドリフトや複雑なネストされたタイプを持つファイルを読み取る際の安定したスキーマ制御のために、`FILES()` で明示的な `schema` パラメーターをサポートするようになりました。[#72033](https://github.com/StarRocks/starrocks/pull/72033)
@@ -833,14 +834,14 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - 共有データテーブルにおける merge-commit（`FRONTEND_STREAMING`）ロードで、トランザクションログとファイルのバンドルを組み合わせた処理をサポートし、他のロードタイプと動作を統一しました。[#74460](https://github.com/StarRocks/starrocks/pull/74460)
 - FE の再起動なしに lake publish のフェーズ内訳の警告しきい値を制御するための可変 FE 設定 `slow_publish_partition_log_threshold_ms`（デフォルト 3000 ms）を追加しました。[#74043](https://github.com/StarRocks/starrocks/pull/74043)
 
-### セキュリティ {#security-5}
+### セキュリティ \{#security-5}
 
 - [CVE-2026-43869] 証明書ホストの検証が不適切な問題に対処するため、`libthrift` を 0.23.0 にバンプしました。[#73243](https://github.com/StarRocks/starrocks/pull/73243)
 - [CVE-2026-41293] HTTP/2 のリクエストヘッダー検証の問題に対処するため、Apache Tomcat を 9.0.118 にバンプしました。[#73797](https://github.com/StarRocks/starrocks/pull/73797)
 - [CVE-2026-45416] [CVE-2026-44249] [CVE-2026-45673] SNI ハンドラのヒープ枯渇（DoS）、IPv6 サブネットフィルタのバイパス、DNS キャッシュポイズニングの問題に対処するため、Netty を 4.1.135.Final にバンプしました。[#74668](https://github.com/StarRocks/starrocks/pull/74668)
 - Go 標準ライブラリのセキュリティ修正を含めるため、pprof のプリビルドバイナリを Go 1.25.11 にアップグレードしました。[#73545](https://github.com/StarRocks/starrocks/pull/73545) [#74669](https://github.com/StarRocks/starrocks/pull/74669)
 
-### バグ修正 {#bug-fixes-5}
+### バグ修正 \{#bug-fixes-5}
 
 以下の問題が修正されました：
 
@@ -926,16 +927,16 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - `0000` 年以降の PostgreSQL JDBC の時刻値で、型マッピングの結果が不正になっていました。[#70842](https://github.com/StarRocks/starrocks/pull/70842)
 - schema change 中にロウセットから `gtid` を読み込む前に null チェックが欠落しており、NPE クラッシュを引き起こしていました。[#74855](https://github.com/StarRocks/starrocks/pull/74855)
 
-## 4.1.1 {#411}
+## 4.1.1 \{#411}
 
 リリース日：2026 年 5 月 29 日
 
-### 動作の変更 {#behavior-changes-5}
+### 動作の変更 \{#behavior-changes-5}
 
 - Hive コネクタは、デフォルトで JNI の Avro スキャナーの代わりにネイティブ C++ の Avro スキャナーを使用するようになりました。[#73237](https://github.com/StarRocks/starrocks/pull/73237) [#73569](https://github.com/StarRocks/starrocks/pull/73569)
 - INCREMENTAL/AUTO マテリアライズドビューに対するクエリの書き換えが無効化され、INCREMENTAL/AUTO マテリアライズドビューに対する FORCE リフレッシュおよびパーティションリフレッシュが拒否されるようになりました。[#72890](https://github.com/StarRocks/starrocks/pull/72890) [#72336](https://github.com/StarRocks/starrocks/pull/72336) [#71355](https://github.com/StarRocks/starrocks/pull/71355)
 
-### 改善 {#improvements-6}
+### 改善 \{#improvements-6}
 
 - Java の UDF/UDAF/UDTF がより多くの型をサポートするようになりました：UDAF/UDTF の引数と戻り値としての STRUCT、ネストされた ARRAY/MAP 型、DATE/DATETIME、DECIMAL、および可変長引数。[#72911](https://github.com/StarRocks/starrocks/pull/72911) [#72283](https://github.com/StarRocks/starrocks/pull/72283) [#72337](https://github.com/StarRocks/starrocks/pull/72337) [#72208](https://github.com/StarRocks/starrocks/pull/72208) [#68596](https://github.com/StarRocks/starrocks/pull/68596)
 - スカラー UDF が STRUCT 引数をサポートするようになりました。[#72620](https://github.com/StarRocks/starrocks/pull/72620)
@@ -978,7 +979,7 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - external catalog の可観測性向上のため、catalog タイプごとのクエリメトリクスを追加しました。[#70533](https://github.com/StarRocks/starrocks/pull/70533)
 - ウィンドウ関数に対する明示的なスキューヒントをサポートし、スキューしたパーティションキーを持つウィンドウ関数を UNION に分割することで自動的に最適化します。[#68739](https://github.com/StarRocks/starrocks/pull/68739)
 
-### セキュリティ {#security-6}
+### セキュリティ \{#security-6}
 
 - [CVE] Netty を 4.1.133.Final にアップグレードしました。[#72905](https://github.com/StarRocks/starrocks/pull/72905)
 - [CVE-2026-42198] [CVE-2026-5598] pgjdbc を 42.7.11（無制限の SCRAM PBKDF2 反復回数によるクライアント側 DoS）、BouncyCastle を 1.84（FrodoKEM 秘密鍵の漏洩）にバンプしました。[#72797](https://github.com/StarRocks/starrocks/pull/72797)
@@ -987,7 +988,7 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - Broker の依存関係の CVE をクリーンアップし、`wildfly-openssl` を削除しました。[#72184](https://github.com/StarRocks/starrocks/pull/72184) [#71908](https://github.com/StarRocks/starrocks/pull/71908)
 - INSERT INTO FILES のエラーメッセージ内の認証情報を隠蔽しました。[#71245](https://github.com/StarRocks/starrocks/pull/71245)
 
-### バグ修正 {#bug-fixes-6}
+### バグ修正 \{#bug-fixes-6}
 
 以下の問題が修正されました：
 
@@ -1068,11 +1069,11 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - 参照先の列が存在しない場合、Stream Load/Broker Load で生成列を解析する際に NPE が発生する問題。[#71116](https://github.com/StarRocks/starrocks/pull/71116)
 - 短絡ポイントルックアップでパーティション述語が欠落する問題。[#71124](https://github.com/StarRocks/starrocks/pull/71124)
 
-## 4.1.0 {#410}
+## 4.1.0 \{#410}
 
 リリース日：2026年4月13日
 
-### 共有データアーキテクチャ {#shared-data-architecture}
+### 共有データアーキテクチャ \{#shared-data-architecture}
 
 - **新しいマルチテナントデータ管理**
 
@@ -1106,7 +1107,7 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 
 - 共有なしクラスタにおけるトランザクションのパブリッシュ用スレッドプールを追加し、パブリッシュのスループットを向上させました。[#67797](https://github.com/StarRocks/starrocks/pull/67797)
 
-### データレイク分析 {#data-lake-analytics}
+### データレイク分析 \{#data-lake-analytics}
 
 - **Iceberg DELETE サポート**
 
@@ -1174,7 +1175,7 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 
 - Oracle および PostgreSQL の JDBC タイプマッピングを改善しました。[#70315](https://github.com/StarRocks/starrocks/pull/70315) [#70566](https://github.com/StarRocks/starrocks/pull/70566)
 
-### クエリエンジン {#query-engine}
+### クエリエンジン \{#query-engine}
 
 - **再帰 CTE**
 
@@ -1190,7 +1191,7 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 
 - クエリキューの可視性のために EXPLAIN をサポートしました。[#69933](https://github.com/StarRocks/starrocks/pull/69933)
 
-### 関数と SQL 構文 {#functions-and-sql-syntax}
+### 関数と SQL 構文 \{#functions-and-sql-syntax}
 
 - 以下の関数を追加しました：
   - `array_top_n`：値でランク付けされた配列の上位 N 個の要素を返します。[#63376](https://github.com/StarRocks/starrocks/pull/63376)
@@ -1217,7 +1218,7 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
   - CSV ファイルエクスポートにおける複数の圧縮フォーマット（GZIP/SNAPPY/ZSTD/LZ4/DEFLATE/ZLIB/BZIP2）をサポートします。[#68054](https://github.com/StarRocks/starrocks/pull/68054)
   - 名前ベースの構造体フィールドマッチングのための `STRUCT_CAST_BY_NAME` SQL モードをサポートします。[#69845](https://github.com/StarRocks/starrocks/pull/69845)
 
-### 管理と可観測性 {#management--observability}
+### 管理と可観測性 \{#management--observability}
 
 - 複数ウェアハウスの CPU リソース分離を改善するため、リソースグループに対して `warehouses`、`cpu_weight_percent`、`exclusive_cpu_weight` 属性をサポートします。[#66947](https://github.com/StarRocks/starrocks/pull/66947)
 - FE のスレッド状態を確認するための `information_schema.fe_threads` システムビューを導入します。[#65431](https://github.com/StarRocks/starrocks/pull/65431)
@@ -1237,13 +1238,13 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - ロードジョブの可視性を向上させるため、`information_schema.loads` に Merge Commit 情報を表示することをサポートします。[#67879](https://github.com/StarRocks/starrocks/pull/67879)
 - トラブルシューティングを改善するため、cloud ネイティブテーブルでの tablet ステータスの表示をサポートします。[#69616](https://github.com/StarRocks/starrocks/pull/69616)
 
-### セキュリティ {#security-7}
+### セキュリティ \{#security-7}
 
 - [CVE-2026-33870] [CVE-2026-33871] AWS バンドルを置き換え、Netty を 4.1.132.Final にバンプしました。[#71017](https://github.com/StarRocks/starrocks/pull/71017)
 - [CVE-2025-27821] Hadoop を v3.4.2 にアップグレードしました。[#68529](https://github.com/StarRocks/starrocks/pull/68529)
 - [CVE-2025-54920] `spark-core_2.12` を 3.5.7 にアップグレードしました。[#70862](https://github.com/StarRocks/starrocks/pull/70862)
 
-### バグ修正 {#bug-fixes-7}
+### バグ修正 \{#bug-fixes-7}
 
 以下の問題が修正されました：
 
@@ -1287,7 +1288,7 @@ v4.1.0 コンテナイメージのロード順序が不安定な問題により�
 - API `proc_file` における SSRF リスクを軽減しました。[#68997](https://github.com/StarRocks/starrocks/pull/68997)
 - 監査ログおよび SQL のマスキングにおいて、ユーザー認証文字列をマスクするようにしました。[#70360](https://github.com/StarRocks/starrocks/pull/70360)
 
-### 動作の変更 {#behavior-changes-6}
+### 動作の変更 \{#behavior-changes-6}
 
 - ETL 実行モードの最適化がデフォルトで有効になりました。これにより、INSERT INTO SELECT、CREATE TABLE AS SELECT、および同様のバッチワークロードが、明示的な設定変更なしで恩恵を受けられるようになりました。[#66841](https://github.com/StarRocks/starrocks/pull/66841)
 - `lag`/`lead` ウィンドウ関数の第 3 引数は、定数値に加えて列参照もサポートするようになりました。[#60209](https://github.com/StarRocks/starrocks/pull/60209)

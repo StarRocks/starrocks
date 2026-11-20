@@ -444,10 +444,10 @@ GRPC_SOURCE="grpc-1.43.0"
 GRPC_MD5SUM="92559743e7b5d3f67486c4c0de2f5cbe"
 
 # simdutf
-SIMDUTF_DOWNLOAD="https://github.com/simdutf/simdutf/archive/refs/tags/v9.1.0.tar.gz"
-SIMDUTF_NAME="simdutf-9.1.0.tar.gz"
-SIMDUTF_SOURCE="simdutf-9.1.0"
-SIMDUTF_MD5SUM="e55123960edadb8d9987fa30f877e588"
+SIMDUTF_DOWNLOAD="https://github.com/simdutf/simdutf/archive/refs/tags/v9.4.0.tar.gz"
+SIMDUTF_NAME="simdutf-9.4.0.tar.gz"
+SIMDUTF_SOURCE="simdutf-9.4.0"
+SIMDUTF_MD5SUM="d10e794f96eb7522b87aeb0a36521454"
 
 # icu
 ICU_DOWNLOAD="https://github.com/unicode-org/icu/releases/download/release-76-1/icu4c-76_1-src.zip"
@@ -537,13 +537,40 @@ LIBNL_NAME=libnl-3.12.0.tar.gz
 LIBNL_SOURCE=libnl-3.12.0
 LIBNL_MD5SUM="f9112ca215807fe65eecd583d8f180cc"
 
+# Dependencies of starlet (USE_STAROS) that BE links from here instead of the starlet
+# artifacts. The versions must match the starlet release in starlet-artifacts-version.sh:
+# libstarlet references google::cloud::v2_36 and the prometheus-cpp 0.13 API.
+# prometheus-cpp
+PROMETHEUS_CPP_DOWNLOAD="https://github.com/jupp0r/prometheus-cpp/archive/v0.13.0.tar.gz"
+PROMETHEUS_CPP_NAME=prometheus-cpp-0.13.0.tar.gz
+PROMETHEUS_CPP_SOURCE=prometheus-cpp-0.13.0
+PROMETHEUS_CPP_MD5SUM="5441cc3dc5277e9ede392f565f6fe4c1"
+
+# crc32c
+CRC32C_DOWNLOAD="https://github.com/google/crc32c/archive/1.1.2.tar.gz"
+CRC32C_NAME=crc32c-1.1.2.tar.gz
+CRC32C_SOURCE=crc32c-1.1.2
+CRC32C_MD5SUM="cc0338e6a60c38cab04a70a2c36cd9f2"
+
+# nlohmann_json
+NLOHMANN_JSON_DOWNLOAD="https://github.com/nlohmann/json/archive/v3.11.3.tar.gz"
+NLOHMANN_JSON_NAME=nlohmann-json-3.11.3.tar.gz
+NLOHMANN_JSON_SOURCE=json-3.11.3
+NLOHMANN_JSON_MD5SUM="d603041cbc6051edbaa02ebb82cf0aa9"
+
+# google-cloud-cpp
+GOOGLE_CLOUD_CPP_DOWNLOAD="https://github.com/googleapis/google-cloud-cpp/archive/refs/tags/v2.36.0.tar.gz"
+GOOGLE_CLOUD_CPP_NAME=google-cloud-cpp-2.36.0.tar.gz
+GOOGLE_CLOUD_CPP_SOURCE=google-cloud-cpp-2.36.0
+GOOGLE_CLOUD_CPP_MD5SUM="875563e29fed339fc56f6d6c7d3c72ca"
+
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 H3 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOPSRC JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
             BENCHMARK FAST_FLOAT STARCACHE STREAMVBYTE JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
             FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF TENANN POCO ICU XSIMD LIBXML2 AZURE LIBDIVIDE PPROF FLAMEGRAPH XXHASH \
-            BLAKE3 BENCHGEN PAIMON_CPP LIBNL KAFEL NSJAIL"
+            BLAKE3 BENCHGEN PAIMON_CPP LIBNL KAFEL NSJAIL PROMETHEUS_CPP CRC32C NLOHMANN_JSON GOOGLE_CLOUD_CPP"
 
 if [[ -n "${STARROCKS_TP_VARS_OVERRIDE:-}" ]]; then
     . "${STARROCKS_TP_VARS_OVERRIDE}"

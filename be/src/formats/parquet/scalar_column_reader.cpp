@@ -191,7 +191,8 @@ bool RawColumnReader::column_all_pages_dict_encoded() const {
                 has_dict_encoding = true;
             }
 
-            // RLE and BIT_PACKED are used for repetition/definition levels
+            // RLE and BIT_PACKED are level encodings. RLE is also the value encoding of v2 boolean
+            // columns, but this check only serves string columns, so it is treated as a level encoding here.
             if (encoding != tparquet::Encoding::PLAIN_DICTIONARY && encoding != tparquet::Encoding::RLE_DICTIONARY &&
                 encoding != tparquet::Encoding::RLE && encoding != tparquet::Encoding::BIT_PACKED) {
                 has_nondict_encoding = true;
@@ -215,8 +216,8 @@ StatusOr<bool> RawColumnReader::_row_group_zone_map_filter(const std::vector<con
                                                            const TypeDescriptor& col_type, const uint64_t rg_first_row,
                                                            const uint64_t rg_num_rows) const {
     bool filtered = false;
-    if (!get_chunk_metadata()->meta_data.__isset.statistics || get_column_parquet_field() == nullptr ||
-        has_geo_annotation(get_column_parquet_field()->schema_element)) {
+    if (col_type.is_geo_type() || !get_chunk_metadata()->meta_data.__isset.statistics ||
+        get_column_parquet_field() == nullptr || has_geo_annotation(get_column_parquet_field()->schema_element)) {
         // Missing statistics or undefined GEO sort order cannot filter this row group.
         return filtered;
     }
@@ -277,7 +278,8 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
     // plaintext ones.
     const tparquet::ColumnChunk* chunk_meta = get_chunk_metadata();
     // ColumnIndex min/max is undefined for GEO too; do not read or prune from it.
-    if (get_column_parquet_field() != nullptr && has_geo_annotation(get_column_parquet_field()->schema_element)) {
+    if (col_type.is_geo_type() ||
+        (get_column_parquet_field() != nullptr && has_geo_annotation(get_column_parquet_field()->schema_element))) {
         return false;
     }
     if (!chunk_meta->__isset.column_index_offset || !chunk_meta->__isset.offset_index_offset ||

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Calculates the base 10 logarithm of a number."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # log10, dlog10

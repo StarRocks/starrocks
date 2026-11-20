@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ALTER RESOURCE modifies properties of a resource like Spark, Hive, Iceberg, or JDBC."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER RESOURCE

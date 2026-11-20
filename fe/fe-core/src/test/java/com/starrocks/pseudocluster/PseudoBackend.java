@@ -776,6 +776,7 @@ public class PseudoBackend {
             }
             TBackendInfo backendInfo = new TBackendInfo(beThriftPort, httpPort);
             backendInfo.setBrpc_port(brpcPort);
+            backendInfo.setSupport_lake_index_fast_path(true);
             return new THeartbeatResult(new TStatus(TStatusCode.OK), backendInfo);
         }
     }

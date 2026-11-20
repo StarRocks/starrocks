@@ -256,12 +256,6 @@ enum GeoLogicalTypePB {
     GEO_LOGICAL_TYPE_GEOMETRY = 2;
 }
 
-enum GeoCoordinateSystemPB {
-    GEO_COORDINATE_SYSTEM_UNKNOWN = 0;
-    GEO_COORDINATE_SYSTEM_SPHERICAL = 1;
-    GEO_COORDINATE_SYSTEM_CARTESIAN = 2;
-}
-
 enum GeoEdgeAlgorithmPB {
     GEO_EDGE_ALGORITHM_UNKNOWN = 0;
     GEO_EDGE_ALGORITHM_SPHERICAL = 1;
@@ -285,10 +279,9 @@ enum GeoDimensionPB {
 // Semantic type metadata for native geo types.
 message GeoTypeDescPB {
     optional GeoLogicalTypePB logical_type = 1;
-    optional GeoCoordinateSystemPB coordinate_system = 2;
-    optional GeoEdgeAlgorithmPB edge_algorithm = 3;
-    optional string crs = 4;
-    optional int32 srid = 5;
+    optional GeoEdgeAlgorithmPB edge_algorithm = 2;
+    optional string crs = 3;
+    optional int32 srid = 4;
 }
 
 message GeoColumnDescPB {

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "システム内のすべてのユーザーを表示します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW USERS

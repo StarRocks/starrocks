@@ -14,6 +14,7 @@
 
 #include "formats/parquet/column_reader_factory.h"
 
+#include <algorithm>
 #include <optional>
 
 #include "base/failpoint/fail_point.h"
@@ -28,6 +29,7 @@
 #include "formats/utils.h"
 #include "runtime/mem_pool.h"
 #include "runtime/type_info_allocator_adapter.h"
+#include "types/geo_srid.h"
 #include "types/type_info.h"
 
 namespace starrocks::parquet {
@@ -36,35 +38,53 @@ DEFINE_FAIL_POINT(parquet_reader_returns_global_dict_not_match_status);
 
 namespace {
 
-Status validate_native_iceberg_geography(const ParquetField& field, const TypeDescriptor& col_type,
-                                         const TIcebergSchemaField& lake_field) {
+Status validate_native_iceberg_geo(const ParquetField& field, const TypeDescriptor& col_type,
+                                   const TIcebergSchemaField& lake_field) {
+    const bool geography = col_type.type == TYPE_GEOGRAPHY;
+    const auto* type_name = logical_type_to_string(col_type.type);
     if (!lake_field.__isset.geo_metadata || !col_type.geo_type) {
-        return Status::NotSupported("Native Iceberg GEOGRAPHY requires GEO metadata: " + field.name);
+        return Status::NotSupported(
+                strings::Substitute("Native Iceberg $0 requires GEO metadata: $1", type_name, field.name));
     }
     const auto& source = lake_field.geo_metadata;
     const auto& planned = *col_type.geo_type;
+    const auto kind = geography ? TIcebergGeoKind::GEOGRAPHY : TIcebergGeoKind::GEOMETRY;
+    const auto logical_type = geography ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY;
     constexpr std::string_view edge_prefix = "GEO_EDGE_ALGORITHM_";
     const std::string edge = GeoEdgeAlgorithmPB_Name(planned.edge_algorithm);
-    if (source.kind != TIcebergGeoKind::GEOGRAPHY || planned.logical_type != GEO_LOGICAL_TYPE_GEOGRAPHY ||
-        source.crs != planned.crs || edge.compare(0, edge_prefix.size(), edge_prefix) != 0 ||
+    if (source.kind != kind || planned.logical_type != logical_type || source.crs != planned.crs ||
+        edge.compare(0, edge_prefix.size(), edge_prefix) != 0 ||
         source.edge_algorithm != edge.substr(edge_prefix.size())) {
         return Status::InvalidArgument("Iceberg/plan geo schema mismatch: " + field.name);
     }
+    if (!geography) {
+        const auto srid = derive_geo_srid(planned.crs);
+        if (planned.edge_algorithm != GEO_EDGE_ALGORITHM_PLANAR || !srid || *srid <= 0 || planned.srid != srid) {
+            return Status::InvalidArgument("Unsupported Iceberg GEOMETRY descriptor: " + field.name);
+        }
+    }
     if (field.physical_type != tparquet::Type::BYTE_ARRAY) {
-        return Status::InvalidArgument("Native Iceberg GEOGRAPHY requires Parquet BYTE_ARRAY: " + field.name);
+        return Status::InvalidArgument(
+                strings::Substitute("Native Iceberg $0 requires Parquet BYTE_ARRAY: $1", type_name, field.name));
     }
     // Older writers may omit the annotation. When present, it must agree with Iceberg;
     // WKB payload bytes cannot establish logical kind, CRS or edge semantics.
     const auto& schema = field.schema_element;
     if (schema.__isset.logicalType) {
         const auto& logical = schema.logicalType;
-        if (!logical.__isset.GEOGRAPHY || logical.__isset.GEOMETRY) {
+        if (logical.__isset.GEOGRAPHY != geography || logical.__isset.GEOMETRY == geography) {
             return Status::InvalidArgument("Iceberg/Parquet geo logical type mismatch: " + field.name);
         }
-        const auto& geography = logical.GEOGRAPHY;
-        const std::string_view crs = geography.__isset.crs ? geography.crs : std::string_view("OGC:CRS84");
+        if (!geography) {
+            const auto& geometry = logical.GEOMETRY;
+            const std::string_view crs = geometry.__isset.crs ? geometry.crs : std::string_view("OGC:CRS84");
+            return crs == source.crs ? Status::OK()
+                                     : Status::InvalidArgument("Iceberg/Parquet geo schema mismatch: " + field.name);
+        }
+        const auto& annotation = logical.GEOGRAPHY;
+        const std::string_view crs = annotation.__isset.crs ? annotation.crs : std::string_view("OGC:CRS84");
         const auto algorithm =
-                geography.__isset.algorithm ? geography.algorithm : tparquet::EdgeInterpolationAlgorithm::SPHERICAL;
+                annotation.__isset.algorithm ? annotation.algorithm : tparquet::EdgeInterpolationAlgorithm::SPHERICAL;
         const auto algorithm_name = tparquet::_EdgeInterpolationAlgorithm_VALUES_TO_NAMES.find(algorithm);
         if (crs != source.crs || algorithm_name == tparquet::_EdgeInterpolationAlgorithm_VALUES_TO_NAMES.end() ||
             algorithm_name->second != source.edge_algorithm) {
@@ -74,6 +94,10 @@ Status validate_native_iceberg_geography(const ParquetField& field, const TypeDe
     return Status::OK();
 }
 
+bool contains_iceberg_geo(const TIcebergSchemaField& field) {
+    return field.__isset.geo_metadata || std::ranges::any_of(field.children, contains_iceberg_geo);
+}
+
 struct VariantNodeFields {
     const ParquetField* metadata = nullptr;
     const ParquetField* value = nullptr;
@@ -81,7 +105,78 @@ struct VariantNodeFields {
 };
 
 Status collect_variant_shredded_fields(const ColumnReaderOptions& opts, const ParquetField* typed_group,
-                                       VariantPath* current_path, std::vector<ShreddedFieldNode>* output);
+                                       VariantPath* current_path, std::vector<ShreddedFieldNode>* output,
+                                       bool within_array = false);
+
+// The leaf to read an object group's definition levels from: a `value` leaf if there is one (always a binary), else
+// any scalar leaf. Only structs are crossed: a leaf under a list or map has one level per element, not per row.
+static const ParquetField* find_object_presence_leaf(const ParquetField& group, bool value_only) {
+    for (const auto& child : group.children) {
+        if (child.type == ColumnType::SCALAR) {
+            if (!value_only || child.name == "value") {
+                return &child;
+            }
+        } else if (child.type == ColumnType::STRUCT) {
+            if (const ParquetField* leaf = find_object_presence_leaf(child, value_only); leaf != nullptr) {
+                return leaf;
+            }
+        }
+    }
+    return nullptr;
+}
+
+// nullptr when the group cannot tell its presence: it is required (so it is present whenever its parent is), no leaf
+// below it carries its levels, or it sits below a repeated ancestor (a VARIANT in a LIST or MAP column): the levels of
+// its leaves then have one entry per element, not per row, and are not aligned with the rows of the read.
+static StatusOr<std::unique_ptr<ObjectPresenceSource>> make_object_presence_source(const ColumnReaderOptions& opts,
+                                                                                   const ParquetField* group) {
+    if (!group->is_nullable || group->max_rep_level() > 0) {
+        return std::unique_ptr<ObjectPresenceSource>();
+    }
+    const ParquetField* leaf = find_object_presence_leaf(*group, true);
+    if (leaf == nullptr) {
+        leaf = find_object_presence_leaf(*group, false);
+    }
+    if (leaf == nullptr || leaf->max_rep_level() > 0) {
+        return std::unique_ptr<ObjectPresenceSource>();
+    }
+    auto source = std::make_unique<ObjectPresenceSource>();
+    source->group_def_level = group->max_def_level();
+    source->read_type = std::make_unique<TypeDescriptor>(variant_typed_desc_from_parquet_field(leaf));
+    auto reader_or = ColumnReaderFactory::create(opts, leaf, *source->read_type);
+    if (!reader_or.ok()) {
+        return reader_or.status().clone_and_prepend(
+                strings::Substitute("build variant object presence reader failed, leaf=$0", leaf->name));
+    }
+    source->reader = std::move(reader_or).value();
+    return source;
+}
+
+// Why a scalar typed_value of this file type is not allowed in a shredded variant, or an empty string. The spec lists
+// the types; unsigned integers and fixed-length byte arrays that are neither decimals nor UUIDs are not among them.
+static std::string shredded_typed_value_unsupported_reason(const ParquetField& field) {
+    if (field.physical_type == tparquet::Type::INT32 || field.physical_type == tparquet::Type::INT64) {
+        if (is_unsigned_integer(field.schema_element)) {
+            const int bit_width =
+                    field.schema_element.__isset.logicalType && field.schema_element.logicalType.__isset.INTEGER
+                            ? field.schema_element.logicalType.INTEGER.bitWidth
+                            : (field.physical_type == tparquet::Type::INT32 ? 32 : 64);
+            return strings::Substitute("Unsupported shredded value type: INTEGER($0,false)", bit_width);
+        }
+    }
+    if (field.physical_type == tparquet::Type::FIXED_LEN_BYTE_ARRAY) {
+        const auto& element = field.schema_element;
+        const bool is_decimal =
+                (element.__isset.logicalType && element.logicalType.__isset.DECIMAL) ||
+                (element.__isset.converted_type && element.converted_type == tparquet::ConvertedType::DECIMAL);
+        const bool is_uuid = element.__isset.logicalType && element.logicalType.__isset.UUID;
+        if (!is_decimal && !is_uuid) {
+            return strings::Substitute("Unsupported shredded value type: fixed_len_byte_array($0) typed_value",
+                                       field.type_length);
+        }
+    }
+    return "";
+}
 
 static VariantNodeFields find_variant_node_fields(const ParquetField* struct_field) {
     VariantNodeFields fields;
@@ -120,9 +215,10 @@ static ScalarArrayLayout detect_scalar_array_layout(const ParquetField* typed_fi
     VariantNodeFields elem_fields = find_variant_node_fields(element_field);
     const ParquetField* elem_value_field = elem_fields.value;
     const ParquetField* elem_typed_value_field = elem_fields.typed_value;
-    // Scalar-array layout: struct {value, typed_value(scalar), ...}
-    if (elem_value_field != nullptr && elem_typed_value_field != nullptr &&
-        elem_typed_value_field->type != ColumnType::STRUCT && elem_typed_value_field->type != ColumnType::ARRAY) {
+    // Scalar-array layout: struct {value, typed_value(scalar), ...}. `value` is optional: an element written without it
+    // has only a typed value.
+    if (elem_typed_value_field != nullptr && elem_typed_value_field->type != ColumnType::STRUCT &&
+        elem_typed_value_field->type != ColumnType::ARRAY) {
         layout.enabled = true;
         layout.value_field = elem_value_field;
         layout.typed_value_field = elem_typed_value_field;
@@ -150,7 +246,11 @@ static Status build_array_typed_value_reader(const ColumnReaderOptions& opts, co
         }
         node->typed_value_reader =
                 std::make_unique<ListColumnReader>(typed_field, std::move(element_reader_or).value());
-        DCHECK(array_layout.value_field != nullptr);
+        node->scalar_array_layout = true;
+        if (array_layout.value_field == nullptr) {
+            node->array_element_value_reader.reset();
+            return Status::OK();
+        }
         if (array_layout.value_field->physical_column_index < 0 ||
             static_cast<size_t>(array_layout.value_field->physical_column_index) >=
                     opts.row_group_meta->columns.size()) {
@@ -158,7 +258,6 @@ static Status build_array_typed_value_reader(const ColumnReaderOptions& opts, co
                     "variant array element.value has out-of-range physical_column_index $0 (num_chunks=$1)",
                     array_layout.value_field->physical_column_index, opts.row_group_meta->columns.size()));
         }
-        node->scalar_array_layout = true;
         auto element_value_reader = std::make_unique<ScalarColumnReader>(
                 array_layout.value_field,
                 &(opts.row_group_meta->columns[array_layout.value_field->physical_column_index]), &TYPE_VARBINARY_DESC,
@@ -198,7 +297,8 @@ static Status collect_array_element_shredded_children(const ColumnReaderOptions&
     const ParquetField* element_typed_value = element_fields.typed_value;
     if (element_typed_value != nullptr && element_typed_value->type == ColumnType::STRUCT) {
         VariantPath element_path;
-        RETURN_IF_ERROR(collect_variant_shredded_fields(opts, element_typed_value, &element_path, &node->children));
+        RETURN_IF_ERROR(
+                collect_variant_shredded_fields(opts, element_typed_value, &element_path, &node->children, true));
     }
     return Status::OK();
 }
@@ -264,6 +364,33 @@ static Status build_array_readers_for_variant_node(const ColumnReaderOptions& op
     return Status::OK();
 }
 
+// The variant primitive a typed_value is read raw for, from its Parquet logical type. Timestamps in milliseconds are not
+// shredded types and keep the usual mapping.
+static ShreddedRawEncoding shredded_raw_encoding(const ParquetField& field) {
+    const auto& element = field.schema_element;
+    if (!element.__isset.logicalType) {
+        return ShreddedRawEncoding::NONE;
+    }
+    const auto& logical = element.logicalType;
+    if (logical.__isset.UUID && field.physical_type == tparquet::Type::FIXED_LEN_BYTE_ARRAY) {
+        return ShreddedRawEncoding::UUID;
+    }
+    if (logical.__isset.TIME && field.physical_type == tparquet::Type::INT64 && !logical.TIME.isAdjustedToUTC &&
+        logical.TIME.unit.__isset.MICROS) {
+        return ShreddedRawEncoding::TIME_NTZ_MICROS;
+    }
+    if (logical.__isset.TIMESTAMP && field.physical_type == tparquet::Type::INT64) {
+        const bool utc = logical.TIMESTAMP.isAdjustedToUTC;
+        if (logical.TIMESTAMP.unit.__isset.MICROS) {
+            return utc ? ShreddedRawEncoding::TIMESTAMP_TZ_MICROS : ShreddedRawEncoding::TIMESTAMP_NTZ_MICROS;
+        }
+        if (logical.TIMESTAMP.unit.__isset.NANOS) {
+            return utc ? ShreddedRawEncoding::TIMESTAMP_TZ_NANOS : ShreddedRawEncoding::TIMESTAMP_NTZ_NANOS;
+        }
+    }
+    return ShreddedRawEncoding::NONE;
+}
+
 // SCALAR typed_value is simpler than ARRAY, but still worth centralizing:
 // build the typed reader and fail immediately if reader creation fails.
 static Status build_scalar_reader_for_variant_node(const ColumnReaderOptions& opts, const ParquetField* typed_field,
@@ -273,7 +400,13 @@ static Status build_scalar_reader_for_variant_node(const ColumnReaderOptions& op
     }
 
     TypeDescriptor file_type = variant_typed_desc_from_parquet_field(typed_field);
+    node->raw_encoding = shredded_raw_encoding(*typed_field);
+    if (node->raw_encoding != ShreddedRawEncoding::NONE && node->raw_encoding != ShreddedRawEncoding::UUID) {
+        // The value is the plain int64 of the file, with no time zone shift.
+        file_type = TypeDescriptor::from_logical_type(TYPE_BIGINT);
+    }
     node->kind = ShreddedFieldNode::Kind::SCALAR;
+    node->unsupported_reason = shredded_typed_value_unsupported_reason(*typed_field);
 
     // Keep the read type on heap before creating reader. ScalarColumnReader stores
     // a raw pointer to TypeDescriptor, so a stack-local cannot be referenced.
@@ -289,7 +422,8 @@ static Status build_scalar_reader_for_variant_node(const ColumnReaderOptions& op
 }
 
 Status collect_variant_shredded_fields(const ColumnReaderOptions& opts, const ParquetField* typed_group,
-                                       VariantPath* current_path, std::vector<ShreddedFieldNode>* output) {
+                                       VariantPath* current_path, std::vector<ShreddedFieldNode>* output,
+                                       bool within_array) {
     if (typed_group == nullptr || current_path == nullptr || output == nullptr) {
         return Status::InvalidArgument("typed_group/current_path/output should not be null");
     }
@@ -352,7 +486,11 @@ Status collect_variant_shredded_fields(const ColumnReaderOptions& opts, const Pa
         if (typed_field->type == ColumnType::SCALAR) {
             RETURN_IF_ERROR(build_scalar_reader_for_variant_node(opts, typed_field, node.full_path, &node));
         } else if (typed_field->type == ColumnType::STRUCT) {
-            RETURN_IF_ERROR(collect_variant_shredded_fields(opts, typed_field, current_path, &node.children));
+            RETURN_IF_ERROR(
+                    collect_variant_shredded_fields(opts, typed_field, current_path, &node.children, within_array));
+            if (!within_array) {
+                ASSIGN_OR_RETURN(node.presence, make_object_presence_source(opts, typed_field));
+            }
         } else if (typed_field->type == ColumnType::ARRAY) {
             node.kind = ShreddedFieldNode::Kind::ARRAY;
             RETURN_IF_ERROR(
@@ -487,6 +625,7 @@ Status VariantShreddedReadHints::add_path(std::string path) {
 void VariantShreddedReadHints::clear() {
     shredded_paths.clear();
     parsed_shredded_paths.clear();
+    null_only = false;
 }
 
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions& opts, const ParquetField* field,
@@ -503,27 +642,36 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
                 strings::Substitute("ParquetField '$0' file's type $1 is different from table's type $2", field->name,
                                     column_type_to_string(field->type), logical_type_to_string(col_type.type)));
     }
-    if (lake_schema_field != nullptr && col_type.is_complex_type()) {
-        for (const auto& child : col_type.children) {
-            if (child.type == TYPE_GEOGRAPHY) {
-                return Status::NotSupported("Nested GEOGRAPHY is not supported");
-            }
-        }
-    }
     // The Iceberg schema child at a fixed position (list element, map key / value); nullptr off the Iceberg path.
     auto lake_child = [lake_schema_field](size_t idx) -> const TIcebergSchemaField* {
-        return lake_schema_field != nullptr ? &lake_schema_field->children[idx] : nullptr;
+        return lake_schema_field != nullptr && idx < lake_schema_field->children.size()
+                       ? &lake_schema_field->children[idx]
+                       : nullptr;
+    };
+    auto create_child = [&opts](const ParquetField* child, const TypeDescriptor& type,
+                                const TIcebergSchemaField* lake) -> StatusOr<ColumnReaderPtr> {
+        if (type.is_geo_type() && lake != nullptr &&
+            (!lake->__isset.field_id || !child->schema_element.__isset.field_id || child->field_id != lake->field_id)) {
+            return Status::InvalidArgument(strings::Substitute("Iceberg/Parquet $0 field ID mismatch: $1",
+                                                               logical_type_to_string(type.type), child->name));
+        }
+        return ColumnReaderFactory::create(opts, child, type, lake);
     };
 
     if (field->type == ColumnType::ARRAY) {
         ASSIGN_OR_RETURN(ColumnReaderPtr child_reader,
-                         ColumnReaderFactory::create(opts, &field->children[0], col_type.children[0], lake_child(0)));
+                         create_child(&field->children[0], col_type.children[0], lake_child(0)));
         if (child_reader != nullptr) {
             return std::make_unique<ListColumnReader>(field, std::move(child_reader));
         } else {
             return nullptr;
         }
     } else if (field->type == ColumnType::MAP) {
+        const auto* lake_key = lake_child(0);
+        // Iceberg metadata still describes the key when the projection prunes it.
+        if (col_type.children[0].is_geo_type() || (lake_key != nullptr && contains_iceberg_geo(*lake_key))) {
+            return Status::NotSupported("GEO types are not supported in Parquet MAP keys: " + field->name);
+        }
         std::unique_ptr<ColumnReader> key_reader = nullptr;
         std::unique_ptr<ColumnReader> value_reader = nullptr;
 
@@ -536,12 +684,10 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
                         "Parquet map column '$0' has a $1 key, which cannot be read as table key type $2", field->name,
                         column_type_to_string(key_field.type), logical_type_to_string(col_type.children[0].type)));
             }
-            ASSIGN_OR_RETURN(key_reader, ColumnReaderFactory::create(opts, &(field->children[0]), col_type.children[0],
-                                                                     lake_child(0)));
+            ASSIGN_OR_RETURN(key_reader, ColumnReaderFactory::create(opts, &key_field, col_type.children[0], lake_key));
         }
         if (!col_type.children[1].is_unknown_type()) {
-            ASSIGN_OR_RETURN(value_reader, ColumnReaderFactory::create(opts, &(field->children[1]),
-                                                                       col_type.children[1], lake_child(1)));
+            ASSIGN_OR_RETURN(value_reader, create_child(&field->children[1], col_type.children[1], lake_child(1)));
         }
 
         if (key_reader != nullptr || value_reader != nullptr) {
@@ -582,9 +728,8 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
                 }
                 continue;
             }
-            ASSIGN_OR_RETURN(
-                    ColumnReaderPtr child_reader,
-                    ColumnReaderFactory::create(opts, parquet_child, col_type.children[i], mapping.lake_children[i]));
+            ASSIGN_OR_RETURN(ColumnReaderPtr child_reader,
+                             create_child(parquet_child, col_type.children[i], mapping.lake_children[i]));
             children_readers.emplace(col_type.field_names[i], std::move(child_reader));
         }
 
@@ -604,11 +749,13 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
         }
         return nullptr;
     } else {
-        if (col_type.type == TYPE_GEOGRAPHY) {
+        if (col_type.is_geo_type()) {
             if (lake_schema_field == nullptr) {
-                return Status::NotSupported("Native GEOGRAPHY reads require Iceberg field IDs and semantic metadata");
+                return Status::NotSupported(
+                        strings::Substitute("Native $0 reads require Iceberg field IDs and semantic metadata",
+                                            logical_type_to_string(col_type.type)));
             }
-            RETURN_IF_ERROR(validate_native_iceberg_geography(*field, col_type, *lake_schema_field));
+            RETURN_IF_ERROR(validate_native_iceberg_geo(*field, col_type, *lake_schema_field));
         }
         return std::make_unique<ScalarColumnReader>(field, &opts.row_group_meta->columns[field->physical_column_index],
                                                     &col_type, opts);
@@ -651,8 +798,10 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
     DCHECK(variant_field->children.size() >= 2);
 
     VariantNodeFields top_fields = find_variant_node_fields(variant_field);
-    if (top_fields.metadata == nullptr || top_fields.value == nullptr) {
-        return Status::InvalidArgument("Variant type must have 'metadata' and 'value' fields");
+    // `value` is optional when `typed_value` holds the whole value (a fully shredded variant).
+    if (top_fields.metadata == nullptr || (top_fields.value == nullptr && top_fields.typed_value == nullptr)) {
+        return Status::InvalidArgument(
+                "Variant type must have a 'metadata' field and a 'value' or 'typed_value' field");
     }
 
     const tparquet::ColumnChunk* column_chunks = opts.row_group_meta->columns.data();
@@ -660,18 +809,37 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
     const ParquetField* value_field = top_fields.value;
     auto _metadata_reader = std::make_unique<ScalarColumnReader>(
             metadata_field, &(column_chunks[metadata_field->physical_column_index]), &TYPE_VARBINARY_DESC, opts);
-    auto _value_reader = std::make_unique<ScalarColumnReader>(
-            value_field, &(column_chunks[value_field->physical_column_index]), &TYPE_VARBINARY_DESC, opts);
+    std::unique_ptr<ScalarColumnReader> _value_reader;
+    if (value_field != nullptr) {
+        _value_reader = std::make_unique<ScalarColumnReader>(
+                value_field, &(column_chunks[value_field->physical_column_index]), &TYPE_VARBINARY_DESC, opts);
+    }
     std::vector<ShreddedFieldNode> shredded_fields;
     ColumnReaderPtr root_typed_value_reader = nullptr;
     std::unique_ptr<TypeDescriptor> root_typed_value_type = nullptr;
+    std::unique_ptr<ObjectPresenceSource> root_presence;
+    std::string root_unsupported_reason;
+    ShreddedRawEncoding root_raw_encoding = ShreddedRawEncoding::NONE;
+    std::unique_ptr<ShreddedFieldNode> root_array_node;
     if (top_fields.typed_value != nullptr) {
         const ParquetField* typed_value_field = top_fields.typed_value;
         if (typed_value_field->type == ColumnType::STRUCT) {
             VariantPath root_path;
             RETURN_IF_ERROR(collect_variant_shredded_fields(opts, typed_value_field, &root_path, &shredded_fields));
+            ASSIGN_OR_RETURN(root_presence, make_object_presence_source(opts, typed_value_field));
+        } else if (typed_value_field->type == ColumnType::ARRAY) {
+            // The elements are {value, typed_value} groups, which an array field resolves and a plain reader would not.
+            root_array_node = std::make_unique<ShreddedFieldNode>();
+            root_array_node->name = typed_value_field->name;
+            root_array_node->kind = ShreddedFieldNode::Kind::ARRAY;
+            RETURN_IF_ERROR(build_array_readers_for_variant_node(opts, column_chunks, typed_value_field,
+                                                                 root_array_node->full_path, root_array_node.get()));
         } else {
             TypeDescriptor file_type = variant_typed_desc_from_parquet_field(typed_value_field);
+            root_raw_encoding = shredded_raw_encoding(*typed_value_field);
+            if (root_raw_encoding != ShreddedRawEncoding::NONE && root_raw_encoding != ShreddedRawEncoding::UUID) {
+                file_type = TypeDescriptor::from_logical_type(TYPE_BIGINT);
+            }
             root_typed_value_type = std::make_unique<TypeDescriptor>(file_type);
             auto root_reader_or = ColumnReaderFactory::create(opts, typed_value_field, *root_typed_value_type);
             if (!root_reader_or.ok()) {
@@ -680,11 +848,19 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
                                             file_type.debug_string(), root_reader_or.status().to_string()));
             }
             root_typed_value_reader = std::move(root_reader_or).value();
+            root_unsupported_reason = shredded_typed_value_unsupported_reason(*typed_value_field);
         }
     }
-    return std::make_unique<VariantColumnReader>(variant_field, std::move(_metadata_reader), std::move(_value_reader),
-                                                 std::move(shredded_fields), std::move(hints.parsed_shredded_paths),
-                                                 std::move(root_typed_value_reader), std::move(root_typed_value_type));
+    auto reader =
+            std::make_unique<VariantColumnReader>(variant_field, std::move(_metadata_reader), std::move(_value_reader),
+                                                  std::move(shredded_fields), std::move(hints.parsed_shredded_paths),
+                                                  std::move(root_typed_value_reader), std::move(root_typed_value_type));
+    reader->set_root_presence(std::move(root_presence));
+    reader->set_root_unsupported_reason(std::move(root_unsupported_reason));
+    reader->set_root_raw_encoding(root_raw_encoding);
+    reader->set_root_array_node(std::move(root_array_node));
+    reader->set_null_only(hints.null_only && hints.parsed_shredded_paths.empty());
+    return ColumnReaderPtr(std::move(reader));
 }
 
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(ColumnReaderPtr raw_reader, const GlobalDictMap* dict,

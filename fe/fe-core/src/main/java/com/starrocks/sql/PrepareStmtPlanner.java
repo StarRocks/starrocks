@@ -20,6 +20,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.PrepareStmtContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.ResolvedAIFunctionDetector;
 import com.starrocks.sql.ast.ExecuteStmt;
@@ -83,6 +84,11 @@ public class PrepareStmtPlanner {
             // get_query_profile() is authorized at analysis time against the literal query id; a cached plan would
             // let a later EXECUTE rebind that parameter without the check (Authorizer#checkGetQueryProfileAccess).
             if (Authorizer.containsGetQueryProfile(queryStmt)) {
+                return StatementPlanner.plan(stmt, session);
+            }
+            // GET_PRESIGNED_URL / GET_PRESIGNED_FILE check the storage volume privilege and snapshot its credentials
+            // at analysis time; a cached plan would skip the check and keep signing with stale credentials.
+            if (AnalyzerUtils.containsPresignedFunction(queryStmt)) {
                 return StatementPlanner.plan(stmt, session);
             }
 

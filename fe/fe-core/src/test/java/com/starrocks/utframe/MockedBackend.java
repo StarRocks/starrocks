@@ -284,6 +284,12 @@ public class MockedBackend {
         return thriftClient;
     }
 
+    /**
+     * What every mocked backend reports for TBackendInfo.support_lake_index_fast_path. A test sets it to false
+     * to model a node that predates the lake index fast path, and restores it afterwards.
+     */
+    public static volatile boolean reportLakeIndexFastPath = true;
+
     private static class MockHeatBeatClient extends HeartbeatService.Client {
         private final int brpcPort;
         private final int beThriftPort;
@@ -303,6 +309,7 @@ public class MockedBackend {
             TBackendInfo backendInfo = new TBackendInfo(beThriftPort, httpPort);
             backendInfo.setBrpc_port(brpcPort);
             backendInfo.setStarlet_port(starletPort);
+            backendInfo.setSupport_lake_index_fast_path(reportLakeIndexFastPath);
             return new THeartbeatResult(new TStatus(TStatusCode.OK), backendInfo);
         }
 
@@ -315,6 +322,7 @@ public class MockedBackend {
             TBackendInfo backendInfo = new TBackendInfo(beThriftPort, httpPort);
             backendInfo.setBrpc_port(brpcPort);
             backendInfo.setStarlet_port(starletPort);
+            backendInfo.setSupport_lake_index_fast_path(reportLakeIndexFastPath);
             return new THeartbeatResult(new TStatus(TStatusCode.OK), backendInfo);
         }
     }

@@ -294,7 +294,7 @@ INSTANTIATE_TEST_SUITE_P(
                 std::make_tuple("primitive_int16.metadata", "primitive_int16.value", "$", "1234"),
                 std::make_tuple("primitive_int32.metadata", "primitive_int32.value", "$", "123456"),
                 std::make_tuple("primitive_int64.metadata", "primitive_int64.value", "$", "1234567890123456789"),
-                std::make_tuple("primitive_float.metadata", "primitive_float.value", "$", "1.23456794e+09"),
+                std::make_tuple("primitive_float.metadata", "primitive_float.value", "$", "1.234568e+09"),
                 std::make_tuple("primitive_double.metadata", "primitive_double.value", "$", "1234567890.1234"),
                 std::make_tuple("primitive_decimal4.metadata", "primitive_decimal4.value", "$", "12.34"),
                 std::make_tuple("primitive_decimal8.metadata", "primitive_decimal8.value", "$", "12345678.9"),

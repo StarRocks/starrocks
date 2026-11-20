@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "シリアライズされた Apache DataSketches Theta スケッチが要約する近似的な distinct count を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_theta_estimate

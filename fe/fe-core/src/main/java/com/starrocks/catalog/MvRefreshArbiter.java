@@ -308,8 +308,9 @@ public class MvRefreshArbiter {
                         return true;
                     }
                     Set<String> absorbedFromThisTable = Sets.intersection(absorbed, trackedByThisTable);
+                    // Not Collections.disjoint: handed a Set first, it enumerates every dropped partition.
                     return absorbedFromThisTable.isEmpty()
-                            || !Collections.disjoint(absorbedFromThisTable, droppedBaseNames);
+                            || absorbedFromThisTable.stream().anyMatch(droppedBaseNames::contains);
                 })
                 .collect(Collectors.toSet());
         if (!affected.isEmpty()) {
@@ -361,8 +362,9 @@ public class MvRefreshArbiter {
                     .filter(name -> {
                         Map<Table, PCellSortedSet> intersected = mvToBasePartitions.get(name);
                         PCellSortedSet basePartitions = intersected == null ? null : intersected.get(refBaseTable);
+                        // Not Collections.disjoint: handed a Set first, it enumerates the second, the whole version map.
                         return basePartitions != null && !basePartitions.isEmpty()
-                                && Collections.disjoint(basePartitions.getPartitionNames(), tracked);
+                                && basePartitions.getPartitionNames().stream().noneMatch(tracked::contains);
                     })
                     .collect(Collectors.toSet());
             if (!untracked.isEmpty()) {

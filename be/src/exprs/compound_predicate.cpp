@@ -46,6 +46,12 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(AndImpl, l_value, r_value) {
     return l_value & r_value;
 }
 
+// A NULL side only yields a non-NULL result when the other side is FALSE (0), and 0 & x is 0,
+// so the value under a NULL row cannot leak here.
+DEFINE_LOGIC_NULL_BINARY_FUNCTION_WITH_IMPL(AndNullableImpl, l_value, l_null, r_value, r_null) {
+    return l_value & r_value;
+}
+
 #ifdef STARROCKS_JIT_ENABLE
 class VectorizedAndCompoundPredicate final : public Predicate,
                                              public JITCodegenNode
@@ -67,7 +73,8 @@ public:
 
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
 
-        return VectorizedLogicPredicateBinaryFunction<AndNullImpl, AndImpl>::template evaluate<TYPE_BOOLEAN>(l, r);
+        return VectorizedLogicPredicateBinaryFunction<AndNullImpl, AndImpl,
+                                                      AndNullableImpl>::template evaluate<TYPE_BOOLEAN>(l, r);
     }
 
 #ifdef STARROCKS_JIT_ENABLE
@@ -133,6 +140,13 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(OrImpl, l_value, r_value) {
     return l_value | r_value;
 }
 
+// TRUE OR NULL is a non-NULL TRUE, so the value under the NULL side must not be OR-ed in: it is undefined
+// (e.g. uninitialized after resize_uninitialized) and would turn TRUE into 17, 185, ...
+// (null - 1) is all ones for a non-NULL row and 0 for a NULL row.
+DEFINE_LOGIC_NULL_BINARY_FUNCTION_WITH_IMPL(OrNullableImpl, l_value, l_null, r_value, r_null) {
+    return (l_value & (l_null - 1)) | (r_value & (r_null - 1));
+}
+
 #ifdef STARROCKS_JIT_ENABLE
 class VectorizedOrCompoundPredicate final : public Predicate,
                                             public JITCodegenNode
@@ -153,7 +167,8 @@ public:
 
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
 
-        return VectorizedLogicPredicateBinaryFunction<OrNullImpl, OrImpl>::template evaluate<TYPE_BOOLEAN>(l, r);
+        return VectorizedLogicPredicateBinaryFunction<OrNullImpl, OrImpl,
+                                                      OrNullableImpl>::template evaluate<TYPE_BOOLEAN>(l, r);
     }
 
 #ifdef STARROCKS_JIT_ENABLE
@@ -181,7 +196,12 @@ public:
         ASSIGN_OR_RETURN(datums[1], ExprJITCodegen::generate_ir(context, _children[1], jit_ctx))
         auto& b = jit_ctx->builder;
         LLVMDatum result(b);
-        result.value = b.CreateOr(datums[0].value, datums[1].value);
+        // Drop the undefined value under a NULL side, see OrNullableImpl.
+        auto non_null_value = [&b](const LLVMDatum& datum) {
+            auto* is_null = b.CreateICmpNE(datum.null_flag, llvm::Constant::getNullValue(datum.null_flag->getType()));
+            return b.CreateSelect(is_null, llvm::Constant::getNullValue(datum.value->getType()), datum.value);
+        };
+        result.value = b.CreateOr(non_null_value(datums[0]), non_null_value(datums[1]));
         result.null_flag = b.CreateOr(b.CreateAnd(datums[0].null_flag, datums[1].null_flag),
                                       b.CreateOr(b.CreateAnd(datums[0].null_flag, b.CreateNot(datums[1].value)),
                                                  b.CreateAnd(datums[1].null_flag, b.CreateNot(datums[0].value))));

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts a string into a Base64-encoded string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # to_base64

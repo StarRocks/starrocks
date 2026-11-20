@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CREATE ANALYZE customizes an automatic collection task for collecting CBO statistics."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE ANALYZE

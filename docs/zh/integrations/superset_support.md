@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Apache Superset 是现代数据探索和可视化平台，可连接 StarRocks 进行数据分析。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 支持 Superset

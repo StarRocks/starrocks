@@ -1,9 +1,10 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet 自动拆分、大容量 tablet 支持（100 GB 目标）、用于……的 Fast Schema Evolution V2"
+products: [oss]
 ---
 
-# StarRocks 4.1 版本 {#starrocks-version-41}
+# StarRocks 4.1 版本 \{#starrocks-version-41}
 
 :::danger
 **容器镜像问题（v4.1.0）**
@@ -19,11 +20,11 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
   由于 v4.1 引入了内部数据布局变更（与tablet的拆分和分布机制相关），升级到 v4.1 的集群可能生成与早期版本不完全兼容的元数据和存储结构。因此，从 v4.1 降级仅支持降级到 v4.0.6 或更高版本，不支持降级到 v4.0.6 之前的版本。此限制是由于早期版本在解析tablet布局和分布元数据方面存在向后兼容性约束。
 :::
 
-## 4.1.7 {#417}
+## 4.1.7 \{#417}
 
 发布日期：2026 年 10 月 26 日
 
-### 行为变更 {#behavior-changes}
+### 行为变更 \{#behavior-changes}
 
 - 本地（存算一体）主键表的插入操作默认不再检查不可变的 L1 和 L2 持久化索引文件中是否存在重复键。新的 BE 配置项 `skip_pindex_l1_l2_check_in_insert` 默认值为 `true`；L0（memtable）检查始终执行。将其设置为 `false` 可恢复之前的行为。[#81304](https://github.com/StarRocks/starrocks/pull/81304)
 - BE JVM 指标默认启用（`enable_jvm_metrics` 现在默认值为 `true`）。这些指标仅在 JVM 存在时才会被采集，因此启用该功能不会在原本不需要 JVM 的 BE 上启动 JVM。[#81113](https://github.com/StarRocks/starrocks/pull/81113) [#81074](https://github.com/StarRocks/starrocks/pull/81074)
@@ -35,7 +36,7 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - 在展示或记录配置和任务定义的所有位置，凭据值均会被屏蔽：`ADMIN SHOW FRONTEND CONFIG`、FE 的 `/variable` 页面、BE 的 `/varz`、`information_schema.be_configs`、归档到 `task_run_history` 的任务运行定义，以及写入 FE 和 BE HTTP 日志的请求 URI 和请求头。通过 `ADMIN SET FRONTEND CONFIG`、FE 的 `/api/_set_config` 端点以及 BE 的 `/api/update_config` 端点设置的值也同样会被屏蔽。[#80097](https://github.com/StarRocks/starrocks/pull/80097) [#80040](https://github.com/StarRocks/starrocks/pull/80040) [#80492](https://github.com/StarRocks/starrocks/pull/80492) [#80444](https://github.com/StarRocks/starrocks/pull/80444) [#80280](https://github.com/StarRocks/starrocks/pull/80280) [#80447](https://github.com/StarRocks/starrocks/pull/80447) [#80515](https://github.com/StarRocks/starrocks/pull/80515) [#80203](https://github.com/StarRocks/starrocks/pull/80203)
 - FE HTTP 端点 `/service_id`、`/dump` 和 `/dump_starmgr` 现在需要管理员用户权限。[#80749](https://github.com/StarRocks/starrocks/pull/80749) [#80701](https://github.com/StarRocks/starrocks/pull/80701)
 
-### 功能优化 {#improvements}
+### 功能优化 \{#improvements}
 
 - 新增表属性 `enable_statistic_auto_collect`。通过 `CREATE TABLE` 或 `ALTER TABLE` 将其设置为 `false` 可将该表排除在自动统计信息采集之外。由数据导入触发的采集不受影响。[#81027](https://github.com/StarRocks/starrocks/pull/81027)
 - 通过将新的 FE 配置项 `authentication_ldap_case_insensitive` 设置为 `true`（默认值 `false`），可以实现对 LDAP 和 Active Directory 用户及组名称的大小写不敏感匹配。[#79255](https://github.com/StarRocks/starrocks/pull/79255)
@@ -49,7 +50,7 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - Colocate 聚合和窗口函数现在可以在 range-colocate 表上进行规划。[#79946](https://github.com/StarRocks/starrocks/pull/79946)
 - 回合了主分支中关于tablet预拆分的改进，包括用于限制基于采样的tablet预拆分扫描数据量的新 FE 配置项（`tablet_pre_split_data_tier_scan_byte_limit`、`tablet_pre_split_data_tier_min_scan_files`、`tablet_pre_split_data_tier_max_scan_files` 和 `tablet_pre_split_meta_tier_footer_read_parallelism`）。[#79949](https://github.com/StarRocks/starrocks/pull/79949)
 
-### 安全性 {#security}
+### 安全性 \{#security}
 
 - 将 pprof 升级到 release/20261012。[#80439](https://github.com/StarRocks/starrocks/pull/80439)
 - 将 lz4-java 升级到 1.11.4。[#80319](https://github.com/StarRocks/starrocks/pull/80319)
@@ -59,7 +60,7 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - 对 `lookup_string` 的参数进行转义以防止SQL注入，其内部查询以调用者的身份运行。[#79991](https://github.com/StarRocks/starrocks/pull/79991) [#79959](https://github.com/StarRocks/starrocks/pull/79959)
 - FE Web 控制台对管理员及主机提供的值和表格单元格进行 HTML 编码，包括在 `/system` 和 `/query` 页面上的内容，并对 `/proc_profile` 上的 `node` 参数进行校验和编码。[#80656](https://github.com/StarRocks/starrocks/pull/80656) [#80639](https://github.com/StarRocks/starrocks/pull/80639) [#80582](https://github.com/StarRocks/starrocks/pull/80582) [#80565](https://github.com/StarRocks/starrocks/pull/80565) [#80689](https://github.com/StarRocks/starrocks/pull/80689)
 
-### 问题修复 {#bug-fixes}
+### 问题修复 \{#bug-fixes}
 
 修复了以下问题：
 
@@ -245,11 +246,11 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - 一个非正数的 `compact_threads` 会导致 CN 崩溃，而不是被拒绝。[#79641](https://github.com/StarRocks/starrocks/pull/79641)
 - `TableKeeper` 导入了 `jdk.jshell`。[#79520](https://github.com/StarRocks/starrocks/pull/79520)
 
-## 4.1.6 {#416}
+## 4.1.6 \{#416}
 
 发布日期：2026 年 9 月 30 日
 
-### 行为变更 {#behavior-changes-1}
+### 行为变更 \{#behavior-changes-1}
 
 - AWS SDK 的默认 HTTP 客户端从 Poco 切换回 SDK 自带的客户端：`enable_poco_client_for_aws_sdk` 现在默认设置为 `false`。将其设置为 `true` 可恢复之前的行为。[#78375](https://github.com/StarRocks/starrocks/pull/78375)
 - 在线优化表现在需要主动开启：FE 配置项 `enable_online_optimize_table` 默认为 `false`，因此 `ALTER TABLE ... DISTRIBUTED BY ...` 会再次阻塞写入，除非该配置被开启。[#78206](https://github.com/StarRocks/starrocks/pull/78206)
@@ -279,7 +280,7 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - 短键索引页的几何信息现在会在不发生 32 位溢出的情况下进行验证，因此损坏的页脚会被拒绝，而不是发生回绕并导致堆越界写入。[#79048](https://github.com/StarRocks/starrocks/pull/79048)
 - TLS 握手超时的 HTTPS 请求不再被视为已连接并在同一 socket 上重试。停滞的请求现在会在大约一个超时周期后失败，而不是 `connect_timeout` 加上两个接收超时周期。[#79369](https://github.com/StarRocks/starrocks/pull/79369)
 
-### 改进项 {#improvements-1}
+### 改进项 \{#improvements-1}
 
 - 现在可以从用户的 `memberOf` 属性解析 LDAP 和 Active Directory 组，因此新的目录组不再需要在集群上配置匹配的组提供程序。[#79254](https://github.com/StarRocks/starrocks/pull/79254)
 - 审计日志现在会记录查询的错误消息，而不仅仅是粗粒度的 `ErrorCode`，因此无需关联回 `fe.log` 即可区分语法错误、未知表和权限失败。[#78798](https://github.com/StarRocks/starrocks/pull/78798)
@@ -288,13 +289,13 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - tablet 拆分点现在根据 segment 现有的索引计算，而不是依赖专用的完整排序键索引页，因此从不拆分的表不再需要为写入和存储该页付出代价。[#79050](https://github.com/StarRocks/starrocks/pull/79050)
 - `/memz` 现在接受 jemalloc 自身的统计选项，这使得每个 arena 的 dirty 和 muzzy 页计数以及 extent 大小类细分信息可以从正在运行的 BE 中获取。[#79090](https://github.com/StarRocks/starrocks/pull/79090)
 
-### 安全性 {#security-1}
+### 安全性 \{#security-1}
 
 - [CVE-2026-55971] 将 Apache Thrift 升级到 0.24.0，修复了 C++ 绑定中 `THeaderTransport::untransform()` 的堆缓冲区溢出问题。[#76922](https://github.com/StarRocks/starrocks/pull/76922)
 - [CVE-2026-42537，CVE-2026-59646] 将 Apache Ranger 升级到 2.9.0，修复了通过 JDBC URL 注入实现的 RCE 问题；将 Bouncy Castle 升级到 1.85，修复了 DTLS 重组缓冲区溢出问题。[#79331](https://github.com/StarRocks/starrocks/pull/79331)
 - [CVE-2026-71290] 将 Apache HttpClient5 升级到 5.6.4。[#79538](https://github.com/StarRocks/starrocks/pull/79538)
 
-### 问题修复 {#bug-fixes-1}
+### 问题修复 \{#bug-fixes-1}
 
 修复了以下问题：
 
@@ -384,11 +385,11 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - Arrow Flight SQL 服务的 FE classpath 中缺少 LZ4 和 ZSTD 的 Arrow IPC 编解码器。[#76921](https://github.com/StarRocks/starrocks/pull/76921)
 - 将 StarOS、starlet 和 starcache 升级至 v4.1.4。[#79429](https://github.com/StarRocks/starrocks/pull/79429)
 
-## 4.1.5 {#415}
+## 4.1.5 \{#415}
 
 发布日期：2026 年 9 月 8 日
 
-### 改进项 {#improvements-2}
+### 改进项 \{#improvements-2}
 
 - 外部表支持 `ANALYZE SAMPLE TABLE PREDICATE COLUMNS`。[#77243](https://github.com/StarRocks/starrocks/pull/77243)
 - 扩展了基于采样的 tablet 预拆分功能：支持非 key 表达式、动态覆盖临时分区，以及 Iceberg 和覆盖导入。[#77843](https://github.com/StarRocks/starrocks/pull/77843) [#77842](https://github.com/StarRocks/starrocks/pull/77842) [#77983](https://github.com/StarRocks/starrocks/pull/77983)
@@ -407,7 +408,7 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - 在作业完成时释放 reshard 输出分片的放置锁定。[#76945](https://github.com/StarRocks/starrocks/pull/76945)
 - 将 StarOS 升级到 v4.1.2。[#77657](https://github.com/StarRocks/starrocks/pull/77657)
 
-### 安全性 {#security-2}
+### 安全性 \{#security-2}
 
 - [CVE-2025-55163] 通过 `grpc-bom` 对齐了 all 的 `io.grpc` 产物，使 `grpc-netty` 与 `grpc-core` 相匹配。[#77171](https://github.com/StarRocks/starrocks/pull/77171)
 - [CVE-2026-59902] 将 Netty 升级到 4.1.137.Final。[#78287](https://github.com/StarRocks/starrocks/pull/78287)
@@ -415,7 +416,7 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - [CVE-2025-48924] 将 Broker 的 `commons-lang3` 升级到 3.20.0，并移除了未使用的 `commons-lang` 2.6 和 `commons-configuration` 1.6。[#77748](https://github.com/StarRocks/starrocks/pull/77748)
 - [CVE] 在更新的发行版上重新构建了 pprof 二进制文件，并从 BE 容器镜像中移除了未使用的 flamegraph 工具。[#77846](https://github.com/StarRocks/starrocks/pull/77846)
 
-### Bug 修复 {#bug-fixes-2}
+### Bug 修复 \{#bug-fixes-2}
 
 修复了以下问题：
 
@@ -497,11 +498,11 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - 按键大小对 `dictionary_get` 键进行序列化；捕获 thrift 处理器中的异常；以及在 CTAS 场景中使 `files()` 的模式推断不占用 planner 元数据锁。[#78706](https://github.com/StarRocks/starrocks/pull/78706) [#78805](https://github.com/StarRocks/starrocks/pull/78805) [#78772](https://github.com/StarRocks/starrocks/pull/78772)
 - 当文件没有尾随换行符时读取最后一行配置；相对 cwd 解析配置 YAML 路径；将 GCS 上传阈值 BE 配置项命名为 `gcs`（而非 `gs`）；将 StarOS 和 Starlet 升级到 4.1.3；并移除了一个废弃的配置转发头拆分以及文档文件名中的一个多余的 U+200E 字符。[#78065](https://github.com/StarRocks/starrocks/pull/78065) [#77132](https://github.com/StarRocks/starrocks/pull/77132) [#78452](https://github.com/StarRocks/starrocks/pull/78452) [#78038](https://github.com/StarRocks/starrocks/pull/78038) [#78780](https://github.com/StarRocks/starrocks/pull/78780) [#78612](https://github.com/StarRocks/starrocks/pull/78612)
 
-## 4.1.4 {#414}
+## 4.1.4 \{#414}
 
 发布日期：2026 年 8 月 5 日
 
-### 行为变更 {#behavior-changes-2}
+### 行为变更 \{#behavior-changes-2}
 
 - 在存算分离模式下，`TABLESAMPLE` / `SAMPLE` 子句以及 `ANALYZE SAMPLE TABLE` 现在会对 lake 表生效。此前，采样选项无法传递到 BE，因此会执行全表扫描。[#71874](https://github.com/StarRocks/starrocks/pull/71874)
 - 对 `ALTER TABLE` 中 `flat_json` 配置的更改现在会通过带版本号的任务传播到 BE 节点，从而可靠地生效。[#74747](https://github.com/StarRocks/starrocks/pull/74747)
@@ -527,7 +528,7 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - 将完整的 `STRUCT` 列与 `ROLLUP`、`CUBE` 或 `GROUPING SETS` 一起聚合时，不再在计划阶段因 `usedStructFiledPos` 错误而失败。[#76804](https://github.com/StarRocks/starrocks/pull/76804)
 - FE 内存 `Estimator` 现在会计入容器开销，并且 Parquet 扫描器现在使用受限的 chunk 大小而非完整批次大小来填充缺失列，从而提升内存统计的准确性。[#75971](https://github.com/StarRocks/starrocks/pull/75971) [#75981](https://github.com/StarRocks/starrocks/pull/75981)
 
-### 改进 {#improvements-3}
+### 改进 \{#improvements-3}
 
 - 在 Routine Load 中新增对 `INCLUDE METADATA` 子句的支持，用于暴露 Kafka/Pulsar 消息元数据（如 partition、offset 和 timestamp）。[#73840](https://github.com/StarRocks/starrocks/pull/73840)
 - 将 Routine Load 元数据别名设置为可选。[#76294](https://github.com/StarRocks/starrocks/pull/76294)
@@ -551,7 +552,7 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - 在 lake PK-index SSTables 上记录生成版本，在 lake 主键发布时应用 `op_write.seg_delvecs`，并在 Compaction 发布版本冲突解决期间跳过打开输出 segment footer。[#76208](https://github.com/StarRocks/starrocks/pull/76208) [#76474](https://github.com/StarRocks/starrocks/pull/76474) [#76657](https://github.com/StarRocks/starrocks/pull/76657)
 - 为 lake 导入和发布版本路径添加了堆栈跟踪和细粒度的跟踪计数器，以便辅助诊断。[#75901](https://github.com/StarRocks/starrocks/pull/75901) [#76810](https://github.com/StarRocks/starrocks/pull/76810)
 
-### 安全性 {#security-3}
+### 安全性 \{#security-3}
 
 - [CVE-2026-44891] 将 Netty 升级到 4.1.136.Final，修复了 STOMP 子帧解码器中的内存耗尽（DoS）漏洞。[#76555](https://github.com/StarRocks/starrocks/pull/76555)
 - [CVE-2026-55971] [CVE-2026-43871] 将 Apache Thrift 升级到 0.24.0，修复了 C++ 绑定中的基于堆的缓冲区溢出以及一个无限循环漏洞。[#76922](https://github.com/StarRocks/starrocks/pull/76922)
@@ -559,7 +560,7 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - [CVE-2011-4969] [CVE-2014-6071] 排除了未使用的 `avro-ipc` jar 包，该包捆绑了存在漏洞的 jQuery 1.4.2（以及其他 jQuery XSS CVE）。[#76270](https://github.com/StarRocks/starrocks/pull/76270)
 - 移除了随已修复版本一起附带的存在漏洞的过时传递依赖（例如 `bcprov-jdk15on` 1.70 和已停止维护的 `okhttp` 2.x），并新增了依赖禁用规则以防止回归。[#76097](https://github.com/StarRocks/starrocks/pull/76097)
 
-### 问题修复 {#bug-fixes-3}
+### 问题修复 \{#bug-fixes-3}
 
 修复了以下问题：
 
@@ -609,11 +610,11 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - 修复了在 `ERROR_IF_OVERFLOW` 下最小值/最大值为空时统计信息缓存加载失败的问题。[#76684](https://github.com/StarRocks/starrocks/pull/76684)
 - 将catalog删除的存在性检查在写锁下改为原子操作。[#76778](https://github.com/StarRocks/starrocks/pull/76778)
 
-## 4.1.3 {#413}
+## 4.1.3 \{#413}
 
 发布日期：2026 年 7 月 14 日
 
-### 行为变更 {#behavior-changes-3}
+### 行为变更 \{#behavior-changes-3}
 
 - `CTAS` 现在会保留明确声明的 `VARCHAR(N)` 列长度，而不是将其放宽为 `VARCHAR(MAX)`。现有表不受影响；使用 `CTAS` 创建的新表将在后续写入时强制执行声明的长度。[#73498](https://github.com/StarRocks/starrocks/pull/73498)
 - 在没有 `OPERATE ON SYSTEM` 权限的情况下查询 `sys.fe_memory_usage` 或 `sys.fe_locks` 现在会返回明确的拒绝访问错误，而不是容易引起误解的节点查找失败。[#73567](https://github.com/StarRocks/starrocks/pull/73567)
@@ -634,7 +635,7 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - 增量物化视图现在支持 `bitmap_agg`、`hll_union`、`percentile_union` 和 `bitmap_union` 聚合函数，使精确去重和基于 sketch 的聚合能够以增量方式维护。[#75587](https://github.com/StarRocks/starrocks/pull/75587) [#75610](https://github.com/StarRocks/starrocks/pull/75610)
 - 基于采样的tablet预拆分tablet数量现在会向上取整为活跃计算节点数量的整数倍，以实现均匀分布，并设有最小tablet大小下限，以避免小规模导入时出现过度碎片化。[#75360](https://github.com/StarRocks/starrocks/pull/75360) [#75584](https://github.com/StarRocks/starrocks/pull/75584)
 
-### 改进 {#improvements-4}
+### 改进 \{#improvements-4}
 
 - `ngram_search` 函数现在接受非常量的 needle 参数。[#74675](https://github.com/StarRocks/starrocks/pull/74675)
 - 新增由 FE 配置项 `enable_http_auth` 控制的 HTTP 认证框架，用于对 all 外部 HTTP 端点进行认证和 RBAC 强制校验的开关控制。[#73822](https://github.com/StarRocks/starrocks/pull/73822)
@@ -667,7 +668,7 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - Parquet 扫描器中基于表达式驱动的按需延迟列加载，减少了多分支 `OR` 查询中不必要的 I/O。[#74886](https://github.com/StarRocks/starrocks/pull/74886)
 - `ds_hll_count_distinct` / `DataSketchesHll` 现在通过使用复合估算器（composite estimator）而非依赖顺序的 HIP 估算器，产生稳定的基数估计结果。[#75053](https://github.com/StarRocks/starrocks/pull/75053)
 
-### 安全性 {#security-4}
+### 安全性 \{#security-4}
 
 - [CVE-2026-45416] [CVE-2026-44249] [CVE-2026-45673] 将 Netty 升级到 4.1.135.Final，以修复 SNI 处理器堆耗尽（DoS）、IPv6 子网过滤器绕过以及 DNS 缓存污染问题。[#74668](https://github.com/StarRocks/starrocks/pull/74668)
 - [CVE-2026-54512] [CVE-2026-54513] 将 `jackson-databind` 升级到 2.21.4，以修复两个反序列化漏洞。[#75373](https://github.com/StarRocks/starrocks/pull/75373)
@@ -679,7 +680,7 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - 修复了 `HyperLogLog::deserialize` 接受超出范围的 `SPARSE` 寄存器索引的问题，该问题可能导致堆内存损坏，并在输入格式异常时使 BE 崩溃。[#75521](https://github.com/StarRocks/starrocks/pull/75521)
 - 修复了 `bar()` 拒绝负宽度值的问题，此前该问题会导致字符串无限增长及 BE 内存耗尽。[#75143](https://github.com/StarRocks/starrocks/pull/75143)
 
-### 问题修复 {#bug-fixes-4}
+### 问题修复 \{#bug-fixes-4}
 
 以下问题已修复：
 
@@ -773,11 +774,11 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - 当全局配置禁用首次导入统计信息收集时，`enable_statistic_collect_on_first_load` 的表级覆盖设置无法启用该功能。[#74794](https://github.com/StarRocks/starrocks/pull/74794)
 - 当某个 union 分支没有输入行时，`PushDownNonGroupedAggregateBelowUnion` 会产生具有非可空声明类型的可空输出，导致 BE `CHECK` 失败。[#76101](https://github.com/StarRocks/starrocks/pull/76101)
 
-## 4.1.2 {#412}
+## 4.1.2 \{#412}
 
 发布日期：2026 年 6 月 18 日
 
-### 行为变更 {#behavior-changes-4}
+### 行为变更 \{#behavior-changes-4}
 
 - 现在，连接到用户没有权限的数据库时会返回正确的 MySQL 错误数据包，而不是以 ERROR 2013 关闭连接。[#70072](https://github.com/StarRocks/starrocks/pull/70072)
 - 对于能够通过函数级权限看到某个函数、但未持有创建函数（create-function）范围权限的用户，`SHOW FUNCTIONS` 现在会将 UDF 文件和对象文件路径脱敏为 `***`。[#73425](https://github.com/StarRocks/starrocks/pull/73425)
@@ -798,7 +799,7 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - 当第一个增量特征已经超过 `mv_max_rows_per_refresh` 时，IVM 自适应刷新现在能正确限定增量窗口的边界，避免在一次任务运行中刷新全部积压数据。[#74464](https://github.com/StarRocks/starrocks/pull/74464)
 - 仅包含 GROUP-BY 的增量物化视图（例如 `SELECT k FROM t GROUP BY k`）现在能正确将 `__ROW_ID__` 编码为 VARCHAR，修复了第二次刷新时出现的崩溃问题。[#74030](https://github.com/StarRocks/starrocks/pull/74030)
 
-### 功能优化 {#improvements-5}
+### 功能优化 \{#improvements-5}
 
 - 支持 Paimon 视图，包括 `CREATE`/`REPLACE`/`DROP`、`SHOW`/`DESC`，以及从外部 catalog 查询 Paimon 视图。Paimon 视图内部的表引用现在会根据 Paimon catalog 进行解析，而不是 `default_catalog`。[#56058](https://github.com/StarRocks/starrocks/pull/56058) [#70217](https://github.com/StarRocks/starrocks/pull/70217)
 - 在 `FILES()` 中支持显式的 `schema` 参数，用于在读取存在模式漂移或复杂嵌套类型的文件时实现稳定的模式控制。[#72033](https://github.com/StarRocks/starrocks/pull/72033)
@@ -833,14 +834,14 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - 存算分离表上的合并提交（`FRONTEND_STREAMING`）导入现已支持事务日志与文件的合并打包，使其与其他导入类型保持一致。[#74460](https://github.com/StarRocks/starrocks/pull/74460)
 - 新增了可动态修改的 FE 配置项 `slow_publish_partition_log_threshold_ms`（默认值 3000 毫秒），用于在无需重启 FE 的情况下控制 Lake 发布阶段分解告警的阈值。[#74043](https://github.com/StarRocks/starrocks/pull/74043)
 
-### 安全性 {#security-5}
+### 安全性 \{#security-5}
 
 - [CVE-2026-43869] 将 `libthrift` 升级到 0.23.0 版本，以修复证书主机校验不当的问题。[#73243](https://github.com/StarRocks/starrocks/pull/73243)
 - [CVE-2026-41293] 将 Apache Tomcat 升级到 9.0.118 版本，以修复 HTTP/2 请求头校验问题。[#73797](https://github.com/StarRocks/starrocks/pull/73797)
 - [CVE-2026-45416] [CVE-2026-44249] [CVE-2026-45673] 将 Netty 升级到 4.1.135.Final 版本，以修复 SNI 处理器堆耗尽（拒绝服务）、IPv6 子网过滤绕过以及 DNS 缓存投毒问题。[#74668](https://github.com/StarRocks/starrocks/pull/74668)
 - 将 pprof 预编译二进制文件升级到 Go 1.25.11，以纳入 Go 标准库的安全修复。[#73545](https://github.com/StarRocks/starrocks/pull/73545) [#74669](https://github.com/StarRocks/starrocks/pull/74669)
 
-### 问题修复 {#bug-fixes-5}
+### 问题修复 \{#bug-fixes-5}
 
 修复了以下问题：
 
@@ -926,16 +927,16 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - 从 `0000` 年开始的 PostgreSQL JDBC 时间值导致类型映射结果不正确。[#70842](https://github.com/StarRocks/starrocks/pull/70842)
 - 在 schema change 期间从 rowset 读取 `gtid` 之前缺少空值检查，导致 NPE 崩溃。[#74855](https://github.com/StarRocks/starrocks/pull/74855)
 
-## 4.1.1 {#411}
+## 4.1.1 \{#411}
 
 发布日期：2026 年 5 月 29 日
 
-### 行为变更 {#behavior-changes-5}
+### 行为变更 \{#behavior-changes-5}
 
 - Hive connector 默认现已使用原生 C++ Avro 扫描器，而非 JNI Avro 扫描器。[#73237](https://github.com/StarRocks/starrocks/pull/73237) [#73569](https://github.com/StarRocks/starrocks/pull/73569)
 - 现已禁用针对 INCREMENTAL/AUTO 物化视图的查询改写，并且拒绝针对 INCREMENTAL/AUTO 物化视图进行 FORCE 刷新和分区刷新。[#72890](https://github.com/StarRocks/starrocks/pull/72890) [#72336](https://github.com/StarRocks/starrocks/pull/72336) [#71355](https://github.com/StarRocks/starrocks/pull/71355)
 
-### 功能优化 {#improvements-6}
+### 功能优化 \{#improvements-6}
 
 - Java UDF/UDAF/UDTF 现已支持更多类型：UDAF/UDTF 的 STRUCT 参数和返回值、嵌套 ARRAY/MAP 类型、DATE/DATETIME、DECIMAL 以及可变参数。[#72911](https://github.com/StarRocks/starrocks/pull/72911) [#72283](https://github.com/StarRocks/starrocks/pull/72283) [#72337](https://github.com/StarRocks/starrocks/pull/72337) [#72208](https://github.com/StarRocks/starrocks/pull/72208) [#68596](https://github.com/StarRocks/starrocks/pull/68596)
 - 标量 UDF 现已支持 STRUCT 参数。[#72620](https://github.com/StarRocks/starrocks/pull/72620)
@@ -978,7 +979,7 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - 为 catalog 类型增加了单独的查询指标，以提升 external catalog 的可观测性。[#70533](https://github.com/StarRocks/starrocks/pull/70533)
 - 支持为窗口函数显式指定倾斜提示（skew hint），通过将倾斜的分区键拆分为 UNION 来自动优化窗口函数。[#68739](https://github.com/StarRocks/starrocks/pull/68739)
 
-### 安全性 {#security-6}
+### 安全性 \{#security-6}
 
 - [CVE] 将 Netty 升级到 4.1.133.Final。[#72905](https://github.com/StarRocks/starrocks/pull/72905)
 - [CVE-2026-42198] [CVE-2026-5598] 将 pgjdbc 升级到 42.7.11（修复通过无限制 SCRAM PBKDF2 迭代次数造成的客户端拒绝服务问题），并将 BouncyCastle 升级到 1.84（修复 FrodoKEM 私钥泄露问题）。[#72797](https://github.com/StarRocks/starrocks/pull/72797)
@@ -987,7 +988,7 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - 清理了 Broker 依赖的 CVE 问题，并移除了 `wildfly-openssl`。[#72184](https://github.com/StarRocks/starrocks/pull/72184) [#71908](https://github.com/StarRocks/starrocks/pull/71908)
 - 对 INSERT INTO FILES 错误信息中的凭据进行了脱敏处理。[#71245](https://github.com/StarRocks/starrocks/pull/71245)
 
-### 问题修复 {#bug-fixes-6}
+### 问题修复 \{#bug-fixes-6}
 
 修复了以下问题：
 
@@ -1068,11 +1069,11 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - 在 Stream Load/Broker Load 中分析生成列时，如果所引用的列缺失，会发生 NPE。[#71116](https://github.com/StarRocks/starrocks/pull/71116)
 - 短路点查询中缺少分区谓词。[#71124](https://github.com/StarRocks/starrocks/pull/71124)
 
-## 4.1.0 {#410}
+## 4.1.0 \{#410}
 
 发布日期：2026 年 4 月 13 日
 
-### 存算分离架构 {#shared-data-architecture}
+### 存算分离架构 \{#shared-data-architecture}
 
 - **全新多租户数据管理**
 
@@ -1106,7 +1107,7 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 
 - 为存算一体集群中的事务发布新增线程池，提升发布吞吐量。[#67797](https://github.com/StarRocks/starrocks/pull/67797)
 
-### 数据湖分析 {#data-lake-analytics}
+### 数据湖分析 \{#data-lake-analytics}
 
 - **Iceberg DELETE 支持**
 
@@ -1174,7 +1175,7 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 
 - 改进了 Oracle 和 PostgreSQL 的 JDBC 类型映射。[#70315](https://github.com/StarRocks/starrocks/pull/70315) [#70566](https://github.com/StarRocks/starrocks/pull/70566)
 
-### 查询引擎 {#query-engine}
+### 查询引擎 \{#query-engine}
 
 - **Recursive CTE**
 
@@ -1190,7 +1191,7 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 
 - 支持 EXPLAIN 以查看查询队列信息。[#69933](https://github.com/StarRocks/starrocks/pull/69933)
 
-### 函数和 SQL 语法 {#functions-and-sql-syntax}
+### 函数和 SQL 语法 \{#functions-and-sql-syntax}
 
 - 新增以下函数：
   - `array_top_n`：按值排序，返回数组中排名前 N 的元素。[#63376](https://github.com/StarRocks/starrocks/pull/63376)
@@ -1217,7 +1218,7 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
   - 支持 CSV 文件导出使用多种压缩格式（GZIP/SNAPPY/ZSTD/LZ4/DEFLATE/ZLIB/BZIP2）。[#68054](https://github.com/StarRocks/starrocks/pull/68054)
   - 支持 `STRUCT_CAST_BY_NAME` SQL 模式，用于基于名称的结构体字段匹配。[#69845](https://github.com/StarRocks/starrocks/pull/69845)
 
-### 管理与可观测性 {#management--observability}
+### 管理与可观测性 \{#management--observability}
 
 - 支持为资源组设置 `warehouses`、`cpu_weight_percent` 和 `exclusive_cpu_weight` 属性，以改进多 Warehouse CPU 资源隔离。[#66947](https://github.com/StarRocks/starrocks/pull/66947)
 - 引入 `information_schema.fe_threads` 系统视图，用于查看 FE 线程状态。[#65431](https://github.com/StarRocks/starrocks/pull/65431)
@@ -1237,13 +1238,13 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - 支持在 `information_schema.loads` 中展示 Merge Commit 信息，以提升导入作业的可见性。[#67879](https://github.com/StarRocks/starrocks/pull/67879)
 - 支持在 cloud 内表中显示 tablet 状态，便于故障排查。[#69616](https://github.com/StarRocks/starrocks/pull/69616)
 
-### 安全 {#security-7}
+### 安全 \{#security-7}
 
 - [CVE-2026-33870] [CVE-2026-33871] 替换了 AWS bundle 并将 Netty 升级到 4.1.132.Final。[#71017](https://github.com/StarRocks/starrocks/pull/71017)
 - [CVE-2025-27821] 将 Hadoop 升级到 v3.4.2。[#68529](https://github.com/StarRocks/starrocks/pull/68529)
 - [CVE-2025-54920] 将 `spark-core_2.12` 升级到 3.5.7。[#70862](https://github.com/StarRocks/starrocks/pull/70862)
 
-### Bug 修复 {#bug-fixes-7}
+### Bug 修复 \{#bug-fixes-7}
 
 修复了以下问题：
 
@@ -1287,7 +1288,7 @@ description: "StarRocks 4.1 版本发布说明：多租户基于范围的 tablet
 - 降低了 API `proc_file` 的 SSRF 风险。[#68997](https://github.com/StarRocks/starrocks/pull/68997)
 - 在审计和 SQL 脱敏中屏蔽了用户认证字符串。[#70360](https://github.com/StarRocks/starrocks/pull/70360)
 
-### 行为变更 {#behavior-changes-6}
+### 行为变更 \{#behavior-changes-6}
 
 - ETL 执行模式优化现已默认启用。这将使 INSERT INTO SELECT、CREATE TABLE AS SELECT 以及类似批处理工作负载受益，无需显式更改配置。[#66841](https://github.com/StarRocks/starrocks/pull/66841)
 - `lag`/`lead` 窗口函数的第三个参数现在除了支持常量值外，还支持列引用。[#60209](https://github.com/StarRocks/starrocks/pull/60209)

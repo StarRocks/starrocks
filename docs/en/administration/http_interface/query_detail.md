@@ -2,6 +2,7 @@
 sidebar_position: 10
 displayed_sidebar: docs
 description: "The query detail API returns recent query execution details that are cached in FE memory."
+products: [oss, enterprise, anywhere]
 ---
 
 # Query detail API

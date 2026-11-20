@@ -2,6 +2,7 @@
 sidebar_position: 160
 displayed_sidebar: docs
 description: "External Catalog 方便访问并查询存储在各类外部数据源的数据，无需创建外部表。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 查询外部数据

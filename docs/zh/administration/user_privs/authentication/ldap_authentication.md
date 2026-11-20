@@ -2,11 +2,11 @@
 displayed_sidebar: docs
 description: "In addition to native password-based authentication, StarRocks supports LDAP authentication for enterprise user directory integration."
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # LDAP 认证
 
-import LDAPSSLLink from '../../../_assets/commonMarkdown/ldap_ssl_link.mdx'
 
 除了原生的基于密码的认证，StarRocks 还支持 LDAP 认证。
 
@@ -174,7 +174,7 @@ mysql -utom -P9030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-c
 
 - **JDBC**
 
-<LDAPSSLLink />
+注意：使用JDBC链接时，Server 端必须要启用 SSL。SSL 配置请参考 [SSL 认证](../ssl_authentication.md)。
 
 JDBC 5：
 

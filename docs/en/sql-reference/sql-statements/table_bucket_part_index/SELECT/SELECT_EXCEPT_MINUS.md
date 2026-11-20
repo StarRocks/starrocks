@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "EXCEPT/MINUS"
 description: "Returns distinct results of the left-hand query that do not exist in the right-hand query."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # EXCEPT/MINUS

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "INSTALL PLUGIN installs a plugin into StarRocks."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # INSTALL PLUGIN

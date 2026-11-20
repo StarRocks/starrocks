@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the date of the first specified day of week (DOW) that occurs after the input date (DATE or DATETIME)."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # next_day

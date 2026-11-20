@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从指定的日期时间中减少指定的小时数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # hours_sub

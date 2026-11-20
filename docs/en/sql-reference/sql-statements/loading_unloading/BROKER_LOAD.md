@@ -6,6 +6,7 @@ keywords:
   - load
   - broker load
 description: "StarRocks provides the MySQL-based loading method Broker Load."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 <head><meta name="docsearch:pagerank" content="100"/></head>
@@ -13,7 +14,6 @@ description: "StarRocks provides the MySQL-based loading method Broker Load."
 # BROKER LOAD
 
 import InsertPrivNote from '../../../_assets/commonMarkdown/insertPrivNote.mdx'
-import LoadWarehouse from '../../../_assets/commonMarkdown/load_warehouse.mdx'
 
 StarRocks provides the MySQL-based loading method Broker Load. After you submit a load job, StarRocks asynchronously runs the job. You can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information about the background information, principles, supported data file formats, how to perform single-table loads and multi-table loads, and how to view job results, see [loading overview](../../../loading/loading_introduction/loading_introduction.mdx).
 
@@ -683,7 +683,10 @@ The following parameters are supported:
 
 - `partial_update_mode`
 
-  Specifies the mode for partial updates. Valid values: `row` and `column`. <ul><li> The value `row` (default) means partial updates in row mode, which is more suitable for real-time updates with many columns and small batches.</li><li>The value `column` means partial updates in column mode, which is more suitable for batch updates with few columns and many rows. In such scenarios, enabling the column mode offers faster update speeds. For example, in a table with 100 columns, if only 10 columns (10% of the total) are updated for all rows, the update speed of the column mode is 10 times faster.</li></ul>
+  Specifies the mode for partial updates. Valid values: `row` and `column`.
+
+  - The value `row` (default) means partial updates in row mode, which is more suitable for real-time updates with many columns and small batches.
+  - The value `column` means partial updates in column mode, which is more suitable for batch updates with few columns and many rows. In such scenarios, enabling the column mode offers faster update speeds. For example, in a table with 100 columns, if only 10 columns (10% of the total) are updated for all rows, the update speed of the column mode is 10 times faster.
 
 - `merge_condition`
 
@@ -714,8 +717,6 @@ StarRocks supports loading JSON data from v3.2.3 onwards. The parameters are as 
   Specifies the CDC envelope format of the JSON data. Valid value: `debezium`. Default: not set (no envelope wrapping). When set to `debezium`, StarRocks parses each JSON message as a Debezium CDC event. The message must contain an `op` field (`c`=create, `u`=update, `d`=delete, `r`=snapshot read) and an `after` field (for c/u/r) or `before` field (for d) holding the actual row data. Tombstone messages where `payload` is `null` are silently skipped. Can only be specified when `format` is `json`. Cannot be used together with `json_root` or `strip_outer_array`.
 
 When you load JSON data, also note that the size per JSON object cannot exceed 4 GB. If an individual JSON object in the JSON data file exceeds 4 GB in size, an error "This parser can't support a document that big." is reported.
-
-<LoadWarehouse />
 
 ## Column mapping
 
