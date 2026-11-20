@@ -135,6 +135,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 最後のベースコンパクションからの時間間隔。この設定項目はベースコンパクションをトリガーする条件の一つです。
 - 導入バージョン: -
 
+このパラメータは v4.1 より前から存在しますが、その時点で共有データの間隔制御に対応していたことを意味しません。4.1 系列では、共有データ Base Compaction の制限には使用しません。共有データの間隔制御は v4.2 からサポートされています。対応バージョンでは自動 Base Compaction の最小間隔を指定し、毎日定時に実行する周期ではありません。手動要求はこの制限を回避します。[バージョン別のサポート](../../management/compaction.md#primary-key-base-compaction-versions)と[実行時間の制御](../../management/compaction.md#base-compaction-time-controls)を参照してください。
+
 ### base_compaction_num_threads_per_disk
 
 - デフォルト: 1

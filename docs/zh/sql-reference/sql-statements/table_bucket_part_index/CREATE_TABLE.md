@@ -873,6 +873,8 @@ SHOW ALTER TABLE COLUMN FROM test_db WHERE TableName = "test_tbl";
 
 `base_compaction_forbidden_time_ranges`：禁止对表进行 Base Compaction 的时间范围。设置此属性后，系统仅在指定时间范围之外对符合条件的 Tablet 执行 Base Compaction。此属性从 v3.2.13 开始支持。
 
+**版本范围：**v3.2.13 是此属性用于存算一体非主键表的起始版本，不是存算分离的支持起点。4.1 系列不支持为存算分离表设置此属性，FE 会拒绝该设置。存算分离的时段控制从 v4.2 开始支持。该属性定义禁止自动 Base Compaction 的时段；支持该能力的版本仍允许手动 `ALTER TABLE ... COMPACT` 绕过限制。详见[存算分离 Base Compaction 的版本支持](../../../administration/management/compaction.md#primary-key-base-compaction-versions)。
+
 :::note
 请确保在禁止 Base Compaction 期间，向表中加载的数据量不超过 500。
 :::
