@@ -322,6 +322,8 @@ public class StatementPlanner {
                         session.getSessionVariable().isEnableInsertSelectExternalAutoRefresh()) {
                     new QueryAnalyzer(session).analyzeExternalTablesOnly(statement,
                             session.getSessionVariable().isEnableInsertSelectExternalAutoRefresh());
+                } else {
+                    new QueryAnalyzer(session).preResolvePaimonInsertTarget(insertStmt);
                 }
             }
 

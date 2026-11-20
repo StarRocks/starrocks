@@ -45,6 +45,9 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
+import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.lake.compaction.PartitionIdentifier;
+import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.EditLogException;
 import com.starrocks.persist.OperationType;
@@ -57,6 +60,7 @@ import com.starrocks.proto.TabletStatPB;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
@@ -71,6 +75,7 @@ import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
+import com.starrocks.transaction.TransactionAlreadyCommitException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.type.IntegerType;
@@ -543,7 +548,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
                 "the shadow index must not be exposed to loads that began before it");
 
         Assertions.assertTrue(inMemory.cancelImpl(e.getMessage()));
-        assertShadowCleanedUp(inMemory, physicalPartition.getId(), shadowTabletIds);
+        assertShadowCleanedUp(inMemory, physicalPartition.getId(), shadowTabletIds, 0);
         Assertions.assertNull(table.getIndexMetaByMetaId(job.getShadowIndexMetaId()));
         ConcurrentLoad.assertSinkIndexesMatch(db, table);
     }
@@ -839,6 +844,56 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
         Assertions.assertNull(job.getWatershedVersion(physicalPartitionId),
                 "W must not be captured before the drain is confirmed finished");
+    }
+
+    /**
+     * StarRocksTest#12647: the table does not compact while the online rewrite waits for earlier transactions. Once a
+     * partition's compaction score is above lake_compaction_score_upper_bound, every commit into it is rejected, the
+     * commits of those transactions included, so the job is cancelled and the table is NORMAL again.
+     */
+    @Test
+    public void testWaitingTxnCancelledOnceCommitsAreRejected() throws Exception {
+        long txnId = ConcurrentLoad.begin(db, table);
+        LakeRangeRewriteSchemaChangeJob job = newJob(stubSampler(diverseSample()));
+        job.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+
+        PhysicalPartition physicalPartition = table.getPhysicalPartitions().iterator().next();
+        long externalPinVersion = physicalPartition.getVisibleVersion();
+        physicalPartition.setMinRetainVersion(externalPinVersion);
+        PartitionIdentifier partition =
+                new PartitionIdentifier(job.getDbId(), table.getId(), physicalPartition.getId());
+        CompactionMgr compactionMgr = GlobalStateMgr.getCurrentState().getCompactionMgr();
+        boolean oldSlowdown = Config.lake_enable_ingest_slowdown;
+        long oldUpperBound = Config.lake_compaction_score_upper_bound;
+        Config.lake_enable_ingest_slowdown = true;
+        Config.lake_compaction_score_upper_bound = 100;
+        try {
+            // At the bound commits still go through, and the job keeps waiting.
+            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
+                    System.currentTimeMillis(), new Quantiles(1.0, 1.0, 100.0));
+            job.runWaitingTxnJob();
+            Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+
+            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
+                    System.currentTimeMillis(), new Quantiles(1.0, 1.0, 101.0));
+            AlterCancelException e = Assertions.assertThrows(AlterCancelException.class, job::runWaitingTxnJob);
+            Assertions.assertTrue(e.getMessage().contains("partition " + physicalPartition.getId()), e.getMessage());
+            Assertions.assertTrue(e.getMessage().contains("lake_compaction_score_upper_bound 100"), e.getMessage());
+            Assertions.assertNull(job.getWatershedVersion(physicalPartition.getId()));
+
+            Assertions.assertTrue(job.cancel(e.getMessage()));
+            Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+            Assertions.assertEquals(externalPinVersion, physicalPartition.getMinRetainVersion());
+        } finally {
+            physicalPartition.setMinRetainVersion(0);
+            Config.lake_enable_ingest_slowdown = oldSlowdown;
+            Config.lake_compaction_score_upper_bound = oldUpperBound;
+            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
+                    System.currentTimeMillis(), new Quantiles(0.0, 0.0, 0.0));
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(db.getId(), txnId, "test done");
+        }
     }
 
     @Test
@@ -1415,6 +1470,46 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     }
 
     @Test
+    public void testRunningWaitsForTheRewritePublishAtMostOneSchedulerTick() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        // The rewrite INSERT runs on the scheduler thread, and the next tick checks a committed rewrite again, so it
+        // must wait for its publish at most one tick, even when the global tx_visible_wait_timeout is far longer.
+        SessionVariable globalDefault = GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable();
+        long globalVisibleWaitS = globalDefault.getTransactionVisibleWaitTimeout();
+        int schedulerIntervalMs = Config.alter_scheduler_interval_millisecond;
+        AtomicReference<Long> visibleWaitS = new AtomicReference<>();
+        job.setRewriteExecutor((context, insertStmt) ->
+                visibleWaitS.set(context.getSessionVariable().getTransactionVisibleWaitTimeout()));
+        try {
+            globalDefault.setTransactionVisibleWaitTimeout(3600);
+            Config.alter_scheduler_interval_millisecond = 3000;
+            job.runRunningJob();
+        } finally {
+            globalDefault.setTransactionVisibleWaitTimeout(globalVisibleWaitS);
+            Config.alter_scheduler_interval_millisecond = schedulerIntervalMs;
+        }
+        Assertions.assertEquals(3L, visibleWaitS.get());
+    }
+
+    @Test
+    public void testRunningWaitsForTheRewritePublishAtLeastOneSecond() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        // A scheduler interval under one second would round down to a zero-second wait, which returns the INSERT
+        // before even a fast publish can finish, so the rewrite still waits one second.
+        int schedulerIntervalMs = Config.alter_scheduler_interval_millisecond;
+        AtomicReference<Long> visibleWaitS = new AtomicReference<>();
+        job.setRewriteExecutor((context, insertStmt) ->
+                visibleWaitS.set(context.getSessionVariable().getTransactionVisibleWaitTimeout()));
+        try {
+            Config.alter_scheduler_interval_millisecond = 500;
+            job.runRunningJob();
+        } finally {
+            Config.alter_scheduler_interval_millisecond = schedulerIntervalMs;
+        }
+        Assertions.assertEquals(1L, visibleWaitS.get());
+    }
+
+    @Test
     public void testRunningResumePublishedSkipsAndTransitionsToFinishedRewriting() throws Exception {
         LakeRangeRewriteSchemaChangeJob job = jobInRunning();
         long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
@@ -1717,17 +1812,16 @@ public class LakeRangeRewriteSchemaChangeJobTest {
 
     /**
      * Helper: assert the shadow index is fully cleaned up after a cancel — no catalog exposure, no
-     * inverted-index entries, table state NORMAL, GC pin released.
+     * inverted-index entries, table state NORMAL, and the expected version retention pin.
      */
     private void assertShadowCleanedUp(LakeRangeRewriteSchemaChangeJob job, long physicalPartitionId,
-                                       List<Long> shadowTabletIds) {
+                                       List<Long> shadowTabletIds, long expectedPinVersion) {
         PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
         Assertions.assertNull(physicalPartition.getLatestIndex(job.getShadowIndexMetaId()),
                 "shadow index must be absent from the partition catalog map after cancel");
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState(),
                 "table state must be reset to NORMAL after cancel");
-        Assertions.assertEquals(0, physicalPartition.getMinRetainVersion(),
-                "GC pin must be released after cancel");
+        Assertions.assertEquals(expectedPinVersion, physicalPartition.getMinRetainVersion());
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (long tabletId : shadowTabletIds) {
             Assertions.assertNull(invertedIndex.getTabletMeta(tabletId),
@@ -1753,7 +1847,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
 
         Assertions.assertTrue(cancelled, "cancelImpl must return true when not already cancelled/finished");
         Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
-        assertShadowCleanedUp(job, physicalPartitionId, shadowTabletIds);
+        assertShadowCleanedUp(job, physicalPartitionId, shadowTabletIds, 0);
     }
 
     @Test
@@ -1792,7 +1886,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         // The in-flight rewrite txn was aborted.
         Assertions.assertEquals(rewriteTxnId, abortedTxnId.get(),
                 "cancelImpl must abort the in-flight rewrite txn");
-        assertShadowCleanedUp(job, physicalPartitionId, shadowTabletIds);
+        assertShadowCleanedUp(job, physicalPartitionId, shadowTabletIds, 0);
     }
 
     @Test
@@ -1823,6 +1917,39 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         Assertions.assertFalse(abortCalled.get(),
                 "cancelImpl must not abort a txn that is already in a terminal status");
         Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+    }
+
+    @Test
+    public void testTimeoutWithACommittedRewriteTxnCancelsAndDropsShadow() throws Exception {
+        // The rewrite INSERT returns while its txn is still COMMITTED, so a publish that never finishes meets the job
+        // deadline in that state. That tick must still cancel the job and clean up, although the transaction manager
+        // refuses to abort a committed txn; the txn later publishes as a no-op.
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+        job.setRewriteTxnIdForTest(physicalPartitionId, 777L);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                TransactionState state = new TransactionState();
+                state.setTransactionStatus(TransactionStatus.COMMITTED);
+                return state;
+            }
+
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason)
+                    throws com.starrocks.common.StarRocksException {
+                throw new TransactionAlreadyCommitException("transaction " + transactionId + " is already committed");
+            }
+        };
+        List<Long> shadowTabletIds = job.getShadowIndex(physicalPartitionId).getTablets()
+                .stream().map(Tablet::getId).collect(Collectors.toList());
+        job.createTimeMs = System.currentTimeMillis() - job.timeoutMs - 1;
+
+        job.run();
+
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        Assertions.assertTrue(job.errMsg.contains("Timeout"), job.errMsg);
+        assertShadowCleanedUp(job, physicalPartitionId, shadowTabletIds, 0);
     }
 
     @Test
@@ -1906,7 +2033,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         Assertions.assertEquals(physicalPartition.getVisibleVersion() + 1, physicalPartition.getNextVersion(),
                 "after force cancel the version chain must be dense (no hole)");
         // The shadow was then dropped.
-        assertShadowCleanedUp(job, physicalPartitionId, shadowTabletIds);
+        assertShadowCleanedUp(job, physicalPartitionId, shadowTabletIds, 0);
     }
 
     @Test
@@ -2249,7 +2376,9 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         MaterializedIndex shadowIdx = job.getShadowIndex(physicalPartitionId);
         physicalPartition.createRollupIndex(shadowIdx);
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
-        physicalPartition.setMinRetainVersion(5L);
+        // WAITING_TXN has not captured a rewrite version. A pre-existing pin belongs to another task.
+        long externalPinVersion = 5L;
+        physicalPartition.setMinRetainVersion(externalPinVersion);
         for (long tabletId : shadowTabletIds) {
             invertedIndex.addTablet(tabletId,
                     new TabletMeta(db.getId(), table.getId(),
@@ -2264,11 +2393,11 @@ public class LakeRangeRewriteSchemaChangeJobTest {
                 (LakeRangeRewriteSchemaChangeJob) GsonUtils.GSON.fromJson(text, AlterJobV2.class);
         inMemory.replay(replayed);
 
-        assertShadowCleanedUp(inMemory, physicalPartitionId, shadowTabletIds);
+        assertShadowCleanedUp(inMemory, physicalPartitionId, shadowTabletIds, externalPinVersion);
 
         // A second replay is a no-op: removing already-absent shadow state must not crash.
         inMemory.replay(replayed);
-        assertShadowCleanedUp(inMemory, physicalPartitionId, shadowTabletIds);
+        assertShadowCleanedUp(inMemory, physicalPartitionId, shadowTabletIds, externalPinVersion);
     }
 
     // ---- cross-state replay idempotency ------------------------------------------------
@@ -3817,7 +3946,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
 
         Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
         assertPruned(job);
-        assertShadowCleanedUp(job, physicalPartitionId, shadowTabletIds);
+        assertShadowCleanedUp(job, physicalPartitionId, shadowTabletIds, 0);
         List<LakeRangeRewriteSchemaChangeJob> entries = readJournaledEntries(job.getJobId());
         for (LakeRangeRewriteSchemaChangeJob entry : entries) {
             assertHasPartitionStates(entry);
@@ -3859,7 +3988,10 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         // The follower starts from the catalog as it was before the rewrite.
         UtFrameUtils.PseudoImage initialImage = saveMetastore();
         LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        PhysicalPartition partition = table.getPhysicalPartitions().iterator().next();
+        Assertions.assertEquals(partition.getVisibleVersion(), partition.getMinRetainVersion());
         Assertions.assertTrue(job.cancel("cancel"));
+        Assertions.assertEquals(0, partition.getMinRetainVersion());
         List<LakeRangeRewriteSchemaChangeJob> entries = readJournaledEntries(job.getJobId());
 
         LocalMetastore followerMetastore = loadMetastore(initialImage);
@@ -3871,7 +4003,10 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         LakeRangeRewriteSchemaChangeJob retained = entries.get(0);
         assertHasPartitionStates(retained);
         Assertions.assertEquals(1, shadowIndexCount(followerTable));
+        PhysicalPartition followerPartition = followerTable.getPhysicalPartitions().iterator().next();
+        Assertions.assertEquals(followerPartition.getVisibleVersion(), followerPartition.getMinRetainVersion());
         replayOn(followerMetastore, followerHandler, entries.get(entries.size() - 1));
+        Assertions.assertEquals(0, followerPartition.getMinRetainVersion());
 
         // The CANCELLED replay drops the shadow index it reads from the entry; the prune comes after it.
         Assertions.assertSame(retained, followerHandler.getAlterJobsV2().get(job.getJobId()));

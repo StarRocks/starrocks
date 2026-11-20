@@ -21,6 +21,7 @@ import com.starrocks.connector.delta.DeltaDataType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.FileType;
+import com.starrocks.type.GeoType;
 import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.MapType;
 import com.starrocks.type.NullType;
@@ -865,10 +866,6 @@ public class ColumnTypeConverter {
     }
 
     public static Type fromIcebergType(org.apache.iceberg.types.Type icebergType) {
-        return convertIcebergType(icebergType, false);
-    }
-
-    private static Type convertIcebergType(org.apache.iceberg.types.Type icebergType, boolean nested) {
         if (icebergType == null) {
             return NullType.NULL;
         }
@@ -929,7 +926,7 @@ public class ColumnTypeConverter {
                 ArrayList<StructField> structFields = new ArrayList<>(fields.size());
                 for (Types.NestedField field : fields) {
                     String fieldName = field.name();
-                    Type fieldType = convertIcebergType(field.type(), true);
+                    Type fieldType = fromIcebergType(field.type());
                     if (fieldType.isUnknown()) {
                         return UnknownType.UNKNOWN_TYPE;
                     }
@@ -952,20 +949,14 @@ public class ColumnTypeConverter {
                 Types.GeographyType geography = (Types.GeographyType) icebergType;
                 if ((geography.crs() == null || geography.crs().equals("OGC:CRS84"))
                         && (geography.algorithm() == null || geography.algorithm().name().equals("SPHERICAL"))) {
-                    return ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
-                            new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
-                                    GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
-                                    GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326));
+                    return GeoType.createGeographyType("OGC:CRS84");
                 }
                 return UnknownType.UNKNOWN_TYPE;
             case GEOMETRY:
-                if (nested) {
-                    return UnknownType.UNKNOWN_TYPE;
-                }
                 String crs = ((Types.GeometryType) icebergType).crs();
                 GeoTypeDescriptor descriptor = GeoTypeDescriptor.geometry(crs == null ? Types.GeometryType.DEFAULT_CRS : crs);
                 Integer srid = descriptor.srid();
-                return srid != null && srid > 0 ? ScalarType.createGeoType(PrimitiveType.GEOMETRY, descriptor)
+                return srid != null && srid > 0 ? GeoType.createGeometryType(descriptor)
                         : UnknownType.UNKNOWN_TYPE;
             case FIXED:
                 return UnknownType.UNKNOWN_TYPE;
@@ -976,17 +967,17 @@ public class ColumnTypeConverter {
     }
 
     private static Type convertToArrayTypeForIceberg(org.apache.iceberg.types.Type icebergType) {
-        Type elementType = convertIcebergType(icebergType.asListType().elementType(), true);
+        Type elementType = fromIcebergType(icebergType.asListType().elementType());
         return elementType.isUnknown() ? UnknownType.UNKNOWN_TYPE : new ArrayType(elementType);
     }
 
     private static Type convertToMapTypeForIceberg(org.apache.iceberg.types.Type icebergType) {
-        Type keyType = convertIcebergType(icebergType.asMapType().keyType(), true);
+        Type keyType = fromIcebergType(icebergType.asMapType().keyType());
         // Iceberg also allows complex and GEO keys, which StarRocks cannot use as MAP keys.
         if (keyType.isComplexType() || keyType.isUnknown() || keyType.isGeoType()) {
             return UnknownType.UNKNOWN_TYPE;
         }
-        Type valueType = convertIcebergType(icebergType.asMapType().valueType(), true);
+        Type valueType = fromIcebergType(icebergType.asMapType().valueType());
         if (valueType.isUnknown()) {
             return UnknownType.UNKNOWN_TYPE;
         }

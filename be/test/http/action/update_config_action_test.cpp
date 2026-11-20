@@ -72,6 +72,10 @@ DECLARE_int64(fslib_azure_storage_max_single_part_size);
 DECLARE_int64(fslib_azure_storage_min_upload_part_size);
 DECLARE_bool(fslib_s3_multipart_equal_part_size);
 DECLARE_bool(fs_enable_buffer_prefetch);
+namespace staros::starlet::fslib {
+DECLARE_bool(remote_read_skip_contended_cache_writes);
+DECLARE_int64(remote_read_retain_prefetched_bytes);
+} // namespace staros::starlet::fslib
 #endif
 
 namespace brpc {
@@ -670,6 +674,90 @@ TEST_F(ConfigUpdateHooksTest, remote_io_scheduler_rejects_conflicting_updates) {
     EXPECT_OK(registry->update_config("starlet_fs_read_prefetch_enable", "true"));
     EXPECT_TRUE(config::starlet_fs_read_prefetch_enable);
     EXPECT_TRUE(FLAGS_fs_enable_buffer_prefetch);
+}
+
+TEST_F(ConfigUpdateHooksTest, update_remote_read_skip_contended_cache_writes) {
+    namespace fslib = staros::starlet::fslib;
+    const bool saved = config::remote_read_skip_contended_cache_writes;
+    gflags::FlagSaver flag_saver;
+    // Declared after the FlagSaver so it runs first: the config is restored through set_config, for
+    // the reason ScopedStarletUploadThresholdConfigs gives, and the gflag is restored after it.
+    DeferOp restore_config([saved] {
+        auto st = config::set_config("remote_read_skip_contended_cache_writes", saved ? "true" : "false");
+        EXPECT_TRUE(st.ok()) << st;
+    });
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    // Start from the opposite flag value each time, so both directions are really forwarded.
+    for (bool value : {true, false}) {
+        fslib::FLAGS_remote_read_skip_contended_cache_writes = !value;
+        auto st = registry->update_config("remote_read_skip_contended_cache_writes", value ? "true" : "false");
+        ASSERT_TRUE(st.ok()) << st;
+        EXPECT_EQ(value, config::remote_read_skip_contended_cache_writes);
+        EXPECT_EQ(value, fslib::FLAGS_remote_read_skip_contended_cache_writes);
+    }
+
+    // A value that is not a boolean is refused; neither the config nor the flag moves.
+    EXPECT_FALSE(registry->update_config("remote_read_skip_contended_cache_writes", "maybe").ok());
+    EXPECT_FALSE(config::remote_read_skip_contended_cache_writes);
+    EXPECT_FALSE(fslib::FLAGS_remote_read_skip_contended_cache_writes);
+}
+
+// The skip and retain configs go through separate hooks. With a small retain budget, which a scan exhausts quickly,
+// toggling skip leaves the budget alone, and changing the budget (including a refused value that is rolled back)
+// leaves skip alone, in both the BE configs and the starlet flags.
+TEST_F(ConfigUpdateHooksTest, update_skip_contended_cache_writes_with_small_retain_budget) {
+    namespace fslib = staros::starlet::fslib;
+    const bool saved_skip = config::remote_read_skip_contended_cache_writes;
+    const int64_t saved_retain = config::remote_read_retain_prefetched_bytes;
+    gflags::FlagSaver flag_saver;
+    // Declared after the FlagSaver so it runs first: the configs are restored through set_config, for the reason
+    // ScopedStarletUploadThresholdConfigs gives, and the gflags are restored after it.
+    DeferOp restore_configs([saved_skip, saved_retain] {
+        auto st = config::set_config("remote_read_skip_contended_cache_writes", saved_skip ? "true" : "false");
+        EXPECT_TRUE(st.ok()) << st;
+        st = config::set_config("remote_read_retain_prefetched_bytes", std::to_string(saved_retain));
+        EXPECT_TRUE(st.ok()) << st;
+    });
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    constexpr int64_t kSmallBudget = 1L << 20;
+    auto st = registry->update_config("remote_read_retain_prefetched_bytes", std::to_string(kSmallBudget));
+    ASSERT_TRUE(st.ok()) << st;
+
+    // Start from the opposite flag value each time, so both directions are really forwarded.
+    for (bool value : {true, false, true}) {
+        fslib::FLAGS_remote_read_skip_contended_cache_writes = !value;
+        st = registry->update_config("remote_read_skip_contended_cache_writes", value ? "true" : "false");
+        ASSERT_TRUE(st.ok()) << st;
+        EXPECT_EQ(value, config::remote_read_skip_contended_cache_writes);
+        EXPECT_EQ(value, fslib::FLAGS_remote_read_skip_contended_cache_writes);
+        EXPECT_EQ(kSmallBudget, config::remote_read_retain_prefetched_bytes);
+        EXPECT_EQ(kSmallBudget, fslib::FLAGS_remote_read_retain_prefetched_bytes);
+    }
+
+    // A refused skip value moves neither skip nor the budget.
+    EXPECT_FALSE(registry->update_config("remote_read_skip_contended_cache_writes", "maybe").ok());
+    EXPECT_TRUE(config::remote_read_skip_contended_cache_writes);
+    EXPECT_TRUE(fslib::FLAGS_remote_read_skip_contended_cache_writes);
+    EXPECT_EQ(kSmallBudget, config::remote_read_retain_prefetched_bytes);
+    EXPECT_EQ(kSmallBudget, fslib::FLAGS_remote_read_retain_prefetched_bytes);
+
+    // With skip on, a refused budget is rolled back to the small one, and accepted budgets reach starlet; skip stays
+    // on throughout.
+    EXPECT_FALSE(registry->update_config("remote_read_retain_prefetched_bytes", "-1").ok());
+    EXPECT_EQ(kSmallBudget, config::remote_read_retain_prefetched_bytes);
+    EXPECT_EQ(kSmallBudget, fslib::FLAGS_remote_read_retain_prefetched_bytes);
+    EXPECT_TRUE(config::remote_read_skip_contended_cache_writes);
+    EXPECT_TRUE(fslib::FLAGS_remote_read_skip_contended_cache_writes);
+    for (int64_t bytes : {int64_t{0}, kSmallBudget * 2}) {
+        st = registry->update_config("remote_read_retain_prefetched_bytes", std::to_string(bytes));
+        ASSERT_TRUE(st.ok()) << st;
+        EXPECT_EQ(bytes, config::remote_read_retain_prefetched_bytes);
+        EXPECT_EQ(bytes, fslib::FLAGS_remote_read_retain_prefetched_bytes);
+        EXPECT_TRUE(config::remote_read_skip_contended_cache_writes);
+        EXPECT_TRUE(fslib::FLAGS_remote_read_skip_contended_cache_writes);
+    }
 }
 
 #endif // USE_STAROS

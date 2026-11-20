@@ -36,16 +36,20 @@ CREATE TABLE t_dup (k BIGINT NOT NULL, v BIGINT) DUPLICATE KEY(k) DISTRIBUTED BY
 insert into t_pk select g, g from table(generate_series(1, 10)) t(g);
 insert into t_dup select g, g from table(generate_series(1, 10)) t(g);
 set enable_sql_transaction = true;
-begin;
+begin with label pk_delete_rollback_${uuid0};
 delete from t_pk where k in (1, 2);
 delete from t_dup where k in (1, 2);
 rollback;
+select STATE from information_schema.loads
+where DB_NAME = 'db_${uuid0}' and LABEL = 'pk_delete_rollback_${uuid0}' and TYPE = 'INSERT';
 select count(*) from t_pk where k in (1, 2);
 select count(*) from t_dup where k in (1, 2);
-begin;
+begin with label pk_delete_commit_${uuid0};
 delete from t_pk where k in (1, 2);
 delete from t_dup where k in (1, 2);
 commit;
+select STATE from information_schema.loads
+where DB_NAME = 'db_${uuid0}' and LABEL = 'pk_delete_commit_${uuid0}' and TYPE = 'INSERT';
 select count(*) from t_pk where k in (1, 2);
 select count(*) from t_dup where k in (1, 2);
 drop database db_${uuid0};

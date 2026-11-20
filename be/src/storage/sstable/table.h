@@ -47,6 +47,9 @@ public:
     // call one of the Seek methods on the iterator before using it).
     Iterator* NewIterator(const ReadOptions&) const;
 
+    // MultiGet times one key in this many for the multiget_t*_us trace counters and scales the result up.
+    static constexpr size_t kMultiGetTimingSampleInterval = 64;
+
     // Batch get keys within indexes iterator between begin to end.
     // If entry found, value of the corresponding index will be set.
     template <typename ForwardIt>

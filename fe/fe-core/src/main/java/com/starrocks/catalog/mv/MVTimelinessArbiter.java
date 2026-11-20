@@ -213,7 +213,8 @@ public abstract class MVTimelinessArbiter {
                 return true;
             }
             // If the non-ref table has already changed, need refresh all materialized views' partitions.
-            if (needsToRefreshTable(mv, tableInfo, baseTable, queryRewriteParams)) {
+            if (needsToRefreshTable(mv, tableInfo, baseTable, queryRewriteParams,
+                    /* pinnedVersionRange */ null)) {
                 return true;
             }
             if (hasDeletedPartitions(mv, baseTable, /* pinnedVersionRange */ null)) {
@@ -265,7 +266,7 @@ public abstract class MVTimelinessArbiter {
         Map<Table, PCellSortedSet> baseChangedPartitionNames = Maps.newHashMap();
         for (Table baseTable : refBaseTableAndColumns.keySet()) {
             MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(mv, baseTable,
-                    true, queryRewriteParams);
+                    true, queryRewriteParams, /* pinnedVersionRange */ null);
             if (mvBaseTableUpdateInfo == null) {
                 logMVPrepare(mv, "Failed to collect update info for ref base table {}, fallback to full refresh",
                         baseTable.getName());

@@ -22,6 +22,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.authorization.SecurityPolicyRewriteRule;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ConnectorView;
 import com.starrocks.catalog.Database;
@@ -31,6 +32,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
@@ -48,6 +50,8 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.concurrent.lock.SnapshotCopyValidator;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorType;
+import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -187,6 +191,10 @@ public class QueryAnalyzer {
      */
     public void analyzeExternalTablesOnly(StatementBase node, boolean refreshFilesystemExternalTables) {
         new ExternalTablesOnlyVisitor(refreshFilesystemExternalTables).process(node);
+    }
+
+    public void preResolvePaimonInsertTarget(InsertStmt statement) {
+        new ExternalTablesOnlyVisitor(false).preResolveInsertTarget(statement, true);
     }
 
     public void analyze(StatementBase node, Scope parent) {
@@ -1025,6 +1033,10 @@ public class QueryAnalyzer {
         public Scope visitTable(TableRelation node, Scope outerScope) {
             TableName tableName = node.getResolveTableName();
             Table table = node.getTable();
+            if (table instanceof MetadataTable metadata
+                    && metadata.isInternalOnly() && !session.isMetadataContext()) {
+                throw new SemanticException("This metadata relation is only available to internal collection queries");
+            }
 
             ImmutableList.Builder<Field> fields = ImmutableList.builder();
             ImmutableMap.Builder<Field, Column> columns = ImmutableMap.builder();
@@ -2361,6 +2373,17 @@ public class QueryAnalyzer {
          * error at the same place.
          */
         private void preResolveExternalWriteTarget(TableRef tableRef) {
+            preResolveExternalWriteTarget(tableRef, false, false);
+        }
+
+        private void preResolveInsertTarget(InsertStmt statement, boolean paimonOnly) {
+            if (!statement.isForCTAS() && !statement.useTableFunctionAsTargetTable()
+                    && !statement.useBlackHoleTableAsTargetTable()) {
+                preResolveExternalWriteTarget(statement.getTableRef(), true, paimonOnly);
+            }
+        }
+
+        private void preResolveExternalWriteTarget(TableRef tableRef, boolean insertTarget, boolean paimonOnly) {
             if (tableRef == null) {
                 return;
             }
@@ -2376,14 +2399,27 @@ public class QueryAnalyzer {
                     || CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
                 return;
             }
+            if (paimonOnly) {
+                Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(tableName.getCatalog());
+                if (catalog == null || !ConnectorType.PAIMON.getName().equalsIgnoreCase(catalog.getType())) {
+                    return;
+                }
+            }
             try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
-                Table table = metadataMgr.getTable(session, tableName.getCatalog(), tableName.getDb(),
-                        tableName.getTbl());
+                Table table;
+                try {
+                    table = metadataMgr.getTable(session, tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+                } catch (RuntimeException e) {
+                    // Leave lookup errors to the analyzer so it can report them in the usual way.
+                    return;
+                }
+                if (insertTarget && table instanceof PaimonTable paimonTable && paimonTable.supportInsert()) {
+                    // Capture the schema and identity from one native table before entering the metadata lock.
+                    table = paimonTable.copyForWrite();
+                }
                 if (table != null) {
                     session.getPreResolvedState().put(PreResolvedState.WRITE_TARGET, tableName, table);
                 }
-            } catch (RuntimeException e) {
-                // left to the locked analyzer, which reports it the way it always has
             }
         }
 
@@ -2593,10 +2629,7 @@ public class QueryAnalyzer {
             // resolving it under the lock only binds the hold time to that catalog. Not for the targets
             // that are not catalog objects at all: a CTAS target does not exist yet, and files() / blackhole
             // are built from the statement rather than looked up.
-            if (!statement.isForCTAS() && !statement.useTableFunctionAsTargetTable()
-                    && !statement.useBlackHoleTableAsTargetTable()) {
-                preResolveExternalWriteTarget(statement.getTableRef());
-            }
+            preResolveInsertTarget(statement, false);
             if (statement.getQueryStatement() != null) {
                 visit(statement.getQueryStatement());
             }

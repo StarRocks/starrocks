@@ -279,7 +279,7 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
         ASSIGN_OR_RETURN(opts.encryption_info, KeyCache::instance().unwrap_encryption_meta(sst_meta.encryption_meta()));
     }
     auto location = _tablet_mgr->sst_location(_tablet_id, sst_meta.name());
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
+    ASSIGN_OR_RETURN(auto rf, PersistentIndexSstable::open_sstable_file(opts, location, sst_meta.size()));
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.set_filename(sst_meta.name());
     sstable_pb.set_filesize(sst_meta.size());
@@ -386,6 +386,8 @@ Status LakePersistentIndex::flush_memtable(bool force) {
         // 3. flush current memtable
         bool flush_async = false;
         if (_inactive_memtables.size() + 1 < config::pk_index_memtable_max_count) {
+            // The flush thread runs without the context of the work flushing; carry it over.
+            _memtable->set_flush_remote_read(ScopedRemoteReadContext::current_or_load());
             if (RuntimeEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->submit(_memtable).ok()) {
                 flush_async = true;
             }
@@ -686,7 +688,7 @@ Status LakePersistentIndex::bulk_erase(size_t n, const Slice* keys, IndexValue* 
                          KeyCache::instance().unwrap_encryption_meta(del_sst_meta.encryption_meta()));
     }
     auto location = _tablet_mgr->sst_location(_tablet_id, del_sst_meta.name());
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(ropts, location));
+    ASSIGN_OR_RETURN(auto rf, PersistentIndexSstable::open_sstable_file(ropts, location, del_sst_meta.size()));
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.set_filename(del_sst_meta.name());
     sstable_pb.set_filesize(del_sst_meta.size());
@@ -1117,6 +1119,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         // segment never needs it; after a tablet merge, which orders the rowsets of a version by uid, a rowset
         // with a larger id may have been replayed first.
         if ((_memtable->max_rss_rowid() >> 32) > too_old) {
+            TRACE_COUNTER_INCREMENT("soak_pk_merge_delete_lookup_cnt", 1);
             // Never join here: load_one and these lookups share the PK execution pool.
             return parallel_get(&get_runner, out->keys.size(), out->keys.data(), too_old, &out->filter_words);
         }

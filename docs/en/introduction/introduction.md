@@ -8,7 +8,7 @@ products: [oss, enterprise, cloud]
 
 StarRocks is a next-generation, blazing-fast massively parallel processing (MPP) database designed to make real-time analytics easy for enterprises. It is built to power sub-second queries at scale.
 
-StarRocks has an elegant design. It encompasses a rich set of features including fully vectorized engine, newly designed cost-based optimizer (CBO), and intelligent materialized view. As such, StarRocks can deliver a query speed far exceeding database products of its kind, especially for multi-table joins.
+StarRocks has an elegant design. It encompasses a rich set of features including a fully vectorized execution engine, newly designed cost-based optimizer (CBO), and intelligent materialized view. As such, StarRocks can deliver a query speed far exceeding database products of its kind, especially for multi-table joins.
 
 StarRocks is ideal for real-time analytics on fresh data. Data can be ingested at a high speed and updated and deleted in real time. StarRocks empowers users to create tables that use various schemas, such as flat, star, and snowflake schemas.
 
@@ -80,6 +80,6 @@ StarRocks provides a unified data analytics experience.
 
 ## License and community
 
-[StarRocks](https://github.com/StarRocks/starrocks/tree/main) is licensed under Apache 2.0, available at the StarRocks GitHub repository (see the [StarRocks license](https://github.com/StarRocks/starrocks/blob/main/LICENSE.txt)). StarRocks (i) links to or calls functions from third party software libraries, the licenses of which are available in the folder [licenses-binary](https://github.com/StarRocks/starrocks/tree/main/licenses-binary); and (ii) incorporates third party software code, the licenses of which are available in the folder [licenses](https://github.com/StarRocks/starrocks/tree/main/licenses).
+[StarRocks](https://github.com/StarRocks/starrocks/tree/main) is licensed under Apache 2.0, available at the StarRocks GitHub repository (see the [StarRocks license](https://github.com/StarRocks/starrocks/blob/main/LICENSE.txt)). StarRocks (i) links to or calls functions from third-party software libraries, the licenses of which are available in the folder [licenses-binary](https://github.com/StarRocks/starrocks/tree/main/licenses-binary); and (ii) incorporates third-party software code, the licenses of which are available in the folder [licenses](https://github.com/StarRocks/starrocks/tree/main/licenses).
 
-Join our [Slack channel](https://docs.starrocks.com/join/) for asking general questions and for chat. For community news, read the [StarRocks.io Blog](https://www.starrocks.io/blog). You can also follow us on [LinkedIn](https://www.linkedin.com/company/starrocks) to get first-hand updates on new features, events, and sharing.
+Join our [Slack channel](https://docs.starrocks.io/join/) for asking general questions and for chat. For community news, read the [StarRocks.io Blog](https://www.starrocks.io/blog). You can also follow us on [LinkedIn](https://www.linkedin.com/company/starrocks) to get first-hand updates on new features, events, and sharing.

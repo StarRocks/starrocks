@@ -17,6 +17,7 @@
 #include <fmt/core.h>
 
 #include <algorithm>
+#include <limits>
 #include <optional>
 #include <string_view>
 #include <unordered_set>
@@ -104,6 +105,110 @@ const ShreddedFieldNode* find_deepest_shredded_ancestor_for_path(const std::vect
     }
     // Every object segment is shredded: the path itself (or its array boundary) is the node.
     return nullptr;
+}
+
+// Integer rank for a lossless widening check; -1 for every other type.
+static int integer_rank(LogicalType type) {
+    switch (type) {
+    case TYPE_TINYINT:
+        return 0;
+    case TYPE_SMALLINT:
+        return 1;
+    case TYPE_INT:
+        return 2;
+    case TYPE_BIGINT:
+        return 3;
+    default:
+        return -1;
+    }
+}
+
+// The value of an integer literal of a predicate on a `slot_type` column, widened to int64.
+static std::optional<int64_t> integer_literal(const Datum& datum, LogicalType slot_type) {
+    if (datum.is_null()) {
+        return std::nullopt;
+    }
+    switch (slot_type) {
+    case TYPE_TINYINT:
+        return datum.get_int8();
+    case TYPE_SMALLINT:
+        return datum.get_int16();
+    case TYPE_INT:
+        return datum.get_int32();
+    case TYPE_BIGINT:
+        return datum.get_int64();
+    default:
+        return std::nullopt;
+    }
+}
+
+static bool integer_fits(int64_t value, LogicalType type) {
+    switch (type) {
+    case TYPE_TINYINT:
+        return value >= std::numeric_limits<int8_t>::min() && value <= std::numeric_limits<int8_t>::max();
+    case TYPE_SMALLINT:
+        return value >= std::numeric_limits<int16_t>::min() && value <= std::numeric_limits<int16_t>::max();
+    case TYPE_INT:
+        return value >= std::numeric_limits<int32_t>::min() && value <= std::numeric_limits<int32_t>::max();
+    case TYPE_BIGINT:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// Writers shred an integer path in the narrowest width that holds its values (int8/int16 for small numbers), while
+// the virtual slot reads it as a wider integer. Comparing the narrower leaf values with a literal gives the same
+// answer as comparing the widened values, as long as the literal itself fits the leaf type: convert_to() only
+// converts the literal, and one outside the leaf range would wrap and prune matching rows. So a predicate can be
+// delegated across the widening only when it has no literal (IS [NOT] NULL) or every literal fits the leaf type.
+static bool can_delegate_across_integer_widening(const std::vector<const ColumnPredicate*>& predicates,
+                                                 const TypeDescriptor& leaf_type, const TypeDescriptor& slot_type) {
+    const int leaf_rank = integer_rank(leaf_type.type);
+    const int slot_rank = integer_rank(slot_type.type);
+    if (leaf_rank < 0 || slot_rank < 0 || leaf_rank > slot_rank) {
+        return false;
+    }
+    for (const ColumnPredicate* predicate : predicates) {
+        if (predicate == nullptr) {
+            return false;
+        }
+        std::vector<Datum> literals;
+        switch (predicate->type()) {
+        case PredicateType::kIsNull:
+        case PredicateType::kNotNull:
+            continue;
+        case PredicateType::kEQ:
+        case PredicateType::kNE:
+        case PredicateType::kGT:
+        case PredicateType::kGE:
+        case PredicateType::kLT:
+        case PredicateType::kLE:
+            literals.emplace_back(predicate->value());
+            break;
+        case PredicateType::kInList:
+        case PredicateType::kNotInList:
+            // A runtime bitset filter is an index-only IN whose convert_to() supports only its own type, and whose
+            // values() enumerates every integer between its min and max. Keep it on the same-type path.
+            if (predicate->is_index_filter_only()) {
+                return false;
+            }
+            literals = predicate->values();
+            if (literals.empty()) {
+                return false;
+            }
+            break;
+        default:
+            return false;
+        }
+        for (const Datum& literal : literals) {
+            std::optional<int64_t> value = integer_literal(literal, slot_type.type);
+            if (!value.has_value() || !integer_fits(*value, leaf_type.type)) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 Status rewrite_delegate_predicates(const std::vector<const ColumnPredicate*>& predicates,
@@ -3216,6 +3321,9 @@ void VariantColumnReader::collect_column_io_range(std::vector<SharedBufferedInpu
     if (_top_level.metadata_reader != nullptr && !skip_flags.skip_metadata) {
         _top_level.metadata_reader->collect_column_io_range(ranges, end_offset, types, active);
     }
+    if (_null_only) {
+        return;
+    }
     if (_top_level.value_reader != nullptr && !skip_flags.skip_payload) {
         _top_level.value_reader->collect_column_io_range(ranges, end_offset, types, active);
     }
@@ -3242,6 +3350,9 @@ void VariantColumnReader::select_offset_index(const SparseRange<uint64_t>& range
     if (_top_level.metadata_reader != nullptr && !skip_flags.skip_metadata) {
         _top_level.metadata_reader->select_offset_index(range, rg_first_row);
     }
+    if (_null_only) {
+        return;
+    }
     if (_top_level.value_reader != nullptr && !skip_flags.skip_payload) {
         _top_level.value_reader->select_offset_index(range, rg_first_row);
     }
@@ -3264,6 +3375,13 @@ void VariantColumnReader::select_offset_index(const SparseRange<uint64_t>& range
 
 VariantColumnReader::TopLevelSkipFlags VariantColumnReader::_compute_top_level_skip_flags() const {
     TopLevelSkipFlags flags;
+    if (_null_only) {
+        // The outer null mask is the metadata column's null mask; it needs no other column, and when the
+        // statistics prove it has no null, not even the metadata column.
+        flags.skip_payload = true;
+        flags.skip_metadata = _column_chunk_has_no_null(_top_level.metadata_reader.get());
+        return flags;
+    }
     flags.skip_payload = _top_level.root_typed_value_reader == nullptr && _top_level.root_array_node == nullptr &&
                          _requested_paths_are_scalar_typed_leaves(_shredded_fields, _requested_shredded_paths) &&
                          _requested_scalar_fallback_values_all_null(_shredded_fields, _requested_shredded_paths);
@@ -3362,6 +3480,41 @@ StatusOr<bool> VariantColumnReader::_read_range_skip_base_payload(const Range<ui
     return true;
 }
 
+// Null-mask-only read (`v IS [NOT] NULL`). Metadata null <-> variant row is SQL NULL (shredding spec), so the
+// outer null mask comes from the metadata column alone. The data rows are placeholders: the FE only sends this
+// path when nothing reads the column's values.
+Status VariantColumnReader::_read_range_null_only(const Range<uint64_t>& range, const Filter* filter,
+                                                  VariantColumn* variant_column, NullableColumn* nullable_column) {
+    const size_t num_rows = range.span_size();
+    if (nullable_column == nullptr) {
+        if (!variant_column->append_nulls(num_rows)) {
+            return Status::InternalError("failed to append placeholder rows to the variant column");
+        }
+        return Status::OK();
+    }
+
+    auto& outer_nulls = nullable_column->null_column_raw_ptr()->get_data();
+    if (_column_chunk_has_no_null(_top_level.metadata_reader.get())) {
+        outer_nulls.resize(outer_nulls.size() + num_rows, 0);
+    } else {
+        ColumnPtr metadata_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+        RETURN_IF_ERROR(_top_level.metadata_reader->read_range(range, filter, metadata_col));
+        const auto* metadata_nullable = down_cast<const NullableColumn*>(metadata_col.get());
+        if (metadata_nullable->size() != num_rows) {
+            return Status::InternalError(
+                    strings::Substitute("variant metadata rows mismatch in null-only read, expected=$0, actual=$1",
+                                        num_rows, metadata_nullable->size()));
+        }
+        const auto& metadata_nulls = metadata_nullable->null_column()->get_data();
+        outer_nulls.insert(outer_nulls.end(), metadata_nulls.begin(), metadata_nulls.end());
+    }
+    if (!variant_column->append_nulls(num_rows)) {
+        return Status::InternalError("failed to append placeholder rows to the variant column");
+    }
+    nullable_column->update_has_null();
+    return Status::OK();
+}
+
 Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
     auto* dst_mut = dst->as_mutable_raw_ptr();
     VariantColumn* variant_column = nullptr;
@@ -3374,6 +3527,10 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
         DCHECK(dst->is_variant());
         DCHECK(!get_column_parquet_field()->is_nullable);
         variant_column = down_cast<VariantColumn*>(dst_mut);
+    }
+
+    if (_null_only) {
+        return _read_range_null_only(range, filter, variant_column, nullable_column);
     }
 
     // Fast path: all requested paths are SCALAR typed_value leaves and base payload is not needed.
@@ -3625,7 +3782,9 @@ bool VariantVirtualZoneMapReader::_prepare_delegate_predicates(
     // ColumnPredicate::convert_to() converts only the literal; it does not derive the inverse
     // predicate of CAST(leaf AS virtual_type). For a lossy cross-type projection, delegating
     // the converted predicate to leaf statistics can incorrectly prune matching rows.
-    if (*leaf_type != _virtual_slot_type) {
+    // The exception is a lossless integer widening whose literals all fit the narrower leaf type.
+    if (*leaf_type != _virtual_slot_type &&
+        !can_delegate_across_integer_widening(predicates, *leaf_type, _virtual_slot_type)) {
         VLOG_FILE << "skip cross-type variant virtual predicate pushdown for path="
                   << _leaf_path.to_shredded_path().value_or("") << ", leaf type=" << leaf_type->debug_string()
                   << ", virtual slot type=" << _virtual_slot_type.debug_string();

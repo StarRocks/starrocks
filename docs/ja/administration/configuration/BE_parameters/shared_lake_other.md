@@ -138,7 +138,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタの主キーテーブルにおいて、1 つのトランザクション内での UPSERT と DELETE の順序を保持するかどうか。1 つのロードトランザクションに同一キーの `DELETE` とそれ以降の再 `UPSERT` が含まれる場合、有効にすると再 UPSERT が優先されます（共有なしクラスタの動作と一致）。デフォルトで有効です。ダウングレードの安全性のため、この修正をサポートしない BE バージョンにロールバックする（または混在クラスタで実行する）前に `false` に設定してください。有効にすると、この修正をサポートしないバージョンにロールバックした BE が誤って解釈しうるオンディスクメタデータをロードが永続化し、主キーの重複を引き起こす可能性があります。無効の場合、DELETE は従来の動作（トランザクション内のすべての UPSERT の後に適用）にフォールバックします。
+- 説明: 共有データクラスタの主キーテーブルにおいて、1 つのトランザクション内での UPSERT と DELETE の順序を保持するかどうか。1 つのロードトランザクションに同一キーの `DELETE` とそれ以降の再 `UPSERT` が含まれる場合、有効にすると再 UPSERT が優先されます（共有なしクラスタの動作と一致）。デフォルトで有効です。ダウングレードの安全性のため、この修正をサポートしない BE バージョンにロールバックする（または混在クラスタで実行する）前に `false` に設定してください。有効にすると、この修正をサポートしないバージョンにロールバックした BE が誤って解釈しうるオンディスクメタデータをロードが永続化し、主キーの重複を引き起こす可能性があります。無効の場合、DELETE は従来の動作（トランザクション内のすべての UPSERT の後に適用）にフォールバックします。1 つのロードで同じキーを DELETE してから再度 UPSERT し、その DELETE と UPSERT が別々にフラッシュされる場合（大量データのロードなど）、そのキーは最終的に削除され、UPSERT は失われます。ソートキー（`ORDER BY`）が主キーと異なる主キーテーブルでは、この設定にかかわらず常に順序が保持されます。
 - 導入バージョン: v4.1.4
 
 ### lake_enable_protobuf_file_checksum
@@ -336,6 +336,32 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: 共有データクラスタでの主キーテーブル軽量コンパクション publish 時、`RowsMapperIterator` のパイプライン化された `.lcrm` 読み取りにおける sub-chunk の粒度。各出力 segment は `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 個の sub-chunk に分割され、独立してパイプライン化されます。値を小さくするほど、少数の大きな出力 segment で達成可能な並列度が上がりますが、その代わりに範囲読み取りが増え、consume 時に追加の memcpy が発生します。デフォルトは 4 MiB で、starcache のディスク層 block サイズと一致させています。
 
+### lake_scan_parallel_segment_open
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタのクエリスキャンで、タブレットのすべての Rowset の Segment を Rowset ごとに順番に開くのではなく、Segment ロードスレッドプール上で Segment ごとに 1 タスクとして一度に開き、各 Rowset のイテレータを並列に構築するかどうか。クエリスキャンにのみ適用されます。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。ロード、コンパクション、その他の読み取りは引き続き `enable_load_segment_parallel` に従います。フッターが Segment メタデータキャッシュですでに開かれている Segment は、タスクを使わずにそのまま使用されます。クエリプロファイルでは、これらは `TabletPrepareCachedSegments` に、フッターの読み取りはその他の `TabletPrepare*` カウンタに報告されます。
+- 導入バージョン: -
+
+### lake_scan_warm_index
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタのクエリスキャン（分割の有無を問わない）が Tablet の Segment を開いた後、次に読むインデックスページを非同期でウォームアップするかどうか。対象は各 Segment の短キーインデックス、述語列の zone map と bloom filter のルートページ、読み取り列の ordinal index のルートページです。スキャンはウォームアップの完了を待たず、失敗した場合は通常どおり読み取ります。Segment メタデータフィルター（`enable_lake_segment_metadata_filter`）によってスキャン対象から除外された Segment はウォームアップしません。この項目はクエリにのみ適用され、リモート I/O スケジューラー（`remote_io_scheduler_enable`）が有効な場合にのみ効果があります。`lake_scan_parallel_segment_open` とは独立しています。ウォームアップの状況はクエリプロファイルの `TabletPrepareIndexWarmSegments`、`TabletPrepareIndexWarmRanges`、`TabletPrepareIndexWarmBlocks`、`TabletPrepareIndexWarmSkipped`、`TabletPrepareIndexWarmPrunedSegments` に記録されます。
+
+### lake_scan_read_ahead_segments
+
+- デフォルト: 16
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: リモート IO スケジューラーが有効な場合、Tablet の Segment を順番に読む lake クエリスキャン（Tablet が複数のスキャンタスクに分割されていない場合）は、現在の Segment が自身のブロックをすべて要求し終えると、現在の Segment を読みながら後続の Segment の先頭ブロックの取得を開始します。先読みする Segment はこの値までです。それらが要求済みで未読のブロックの合計が `remote_prefetch_window_blocks` 個のキャッシュブロック未満のときにのみ次の Segment の先読みを開始するため、最後に開始した Segment によって合計がウィンドウの約 2 倍に達することがあります。`0` を指定すると無効になり、各 Segment は自分の順番が来たときに先読みを開始します。分割スキャン、取り込み、Compaction には影響しません。クエリプロファイルの SegmentReadAheadStarted に記録されます。
+- 導入バージョン: -
+
 ### lake_segment_metadata_cache_limit_percent
 
 - デフォルト: 10
@@ -532,6 +558,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: すべてが待機している場合の、クエリによるオブジェクトストレージ読み取りの割り当て。`remote_read_load_weight`、`remote_read_compaction_weight`、`remote_read_background_weight` に対する相対値です。正の値である必要があります。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
 - 導入バージョン: -
 
+### remote_read_retain_prefetched_bytes
+
+- デフォルト: 2147483648
+- タイプ: Int
+- 単位: Bytes
+- 変更可能: はい
+- 説明: 共有データクラスタで、ノードがメモリ上に保持する Segment ファイルの先読み済み Block の合計サイズの上限。リモート I/O スケジューラ（`remote_io_scheduler_enable`）がクエリのスキャンのために先読みした Block は、読み取り完了後もスキャンがその Block を対象としている間はメモリ上に保持され、スキャンは Data Cache から読み直す代わりにメモリから Page をコピーします。Block は引き続き Data Cache にも書き込まれます。メモリ上に保持した Block の合計がこの値に達すると、それ以降に完了した Block は保持されません。`0` に設定するとこの機能は無効になります。リモート I/O スケジューラが無効な場合、この項目は効果がありません。保持の対象は上書きされることのない Segment ファイルのみで、メタデータなどその他のファイルは保持されません。このメモリはプロセスに計上され、どのクエリにも計上されません。値を大きくすると、その後に完了した Block から適用されます。値を小さくすると、合計が新しい値を下回るまで新しい Block は保持されず、保持済みの Block は、次に読み取られた時点で合計がまだ新しい値を超えていれば読み取り後に解放され、スキャンの対象外になったときにも解放されます。バックグラウンドでの追い出しは行われません。負の値は指定できません。リモート I/O スケジューラが有効な場合、負の値が設定されていると CN は起動を拒否し、負の値への動的な変更は拒否されます。
+- 導入バージョン: v4.2
+
+### remote_read_skip_contended_cache_writes
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタで、キャッシュディスクが混雑しているときに、リモート IO スケジューラーが取得したブロックの Data Cache への書き込みを省略できるかどうか。混雑とは、250 ms ごとのサンプリングで 2 回連続して、ディスク使用率が 90% 以上かつ読み取りがサービス時間の 20% 以上を占める状態を指します。対象は大規模なクエリスキャンの後半で取得されたブロックのみで、さらにそのブロックが `remote_read_retain_prefetched_bytes` の範囲でメモリに保持され、読み取り側にメモリから提供される場合に限ります。書き込みを省略したブロックを後で読み取る場合は、オブジェクトストレージから再取得します。キャッシュディスクがネットワークより遅く、後続のスキャンが直前のスキャンでキャッシュしたブロックを読み戻す場合に効果があります。`remote_io_scheduler_enable` が `false` の場合、または `remote_read_retain_prefetched_bytes` が `0` の場合は効果がありません。変更はその後に取得されるブロックに反映されます。
+- 導入バージョン: -
+
 ### remote_read_weight_decay_ios
 
 - デフォルト: 1024
@@ -621,6 +665,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: 共有データクラスタにおいて、S3 または S3 互換オブジェクトストレージへのマルチパートアップロードで使用するパートサイズです。パートのアップロードまで、出力ストリームごとに最大このサイズまでメモリにバッファリングされるため、値を大きくするとメモリ使用量が増加し、同時実行される出力ストリーム数に比例して増加します。値を小さくしすぎるとリクエスト数が増加し、AWS S3 の 10,000 パート上限を超えたり、最小パートサイズ 5 MB を下回ったりする可能性があります。他の S3 互換ストレージでは制限が異なります。変更は進行中のアップロードにも反映されます。値は 0 より大きい必要があり、0 以下の値は拒否されます。有効な値は、BE のコマンドラインで渡された対応する `--fslib_*` gflag を上書きします。BE 起動時に拒否された値は適用されず、BE は以前に有効だった値を保持して警告ログを出力するため、この項目が表示する値が実際に有効な値と異なる場合があります。この項目は共有データクラスタの starlet アップロードを制御するもので、`experimental_s3_*` 項目とは無関係です。
 - 導入バージョン: v4.1.5, v4.2
+
+### starlet_grpc_client_enable_http_proxy
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: 共有データクラスタで、この CN が StarMgr および他の CN に対して開始する gRPC 接続が、CN プロセスの環境変数で設定された HTTP プロキシを経由するかどうか。これらの接続は、tablet 情報の照会（GetShard）、worker ハートビート、tablet レプリカ情報の更新、および CN 間の Data Cache のレプリケーションに使用されます。CN は小文字の `grpc_proxy`、`https_proxy`、`http_proxy` 環境変数からのみプロキシを取得し、小文字の `no_grpc_proxy` または `no_proxy` に記載されたホストに対してのみプロキシをバイパスします。デフォルト値の `false` では、これらの環境変数を無視して直接接続します。そのため、CN プロセスが他の外部通信用のプロキシ設定を継承しており、そのバイパスリストにクラスタノードのアドレスが含まれていない場合でも、クラスタノード間の通信がプロキシに送られることはありません。これらの接続がプロキシを経由する必要がある場合にのみ `true` に設定してください。これは以前のバージョンの動作です。この項目は、オブジェクトストレージへのアクセスなど、CN の他の外部通信には影響しません。CN はこの項目を起動時に一度だけ読み取るため、変更は CN の再起動後にのみ有効になります。FE 側の接続については、FE パラメータ `starmgr_grpc_client_enable_http_proxy` を参照してください。
+- 導入バージョン: v26.3
 
 ### starlet_port
 

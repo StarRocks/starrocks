@@ -51,8 +51,10 @@ public class MvRefreshArbiter {
     private static final Logger LOG = LogManager.getLogger(MvRefreshArbiter.class);
 
     public static boolean needsToRefreshTable(MaterializedView mv, BaseTableInfo baseTableInfo, Table table,
-                                              MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
-        Optional<Boolean> needsToRefresh = needsToRefreshTable(mv, baseTableInfo, table, true, queryRewriteParams);
+                                              MVTimelinessArbiter.QueryRewriteParams queryRewriteParams,
+                                              TvrVersionRange pinnedVersionRange) {
+        Optional<Boolean> needsToRefresh =
+                needsToRefreshTable(mv, baseTableInfo, table, true, queryRewriteParams, pinnedVersionRange);
         if (needsToRefresh.isPresent()) {
             return needsToRefresh.get();
         }
@@ -130,7 +132,8 @@ public class MvRefreshArbiter {
                                                          BaseTableInfo baseTableInfo,
                                                          Table baseTable,
                                                          boolean withMv,
-                                                         MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
+                                                         MVTimelinessArbiter.QueryRewriteParams queryRewriteParams,
+                                                         TvrVersionRange pinnedVersionRange) {
         if (baseTable.isView()) {
             // do nothing
             return Optional.of(false);
@@ -168,7 +171,7 @@ public class MvRefreshArbiter {
             return Optional.of(false);
         } else {
             Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfExternalTable(baseTable,
-                    queryRewriteParams.isQueryRewrite());
+                    queryRewriteParams.isQueryRewrite(), pinnedVersionRange);
             if (baseUpdatedPartitionNames == null) {
                 return Optional.empty();
             }
@@ -181,12 +184,14 @@ public class MvRefreshArbiter {
      * @param baseTable: the table to check
      * @param withMv: whether to check the materialized view if it's a materialized view
      * @param queryRewriteParams: whether this caller is query rewrite or not
+     * @param pinnedVersionRange: the frozen snapshot to answer from, null to answer from the live table
      * @return MvBaseTableUpdateInfo: the update info of the base table
      */
     public static MvBaseTableUpdateInfo getMvBaseTableUpdateInfo(MaterializedView mv,
                                                                  Table baseTable,
                                                                  boolean withMv,
-                                                                 MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
+                                                                 MVTimelinessArbiter.QueryRewriteParams queryRewriteParams,
+                                                                 TvrVersionRange pinnedVersionRange) {
         MvBaseTableUpdateInfo baseTableUpdateInfo = new MvBaseTableUpdateInfo();
         if (baseTable.isView()) {
             // do nothing
@@ -225,7 +230,7 @@ public class MvRefreshArbiter {
             baseTableUpdateInfo.addToRefreshPartitionNames(updatedPCellSet);
         } else {
             Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfExternalTable(baseTable,
-                    queryRewriteParams.isQueryRewrite());
+                    queryRewriteParams.isQueryRewrite(), pinnedVersionRange);
             if (baseUpdatedPartitionNames == null) {
                 return null;
             }
@@ -308,8 +313,9 @@ public class MvRefreshArbiter {
                         return true;
                     }
                     Set<String> absorbedFromThisTable = Sets.intersection(absorbed, trackedByThisTable);
+                    // Not Collections.disjoint: handed a Set first, it enumerates every dropped partition.
                     return absorbedFromThisTable.isEmpty()
-                            || !Collections.disjoint(absorbedFromThisTable, droppedBaseNames);
+                            || absorbedFromThisTable.stream().anyMatch(droppedBaseNames::contains);
                 })
                 .collect(Collectors.toSet());
         if (!affected.isEmpty()) {
@@ -361,8 +367,9 @@ public class MvRefreshArbiter {
                     .filter(name -> {
                         Map<Table, PCellSortedSet> intersected = mvToBasePartitions.get(name);
                         PCellSortedSet basePartitions = intersected == null ? null : intersected.get(refBaseTable);
+                        // Not Collections.disjoint: handed a Set first, it enumerates the second, the whole version map.
                         return basePartitions != null && !basePartitions.isEmpty()
-                                && Collections.disjoint(basePartitions.getPartitionNames(), tracked);
+                                && basePartitions.getPartitionNames().stream().noneMatch(tracked::contains);
                     })
                     .collect(Collectors.toSet());
             if (!untracked.isEmpty()) {

@@ -17,6 +17,7 @@
 
 #include <atomic>
 #include <map>
+#include <numeric>
 #include <optional>
 #include <random>
 #include <set>
@@ -44,6 +45,7 @@
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "fs/remote_read_context.h"
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/datum_variant.h"
@@ -59,6 +61,7 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/persistent_index_memtable.h"
 #include "storage/lake/persistent_index_sstable.h"
+#include "storage/lake/rowset.h"
 #include "storage/lake/scoped_local_disk_cache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
@@ -5077,6 +5080,123 @@ TEST_P(LakePrimaryKeyPublishTest, test_parallel_sstable_open_on_index_init) {
     ASSERT_EQ(kChunkSize * 6, read_rows(tablet_id, version));
 
     config::l0_max_mem_usage = old_l0_max_mem_usage;
+}
+
+// Under the remote I/O scheduler a non-split query scan whose segments are all opened in the cache builds its
+// iterators inline. A primary-key iterator loads its delete vector and delta column groups when it is constructed,
+// so a primary-key tablet does so only when that needs no read: no delta column group, every delete vector cached.
+// Every path returns the same rows, including those an upsert or a delete has masked through the delete vectors.
+TEST_P(LakePrimaryKeyPublishTest, test_cached_pk_rowsets_build_iterators_inline) {
+    constexpr int32_t kRows = 64;
+    const int64_t tablet_id = _tablet_metadata->id();
+    auto write = [&](int32_t begin, int32_t end, int32_t multiplier, bool upsert, int64_t version) {
+        auto keys = Int32Column::create();
+        auto values = Int32Column::create();
+        auto ops = Int8Column::create();
+        for (int32_t k = begin; k < end; ++k) {
+            keys->append(k);
+            values->append(k * multiplier);
+            ops->append(upsert ? TOpType::UPSERT : TOpType::DELETE);
+        }
+        auto chunk =
+                std::make_shared<Chunk>(Columns{std::move(keys), std::move(values), std::move(ops)}, _slot_cid_map);
+        std::vector<uint32_t> indexes(chunk->num_rows());
+        std::iota(indexes.begin(), indexes.end(), 0);
+        const int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
+                                             .set_tablet_manager(_tablet_mgr.get())
+                                             .set_tablet_id(tablet_id)
+                                             .set_txn_id(txn_id)
+                                             .set_partition_id(_partition_id)
+                                             .set_mem_tracker(_mem_tracker.get())
+                                             .set_schema_id(_tablet_schema->id())
+                                             .set_slot_descriptors(&_slot_pointers)
+                                             .set_profile(&_dummy_runtime_profile)
+                                             .build());
+        ASSERT_OK(writer->open());
+        ASSERT_OK(writer->write(*chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(writer->finish_with_txnlog());
+        writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version, txn_id).status());
+    };
+    // v2 writes [0, 64); v3 overwrites [32, 96) with new values; v4 deletes [0, 16).
+    ASSERT_NO_FATAL_FAILURE(write(0, kRows, 3, true, 2));
+    ASSERT_NO_FATAL_FAILURE(write(kRows / 2, kRows / 2 + kRows, 7, true, 3));
+    ASSERT_NO_FATAL_FAILURE(write(0, kRows / 4, 3, false, 4));
+    std::vector<std::pair<int32_t, int32_t>> expected;
+    for (int32_t k = kRows / 4; k < kRows / 2 + kRows; ++k) {
+        expected.emplace_back(k, k < kRows / 2 ? k * 3 : k * 7);
+    }
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 4));
+    ASSERT_GE(metadata->rowsets_size(), 2);
+    ASSERT_GT(metadata->delvec_meta().delvecs_size(), 0);
+
+    ConfigResetGuard<bool> parallel_guard(&config::enable_load_segment_parallel, false);
+    ConfigResetGuard<bool> open_guard(&config::lake_scan_parallel_segment_open, true);
+    ConfigResetGuard<bool> warm_guard(&config::lake_scan_warm_index, true);
+    const bool old_scheduler = g_remote_io_scheduler_enabled.exchange(true);
+    auto* sync = SyncPoint::GetInstance();
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+        g_remote_io_scheduler_enabled.store(old_scheduler);
+    });
+    std::atomic<int> rowset_tasks{0};
+    sync->SetCallBack("TabletReader::get_segment_iterators::submit", [&](void*) { ++rowset_tasks; });
+    // Returns the number of rowsets built inline; expects the others to have been submitted as tasks.
+    auto read = [&](const TabletMetadataPtr& meta) -> int64_t {
+        rowset_tasks = 0;
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), meta, *_schema);
+        CHECK_OK(reader->prepare());
+        CHECK_OK(reader->open(TabletReaderParams()));
+        std::vector<std::pair<int32_t, int32_t>> rows;
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
+        while (true) {
+            chunk->reset();
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) break;
+            CHECK_OK(st);
+            for (size_t i = 0; i < chunk->num_rows(); ++i) {
+                rows.emplace_back(chunk->get_column_by_index(0)->get(i).get_int32(),
+                                  chunk->get_column_by_index(1)->get(i).get_int32());
+            }
+        }
+        std::sort(rows.begin(), rows.end());
+        EXPECT_EQ(expected, rows);
+        const int64_t inline_rowsets = reader->stats().lake_prepared_tablet_inline_rowsets;
+        EXPECT_EQ(meta->rowsets_size(), inline_rowsets + rowset_tasks.load());
+        reader->close();
+        return inline_rowsets;
+    };
+    const int rowsets = metadata->rowsets_size();
+
+    // Nothing cached: parallel.
+    _tablet_mgr->prune_metacache();
+    EXPECT_EQ(0, read(metadata));
+    // Segments and delete vectors cached by the read above, no delta column group: inline.
+    EXPECT_EQ(rowsets, read(metadata));
+
+    // Segments cached but the delete vectors not: parallel.
+    _tablet_mgr->prune_metacache();
+    for (const auto& rowset : Rowset::get_rowsets(_tablet_mgr.get(), metadata)) {
+        ASSERT_OK(rowset->segments(true).status());
+    }
+    EXPECT_EQ(0, read(metadata));
+    EXPECT_EQ(rowsets, read(metadata));
+
+    // One segment not cached: parallel.
+    auto cached = Rowset::get_rowsets(_tablet_mgr.get(), metadata)[0]->lookup_opened_segment_at(0, {});
+    ASSERT_NE(nullptr, cached);
+    _tablet_mgr->metacache()->erase(MetacacheKey::segment(cached->file_info()));
+    EXPECT_EQ(0, read(metadata));
+
+    // A tablet with delta column groups stays parallel even when everything is cached. The entry names no segment
+    // of this tablet, so the rows read are unchanged.
+    EXPECT_EQ(rowsets, read(metadata));
+    auto with_dcg = std::make_shared<TabletMetadata>(*metadata);
+    (*with_dcg->mutable_dcg_meta()->mutable_dcgs())[1U << 30] = DeltaColumnGroupVerPB();
+    EXPECT_EQ(0, read(with_dcg));
 }
 
 } // namespace starrocks::lake

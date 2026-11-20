@@ -138,7 +138,7 @@ This topic introduces the following types of BE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to preserve the in-transaction upsert/delete order for Primary Key tables in a shared-data cluster. When a single load transaction contains both a `DELETE` and a later re-`UPSERT` of the same key, enabling this makes the re-upsert win (consistent with shared-nothing clusters). It is enabled by default. For downgrade safety, set it to `false` before rolling back to (or running a mixed cluster with) a BE version without this fix: when enabled, a load can persist on-disk metadata that a pre-fix BE would misinterpret, potentially producing duplicate primary keys. When disabled, deletes fall back to the legacy behavior (applied after all upserts in the transaction).
+- Description: Whether to preserve the in-transaction upsert/delete order for Primary Key tables in a shared-data cluster. When a single load transaction contains both a `DELETE` and a later re-`UPSERT` of the same key, enabling this makes the re-upsert win (consistent with shared-nothing clusters). It is enabled by default. For downgrade safety, set it to `false` before rolling back to (or running a mixed cluster with) a BE version without this fix: when enabled, a load can persist on-disk metadata that a pre-fix BE would misinterpret, potentially producing duplicate primary keys. When disabled, deletes fall back to the legacy behavior (applied after all upserts in the transaction): if a load deletes a key and then upserts it again, and the delete and the upsert are flushed separately (for example, in a large load), the key ends up deleted and the upsert is lost. A Primary Key table whose sort key (`ORDER BY`) differs from its primary key always preserves the order, whatever this item is set to.
 - Introduced in: v4.1.4
 
 ### lake_enable_protobuf_file_checksum
@@ -335,6 +335,32 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Unit: Bytes
 - Is mutable: Yes
 - Description: Sub-chunk granularity for `RowsMapperIterator` pipelined reads of `.lcrm` files during light Primary Key compaction publish in a shared-data cluster. Each output segment is split into `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` sub-chunks pipelined independently. Smaller values raise the achievable parallelism for few-but-large output segments at the cost of more range reads and an extra memcpy on consume. Defaults to 4 MiB to align with the starcache disk-tier block size.
+
+### lake_scan_parallel_segment_open
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a query scan in a shared-data cluster opens the segments of all rowsets of a tablet at once, one task per segment on the segment loading thread pool, instead of one rowset after another, and builds the iterators of the rowsets in parallel. It applies only to query scans. Takes effect only when `remote_io_scheduler_enable` is `true`. Loads, compaction, and other reads keep following `enable_load_segment_parallel`. Segments whose footers are already open in the segment metadata cache are used without a task. The query profile reports them in `TabletPrepareCachedSegments`, and the footer reads in the other `TabletPrepare*` counters.
+- Introduced in: -
+
+### lake_scan_warm_index
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a query scan in a shared-data cluster, split or not, asynchronously warms the index pages it reads next once it has opened the tablet's segments: the short key index of every segment, the zone map and bloom filter root pages of the predicate columns, and the ordinal index root pages of the read columns. Scans do not wait for the warming, and read as usual if it fails. Segments that the segment metadata filter (`enable_lake_segment_metadata_filter`) excludes from the scan are not warmed. This item takes effect only for queries, and only when the remote I/O scheduler is enabled (`remote_io_scheduler_enable`). It is independent of `lake_scan_parallel_segment_open`. The query profile reports the warming in `TabletPrepareIndexWarmSegments`, `TabletPrepareIndexWarmRanges`, `TabletPrepareIndexWarmBlocks`, `TabletPrepareIndexWarmSkipped`, and `TabletPrepareIndexWarmPrunedSegments`.
+
+### lake_scan_read_ahead_segments
+
+- Default: 16
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: With the remote I/O scheduler active, a lake query scan that reads a tablet's segments one after another (the tablet is not split across scan tasks) starts fetching the first blocks of the next segments while it is still reading the current one, once the current segment has asked for all of its own blocks. At most this many segments are read ahead. A next segment starts only while the blocks that all of them have asked for and not yet read are fewer than `remote_prefetch_window_blocks` cache blocks, so the segment started last can take that total to about twice the window. `0` disables it: each segment starts its read-ahead only when its turn comes. Split scans, loads, and compaction are not affected. The query profile reports SegmentReadAheadStarted.
+- Introduced in: -
 
 ### lake_segment_metadata_cache_limit_percent
 
@@ -541,6 +567,24 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Description: The share of the object store reads of queries relative to `remote_read_load_weight`, `remote_read_compaction_weight`, and `remote_read_background_weight` while all of them wait. It must be positive. Takes effect only when `remote_io_scheduler_enable` is `true`.
 - Introduced in: -
 
+### remote_read_retain_prefetched_bytes
+
+- Default: 2147483648
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum total size of finished read-ahead blocks of segment files that a node keeps in memory in a shared-data cluster. When the remote I/O scheduler (`remote_io_scheduler_enable`) reads blocks ahead for a query scan, a finished block stays in memory while the scan still covers it, and the scan copies its pages from memory instead of reading them back from the Data Cache. The block is still written to the Data Cache. Once the blocks kept in memory reach this size, later blocks are not kept. `0` disables this feature. This item has no effect while the remote I/O scheduler is disabled. Only segment files, which are never overwritten, are kept; other files such as metadata are not. The memory is counted toward the process, not toward any query. A raised value applies to the blocks finished afterwards. After the value is lowered, no new blocks are kept until the total falls below it, and a block already kept is released when it is next read while the total is still above the new value, or when the scan no longer covers it. Nothing is evicted in the background. The value must not be negative: with the remote I/O scheduler enabled, the CN refuses to start with a negative value, and a dynamic update to a negative value is rejected.
+- Introduced in: v4.2
+
+### remote_read_skip_contended_cache_writes
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the remote I/O scheduler in a shared-data cluster may skip writing a fetched block to Data Cache while the cache disk is contended, that is, at least 90% busy with reads taking at least 20% of its service time for two consecutive 250 ms samples. Only blocks fetched for the later part of a large query scan qualify, and only after the block is retained in memory under `remote_read_retain_prefetched_bytes`, from which its readers are served. A later read of a skipped block fetches it from object storage again. Enabling this item can help when the cache disk is slower than the network and scans read back blocks that earlier scans have just cached. It has no effect when `remote_io_scheduler_enable` is `false` or `remote_read_retain_prefetched_bytes` is `0`. A change takes effect on blocks fetched afterwards.
+- Introduced in: -
+
 ### remote_read_weight_decay_ios
 
 - Default: 1024
@@ -630,6 +674,15 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Is mutable: Yes
 - Description: In a shared-data cluster, the part size used for multipart uploads to S3 or an S3-compatible object store. BE buffers up to this many bytes in memory per output stream between part uploads, so raising it raises memory usage, multiplied by the number of concurrent output streams. Setting it very low increases request count and can exceed the 10,000-part limit or fall below the 5 MB minimum part size that AWS S3 enforces; the limits of other S3-compatible stores differ. Changing it takes effect on uploads already in progress. The value must be greater than 0; a non-positive value is rejected. A valid value here overrides an equivalent `--fslib_*` gflag passed on the BE command line. A value rejected at BE startup is not applied at all: BE keeps the previously effective value and logs a warning, so this item can report a value that is not the one in effect. This item controls starlet uploads in a shared-data cluster and is unrelated to the `experimental_s3_*` items.
 - Introduced in: v4.1.5, v4.2
+
+### starlet_grpc_client_enable_http_proxy
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: In a shared-data cluster, whether the gRPC connections that this CN opens to StarMgr and to other CNs go through the HTTP proxy set in the environment of the CN process. These connections carry tablet information lookups (GetShard), the worker heartbeat, tablet replica information updates, and Data Cache replication between CNs. The CN takes the proxy only from the lowercase `grpc_proxy`, `https_proxy`, and `http_proxy` environment variables, and bypasses it only for the hosts listed in the lowercase `no_grpc_proxy` or `no_proxy` environment variables. The default value `false` ignores these variables and connects directly, so a proxy that the CN process inherits for other outbound traffic cannot capture the traffic between cluster nodes, even when its bypass list does not include the cluster addresses. Set this item to `true` only if these connections must go through the proxy, as they did in earlier versions. This item does not affect other outbound traffic of the CN, such as access to object storage. The CN reads this item once at startup, so a change takes effect only after the CN restarts. For the connections that the FE opens, see the FE parameter `starmgr_grpc_client_enable_http_proxy`.
+- Introduced in: v26.3
 
 ### starlet_port
 

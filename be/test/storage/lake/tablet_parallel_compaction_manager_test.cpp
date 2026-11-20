@@ -18,7 +18,10 @@
 
 #include <filesystem>
 #include <future>
+#include <numeric>
 #include <optional>
+#include <set>
+#include <tuple>
 
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
@@ -26,10 +29,12 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
+#include "column/datum_tuple.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/thread/threadpool.h"
 #include "fs/fs_factory.h"
 #include "gen_cpp/lake_service.pb.h"
@@ -37,7 +42,9 @@
 #include "storage/datum_variant.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task_context.h"
+#include "storage/lake/delta_writer.h"
 #include "storage/lake/sort_key_bounds_test_util.h"
+#include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_splitter.h"
 #include "storage/lake/test_util.h"
 #include "storage/lake/versioned_tablet.h"
@@ -760,6 +767,57 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_two_group
     // Unblock the thread
     pool.release();
 
+    _manager->cleanup_tablet(tablet_id, txn_id);
+}
+
+// Planning a parallel compaction -- tablet metadata, range-split sampling -- reads as that compaction, not as an
+// unattributed background read, whatever context the calling thread had.
+TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_plans_as_compaction) {
+    int64_t tablet_id = 10002;
+    int64_t txn_id = 20002;
+    int64_t version = 11;
+    create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
+
+    TabletParallelConfig config;
+    config.set_max_parallel_per_tablet(2);
+    config.set_max_bytes_per_subtask(5 * 1024 * 1024);
+
+    CompactRequest request;
+    request.set_skip_write_txnlog(true);
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    std::vector<RemoteReadContext> seen;
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->SetCallBack("TabletParallelCompactionManager::submit_subtasks_from_groups:after_register",
+                            [&](void* /*arg*/) { seen.push_back(ScopedRemoteReadContext::current_or_load()); });
+    sync_point->EnableProcessing();
+    DeferOp clear_callback([sync_point]() {
+        sync_point->ClearCallBack("TabletParallelCompactionManager::submit_subtasks_from_groups:after_register");
+        sync_point->DisableProcessing();
+    });
+
+    BlockedThreadPool pool;
+    {
+        // A caller context of another workload must not leak into the planning.
+        ScopedRemoteReadContext caller(RemoteReadContext::for_load(7));
+        auto st = _manager->create_parallel_tasks(
+                tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
+        ASSERT_TRUE(st.ok()) << st.status();
+        ASSERT_EQ(2, st.value());
+        // The caller's context is back once the planning returns.
+        EXPECT_EQ(RemoteReadContext::Workload::LOAD, ScopedRemoteReadContext::current_or_load().workload);
+    }
+    ASSERT_EQ(2, seen.size());
+    for (const auto& ctx : seen) {
+        EXPECT_TRUE(ctx.is_set);
+        EXPECT_EQ(RemoteReadContext::Workload::COMPACTION, ctx.workload);
+        EXPECT_EQ(static_cast<uint64_t>(txn_id), ctx.flow_id);
+    }
+
+    pool.release();
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
@@ -8711,6 +8769,343 @@ TEST_F(TabletParallelCompactionManagerTest, test_failure_after_the_rpc_is_answer
     EXPECT_EQ(1, response.compact_stats_size());
 
     _manager->cleanup_tablet(tablet_id, txn_id);
+}
+
+// ================================================================================
+// Range-split compaction over sort key bounds the writer stored truncated to the value budget
+// ================================================================================
+
+namespace {
+
+// Range-split compaction on and sort key sampling off, so subtask boundaries come from the stored segment bounds
+// alone. Puts both back on destruction.
+class RangeSplitFromStoredBounds {
+public:
+    RangeSplitFromStoredBounds() {
+        config::enable_lake_compaction_range_split = true;
+        config::sort_key_max_samples_per_tablet = 0;
+    }
+
+    ~RangeSplitFromStoredBounds() {
+        config::enable_lake_compaction_range_split = _enable_range_split;
+        config::sort_key_max_samples_per_tablet = _max_samples;
+    }
+
+    RangeSplitFromStoredBounds(const RangeSplitFromStoredBounds&) = delete;
+    RangeSplitFromStoredBounds& operator=(const RangeSplitFromStoredBounds&) = delete;
+
+private:
+    // Captured before the constructor body overwrites them.
+    bool _enable_range_split = config::enable_lake_compaction_range_split;
+    int32_t _max_samples = config::sort_key_max_samples_per_tablet;
+};
+
+// k1, k2, v of one row.
+using KeyRow = std::tuple<std::string, int64_t, int32_t>;
+
+constexpr int kRowsPerRowset = 200;
+
+// DUP_KEYS, sort key (k1 VARCHAR(64), k2 BIGINT), value v INT.
+TabletSchemaPB long_varchar_sort_key_schema_pb() {
+    TabletSchemaPB pb;
+    pb.set_keys_type(DUP_KEYS);
+    pb.set_id(next_id());
+    pb.set_num_short_key_columns(1);
+    pb.set_num_rows_per_row_block(65535);
+    auto* k1 = pb.add_column();
+    k1->set_unique_id(1);
+    k1->set_name("k1");
+    k1->set_type("VARCHAR");
+    k1->set_is_key(true);
+    k1->set_is_nullable(false);
+    k1->set_length(64);
+    k1->set_index_length(4);
+    auto* k2 = pb.add_column();
+    k2->set_unique_id(2);
+    k2->set_name("k2");
+    k2->set_type("BIGINT");
+    k2->set_is_key(true);
+    k2->set_is_nullable(false);
+    k2->set_length(8);
+    k2->set_index_length(8);
+    auto* v = pb.add_column();
+    v->set_unique_id(3);
+    v->set_name("v");
+    v->set_type("INT");
+    v->set_is_key(false);
+    v->set_is_nullable(false);
+    v->set_aggregation("NONE");
+    pb.add_sort_key_idxes(0);
+    pb.add_sort_key_idxes(1);
+    return pb;
+}
+
+// The rows of rowset `s`: k1 is a lead character, `fill` copies of 'x' and the zero-padded row number. The first half
+// of the rows is led by 'a' + s and the second half by 'a' + s + 1, so the key ranges of neighbouring rowsets overlap.
+// With fill 39, k1 is 50 bytes, over the 36-byte value budget, and its stored bounds keep a 36-byte prefix (or the
+// successor of one) that differs from rowset to rowset. With fill 0, k1 is 11 bytes and the whole (k1, k2) fits.
+std::vector<KeyRow> overlapping_rowset_rows(int s, int fill) {
+    std::vector<KeyRow> rows;
+    for (int i = 0; i < kRowsPerRowset; ++i) {
+        const char lead = static_cast<char>('a' + s + (i < kRowsPerRowset / 2 ? 0 : 1));
+        const int64_t n = s * 1000 + i;
+        rows.emplace_back(std::string(1, lead) + std::string(fill, 'x') + fmt::format("{:010d}", n), n, s);
+    }
+    return rows;
+}
+
+// Writes each element of `rowsets` as one load through the delta writer, which stores the bounds of the one segment it
+// writes, and publishes it. Returns the tablet after the last load.
+StatusOr<TabletMetadataPtr> load_rowsets(TabletManager* tablet_mgr, MemTracker* mem_tracker,
+                                         const std::vector<std::vector<KeyRow>>& rowsets) {
+    auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+    *metadata->mutable_schema() = long_varchar_sort_key_schema_pb();
+    RETURN_IF_ERROR(tablet_mgr->put_tablet_metadata(*metadata));
+    const std::shared_ptr<const TabletSchema> tablet_schema = TabletSchema::create(metadata->schema());
+    const auto schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
+    TabletMetadataPtr tablet = metadata;
+    for (const auto& rows : rowsets) {
+        auto k1 = BinaryColumn::create();
+        auto k2 = Int64Column::create();
+        auto v = Int32Column::create();
+        for (const auto& [k1_value, k2_value, v_value] : rows) {
+            k1->append(Slice(k1_value));
+            k2->append(k2_value);
+            v->append(v_value);
+        }
+        Chunk chunk({std::move(k1), std::move(k2), std::move(v)}, schema);
+        std::vector<uint32_t> indexes(rows.size());
+        std::iota(indexes.begin(), indexes.end(), 0);
+        const int64_t txn_id = next_id();
+        RuntimeProfile profile("load");
+        ASSIGN_OR_RETURN(auto writer, DeltaWriterBuilder()
+                                              .set_tablet_manager(tablet_mgr)
+                                              .set_tablet_id(metadata->id())
+                                              .set_txn_id(txn_id)
+                                              .set_partition_id(next_id())
+                                              .set_mem_tracker(mem_tracker)
+                                              .set_schema_id(metadata->schema().id())
+                                              .set_tablet_schema(tablet_schema)
+                                              .set_profile(&profile)
+                                              .build());
+        RETURN_IF_ERROR(writer->open());
+        RETURN_IF_ERROR(writer->write(chunk, indexes.data(), indexes.size()));
+        RETURN_IF_ERROR(writer->finish_with_txnlog());
+        writer->close();
+        ASSIGN_OR_RETURN(tablet,
+                         TEST_publish_single_version(tablet_mgr, metadata->id(), tablet->version() + 1, txn_id));
+    }
+    return tablet;
+}
+
+// Every row of `tablet` as a real reader returns it, sorted.
+StatusOr<std::vector<KeyRow>> read_sorted_rows(TabletManager* tablet_mgr, const TabletMetadataPtr& tablet) {
+    const auto schema = ChunkHelper::convert_schema(TabletSchema::create(tablet->schema()));
+    auto reader = std::make_shared<TabletReader>(tablet_mgr, tablet, schema);
+    RETURN_IF_ERROR(reader->prepare());
+    RETURN_IF_ERROR(reader->open(TabletReaderParams()));
+    std::vector<KeyRow> rows;
+    auto chunk = ChunkFactory::new_chunk(schema, 1024);
+    while (true) {
+        chunk->reset();
+        auto st = reader->get_next(chunk.get());
+        if (st.is_end_of_file()) break;
+        RETURN_IF_ERROR(st);
+        for (size_t i = 0; i < chunk->num_rows(); ++i) {
+            const auto row = chunk->get(i);
+            rows.emplace_back(row[0].get_slice().to_string(), row[1].get_int64(), row[2].get_int32());
+        }
+    }
+    std::sort(rows.begin(), rows.end());
+    return rows;
+}
+
+// The format version byte of every stored segment bound of `tablet`, minimums and maximums alike, sorted.
+std::vector<int> stored_bound_versions(const TabletMetadataPB& tablet) {
+    std::vector<int> versions;
+    for (const auto& rowset : tablet.rowsets()) {
+        for (const auto& segment : rowset.segment_metas()) {
+            for (const std::string* bound : {&segment.sort_key_min_encoded(), &segment.sort_key_max_encoded()}) {
+                versions.push_back(bound->empty() ? -1 : static_cast<uint8_t>(bound->front()));
+            }
+        }
+    }
+    std::sort(versions.begin(), versions.end());
+    return versions;
+}
+
+int64_t total_data_size(const TabletMetadataPB& tablet) {
+    int64_t total = 0;
+    for (const auto& rowset : tablet.rowsets()) {
+        total += rowset.data_size();
+    }
+    return total;
+}
+
+// What one parallel compaction of a tablet did.
+struct ParallelCompactionRun {
+    bool is_range_split = false;
+    // The subtasks as registered, in creation order, before any of them ran.
+    std::vector<SubtaskInfo> subtasks;
+    // The tablet with the compaction published.
+    TabletMetadataPtr published;
+};
+
+// Runs a parallel compaction of `tablet` through create_parallel_tasks, lets every subtask run, and publishes the merged
+// txn log it writes.
+void run_parallel_compaction(TabletParallelCompactionManager* manager, TabletManager* tablet_mgr,
+                             const TabletMetadataPtr& tablet, int32_t max_parallel, int64_t max_bytes_per_subtask,
+                             ParallelCompactionRun* run) {
+    const int64_t tablet_id = tablet->id();
+    const int64_t txn_id = next_id();
+    TabletParallelConfig config;
+    config.set_max_parallel_per_tablet(max_parallel);
+    config.set_max_bytes_per_subtask(max_bytes_per_subtask);
+
+    CompactRequest request;
+    // The merged txn log goes where publish reads it.
+    request.set_skip_write_txnlog(false);
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    BlockedThreadPool pool;
+    auto created = manager->create_parallel_tasks(
+            tablet_id, txn_id, tablet->version(), config, callback, false, pool.get(), []() { return true; },
+            [](bool) {});
+    ASSERT_OK(created.status());
+    ASSERT_GT(created.value(), 0) << "fell back to a normal compaction";
+    auto state = manager->get_tablet_state(tablet_id, txn_id);
+    ASSERT_NE(nullptr, state);
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        run->is_range_split = state->is_range_split;
+        for (const auto& [subtask_id, info] : state->running_subtasks) {
+            run->subtasks.push_back(info);
+        }
+    }
+    std::sort(run->subtasks.begin(), run->subtasks.end(),
+              [](const SubtaskInfo& a, const SubtaskInfo& b) { return a.subtask_id < b.subtask_id; });
+
+    pool.release();
+    ASSERT_TRUE(closure.wait_finish());
+    ASSERT_EQ(0, response.failed_tablets_size());
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        ASSERT_EQ(created.value(), state->completed_subtasks.size());
+        for (const auto& context : state->completed_subtasks) {
+            ASSERT_OK(context->status);
+        }
+    }
+    manager->cleanup_tablet(tablet_id, txn_id);
+
+    ASSIGN_OR_ABORT(run->published, TEST_publish_single_version(tablet_mgr, tablet_id, tablet->version() + 1, txn_id));
+}
+
+} // namespace
+
+// Overlapping rowsets of 50-byte keys whose stored bounds keep 36-byte prefixes that differ from rowset to rowset, or
+// the successors of such prefixes. Without samples these are the only boundary candidates, so range split cuts at
+// truncated tuples; every row must still land in exactly one subtask.
+TEST_F(TabletParallelCompactionManagerTest, RangeSplitWithTruncatedBoundsKeepsAllRows) {
+    RangeSplitFromStoredBounds range_split;
+    std::vector<std::vector<KeyRow>> rowsets;
+    for (int s = 0; s < 5; ++s) {
+        rowsets.push_back(overlapping_rowset_rows(s, /*fill=*/39));
+    }
+    ASSIGN_OR_ABORT(auto tablet, load_rowsets(_tablet_mgr.get(), _mem_tracker.get(), rowsets));
+    ASSERT_EQ(std::vector<int>(10, 2), stored_bound_versions(*tablet));
+    ASSIGN_OR_ABORT(auto input, read_sorted_rows(_tablet_mgr.get(), tablet));
+    ASSERT_EQ(5 * kRowsPerRowset, input.size());
+
+    ParallelCompactionRun run;
+    ASSERT_NO_FATAL_FAILURE(run_parallel_compaction(_manager.get(), _tablet_mgr.get(), tablet, /*max_parallel=*/3,
+                                                    total_data_size(*tablet) / 3 + 1, &run));
+    ASSERT_TRUE(run.is_range_split);
+    ASSERT_GT(run.subtasks.size(), 1u);
+    bool cut_at_truncated_bound = false;
+    for (const auto& subtask : run.subtasks) {
+        EXPECT_EQ(SubtaskType::RANGE_SPLIT, subtask.type);
+        // A bound kept whole has both sort key columns; a truncated one only a prefix of k1 or the successor of one.
+        for (const auto* bound : {&subtask.range_lower_bound, &subtask.range_upper_bound}) {
+            cut_at_truncated_bound |= bound->size() == 1;
+        }
+    }
+    EXPECT_TRUE(cut_at_truncated_bound);
+
+    // One non-overlapping rowset replaces the inputs and holds exactly their rows.
+    ASSERT_EQ(1, run.published->rowsets_size());
+    ASSIGN_OR_ABORT(auto output, read_sorted_rows(_tablet_mgr.get(), run.published));
+    ASSERT_EQ(input.size(), output.size());
+    EXPECT_TRUE(input == output);
+}
+
+// Every key starts with the same 40 bytes, so every stored bound is the same 36-byte prefix or its successor: the
+// bounds give range split a single interval, it falls back to whole-rowset subtasks, and the rows survive.
+TEST_F(TabletParallelCompactionManagerTest, RangeSplitCommonTruncatedPrefixFallsBack) {
+    RangeSplitFromStoredBounds range_split;
+    std::vector<std::vector<KeyRow>> rowsets;
+    for (int s = 0; s < 5; ++s) {
+        auto& rows = rowsets.emplace_back();
+        for (int i = 0; i < kRowsPerRowset; ++i) {
+            const int64_t n = s * 1000 + i;
+            rows.emplace_back(std::string(40, 'p') + fmt::format("{:010d}", n), n, s);
+        }
+    }
+    ASSIGN_OR_ABORT(auto tablet, load_rowsets(_tablet_mgr.get(), _mem_tracker.get(), rowsets));
+    ASSERT_EQ(std::vector<int>(10, 2), stored_bound_versions(*tablet));
+    std::set<std::string> stored_mins;
+    std::set<std::string> stored_maxes;
+    for (const auto& rowset : tablet->rowsets()) {
+        for (const auto& segment : rowset.segment_metas()) {
+            stored_mins.insert(segment.sort_key_min_encoded());
+            stored_maxes.insert(segment.sort_key_max_encoded());
+        }
+    }
+    ASSERT_EQ(1, stored_mins.size());
+    ASSERT_EQ(1, stored_maxes.size());
+    ASSIGN_OR_ABORT(auto input, read_sorted_rows(_tablet_mgr.get(), tablet));
+    ASSERT_EQ(5 * kRowsPerRowset, input.size());
+
+    // Two rowsets' worth per subtask, so the fallback has whole-rowset groups of two to run.
+    ParallelCompactionRun run;
+    ASSERT_NO_FATAL_FAILURE(run_parallel_compaction(_manager.get(), _tablet_mgr.get(), tablet, /*max_parallel=*/3,
+                                                    total_data_size(*tablet) / 2 + 1, &run));
+    EXPECT_FALSE(run.is_range_split);
+    for (const auto& subtask : run.subtasks) {
+        EXPECT_NE(SubtaskType::RANGE_SPLIT, subtask.type);
+    }
+
+    EXPECT_LT(run.published->rowsets_size(), 5);
+    ASSIGN_OR_ABORT(auto output, read_sorted_rows(_tablet_mgr.get(), run.published));
+    ASSERT_EQ(input.size(), output.size());
+    EXPECT_TRUE(input == output);
+}
+
+// Rowsets 0, 2 and 4 have 11-byte keys whose bounds fit the budget and are stored whole (format version 1); rowsets 1
+// and 3 have 50-byte keys whose bounds are cut (format version 2). Range split orders both kinds of bound together.
+TEST_F(TabletParallelCompactionManagerTest, RangeSplitMixedV1V2BoundsKeepsAllRows) {
+    RangeSplitFromStoredBounds range_split;
+    std::vector<std::vector<KeyRow>> rowsets;
+    for (int s = 0; s < 5; ++s) {
+        rowsets.push_back(overlapping_rowset_rows(s, /*fill=*/s % 2 == 1 ? 39 : 0));
+    }
+    ASSIGN_OR_ABORT(auto tablet, load_rowsets(_tablet_mgr.get(), _mem_tracker.get(), rowsets));
+    ASSERT_EQ((std::vector<int>{1, 1, 1, 1, 1, 1, 2, 2, 2, 2}), stored_bound_versions(*tablet));
+    ASSIGN_OR_ABORT(auto input, read_sorted_rows(_tablet_mgr.get(), tablet));
+    ASSERT_EQ(5 * kRowsPerRowset, input.size());
+
+    ParallelCompactionRun run;
+    ASSERT_NO_FATAL_FAILURE(run_parallel_compaction(_manager.get(), _tablet_mgr.get(), tablet, /*max_parallel=*/3,
+                                                    total_data_size(*tablet) / 3 + 1, &run));
+    ASSERT_TRUE(run.is_range_split);
+    ASSERT_GT(run.subtasks.size(), 1u);
+
+    ASSERT_EQ(1, run.published->rowsets_size());
+    ASSIGN_OR_ABORT(auto output, read_sorted_rows(_tablet_mgr.get(), run.published));
+    ASSERT_EQ(input.size(), output.size());
+    EXPECT_TRUE(input == output);
 }
 
 } // namespace starrocks::lake

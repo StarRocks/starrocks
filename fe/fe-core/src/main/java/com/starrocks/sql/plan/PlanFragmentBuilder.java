@@ -61,6 +61,7 @@ import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.delta.DeltaLakePreimagePredicates;
 import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
 import com.starrocks.connector.metadata.MetadataTable;
+import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AIProjectNode;
 import com.starrocks.planner.AggregateInfo;
@@ -96,12 +97,14 @@ import com.starrocks.planner.LanceScanNode;
 import com.starrocks.planner.LookUpNode;
 import com.starrocks.planner.MergeJoinNode;
 import com.starrocks.planner.MetaScanNode;
+import com.starrocks.planner.MetadataScanNode;
 import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.MysqlScanNode;
 import com.starrocks.planner.NestLoopJoinNode;
 import com.starrocks.planner.NoopSink;
 import com.starrocks.planner.OdpsScanNode;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.PaimonGlobalIndexScanNode;
 import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.PartitionIdGenerator;
 import com.starrocks.planner.PlanFragment;
@@ -195,7 +198,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergEqualityDeleteScanOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
@@ -205,6 +207,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLookUpOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOdpsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
@@ -2267,8 +2270,8 @@ public class PlanFragmentBuilder {
         }
 
         @Override
-        public PlanFragment visitPhysicalIcebergMetadataScan(OptExpression optExpression, ExecPlan context) {
-            PhysicalIcebergMetadataScanOperator node = (PhysicalIcebergMetadataScanOperator) optExpression.getOp();
+        public PlanFragment visitPhysicalMetadataScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalMetadataScanOperator node = (PhysicalMetadataScanOperator) optExpression.getOp();
 
             MetadataTable table = (MetadataTable) node.getTable();
             context.getDescTbl().addReferencedTable(table);
@@ -2293,8 +2296,9 @@ public class PlanFragmentBuilder {
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
             }
 
-            IcebergMetadataScanNode metadataScanNode =
-                    new IcebergMetadataScanNode(context.getNextNodeId(), tupleDescriptor,
+            MetadataScanNode metadataScanNode = table.getMetadataTableType() == MetadataTableType.PAIMON_GLOBAL_INDEX
+                    ? new PaimonGlobalIndexScanNode(context.getNextNodeId(), tupleDescriptor)
+                    : new IcebergMetadataScanNode(context.getNextNodeId(), tupleDescriptor,
                             "IcebergMetadataScanNode", node.getTvrVersionRange());
             try {
                 ScalarOperatorToExpr.FormatterContext formatterContext =
@@ -2315,11 +2319,11 @@ public class PlanFragmentBuilder {
                     }
                 }
 
-                metadataScanNode.preProcessIcebergPredicate(icebergPredicate);
+                metadataScanNode.preProcessMetadataPredicate(icebergPredicate);
                 metadataScanNode.setupScanRangeLocations();
 
             } catch (Exception e) {
-                LOG.warn("Iceberg metadata scan node get scan range locations failed", e);
+                LOG.warn("Metadata scan node get scan range locations failed", e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
 
@@ -3959,6 +3963,16 @@ public class PlanFragmentBuilder {
             for (TupleId id : inputFragment.getPlanRoot().getTupleIds()) {
                 context.getDescTbl().getTupleDesc(id).getSlots().forEach(s -> s.setIsNullable(true));
             }
+            // The tuples of the plan root do not always hold the slots the assert passes through (e.g. an exchange
+            // over an aggregation), so also mark the slot behind every input column. Otherwise an operator above is
+            // planned for a non-nullable input and reads the filled NULL row as a value. Use the input columns: the
+            // output columns of the assert may already be those of a projection merged into it.
+            ColumnRefSet inputColumns = optExpression.inputAt(0).getOutputColumns();
+            context.getColRefToExpr().forEach((column, expr) -> {
+                if (inputColumns.contains(column) && expr instanceof SlotRef slotRef && slotRef.getDesc() != null) {
+                    slotRef.getDesc().setIsNullable(true);
+                }
+            });
 
             PhysicalAssertOneRowOperator assertOneRow = (PhysicalAssertOneRowOperator) optExpression.getOp();
             AssertNumRowsNode node =

@@ -57,9 +57,8 @@ namespace {
 Status check_geography_boundary(const GeoColumn& column) {
     const auto& descriptor = column.descriptor();
     const auto& type = descriptor.type;
-    if (type.logical_type != GEO_LOGICAL_TYPE_GEOGRAPHY || type.coordinate_system != GEO_COORDINATE_SYSTEM_SPHERICAL ||
-        type.edge_algorithm != GEO_EDGE_ALGORITHM_SPHERICAL || type.crs != "OGC:CRS84" ||
-        (type.srid.has_value() && type.srid.value() != kCrs84Srid)) {
+    if (type.logical_type != GEO_LOGICAL_TYPE_GEOGRAPHY || type.edge_algorithm != GEO_EDGE_ALGORITHM_SPHERICAL ||
+        type.crs != "OGC:CRS84" || (type.srid.has_value() && type.srid.value() != kCrs84Srid)) {
         return Status::NotSupported("Unsupported GEOGRAPHY SQL boundary descriptor");
     }
     return Status::OK();
@@ -68,9 +67,8 @@ Status check_geography_boundary(const GeoColumn& column) {
 Status check_geometry_boundary(const GeoColumn& column) {
     const auto& descriptor = column.descriptor();
     const auto& type = descriptor.type;
-    if (type.logical_type != GEO_LOGICAL_TYPE_GEOMETRY || type.coordinate_system != GEO_COORDINATE_SYSTEM_CARTESIAN ||
-        type.edge_algorithm != GEO_EDGE_ALGORITHM_PLANAR || type.crs.empty() ||
-        type.srid != derive_geo_srid(type.crs)) {
+    if (type.logical_type != GEO_LOGICAL_TYPE_GEOMETRY || type.edge_algorithm != GEO_EDGE_ALGORITHM_PLANAR ||
+        type.crs.empty() || type.srid != derive_geo_srid(type.crs)) {
         return Status::NotSupported("Unsupported GEOMETRY SQL boundary descriptor");
     }
     return Status::OK();

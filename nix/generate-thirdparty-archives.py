@@ -61,13 +61,22 @@ ARCHIVE_EXCLUDES = {
     "PPROF",
     "STARCACHE",
     "TENANN",
+    # Dependencies of starlet only; the Nix build does not enable StarOS (USE_STAROS).
+    "CRC32C",
+    "GOOGLE_CLOUD_CPP",
+    "NLOHMANN_JSON",
+    "PROMETHEUS_CPP",
 }
 PACKAGE_EXCLUDES = {
     "aliyun_jindosdk",
+    "crc32c",
     "gcs_connector",
+    "google_cloud_cpp",
     "jdk",
+    "nlohmann_json",
     "paimon_cpp",
     "pprof",
+    "prometheus_cpp",
     "starcache",
     "tenann",
 }

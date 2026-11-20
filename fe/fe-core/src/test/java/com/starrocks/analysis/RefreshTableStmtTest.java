@@ -79,7 +79,7 @@ public class RefreshTableStmtTest {
         stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
         Assertions.assertTrue(stmt instanceof RefreshTableStmt);
         sql_1 = "REFRESH EXTERNAL TABLE catalog1.db1.table1.test";
-        AnalyzeTestUtil.analyzeFail(sql_1);
+        AnalyzeTestUtil.analyzeFail(sql_1, "Invalid table name format 'catalog1.db1.table1.test'");
         sql_1 = "REFRESH EXTERNAL TABLE catalog1.db1.table1 PARTITION(\"p1\", \"p2\")";
         stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
         Assertions.assertTrue(stmt instanceof RefreshTableStmt);
@@ -88,5 +88,29 @@ public class RefreshTableStmtTest {
         sql_1 = "REFRESH EXTERNAL TABLE catalog1.db1.table1 PARTITION(\"k1=0\\/k2=1\", \"k1=1\\/k2=2\")";
         stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
         Assertions.assertEquals(((RefreshTableStmt) stmt).getPartitions().size(), 2);
+    }
+
+    @Test
+    public void testRefreshTableUnknownDbOrTable(@Mocked MetadataMgr metadataMgr,
+                                                 @Injectable Database database) {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getMetadataMgr();
+                result = metadataMgr;
+
+                metadataMgr.getDb((ConnectContext) any, anyString, "not_exist_db");
+                result = null;
+
+                metadataMgr.getDb((ConnectContext) any, anyString, "db1");
+                result = database;
+
+                metadataMgr.getTable((ConnectContext) any, anyString, "db1", "not_exist_tbl");
+                result = null;
+            }
+        };
+        AnalyzeTestUtil.analyzeFail("REFRESH EXTERNAL TABLE catalog1.not_exist_db.table1",
+                "Unknown database 'not_exist_db'");
+        AnalyzeTestUtil.analyzeFail("REFRESH EXTERNAL TABLE catalog1.db1.not_exist_tbl",
+                "Unknown table 'not_exist_tbl'");
     }
 }

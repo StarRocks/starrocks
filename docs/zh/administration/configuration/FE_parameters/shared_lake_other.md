@@ -692,6 +692,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述:
 - 引入版本: -
 
+### `starmgr_grpc_client_enable_http_proxy`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: No
+- 描述: 存算分离集群中，FE 内的 StarMgr 向 CN 发起的 gRPC 连接，以及 FE 向 StarMgr 发起的 gRPC 连接，是否经过 HTTP 代理。FE 从 JVM 代理设置（例如 `-Dhttps.proxyHost`）获取代理，而不是直接读取 `http_proxy` 或 `https_proxy` 环境变量。默认值 `false` 表示这些连接忽略 JVM 代理设置，直接建立连接，因此为 FE 其他对外访问配置的代理不会转发集群节点之间的流量。仅当这些连接必须经过代理时才需要设为 `true`，即沿用早期版本的行为。该项不影响 FE 的其他对外访问。FE 仅在启动时读取该项，修改后需重启 FE 才能生效。CN 侧的对应配置参见 BE 参数 `starlet_grpc_client_enable_http_proxy`。
+- 引入版本: v26.3
+
 ### `star_client_get_shard_info_batch_size`
 
 - 默认值: 1024

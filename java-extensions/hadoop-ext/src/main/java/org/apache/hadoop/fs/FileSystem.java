@@ -3782,7 +3782,8 @@ public abstract class FileSystem extends Configured
         /**
          * StarRocks: last access time (ms) of every cached entry whose key carries a credential fingerprint
          * ({@link HadoopExt#HADOOP_DYNAMIC_CREDENTIAL_PREFIX}). A vended credential rotates, so each rotation
-         * is a new key; without eviction the map would grow with every token. An entry idle for
+         * is a new key; without eviction the map would grow with every token. Explicit access scopes
+         * protect readers until their resources are closed. An unprotected entry idle for
          * {@link #credentialIdleTtlMs} leaves the map and waits in {@link #pendingClose} for one more TTL
          * before it is closed: an InputFile/OutputFile created before the eviction may still hold the
          * instance, and every new lookup of the key refreshes its access time, so a holder would have to
@@ -4001,7 +4002,9 @@ public abstract class FileSystem extends Configured
             Iterator<Map.Entry<Key, Long>> it = credentialLastAccessMs.entrySet().iterator();
             while (it.hasNext()) {
                 Map.Entry<Key, Long> entry = it.next();
-                if (now - entry.getValue() >= ttl) {
+                if (now - entry.getValue() >= ttl
+                        && !HadoopExt.getInstance().hasActiveFileSystemAccess(
+                                entry.getKey().cloudConf, entry.getKey().credFingerprint)) {
                     it.remove();
                     FileSystem fs = map.remove(entry.getKey());
                     toAutoClose.remove(entry.getKey());

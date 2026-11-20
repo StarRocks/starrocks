@@ -806,6 +806,9 @@ Status LakeDataSource::reopen_reader(RuntimeState* /*state*/) {
 
 void LakeDataSource::apply_child_split_context(const pipeline::LakeSplitContext& split_context,
                                                bool use_prepared_state) {
+    // This shares immutable segment objects, not predicates or prepared row-range caches. It remains
+    // valid when late runtime filters rebuild a CLASSIC reader's query-specific iterators.
+    _params.classic_tablet_read_state = split_context.classic_tablet_read_state;
     if (is_pre_refinement_coarse_split(split_context)) {
         ++_lake_prerefinement_coarse_splits;
     } else if (is_initial_coarse_split(split_context)) {
@@ -1527,6 +1530,21 @@ void LakeDataSource::init_counter(RuntimeState* state) {
             ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareIOCountRemote", TUnit::UNIT, tablet_prepare_name);
     _lake_tablet_prepare_bytes_read_remote_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareBytesReadRemote", TUnit::BYTES, tablet_prepare_name);
+    _lake_tablet_prepare_cached_segments_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareCachedSegments", TUnit::UNIT, tablet_prepare_name);
+    // lake_scan_warm_index: the index pages a query scan started warming once it opened the tablet's segments.
+    _lake_tablet_prepare_warm_index_segments_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareIndexWarmSegments", TUnit::UNIT, tablet_prepare_name);
+    _lake_tablet_prepare_warm_index_ranges_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareIndexWarmRanges", TUnit::UNIT, tablet_prepare_name);
+    _lake_tablet_prepare_warm_index_blocks_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareIndexWarmBlocks", TUnit::UNIT, tablet_prepare_name);
+    _lake_tablet_prepare_warm_index_skipped_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareIndexWarmSkipped", TUnit::UNIT, tablet_prepare_name);
+    _lake_tablet_prepare_warm_index_pruned_segments_counter = ADD_CHILD_COUNTER(
+            _runtime_profile, "TabletPrepareIndexWarmPrunedSegments", TUnit::UNIT, tablet_prepare_name);
+    _lake_tablet_prepare_inline_rowsets_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareInlineRowsets", TUnit::UNIT, tablet_prepare_name);
     _lake_seed_segment_init_timer = ADD_CHILD_TIMER(_runtime_profile, "SeedSegmentInitTime", "SeedPrepareTime");
 
     const std::string seed_vector_index_name = "SeedVectorIndex";
@@ -1609,6 +1627,8 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _segment_first_chunk_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "SegmentFirstChunks", TUnit::UNIT, io_statistics_name);
     _segment_first_chunk_timer = ADD_CHILD_TIMER(_runtime_profile, "SegmentFirstChunkTime", io_statistics_name);
+    _segment_read_ahead_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "SegmentReadAheadStarted", TUnit::UNIT, io_statistics_name);
     _remote_prefetch_block_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "RemotePrefetchBlocks", TUnit::UNIT, io_statistics_name);
     _remote_prefetch_rejected_block_counter =
@@ -1726,6 +1746,16 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_lake_tablet_prepare_io_remote_timer, reader_stats.lake_prepared_tablet_io_remote_ns);
     COUNTER_UPDATE(_lake_tablet_prepare_io_count_remote_counter, reader_stats.lake_prepared_tablet_io_count_remote);
     COUNTER_UPDATE(_lake_tablet_prepare_bytes_read_remote_counter, reader_stats.lake_prepared_tablet_bytes_read_remote);
+    COUNTER_UPDATE(_lake_tablet_prepare_cached_segments_counter, reader_stats.lake_prepared_tablet_cached_segments);
+    COUNTER_UPDATE(_lake_tablet_prepare_warm_index_segments_counter,
+                   reader_stats.lake_prepared_tablet_warm_index_segments);
+    COUNTER_UPDATE(_lake_tablet_prepare_warm_index_ranges_counter, reader_stats.lake_prepared_tablet_warm_index_ranges);
+    COUNTER_UPDATE(_lake_tablet_prepare_warm_index_blocks_counter, reader_stats.lake_prepared_tablet_warm_index_blocks);
+    COUNTER_UPDATE(_lake_tablet_prepare_warm_index_skipped_counter,
+                   reader_stats.lake_prepared_tablet_warm_index_skipped);
+    COUNTER_UPDATE(_lake_tablet_prepare_warm_index_pruned_segments_counter,
+                   reader_stats.lake_prepared_tablet_warm_index_pruned_segments);
+    COUNTER_UPDATE(_lake_tablet_prepare_inline_rowsets_counter, reader_stats.lake_prepared_tablet_inline_rowsets);
     COUNTER_UPDATE(_lake_seed_io_timer, reader_stats.lake_prepared_seed_io_ns);
     COUNTER_UPDATE(_lake_seed_io_count_counter, reader_stats.lake_prepared_seed_io_count);
     COUNTER_UPDATE(_lake_seed_io_remote_timer, reader_stats.lake_prepared_seed_io_remote_ns);
@@ -1838,6 +1868,7 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_remote_io_fill_join_counter, reader_stats.remote_io_fill_joins);
     COUNTER_UPDATE(_segment_first_chunk_counter, reader_stats.segment_first_chunks);
     COUNTER_UPDATE(_segment_first_chunk_timer, reader_stats.segment_first_chunk_ns);
+    COUNTER_UPDATE(_segment_read_ahead_counter, reader_stats.segment_read_ahead_started);
     COUNTER_UPDATE(_remote_prefetch_block_counter, reader_stats.remote_prefetch_blocks);
     COUNTER_UPDATE(_remote_prefetch_rejected_block_counter, reader_stats.remote_prefetch_rejected_blocks);
     COUNTER_UPDATE(_remote_prefetch_range_counter, reader_stats.remote_prefetch_ranges);
