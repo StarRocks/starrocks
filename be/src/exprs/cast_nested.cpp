@@ -93,6 +93,9 @@ StatusOr<ColumnPtr> CastStructExpr::evaluate_checked(ExprContext* context, Chunk
 
     auto casted_struct = StructColumn::create(std::move(casted_fields), _type.field_names);
     RETURN_IF_ERROR(down_cast<StructColumn*>(casted_struct.get())->unfold_const_children(_type));
+    if (orig_column->is_constant()) {
+        return ConstColumn::create(std::move(casted_struct), orig_column->size());
+    }
     if (!orig_column->is_nullable()) {
         return std::move(casted_struct);
     }
