@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
@@ -161,10 +162,43 @@ public class CompactionMgr implements MemoryTrackable {
             if (v == null) {
                 v = new PartitionStatistics(partition);
             }
+            maybeStaggerColdStartCompaction(v, compactionScore);
             v.setCurrentVersion(currentVersion);
             v.setCompactionScore(compactionScore);
             return v;
         });
+    }
+
+    // Stagger the cold-start compaction wave. When a partition's compaction score first crosses
+    // Config.lake_compaction_score_selector_min_score (below -> at/above) and the partition would
+    // otherwise be immediately eligible for compaction, defer its next compaction by a random offset
+    // in [0, Config.lake_compaction_score_selector_jitter_ms). Many identically-loaded partitions tend
+    // to cross the threshold in the same scheduling cycle; without staggering they all start compacting
+    // at once and thrash shared object-storage bandwidth, stalling concurrent loads on the same tablets.
+    // This only spreads the same total compaction work over a wider window; it does not reduce work.
+    // No-op when the jitter config is <= 0 (default), preserving the original behavior.
+    private void maybeStaggerColdStartCompaction(PartitionStatistics stat, Quantiles newScore) {
+        long jitterMs = Config.lake_compaction_score_selector_jitter_ms;
+        if (jitterMs <= 0 || newScore == null) {
+            return;
+        }
+        double minScore = Config.lake_compaction_score_selector_min_score;
+        double oldMax = (stat.getCompactionScore() != null) ? stat.getCompactionScore().getMax() : 0.0;
+        // Only act on the upward crossing of the selection threshold.
+        if (oldMax >= minScore || newScore.getMax() < minScore) {
+            return;
+        }
+        // Never delay manually-triggered compaction.
+        if (stat.getPriority() != PartitionStatistics.CompactionPriority.DEFAULT) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        // If the partition is already deferred (e.g. by the post-compaction interval), keep that schedule.
+        if (stat.getNextCompactionTime() > now) {
+            return;
+        }
+        long offset = (long) (ThreadLocalRandom.current().nextDouble() * jitterMs);
+        stat.setNextCompactionTime(now + offset);
     }
 
     public void handleCompactionFinished(PartitionIdentifier partition, long version, long versionTime,
