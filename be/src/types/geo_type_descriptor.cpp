@@ -85,7 +85,6 @@ GeoStorageDescriptor GeoStorageDescriptor::from_protobuf(const GeoStorageDescPB&
     GeoStorageDescriptor result;
     result.encoding = protobuf.encoding();
     result.dimension = protobuf.dimension();
-    result.validation_state = protobuf.validation_state();
     return result;
 }
 
@@ -93,7 +92,6 @@ GeoStorageDescPB GeoStorageDescriptor::to_protobuf() const {
     GeoStorageDescPB result;
     result.set_encoding(encoding);
     result.set_dimension(dimension);
-    result.set_validation_state(validation_state);
     return result;
 }
 

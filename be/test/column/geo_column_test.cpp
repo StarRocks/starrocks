@@ -60,7 +60,6 @@ TEST(GeoColumnTest, RawBytesAndDistinctSemantics) {
         ASSERT_TRUE(info.ok());
         EXPECT_EQ(1, info->geometry_type);
         EXPECT_FALSE(info->empty);
-        EXPECT_EQ(GEO_VALIDATION_STATE_UNKNOWN, column->descriptor().storage.validation_state);
     }
 }
 
@@ -232,7 +231,7 @@ TEST(GeoColumnTest, CopyRejectsDescriptorChangesWithoutSqlCoercion) {
 
 TEST(GeoColumnTest, CopiesCheckTypeAndKeepDestinationStorage) {
     auto desc = descriptor(GEO_LOGICAL_TYPE_GEOMETRY);
-    desc.storage = {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED};
+    desc.storage = {GEO_ENCODING_WKB, GEO_DIMENSION_XY};
     const auto type = TypeDescriptor::create_geo_type(TYPE_GEOMETRY, desc.type);
     auto source = GeoColumn::create(desc);
     source->append_wkb(Slice(point()));
@@ -285,7 +284,7 @@ TEST(GeoColumnTest, CopiesCheckTypeAndKeepDestinationStorage) {
 TEST(GeoColumnTest, ZeroCountCopiesCheckTypeOnly) {
     for (auto kind : {GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_LOGICAL_TYPE_GEOMETRY}) {
         auto desc = descriptor(kind);
-        desc.storage = {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED};
+        desc.storage = {GEO_ENCODING_WKB, GEO_DIMENSION_XY};
         const auto primitive = kind == GEO_LOGICAL_TYPE_GEOGRAPHY ? TYPE_GEOGRAPHY : TYPE_GEOMETRY;
         const auto type = TypeDescriptor::create_geo_type(primitive, desc.type);
         for (int operation = 0; operation < 3; ++operation) {
@@ -348,10 +347,8 @@ TEST(GeoColumnTest, ZeroCountCopiesCheckTypeOnly) {
     }
 }
 
-TEST(GeoColumnTest, InspectionDoesNotTrustProducerFlag) {
-    auto desc = descriptor();
-    desc.storage.validation_state = GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED;
-    auto column = GeoColumn::create(desc);
+TEST(GeoColumnTest, InspectionChecksRowBytes) {
+    auto column = GeoColumn::create(descriptor());
     column->append_wkb(Slice("invalid"));
     EXPECT_FALSE(column->inspect_wkb(0).ok());
     EXPECT_FALSE(column->inspect_wkb(1).ok());
