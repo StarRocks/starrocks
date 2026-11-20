@@ -116,17 +116,15 @@ void simd_widen_int16_to_int32(int32_t* __restrict dest, const int16_t* __restri
 
 template <typename T>
 inline void simd_minmax(const T* __restrict data, int32_t count, T& out_min, T& out_max) {
-    if constexpr (sizeof(T) == 4) {
+    if constexpr (sizeof(T) == 4 && std::is_integral_v<T> && std::is_signed_v<T>) {
         int32_t mn = std::numeric_limits<int32_t>::max();
         int32_t mx = std::numeric_limits<int32_t>::min();
         simd_minmax_int32(reinterpret_cast<const int32_t*>(data), count, mn, mx);
-        // Round-trip through int32 preserves the value bits; callers that
-        // care about signed vs unsigned interpretation cast back themselves.
         out_min = static_cast<T>(mn);
         out_max = static_cast<T>(mx);
     } else {
         T mn = std::numeric_limits<T>::max();
-        T mx = std::numeric_limits<T>::min();
+        T mx = std::numeric_limits<T>::lowest();
         for (int32_t i = 0; i < count; ++i) {
             mn = std::min(mn, data[i]);
             mx = std::max(mx, data[i]);

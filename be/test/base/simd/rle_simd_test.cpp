@@ -145,6 +145,45 @@ PARALLEL_TEST(RleSimdTest, simd_minmax_int32) {
     }
 }
 
+PARALLEL_TEST(RleSimdTest, simd_minmax_template_type_safety) {
+    // float with negative and positive values must not be reinterpreted as signed int32_t.
+    for (int32_t n : kRleTestSizes) {
+        if (n == 0) continue;
+        std::vector<float> data(n);
+        for (int32_t i = 0; i < n; ++i) {
+            data[i] = static_cast<float>(i - n / 2) * 1.25f - 0.5f;
+        }
+        float got_min = 0.0f, got_max = 0.0f;
+        simd_minmax<float>(data.data(), n, got_min, got_max);
+        ASSERT_FLOAT_EQ(got_min, *std::min_element(data.begin(), data.end())) << "n=" << n;
+        ASSERT_FLOAT_EQ(got_max, *std::max_element(data.begin(), data.end())) << "n=" << n;
+    }
+
+    // All-negative floats: max must still be the largest (least-negative) float, not +FLT_MIN.
+    {
+        std::vector<float> neg_floats = {-100.5f, -42.25f, -3.75f, -0.125f, -19.0f};
+        float got_min = 0.0f, got_max = 0.0f;
+        simd_minmax<float>(neg_floats.data(), static_cast<int32_t>(neg_floats.size()), got_min, got_max);
+        ASSERT_FLOAT_EQ(got_min, -100.5f);
+        ASSERT_FLOAT_EQ(got_max, -0.125f);
+    }
+
+    // uint32_t with values > INT32_MAX must compare as unsigned, not wrap negative via int32_t.
+    for (int32_t n : kRleTestSizes) {
+        if (n == 0) continue;
+        std::vector<uint32_t> data(n);
+        for (int32_t i = 0; i < n; ++i) {
+            // Mix values below and above INT32_MAX (0x7fffffff).
+            data[i] =
+                    (i % 2 == 0) ? static_cast<uint32_t>(10 + i) : (0x80000000u + static_cast<uint32_t>(i * 100));
+        }
+        uint32_t got_min = 0, got_max = 0;
+        simd_minmax<uint32_t>(data.data(), n, got_min, got_max);
+        ASSERT_EQ(got_min, *std::min_element(data.begin(), data.end())) << "n=" << n;
+        ASSERT_EQ(got_max, *std::max_element(data.begin(), data.end())) << "n=" << n;
+    }
+}
+
 // ----------------------------------------------------------------------------
 // simd_dict_gather_{int32,int64,float,double}
 // Contract: dest[i] = dict[indices[i]].
