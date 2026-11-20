@@ -777,11 +777,6 @@ public class Explain {
 
         // The defaults of these visitors end in visit(), which dispatches again and recurses forever.
         @Override
-        public OperatorStr visitPhysicalScan(OptExpression optExpression, ExplainContext context) {
-            return visitUnhandled(optExpression, context);
-        }
-
-        @Override
         public OperatorStr visitPhysicalRawValues(OptExpression optExpression, ExplainContext context) {
             return visitUnhandled(optExpression, context);
         }
@@ -799,16 +794,9 @@ public class Explain {
         private OperatorStr visitUnhandled(OptExpression optExpression, ExplainContext context) {
             PhysicalOperator op = (PhysicalOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("- ")
-                    .append(op.getOpType().name().replaceFirst("^PHYSICAL_", "").replace('_', '-'));
-            if (op instanceof PhysicalScanOperator scan) {
-                sb.append(" [").append(scan.getTable().getName()).append("]")
-                        .append(buildOutputColumns(scan,
-                                "[" + scan.getOutputColumns().stream().map(EXPR_PRINTER::print)
-                                        .collect(Collectors.joining(", ")) + "]"));
-            } else {
-                sb.append(buildOutputColumns(op, ""));
-            }
-            sb.append("\n");
+                    .append(op.getOpType().name().replaceFirst("^PHYSICAL_", "").replace('_', '-'))
+                    .append(buildOutputColumns(op, ""))
+                    .append("\n");
             // LookUp carries no statistics
             if (optExpression.getStatistics() != null) {
                 buildCostEstimate(sb, optExpression, context.step);
