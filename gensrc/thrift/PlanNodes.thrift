@@ -99,7 +99,8 @@ enum TPlanNodeType {
   BENCHMARK_SCAN_NODE = 42,
   LAKE_CACHE_STATS_SCAN_NODE = 43,
   ENFORCE_UNIQUE_ROW_LOCATOR_NODE = 44,
-  AI_PROJECT_NODE = 45
+  AI_PROJECT_NODE = 45,
+  LAKE_GROUPED_SCAN_NODE = 46
 }
 
 // phases of an execution node
@@ -401,12 +402,41 @@ struct TIcebergDeleteFile {
     // encrypted table is itself encrypted and carries its OWN per-file key, so it cannot reuse
     // the data file's key in THdfsScanRange.parquet_encryption_info (field 46).
     5: optional TParquetEncryptionInfo parquet_encryption_info
+    // Set for a position delete file whose every row references the data file of this scan
+    // range, so the BE reads only its pos column.
+    6: optional bool references_only_data_file
 }
 
 struct TPaimonDeletionFile {
     1: optional string path
     2: optional i64 offset
     3: optional i64 length
+}
+
+// Exact snapshot-bound index artifact selected by FE. row_range_from is the
+// original index segment's offset, which may differ from the task's lower bound.
+struct TPaimonGlobalIndexFile {
+    1: optional i32 field_id
+    2: optional string field_type
+    3: optional string path
+    4: optional i64 file_size
+    5: optional i64 row_range_from
+    6: optional i64 row_range_to
+    7: optional binary metadata
+}
+
+// Versioned request for one Paimon Global Index shard. Keep this typed instead
+// of adding loosely related fields directly to THdfsScanRange so FE/BE skew is
+// detected before an index reader is opened.
+struct TPaimonGlobalIndexScanRange {
+    1: optional i32 protocol_version
+    2: optional i32 shard_id
+    3: optional i64 range_from
+    4: optional i64 range_to
+    5: optional string query_json
+    6: optional string table_path
+    7: optional i64 snapshot_id
+    8: optional list<TPaimonGlobalIndexFile> index_files
 }
 
 // refer to https://github.com/delta-io/delta/blob/master/PROTOCOL.md#deletion-vector-descriptor-schema
@@ -559,6 +589,9 @@ struct THdfsScanRange {
     // Parquet encryption info for encrypted Iceberg files. 44 and 45 are taken above, so this
     // uses 46. Never reuse an ordinal: it corrupts the wire format between mixed-version FE/BE.
     46: optional TParquetEncryptionInfo parquet_encryption_info
+
+    // Paimon Global Index shard evaluation request.
+    47: optional TPaimonGlobalIndexScanRange paimon_global_index_scan_range
 }
 
 struct TBinlogScanRange {
@@ -584,6 +617,13 @@ struct TBenchmarkScanRange {
 struct TScanRangeExt {
 }
 
+// Query-local clip; never persisted in tablet metadata.
+struct TGroupedRangeTask {
+  1: optional i32 group_id
+  2: optional Types.TTabletRange key_range
+  3: optional list<i32> sort_key_unique_ids
+}
+
 // Specification of an individual data range which is held in its entirety
 // by a storage server
 struct TScanRange {
@@ -600,6 +640,8 @@ struct TScanRange {
 
   40: optional TBenchmarkScanRange benchmark_scan_range
   41: optional TScanRangeExt ext
+
+  52: optional TGroupedRangeTask grouped_range_task
 }
 
 struct TMySQLScanNode {
@@ -713,7 +755,7 @@ struct TSchemaScanNode {
 enum TAccessPathType {
     ROOT,       // ROOT
     KEY,        // MAP KEY
-    OFFSET,     // ARRAY/MAP OFFSET
+    OFFSET,     // ARRAY/MAP OFFSET; on a VARIANT column: only the outer null mask (`v IS [NOT] NULL`)
     FIELD,      // STRUCT FIELD
     INDEX,      // ARRAY/MAP INDEX-AT POSITION DATA
     ALL,        // ARRAY/MAP ALL DATA
@@ -1663,7 +1705,8 @@ enum TAIProviderType {
 enum TAIProviderProtocol {
   OPENAI = 0,
   ANTHROPIC = 1,
-  COHERE = 2
+  COHERE = 2,
+  DASHSCOPE = 3
 }
 
 struct TAIProvider {

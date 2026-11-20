@@ -25,6 +25,7 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
@@ -92,7 +93,9 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
 
     private ConnectorMetadata metadataOfTable(String tableName) {
         // Paimon system table shares the same pattern, ignore it here
-        if (getTableType() != Table.TableType.PAIMON && TableMetaMetadata.isMetadataTable(tableName)) {
+        if (TableMetaMetadata.isMetadataTable(tableName)
+                && (getTableType() != Table.TableType.PAIMON
+                || tableName.endsWith(com.starrocks.connector.paimon.PaimonGlobalIndexMetadataTable.SUFFIX))) {
             return tableMetadata;
         }
         return null;
@@ -274,6 +277,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     }
 
     @Override
+    public Map<String, Pair<Double, Double>> getPartitionSourceColumnRanges(Table table, TvrVersionRange version) {
+        return normal.getPartitionSourceColumnRanges(table, version);
+    }
+
+    @Override
     public Set<DeleteFile> getDeleteFiles(IcebergTable table, Long snapshotId, ScalarOperator predicate, FileContent content) {
         return normal.getDeleteFiles(table, snapshotId, predicate, content);
     }
@@ -291,6 +299,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     @Override
     public void invalidateTableForRead(String srDbName, Table table) {
         normal.invalidateTableForRead(srDbName, table);
+    }
+
+    @Override
+    public void invalidateCachedTable(String dbName, String tableName) {
+        normal.invalidateCachedTable(dbName, tableName);
     }
 
     @Override

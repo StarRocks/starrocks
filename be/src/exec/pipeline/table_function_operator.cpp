@@ -319,10 +319,10 @@ void TableFunctionOperator::_copy_result(Columns& columns, uint32_t max_output_s
         }
 
         uint32_t copy_rows = std::min(end - start, max_output_size - curr_output_size);
-        VLOG(2) << "_next_output_row=" << _next_output_row << " start=" << start << " end=" << end
-                << " copy_rows=" << copy_rows << " input_size=" << offsets_data.back()
-                << " _next_output_row_offset=" << _next_output_row_offset
-                << " _input_index_of_first_result=" << _input_index_of_first_result;
+        VLOG_ROW << "_next_output_row=" << _next_output_row << " start=" << start << " end=" << end
+                 << " copy_rows=" << copy_rows << " input_size=" << offsets_data.back()
+                 << " _next_output_row_offset=" << _next_output_row_offset
+                 << " _input_index_of_first_result=" << _input_index_of_first_result;
 
         if (copy_rows > 0) {
             append_outer(copy_rows);

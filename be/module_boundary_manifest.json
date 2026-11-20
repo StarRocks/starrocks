@@ -247,6 +247,7 @@
         "be/src/runtime/mem_pool.h",
         "be/src/runtime/mem_tracker.h",
         "be/src/runtime/mem_tracker_fwd.h",
+        "be/src/runtime/paimon_cpp_library.h",
         "be/src/runtime/merge_commit_trace.h",
         "be/src/runtime/multi_precision.h",
         "be/src/runtime/process_memory_metrics.h",

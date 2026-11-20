@@ -138,7 +138,7 @@ TupleDescriptor* CacheSelectScannerTest::_create_tuple_desc(SlotDesc* descs) {
 }
 
 TEST_F(CacheSelectScannerTest, TestUnknowFormat) {
-    SlotDesc slot_desc[] = {{"Id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+    SlotDesc slot_desc[] = {{"Id", TYPE_INT_DESC}, {""}};
     auto scanner = std::make_shared<CacheSelectScanner>();
     auto* range = _create_scan_range("jni_scan_range", 0, 0, THdfsFileFormat::UNKNOWN);
     auto* tuple_desc = _create_tuple_desc(slot_desc);

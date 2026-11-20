@@ -38,7 +38,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-public class IcebergMetadataScanNode extends ScanNode {
+public class IcebergMetadataScanNode extends MetadataScanNode {
     private static final Logger LOG = LogManager.getLogger(IcebergMetadataScanNode.class);
 
     private static final Set<String> STATS_COLUMNS =
@@ -67,8 +67,13 @@ public class IcebergMetadataScanNode extends ScanNode {
         this.version = version;
     }
 
-    public void preProcessIcebergPredicate(String icebergPredicate) {
+    @Override
+    public void preProcessMetadataPredicate(String icebergPredicate) {
         this.icebergPredicate = icebergPredicate;
+    }
+
+    public void preProcessIcebergPredicate(String predicate) {
+        preProcessMetadataPredicate(predicate);
     }
 
     public HDFSScanNodePredicates getScanNodePredicates() {
@@ -93,7 +98,8 @@ public class IcebergMetadataScanNode extends ScanNode {
             return;
         }
 
-        if (metadataTableType == MetadataTableType.FILES) {
+        if (metadataTableType == MetadataTableType.FILES || metadataTableType == MetadataTableType.ALL_DATA_FILES
+                || metadataTableType == MetadataTableType.ALL_DELETE_FILES) {
             for (SlotDescriptor slot : desc.getSlots()) {
                 if (STATS_COLUMNS.contains(slot.getColumn().getName())) {
                     serializedMetaSpec.setLoadColumnStats(true);

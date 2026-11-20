@@ -15,6 +15,7 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TNormalRawValuesNode;
@@ -114,7 +115,7 @@ public class RawValuesNode extends PlanNode {
         output.append(prefix).append("constant count: ").append(constantCount).append("\n");
         output.append(prefix).append("constant type: ").append(constantType.toString()).append("\n");
 
-        if (detailLevel == TExplainLevel.VERBOSE) {
+        if (detailLevel == TExplainLevel.VERBOSE && !ExprToSql.isDigestingLiterals()) {
             String sample = rawText.length() > 100 ?
                            rawText.substring(0, 97) + "..." : rawText;
             output.append(prefix).append("sample values: ").append(sample).append("\n");

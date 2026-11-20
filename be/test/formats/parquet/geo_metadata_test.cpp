@@ -16,13 +16,19 @@
 #include <thrift/protocol/TCompactProtocol.h>
 #include <thrift/transport/TBufferTransports.h>
 
+#include <optional>
+#include <string_view>
+
 #include "base/coding.h"
 #include "base/utility/defer_op.h"
+#include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/geo_column.h"
+#include "column/map_column.h"
 #include "column/mysql_row_buffer.h"
 #include "column/sorting/sort_permute.h"
+#include "column/struct_column.h"
 #include "common/object_pool.h"
 #include "compute_env/query/scan_conjuncts_manager.h"
 #include "formats/parquet/column_converter.h"
@@ -38,6 +44,7 @@
 #include "runtime/serde/protobuf_chunk_serde.h"
 #include "storage_primitive/column_predicate_factory.h"
 #include "storage_primitive/predicate_tree/predicate_tree.h"
+#include "types/geo_srid.h"
 
 namespace starrocks::parquet {
 namespace {
@@ -127,12 +134,15 @@ std::string compact_bytes(const T& value) {
     return buffer->getBufferAsString();
 }
 
-// A complete two-column Parquet file: required id=42 and WKB POINT(0 0).
-// Generated in memory to keep the fixture and its external annotations auditable.
-std::string geo_file(bool geography, bool dictionary = false, bool annotated = true, bool with_statistics = true) {
+// A complete two-column Parquet file: required id=42 and WKB POINT(0 0) by default.
+// Optional shape values use plain encoding and DATA_PAGE v1 definition levels.
+std::string geo_file(bool geography, bool dictionary = false, bool annotated = true, bool with_statistics = true,
+                     const std::vector<std::optional<std::string>>& shape_values = {}) {
+    DCHECK(!dictionary || shape_values.empty());
     auto shape = geo_element(geography);
     if (!annotated) shape.__isset.logicalType = false;
-    shape.__set_repetition_type(tparquet::FieldRepetitionType::REQUIRED);
+    if (shape_values.empty()) shape.__set_repetition_type(tparquet::FieldRepetitionType::REQUIRED);
+    const int64_t num_rows = shape_values.empty() ? 1 : shape_values.size();
     tparquet::SchemaElement id;
     id.__set_name("id");
     id.__set_field_id(2);
@@ -146,8 +156,23 @@ std::string geo_file(bool geography, bool dictionary = false, bool annotated = t
     for (const auto& field : {id, shape}) {
         const auto column_offset = bytes.size();
         std::string payload;
+        int64_t null_count = 0;
         if (field.name == "id") {
-            put_fixed32_le(&payload, 42);
+            for (int64_t row = 0; row < num_rows; ++row) put_fixed32_le(&payload, 42);
+        } else if (!shape_values.empty()) {
+            std::string levels;
+            for (const auto& value : shape_values) {
+                levels.push_back(2); // Parquet RLE header for a one-value run.
+                levels.push_back(value.has_value());
+                null_count += !value.has_value();
+            }
+            put_fixed32_le(&payload, levels.size());
+            payload += levels;
+            for (const auto& value : shape_values) {
+                if (!value) continue;
+                put_fixed32_le(&payload, value->size());
+                payload += *value;
+            }
         } else {
             put_fixed32_le(&payload, 21);
             payload.push_back(1);        // Little endian ISO WKB, no embedded SRID.
@@ -167,7 +192,7 @@ std::string geo_file(bool geography, bool dictionary = false, bool annotated = t
             payload.assign("\x01\x02\x00", 3); // One RLE dictionary index, value zero.
         }
         tparquet::DataPageHeader data;
-        data.__set_num_values(1);
+        data.__set_num_values(num_rows);
         data.__set_encoding(tparquet::Encoding::PLAIN);
         if (dictionary && field.name == "shape") data.__set_encoding(tparquet::Encoding::RLE_DICTIONARY);
         data.__set_definition_level_encoding(tparquet::Encoding::RLE);
@@ -183,7 +208,7 @@ std::string geo_file(bool geography, bool dictionary = false, bool annotated = t
         metadata.__set_encodings({tparquet::Encoding::PLAIN, tparquet::Encoding::RLE});
         metadata.__set_path_in_schema({field.name});
         metadata.__set_codec(tparquet::CompressionCodec::UNCOMPRESSED);
-        metadata.__set_num_values(1);
+        metadata.__set_num_values(num_rows);
         metadata.__set_total_uncompressed_size(page_bytes.size());
         metadata.__set_total_compressed_size(page_bytes.size());
         metadata.__set_data_page_offset(bytes.size());
@@ -199,7 +224,7 @@ std::string geo_file(bool geography, bool dictionary = false, bool annotated = t
             tparquet::Statistics stats;
             stats.__set_min_value("z");
             stats.__set_max_value("z");
-            stats.__set_null_count(0);
+            stats.__set_null_count(null_count);
             metadata.__set_statistics(stats);
             tparquet::BoundingBox bbox;
             bbox.__set_xmin(170);
@@ -222,11 +247,11 @@ std::string geo_file(bool geography, bool dictionary = false, bool annotated = t
     tparquet::RowGroup group;
     group.__set_columns(columns);
     group.__set_total_byte_size(bytes.size() - 4);
-    group.__set_num_rows(1);
+    group.__set_num_rows(num_rows);
     tparquet::FileMetaData footer;
     footer.__set_version(2);
     footer.__set_schema({root, id, shape});
-    footer.__set_num_rows(1);
+    footer.__set_num_rows(num_rows);
     footer.__set_row_groups({group});
     auto metadata = compact_bytes(footer);
     bytes += metadata;
@@ -316,7 +341,7 @@ TEST(GeoMetadataTest, MissingAndNoIdColumnsKeepExistingMatching) {
     lake.__set_fields({lake_field});
     SlotDescriptor slot(1, "renamed_shape", TypeDescriptor::create_varbinary_type(1024));
     EXPECT_TRUE(validate_scan(without_shape, &lake, {{0, &slot, true}}, true).ok());
-    SlotDescriptor supported(2, "id", TypeDescriptor(TYPE_INT));
+    SlotDescriptor supported(2, "id", TYPE_INT_DESC);
     EXPECT_TRUE(validate_scan(without_shape, &lake, {{0, &supported, true}}, true).ok());
     auto element = geo_element();
     element.__isset.field_id = false;
@@ -563,8 +588,7 @@ TEST(GeoMetadataTest, AnnotatedAndUnannotatedWkbKeepExistingBinaryReads) {
     }
 }
 TEST(GeoMetadataTest, NativeGeographyPermutationPreservesPayloadAndDescriptor) {
-    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                     GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
+    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
     auto input = ColumnHelper::create_column(TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, semantic), true);
     auto* nullable = down_cast<NullableColumn*>(input.get());
     auto* geo = down_cast<GeoColumn*>(nullable->data_column_raw_ptr());
@@ -596,8 +620,7 @@ TEST(GeoMetadataTest, NativeGeographyPermutationPreservesPayloadAndDescriptor) {
 }
 
 TEST(GeoMetadataTest, NativeGeographyScanDoesNotBuildValueRanges) {
-    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                     GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
+    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
     TSlotDescriptor slot;
     slot.__set_id(1);
     slot.__set_parent(0);
@@ -624,8 +647,7 @@ TEST(GeoMetadataTest, NativeGeographyScanDoesNotBuildValueRanges) {
 }
 
 TEST(GeoMetadataTest, NativeGeographyRequiresCompatibleIcebergMetadata) {
-    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                     GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
+    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
     SlotDescriptor slot(1, "shape", TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, semantic));
     TIcebergSchema lake;
     lake.__set_fields({lake_geo()});
@@ -646,8 +668,7 @@ TEST(GeoMetadataTest, NativeGeographyRequiresCompatibleIcebergMetadata) {
 }
 
 TEST(GeoMetadataTest, NativeGeographyChecksParquetDefaultsAndExplicitMetadata) {
-    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                     GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
+    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
     SlotDescriptor slot(1, "shape", TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, semantic));
     TIcebergSchema lake;
     lake.__set_fields({lake_geo()});
@@ -664,8 +685,7 @@ TEST(GeoMetadataTest, NativeGeographyChecksParquetDefaultsAndExplicitMetadata) {
 }
 
 TEST(GeoMetadataTest, NativeGeographyRejectsConflictingParquetMetadata) {
-    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                     GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
+    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
     SlotDescriptor slot(1, "shape", TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, semantic));
     TIcebergSchema lake;
     lake.__set_fields({lake_geo()});
@@ -701,10 +721,12 @@ TEST(GeoMetadataTest, NativeGeographyRejectsConflictingParquetMetadata) {
     }
 }
 
-TEST(GeoMetadataTest, GeoAnnotationsDoNotUseRowGroupOrPageIndexMinMax) {
-    for (int kind : {0, 1, 2}) {
+TEST(GeoMetadataTest, GeoLeavesDoNotUseRowGroupOrPageIndexMinMax) {
+    const auto geography = TypeDescriptor::create_geo_type(
+            TYPE_GEOGRAPHY, {GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326});
+    for (int kind : {0, 1, 2, 3}) {
         auto element = geo_element(kind == 1);
-        if (kind == 2) element.__isset.logicalType = false;
+        if (kind >= 2) element.__isset.logicalType = false;
         tparquet::FileMetaData thrift;
         thrift.__set_schema(schema_of(element));
         FileMetaData metadata;
@@ -717,19 +739,19 @@ TEST(GeoMetadataTest, GeoAnnotationsDoNotUseRowGroupOrPageIndexMinMax) {
         statistics.__set_max_value("z");
         statistics.__set_null_count(0);
         column.__set_statistics(statistics);
-        const TypeDescriptor type = TypeDescriptor::create_varchar_type(1024);
         std::vector<std::string> min_values;
         std::vector<std::string> max_values;
-        auto status = StatisticsHelper::get_min_max_value(&metadata, type, &column, field, min_values, max_values);
-        EXPECT_EQ(kind == 2, status.ok()) << status;
-        EXPECT_EQ(kind == 2 ? 1 : 0, min_values.size());
-        EXPECT_EQ(kind == 2 ? 1 : 0, max_values.size());
+        auto status = StatisticsHelper::get_min_max_value(&metadata, TYPE_VARCHAR_DESC, &column, field, min_values,
+                                                          max_values);
+        EXPECT_EQ(kind >= 2, status.ok()) << status;
+        EXPECT_EQ(kind >= 2 ? 1 : 0, min_values.size());
+        EXPECT_EQ(kind >= 2 ? 1 : 0, max_values.size());
 
         tparquet::ColumnChunk chunk;
         chunk.__set_meta_data(column);
         ColumnReaderOptions options{};
         options.file_meta_data = &metadata;
-        ScalarColumnReader reader(field, &chunk, &type, options);
+        ScalarColumnReader reader(field, &chunk, kind == 3 ? &geography : &TYPE_VARCHAR_DESC, options);
         ObjectPool pool;
         auto* predicate =
                 pool.add(new_column_eq_predicate_from_datum(get_type_info(TYPE_VARCHAR), 1, Datum(Slice("a"))));
@@ -739,7 +761,7 @@ TEST(GeoMetadataTest, GeoAnnotationsDoNotUseRowGroupOrPageIndexMinMax) {
         EXPECT_EQ(kind == 2, filtered.value());
 
         if (kind != 2) {
-            // An invalid ColumnIndex location must not even be read for GEO annotations.
+            // GEO skips the ColumnIndex even if a legacy writer omitted the annotation.
             chunk.__set_column_index_offset(1000000);
             chunk.__set_column_index_length(32);
             chunk.__set_offset_index_offset(1000000);
@@ -785,7 +807,7 @@ TEST(GeoMetadataTest, GeoMinMaxCannotHideMatchingFileRows) {
                 TSlotDescriptor output;
                 output.__set_id(1);
                 output.__set_colName("shape");
-                output.__set_slotType(TypeDescriptor::create_varchar_type(1024).to_thrift());
+                output.__set_slotType(TYPE_VARCHAR_DESC.to_thrift());
                 output.__set_col_unique_id(-1);
                 output.__set_isMaterialized(true);
                 output.__set_isOutputColumn(true);
@@ -809,29 +831,304 @@ TEST(GeoMetadataTest, GeoMinMaxCannotHideMatchingFileRows) {
     }
 }
 
-TEST(GeoMetadataTest, NestedNativeGeographyIsRejectedByComplexReader) {
-    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                     GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
-    const auto geography = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, semantic);
-    ColumnReaderOptions options;
-    TIcebergSchemaField lake_schema_field;
+TEST(GeoMetadataTest, NativeGeometryValidatesIcebergAndParquetDescriptors) {
+    const GeoTypeDescriptor crs84{GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "OGC:CRS84", 4326};
+    TIcebergSchema lake;
+    lake.__set_fields({lake_geo(TIcebergGeoKind::GEOMETRY, "PLANAR")});
+    const auto geometry = geo_element(false);
+    const auto validate = [&](const tparquet::SchemaElement& element, const GeoTypeDescriptor& semantic,
+                              const TIcebergSchema* schema) {
+        SlotDescriptor slot(1, "shape", TypeDescriptor::create_geo_type(TYPE_GEOMETRY, semantic));
+        return validate_scan(schema_of(element), schema, {{0, &slot, true}}, true);
+    };
+    EXPECT_TRUE(validate(geometry, crs84, &lake).ok());
+    EXPECT_TRUE(validate(geometry, crs84, nullptr).is_not_supported());
+    auto no_id = geometry;
+    no_id.__isset.field_id = false;
+    EXPECT_TRUE(validate(no_id, crs84, &lake).is_not_supported());
+    lake.fields[0].__isset.geo_metadata = false;
+    EXPECT_TRUE(validate(geometry, crs84, &lake).is_not_supported());
+    lake.fields[0].__isset.geo_metadata = true;
+    SlotDescriptor missing(1, "shape", TypeDescriptor(TYPE_GEOMETRY));
+    EXPECT_TRUE(validate_scan(schema_of(geometry), &lake, {{0, &missing, true}}, true).is_not_supported());
 
-    const auto expect_rejected = [&](ColumnType type, const TypeDescriptor& descriptor) {
-        ParquetField field;
-        field.type = type;
-        auto reader = ColumnReaderFactory::create(options, &field, descriptor, &lake_schema_field);
-        ASSERT_FALSE(reader.ok());
-        EXPECT_TRUE(reader.status().is_not_supported()) << reader.status();
+    auto& source = lake.fields[0].geo_metadata;
+    source.kind = TIcebergGeoKind::GEOGRAPHY;
+    EXPECT_TRUE(validate(geometry, crs84, &lake).is_invalid_argument());
+    source.kind = TIcebergGeoKind::GEOMETRY;
+    source.edge_algorithm = "SPHERICAL";
+    EXPECT_TRUE(validate(geometry, crs84, &lake).is_invalid_argument());
+    auto spherical = crs84;
+    spherical.edge_algorithm = GEO_EDGE_ALGORITHM_SPHERICAL;
+    EXPECT_TRUE(validate(geometry, spherical, &lake).is_invalid_argument());
+    source.edge_algorithm = "PLANAR";
+    // create_geo_type() requires the kind to match the primitive, but a type deserialized from thrift is not
+    // checked, so build the mismatched type directly.
+    TypeDescriptor wrong_kind_type(TYPE_GEOMETRY);
+    wrong_kind_type.geo_type = crs84;
+    wrong_kind_type.geo_type->logical_type = GEO_LOGICAL_TYPE_GEOGRAPHY;
+    SlotDescriptor wrong_kind(1, "shape", wrong_kind_type);
+    EXPECT_TRUE(validate_scan(schema_of(geometry), &lake, {{0, &wrong_kind, true}}, true).is_invalid_argument());
+    EXPECT_TRUE(validate(geo_element(), crs84, &lake).is_invalid_argument());
+    auto both = geometry;
+    both.logicalType.__set_GEOGRAPHY(tparquet::GeographyType());
+    EXPECT_TRUE(validate(both, crs84, &lake).is_invalid_argument());
+    auto wrong_physical = geometry;
+    wrong_physical.__set_type(tparquet::Type::FIXED_LEN_BYTE_ARRAY);
+    wrong_physical.__set_type_length(21);
+    EXPECT_TRUE(validate(wrong_physical, crs84, &lake).is_invalid_argument());
+
+    auto unannotated = geometry;
+    unannotated.__isset.logicalType = false;
+    EXPECT_TRUE(validate(unannotated, crs84, &lake).ok());
+    auto epsg = crs84;
+    epsg.crs = "EPSG:4326";
+    EXPECT_TRUE(validate(geometry, epsg, &lake).is_invalid_argument());
+    source.crs = epsg.crs;
+    EXPECT_TRUE(validate(geometry, epsg, &lake).is_invalid_argument());
+    EXPECT_TRUE(validate(unannotated, epsg, &lake).ok());
+    auto annotated_epsg = geometry;
+    annotated_epsg.logicalType.GEOMETRY.__set_crs(epsg.crs);
+    EXPECT_TRUE(validate(annotated_epsg, epsg, &lake).ok());
+    for (auto srid : {std::optional<int32_t>{3857}, std::optional<int32_t>{}}) {
+        epsg.srid = srid;
+        EXPECT_TRUE(validate(annotated_epsg, epsg, &lake).is_invalid_argument());
+    }
+    for (const char* crs : {"EPSG:-1", "EPSG:0", "EPSG:+1", "EPSG:2147483648", "EPSG:1a", "IGNF:ATI", ""}) {
+        epsg.crs = crs;
+        epsg.srid = derive_geo_srid(crs);
+        source.crs = crs;
+        EXPECT_TRUE(validate(unannotated, epsg, &lake).is_invalid_argument()) << crs;
+    }
+}
+
+namespace {
+TIcebergSchemaField iceberg_field(std::string name, int id, std::vector<TIcebergSchemaField> children = {}) {
+    TIcebergSchemaField field;
+    field.__set_name(name);
+    field.__set_field_id(id);
+    field.__set_children(children);
+    return field;
+}
+
+StatusOr<ColumnPtr> read_nested_geo(const std::string& path, const TypeDescriptor& type,
+                                    const TIcebergSchemaField& field) {
+    ASSIGN_OR_RETURN(auto file, FileSystem::Default()->new_random_access_file(path));
+    ASSIGN_OR_RETURN(auto size, file->get_size());
+    TIcebergSchema lake;
+    lake.__set_fields({field});
+    TSlotDescriptor output;
+    output.__set_id(1);
+    output.__set_colName(field.name);
+    output.__set_slotType(type.to_thrift());
+    output.__set_col_unique_id(-1);
+    output.__set_isMaterialized(true);
+    output.__set_isOutputColumn(true);
+    output.__set_isNullable(true);
+    SlotDescriptor slot(output);
+    FormatScannerStats stats;
+    FormatScanContext context;
+    PredicateTree predicates;
+    std::atomic<int32_t> lazy_coalesce_counter{0};
+    context.stats = &stats;
+    context.timezone = "UTC";
+    context.predicate_tree = &predicates;
+    context.lake_schema = &lake;
+    context.lazy_column_coalesce_counter = &lazy_coalesce_counter;
+    context.materialized_columns = {{0, &slot, true}};
+    FileReader reader(1024, file.get(), size);
+    RETURN_IF_ERROR(reader.init(&context));
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(type, true), slot.id());
+    RETURN_IF_ERROR(reader.get_next(&chunk));
+    return chunk->get_column_by_index(0);
+}
+void expect_nested_geo_scan(LogicalType logical_type) {
+    MemTracker tracker{-1, "nested_geo_scan"};
+    CurrentThread::set_mem_tracker_source([] { return true; }, []() -> MemTracker* { return nullptr; });
+    DeferOp reset_tracker_source([] { CurrentThread::set_mem_tracker_source(nullptr, nullptr); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&tracker);
+    const bool geography = logical_type == TYPE_GEOGRAPHY;
+    const GeoTypeDescriptor semantic{geography ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY,
+                                     geography ? GEO_EDGE_ALGORITHM_SPHERICAL : GEO_EDGE_ALGORITHM_PLANAR, "OGC:CRS84",
+                                     4326};
+    auto map_semantic = semantic;
+    if (!geography) {
+        map_semantic.crs = "EPSG:3857";
+        map_semantic.srid = 3857;
+    }
+    const auto geo = TypeDescriptor::create_geo_type(logical_type, semantic);
+    const auto map_value = TypeDescriptor::create_geo_type(logical_type, map_semantic);
+    const auto array_type = TypeDescriptor::create_array_type(geo);
+    const auto map_type = TypeDescriptor::create_map_type(TYPE_INT_DESC, map_value);
+    const auto struct_type = TypeDescriptor::create_struct_type({"shape"}, {geo});
+    const auto leaf = [geography](std::string name, int id, const std::string& crs = "OGC:CRS84") {
+        auto field = iceberg_field(std::move(name), id);
+        auto metadata =
+                geography ? lake_geo().geo_metadata : lake_geo(TIcebergGeoKind::GEOMETRY, "PLANAR").geo_metadata;
+        metadata.__set_crs(crs);
+        field.__set_geo_metadata(metadata);
+        return field;
+    };
+    // parquet-mr 1.18.1. The files use the same field IDs and container layout.
+    const std::string path = std::string("./be/test/formats/parquet/test_data/iceberg_schema_evolution/") +
+                             (geography ? "nested_geography.parquet" : "nested_geometry.parquet");
+    const auto read = [&](const TypeDescriptor& type, const TIcebergSchemaField& field) {
+        return read_nested_geo(path, type, field);
+    };
+    const auto array = iceberg_field("ag", 1, {leaf("element", 11)});
+    const auto map = iceberg_field("mg", 2, {iceberg_field("key", 21), leaf("value", 22, map_semantic.crs)});
+    const auto record =
+            iceberg_field("sg", 3, {iceberg_field("label", 31), leaf("shape", 32), leaf("conflicting_shape", 33)});
+    const auto nested = iceberg_field("lsg", 4, {iceberg_field("element", 41, {leaf("shape", 42)})});
+    // GEOMETRY uses POINT(1000 -2000), outside spherical coordinate bounds.
+    const std::string little =
+            std::string("\x01\x01\0\0\0", 5) +
+            (geography ? std::string(16, '\0') : std::string("\0\0\0\0\0\x40\x8f\x40\0\0\0\0\0\x40\x9f\xc0", 16));
+    const std::string big =
+            std::string("\0\0\0\0\x01", 5) +
+            (geography ? std::string(16, '\0') : std::string("\x40\x8f\x40\0\0\0\0\0\xc0\x9f\x40\0\0\0\0\0", 16));
+    const std::string empty("\x01\x01\0\0\0\0\0\0\0\0\0\xf8\x7f\0\0\0\0\0\0\xf8\x7f", 21);
+    const auto expect_wkb = [](const Column* column, const GeoTypeDescriptor& expected,
+                               std::initializer_list<std::optional<std::string_view>> values) {
+        ASSERT_EQ(values.size(), column->size());
+        const auto* geo = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(column));
+        EXPECT_EQ(expected, geo->descriptor().type);
+        size_t index = 0;
+        for (const auto& value : values) {
+            EXPECT_EQ(!value, column->is_null(index));
+            if (value) EXPECT_EQ(*value, geo->get_wkb(index).to_string());
+            ++index;
+        }
+    };
+    const auto expect_container = [](const ColumnPtr& column, const UInt32Column& offsets, uint32_t count) {
+        ASSERT_EQ(6, column->size());
+        EXPECT_TRUE(column->is_null(0));
+        EXPECT_FALSE(column->is_null(1));
+        EXPECT_FALSE(column->is_null(2));
+        EXPECT_FALSE(column->is_null(5));
+        const auto data = offsets.get_data();
+        EXPECT_EQ((std::vector<uint32_t>{0, 0, 0, count, count, count, count + 1}),
+                  std::vector<uint32_t>(data.begin(), data.end()));
     };
 
-    expect_rejected(ColumnType::ARRAY, TypeDescriptor::create_array_type(geography));
-    expect_rejected(ColumnType::MAP, TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), geography));
-    expect_rejected(ColumnType::STRUCT, TypeDescriptor::create_struct_type({"shape"}, {geography}));
+    auto list_result = read(array_type, array);
+    ASSERT_TRUE(list_result.ok()) << list_result.status();
+    const auto* list = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(list_result.value().get()));
+    expect_container(list_result.value(), *list->offsets_column(), 4);
+    expect_wkb(list->elements_column().get(), semantic, {little, std::nullopt, big, empty, std::nullopt});
+
+    auto map_result = read(map_type, map);
+    ASSERT_TRUE(map_result.ok()) << map_result.status();
+    const auto* map_data = down_cast<const MapColumn*>(ColumnHelper::get_data_column(map_result.value().get()));
+    expect_container(map_result.value(), *map_data->offsets_column(), 4);
+    ASSERT_EQ(5, map_data->keys_column()->size());
+    EXPECT_EQ(14, map_data->keys_column()->get(4).get_int32());
+    expect_wkb(map_data->values_column().get(), map_semantic, {little, std::nullopt, big, empty, std::nullopt});
+
+    auto pruned_map = read(TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, map_value), map);
+    ASSERT_TRUE(pruned_map.ok()) << pruned_map.status();
+    const auto* pruned_map_data = down_cast<const MapColumn*>(ColumnHelper::get_data_column(pruned_map.value().get()));
+    expect_container(pruned_map.value(), *pruned_map_data->offsets_column(), 4);
+    expect_wkb(pruned_map_data->values_column().get(), map_semantic, {little, std::nullopt, big, empty, std::nullopt});
+
+    auto struct_result = read(struct_type, record);
+    ASSERT_TRUE(struct_result.ok()) << struct_result.status();
+    ASSERT_EQ(6, struct_result.value()->size());
+    EXPECT_TRUE(struct_result.value()->is_null(0));
+    EXPECT_FALSE(struct_result.value()->is_null(1));
+    const auto* fields = down_cast<const StructColumn*>(ColumnHelper::get_data_column(struct_result.value().get()));
+    expect_wkb(fields->field_column_raw_ptr(0), semantic,
+               {std::nullopt, std::nullopt, little, big, empty, std::nullopt});
+
+    auto nested_result = read(TypeDescriptor::create_array_type(struct_type), nested);
+    ASSERT_TRUE(nested_result.ok()) << nested_result.status();
+    const auto* nested_list = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(nested_result.value().get()));
+    expect_container(nested_result.value(), *nested_list->offsets_column(), 5);
+    const auto& elements = nested_list->elements_column();
+    ASSERT_EQ(6, elements->size());
+    EXPECT_FALSE(elements->is_null(1));
+    EXPECT_TRUE(elements->is_null(4));
+    EXPECT_TRUE(elements->is_null(5));
+    const auto* nested_fields = down_cast<const StructColumn*>(ColumnHelper::get_data_column(elements.get()));
+    expect_wkb(nested_fields->field_column_raw_ptr(0), semantic,
+               {little, std::nullopt, big, empty, std::nullopt, std::nullopt});
+
+    auto wrong_id = array;
+    wrong_id.children[0].field_id = 100;
+    auto status = read(array_type, wrong_id).status();
+    EXPECT_TRUE(status.is_invalid_argument()) << status;
+    EXPECT_NE(std::string::npos, status.message().find("field ID mismatch"));
+    auto invalid_metadata = map;
+    invalid_metadata.children[1].geo_metadata.edge_algorithm = geography ? "PLANAR" : "SPHERICAL";
+    status = read(map_type, invalid_metadata).status();
+    EXPECT_TRUE(status.is_invalid_argument()) << status;
+    EXPECT_NE(std::string::npos, status.message().find("Iceberg/plan geo schema mismatch"));
+    EXPECT_TRUE(read(array_type, iceberg_field("ag", 1, {iceberg_field("element", 11)})).status().is_not_supported());
+
+    auto geo_key = map;
+    EXPECT_TRUE(read(TypeDescriptor::create_map_type(geo, map_value), geo_key).status().is_not_supported());
+    geo_key.children[0] = iceberg_field("key", 21, {leaf("shape", 100)});
+    status = read(TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, map_value), geo_key).status();
+    EXPECT_TRUE(status.is_not_supported()) << status;
+
+    const auto missing = iceberg_field("sg", 3, {leaf("old_shape", 100)});
+    auto missing_result = read(TypeDescriptor::create_struct_type({"old_shape"}, {geo}), missing);
+    ASSERT_TRUE(missing_result.ok()) << missing_result.status();
+    ASSERT_EQ(6, missing_result.value()->size());
+    EXPECT_TRUE(missing_result.value()->is_null(0));
+    EXPECT_FALSE(missing_result.value()->is_null(2));
+    const auto* missing_fields =
+            down_cast<const StructColumn*>(ColumnHelper::get_data_column(missing_result.value().get()));
+    expect_wkb(missing_fields->field_column_raw_ptr(0), semantic,
+               {std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt});
+
+    const auto label_type = TypeDescriptor::create_struct_type({"label"}, {TYPE_INT_DESC});
+    auto pruned = read(label_type, record);
+    ASSERT_TRUE(pruned.ok()) << pruned.status();
+    ASSERT_EQ(6, pruned.value()->size());
+    const auto* labels = down_cast<const StructColumn*>(ColumnHelper::get_data_column(pruned.value().get()));
+    EXPECT_EQ(20, labels->field_column_raw_ptr(0)->get(2).get_int32());
+    status = read(TypeDescriptor::create_struct_type({"conflicting_shape"}, {geo}), record).status();
+    EXPECT_TRUE(status.is_invalid_argument()) << status;
+    EXPECT_NE(std::string::npos, status.message().find("Iceberg/Parquet geo logical type mismatch"));
+
+    if (!geography) {
+        // A physical unannotated BYTE_ARRAY leaf with only NULLs still has the planned descriptor.
+        const auto all_null = iceberg_field("sg", 3, {leaf("null_shape", 34)});
+        auto result = read(TypeDescriptor::create_struct_type({"null_shape"}, {geo}), all_null);
+        ASSERT_TRUE(result.ok()) << result.status();
+        EXPECT_FALSE(result.value()->is_null(2));
+        const auto* data = down_cast<const StructColumn*>(ColumnHelper::get_data_column(result.value().get()));
+        expect_wkb(data->field_column_raw_ptr(0), semantic,
+                   {std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt});
+
+        // The real Parquet annotation is EPSG:3857, while Iceberg and the slot agree on CRS84.
+        const auto wrong_crs = iceberg_field("mg", 2, {iceberg_field("key", 21), leaf("value", 22)});
+        status = read(TypeDescriptor::create_map_type(TYPE_INT_DESC, geo), wrong_crs).status();
+        EXPECT_TRUE(status.is_invalid_argument()) << status;
+        EXPECT_NE(std::string::npos, status.message().find("Iceberg/Parquet geo schema mismatch"));
+
+        // A GEOMETRY leaf beneath a struct key must be rejected even if the key is pruned.
+        const auto nested_key =
+                iceberg_field("bad_keys", 5, {iceberg_field("key", 51, {leaf("shape", 52)}), leaf("value", 53)});
+        status = read(TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, geo), nested_key).status();
+        EXPECT_TRUE(status.is_not_supported()) << status;
+        EXPECT_NE(std::string::npos, status.message().find("GEO types are not supported in Parquet MAP keys"));
+    }
+}
+} // namespace
+
+TEST(GeoMetadataTest, NestedNativeGeographyReadsContainers) {
+    expect_nested_geo_scan(TYPE_GEOGRAPHY);
+}
+
+TEST(GeoMetadataTest, NestedNativeGeometryReadsContainers) {
+    expect_nested_geo_scan(TYPE_GEOMETRY);
 }
 
 TEST(GeoMetadataTest, NativeGeographyConverterPreservesNullsAndOwnership) {
-    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                     GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
+    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
     const auto type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, semantic);
     ParquetField field;
     field.physical_type = tparquet::Type::BYTE_ARRAY;
@@ -870,17 +1167,28 @@ TEST(GeoMetadataTest, NativeGeographyConverterPreservesNullsAndOwnership) {
     EXPECT_TRUE(converter->convert(source.get(), required_target.get()).is_invalid_argument());
 }
 
-TEST(GeoMetadataTest, NativeGeographyScanTransportAndOutput) {
+static void expect_native_geo_scan(LogicalType logical_type) {
     MemTracker tracker{-1, "native_geography_scan"};
     CurrentThread::set_mem_tracker_source([] { return true; }, []() -> MemTracker* { return nullptr; });
     DeferOp reset_tracker_source([] { CurrentThread::set_mem_tracker_source(nullptr, nullptr); });
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&tracker);
-    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                     GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
-    const auto type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, semantic);
+    const bool geography = logical_type == TYPE_GEOGRAPHY;
+    const GeoTypeDescriptor semantic{geography ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY,
+                                     geography ? GEO_EDGE_ALGORITHM_SPHERICAL : GEO_EDGE_ALGORITHM_PLANAR, "OGC:CRS84",
+                                     4326};
+    const auto type = TypeDescriptor::create_geo_type(logical_type, semantic);
+    // WKB POINT(0 0) in each byte order and a little-endian POLYGON EMPTY (zero rings).
+    const auto point_le = std::string("\x01\x01\0\0\0", 5) + std::string(16, '\0');
+    const auto point_be = std::string("\0\0\0\0\x01", 5) + std::string(16, '\0');
+    const std::string empty("\x01\x03\0\0\0\0\0\0\0", 9);
+    const std::vector<std::optional<std::string>> mixed{point_le, std::nullopt, point_be, empty};
+    const std::vector<std::optional<std::string>> single{point_le};
     for (bool dictionary : {false, true}) {
         for (bool annotated : {false, true}) {
-            auto bytes = geo_file(true, dictionary, annotated);
+            const bool use_mixed = !geography && !dictionary;
+            auto bytes = use_mixed ? geo_file(false, false, annotated, true, mixed)
+                                   : geo_file(geography, dictionary, annotated);
+            const auto& expected = use_mixed ? mixed : single;
             const auto size = bytes.size();
             RandomAccessFile file(std::make_shared<io::StringInputStream>(std::move(bytes)), "native-geo.parquet");
             FormatScannerStats stats;
@@ -892,7 +1200,7 @@ TEST(GeoMetadataTest, NativeGeographyScanTransportAndOutput) {
             PredicateTree predicates;
             context.predicate_tree = &predicates;
             TIcebergSchema lake;
-            lake.__set_fields({lake_geo()});
+            lake.__set_fields({geography ? lake_geo() : lake_geo(TIcebergGeoKind::GEOMETRY, "PLANAR")});
             context.lake_schema = &lake;
             TSlotDescriptor output_slot;
             output_slot.__set_id(1);
@@ -909,13 +1217,6 @@ TEST(GeoMetadataTest, NativeGeographyScanTransportAndOutput) {
             auto chunk = std::make_shared<Chunk>();
             chunk->append_column(ColumnHelper::create_column(type, true), 1);
             ASSERT_TRUE(reader.get_next(&chunk).ok());
-            ASSERT_EQ(1, chunk->num_rows());
-            const auto* geo = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(chunk->columns()[0].get()));
-            EXPECT_EQ(semantic, geo->descriptor().type);
-            std::string expected(1, '\x01');
-            put_fixed32_le(&expected, 1);
-            expected.append(16, '\0');
-            EXPECT_EQ(expected, geo->get_wkb(0).to_string());
             auto wire = serde::ProtobufChunkSerde::serialize(*chunk);
             ASSERT_TRUE(wire.ok()) << wire.status();
             serde::ProtobufChunkMeta meta;
@@ -926,14 +1227,35 @@ TEST(GeoMetadataTest, NativeGeographyScanTransportAndOutput) {
             serde::ProtobufChunkDeserializer decoder(meta);
             auto restored = decoder.deserialize(wire->data());
             ASSERT_TRUE(restored.ok()) << restored.status();
-            MysqlRowBuffer row;
-            restored->columns()[0]->put_mysql_row_buffer(&row, 0);
-            std::string output;
-            row.move_content(&output);
-            EXPECT_EQ(std::string(1, static_cast<char>(expected.size())) + expected, output);
+            for (const auto* column : {chunk->columns()[0].get(), restored->columns()[0].get()}) {
+                ASSERT_EQ(expected.size(), column->size());
+                const auto* geo = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(column));
+                EXPECT_EQ(semantic, geo->descriptor().type);
+                for (size_t row = 0; row < expected.size(); ++row) {
+                    EXPECT_EQ(!expected[row].has_value(), column->is_null(row));
+                    if (expected[row]) {
+                        EXPECT_EQ(*expected[row], geo->get_wkb(row).to_string());
+                    }
+                }
+            }
+            if (geography) {
+                MysqlRowBuffer row;
+                restored->columns()[0]->put_mysql_row_buffer(&row, 0);
+                std::string output;
+                row.move_content(&output);
+                EXPECT_EQ(std::string(1, static_cast<char>(point_le.size())) + point_le, output);
+            }
             EXPECT_EQ(0, stats.statistics_tried_counter);
             EXPECT_EQ(0, stats.bloom_filter_tried_counter);
         }
     }
+}
+
+TEST(GeoMetadataTest, NativeGeographyScanTransportAndOutput) {
+    expect_native_geo_scan(TYPE_GEOGRAPHY);
+}
+
+TEST(GeoMetadataTest, NativeGeometryScanAndTransportPreserveWkb) {
+    expect_native_geo_scan(TYPE_GEOMETRY);
 }
 } // namespace starrocks::parquet

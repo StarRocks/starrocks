@@ -16,6 +16,7 @@ package com.starrocks.connector.metadata;
 
 public enum MetadataTableType {
     LOGICAL_ICEBERG_METADATA("logical_iceberg_metadata"),
+    PAIMON_GLOBAL_INDEX("paimon_global_index"),
     REFS("refs"),
     HISTORY("history"),
     METADATA_LOG_ENTRIES("metadata_log_entries"),
@@ -23,7 +24,12 @@ public enum MetadataTableType {
     MANIFESTS("manifests"),
     FILES("files"),
     PARTITIONS("partitions"),
-    PROPERTIES("properties");
+    PROPERTIES("properties"),
+    ENTRIES("entries"),
+    ALL_DATA_FILES("all_data_files"),
+    ALL_DELETE_FILES("all_delete_files"),
+    ALL_MANIFESTS("all_manifests"),
+    ALL_ENTRIES("all_entries");
 
     public final String typeString;
 

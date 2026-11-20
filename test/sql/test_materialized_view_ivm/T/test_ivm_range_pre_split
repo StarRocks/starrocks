@@ -1,7 +1,7 @@
 -- name: test_ivm_range_pre_split @cloud
 -- A range-distributed incremental MV is keyed by its hidden auto-increment row-id column, so a
 -- refresh has no user data to sample: its pre-split boundaries are derived from the row-id space
--- instead, which is knowable in advance only while the counter is still pristine.
+-- instead, starting at the table's current auto-increment counter.
 --
 -- This drives that path end to end at a scale where it deliberately declines to split: a tablet's
 -- share of 1000 rows cannot clear the gaps that per-node id caching leaves behind, so the planner
@@ -55,7 +55,15 @@ SELECT count(*), sum(amount) FROM mv_range_pre_split;
 SELECT region, amount FROM mv_range_pre_split WHERE region = 'r9';
 
 drop materialized view mv_range_pre_split;
-drop table ivm_ice_${uuid0}.ivm_ice_db_${uuid0}.base;
+drop table ivm_ice_${uuid0}.ivm_ice_db_${uuid0}.base force;
 drop database ivm_ice_${uuid0}.ivm_ice_db_${uuid0};
 drop catalog ivm_ice_${uuid0};
 drop database db_${uuid0};
+
+CLEANUP {
+drop database if exists default_catalog.db_${uuid0} force;
+drop table if exists ivm_ice_${uuid0}.ivm_ice_db_${uuid0}.base force;
+drop database if exists ivm_ice_${uuid0}.ivm_ice_db_${uuid0};
+set catalog default_catalog;
+drop catalog if exists ivm_ice_${uuid0};
+} END CLEANUP

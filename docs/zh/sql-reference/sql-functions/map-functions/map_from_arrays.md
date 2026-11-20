@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将两个 Array 数组组合成一个 Map，分别作为 Key 和 Value。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # map_from_arrays

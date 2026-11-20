@@ -134,6 +134,36 @@ public class LakeRangeRollupJobTest {
         return job;
     }
 
+    /**
+     * A load planned right after the job enters WAITING_TXN must get a schema param and a partition param that
+     * list the same indexes, or the compute node rejects it.
+     */
+    @Test
+    public void testLoadPlannedRightAfterPendingMatchesSinkIndexes() throws Exception {
+        new MockUp<WarehouseManager>(GlobalStateMgr.getCurrentState().getWarehouseMgr().getClass()) {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                ComputeNode cn = new ComputeNode(1000L, "127.0.0.1", 9050);
+                cn.setAlive(true);
+                return cn;
+            }
+        };
+        new MockUp<LakeRollupJob>() {
+            @Mock
+            public static void sendAgentTaskAndWait(AgentBatchTask batchTask,
+                    MarkedCountDownLatch<Long, Long> countDownLatch, long timeoutSeconds) {
+            }
+        };
+        LakeRangeRollupJob job = createSyncJob("select k2, count(v1) from t_rollup where k1 > 0 group by k2");
+        job.setSampler(stubSamplerReturning(List.of()));
+        ConcurrentLoad.assertSinkIndexesMatch(db, table);
+
+        job.runPendingJob();
+
+        assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+        ConcurrentLoad.assertSinkIndexesMatch(db, table);
+    }
+
     @Test
     public void testSyncDefinitionsAndBaseRewriteInputSurviveJournal() throws Exception {
         LakeRangeRollupJob job = createSyncJob("select k2 + 1 as derived, count(v1), bitmap_agg(v1), "

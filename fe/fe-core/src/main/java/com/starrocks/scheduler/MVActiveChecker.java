@@ -19,14 +19,15 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.util.LeaderDaemon;
-import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -71,7 +72,8 @@ public class MVActiveChecker extends LeaderDaemon {
             MV_BACKUP_INACTIVE_REASON,
             MaterializedViewExceptions.INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED,
             MaterializedViewExceptions.INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES,
-            MaterializedViewExceptions.INACTIVE_REASON_FOR_INCREMENTAL_BREAKING
+            MaterializedViewExceptions.INACTIVE_REASON_FOR_INCREMENTAL_BREAKING,
+            MaterializedViewExceptions.INACTIVE_REASON_FOR_MV_SCHEMA_MISMATCH
     );
 
     @Override
@@ -160,11 +162,6 @@ public class MVActiveChecker extends LeaderDaemon {
             return;
         }
 
-<<<<<<< HEAD
-        boolean activeOk = false;
-        String mvFullName =
-                new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName.get(), mv.getName()).toString();
-=======
         boolean activeOk = executeActivate(mv, dbName.get());
         if (activeOk) {
             MV_ACTIVE_INFO.remove(mv.getMvId());
@@ -188,38 +185,29 @@ public class MVActiveChecker extends LeaderDaemon {
     }
 
     private static boolean executeActivate(MaterializedView mv, String dbName) {
-        String mvFullName = ParseUtil.backquote(dbName) + "." + ParseUtil.backquote(mv.getName());
->>>>>>> 489629bc8df... [BugFix] Quote the materialized view name when FORCE activates it and in its recovery hint (#64945)
+        String mvFullName =
+                new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, mv.getName()).toString();
         String sql = String.format("ALTER MATERIALIZED VIEW %s active", mvFullName);
         LOG.info("[MVActiveChecker] Start to activate MV {} because of its inactive reason: {}",
                 mvFullName, mv.getInactiveReason());
         try {
             ConnectContext connect = StatisticUtils.buildConnectContext();
             connect.setStatisticsContext(false);
-            connect.setDatabase(dbName.get());
-
-            connect.executeSql(sql);
-            if (mv.isActive()) {
-                activeOk = true;
-                LOG.info("[MVActiveChecker] activate MV {} successfully", mvFullName);
-            } else {
-                LOG.warn("[MVActiveChecker] activate MV {} failed", mvFullName);
+            connect.setDatabase(dbName);
+            // Hand the caller's thread its own context back: a refresh activates its view from the thread it runs in.
+            try (ConnectContext.ScopeGuard ignored = connect.bindScope()) {
+                connect.executeSql(sql);
             }
         } catch (Exception e) {
             LOG.warn("[MVActiveChecker] activate MV {} failed", mvFullName, e);
-        } finally {
-            ConnectContext.remove();
+            return false;
         }
-
-        if (activeOk) {
-            MV_ACTIVE_INFO.remove(mv.getMvId());
-        } else {
-            if (activeInfo != null) {
-                activeInfo.next();
-            } else {
-                MV_ACTIVE_INFO.put(mv.getMvId(), MvActiveInfo.firstFailure());
-            }
+        if (mv.isActive()) {
+            LOG.info("[MVActiveChecker] activate MV {} successfully", mvFullName);
+            return true;
         }
+        LOG.warn("[MVActiveChecker] activate MV {} failed", mvFullName);
+        return false;
     }
 
     public static class MvActiveInfo {

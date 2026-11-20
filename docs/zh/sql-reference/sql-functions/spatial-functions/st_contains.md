@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "判断多边形是否严格包含一个点。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Contains

@@ -214,6 +214,7 @@ jobs:
               - 'thirdparty/**'
               - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
 
+      # Keep aligned with THIRDPARTY_PATHSPECS in build-support/check_thirdparty_merge_base.py.
       - uses: dorny/paths-filter@v3
         id: linux-thirdparty-filter
         with:
@@ -236,9 +237,35 @@ jobs:
           echo "be=${{ steps.changes.outputs.be }}" >> $GITHUB_OUTPUT
           echo "thirdparty=${thirdparty}" >> $GITHUB_OUTPUT
 
+  # Once a PR that changes the thirdparty build is merged, the merge pipeline (ci-merged.yml)
+  # promotes its CI image to the base branch's CI image, so such PRs must land in order: the PR
+  # must be based on every thirdparty change already merged into its base branch, or the image
+  # it promotes drops them. When this job does not pass, Thirdparty Update builds no image and
+  # Thirdparty Info fails. Logic: build-support/check_thirdparty_merge_base.py.
+  thirdparty-merge-base:
+    runs-on: ubuntu-latest
+    needs: be-checker
+    name: Thirdparty Merge Base
+    if: needs.be-checker.outputs.output2 == 'true'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check Merge Base
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Check the PR head, not the checked-out test-merge commit (always based on the base tip),
+          # against the base branch as it is now, so a re-run sees changes merged since the push.
+          git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          git cat-file -e "${HEAD_SHA}^{commit}" 2>/dev/null || git fetch --no-tags origin "${HEAD_SHA}"
+          python3 build-support/check_thirdparty_merge_base.py --head "${HEAD_SHA}" --base "origin/${BASE_REF}"
+
   thirdparty-update:
     runs-on: [self-hosted, normal]
-    needs: be-checker
+    needs: [be-checker, thirdparty-merge-base]
     if: ${{ needs.be-checker.outputs.output2 == 'true' }}
     name: Thirdparty Update
     env:
@@ -285,6 +312,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - be-checker
+      - thirdparty-merge-base
       - thirdparty-update
     if: "!cancelled() && needs.be-checker.outputs.output1 == 'true'"
     name: Thirdparty Info
@@ -301,14 +329,25 @@ jobs:
 
       - name: Check Result
         run: |
+          thirdparty_filter='${{ needs.be-checker.outputs.output2 }}'
+          merge_base_result='${{ needs.thirdparty-merge-base.result }}'
           update_result='${{ needs.thirdparty-update.result }}'
+          if [[ "$thirdparty_filter" == 'true' && "$merge_base_result" != 'success' ]]; then
+            echo "::error::Thirdparty Merge Base did not pass (result=$merge_base_result). If it reports missing thirdparty changes, rebase this PR onto the latest ${{ github.base_ref }} and push again."
+            exit 1
+          fi
           if [[ "$update_result" == 'failure' || "$update_result" == 'cancelled' ]]; then
             echo "::error::thirdparty-update did not complete (result=$update_result)"
             exit 1
           fi
-          # 'skipped' means this PR didn't touch thirdparty - nothing to verify,
-          # downstream BUILD reuses the default cached image.
           if [[ "$update_result" != 'success' ]]; then
+            # A thirdparty PR must build its own image; never fall back to the default one.
+            if [[ "$thirdparty_filter" == 'true' ]]; then
+              echo "::error::This PR changes thirdparty but thirdparty-update did not run (result=$update_result)"
+              exit 1
+            fi
+            # 'skipped' means this PR didn't touch thirdparty - nothing to verify,
+            # downstream BUILD reuses the default cached image.
             exit 0
           fi
           # Defensive (only when update reported success): verify both platforms
@@ -345,6 +384,12 @@ jobs:
     needs: [be-checker, thirdparty-info]
     timeout-minutes: 180
     name: BE UT
+    # The implicit success() would skip this job whenever thirdparty-update is skipped.
+    # thirdparty-info only succeeds when BE changed and thirdparty-update did not fail.
+    if: >
+      !cancelled() &&
+      needs.be-checker.result == 'success' &&
+      needs.thirdparty-info.result == 'success'
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}

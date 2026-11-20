@@ -19,9 +19,11 @@ import com.starrocks.authorization.AccessControlProvider;
 import com.starrocks.authorization.AccessController;
 import com.starrocks.authorization.AllowAllAccessController;
 import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvRefreshArbiter;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
@@ -33,27 +35,41 @@ import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersion;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.ConnectorPartitionTraits;
+import com.starrocks.connector.MVPartitionCellBuilder;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
+import com.starrocks.connector.partitiontraits.IcebergPartitionTraits;
 import com.starrocks.load.loadv2.IVMInsertLoadTxnCallback;
+import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.mv.MVRefreshProcessor;
 import com.starrocks.scheduler.mv.hybrid.MVHybridRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshPartitioner;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.PCTPartitionTopology;
+import com.starrocks.scheduler.mv.pct.PCTRefreshScope;
+import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellWithName;
+import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.transaction.TransactionState;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -62,9 +78,13 @@ import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 @TestMethodOrder(MethodName.class)
@@ -110,7 +130,7 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
     }
 
     @Test
-    public void testPlannerFailureRestoresInternalAuthorizationBypass() throws Exception {
+    public void testIvmRefreshIsPlannedWithoutAuthorizationBypass() throws Exception {
         String ddl = "CREATE MATERIALIZED VIEW `test`.`test_mv1` " +
                 "REFRESH DEFERRED MANUAL\n" +
                 "PROPERTIES ('refresh_mode' = 'incremental')\n" +
@@ -134,9 +154,8 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         try {
             TaskRun taskRun = buildMVTaskRun(mv, "test");
             Assertions.assertThrows(RuntimeException.class, () -> getMVRefreshExecPlan(taskRun));
-            Assertions.assertTrue(bypassDuringPlanning.get());
+            Assertions.assertFalse(bypassDuringPlanning.get());
             Assertions.assertSame(taskRun.getRunCtx(), plannerContext.get());
-            Assertions.assertFalse(plannerContext.get().isBypassAuthorizerCheck());
         } finally {
             starRocksAssert.dropMaterializedView("test_mv1");
         }
@@ -161,7 +180,8 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
     @Test
     public void testIVMWithGroupByNoAggregate() throws Exception {
         // Guards the row-id fix: GROUP BY-only refresh used to fail TypeChecker on the
-        // __ROW_ID__ merge join (BIGINT vs VARCHAR).
+        // __ROW_ID__ merge join (BIGINT vs VARCHAR). The row id is the encoded key, and with
+        // no aggregate state to merge the refresh does not join the MV.
         doTestWith3RunsNoCheckRewrite("SELECT id FROM `iceberg0`.`unpartitioned_db`.`t0` as a GROUP BY id;",
                 plan -> {
                     PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.NORMAL),
@@ -171,8 +191,8 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                 plan -> {
                     String planStr = plan.getExplainString(TExplainLevel.NORMAL);
                     PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
-                    PlanTestBase.assertContains(planStr, "__ROW_ID__ = ");
                     PlanTestBase.assertContains(planStr, "from_binary");
+                    PlanTestBase.assertNotContains(planStr, "__ROW_ID__ = ");
                 }
         );
     }
@@ -180,7 +200,8 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
     @Test
     public void testIVMWithSelectDistinctNoAggregate() throws Exception {
         // Statement-level SELECT DISTINCT used to pick AUTO_INCREMENT and crash refresh
-        // TypeChecker on the __ROW_ID__ merge join (BIGINT vs VARCHAR).
+        // TypeChecker on the __ROW_ID__ merge join (BIGINT vs VARCHAR). The row id is the encoded
+        // key, and with no aggregate state to merge the refresh does not join the MV.
         doTestWith3RunsNoCheckRewrite("SELECT DISTINCT id FROM `iceberg0`.`unpartitioned_db`.`t0` as a;",
                 plan -> {
                     PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.NORMAL),
@@ -190,8 +211,8 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                 plan -> {
                     String planStr = plan.getExplainString(TExplainLevel.NORMAL);
                     PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
-                    PlanTestBase.assertContains(planStr, "__ROW_ID__ = ");
                     PlanTestBase.assertContains(planStr, "from_binary");
+                    PlanTestBase.assertNotContains(planStr, "__ROW_ID__ = ");
                 }
         );
     }
@@ -378,26 +399,6 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                                     "     TABLE VERSION: Delta@[1,2]");
                 }
         );
-    }
-
-    @Test
-    public void testPartitionedIVMWithScanWithDisableIcebergIdentityColumnOptimize() throws Exception {
-        connectContext.getSessionVariable().setEnableIcebergIdentityColumnOptimize(false);
-        doTestWith3Runs("SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1` as a;",
-                plan -> {
-                    PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.COSTS),
-                            "  0:IcebergScanNode\n" +
-                                    "     TABLE: partitioned_db.t1\n" +
-                                    "     TABLE VERSION: Delta@[0,1]");
-                },
-                plan -> {
-                    PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.COSTS),
-                            "  0:IcebergScanNode\n" +
-                                    "     TABLE: partitioned_db.t1\n" +
-                                    "     TABLE VERSION: Delta@[1,2]");
-                }
-        );
-        connectContext.getSessionVariable().setEnableIcebergIdentityColumnOptimize(true);
     }
 
     @Test
@@ -1110,6 +1111,37 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
     }
 
     @Test
+    public void testInterruptedAutoFallbackIsTakenOverByPct() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto",
+                "`date`", Map.of("partition_refresh_number", "1"));
+        advanceTableVersionTo(2);
+        runRemainingBatches(getMVTaskRunProcessor(mv).getMVRefreshProcessor());
+        Assertions.assertEquals(2L, tvrBaselineVersion(mv));
+
+        MockIcebergMetadata mockIcebergMetadata =
+                (MockIcebergMetadata) connectContext.getGlobalStateMgr().getMetadataMgr()
+                        .getOptionalMetadata(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME).get();
+        mockIcebergMetadata.updatePartitions("partitioned_db", "t1",
+                ImmutableList.of("date=2020-01-02", "date=2020-01-03"));
+        advanceTableVersionTo(3);
+        mockListTableDeltaTraitsThrows("Starting snapshot (exclusive) 2 is not a parent ancestor of end snapshot 3");
+        MVRefreshProcessor interrupted = getMVTaskRunProcessor(mv).getMVRefreshProcessor();
+        Assertions.assertTrue(((MVHybridRefreshProcessor) interrupted).getCurrentProcessor()
+                instanceof MVPCTRefreshProcessor);
+        Assertions.assertNotNull(nextBatchOf(interrupted), "the fallback must stop with a batch still to run");
+
+        mockListTableDeltaTraits(ImmutableList.of(
+                TvrTableDeltaTrait.ofMonotonic(TvrTableDelta.of(2L, 3L), TvrDeltaStats.EMPTY)));
+        MVRefreshProcessor takeover = getMVTaskRunProcessor(mv).getMVRefreshProcessor();
+        Assertions.assertTrue(((MVHybridRefreshProcessor) takeover).getCurrentProcessor()
+                        instanceof MVPCTRefreshProcessor,
+                "a job that stopped after writing must be rebuilt, not resumed from a baseline its data moved past");
+        runRemainingBatches(takeover);
+        Assertions.assertEquals(3L, tvrBaselineVersion(mv));
+    }
+
+    @Test
     public void testIVMAggregatePlanContainsStateUnionAndMvScan() throws Exception {
         doTestWith3Runs("SELECT date, sum(id), approx_count_distinct(data) " +
                         "FROM `iceberg0`.`partitioned_db`.`t1` as a group by date;",
@@ -1220,6 +1252,280 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         Assertions.assertTrue(pinned instanceof TvrTableSnapshot, "pinned range should be a TvrTableSnapshot");
         Assertions.assertEquals(2L, pinned.to().getVersion(),
                 "pinned snapshot should match the PCT-synced version (2)");
+    }
+
+    /**
+     * A pinned PCT batch must enumerate the ref base table's partitions AS OF the frozen snapshot:
+     * {@code MVPartitionCellBuilder} honours its {@code pinnedVersionRange} argument for external
+     * tables, and both partition differs feed it from {@code PartitionDiffer#pinnedRangeFor}.
+     */
+    @Test
+    public void testPinnedRangeReachesPartitionEnumeration() throws Exception {
+        List<TvrVersionRange> pinnedArgsForExternalTables = new ArrayList<>();
+        new MockUp<MVPartitionCellBuilder>() {
+            @Mock
+            public BaseToMVPartitionMapping getPartitionKeyRange(Invocation invocation,
+                                                                 com.starrocks.catalog.Table table,
+                                                                 Column partitionColumn,
+                                                                 Expr partitionExpr,
+                                                                 TvrVersionRange pinnedVersionRange)
+                    throws AnalysisException {
+                if (!table.isNativeTableOrMaterializedView()) {
+                    pinnedArgsForExternalTables.add(pinnedVersionRange);
+                }
+                return invocation.proceed();
+            }
+
+            @Mock
+            public BaseToMVPartitionMapping getPartitionCells(Invocation invocation,
+                                                              com.starrocks.catalog.Table table,
+                                                              List<Column> partitionColumns,
+                                                              TvrVersionRange pinnedVersionRange)
+                    throws AnalysisException {
+                if (!table.isNativeTableOrMaterializedView()) {
+                    pinnedArgsForExternalTables.add(pinnedVersionRange);
+                }
+                return invocation.proceed();
+            }
+        };
+
+        String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto",
+                "`date`", Map.of("partition_refresh_number", "1"));
+
+        advanceTableVersionTo(2);
+        mockListTableDeltaTraits();
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
+        TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
+        MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(taskRun);
+
+        MvTaskRunContext mvTaskRunContext = mvTaskRunProcessor.getMvTaskRunContext();
+        Assertions.assertFalse(mvTaskRunContext.getRefreshRuntimeState().getPinnedTvrMap().isEmpty(),
+                "precondition: the run must have taken the pinned fallback path");
+        Assertions.assertFalse(pinnedArgsForExternalTables.isEmpty(),
+                "precondition: partition enumeration must have run for the iceberg base table");
+
+        Assertions.assertTrue(pinnedArgsForExternalTables.stream().anyMatch(Objects::nonNull),
+                String.format("pinned snapshot never reached partition enumeration: all %d call(s) got null, "
+                                + "so partitions were enumerated from live while the scan reads the frozen snapshot",
+                        pinnedArgsForExternalTables.size()));
+    }
+
+    /**
+     * The refresh scope and its partition predicate are derived from the partition topology, while the
+     * scan reads the frozen snapshot. Publishing the topology first would derive the scope from a state
+     * older than the snapshot, so a partition created in between is inside the snapshot yet outside the
+     * scope: its rows are never materialized even though the baseline advances past them. This ordering
+     * is shared by every base-table type, so exercising it once here covers the cloud-native path too.
+     */
+    @Test
+    public void testSnapshotIsFrozenBeforePartitionTopologyIsPublished() throws Exception {
+        List<String> order = new ArrayList<>();
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public TvrTableSnapshot acquireTvrSnapshot(Invocation invocation, String dbName,
+                                                      com.starrocks.catalog.Table table, MvId mvId) {
+                TvrTableSnapshot snapshot = invocation.proceed();
+                order.add("freeze");
+                return snapshot;
+            }
+        };
+        new MockUp<MVPCTRefreshPartitioner>() {
+            @Mock
+            public void publishTopology(Invocation invocation, PCTPartitionTopology topology) {
+                order.add("publishTopology");
+                invocation.proceed();
+            }
+        };
+
+        String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto",
+                "`date`", Map.of("partition_refresh_number", "1"));
+
+        advanceTableVersionTo(2);
+        mockListTableDeltaTraits();
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
+        TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
+        getMVTaskRunProcessor(taskRun);
+
+        Assertions.assertTrue(order.contains("freeze") && order.contains("publishTopology"),
+                "precondition: both the freeze and the topology publish must have run, got: " + order);
+        // Compare the last of each: the hybrid processor's IVM attempt runs the same sync path and
+        // freezes before it bails out, so the earlier pair belongs to a run whose plan was discarded.
+        Assertions.assertTrue(order.lastIndexOf("freeze") < order.lastIndexOf("publishTopology"),
+                "the snapshot must be frozen before the topology the plan uses is published, got: " + order);
+    }
+
+    /**
+     * Enumerating as of the frozen snapshot must materialise into the MV's partition set: a partition
+     * the snapshot holds but live no longer reports still gets an MV partition to receive its rows.
+     * Whether that partition then enters the refresh scope is asserted separately by
+     * {@link #testPartitionOnlyInPinnedSnapshotEntersRefreshScope}.
+     */
+    @Test
+    public void testPartitionOnlyInPinnedSnapshotGetsAnMvPartition() throws Exception {
+        String pinnedOnlyPartition = "p19990101";
+        new MockUp<MVPartitionCellBuilder>() {
+            @Mock
+            public BaseToMVPartitionMapping getPartitionCells(Invocation invocation,
+                                                             com.starrocks.catalog.Table table,
+                                                             List<Column> partitionColumns,
+                                                             TvrVersionRange pinnedVersionRange)
+                    throws AnalysisException {
+                BaseToMVPartitionMapping liveView = invocation.proceed();
+                if (table.isNativeTableOrMaterializedView() || pinnedVersionRange == null) {
+                    return liveView;
+                }
+                List<PCellWithName> asOfPinned = new ArrayList<>(liveView.cells().getPartitions());
+                asOfPinned.add(PCellWithName.of(pinnedOnlyPartition, new PListCell("1999-01-01")));
+                return BaseToMVPartitionMapping.of(PCellSortedSet.of(asOfPinned));
+            }
+        };
+
+        String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto",
+                "`date`", Map.of("partition_refresh_number", "-1"));
+
+        advanceTableVersionTo(2);
+        mockListTableDeltaTraits();
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
+        TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
+        MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(taskRun);
+
+        MvTaskRunContext mvTaskRunContext = mvTaskRunProcessor.getMvTaskRunContext();
+        Assertions.assertFalse(mvTaskRunContext.getRefreshRuntimeState().getPinnedTvrMap().isEmpty(),
+                "precondition: the run must have taken the pinned fallback path");
+
+        Set<String> mvPartitions = getMv("test_mv1").getVisiblePartitionNames();
+        Assertions.assertTrue(mvPartitions.contains(pinnedOnlyPartition),
+                String.format("partition '%s' exists at the pinned snapshot but the MV has no partition "
+                                + "for it, so partitions were enumerated from live: %s",
+                        pinnedOnlyPartition, mvPartitions));
+    }
+
+    /**
+     * A pinned run must also decide WHICH partitions to refresh from the frozen snapshot: enumerating from
+     * the pin but scoping from live leaves a partition that only the pin holds with an MV partition and no
+     * batch to fill it, while the last batch still promotes the baseline past that snapshot.
+     */
+    @Test
+    public void testPartitionOnlyInPinnedSnapshotEntersRefreshScope() throws Exception {
+        String droppedFromLive = "date=2020-01-04";
+        String mvPartitionOfDropped = "p20200104";
+        new MockUp<IcebergPartitionTraits>() {
+            @Mock
+            public List<String> getPartitionNames(Invocation invocation) {
+                List<String> names = new ArrayList<>(invocation.<List<String>>proceed());
+                ConnectorPartitionTraits traits = invocation.getInvokedInstance();
+                if (traits.getPinnedVersionRange() == null) {
+                    names.remove(droppedFromLive);
+                }
+                return names;
+            }
+        };
+
+        String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto",
+                "`date`", Map.of("partition_refresh_number", "-1"));
+
+        advanceTableVersionTo(2);
+        mockListTableDeltaTraits();
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
+        TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
+        MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(taskRun);
+
+        MvTaskRunContext mvTaskRunContext = mvTaskRunProcessor.getMvTaskRunContext();
+        Assertions.assertFalse(mvTaskRunContext.getRefreshRuntimeState().getPinnedTvrMap().isEmpty(),
+                "precondition: the run must have taken the pinned fallback path");
+        Assertions.assertTrue(getMv("test_mv1").getVisiblePartitionNames().contains(mvPartitionOfDropped),
+                "precondition: pin-aware enumeration must have created the MV partition");
+        PCTRefreshScope refreshScope = mvTaskRunContext.getRefreshScope();
+        Assertions.assertNotNull(refreshScope, "precondition: the run must have computed a refresh scope");
+
+        Set<String> mvPartitionsToRefresh = refreshScope.getMvPartitionsToRefresh().getPartitionNames();
+        Assertions.assertTrue(mvPartitionsToRefresh.contains(mvPartitionOfDropped),
+                String.format("base partition '%s' exists at the pinned snapshot the scan reads but no batch "
+                                + "refreshes its MV partition '%s', so the scope was built from live: %s",
+                        droppedFromLive, mvPartitionOfDropped, mvPartitionsToRefresh));
+    }
+
+    /**
+     * The sync loop re-collects the base-table copy on every retry, but the snapshot must be frozen
+     * once and reused: re-acquiring per iteration would move the frozen point the scan reads and would
+     * leak a bookmark reference per retry.
+     */
+    @Test
+    public void testSnapshotIsFrozenOnceAcrossSyncRetries() throws Exception {
+        AtomicInteger driftChecks = new AtomicInteger();
+        AtomicInteger freezes = new AtomicInteger();
+        new MockUp<PCTTableSnapshotInfo>() {
+            @Mock
+            public boolean hasBaseTableChanged(Invocation invocation, MaterializedView mv) {
+                // Report drift for the first two checks so the sync loop runs three iterations.
+                return driftChecks.incrementAndGet() <= 2;
+            }
+        };
+        new MockUp<MaterializedView.AsyncRefreshContext>() {
+            @Mock
+            public void replaceTempBaseTableInfoTvrDeltaMap(Invocation invocation, String ownerStartTaskRunId,
+                                                           Map<BaseTableInfo, TvrVersionRange> tvrMap) {
+                freezes.incrementAndGet();
+                invocation.proceed();
+            }
+        };
+
+        String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto",
+                "`date`", Map.of("partition_refresh_number", "1"));
+
+        advanceTableVersionTo(2);
+        mockListTableDeltaTraits();
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
+        TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
+        getMVTaskRunProcessor(taskRun);
+
+        Assertions.assertTrue(driftChecks.get() > 1,
+                "precondition: the sync loop must have retried, drift checks: " + driftChecks.get());
+        Assertions.assertEquals(1, freezes.get(),
+                "the snapshot must be frozen exactly once no matter how often the sync loop retries");
+    }
+
+    /**
+     * The temp TVR map is dual-purpose: an in-flight IVM execution stages its own delta there under the
+     * same owner. Hydrating it on the IVM path would let a failed attempt's staged delta be retried as
+     * a PCT pin, so the freeze must stay a no-op there.
+     */
+    @Test
+    public void testIvmPathNeverHydratesPinnedRanges() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental",
+                "`date`", Map.of());
+        seedTvrBaselineAtVersionZero(mv);
+
+        advanceTableVersionTo(2);
+        MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(mv);
+        MVRefreshProcessor processor = mvTaskRunProcessor.getMVRefreshProcessor();
+        Assertions.assertTrue(processor instanceof MVIVMRefreshProcessor,
+                "precondition: this must be the pure IVM path, got: " + processor.getClass().getSimpleName());
+
+        // Leave the temp map behind exactly as a failed IVM execution would, owner included.
+        MvTaskRunContext mvTaskRunContext = mvTaskRunProcessor.getMvTaskRunContext();
+        String owner = mvTaskRunContext.getStatus().getStartTaskRunId();
+        MaterializedView.AsyncRefreshContext asyncCtx = getMv("test_mv1").getRefreshScheme().getAsyncRefreshContext();
+        asyncCtx.replaceTempBaseTableInfoTvrDeltaMap(owner,
+                Map.copyOf(asyncCtx.getBaseTableInfoTvrVersionRangeMap()));
+        mvTaskRunContext.getRefreshRuntimeState().getPinnedTvrMap().clear();
+
+        processor.freezeSnapshotBeforePartitionAlign();
+
+        Assertions.assertTrue(mvTaskRunContext.getRefreshRuntimeState().getPinnedTvrMap().isEmpty(),
+                "the IVM path must not hydrate pinned ranges from its own staged temp delta, got: "
+                        + mvTaskRunContext.getRefreshRuntimeState().getPinnedTvrMap());
     }
 
     /**
@@ -1388,6 +1694,64 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                 "Batch 2's scan must pin to S2 via TvrTableSnapshot(2); plan was:\n" + planStr);
         Assertions.assertFalse(planStr.contains("Snapshot@(3)"),
                 "Batch 2 must not scan live S3 after background catalog advance; plan was:\n" + planStr);
+    }
+
+    /**
+     * Only the first batch of a pinned job freezes; every later batch reaches its pin by hydrating the
+     * persisted temp map, because {@code MVRefreshRuntimeState.reset()} empties the runtime map at the
+     * start of each task run. That hydration has to land before the batch aligns partitions, or the
+     * batch enumerates from live while its scan reads the frozen snapshot.
+     *
+     * <p>Not covered by {@code testSubsequentBatchScanPlanUsesFrozenSnapshotNotLive}: the scan side is
+     * satisfied by any hydration before plan building, so only this asserts the ordering against alignment.
+     */
+    @Test
+    public void testSubsequentBatchEnumeratesWithHydratedPin() throws Exception {
+        List<TvrVersionRange> pinnedArgs = new ArrayList<>();
+        new MockUp<MVPartitionCellBuilder>() {
+            @Mock
+            public BaseToMVPartitionMapping getPartitionCells(Invocation invocation,
+                                                             com.starrocks.catalog.Table table,
+                                                             List<Column> partitionColumns,
+                                                             TvrVersionRange pinnedVersionRange)
+                    throws AnalysisException {
+                if (!table.isNativeTableOrMaterializedView()) {
+                    pinnedArgs.add(pinnedVersionRange);
+                }
+                return invocation.proceed();
+            }
+        };
+
+        String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto",
+                "`date`", Map.of("partition_refresh_number", "1"));
+
+        advanceTableVersionTo(2);
+        mockListTableDeltaTraits();
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
+        TaskRun batch1 = withMVRefreshTaskRun(db.getFullName(), mv);
+        MVTaskRunProcessor batch1Proc = getMVTaskRunProcessor(batch1);
+        MVHybridRefreshProcessor hybrid =
+                (MVHybridRefreshProcessor) batch1Proc.getMVRefreshProcessor();
+        MVPCTRefreshProcessor pctProc = (MVPCTRefreshProcessor) hybrid.getCurrentProcessor();
+        TaskRun batch2 = pctProc.getNextTaskRun();
+        Assertions.assertNotNull(batch2, "precondition: the pinned job must have generated a second batch");
+
+        // Batch 1 freezes; drop what it recorded so the assertion below is about batch 2 alone.
+        pinnedArgs.clear();
+        initAndExecuteTaskRun(batch2);
+
+        MvTaskRunContext batch2Ctx = getMVTaskRunProcessor(batch2).getMvTaskRunContext();
+        Assertions.assertFalse(batch2Ctx.getRefreshRuntimeState().getPinnedTvrMap().isEmpty(),
+                "precondition: batch 2 must have recognised itself as a pinned batch");
+        Assertions.assertFalse(pinnedArgs.isEmpty(),
+                "precondition: batch 2 must have enumerated the iceberg base table's partitions");
+
+        Assertions.assertTrue(pinnedArgs.stream().anyMatch(Objects::nonNull),
+                String.format("batch 2 enumerated partitions before hydrating its pin: all %d call(s) got null, "
+                                + "so it aligned against live while its scan reads the frozen snapshot",
+                        pinnedArgs.size()));
     }
 
     /**
@@ -1798,6 +2162,27 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
             cur = cur.getCause();
         }
         return sb.toString();
+    }
+
+    private static TaskRun nextBatchOf(MVRefreshProcessor executed) {
+        if (executed instanceof MVHybridRefreshProcessor hybrid) {
+            return hybrid.getCurrentProcessor().getNextTaskRun();
+        }
+        return executed.getNextTaskRun();
+    }
+
+    private static void runRemainingBatches(MVRefreshProcessor firstBatch) throws Exception {
+        for (TaskRun batch = nextBatchOf(firstBatch); batch != null;
+                batch = nextBatchOf(getMVTaskRunProcessor(batch).getMVRefreshProcessor())) {
+            initAndExecuteTaskRun(batch);
+        }
+    }
+
+    private static long tvrBaselineVersion(MaterializedView mv) {
+        Map<BaseTableInfo, TvrVersionRange> baseline =
+                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap();
+        Assertions.assertEquals(1, baseline.size(), "baseline: " + baseline);
+        return baseline.values().iterator().next().to().getVersion();
     }
 
     @Test

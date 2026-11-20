@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ANALYZE TABLE creates a manual collection task for collecting CBO statistics."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ANALYZE TABLE

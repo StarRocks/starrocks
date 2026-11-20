@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "AI プロバイダーをクラスターから削除します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP AI PROVIDER

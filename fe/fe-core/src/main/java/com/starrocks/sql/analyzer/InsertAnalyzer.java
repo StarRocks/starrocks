@@ -27,6 +27,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
@@ -40,7 +41,9 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergRowLineageUtils;
+import com.starrocks.connector.paimon.PaimonWriteCapabilities;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -73,11 +76,11 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.OlapTable.OlapTableState.NORMAL;
@@ -211,40 +214,12 @@ public class InsertAnalyzer {
             insertStmt.setTargetPartitionIds(targetPartitionIds);
         }
 
-        if (table.isIcebergTable() || table.isHiveTable()) {
-            if (table.isHiveTable() && ((HiveTable) table).getHiveTableType() != HiveTable.HiveTableType.MANAGED_TABLE &&
-                    !session.getSessionVariable().enableWriteHiveExternalTable()) {
-                throw new SemanticException("Only support to write hive managed table, tableType: " +
-                        ((HiveTable) table).getHiveTableType());
-            }
-
-            PartitionRef targetPartitionNames = insertStmt.getTargetPartitionNames();
-            List<String> tablePartitionColumnNames = table.getPartitionColumnNames();
-            // Always validate a static partition clause so a clause naming a non-partition or
-            // non-existent column is rejected instead of being silently ignored (issue #11350).
-            // This is independent of the target-list invariant below, so both run when both apply.
+        if (table.isIcebergTable() || table.isHiveTable() || table.isPaimonTable()) {
+            validateExternalWriteTarget(insertStmt, table, session);
             if (insertStmt.isStaticKeyPartitionInsert()) {
-                checkStaticKeyPartitionInsert(insertStmt, table, targetPartitionNames);
+                checkStaticKeyPartitionInsert(insertStmt, table, insertStmt.getTargetPartitionNames());
             }
-            if (insertStmt.getTargetColumnNames() != null) {
-                for (String partitionColName : tablePartitionColumnNames) {
-                    // case-insensitive match. refer to AstBuilder#getColumnNames
-                    if (!insertStmt.getTargetColumnNames().contains(partitionColName.toLowerCase())) {
-                        throw new SemanticException("Must include partition column %s", partitionColName);
-                    }
-                }
-            }
-            if (!table.isIcebergTable()) {
-                List<Column> partitionColumns = tablePartitionColumnNames.stream()
-                        .map(table::getColumn)
-                        .collect(Collectors.toList());
-                for (Column column : partitionColumns) {
-                    if (isUnSupportedPartitionColumnType(column.getType())) {
-                        throw new SemanticException("Unsupported partition column type [%s] for %s table sink",
-                                column.getType().canonicalName(), table.getType());
-                    }
-                }
-            }
+            validatePartitionColumnsInTargetList(insertStmt, table);
         }
 
         // Set insert stmt target columns using select output columns if match column by name
@@ -339,6 +314,10 @@ public class InsertAnalyzer {
             }
         }
 
+        if (table instanceof PaimonTable paimonTable) {
+            analyzePaimonTargetColumns(insertStmt, paimonTable, targetColumns, mentionedColumns);
+        }
+
         // An internal shadow-rewrite INSERT writes only the target rollup index with a column-subset
         // target list, so a base required column that the rollup does not carry must not be required
         // here. This branch only fires for the internal rewrite (no user INSERT sets isShadowRewrite).
@@ -365,7 +344,8 @@ public class InsertAnalyzer {
         // FILES() takes its schema from the select list, whose names may repeat
         int mentionedColumnSize = table instanceof TableFunctionTable && insertStmt.getTargetColumnNames() == null
                 ? targetColumns.size() : mentionedColumns.size();
-        if ((table.isIcebergTable() || table.isHiveTable()) && insertStmt.isStaticKeyPartitionInsert()) {
+        if ((table.isIcebergTable() || table.isHiveTable() || table.isPaimonTable())
+                && insertStmt.isStaticKeyPartitionInsert()) {
             // full column size = mentioned column size + partition column size for static partition insert
             mentionedColumnSize -= table.getPartitionColumnNames().size();
             mentionedColumns.removeAll(table.getPartitionColumnNames());
@@ -382,6 +362,9 @@ public class InsertAnalyzer {
             for (List<Expr> row : valuesRelation.getRows()) {
                 for (int columnIdx = 0; columnIdx < row.size(); ++columnIdx) {
                     Column column = targetColumns.get(columnIdx);
+                    if (table instanceof PaimonTable paimonTable) {
+                        validatePaimonDefaultValue(paimonTable, column, row.get(columnIdx));
+                    }
                     Column.DefaultValueType defaultValueType = column.getDefaultValueType();
                     if (row.get(columnIdx) instanceof DefaultValueExpr &&
                             defaultValueType == Column.DefaultValueType.NULL &&
@@ -395,6 +378,11 @@ public class InsertAnalyzer {
             }
         }
 
+        if (table.isPaimonTable() && insertStmt.isStaticKeyPartitionInsert()) {
+            // Normalize the compact source permutation once. The planner fills the partition constants in native order.
+            insertStmt.setTargetColumnNames(targetColumns.stream().map(column -> column.getName().toLowerCase(Locale.ROOT))
+                    .collect(Collectors.toList()));
+        }
         insertStmt.setTargetTable(table);
         if (session.getDumpInfo() != null) {
             session.getDumpInfo().addTable(insertStmt.getDbName(), table);
@@ -405,6 +393,90 @@ public class InsertAnalyzer {
                 AnalyzerUtils.collectFileTableFunctionRelation(insertStmt.getQueryStatement());
         for (FileTableFunctionRelation relation : relations) {
             ((TableFunctionTable) relation.getTable()).setFilesTableType(TableFunctionTable.FilesTableType.LOAD);
+        }
+    }
+
+    private static void validateExternalWriteTarget(InsertStmt insertStmt, Table table, ConnectContext session) {
+        if (table instanceof PaimonTable paimonTable) {
+            validatePaimonTarget(insertStmt, paimonTable, session);
+        } else if (table instanceof HiveTable hiveTable) {
+            if (hiveTable.getHiveTableType() != HiveTable.HiveTableType.MANAGED_TABLE
+                    && !session.getSessionVariable().enableWriteHiveExternalTable()) {
+                throw new SemanticException("Only support to write hive managed table, tableType: "
+                        + hiveTable.getHiveTableType());
+            }
+            for (String name : table.getPartitionColumnNames()) {
+                Column column = table.getColumn(name);
+                if (isUnSupportedPartitionColumnType(column.getType())) {
+                    throw new SemanticException("Unsupported partition column type [%s] for %s table sink",
+                            column.getType().canonicalName(), table.getType());
+                }
+            }
+        }
+    }
+
+    private static void validatePartitionColumnsInTargetList(InsertStmt insertStmt, Table table) {
+        if (!(table.isHiveTable() || table.isIcebergTable())) {
+            return;
+        }
+        List<String> partitionColumnNames = table.getPartitionColumnNames();
+        if (insertStmt.getTargetColumnNames() == null) {
+            return;
+        }
+        for (String name : partitionColumnNames) {
+            if (!insertStmt.getTargetColumnNames().contains(name.toLowerCase())) {
+                throw new SemanticException("Must include partition column %s", name);
+            }
+        }
+    }
+
+    private static void analyzePaimonTargetColumns(InsertStmt insertStmt, PaimonTable paimonTable,
+                                                  List<Column> targetColumns, Set<String> mentionedColumns) {
+        if (insertStmt.isStaticKeyPartitionInsert()) {
+            // Unlike Hive, Paimon partition columns need not be the trailing columns of the native schema.
+            targetColumns.removeIf(column -> paimonTable.getPartitionColumnNames().stream()
+                    .anyMatch(name -> name.equalsIgnoreCase(column.getName())));
+            mentionedColumns.addAll(paimonTable.getPartitionColumnNames());
+        }
+
+        for (org.apache.paimon.types.DataField field : paimonTable.getNativeTable().rowType().getFields()) {
+            if (field.defaultValue() != null && !mentionedColumns.contains(field.name())) {
+                throw new SemanticException("Paimon native default values are not supported for column '%s'; "
+                        + "provide an explicit value", field.name());
+            }
+            if ((!field.type().isNullable() || paimonTable.getPrimaryKeyColumnNames().contains(field.name()))
+                    && !mentionedColumns.contains(field.name())) {
+                throw new SemanticException("Paimon column '%s' must be explicitly mentioned in column permutation",
+                        field.name());
+            }
+        }
+    }
+
+    private static void validatePaimonDefaultValue(PaimonTable table, Column column, Expr expression) {
+        if (expression instanceof DefaultValueExpr && table.getNativeTable().rowType().getFields().stream()
+                .anyMatch(field -> field.name().equals(column.getName()) && field.defaultValue() != null)) {
+            throw new SemanticException("Paimon native default values are not supported for column '%s'; "
+                    + "provide an explicit value", column.getName());
+        }
+    }
+
+    private static void validatePaimonTarget(InsertStmt insertStmt, PaimonTable table, ConnectContext session) {
+        try {
+            PaimonWriteCapabilities.validateWrite(table.getNativeTable());
+        } catch (StarRocksConnectorException e) {
+            throw new SemanticException(e.getMessage());
+        }
+        if (CatalogMgr.isInternalCatalog(table.getCatalogName())) {
+            throw new SemanticException("Paimon writes require an external Paimon catalog");
+        }
+        if (session.getTxnId() != 0) {
+            throw new SemanticException("Paimon writes are not supported in an explicit transaction");
+        }
+        if (insertStmt.getTargetBranch() != null) {
+            throw unsupportedException("Only support insert iceberg table with branch");
+        }
+        if (insertStmt.isSpecifyPartitionNames()) {
+            throw new SemanticException("Paimon writes require partition column values, not partition names");
         }
     }
 
@@ -818,7 +890,8 @@ public class InsertAnalyzer {
                     tablePartitionColumnNames.size());
         }
         Map<String, Long> frequencies = partitionColNames.stream()
-                .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+                .collect(Collectors.groupingBy(name -> table.isPaimonTable()
+                        ? name.toLowerCase(Locale.ROOT) : name, Collectors.counting()));
         Optional<Map.Entry<String, Long>> duplicateKey = frequencies.entrySet().stream()
                 .filter(entry -> entry.getValue() > 1).findFirst();
         if (duplicateKey.isPresent()) {
@@ -839,6 +912,11 @@ public class InsertAnalyzer {
 
             LiteralExpr literalExpr = (LiteralExpr) partitionValue;
             Column column = table.getColumn(actualName);
+            if (table instanceof PaimonTable paimonTable && literalExpr.isConstantNull()
+                    && paimonTable.getNativeTable().rowType().getFields().stream()
+                    .anyMatch(field -> field.name().equalsIgnoreCase(actualName) && !field.type().isNullable())) {
+                throw new SemanticException("Paimon partition column '%s' does not allow NULL", actualName);
+            }
             try {
                 Type type = literalExpr.isConstantNull() ? NullType.NULL : column.getType();
                 Expr expr = LiteralExprFactory.create(literalExpr.getStringValue(), type);
@@ -874,14 +952,14 @@ public class InsertAnalyzer {
         MetaUtils.checkCatalogExistAndReport(catalogName);
 
         TableName tableNameObj = new TableName(catalogName, dbName, tableName, tableRef.getPos());
-        // An external target was resolved before the lock was taken; see PreResolvedState#WRITE_TARGET.
-        Table table = session.getPreResolvedState().takeOrResolve(PreResolvedState.WRITE_TARGET, tableNameObj, () -> {
+        Table table = session.getPreResolvedState().get(PreResolvedState.WRITE_TARGET, tableNameObj);
+        if (table == null) {
             Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogName, dbName);
             if (database == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
-            return MetaUtils.getSessionAwareTable(session, database, tableNameObj);
-        });
+            table = MetaUtils.getSessionAwareTable(session, database, tableNameObj);
+        }
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);
         }
@@ -894,10 +972,12 @@ public class InsertAnalyzer {
         }
 
         if (insertStmt.isOverwrite()) {
-            if (!(table instanceof OlapTable) && !table.isIcebergTable() && !table.isHiveTable()) {
-                throw unsupportedException("Only support insert overwrite olap/iceberg/hive table");
+            if (!(table instanceof OlapTable) && !table.isIcebergTable() && !table.isHiveTable() && !table.isPaimonTable()) {
+                throw unsupportedException("Only support insert overwrite olap/iceberg/hive/paimon table");
             }
-            if (table instanceof OlapTable && ((OlapTable) table).getState() != NORMAL) {
+            if (table instanceof OlapTable olapTable && olapTable.getState() != NORMAL
+                    && !(olapTable.getState() == OlapTable.OlapTableState.TABLET_RESHARD
+                        && olapTable.isCloudNativeTableOrMaterializedView() && olapTable.isRangeDistribution())) {
                 String msg =
                         String.format("table state is %s, please wait to insert overwrite until table state is normal",
                                 ((OlapTable) table).getState());
@@ -905,6 +985,13 @@ public class InsertAnalyzer {
             }
         }
 
+        if (table instanceof PaimonTable paimonTable) {
+            try {
+                PaimonWriteCapabilities.validateWrite(paimonTable.getNativeTable());
+            } catch (StarRocksConnectorException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        }
         if (!table.supportInsert()) {
             if (table.isIcebergTable() || table.isHiveTable()) {
                 throw unsupportedException(String.format("Only support insert into %s table with parquet file format",

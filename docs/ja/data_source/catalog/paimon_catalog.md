@@ -3,6 +3,7 @@ sidebar_position: 100
 displayed_sidebar: docs
 description: "StarRocks v3.1 以降の Paimon catalog で、Apache Paimon からデータをインジェストせずにクエリおよび変換ロード。"
 toc_max_heading_level: 5
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
@@ -24,7 +25,7 @@ Paimon クラスターで SQL ワークロードを成功させるには、StarR
 
 ## 使用上の注意
 
-Paimon catalog はデータのクエリにのみ使用できます。Paimon catalog を使用して、Paimon クラスターにデータを削除、削除、または挿入することはできません。
+Paimon catalog では、データのクエリ、Paimon データベースとテーブルの作成・削除、および INSERT INTO と INSERT OVERWRITE による書き込みができます。UPDATE、DELETE、CREATE TABLE LIKE、CREATE TABLE AS SELECT はサポートされていません。
 
 ## Paimon to StarRocks data types
 
@@ -700,6 +701,169 @@ SHOW CREATE CATALOG paimon_catalog_fs;
 DROP Catalog paimon_catalog_fs;
 ```
 
+## Paimon データベースとテーブルの作成・削除
+
+これらの操作は Paimon のネイティブオブジェクトを作成または削除します。例では、warehouse とストレージ認証情報を設定済みの `paimon_catalog_fs` catalog を使用します。
+
+### CREATE DATABASE
+
+#### 構文
+
+```SQL
+CREATE DATABASE [IF NOT EXISTS] <catalog_name>.<database_name>;
+```
+
+#### パラメータ
+
+- `catalog_name`: 既存の Paimon catalog の名前。
+- `database_name`: 作成するデータベースの名前。
+- `IF NOT EXISTS`: データベースが既に存在する場合にエラーを返しません。
+
+データベースの `PROPERTIES` はサポートされていません。データベースは catalog のストレージ設定を使用します。
+
+#### 例
+
+```SQL
+CREATE DATABASE IF NOT EXISTS paimon_catalog_fs.ddl_demo;
+```
+
+### CREATE TABLE
+
+#### 構文
+
+```SQL
+CREATE TABLE [IF NOT EXISTS] <catalog_name>.<database_name>.<table_name> (
+    <column_name> <column_type> [NULL | NOT NULL] [DEFAULT NULL] [COMMENT '<column_comment>']
+    [, ...]
+)
+[ENGINE = paimon]
+[PRIMARY KEY (<column_name> [, ...])]
+[COMMENT '<table_comment>']
+[PARTITION BY (<column_name> [, ...])]
+[PROPERTIES ("<key>" = "<value>" [, ...])];
+```
+
+#### パラメータ
+
+- **テーブル名とエンジン**: 既存の Paimon catalog 内のデータベースと新しいテーブル名を指定します。作成先が Paimon catalog の場合、`ENGINE = paimon` は省略できます。`IF NOT EXISTS` はテーブルが既に存在する場合のエラーを抑制しますが、テーブル定義とプロパティの検証は行われます。
+- **列定義**: 対応する型は BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、FLOAT、DOUBLE、DATE、DATETIME、CHAR、VARCHAR、VARBINARY、精度 38 以下の DECIMAL、ARRAY、MAP、STRUCT、VARIANT です。DATETIME は Paimon TIMESTAMP(6) に変換されます。VARIANT の既存の読み取り制限は引き続き適用されます。デフォルト値は `DEFAULT NULL` のみ対応し、主キー列にはデフォルト値を指定できません。列とテーブルのコメントは `COMMENT` で指定します。
+- **主キー**: `PRIMARY KEY (column, ...)` または `primary-key` テーブルプロパティで定義します。主キー列を先頭に配置する必要はありません。NULL 許容性を省略すると Paimon schema では非 NULL になります。明示的な `NULL` 宣言は使用できません。両方の形式を指定する場合、解決後の列名と順序を一致させてください。
+- **パーティション**: 通常のパーティション列は `PARTITION BY (column, ...)` で指定します。パーティション式と明示的なパーティション定義はサポートされていません。
+- **テーブルプロパティ**: `bucket` や `file.format` などの Paimon オプションを `PROPERTIES` で指定します。テーブルは catalog の warehouse とストレージ認証情報を使用します。catalog、保存場所、認証情報、schema を上書きするプロパティは使用できません。未知のオプションは拒否されます。書き込みに関する設定エラーの一部は、実際の書き込み時に検出される場合があります。`fields.<column>.aggregate-function` などの動的な列オプションは現在サポートされていません。
+
+#### 例
+
+空の append-only パーティションテーブルを作成します。
+
+```SQL
+CREATE TABLE IF NOT EXISTS paimon_catalog_fs.ddl_demo.append_demo (
+    id BIGINT NOT NULL,
+    payload VARCHAR(100) COMMENT 'Payload',
+    dt DATE
+)
+ENGINE = paimon
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "-1",
+    "file.format" = "parquet"
+);
+```
+
+主キーパーティションテーブルを作成します。
+
+```SQL
+CREATE TABLE IF NOT EXISTS paimon_catalog_fs.ddl_demo.pk_demo (
+    payload VARCHAR(100),
+    id BIGINT,
+    dt DATE
+)
+PRIMARY KEY (id, dt)
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "2",
+    "bucket-key" = "id",
+    "file.format" = "parquet"
+);
+```
+
+`PRIMARY KEY (id, dt)` 句を省略し、`PROPERTIES` に `"primary-key" = "id,dt"` を追加することもできます。
+
+#### 制限事項
+
+- `DISTRIBUTED BY`、`ORDER BY`、`ROLLUP`、生成列、集約列、`AUTO_INCREMENT` はサポートされていません。
+- NULL 以外の列デフォルト値はサポートされていません。
+- `CREATE TABLE LIKE`、`CREATE TABLE AS SELECT`、および `UPDATE`、`DELETE` によるデータの書き込みはサポートされていません。
+
+### DROP TABLE
+
+#### 構文
+
+```SQL
+DROP TABLE [IF EXISTS] <catalog_name>.<database_name>.<table_name>;
+```
+
+`IF EXISTS` を指定すると、テーブルが存在しない場合にエラーを返しません。この操作は StarRocks 内の参照だけでなく、Paimon のネイティブテーブルを削除します。
+
+#### 例
+
+```SQL
+DROP TABLE IF EXISTS paimon_catalog_fs.ddl_demo.append_demo;
+DROP TABLE IF EXISTS paimon_catalog_fs.ddl_demo.pk_demo;
+```
+
+### DROP DATABASE
+
+#### 構文
+
+```SQL
+DROP DATABASE [IF EXISTS] <catalog_name>.<database_name> [FORCE];
+```
+
+`IF EXISTS` を指定すると、データベースが存在しない場合にエラーを返しません。空でないデータベースは削除できません。`FORCE` を指定してもカスケード削除は行われません。
+
+#### 例
+
+データベース内のテーブルを削除してから、データベースを削除します。
+
+```SQL
+DROP DATABASE IF EXISTS paimon_catalog_fs.ddl_demo;
+```
+
+## Paimon へのデータ書き込み
+
+`INSERT INTO ... VALUES` または `INSERT INTO ... SELECT` を使用して、Paimon catalog のネイティブ file-store テーブルに書き込めます。Append-only テーブルは `bucket = -1` または正の固定バケット数をサポートします。主キーテーブルでは正の固定バケット数と `deduplicate` マージエンジンが必要です。既存の主キーへの書き込みは行全体の upsert になり、部分更新ではありません。
+
+```sql
+CREATE DATABASE IF NOT EXISTS paimon_catalog_fs.ddl_demo;
+CREATE TABLE paimon_catalog_fs.ddl_demo.write_demo (
+    id INT NOT NULL,
+    p VARCHAR(32),
+    value VARCHAR(64)
+)
+PARTITION BY (p)
+PROPERTIES ('bucket' = '-1', 'file.format' = 'parquet');
+
+INSERT INTO paimon_catalog_fs.ddl_demo.write_demo VALUES (1, 'a', 'one');
+INSERT INTO paimon_catalog_fs.ddl_demo.write_demo PARTITION (p = 'b')
+SELECT 2, 'two';
+```
+
+明示的な列リストと `BY NAME` をサポートします。静的パーティションを指定する場合は入力からパーティション列を除外します。ネイティブ schema 内での列の位置は問いません。省略した NULL 許容列には NULL が入り、必須列には値の指定が必要です。Paimon ネイティブのデフォルト値を持つ列は、値を明示的に指定してください。列の省略と `DEFAULT` はサポートされていません。
+
+`INSERT OVERWRITE` はデフォルトでテーブル全体を上書きします。`PARTITION` を指定すると対象パーティションのみを上書きします。`dynamic_overwrite = true` でパーティションを指定しない場合は、入力に含まれるパーティションのみを上書きします。入力が空の場合、全体または静的パーティションの上書きでは対象を消去し、動的上書きではデータを変更しません。
+
+:::warning
+
+`PARTITION (...)` には、テーブルの NULL パーティションの予約名を文字列として指定しないでください。Paimon は上書き対象を特定する際、`partition.default-name`（デフォルトは `__DEFAULT_PARTITION__`）と同じパーティション値を NULL として扱います。例えば、`PARTITION (p = '__DEFAULT_PARTITION__')` を指定して入力が 0 行の場合、NULL パーティションのデータが消去されることがあります。NULL パーティションを上書きする場合は、`PARTITION (p = NULL)` を使用してください。
+
+:::
+
+書き込みには Parquet データファイル、同一バージョンの FE/BE、および BE のネイティブ Paimon writer が必要です。catalog のストレージ認証情報を使用します。`paimon_reader_mode` は読み取り方式のみを選択し、書き込み方式は変更しません。明示的トランザクション、部分更新、主キーテーブルの動的バケット、パーティションをまたぐ主キー更新、data evolution、row tracking、グローバルインデックス、外部データパスはサポートされていません。
+
+パーティション列には boolean、整数、文字列、日付型を使用できます。データ行の書き込み時に、StarRocks は空文字列、空白のみの文字列、およびデフォルトパーティションの予約名と同じ文字列をパーティション値として拒否します。ネイティブ SDK はこれらの値を NULL と区別して保存できません。各 Sink Driver のデフォルト上限は、アクティブなパーティション/バケット writer が 64 個、ネイティブ/Arrow メモリ割り当てが 256 MiB です。上限を超えると、公開前にステートメントが失敗します。テーブルオプション `starrocks.paimon.max-active-writers`（1–4096）と `starrocks.paimon.max-writer-memory-bytes`（2 MiB–4 GiB、バイト単位）で変更できます。クエリのメモリ制限も適用されます。
+
+FE が Paimon ネイティブスナップショットを公開するとデータが読み取り可能になります。入力が空の INSERT INTO はデータを変更しません。コミット結果が不明というエラーが返った場合は、再試行する前に操作結果を確認してください。スナップショットが既に公開されている可能性があり、再試行で追加行が重複することがあります。Query Profile の `PaimonOperationId` と `PaimonPublicationState` で操作を確認できます。
+
 ## Paimon テーブルのスキーマを表示
 
 Paimon テーブルのスキーマを表示するには、次のいずれかの構文を使用します。
@@ -747,6 +911,40 @@ Paimon テーブルのスキーマを表示するには、次のいずれかの�
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10;
    ```
+
+### 計画されたスキャンサイズの確認
+
+`EXPLAIN VERBOSE` と `EXPLAIN COSTS` は、各 Paimon スキャンノードの候補ファイルのメトリクスを表示します。通常の `EXPLAIN` では、このブロックは表示されません。
+
+```text
+0:PaimonScanNode
+   ...
+   avgRowSize=2.0
+   Paimon Scan Metrics:
+     splits=2
+     data_files=3
+     data_file_bytes=12000000000
+     data_file_rows=9000000000
+   limit: 10
+   cardinality: 10
+```
+
+これらのメトリクスは、Paimon プランナーによるパーティションとファイルのプルーニング、および計画時の LIMIT によるプルーニング後に選択された split を集計します。
+スキャン計画で読み込み済みのファイルメタデータを使用し、reader の選択には依存しません。ファイルを複数のスキャン範囲に分割しても、ファイル数、バイト数、行数は重複して計上されません。
+グローバルインデックスの split では、インデックスの行範囲を適用する前の候補ファイルを集計します。
+
+| フィールド | 意味 |
+| --- | --- |
+| `splits` | スキャン範囲に分割する前の Paimon 入力 split の数。 |
+| `data_files` | 選択された split に含まれるデータファイルのエントリ数。 |
+| `data_file_bytes` | これらのデータファイルのストレージ上のサイズの合計（バイト単位）。 |
+| `data_file_rows` | 残余条件によるフィルタリング、削除ベクトルによるフィルタリング、主キーのマージを行う前の、ファイルメタデータ内のレコード数の合計。 |
+
+空のスキャンではゼロを表示します。システムテーブルなど、いずれかの split にデータファイルのメタデータがない場合、3 つのファイルメトリクスはすべて `-1`（取得不可）になります。ゼロや不完全な合計は表示しません。スキャン計画前には、このメトリクスブロックは表示されません。
+
+`cardinality` は引き続きオプティマイザーが推定した出力行数を表し、述語や `LIMIT` によって減少する場合があります。`data_file_rows` は、この出力行数の推定値によって制限されません。
+バイト数は候補データファイル全体のサイズを表し、削除ファイルとインデックスファイルを含みません。また、列の射影、ページのプルーニング、キャッシュヒット、実行の早期終了は考慮しません。
+スキャンサイズの目安であり、実測 I/O、出力サイズ、実行制限ではありません。そのため、小さな `LIMIT` でも大きなファイルが選択される場合があります。
 
 ## Paimon からデータをロード
 

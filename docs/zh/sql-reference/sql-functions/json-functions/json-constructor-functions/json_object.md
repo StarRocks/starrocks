@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将一个或多个键值对转换为由这些键值对组成的JSON对象。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # json_object

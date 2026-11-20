@@ -22,6 +22,7 @@
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
+#include "column/json_column.h"
 #include "column/schema.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_storage_fwd.h"
@@ -33,6 +34,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/compaction.h"
 #include "storage/compaction_utils.h"
+#include "storage/flat_json_metrics.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -40,6 +42,7 @@
 #include "storage/tablet_meta.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
+#include "types/json_value.h"
 
 namespace starrocks {
 
@@ -990,6 +993,104 @@ TEST_F(CumulativeCompactionTest, test_cumulative_single_rowset) {
     ASSERT_EQ(0, versions[0].second);
 
     delete_specify_version(tablet, 0, rowset_ptr);
+}
+
+// A vertical compaction reads its column groups in turn and keeps the access paths derived by earlier groups. Every
+// JSON column of a flat table must still get a flat read layout and stream, not only the first group's.
+TEST_F(CumulativeCompactionTest, test_vertical_compaction_streams_every_flat_json_column) {
+    const int64_t saved_group = config::vertical_compaction_max_columns_per_group;
+    const int64_t saved_mem_limit = config::compaction_memory_limit_per_worker;
+    DeferOp restore([&]() {
+        config::vertical_compaction_max_columns_per_group = saved_group;
+        config::compaction_memory_limit_per_worker = saved_mem_limit;
+    });
+    config::vertical_compaction_max_columns_per_group = 1; // one column per group: j1 and j2 in different groups
+    config::compaction_memory_limit_per_worker = 8;        // stream from the first chunk on
+
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_num_rows_per_row_block(1024);
+    schema_pb.set_next_column_unique_id(5);
+    auto add_column = [&](int32_t uid, const char* name, const char* type, bool key, int32_t length) {
+        ColumnPB* c = schema_pb.add_column();
+        c->set_unique_id(uid);
+        c->set_name(name);
+        c->set_type(type);
+        c->set_is_key(key);
+        c->set_length(length);
+        c->set_index_length(length);
+        c->set_is_nullable(false);
+        c->set_is_bf_column(false);
+    };
+    add_column(1, "k1", "INT", true, 4);
+    add_column(2, "j1", "JSON", false, 16);
+    add_column(3, "v1", "INT", false, 4);
+    add_column(4, "j2", "JSON", false, 16);
+    _tablet_schema = std::make_unique<TabletSchema>(schema_pb);
+
+    TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+    create_tablet_meta(tablet_meta.get());
+    auto j1_of = [](int32_t k) { return fmt::format(R"({{"a": {}, "b": "s{}"}})", k, k % 7); };
+    auto j2_of = [](int32_t k) { return fmt::format(R"({{"c": {}}})", k * 2); };
+    constexpr int32_t kRows = 1024;
+    for (int32_t r = 0; r < 2; r++) {
+        RowsetWriterContext context;
+        create_rowset_writer_context(&context, _version++);
+        std::unique_ptr<RowsetWriter> writer;
+        ASSERT_OK(RowsetFactory::create_rowset_writer(context, &writer));
+        auto chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(_tablet_schema), kRows);
+        auto cols = chunk->columns();
+        for (int32_t i = 0; i < kRows; i++) {
+            const int32_t k = r * kRows + i;
+            cols[0]->as_mutable_ptr()->append_datum(Datum(k));
+            ASSIGN_OR_ABORT(auto j1, JsonValue::parse(j1_of(k)));
+            down_cast<JsonColumn*>(cols[1]->as_mutable_raw_ptr())->append(&j1);
+            cols[2]->as_mutable_ptr()->append_datum(Datum(k));
+            ASSIGN_OR_ABORT(auto j2, JsonValue::parse(j2_of(k)));
+            down_cast<JsonColumn*>(cols[3]->as_mutable_raw_ptr())->append(&j2);
+        }
+        ASSERT_OK(writer->add_chunk(*chunk));
+        ASSERT_OK(writer->flush());
+        auto rowset = *writer->build();
+        tablet_meta->add_rs_meta(rowset->rowset_meta());
+    }
+    TabletSharedPtr tablet =
+            Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
+    ASSERT_OK(tablet->init());
+
+    const int64_t streamed_before = FlatJsonMetrics::instance()->flat_json_compaction_streaming_total.value();
+    CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
+    ASSERT_OK(cumulative_compaction.compact());
+    ASSERT_EQ(1, tablet->version_count());
+    EXPECT_EQ(streamed_before + 2, FlatJsonMetrics::instance()->flat_json_compaction_streaming_total.value());
+
+    auto schema = ChunkHelper::convert_schema(_tablet_schema);
+    TabletReader reader(tablet, Version(0, _version - 1), schema);
+    TabletReaderParams params;
+    params.reader_type = ReaderType::READER_QUERY;
+    params.skip_aggregation = false;
+    ASSERT_OK(reader.prepare());
+    ASSERT_OK(reader.open(params));
+    auto chunk = ChunkFactory::new_chunk(schema, 1024);
+    size_t rows = 0;
+    while (true) {
+        chunk->reset();
+        auto st = reader.get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(st);
+        for (size_t i = 0; i < chunk->num_rows(); i++) {
+            const int32_t k = chunk->get_column_by_index(0)->get(i).get_int32();
+            ASSIGN_OR_ABORT(auto j1, JsonValue::parse(j1_of(k)));
+            ASSIGN_OR_ABORT(auto j2, JsonValue::parse(j2_of(k)));
+            EXPECT_EQ(j1.to_string_uncheck(), chunk->get_column_by_index(1)->debug_item(i)) << "k1=" << k;
+            EXPECT_EQ(j2.to_string_uncheck(), chunk->get_column_by_index(3)->debug_item(i)) << "k1=" << k;
+        }
+        rows += chunk->num_rows();
+    }
+    EXPECT_EQ(2 * kRows, rows);
 }
 
 TEST_F(CumulativeCompactionTest, test_issue_20084) {

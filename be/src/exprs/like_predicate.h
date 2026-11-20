@@ -175,9 +175,8 @@ private:
     // FRAGMENT_LOCAL prepare path.
     static Status setup_like_state(FunctionContext* context, LikePredicateState* state);
     static Status setup_regex_state(FunctionContext* context, LikePredicateState* state);
-    // The compile-once LIKE/regex state read by eval: the shared FRAGMENT_LOCAL state, with a
-    // fallback to the THREAD_LOCAL state for unit tests that prepare only a single scope (the
-    // normal open flow always prepares FRAGMENT_LOCAL).
+    // The compile-once LIKE/regex state read by eval: the shared FRAGMENT_LOCAL state, built
+    // once in prepare and inherited by every cloned FunctionContext.
     static LikePredicateState* shared_state(FunctionContext* context);
     template <bool full_match>
     static Status compile_with_hyperscan_or_re2(const std::string& pattern, LikePredicateState* state,

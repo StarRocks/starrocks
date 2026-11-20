@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "To facilitate the maintenance of StarRocks clusters, StarRocks provides various types of operation and query interfaces."
+products: [oss, enterprise, anywhere]
 ---
 
 # HTTP Interface

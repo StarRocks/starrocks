@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "v3.2 以降で、同じ構造で異なる変数を持つ SQL ステートメントを複数回実行します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Prepared statement

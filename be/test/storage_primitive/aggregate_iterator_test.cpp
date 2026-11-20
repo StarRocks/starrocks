@@ -34,6 +34,36 @@ static std::vector<Datum> row(const Chunk& chunk, size_t row_id) {
     return result;
 }
 
+// A value column that is merged by an aggregate function now describes itself to that function
+// through a TypeDescriptor built from its TypeInfo. Only the decimal v3 TypeInfos carry the
+// precision and scale such a descriptor needs, so aggregated decimal columns are modelled with
+// DECIMAL128 here. DECIMALV2 stays in the tests that do not build an aggregate function, namely
+// the REPLACE value column and the decimal key column.
+constexpr int kDecimalPrecision = 27;
+constexpr int kDecimalScale = 9;
+
+static TypeInfoPtr decimal128_type_info() {
+    return get_decimal_type_info(TYPE_DECIMAL128, kDecimalPrecision, kDecimalScale);
+}
+
+// Builds DECIMAL128 datums from their textual form, mirroring COL_DECIMAL for DECIMALV2.
+static Datums COL_DECIMAL128(const std::vector<const char*>& data) {
+    auto type_info = decimal128_type_info();
+    Datums datums;
+    datums.resize(data.size());
+    for (size_t i = 0; i < data.size(); i++) {
+        CHECK(datum_from_string(type_info.get(), &datums[i], data[i], nullptr).ok());
+    }
+    return datums;
+}
+
+// The unscaled DECIMAL128 representation of |str|, i.e. what a Decimal128Column stores.
+static int128_t decimal128(const char* str) {
+    Datum datum;
+    CHECK(datum_from_string(decimal128_type_info().get(), &datum, str, nullptr).ok());
+    return datum.get_int128();
+}
+
 class AggregateIteratorTest : public testing::Test {
 protected:
     void SetUp() override {}
@@ -49,7 +79,7 @@ TEST_F(AggregateIteratorTest, agg_max) {
     auto c2 = std::make_shared<Field>(2, "c2", TYPE_LARGEINT, false);
     auto c3 = std::make_shared<Field>(3, "c3", TYPE_FLOAT, false);
     auto c4 = std::make_shared<Field>(4, "c4", TYPE_DOUBLE, false);
-    auto c5 = std::make_shared<Field>(5, "c5", TYPE_DECIMALV2, false);
+    auto c5 = std::make_shared<Field>(5, "c5", TYPE_DECIMAL128, kDecimalPrecision, kDecimalScale, false);
     auto c6 = std::make_shared<Field>(6, "c6", TYPE_DATE, false);
     auto c7 = std::make_shared<Field>(7, "c7", TYPE_DATETIME, false);
     auto c8 = std::make_shared<Field>(8, "c8", TYPE_VARCHAR, false);
@@ -82,7 +112,7 @@ TEST_F(AggregateIteratorTest, agg_max) {
                                                             COL_LARGEINT(v1),
                                                             COL_FLOAT(v1),
                                                             COL_DOUBLE(v1),
-                                                            COL_DECIMAL(v2),
+                                                            COL_DECIMAL128(v2),
                                                             COL_DATE(v3),
                                                             COL_DATETIME(v4),
                                                             COL_VARCHAR(v5));
@@ -101,7 +131,7 @@ TEST_F(AggregateIteratorTest, agg_max) {
     ASSERT_EQ(3, row(*chunk, 0)[2].get_int128());                                              // c2
     ASSERT_EQ(3.0, row(*chunk, 0)[3].get_float());                                             // c3
     ASSERT_EQ(3.0, row(*chunk, 0)[4].get_double());                                            // c4
-    ASSERT_EQ(DecimalV2Value("3"), row(*chunk, 0)[5].get_decimal());                           // c5
+    ASSERT_EQ(decimal128("3"), row(*chunk, 0)[5].get_int128());                                // c5
     ASSERT_EQ(DateValue::create(2020, 6, 1), row(*chunk, 0)[6].get_date());                    // c6
     ASSERT_EQ(TimestampValue::create(2020, 1, 1, 1, 3, 1), row(*chunk, 0)[7].get_timestamp()); // c7
     ASSERT_EQ("c", row(*chunk, 0)[8].get_slice());                                             // c8
@@ -112,7 +142,7 @@ TEST_F(AggregateIteratorTest, agg_max) {
     ASSERT_EQ(1, row(*chunk, 1)[2].get_int128());                                              // c2
     ASSERT_EQ(1.0, row(*chunk, 1)[3].get_float());                                             // c3
     ASSERT_EQ(1.0, row(*chunk, 1)[4].get_double());                                            // c4
-    ASSERT_EQ(DecimalV2Value("1"), row(*chunk, 1)[5].get_decimal());                           // c5
+    ASSERT_EQ(decimal128("1"), row(*chunk, 1)[5].get_int128());                                // c5
     ASSERT_EQ(DateValue::create(1998, 9, 1), row(*chunk, 1)[6].get_date());                    // c6
     ASSERT_EQ(TimestampValue::create(1991, 1, 1, 1, 1, 1), row(*chunk, 1)[7].get_timestamp()); // c7
     ASSERT_EQ("y", row(*chunk, 1)[8].get_slice());                                             // c8
@@ -128,7 +158,7 @@ TEST_F(AggregateIteratorTest, agg_min) {
     auto c2 = std::make_shared<Field>(2, "c2", TYPE_LARGEINT, false);
     auto c3 = std::make_shared<Field>(3, "c3", TYPE_FLOAT, false);
     auto c4 = std::make_shared<Field>(4, "c4", TYPE_DOUBLE, false);
-    auto c5 = std::make_shared<Field>(5, "c5", TYPE_DECIMALV2, false);
+    auto c5 = std::make_shared<Field>(5, "c5", TYPE_DECIMAL128, kDecimalPrecision, kDecimalScale, false);
     auto c6 = std::make_shared<Field>(6, "c6", TYPE_DATE, false);
     auto c7 = std::make_shared<Field>(7, "c7", TYPE_DATETIME, false);
     auto c8 = std::make_shared<Field>(8, "c8", TYPE_VARCHAR, false);
@@ -161,7 +191,7 @@ TEST_F(AggregateIteratorTest, agg_min) {
                                                             COL_LARGEINT(v1),
                                                             COL_FLOAT(v1),
                                                             COL_DOUBLE(v1),
-                                                            COL_DECIMAL(v2),
+                                                            COL_DECIMAL128(v2),
                                                             COL_DATE(v3),
                                                             COL_DATETIME(v4),
                                                             COL_VARCHAR(v5));
@@ -180,7 +210,7 @@ TEST_F(AggregateIteratorTest, agg_min) {
     ASSERT_EQ(1, row(*chunk, 0)[2].get_int128());                                              // c2
     ASSERT_EQ(1.0, row(*chunk, 0)[3].get_float());                                             // c3
     ASSERT_EQ(1.0, row(*chunk, 0)[4].get_double());                                            // c4
-    ASSERT_EQ(DecimalV2Value("1"), row(*chunk, 0)[5].get_decimal());                           // c5
+    ASSERT_EQ(decimal128("1"), row(*chunk, 0)[5].get_int128());                                // c5
     ASSERT_EQ(DateValue::create(2020, 1, 2), row(*chunk, 0)[6].get_date());                    // c6
     ASSERT_EQ(TimestampValue::create(2020, 1, 1, 1, 1, 1), row(*chunk, 0)[7].get_timestamp()); // c7
     ASSERT_EQ("a", row(*chunk, 0)[8].get_slice());                                             // c8
@@ -191,7 +221,7 @@ TEST_F(AggregateIteratorTest, agg_min) {
     ASSERT_EQ(-1, row(*chunk, 1)[2].get_int128());                                             // c2
     ASSERT_EQ(-1.0, row(*chunk, 1)[3].get_float());                                            // c3
     ASSERT_EQ(-1.0, row(*chunk, 1)[4].get_double());                                           // c4
-    ASSERT_EQ(DecimalV2Value("-1"), row(*chunk, 1)[5].get_decimal());                          // c5
+    ASSERT_EQ(decimal128("-1"), row(*chunk, 1)[5].get_int128());                               // c5
     ASSERT_EQ(DateValue::create(1990, 11, 25), row(*chunk, 1)[6].get_date());                  // c6
     ASSERT_EQ(TimestampValue::create(1990, 1, 1, 1, 1, 1), row(*chunk, 1)[7].get_timestamp()); // c7
     ASSERT_EQ("x", row(*chunk, 1)[8].get_slice());                                             // c8
@@ -210,7 +240,7 @@ TEST_F(AggregateIteratorTest, agg_sum) {
     auto c5 = std::make_shared<Field>(5, "c5", TYPE_LARGEINT, false);
     auto c6 = std::make_shared<Field>(6, "c6", TYPE_FLOAT, false);
     auto c7 = std::make_shared<Field>(7, "c7", TYPE_DOUBLE, false);
-    auto c8 = std::make_shared<Field>(8, "c8", TYPE_DECIMALV2, false);
+    auto c8 = std::make_shared<Field>(8, "c8", TYPE_DECIMAL128, kDecimalPrecision, kDecimalScale, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
@@ -238,7 +268,7 @@ TEST_F(AggregateIteratorTest, agg_sum) {
                                                             COL_LARGEINT(v1),
                                                             COL_FLOAT(v1),
                                                             COL_DOUBLE(v1),
-                                                            COL_DECIMAL(v2));
+                                                            COL_DECIMAL128(v2));
     // clang-format on
     auto agg_iter = new_aggregate_iterator(child_iter);
     ASSERT_TRUE(agg_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
@@ -257,7 +287,7 @@ TEST_F(AggregateIteratorTest, agg_sum) {
     ASSERT_EQ(6, row(*chunk, 0)[5].get_int128());
     ASSERT_EQ(6.0, row(*chunk, 0)[6].get_float());
     ASSERT_EQ(6.0, row(*chunk, 0)[7].get_double());
-    ASSERT_EQ(DecimalV2Value("6"), row(*chunk, 0)[8].get_decimal());
+    ASSERT_EQ(decimal128("6"), row(*chunk, 0)[8].get_int128());
 
     // second row
     ASSERT_EQ(2, row(*chunk, 1)[0].get_int64());
@@ -268,7 +298,7 @@ TEST_F(AggregateIteratorTest, agg_sum) {
     ASSERT_EQ(0, row(*chunk, 1)[5].get_int128());
     ASSERT_EQ(0.0, row(*chunk, 1)[6].get_float());
     ASSERT_EQ(0.0, row(*chunk, 1)[7].get_double());
-    ASSERT_EQ(DecimalV2Value("0"), row(*chunk, 1)[8].get_decimal());
+    ASSERT_EQ(decimal128("0"), row(*chunk, 1)[8].get_int128());
     agg_iter->close();
 }
 

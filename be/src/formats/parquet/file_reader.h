@@ -86,6 +86,8 @@ private:
 
     // filter row group by conjuncts
     bool _filter_group(const GroupReaderPtr& group_reader);
+    // True when the deletion bitmap covers every row of [first_row, first_row + num_rows).
+    bool _is_row_group_all_deleted(int64_t first_row, int64_t num_rows) const;
     StatusOr<bool> _update_rf_and_filter_group(const GroupReaderPtr& group_reader);
 
     // get row group to read

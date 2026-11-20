@@ -187,26 +187,26 @@ public class TabletReshardUtilsTest {
     public void needSplit_threshold() {
         long t = Config.tablet_reshard_target_size;
         long splitTrigger = TabletReshardUtils.splitThreshold(t);
-        assertFalse(TabletReshardUtils.needSplit(t));
-        assertFalse(TabletReshardUtils.needSplit(splitTrigger - 1));
-        assertTrue(TabletReshardUtils.needSplit(splitTrigger));
-        assertTrue(TabletReshardUtils.needSplit(t * 100));
+        assertFalse(TabletReshardUtils.needSplit(t, t));
+        assertFalse(TabletReshardUtils.needSplit(splitTrigger - 1, t));
+        assertTrue(TabletReshardUtils.needSplit(splitTrigger, t));
+        assertTrue(TabletReshardUtils.needSplit(t * 100, t));
     }
 
     @Test
     public void needMerge_strictlyLess() {
         long t = Config.tablet_reshard_target_size;
         long pairThresh = TabletReshardUtils.mergePairThreshold(t);
-        assertTrue(TabletReshardUtils.needMerge(pairThresh - 1));
-        assertFalse(TabletReshardUtils.needMerge(pairThresh));    // strict <
-        assertFalse(TabletReshardUtils.needMerge(t));
+        assertTrue(TabletReshardUtils.needMerge(pairThresh - 1, t));
+        assertFalse(TabletReshardUtils.needMerge(pairThresh, t));    // strict <
+        assertFalse(TabletReshardUtils.needMerge(t, t));
     }
 
     @Test
     public void needMerge_targetZeroDisabled() {
         Config.tablet_reshard_target_size = 0L;
-        assertFalse(TabletReshardUtils.needMerge(0));
-        assertFalse(TabletReshardUtils.needMerge(100));
+        assertFalse(TabletReshardUtils.needMerge(0, Config.tablet_reshard_target_size));
+        assertFalse(TabletReshardUtils.needMerge(100, Config.tablet_reshard_target_size));
     }
 
     @Test
@@ -289,42 +289,31 @@ public class TabletReshardUtilsTest {
 
 
     @Test
-    public void adaptiveTargetSize_aimsForOneTabletPerNodeWhileTheIndexIsNarrow() {
-        long saved = Config.tablet_reshard_min_split_size;
-        Config.tablet_reshard_min_split_size = 2L << 30;
-        try {
-            // 24 GiB over a bound of 8 wants 3 GiB tablets, which is below the steady target, so the
-            // adaptive term wins and a single 24 GiB tablet splits into exactly the bound.
-            assertEquals(3L << 30, TabletReshardUtils.adaptiveTargetSize(24L << 30, 10L << 30, 8));
-            assertEquals(8, TabletReshardUtils.calcSplitCount(24L << 30, 3L << 30),
-                    "one step lands on the bound, so nothing needs to stop it overshooting");
-
-            // Enough data that one tablet per node would be larger than the steady target: the steady
-            // target wins and the rule is the size rule, unchanged.
-            assertEquals(10L << 30, TabletReshardUtils.adaptiveTargetSize(100L << 30, 10L << 30, 8));
-
-            // Nearly empty index: the floor stops it being carved into slivers.
-            assertEquals(2L << 30, TabletReshardUtils.adaptiveTargetSize(100L << 20, 10L << 30, 8));
-
-            // Unresolved warehouse leaves the steady target alone.
-            assertEquals(10L << 30, TabletReshardUtils.adaptiveTargetSize(24L << 30, 10L << 30, 0));
-        } finally {
-            Config.tablet_reshard_min_split_size = saved;
-        }
+    public void adaptiveRuleOn_whileTheIndexHoldsLessThanBoundTargets() {
+        long floor = 2L << 30;
+        // 24 GiB against a bound of 8 and a 10 GiB target: well short of 80 GiB, so the rule is on.
+        assertTrue(TabletReshardUtils.adaptiveRuleOn(24L << 30, 10L << 30, 8, floor));
+        // A nearly empty index is too; the floor, not the gate, keeps it from being carved into slivers.
+        assertTrue(TabletReshardUtils.adaptiveRuleOn(100L << 20, 10L << 30, 8, floor));
+        // Bound x target of data or more: the index is the size rule's.
+        assertFalse(TabletReshardUtils.adaptiveRuleOn(80L << 30, 10L << 30, 8, floor));
+        assertFalse(TabletReshardUtils.adaptiveRuleOn(100L << 30, 10L << 30, 8, floor));
+        // An unresolved warehouse, or a zero floor, keeps it off.
+        assertFalse(TabletReshardUtils.adaptiveRuleOn(24L << 30, 10L << 30, 0, floor));
+        assertFalse(TabletReshardUtils.adaptiveRuleOn(24L << 30, 10L << 30, 8, 0L));
     }
 
     @Test
-    public void adaptiveTargetSize_isDisabledByRaisingTheMinimumToTheTarget() {
+    public void adaptiveRuleOn_isOffWhenTheMinimumReachesTheTarget() {
         long saved = Config.tablet_reshard_min_split_size;
         try {
-            // The floor is clamped to the target, so a minimum at or above it collapses the whole
-            // expression to the target -- that clamp is the off switch, and it is also what stops a
-            // large minimum raising the target above its configured value.
+            // A minimum at or above the target reads as a zero floor, which is the documented off switch.
             Config.tablet_reshard_min_split_size = 10L << 30;
-            assertEquals(10L << 30, TabletReshardUtils.adaptiveTargetSize(24L << 30, 10L << 30, 8));
+            assertFalse(TabletReshardUtils.adaptiveRuleOn(24L << 30, 10L << 30, 8,
+                    TabletReshardUtils.adaptiveSplitFloor(10L << 30)));
             Config.tablet_reshard_min_split_size = 40L << 30;
-            assertEquals(10L << 30, TabletReshardUtils.adaptiveTargetSize(24L << 30, 10L << 30, 8),
-                    "a minimum above the target must not raise the target");
+            assertFalse(TabletReshardUtils.adaptiveRuleOn(24L << 30, 10L << 30, 8,
+                    TabletReshardUtils.adaptiveSplitFloor(10L << 30)));
         } finally {
             Config.tablet_reshard_min_split_size = saved;
         }
@@ -387,6 +376,64 @@ public class TabletReshardUtilsTest {
         assertEquals(1, TabletReshardUtils.parallelismFloor(5, 0));
     }
 
+    @Test
+    public void testNeedSplitAndMergeAgainstExplicitTarget() {
+        long target = 1L << 30;
+        long splitTrigger = TabletReshardUtils.splitThreshold(target);
+        assertTrue(TabletReshardUtils.needSplit(splitTrigger, target));
+        assertFalse(TabletReshardUtils.needSplit(splitTrigger - 1, target));
+        long pairThresh = TabletReshardUtils.mergePairThreshold(target);
+        assertTrue(TabletReshardUtils.needMerge(pairThresh - 1, target));
+        assertFalse(TabletReshardUtils.needMerge(pairThresh, target));
+        assertFalse(TabletReshardUtils.needMerge(0, 0));
+    }
+
+    @Test
+    public void adaptiveRuleOn_isOffForATableTargetBelowTheMinimum() {
+        // A 1 GiB table target under the 2 GiB minimum: the floor reads as 0 and the rule stays off.
+        assertFalse(TabletReshardUtils.adaptiveRuleOn(100L << 30, 1L << 30, 8,
+                TabletReshardUtils.adaptiveSplitFloor(1L << 30)));
+    }
+
+    @Test
+    public void canSplitInto_needsEveryPieceAtTheFloor() {
+        assertTrue(TabletReshardUtils.canSplitInto(4L << 30, 2, 2L << 30));
+        assertFalse(TabletReshardUtils.canSplitInto((4L << 30) - 1, 2, 2L << 30));
+        assertTrue(TabletReshardUtils.canSplitInto(6L << 30, 3, 2L << 30));
+        assertFalse(TabletReshardUtils.canSplitInto(6L << 30, 4, 2L << 30));
+    }
+
+    @Test
+    public void adaptiveSplitFloor_isTheMinimumWhileItSitsBelowTheTarget() {
+        // The setup pins the minimum at 2 GiB.
+        assertEquals(2L << 30, TabletReshardUtils.adaptiveSplitFloor(10L << 30));
+    }
+
+    @Test
+    public void adaptiveRuleOn_usesTheFloorItIsHandedNotTheConfiguration() {
+        // A caller reads the floor once and hands it to both the gate and the fill. Change the configuration
+        // after that reading: the gate must follow the floor it was given, or the two could disagree.
+        long floor = TabletReshardUtils.adaptiveSplitFloor(10L << 30);
+        Config.tablet_reshard_min_split_size = 10L << 30;   // would switch the rule off if read again
+        assertTrue(TabletReshardUtils.adaptiveRuleOn(24L << 30, 10L << 30, 8, floor));
+    }
+
+    @Test
+    public void adaptiveSplitFloor_isZeroWhereTheAdaptiveRuleIsOff() {
+        // A minimum at or above the target is the documented off switch of the adaptive rule; the floor must
+        // read as "no child at all" there, not as a floor equal to the target.
+        assertEquals(0L, TabletReshardUtils.adaptiveSplitFloor(2L << 30));
+        assertEquals(0L, TabletReshardUtils.adaptiveSplitFloor(1L << 30));
+        // A target that disables reshard altogether.
+        assertEquals(0L, TabletReshardUtils.adaptiveSplitFloor(0L));
+        assertEquals(0L, TabletReshardUtils.adaptiveSplitFloor(-3L));
+        // A non-positive minimum has no validator on it; it must not turn into "children of any size".
+        Config.tablet_reshard_min_split_size = 0L;
+        assertEquals(0L, TabletReshardUtils.adaptiveSplitFloor(10L << 30));
+        Config.tablet_reshard_min_split_size = -1L;
+        assertEquals(0L, TabletReshardUtils.adaptiveSplitFloor(10L << 30));
+    }
+
     /**
      * Static check of the convergence invariants. These two inequalities are what prevent
      * split↔merge oscillation. If they ever fail, the algorithm can ping-pong indefinitely.
@@ -401,7 +448,7 @@ public class TabletReshardUtilsTest {
         // 1. Two adjacent post-split pieces (each >= splitTrigger / 2 under uniform row width)
         //    must NOT satisfy needMerge: their pair sum >= splitTrigger > pairThresh required.
         long minPiece = splitTrigger / 2;
-        assertFalse(TabletReshardUtils.needMerge(minPiece + minPiece),
+        assertFalse(TabletReshardUtils.needMerge(minPiece + minPiece, t),
                 "split output pair must not be a merge candidate");
 
         // 2. Merged group cap must be strictly below split trigger (otherwise merge output

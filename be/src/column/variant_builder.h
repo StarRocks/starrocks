@@ -14,9 +14,11 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/statusor.h"
@@ -61,6 +63,15 @@ public:
 
     static StatusOr<VariantRowValue> build_row_from_overlays(std::optional<VariantRowRef> base,
                                                              std::vector<Overlay> overlays);
+
+    // Write-side entrypoints. Validate exact binary extents before decoding, with bounded depth,
+    // work and input bytes. A malformed base is rejected even if an overlay replaces its root.
+    static Status validate_metadata_strict(std::string_view metadata);
+    static Status validate_row_strict(std::string_view metadata, std::string_view value);
+    static StatusOr<VariantRowValue> build_row_from_overlays_strict(std::optional<VariantRowRef> base,
+                                                                    std::vector<Overlay> overlays);
+    static constexpr size_t kMaxStrictDepth = 128;
+    static constexpr size_t kMaxStrictWork = 1 << 20;
 
 private:
     std::optional<VariantRowRef> _base;

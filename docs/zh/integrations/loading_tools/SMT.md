@@ -2,6 +2,7 @@
 sidebar_position: 10
 displayed_sidebar: docs
 description: "StarRocks Migration Tool（SMT）用于通过 Flink 将源数据库数据迁移导入 StarRocks。"
+products: [oss, enterprise, anywhere]
 ---
 
 # StarRocks migration tool（SMT）

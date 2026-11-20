@@ -571,6 +571,11 @@ public abstract class StarRocksHttpTestCase {
     public void tearDown() {
     }
 
+    // For a test that needs an action of its own on the running server.
+    protected static ActionController httpController() {
+        return httpServer.getController();
+    }
+
     @AfterAll
     public static void closeHttpServer() {
         httpServer.shutDown();

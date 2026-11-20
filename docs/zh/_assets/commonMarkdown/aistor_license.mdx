@@ -1,0 +1,5 @@
+MinIO AIStor 需要许可证才能运行。您可以使用现有的许可证，也可以申请新的 MinIO AIStor 免费版（Free Tier）许可证。
+
+要申请新的 MinIO AIStor 免费版许可证，请访问 [MinIO AIStor 定价](https://min.io/pricing)页面，在 Free 版本下选择 **Get Started** 以获取免费许可证。免费版许可证允许您在单个计算资源（包含一个或多个磁盘）上运行 MinIO AIStor。
+
+将许可证文件保存为 `minio.license`，并放在与 `docker-compose.yml` 文件相同的目录中。Docker Compose 文件会将 `minio.license` 挂载到 MinIO AIStor 容器中。如果没有有效的许可证，MinIO AIStor 可以启动，但会拒绝所有 S3 操作。

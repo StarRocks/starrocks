@@ -1,0 +1,37 @@
+-- name: test_range_partition_prune_null_below_prefix
+
+-- A NULL sorts below every value of its column, so on RANGE(a, b) the row (5, NULL) lies just below
+-- (5, -128) and lands in p0, the partition that ENDS on that boundary. test_range_partition_prune_is_null
+-- covers `b IS NULL`; here nothing constrains b at all, and the pruner fills b with its type minimum,
+-- looks the key up as (5, -128), and selects p1, the partition that STARTS on it. The NULL row is lost.
+
+CREATE TABLE t_prefix_null (
+    a TINYINT NOT NULL,
+    b TINYINT NULL,
+    v INT
+)
+DUPLICATE KEY(a)
+PARTITION BY RANGE(a, b) (
+    PARTITION p0 VALUES LESS THAN ('5', '-128'),
+    PARTITION p1 VALUES LESS THAN ('5', '10'),
+    PARTITION p2 VALUES LESS THAN ('50', '0')
+)
+DISTRIBUTED BY HASH(v) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_prefix_null VALUES (5, NULL, 1), (5, 3, 2), (1, 7, 3), (40, NULL, 4), (5, -128, 5);
+
+-- An equality on the prefix alone, directly and through an IN list.
+select v from t_prefix_null where a = 5 order by v;
+select v from t_prefix_null where a in (5, 40) order by v;
+select v from t_prefix_null where a = 5 and v > 0 order by v;
+-- An inclusive lower bound on the prefix fills b with its minimum the same way.
+select v from t_prefix_null where a >= 5 order by v;
+select v from t_prefix_null where a between 5 and 40 order by v;
+select v from t_prefix_null where a >= 5 and a <= 5 order by v;
+-- Controls: a predicate on b excludes the NULL row by itself, and `b is null` has its own path.
+select v from t_prefix_null where a = 5 and b < 3 order by v;
+select v from t_prefix_null where a = 5 and b >= -128 order by v;
+select v from t_prefix_null where a = 5 and b is null order by v;
+-- An exclusive bound does not fill b, so it was already right.
+select v from t_prefix_null where a > 4 order by v;

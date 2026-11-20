@@ -19,7 +19,25 @@ env:
   PR_NUMBER: ${{ github.event.number }}
 
 jobs:
+  # The backport versions come from the branch map (ci-tool conf/sync_branch_map.json:
+  # `versions --repo sr`, the StarRocks branches paired with CelerData), so a
+  # new or retired release branch needs no workflow edit. The static list is the fallback when
+  # the map cannot be read.
+  backport-versions:
+    runs-on: [ self-hosted, quick ]
+    if: github.event.pull_request.merged == true && github.base_ref == 'main' && github.repository == 'StarRocks/starrocks'
+    outputs:
+      versions: ${{ steps.map.outputs.versions || '["4.2", "4.1", "4.0"]' }}
+    steps:
+      - name: read the backport versions
+        id: map
+        continue-on-error: true
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull -q || true)
+          echo "versions=$(python3 lib/sync_branch_map.py versions --repo sr)" >> "$GITHUB_OUTPUT"
+
   backport:
+    needs: backport-versions
     runs-on: ubuntu-latest
     if: >
       github.event.pull_request.merged == true &&
@@ -31,7 +49,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ["4.1", "4.0", "3.5", "3.4", "3.3"]
+        version: ${{ fromJSON(needs.backport-versions.outputs.versions) }}
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
@@ -47,6 +65,28 @@ jobs:
         if: contains(github.event.pull_request.labels.*.name, matrix.version)
         with:
           labels: ${{ matrix.version }}
+
+  # The newest release branch is easy to miss: a PR opened before it was cut has no box for it,
+  # and the boxes workflow (backport-boxes.yml) only fixes PRs that are edited or pushed, or
+  # recent ones. When a merged main PR's labels lack the newest version but its body ticks the
+  # previous one only, or ticks the newest without its label, it is backported to the newest
+  # too and the assignees are told. A box the author unticked is respected; reverse-sync PRs
+  # are skipped. Labeled versions stay with the `backport` job above.
+  # Logic: ci-tool lib/backport_boxes.py --merged.
+  backport-newest:
+    runs-on: [ self-hosted, quick ]
+    if: >
+      github.event.pull_request.merged == true &&
+      github.base_ref == 'main' &&
+      github.repository == 'StarRocks/starrocks'
+    steps:
+      - name: backport to the newest branch when only the previous one is ticked
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && (cd ci-tool && git pull -q || true)
+          python3 ci-tool/lib/backport_boxes.py --repo "${{ github.repository }}" --pr "${PR_NUMBER}" --merged --labels-json "${LABELS}"
 
   # Backport fan-out engine — DRY-RUN shadow. Runs alongside the static `backport`
   # job above and only PRINTS the computed target set (never posts @Mergifyio), for
@@ -79,6 +119,7 @@ jobs:
       centos7: ${{ steps.distro.outputs.centos7 }}
       rocky9: ${{ steps.distro.outputs.rocky9 }}
     steps:
+      # Keep aligned with THIRDPARTY_PATHSPECS in build-support/check_thirdparty_merge_base.py.
       - uses: dorny/paths-filter@v3
         id: linux-thirdparty-filter
         with:
@@ -268,6 +309,33 @@ jobs:
           VERSION_LABEL: ${{ steps.prepare_version_label.outputs.LABEL }}
         run: |
           gh api --method POST "/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" -f "labels[]=${VERSION_LABEL}"
+
+  # Freeze-window correction (ci-tool docs/workflow/version-accuracy-design.md), as on
+  # CelerData: a change merged to branch-X.Y after branch-X.Y.Z was cut is labelled X.Y.(Z+1),
+  # but when the same change also merges to branch-X.Y.Z it reaches users in X.Y.Z, and this
+  # lowers the branch-X.Y label. Here the branch-X.Y PR merges second: the patch-branch copy
+  # is already in, so this PR corrects itself. image-rebuild-three-digit.yml covers the
+  # other order.
+  #
+  # Must follow update_backport_merged_msg, which adds the label read here; always() because
+  # that job is skipped on main and a skipped `needs` would skip this one too.
+  reconcile-version-label:
+    runs-on: [self-hosted, quick]
+    needs: update_backport_merged_msg
+    if: always() && github.event.pull_request.merged == true && github.base_ref != 'main'
+    # Label accuracy is not worth a red MERGE PIPELINE on a PR that is already merged.
+    continue-on-error: true
+    env:
+      REPO: ${{ github.repository }}
+      BASE_REF: ${{ github.base_ref }}
+      PR_NUMBER: ${{ github.event.number }}
+      PR_TITLE: ${{ github.event.pull_request.title }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Reconcile version label
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull -q || true)
+          python3 scripts/reconcile-version-label.py
 
   update_version_label_for_main_feature:
     runs-on: [self-hosted, quick]

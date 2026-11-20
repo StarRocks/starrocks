@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 3.3：共有データの高速スキーマ進化による準秒 DDL、StarRocks データ移行ツール、データレイク ウォームアップ用 CACHE SELECT。"
+products: [oss]
 ---
 
 # StarRocks version 3.3
@@ -915,10 +916,10 @@ v3.3.1 以降から v3.2 にクラスタをダウングレードするには、�
 
 #### 共有データクラスタ
 
-- 共有データクラスタでのスキーマ進化のパフォーマンスを最適化し、DDL 変更の時間消費をサブ秒レベルに削減しました。詳細については、[スキーマ進化](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE/#set-fast-schema-evolution) を参照してください。
-- 共有なしクラスタから共有データクラスタへのデータ移行の要件を満たすために、コミュニティは公式に [StarRocks データ移行ツール](https://docs.starrocks.io/docs/administration/data_migration_tool/) をリリースしました。これは、共有なしクラスタ間のデータ同期および災害復旧にも使用できます。
-- [プレビュー] AWS Express One Zone Storage をストレージボリュームとして使用でき、読み書きパフォーマンスを大幅に向上させます。詳細については、[CREATE STORAGE VOLUME](https://docs.starrocks.io/docs/sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME/#properties) を参照してください。
-- 共有データクラスタでのガーベジコレクション (GC) メカニズムを最適化しました。オブジェクトストレージ内のデータに対する手動コンパクションをサポートします。詳細については、[手動コンパクション](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE/#manual-compaction-from-31) を参照してください。
+- 共有データクラスタでのスキーマ進化のパフォーマンスを最適化し、DDL 変更の時間消費をサブ秒レベルに削減しました。詳細については、[スキーマ進化](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) を参照してください。
+- 共有なしクラスタから共有データクラスタへのデータ移行の要件を満たすために、コミュニティは公式に [StarRocks データ移行ツール](../administration/data_migration_tool.md) をリリースしました。これは、共有なしクラスタ間のデータ同期および災害復旧にも使用できます。
+- [プレビュー] AWS Express One Zone Storage をストレージボリュームとして使用でき、読み書きパフォーマンスを大幅に向上させます。詳細については、[CREATE STORAGE VOLUME](../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md#properties) を参照してください。
+- 共有データクラスタでのガーベジコレクション (GC) メカニズムを最適化しました。オブジェクトストレージ内のデータに対する手動コンパクションをサポートします。詳細については、[手動コンパクション](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#manual-compaction-from-31) を参照してください。
 - 共有データクラスタ内の主キーテーブルの Compaction トランザクションの公開実行を最適化し、主キーインデックスの読み取りを回避することで I/O およびメモリオーバーヘッドを削減しました。
 - タブレット内での内部並列スキャンをサポートします。これにより、テーブル内のバケットが非常に少ないシナリオでのクエリパフォーマンスが最適化され、クエリの並列性がタブレットの数に制限されます。ユーザーは次のシステム変数を設定することで並列スキャン機能を有効にできます:
 
@@ -930,8 +931,8 @@ v3.3.1 以降から v3.2 にクラスタをダウングレードするには、�
 #### データレイク分析
 
 - **Data Cache の強化**
-  - ホットスポットデータをデータレイクから取得するための [Data Cache Warmup](https://docs.starrocks.io/docs/data_source/data_cache_warmup/) コマンド CACHE SELECT を追加し、クエリを高速化し、リソース使用量を最小化します。CACHE SELECT は SUBMIT TASK と組み合わせて定期的なキャッシュウォームアップを実現できます。この機能は、外部カタログ内のテーブルと共有データクラスタ内の内部テーブルの両方をサポートします。
-  - [Data Cache の観測性](https://docs.starrocks.io/docs/data_source/data_cache_observe/) を強化するためにメトリクスと監視方法を追加しました。
+  - ホットスポットデータをデータレイクから取得するための [Data Cache Warmup](../data_source/data_cache/block_cache_warmup.md) コマンド CACHE SELECT を追加し、クエリを高速化し、リソース使用量を最小化します。CACHE SELECT は SUBMIT TASK と組み合わせて定期的なキャッシュウォームアップを実現できます。この機能は、外部カタログ内のテーブルと共有データクラスタ内の内部テーブルの両方をサポートします。
+  - [Data Cache の観測性](../data_source/data_cache/data_cache_observe.md) を強化するためにメトリクスと監視方法を追加しました。
 - **Parquet リーダーパフォーマンスの強化**
   - ページインデックスを最適化し、データスキャンサイズを大幅に削減しました。
   - ページインデックスが使用される場合に不要なページを読み取る頻度を減らしました。
@@ -941,33 +942,33 @@ v3.3.1 以降から v3.2 にクラスタをダウングレードするには、�
   - ORC 小さなストライプの処理ロジックを最適化しました。
 - **Iceberg テーブル形式の強化**
   - Iceberg Catalog のメタデータアクセスパフォーマンスを大幅に向上させ、並列スキャンロジックをリファクタリングしました。大量のメタデータファイルを処理する際のネイティブ Iceberg SDK の単一スレッド I/O ボトルネックを解決しました。その結果、メタデータボトルネックを持つクエリは 10 倍以上のパフォーマンス向上を達成しました。
-  - Parquet 形式の Iceberg v2 テーブルに対するクエリが [equality deletes](https://docs.starrocks.io/docs/data_source/catalog/iceberg/iceberg_catalog/#usage-notes) をサポートします。
+  - Parquet 形式の Iceberg v2 テーブルに対するクエリが [equality deletes](../data_source/catalog/iceberg/iceberg.md#usage-notes) をサポートします。
 - **[実験的] Paimon Catalog の強化**
   - Paimon 外部テーブルに基づいて作成されたマテリアライズドビューが自動クエリ書き換えをサポートします。
   - Paimon Catalog に対するクエリのスキャン範囲スケジューリングを最適化し、I/O 並行性を向上させました。
   - Paimon システムテーブルのクエリをサポートします。
   - Paimon 外部テーブルが DELETE Vectors をサポートし、更新および削除シナリオでのクエリ効率を向上させます。
-- **[外部テーブル統計の収集の強化](https://docs.starrocks.io/docs/using_starrocks/Cost_based_optimizer/#collect-statistics-of-hiveiceberghudi-tables)**
+- **[外部テーブル統計の収集の強化](../using_starrocks/Cost_based_optimizer.md#collect-statistics-of-hiveiceberghudi-tables)**
   - ANALYZE TABLE を使用して外部テーブルのヒストグラムを収集でき、データスキューを防ぎます。
   - STRUCT サブフィールドの統計収集をサポートします。
 - **テーブルシンクの強化**
   - Sink オペレーターのパフォーマンスが Trino と比較して倍増しました。
-  - [Hive カタログ](https://docs.starrocks.io/docs/data_source/catalog/hive_catalog/) および HDFS や AWS S3 などのクラウドストレージでの Textfile および ORC 形式のテーブルにデータをシンクできます。
-- [プレビュー] Alibaba Cloud [MaxCompute カタログ](https://docs.starrocks.io/docs/data_source/catalog/maxcompute_catalog/) をサポートし、MaxCompute からのデータをインジェストせずにクエリし、INSERT INTO を使用して MaxCompute からデータを直接変換およびロードできます。
+  - [Hive カタログ](../data_source/catalog/hive_catalog.md) および HDFS や AWS S3 などのクラウドストレージでの Textfile および ORC 形式のテーブルにデータをシンクできます。
+- [プレビュー] Alibaba Cloud [MaxCompute カタログ](../data_source/catalog/maxcompute_catalog.md) をサポートし、MaxCompute からのデータをインジェストせずにクエリし、INSERT INTO を使用して MaxCompute からデータを直接変換およびロードできます。
 - [実験的] ClickHouse Catalog をサポートします。
-- [実験的] [Kudu Catalog](https://docs.starrocks.io/docs/data_source/catalog/kudu_catalog/) をサポートします。
+- [実験的] [Kudu Catalog](../data_source/catalog/kudu_catalog.md) をサポートします。
 
 #### パフォーマンス改善とクエリ最適化
 
 - **ARM 上でのパフォーマンスを最適化しました。**
   - ARM アーキテクチャ命令セットのパフォーマンスを大幅に最適化しました。AWS Graviton インスタンスでのパフォーマンステストでは、SSB 100G テストで ARM アーキテクチャが x86 アーキテクチャよりも 11% 高速であり、Clickbench テストで 39% 高速、TPC-H 100G テストで 13% 高速、TPC-DS 100G テストで 35% 高速でした。
 - **ディスクへのスピルが GA になりました。** 複雑なクエリのメモリ使用量を最適化し、スピルスケジューリングを改善して、大規模なクエリが OOM なしで安定して実行できるようにしました。
-- [プレビュー] [中間結果をオブジェクトストレージにスピルすることをサポートします](https://docs.starrocks.io/docs/administration/management/resource_management/spill_to_disk/#preview-spill-intermediate-result-to-object-storage)。
+- [プレビュー] [中間結果をオブジェクトストレージにスピルすることをサポートします](../administration/management/resource_management/spill_to_disk.md#preview-spill-intermediate-result-to-object-storage)。
 - **より多くのインデックスをサポートします。**
-  - [プレビュー] [全文逆インデックス](https://docs.starrocks.io/docs/table_design/indexes/inverted_index/) をサポートし、全文検索を加速します。
-  - [プレビュー] [N-Gram ブルームフィルターインデックス](https://docs.starrocks.io/docs/table_design/indexes/Ngram_Bloom_Filter_Index/) をサポートし、`LIKE` クエリや `ngram_search` および `ngram_search_case_insensitive` 関数の計算速度を向上させます。
-- Bitmap 関数のパフォーマンスとメモリ使用量を改善しました。[Hive Bitmap UDFs](https://docs.starrocks.io/docs/sql-reference/sql-functions/hive_bitmap_udf/) を使用して Bitmap データを Hive にエクスポートする機能を追加しました。
-- **[プレビュー] [Flat JSON](https://docs.starrocks.io/docs/using_starrocks/Flat_json/) をサポートします。** この機能は、データロード中に JSON データを自動的に検出し、JSON データから共通フィールドを抽出して、これらのフィールドをカラム形式で保存します。これにより、JSON クエリパフォーマンスが向上し、STRUCT データのクエリに匹敵するようになります。
+  - [プレビュー] [全文逆インデックス](../table_design/indexes/inverted_index.md) をサポートし、全文検索を加速します。
+  - [プレビュー] [N-Gram ブルームフィルターインデックス](../table_design/indexes/Ngram_Bloom_Filter_Index.md) をサポートし、`LIKE` クエリや `ngram_search` および `ngram_search_case_insensitive` 関数の計算速度を向上させます。
+- Bitmap 関数のパフォーマンスとメモリ使用量を改善しました。[Hive Bitmap UDFs](../sql-reference/sql-functions/hive_bitmap_udf.md) を使用して Bitmap データを Hive にエクスポートする機能を追加しました。
+- **[プレビュー] [Flat JSON](../using_starrocks/Flat_json.md) をサポートします。** この機能は、データロード中に JSON データを自動的に検出し、JSON データから共通フィールドを抽出して、これらのフィールドをカラム形式で保存します。これにより、JSON クエリパフォーマンスが向上し、STRUCT データのクエリに匹敵するようになります。
 - **[プレビュー] グローバル辞書を最適化しました。** 辞書テーブルからのキーと値のペアのマッピングを BE メモリ内に保存する辞書オブジェクトを提供します。新しい `dictionary_get()` 関数を使用して、BE メモリ内の辞書オブジェクトを直接クエリし、辞書テーブルをクエリする速度を `dict_mapping()` 関数を使用する場合と比較して加速します。さらに、辞書オブジェクトはディメンションテーブルとしても機能します。`dictionary_get()` を使用して辞書オブジェクトを直接クエリすることでディメンション値を取得でき、ディメンションテーブルでの JOIN 操作を行ってディメンション値を取得する従来の方法よりも高速なクエリ速度を実現します。
 - [プレビュー] Colocate Group Execution をサポートします。Colocate テーブルでの Join および Agg オペレーターの実行におけるメモリ使用量を大幅に削減し、大規模なクエリをより安定して実行できるようにします。
 - CodeGen のパフォーマンスを最適化しました。JIT がデフォルトで有効になっており、複雑な式計算で 5 倍のパフォーマンス向上を達成します。
@@ -978,11 +979,11 @@ v3.3.1 以降から v3.2 にクラスタをダウングレードするには、�
 
 #### ストレージ最適化とクラスタ管理
 
-- **[レンジパーティション化の柔軟性を強化しました](https://docs.starrocks.io/docs/table_design/Data_distribution/#range-partitioning)。** 3 つの時間関数をパーティション列として使用できます。これらの関数は、パーティション列内のタイムスタンプまたは文字列を日付値に変換し、変換された日付値に基づいてデータをパーティション化します。
+- **[レンジパーティション化の柔軟性を強化しました](../table_design/data_distribution/Data_distribution.md#range-partitioning)。** 3 つの時間関数をパーティション列として使用できます。これらの関数は、パーティション列内のタイムスタンプまたは文字列を日付値に変換し、変換された日付値に基づいてデータをパーティション化します。
 - **FE メモリの観測性。** FE 内の各モジュールの詳細なメモリ使用量メトリクスを提供し、リソースをより適切に管理します。
-- **[FE 内のメタデータロックを最適化しました](https://docs.starrocks.io/docs/administration/management/FE_configuration/#lock_manager_enabled)。** FE 内のメタデータロックを集中管理するためのロックマネージャーを提供します。たとえば、メタデータロックの粒度をデータベースレベルからテーブルレベルに細分化し、ロードおよびクエリの並行性を向上させます。小規模データセットでの 100 の同時ロードジョブのシナリオでは、ロード時間を 35% 削減できます。
-- **[BE にラベルを追加することをサポートします](https://docs.starrocks.io/docs/administration/management/resource_management/be_label/)。** BE が配置されているラックやデータセンターなどの情報に基づいて BE にラベルを追加することをサポートします。これにより、ラックやデータセンター間でのデータ分布が均等になり、特定のラックでの停電やデータセンターでの障害が発生した場合の災害復旧が容易になります。
-- **[ソートキーを最適化しました](https://docs.starrocks.io/docs/table_design/indexes/Prefix_index_sort_key/#usage-notes)。** 重複キーテーブル、集計テーブル、およびユニークキーテーブルはすべて、`ORDER BY` 句を使用してソートキーを指定することをサポートします。
+- **[FE 内のメタデータロックを最適化しました](https://docs.starrocks.io/docs/3.3/administration/management/FE_configuration/#lock_manager_enabled)。** FE 内のメタデータロックを集中管理するためのロックマネージャーを提供します。たとえば、メタデータロックの粒度をデータベースレベルからテーブルレベルに細分化し、ロードおよびクエリの並行性を向上させます。小規模データセットでの 100 の同時ロードジョブのシナリオでは、ロード時間を 35% 削減できます。
+- **[BE にラベルを追加することをサポートします](../administration/management/resource_management/be_label.md)。** BE が配置されているラックやデータセンターなどの情報に基づいて BE にラベルを追加することをサポートします。これにより、ラックやデータセンター間でのデータ分布が均等になり、特定のラックでの停電やデータセンターでの障害が発生した場合の災害復旧が容易になります。
+- **[ソートキーを最適化しました](../table_design/indexes/Prefix_index_sort_key.md#usage-notes)。** 重複キーテーブル、集計テーブル、およびユニークキーテーブルはすべて、`ORDER BY` 句を使用してソートキーを指定することをサポートします。
 - **[実験的] 非文字列スカラー データのストレージ効率を最適化しました。** このタイプのデータは辞書エンコーディングをサポートし、ストレージスペースの使用量を 12% 削減します。
 - **主キーテーブルのサイズ階層型コンパクションをサポートします。** コンパクション中の書き込み I/O およびメモリオーバーヘッドを削減します。この改善は、共有データクラスタと共有なしクラスタの両方でサポートされています。BE 設定項目 `enable_pk_size_tiered_compaction_strategy` を使用して、この機能を有効にするかどうかを制御できます（デフォルトで有効）。
 - **主キーテーブルの永続性インデックスの読み取り I/O を最適化しました。** 永続性インデックスをより小さな粒度（ページ）で読み取ることをサポートし、永続性インデックスのブルームフィルターを改善します。この改善は、共有データクラスタと共有なしクラスタの両方でサポートされています。
@@ -990,30 +991,30 @@ v3.3.1 以降から v3.2 にクラスタをダウングレードするには、�
 
 #### マテリアライズドビュー
 
-- **ビューに基づくクエリ書き換えをサポートします。** この機能が有効になっている場合、ビューに対するクエリは、そのビューに基づいて作成されたマテリアライズドビューに書き換えられます。詳細については、[ビューに基づくマテリアライズドビューの書き換え](https://docs.starrocks.io/docs/using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views/#view-based-materialized-view-rewrite) を参照してください。
-- **テキストベースのクエリ書き換えをサポートします。** この機能が有効になっている場合、マテリアライズドビューと同じ抽象構文木 (AST) を持つクエリ（またはそのサブクエリ）は透過的に書き換えられます。詳細については、[テキストベースのマテリアライズドビューの書き換え](https://docs.starrocks.io/docs/using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views/#text-based-materialized-view-rewrite) を参照してください。
-- **[プレビュー] マテリアライズドビューに直接対するクエリの透過的な書き換えモードを設定することをサポートします。** `transparent_mv_rewrite_mode` プロパティが有効になっている場合、StarRocks はクエリをマテリアライズドビューに自動的に書き換えます。リフレッシュされたマテリアライズドビューのパーティションからのデータを、リフレッシュされていないパーティションに対応する生データと自動的に UNION 操作を使用してマージします。このモードは、データの一貫性を維持しながら、リフレッシュ頻度を制御し、リフレッシュコストを削減することを目的としたモデリングシナリオに適しています。詳細については、[CREATE MATERIALIZED VIEW](https://docs.starrocks.io/docs/sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW/#parameters-1) を参照してください。
-- マテリアライズドビューのクエリ書き換えのための集計プッシュダウンをサポートします: `enable_materialized_view_agg_pushdown_rewrite` 変数が有効になっている場合、ユーザーは [Aggregation Rollup](https://docs.starrocks.io/docs/using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views/#aggregation-rollup-rewrite) を使用して、マルチテーブルジョインシナリオを加速するために単一テーブルの非同期マテリアライズドビューを使用できます。集計関数はクエリ実行中にスキャンオペレーターにプッシュダウンされ、ジョインオペレーターが実行される前にマテリアライズドビューによって書き換えられ、クエリ効率が大幅に向上します。詳細については、[集計プッシュダウン](https://docs.starrocks.io/docs/using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views/#aggregation-pushdown) を参照してください。
-- **マテリアライズドビューの書き換えを制御する新しいプロパティをサポートします。** ユーザーは `enable_query_rewrite` プロパティを `false` に設定して、特定のマテリアライズドビューに基づくクエリ書き換えを無効にし、クエリ書き換えのオーバーヘッドを削減できます。モデリング後に直接クエリのためにのみ使用され、クエリ書き換えのために使用されないマテリアライズドビューの場合、ユーザーはこのマテリアライズドビューのクエリ書き換えを無効にできます。詳細については、[CREATE MATERIALIZED VIEW](https://docs.starrocks.io/docs/sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW/#parameters-1) を参照してください。
+- **ビューに基づくクエリ書き換えをサポートします。** この機能が有効になっている場合、ビューに対するクエリは、そのビューに基づいて作成されたマテリアライズドビューに書き換えられます。詳細については、[ビューに基づくマテリアライズドビューの書き換え](../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#view-based-materialized-view-rewrite) を参照してください。
+- **テキストベースのクエリ書き換えをサポートします。** この機能が有効になっている場合、マテリアライズドビューと同じ抽象構文木 (AST) を持つクエリ（またはそのサブクエリ）は透過的に書き換えられます。詳細については、[テキストベースのマテリアライズドビューの書き換え](../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#text-based-materialized-view-rewrite) を参照してください。
+- **[プレビュー] マテリアライズドビューに直接対するクエリの透過的な書き換えモードを設定することをサポートします。** `transparent_mv_rewrite_mode` プロパティが有効になっている場合、StarRocks はクエリをマテリアライズドビューに自動的に書き換えます。リフレッシュされたマテリアライズドビューのパーティションからのデータを、リフレッシュされていないパーティションに対応する生データと自動的に UNION 操作を使用してマージします。このモードは、データの一貫性を維持しながら、リフレッシュ頻度を制御し、リフレッシュコストを削減することを目的としたモデリングシナリオに適しています。詳細については、[CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md#parameters-1) を参照してください。
+- マテリアライズドビューのクエリ書き換えのための集計プッシュダウンをサポートします: `enable_materialized_view_agg_pushdown_rewrite` 変数が有効になっている場合、ユーザーは [Aggregation Rollup](../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#aggregation-rollup-rewrite) を使用して、マルチテーブルジョインシナリオを加速するために単一テーブルの非同期マテリアライズドビューを使用できます。集計関数はクエリ実行中にスキャンオペレーターにプッシュダウンされ、ジョインオペレーターが実行される前にマテリアライズドビューによって書き換えられ、クエリ効率が大幅に向上します。詳細については、[集計プッシュダウン](../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#aggregation-pushdown) を参照してください。
+- **マテリアライズドビューの書き換えを制御する新しいプロパティをサポートします。** ユーザーは `enable_query_rewrite` プロパティを `false` に設定して、特定のマテリアライズドビューに基づくクエリ書き換えを無効にし、クエリ書き換えのオーバーヘッドを削減できます。モデリング後に直接クエリのためにのみ使用され、クエリ書き換えのために使用されないマテリアライズドビューの場合、ユーザーはこのマテリアライズドビューのクエリ書き換えを無効にできます。詳細については、[CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md#parameters-1) を参照してください。
 - **マテリアライズドビューの書き換えのコストを最適化しました。** 候補マテリアライズドビューの数を指定することをサポートし、フィルタリングアルゴリズムを強化しました。クエリ書き換えフェーズでのオプティマイザーの時間消費を削減するために、マテリアライズドビュープランキャッシュを導入しました。詳細については、`cbo_materialized_view_rewrite_related_mvs_limit` を参照してください。
-- **Iceberg カタログに基づいて作成されたマテリアライズドビューを最適化しました。** Iceberg カタログに基づくマテリアライズドビューは、パーティション更新によってトリガーされるインクリメンタルリフレッシュと、パーティション変換を使用した Iceberg テーブルのパーティション整合性をサポートします。詳細については、[マテリアライズドビューによるデータレイククエリアクセラレーション](https://docs.starrocks.io/docs/using_starrocks/async_mv/use_cases/data_lake_query_acceleration_with_materialized_views/#choose-a-suitable-refresh-strategy) を参照してください。
-- **マテリアライズドビューの観測性を強化しました。** マテリアライズドビューの監視と管理を改善し、システムの洞察を向上させました。詳細については、[非同期マテリアライズドビューのメトリクス](https://docs.starrocks.io/docs/administration/management/monitoring/metrics/#metrics-for-asynchronous-materialized-views) を参照してください。
+- **Iceberg カタログに基づいて作成されたマテリアライズドビューを最適化しました。** Iceberg カタログに基づくマテリアライズドビューは、パーティション更新によってトリガーされるインクリメンタルリフレッシュと、パーティション変換を使用した Iceberg テーブルのパーティション整合性をサポートします。詳細については、[マテリアライズドビューによるデータレイククエリアクセラレーション](../using_starrocks/async_mv/use_cases/data_lake_query_acceleration_with_materialized_views.md#choose-a-suitable-refresh-strategy) を参照してください。
+- **マテリアライズドビューの観測性を強化しました。** マテリアライズドビューの監視と管理を改善し、システムの洞察を向上させました。詳細については、[非同期マテリアライズドビューのメトリクス](../administration/management/monitoring/metric_details/metric_details.mdx#metrics-for-asynchronous-materialized-views) を参照してください。
 - **大規模なマテリアライズドビューのリフレッシュ効率を改善しました。** グローバル FIFO スケジューリングをサポートし、ネストされたマテリアライズドビューのカスケードリフレッシュ戦略を最適化し、高頻度リフレッシュシナリオで発生するいくつかの問題を修正しました。
-- **複数のファクトテーブルによってトリガーされるリフレッシュをサポートします。** 複数のファクトテーブルに基づいて作成されたマテリアライズドビューは、ファクトテーブルのいずれかのデータが更新された場合にパーティションレベルのインクリメンタルリフレッシュをサポートし、データ管理の柔軟性を向上させます。詳細については、[複数のベーステーブルとのパーティション整合性](https://docs.starrocks.io/docs/using_starrocks/async_mv/use_cases/create_partitioned_materialized_view/#align-partitions-with-multiple-base-tables) を参照してください。
+- **複数のファクトテーブルによってトリガーされるリフレッシュをサポートします。** 複数のファクトテーブルに基づいて作成されたマテリアライズドビューは、ファクトテーブルのいずれかのデータが更新された場合にパーティションレベルのインクリメンタルリフレッシュをサポートし、データ管理の柔軟性を向上させます。詳細については、[複数のベーステーブルとのパーティション整合性](../using_starrocks/async_mv/use_cases/create_partitioned_materialized_view.md#align-partitions-with-multiple-base-tables) を参照してください。
 
 #### SQL 関数
 
 - DATETIME フィールドがマイクロ秒精度をサポートします。新しい時間単位は関連する時間関数およびデータロード中にサポートされます。
 - 次の関数を追加しました:
-  - [文字列関数](https://docs.starrocks.io/docs/category/string-1/): crc32, url_extract_host, ngram_search
-  - 配列関数: [array_contains_seq](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_contains_seq/)
-  - 日付と時間関数: [yearweek](https://docs.starrocks.io/docs/sql-reference/sql-functions/date-time-functions/yearweek/)
-  - 数学関数: [cbrt](https://docs.starrocks.io/docs/sql-reference/sql-functions/math-functions/cbrt/)
+  - [文字列関数](../sql-reference/sql-functions/string-functions/string-functions.mdx): crc32, url_extract_host, ngram_search
+  - 配列関数: [array_contains_seq](../sql-reference/sql-functions/array-functions/array_contains_seq.md)
+  - 日付と時間関数: [yearweek](../sql-reference/sql-functions/date-time-functions/yearweek.md)
+  - 数学関数: [cbrt](../sql-reference/sql-functions/math-functions/cbrt.md)
 
 #### エコシステムサポート
 
 - [実験的] [ClickHouse SQL Rewriter](https://github.com/StarRocks/SQLTransformer) を提供し、ClickHouse の構文を StarRocks の構文に変換するための新しいツールです。
-- StarRocks が提供する Flink コネクタ v1.2.9 は Flink CDC 3.0 フレームワークと統合されており、CDC データソースから StarRocks へのストリーミング ELT パイプラインを構築できます。このパイプラインは、ソースの全データベース、シャーディングテーブル、およびスキーマ変更を StarRocks に同期できます。詳細については、[Flink CDC 3.0 を使用したデータの同期（スキーマ変更対応）](https://docs.starrocks.io/docs/loading/Flink-connector-starrocks/#synchronize-data-with-flink-cdc-30-with-schema-change-supported) を参照してください。
+- StarRocks が提供する Flink コネクタ v1.2.9 は Flink CDC 3.0 フレームワークと統合されており、CDC データソースから StarRocks へのストリーミング ELT パイプラインを構築できます。このパイプラインは、ソースの全データベース、シャーディングテーブル、およびスキーマ変更を StarRocks に同期できます。詳細については、[Flink CDC 3.0 を使用したデータの同期（スキーマ変更対応）](../loading/Flink-connector-starrocks.md#synchronize-data-with-flink-cdc-30-with-schema-change-supported) を参照してください。
 
 ### 動作とパラメータの変更
 
@@ -1041,7 +1042,7 @@ v3.3.1 以降から v3.2 にクラスタをダウングレードするには、�
 - マテリアライズドビューのプロパティ `partition_refresh_num` のデフォルト値が `-1` から `1` に変更されました。パーティション化されたマテリアライズドビューをリフレッシュする必要がある場合、元の動作ではすべてのパーティションを単一のタスクでリフレッシュしていましたが、新しい動作では 1 つのパーティションを一度にインクリメンタルにリフレッシュします。この変更は、元の動作によって引き起こされる過剰なリソース消費を防ぐことを目的としています。デフォルトの動作は、FE 設定 `default_mv_partition_refresh_number` を使用して調整できます。
 - 元々、データベース整合性チェッカーは GMT+8 タイムゾーンに基づいてスケジュールされていました。データベース整合性チェッカーは現在、ローカルタイムゾーンに基づいてスケジュールされています。 [#45748](https://github.com/StarRocks/starrocks/issues/45748)
 - データレイククエリを加速するために、デフォルトで Data Cache が有効になっています。ユーザーは `SET enable_scan_datacache = false` を実行して手動で無効にできます。
-- 共有データクラスタを v3.3 から v3.2.8 およびそれ以前にダウングレードした後に Data Cache 内のキャッシュデータを再利用したい場合、**starlet_cache** ディレクトリ内の Blockfile のファイル名形式を `blockfile_{n}.{version}` から `blockfile_{n}` に変更し、バージョン情報のサフィックスを削除する必要があります。詳細については、[Data Cache 使用上の注意](https://docs.starrocks.io/docs/using_starrocks/caching/block_cache/#usage-notes) を参照してください。v3.2.9 およびそれ以降のバージョンは v3.3 のファイル名形式と互換性があるため、ユーザーはこの操作を手動で行う必要はありません。
+- 共有データクラスタを v3.3 から v3.2.8 およびそれ以前にダウングレードした後に Data Cache 内のキャッシュデータを再利用したい場合、**starlet_cache** ディレクトリ内の Blockfile のファイル名形式を `blockfile_{n}.{version}` から `blockfile_{n}` に変更し、バージョン情報のサフィックスを削除する必要があります。詳細については、[Data Cache 使用上の注意](../using_starrocks/caching/block_cache.md#usage-notes) を参照してください。v3.2.9 およびそれ以降のバージョンは v3.3 のファイル名形式と互換性があるため、ユーザーはこの操作を手動で行う必要はありません。
 - FE パラメータ `sys_log_level` を動的に変更することをサポートします。 [#45062](https://github.com/StarRocks/starrocks/issues/45062)
 - Hive Catalog プロパティ `metastore_cache_refresh_interval_sec` のデフォルト値が `7200`（2 時間）から `60`（1 分）に変更されました。 [#46681](https://github.com/StarRocks/starrocks/pull/46681)
 

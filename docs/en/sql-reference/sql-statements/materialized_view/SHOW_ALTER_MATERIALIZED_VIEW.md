@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW ALTER MATERIALIZED VIEW shows the building status of synchronous materialized views."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW ALTER MATERIALIZED VIEW

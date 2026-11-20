@@ -47,6 +47,7 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.InsertAnalyzer;
 import com.starrocks.sql.analyzer.InsertSourceRefresher;
 import com.starrocks.sql.analyzer.PipeAnalyzer;
@@ -66,6 +67,7 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
@@ -87,6 +89,7 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.sql.plan.RangeScanExecutionValidator;
 import com.starrocks.sql.spm.SPMPlanner;
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TResultSinkType;
@@ -96,6 +99,8 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.RemoteTransactionMgr;
 import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -145,6 +150,7 @@ public class StatementPlanner {
             plannerMetaLocker = new PlannerMetaLocker(session, stmt);
             // Analyze
             analyzeStatement(stmt, session, plannerMetaLocker);
+            RangeScanExecutionValidator.validateStatement(stmt, session);
 
             // Whether planning will run off private snapshots is decided here, before the authorization
             // check, and when it will the snapshots are taken and the lock dropped first. The check is not
@@ -187,14 +193,14 @@ public class StatementPlanner {
                 setExplainToQueryDetail(plan, stmt, session, ResourceGroupClassifier.QueryType.INSERT);
                 return plan;
             } else if (stmt instanceof UpdateStmt updateStmt) {
-                return planDmlOffSnapshots(stmt, session, plannerMetaLocker, snapshot,
-                        () -> new UpdatePlanner().plan(updateStmt, session));
+                return withExplainInQueryDetail(planDmlOffSnapshots(stmt, session, plannerMetaLocker, snapshot,
+                        () -> new UpdatePlanner().plan(updateStmt, session)), stmt, session);
             } else if (stmt instanceof DeleteStmt deleteStmt) {
-                return planDmlOffSnapshots(stmt, session, plannerMetaLocker, snapshot,
-                        () -> new DeletePlanner().plan(deleteStmt, session));
+                return withExplainInQueryDetail(planDmlOffSnapshots(stmt, session, plannerMetaLocker, snapshot,
+                        () -> new DeletePlanner().plan(deleteStmt, session)), stmt, session);
             } else if (stmt instanceof MergeIntoStmt mergeIntoStmt) {
-                return planDmlOffSnapshots(stmt, session, plannerMetaLocker, snapshot,
-                        () -> new MergeIntoPlanner().plan(mergeIntoStmt, session));
+                return withExplainInQueryDetail(planDmlOffSnapshots(stmt, session, plannerMetaLocker, snapshot,
+                        () -> new MergeIntoPlanner().plan(mergeIntoStmt, session)), stmt, session);
             }
         } catch (OutOfMemoryError e) {
             LOG.warn("planner out of memory, sql is:" + stmt.getOrigStmt().getOrigStmt());
@@ -222,6 +228,20 @@ public class StatementPlanner {
         return null;
     }
 
+    // Under enable_sql_desensitize_in_log, StmtExecutor#handleExplainStmt keeps the planning-time plan in the query
+    // detail instead of the client's copy; queries and INSERT record one above, so EXPLAIN on these DMLs does too.
+    private static ExecPlan withExplainInQueryDetail(ExecPlan plan, StatementBase stmt, ConnectContext session) {
+        if (stmt.isExplain() && Config.enable_sql_desensitize_in_log && session.getQueryDetail() != null) {
+            if (plan == null) {
+                // DELETE run by DeleteHandler has no plan
+                session.getQueryDetail().setExplain("PLAN NOT AVAILABLE\n");
+            } else {
+                setExplainToQueryDetail(plan, stmt, session, ResourceGroupClassifier.QueryType.INSERT);
+            }
+        }
+        return plan;
+    }
+
     /**
      * Generate a query plan for query detail.
      * Explaining internal table is very quick, we prefer to use EXPLAIN COSTS.
@@ -238,7 +258,11 @@ public class StatementPlanner {
         StatementBase.ExplainLevel level = AnalyzerUtils.hasExternalTables(stmt) ?
                 StatementBase.ExplainLevel.defaultValue() :
                 StatementBase.ExplainLevel.parse(Config.query_detail_explain_level);
-        session.getQueryDetail().setExplain(buildExplainString(plan, stmt, session, queryType, level));
+        // the plan quotes literal values, which enable_sql_desensitize_in_log keeps out of query details
+        String explain = Config.enable_sql_desensitize_in_log
+                ? ExprToSql.withDigestedLiterals(() -> buildExplainString(plan, stmt, session, queryType, level))
+                : buildExplainString(plan, stmt, session, queryType, level);
+        session.getQueryDetail().setExplain(explain);
     }
 
     /**
@@ -297,6 +321,8 @@ public class StatementPlanner {
                         session.getSessionVariable().isEnableInsertSelectExternalAutoRefresh()) {
                     new QueryAnalyzer(session).analyzeExternalTablesOnly(statement,
                             session.getSessionVariable().isEnableInsertSelectExternalAutoRefresh());
+                } else {
+                    new QueryAnalyzer(session).preResolvePaimonInsertTarget(insertStmt);
                 }
             }
 
@@ -341,9 +367,28 @@ public class StatementPlanner {
                 refreshRemainingInsertSources(statement, session);
                 takeLock.run();
                 Analyzer.analyze(statement, session);
+                checkQueryOutput(statement);
                 refreshRemainingInsertSources(statement, session);
                 ExplicitTxnStatementValidator.validate(statement, session);
                 return false;
+            }
+        }
+    }
+
+    private static void checkQueryOutput(StatementBase statement) {
+        if (statement instanceof QueryStatement query && !query.hasOutFileClause()) {
+            if (query.isExplain() && !query.isExplainAnalyze()) {
+                return;
+            }
+            for (Field field : query.getQueryRelation().getRelationFields().getAllFields()) {
+                Type type = field.getType();
+                boolean nestedGeo = type.hasNestedGeoType();
+                if (nestedGeo || type.isScalarType(PrimitiveType.GEOMETRY)) {
+                    String resultType = nestedGeo ? "Nested GEOGRAPHY/GEOMETRY" : "GEOMETRY";
+                    String hint = nestedGeo ? " on geo elements" : "";
+                    throw new SemanticException(resultType + " query results are not supported; use ST_AsText or ST_AsBinary"
+                            + hint, query.getPos());
+                }
             }
         }
     }
@@ -638,7 +683,8 @@ public class StatementPlanner {
             logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
         }
 
-        boolean isShortCircuit = ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
+        boolean isShortCircuit = !session.getSessionVariable().isGroupedRangeScan()
+                        && ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
         OptExpression optimizedPlan;
         try (Timer ignored = Tracers.watchScope("Optimizer")) {
             // 2. Optimize logical plan and build physical plan
@@ -665,6 +711,7 @@ public class StatementPlanner {
              * currently only used in Spark/Flink Connector
              * Because the connector sends only simple queries, it only needs to remove the output fragment
              */
+            RangeScanExecutionValidator.validatePhysicalPlan(optimizedPlan, queryStmt, session);
             ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(
                     optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
                     resultSinkType,
@@ -727,7 +774,8 @@ public class StatementPlanner {
                 }
 
                 boolean isShortCircuit =
-                        ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
+                        !session.getSessionVariable().isGroupedRangeScan()
+                        && ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
                 OptExpression optimizedPlan;
                 try (Timer ignored = Tracers.watchScope("Optimizer")) {
                     OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
@@ -755,6 +803,7 @@ public class StatementPlanner {
                     // SingleNodeExecPlan is set in TableQueryPlanAction to generate a single-node Plan,
                     // currently only used in Spark/Flink Connector
                     // Because the connector sends only simple queries, it only needs to remove the output fragment
+                    RangeScanExecutionValidator.validatePhysicalPlan(optimizedPlan, queryStmt, session);
                     ExecPlan plan = PlanFragmentBuilder.createPhysicalPlan(
                             optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
                             resultSinkType,
@@ -1010,8 +1059,8 @@ public class StatementPlanner {
                     tbl.getSourceTablePort(),
                     authenticateParams);
         } else if (targetTable instanceof SystemTable || targetTable.isIcebergTable() || targetTable.isHiveTable()
-                || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
-            // schema table and iceberg and hive table does not need txn
+                || targetTable.isPaimonTable() || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
+            // These targets do not use StarRocks local transactions; their analyzers validate write support.
         } else {
             long dbId = db.getId();
             txnId = transactionMgr.beginTransaction(
@@ -1028,7 +1077,8 @@ public class StatementPlanner {
         stmt.setTxnId(txnId);
     }
 
-    private static void abortTransaction(DmlStmt stmt, ConnectContext session, String errMsg) {
+    /** Aborts the transaction {@link #beginTransaction} opened for stmt, if it opened one. */
+    public static void abortTransaction(DmlStmt stmt, ConnectContext session, String errMsg) {
         long txnId = stmt.getTxnId();
         if (txnId == DmlStmt.INVALID_TXN_ID) {
             return;

@@ -723,7 +723,7 @@ TEST_F(PersistentIndexSstableTest, test_metric_sst_open_read_error) {
 TEST_F(PersistentIndexSstableTest, test_sst_open_retry_after_clear_corrupted_cache) {
     auto location_provider = std::make_shared<FixedLocationProvider>(kTestDir);
     auto metadata = std::make_shared<TabletMetadata>();
-    TabletManager tablet_mgr(location_provider, 1024);
+    TabletManager tablet_mgr(location_provider, 1024, 1024);
     metadata->set_id(10001);
     ASSERT_OK(fs::create_directories(lake::join_path(kTestDir, lake::kSegmentDirectoryName)));
 
@@ -744,6 +744,9 @@ TEST_F(PersistentIndexSstableTest, test_sst_open_retry_after_clear_corrupted_cac
     });
     SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::drop_corrupted_cache",
                                           [](void* arg) { *(Status*)arg = Status::OK(); });
+    std::vector<FileInfo> reopened;
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::open_sstable_file",
+                                          [&](void* arg) { reopened.push_back(*static_cast<FileInfo*>(arg)); });
     SyncPoint::GetInstance()->EnableProcessing();
 
     auto sst = std::make_unique<PersistentIndexSstable>();
@@ -755,12 +758,66 @@ TEST_F(PersistentIndexSstableTest, test_sst_open_retry_after_clear_corrupted_cac
 
     SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::init:table_open_error");
     SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
+    SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::open_sstable_file");
     SyncPoint::GetInstance()->DisableProcessing();
     config::lake_clear_corrupted_cache_data = old;
 
     ASSERT_OK(st);
+    // The file opened again after the cache drop carries the recorded size too.
+    ASSERT_EQ(1, reopened.size());
+    ASSERT_EQ(path, reopened[0].path);
+    ASSERT_EQ(static_cast<int64_t>(filesize), reopened[0].size.value_or(-1));
 }
 #endif // USE_STAROS && !BUILD_FORMAT_LIB
+
+// Every open of a PK index sstable hands the size recorded in the metadata to the filesystem. Without
+// it a shared-data read looks the size up, which is a synchronous HEAD request to the object storage
+// when the star cache does not hold the size; multi_get opens the file once per call.
+TEST_F(PersistentIndexSstableTest, test_open_sstable_file_passes_recorded_size) {
+    const std::string filename = "open_passes_recorded_size.sst";
+    const std::string path = lake::join_path(kTestDir, filename);
+    uint64_t filesize = 0;
+    build_test_sst(path, &filesize);
+    ASSERT_GT(filesize, 0);
+
+    std::vector<FileInfo> opened;
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::open_sstable_file",
+                                          [&](void* arg) { opened.push_back(*static_cast<FileInfo*>(arg)); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::open_sstable_file");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    std::unique_ptr<Cache> cache(new_lru_cache(1024));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename(filename);
+    sstable_pb.set_filesize(filesize);
+    ASSIGN_OR_ABORT(auto sst, PersistentIndexSstable::new_sstable(sstable_pb, path, cache.get()));
+
+    std::string key_str = fmt::format("key_{:04d}", 3);
+    Slice key(key_str);
+    KeyIndexSet key_indexes{0};
+    std::vector<IndexValue> values(1, IndexValue(NullIndexValue));
+    KeyIndexSet found;
+    ASSERT_OK(sst->multi_get(&key, key_indexes, -1, values.data(), &found));
+    ASSERT_EQ(1, found.size());
+    ASSERT_EQ(IndexValue(3), values[0]);
+
+    // One open by new_sstable and one by multi_get, both with the recorded size.
+    ASSERT_EQ(2, opened.size());
+    for (const auto& info : opened) {
+        ASSERT_EQ(path, info.path);
+        ASSERT_EQ(static_cast<int64_t>(filesize), info.size.value_or(-1));
+    }
+
+    // A size that is not positive is unknown: the file is opened without one and reads as before.
+    ASSIGN_OR_ABORT(auto rf, PersistentIndexSstable::open_sstable_file(RandomAccessFileOptions(), path, 0));
+    ASSERT_EQ(3, opened.size());
+    ASSERT_FALSE(opened.back().size.has_value());
+    ASSIGN_OR_ABORT(auto size, rf->get_size());
+    ASSERT_EQ(static_cast<int64_t>(filesize), size);
+}
 
 TEST_F(PersistentIndexSstableTest, test_metric_sst_multiget_read_error) {
     const std::string path = lake::join_path(kTestDir, "metric_multiget_error.sst");
@@ -1390,6 +1447,219 @@ TEST_F(PersistentIndexSstableTest, test_sample_data_keys_scoped_to_range) {
     const std::string beyond_key = fmt::format("test_key_{:016X}", N + 1000);
     ASSERT_OK(sst->sample_data_keys(&beyond_samples, Slice(beyond_key), Slice(), kMaxSamples));
     EXPECT_TRUE(beyond_samples.empty());
+}
+
+// multi_get decodes every found value into one reused IndexValuesWithVerPB. Interleave keys whose values hold two
+// versions, one version and a tombstone, so anything carried over from the previous key's value would show up as a
+// wrong rss_rowid, a wrong version match or a tombstone read back as live.
+TEST_F(PersistentIndexSstableTest, test_multi_get_reuses_value_message_across_keys) {
+    const int N = 30;
+    const std::string filename = "test_multi_get_reuses_value_message.sst";
+    ASSIGN_OR_ABORT(auto file, fs::new_writable_file(lake::join_path(kTestDir, filename)));
+    sstable::Options options;
+    sstable::TableBuilder builder(options, file.get());
+    std::vector<std::string> key_str(N);
+    for (int i = 0; i < N; i++) {
+        key_str[i] = fmt::format("reuse_{:016X}", i);
+        IndexValuesWithVerPB value_pb;
+        auto add_value = [&](int64_t version, uint32_t rssid, uint32_t rowid) {
+            auto* value = value_pb.add_values();
+            value->set_version(version);
+            value->set_rssid(rssid);
+            value->set_rowid(rowid);
+        };
+        if (i % 3 == 0) {
+            // Two versions, newest first.
+            add_value(200, 2, i);
+            add_value(100, 1, i);
+        } else if (i % 3 == 1) {
+            add_value(100, 1, i);
+        } else {
+            add_value(100, UINT32_MAX, UINT32_MAX);
+        }
+        ASSERT_OK(builder.Add(Slice(key_str[i]), Slice(value_pb.SerializeAsString())));
+    }
+    ASSERT_OK(builder.Finish());
+    PersistentIndexSstableRangePB range_pb;
+    auto [start_key, end_key] = builder.KeyRange();
+    range_pb.set_start_key(start_key.to_string());
+    range_pb.set_end_key(end_key.to_string());
+    const uint64_t filesize = builder.FileSize();
+    ASSERT_OK(file->close());
+
+    auto sst = std::make_unique<PersistentIndexSstable>();
+    ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
+    std::unique_ptr<Cache> cache_ptr;
+    cache_ptr.reset(new_lru_cache(1024));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename(filename);
+    sstable_pb.set_filesize(filesize);
+    sstable_pb.mutable_range()->CopyFrom(range_pb);
+    sstable_pb.mutable_fileset_id()->CopyFrom(UniqueId::gen_uid().to_proto());
+    ASSERT_OK(sst->init(std::move(read_file), sstable_pb, cache_ptr.get()));
+
+    std::vector<Slice> keys(N);
+    KeyIndexSet key_indexes;
+    for (int i = 0; i < N; i++) {
+        keys[i] = Slice(key_str[i]);
+        key_indexes.insert(i);
+    }
+    auto rss_rowid = [](uint32_t rssid, uint32_t rowid) { return (static_cast<uint64_t>(rssid) << 32) | rowid; };
+
+    // The newest value of every key.
+    {
+        std::vector<IndexValue> values(N, IndexValue(NullIndexValue));
+        KeyIndexSet found;
+        ASSERT_OK(sst->multi_get(keys.data(), key_indexes, -1, values.data(), &found));
+        ASSERT_EQ(key_indexes, found);
+        for (int i = 0; i < N; i++) {
+            const uint64_t expected = i % 3 == 0 ? rss_rowid(2, i) : (i % 3 == 1 ? rss_rowid(1, i) : NullIndexValue);
+            ASSERT_EQ(expected, values[i].get_value()) << "key " << i;
+        }
+    }
+    // Only the two-version keys hold a version-200 entry.
+    {
+        std::vector<IndexValue> values(N, IndexValue(NullIndexValue));
+        KeyIndexSet found;
+        ASSERT_OK(sst->multi_get(keys.data(), key_indexes, 200, values.data(), &found));
+        for (int i = 0; i < N; i++) {
+            ASSERT_EQ(i % 3 == 0, found.count(i) > 0) << "key " << i;
+            if (i % 3 == 0) {
+                ASSERT_EQ(rss_rowid(2, i), values[i].get_value()) << "key " << i;
+            }
+        }
+    }
+    // Every key holds a version-100 entry: the older one of the two-version keys, the only one elsewhere.
+    {
+        std::vector<IndexValue> values(N, IndexValue(NullIndexValue));
+        KeyIndexSet found;
+        ASSERT_OK(sst->multi_get(keys.data(), key_indexes, 100, values.data(), &found));
+        ASSERT_EQ(key_indexes, found);
+        for (int i = 0; i < N; i++) {
+            const uint64_t expected = i % 3 == 2 ? NullIndexValue : rss_rowid(1, i);
+            ASSERT_EQ(expected, values[i].get_value()) << "key " << i;
+        }
+    }
+}
+
+// MultiGet reads the clock for one key in Table::kMultiGetTimingSampleInterval, and only when a trace will report
+// the time: one at random among the first kInterval keys, then every kInterval-th. The counts it adds to the trace
+// stay exact: every probe is found in the block already open, rejected by the bloom filter, or reads a block.
+TEST_F(PersistentIndexSstableTest, test_multi_get_times_sampled_keys_only) {
+    constexpr int kTableKeys = 4096;
+    constexpr size_t kInterval = sstable::Table::kMultiGetTimingSampleInterval;
+    const std::string filename = "test_multi_get_times_sampled_keys_only.sst";
+    auto key_of = [](int n) { return fmt::format("sampled_key_{:08d}", n); };
+    ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(lake::join_path(kTestDir, filename)));
+    phmap::btree_map<std::string, IndexValueWithVer, std::less<>> map;
+    for (int i = 0; i < kTableKeys; ++i) {
+        // Even numbers only: the odd ones are absent keys inside the table's range.
+        map.emplace(key_of(2 * i), std::make_pair(int64_t(1), IndexValue(i)));
+    }
+    uint64_t filesize = 0;
+    PersistentIndexSstableRangePB range_pb;
+    ASSERT_OK(PersistentIndexSstable::build_sstable(map, wf.get(), &filesize, &range_pb));
+    ASSERT_OK(wf->close());
+
+    ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
+    auto sst = std::make_unique<PersistentIndexSstable>();
+    std::unique_ptr<Cache> cache(new_lru_cache(1024 * 1024));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename(filename);
+    sstable_pb.set_filesize(filesize);
+    sstable_pb.mutable_range()->CopyFrom(range_pb);
+    sstable_pb.mutable_fileset_id()->CopyFrom(UniqueId::gen_uid().to_proto());
+    ASSERT_OK(sst->init(std::move(read_file), sstable_pb, cache.get()));
+
+    // Positions, within each lookup, of the keys MultiGet timed.
+    std::vector<size_t> timed;
+    SyncPoint::GetInstance()->SetCallBack("sstable::Table::MultiGet:timed_probe",
+                                          [&](void* arg) { timed.push_back(*static_cast<size_t*>(arg)); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_callback([] {
+        SyncPoint::GetInstance()->ClearCallBack("sstable::Table::MultiGet:timed_probe");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // Looks up the keys numbered `numbers` under `trace` (none if nullptr) and returns how many were found.
+    auto multi_get = [&](const std::vector<int>& numbers, Trace* trace) {
+        std::vector<std::string> key_str;
+        for (int n : numbers) {
+            key_str.push_back(key_of(n));
+        }
+        std::vector<Slice> keys(key_str.begin(), key_str.end());
+        std::vector<IndexValue> values(keys.size(), IndexValue(NullIndexValue));
+        KeyIndexSet key_indexes;
+        for (size_t i = 0; i < keys.size(); ++i) {
+            key_indexes.insert(i);
+        }
+        KeyIndexSet found;
+        if (trace != nullptr) {
+            ADOPT_TRACE(trace);
+            CHECK_OK(sst->multi_get(keys.data(), key_indexes, -1, values.data(), &found));
+        } else {
+            CHECK_OK(sst->multi_get(keys.data(), key_indexes, -1, values.data(), &found));
+        }
+        return found.size();
+    };
+    auto probes_in = [](const std::map<const char*, int64_t>& metrics) {
+        return find_trace_metric(metrics, "continue_block_read_cnt") +
+               find_trace_metric(metrics, "sst_bloom_filter_rows") +
+               find_trace_metric(metrics, "read_block_hit_cache_cnt") +
+               find_trace_metric(metrics, "read_block_miss_cache_cnt");
+    };
+
+    // Absent keys, as in an upsert of new primary keys: the bloom filter rejects nearly all of them and none is
+    // found in an open block, so every key picked for timing reaches the end of the loop and is timed.
+    std::vector<int> absent;
+    for (int i = 0; i < 1000; ++i) {
+        absent.push_back(2 * i + 1);
+    }
+    {
+        scoped_refptr<Trace> trace(new Trace);
+        ASSERT_EQ(0, multi_get(absent, trace.get()));
+        ASSERT_FALSE(timed.empty());
+        EXPECT_LT(timed.front(), kInterval);
+        for (size_t j = 1; j < timed.size(); ++j) {
+            EXPECT_EQ(timed[j - 1] + kInterval, timed[j]);
+        }
+        EXPECT_GE(timed.back() + kInterval, absent.size());
+        auto metrics = trace->metrics()->Get();
+        EXPECT_EQ(absent.size(), probes_in(metrics));
+        EXPECT_EQ(0, find_trace_metric(metrics, "continue_block_read_cnt"));
+        EXPECT_GT(find_trace_metric(metrics, "sst_bloom_filter_rows"), 900);
+        for (std::string_view name : {"multiget_t1_us", "multiget_t2_us", "multiget_t3_us"}) {
+            auto it = std::find_if(metrics.begin(), metrics.end(),
+                                   [&](const auto& kv) { return kv.first != nullptr && name == kv.first; });
+            ASSERT_TRUE(it != metrics.end()) << name;
+            EXPECT_GE(it->second, 0) << name;
+        }
+    }
+
+    // Present keys: most are found in the block already open and leave the loop before its timed end, so only some
+    // of the keys picked for timing show up, all kInterval apart.
+    std::vector<int> present;
+    for (int i = 0; i < kTableKeys; ++i) {
+        present.push_back(2 * i);
+    }
+    {
+        timed.clear();
+        scoped_refptr<Trace> trace(new Trace);
+        ASSERT_EQ(present.size(), multi_get(present, trace.get()));
+        EXPECT_LE(timed.size(), (present.size() + kInterval - 1) / kInterval);
+        for (size_t pos : timed) {
+            EXPECT_EQ(timed.front() % kInterval, pos % kInterval);
+        }
+        auto metrics = trace->metrics()->Get();
+        EXPECT_EQ(present.size(), probes_in(metrics));
+        EXPECT_GT(find_trace_metric(metrics, "continue_block_read_cnt"), 0);
+        EXPECT_EQ(0, find_trace_metric(metrics, "sst_bloom_filter_rows"));
+    }
+
+    // Without a trace nothing would report the time, so no key is timed.
+    timed.clear();
+    ASSERT_EQ(0, multi_get(absent, nullptr));
+    EXPECT_TRUE(timed.empty());
 }
 
 } // namespace starrocks::lake

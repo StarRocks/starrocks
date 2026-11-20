@@ -36,7 +36,6 @@ import com.starrocks.sql.optimizer.rule.implementation.HashJoinImplementationRul
 import com.starrocks.sql.optimizer.rule.implementation.HiveScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HudiScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IcebergEqualityDeleteScanImplementationRule;
-import com.starrocks.sql.optimizer.rule.implementation.IcebergMetadataScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IcebergScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IntersectImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.JDBCScanImplementationRule;
@@ -45,6 +44,7 @@ import com.starrocks.sql.optimizer.rule.implementation.LanceScanImplementationRu
 import com.starrocks.sql.optimizer.rule.implementation.LimitImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MergeJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MetaScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.MetadataScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MysqlScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.NestLoopJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.OdpsScanImplementationRule;
@@ -202,7 +202,7 @@ public class RuleSet {
             new DeltaLakeScanImplementationRule(),
             new PaimonScanImplementationRule(),
             new OdpsScanImplementationRule(),
-            new IcebergMetadataScanImplementationRule(),
+            new MetadataScanImplementationRule(),
             new KuduScanImplementationRule(),
             new FlussScanImplementationRule(),
             new LanceScanImplementationRule(),

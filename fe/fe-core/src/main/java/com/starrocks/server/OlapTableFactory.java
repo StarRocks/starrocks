@@ -17,6 +17,7 @@ package com.starrocks.server;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
@@ -47,6 +48,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.ColocatePropertyInfo;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.Util;
@@ -503,6 +505,18 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException(e.getMessage());
             }
 
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE)) {
+                if (!table.isRangeDistribution()) {
+                    throw new DdlException(PropertyAnalyzer.TABLET_RESHARD_TARGET_SIZE_RANGE_ONLY_MSG);
+                }
+                String value = properties.remove(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE);
+                try {
+                    table.setTabletReshardTargetSize(PropertyAnalyzer.analyzeTableTabletReshardTargetSize(value, false));
+                } catch (SemanticException e) {
+                    throw new DdlException(e.getMessage(), e);
+                }
+            }
+
             try {
                 long mutableBucketNum = PropertyAnalyzer.analyzeLongProp(properties,
                         PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM, 0);
@@ -721,17 +735,6 @@ public class OlapTableFactory implements AbstractTableFactory {
                         shortKeyColumnCount, baseIndexStorageType, keysType, null);
             }
 
-            // check colocation properties and set up colocate group before tablet creation.
-            // Must be after setIndexMeta because range colocate needs baseIndexMeta to resolve sort key columns.
-            String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
-            if (StringUtils.isNotEmpty(colocateGroup)) {
-                if (!distributionInfo.supportColocate()) {
-                    throw new DdlException("random distribution does not support 'colocate_with'");
-                }
-
-                colocateTableIndex.addTableToGroup(db, table, colocateGroup, false /* afterTabletCreation */);
-            }
-
             for (AlterClause alterClause : stmt.getRollupAlterClauseList()) {
                 AddRollupClause addRollupClause = (AddRollupClause) alterClause;
 
@@ -754,6 +757,32 @@ public class OlapTableFactory implements AbstractTableFactory {
                 long rollupIndexMetaId = metastore.getNextId();
                 table.setIndexMeta(rollupIndexMetaId, addRollupClause.getRollupName(), rollupColumns, schemaVersion,
                         rollupSchemaHash, rollupShortKeyColumnCount, rollupIndexStorageType, keysType);
+            }
+
+            // check colocation properties and set up colocate group before tablet creation.
+            // Must be after setIndexMeta because range colocate needs baseIndexMeta to resolve sort key columns,
+            // and after the rollup index metas are set: the sort key of every rollup of a range table must start
+            // with the table's colocate columns, and it is checked before the table joins the group so that a
+            // rejected CREATE TABLE leaves no member behind. The base colocate columns are checked against the
+            // group by addTableToGroup; a rollup column is a copy of its base column.
+            String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
+            if (StringUtils.isNotEmpty(colocateGroup)) {
+                if (!distributionInfo.supportColocate()) {
+                    throw new DdlException("random distribution does not support 'colocate_with'");
+                }
+                if (table.isRangeDistribution() && !stmt.getRollupAlterClauseList().isEmpty()) {
+                    List<Column> colocateColumns = MetaUtils.getRangeColocateColumns(table,
+                            ColocatePropertyInfo.of(colocateGroup).getColocateColumnNames());
+                    for (AlterClause alterClause : stmt.getRollupAlterClauseList()) {
+                        String rollupName = ((AddRollupClause) alterClause).getRollupName();
+                        List<Column> routingColumns = MetaUtils.getRangeDistributionColumns(table,
+                                table.getIndexMetaIdByName(rollupName));
+                        MaterializedViewHandler.checkRangeColocateRollupPrefix(colocateColumns, rollupName,
+                                routingColumns);
+                    }
+                }
+
+                colocateTableIndex.addTableToGroup(db, table, colocateGroup, false /* afterTabletCreation */);
             }
 
             // analyze version info

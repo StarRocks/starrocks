@@ -4,6 +4,7 @@ displayed_sidebar: docs
 description: "StarRocks Iceberg Catalog のテーブルへのデータ挿入を含む DML 操作。"
 toc_max_heading_level: 5
 keywords: ['iceberg', 'dml', 'insert', 'sink data', 'overwrite']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Iceberg DML 操作
@@ -35,7 +36,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 :::note
 
-パーティション列は `NULL` 値を許可しません。したがって、Icebergテーブルのパーティション列に空の値がロードされないようにする必要があります。
+パーティション列は `NULL` 値を許可します。パーティション値が `NULL` の行は、パーティション値が `NULL` のパーティションに書き込まれます。
 
 :::
 
@@ -47,7 +48,7 @@ StarRocks テーブルのデータを Iceberg テーブルに追加します。
 
 #### OVERWRITE
 
-StarRocks テーブルのデータで Iceberg テーブルの既存のデータを上書きします。
+StarRocks テーブルのデータで Iceberg テーブルの既存のデータを上書きします。新しいデータが書き込まれたパーティションのみが上書きされ、その他のパーティションは保持されます。この動作は変数 `dynamic_overwrite` に依存せず、この変数は Iceberg テーブルには影響しません。非パーティションテーブルの場合、既存のすべてのデータが置き換えられます。クエリが行を返さない場合、非パーティションテーブルであってもデータは上書きされません。
 
 #### column_name
 
@@ -67,7 +68,7 @@ Iceberg テーブルにロードされるクエリストートメントの結果
 
 #### PARTITION
 
-データをロードしたいパーティション。Iceberg テーブルのすべてのパーティション列をこのプロパティで指定する必要があります。このプロパティで指定するパーティション列は、テーブル作成ステートメントで定義したパーティション列と異なる順序であってもかまいません。このプロパティを指定する場合、`column_name` プロパティを指定することはできません。
+データをロードしたいパーティション。Iceberg テーブルのすべてのパーティション列をこのプロパティで指定する必要があります。このプロパティで指定するパーティション列は、テーブル作成ステートメントで定義したパーティション列と異なる順序であってもかまいません。Iceberg テーブルのパーティション仕様に identity 以外の変換（例: `day()` や `bucket()`）が含まれる場合、PARTITION 句はサポートされていません。このプロパティを指定する場合、`column_name` プロパティを指定することはできません。
 
 ### 例
 
@@ -121,12 +122,14 @@ Iceberg テーブルにロードされるクエリストートメントの結果
 
 ## DELETE
 
-指定された条件に基づいて Iceberg テーブルからデータを削除するには、DELETE ステートメントを使用できます。この機能は StarRocks v4.1 以降でサポートされています。
+指定された条件に基づいて Iceberg テーブルからデータを削除するには、DELETE ステートメントを使用できます。この機能は StarRocks v4.1 以降でサポートされています。`WITH` 句、`USING` 句、および `FOR VERSION AS OF` は v4.2 以降でサポートされています。WHERE 句は必須であり、PARTITION 句はサポートされていません。
 
 ### 構文
 
 ```SQL
+[WITH <with_query> [, ...]]
 DELETE FROM <table_name> [FOR VERSION AS OF <branch_name>]
+[USING <relation> [, ...]]
 WHERE <condition>
 ```
 
@@ -138,6 +141,10 @@ WHERE <condition>
   - テーブル名のみ（catalog とデータベースの設定後）：`table_name`
 
 - `branch_name`: 行を削除するブランチ。ブランチから行を読み取り、変更をそのブランチにコミットします。タグではなくブランチである必要があります。
+
+- `relation`: `condition` でターゲットテーブルと結合するテーブルまたはサブクエリ。ターゲットの行がそれらの複数の行と一致しても、削除は 1 回だけです。
+
+- `with_query`: `condition` で参照できる共通テーブル式 (CTE)。
 
 - `condition`: 削除する行を識別する条件。以下を含めることができます：
   - 比較演算子：`=`、`!=`、`>`、`<`、`>=`、`<=`、`<>`
@@ -224,6 +231,7 @@ UPDATE は Iceberg V2 の **Merge-On-Read** モデルで実装しています。
 ### 構文
 
 ```SQL
+[WITH <with_query> [, ...]]
 UPDATE <table_name> [FOR VERSION AS OF <branch_name>]
 SET <column_name> = <expression> [, <column_name> = <expression> ...]
 WHERE <condition>
@@ -240,15 +248,17 @@ WHERE <condition>
 
 - `branch_name`: 更新するブランチ。ブランチから行を読み取り、変更をそのブランチにコミットします。タグではなくブランチである必要があります。
 
+- `with_query`: `condition` で参照できる共通テーブル式 (CTE)。
+
 - `condition`: 更新する行を識別する述語。サポートされる演算子は `DELETE` と同じです（比較演算子、論理演算子、`IN` / `NOT IN`、`BETWEEN`、`LIKE`、`IS NULL` / `IS NOT NULL`、`IN` / `EXISTS` サブクエリ）。
 
 ### 使用上の注意
 
-- **format-version 2** の Iceberg テーブルのみサポートされます。V1 と V3 テーブルへの UPDATE は解析時に拒否されます。
+- **format-version 2** の Iceberg テーブルのみサポートされます。V1、V3、V4 テーブルへの UPDATE は解析時に拒否されます。
 - フルテーブル更新を防ぐため、`WHERE` 句は **必須** です。
 - パーティション列は更新できません。 パーティション割り当てを変更する必要がある場合は、`INSERT OVERWRITE` を使用してください。
 - 隠しメタデータ列 `_file` および `_pos` は `SET` で代入できません。
-- Iceberg テーブルへの UPDATE では、`WITH`（CTE）句および `FROM` 句は使用できません。
+- Iceberg テーブルへの UPDATE では、`FROM` 句は使用できません。
 - Iceberg V2 には列のデフォルト値セマンティクスが存在しないため、`DEFAULT` 値はサポートされていません（initial-default / write-default は V3 の機能です）。
 - 既存の Iceberg sink と同様に、Parquet 形式の Iceberg テーブルのみサポートされます。
 - 並行 UPDATE は **直列化可能（serializable）分離** で実行されます。コミット時、StarRocks は読み取りスナップショットに対してデータファイルを再検証し、並行書き込みと衝突した場合、UPDATE はサイレントに上書きせずに失敗します。
@@ -360,7 +370,7 @@ ON <merge_condition>
 
 ### 使用上の注意
 
-- **format-version 2** の Iceberg テーブルのみサポートされます。V1、V3 テーブル、または非 Iceberg テーブル（ネイティブ OLAP テーブルなど）への MERGE INTO は解析時に拒否されます。
+- **format-version 2** の Iceberg テーブルのみサポートされます。V1、V3、V4 テーブル、または非 Iceberg テーブル（ネイティブ OLAP テーブルなど）への MERGE INTO は解析時に拒否されます。
 - 少なくとも 1 つの `WHEN` 句が必要です。
 - 各ターゲット行は **最大 1 つ** のソース行にのみ一致できます。あるターゲット行が複数のソース行に一致した場合、あいまいな変更を適用する代わりに、ステートメントは実行時に失敗します。必要に応じて、事前にソースを重複排除または集約してください。
 - `WHEN MATCHED ... THEN UPDATE` 句ではパーティション列を更新できません。
@@ -452,7 +462,7 @@ Iceberg テーブルに実際に書き込む MERGE INTO ステートメントは
 
 ## TRUNCATE
 
-Iceberg テーブルからすべてのデータを迅速に削除するには、TRUNCATE TABLE ステートメントを使用できます。
+Iceberg テーブルからすべてのデータを迅速に削除するには、TRUNCATE TABLE ステートメントを使用できます。Iceberg テーブルでは、特定のパーティションの切り捨て（`TRUNCATE TABLE ... PARTITION`）はサポートされていません。
 
 ### 構文
 

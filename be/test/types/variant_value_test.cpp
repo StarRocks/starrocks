@@ -14,10 +14,15 @@
 
 #include "types/variant_value.h"
 
+#include <arrow/util/endian.h>
 #include <gtest/gtest.h>
 
 #include <cstring>
+#include <limits>
+#include <memory>
 #include <vector>
+
+#include "base/time/timezone_utils.h"
 
 namespace starrocks {
 namespace {
@@ -46,6 +51,50 @@ uint32_t decode_size_header(const uint8_t* bytes) {
 }
 
 } // namespace
+
+TEST(VariantValueTest, ObjectFieldAtIndexPreservesExactExtentWithNonmonotonicOffsets) {
+    const char metadata_bytes[] = {0x11, 2, 0, 1, 2, 'a', 'b'};
+    // Field order is [a, b]; payload order is [b (null), a ("xyz")].
+    const char value_bytes[] = {2, 2, 0, 1, 1, 0, 5, 0, 13, 'x', 'y', 'z'};
+    VariantRowValue row(std::string_view(metadata_bytes, sizeof(metadata_bytes)),
+                        std::string_view(value_bytes, sizeof(value_bytes)));
+    const auto& value = row.get_value();
+    auto a = value.get_object_field_at_index(0);
+    auto b = value.get_object_field_at_index(1);
+    ASSERT_TRUE(a.ok()) << a.status();
+    ASSERT_TRUE(b.ok()) << b.status();
+    EXPECT_EQ(std::string_view(value_bytes + 8, 4), a->raw());
+    EXPECT_EQ(VariantValue::kEmptyValue, b->raw());
+
+    auto a_by_key = value.get_object_by_key(row.get_metadata(), "a");
+    auto b_by_key = value.get_object_by_key(row.get_metadata(), "b");
+    ASSERT_TRUE(a_by_key.ok()) << a_by_key.status();
+    ASSERT_TRUE(b_by_key.ok()) << b_by_key.status();
+    EXPECT_EQ(a_by_key->raw(), a->raw());
+    EXPECT_EQ(b_by_key->raw(), b->raw());
+    EXPECT_FALSE(value.get_object_field_at_index(2).ok());
+    EXPECT_FALSE(value.get_object_field_at_index(UINT32_MAX).ok());
+}
+
+TEST(VariantValueTest, ObjectFieldAtIndexRejectsInvalidInput) {
+    struct TestCase {
+        const char* description;
+        std::string value;
+    };
+    const std::vector<TestCase> cases = {
+            {"not an object", {0}},
+            {"truncated object header", {2}},
+            {"empty object", {2, 0, 0}},
+            {"offset equals payload size", {2, 1, 0, 1, 1, 0}},
+            {"offset exceeds payload size", {2, 1, 0, 2, 1, 0}},
+            {"payload size exceeds buffer", {2, 1, 0, 0, 2, 0}},
+            {"truncated short string", {2, 1, 0, 0, 1, 13}},
+    };
+    for (const auto& test : cases) {
+        SCOPED_TRACE(test.description);
+        EXPECT_FALSE(VariantValue(test.value).get_object_field_at_index(0).ok());
+    }
+}
 
 TEST(VariantRowValueTest, CreateFromNullMetadataReturnsNullVariant) {
     auto row = VariantRowValue::create("", "");
@@ -187,6 +236,126 @@ TEST(VariantRowValueTest, CompareUsesSemanticJsonEqualityAcrossDifferentNumericE
     EXPECT_EQ(compare(int16_row, int8_row), 0);
     EXPECT_TRUE(int8_row == int16_row);
     EXPECT_FALSE(int8_row != int16_row);
+}
+
+TEST(VariantRowValueTest, ToJsonZonedTimestampOutsideNanosecondRange) {
+    // 2500-01-01 00:00:00.5 UTC and 1500-01-01 00:00:00 UTC are valid values, but outside of what a clock in
+    // nanoseconds holds (years 1677 to 2262).
+    const auto to_json = [](int64_t micros) {
+        std::string bytes(1 + sizeof(int64_t), '\0');
+        bytes[0] = static_cast<char>(static_cast<uint8_t>(VariantType::TIMESTAMP_TZ) << 2);
+        micros = arrow::bit_util::ToLittleEndian(micros);
+        memcpy(bytes.data() + 1, &micros, sizeof(micros));
+        VariantRowValue row(VariantMetadata::kEmptyMetadata, bytes);
+        auto json = row.to_json(cctz::utc_time_zone());
+        EXPECT_TRUE(json.ok()) << json.status();
+        return json.value_or("");
+    };
+    EXPECT_EQ(R"("2500-01-01 00:00:00.5+00:00")", to_json(16725225600LL * 1000000 + 500000));
+    EXPECT_EQ(R"("1500-01-01 00:00:00+00:00")", to_json(-14831769600LL * 1000000));
+}
+
+TEST(VariantRowValueTest, ToJsonMicrosecondTimestampsBeforeEpoch) {
+    const auto to_json = [](VariantType type, int64_t micros) {
+        std::string bytes(1 + sizeof(int64_t), '\0');
+        bytes[0] = static_cast<char>(static_cast<uint8_t>(type) << 2);
+        micros = arrow::bit_util::ToLittleEndian(micros);
+        memcpy(bytes.data() + 1, &micros, sizeof(micros));
+        VariantRowValue row(VariantMetadata::kEmptyMetadata, bytes);
+        auto json = row.to_json(cctz::utc_time_zone());
+        EXPECT_TRUE(json.ok()) << json.status();
+        return json.value_or("");
+    };
+    // A fraction of a second before 1970 must not be split into a negative microsecond part.
+    EXPECT_EQ(R"("1969-12-31 23:59:59.999999+00:00")", to_json(VariantType::TIMESTAMP_TZ, -1));
+    EXPECT_EQ(R"("1969-12-31 23:59:59.999999")", to_json(VariantType::TIMESTAMP_NTZ, -1));
+    EXPECT_EQ(R"("1969-12-31 23:59:58.5+00:00")", to_json(VariantType::TIMESTAMP_TZ, -1500000));
+    EXPECT_EQ(R"("1969-12-31 23:59:59")", to_json(VariantType::TIMESTAMP_NTZ, -1000000));
+    EXPECT_EQ(R"("1970-01-01 00:00:00.000001+00:00")", to_json(VariantType::TIMESTAMP_TZ, 1));
+}
+
+TEST(VariantRowValueTest, ToJsonNanosecondTimestamps) {
+    const auto primitive = [](VariantType type, int64_t nanos) {
+        std::string bytes(1 + sizeof(int64_t), '\0');
+        bytes[0] = static_cast<char>(static_cast<uint8_t>(type) << 2);
+        nanos = arrow::bit_util::ToLittleEndian(nanos);
+        memcpy(bytes.data() + 1, &nanos, sizeof(nanos));
+        return bytes;
+    };
+    cctz::time_zone shanghai;
+    ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone("Asia/Shanghai", shanghai));
+    constexpr int64_t kNanos = 1735787045LL * 1000000000 + 123456789; // 2025-01-02 03:04:05.123456789 UTC
+    const auto to_json = [&](VariantType type, int64_t nanos, const cctz::time_zone& zone) {
+        const std::string bytes = primitive(type, nanos);
+        VariantRowValue row(VariantMetadata::kEmptyMetadata, bytes);
+        auto json = row.to_json(zone);
+        EXPECT_TRUE(json.ok()) << json.status();
+        return json.value_or("");
+    };
+    EXPECT_EQ(R"("2025-01-02 03:04:05.123456789+00:00")",
+              to_json(VariantType::TIMESTAMP_TZ_NANOS, kNanos, cctz::utc_time_zone()));
+    EXPECT_EQ(R"("2025-01-02 11:04:05.123456789+08:00")", to_json(VariantType::TIMESTAMP_TZ_NANOS, kNanos, shanghai));
+    EXPECT_EQ(R"("2025-01-02 03:04:05.123456789")", to_json(VariantType::TIMESTAMP_NTZ_NANOS, kNanos, shanghai));
+    EXPECT_EQ(R"("1969-12-31 23:59:59.999999999")", to_json(VariantType::TIMESTAMP_NTZ_NANOS, -1, shanghai));
+    EXPECT_EQ(R"("2025-01-02 03:04:05+00:00")",
+              to_json(VariantType::TIMESTAMP_TZ_NANOS, 1735787045LL * 1000000000, cctz::utc_time_zone()));
+}
+
+// FLOAT and DOUBLE print the shortest text that parses back to the same value, not max_digits10 digits.
+TEST(VariantRowValueTest, ToJsonFloatingPointUsesShortestRoundTrip) {
+    const auto to_json = [](VariantType type, const void* value, size_t size) {
+        std::string bytes(1 + size, '\0');
+        bytes[0] = static_cast<char>(static_cast<uint8_t>(type) << 2);
+        memcpy(bytes.data() + 1, value, size); // little-endian host
+        VariantRowValue row(VariantMetadata::kEmptyMetadata, bytes);
+        auto json = row.to_json(cctz::utc_time_zone());
+        EXPECT_TRUE(json.ok()) << json.status();
+        return json.value_or("");
+    };
+    const auto double_json = [&](double d) { return to_json(VariantType::DOUBLE, &d, sizeof(d)); };
+    const auto float_json = [&](float f) { return to_json(VariantType::FLOAT, &f, sizeof(f)); };
+
+    EXPECT_EQ("1e+300", double_json(1e300));
+    EXPECT_EQ("0.1", double_json(0.1));
+    EXPECT_EQ("1.0000000000000002", double_json(1.0000000000000002));
+    EXPECT_EQ("-2.5", double_json(-2.5));
+    EXPECT_EQ("100.0", double_json(100.0));
+    EXPECT_EQ("9007199254740992.0", double_json(9007199254740992.0));
+    EXPECT_EQ("1.8446744073709552e+19", double_json(18446744073709551616.0));
+    EXPECT_EQ("1e+17", double_json(1e17));
+    EXPECT_EQ("10000000000000000.0", double_json(1e16));
+    EXPECT_EQ("0.0001", double_json(1e-4));
+    EXPECT_EQ("1e-05", double_json(1e-5));
+    EXPECT_EQ("0.0", double_json(0.0));
+    EXPECT_EQ("-0.0", double_json(-0.0));
+    EXPECT_EQ("5e-324", double_json(std::numeric_limits<double>::denorm_min()));
+    EXPECT_EQ("1.7976931348623157e+308", double_json(std::numeric_limits<double>::max()));
+    EXPECT_EQ("null", double_json(std::numeric_limits<double>::quiet_NaN()));
+    EXPECT_EQ("0.1", float_json(0.1f));
+    EXPECT_EQ("3.4028235e+38", float_json(std::numeric_limits<float>::max()));
+    EXPECT_EQ("1.0", float_json(1.0f));
+    EXPECT_EQ("100000000.0", float_json(1e8f));
+    EXPECT_EQ("1e+09", float_json(1e9f));
+}
+
+TEST(VariantMetadataTest, GetKeyRejectsTruncatedOffsetTable) {
+    // The dictionary size says 255 keys, but the metadata has no offset table: reading key 254 must fail, not read past
+    // the buffer.
+    // The bytes sit in a heap buffer of exactly their size, so that ASAN sees any read past them.
+    const char truncated_bytes[] = {'\x01', '\xff', '\x00'};
+    const std::unique_ptr<char[]> truncated(new char[sizeof(truncated_bytes)]);
+    memcpy(truncated.get(), truncated_bytes, sizeof(truncated_bytes));
+    VariantMetadata truncated_metadata(std::string_view(truncated.get(), sizeof(truncated_bytes)));
+    EXPECT_FALSE(truncated_metadata.get_key(254).ok());
+
+    const std::string valid(
+            "\x01\x01\x00\x05"
+            "extra",
+            9);
+    VariantMetadata valid_metadata(valid);
+    auto key = valid_metadata.get_key(0);
+    ASSERT_TRUE(key.ok()) << key.status();
+    EXPECT_EQ("extra", key.value());
 }
 
 TEST(VariantRowValueTest, CompareFallbackToRawWhenToJsonFails) {

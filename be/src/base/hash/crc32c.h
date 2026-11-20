@@ -59,6 +59,8 @@ const char* ActiveImplementationName();
 void SetArmPmullDisabledForTesting(bool disabled);
 void ResetArmPmullForTesting();
 bool HasArmPmull();
+void SetArmCrc32DisabledForTesting(bool disabled);
+void ResetArmCrc32cCacheForTesting();
 uint32_t ExtendFallback(uint32_t init_crc, const char* data, size_t n);
 inline uint32_t ValueFallback(const char* data, size_t n) {
     return ExtendFallback(0, data, n);

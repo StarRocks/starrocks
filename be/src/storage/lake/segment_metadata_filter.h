@@ -18,10 +18,14 @@
 #include "storage/tablet_schema.h"
 #include "storage_primitive/predicate_tree/predicate_tree.hpp"
 
+namespace starrocks {
+class RowsetReadOptions;
+}
+
 namespace starrocks::lake {
 
 // Segment metadata filter for Lake tables.
-// Uses sort_key_min/max from SegmentMetadataPB to filter segments
+// Uses the sort key bounds of SegmentMetadataPB (see storage/sort_key_bounds.h) to filter segments
 // that cannot possibly contain data matching the query predicates.
 class SegmentMetadataFilter {
 public:
@@ -30,6 +34,10 @@ public:
     // Returns false if the segment definitely does not contain matching data (can skip).
     static bool may_contain(const SegmentMetadataPB& segment_meta, const PredicateTree& pred_tree_for_zone_map,
                             const TabletSchema& tablet_schema);
+
+    // The predicate tree a rowset read with |options| applies the filter with, or nullptr when it applies none. Every
+    // caller that skips segments ahead of Rowset::read() uses this, so it never skips one the read would keep.
+    static const PredicateTree* filter_tree(const RowsetReadOptions& options);
 };
 
 } // namespace starrocks::lake

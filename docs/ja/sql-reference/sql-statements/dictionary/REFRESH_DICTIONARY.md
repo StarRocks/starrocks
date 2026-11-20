@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "REFRESH DICTIONARY は、辞書オブジェクトを手動でリフレッシュします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # REFRESH DICTIONARY

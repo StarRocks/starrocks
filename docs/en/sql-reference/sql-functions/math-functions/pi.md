@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the value of Pi."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # pi

@@ -60,6 +60,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
@@ -556,8 +557,9 @@ public class InsertOverwriteJobRunnerTest {
         return partition;
     }
 
-    @Test
-    public void testInsertOverwriteAbortsWhenTableStateNotNormal() throws Exception {
+    @ParameterizedTest
+    @EnumSource(value = OlapTable.OlapTableState.class, names = {"SCHEMA_CHANGE", "ROLLUP", "TABLET_RESHARD"})
+    public void testInsertOverwriteAbortsWhenTableStateNotNormal(OlapTable.OlapTableState state) throws Exception {
         // Guards against the race where an overwrite passes analysis while the table is NORMAL,
         // then the table state flips (e.g. an ALTER submits) before the job's prepare() runs.
         String sql = "insert overwrite t1 select * from t2";
@@ -571,7 +573,7 @@ public class InsertOverwriteJobRunnerTest {
                 WarehouseManager.DEFAULT_WAREHOUSE_ID, false);
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob, connectContext, executor);
 
-        olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        olapTable.setState(state);
         try {
             Assertions.assertThrows(DmlException.class, runner::run);
         } finally {

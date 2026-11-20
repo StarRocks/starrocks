@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回当前 StarRocks 的版本。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # current_version

@@ -3,6 +3,7 @@ sidebar_position: 100
 displayed_sidebar: docs
 toc_max_heading_level: 5
 description: "StarRocks supports Paimon catalogs from v3.1 onwards."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
@@ -24,7 +25,7 @@ To ensure successful SQL workloads on your Paimon cluster, your StarRocks cluste
 
 ## Usage notes
 
-You can only use Paimon catalogs to query data. You cannot use Paimon catalogs to drop, delete, or insert data into your Paimon cluster.
+You can use Paimon catalogs to query data, create or drop Paimon databases and tables, and write data with INSERT INTO or INSERT OVERWRITE. UPDATE, DELETE, CREATE TABLE LIKE, and CREATE TABLE AS SELECT are not supported.
 
 ## Paimon to StarRocks data types
 
@@ -700,6 +701,169 @@ The following example drops a Paimon catalog named `paimon_catalog_fs`:
 DROP Catalog paimon_catalog_fs;
 ```
 
+## Create and drop Paimon databases and tables
+
+These operations create or drop native Paimon objects. The examples use an existing `paimon_catalog_fs` catalog with its warehouse and storage credentials configured.
+
+### CREATE DATABASE
+
+#### Syntax
+
+```SQL
+CREATE DATABASE [IF NOT EXISTS] <catalog_name>.<database_name>;
+```
+
+#### Parameters
+
+- `catalog_name`: The name of an existing Paimon catalog.
+- `database_name`: The name of the database to create.
+- `IF NOT EXISTS`: Suppresses the error if the database already exists.
+
+Database `PROPERTIES` are not supported. The database uses the catalog's storage configuration.
+
+#### Example
+
+```SQL
+CREATE DATABASE IF NOT EXISTS paimon_catalog_fs.ddl_demo;
+```
+
+### CREATE TABLE
+
+#### Syntax
+
+```SQL
+CREATE TABLE [IF NOT EXISTS] <catalog_name>.<database_name>.<table_name> (
+    <column_name> <column_type> [NULL | NOT NULL] [DEFAULT NULL] [COMMENT '<column_comment>']
+    [, ...]
+)
+[ENGINE = paimon]
+[PRIMARY KEY (<column_name> [, ...])]
+[COMMENT '<table_comment>']
+[PARTITION BY (<column_name> [, ...])]
+[PROPERTIES ("<key>" = "<value>" [, ...])];
+```
+
+#### Parameters
+
+- **Table name and engine**: Specify the database and new table name in an existing Paimon catalog. You can omit `ENGINE = paimon` when the target is a Paimon catalog. `IF NOT EXISTS` suppresses the duplicate-table error, but the table definition and properties are still validated.
+- **Column definitions**: Supported types are BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, FLOAT, DOUBLE, DATE, DATETIME, CHAR, VARCHAR, VARBINARY, DECIMAL with precision up to 38, ARRAY, MAP, STRUCT, and VARIANT. DATETIME maps to Paimon TIMESTAMP(6). The existing read restrictions for VARIANT still apply. Only `DEFAULT NULL` is supported, and primary key columns cannot have defaults. Use `COMMENT` for column and table comments.
+- **Primary keys**: Define keys with `PRIMARY KEY (column, ...)` or the `primary-key` table property. Key columns need not be the first columns. If nullability is unspecified, they become non-nullable in the Paimon schema; explicitly declaring them as `NULL` is not allowed. If both key forms are specified, the resolved column names and their order must match.
+- **Partitions**: Use `PARTITION BY (column, ...)` for ordinary partition columns. Partition expressions and explicit partition definitions are not supported.
+- **Table properties**: Specify Paimon table options, such as `bucket` and `file.format`, in `PROPERTIES`. The table uses the catalog's warehouse and storage credentials. Properties that override the catalog, storage location, credentials, or schema are rejected. Unknown options are rejected. Some invalid write configurations may only be detected when writing data. Dynamic column options such as `fields.<column>.aggregate-function` are not currently supported.
+
+#### Examples
+
+Create an empty partitioned append-only table:
+
+```SQL
+CREATE TABLE IF NOT EXISTS paimon_catalog_fs.ddl_demo.append_demo (
+    id BIGINT NOT NULL,
+    payload VARCHAR(100) COMMENT 'Payload',
+    dt DATE
+)
+ENGINE = paimon
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "-1",
+    "file.format" = "parquet"
+);
+```
+
+Create a partitioned primary-key table:
+
+```SQL
+CREATE TABLE IF NOT EXISTS paimon_catalog_fs.ddl_demo.pk_demo (
+    payload VARCHAR(100),
+    id BIGINT,
+    dt DATE
+)
+PRIMARY KEY (id, dt)
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "2",
+    "bucket-key" = "id",
+    "file.format" = "parquet"
+);
+```
+
+Alternatively, omit the `PRIMARY KEY (id, dt)` clause and add `"primary-key" = "id,dt"` to `PROPERTIES`.
+
+#### Limitations
+
+- `DISTRIBUTED BY`, `ORDER BY`, `ROLLUP`, generated columns, aggregate columns, and `AUTO_INCREMENT` are not supported.
+- Non-NULL column defaults are not supported.
+- `CREATE TABLE LIKE`, `CREATE TABLE AS SELECT`, and writing data with `UPDATE` or `DELETE` are not supported.
+
+### DROP TABLE
+
+#### Syntax
+
+```SQL
+DROP TABLE [IF EXISTS] <catalog_name>.<database_name>.<table_name>;
+```
+
+`IF EXISTS` suppresses the error if the table does not exist. This operation drops the native Paimon table, rather than only removing its reference in StarRocks.
+
+#### Example
+
+```SQL
+DROP TABLE IF EXISTS paimon_catalog_fs.ddl_demo.append_demo;
+DROP TABLE IF EXISTS paimon_catalog_fs.ddl_demo.pk_demo;
+```
+
+### DROP DATABASE
+
+#### Syntax
+
+```SQL
+DROP DATABASE [IF EXISTS] <catalog_name>.<database_name> [FORCE];
+```
+
+`IF EXISTS` suppresses the error if the database does not exist. A database must be empty before it can be dropped; `FORCE` does not enable cascading deletion.
+
+#### Example
+
+After dropping the tables in the database, drop the database:
+
+```SQL
+DROP DATABASE IF EXISTS paimon_catalog_fs.ddl_demo;
+```
+
+## Write data to Paimon
+
+Use `INSERT INTO ... VALUES` or `INSERT INTO ... SELECT` to write to a native file-store table in a Paimon catalog. Append-only tables support `bucket = -1` or a positive fixed bucket count. Primary-key tables require a positive fixed bucket count and the `deduplicate` merge engine. Inserting an existing primary key performs a full-row upsert; it is not a partial update.
+
+```sql
+CREATE DATABASE IF NOT EXISTS paimon_catalog_fs.ddl_demo;
+CREATE TABLE paimon_catalog_fs.ddl_demo.write_demo (
+    id INT NOT NULL,
+    p VARCHAR(32),
+    value VARCHAR(64)
+)
+PARTITION BY (p)
+PROPERTIES ('bucket' = '-1', 'file.format' = 'parquet');
+
+INSERT INTO paimon_catalog_fs.ddl_demo.write_demo VALUES (1, 'a', 'one');
+INSERT INTO paimon_catalog_fs.ddl_demo.write_demo PARTITION (p = 'b')
+SELECT 2, 'two';
+```
+
+An explicit column list and `BY NAME` are supported. For a static partition, omit the partition columns from the input; their position in the native schema does not matter. Omitted nullable columns receive NULL. Required columns must be supplied. If a column has a native Paimon default value, provide its value explicitly: omitting it or using `DEFAULT` is not supported.
+
+`INSERT OVERWRITE` replaces the entire table by default. An explicit `PARTITION` replaces only that partition. With `dynamic_overwrite = true`, an overwrite without an explicit partition replaces only partitions present in the input. An empty full or static overwrite clears its target; an empty dynamic overwrite is a no-op.
+
+:::warning
+
+Avoid specifying the table's reserved NULL partition name as a string in `PARTITION (...)`. Paimon treats the value of `partition.default-name` (`__DEFAULT_PARTITION__` by default) as NULL when resolving the overwrite target. For example, an overwrite with `PARTITION (p = '__DEFAULT_PARTITION__')` and zero input rows can clear the NULL partition. To intentionally overwrite the NULL partition, use `PARTITION (p = NULL)`.
+
+:::
+
+Writes require Parquet data files, and matching FE/BE versions with the native Paimon writer installed. The writer uses the catalog storage credentials. `paimon_reader_mode` selects a reader and does not change the write implementation. Explicit transactions, partial updates, dynamic primary-key buckets, cross-partition primary-key updates, data evolution, row tracking, global indexes, and external data paths are not supported.
+
+Partition columns support boolean, integer, string, and date types. When writing rows, StarRocks rejects partition strings that are empty, contain only whitespace, or match the reserved default partition name. The native SDK cannot preserve these values separately from NULL. Each sink driver defaults to at most 64 active partition/bucket writers and a 256 MiB native/Arrow allocation budget; exceeding a bound fails the statement before publication. The table options `starrocks.paimon.max-active-writers` (1–4096) and `starrocks.paimon.max-writer-memory-bytes` (2 MiB–4 GiB, in bytes) control these bounds. The query memory limit also applies.
+
+Data becomes visible after the FE publishes the native Paimon snapshot. An empty INSERT INTO is a no-op. If the client receives a Paimon commit-outcome-unknown error, reconcile the operation before retrying: the snapshot may already have been published, and retrying an append can duplicate rows. The query profile exposes `PaimonOperationId` and `PaimonPublicationState` for this purpose.
+
 ## View the schema of a Paimon table
 
 You can use one of the following syntaxes to view the schema of a Paimon table:
@@ -747,6 +911,50 @@ You can use one of the following syntaxes to view the schema of a Paimon table:
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10;
    ```
+
+### Inspect the planned scan size
+
+`EXPLAIN VERBOSE` and `EXPLAIN COSTS` include candidate file metrics for each
+Paimon scan node. Plain `EXPLAIN` omits this block:
+
+```text
+0:PaimonScanNode
+   ...
+   avgRowSize=2.0
+   Paimon Scan Metrics:
+     splits=2
+     data_files=3
+     data_file_bytes=12000000000
+     data_file_rows=9000000000
+   limit: 10
+   cardinality: 10
+```
+
+These metrics summarize the splits selected by Paimon's planner, after its
+partition/file pruning and any planning-time limit pruning. They use file
+metadata already loaded for the scan and are independent of reader selection.
+Splitting a file into multiple scan ranges does not multiply its file count,
+bytes, or rows. For global-index splits, the metrics describe the underlying
+candidate files, before applying the index's row ranges.
+
+| Field | Meaning |
+| --- | --- |
+| `splits` | Number of Paimon input splits, before scan-range splitting. |
+| `data_files` | Number of data-file entries across the selected splits. |
+| `data_file_bytes` | Sum of those data files' on-storage sizes, in bytes. |
+| `data_file_rows` | Sum of their metadata record counts, before residual filters, deletion-vector filtering, or primary-key merging. |
+
+An empty scan reports zero. If any split lacks data-file metadata, as can happen
+for system tables, the three file metrics are `-1` (unavailable), rather than
+zero or a partial total. The metrics block is absent before scan planning.
+
+`cardinality` remains the optimizer's estimated output row count, which can be
+reduced by predicates and `LIMIT`. `data_file_rows` is not capped to that output
+estimate. The byte count describes whole candidate data files, excludes
+deletion/index files, and does not account for column projection, page pruning,
+cache hits, or execution stopping early. It is a scan-size signal, not measured
+I/O, output size, or an execution limit. In particular, a small `LIMIT` can still
+select large files.
 
 ## Load data from Paimon
 

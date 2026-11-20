@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the CREATE TABLE statement that was used to create a given table."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW CREATE TABLE

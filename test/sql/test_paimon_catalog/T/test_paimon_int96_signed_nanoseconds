@@ -1,0 +1,20 @@
+-- name: test_paimon_int96_signed_nanoseconds
+create external catalog paimon_int96_${uuid0} properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}",
+"aws.s3.region" = "${oss_region}",
+"aws.s3.enable_ssl" = "true"
+);
+set paimon_reader_mode = 'auto';
+set time_zone = 'UTC';
+[ORDER]select cast(before_epoch_us as varchar), cast(before_epoch_half_second as varchar), cast(after_epoch as varchar), count(*) from paimon_int96_${uuid0}.paimon_test.reader_int96_signed_nanos_v1 group by before_epoch_us, before_epoch_half_second, after_epoch order by before_epoch_us;
+function: assert_paimon_reader("select * from paimon_int96_${uuid0}.paimon_test.reader_int96_signed_nanos_v1", "reader_int96_signed_nanos_v1", "starrocks")
+set time_zone = 'Asia/Shanghai';
+[ORDER]select cast(before_epoch_us as varchar), cast(before_epoch_half_second as varchar), cast(after_epoch as varchar), count(*) from paimon_int96_${uuid0}.paimon_test.reader_int96_signed_nanos_v1 group by before_epoch_us, before_epoch_half_second, after_epoch order by before_epoch_us;
+set paimon_reader_mode = 'jni';
+[ORDER]select cast(before_epoch_us as varchar), cast(before_epoch_half_second as varchar), cast(after_epoch as varchar), count(*) from paimon_int96_${uuid0}.paimon_test.reader_int96_signed_nanos_v1 group by before_epoch_us, before_epoch_half_second, after_epoch order by before_epoch_us;
+drop catalog paimon_int96_${uuid0};

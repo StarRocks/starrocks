@@ -88,6 +88,22 @@ target_link_libraries(ConnectorHive PUBLIC
 
 target_link_libraries(ConnectorHive PRIVATE Formats)
 
+# Keep native Paimon UT objects under src/: CI removes the test build directory
+# before collecting coverage, and only scans src/ for .gcda files.
+if ("${WITH_PAIMON_CPP}" STREQUAL "ON" AND "${MAKE_TEST}" STREQUAL "ON")
+    add_library(paimon_cpp_test_support OBJECT
+            hive/paimon/paimon_global_index_evaluator.cpp
+            hive/paimon/paimon_global_index_scanner.cpp
+            hive/paimon/paimon_predicate_converter.cpp
+            hive/paimon/paimon_file_system.cpp
+            hive/paimon/paimon_scanner.cpp
+            hive/paimon/paimon_blob_converter.cpp
+            hive/paimon/paimon_chunk_sink.cpp
+            hive/paimon/paimon_write_column_converter.cpp
+    )
+    target_link_libraries(paimon_cpp_test_support PRIVATE paimon)
+endif ()
+
 # The paimon-cpp shim: the only binary linked against libpaimon.so. It is
 # loaded lazily by paimon_cpp_loader.cpp (compiled into ConnectorHive above)
 # through dlopen on the first paimon-native scan, so starrocks_be carries no
@@ -98,14 +114,18 @@ target_link_libraries(ConnectorHive PRIVATE Formats)
 # sources are compiled again in this target (not reused from ConnectorHive)
 # because regular BE objects are not built with -fPIC, and linking BE static
 # libs would duplicate global state.
-# Skipped for UT builds (the test binary compiles the sources directly) and
+# Skipped for UT builds (the test support target compiles the sources) and
 # for format-lib builds (no starrocks_be to load it, and its objects would
 # carry -DBUILD_FORMAT_LIB).
 if ("${WITH_PAIMON_CPP}" STREQUAL "ON" AND NOT "${MAKE_TEST}" STREQUAL "ON" AND NOT BUILD_FORMAT_LIB)
     add_library(starrocks_paimon SHARED
             hive/paimon/paimon_cpp_entry.cpp
+            hive/paimon/paimon_chunk_sink.cpp
+            hive/paimon/paimon_write_column_converter.cpp
             hive/paimon/paimon_predicate_converter.cpp
             hive/paimon/paimon_file_system.cpp
+            hive/paimon/paimon_global_index_evaluator.cpp
+            hive/paimon/paimon_global_index_scanner.cpp
             hive/paimon/paimon_scanner.cpp
             hive/paimon/paimon_blob_converter.cpp
     )

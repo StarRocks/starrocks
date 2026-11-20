@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Checks whether all the elements of array2 appear in array1 in the same exact order."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_contains_seq

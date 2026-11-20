@@ -19,6 +19,7 @@
 
 #include "common/status.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "storage/lake/sst_seek_range.h"
 #include "storage/lake/tablet_metadata.h"
 
 namespace starrocks::lake {
@@ -69,6 +70,14 @@ public:
     //
     static StatusOr<CompactionCandidateResult> pick_compaction_candidates(
             const PersistentIndexSstableMetaPB& sstable_meta);
+
+    // Pick the filesets an UNSHARE compaction rewrites for a tablet owning tablet_range: the contiguous run of
+    // filesets, in list order, from the first to the last one that holds an sstable the tablet cannot keep (see
+    // sstable_needs_rewrite). Filesets are grouped as in pick_compaction_candidates. The base level is merged only
+    // when the run starts at it. The pick has no minimum fileset count and may include the newest fileset. Returns
+    // no candidate when no sstable needs a rewrite.
+    static StatusOr<CompactionCandidateResult> pick_unshare_candidates(const PersistentIndexSstableMetaPB& sstable_meta,
+                                                                       const SstSeekRange& tablet_range);
 };
 
 } // namespace starrocks::lake

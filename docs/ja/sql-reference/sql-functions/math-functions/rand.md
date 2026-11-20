@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "0（含む）から 1（含まない）の間のランダムな浮動小数点数を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # rand, random

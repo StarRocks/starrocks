@@ -201,9 +201,8 @@ public class UpdateAnalyzerIcebergTest {
         UpdateStmt updateStmt = (UpdateStmt) SqlParser.parse(
                 sql, connectContext.getSessionVariable().getSqlMode()).get(0);
 
-        SemanticException exception = assertThrows(SemanticException.class,
-                () -> UpdateAnalyzer.analyze(updateStmt, connectContext));
-        assertTrue(exception.getMessage().contains("with"));
+        assertDoesNotThrow(() -> UpdateAnalyzer.analyze(updateStmt, connectContext));
+        assertNotNull(updateStmt.getQueryStatement());
     }
 
     @Test

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "WKT(Well Known Text)を地球の球面上の円に変換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Circle

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "計算が実行されているノードのホスト名を取得します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # host_name

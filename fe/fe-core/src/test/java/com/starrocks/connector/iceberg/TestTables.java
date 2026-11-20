@@ -74,10 +74,12 @@ public class TestTables {
             throw new AlreadyExistsException("Table %s already exists at location: %s", name, temp);
         }
 
+        // Format v4 requires the table location to carry a URI scheme.
+        String location = formatVersion >= 4 ? "file:" + temp : temp.toString();
         ops.commit(
                 null,
                 newTableMetadata(
-                        schema, spec, sortOrder, temp.toString(),
+                        schema, spec, sortOrder, location,
                         ImmutableMap.of(FORMAT_VERSION, String.valueOf(formatVersion))));
 
         return new TestTable(ops, name);

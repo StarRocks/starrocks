@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Date and time type."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import DateTip from '../../../_assets/commonMarkdown/dateTimeTip.mdx'

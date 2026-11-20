@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回物化视图的逻辑计划，可选择是否从计划缓存读取。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # inspect_mv_plan

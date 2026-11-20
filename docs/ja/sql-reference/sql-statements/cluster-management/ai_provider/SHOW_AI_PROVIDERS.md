@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "登録済みの AI プロバイダーを一覧表示します。名前のパターンまたはタイプでフィルタリングできます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW AI PROVIDERS
@@ -26,8 +27,8 @@ SHOW AI PROVIDERS [ LIKE '<pattern>' | TYPE { embedding | rerank | chat } ]
 | 列             | 説明                                                                 |
 | -------------- | -------------------------------------------------------------------- |
 | `Name`         | プロバイダーの名前。                                                  |
-| `Type`         | プロバイダーのタイプ (`embedding` / `rerank` / `chat`)。              |
-| `Protocol`     | エンドポイントのプロトコル (`openai` / `anthropic` / `cohere`)。      |
+| `Type`         | プロバイダーのタイプ。                                                |
+| `Protocol`     | エンドポイントのプロトコル。                                          |
 | `IsDefault`    | このプロバイダーがそのタイプのデフォルトかどうか (`true`/`false`)。    |
 | `Endpoint`     | エンドポイントの URL。                                                |
 | `Model`        | モデル名。                                                            |

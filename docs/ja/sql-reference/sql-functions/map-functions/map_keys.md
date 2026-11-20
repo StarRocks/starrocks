@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定されたマップ内のすべてのキーを配列として返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # map_keys
