@@ -483,6 +483,14 @@ if [ ! -f $PATCHED_MARK ] && [ $VPACK_SOURCE = "velocypack-XYZ1.0" ]; then
     patch -p1 < $TP_PATCH_DIR/velocypack-XYZ1.0.patch
     touch $PATCHED_MARK
 fi
+# Keep this fix independent of the mark on previously patched sources.
+if [ ! -f $PATCHED_MARK.append_double_buffer ] && [ $VPACK_SOURCE = "velocypack-XYZ1.0" ]; then
+    # Earlier revisions included this fix in velocypack-XYZ1.0.patch.
+    if ! patch --dry-run --force --reverse -p1 < "$TP_PATCH_DIR/velocypack-XYZ1.0-append-double-buffer.patch" >/dev/null 2>&1; then
+        patch -p1 < $TP_PATCH_DIR/velocypack-XYZ1.0-append-double-buffer.patch
+    fi
+    touch $PATCHED_MARK.append_double_buffer
+fi
 cd -
 echo "Finished patching $VPACK_SOURCE"
 
