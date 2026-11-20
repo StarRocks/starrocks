@@ -137,6 +137,10 @@ uint64_t CompressionStreamBase::flush() {
 }
 
 void CompressionStreamBase::suppress() {
+<<<<<<< HEAD
+=======
+    // A suppressed PRESENT stream is reused by the next stripe.
+>>>>>>> approved-change
     outputBuffer = nullptr;
     bufferSize = outputPosition = outputSize = 0;
     BufferedOutputStream::suppress();
