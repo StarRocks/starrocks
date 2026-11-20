@@ -362,6 +362,15 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Is mutable: Yes
 - Description: Whether a query scan in a shared-data cluster, split or not, asynchronously warms the index pages it reads next once it has opened the tablet's segments: the short key index of every segment, the zone map, bloom filter, and bitmap index root pages of the predicate columns, and the ordinal index root pages of the read columns. In the same way, the bitmap index lookups of equality and `IN` predicates request the dictionary pages of all their values at once, and then the pages of all the bitmaps they select, before reading them. Scans do not wait for the warming, and read as usual if it fails. Segments that the segment metadata filter (`enable_lake_segment_metadata_filter`) excludes from the scan are not warmed. This item takes effect only for queries, and only when the remote I/O scheduler is enabled (`remote_io_scheduler_enable`). It is independent of `lake_scan_parallel_segment_open`. The query profile reports the warming in `TabletPrepareIndexWarmSegments`, `TabletPrepareIndexWarmRanges`, `TabletPrepareIndexWarmBlocks`, `TabletPrepareIndexWarmSkipped`, and `TabletPrepareIndexWarmPrunedSegments`, and the bitmap index page requests in `BitmapIndexPrefetchPages` and `BitmapIndexPrefetchBlocks`.
 
+### lake_scan_read_ahead_max_blocks
+
+- Default: 2048
+- Type: Long
+- Unit: -
+- Is mutable: Yes
+- Description: The cache blocks that all query scans on a BE/CN together may have asked to fetch ahead of their reads and not yet read. This covers the blocks `remote_prefetch_window_blocks` lets each segment keep ahead and those of the segments that `lake_scan_read_ahead_segments` starts early. While the node holds this many, a segment asks for no more blocks ahead and a tablet scan starts no next segment early; their reads fetch the data when they reach it. The blocks a read is about to consume are always fetched. Concurrent scans may take the total slightly past the limit. `0` means no limit. The metrics `lake_scan_read_ahead_blocks` and `lake_scan_read_ahead_capped_total` report the current total and how often the limit held read-ahead back.
+- Introduced in: -
+
 ### lake_scan_read_ahead_segments
 
 - Default: 16

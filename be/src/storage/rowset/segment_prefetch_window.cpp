@@ -15,15 +15,35 @@
 #include "storage/rowset/segment_prefetch_window.h"
 
 #include <algorithm>
+#include <limits>
 
+#include "common/config_lake_fwd.h"
 #include "common/logging.h"
 #include "storage/rowset/column_reader.h"
+#include "storage/storage_metrics.h"
 #include "storage_primitive/storage_stats.h"
 
 namespace starrocks {
 
 // See SegmentPrefetchWindow::warm_rows().
 static constexpr int kLateReadAheadMinBatches = 4;
+
+// The blocks the node may still ask for ahead.
+static int64_t node_blocks_left() {
+    const int64_t limit = config::lake_scan_read_ahead_max_blocks;
+    if (limit <= 0) {
+        return std::numeric_limits<int64_t>::max();
+    }
+    return limit - StorageMetrics::instance()->lake_scan_read_ahead_blocks.value();
+}
+
+bool SegmentPrefetchWindow::node_has_room() {
+    if (node_blocks_left() > 0) {
+        return true;
+    }
+    StorageMetrics::instance()->lake_scan_read_ahead_capped_total.increment(1);
+    return false;
+}
 
 SegmentPrefetchWindow::SegmentPrefetchWindow(std::vector<Column> columns, const SparseRange<>* scan_range,
                                              rowid_t start_row, size_t ahead_blocks, double late_read_ahead_ratio,
@@ -34,6 +54,15 @@ SegmentPrefetchWindow::SegmentPrefetchWindow(std::vector<Column> columns, const 
           _block_size(std::max<int64_t>(1, static_cast<int64_t>(block_size))),
           _stats(stats) {
     add_cursors(columns, start_row);
+}
+
+SegmentPrefetchWindow::~SegmentPrefetchWindow() {
+    hold(-static_cast<int64_t>(_ahead_blocks));
+}
+
+void SegmentPrefetchWindow::hold(int64_t blocks) {
+    _ahead_blocks += blocks;
+    StorageMetrics::instance()->lake_scan_read_ahead_blocks.increment(blocks);
 }
 
 void SegmentPrefetchWindow::add_cursors(const std::vector<Column>& columns, rowid_t start_row) {
@@ -94,7 +123,7 @@ bool SegmentPrefetchWindow::warm(io::SeekableInputStream* file, int64_t offset, 
         VLOG(2) << "stop warming " << file->filename() << ": " << res.status();
         _disabled = true;
         _inflight.clear();
-        _ahead_blocks = 0;
+        hold(-static_cast<int64_t>(_ahead_blocks));
         _row_batch.clear();
         return false;
     }
@@ -137,7 +166,8 @@ void SegmentPrefetchWindow::submit(size_t cursor_idx, rowid_t row) {
     // A page larger than what is left of the window is asked for a window at a time: the cursor stays on it,
     // and the rest follows once the reader has released enough blocks.
     const int64_t from_block = std::max(first_block, c.last_block + 1);
-    const int64_t budget = static_cast<int64_t>(_ahead_limit) - static_cast<int64_t>(_ahead_blocks);
+    const int64_t budget =
+            std::min(static_cast<int64_t>(_ahead_limit) - static_cast<int64_t>(_ahead_blocks), node_blocks_left());
     const int64_t to_block = std::min(last_block, from_block + std::max<int64_t>(budget, 1) - 1);
     const int64_t warm_begin = std::max(begin, from_block * _block_size);
     const int64_t warm_end = std::min(end, (to_block + 1) * _block_size);
@@ -148,7 +178,7 @@ void SegmentPrefetchWindow::submit(size_t cursor_idx, rowid_t row) {
     const size_t blocks = static_cast<size_t>(to_block - from_block + 1);
     c.last_block = to_block;
     _inflight.push_back(InFlight{cursor_idx, begin_row, end_row, blocks, std::move(handle)});
-    _ahead_blocks += blocks;
+    hold(static_cast<int64_t>(blocks));
     if (to_block == last_block) {
         next_page();
     }
@@ -162,7 +192,7 @@ void SegmentPrefetchWindow::advance(rowid_t row) {
     // other reader waits for it.
     auto consumed = std::remove_if(_inflight.begin(), _inflight.end(), [&](const InFlight& e) {
         if (e.end_row <= row) {
-            _ahead_blocks -= e.blocks;
+            hold(-static_cast<int64_t>(e.blocks));
             return true;
         }
         return false;
@@ -177,7 +207,7 @@ void SegmentPrefetchWindow::advance(rowid_t row) {
                 next = i;
             }
         }
-        if (next == _cursors.size()) {
+        if (next == _cursors.size() || !node_has_room()) {
             break;
         }
         submit(next, row);

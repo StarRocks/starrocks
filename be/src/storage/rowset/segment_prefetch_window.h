@@ -38,7 +38,8 @@ struct OlapReaderStatistics;
 // so far ahead that it evicts what it still needs; when the blocks are fetched, and for whom first, is the
 // scheduler's decision. It never guesses: only pages the reader will read (per the ordinal index and the
 // scan range) are warmed, and a page leaves the window once the reader has passed its last row. The page
-// list is produced incrementally, so the window's memory does not grow with the segment.
+// list is produced incrementally, so the window's memory does not grow with the segment. All windows of a node
+// together keep at most lake_scan_read_ahead_max_blocks blocks ahead; beyond that the reads fetch what they reach.
 class SegmentPrefetchWindow {
 public:
     struct Column {
@@ -53,6 +54,12 @@ public:
     SegmentPrefetchWindow(std::vector<Column> columns, const SparseRange<>* scan_range, rowid_t start_row,
                           size_t ahead_blocks, double late_read_ahead_ratio, size_t block_size,
                           OlapReaderStatistics* stats);
+    ~SegmentPrefetchWindow();
+
+    // Whether the query scans of the node, all windows together, hold fewer blocks ahead than
+    // lake_scan_read_ahead_max_blocks. When it returns false the caller gave up something for the limit, which is
+    // counted.
+    static bool node_has_room();
 
     // The reader is about to read the rows from `row` on: forget what it has consumed and top the
     // window up again.
@@ -105,6 +112,8 @@ private:
     // Reads `columns` ahead from `start_row` on.
     void add_cursors(const std::vector<Column>& columns, rowid_t start_row);
     void submit(size_t cursor_idx, rowid_t row);
+    // Adds `blocks` (may be negative) to the blocks this window, and the node, hold ahead.
+    void hold(int64_t blocks);
     // `urgent`: pages a read is about to consume, fetched in parallel as a demand rather than as read-ahead.
     bool warm(io::SeekableInputStream* file, int64_t offset, int64_t size, bool urgent,
               std::shared_ptr<io::CacheWarmHandle>* handle);
