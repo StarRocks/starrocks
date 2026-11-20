@@ -15,6 +15,8 @@
 #include "base/simd/filter.h"
 
 #include <gtest/gtest.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 #include <cstring>
 #include <iterator>
@@ -1444,5 +1446,144 @@ PARALLEL_TEST(SimdFilterTest, out_of_place_padded_capacity_asan) {
 }
 
 #endif // __x86_64__
+
+// Verify in-place (dst == src) compaction with leading all-1 batches followed by mixed
+// batches across uint8_t, uint16_t, uint32_t, and uint64_t for sizes that are exact
+// multiples of 32 and 64, and confirm that leading all-1 batches do not issue redundant
+// self-memmove writes when dst + result == src + start.
+PARALLEL_TEST(SimdFilterTest, in_place_leading_all_ones_followed_by_mixed) {
+    auto test_for_type = [](auto dummy) {
+        using T = decltype(dummy);
+
+        // 1. Sweep exact multiples of 32 and 64 with leading all-1 batches followed by
+        // sparse (< 6 set bits), single-half-zero 16-lane sub-masks, dense, and alternating batches.
+        for (size_t total : {size_t(32), size_t(64), size_t(96), size_t(128), size_t(160), size_t(192), size_t(256)}) {
+            for (size_t leading_ones : {size_t(16), size_t(32), size_t(64), size_t(96)}) {
+                if (leading_ones > total) {
+                    continue;
+                }
+                for (int mode = 0; mode < 4; ++mode) {
+                    std::vector<T> orig(total);
+                    std::vector<uint8_t> selector(total, 0);
+                    std::vector<T> expected;
+                    expected.reserve(total);
+
+                    for (size_t i = 0; i < total; ++i) {
+                        orig[i] = static_cast<T>(i * 97 + 13);
+                        bool keep = false;
+                        if (i < leading_ones) {
+                            keep = true;
+                        } else {
+                            size_t rel = i - leading_ones;
+                            switch (mode) {
+                            case 0:
+                                // Alternating elements
+                                keep = ((rel & 1) == 0);
+                                break;
+                            case 1:
+                                // Sparse (< 6 set bits per 32-element batch)
+                                keep = ((rel % 32) == 1 || (rel % 32) == 19);
+                                break;
+                            case 2:
+                                // First 16 lanes kept, second 16 lanes dropped (tests high_mask == 0 in compress_w4)
+                                keep = ((rel % 32) < 16);
+                                break;
+                            case 3:
+                                // Dropped 32-element batch followed by all-1 32-element batch (tests shifted memmove)
+                                keep = (((rel / 32) & 1) == 1);
+                                break;
+                            }
+                        }
+                        selector[i] = keep ? 1 : 0;
+                        if (keep) {
+                            expected.push_back(orig[i]);
+                        }
+                    }
+
+                    {
+                        std::vector<T> buf = orig;
+                        size_t out = SIMD::Filter::filter_range(buf.data(), buf.data(), selector.data(), 0, total);
+                        ASSERT_EQ(expected.size(), out) << "sizeof(T)=" << sizeof(T) << " total=" << total
+                                                        << " leading=" << leading_ones << " mode=" << mode;
+                        for (size_t i = 0; i < out; ++i) {
+                            ASSERT_EQ(expected[i], buf[i]);
+                        }
+                    }
+
+#if defined(__x86_64__)
+                    if (__builtin_cpu_supports("avx2")) {
+                        std::vector<T> buf = orig;
+                        size_t out = SIMD::Filter::detail::filter_range_avx2(buf.data(), buf.data(), sizeof(T),
+                                                                             selector.data(), 0, total);
+                        ASSERT_EQ(expected.size(), out);
+                        for (size_t i = 0; i < out; ++i) {
+                            ASSERT_EQ(expected[i], buf[i]);
+                        }
+                    }
+#endif
+                }
+            }
+        }
+
+        // 2. Enforce via mprotect(PROT_READ) on the leading all-1 page that no kernel issues
+        // a redundant self-memmove write when dst + result == src + start.
+        const size_t page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE));
+        const size_t leading_elems = page_size / sizeof(T);
+        for (size_t tail_elems : {size_t(32), size_t(64), size_t(96), size_t(128)}) {
+            const size_t total_elems = leading_elems + tail_elems;
+            const size_t map_bytes = 2 * page_size;
+            void* raw = mmap(nullptr, map_bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+            ASSERT_NE(MAP_FAILED, raw);
+
+            auto* buf = static_cast<T*>(raw);
+            std::vector<uint8_t> selector(total_elems, 0);
+            std::vector<T> expected;
+            expected.reserve(total_elems);
+
+            for (size_t i = 0; i < total_elems; ++i) {
+                buf[i] = static_cast<T>(i * 73 + 5);
+                bool keep = (i < leading_elems) || (((i - leading_elems) % 3) == 0);
+                selector[i] = keep ? 1 : 0;
+                if (keep) {
+                    expected.push_back(buf[i]);
+                }
+            }
+
+            // Mark the leading all-1 page read-only. If an in-place kernel calls memmove
+            // without checking `dst + result != src + start`, writing to page 0 faults.
+            ASSERT_EQ(0, mprotect(raw, page_size, PROT_READ));
+
+            size_t out = SIMD::Filter::filter_range(buf, buf, selector.data(), 0, total_elems);
+            ASSERT_EQ(expected.size(), out);
+            for (size_t i = 0; i < out; ++i) {
+                ASSERT_EQ(expected[i], buf[i]);
+            }
+
+#if defined(__x86_64__)
+            if (__builtin_cpu_supports("avx2")) {
+                ASSERT_EQ(0, mprotect(raw, page_size, PROT_READ | PROT_WRITE));
+                for (size_t i = 0; i < total_elems; ++i) {
+                    buf[i] = static_cast<T>(i * 73 + 5);
+                }
+                ASSERT_EQ(0, mprotect(raw, page_size, PROT_READ));
+
+                size_t avx2_out =
+                        SIMD::Filter::detail::filter_range_avx2(buf, buf, sizeof(T), selector.data(), 0, total_elems);
+                ASSERT_EQ(expected.size(), avx2_out);
+                for (size_t i = 0; i < avx2_out; ++i) {
+                    ASSERT_EQ(expected[i], buf[i]);
+                }
+            }
+#endif
+
+            ASSERT_EQ(0, munmap(raw, map_bytes));
+        }
+    };
+
+    test_for_type(uint8_t{0});
+    test_for_type(uint16_t{0});
+    test_for_type(uint32_t{0});
+    test_for_type(uint64_t{0});
+}
 
 } // namespace starrocks
