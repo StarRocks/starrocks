@@ -20,14 +20,25 @@
 
 namespace starrocks {
 
+template <LogicalType TYPE>
+inline constexpr bool can_use_simd_selector =
+#if defined(__AVX2__) || (defined(__ARM_NEON) && defined(__aarch64__))
+        isArithmeticLT<TYPE> || lt_is_date_or_datetime<TYPE>;
+#else
+        isArithmeticLT<TYPE>;
+#endif
+
 // SIMD selector
-// only support PrimaryType Arithmetic and DATE
+// Supports primary arithmetic types, DATE, and DATETIME
 template <LogicalType TYPE>
 class SIMD_selector {
 public:
     using Container = typename RunTimeColumnType<TYPE>::Container;
     using CppType = RunTimeCppType<TYPE>;
     using SelectVec = uint8_t*;
+
+    static_assert(!lt_is_date_or_datetime<TYPE> ||
+                  (std::is_trivially_copyable_v<CppType> && (sizeof(CppType) == 4 || sizeof(CppType) == 8)));
 
     // select if var var
     // dst[i] = select_vec[i] ? a[i] : b[i]
@@ -41,8 +52,6 @@ public:
 
 #ifdef __AVX2__
         if constexpr (sizeof(CppType) == 1) {
-            avx2_select_if(select_vec, start_dst, start_a, start_b, size);
-        } else if constexpr (sizeof(CppType) == 4) {
             avx2_select_if(select_vec, start_dst, start_a, start_b, size);
         } else if constexpr (could_use_common_select_if<CppType>()) {
             avx2_select_if_common_implement(select_vec, start_dst, start_a, start_b, size);

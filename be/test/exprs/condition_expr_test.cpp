@@ -26,6 +26,7 @@
 #include "column/column_viewer.h"
 #include "column/fixed_length_column.h"
 #include "column/runtime_type_traits.h"
+#include "column/simd_selector.h"
 #include "column/variant_column.h"
 #include "column/variant_encoder.h"
 #include "column/vectorized_fwd.h"
@@ -632,6 +633,352 @@ TEST_F(VectorizedConditionExprTest, coalesceVariant) {
 
     ColumnPtr result = expr->evaluate(nullptr, nullptr);
     assert_variant_result(result, {"1", "12", "23", std::nullopt});
+}
+
+template <LogicalType Type>
+static RunTimeCppType<Type> make_test_value_for_if(int seed) {
+    using CppType = RunTimeCppType<Type>;
+    if constexpr (Type == TYPE_BOOLEAN) {
+        return static_cast<uint8_t>((seed & 1) != 0);
+    } else if constexpr (Type == TYPE_DATE) {
+        return DateValue{static_cast<int32_t>(DateValue::MIN_DATE_VALUE._julian + (seed % 100000))};
+    } else if constexpr (Type == TYPE_DATETIME) {
+        return TimestampValue{
+                static_cast<int64_t>(TimestampValue::MIN_TIMESTAMP_VALUE._timestamp + int64_t(seed) * 1000)};
+    } else if constexpr (Type == TYPE_FLOAT) {
+        return static_cast<float>(seed) * 1.25f - 17.5f;
+    } else if constexpr (Type == TYPE_DOUBLE) {
+        return static_cast<double>(seed) * 2.5 - 35.125;
+    } else {
+        return static_cast<CppType>(seed);
+    }
+}
+
+template <LogicalType Type>
+static void verify_simd_selector_type() {
+    using Container = typename SIMD_selector<Type>::Container;
+    using CppType = typename SIMD_selector<Type>::CppType;
+
+    // 1. Verify size == 0 does not dereference null const pointers in low-level SIMD helpers.
+    {
+        uint8_t dummy_sel = 0;
+        uint8_t* sel_ptr = &dummy_sel;
+        CppType dummy_dst{};
+        CppType* dst_ptr = &dummy_dst;
+        const CppType* null_a = nullptr;
+        const CppType* null_b = nullptr;
+#ifdef __AVX2__
+        if constexpr (sizeof(CppType) == 1) {
+            avx2_select_if<CppType, true, true>(sel_ptr, dst_ptr, null_a, null_b, 0);
+        } else if constexpr (could_use_common_select_if<CppType>()) {
+            avx2_select_if_common_implement<CppType, true, true>(sel_ptr, dst_ptr, null_a, null_b, 0);
+        }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+        if constexpr (neon_could_use_common_select_if<CppType>()) {
+            neon_select_if_common_implement<CppType, true, true>(sel_ptr, dst_ptr, null_a, null_b, 0);
+        }
+#endif
+        EXPECT_EQ(&dummy_dst, dst_ptr);
+    }
+
+    const uint8_t truthy_bytes[3] = {0x02, 0x80, 0xFF};
+    const uint8_t mixed_truthy[5] = {0x01, 0x02, 0x7F, 0x80, 0xFF};
+
+    for (int n : {0, 1, 8, 15, 16, 17, 31, 32, 33, 48, 63, 64}) {
+        // Pattern 0: all-zero
+        // Pattern 1: all-nonzero with non-canonical truthy bytes (0x02, 0x80, 0xFF)
+        // Pattern 2: sub-chunk homogeneous within a mixed batch (alternating all-0 and all-truthy sub-chunks)
+        // Pattern 3: single active lane per sub-chunk (exercises every bit in data_mask including lane 15 0x8000)
+        // Pattern 4: alternating mixed non-canonical truthy bytes
+        for (int pat : {0, 1, 2, 3, 4}) {
+            BooleanColumn::Container selector(n, 0);
+            constexpr int sub_lanes = (sizeof(CppType) <= 8) ? (16 / sizeof(CppType)) : 1;
+            for (int r = 0; r < n; ++r) {
+                if (pat == 0) {
+                    selector[r] = 0x00;
+                } else if (pat == 1) {
+                    selector[r] = truthy_bytes[r % 3];
+                } else if (pat == 2) {
+                    int sub_idx = (sub_lanes > 0) ? (r / sub_lanes) : r;
+                    selector[r] = (sub_idx & 1) ? truthy_bytes[r % 3] : 0x00;
+                } else if (pat == 3) {
+                    int lane_in_16 = r % 16;
+                    int target_lane = ((r / 16) * 7 + 15) % 16;
+                    selector[r] = (lane_in_16 == target_lane) ? truthy_bytes[r % 3] : 0x00;
+                } else {
+                    selector[r] = ((r % 3) != 0) ? mixed_truthy[r % 5] : 0x00;
+                }
+            }
+
+            Container a_vec(n);
+            Container b_vec(n);
+            for (int r = 0; r < n; ++r) {
+                a_vec[r] = make_test_value_for_if<Type>(1000 + r * 3);
+                b_vec[r] = make_test_value_for_if<Type>(5000 + r * 5);
+            }
+            const CppType a_const = make_test_value_for_if<Type>(777);
+            const CppType b_const = make_test_value_for_if<Type>(888);
+
+            // Verify exact batch multiples are processed 100% by the SIMD loop without falling back to the scalar tail.
+#ifdef __AVX2__
+            if (n > 0 && (n % 32 == 0)) {
+                Container simd_dst(n);
+                uint8_t* sel_ptr = selector.data();
+                CppType* dst_ptr = simd_dst.data();
+                const CppType* a_ptr = a_vec.data();
+                const CppType* b_ptr = b_vec.data();
+                if constexpr (sizeof(CppType) == 1) {
+                    avx2_select_if(sel_ptr, dst_ptr, a_ptr, b_ptr, n);
+                } else if constexpr (could_use_common_select_if<CppType>()) {
+                    avx2_select_if_common_implement(sel_ptr, dst_ptr, a_ptr, b_ptr, n);
+                }
+                ASSERT_EQ(simd_dst.data() + n, dst_ptr)
+                        << "AVX2 loop did not consume full batch multiple n=" << n << " type=" << Type;
+            }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+            if (n > 0 && (n % 16 == 0)) {
+                Container simd_dst(n);
+                uint8_t* sel_ptr = selector.data();
+                CppType* dst_ptr = simd_dst.data();
+                const CppType* a_ptr = a_vec.data();
+                const CppType* b_ptr = b_vec.data();
+                if constexpr (neon_could_use_common_select_if<CppType>()) {
+                    neon_select_if_common_implement(sel_ptr, dst_ptr, a_ptr, b_ptr, n);
+                }
+                ASSERT_EQ(simd_dst.data() + n, dst_ptr)
+                        << "NEON loop did not consume full batch multiple n=" << n << " type=" << Type;
+            }
+#endif
+
+            // Mode 0: var, var
+            {
+                Container dst(n, make_test_value_for_if<Type>(0));
+                SIMD_selector<Type>::select_if(selector.data(), dst, a_vec, b_vec);
+                for (int r = 0; r < n; ++r) {
+                    CppType expected = (selector[r] != 0) ? a_vec[r] : b_vec[r];
+                    ASSERT_EQ(expected, dst[r])
+                            << "var/var type=" << Type << " n=" << n << " pat=" << pat << " r=" << r;
+                }
+            }
+            // Mode 1: const, var
+            {
+                Container dst(n, make_test_value_for_if<Type>(0));
+                SIMD_selector<Type>::select_if(selector.data(), dst, a_const, b_vec);
+                for (int r = 0; r < n; ++r) {
+                    CppType expected = (selector[r] != 0) ? a_const : b_vec[r];
+                    ASSERT_EQ(expected, dst[r])
+                            << "const/var type=" << Type << " n=" << n << " pat=" << pat << " r=" << r;
+                }
+            }
+            // Mode 2: var, const
+            {
+                Container dst(n, make_test_value_for_if<Type>(0));
+                SIMD_selector<Type>::select_if(selector.data(), dst, a_vec, b_const);
+                for (int r = 0; r < n; ++r) {
+                    CppType expected = (selector[r] != 0) ? a_vec[r] : b_const;
+                    ASSERT_EQ(expected, dst[r])
+                            << "var/const type=" << Type << " n=" << n << " pat=" << pat << " r=" << r;
+                }
+            }
+            // Mode 3: const, const
+            {
+                Container dst(n, make_test_value_for_if<Type>(0));
+                SIMD_selector<Type>::select_if(selector.data(), dst, a_const, b_const);
+                for (int r = 0; r < n; ++r) {
+                    CppType expected = (selector[r] != 0) ? a_const : b_const;
+                    ASSERT_EQ(expected, dst[r])
+                            << "const/const type=" << Type << " n=" << n << " pat=" << pat << " r=" << r;
+                }
+            }
+        }
+    }
+}
+
+TEST_F(VectorizedConditionExprTest, simdSelectorExactBatchMultiplesAndNonCanonicalBytes) {
+    static_assert(can_use_simd_selector<TYPE_BOOLEAN>);
+    static_assert(can_use_simd_selector<TYPE_INT>);
+    static_assert(can_use_simd_selector<TYPE_DOUBLE>);
+#if defined(__AVX2__) || (defined(__ARM_NEON) && defined(__aarch64__))
+    static_assert(can_use_simd_selector<TYPE_DATE>);
+    static_assert(can_use_simd_selector<TYPE_DATETIME>);
+#endif
+
+    // Directly test consolidated SIMDUtils primitives (load_selector_mask, expand_sub_mask, set_data).
+#ifdef __AVX2__
+    {
+        alignas(32) uint8_t raw_sel[32] = {};
+        raw_sel[0] = 0x02;
+        raw_sel[15] = 0x80;
+        raw_sel[16] = 0xFF;
+        raw_sel[31] = 0x01;
+        uint32_t mask = 0;
+        __m256i mask_vec = SIMDUtils::load_selector_mask(raw_sel, &mask);
+        EXPECT_EQ((1u << 0) | (1u << 15) | (1u << 16) | (1u << 31), mask);
+        EXPECT_EQ(mask, static_cast<uint32_t>(_mm256_movemask_epi8(mask_vec)));
+
+        // 2-byte expand_sub_mask: lane 0 and lane 15 (0x8001)
+        __m256i exp16 = SIMDUtils::expand_sub_mask<2>(0x8001u);
+        alignas(32) uint16_t lanes16[16] = {};
+        _mm256_storeu_si256(reinterpret_cast<__m256i*>(lanes16), exp16);
+        EXPECT_EQ(0xFFFFu, lanes16[0]);
+        EXPECT_EQ(0x0000u, lanes16[1]);
+        EXPECT_EQ(0x0000u, lanes16[14]);
+        EXPECT_EQ(0xFFFFu, lanes16[15]);
+
+        // 4-byte expand_sub_mask: lane 0 and lane 7 (0x81)
+        __m256i exp32 = SIMDUtils::expand_sub_mask<4>(0x81u);
+        alignas(32) uint32_t lanes32[8] = {};
+        _mm256_storeu_si256(reinterpret_cast<__m256i*>(lanes32), exp32);
+        EXPECT_EQ(0xFFFFFFFFu, lanes32[0]);
+        EXPECT_EQ(0x00000000u, lanes32[1]);
+        EXPECT_EQ(0xFFFFFFFFu, lanes32[7]);
+
+        // 8-byte expand_sub_mask: lane 0 and lane 3 (0x09)
+        __m256i exp64 = SIMDUtils::expand_sub_mask<8>(0x09u);
+        alignas(32) uint64_t lanes64[4] = {};
+        _mm256_storeu_si256(reinterpret_cast<__m256i*>(lanes64), exp64);
+        EXPECT_EQ(0xFFFFFFFFFFFFFFFFull, lanes64[0]);
+        EXPECT_EQ(0x0000000000000000ull, lanes64[1]);
+        EXPECT_EQ(0xFFFFFFFFFFFFFFFFull, lanes64[3]);
+    }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    {
+        uint8_t raw_sel[16] = {};
+        raw_sel[0] = 0x02;
+        raw_sel[7] = 0x80;
+        raw_sel[15] = 0xFF;
+        uint64_t nibble_mask = 0;
+        uint8x16_t mask_vec = SIMDUtils::load_selector_mask(raw_sel, &nibble_mask);
+        EXPECT_EQ((0xFull << 0) | (0xFull << 28) | (0xFull << 60), nibble_mask);
+        uint8x16_t exp16 = SIMDUtils::expand_sub_mask<2>(mask_vec, 0);
+        uint16_t lanes16[8] = {};
+        vst1q_u16(lanes16, vreinterpretq_u16_u8(exp16));
+        EXPECT_EQ(0xFFFFu, lanes16[0]);
+        EXPECT_EQ(0x0000u, lanes16[1]);
+        EXPECT_EQ(0xFFFFu, lanes16[7]);
+    }
+#endif
+
+    verify_simd_selector_type<TYPE_BOOLEAN>();
+    verify_simd_selector_type<TYPE_TINYINT>();
+    verify_simd_selector_type<TYPE_SMALLINT>();
+    verify_simd_selector_type<TYPE_INT>();
+    verify_simd_selector_type<TYPE_BIGINT>();
+    verify_simd_selector_type<TYPE_FLOAT>();
+    verify_simd_selector_type<TYPE_DOUBLE>();
+    verify_simd_selector_type<TYPE_DATE>();
+    verify_simd_selector_type<TYPE_DATETIME>();
+}
+
+template <LogicalType Type>
+static void verify_if_expr_date_or_datetime() {
+    using CppType = RunTimeCppType<Type>;
+    using ColumnType = RunTimeColumnType<Type>;
+
+    TExprNode node;
+    node.opcode = TExprOpcode::ADD;
+    node.child_type = TPrimitiveType::INT;
+    node.node_type = TExprNodeType::FUNCTION_CALL;
+    node.num_children = 3;
+    node.__isset.opcode = true;
+    node.__isset.child_type = true;
+    node.type = gen_type_desc(to_thrift(Type));
+
+    const uint8_t truthy_bytes[3] = {0x02, 0x80, 0xFF};
+
+    for (int n : {16, 32, 64, 65}) {
+        // Mode 0: var/var non-null
+        // Mode 1: const/var non-null
+        // Mode 2: var/const non-null
+        // Mode 3: const/const non-null
+        // Mode 4: nullable lhs with unselected null at row 0 (verifies SIMD branch returns NullableColumn)
+        for (int mode : {0, 1, 2, 3, 4}) {
+            auto cond_col = BooleanColumn::create();
+            auto& cond_data = cond_col->get_data();
+            cond_data.resize(n);
+            for (int r = 0; r < n; ++r) {
+                if (mode == 4 && r == 0) {
+                    cond_data[r] = 0x00;
+                } else {
+                    cond_data[r] = ((r % 3) != 0) ? truthy_bytes[r % 3] : 0x00;
+                }
+            }
+
+            const CppType lhs_const_val = make_test_value_for_if<Type>(777);
+            const CppType rhs_const_val = make_test_value_for_if<Type>(888);
+
+            ColumnPtr lhs_col;
+            if (mode == 1 || mode == 3) {
+                auto c = ColumnType::create();
+                c->append(lhs_const_val);
+                lhs_col = ConstColumn::create(std::move(c), n);
+            } else {
+                auto v = ColumnType::create();
+                for (int r = 0; r < n; ++r) {
+                    v->append(make_test_value_for_if<Type>(100 + r));
+                }
+                if (mode == 4) {
+                    auto nulls = NullColumn::create(n, 0);
+                    nulls->get_data()[0] = 1; // Null at row 0 (where cond_data[0] == 0)
+                    lhs_col = NullableColumn::create(std::move(v), std::move(nulls));
+                } else {
+                    lhs_col = std::move(v);
+                }
+            }
+
+            ColumnPtr rhs_col;
+            if (mode == 2 || mode == 3) {
+                auto c = ColumnType::create();
+                c->append(rhs_const_val);
+                rhs_col = ConstColumn::create(std::move(c), n);
+            } else {
+                auto v = ColumnType::create();
+                for (int r = 0; r < n; ++r) {
+                    v->append(make_test_value_for_if<Type>(500 + r));
+                }
+                rhs_col = std::move(v);
+            }
+
+            const TypeDescriptor type_desc(Type);
+            auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_expr(node));
+            expr->set_type(type_desc);
+            MockExpr cond_expr(TYPE_BOOLEAN_DESC, cond_col);
+            MockExpr lhs_expr(type_desc, lhs_col);
+            MockExpr rhs_expr(type_desc, rhs_col);
+            expr->_children.push_back(&cond_expr);
+            expr->_children.push_back(&lhs_expr);
+            expr->_children.push_back(&rhs_expr);
+
+            ColumnPtr res = expr->evaluate(nullptr, nullptr);
+            ASSERT_EQ(n, res->size());
+
+#if defined(__AVX2__) || (defined(__ARM_NEON) && defined(__aarch64__))
+            if (mode == 4) {
+                // The SIMD nullable branch always wraps select_data and select_null in a NullableColumn,
+                // whereas _evaluate_general<true> only builds a NullableColumn when a selected row is null.
+                EXPECT_TRUE(res->is_nullable()) << "Expected SIMD nullable branch for type=" << Type;
+            }
+#endif
+
+            ColumnViewer<Type> viewer(res);
+            for (int r = 0; r < n; ++r) {
+                ASSERT_FALSE(viewer.is_null(r)) << "mode=" << mode << " r=" << r;
+                const bool take_lhs = (cond_data[r] != 0);
+                CppType expected;
+                if (take_lhs) {
+                    expected = (mode == 1 || mode == 3) ? lhs_const_val : make_test_value_for_if<Type>(100 + r);
+                } else {
+                    expected = (mode == 2 || mode == 3) ? rhs_const_val : make_test_value_for_if<Type>(500 + r);
+                }
+                ASSERT_EQ(expected, viewer.value(r)) << "type=" << Type << " n=" << n << " mode=" << mode << " r=" << r;
+            }
+        }
+    }
+}
+
+TEST_F(VectorizedConditionExprTest, ifExprDateAndDateTimeSimd) {
+    verify_if_expr_date_or_datetime<TYPE_DATE>();
+    verify_if_expr_date_or_datetime<TYPE_DATETIME>();
 }
 
 } // namespace starrocks
