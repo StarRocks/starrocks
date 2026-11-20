@@ -14,11 +14,11 @@
 
 #include "formats/parquet/schema.h"
 
-#include <boost/algorithm/string/case_conv.hpp>
 #include <sstream>
 #include <string>
 #include <string_view>
 
+#include "formats/utils.h"
 #include "gutil/strings/substitute.h"
 #include "types/logical_type.h"
 
@@ -456,9 +456,7 @@ Status SchemaDescriptor::from_thrift(const std::vector<tparquet::SchemaElement>&
     size_t next_pos = 1;
     for (size_t i = 0; i < root_schema->num_children; ++i) {
         RETURN_IF_ERROR(node_to_field(t_schemas, next_pos, LevelInfo(), &_fields[i], &next_pos));
-        if (!case_sensitive) {
-            _fields[i].name = boost::algorithm::to_lower_copy(_fields[i].name);
-        }
+        _fields[i].name = Utils::format_name(_fields[i].name, case_sensitive);
         if (_formatted_column_name_2_field_idx.find(_fields[i].name) != _formatted_column_name_2_field_idx.end()) {
             return Status::InvalidArgument(strings::Substitute("Duplicate field name: $0", _fields[i].name));
         }
@@ -489,11 +487,7 @@ std::string SchemaDescriptor::debug_string() const {
 }
 
 const int32_t SchemaDescriptor::get_field_idx_by_column_name(std::string_view column_name) const {
-    std::string format_name{column_name};
-    if (!_case_sensitive) {
-        format_name = boost::algorithm::to_lower_copy(format_name);
-    }
-    auto it = _formatted_column_name_2_field_idx.find(format_name);
+    auto it = _formatted_column_name_2_field_idx.find(Utils::format_name(column_name, _case_sensitive));
     if (it == _formatted_column_name_2_field_idx.end()) return -1;
     return it->second;
 }

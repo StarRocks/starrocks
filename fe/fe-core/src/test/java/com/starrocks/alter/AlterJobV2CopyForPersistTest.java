@@ -300,6 +300,34 @@ public class AlterJobV2CopyForPersistTest {
         assertFieldsEqual(dropJob, dropJob.copyForPersist(), "commitGtid");
     }
 
+    /** Every journal entry must retain independent catalog definitions and DROP names. */
+    @Test
+    public void testLakeTableIndexFastPathJobsCopySubclassFields() throws Exception {
+        LakeTableAddIndexJob addJob = newLakeTableAddIndexJob();
+        assertCollectionsEqual(addJob, addJob.copyForPersist(),
+                "newIndexes", "addBfColumns", "indexMetaIdToNewSchema");
+        assertCollectionsIndependent(AlterJobV2CopyForPersistTest::newLakeTableAddIndexJob,
+                "newIndexes", "addBfColumns", "indexMetaIdToNewSchema");
+
+        LakeTableDropIndexJob dropJob = newLakeTableDropIndexJob();
+        assertCollectionsEqual(dropJob, dropJob.copyForPersist(),
+                "dropIndexIds", "dropIndexNames", "dropBfColumns");
+        assertCollectionsIndependent(AlterJobV2CopyForPersistTest::newLakeTableDropIndexJob,
+                "dropIndexIds", "dropIndexNames", "dropBfColumns");
+    }
+
+    private static LakeTableAddIndexJob newLakeTableAddIndexJob() {
+        Index index = new Index(-1L, "ix_bm", List.of(ColumnId.create("c1")), IndexDef.IndexType.BITMAP, "",
+                Maps.newHashMap());
+        LakeTableAddIndexJob job = new LakeTableAddIndexJob(1L, 2L, 3L, "tbl", 1000L, List.of(index), List.of("c2"));
+        job.putNewSchema(10L, 100L, 2L);
+        return job;
+    }
+
+    private static LakeTableDropIndexJob newLakeTableDropIndexJob() {
+        return new LakeTableDropIndexJob(1L, 2L, 3L, "tbl", 1000L, List.of(-1L), List.of("ix_bm"), List.of("c2"));
+    }
+
     @Test
     public void testLakeTableAlterMetaJobCopyForPersist() throws Exception {
         LakeTableAlterMetaJob job = newLakeTableAlterMetaJob();

@@ -2,6 +2,7 @@
 sidebar_position: 100
 displayed_sidebar: docs
 description: "How to orchestrate and schedule StarRocks data workflows using Apache Airflow DAGs, SQLExecuteQueryOperator, and MySQLHook."
+products: [oss, anywhere]
 ---
 
 # Apache Airflow

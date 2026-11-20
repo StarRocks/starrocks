@@ -2,6 +2,7 @@
 sidebar_position: 60
 description: Kafka ルーチン ロード with 共有データ storage
 displayed_sidebar: docs
+products: [oss]
 ---
 
 # Kafka routine load StarRocks using shared-data storage
@@ -228,7 +229,7 @@ Empty set (0.04 sec)
 
 #### Create a shared-data storage volume
 
-以前に MinIO に `my-starrocks-volume` という名前のバケットを作成し、MinIO に `AAAAAAAAAAAAAAAAAAAA` というアクセスキーがあることを確認しました。次の SQL は、アクセスキーとシークレットを使用して MionIO バケットにストレージボリュームを作成します。
+以前に MinIO に `my-starrocks-volume` という名前のバケットを作成し、MinIO に `AAAAAAAAAAAAAAAAAAAA` というアクセスキーがあることを確認しました。次の SQL は、アクセスキーとシークレットを使用して MinIO バケットにストレージボリュームを作成します。
 
 ```sql
 CREATE STORAGE VOLUME s3_volume
@@ -741,7 +742,7 @@ Kafka のブローカー接続情報。形式は `<kafka_broker_name_or_ip>:<bro
 
 このチュートリアルでは：
 
-- Docker で StarRocks、Reedpanda、Minio をデプロイしました
+- Docker で StarRocks、Redpanda、Minio をデプロイしました
 - Kafka トピックからデータを消費する Routine Load ジョブを作成しました
 - MinIO を使用する StarRocks ストレージボリュームの設定方法を学びました
 

@@ -829,4 +829,56 @@ public class IcebergManifestCacheStatsTest extends TableTestBase {
         Assertions.assertEquals(List.of(Map.of(1, id(70)), Map.of(1, id(79))),
                 statsByFile(tasks).get("/path/to/data-id-7.parquet").subList(0, 2));
     }
+
+    private static DataFile idFile(int i) {
+        return DataFiles.builder(SPEC_A)
+                .withPath("/path/to/data-id-" + i + ".parquet")
+                .withFileSizeInBytes(10)
+                .withPartitionPath("data_bucket=0")
+                .withRecordCount(10)
+                .withMetrics(new Metrics(10L, Map.of(1, 40L + i), Map.of(1, 10L), Map.of(1, 0L), null,
+                        Map.of(1, id(10 * i)), Map.of(1, id(10 * i + 9))))
+                .build();
+    }
+
+    private static List<String> sortedLocations(Iterable<FileScanTask> tasks) {
+        List<String> locations = new ArrayList<>();
+        tasks.forEach(task -> locations.add(task.file().location()));
+        locations.sort(Comparator.naturalOrder());
+        return locations;
+    }
+
+    // A file committed twice (e.g. a retried append) lands in one manifest twice once the manifests are merged:
+    // the manifest counts both live entries, and Iceberg plans the file twice. The cache must keep both entries,
+    // or it never matches the manifest's count and is dropped and rebuilt on every scan.
+    @Test
+    public void testManifestWithDuplicateLiveEntriesIsCached() throws IOException {
+        Table table = mockedNativeTableA;
+        table.newAppend().appendFile(idFile(0)).appendFile(idFile(1)).commit();
+        table.newAppend().appendFile(idFile(0)).commit();
+        table.rewriteManifests().clusterBy(file -> "all").commit();
+
+        List<ManifestFile> manifests = table.currentSnapshot().dataManifests(table.io());
+        Assertions.assertEquals(1, manifests.size());
+        ManifestFile manifest = manifests.get(0);
+        Assertions.assertEquals(3, manifest.existingFilesCount() + manifest.addedFilesCount());
+
+        List<String> expected;
+        try (CloseableIterable<FileScanTask> tasks = table.newScan().planFiles()) {
+            expected = sortedLocations(tasks);
+        }
+        Assertions.assertEquals(List.of("/path/to/data-id-0.parquet", "/path/to/data-id-0.parquet",
+                "/path/to/data-id-1.parquet"), expected);
+
+        CachingIcebergCatalog catalog = newCatalog(Map.of());
+        // cold: reads the manifest and fills the cache; warm: must be served from the complete cache entry
+        for (int i = 0; i < 3; i++) {
+            Assertions.assertEquals(expected, sortedLocations(planTasks(catalog, table, Expressions.alwaysTrue())));
+            Assertions.assertNotNull(catalog.findCachedDataFiles(manifest, Set.of("/path/to/data-id-0.parquet")),
+                    "plan " + i + " left no complete cache entry");
+        }
+        Assertions.assertEquals(List.of("/path/to/data-id-0.parquet", "/path/to/data-id-0.parquet"),
+                sortedLocations(planTasks(catalog, table, Expressions.equal("id", 5))));
+        Assertions.assertEquals(expected, sortedLocations(planTasksWithStats(catalog, table, List.of("id"))));
+    }
 }

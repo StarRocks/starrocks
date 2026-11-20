@@ -42,12 +42,10 @@ import com.starrocks.type.AnyArrayType;
 import com.starrocks.type.AnyElementType;
 import com.starrocks.type.AnyMapType;
 import com.starrocks.type.ArrayType;
-import com.starrocks.type.GeoTypeDescriptor;
+import com.starrocks.type.GeoType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.NullType;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -67,10 +65,8 @@ public class NestedGeoTypeRefusalTest {
     static List<Type> types() {
         List<Type> result = new ArrayList<>();
         for (Type leaf : List.of(IntegerType.INT,
-                ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, new GeoTypeDescriptor(
-                        GeoTypeDescriptor.LogicalType.GEOGRAPHY, GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
-                        GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326)),
-                ScalarType.createGeoType(PrimitiveType.GEOMETRY, GeoTypeDescriptor.geometry("EPSG:3857")))) {
+                GeoType.createGeographyType("OGC:CRS84"),
+                GeoType.createGeometryType("EPSG:3857"))) {
             result.addAll(List.of(leaf, new ArrayType(leaf), new MapType(IntegerType.INT, leaf),
                     new StructType(List.of(leaf)), new ArrayType(new StructType(List.of(new ArrayType(leaf))))));
         }
@@ -119,6 +115,38 @@ public class NestedGeoTypeRefusalTest {
         apply.getChild(0).setChild(0, new MapExpr(values, List.of(new IntLiteral(1, IntegerType.INT), NullLiteral.create(type))));
         FunctionAnalyzer.analyze(apply);
         assertEquals(values, apply.getType());
+    }
+
+    @ParameterizedTest
+    @MethodSource("types")
+    public void testExpressionAndResolvedMapKeys(Type key) {
+        Type map = new MapType(IntegerType.INT, new MapType(key, IntegerType.INT));
+        Type nested = new ArrayType(new StructType(List.of(map)));
+        boolean geo = key.isGeoType() || key.hasNestedGeoType();
+        String error = "Map key doesn't support type: " + key;
+        if (geo) {
+            assertEquals(error, assertThrows(SemanticException.class,
+                    () -> visitor.visit(NullLiteral.create(nested), null)).getDetailMsg());
+        } else {
+            visitor.visit(NullLiteral.create(nested), null);
+        }
+
+        // Model a resolved variadic call whose result and SQL arguments do not expose the map type.
+        ExpressionAnalyzer.Visitor resolved = new ExpressionAnalyzer.Visitor(new AnalyzeState(), new ConnectContext()) {
+            @Override
+            public Void visitFunctionCall(FunctionCallExpr call, Scope scope) {
+                return null;
+            }
+        };
+        FunctionCallExpr call = new FunctionCallExpr("test", List.of(new IntLiteral(1), new NullLiteral()));
+        call.setType(IntegerType.INT);
+        call.setFn(new ScalarFunction(new FunctionName("test"), List.of(IntegerType.INT, nested), IntegerType.INT, true));
+        if (geo) {
+            assertEquals(error, assertThrows(SemanticException.class,
+                    () -> resolved.visit(call, null)).getDetailMsg());
+        } else {
+            resolved.visit(call, null);
+        }
     }
 
     @ParameterizedTest

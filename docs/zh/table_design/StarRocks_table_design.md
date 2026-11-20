@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "Overview of StarRocks table design principles: columnar storage, sort keys, data organization, and optimization for query performance."
 sidebar_position: 10
 keywords: ['linshi'] 
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 表概览

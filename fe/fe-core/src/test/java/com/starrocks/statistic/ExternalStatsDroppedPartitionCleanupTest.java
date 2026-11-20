@@ -19,6 +19,8 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
@@ -37,6 +39,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.File;
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -337,6 +340,80 @@ public class ExternalStatsDroppedPartitionCleanupTest extends PlanTestNoneDBBase
         runPeriodic();
         Assertions.assertEquals(List.of(columns()), refreshed);
         Assertions.assertEquals(0, expired.get());
+    }
+
+    // Followers learn about the deletes from the table's statistics metadata, re-journaled unchanged: replaying it
+    // drops their cached statistics. Its update time must not move, since it drives query-triggered re-analyze.
+    private static List<ExternalBasicStatsMeta> captureJournaledStatsMeta() {
+        List<ExternalBasicStatsMeta> logged = new ArrayList<>();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logAddExternalBasicStatsMeta(ExternalBasicStatsMeta meta, WALApplier walApplier) {
+                logged.add(meta);
+                walApplier.apply(meta);
+            }
+        };
+        return logged;
+    }
+
+    @Test
+    public void testPeriodicJournalsTheUnchangedStatsMetaForFollowers() {
+        addStatsMeta(TABLE);
+        AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+        ExternalBasicStatsMeta before = analyzeMgr.getExternalBasicStatsMetaMap()
+                .get(new AnalyzeMgr.StatsMetaKey(CATALOG, DB, TABLE));
+        LocalDateTime updateTime = before.getUpdateTime();
+        new FakeStatsTable(Lists.newArrayList("par_col=7"), true);
+        List<ExternalBasicStatsMeta> logged = captureJournaledStatsMeta();
+        runPeriodic();
+        Assertions.assertEquals(1, logged.size());
+        Assertions.assertSame(before, logged.get(0));
+        Assertions.assertEquals(updateTime, logged.get(0).getUpdateTime());
+        Assertions.assertSame(before, analyzeMgr.getExternalBasicStatsMetaMap()
+                .get(new AnalyzeMgr.StatsMetaKey(CATALOG, DB, TABLE)));
+    }
+
+    // The metadata's column list is only the last collection's (a query-triggered one may have collected c2 alone),
+    // and replay refreshes that list: the cleaned columns are added to it, nothing else changes.
+    @Test
+    public void testPeriodicJournalsTheCleanedColumnsMissingFromTheColumnList() {
+        addStatsMeta(TABLE);
+        AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+        AnalyzeMgr.StatsMetaKey key = new AnalyzeMgr.StatsMetaKey(CATALOG, DB, TABLE);
+        ExternalBasicStatsMeta before = analyzeMgr.getExternalBasicStatsMetaMap().get(key);
+        before.setColumns(Lists.newArrayList("c2"));
+        new FakeStatsTable(Lists.newArrayList("par_col=7"), true);
+        List<ExternalBasicStatsMeta> logged = captureJournaledStatsMeta();
+        runPeriodic();
+        Assertions.assertEquals(1, logged.size());
+        ExternalBasicStatsMeta journaled = logged.get(0);
+        Assertions.assertEquals(Lists.newArrayList("c2", "c1"), journaled.getColumns());
+        // The journal keeps times to the second, as for any journaled metadata.
+        Assertions.assertEquals(before.getUpdateTime().truncatedTo(ChronoUnit.SECONDS), journaled.getUpdateTime());
+        Assertions.assertEquals(before.getColumnStatsMetaMap().keySet(), journaled.getColumnStatsMetaMap().keySet());
+        for (String column : columns()) {
+            Assertions.assertEquals(before.getColumnStatsMeta(column).getUpdateTime().truncatedTo(ChronoUnit.SECONDS),
+                    journaled.getColumnStatsMeta(column).getUpdateTime());
+        }
+        Assertions.assertSame(journaled, analyzeMgr.getExternalBasicStatsMetaMap().get(key));
+    }
+
+    @Test
+    public void testPeriodicJournalsNothingWhenNoPartitionIsMissing() {
+        addStatsMeta(TABLE);
+        new FakeStatsTable(Lists.newArrayList("par_col=1"), true);
+        List<ExternalBasicStatsMeta> logged = captureJournaledStatsMeta();
+        runPeriodic();
+        Assertions.assertTrue(logged.isEmpty());
+    }
+
+    @Test
+    public void testPeriodicJournalsNothingWhenEveryDeleteFailed() {
+        addStatsMeta(TABLE);
+        new FakeStatsTable(Lists.newArrayList("par_col=7"), false);
+        List<ExternalBasicStatsMeta> logged = captureJournaledStatsMeta();
+        runPeriodic();
+        Assertions.assertTrue(logged.isEmpty());
     }
 
     @Test

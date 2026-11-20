@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "v3.5.0以降、OAuth 2.0 認可コードフロー を使用して Web UI・JDBC ドライバー経由のクライアント認証をサポートします。"
 sidebar_position: 50
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # OAuth 2.0 認証

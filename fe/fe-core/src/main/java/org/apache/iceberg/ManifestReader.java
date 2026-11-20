@@ -43,6 +43,8 @@ import org.apache.iceberg.relocated.com.google.common.collect.Sets;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.PartitionSet;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.Collection;
@@ -51,6 +53,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 import static org.apache.iceberg.expressions.Expressions.alwaysTrue;
@@ -64,6 +67,8 @@ import static org.apache.iceberg.expressions.Expressions.alwaysTrue;
 // existed upstream.
 public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         implements CloseableIterable<F> {
+    private static final Logger LOG = LogManager.getLogger(ManifestReader.class);
+
     static final ImmutableList<String> ALL_COLUMNS = ImmutableList.of("*");
 
     private static final Types.NestedField UNPARTITIONED_PARTITION_FIELD =
@@ -370,10 +375,13 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
                 ManifestColumnStats.builder(identifierFieldIds, cacheStatsCandidateRanks, cacheStatsColumnLimit,
                         cacheStatsExpectedFileCount, cacheStatsTruncatedTypes) : null;
         Map<Integer, DataFile> tmpStatslessDataFiles = new ConcurrentHashMap<>();
+        // live data entries read, to log a fill that does not match the manifest
+        AtomicInteger liveDataEntries = new AtomicInteger();
         if (statsBuilder != null) {
             entries = CloseableIterable.transform(entries,
                     entry -> {
                         if (entry.isLive()) {
+                            liveDataEntries.incrementAndGet();
                             DataFile dataFile = (DataFile) entry.file();
                             tmpStatslessDataFiles.put(statsBuilder.add(dataFile), dataFile.copyWithoutStats());
                         }
@@ -383,6 +391,7 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
             entries = CloseableIterable.transform(entries,
                     entry -> {
                         if (entry.isLive()) {
+                            liveDataEntries.incrementAndGet();
                             tmpDataFiles.add(DataFileWrapper.wrap(((DataFile) entry.file()).copyWithoutStats()));
                         }
                         return entry;
@@ -437,6 +446,7 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
                                     tmpDataFiles.add(DataFileWrapper.wrap(dataFile, columnStats, index)));
                         }
                         if (!tmpDataFiles.isEmpty()) {
+                            logDataFileCacheFill(liveDataEntries.get(), tmpDataFiles);
                             dataFileCache.put(file.location(), tmpDataFiles); // to recalculate the weight
                         }
                         if (!tmpDeleteFiles.isEmpty()) {
@@ -448,6 +458,17 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
                 }
             }
         };
+    }
+
+    // Records a fill whose size differs from the manifest's declared live file count, which the read side will drop;
+    // a fill happens once per cache miss, so this stays rare. Only counts are compared: no extra memory per fill.
+    private void logDataFileCacheFill(int liveEntries, Set<DataFile> files) {
+        // cacheStatsExpectedFileCount is the manifest's added + existing file count, 0 when unknown
+        int declared = cacheStatsExpectedFileCount;
+        if (declared > 0 && (liveEntries != declared || files.size() != declared)) {
+            LOG.warn("Iceberg manifest cache fill for {} does not match the manifest: read {} live entries, "
+                    + "cached {} files, manifest declares {}", file.location(), liveEntries, files.size(), declared);
+        }
     }
 
     private boolean shouldCacheDataFiles() {

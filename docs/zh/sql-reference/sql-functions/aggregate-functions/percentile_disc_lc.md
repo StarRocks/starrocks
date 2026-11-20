@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "percentile_disc_lc 计算百分位数，使用 hash 表实现，低基数输入时内存占用少。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # percentile_disc_lc

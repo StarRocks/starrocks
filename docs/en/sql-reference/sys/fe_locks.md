@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "fe_locks provides information about metadata locks in StarRocks FE."
+products: [oss, enterprise, anywhere]
 ---
 
 # fe_locks

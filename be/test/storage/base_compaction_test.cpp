@@ -20,6 +20,7 @@
 #include <cstddef>
 
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/schema.h"
 #include "common/config_compaction_fwd.h"
@@ -30,12 +31,16 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction.h"
+#include "storage/cumulative_compaction.h"
+#include "storage/default_compaction_policy.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
+#include "storage/tablet_reader.h"
+#include "storage/tablet_reader_params.h"
 #include "types/json_value.h"
 
 namespace starrocks {
@@ -389,6 +394,107 @@ TEST_F(BaseCompactionTest, test_vertical_compact_succeed) {
 TEST_F(BaseCompactionTest, test_vertical_compact_failed_with_gin) {
     config::vertical_compaction_max_columns_per_group = 1;
     do_compaction_failed_with_gin();
+}
+
+TEST_F(BaseCompactionTest, overwrite_recalculates_cumulative_point) {
+    create_tablet_schema(DUP_KEYS);
+    auto tablet_meta = std::make_shared<TabletMeta>();
+    create_tablet_meta(tablet_meta.get());
+    auto tablet = Tablet::create_tablet_from_meta(tablet_meta, _engine->get_stores()[0]);
+    ASSERT_OK(tablet->init());
+    for (int64_t version : {1, 5}) {
+        RowsetWriterContext context;
+        create_rowset_writer_context(&context);
+        context.rowset_id.init(10000 + version);
+        context.version = Version(version, version);
+        std::unique_ptr<RowsetWriter> writer;
+        ASSERT_OK(RowsetFactory::create_rowset_writer(context, &writer));
+        ASSERT_OK(writer->flush());
+        ASSIGN_OR_ABORT(auto rowset, writer->build());
+        ASSERT_FALSE(rowset->is_overlapped());
+        ASSERT_OK(tablet->overwrite_rowset(rowset, version));
+        tablet->calculate_cumulative_point();
+        EXPECT_EQ(version + 1, tablet->cumulative_layer_point());
+    }
+}
+
+TEST_F(BaseCompactionTest, overwritten_overlapping_rowset_can_be_cumulatively_compacted) {
+    auto saved_min_deltas = config::min_cumulative_compaction_num_singleton_deltas;
+    DeferOp restore_config([&] { config::min_cumulative_compaction_num_singleton_deltas = saved_min_deltas; });
+    config::min_cumulative_compaction_num_singleton_deltas = 2;
+    create_tablet_schema(AGG_KEYS);
+    RowsetWriterContext context;
+    create_rowset_writer_context(&context);
+    std::unique_ptr<RowsetWriter> writer;
+    ASSERT_OK(RowsetFactory::create_rowset_writer(context, &writer));
+    ASSERT_OK(writer->flush());
+    ASSIGN_OR_ABORT(auto empty_rowset, writer->build());
+    auto tablet_meta = std::make_shared<TabletMeta>();
+    create_tablet_meta(tablet_meta.get());
+    tablet_meta->add_rs_meta(empty_rowset->rowset_meta());
+    auto tablet = Tablet::create_tablet_from_meta(tablet_meta, _engine->get_stores()[0]);
+    ASSERT_OK(tablet->init());
+    tablet->calculate_cumulative_point();
+    ASSERT_EQ(2, tablet->cumulative_layer_point());
+
+    context.rowset_id.init(10001);
+    context.version = Version(2, 2);
+    context.segments_overlap = OVERLAPPING;
+    ASSERT_OK(RowsetFactory::create_rowset_writer(context, &writer));
+    rowset_writer_add_rows(writer);
+    ASSERT_OK(writer->flush());
+    rowset_writer_add_rows(writer);
+    ASSERT_OK(writer->flush());
+    ASSIGN_OR_ABORT(auto rowset, writer->build());
+    ASSERT_EQ(2, rowset->num_segments());
+    ASSERT_OK(tablet->overwrite_rowset(rowset, 2));
+    ASSERT_EQ(Version(0, 2), rowset->version());
+
+    auto check_rows = [&] {
+        auto schema = ChunkHelper::convert_schema(_tablet_schema);
+        TabletReader reader(tablet, Version(0, 2), schema);
+        TabletReaderParams params;
+        params.skip_aggregation = false;
+        ASSERT_OK(reader.prepare());
+        ASSERT_OK(reader.open(params));
+        auto chunk = ChunkFactory::new_chunk(schema, 1024);
+        size_t count = 0;
+        while (true) {
+            chunk->reset();
+            auto st = reader.get_next(chunk.get());
+            if (st.is_end_of_file()) break;
+            ASSERT_OK(st);
+            for (size_t i = 0; i < chunk->num_rows(); ++i) {
+                int32_t key = chunk->get_column_by_index(0)->get(i).get_int32();
+                ASSERT_EQ(2 * (10000 + key), chunk->get_column_by_index(2)->get(i).get_int32());
+            }
+            count += chunk->num_rows();
+        }
+        EXPECT_EQ(1024, count);
+        reader.close();
+    };
+    check_rows();
+    tablet->calculate_cumulative_point();
+    EXPECT_EQ(0, tablet->cumulative_layer_point());
+    std::vector<RowsetSharedPtr> candidates;
+    tablet->pick_candicate_rowsets_to_cumulative_compaction(&candidates);
+    EXPECT_EQ(1, candidates.size());
+    const auto point_before_selection = tablet->cumulative_layer_point();
+    DefaultCumulativeBaseCompactionPolicy policy(tablet.get());
+    double score = 0;
+    CompactionType type = INVALID_COMPACTION;
+    const bool selected = policy.need_compaction(&score, &type);
+    EXPECT_TRUE(selected);
+    EXPECT_EQ(CUMULATIVE_COMPACTION, type);
+    EXPECT_EQ(2, score);
+    tablet->set_cumulative_layer_point(point_before_selection);
+    CumulativeCompaction compaction(_compaction_mem_tracker.get(), tablet);
+    const auto compact_status = compaction.compact();
+    ASSERT_OK(compact_status);
+    auto compacted = tablet->get_rowset_by_version(Version(0, 2));
+    ASSERT_NE(nullptr, compacted);
+    EXPECT_FALSE(compacted->is_overlapped());
+    check_rows();
 }
 
 } // namespace starrocks

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "BOOLEAN 类型用 0 表示 false，1 表示 true，与 TINYINT 相同。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # BOOLEAN

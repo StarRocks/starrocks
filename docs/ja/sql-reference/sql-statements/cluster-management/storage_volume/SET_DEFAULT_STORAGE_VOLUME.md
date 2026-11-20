@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SET DEFAULT STORAGE VOLUME は、ストレージボリュームをデフォルトのストレージボリュームとして設定します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SET DEFAULT STORAGE VOLUME

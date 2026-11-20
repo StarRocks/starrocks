@@ -56,6 +56,7 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/txn_log.h"
+#include "storage/lake/txn_vlog_format.h"
 #include "storage/lake/vacuum.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/lake/vertical_compaction_task.h"
@@ -106,6 +107,26 @@ static Status load_lake_protobuf(const std::string& path, ::google::protobuf::Me
                                  const std::shared_ptr<FileSystem>& fs = nullptr) {
     ProtobufFileWithHeader file(path, fs, LAKE_META_HEADER_MAGIC_NUMBER, /*allow_plain_protobuf_fallback=*/true);
     return file.load(message, fill_cache);
+}
+
+static Status validate_txn_vlog_group(const TxnLogVector& logs, bool write_only) {
+    if (logs.empty()) {
+        return Status::InvalidArgument("empty txn vlog group");
+    }
+    for (const auto& log : logs) {
+        if (!log || !log->has_tablet_id() || !log->has_txn_id()) {
+            return Status::InvalidArgument("txn vlog group entry lacks tablet id or txn id");
+        }
+        if (log->tablet_id() != logs.front()->tablet_id() || log->txn_id() != logs.front()->txn_id()) {
+            return Status::InvalidArgument("txn vlog group entries have different tablet ids or txn ids");
+        }
+        if (write_only && (!log->has_op_write() || log->has_op_compaction() || log->has_op_schema_change() ||
+                           log->has_op_alter_metadata() || log->has_op_replication() ||
+                           log->has_op_parallel_compaction() || log->has_op_add_index() || log->has_op_drop_index())) {
+            return Status::InvalidArgument("txn vlog group only supports op_write statements");
+        }
+    }
+    return Status::OK();
 }
 
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
@@ -207,6 +228,10 @@ std::string TabletManager::txn_slog_location(int64_t tablet_id, int64_t txn_id) 
 
 std::string TabletManager::txn_vlog_location(int64_t tablet_id, int64_t version) const {
     return _location_provider->txn_vlog_location(tablet_id, version);
+}
+
+std::string TabletManager::txn_vlog_group_location(int64_t tablet_id, int64_t version) const {
+    return _location_provider->txn_vlog_group_location(tablet_id, version);
 }
 
 std::string TabletManager::segment_location(int64_t tablet_id, std::string_view segment_name) const {
@@ -1492,6 +1517,86 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_vlog(const std::string& path, bool fi
     return get_txn_log(path, fill_cache);
 }
 
+StatusOr<TxnLogVector> TabletManager::get_txn_vlog_group(const std::string& path, bool fill_cache) {
+    TEST_ERROR_POINT("TabletManager::get_txn_vlog");
+    auto t0 = butil::gettimeofday_us();
+    // Set once bytes that carry a checksum have decoded. A validation failure after that is the file as written,
+    // which dropping the cached copy and reading it again cannot change, so it skips the corruption handler.
+    bool checksum_verified = false;
+    auto load = [&]() -> StatusOr<TxnLogVector> {
+        checksum_verified = false;
+        ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(path));
+        RandomAccessFileOptions opts{.skip_fill_local_cache = !fill_cache};
+        ASSIGN_OR_RETURN(auto file, fs->new_random_access_file(opts, path));
+        ASSIGN_OR_RETURN(auto content, file->read_all());
+        const auto magic = txn_vlog_magic(content);
+        const bool grouped = magic == kTxnVlogGroupMagic;
+        if (!grouped && is_txn_vlog_group_file(path)) {
+            // Do not let a damaged group header fall back to the legacy single-log parser.
+            return Status::Corruption(fmt::format("txn vlog group {} lacks the group header", path));
+        }
+        TxnLogVector logs;
+        if (grouped) {
+            CombinedTxnLogPB group;
+            RETURN_IF_ERROR(ProtobufFileWithHeader::load_from_buffer(&group, content, kTxnVlogGroupMagic));
+            logs.reserve(group.txn_logs_size());
+            for (auto& log : *group.mutable_txn_logs()) {
+                normalize_txn_log_after_load(&log);
+                logs.push_back(std::make_shared<TxnLog>(std::move(log)));
+            }
+        } else {
+            auto log = std::make_shared<TxnLog>();
+            RETURN_IF_ERROR(ProtobufFileWithHeader::load_from_buffer(log.get(), content, LAKE_META_HEADER_MAGIC_NUMBER,
+                                                                     /*allow_plain_protobuf_fallback=*/true));
+            normalize_txn_log_after_load(log.get());
+            logs.push_back(std::move(log));
+        }
+        checksum_verified = grouped || magic == LAKE_META_HEADER_MAGIC_NUMBER;
+        auto st = validate_txn_vlog_group(logs, grouped);
+        if (!st.ok()) {
+            return Status::Corruption(st.to_string());
+        }
+        return logs;
+    };
+    auto result = load();
+    if (!result.ok() && !checksum_verified) {
+        RETURN_IF_ERROR(corrupted_txn_log_handler(result.status(), path));
+        // A cached filesystem block may have been corrupt. Re-read into fresh protobufs after the
+        // existing cache-corruption handler drops it, as load_txn_log does for single logs.
+        result = load();
+    }
+    if (result.ok()) {
+        g_get_txn_log_latency << (butil::gettimeofday_us() - t0);
+    }
+    return result;
+}
+
+StatusOr<TxnLogVector> TabletManager::get_txn_vlog_group(int64_t tablet_id, int64_t version, std::string* path) {
+    // Through the metacache, as a legacy version log was read before statement groups existed.
+    return resolve_txn_vlog(tablet_id, version, get_txn_vlog(txn_vlog_location(tablet_id, version), false), path);
+}
+
+StatusOr<TxnLogVector> TabletManager::resolve_txn_vlog(int64_t tablet_id, int64_t version, StatusOr<TxnLogPtr> legacy,
+                                                       std::string* path) {
+    if (!legacy.ok() && (legacy.status().is_not_found() || legacy.status().is_corruption())) {
+        // No legacy file, or a damaged one next to the group a retry wrote after a writer-flag change.
+        auto group_path = txn_vlog_group_location(tablet_id, version);
+        auto group = get_txn_vlog_group(group_path, false);
+        // With neither file this reports the legacy one, as the read did before statement groups existed.
+        if (group.ok() || (legacy.status().is_not_found() && !group.status().is_not_found())) {
+            if (path != nullptr) {
+                *path = std::move(group_path);
+            }
+            return group;
+        }
+    }
+    if (path != nullptr) {
+        *path = txn_vlog_location(tablet_id, version);
+    }
+    ASSIGN_OR_RETURN(auto log, std::move(legacy));
+    return TxnLogVector{std::move(log)};
+}
+
 StatusOr<TxnLogPtr> TabletManager::get_txn_slog(const std::string& path, bool fill_cache) {
     TEST_ERROR_POINT("TabletManager::get_txn_slog");
     return get_txn_log(path, fill_cache);
@@ -1554,10 +1659,6 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_slog(int64_t tablet_id, int64_t txn_i
     return get_txn_log(txn_slog_location(tablet_id, txn_id));
 }
 
-StatusOr<TxnLogPtr> TabletManager::get_txn_vlog(int64_t tablet_id, int64_t version) {
-    return get_txn_log(txn_vlog_location(tablet_id, version), false);
-}
-
 DEFINE_FAIL_POINT(put_txn_log_fail);
 Status TabletManager::put_txn_log(const TxnLogPtr& log, const std::string& path) {
     FAIL_POINT_TRIGGER_RETURN(put_txn_log_fail, Status::InternalError("put_txn_log_fail"));
@@ -1608,6 +1709,34 @@ Status TabletManager::put_txn_slog(const TxnLogPtr& log, const std::string& path
 
 Status TabletManager::put_txn_vlog(const TxnLogPtr& log, int64_t version) {
     return put_txn_log(log, txn_vlog_location(log->tablet_id(), version));
+}
+
+Status TabletManager::put_txn_vlog_group(const TxnLogVector& logs, int64_t version) {
+    RETURN_IF_ERROR(validate_txn_vlog_group(logs, logs.size() > 1));
+    if (logs.size() == 1) {
+        return put_txn_vlog(logs.front(), version);
+    }
+    // A file of its own: the legacy version log is never rewritten in this format, so a cached copy of it
+    // can never turn stale.
+    const auto path = txn_vlog_group_location(logs.front()->tablet_id(), version);
+    // The fail point, slow-write guard and latency metric of put_txn_log.
+    FAIL_POINT_TRIGGER_RETURN(put_txn_log_fail, Status::InternalError("put_txn_log_fail"));
+    DUMP_TRACE_IF_TIMEOUT(config::lake_put_txn_log_timeout_guard_ms);
+    auto t0 = butil::gettimeofday_us();
+    CombinedTxnLogPB group;
+    for (const auto& source : logs) {
+        auto* log = group.add_txn_logs();
+        log->CopyFrom(*source);
+        normalize_txn_log_after_load(log);
+        RETURN_IF_ERROR(normalize_txn_log_before_save(log));
+    }
+    // Always emit the distinct header, even with the general protobuf checksum option disabled.
+    // Without it an older reader could parse CombinedTxnLogPB as an all-default TxnLogPB and a
+    // cross-publish could then rewrite tablet_id and advance visibility without applying any data.
+    RETURN_IF_ERROR(ProtobufFileWithHeader(path, kTxnVlogGroupMagic).save(group));
+    VLOG(2) << "put txn vlog group path " << path << " statement count " << logs.size();
+    g_put_txn_log_latency << (butil::gettimeofday_us() - t0);
+    return Status::OK();
 }
 
 static Status check_combined_txn_log_coverage(const CombinedTxnLogPB& logs,
@@ -2081,6 +2210,25 @@ StatusOr<VersionedTablet> TabletManager::get_tablet(int64_t tablet_id, int64_t v
     return VersionedTablet(this, std::move(metadata));
 }
 
+// Whether a cached |segment| can serve a request for |tablet_schema|.
+static bool segment_schema_matches(Segment& segment, const TabletSchemaPtr& tablet_schema) {
+    const auto cached_schema = segment.tablet_schema_share_ptr();
+    return cached_schema != nullptr && cached_schema->id() == tablet_schema->id() &&
+           cached_schema->schema_version() == tablet_schema->schema_version() &&
+           cached_schema->num_columns() == tablet_schema->num_columns();
+}
+
+SegmentPtr TabletManager::lookup_opened_segment(const FileInfo& segment_info, const TabletSchemaPtr& tablet_schema) {
+    auto segment = metacache()->lookup_segment(MetacacheKey::segment(segment_info), /*count=*/false);
+    if (segment == nullptr || !segment->has_opened() ||
+        (tablet_schema != nullptr && !segment_schema_matches(*segment, tablet_schema))) {
+        return nullptr;
+    }
+    // Counted only when the probe supplies the segment: a rejected entry is looked up, and counted, by the load.
+    metacache()->count_segment_hit();
+    return segment;
+}
+
 StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
                                                  const LakeIOOptions& lake_io_opts, bool fill_meta_cache,
                                                  TabletSchemaPtr tablet_schema, OlapReaderStatistics* stats) {
@@ -2116,10 +2264,7 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
         }
     }
     if (tablet_schema != nullptr) {
-        const auto cached_schema = segment->tablet_schema_share_ptr();
-        if (cached_schema == nullptr || cached_schema->id() != tablet_schema->id() ||
-            cached_schema->schema_version() != tablet_schema->schema_version() ||
-            cached_schema->num_columns() != tablet_schema->num_columns()) {
+        if (!segment_schema_matches(*segment, tablet_schema)) {
             // A physical lookup hit can still be unusable for this request's schema.
             // Count the final cache winner, including an insert-if-absent race.
             g_segment_cache_schema_reject_total << 1;

@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "通过 Block Cache 预热在查询前主动加载远端数据到本地缓存，提升数据湖分析查询性能。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Block Cache 预热

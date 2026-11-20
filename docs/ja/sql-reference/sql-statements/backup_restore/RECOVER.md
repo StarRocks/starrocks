@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP コマンドで削除されたデータベース、テーブル、またはパーティションを復元します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # RECOVER

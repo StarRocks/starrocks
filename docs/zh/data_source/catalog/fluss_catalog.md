@@ -2,6 +2,7 @@
 sidebar_position: 110
 displayed_sidebar: docs
 description: "使用 Fluss catalog 查询 Apache Fluss 表中的数据。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Experimental from '../../_assets/commonMarkdown/_experimental.mdx'

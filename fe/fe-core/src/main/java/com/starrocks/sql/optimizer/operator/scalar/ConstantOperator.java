@@ -416,7 +416,9 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
 
     @Override
     public int hashCodeSelf() {
-        return Objects.hash(value, type.getPrimitiveType(), isNull);
+        // equalsSelf matches CHAR and VARCHAR through matchesType(), so both hash as VARCHAR
+        PrimitiveType hashType = type.isStringType() ? PrimitiveType.VARCHAR : type.getPrimitiveType();
+        return Objects.hash(value, hashType, isNull);
     }
 
     @Override

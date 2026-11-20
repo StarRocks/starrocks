@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SET CATALOG 用于切换到指定的 Catalog。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SET CATALOG

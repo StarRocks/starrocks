@@ -73,8 +73,7 @@ public:
                             StreamLoadExecutor* stream_load_executor)
             : _exec_env(exec_env),
               _stream_load_orchestrator(stream_load_orchestrator),
-              _stream_load_executor(stream_load_executor),
-              _data_consumer_pool(10) {}
+              _stream_load_executor(stream_load_executor) {}
 
     ~RoutineLoadTaskExecutor() noexcept = default;
 
@@ -84,15 +83,20 @@ public:
     // submit a routine load task
     Status submit_task(const TRoutineLoadTask& task);
 
+    // Append pool evictions to the caller's container so an RPC can send its response before broker close.
     Status get_kafka_partition_meta(const PKafkaMetaProxyRequest& request, std::vector<int32_t>* partition_ids,
-                                    int timeout, std::string* group_id);
+                                    int timeout, std::string* group_id,
+                                    std::vector<std::shared_ptr<DataConsumer>>* evicted_consumers);
 
     Status get_kafka_partition_offset(const PKafkaOffsetProxyRequest& request, std::vector<int64_t>* beginning_offsets,
-                                      std::vector<int64_t>* latest_offsets, int timeout, std::string* group_id);
+                                      std::vector<int64_t>* latest_offsets, int timeout, std::string* group_id,
+                                      std::vector<std::shared_ptr<DataConsumer>>* evicted_consumers);
 
-    Status get_pulsar_partition_meta(const PPulsarMetaProxyRequest& request, std::vector<std::string>* partitions);
+    Status get_pulsar_partition_meta(const PPulsarMetaProxyRequest& request, std::vector<std::string>* partitions,
+                                     std::vector<std::shared_ptr<DataConsumer>>* evicted_consumers);
 
-    Status get_pulsar_partition_backlog(const PPulsarBacklogProxyRequest& request, std::vector<int64_t>* backlog_num);
+    Status get_pulsar_partition_backlog(const PPulsarBacklogProxyRequest& request, std::vector<int64_t>* backlog_num,
+                                        std::vector<std::shared_ptr<DataConsumer>>* evicted_consumers);
 
 private:
     // execute the task

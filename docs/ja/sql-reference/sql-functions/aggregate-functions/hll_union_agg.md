@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "HLL は HyperLogLog アルゴリズムに基づく実装です。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # hll_union_agg

@@ -887,7 +887,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (isGeneratedColumn()) {
             String generatedColumnSql;
             if (idToColumn != null) {
-                generatedColumnSql = ExprToSql.toSql(generatedColumnExpr.convertToColumnNameExpr(idToColumn));
+                generatedColumnSql = AstToSQLBuilder.toSQL(generatedColumnExpr.convertToColumnNameExpr(idToColumn));
             } else {
                 generatedColumnSql = generatedColumnExpr.toSql();
             }

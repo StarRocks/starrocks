@@ -55,7 +55,15 @@ SELECT count(*), sum(amount) FROM mv_range_pre_split;
 SELECT region, amount FROM mv_range_pre_split WHERE region = 'r9';
 
 drop materialized view mv_range_pre_split;
-drop table ivm_ice_${uuid0}.ivm_ice_db_${uuid0}.base;
+drop table ivm_ice_${uuid0}.ivm_ice_db_${uuid0}.base force;
 drop database ivm_ice_${uuid0}.ivm_ice_db_${uuid0};
 drop catalog ivm_ice_${uuid0};
 drop database db_${uuid0};
+
+CLEANUP {
+drop database if exists default_catalog.db_${uuid0} force;
+drop table if exists ivm_ice_${uuid0}.ivm_ice_db_${uuid0}.base force;
+drop database if exists ivm_ice_${uuid0}.ivm_ice_db_${uuid0};
+set catalog default_catalog;
+drop catalog if exists ivm_ice_${uuid0};
+} END CLEANUP
