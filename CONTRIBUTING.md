@@ -143,3 +143,5 @@ You are welcome to author a blog article about StarRocks in the media, or host a
 ## Code of conduct
 
 All members in the community are instructed to follow our [Code of Conduct](https://github.com/StarRocks/starrocks/blob/main/CODE_OF_CONDUCT.md).
+
+<!-- Temporary change to verify the webhook that requests @codex review next to check-blacklist.sh; this PR will be closed. -->
