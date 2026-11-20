@@ -1,0 +1,7 @@
+-- name: test_refresh_external_table_unknown_db
+-- A missing database must be reported as an unknown database, not as an unknown table.
+create database db_${uuid0};
+REFRESH EXTERNAL TABLE default_catalog.not_exist_db_for_refresh.not_exist_tbl;
+REFRESH EXTERNAL TABLE not_exist_db_for_refresh.not_exist_tbl;
+REFRESH EXTERNAL TABLE default_catalog.db_${uuid0}.not_exist_tbl;
+drop database db_${uuid0};
