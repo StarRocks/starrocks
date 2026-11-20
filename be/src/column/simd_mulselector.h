@@ -80,7 +80,7 @@ public:
 
             const __m256i all_zero_vec = _mm256_setzero_si256();
 
-            while (processed_rows + 32 < row_sz) {
+            while (processed_rows + 32 <= row_sz) {
                 __m256i selected_vec = all_zero_vec;
                 // load select vector
                 for (int i = 0; i < select_vec_size; ++i) {
@@ -171,7 +171,7 @@ public:
             // Disjoint32 optimisation: resolve mutually disjoint 32-row winner masks once per batch
             // and lazily load only active branches per YMM sub-chunk.
             __m256i const_vecs[select_list_size];
-            if (processed_rows + 32 < row_sz) {
+            if (processed_rows + 32 <= row_sz) {
                 for (int i = 0; i < select_list_size; ++i) {
                     if (then_column_is_const[i]) {
                         const_vecs[i] = SIMDUtils::set_data(handle_select_data[i][0]);
@@ -186,7 +186,7 @@ public:
                 return _mm256_loadu_si256(reinterpret_cast<const __m256i*>(handle_select_data[branch] + sub * kLanes));
             };
 
-            while (processed_rows + 32 < row_sz) {
+            while (processed_rows + 32 <= row_sz) {
                 uint32_t win_bits[select_vec_size];
                 __m256i claimed_vec = all_zero_vec;
                 uint32_t claimed_bits = 0;

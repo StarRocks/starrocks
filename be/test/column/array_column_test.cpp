@@ -342,14 +342,14 @@ PARALLEL_TEST(ArrayColumnTest, test_filter) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_filter_noncanonical_bytes) {
     const std::vector<uint8_t> non_zero_bytes = {0x01, 0x02, 0x7f, 0x80, 0xff};
-    for (size_t n : {size_t(16), size_t(32), size_t(48), size_t(65), size_t(97)}) {
+    for (size_t n : {size_t(16), size_t(32), size_t(48), size_t(64), size_t(65), size_t(97)}) {
         auto column = ArrayColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
                                           UInt32Column::create());
         Filter filter(n, 0);
         std::vector<int32_t> expected_first_elem;
         for (size_t i = 0; i < n; ++i) {
             column->append_datum(DatumArray{static_cast<int32_t>(i), static_cast<int32_t>(i * 10)});
-            bool select_row = (n == 97 && i >= 32 && i < 64) ? true : (i % 2 == 0);
+            bool select_row = ((n == 64 || n == 97) && i >= 32 && i < 64) ? true : (i % 2 == 0);
             if (select_row) {
                 filter[i] = non_zero_bytes[expected_first_elem.size() % non_zero_bytes.size()];
                 expected_first_elem.push_back(static_cast<int32_t>(i));
@@ -363,6 +363,85 @@ PARALLEL_TEST(ArrayColumnTest, test_filter_noncanonical_bytes) {
             ASSERT_EQ(2u, arr.size()) << "n=" << n << " i=" << i;
             ASSERT_EQ(expected_first_elem[i], arr[0].get_int32()) << "n=" << n << " i=" << i;
             ASSERT_EQ(expected_first_elem[i] * 10, arr[1].get_int32()) << "n=" << n << " i=" << i;
+        }
+    }
+    // Exact multiples of AVX2 batch width (N = 32 and N = 64) across all-zero, all-nonzero
+    // (including non-canonical truthy bytes 0x02, 0x80, 0xFF), single-winner, and mixed patterns.
+    {
+        const uint8_t non_canonical_truthy[3] = {0x02, 0x80, 0xff};
+        // Pattern 0: all-zero
+        // Pattern 1: all-nonzero cycling {0x02, 0x80, 0xff}
+        // Pattern 2: all-nonzero uniform 0x80
+        // Pattern 3: all-nonzero uniform 0xff
+        // Pattern 4: single-winner at first lane (index 0)
+        // Pattern 5: single-winner at last lane of final 32-row batch (index n - 1)
+        // Pattern 6: single-winner per 32-row batch (lane 0 in batch 0, lane 31 in batch 1)
+        // Pattern 7: mixed (for N = 64: batch 0 sparse/all-zero -> batch 1 all-nonzero memmove fast path on final batch)
+        for (size_t n : {size_t(32), size_t(64)}) {
+            for (int pat : {0, 1, 2, 3, 4, 5, 6, 7}) {
+                auto column = ArrayColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
+                                                  UInt32Column::create());
+                Filter filter(n, 0);
+                std::vector<int32_t> expected_first_elem;
+                for (size_t i = 0; i < n; ++i) {
+                    column->append_datum(DatumArray{static_cast<int32_t>(i), static_cast<int32_t>(i * 10)});
+                    uint8_t f_byte = 0;
+                    switch (pat) {
+                    case 0:
+                        f_byte = 0x00;
+                        break;
+                    case 1:
+                        f_byte = non_canonical_truthy[i % 3];
+                        break;
+                    case 2:
+                        f_byte = 0x80;
+                        break;
+                    case 3:
+                        f_byte = 0xff;
+                        break;
+                    case 4:
+                        f_byte = (i == 0) ? 0x02 : 0x00;
+                        break;
+                    case 5:
+                        f_byte = (i == n - 1) ? 0x80 : 0x00;
+                        break;
+                    case 6: {
+                        size_t batch = i / 32;
+                        size_t lane = i % 32;
+                        size_t target_lane = (batch == 0) ? 0 : 31;
+                        f_byte = (lane == target_lane) ? non_canonical_truthy[batch % 3] : 0x00;
+                        break;
+                    }
+                    case 7:
+                        if (n == 64) {
+                            // Batch 0 has 2 hits so result_offset != check_offset when batch 1 (all-nonzero)
+                            // executes the memmove fast path on the final 32-row batch (check_offset + 32 == to).
+                            if (i < 32) {
+                                f_byte = (i == 3 || i == 19) ? 0x02 : 0x00;
+                            } else {
+                                f_byte = non_canonical_truthy[i % 3];
+                            }
+                        } else {
+                            f_byte = ((i % 3) == 1) ? non_canonical_truthy[i % 3] : 0x00;
+                        }
+                        break;
+                    }
+                    filter[i] = f_byte;
+                    if (f_byte != 0) {
+                        expected_first_elem.push_back(static_cast<int32_t>(i));
+                    }
+                }
+                size_t ret = column->filter_range(filter, 0, n);
+                ASSERT_EQ(expected_first_elem.size(), ret) << "n=" << n << " pat=" << pat;
+                ASSERT_EQ(expected_first_elem.size(), column->size()) << "n=" << n << " pat=" << pat;
+                for (size_t i = 0; i < expected_first_elem.size(); ++i) {
+                    auto arr = column->get(i).get_array();
+                    ASSERT_EQ(2u, arr.size()) << "n=" << n << " pat=" << pat << " i=" << i;
+                    ASSERT_EQ(expected_first_elem[i], arr[0].get_int32()) << "n=" << n << " pat=" << pat << " i=" << i;
+                    ASSERT_EQ(expected_first_elem[i] * 10, arr[1].get_int32())
+                            << "n=" << n << " pat=" << pat << " i=" << i;
+                }
+            }
         }
     }
     // All-empty column (elements_end == 0): exercises empty element_filter (data() == nullptr)

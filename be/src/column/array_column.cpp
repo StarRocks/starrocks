@@ -338,7 +338,7 @@ size_t ArrayColumn::filter_range(const Filter& filter, size_t from, size_t to) {
     constexpr size_t kBatchSize = /*width of AVX registers*/ 256 / 8;
     const __m256i all0 = _mm256_setzero_si256();
 
-    while (check_offset + kBatchSize < to) {
+    while (check_offset + kBatchSize <= to) {
         __m256i f = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(f_data + check_offset));
         uint32_t mask = ~static_cast<uint32_t>(_mm256_movemask_epi8(_mm256_cmpeq_epi8(f, all0)));
 
