@@ -14,51 +14,33 @@
 
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 
-<<<<<<< HEAD
 #include <brpc/server.h>
 #include <gtest/gtest.h>
 
 #include <chrono>
 #include <thread>
 
+#include "column/chunk.h"
 #include "common/config.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
-=======
-#include <gtest/gtest.h>
-
-#include "base/testutil/assert.h"
-#include "base/utility/defer_op.h"
-#include "column/chunk.h"
-#include "common/config_exec_flow_fwd.h"
-#include "common/config_network_fwd.h"
-#include "exec/pipeline/fragment_context.h"
->>>>>>> 2113b39 ([Enhancement] Skip compression instead of erroring when chunk size exceeds codec max input size (#70918))
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Partitions_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/data.pb.h"
-<<<<<<< HEAD
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/casts.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "service/backend_options.h"
 #include "testutil/assert.h"
+#include "testutil/column_test_helper.h"
+#include "util/compression/block_compression.h"
 #include "util/countdown_latch.h"
 #include "util/defer_op.h"
 #include "util/internal_service_recoverable_stub.h"
-
-namespace starrocks::pipeline {
-
-=======
-#include "gutil/casts.h"
-#include "runtime/exec_env.h"
-#include "runtime/runtime_state.h"
-#include "testutil/column_test_helper.h"
-#include "util/compression/block_compression.h"
 
 namespace starrocks::pipeline {
 
@@ -81,7 +63,6 @@ public:
     size_t max_input_size() const override { return 0; }
 };
 
->>>>>>> 2113b39 ([Enhancement] Skip compression instead of erroring when chunk size exceeds codec max input size (#70918))
 class ExchangeSinkOperatorTest : public ::testing::Test {
 public:
     void SetUp() override {
@@ -94,12 +75,9 @@ public:
         _query_context->init_mem_tracker(-1, GlobalEnv::GetInstance()->process_mem_tracker());
 
         TQueryOptions query_options;
-<<<<<<< HEAD
         // Use a large query timeout so an in-flight RPC does not complete on its own during the
         // cancellation test; the test relies on cancel_one_sinker() to abort it promptly instead.
         query_options.__set_query_timeout(300);
-=======
->>>>>>> 2113b39 ([Enhancement] Skip compression instead of erroring when chunk size exceeds codec max input size (#70918))
         TQueryGlobals query_globals;
         _runtime_state = std::make_shared<RuntimeState>(_fragment_id, query_options, query_globals, _exec_env);
         _runtime_state->set_query_ctx(_query_context.get());
@@ -107,14 +85,8 @@ public:
 
         _fragment_context = std::make_shared<FragmentContext>();
         _fragment_context->set_fragment_instance_id(_fragment_id);
-<<<<<<< HEAD
         _fragment_context->set_runtime_state(std::shared_ptr<RuntimeState>{_runtime_state});
         _runtime_state->set_fragment_ctx(_fragment_context.get());
-=======
-        _fragment_context->set_runtime_state(std::shared_ptr{_runtime_state});
-        _runtime_state->set_fragment_ctx(_fragment_context.get());
-        _runtime_state->set_fragment_dict_state(_fragment_context->dict_state());
->>>>>>> 2113b39 ([Enhancement] Skip compression instead of erroring when chunk size exceeds codec max input size (#70918))
 
         TNetworkAddress address;
         address.__set_hostname(BackendOptions::get_local_ip());
@@ -139,10 +111,7 @@ public:
         _factory->set_runtime_state(_runtime_state.get());
     }
 
-<<<<<<< HEAD
     void TearDown() override {}
-=======
-    void TearDown() override { _query_context->set_exec_env(nullptr); }
 
     // Build a minimal single-column INT chunk.
     static ChunkPtr make_chunk() {
@@ -151,7 +120,6 @@ public:
         chunk->append_column(std::move(col), 0);
         return chunk;
     }
->>>>>>> 2113b39 ([Enhancement] Skip compression instead of erroring when chunk size exceeds codec max input size (#70918))
 
 protected:
     TUniqueId _fragment_id;
@@ -163,7 +131,8 @@ protected:
     std::shared_ptr<SinkBuffer> _sink_buffer;
     std::shared_ptr<ExchangeSinkOperatorFactory> _factory;
     TPlanFragmentDestination _destination;
-<<<<<<< HEAD
+
+    AlwaysOverflowCodec _overflow_codec;
 };
 
 // A brpc PInternalService whose transmit_chunk blocks until explicitly released, so the client-side
@@ -285,12 +254,6 @@ TEST_F(SinkBufferCancelTest, cancel_with_no_inflight_rpc_is_safe) {
     EXPECT_TRUE(buffer->is_finished());
 }
 
-} // namespace starrocks::pipeline
-=======
-
-    AlwaysOverflowCodec _overflow_codec;
-};
-
 // When enable_rpc_compress_overflow_skip=true and the codec reports overflow,
 // serialize_chunk should succeed (skip compression rather than error).
 TEST_F(ExchangeSinkOperatorTest, serialize_chunk_overflow_skip_enabled) {
@@ -335,4 +298,3 @@ TEST_F(ExchangeSinkOperatorTest, serialize_chunk_overflow_skip_disabled) {
 }
 
 } // namespace starrocks::pipeline
->>>>>>> 2113b39 ([Enhancement] Skip compression instead of erroring when chunk size exceeds codec max input size (#70918))
