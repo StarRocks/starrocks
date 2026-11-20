@@ -498,6 +498,49 @@ public class SkewJoinTest extends PlanTestBase {
     }
 
     @Test
+    void testSkewJoinNullSafeNoNullSaltWhenOtherSideStatsUnknown() throws Exception {
+        final var oldStatisticsStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
+        final double oldThreshold = connectContext.getSessionVariable().getSkewJoinDataSkewThreshold();
+        final boolean oldEnableStats = connectContext.getSessionVariable().isEnableStatsToOptimizeSkewJoin();
+        final boolean oldEnableRewrite = connectContext.getSessionVariable().isEnableOptimizerSkewJoinOptimizeV1();
+        try {
+            final var emptyStatisticsStorage = new EmptyStatisticStorage() {
+                @Override
+                public ColumnStatistic getColumnStatistic(Table table, String column) {
+                    if (table.getName().equalsIgnoreCase("t0") && column.equalsIgnoreCase("v1")) {
+                        return ColumnStatistic.builder() //
+                                .setNullsFraction(0.8) //
+                                .build();
+                    }
+                    // other side has no statistics
+                    return super.getColumnStatistic(table, column);
+                }
+            };
+            setTableStatistics(getOlapTable("t0"), 1337);
+            setTableStatistics(getOlapTable("t1"), 1337);
+            connectContext.getGlobalStateMgr().setStatisticStorage(emptyStatisticsStorage);
+            connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(0.1);
+            connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
+            connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV1(true);
+
+            // With <=> the other side's NULL count can't be estimated, so NULLs must not be salted
+            String sql = "select * from t0 left join t1 on t0.v1 <=> t1.v4";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "rand_col");
+
+            // With = the other side's NULLs never join, so unknown stats don't matter
+            sql = "select * from t0 left join t1 on t0.v1 = t1.v4";
+            plan = getFragmentPlan(sql);
+            assertCContains(plan, "rand_col");
+        } finally {
+            connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(oldThreshold);
+            connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(oldEnableStats);
+            connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV1(oldEnableRewrite);
+            connectContext.getGlobalStateMgr().setStatisticStorage(oldStatisticsStorage);
+        }
+    }
+
+    @Test
     void testSkewJoinWithMcvOnlySkewByStats() throws Exception {
         final var oldStatisticsStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
         final double oldThreshold = connectContext.getSessionVariable().getSkewJoinDataSkewThreshold();

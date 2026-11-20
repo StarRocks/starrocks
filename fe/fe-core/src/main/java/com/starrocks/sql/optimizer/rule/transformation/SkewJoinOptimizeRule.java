@@ -131,6 +131,20 @@ public class SkewJoinOptimizeRule extends TransformationRule {
                 .map(colStats -> DataSkew.getColumnSkewInfo(leftChildStats, colStats, skewThresholds));
     }
 
+    /**
+     * Estimates the number of NULL rows of the column, empty if the statistics don't allow an estimate.
+     */
+    private static Optional<Double> estimateNullRowCount(Statistics stats, ColumnRefOperator column) {
+        if (stats == null) {
+            return Optional.empty();
+        }
+        final var columnStats = stats.getColumnStatistics().get(column);
+        if (columnStats == null || columnStats.isUnknown() || Double.isNaN(columnStats.getNullsFraction())) {
+            return Optional.empty();
+        }
+        return Optional.of(stats.getOutputRowCount() * columnStats.getNullsFraction());
+    }
+
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
@@ -237,15 +251,12 @@ public class SkewJoinOptimizeRule extends TransformationRule {
             }
 
             // With <=>, NULLs do join, so every NULL row on the other side gets one copy per salt value,
-            // if that blows up cardinality, don't salt NULLs at all.
+            // if that blows up cardinality or it can't be estimated, don't salt NULLs at all.
             if (skewPredicate.nullSafe() && skewValues.stream().anyMatch(ScalarOperator::isConstantNull)) {
-                final var rightChildStats = input.inputAt(1).getStatistics();
-                if (rightChildStats != null && rightChildStats.getColumnStatistics().containsKey(skewPredicate.otherColumn)) {
-                    final var otherNullRows = rightChildStats.getOutputRowCount()
-                            * rightChildStats.getColumnStatistic(skewPredicate.otherColumn).getNullsFraction();
-                    if (otherNullRows > context.getSessionVariable().getSkewJoinMaxOtherSideOverlapRowCount()) {
-                        skewValues.removeIf(ScalarOperator::isConstantNull);
-                    }
+                final var otherNullRows = estimateNullRowCount(input.inputAt(1).getStatistics(), skewPredicate.otherColumn);
+                final var maxOverlapRowCount = context.getSessionVariable().getSkewJoinMaxOtherSideOverlapRowCount();
+                if (otherNullRows.isEmpty() || otherNullRows.get() > maxOverlapRowCount) {
+                    skewValues.removeIf(ScalarOperator::isConstantNull);
                 }
             }
             if (skewValues.isEmpty()) {
