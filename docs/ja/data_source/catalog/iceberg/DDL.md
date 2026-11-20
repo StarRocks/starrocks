@@ -181,6 +181,7 @@ ORDER BY (column_name [ASC | DESC] [NULLS FIRST | NULLS LAST], ...)
 - `location`: テーブルのファイルパス。データベースレベルの場所を指定せずにAWS Glueを使用する場合に必要です。
 - `file_format`: ファイル形式。`parquet` のみがサポートされています（デフォルト）。
 - `compression_codec`: 圧縮アルゴリズム。オプション：SNAPPY、GZIP、ZSTD、LZ4（デフォルト：`zstd`）。
+- `identifier-fields`: 行を識別する列名をカンマ区切りで指定します。Iceberg スキーマの identifier fields として保存されます。各列は、FLOAT と DOUBLE 以外のプリミティブ型で、トップレベルの `NOT NULL` 列である必要があります。このプロパティは CREATE TABLE でのみ設定できます。
 
 ### 例
 
