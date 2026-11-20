@@ -1,0 +1,221 @@
+-- name: test_iceberg_variant_is_null
+create external catalog iceberg_variant_is_null_${uuid0}
+PROPERTIES (
+    "type"="iceberg",
+    "iceberg.catalog.type"="hadoop",
+    "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_variant_is_null/${uuid0}/warehouse/"
+);
+-- result:
+-- !result
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_variant_is_null/${uuid0}/warehouse/db_${uuid0} > /dev/null
+-- result:
+0
+
+-- !result
+use iceberg_variant_is_null_${uuid0}.db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_null (data VARIANT) properties('format-version' = '3');
+-- result:
+-- !result
+shell: ossutil64 cp ../be/test/formats/parquet/test_data/variant_shredding_variant_null.parquet oss://${oss_bucket}/test_iceberg_variant_is_null/${uuid0}/data/null.parquet > /dev/null
+-- result:
+0
+
+-- !result
+alter table t_null execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_is_null/${uuid0}/data/null.parquet', file_format='parquet');
+-- result:
+-- !result
+CREATE TABLE t_empty (data VARIANT) properties('format-version' = '3');
+-- result:
+-- !result
+shell: ossutil64 cp ../be/test/formats/parquet/test_data/variant_shredding_empty_object.parquet oss://${oss_bucket}/test_iceberg_variant_is_null/${uuid0}/data/empty.parquet > /dev/null
+-- result:
+0
+
+-- !result
+alter table t_empty execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_is_null/${uuid0}/data/empty.parquet', file_format='parquet');
+-- result:
+-- !result
+CREATE TABLE t_nested (id BIGINT, data VARIANT) properties('format-version' = '3');
+-- result:
+-- !result
+shell: ossutil64 cp ../be/test/formats/parquet/test_data/variant_shredding_nested_residual.parquet oss://${oss_bucket}/test_iceberg_variant_is_null/${uuid0}/data/nested.parquet > /dev/null
+-- result:
+0
+
+-- !result
+alter table t_nested execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_is_null/${uuid0}/data/nested.parquet', file_format='parquet');
+-- result:
+-- !result
+CREATE TABLE t_nonull (data VARIANT) properties('format-version' = '3');
+-- result:
+-- !result
+shell: ossutil64 cp ../be/test/formats/parquet/test_data/variant_shredding_n_int64.parquet oss://${oss_bucket}/test_iceberg_variant_is_null/${uuid0}/data/nonull.parquet > /dev/null
+-- result:
+0
+
+-- !result
+alter table t_nonull execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_is_null/${uuid0}/data/nonull.parquet', file_format='parquet');
+-- result:
+-- !result
+set cbo_prune_subfield = true;
+-- result:
+-- !result
+select count(*) from t_null where data is not null;
+-- result:
+3
+-- !result
+select count(*) from t_null where data is null;
+-- result:
+1
+-- !result
+select count(*) from t_empty where data is not null;
+-- result:
+3
+-- !result
+select count(*) from t_empty where data is null;
+-- result:
+1
+-- !result
+select count(*) from t_nested where data is not null;
+-- result:
+4
+-- !result
+select id from t_nested where data is null order by id;
+-- result:
+3
+-- !result
+select id from t_nested where data is not null order by id;
+-- result:
+0
+1
+2
+4
+-- !result
+select count(*) from t_nonull where data is not null;
+-- result:
+2
+-- !result
+select count(*) from t_nonull where data is null;
+-- result:
+0
+-- !result
+select count(*) from t_null where data is null or data is not null;
+-- result:
+4
+-- !result
+select data from t_null where data is not null order by cast(data as string);
+-- result:
+null
+null
+5
+-- !result
+select id, data is null from t_nested order by id;
+-- result:
+0	0
+1	0
+2	0
+3	1
+4	0
+-- !result
+select id, get_variant_int(data, '$.a') from t_nested where data is not null order by id;
+-- result:
+0	None
+1	None
+2	None
+4	None
+-- !result
+set cbo_prune_subfield = false;
+-- result:
+-- !result
+select count(*) from t_null where data is not null;
+-- result:
+3
+-- !result
+select count(*) from t_null where data is null;
+-- result:
+1
+-- !result
+select count(*) from t_empty where data is not null;
+-- result:
+3
+-- !result
+select count(*) from t_empty where data is null;
+-- result:
+1
+-- !result
+select count(*) from t_nested where data is not null;
+-- result:
+4
+-- !result
+select id from t_nested where data is null order by id;
+-- result:
+3
+-- !result
+select id from t_nested where data is not null order by id;
+-- result:
+0
+1
+2
+4
+-- !result
+select count(*) from t_nonull where data is not null;
+-- result:
+2
+-- !result
+select count(*) from t_nonull where data is null;
+-- result:
+0
+-- !result
+select count(*) from t_null where data is null or data is not null;
+-- result:
+4
+-- !result
+select data from t_null where data is not null order by cast(data as string);
+-- result:
+null
+null
+5
+-- !result
+select id, data is null from t_nested order by id;
+-- result:
+0	0
+1	0
+2	0
+3	1
+4	0
+-- !result
+select id, get_variant_int(data, '$.a') from t_nested where data is not null order by id;
+-- result:
+0	None
+1	None
+2	None
+4	None
+-- !result
+set cbo_prune_subfield = true;
+-- result:
+-- !result
+drop table t_null force;
+-- result:
+-- !result
+drop table t_empty force;
+-- result:
+-- !result
+drop table t_nested force;
+-- result:
+-- !result
+drop table t_nonull force;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_variant_is_null_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_is_null/${uuid0}/ > /dev/null
+-- result:
+0
+
+-- !result

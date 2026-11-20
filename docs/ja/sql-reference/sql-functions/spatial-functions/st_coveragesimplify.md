@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 53
 description: "ネイティブ平面ポリゴンのウィンドウパーティションを共同で簡略化し、coverage のトポロジーを維持します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_CoverageSimplify

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "FEモジュール内の特定のクラスまたはフィールドの推定メモリ使用量を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # inspect_memory_detail

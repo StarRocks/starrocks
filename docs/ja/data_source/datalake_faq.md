@@ -2,6 +2,7 @@
 sidebar_position: 50
 displayed_sidebar: docs
 description: "StarRocks データレイク分析の catalog 設定とクエリ問題に関する FAQ と解決策。"
+products: [oss, enterprise, anywhere]
 ---
 
 # データレイク FAQ

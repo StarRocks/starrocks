@@ -2,10 +2,10 @@
 displayed_sidebar: docs
 toc_max_heading_level: 4
 description: "STREAM LOADを使用すると、ローカルファイルシステムまたはストリーミングデータソースからデータをロードできます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.mdx';
-import TableURL from '../../../_assets/commonMarkdown/stream_load_table_url.mdx';
 import TableURLTip from '../../../_assets/commonMarkdown/stream_load_table_url_tip.mdx';
 
 # STREAM LOAD
@@ -60,7 +60,22 @@ HTTPリクエストメソッドを指定します。これは必須パラメー�
 
 テーブルのURLを指定します。構文：
 
-<TableURL />
+```Plain
+http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
+```
+
+以下の表は、URL内のパラメーターについて説明しています。
+
+| パラメーター     | 必須 | 説明                                                  |
+| ------------- | -------- | ------------------------------------------------------------ |
+| fe_host       | はい      | クラスター内のFEノードのIPアドレス。<br />**注**<br />ロードジョブを特定のBEまたはCNノードに送信する場合、そのBEまたはCNノードのIPアドレスを入力する必要があります。 |
+| fe_http_port  | はい      | クラスター内のFEノードのHTTPポート番号。デフォルトのポート番号は`8030`。<br />**注**<br />ロードジョブを特定のBEまたはCNノードに送信する場合、そのBEまたはCNノードのHTTPポート番号を入力する必要があります。デフォルトのポート番号は`8030`。 |
+| database_name | はい      | テーブルが属するデータベースの名前。         |
+| table_name    | はい      | テーブルの名前。                                       |
+
+:::note
+[SHOW FRONTENDS](../cluster-management/nodes_processes/SHOW_FRONTENDS.md) を使用して、FE ノードの IP アドレスと HTTP ポートを確認できます。
+:::
 
 ### data_desc
 
@@ -129,7 +144,10 @@ HTTPリクエストメソッドを指定します。これは必須パラメー�
 
 必須: いいえ
 
-説明: 行区切り文字、列区切り文字、エスケープ文字、`enclose` で指定された文字などのさまざまな特殊文字をエスケープするために使用される文字を指定します。エスケープされた文字は通常の文字とみなされ、それが存在するフィールド値の一部として解析されます。型: 1バイト文字。デフォルト値: `NONE`。最も一般的な文字はスラッシュ（`\`）で、SQLステートメントではダブルスラッシュ（`\\`）として記述する必要があります。<br />**注意**<br />`escape` で指定された文字は、`enclose` で指定された文字のペアの内側と外側の両方に適用されます。<br />以下に2つの例を示します:<ul><li>`enclose` を `"` に設定し、`escape` を `\` に設定した場合、システムは `"say \"Hello world\""` を `say "Hello world"` に解析します。</li><li>列区切り文字がカンマ（`,`）であると仮定します。`escape` を `\` に設定した場合、システムは `a, b\, c` を2つの別々のフィールド値 `a` と `b, c` に解析します。</li></ul>
+説明: 行区切り文字、列区切り文字、エスケープ文字、`enclose` で指定された文字などのさまざまな特殊文字をエスケープするために使用される文字を指定します。エスケープされた文字は通常の文字とみなされ、それが存在するフィールド値の一部として解析されます。型: 1バイト文字。デフォルト値: `NONE`。最も一般的な文字はスラッシュ（`\`）で、SQLステートメントではダブルスラッシュ（`\\`）として記述する必要があります。<br />**注意**<br />`escape` で指定された文字は、`enclose` で指定された文字のペアの内側と外側の両方に適用されます。<br />以下に2つの例を示します:
+
+- `enclose` を `"` に設定し、`escape` を `\` に設定した場合、システムは `"say \"Hello world\""` を `say "Hello world"` に解析します。
+- 列区切り文字がカンマ（`,`）であると仮定します。`escape` を `\` に設定した場合、システムは `a, b\, c` を2つの別々のフィールド値 `a` と `b, c` に解析します。
 
 :::note
 

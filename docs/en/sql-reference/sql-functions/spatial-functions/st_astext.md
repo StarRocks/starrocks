@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts a GEOMETRY or GEOGRAPHY value to WKT (Well-Known Text)."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_AsText, ST_AsWKT

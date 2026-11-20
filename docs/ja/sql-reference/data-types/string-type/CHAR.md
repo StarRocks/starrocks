@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "固定長文字列型で長さは 1 から 255 バイト。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CHAR

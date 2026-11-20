@@ -2,6 +2,7 @@
 keywords: ['xiugai'] 
 displayed_sidebar: docs
 description: "变更异步物化视图的名称、刷新策略、状态和属性。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER MATERIALIZED VIEW

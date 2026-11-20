@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Adds a time interval to a date value."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # microseconds_add

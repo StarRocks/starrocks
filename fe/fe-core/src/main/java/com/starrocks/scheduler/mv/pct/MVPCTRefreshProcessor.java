@@ -95,10 +95,10 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
         if (mvContext.getProperties().get(TaskRun.PINNED_REFRESH_JOB_ID) == null) {
             return false;
         }
-        String owner = mv.getRefreshScheme().getAsyncRefreshContext().getTempTvrOwnerStartTaskRunId();
         String startTaskRunId = getStartTaskRunId();
-        if (owner == null || !owner.equals(startTaskRunId)) {
-            logger.warn("Skip stale pinned batch: pinning owner={}, startTaskRunId={}", owner, startTaskRunId);
+        if (!pinState().isPinnedBy(startTaskRunId)) {
+            logger.warn("Skip stale pinned batch: pinning owner={}, startTaskRunId={}",
+                    pinState().getOwner(), startTaskRunId);
             return true;
         }
         return false;

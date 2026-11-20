@@ -30,6 +30,7 @@
 #include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
 #include "common/thread/threadpool.h"
+#include "fs/remote_read_context.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
@@ -47,6 +48,7 @@
 #include "storage/rows_mapper.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_file_info.h"
+#include "storage/sort_key_bounds.h"
 #include "storage/sort_key_sampler.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema.h"
@@ -649,6 +651,10 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
         const AcquireTokenFunc& acquire_token, const ReleaseTokenFunc& release_token, bool is_unshare,
         int64_t handoff_in_queue_time_sec, int64_t handoff_queue_wait_ns, const ReturnTokenFunc& return_token,
         bool allow_base_compaction) {
+    // Planning reads as this compaction: the tablet metadata, and the footers and data pages range-split sampling
+    // opens (_collect_segment_key_bounds). The subtasks carry their own context.
+    ScopedRemoteReadContext remote_read_scope(
+            RemoteReadContext::for_background(RemoteReadContext::Workload::COMPACTION, static_cast<uint64_t>(txn_id)));
     // Validate configuration
     // max_parallel comes from table property (via FE)
     // max_bytes comes from BE config if FE passes 0
@@ -1745,6 +1751,9 @@ StatusOr<TxnLogPB> TabletParallelCompactionManager::get_merged_txn_log(int64_t t
     // An UNSHARE of a tablet whose sort key is not its primary key rewrites shared data files only, so it skips this
     // step, and the tablet metadata read it starts with, entirely.
     if (!state->is_unshare || state->unshare_rewrites_index) {
+        // Read the index sstables as this compaction, like CompactionTask::execute_index_major_compaction().
+        ScopedRemoteReadContext remote_read_scope(RemoteReadContext::for_background(
+                RemoteReadContext::Workload::COMPACTION, static_cast<uint64_t>(txn_id)));
         RETURN_IF_ERROR(execute_sst_compaction_for_parallel(tablet_id, version, op_parallel, state->is_unshare));
     }
 
@@ -3142,10 +3151,7 @@ bool TabletParallelCompactionManager::_can_use_range_split(const std::vector<Row
             return false;
         }
         for (const auto& segment_meta : rowset_meta.segment_metas()) {
-            if (!segment_meta.has_sort_key_min() || !segment_meta.has_sort_key_max()) {
-                return false;
-            }
-            if (segment_meta.sort_key_min().values_size() == 0 || segment_meta.sort_key_max().values_size() == 0) {
+            if (!has_segment_sort_key_bounds(segment_meta)) {
                 return false;
             }
         }
@@ -3254,8 +3260,7 @@ StatusOr<std::vector<SegmentSplitInfo>> TabletParallelCompactionManager::_collec
         for (int meta_pos = 0; meta_pos < num_segments; ++meta_pos) {
             const auto& segment_meta = rowset_meta.segment_metas(meta_pos);
             SegmentSplitInfo segment;
-            RETURN_IF_ERROR(segment.min_key.from_proto(segment_meta.sort_key_min()));
-            RETURN_IF_ERROR(segment.max_key.from_proto(segment_meta.sort_key_max()));
+            RETURN_IF_ERROR(decode_segment_sort_key_bounds(segment_meta, &segment.min_key, &segment.max_key));
             segment.num_rows = segment_meta.has_num_rows() ? segment_meta.num_rows() : 0;
             if (segment.num_rows > 0 && rowset_num_rows > 0) {
                 segment.data_size = rowset_data_size * segment.num_rows / rowset_num_rows;

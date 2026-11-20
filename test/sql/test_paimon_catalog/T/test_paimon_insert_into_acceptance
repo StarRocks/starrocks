@@ -1,0 +1,100 @@
+-- name: test_paimon_insert_into_scalar_boundaries
+function: create_paimon_ddl_catalog("paimon_write_${uuid0}", "${uuid0}")
+set time_zone = 'UTC';
+set paimon_reader_mode = 'native';
+create database paimon_write_${uuid0}.writer_db;
+create table paimon_write_${uuid0}.writer_db.scalar_rows (id int, b boolean, i8 tinyint, i16 smallint, i32 int, i64 bigint, f float, d double, d9 decimal(9,2), d18 decimal(18,4), d38 decimal(38,8), dt date, ts datetime, s varchar(4), bin varbinary(4)) properties ('bucket'='-1','file.format'='parquet');
+insert into paimon_write_${uuid0}.writer_db.scalar_rows values (1,true,-128,-32768,-2147483648,-9223372036854775808,1.5,2.25,-9999999.99,-99999999999999.9999,-999999999999999999999999999999.99999999,'1969-12-31','1969-12-31 23:59:59.999999','😀中文a',unhex('00FF007F'));
+insert into paimon_write_${uuid0}.writer_db.scalar_rows select 2,false,127,32767,2147483647,9223372036854775807,-1.5,-2.25,9999999.99,99999999999999.9999,999999999999999999999999999999.99999999,cast('2000-02-29' as date),cast('2000-02-29 12:34:56.123456' as datetime),'',unhex('');
+insert into paimon_write_${uuid0}.writer_db.scalar_rows (id) values (3);
+[ORDER]select id,b,i8,i16,i32,i64,f,d,cast(d9 as varchar),cast(d18 as varchar),cast(d38 as varchar),cast(dt as varchar),cast(ts as varchar),s,hex(bin) from paimon_write_${uuid0}.writer_db.scalar_rows order by id;
+function: create_paimon_ddl_catalog("paimon_write_reader_${uuid0}", "${uuid0}")
+set paimon_reader_mode = 'jni';
+[ORDER]select id,b,i8,i16,i32,i64,f,d,cast(d9 as varchar),cast(d18 as varchar),cast(d38 as varchar),cast(dt as varchar),cast(ts as varchar),s,hex(bin) from paimon_write_reader_${uuid0}.writer_db.scalar_rows order by id;
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db.scalar_rows;
+  drop database if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_write_reader_${paimon_ddl_warehouse_id};
+  drop catalog if exists paimon_write_${paimon_ddl_warehouse_id};
+} END CLEANUP
+
+-- name: test_paimon_insert_into_nested_nulls_and_variant_values
+function: create_paimon_ddl_catalog("paimon_write_${uuid0}", "${uuid0}")
+set paimon_reader_mode = 'native';
+create database paimon_write_${uuid0}.writer_db;
+create table paimon_write_${uuid0}.writer_db.nested_rows (id int, a array<array<int>>, m map<varchar(8),array<int>>, r struct<x int,y struct<z varchar(8)>>) properties ('bucket'='-1','file.format'='parquet');
+insert into paimon_write_${uuid0}.writer_db.nested_rows select 1,[[1,NULL],[],NULL],map{'a':[2,NULL],'b':[]},named_struct('x',3,'y',named_struct('z','中文'));
+insert into paimon_write_${uuid0}.writer_db.nested_rows select 2,[],map{},named_struct('x',NULL,'y',NULL);
+insert into paimon_write_${uuid0}.writer_db.nested_rows values (3,NULL,NULL,NULL);
+[ORDER]select id,array_length(a),a[1][1],a[1][2],array_length(a[2]),a[3] is null,m['a'][1],m['a'][2],r.x,r.y.z from paimon_write_${uuid0}.writer_db.nested_rows order by id;
+set paimon_reader_mode = 'jni';
+[ORDER]select id,array_length(a),a[1][1],a[1][2],array_length(a[2]),a[3] is null,m['a'][1],m['a'][2],r.x,r.y.z from paimon_write_${uuid0}.writer_db.nested_rows order by id;
+set paimon_reader_mode = 'native';
+create table paimon_write_${uuid0}.writer_db.variant_rows (id int,v variant) properties ('bucket'='-1','file.format'='parquet');
+insert into paimon_write_${uuid0}.writer_db.variant_rows select 1,cast(42 as variant);
+insert into paimon_write_${uuid0}.writer_db.variant_rows select 2,cast('中文' as variant);
+insert into paimon_write_${uuid0}.writer_db.variant_rows select 3,cast(3.5 as variant);
+insert into paimon_write_${uuid0}.writer_db.variant_rows select 4,cast(true as variant);
+insert into paimon_write_${uuid0}.writer_db.variant_rows select 5,cast(parse_json('[1,"s",false]') as variant);
+insert into paimon_write_${uuid0}.writer_db.variant_rows select 6,cast(parse_json('{"a":1,"b":"text"}') as variant);
+insert into paimon_write_${uuid0}.writer_db.variant_rows select 7,cast(parse_json('null') as variant);
+insert into paimon_write_${uuid0}.writer_db.variant_rows values (8,NULL);
+[ORDER]select id,cast(variant_query(v,'$.a') as int),cast(variant_query(v,'$.b') as varchar),cast(variant_query(v,'$[0]') as int),v is null from paimon_write_${uuid0}.writer_db.variant_rows order by id;
+select cast(v as int) from paimon_write_${uuid0}.writer_db.variant_rows where id=1;
+select cast(v as varchar) from paimon_write_${uuid0}.writer_db.variant_rows where id=2;
+select cast(v as double) from paimon_write_${uuid0}.writer_db.variant_rows where id=3;
+select cast(v as boolean) from paimon_write_${uuid0}.writer_db.variant_rows where id=4;
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db.variant_rows;
+  drop table if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db.nested_rows;
+  drop database if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_write_${paimon_ddl_warehouse_id};
+} END CLEANUP
+
+-- name: test_paimon_insert_into_relational_sources
+function: create_paimon_ddl_catalog("paimon_write_${uuid0}", "${uuid0}")
+set paimon_reader_mode = 'native';
+set pipeline_dop = 4;
+create database paimon_write_${uuid0}.writer_db;
+create database paimon_insert_source_${uuid0};
+create table paimon_insert_source_${uuid0}.src (id int,value int) duplicate key(id) distributed by hash(id) buckets 2 properties ('replication_num'='1');
+insert into paimon_insert_source_${uuid0}.src values (1,10),(2,20),(3,30),(4,40);
+create table paimon_write_${uuid0}.writer_db.target_rows (id int not null,value int) primary key(id) properties ('bucket'='3','file.format'='parquet');
+insert into paimon_write_${uuid0}.writer_db.target_rows select a.id,a.value+b.value from paimon_insert_source_${uuid0}.src a join paimon_insert_source_${uuid0}.src b on a.id=b.id;
+insert into paimon_write_${uuid0}.writer_db.target_rows select id+10,value from paimon_insert_source_${uuid0}.src where id<=2 union all select id+20,value from paimon_insert_source_${uuid0}.src where id>2;
+insert into paimon_write_${uuid0}.writer_db.target_rows select 100,count(*) from paimon_insert_source_${uuid0}.src;
+insert into paimon_write_${uuid0}.writer_db.target_rows by name select 7 as value,200 as id;
+insert into paimon_write_${uuid0}.writer_db.target_rows (value,id) select 8,201;
+insert into paimon_write_${uuid0}.writer_db.target_rows (id) values (202);
+insert into paimon_write_${uuid0}.writer_db.target_rows select 999,999 where false;
+insert into paimon_write_${uuid0}.writer_db.target_rows select id+1000,cast(value as int) from paimon_insert_source_${uuid0}.src order by id limit 2;
+[ORDER]select id,value from paimon_write_${uuid0}.writer_db.target_rows order by id;
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db.target_rows;
+  drop database if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_write_${paimon_ddl_warehouse_id};
+  drop database if exists paimon_insert_source_${paimon_ddl_warehouse_id} force;
+} END CLEANUP
+
+-- name: test_paimon_insert_into_late_error_is_atomic
+function: create_paimon_ddl_catalog("paimon_write_${uuid0}", "${uuid0}")
+set paimon_reader_mode = 'native';
+set pipeline_dop = 4;
+set enable_insert_strict = true;
+create database paimon_write_${uuid0}.writer_db;
+create table paimon_write_${uuid0}.writer_db.target_rows (id bigint not null,value varchar(8)) primary key(id) properties ('bucket'='3','file.format'='parquet');
+insert into paimon_write_${uuid0}.writer_db.target_rows values (0,'baseline');
+-- The invalid value occurs after several source chunks have been consumed.
+function: assert_query_error_contains("insert into paimon_write_${uuid0}.writer_db.target_rows select generate_series,if(generate_series=12000,'value-too-long','ok') from table(generate_series(1,16384))", "character length exceeded")
+select id,value from paimon_write_${uuid0}.writer_db.target_rows;
+set paimon_reader_mode = 'jni';
+select id,value from paimon_write_${uuid0}.writer_db.target_rows;
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db.target_rows;
+  drop database if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_write_${paimon_ddl_warehouse_id};
+} END CLEANUP

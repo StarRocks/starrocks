@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "tables_config 提供表配置的信息。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # tables_config

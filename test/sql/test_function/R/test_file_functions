@@ -189,3 +189,76 @@ select id, try_to_file(s) is null, fl_get_uri(try_to_file(s)) from input_metadat
 drop database test_try_to_file_${uuid0};
 -- result:
 -- !result
+
+-- name: test_get_presigned
+CREATE STORAGE VOLUME "presign_${uuid0}"
+TYPE = S3
+LOCATIONS = ("s3://${oss_bucket}/test_presign_${uuid0}/")
+PROPERTIES
+(
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}"
+);
+-- result:
+-- !result
+select u like 'http%', u like '%X-Amz-Signature=%', u like '%X-Amz-Expires=3600%', u like '%dir/a.png?%'
+from (select get_presigned_url('presign_${uuid0}', 's3://${oss_bucket}/dir/a.png') u) t;
+-- result:
+1	1	1	1
+-- !result
+select fl_get_uri(f) like 'http%', fl_get_uri(f) like '%X-Amz-Signature=%', fl_get_uri(f) like '%X-Amz-Expires=3600%', fl_get_offset(f), fl_get_size(f), fl_get_content_type(f), fl_get_checksum(f), fl_get_inline(f) is null
+from (select get_presigned_file('presign_${uuid0}', to_file(named_struct('uri', 's3://${oss_bucket}/dir/a.png', 'offset', 0, 'size', 12, 'content_type', 'image/png', 'checksum', 'opaque'))) f) t;
+-- result:
+1	1	1	0	12	image/png	opaque	1
+-- !result
+select fl_get_uri(f) is null, hex(fl_get_inline(f)), fl_get_content_type(f)
+from (select get_presigned_file('presign_${uuid0}', to_file(named_struct('inline', to_binary('610062', 'hex'), 'content_type', 'text/plain')), 60) f) t;
+-- result:
+1	610062	text/plain
+-- !result
+create database test_get_presigned_${uuid0};
+-- result:
+-- !result
+use test_get_presigned_${uuid0};
+-- result:
+-- !result
+create table media (id int, uri varchar(256), ttl bigint)
+duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+insert into media values
+(1, 's3://${oss_bucket}/dir/a.png', 60),
+(2, NULL, 0),
+(3, 'oss://${oss_bucket}/dir/b c.png', NULL),
+(4, 'https://example.com/c.png', 0);
+-- result:
+-- !result
+select id, u is null, u like '%X-Amz-Signature=%', u like concat('%X-Amz-Expires=', ifnull(ttl, 3600), '%')
+from (select id, ttl, get_presigned_url('presign_${uuid0}', uri, ttl) u from media where id <= 3) t order by id;
+-- result:
+1	0	1	1
+2	1	None	None
+3	0	1	1
+-- !result
+select id, fl_get_uri(f) = uri, fl_get_uri(f) like '%X-Amz-Signature=%', fl_get_uri(f) like concat('%X-Amz-Expires=', ifnull(ttl, 3600), '&%')
+from (select id, uri, ttl, get_presigned_file('presign_${uuid0}', to_file(named_struct('uri', uri)), ttl) f from media where id in (1, 3, 4)) t order by id;
+-- result:
+1	0	1	1
+3	0	1	1
+4	1	0	0
+-- !result
+select count(*) from media where fl_get_uri(get_presigned_file('presign_${uuid0}', try_to_file(named_struct('uri', uri)))) like '%X-Amz-Signature=%';
+-- result:
+2
+-- !result
+select get_presigned_url('presign_${uuid0}', uri, 60) from media where id = 4;
+-- result:
+[REGEX].*GET_PRESIGNED_URL.*not a URI of an S3-compatible object storage.*
+-- !result
+drop database test_get_presigned_${uuid0};
+-- result:
+-- !result
+DROP STORAGE VOLUME "presign_${uuid0}";
+-- result:
+-- !result

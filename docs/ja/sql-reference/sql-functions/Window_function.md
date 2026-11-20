@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "ウィンドウ関数は組み込み関数の特殊なクラスで、特定のウィンドウ内のデータを処理します。"
 keywords: ['ウィンドウ関数', 'ウィンドウ']
 sidebar_position: 0.9
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ウィンドウ関数

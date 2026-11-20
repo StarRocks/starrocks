@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Extracts the inline field of a FILE value."
 sidebar_position: 80
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'

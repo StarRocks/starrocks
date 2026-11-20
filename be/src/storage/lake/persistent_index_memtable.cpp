@@ -242,10 +242,11 @@ Status PersistentIndexMemtable::flush() {
 
     auto sstable = std::make_unique<PersistentIndexSstable>();
     RandomAccessFileOptions opts;
+    opts.remote_read = ScopedRemoteReadContext::current_or_load();
     if (!encryption_meta.empty()) {
         opts.encryption_info = wopts.encryption_info;
     }
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
+    ASSIGN_OR_RETURN(auto rf, PersistentIndexSstable::open_sstable_file(opts, location, filesize));
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.set_filename(filename);
     sstable_pb.set_filesize(filesize);
@@ -272,6 +273,7 @@ void PersistentIndexMemtable::clear() {
 }
 
 void PersistentIndexMemtable::run() {
+    ScopedRemoteReadContext remote_read_scope(_flush_remote_read);
     auto st = flush();
     if (!st.ok()) {
         LOG(ERROR) << "PersistentIndexMemtable flush failed for tablet " << _tablet_id << ": " << st;

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "global_variables provides information about global variables."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # global_variables

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "2 つのネイティブ平面ポリゴンまたはマルチポリゴンの和集合を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Union

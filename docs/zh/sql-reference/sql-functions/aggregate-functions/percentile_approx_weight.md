@@ -1,3 +1,7 @@
+---
+products: [oss, enterprise, cloud, anywhere]
+---
+
 # percentile_approx_weight
 
 计算指定百分位数的加权近似值。百分位数参数 p 可以是一个值或一个数组。`percentile_approx_weight` 是 `PERCENTILE_APPROX` 的加权版本，允许用户为每个输入值指定一个权重（一个常量值或数值列）。

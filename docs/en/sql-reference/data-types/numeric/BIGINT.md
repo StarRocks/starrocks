@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "BIGINT is an 8-byte signed integer."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # BIGINT

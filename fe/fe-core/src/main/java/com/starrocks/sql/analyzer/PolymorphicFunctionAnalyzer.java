@@ -25,6 +25,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.AnyArrayType;
 import com.starrocks.type.AnyElementType;
 import com.starrocks.type.AnyGeographyType;
@@ -237,7 +238,7 @@ public class PolymorphicFunctionAnalyzer {
             if (!allScalarKv) {
                 throw new SemanticException("sum_map only support scalar KV");
             }
-            if (v.isDecimalOfAnyVersion() || v.isStringType() || v.isDateType()) {
+            if (v.isDecimalOfAnyVersion() || v.isStringType() || v.isDateType() || v.isGeoType()) {
                 throw new SemanticException("sum_map unsupported value type:" + v);
             }
             if (v.isIntegerType() || v.isBoolean()) {
@@ -360,17 +361,21 @@ public class PolymorphicFunctionAnalyzer {
     }
 
     static void checkMapKeyType(Type type) {
+        checkMapKeyType(type, NodePosition.ZERO);
+    }
+
+    static void checkMapKeyType(Type type, NodePosition pos) {
         if (type.isMapType()) {
             MapType map = (MapType) type;
             if (map.getKeyType().isGeoType() || map.getKeyType().hasNestedGeoType()) {
-                throw new SemanticException("Map key doesn't support type: " + map.getKeyType());
+                throw new SemanticException("Map key doesn't support type: " + map.getKeyType(), pos);
             }
-            checkMapKeyType(map.getValueType());
+            checkMapKeyType(map.getValueType(), pos);
         } else if (type.isArrayType()) {
-            checkMapKeyType(((ArrayType) type).getItemType());
+            checkMapKeyType(((ArrayType) type).getItemType(), pos);
         } else if (type.isStructType()) {
             for (StructField field : ((StructType) type).getFields()) {
-                checkMapKeyType(field.getType());
+                checkMapKeyType(field.getType(), pos);
             }
         }
     }

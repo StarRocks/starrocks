@@ -4,12 +4,17 @@
 
 #include "storage/sstable/table.h"
 
-#include <butil/time.h> // NOLINT
+#include <butil/fast_rand.h>
+
+#include <algorithm>
+#include <limits>
 
 #include "base/coding.h"
 #include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
 #include "base/phmap/btree.h"
+#include "base/testutil/sync_point.h"
+#include "base/time/time.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "storage/lake/tablet_manager.h"
@@ -332,14 +337,30 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
 
     int64_t continue_block_read_cnt = 0;
     int64_t sst_bloom_filter_rows = 0;
-    int64_t multiget_t1_us = 0;
-    int64_t multiget_t2_us = 0;
-    int64_t multiget_t3_us = 0;
+    // A clock read costs ~35 ns on aarch64, and the four that time a key cost about as much as a probe the bloom
+    // filter rejects, so only one key in kMultiGetTimingSampleInterval is timed, and only when a trace will report
+    // the time: one at random among the first kMultiGetTimingSampleInterval keys, then every
+    // kMultiGetTimingSampleInterval-th. Every key is timed with the same probability, so scaling the sums up by the
+    // interval is unbiased for a lookup of any size. Each timed phase also contains one clock read; the
+    // back-to-back pair before t0 measures it so that it can be taken out.
+    size_t next_timed = Trace::CurrentTrace() != nullptr ? butil::fast_rand_less_than(kMultiGetTimingSampleInterval)
+                                                         : std::numeric_limits<size_t>::max();
+    int64_t multiget_t1_ns = 0;
+    int64_t multiget_t2_ns = 0;
+    int64_t multiget_t3_ns = 0;
     size_t i = 0;
     bool founded = false;
     for (auto it = begin; it != end; ++it, ++i) {
         auto& k = keys[*it];
-        int64_t t0 = butil::gettimeofday_us();
+        const bool timed = i == next_timed;
+        int64_t clock_read_ns = 0;
+        int64_t t0 = 0;
+        if (timed) {
+            next_timed += kMultiGetTimingSampleInterval;
+            int64_t before_t0 = MonotonicNanos();
+            t0 = MonotonicNanos();
+            clock_read_ns = t0 - before_t0;
+        }
         if (current_block_itr_ptr != nullptr && current_block_itr_ptr->Valid()) {
             // keep searching current block
             ASSIGN_OR_RETURN(founded, search_in_block(k, &(*values)[i], current_block_itr_ptr.get()));
@@ -350,9 +371,9 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
                 current_block_itr_ptr.reset(nullptr);
             }
         }
-        int64_t t1 = butil::gettimeofday_us();
+        int64_t t1 = timed ? MonotonicNanos() : 0;
         iiter->Seek(k);
-        int64_t t2 = butil::gettimeofday_us();
+        int64_t t2 = timed ? MonotonicNanos() : 0;
         if (iiter->Valid()) {
             Slice handle_value = iiter->value();
             FilterBlockReader* filter = rep_->filter;
@@ -366,19 +387,26 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
                 ASSIGN_OR_RETURN(founded, search_in_block(k, &(*values)[i], current_block_itr_ptr.get()));
             }
         }
-        int64_t t3 = butil::gettimeofday_us();
-        multiget_t1_us += t1 - t0;
-        multiget_t2_us += t2 - t1;
-        multiget_t3_us += t3 - t2;
+        if (timed) {
+            int64_t t3 = MonotonicNanos();
+            multiget_t1_ns += t1 - t0 - clock_read_ns;
+            multiget_t2_ns += t2 - t1 - clock_read_ns;
+            multiget_t3_ns += t3 - t2 - clock_read_ns;
+            TEST_SYNC_POINT_CALLBACK("sstable::Table::MultiGet:timed_probe", &i);
+        }
     }
     if (s.ok()) {
         s = iiter->status();
     }
+    // Scale the timed keys up to all keys.
+    auto estimated_total_us = [](int64_t timed_ns) {
+        return std::max<int64_t>(0, timed_ns) * static_cast<int64_t>(kMultiGetTimingSampleInterval) / 1000;
+    };
     TRACE_COUNTER_INCREMENT("continue_block_read_cnt", continue_block_read_cnt);
     TRACE_COUNTER_INCREMENT("sst_bloom_filter_rows", sst_bloom_filter_rows);
-    TRACE_COUNTER_INCREMENT("multiget_t1_us", multiget_t1_us);
-    TRACE_COUNTER_INCREMENT("multiget_t2_us", multiget_t2_us);
-    TRACE_COUNTER_INCREMENT("multiget_t3_us", multiget_t3_us);
+    TRACE_COUNTER_INCREMENT("multiget_t1_us", estimated_total_us(multiget_t1_ns));
+    TRACE_COUNTER_INCREMENT("multiget_t2_us", estimated_total_us(multiget_t2_ns));
+    TRACE_COUNTER_INCREMENT("multiget_t3_us", estimated_total_us(multiget_t3_ns));
     return s;
 }
 

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Join operations combine data from two or more tables and return result columns."
 sidebar_label: "JOIN"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Join

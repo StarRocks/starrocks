@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP TASK drops an asynchronous ETL task submitted using SUBMIT TASK."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP TASK

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the cotangent of the angle in radians x."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # cot

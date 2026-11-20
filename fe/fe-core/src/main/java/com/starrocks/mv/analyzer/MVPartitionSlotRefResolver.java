@@ -144,7 +144,8 @@ public class MVPartitionSlotRefResolver {
         public Expr visitTable(TableRelation node, SlotRef slot) {
             TableName tableName = slot.getTblNameWithoutAnalyzed();
             if (node.getName().equals(tableName)) {
-                return slot;
+                // clone: callers rewrite the table name, which must not leak into the query's select list
+                return (SlotRef) slot.clone();
             }
             if (tableName != null && !node.getResolveTableName().equals(tableName)) {
                 return null;

@@ -48,6 +48,10 @@ struct IoStatsSnapshot {
     int64_t prefetch_hit_count = 0;
     int64_t prefetch_wait_finish_ns = 0;
     int64_t prefetch_pending_ns = 0;
+    // remote read scheduler: admission wait, wait for a cache fill another read started, and such joins
+    int64_t remote_queue_wait_ns = 0;
+    int64_t remote_fill_wait_ns = 0;
+    int64_t remote_fill_joins = 0;
 };
 
 // InputStream is the superclass of all classes representing an input stream of bytes.

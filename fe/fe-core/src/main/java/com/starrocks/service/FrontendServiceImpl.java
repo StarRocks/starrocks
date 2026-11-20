@@ -2061,6 +2061,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             String catalog = request.getCatalog_name();
             String db = request.getDb_name();
             String table = request.getTable_name();
+            if (request.isInvalidate_only()) {
+                // The sender committed to the table and waits for this; drop the cached copy, load nothing
+                GlobalStateMgr.getCurrentState().getMetadataMgr().invalidateCachedTable(catalog, db, table);
+                LOG.info("Invalidated cached external table {}.{}.{}", catalog, db, table);
+                return new TRefreshTableResponse(new TStatus(TStatusCode.OK));
+            }
             List<String> partitions = request.getPartitions() == null ? new ArrayList<>() : request.getPartitions();
             LOG.info("Start to refresh external table {}.{}.{}.{}", catalog, db, table, partitions);
             GlobalStateMgr.getCurrentState().refreshExternalTable(new ConnectContext(),

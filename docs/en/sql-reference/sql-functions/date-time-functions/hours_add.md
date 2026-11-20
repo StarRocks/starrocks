@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Adds hours to a date or datetime."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # hours_add

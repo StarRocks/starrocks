@@ -14,6 +14,7 @@
 
 package com.starrocks.alter;
 
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -22,21 +23,35 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.OlapTableSink;
+import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TOlapTableIndexSchema;
+import com.starrocks.thrift.TOlapTableIndexTablets;
+import com.starrocks.thrift.TOlapTablePartition;
+import com.starrocks.thrift.TOlapTablePartitionParam;
+import com.starrocks.thrift.TOlapTableSchemaParam;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.PartitionCommitInfo;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.jupiter.api.Assertions;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * A load that commits on a table while an alter or reshard job on that table is under way, as a stream load
@@ -70,6 +85,19 @@ public class ConcurrentLoad {
                 List.of(table.getId()), "load_" + UUIDUtil.genUUID(),
                 new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localfe"),
                 TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+    }
+
+    /**
+     * Begins a two-phase load and prepares it on every tablet of the table, as the stream load transaction interface
+     * does (begin, load, prepare), and returns its transaction id. The load stays PREPARED until the test commits or
+     * rolls it back.
+     */
+    public static long prepare(Database db, OlapTable table) throws Exception {
+        long txnId = begin(db, table);
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().prepareTransaction(db.getId(), txnId,
+                Config.prepared_transaction_default_timeout_second * 1000L, commitInfos(table), new ArrayList<>(),
+                null);
+        return txnId;
     }
 
     /**
@@ -114,10 +142,76 @@ public class ConcurrentLoad {
     }
 
     /**
+     * Makes a committed load visible the way the publish daemon does once its publish has finished: only when every
+     * partition it committed has reached the version right below the load's, which the daemon checks under the table
+     * READ lock. Waits at most lockTimeoutMs for that lock and leaves the load committed if it does not come free in
+     * time. Runs on a thread of its own, as the daemon does: the lock is reentrant, so the thread that holds it would
+     * always get in. Returns whether it made the load visible.
+     */
+    public static boolean tryMakeVisible(Database db, OlapTable table, TransactionState load, long lockTimeoutMs) {
+        return CompletableFuture.supplyAsync(() -> {
+            Locker locker = new Locker();
+            if (!locker.tryLockTablesWithIntensiveDbLock(db.getId(), List.of(table.getId()), LockType.READ,
+                    lockTimeoutMs, TimeUnit.MILLISECONDS)) {
+                return false;
+            }
+            try {
+                for (PartitionCommitInfo commitInfo : load.getTableCommitInfo(table.getId())
+                        .getIdToPartitionCommitInfo().values()) {
+                    PhysicalPartition partition = table.getPhysicalPartition(commitInfo.getPhysicalPartitionId());
+                    if (partition.getVisibleVersion() + 1 != commitInfo.getVersion()) {
+                        return false;
+                    }
+                }
+            } finally {
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), List.of(table.getId()), LockType.READ);
+            }
+            try {
+                makeVisible(db, load);
+            } catch (Exception e) {
+                throw new CompletionException(e);
+            }
+            return true;
+        }).join();
+    }
+
+    /**
      * The version the load committed in the given physical partition.
      */
     public static long versionIn(TransactionState load, OlapTable table, long physicalPartitionId) {
         return load.getTableCommitInfo(table.getId()).getPartitionCommitInfo(physicalPartitionId).getVersion();
+    }
+
+    /**
+     * Plans the sink parameters a load on the table would get now and checks them the way the compute node does
+     * (OlapTablePartitionParam::init): every partition lists exactly the indexes the schema lists, or the load is
+     * rejected with "number of partition's index is not equal with schema's".
+     */
+    public static void assertSinkIndexesMatch(Database db, OlapTable table) throws Exception {
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), List.of(table.getId()), LockType.READ)) {
+            DescriptorTable descTable = new DescriptorTable();
+            TupleDescriptor tuple = descTable.createTupleDescriptor();
+            for (Column column : table.getFullSchema()) {
+                SlotDescriptor slot = descTable.addSlotDescriptor(tuple);
+                slot.setIsMaterialized(true);
+                slot.setColumn(column);
+                slot.setIsNullable(column.isAllowNull());
+            }
+            descTable.computeMemLayout();
+
+            TOlapTableSchemaParam schema = OlapTableSink.createSchema(db.getId(), table, tuple, null);
+            TOlapTablePartitionParam partitions = OlapTableSink.createPartition(
+                    db.getId(), table, tuple, false, 0, table.getAllPartitionIds(), null, null);
+
+            List<Long> schemaIndexIds = schema.getIndexes().stream()
+                    .map(TOlapTableIndexSchema::getId).sorted().collect(Collectors.toList());
+            for (TOlapTablePartition partition : partitions.getPartitions()) {
+                List<Long> partitionIndexIds = partition.getIndexes().stream()
+                        .map(TOlapTableIndexTablets::getIndex_id).sorted().collect(Collectors.toList());
+                Assertions.assertEquals(schemaIndexIds, partitionIndexIds,
+                        "a load would be rejected: partition " + partition.getId() + " lists other indexes than the schema");
+            }
+        }
     }
 
     private static List<TabletCommitInfo> commitInfos(OlapTable table) {
