@@ -123,7 +123,9 @@ __attribute__((target("avx2"))) size_t scan_avx2(Elem* dst, const Elem* src, con
         if (mask == 0) {
             // whole batch dropped
         } else if (mask == 0xffffffff) {
-            memmove(dst + result, src + start, kBatchNums * sizeof(Elem));
+            if (dst + result != src + start) {
+                std::memmove(dst + result, src + start, kBatchNums * sizeof(Elem));
+            }
             result += kBatchNums;
         } else {
             for (uint32_t m = mask; m != 0; m &= m - 1) {
@@ -154,7 +156,9 @@ __attribute__((target("avx512f,avx512vl,avx512bw"))) size_t compress_w4(uint32_t
         if (mask == 0) {
             // whole batch dropped
         } else if (mask == 0xffffffff) {
-            memmove(dst + result, src + start, kBatchNums * sizeof(uint32_t));
+            if (dst + result != src + start) {
+                std::memmove(dst + result, src + start, kBatchNums * sizeof(uint32_t));
+            }
             result += kBatchNums;
         } else if (__builtin_popcount(mask) < kCompressMinBits) {
             for (uint32_t m = mask; m != 0; m &= m - 1) {
@@ -197,7 +201,9 @@ __attribute__((target("avx512f,avx512vl,avx512bw"))) size_t compress_w8(uint64_t
         if (mask == 0) {
             // whole batch dropped
         } else if (mask == 0xffffffff) {
-            memmove(dst + result, src + start, kBatchNums * sizeof(uint64_t));
+            if (dst + result != src + start) {
+                std::memmove(dst + result, src + start, kBatchNums * sizeof(uint64_t));
+            }
             result += kBatchNums;
         } else if (__builtin_popcount(mask) < kCompressMinBits) {
             for (uint32_t m = mask; m != 0; m &= m - 1) {
@@ -246,7 +252,9 @@ size_t scan_neon(Elem* dst, const Elem* src, const uint8_t* selector, size_t fro
         if (nibble_mask == 0) {
             // whole batch dropped
         } else if (nibble_mask == 0xffff'ffff'ffff'ffffull) {
-            memmove(dst + result, src + start, kBatchNums * sizeof(Elem));
+            if (dst + result != src + start) {
+                std::memmove(dst + result, src + start, kBatchNums * sizeof(Elem));
+            }
             result += kBatchNums;
         } else {
             // Keep only the high bit of each nibble: 0b1111 -> 0b1000.

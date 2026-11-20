@@ -340,4 +340,69 @@ PARALLEL_TEST(SimdFilterTest, SparseAndHalfEmptyBatchCompaction4BAnd8B) {
     }
 }
 
+PARALLEL_TEST(SimdFilterTest, TightlyReservedPaddedBufferAndInPlaceAllOnes) {
+    static_assert(SIMD::Filter::kFilterSimdStorePadBytes == 64);
+
+    auto test_tight_buffer = [](auto dummy) {
+        using T = decltype(dummy);
+        constexpr size_t kPadElems = (SIMD::Filter::kFilterSimdStorePadBytes + sizeof(T) - 1) / sizeof(T);
+        constexpr size_t kBatchSize = 64;
+
+        std::vector<T> src(kBatchSize);
+        for (size_t i = 0; i < kBatchSize; ++i) {
+            src[i] = static_cast<T>(i * 37 + 11);
+        }
+
+        // Test 1, 2, 6, and 7 elements selected near the end of a 64-element batch on a tightly
+        // allocated buffer of exact size (selected_count + kPadElems).
+        for (size_t selected_count : {size_t(1), size_t(2), size_t(6), size_t(7)}) {
+            std::vector<uint8_t> sel(kBatchSize, 0);
+            std::vector<T> expected;
+            for (size_t i = kBatchSize - selected_count; i < kBatchSize; ++i) {
+                sel[i] = 1;
+                expected.push_back(src[i]);
+            }
+
+            std::vector<T> dst(selected_count + kPadElems);
+            dst.shrink_to_fit();
+            size_t out = SIMD::Filter::filter_range(dst.data(), src.data(), sel.data(), 0, kBatchSize);
+            ASSERT_EQ(selected_count, out);
+            for (size_t i = 0; i < selected_count; ++i) {
+                ASSERT_EQ(expected[i], dst[i]) << "selected_count=" << selected_count << " i=" << i;
+            }
+        }
+
+        // Test in-place filter_range with a leading all-ones 32-element batch (dst + result == src + start,
+        // skipping self-memmove), followed by a mixed 32-element batch, followed by a trailing all-ones
+        // 32-element batch (dst + result != src + start, executing memmove).
+        constexpr size_t kInPlaceTotal = 96;
+        std::vector<T> in_place(kInPlaceTotal);
+        std::vector<uint8_t> in_place_sel(kInPlaceTotal, 1);
+        for (size_t i = 0; i < kInPlaceTotal; ++i) {
+            in_place[i] = static_cast<T>(i + 1);
+        }
+        // Drop every odd element in the middle batch [32, 64)
+        for (size_t i = 32; i < 64; i += 2) {
+            in_place_sel[i] = 0;
+        }
+        std::vector<T> expected_in_place;
+        for (size_t i = 0; i < kInPlaceTotal; ++i) {
+            if (in_place_sel[i]) {
+                expected_in_place.push_back(in_place[i]);
+            }
+        }
+        size_t in_place_out =
+                SIMD::Filter::filter_range(in_place.data(), in_place.data(), in_place_sel.data(), 0, kInPlaceTotal);
+        ASSERT_EQ(expected_in_place.size(), in_place_out);
+        for (size_t i = 0; i < in_place_out; ++i) {
+            ASSERT_EQ(expected_in_place[i], in_place[i]) << "in-place mismatch at i=" << i;
+        }
+    };
+
+    test_tight_buffer(uint8_t{0});
+    test_tight_buffer(uint16_t{0});
+    test_tight_buffer(uint32_t{0});
+    test_tight_buffer(uint64_t{0});
+}
+
 } // namespace starrocks

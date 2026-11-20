@@ -15,6 +15,7 @@
 #include <numeric>
 #include <vector>
 
+#include "base/simd/filter.h"
 #include "column/append_with_mask.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -748,6 +749,83 @@ TEST(AppendWithMaskCoreTest, appendWithPrecomputedSelectedCountAndSparseBitmask)
         EXPECT_EQ(41u, dst->get_data().capacity());
         for (size_t idx = 0; idx < kExpectedSparseSelected; ++idx) {
             EXPECT_EQ(static_cast<int64_t>(100000 + idx * 100), dst->get_data()[idx]);
+        }
+    }
+}
+
+TEST(AppendWithMaskCoreTest, tightlyReservedDestinationAndNullableMaskedAppendWithSimdStorePad) {
+    constexpr size_t kBatchSize = 64;
+    constexpr size_t kPadElems32 = (SIMD::Filter::kFilterSimdStorePadBytes + sizeof(int32_t) - 1) / sizeof(int32_t);
+    constexpr size_t kPadElems64 = (SIMD::Filter::kFilterSimdStorePadBytes + sizeof(int64_t) - 1) / sizeof(int64_t);
+
+    auto src32 = Int32Column::create();
+    auto src64 = Int64Column::create();
+    auto nullable_base = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    nullable_base->append_datum(Datum(static_cast<int64_t>(777)));
+    nullable_base->append_nulls(1);
+
+    auto nullable_src = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    // Populate nullable_src via NullableColumn::append_value_multiple_times (32 non-nulls, 32 nulls)
+    nullable_src->append_value_multiple_times(*nullable_base, 0, 32);
+    nullable_src->append_value_multiple_times(*nullable_base, 1, 32);
+    ASSERT_EQ(kBatchSize, nullable_src->size());
+
+    for (size_t i = 0; i < kBatchSize; ++i) {
+        src32->append(static_cast<int32_t>(1000 + i));
+        src64->append(static_cast<int64_t>(2000 + i));
+    }
+
+    // Exercise small selections (1, 2, 6, 7 elements near the end of a 64-element batch) as well
+    // as near-full selection (60 of 64 elements where selected + kPadElems > kBatchSize) on
+    // tightly pre-reserved destination columns.
+    for (size_t selected_count : {size_t(1), size_t(2), size_t(6), size_t(7), size_t(60)}) {
+        std::vector<uint8_t> mask(kBatchSize, 0);
+        for (size_t i = kBatchSize - selected_count; i < kBatchSize; ++i) {
+            mask[i] = 1;
+        }
+
+        // 1. Int32Column tightly reserved to selected_count
+        {
+            auto dst32 = Int32Column::create();
+            dst32->reserve(selected_count);
+            ASSERT_TRUE(append_with_mask<true>(dst32.get(), *src32, mask.data(), kBatchSize, selected_count).ok());
+            ASSERT_EQ(selected_count, dst32->size());
+            if (selected_count * 20 >= kBatchSize) {
+                EXPECT_GE(dst32->get_data().capacity(), selected_count + kPadElems32);
+            }
+            for (size_t i = 0; i < selected_count; ++i) {
+                EXPECT_EQ(static_cast<int32_t>(1000 + kBatchSize - selected_count + i), dst32->get_data()[i]);
+            }
+        }
+
+        // 2. Int64Column tightly reserved to selected_count
+        {
+            auto dst64 = Int64Column::create();
+            dst64->reserve(selected_count);
+            ASSERT_TRUE(append_with_mask<true>(dst64.get(), *src64, mask.data(), kBatchSize, selected_count).ok());
+            ASSERT_EQ(selected_count, dst64->size());
+            if (selected_count * 20 >= kBatchSize) {
+                EXPECT_GE(dst64->get_data().capacity(), selected_count + kPadElems64);
+            }
+            for (size_t i = 0; i < selected_count; ++i) {
+                EXPECT_EQ(static_cast<int64_t>(2000 + kBatchSize - selected_count + i), dst64->get_data()[i]);
+            }
+        }
+
+        // 3. NullableColumn (populated with append_value_multiple_times) tightly reserved to selected_count
+        {
+            auto dst_null = NullableColumn::create(Int64Column::create(), NullColumn::create());
+            dst_null->reserve(selected_count);
+            ASSERT_TRUE(append_with_mask<true>(dst_null.get(), *nullable_src, mask.data(), kBatchSize, selected_count)
+                                .ok());
+            ASSERT_EQ(selected_count, dst_null->size());
+            for (size_t i = 0; i < selected_count; ++i) {
+                size_t src_idx = kBatchSize - selected_count + i;
+                EXPECT_EQ(nullable_src->is_null(src_idx), dst_null->is_null(i));
+                if (!nullable_src->is_null(src_idx)) {
+                    EXPECT_EQ(nullable_src->get(src_idx).get_int64(), dst_null->get(i).get_int64());
+                }
+            }
         }
     }
 }

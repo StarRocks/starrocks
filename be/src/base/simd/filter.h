@@ -26,12 +26,23 @@ namespace detail {
 size_t filter_range(void* dst, const void* src, size_t element_size, const uint8_t* selector, size_t from, size_t to);
 } // namespace detail
 
+// Maximum vector store width (in bytes) issued by SIMD compaction kernels
+// (AVX-512 64-byte `vpcompressd`/`vpcompressq` or AVX2 32-byte `vpermd` + `vmovdqu`).
+inline constexpr size_t kFilterSimdStorePadBytes = 64;
+
 // Stream compaction: copy the elements of `src` whose selector byte is non-zero,
 // over the index range [from, to), to the front of `dst` starting at index
-// `from`, and return the new end offset. Elements before `from` are left
-// untouched, and `dst` may alias `src` (in-place). 4- and 8-byte elements take a
-// vectorised path (AVX-512 vpcompress / AVX2 on x86, NEON on aarch64); other
-// sizes use a scalar byte copy.
+// `from`, and return the new end offset (`returned_size`). Elements before `from`
+// are left untouched, and `dst` may alias `src` (in-place).
+//
+// Capacity contract: `dst` must have capacity for at least
+// `std::min(to, returned_size + kFilterSimdStorePadBytes / sizeof(T))` elements
+// (which is always satisfied when `dst` has capacity for `to` elements);
+// vectorised stores may overwrite dead slots in
+// `[returned_size, std::min(to, returned_size + kFilterSimdStorePadBytes / sizeof(T)))`
+// before the caller resizes `dst`. 4- and 8-byte elements take a vectorised path
+// (AVX-512 vpcompress / AVX2 on x86, NEON on aarch64); other sizes use a scalar
+// byte copy.
 template <typename T>
 inline size_t filter_range(T* dst, const T* src, const uint8_t* selector, size_t from, size_t to) {
     return detail::filter_range(dst, src, sizeof(T), selector, from, to);

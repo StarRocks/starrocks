@@ -178,14 +178,11 @@ Status AppendWithMaskVisitor<PositiveSelect>::append_fixed_length(FixedLengthCol
 
     if constexpr (PositiveSelect && sizeof(T) <= 32) {
         if (use_simd) {
-            // AVX-512 _mm512_storeu_si512 writes 64 bytes starting at (dest + result) where result <= selected.
-            // Padding by at most (64 / sizeof(T)) elements prevents any unmasked vector store overrun.
-            constexpr size_t kSimdStorePad = (64 / sizeof(T)) > 0 ? (64 / sizeof(T)) : 1;
-            const size_t padded_count = std::min(_count, selected + kSimdStorePad);
-            raw::stl_vector_resize_uninitialized(&data, orig_size + padded_count);
+            constexpr size_t kPadElems = (SIMD::Filter::kFilterSimdStorePadBytes + sizeof(T) - 1) / sizeof(T);
+            data.reserve(orig_size + selected + kPadElems);
+            raw::stl_vector_resize_uninitialized(&data, orig_size + selected);
             auto* __restrict dest = data.data() + orig_size;
             SIMD::Filter::filter_range(dest, src_data, _mask, 0, _count);
-            raw::stl_vector_resize_uninitialized(&data, orig_size + selected);
             return Status::OK();
         }
     }
