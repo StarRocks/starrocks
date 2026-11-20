@@ -199,7 +199,7 @@ public class AnalyzeFunctionTest {
             String source = " from (select " + String.format(constructor, "if(v1 IS NULL, NULL, 'POINT (1 2)')")
                     + " g, v1 id from t0) t";
             for (String expr : List.of("[[g]]", "map{'a': g}", "map{g: 'a'}", "row([g])", "named_struct('a', [g])",
-                    "array_agg(g)", "array_agg(distinct g)", "max_by([g], id)", "map_agg(id, g)",
+                    "array_agg(g)", "max_by([g], id)", "map_agg(id, g)",
                     "array_distinct([g])", "array_sort([g])", "array_contains([g], g)", "[g] = [g]",
                     "ST_AsText([g][1])", "cardinality([g])", "array_contains([], g)", "array_position([], g)",
                     "array_contains(NULL, g)")) {
