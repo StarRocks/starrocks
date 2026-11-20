@@ -35,9 +35,9 @@ import com.starrocks.planner.FileTableScanNode;
 import com.starrocks.planner.FlussScanNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
-import com.starrocks.planner.IcebergMetadataScanNode;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.LanceScanNode;
+import com.starrocks.planner.MetadataScanNode;
 import com.starrocks.planner.OdpsScanNode;
 import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.ScanNode;
@@ -146,7 +146,7 @@ public class HDFSBackendSelector implements BackendSelector {
             } else if (scanNode instanceof OdpsScanNode) {
                 OdpsScanNode node = (OdpsScanNode) scanNode;
                 predicates = node.getScanNodePredicates();
-            } else if (scanNode instanceof IcebergMetadataScanNode) {
+            } else if (scanNode instanceof MetadataScanNode) {
                 // ignored
             } else {
                 Preconditions.checkState(false);

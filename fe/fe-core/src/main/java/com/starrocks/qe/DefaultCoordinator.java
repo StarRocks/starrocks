@@ -633,6 +633,10 @@ public class DefaultCoordinator extends Coordinator {
         try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Pending")) {
             QueryQueueManager.getInstance().maybeWait(connectContext, this);
         }
+        if (connectContext != null && connectContext.isMetadataContext()) {
+            // Planning and queueing consume both the metadata task's budget and its parent's budget.
+            setTimeoutSecond(SimpleExecutor.checkInternalQueryState(connectContext));
+        }
 
         if (isShortCircuit) {
             execShortCircuit();
@@ -651,6 +655,10 @@ public class DefaultCoordinator extends Coordinator {
         }
 
         try {
+            if (connectContext != null && connectContext.isMetadataContext()) {
+                // Fragment preparation may also exhaust the deadline before anything has been dispatched.
+                setTimeoutSecond(SimpleExecutor.checkInternalQueryState(connectContext));
+            }
             try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Deploy")) {
                 deliverExecFragments(option);
             }

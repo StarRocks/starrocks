@@ -54,4 +54,8 @@ using StarRocksPaimonCreateScannerFn = starrocks::HdfsScanner* (*)();
 using StarRocksPaimonCreateSinkFn = connector::ConnectorSink* (*)(std::shared_ptr<connector::PaimonChunkSinkContext>,
                                                                   int32_t);
 
+// Creates the virtual-table scanner used for distributed global-index evaluation.
+#define STARROCKS_PAIMON_CREATE_GLOBAL_INDEX_SCANNER_SYMBOL "starrocks_paimon_create_global_index_scanner"
+using StarRocksPaimonCreateGlobalIndexScannerFn = starrocks::HdfsScanner* (*)();
+
 } // namespace starrocks

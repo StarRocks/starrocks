@@ -18,23 +18,23 @@ import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergMetadataScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergMetadataScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMetadataScanOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
 
-public class IcebergMetadataScanImplementationRule extends ImplementationRule {
-    public IcebergMetadataScanImplementationRule() {
-        super(RuleType.IMP_ICEBERG_METADATA_LSCAN_TO_PSCAN,
-                Pattern.create(OperatorType.LOGICAL_ICEBERG_METADATA_SCAN));
+public class MetadataScanImplementationRule extends ImplementationRule {
+    public MetadataScanImplementationRule() {
+        super(RuleType.IMP_METADATA_LSCAN_TO_PSCAN,
+                Pattern.create(OperatorType.LOGICAL_METADATA_SCAN));
     }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        LogicalIcebergMetadataScanOperator scan = (LogicalIcebergMetadataScanOperator) input.getOp();
-        PhysicalIcebergMetadataScanOperator physicalMetadataScan = new PhysicalIcebergMetadataScanOperator(scan);
+        LogicalMetadataScanOperator scan = (LogicalMetadataScanOperator) input.getOp();
+        PhysicalMetadataScanOperator physicalMetadataScan = new PhysicalMetadataScanOperator(scan);
         OptExpression result = new OptExpression(physicalMetadataScan);
         return Lists.newArrayList(result);
     }
