@@ -53,7 +53,6 @@ import org.apache.iceberg.Metrics;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.RowDelta;
 import org.apache.iceberg.Schema;
-import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.expressions.Expression;
@@ -928,7 +927,7 @@ public class IcebergManifestCacheStatsTest extends TableTestBase {
             Assertions.assertEquals(1, tasks.size());
             Assertions.assertEquals(expected, tasks.get(0).deletes().size(), "plan " + i);
             Set<DeleteFile> cached =
-                    deleteFileCache.getIfPresent(StarRocksIcebergTableScan.manifestEntriesCacheKey(manifest));
+                    deleteFileCache.getIfPresent(manifest.path());
             Assertions.assertNotNull(cached, "plan " + i + " left no cache entry");
             Assertions.assertEquals(2, cached.size(), "plan " + i + " left an incomplete cache entry");
         }

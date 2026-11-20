@@ -53,28 +53,17 @@ public class DeleteFileWrapper implements DeleteFile {
 
         DeleteFileWrapper that = (DeleteFileWrapper) o;
 
-<<<<<<< HEAD
-        return deleteFile.path().toString().equals(that.deleteFile.path().toString());
-=======
-        // V3 deletion vectors share one Puffin path, so contentOffset is what tells them apart.
-        // It is null for position/equality deletes, which keeps their identity unchanged.
         // pos() is the entry's row in its manifest: a manifest can list the same delete file twice (committed twice
         // and then merged into one manifest), and Iceberg indexes it once per entry. Keeping both entries keeps the
         // cached set in step with the manifest's live entry count, which the read side checks.
         return deleteFile.path().toString().equals(that.deleteFile.path().toString())
-                && Objects.equals(deleteFile.contentOffset(), that.deleteFile.contentOffset())
                 && Objects.equals(deleteFile.pos(), that.deleteFile.pos());
->>>>>>> e6644dbb446... [BugFix][RB-1509] Keep duplicate live entries of an Iceberg delete manifest in the delete file cache (#70577)
     }
 
     @Override
     public int hashCode() {
-<<<<<<< HEAD
-        return Objects.hash(deleteFile.path());
-=======
         // path() is a CharSequence; hash its string form so it stays consistent with equals().
-        return Objects.hash(deleteFile.path().toString(), deleteFile.contentOffset(), deleteFile.pos());
->>>>>>> e6644dbb446... [BugFix][RB-1509] Keep duplicate live entries of an Iceberg delete manifest in the delete file cache (#70577)
+        return Objects.hash(deleteFile.path().toString(), deleteFile.pos());
     }
 
     @Override
