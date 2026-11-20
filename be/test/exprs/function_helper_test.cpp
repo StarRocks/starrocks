@@ -199,15 +199,9 @@ TEST_F(FunctionHelperTest, testCreateColumnSpecialTypes) {
             TYPE_GEOMETRY,
             {GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857});
     for (const auto& type :
-<<<<<<< HEAD
          {TypeDescriptor(TYPE_NULL),
           TypeDescriptor::create_map_type(TypeDescriptor(TYPE_UNKNOWN), TypeDescriptor(TYPE_UNKNOWN)),
-          TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 35, 7), TypeDescriptor(TYPE_GEOGRAPHY),
-          TypeDescriptor(TYPE_GEOMETRY)}) {
-=======
-         {TypeDescriptor(TYPE_NULL), TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, TYPE_UNKNOWN_DESC),
           TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 35, 7), geography, geometry}) {
->>>>>>> e37002f ([Enhancement] Replace GeoColumn type exceptions with DCHECKs (backport #83349) (#83371))
         for (bool nullable : {false, true}) {
             auto column = FunctionHelper::create_column(type, nullable);
             EXPECT_EQ(nullable, column->is_nullable());
