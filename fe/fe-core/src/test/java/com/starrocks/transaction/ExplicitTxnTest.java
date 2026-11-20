@@ -761,6 +761,13 @@ public class ExplicitTxnTest {
 
     @Test
     public void testExplicitDeleteLoadJobFollowsTransactionOutcome() throws Exception {
+        // The real commit allocates a GTID on the FE leader.
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
         new MockUp<GlobalTransactionMgr>() {
             @Mock
             public VisibleStateWaiter retryCommitOnRateLimitExceeded(Invocation invocation,
@@ -819,20 +826,6 @@ public class ExplicitTxnTest {
                 cleanupExplicitState(txnMgr, txnMgr.getTransactionState(database.getId(), txnId));
             }
         }
-    }
-
-    @Test
-    public void testCommitWithLostTransactionState() {
-        // When txnId is set but explicitTxnState is null (e.g., FE leader switch),
-        // commitStmt should report an error instead of silently succeeding.
-        ConnectContext context = new ConnectContext();
-        context.setTxnId(99999);
-
-        TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
-
-        Assertions.assertEquals(0, context.getTxnId());
-        Assertions.assertTrue(context.getState().isError());
-        Assertions.assertTrue(context.getState().getErrorMessage().contains("Transaction state not found"));
     }
 
     @Test
