@@ -4635,6 +4635,73 @@ TEST_F(LakeTabletReaderSpit, test_nosplit_index_warm_gates_and_lifetime) {
     run(true, true, READER_QUERY, true, false); // a refused warm falls back to ordinary reads
 }
 
+TEST_F(LakeTabletReaderSpit, test_index_warm_respects_scan_cache_policy) {
+    ASSERT_NO_FATAL_FAILURE(write_two_rowsets_with_three_segments());
+    TInternalScanRange internal;
+    internal.__set_tablet_id(_tablet_metadata->id());
+    internal.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan;
+    scan.__set_internal_scan_range(internal);
+
+    ConfigResetGuard<bool> warm_guard(&config::lake_scan_warm_index, true);
+    ConfigResetGuard<bool> open_guard(&config::lake_scan_parallel_segment_open, false);
+    ConfigResetGuard<bool> parallel_guard(&config::enable_load_segment_parallel, false);
+    const bool old_scheduler = g_remote_io_scheduler_enabled.exchange(true);
+    auto* sync = SyncPoint::GetInstance();
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+        g_remote_io_scheduler_enabled.store(old_scheduler);
+    });
+    int warm_calls = 0;
+    int eager_open_calls = 0;
+    sync->SetCallBack("TabletReader::warm_prepared_indexes::warm", [&](void*) { ++warm_calls; });
+    sync->SetCallBack("TabletReader::open_segment_task", [&](void*) { ++eager_open_calls; });
+
+    auto run = [&](const LakeIOOptions& policy, bool split, bool prepared) {
+        SCOPED_TRACE(::testing::Message() << "split=" << split << " prepared=" << prepared);
+        _tablet_mgr->metacache()->prune();
+        warm_calls = 0;
+        eager_open_calls = 0;
+        auto params = generate_tablet_reader_params(&scan);
+        params.reader_type = READER_QUERY;
+        params.lake_io_opts = policy;
+        params.enable_prepared_physical_split_scan = prepared;
+        params.range = TabletReaderParams::RangeStartOperation::GE;
+        params.end_range = TabletReaderParams::RangeEndOperation::LE;
+        params.start_key = {OlapTuple({"1"})};
+        params.end_key = {OlapTuple({"100"})};
+        TabletReader reader(_tablet_mgr.get(), _tablet_metadata, *_schema, split, split);
+        ASSERT_OK(reader.prepare());
+        ASSERT_OK(reader.open(params));
+        EXPECT_EQ(0, warm_calls);
+        EXPECT_EQ(0, reader.stats().lake_prepared_tablet_warm_index_ranges);
+        if (split) {
+            std::vector<pipeline::ScanSplitContextPtr> tasks;
+            reader.get_split_tasks(&tasks);
+            ASSERT_FALSE(tasks.empty());
+            if (!prepared) {
+                for (const auto& task : tasks) {
+                    const auto* ctx = down_cast<const pipeline::LakeSplitContext*>(task.get());
+                    EXPECT_EQ(nullptr, ctx->classic_tablet_read_state);
+                }
+            }
+        } else {
+            EXPECT_EQ(0, eager_open_calls);
+        }
+        reader.close();
+    };
+    for (const auto& [name, policy] : {std::pair{"no cache fill", LakeIOOptions{.fill_data_cache = false}},
+                                       std::pair{"skip disk cache", LakeIOOptions{.skip_disk_cache = true}},
+                                       std::pair{"cache file only", LakeIOOptions{.cache_file_only = true}}}) {
+        SCOPED_TRACE(name);
+        ASSERT_NO_FATAL_FAILURE(run(policy, /*split=*/false, /*prepared=*/false));
+        ASSERT_NO_FATAL_FAILURE(run(policy, /*split=*/true, /*prepared=*/false));
+        ASSERT_NO_FATAL_FAILURE(run(policy, /*split=*/true, /*prepared=*/true));
+    }
+}
+
 // Ordinal metadata for a one-page column may be loaded without reading that data page, so the warm path still
 // visits it; a loaded short key index is skipped. A bloom filter root is warmed even when its reader is loaded,
 // because the loaded reader holds only its ordinal index, not the filter pages.
