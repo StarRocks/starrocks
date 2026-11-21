@@ -1298,12 +1298,8 @@ public class StarMgrMetaSyncerTest {
             }
         };
 
-        new MockUp<SystemInfoService>() {
-            @Mock
-            public ComputeNode getBackendOrComputeNode(long nodeId) {
-                return null;
-            }
-        };
+        ComputeNode computeNode = new ComputeNode(1L, "127.0.0.1", 9060);
+        List<Long> deleteTabletRequests = mockDeleteTablet(computeNode, Set.of());
 
         shards.clear();
         shards.add(111L);
@@ -1312,13 +1308,14 @@ public class StarMgrMetaSyncerTest {
         shards.add(555L);
         Assertions.assertTrue(starMgrMetaSyncer.syncTableMetaInternal(db, (OlapTable) table, true));
         Assertions.assertEquals(3, shards.size());
+        Assertions.assertEquals(List.of(555L), deleteTabletRequests);
 
         // test aggregator
         new MockUp<LakeAggregator>() {
             @Mock
-            public static ComputeNode chooseAggregatorNode(ComputeResource computeResource,
-                                                           java.util.Collection<ComputeNode> candidateNodes) {
-                return null;
+            public ComputeNode chooseAggregatorNode(ComputeResource computeResource,
+                                                    java.util.Collection<ComputeNode> candidateNodes) {
+                return computeNode;
             }
         };
         shards.clear();
@@ -1328,8 +1325,10 @@ public class StarMgrMetaSyncerTest {
         shards.add(555L);
         OlapTable olapTable = (OlapTable) table;
         olapTable.setFileBundling(true);
+        deleteTabletRequests.clear();
         Assertions.assertTrue(starMgrMetaSyncer.syncTableMetaInternal(db, olapTable, true));
         Assertions.assertEquals(3, shards.size());
+        Assertions.assertEquals(List.of(555L), deleteTabletRequests);
 
         shards.clear();
         shards.add(111L);
@@ -1359,6 +1358,216 @@ public class StarMgrMetaSyncerTest {
         Assertions.assertEquals(4, shards.size());
 
         table.setId(oldTblId);
+    }
+
+    /**
+     * Mocks a lake table whose index holds tablets 111, 222 and 333 while StarMgr lists {@code shards} for
+     * its shard group, so every other shard is redundant (left behind by e.g. a schema change).
+     * StarOSAgent.deleteShards removes the given ids from {@code shards}.
+     */
+    private OlapTable mockTableWithRedundantShards(List<Long> shards) {
+        new MockUp<MaterializedIndex>() {
+            @Mock
+            public List<Tablet> getTablets() {
+                return Lists.newArrayList(new LakeTablet(111), new LakeTablet(222), new LakeTablet(333));
+            }
+        };
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Long> listShard(long groupId) {
+                return shards;
+            }
+
+            @Mock
+            public void deleteShards(Set<Long> shardIds) {
+                shards.removeAll(shardIds);
+            }
+        };
+        return new LakeTable(1000L, "t", new ArrayList<>(), KeysType.AGG_KEYS,
+                new PartitionInfo(PartitionType.RANGE), new HashDistributionInfo());
+    }
+
+    /**
+     * Routes every shard to {@code computeNode} (none when null) and mocks its deleteTablet RPC, which fails
+     * for {@code failedTablets}. Returns the tablet ids the CN was asked to delete.
+     */
+    private List<Long> mockDeleteTablet(ComputeNode computeNode, Set<Long> failedTablets) {
+        return mockDeleteTablet(computeNode, failedTablets, TStatusCode.INTERNAL_ERROR);
+    }
+
+    private List<Long> mockDeleteTablet(ComputeNode computeNode, Set<Long> failedTablets, TStatusCode failure) {
+        List<Long> requested = new ArrayList<>();
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                return computeNode;
+            }
+        };
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(String host, int port) {
+                return new PseudoBackend.PseudoLakeService();
+            }
+        };
+        new MockUp<PseudoBackend.PseudoLakeService>() {
+            @Mock
+            Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request) {
+                requested.addAll(request.tabletIds);
+                DeleteTabletResponse resp = new DeleteTabletResponse();
+                resp.status = new StatusPB();
+                resp.failedTablets = request.tabletIds.stream().filter(failedTablets::contains)
+                        .collect(Collectors.toList());
+                resp.status.statusCode = resp.failedTablets.isEmpty()
+                        ? TStatusCode.OK.getValue() : failure.getValue();
+                return CompletableFuture.completedFuture(resp);
+            }
+        };
+        return requested;
+    }
+
+    @Test
+    public void testSyncTableMetaInternalKeepsShardsWhoseDataDeleteFailed() throws Exception {
+        Database db = new Database(100L, "db");
+        List<Long> shards = Lists.newArrayList(111L, 222L, 333L, 555L);
+        OlapTable table = mockTableWithRedundantShards(shards);
+        // The CN cannot delete tablet 555's files, e.g. the storage volume credential lacks delete permission.
+        List<Long> requested = mockDeleteTablet(new ComputeNode(1L, "127.0.0.1", 9060), Set.of(555L));
+
+        Assertions.assertFalse(starMgrMetaSyncer.syncTableMetaInternal(db, table, true));
+        Assertions.assertEquals(List.of(555L), requested);
+        Assertions.assertEquals(List.of(111L, 222L, 333L, 555L), shards);
+
+        mockDeleteTablet(new ComputeNode(1L, "127.0.0.1", 9060), Set.of());
+        Assertions.assertTrue(starMgrMetaSyncer.syncTableMetaInternal(db, table, true));
+        Assertions.assertEquals(List.of(111L, 222L, 333L), shards);
+    }
+
+    @Test
+    public void testSyncTableMetaInternalDropsOnlyShardsWhoseDataIsDeleted() throws Exception {
+        Database db = new Database(100L, "db");
+        List<Long> shards = Lists.newArrayList(111L, 222L, 333L, 555L, 666L);
+        OlapTable table = mockTableWithRedundantShards(shards);
+        mockDeleteTablet(new ComputeNode(1L, "127.0.0.1", 9060), Set.of(555L));
+
+        Assertions.assertTrue(starMgrMetaSyncer.syncTableMetaInternal(db, table, true));
+        Assertions.assertEquals(List.of(111L, 222L, 333L, 555L), shards);
+    }
+
+    @Test
+    public void testSyncTableMetaInternalKeepsShardsWithoutComputeNode() throws Exception {
+        Database db = new Database(100L, "db");
+        List<Long> shards = Lists.newArrayList(111L, 222L, 333L, 555L);
+        OlapTable table = mockTableWithRedundantShards(shards);
+        // The shard owner does not resolve to a live node, so no delete is sent.
+        List<Long> requested = mockDeleteTablet(null, Set.of());
+
+        Assertions.assertFalse(starMgrMetaSyncer.syncTableMetaInternal(db, table, true));
+        Assertions.assertTrue(requested.isEmpty());
+        Assertions.assertEquals(List.of(111L, 222L, 333L, 555L), shards);
+    }
+
+    @Test
+    public void testSyncTableMetaInternalKeepsShardsWithoutAggregatorNode() throws Exception {
+        Database db = new Database(100L, "db");
+        List<Long> shards = Lists.newArrayList(111L, 222L, 333L, 555L);
+        OlapTable table = mockTableWithRedundantShards(shards);
+        table.setFileBundling(true);
+        List<Long> requested = mockDeleteTablet(new ComputeNode(1L, "127.0.0.1", 9060), Set.of());
+        new MockUp<LakeAggregator>() {
+            @Mock
+            public static ComputeNode chooseAggregatorNode(ComputeResource computeResource,
+                                                           java.util.Collection<ComputeNode> candidateNodes) {
+                return null;
+            }
+        };
+
+        Assertions.assertFalse(starMgrMetaSyncer.syncTableMetaInternal(db, table, true));
+        Assertions.assertTrue(requested.isEmpty());
+        Assertions.assertEquals(List.of(111L, 222L, 333L, 555L), shards);
+    }
+
+    @Test
+    public void testSyncTableMetaInternalTreatsInvalidArgumentAsDeleted() throws Exception {
+        Database db = new Database(100L, "db");
+        List<Long> shards = Lists.newArrayList(111L, 222L, 333L, 555L);
+        OlapTable table = mockTableWithRedundantShards(shards);
+        // INVALID_ARGUMENT (e.g. unusable storage volume params) can never succeed, so the shard is dropped.
+        mockDeleteTablet(new ComputeNode(1L, "127.0.0.1", 9060), Set.of(555L), TStatusCode.INVALID_ARGUMENT);
+
+        Assertions.assertTrue(starMgrMetaSyncer.syncTableMetaInternal(db, table, true));
+        Assertions.assertEquals(List.of(111L, 222L, 333L), shards);
+    }
+
+    @Test
+    public void testSyncTableMetaInternalWithoutForceDeleteDataDropsMetaOnly() throws Exception {
+        Database db = new Database(100L, "db");
+        List<Long> shards = Lists.newArrayList(111L, 222L, 333L, 555L);
+        OlapTable table = mockTableWithRedundantShards(shards);
+        List<Long> requested = mockDeleteTablet(new ComputeNode(1L, "127.0.0.1", 9060), Set.of());
+
+        // forceDeleteData = false (/api/{db}/{table}/_sync_meta?force=false) asks for a meta-only cleanup.
+        Assertions.assertTrue(starMgrMetaSyncer.syncTableMetaInternal(db, table, false));
+        Assertions.assertTrue(requested.isEmpty());
+        Assertions.assertEquals(List.of(111L, 222L, 333L), shards);
+    }
+
+    @Test
+    public void testSyncTableMetaInternalKeepsShardsWhenDeleteTabletRpcFails() throws Exception {
+        Database db = new Database(100L, "db");
+        List<Long> shards = Lists.newArrayList(111L, 222L, 333L, 555L);
+        OlapTable table = mockTableWithRedundantShards(shards);
+        mockDeleteTablet(new ComputeNode(1L, "127.0.0.1", 9060), Set.of());
+        new MockUp<PseudoBackend.PseudoLakeService>() {
+            @Mock
+            Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request) {
+                return CompletableFuture.failedFuture(new RpcException("127.0.0.1", "rpc failed"));
+            }
+        };
+
+        Assertions.assertFalse(starMgrMetaSyncer.syncTableMetaInternal(db, table, true));
+        Assertions.assertEquals(List.of(111L, 222L, 333L, 555L), shards);
+    }
+
+    @Test
+    public void testSyncTableMetaInternalKeepsShardsWhenStarMgrDeleteFails() throws Exception {
+        Database db = new Database(100L, "db");
+        List<Long> shards = Lists.newArrayList(111L, 222L, 333L, 555L);
+        OlapTable table = mockTableWithRedundantShards(shards);
+        List<Long> requested = mockDeleteTablet(new ComputeNode(1L, "127.0.0.1", 9060), Set.of());
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void deleteShards(Set<Long> shardIds) throws DdlException {
+                throw new DdlException("starMgr unavailable");
+            }
+        };
+
+        // The data is deleted but the shard stays; the next round deletes the (now empty) tablet again and retries.
+        Assertions.assertFalse(starMgrMetaSyncer.syncTableMetaInternal(db, table, true));
+        Assertions.assertEquals(List.of(555L), requested);
+        Assertions.assertEquals(List.of(111L, 222L, 333L, 555L), shards);
+    }
+
+    @Test
+    public void testSyncTableMetaInternalKeepsShardsWhenDropTabletThrows() throws Exception {
+        Database db = new Database(100L, "db");
+        List<Long> shards = Lists.newArrayList(111L, 222L, 333L, 555L);
+        OlapTable table = mockTableWithRedundantShards(shards);
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                throw new IllegalStateException("cluster info unavailable");
+            }
+        };
+
+        Assertions.assertFalse(starMgrMetaSyncer.syncTableMetaInternal(db, table, true));
+        Assertions.assertEquals(List.of(111L, 222L, 333L, 555L), shards);
+    }
+
+    @Test
+    public void testDropTabletAndDeleteShardWithNoShards() {
+        ComputeResource computeResource = GlobalStateMgr.getCurrentState().getWarehouseMgr().getBackgroundComputeResource();
+        Assertions.assertTrue(StarMgrMetaSyncer.dropTabletAndDeleteShard(computeResource, List.of(), starOSAgent,
+                false, false).isEmpty());
     }
 
     @Test
@@ -1927,10 +2136,12 @@ public class StarMgrMetaSyncerTest {
         };
 
         Assertions.assertTrue(deletedShardIds.isEmpty());
-        StarMgrMetaSyncer.dropTabletAndDeleteShard(computeResource, allShardIds, starOSAgent, false, false);
+        Set<Long> removed =
+                StarMgrMetaSyncer.dropTabletAndDeleteShard(computeResource, allShardIds, starOSAgent, false, false);
         Assertions.assertEquals(successIds.size(), deletedShardIds.size());
         Set<Long> expectedShardIds = new HashSet<>(successIds);
         Assertions.assertEquals(expectedShardIds, deletedShardIds);
+        Assertions.assertEquals(expectedShardIds, removed);
     }
 
     @Test

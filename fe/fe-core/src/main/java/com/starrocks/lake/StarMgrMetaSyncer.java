@@ -164,11 +164,15 @@ public class StarMgrMetaSyncer extends LeaderDaemon {
     // |isRangeDistribution| tells BE these tablets share physical files with the tablets a reshard
     // produced, so it must not delete their data files. BE can otherwise only infer that from a dropped
     // tablet's own metadata, which vacuum removes -- and then it deleted files a split child still read.
-    public static void dropTabletAndDeleteShard(ComputeResource computeResource,
-                                                List<Long> shardIds, StarOSAgent starOSAgent,
-                                                boolean isFileBundling, boolean isRangeDistribution) {
+    //
+    // A shard is removed from starMgr only after its CN reports the tablet deleted (INVALID_ARGUMENT, e.g.
+    // unusable storage volume params, counts as deleted); the others stay so that the next round retries them.
+    // Returns the shards removed from starMgr.
+    public static Set<Long> dropTabletAndDeleteShard(ComputeResource computeResource,
+                                                     List<Long> shardIds, StarOSAgent starOSAgent,
+                                                     boolean isFileBundling, boolean isRangeDistribution) {
         if (shardIds.isEmpty()) {
-            return;
+            return Collections.emptySet();
         }
         Preconditions.checkNotNull(starOSAgent);
         Map<Long, Set<Long>> shardIdsByBeMap = new HashMap<>();
@@ -248,7 +252,7 @@ public class StarMgrMetaSyncer extends LeaderDaemon {
                 // Delete tablets in parallel
                 futureMap.put(backendId, lakeService.deleteTablet(request));
             } catch (Throwable e) {
-                LOG.info("Fail to send the deleteTablet request to host: {}. error: {}. Ignored for now.",
+                LOG.warn("Fail to send the deleteTablet request to host: {}. error: {}. Ignored for now.",
                         node.toString(), e.getMessage());
             }
         }
@@ -272,7 +276,7 @@ public class StarMgrMetaSyncer extends LeaderDaemon {
                         if (response.status != null) {
                             stCode = TStatusCode.findByValue(response.status.statusCode);
                         }
-                        LOG.info("Fail to delete tablet from node: {}. StatusCode: {}, Error: {}, failedTablets: {}",
+                        LOG.warn("Fail to delete tablet from node: {}. StatusCode: {}, Error: {}, failedTablets: {}",
                                 nodeId, stCode, errorMsg, response.failedTablets);
 
                         // ignore INVALID_ARGUMENT error, treat it as success
@@ -285,21 +289,24 @@ public class StarMgrMetaSyncer extends LeaderDaemon {
                 }
             } catch (InterruptedException exception) {
                 Thread.currentThread().interrupt();
-                LOG.info("Interrupted while waiting for delete tablet response from node:{}, error: {}", nodeId,
+                LOG.warn("Interrupted while waiting for delete tablet response from node:{}, error: {}", nodeId,
                         exception.getMessage());
             } catch (Exception e) {
-                LOG.info("Failed to get delete tablet response from node:{}, error: {}", nodeId, e.getMessage());
+                LOG.warn("Failed to get delete tablet response from node:{}, error: {}", nodeId, e.getMessage());
             }
         }
 
         // Delete shards from starMgr
-        if (!shardToDelete.isEmpty()) {
-            try {
-                starOSAgent.deleteShards(shardToDelete);
-                SHARD_DELETE_COUNTER.increase((long) shardToDelete.size());
-            } catch (DdlException e) {
-                LOG.info("Failed to delete shard: {} from starMgr, error: {}", shardToDelete, e.getMessage());
-            }
+        if (shardToDelete.isEmpty()) {
+            return Collections.emptySet();
+        }
+        try {
+            starOSAgent.deleteShards(shardToDelete);
+            SHARD_DELETE_COUNTER.increase((long) shardToDelete.size());
+            return shardToDelete;
+        } catch (DdlException e) {
+            LOG.warn("Failed to delete shard: {} from starMgr, error: {}", shardToDelete, e.getMessage());
+            return Collections.emptySet();
         }
     }
 
@@ -650,29 +657,30 @@ public class StarMgrMetaSyncer extends LeaderDaemon {
 
         redundantGroupToShards.keySet().removeAll(snapshotProtectedShardGroups);
 
-        // try to delete data, if fail, still delete redundant shard meta in starmgr
-        Set<Long> shardToDelete = new HashSet<>();
+        boolean changed = false;
+        Set<Long> metaOnlyShards = new HashSet<>();
         for (Map.Entry<Long, Set<Long>> entry : redundantGroupToShards.entrySet()) {
-            if (forceDeleteData) {
-                try {
-                    List<Long> shardIds = new ArrayList<>();
-                    shardIds.addAll(entry.getValue());
-                    dropTabletAndDeleteShard(computeResource, shardIds, starOSAgent, table.isFileBundling(),
-                            table.isRangeDistribution());
-                } catch (Exception e) {
-                    // ignore exception
-                    LOG.info(e.getMessage());
-                }
+            if (!forceDeleteData) {
+                metaOnlyShards.addAll(entry.getValue());
+                continue;
             }
-            shardToDelete.addAll(entry.getValue());
+            // A shard is the last reference to its tablet's files: keep the ones whose delete failed or was
+            // never sent, so that the next round retries them instead of leaking the files.
+            try {
+                changed |= !dropTabletAndDeleteShard(computeResource, new ArrayList<>(entry.getValue()), starOSAgent,
+                        table.isFileBundling(), table.isRangeDistribution()).isEmpty();
+            } catch (Exception e) {
+                LOG.warn("Failed to drop redundant tablets of table {}, shard group {}", table.getName(),
+                        entry.getKey(), e);
+            }
         }
 
-        // do final meta delete, regardless whether above tablet deleted or not
-        if (!shardToDelete.isEmpty()) {
-            starOSAgent.deleteShards(shardToDelete);
-            SHARD_DELETE_COUNTER.increase((long) shardToDelete.size());
+        if (!metaOnlyShards.isEmpty()) {
+            starOSAgent.deleteShards(metaOnlyShards);
+            SHARD_DELETE_COUNTER.increase((long) metaOnlyShards.size());
+            changed = true;
         }
-        return !shardToDelete.isEmpty();
+        return changed;
     }
 
     private boolean isShardGroupNotExist(DdlException e) {
