@@ -1259,7 +1259,11 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
             // If it's not an extended column, we have to check the cardinality of the column.
             // TODO(murphy) support collect cardinality of extended column
-            if (!checkExtendedColumn(scan, column)) {
+            boolean extendedColumn = checkExtendedColumn(scan, column);
+            if (column.getHints().contains(JsonPathRewriteRule.COLUMN_REF_HINT) && !extendedColumn) {
+                continue;
+            }
+            if (!extendedColumn) {
                 ColumnStatistic columnStatistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
                         .getColumnStatistic(table, column.getName());
                 // Condition 2: the varchar column is low cardinality string column
