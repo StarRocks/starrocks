@@ -1069,6 +1069,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 部分更新操作におけるワーカー スレッドあたりの最大メモリ。部分更新を処理する際の個々のワーカー スレッドのメモリ使用量を制御します。
 - 導入バージョン: -
 
+### lake_pk_column_mode_spill_min_source_segments
+
+- デフォルト: 2
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データの主キーテーブルでカラムモードの部分更新を行う際、更新対象のソースセグメント数がこの値以上の場合に、更新行をソースセグメント単位で `spill_local_storage_dir` 配下のローカル spill ファイルに分割してから適用します。これらのディレクトリに空きがない場合は、spill を使わずに適用します。spill を使う場合、各更新ファイルはカラムバッチごとにオブジェクトストレージから一度だけ読み込まれ、各ソースセグメントは自分の行だけをローカルディスクから読み込みます。ソースセグメント数がこの値より少ない場合、またはこの値が 0 以下の場合は、各ソースセグメントが関係する更新ファイルをすべて読み直すため、セグメント数の多い tablet では遅くなります。分割処理のメモリは `lake_pk_column_mode_spill_buffer_bytes` で制限されます。
+- 導入バージョン: -
+
+### lake_pk_column_mode_spill_buffer_bytes
+
+- デフォルト: 67108864
+- タイプ: Int
+- 単位: Bytes
+- 変更可能: はい
+- 説明: カラムモード部分更新の分割処理が spill ファイルに書き出す前にバッファできるメモリの上限。`lake_pk_column_mode_spill_min_source_segments` を参照。
+- 導入バージョン: -
+
 ### enable_load_spill_parallel_merge
 
 - デフォルト: true

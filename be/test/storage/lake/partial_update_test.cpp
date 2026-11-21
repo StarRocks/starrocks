@@ -16,10 +16,13 @@
 
 #include <algorithm>
 #include <atomic>
+#include <filesystem>
+#include <limits>
 #include <map>
 #include <numeric>
 #include <optional>
 #include <random>
+#include <set>
 
 #include "base/container/lru_cache.h"
 #include "base/testutil/assert.h"
@@ -40,8 +43,11 @@
 #include "common/config_rowset_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/logging.h"
+#include "compute_env/spill/block_manager.h"
+#include "compute_env/spill/dir_manager.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
+#include "io/input_stream.h"
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/datum_variant.h"
@@ -60,12 +66,33 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
 #include "storage/variant_tuple.h"
 #include "types/json_value.h"
 
 namespace starrocks::lake {
+
+// Seed encryption keys for tests that enable TDE (no FE in UT environment).
+// Only add keys if they don't already exist to avoid conflicts with other tests.
+static void seed_encryption_keys() {
+    if (KeyCache::instance().get_key("0000000000000000") != nullptr) {
+        return;
+    }
+    EncryptionKeyPB pb;
+    pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
+    pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
+    pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
+    pb.set_plain_key("0000000000000000");
+    std::unique_ptr<EncryptionKey> root_encryption_key = EncryptionKey::create_from_pb(pb).value();
+    auto val_st = root_encryption_key->generate_key();
+    ASSERT_TRUE(val_st.ok());
+    std::unique_ptr<EncryptionKey> encryption_key = std::move(val_st.value());
+    encryption_key->set_id(2);
+    KeyCache::instance().add_key(root_encryption_key);
+    KeyCache::instance().add_key(encryption_key);
+}
 
 class LakePartialUpdateTestBase : public TestBase {
 public:
@@ -593,6 +620,315 @@ TEST_P(LakePartialUpdateTest, test_column_mode_partial_update_streams_source_seg
 // This test stamps a bundle_file_offset onto a row-mode partial update segment (as a bundled load
 // records it), publishes so rewrite_segment orphans the raw segment, and asserts the orphaned
 // segment is flagged shared.
+// Many update files, each touching rows of every source segment. The update rows are partitioned by
+// source segment into a local spill file, so every update file is read once; the result must equal
+// the per-segment re-read path, whether the partition pass flushes once per update file or on every
+// chunk, and the spill file must be gone when the publish is done.
+TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
+    if (GetParam().partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        GTEST_SKIP() << "Only column mode reads update files while generating DCGs";
+    }
+    std::vector<uint32_t> indexes(kChunkSize);
+    std::iota(indexes.begin(), indexes.end(), 0);
+    auto version = 1;
+    const auto tablet_id = _tablet_metadata->id();
+    const int kSourceSegments = 4;
+    for (int shift = 0; shift < kSourceSegments; shift++) {
+        auto chunk = generate_data(kChunkSize, shift, false, 3);
+        const auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+    }
+    ASSERT_EQ(kChunkSize * kSourceSegments,
+              check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+
+    // Keys k, k + 4, k + 8, ... so that every update file carries rows of every source segment.
+    auto strided_update = [&](int slice, int update_ratio) {
+        std::vector<int> v0(kChunkSize);
+        std::vector<int> v1(kChunkSize);
+        for (int i = 0; i < kChunkSize; i++) {
+            v0[i] = slice + i * kSourceSegments;
+            v1[i] = v0[i] * update_ratio;
+        }
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_numbers(v0.data(), v0.size() * sizeof(int));
+        c1->append_numbers(v1.data(), v1.size() * sizeof(int));
+        return Chunk({std::move(c0), std::move(c1)}, _slot_cid_map);
+    };
+
+    // The spill goes to the local spill directories shared with the query and load spill.
+    const std::string spill_dir = std::string(kTestDirectory) + "/pcu_spill";
+    ASSERT_OK(fs::create_directories(spill_dir));
+    ASSIGN_OR_ABORT(auto spill_fs, FileSystemFactory::CreateSharedFromString(spill_dir));
+    auto spill_disk = std::make_shared<spill::Dir>(spill_dir, spill_fs, std::numeric_limits<int64_t>::max());
+    spill::DirManager spill_dir_mgr(std::vector<spill::DirPtr>{spill_disk});
+    auto* old_spill_dir_mgr = StorageEnv::GetInstance()->spill_dir_mgr();
+    StorageEnv::GetInstance()->set_spill_dir_mgr(&spill_dir_mgr);
+    DeferOp restore_dir([&]() { StorageEnv::GetInstance()->set_spill_dir_mgr(old_spill_dir_mgr); });
+
+    std::atomic<int> upt_reads{0};
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:upt_read",
+                                          [&](void*) { upt_reads++; });
+    // Each update file's iterator is released right after the file is read, not at the end of the
+    // pass: the number of live iterators drops by one per file and reaches zero with the last one.
+    std::atomic<int> upt_closes{0};
+    size_t live_iters = SIZE_MAX;
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:upt_closed",
+                                          [&](void* arg) {
+                                              upt_closes++;
+                                              const size_t live = *static_cast<size_t*>(arg);
+                                              EXPECT_LT(live, live_iters) << "a read update file kept its iterator";
+                                              live_iters = live;
+                                          });
+    // A flush must drop its per-segment buffers, not just clear them: a reset chunk keeps its capacity
+    // for the rest of the partition pass while the tracker already says the bytes are gone.
+    std::atomic<int> flushes{0};
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:flushed", [&](void* arg) {
+        flushes++;
+        EXPECT_EQ(0, *static_cast<size_t*>(arg)) << "flushed buffers retained after the flush";
+    });
+    // The routing entries of one update file are charged to the update tracker while they are alive.
+    std::atomic<int> charged_routes{0};
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:routed", [&](void* arg) {
+        charged_routes++;
+        const int64_t bytes = *static_cast<int64_t*>(arg);
+        EXPECT_GT(bytes, 0);
+        EXPECT_GE(_primary_key_mgr->mem_tracker()->consumption(), bytes);
+    });
+    // Every spill record a segment task reads back is charged to the update tracker while it is alive.
+    std::atomic<int> charged_reads{0};
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:charged",
+                                          [&](void* arg) {
+                                              charged_reads++;
+                                              const int64_t bytes = *static_cast<int64_t*>(arg);
+                                              EXPECT_GT(bytes, 0);
+                                              EXPECT_GE(_primary_key_mgr->mem_tracker()->consumption(), bytes);
+                                          });
+    // The chunk an update file is decoded into is charged while it is alive, rows left out included.
+    std::atomic<int> charged_chunks{0};
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:chunk", [&](void* arg) {
+        charged_chunks++;
+        const int64_t bytes = *static_cast<int64_t*>(arg);
+        EXPECT_GT(bytes, 0);
+        EXPECT_GE(_primary_key_mgr->mem_tracker()->consumption(), bytes);
+    });
+    // The serialized copy a flush writes out is charged too, on top of the buffer it was made from.
+    std::atomic<int> charged_payloads{0};
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:payload", [&](void* arg) {
+        charged_payloads++;
+        const int64_t bytes = *static_cast<int64_t*>(arg);
+        EXPECT_GT(bytes, 0);
+        EXPECT_GE(_primary_key_mgr->mem_tracker()->consumption(), bytes);
+    });
+    // One update_rows() per source range and update file, however many records the rows came from.
+    std::atomic<int> applies{0};
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:apply",
+                                          [&](void*) { applies++; });
+    // Records written, and the largest one, to size a record limit that forces splits below.
+    std::atomic<int> records_written{0};
+    int64_t max_record_len = 0;
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:record", [&](void* arg) {
+        records_written++;
+        max_record_len = std::max(max_record_len, *static_cast<int64_t*>(arg));
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp sync_point_guard([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:upt_read");
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:record");
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:payload");
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:chunk");
+        SyncPoint::GetInstance()->ClearCallBack(
+                "ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:apply");
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:upt_closed");
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:flushed");
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:routed");
+        SyncPoint::GetInstance()->ClearCallBack(
+                "ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:charged");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    auto run_update = [&](int update_ratio) {
+        // One column-mode update that rewrites c1 of every row, flushed as one update file per write.
+        ConfigResetGuard<int64_t> write_buffer_guard(&config::write_buffer_size, 1);
+        upt_reads = 0;
+        upt_closes = 0;
+        live_iters = SIZE_MAX;
+        const auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        for (int slice = 0; slice < kSourceSegments; slice++) {
+            auto chunk = strided_update(slice, update_ratio);
+            ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        }
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+        ASSERT_EQ(kChunkSize * kSourceSegments, check(version, [update_ratio](int c0, int c1, int c2) {
+                      return (c0 * update_ratio == c1) && (c0 * 4 == c2);
+                  }));
+    };
+
+    // Spill on: each update file is read exactly once, whatever the number of source segments.
+    const int64_t tracker_before_spill = _primary_key_mgr->mem_tracker()->consumption();
+    run_update(5);
+    const int baseline_records = records_written.load();
+    const int64_t baseline_max_record_len = max_record_len;
+    EXPECT_EQ(kSourceSegments, upt_reads.load());
+    EXPECT_EQ(kSourceSegments, upt_closes.load());
+    EXPECT_EQ(0, live_iters);
+    EXPECT_GT(flushes.load(), 0);
+    EXPECT_EQ(kSourceSegments, charged_routes.load());
+    EXPECT_GT(charged_reads.load(), 0);
+    EXPECT_GT(charged_payloads.load(), 0);
+    EXPECT_GT(charged_chunks.load(), 0);
+    // Every update file has rows of every source segment, and a source segment is one streamed range.
+    EXPECT_EQ(kSourceSegments * kSourceSegments, applies.load());
+    // Reading the update files four rows at a time and flushing on every chunk splits a segment's
+    // rows of one update file over several records. They are still applied together.
+    {
+        ConfigResetGuard<int64_t> buffer_guard(&config::lake_pk_column_mode_spill_buffer_bytes, 1);
+        ConfigResetGuard<int32_t> chunk_size_guard(&config::pk_vector_chunk_size, 4);
+        flushes = 0;
+        charged_reads = 0;
+        applies = 0;
+        run_update(7);
+        EXPECT_EQ(kSourceSegments, upt_reads.load());
+        EXPECT_GT(flushes.load(), kSourceSegments);
+        EXPECT_GT(charged_reads.load(), kSourceSegments * kSourceSegments);
+        EXPECT_EQ(kSourceSegments * kSourceSegments, applies.load());
+    }
+    // A record lands on disk as it was serialized, unless transparent data encryption is on: then
+    // the bytes on disk differ from the serialized record, and the update still applies.
+    {
+        seed_encryption_keys();
+        std::string plain;
+        std::atomic<int> plain_blocks{0};
+        std::atomic<int> encrypted_blocks{0};
+        SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:plain",
+                                              [&](void* arg) {
+                                                  const auto& p = *static_cast<std::pair<const char*, int64_t>*>(arg);
+                                                  plain.assign(p.first, p.second);
+                                              });
+        SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:block",
+                                              [&](void* arg) {
+                                                  const auto& block = *static_cast<spill::BlockPtr*>(arg);
+                                                  ASSERT_EQ(plain.size(), block->size());
+                                                  std::string raw(block->size(), 0);
+                                                  ASSIGN_OR_ABORT(auto readable, block->get_readable());
+                                                  ASSERT_OK(readable->read_fully(raw.data(), raw.size()));
+                                                  (raw == plain ? plain_blocks : encrypted_blocks)++;
+                                              });
+        run_update(8);
+        EXPECT_GT(plain_blocks.load(), 0);
+        EXPECT_EQ(0, encrypted_blocks.load());
+        {
+            ConfigResetGuard<bool> tde_guard(&config::enable_transparent_data_encryption, true);
+            plain_blocks = 0;
+            run_update(15);
+            EXPECT_EQ(0, plain_blocks.load());
+            EXPECT_GT(encrypted_blocks.load(), 0);
+        }
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:plain");
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:block");
+    }
+    // Everything the spill charged (buffers, records read back) was released again; other caches
+    // may legitimately keep bytes on this tracker, so compare against the pre-spill baseline.
+    EXPECT_EQ(tracker_before_spill, _primary_key_mgr->mem_tracker()->consumption());
+    // The spill files are removed with the handler, and their space goes back to the directory.
+    EXPECT_EQ(0, spill_disk->get_current_size());
+    std::set<std::string> leftovers;
+    if (fs::path_exist(spill_dir)) {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(spill_dir)) {
+            if (entry.is_regular_file()) {
+                leftovers.insert(entry.path().string());
+            }
+        }
+    }
+    EXPECT_TRUE(leftovers.empty()) << *leftovers.begin();
+
+    // A spill directory with no room left, or no spill directory at all, does not fail the publish:
+    // the batch falls back to the per-segment re-read path, with the same result, and keeps no space.
+    {
+        auto full_disk = std::make_shared<spill::Dir>(spill_dir, spill_fs, 1);
+        spill::DirManager full_dir_mgr(std::vector<spill::DirPtr>{full_disk});
+        std::atomic<int> fallbacks{0};
+        SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::execute:spill_fallback",
+                                              [&](void*) { fallbacks++; });
+        StorageEnv::GetInstance()->set_spill_dir_mgr(&full_dir_mgr);
+        run_update(10);
+        EXPECT_GT(fallbacks.load(), 0);
+        EXPECT_EQ(0, full_disk->get_current_size());
+        fallbacks = 0;
+        StorageEnv::GetInstance()->set_spill_dir_mgr(nullptr);
+        run_update(16);
+        EXPECT_GT(fallbacks.load(), 0);
+        EXPECT_EQ(0, upt_reads.load());
+        StorageEnv::GetInstance()->set_spill_dir_mgr(&spill_dir_mgr);
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::execute:spill_fallback");
+    }
+    // A record whose serialized size passes the record limit (the serde's uint32_t buffer lengths)
+    // is split by rows, and a single row that cannot fit falls back to the per-segment re-read. Both
+    // give the same result.
+    {
+        int64_t record_limit = baseline_max_record_len - 1;
+        SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:max_record_bytes",
+                                              [&](void* arg) { *static_cast<int64_t*>(arg) = record_limit; });
+        std::atomic<int> fallbacks{0};
+        SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::execute:spill_fallback",
+                                              [&](void*) { fallbacks++; });
+        records_written = 0;
+        run_update(11);
+        EXPECT_EQ(0, fallbacks.load());
+        EXPECT_GT(records_written.load(), baseline_records);
+        record_limit = 1;
+        run_update(12);
+        EXPECT_GT(fallbacks.load(), 0);
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:max_record_bytes");
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::execute:spill_fallback");
+    }
+    // Fewer source segments than the threshold: nothing is spilled, the update files are re-read.
+    {
+        ConfigResetGuard<int32_t> min_guard(&config::lake_pk_column_mode_spill_min_source_segments,
+                                            kSourceSegments + 1);
+        run_update(13);
+        EXPECT_EQ(0, upt_reads.load());
+    }
+    // Exactly at the threshold: spilled.
+    {
+        ConfigResetGuard<int32_t> min_guard(&config::lake_pk_column_mode_spill_min_source_segments, kSourceSegments);
+        run_update(14);
+        EXPECT_EQ(kSourceSegments, upt_reads.load());
+    }
+    // Spill off: the previous per-segment re-read path, same result.
+    {
+        ConfigResetGuard<int32_t> spill_guard(&config::lake_pk_column_mode_spill_min_source_segments, 0);
+        run_update(9);
+        EXPECT_EQ(0, upt_reads.load());
+    }
+    EXPECT_EQ(0, _primary_key_mgr->update_state_mem_tracker()->consumption());
+}
+
 TEST_P(LakePartialUpdateTest, test_bundled_orphan_segment_marked_shared) {
     // Column mode orphans the partial-column update segment via a different path; this test targets
     // the row-mode rewrite orphan path.
@@ -3992,22 +4328,7 @@ public:
 
     void SetUp() override {
         LakePartialUpdateTestBase::SetUp();
-        // Seed encryption keys for tests that enable TDE (no FE in UT environment)
-        // Only add keys if they don't already exist to avoid conflicts with other tests
-        if (KeyCache::instance().get_key("0000000000000000") == nullptr) {
-            EncryptionKeyPB pb;
-            pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
-            pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
-            pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
-            pb.set_plain_key("0000000000000000");
-            std::unique_ptr<EncryptionKey> root_encryption_key = EncryptionKey::create_from_pb(pb).value();
-            auto val_st = root_encryption_key->generate_key();
-            ASSERT_TRUE(val_st.ok());
-            std::unique_ptr<EncryptionKey> encryption_key = std::move(val_st.value());
-            encryption_key->set_id(2);
-            KeyCache::instance().add_key(root_encryption_key);
-            KeyCache::instance().add_key(encryption_key);
-        }
+        seed_encryption_keys();
     }
 
     constexpr static const char* const kTestDirectory = "test_lake_column_upsert_mode";
@@ -4403,6 +4724,15 @@ TEST_F(LakeColumnUpsertModeTest, upsert_with_new_rows_adds_new_segments) {
     auto prev_rowsets = md_before->rowsets_size();
 
     auto chunk_insert = generate_data(kChunkSize, 100, true, 7);
+    // No existing key matches, so the publish has nothing to spill and opens no spill file.
+    std::atomic<int> spill_opens{0};
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:opened",
+                                          [&](void*) { spill_opens++; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp sync_point_guard([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:opened");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
     {
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -4423,6 +4753,7 @@ TEST_F(LakeColumnUpsertModeTest, upsert_with_new_rows_adds_new_segments) {
         version++;
     }
 
+    EXPECT_EQ(0, spill_opens.load());
     ASSIGN_OR_ABORT(auto md_after, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_GT(md_after->rowsets_size(), prev_rowsets);
     auto total = check(version, [](int c0, int c1, int c2) { return (c2 == c0 * 4) || (c2 == 10); });
