@@ -2500,7 +2500,8 @@ public class QueryAnalyzer {
             // 3. Pre-resolves real external tables (avoiding lock during RPC)
             // Similar to TableCollector.resolveTable but inverts the logic (handles external tables only)
             try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
-                Table table = metadataMgr.getTable(session, catalogName, dbName, tableName.getTbl());
+                Table table = QueryPeriodResolver.lookupTable(tableRelation, catalogName, dbName, tableName.getTbl(),
+                        session, metadataMgr);
                 if (table != null) {
                     if (refreshFilesystemExternalTables && table.isExternalTableWithFileSystem()) {
                         table = refreshFilesystemExternalTable(catalogName, dbName, tableName, table);
@@ -2903,7 +2904,7 @@ public class QueryAnalyzer {
                 }
                 if (table == null) {
                     try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
-                        table = metadataMgr.getTable(session, catalogName, dbName, tbName);
+                        table = QueryPeriodResolver.lookupTable(tableRelation, catalogName, dbName, tbName, session, metadataMgr);
                     }
                 }
             }
