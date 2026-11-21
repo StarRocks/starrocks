@@ -1091,7 +1091,7 @@ TEST(AIProjectProcessorTest, PendingTaskSharesMediaAndOptionsAcrossSourceFinish)
     auto projection = std::make_shared<RecordingProjection>();
     const std::string png("\x89PNG\r\n\x1a\n", 8);
     projection->media =
-            std::make_shared<const AIMediaInput>(AIMediaInput{.mime_type = "image/png", .inline_bytes = png});
+            std::make_shared<const AIMediaInput>(AIMediaInput{.content_type = "image/png", .inline_bytes = png});
     projection->options = std::make_shared<const AIProviderOptions>();
     std::weak_ptr<const AIMediaInput> media = projection->media;
     std::weak_ptr<const AIProviderOptions> options = projection->options;
@@ -1114,7 +1114,7 @@ TEST(AIProjectProcessorTest, PendingTaskSharesMediaAndOptionsAcrossSourceFinish)
     ASSERT_OK(processor->set_source_finished(0));
     EXPECT_EQ(1, submitter->cancel_calls("prompt-0"));
     EXPECT_TRUE(processor->pending_finish(0));
-    EXPECT_EQ("image/png", pending.media->mime_type);
+    EXPECT_EQ("image/png", pending.media->content_type);
     EXPECT_EQ(png, pending.media->inline_bytes);
     EXPECT_TRUE(pending.options->members().empty());
     submitter->complete_remaining_as_cancelled();

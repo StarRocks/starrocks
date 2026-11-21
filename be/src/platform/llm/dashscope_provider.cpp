@@ -96,7 +96,8 @@ rapidjson::Value content_part(const char* key, std::string_view value, rapidjson
 }
 
 StatusOr<rapidjson::Value> make_input(EndpointType endpoint_type, const AIChatRequest& request,
-                                      std::string* encoded_media, rapidjson::Document::AllocatorType& allocator) {
+                                      rapidjson::Value& parameters, std::string* encoded_media,
+                                      rapidjson::Document::AllocatorType& allocator) {
     rapidjson::Value input(rapidjson::kObjectType);
     rapidjson::Value parts(rapidjson::kArrayType);
     if (request.media != nullptr) {
@@ -104,12 +105,13 @@ StatusOr<rapidjson::Value> make_input(EndpointType endpoint_type, const AIChatRe
             return Status::NotSupported("DashScope text endpoint does not support FILE input");
         }
         const auto& media = *request.media;
-        if (!media.is_image() && !media.is_video()) {
+        const bool is_video = media.is_video();
+        if (!is_video && !media.is_image()) {
             return Status::NotSupported("DashScope visual input requires an image or video");
         }
         if (endpoint_type == EndpointType::MULTIMODAL_EMBEDDING) {
             if (!request.prompt.empty()) return invalid_request();
-            if (media.is_video() && media.inline_bytes) {
+            if (is_video && media.inline_bytes) {
                 return Status::NotSupported("DashScope multimodal embedding requires a URL for video input");
             }
         }
@@ -121,7 +123,16 @@ StatusOr<rapidjson::Value> make_input(EndpointType endpoint_type, const AIChatRe
             ASSIGN_OR_RETURN(*encoded_media, encode_ai_media_data_uri(media));
             uri = *encoded_media;
         }
-        parts.PushBack(content_part(media.is_video() ? "video" : "image", uri, allocator), allocator);
+        auto part = content_part(is_video ? "video" : "image", uri, allocator);
+        // DashScope Chat takes fps on the video part. Embedding takes it in parameters.
+        if (endpoint_type == EndpointType::MULTIMODAL_CHAT && is_video) {
+            auto fps = parameters.FindMember("fps");
+            if (fps != parameters.MemberEnd()) {
+                part.AddMember("fps", fps->value, allocator);
+                parameters.EraseMember(fps);
+            }
+        }
+        parts.PushBack(part, allocator);
     }
     switch (endpoint_type) {
     case EndpointType::TEXT_EMBEDDING:
@@ -153,21 +164,17 @@ StatusOr<rapidjson::Value> make_input(EndpointType endpoint_type, const AIChatRe
     return input;
 }
 
-Status add_parameters(const AIChatRequest& request, std::optional<int32_t> default_embedding_dimensions,
-                      rapidjson::Document& document) {
-    auto& allocator = document.GetAllocator();
+StatusOr<rapidjson::Value> make_parameters(const AIChatRequest& request,
+                                           std::optional<int32_t> default_embedding_dimensions,
+                                           rapidjson::Document::AllocatorType& allocator) {
     rapidjson::Value parameters(rapidjson::kObjectType);
     if (request.capability == AICapability::CHAT) parameters.AddMember("result_format", "message", allocator);
     if (request.options) {
         for (const auto& option : request.options->members()) {
-            std::string_view key = option.key;
+            const std::string_view key = option.key;
             if (key == "model" || key == "input" || key == "contents" || key == "parameters" ||
                 key == "encoding_format" || key == "messages" || key == "stream") {
                 return invalid_request();
-            }
-            if (request.capability == AICapability::EMBEDDING && key == "dimensions") {
-                key = "dimension";
-                default_embedding_dimensions.reset();
             }
             rapidjson::Document value(&allocator);
             value.Parse<rapidjson::kParseFullPrecisionFlag | rapidjson::kParseValidateEncodingFlag>(
@@ -177,17 +184,14 @@ Status add_parameters(const AIChatRequest& request, std::optional<int32_t> defau
                 if (value != "message") return invalid_request();
                 continue;
             }
-            auto name = json_string(key);
-            if (parameters.HasMember(name)) return invalid_request();
-            parameters.AddMember(name, value.Move(), allocator);
+            parameters.AddMember(json_string(key), value.Move(), allocator);
         }
     }
-    if (request.capability == AICapability::EMBEDDING && default_embedding_dimensions) {
-        if (parameters.HasMember("dimension")) return invalid_request();
+    if (request.capability == AICapability::EMBEDDING && default_embedding_dimensions &&
+        !parameters.HasMember("dimension")) {
         parameters.AddMember("dimension", *default_embedding_dimensions, allocator);
     }
-    if (!parameters.ObjectEmpty()) document.AddMember("parameters", parameters, allocator);
-    return Status::OK();
+    return parameters;
 }
 
 AIProviderParseResult parse_chat(const rapidjson::Value& output, EndpointType endpoint_type, AIProviderUsage usage) {
@@ -253,9 +257,10 @@ StatusOr<AIProviderHttpRequest> DashScopeProvider::build_request(const AIChatReq
     rapidjson::Document document(rapidjson::kObjectType);
     auto& allocator = document.GetAllocator();
     document.AddMember("model", json_string(request.model), allocator);
-    ASSIGN_OR_RETURN(auto input, make_input(_endpoint_type, request, &encoded_media, allocator));
+    ASSIGN_OR_RETURN(auto parameters, make_parameters(request, _default_embedding_dimensions, allocator));
+    ASSIGN_OR_RETURN(auto input, make_input(_endpoint_type, request, parameters, &encoded_media, allocator));
     document.AddMember("input", input, allocator);
-    RETURN_IF_ERROR(add_parameters(request, _default_embedding_dimensions, document));
+    if (!parameters.ObjectEmpty()) document.AddMember("parameters", parameters, allocator);
 
     rapidjson::StringBuffer buffer;
     RequestWriter writer(buffer);

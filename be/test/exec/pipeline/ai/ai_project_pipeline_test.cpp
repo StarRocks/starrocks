@@ -1135,10 +1135,11 @@ TEST_F(AIProjectPipelineTest, HttpAndHttpsCarryOptionalCredentialsAndExplicitMod
 
 TEST_F(AIProjectPipelineTest, EmbeddingProvidersApplyDimensionDefaultsToHttpRequests) {
     set_query_deadline_ns(120'000'000'000);
-    const std::vector<std::string> options = {R"({"dimensions":2})", R"({"dimensions":null})", R"({"user":"user-a"})",
-                                              "{}"};
     for (auto protocol : {AIProviderProtocol::OPENAI, AIProviderProtocol::DASHSCOPE}) {
         const bool dashscope = protocol == AIProviderProtocol::DASHSCOPE;
+        const std::vector<std::string> options = {dashscope ? R"({"dimension":2})" : R"({"dimensions":2})",
+                                                  dashscope ? R"({"dimension":null})" : R"({"dimensions":null})",
+                                                  R"({"user":"user-a"})", "{}"};
         const char* endpoint =
                 dashscope ? "http://127.0.0.1/text-embedding/text-embedding" : "http://127.0.0.1/v1/embeddings";
         const rapidjson::Pointer dimension_path(dashscope ? "/parameters/dimension" : "/dimensions");
@@ -1224,7 +1225,7 @@ TEST_F(AIProjectPipelineTest, DashScopeEmbeddingAppliesDimensionDefaultsAndRecor
                                                     .capability = AICapability::EMBEDDING,
                                                     .dimensions = 3,
                                                     .protocol = AIProviderProtocol::DASHSCOPE}}};
-    auto projection = create_embedding_projection(configs, {"{}", R"({"dimensions":2})", R"({"dimensions":1})"});
+    auto projection = create_embedding_projection(configs, {"{}", R"({"dimension":2})", R"({"dimension":1})"});
     ASSERT_TRUE(projection.ok()) << projection.status();
     ASSERT_OK((*projection)->prepare(_runtime_state.get(), 1));
     auto submitter = AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot());

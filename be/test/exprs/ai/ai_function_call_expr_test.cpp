@@ -1231,14 +1231,14 @@ TEST_F(AIFunctionCallExprTest, BatchOwnsInlineAndUrlAfterFileColumnIsReleased) {
     EXPECT_EQ(AIFunctionRowAction::DISPATCH, batch.rows[0].action);
     EXPECT_EQ("describe", batch.rows[0].prompt);
     ASSERT_TRUE(batch.rows[0].media);
-    EXPECT_EQ("image/png", batch.rows[0].media->mime_type);
+    EXPECT_EQ("image/png", batch.rows[0].media->content_type);
     EXPECT_EQ(png, batch.rows[0].media->inline_bytes);
     EXPECT_EQ(AIFunctionRowAction::SQL_NULL, batch.rows[1].action);
     // A NULL prompt short-circuits even an invalid FILE URL.
     EXPECT_EQ(AIFunctionRowAction::SQL_NULL, batch.rows[2].action);
     EXPECT_EQ(AIFunctionRowAction::DISPATCH, batch.rows[3].action);
     ASSERT_TRUE(batch.rows[3].media);
-    EXPECT_EQ("image/jpeg", batch.rows[3].media->mime_type);
+    EXPECT_EQ("image/jpeg", batch.rows[3].media->content_type);
     EXPECT_EQ(url, batch.rows[3].media->referenced_url);
 }
 

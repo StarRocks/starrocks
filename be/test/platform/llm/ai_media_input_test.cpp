@@ -30,9 +30,9 @@ FileRowRef inline_file(std::string_view bytes, std::optional<Slice> content_type
     return {.content_type = content_type, .inline_bytes = Slice(bytes)};
 }
 
-TEST(AIMediaInputTest, ClassifiesInlineAndReferencedMediaByMimeType) {
+TEST(AIMediaInputTest, ClassifiesInlineAndReferencedMediaByContentTypePrefix) {
     struct TestCase {
-        const char* mime_type;
+        const char* content_type;
         bool image;
         bool audio;
         bool video;
@@ -45,17 +45,18 @@ TEST(AIMediaInputTest, ClassifiesInlineAndReferencedMediaByMimeType) {
             {"video/quicktime", false, false, true},
             {"VIDEO/MP4 ; codecs=avc1", false, false, true},
             {"", false, false, false},
-            {"image/", false, false, false},
-            {"audio/; codecs=pcm", false, false, false},
-            {"video/ \t; codecs=avc1", false, false, false},
+            {"image", false, false, false},
+            {"image/", true, false, false},
+            {"audio/; codecs=pcm", false, true, false},
+            {"video/ \t; codecs=avc1", false, false, true},
             {"application/octet-stream", false, false, false},
             {"application/octet-stream; name=image/jpeg", false, false, false},
     };
-    for (const auto& [mime_type, image, audio, video] : cases) {
-        SCOPED_TRACE(mime_type);
+    for (const auto& [content_type, image, audio, video] : cases) {
+        SCOPED_TRACE(content_type);
         for (const auto& media :
-             {AIMediaInput{.mime_type = mime_type, .inline_bytes = "bytes"},
-              AIMediaInput{.mime_type = mime_type, .referenced_url = "https://example.com/media"}}) {
+             {AIMediaInput{.content_type = content_type, .inline_bytes = "bytes"},
+              AIMediaInput{.content_type = content_type, .referenced_url = "https://example.com/media"}}) {
             SCOPED_TRACE(media.inline_bytes ? "inline" : "URL");
             EXPECT_EQ(image, media.is_image());
             EXPECT_EQ(audio, media.is_audio());
@@ -74,17 +75,17 @@ TEST(AIMediaInputTest, DetectsSupportedHeadersAndOwnsBinaryBytes) {
                          24),
              "video/mp4"},
     };
-    for (const auto& [bytes, mime] : cases) {
+    for (const auto& [bytes, content_type] : cases) {
         std::string source = bytes;
         auto result = create_ai_media(inline_file(source), source.size());
         ASSERT_TRUE(result.ok()) << result.status();
         source.front() = 'X';
-        EXPECT_EQ(mime, result->mime_type);
+        EXPECT_EQ(content_type, result->content_type);
         ASSERT_TRUE(result->inline_bytes.has_value());
         EXPECT_EQ(bytes, *result->inline_bytes);
         EXPECT_FALSE(result->referenced_url.has_value());
         EXPECT_TRUE(create_ai_media(inline_file(bytes, ""), bytes.size()).ok());
-        EXPECT_TRUE(create_ai_media(inline_file(bytes, mime), bytes.size()).ok());
+        EXPECT_TRUE(create_ai_media(inline_file(bytes, content_type), bytes.size()).ok());
     }
 }
 
@@ -113,7 +114,7 @@ TEST(AIMediaInputTest, InlineTakesPrecedenceOverReferenceAndRange) {
                     .inline_bytes = Slice("\x89PNG\r\n\x1a\n", 8)};
     auto media = create_ai_media(file, 8);
     ASSERT_TRUE(media.ok()) << media.status();
-    EXPECT_EQ("image/png", media->mime_type);
+    EXPECT_EQ("image/png", media->content_type);
     ASSERT_TRUE(media->inline_bytes.has_value());
     EXPECT_EQ(std::string_view(*file.inline_bytes), *media->inline_bytes);
     EXPECT_FALSE(media->referenced_url);
@@ -136,12 +137,12 @@ TEST(AIMediaInputTest, OwnsFullUrlAndInfersTypeFromLastPathSegment) {
             {"https://bucket.example/dir.jpg/image.WebP", "image/webp"},
             {"https://bucket.example/video.MP4", "video/mp4"},
     };
-    for (auto [url, mime] : cases) {
+    for (auto [url, content_type] : cases) {
         std::string source(url);
         auto media = create_ai_media({.uri = Slice(source), .offset = 0, .size = 1, .content_type = Slice("")}, 0);
         ASSERT_TRUE(media.ok()) << media.status();
         source.front() = 'X';
-        EXPECT_EQ(mime, media->mime_type);
+        EXPECT_EQ(content_type, media->content_type);
         EXPECT_FALSE(media->inline_bytes);
         ASSERT_TRUE(media->referenced_url);
         EXPECT_EQ(url, *media->referenced_url);
@@ -153,7 +154,7 @@ TEST(AIMediaInputTest, OwnsFullUrlAndInfersTypeFromLastPathSegment) {
     FileRowRef file{.uri = Slice("https://host/object?signature=secret"), .content_type = Slice("IMAGE/PNG")};
     auto declared = create_ai_media(file, 0);
     ASSERT_TRUE(declared.ok()) << declared.status();
-    EXPECT_EQ("IMAGE/PNG", declared->mime_type);
+    EXPECT_EQ("IMAGE/PNG", declared->content_type);
     file.offset = 1;
     EXPECT_TRUE(create_ai_media(file, 0).status().is_data_quality_error());
 }
@@ -173,13 +174,14 @@ TEST(AIMediaInputTest, RejectsMissingSourceAndInvalidUrlEvenWithDeclaredType) {
                         .is_data_quality_error());
 }
 
-TEST(AIMediaInputTest, DeclaredTypeOverridesHeaderAndIsPreservedInDataUri) {
+TEST(AIMediaInputTest, DataUriUsesDeclaredTypeWithoutItsParameters) {
     const std::string jpeg("\xff\xd8\xff\xe0\0\x02", 6);
-    std::string declared = "IMAGE/PNG";
+    std::string declared = R"(IMAGE/PNG; name="a,b.png")";
     auto media = create_ai_media(inline_file(jpeg, declared), 1024);
     ASSERT_TRUE(media.ok()) << media.status();
     declared.front() = 'X';
-    EXPECT_EQ("IMAGE/PNG", media->mime_type);
+    EXPECT_EQ(R"(IMAGE/PNG; name="a,b.png")", media->content_type);
+    EXPECT_TRUE(media->is_image());
     auto uri = encode_ai_media_data_uri(*media);
     ASSERT_TRUE(uri.ok()) << uri.status();
     EXPECT_EQ("data:IMAGE/PNG;base64,/9j/4AAC", *uri);
@@ -192,9 +194,9 @@ TEST(AIMediaInputTest, DeclaredTypeOverridesHeaderAndIsPreservedInDataUri) {
 }
 
 TEST(AIMediaInputTest, DataUriRequiresInlineBytesAndMediaType) {
-    EXPECT_FALSE(encode_ai_media_data_uri({.mime_type = "image/jpeg", .inline_bytes = ""}).ok());
+    EXPECT_FALSE(encode_ai_media_data_uri({.content_type = "image/jpeg", .inline_bytes = ""}).ok());
     EXPECT_FALSE(encode_ai_media_data_uri({.inline_bytes = "bytes"}).ok());
-    EXPECT_FALSE(encode_ai_media_data_uri({.mime_type = "image/png", .referenced_url = "https://host/a.png"}).ok());
+    EXPECT_FALSE(encode_ai_media_data_uri({.content_type = "image/png", .referenced_url = "https://host/a.png"}).ok());
 }
 
 TEST(AIMediaInputTest, RejectsTruncatedJpegSegmentsAndNonVideoIsoMedia) {

@@ -15,6 +15,8 @@
 #include "platform/llm/dashscope_provider.h"
 
 #include <gtest/gtest.h>
+#include <rapidjson/document.h>
+#include <rapidjson/pointer.h>
 
 #include <limits>
 #include <memory>
@@ -27,7 +29,7 @@ namespace {
 using EndpointType = DashScopeProvider::EndpointType;
 
 TEST(DashScopeProviderTest, BuildsTextAndImageContentsWithParameters) {
-    DashScopeProvider provider(EndpointType::MULTIMODAL_EMBEDDING);
+    DashScopeProvider provider(EndpointType::MULTIMODAL_EMBEDDING, 256);
     auto options = AIProviderOptions::create(
             {{.key = "dimensions", .serialized_json = "512", .kind = AIProviderOptionKind::NUMBER},
              {.key = "metadata", .serialized_json = R"({"enabled":true})", .kind = AIProviderOptionKind::OBJECT}});
@@ -44,22 +46,24 @@ TEST(DashScopeProviderTest, BuildsTextAndImageContentsWithParameters) {
     EXPECT_EQ(3, text->headers.size());
     EXPECT_EQ("Bearer key", text->headers.back().value);
     EXPECT_EQ(
-            R"({"model":"model","input":{"contents":[{"text":"hello\nworld"}]},"parameters":{"dimension":512,"metadata":{"enabled":true}}})",
+            R"({"model":"model","input":{"contents":[{"text":"hello\nworld"}]},"parameters":{"dimensions":512,"metadata":{"enabled":true},"dimension":256}})",
             text->body);
     auto media = std::make_shared<const AIMediaInput>(
-            AIMediaInput{.mime_type = "image/jpeg", .inline_bytes = std::string("\xff\xd8\xff\xe0\0\x02", 6)});
+            AIMediaInput{.content_type = "image/jpeg", .inline_bytes = std::string("\xff\xd8\xff\xe0\0\x02", 6)});
     request.prompt = "";
     request.media = media;
     request.options = nullptr;
     auto image = provider.build_request(request);
     ASSERT_TRUE(image.ok()) << image.status();
-    EXPECT_EQ(R"({"model":"model","input":{"contents":[{"image":"data:image/jpeg;base64,/9j/4AAC"}]}})", image->body);
+    EXPECT_EQ(
+            R"({"model":"model","input":{"contents":[{"image":"data:image/jpeg;base64,/9j/4AAC"}]},"parameters":{"dimension":256}})",
+            image->body);
 }
 
 TEST(DashScopeProviderTest, MultimodalEmbeddingRejectsInlineVideoChatAndImplicitFusion) {
     DashScopeProvider provider(EndpointType::MULTIMODAL_EMBEDDING);
     auto image = std::make_shared<const AIMediaInput>(
-            AIMediaInput{.mime_type = "image/png", .inline_bytes = std::string("\x89PNG\r\n\x1a\n", 8)});
+            AIMediaInput{.content_type = "image/png", .inline_bytes = std::string("\x89PNG\r\n\x1a\n", 8)});
     AIChatRequest request{
             .model = "model", .prompt = "unexpected text", .capability = AICapability::EMBEDDING, .media = image};
     EXPECT_FALSE(provider.build_request(request).ok());
@@ -68,14 +72,14 @@ TEST(DashScopeProviderTest, MultimodalEmbeddingRejectsInlineVideoChatAndImplicit
     EXPECT_FALSE(provider.build_request(request).ok());
     request.capability = AICapability::EMBEDDING;
     auto video =
-            std::make_shared<const AIMediaInput>(AIMediaInput{.mime_type = "VIDEO/MP4",
+            std::make_shared<const AIMediaInput>(AIMediaInput{.content_type = "VIDEO/MP4",
                                                               .inline_bytes = std::string("\0\0\0\x18"
                                                                                           "ftypisom\0\0\0\0isommp42",
                                                                                           24)});
     request.media = video;
     EXPECT_TRUE(provider.build_request(request).status().is_not_supported());
     auto webm = std::make_shared<const AIMediaInput>(
-            AIMediaInput{.mime_type = "video/webm", .inline_bytes = "\x1a\x45\xdf\xa3"});
+            AIMediaInput{.content_type = "video/webm", .inline_bytes = "\x1a\x45\xdf\xa3"});
     request.media = webm;
     EXPECT_TRUE(provider.build_request(request).status().is_not_supported());
 }
@@ -124,9 +128,10 @@ TEST(DashScopeProviderTest, NativeChatResultFormatCannotChangeTheResponseSchema)
 }
 
 TEST(DashScopeProviderTest, SendsSignedMediaUrlsVerbatimAndInlineChatMediaAsDataUris) {
-    for (const auto* mime : {"image/jpeg", "video/mp4"}) {
-        auto media = std::make_shared<const AIMediaInput>(AIMediaInput{
-                .mime_type = mime, .referenced_url = "https://bucket.example/object?x-signature=a%2Fb&expires=1"});
+    for (const auto* content_type : {"image/jpeg", "video/mp4"}) {
+        auto media = std::make_shared<const AIMediaInput>(
+                AIMediaInput{.content_type = content_type,
+                             .referenced_url = "https://bucket.example/object?x-signature=a%2Fb&expires=1"});
         const char* key = media->is_video() ? "video" : "image";
         const auto part = std::string(R"({")") + key + R"(":")" + *media->referenced_url + R"("})";
         for (auto endpoint_type : {EndpointType::TEXT_CHAT, EndpointType::MULTIMODAL_CHAT, EndpointType::TEXT_EMBEDDING,
@@ -149,19 +154,19 @@ TEST(DashScopeProviderTest, SendsSignedMediaUrlsVerbatimAndInlineChatMediaAsData
             }
         }
         auto inline_media =
-                std::make_shared<const AIMediaInput>(AIMediaInput{.mime_type = mime, .inline_bytes = "abc"});
+                std::make_shared<const AIMediaInput>(AIMediaInput{.content_type = content_type, .inline_bytes = "abc"});
         auto result = DashScopeProvider(EndpointType::MULTIMODAL_CHAT)
                               .build_request({.model = "m", .prompt = "describe", .media = inline_media});
         ASSERT_TRUE(result.ok()) << result.status();
         EXPECT_NE(std::string::npos,
-                  result->body.find(std::string(R"(")") + key + R"(":"data:)" + mime + ";base64,YWJj"));
+                  result->body.find(std::string(R"(")") + key + R"(":"data:)" + content_type + ";base64,YWJj"));
     }
 }
 
 TEST(DashScopeProviderTest, TextEmbeddingUsesTextsAndAcceptsNativeIndexNames) {
-    DashScopeProvider provider(EndpointType::TEXT_EMBEDDING);
+    DashScopeProvider provider(EndpointType::TEXT_EMBEDDING, 1024);
     auto options = AIProviderOptions::create(
-            {{.key = "dimensions", .serialized_json = "256", .kind = AIProviderOptionKind::NUMBER}});
+            {{.key = "dimension", .serialized_json = "256", .kind = AIProviderOptionKind::NUMBER}});
     ASSERT_TRUE(options.ok());
     auto request =
             provider.build_request({.model = "m",
@@ -182,6 +187,52 @@ TEST(DashScopeProviderTest, TextEmbeddingUsesTextsAndAcceptsNativeIndexNames) {
     auto conflict = provider.parse_response(R"({"output":{"embeddings":[{"index":0,"text_index":1,"embedding":[1]}]}})",
                                             AICapability::EMBEDDING);
     EXPECT_TRUE(std::holds_alternative<AIProviderMalformed>(conflict));
+}
+
+TEST(DashScopeProviderTest, ForwardsDimensionAndDimensionsAsSeparateOptions) {
+    auto options = AIProviderOptions::create(
+            {{.key = "dimension", .serialized_json = "256", .kind = AIProviderOptionKind::NUMBER},
+             {.key = "dimensions", .serialized_json = "512", .kind = AIProviderOptionKind::NUMBER}});
+    ASSERT_TRUE(options.ok());
+    DashScopeProvider provider(EndpointType::MULTIMODAL_EMBEDDING);
+    auto result =
+            provider.build_request({.model = "m",
+                                    .prompt = "hello",
+                                    .options = std::make_shared<const AIProviderOptions>(std::move(options).value()),
+                                    .capability = AICapability::EMBEDDING});
+    ASSERT_TRUE(result.ok()) << result.status();
+    EXPECT_EQ(
+            R"({"model":"m","input":{"contents":[{"text":"hello"}]},"parameters":{"dimension":256,"dimensions":512}})",
+            result->body);
+}
+
+TEST(DashScopeProviderTest, PlacesVideoFpsInChatContentOrEmbeddingParameters) {
+    auto options =
+            AIProviderOptions::create({{.key = "fps", .serialized_json = "0.5", .kind = AIProviderOptionKind::NUMBER}});
+    ASSERT_TRUE(options.ok());
+    AIChatRequest request{.model = "m",
+                          .options = std::make_shared<const AIProviderOptions>(std::move(options).value()),
+                          .media = std::make_shared<const AIMediaInput>(AIMediaInput{
+                                  .content_type = "video/mp4", .referenced_url = "https://example.com/clip.mp4"})};
+    for (auto endpoint : {EndpointType::MULTIMODAL_CHAT, EndpointType::MULTIMODAL_EMBEDDING}) {
+        const bool chat = endpoint == EndpointType::MULTIMODAL_CHAT;
+        SCOPED_TRACE(chat ? "chat" : "embedding");
+        request.capability = chat ? AICapability::CHAT : AICapability::EMBEDDING;
+        request.prompt = chat ? "Describe the video" : "";
+        auto result = DashScopeProvider(endpoint).build_request(request);
+        ASSERT_TRUE(result.ok()) << result.status();
+        rapidjson::Document body;
+        body.Parse(result->body.c_str());
+        ASSERT_TRUE(body.IsObject());
+        const auto* media_fps =
+                rapidjson::Pointer(chat ? "/input/messages/0/content/0/fps" : "/input/contents/0/fps").Get(body);
+        const auto* parameter_fps = rapidjson::Pointer("/parameters/fps").Get(body);
+        const auto* fps = chat ? media_fps : parameter_fps;
+        ASSERT_NE(nullptr, fps);
+        ASSERT_TRUE(fps->IsNumber());
+        EXPECT_DOUBLE_EQ(0.5, fps->GetDouble());
+        EXPECT_EQ(nullptr, chat ? parameter_fps : media_fps);
+    }
 }
 
 TEST(DashScopeProviderTest, ChatUsageIncludesImageAndVideoEvenOnErrors) {

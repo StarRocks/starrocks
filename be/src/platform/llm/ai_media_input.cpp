@@ -77,9 +77,12 @@ bool ascii_iequals(std::string_view value, std::string_view other) {
     return value.size() == other.size() && memcasecmp(value.data(), other.data(), other.size()) == 0;
 }
 
-bool has_mime_type_prefix(std::string_view mime_type, std::string_view prefix) {
-    const auto type = mime_type.substr(0, mime_type.find_first_of("; \t"));
-    return type.size() > prefix.size() && ascii_iequals(type.substr(0, prefix.size()), prefix);
+std::string_view content_type_without_parameters(std::string_view content_type) {
+    return content_type.substr(0, content_type.find_first_of("; \t"));
+}
+
+bool has_content_type_prefix(std::string_view content_type, std::string_view prefix) {
+    return ascii_iequals(content_type.substr(0, prefix.size()), prefix);
 }
 
 Status validate_file_url(const std::string& url) {
@@ -118,15 +121,15 @@ StatusOr<std::string_view> detect_content_type_by_url(const std::string& url) {
 } // namespace
 
 bool AIMediaInput::is_image() const {
-    return has_mime_type_prefix(mime_type, "image/");
+    return has_content_type_prefix(content_type, "image/");
 }
 
 bool AIMediaInput::is_audio() const {
-    return has_mime_type_prefix(mime_type, "audio/");
+    return has_content_type_prefix(content_type, "audio/");
 }
 
 bool AIMediaInput::is_video() const {
-    return has_mime_type_prefix(mime_type, "video/");
+    return has_content_type_prefix(content_type, "video/");
 }
 
 StatusOr<AIMediaInput> create_ai_media(const FileRowRef& file, size_t inline_max_bytes) {
@@ -143,7 +146,7 @@ StatusOr<AIMediaInput> create_ai_media(const FileRowRef& file, size_t inline_max
                 if (content_type.empty())
                     return Status::DataQualityError("AI FILE input has an unsupported or invalid media header");
             }
-            return AIMediaInput{.mime_type = std::string(content_type), .inline_bytes = std::string(bytes)};
+            return AIMediaInput{.content_type = std::string(content_type), .inline_bytes = std::string(bytes)};
         }
         if (file.uri) {
             if (file.offset.value_or(0) > 0) {
@@ -154,7 +157,7 @@ StatusOr<AIMediaInput> create_ai_media(const FileRowRef& file, size_t inline_max
             if (content_type.empty()) {
                 ASSIGN_OR_RETURN(content_type, detect_content_type_by_url(url));
             }
-            return AIMediaInput{.mime_type = std::string(content_type), .referenced_url = std::move(url)};
+            return AIMediaInput{.content_type = std::string(content_type), .referenced_url = std::move(url)};
         }
         return Status::DataQualityError("AI FILE input has neither inline bytes nor a URL");
     } catch (const std::bad_alloc&) {
@@ -163,20 +166,21 @@ StatusOr<AIMediaInput> create_ai_media(const FileRowRef& file, size_t inline_max
 }
 
 StatusOr<std::string> encode_ai_media_data_uri(const AIMediaInput& media) {
-    if (!media.inline_bytes || media.inline_bytes->empty() || media.referenced_url || media.mime_type.empty()) {
+    const auto content_type = content_type_without_parameters(media.content_type);
+    if (!media.inline_bytes || media.inline_bytes->empty() || media.referenced_url || content_type.empty()) {
         return Status::InvalidArgument("AI media input is invalid");
     }
     constexpr size_t kDataUriOverhead = sizeof("data:;base64,") - 1;
     // Provider JSON writers use 32-bit string lengths, even on hosts with a larger std::string limit.
     const size_t max_size = std::min<size_t>(std::string{}.max_size(), std::numeric_limits<uint32_t>::max());
-    if (media.mime_type.size() > max_size - kDataUriOverhead ||
-        media.inline_bytes->size() > (max_size - kDataUriOverhead - media.mime_type.size()) / 4 * 3) {
+    if (content_type.size() > max_size - kDataUriOverhead ||
+        media.inline_bytes->size() > (max_size - kDataUriOverhead - content_type.size()) / 4 * 3) {
         return Status::InvalidArgument("AI media input is too large to encode");
     }
     try {
         std::string encoded;
         base64_encode(*media.inline_bytes, &encoded);
-        encoded.insert(0, "data:" + media.mime_type + ";base64,");
+        encoded.insert(0, "data:" + std::string(content_type) + ";base64,");
         return encoded;
     } catch (const std::bad_alloc&) {
         return Status::MemoryLimitExceeded("Failed to encode AI media input");

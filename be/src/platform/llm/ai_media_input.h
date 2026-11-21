@@ -28,7 +28,7 @@ struct FileRowRef;
 inline constexpr int64_t kDefaultAIMaxInputFileBytes = 10485760;
 
 struct AIMediaInput {
-    std::string mime_type;
+    std::string content_type;
     // Exactly one source is populated for each FILE input.
     std::optional<std::string> inline_bytes;
     std::optional<std::string> referenced_url;

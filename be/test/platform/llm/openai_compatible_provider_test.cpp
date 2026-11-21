@@ -121,20 +121,20 @@ TEST(OpenAICompatibleProviderTest, BuildsChatMediaPartsAndRejectsEmbeddingMedia)
         const char* part_type;
         std::string expected_url;
     } cases[] = {
-            {{.mime_type = "image/jpeg", .inline_bytes = std::string("\xff\xd8\xff\xe0\0\x02", 6)},
+            {{.content_type = "image/jpeg", .inline_bytes = std::string("\xff\xd8\xff\xe0\0\x02", 6)},
              "image_url",
              "data:image/jpeg;base64,/9j/4AAC"},
-            {{.mime_type = "VIDEO/MP4",
+            {{.content_type = "VIDEO/MP4",
               .inline_bytes = std::string("\0\0\0\x18"
                                           "ftypisom\0\0\0\0isommp42",
                                           24)},
              "video_url",
              "data:VIDEO/MP4;base64,AAAAGGZ0eXBpc29tAAAAAGlzb21tcDQy"},
-            {{.mime_type = "video/webm", .inline_bytes = "\x1a\x45\xdf\xa3"},
+            {{.content_type = "video/webm", .inline_bytes = "\x1a\x45\xdf\xa3"},
              "video_url",
              "data:video/webm;base64,GkXfow=="},
-            {{.mime_type = "image/jpeg", .referenced_url = signed_url}, "image_url", signed_url},
-            {{.mime_type = "video/mp4", .referenced_url = signed_url}, "video_url", signed_url},
+            {{.content_type = "image/jpeg", .referenced_url = signed_url}, "image_url", signed_url},
+            {{.content_type = "video/mp4", .referenced_url = signed_url}, "video_url", signed_url},
     };
     for (const auto& test : cases) {
         SCOPED_TRACE(test.expected_url);
@@ -157,8 +157,8 @@ TEST(OpenAICompatibleProviderTest, BuildsChatMediaPartsAndRejectsEmbeddingMedia)
 
 TEST(OpenAICompatibleProviderTest, ChatRejectsNonvisualInlineAndReferencedMedia) {
     OpenAICompatibleProvider provider;
-    for (const auto& media : {AIMediaInput{.mime_type = "application/octet-stream", .inline_bytes = "private-bytes"},
-                              AIMediaInput{.mime_type = "application/octet-stream",
+    for (const auto& media : {AIMediaInput{.content_type = "application/octet-stream", .inline_bytes = "private-bytes"},
+                              AIMediaInput{.content_type = "application/octet-stream",
                                            .referenced_url = "https://bucket.example/file?signature=private"}}) {
         SCOPED_TRACE(media.inline_bytes ? "inline" : "URL");
         auto request = provider.build_request(

@@ -33,8 +33,7 @@ public:
 
 private:
     const EndpointType _endpoint_type;
-    // Default embedding vector size from the provider configuration.
-    // Used when `dimensions` is not specified in JSON options.
+    // Used when the embedding request has no native `dimension` option.
     const std::optional<int32_t> _default_embedding_dimensions;
 };
 
