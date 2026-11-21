@@ -14,14 +14,27 @@
 
 package com.starrocks.catalog;
 
+import com.google.gson.Gson;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.thrift.TLanceTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 
 import java.util.List;
+import java.util.Map;
 
 public class LanceTable extends Table {
+
+    private Map<String, Object> restCatalog;
+
+    public void setRestCatalog(String uri, String tokenFile, List<String> tableId, long version) {
+        restCatalog = Map.of("catalog_uri", uri, "token_file", tokenFile,
+                "table_id", List.copyOf(tableId), "dataset_version", version);
+    }
+
+    public String getRestCatalogInfo() {
+        return restCatalog == null ? null : new Gson().toJson(restCatalog);
+    }
 
     private final String uri;
 
@@ -70,7 +83,7 @@ public class LanceTable extends Table {
 
     @Override
     public boolean isSupported() {
-        return false;
+        return true;
     }
 
     @Override
