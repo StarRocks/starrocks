@@ -159,7 +159,7 @@ TEST(OpenAICompatibleProviderTest, ChatRejectsNonvisualInlineAndReferencedMedia)
     OpenAICompatibleProvider provider;
     for (const auto& media : {AIMediaInput{.content_type = "application/octet-stream", .inline_bytes = "private-bytes"},
                               AIMediaInput{.content_type = "application/octet-stream",
-                                           .referenced_url = "https://bucket.example/file?signature=private"}}) {
+                              .referenced_url = "https://bucket.example/file?signature=private"}}) {
         SCOPED_TRACE(media.inline_bytes ? "inline" : "URL");
         auto request = provider.build_request(
                 {.model = "model", .prompt = "describe", .media = std::make_shared<const AIMediaInput>(media)});
