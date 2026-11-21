@@ -11,17 +11,33 @@ import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
 
 <Experimental />
 
-AI functions call model services from SQL to generate, classify, extract, translate, summarize, and embed text. You can call these functions on constant text or process text columns in queries.
+AI functions call model services from SQL to generate, classify, extract, translate, summarize, and embed text. `ai_complete` can also answer questions about an image or video, and `ai_embed` can generate an embedding for either.
+
+## Function index {/* #function-index */}
+
+| Function | Purpose | Return type |
+| --- | --- | --- |
+| [ai_complete](ai_complete.md) | Generate text from a prompt and an optional image or video | VARCHAR |
+| [ai_embed](ai_embed.md) | Generate an embedding for text, an image, or a video | `ARRAY<FLOAT>` |
+| [ai_sentiment](ai_sentiment.md) | Analyze text sentiment | VARCHAR |
+| [ai_classify](ai_classify.md) | Classify text into given categories | JSON |
+| [ai_extract](ai_extract.md) | Extract specified information | JSON |
+| [ai_fix_grammar](ai_fix_grammar.md) | Correct grammar and spelling | VARCHAR |
+| [ai_redact](ai_redact.md) | Redact sensitive information by category | VARCHAR |
+| [ai_translate](ai_translate.md) | Translate text | VARCHAR |
+| [ai_similarity](ai_similarity.md) | Evaluate the semantic similarity of two texts | FLOAT |
+| [ai_summarize](ai_summarize.md) | Generate a summary | VARCHAR |
+| [ai_filter](ai_filter.md) | Determine whether text meets a condition | BOOLEAN |
 
 ## AI Providers and AI functions
 
 An AI Provider is a centrally managed model service configuration in the cluster. It stores an endpoint, protocol, default model, and optional credentials. AI functions obtain these settings from the Provider, so you do not need to repeat endpoints and credentials in SQL.
 
-- `ai_embed` uses an `embedding` Provider.
-- `ai_complete` and the other text helper functions use a `chat` Provider.
-- These AI functions currently require the Provider to use the `openai` protocol. The endpoint and model must also support the corresponding chat or embedding capability.
+- [ai_embed](ai_embed.md) uses an `embedding` Provider.
+- [ai_complete](ai_complete.md) and the other text helper functions use a `chat` Provider.
+- SQL AI functions support the `openai` compatible protocol and the native `dashscope` protocol. For images and videos, choose an endpoint and model that accept the input. See [FILE input support](#file-input).
 
-When calling a function, you can specify a Provider with `provider` or use the cluster default Provider of the corresponding type. Defaults are maintained independently for each type. If you omit `model`, the selected Provider's default model is used. You can also explicitly specify another model supported by the service.
+Provider endpoints support HTTP and HTTPS. Each execution plan captures the selected Provider configuration. Changes to that configuration or to the default Provider apply when a query is replanned.
 
 For Provider creation, configuration properties, and management syntax, see [CREATE AI PROVIDER](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md). For default settings, see [SET DEFAULT AI PROVIDER](../../sql-statements/cluster-management/ai_provider/SET_DEFAULT_AI_PROVIDER.md).
 
@@ -38,7 +54,7 @@ For details, see [AI privilege items](../../../administration/user_privs/authori
 
 ## Getting started
 
-The following examples use the OpenAI-compatible API of Alibaba Cloud Model Studio (Bailian) in the Beijing region. Activate the model service, replace `YOUR_DASHSCOPE_API_KEY` with an API key for the Beijing region, and run the examples with an account that has Provider management privileges and usage privileges on the corresponding functions and Providers.
+The examples use Alibaba Cloud Model Studio (Bailian) in the Beijing region. Enable the models you plan to use, replace `YOUR_DASHSCOPE_API_KEY` with an API key for that region, and use an account with Provider management privileges and usage privileges on the corresponding functions and Providers.
 
 ### Chat Provider: generate text
 
@@ -95,7 +111,147 @@ SET bailian_embedding AS DEFAULT AI PROVIDER;
 SELECT ai_embed('Columnar storage is suitable for analytical queries.');
 ```
 
-For complete function syntax, argument rules, and examples, see [AI text functions](ai_text_functions.md). Model calls send input text to the Provider's endpoint. Choose a service according to your data egress requirements, and consider query row counts, latency, and invocation costs.
+### Describe an image with a vision model {/* #vision-chat */}
+
+The `vision_chat` Provider uses the OpenAI-compatible Chat endpoint in Model Studio and a vision model. Wrap the image URL in a FILE and pass it with the prompt using the `file` argument.
+
+```sql
+CREATE AI PROVIDER vision_chat TYPE chat
+PROPERTIES (
+    "protocol" = "openai",
+    "endpoint" = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+    "model" = "qwen3-vl-plus",
+    "api_key" = "YOUR_DASHSCOPE_API_KEY"
+);
+
+SELECT ai_complete(
+    prompt => 'Describe this image.',
+    file => to_file(named_struct(
+        'uri', 'https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20241022/emyrja/dog_and_girl.jpeg'
+    )),
+    provider => 'vision_chat'
+);
+```
+
+### Embed a video from object storage {/* #video-embedding */}
+
+Create `vision_embedding` with the native DashScope multimodal embedding endpoint. This example uses an S3 storage volume named `media_volume`. You need USAGE on the volume to call [get_presigned_file](../file-functions/presigned_functions.md#get_presigned_file). Replace the object URI with an MP4 video the volume can read. The model service must be able to reach the signed URL.
+
+```sql
+CREATE AI PROVIDER vision_embedding TYPE embedding
+PROPERTIES (
+    "protocol" = "dashscope",
+    "endpoint" = "https://dashscope.aliyuncs.com/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding",
+    "model" = "tongyi-embedding-vision-plus",
+    "api_key" = "YOUR_DASHSCOPE_API_KEY"
+);
+
+SELECT ai_embed(
+    input => get_presigned_file(
+        'media_volume',
+        to_file(named_struct('uri', 's3://my-bucket/videos/clip.mp4'))
+    ),
+    provider => 'vision_embedding'
+);
+```
+
+Model calls send text, inline media, or the full media URL (including any signature) to the Provider endpoint. Consider data egress requirements, query row counts, latency, and invocation costs when choosing a service.
+
+## Common calling rules
+
+### Passing arguments
+
+Functions support positional arguments and named arguments in the form `argument_name => value`. Named arguments can appear in any order and allow you to specify optional arguments without supplying defaults for earlier arguments.
+
+```sql
+-- Use the default chat AI Provider and its default model.
+SELECT ai_complete('Explain columnar storage.');
+
+-- Positional arguments: override the default model of chat_provider with chat-model.
+SELECT ai_complete('Explain columnar storage.', 'chat_provider', 'chat-model');
+
+-- Named arguments: override the default model of the default chat AI Provider.
+SELECT ai_complete(prompt => 'Explain columnar storage.', model => 'chat-model');
+```
+
+In these examples, `chat_provider` refers to an existing chat AI Provider.
+
+### Provider and model
+
+All functions have optional `provider` and `model` arguments. Both must be constant VARCHAR expressions. The cluster maintains separate default Providers for chat and embedding.
+
+| Argument | When omitted, an empty string, or SQL NULL | When explicitly specified |
+| --- | --- | --- |
+| `provider` | Use the cluster default Provider of the corresponding type | Use the named Provider; no cluster default is required |
+| `model` | Use the selected Provider's default model | Use the specified model offered by the selected service |
+
+### JSON options {/* #json-options */}
+
+Only `ai_complete` and `ai_embed` support the optional `options` argument. It must be a constant JSON expression, and any value other than SQL NULL must be a JSON object. When omitted, it defaults to an empty object. Both `json_object()` and SQL NULL mean that no additional options are passed.
+
+```sql
+SELECT ai_complete(
+    prompt => 'Explain columnar storage in one sentence.',
+    options => json_object('temperature', 0.2)
+);
+```
+
+Use options to pass additional request parameters supported by the model service.
+
+## FILE input support {/* #file-input */}
+
+Each call accepts at most one [FILE](../../data-types/other-data-types/FILE.md). The table shows what StarRocks can send. The model must also support the format you supply.
+
+| Function | Protocol and endpoint | Text | Image FILE | Video FILE |
+| --- | --- | --- | --- | --- |
+| `ai_complete` | `openai` compatible Chat | Yes | Inline or URL | Inline or URL if the endpoint and model accept `video_url` |
+| `ai_complete` | `dashscope` native text generation | Yes | No | No |
+| `ai_complete` | `dashscope` native multimodal generation | Yes | Inline or URL | Inline or URL |
+| `ai_embed` | `openai` compatible Embeddings | Yes | No | No |
+| `ai_embed` | `dashscope` native text embedding | Yes | No | No |
+| `ai_embed` | `dashscope` native multimodal embedding | Yes | Inline or URL | URL only |
+
+The FILE overloads support images and video. Audio and PDF inputs are unsupported. The OpenAI-compatible Chat adapter sends video as `video_url`, which is supported by [Model Studio vision models](https://www.alibabacloud.com/help/en/model-studio/vision). Check the endpoint and model before using this extension with another service.
+
+- To supply **inline bytes** from a `VARBINARY` column `image_bytes`, use `to_file(named_struct('inline', image_bytes))`. The bytes must be nonempty. StarRocks encodes them as a data URI. The default limit is 10 MiB per FILE before Base64 encoding. See [`ai_function_max_input_file_bytes`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_input_file_bytes).
+- For a **URL reference**, supply an HTTP(S) URL the model service can access. For private objects, use [get_presigned_file](../file-functions/presigned_functions.md#get_presigned_file). StarRocks forwards the full URL. `offset` must be NULL or 0, and `size` does not restrict the byte range available to the service.
+- A nonempty `content_type` sets the **media type**. If it is NULL or empty, StarRocks infers JPEG, PNG, WebP, or MP4 from the inline file header or the extension on the last segment of the URL path (`.jpg`, `.jpeg`, `.png`, `.webp`, `.mp4`). Extension matching ignores case, query parameters, and fragments. An unknown type requires an explicit `content_type` supported by the model.
+- A FILE that evaluates to **SQL NULL** returns NULL without a model request. Invalid media follows [`ai_function_on_error`](#error-handling).
+
+## Error handling
+
+`ai_function_on_error` controls row-level failures. The default, `ignore`, returns NULL for a failed row and continues the query; `fail` aborts the query. Analysis or configuration errors, query cancellation, and deadline expiration are not ignored. A NULL result therefore does not necessarily mean the input was NULL; it can also indicate a failed model call or response validation.
+
+## Runtime limits and retries
+
+- Text generation and helper functions use [`ai_function_rate_limit_qps_chat`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_rate_limit_qps_chat),
+  while embedding functions use [`ai_function_rate_limit_qps_embedding`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_rate_limit_qps_embedding). Their respective QPS limits
+  and
+  [`ai_function_max_inflight`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_inflight)
+  apply independently on each BE. QPS limits are maintained in buckets keyed by endpoint, credential, and capability, while the in-flight limit is process-wide. Fair admission based on WorkGroup and Query shares the applicable limits among queued requests. Every initial or retry HTTP attempt must acquire both kinds of admission permits.
+- StarRocks cannot guarantee that a model provider executes a request only once. An attempt that times out or otherwise fails may already have reached the provider, so retries can repeat work at the provider and incur additional charges. Configure
+  [`ai_function_max_retries`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_retries)
+  and
+  [`ai_function_max_retries_on_throttle`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_retries_on_throttle) according to the provider's behavior and billing policy.
+- Request and response payloads are accounted for in the Query memory tracker. The execution Pipeline applies backpressure while requests are outstanding.
+  [`ai_function_max_response_bytes`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_response_bytes)
+  is a hard limit for each HTTP response body.
+- The independent task timeout remains fixed after task creation and does not restart on retries. Query cancellation and deadline updates remain effective throughout asynchronous execution. For timeout, worker thread, and scheduling granularity controls, see the other
+  [BE AI function configuration items](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_request_timeout_ms).
+
+For request, retry, and timeout metrics, see [AI HTTP metrics](../../../administration/management/monitoring/metric_details/a-c.md#ai_http_requests_total).
+
+## SQL usage restrictions
+
+- AI functions cannot be used in `GROUP BY`, `SELECT DISTINCT`, aggregate function arguments, or window function expressions.
+- They cannot be used in `IF`, `IFNULL`, `NULLIF`, `COALESCE`, or `CASE` conditional expressions, or as table function arguments.
+- They cannot be used in synchronous materialized view definitions, LOAD expressions, or generated column expressions.
+- They cannot be used in Lambda expression bodies or SQL UDF bodies.
+- SQL Plan Baselines cannot be created or bound for statements containing AI functions. Other queries containing AI functions do not use SPM rewrites either.
+- `PREPARE` is supported, but statements containing AI functions are fully replanned on every `EXECUTE`; execution plans are not reused.
+- In a correlated subquery block, AI expressions in the `SELECT` list, `WHERE`, `HAVING`, `ORDER BY`, and `JOIN ON`
+  are rejected even if the AI expression references only columns in that block. AI expressions in join conditions are supported only for `INNER JOIN` and `CROSS JOIN`.
+- Each non-NULL input row may produce a remote request. Before using AI functions on many rows, consider network latency, provider quotas, query deadlines, costs, and data egress policies.
 
 ## Reducing AI input rows {/* #reducing-ai-input-rows */}
 
