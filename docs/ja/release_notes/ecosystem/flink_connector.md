@@ -23,18 +23,16 @@ products: [oss]
 **JAR ファイルを取得する方法:**
 
 - [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks/) から直接 Flink コネクタ JAR ファイルをダウンロードします。
-- Flink コネクタを Maven プロジェクトの `pom.xml` ファイルに依存関係として追加し、ダウンロードします。具体的な手順は [ユーザーガイド](../../loading/Flink-connector-starrocks.md#obtain-flink-connector) を参照してください。
-- ソースコードをコンパイルして Flink コネクタ JAR ファイルを作成します。具体的な手順は [ユーザーガイド](../../loading/Flink-connector-starrocks.md#obtain-flink-connector) を参照してください。
+- Flink コネクタを Maven プロジェクトの `pom.xml` ファイルに依存関係として追加し、ダウンロードします。具体的な手順は [ユーザーガイド](../../loading/Flink-connector-starrocks.md#flink-コネクタの取得) を参照してください。
+- ソースコードをコンパイルして Flink コネクタ JAR ファイルを作成します。具体的な手順は [ユーザーガイド](../../loading/Flink-connector-starrocks.md#flink-コネクタの取得) を参照してください。
 
 **バージョン要件:**
 
 | コネクタ   | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.17    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降       | 8    | 2.11,2.12 |
 | 1.2.16    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降       | 8    | 2.11,2.12 |
 | 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降       | 8    | 2.11,2.12 |
-| 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降       | 8    | 2.11,2.12 |
-| 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降       | 8    | 2.11,2.12 |
-| 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 以降       | 8    | 2.11,2.12 |
 
 > **注意**
 >
@@ -43,6 +41,20 @@ products: [oss]
 ## リリースノート
 
 ### 1.2
+
+#### 1.2.17
+
+リリース日: 2026年11月18日
+
+##### 改善点
+
+- 新しいオプション `sink.http.keep-alive.enabled` を `true` に設定すると、Stream Load リクエストとトランザクションリクエストで HTTP 接続を再利用します。 [#532](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/532)
+- マルチテーブルトランザクション: 新しい `sharedTxnLatencyMs` メトリクスとコミットログで、各共有トランザクションの最初の行の時刻とレイテンシを報告します。 [#527](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/527)
+
+##### バグ修正
+
+- `sink.merge-commit.max-concurrent-requests` を設定した場合に、Merge Commit でデータが通知なく失われる問題を修正します。 [#528](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/528)
+- Lookup Join でプロジェクションプッシュダウンが適用されない問題を修正します。 [#526](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/526)
 
 #### 1.2.16
 
@@ -59,7 +71,7 @@ products: [oss]
 
 ##### バグ修正
 
-- マルチテーブルトランザクション: `txnEnd` 前にフラッシュできないバイトデータによって writer が停止したままにならないようにします。 [#512](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/)
+- マルチテーブルトランザクション: `txnEnd` 前にフラッシュできないバイトデータによって writer が停止したままにならないようにします。 [#512](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/512)
 - マルチテーブルトランザクション: コミット応答が失われた場合にハングまたは失敗するのではなく、リカバリします。 [#501](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/501)
 - マルチテーブルトランザクション: `flushQ` のリージョンラベルを、稼働中の共有ラベルと整合させます。 [#500](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/500)
 - クエリプランビジターにおける共有状態の競合を修正します。 [#499](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/499)
@@ -163,7 +175,7 @@ products: [oss]
 
 #### 1.2.9
 
-このリリースにはいくつかの機能とバグ修正が含まれています。注目すべき変更は、Flink コネクタが Flink CDC 3.0 と統合され、CDC ソース（MySQL や Kafka など）から StarRocks へのストリーミング ELT パイプラインを簡単に構築できるようになったことです。詳細は [Flink CDC 3.0 とのデータ同期 (schema change 対応)](../../loading/Flink-connector-starrocks.md#synchronize-data-with-flink-cdc-30-with-schema-change-supported) を参照してください。
+このリリースにはいくつかの機能とバグ修正が含まれています。注目すべき変更は、Flink コネクタが Flink CDC 3.0 と統合され、CDC ソース（MySQL や Kafka など）から StarRocks へのストリーミング ELT パイプラインを簡単に構築できるようになったことです。詳細は [Flink CDC 3.0 とのデータ同期 (schema change 対応)](../../loading/Flink-connector-starrocks.md#flink-cdc-30-でデータを同期するスキーマ変更をサポート) を参照してください。
 
 **機能**
 
