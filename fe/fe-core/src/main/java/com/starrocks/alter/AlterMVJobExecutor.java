@@ -1890,10 +1890,15 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
      */
     public static void inactiveMvAndSuspendTask(MaterializedView mv, String inactiveReason) {
         try (AutoCloseableLock ignored = new AutoCloseableLock(mv.getDbId(), mv.getId(), LockType.WRITE)) {
-            inactiveMvAndLog(mv, inactiveReason);
-            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-            taskManager.suspendTaskWithoutKilling(taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId())));
+            inactiveMvAndSuspendTaskLocked(mv, inactiveReason);
         }
+    }
+
+    /** {@link #inactiveMvAndSuspendTask} for a caller that already holds the MV's write lock. */
+    public static void inactiveMvAndSuspendTaskLocked(MaterializedView mv, String inactiveReason) {
+        inactiveMvAndLog(mv, inactiveReason);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        taskManager.suspendTaskWithoutKilling(taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId())));
     }
 
     // Mark the MV inactive and journal the transition, so the inactive state survives a leader restart
