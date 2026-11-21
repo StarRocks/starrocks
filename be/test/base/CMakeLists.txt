@@ -57,6 +57,7 @@ set(BASE_TEST_FILES
     phmap_test.cpp
     crypto/aes_util_test.cpp
     crypto/md5_test.cpp
+    crypto/sm3_test.cpp
     failpoint/fail_point_test.cpp
     metrics_test.cpp
     debug/trace_test.cpp
