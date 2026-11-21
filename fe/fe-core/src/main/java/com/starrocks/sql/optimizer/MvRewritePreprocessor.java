@@ -117,6 +117,8 @@ public class MvRewritePreprocessor {
     private final OptimizerContext context;
     private final ColumnRefSet requiredColumns;
     private final QueryMaterializationContext queryMaterializationContext;
+    // time budget for choosing SPJG candidate mvs (MVChooseCandidates), started in prepare()
+    private PreprocessDeadline preprocessDeadline = PreprocessDeadline.unlimited();
 
     public MvRewritePreprocessor(ConnectContext connectContext,
                                  ColumnRefFactory queryColumnRefFactory,
@@ -128,6 +130,105 @@ public class MvRewritePreprocessor {
         this.requiredColumns = requiredColumns;
         this.queryMaterializationContext = context.getQueryMaterializationContext() == null ?
                 new QueryMaterializationContext() : context.getQueryMaterializationContext();
+    }
+
+    /**
+     * An elapsed-time budget for choosing SPJG candidate mvs (MVChooseCandidates). Validating a related mv
+     * may resolve all of its base tables, which are remote metadata calls for external catalogs, and it is
+     * done for every related mv. Once expired, the remaining related mvs are skipped and the mvs validated
+     * so far are still ranked and go through the following stages (MVGenerateMvPlan, MVPrepareRelatedMVs),
+     * which are bounded by cbo_materialized_view_rewrite_related_mvs_limit and their own per-mv timeouts.
+     * Thread-safe so that concurrent validation workers can share it.
+     * TODO(s.ling): Also apply to MVGenerateMvPlan and MVPrepareRelatedMVs if they become slow.
+     */
+    @VisibleForTesting
+    public static final class PreprocessDeadline {
+        private static final int MAX_LOGGED_SKIPPED_MVS = 20;
+
+        private final long budgetMs;
+        private final long startNanos;
+        private final Map<String, Set<String>> skippedMVsByStage = new ConcurrentHashMap<>();
+
+        private PreprocessDeadline(long budgetMs) {
+            this.budgetMs = budgetMs;
+            this.startNanos = System.nanoTime();
+        }
+
+        public static PreprocessDeadline unlimited() {
+            return new PreprocessDeadline(-1);
+        }
+
+        public static PreprocessDeadline start(long budgetMs) {
+            return new PreprocessDeadline(budgetMs);
+        }
+
+        public boolean isUnlimited() {
+            return budgetMs < 0;
+        }
+
+        public long getBudgetMs() {
+            return budgetMs;
+        }
+
+        public long elapsedMs() {
+            return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
+        }
+
+        public long remainingMs() {
+            return isUnlimited() ? Long.MAX_VALUE : Math.max(0, budgetMs - elapsedMs());
+        }
+
+        public boolean isExpired() {
+            return !isUnlimited() && elapsedMs() >= budgetMs;
+        }
+
+        /**
+         * Cap a per-MV timeout by the remaining budget.
+         */
+        public long capTimeoutMs(long timeoutMs) {
+            return Math.min(timeoutMs, remainingMs());
+        }
+
+        public void skip(String stage, String mvName) {
+            skippedMVsByStage.computeIfAbsent(stage, k -> ConcurrentHashMap.newKeySet()).add(mvName);
+        }
+
+        public boolean isExhausted() {
+            return !skippedMVsByStage.isEmpty();
+        }
+
+        public int getSkippedCount(String stage) {
+            Set<String> skipped = skippedMVsByStage.get(stage);
+            return skipped == null ? 0 : skipped.size();
+        }
+
+        public String summary() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("budget=").append(budgetMs).append("ms, elapsed=").append(elapsedMs()).append("ms");
+            skippedMVsByStage.forEach((stage, mvNames) -> sb.append(", ").append(stage)
+                    .append(" skipped ").append(mvNames.size()).append(" mvs: ")
+                    .append(MvUtils.shrinkToSize(mvNames, MAX_LOGGED_SKIPPED_MVS)));
+            return sb.toString();
+        }
+    }
+
+    /**
+     * Resolve the MV preprocess time budget from session variables, -1 means no limit (0 or negative).
+     */
+    @VisibleForTesting
+    public static long getPreprocessTimeLimitMs(SessionVariable sessionVariable) {
+        long limit = sessionVariable.getOptimizerMaterializedViewPreprocessTimeLimitMillis();
+        return limit > 0 ? limit : -1;
+    }
+
+    @VisibleForTesting
+    public PreprocessDeadline getPreprocessDeadline() {
+        return preprocessDeadline;
+    }
+
+    @VisibleForTesting
+    public void setPreprocessDeadline(PreprocessDeadline preprocessDeadline) {
+        this.preprocessDeadline = preprocessDeadline;
     }
 
     public void prepare(OptExpression queryOptExpression) {
@@ -154,6 +255,11 @@ public class MvRewritePreprocessor {
                 relatedMVWrappers.forEach(relatedMVWrapper -> {
                     this.queryMaterializationContext.addRelatedMV(relatedMVWrapper.getMV());
                 });
+
+                // Related mvs are registered above (text based rewrite relies on them), the time budget only
+                // bounds choosing the SPJG candidate mvs below. Mvs validated within the budget are kept.
+                this.preprocessDeadline = PreprocessDeadline.start(
+                        getPreprocessTimeLimitMs(connectContext.getSessionVariable()));
 
                 // 2. choose best related mvs by user's config or related mv limit
                 List<MaterializedViewWrapper> candidateMVs;
@@ -211,7 +317,25 @@ public class MvRewritePreprocessor {
                     LOG.warn("Failed to log mv rewrite prepare exception: {}",
                             DebugUtil.getStackTrace(traceLogException));
                 }
+            } finally {
+                recordPreprocessDeadlineExhausted();
             }
+        }
+    }
+
+    private void recordPreprocessDeadlineExhausted() {
+        if (!preprocessDeadline.isExhausted()) {
+            return;
+        }
+        try {
+            String summary = preprocessDeadline.summary();
+            Tracers.record("MVPreprocessTimeout", summary);
+            logMVPrepare(connectContext, "MV preprocess time limit exhausted, continue with prepared candidates: {}",
+                    summary);
+            LOG.warn("MV preprocess time limit exhausted for query {}: {}",
+                    connectContext.getQueryId(), summary);
+        } catch (Throwable e) {
+            LOG.warn("Failed to record mv preprocess timeout: {}", DebugUtil.getStackTrace(e));
         }
     }
 
@@ -518,6 +642,17 @@ public class MvRewritePreprocessor {
                                                                  boolean force,
                                                                  boolean isNoPlanAsInvalid,
                                                                  long timeoutMs) {
+        return isMVValidToRewriteQuery(connectContext, mv, queryTables, force, isNoPlanAsInvalid, timeoutMs,
+                PreprocessDeadline.unlimited());
+    }
+
+    private static MVPlanValidationResult isMVValidToRewriteQuery(ConnectContext connectContext,
+                                                                  MaterializedView mv,
+                                                                  Set<Table> queryTables,
+                                                                  boolean force,
+                                                                  boolean isNoPlanAsInvalid,
+                                                                  long timeoutMs,
+                                                                  PreprocessDeadline preprocessDeadline) {
         if (!mv.isActive())  {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "is not active");
             return MVPlanValidationResult.invalid(MVPlanValidationResult.Reason.MV_INACTIVE, "MV is not active");
@@ -549,11 +684,18 @@ public class MvRewritePreprocessor {
                     "MV contains extra tables besides FK-PK");
         }
         // if mv is in plan cache(avoid building plan), check whether it's valid
-        final List<MvPlanContext> planContexts = force ?
-                CachingMvPlanContextBuilder.getInstance()
-                        .getOrLoadPlanContext(mv, timeoutMs) :
-                CachingMvPlanContextBuilder.getInstance()
-                        .getPlanContextIfPresent(mv, timeoutMs);
+        long remainingMs = preprocessDeadline.remainingMs();
+        final List<MvPlanContext> planContexts;
+        if (remainingMs == 0) {
+            planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContextIfLoaded(mv);
+        } else {
+            long remainingTimeoutMs = Math.min(timeoutMs, remainingMs);
+            planContexts = force ?
+                    CachingMvPlanContextBuilder.getInstance()
+                            .getOrLoadPlanContext(mv, remainingTimeoutMs) :
+                    CachingMvPlanContextBuilder.getInstance()
+                            .getPlanContextIfPresent(mv, remainingTimeoutMs);
+        }
         // if mv is not in plan cache, we cannot determine whether it's valid
         if (isNoPlanAsInvalid && CollectionUtils.isEmpty(planContexts)) {
             return MVPlanValidationResult.unknown(MVPlanValidationResult.Reason.UNKNOWN,
@@ -599,8 +741,10 @@ public class MvRewritePreprocessor {
             MaterializedView mv = wrapper.getMV();
             List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
             long mvQueryInteractedTableNum = MVCorrelation.getMvQueryIntersectedTableNum(baseTableInfos, queryTableNames);
-            List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance()
-                            .getPlanContextIfPresent(mv, timeoutMs);
+            long remainingTimeoutMs = preprocessDeadline.capTimeoutMs(timeoutMs);
+            List<MvPlanContext> planContexts = remainingTimeoutMs == 0 ?
+                    CachingMvPlanContextBuilder.getInstance().getPlanContextIfLoaded(mv) :
+                    CachingMvPlanContextBuilder.getInstance().getPlanContextIfPresent(mv, remainingTimeoutMs);
             int mvQueryScanOpDiff = MVCorrelation.getMvQueryScanOpDiff(planContexts, baseTableInfos.size(), queryScanOpNum);
             MVCorrelation mvCorrelation = new MVCorrelation(mv, mvQueryInteractedTableNum,
                     mvQueryScanOpDiff, mv.getLastRefreshTime(), wrapper.getLevel());
@@ -644,16 +788,70 @@ public class MvRewritePreprocessor {
         // choose all valid mvs and filter mvs that cannot be rewritten for the query
         int maxRelatedMVsLimit = connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
         long timeoutMs = getPrepareTimeoutMsPerMV(connectContext, Math.min(relatedMVs.size(), maxRelatedMVsLimit));
+        // warm the query-level metadata cache for the base tables the validity check below resolves one by one
+        prefetchBaseTablesForExtraTablesCheck(queryTables, relatedMVs);
         // to make unit test more stable, force build mv plan in unit test
-        Set<MaterializedViewWrapper> validMVs = relatedMVs.stream()
-                .filter(wrapper -> isMVValidToRewriteQuery(connectContext, wrapper.getMV(),
-                        queryTables, isForceLoadMVPlan(wrapper.getMV()), false, timeoutMs).isValid())
-                .collect(Collectors.toSet());
-        logMVPrepare(connectContext, "Choose {}/{} valid mvs after checking valid",
-                validMVs.size(), relatedMVs.size());
+        // NOTE: validating an mv may resolve all of its base tables, which can be remote metadata calls for
+        // external catalogs, so the shared preprocess deadline is checked before each mv.
+        Set<MaterializedViewWrapper> validMVs = Sets.newHashSet();
+        for (MaterializedViewWrapper wrapper : relatedMVs) {
+            MaterializedView mv = wrapper.getMV();
+            if (preprocessDeadline.isExpired()) {
+                preprocessDeadline.skip("MVChooseCandidates", mv.getName());
+                continue;
+            }
+            if (isMVValidToRewriteQuery(connectContext, mv, queryTables, isForceLoadMVPlan(mv), false,
+                    timeoutMs, preprocessDeadline).isValid()) {
+                validMVs.add(wrapper);
+            }
+        }
+        logMVPrepare(connectContext, "Choose {}/{} valid mvs after checking valid, {} skipped by time limit",
+                validMVs.size(), relatedMVs.size(), preprocessDeadline.getSkippedCount("MVChooseCandidates"));
 
         // choose max config related mvs for mv rewrite to avoid too much optimize time
         return chooseBestRelatedMVsByCorrelations(queryTables, validMVs, queryOptExpression, maxRelatedMVsLimit);
+    }
+
+    @VisibleForTesting
+    public void prefetchBaseTablesForExtraTablesCheck(Set<Table> queryTables,
+                                                      List<MaterializedViewWrapper> relatedMVs) {
+        if (CollectionUtils.isEmpty(queryTables) || CollectionUtils.isEmpty(relatedMVs) ||
+                !connectContext.getSessionVariable().enableParallelPrefetchMvBaseTableMetadata()) {
+            return;
+        }
+        Set<BaseTableInfo> baseTableInfos = Sets.newLinkedHashSet();
+        for (MaterializedViewWrapper wrapper : relatedMVs) {
+            MaterializedView mv = wrapper.getMV();
+            // mirror the early returns of isMVValidToRewriteQuery / canMVRewriteIfMVHasExtraTables
+            if (!mv.isActive() || mv.getRefreshMode().isIncrementalOrAuto() || !mv.isEnableRewrite() ||
+                    mv.hasForeignKeyConstraints() || isCachedPlanInvalid(mv)) {
+                continue;
+            }
+            for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
+                if (baseTableInfo.isInternalCatalog() || queryTables.stream().anyMatch(baseTableInfo::matchTable)) {
+                    continue;
+                }
+                baseTableInfos.add(baseTableInfo);
+            }
+        }
+        // the validity check below skips all mvs once the preprocess deadline is expired, so there is
+        // nothing to warm; otherwise only wait for the prefetch as long as the remaining budget allows
+        if (baseTableInfos.isEmpty() || preprocessDeadline.isExpired()) {
+            return;
+        }
+        try (Timer ignored = Tracers.watchScope("MVPrefetchBaseTables")) {
+            MvBaseTableMetadataPrefetcher.prefetchBaseTables(baseTableInfos, connectContext,
+                    preprocessDeadline.remainingMs());
+        } catch (Exception e) {
+            // prefetch is best effort: the validity check resolves the tables again on a miss
+            LOG.warn("Prefetch mv base tables failed, base tables will be resolved sequentially", e);
+        }
+    }
+
+    private static boolean isCachedPlanInvalid(MaterializedView mv) {
+        List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContextIfLoaded(mv);
+        return CollectionUtils.isNotEmpty(planContexts) &&
+                planContexts.stream().noneMatch(MvPlanContext::isValidMvPlan);
     }
 
     @VisibleForTesting
