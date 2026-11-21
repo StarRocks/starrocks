@@ -28,6 +28,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateSyncMVStmt;
 import mockit.Expectations;
+import mockit.FullVerifications;
 import mockit.Mocked;
 import org.junit.jupiter.api.Test;
 
@@ -163,6 +164,47 @@ public class CatalogConnectorMetadataTest {
         Table table = catalogConnectorMetadata.getTable(new ConnectContext(), "test_db", "test_tbl");
         assertNull(table);
         assertNotNull(catalogConnectorMetadata.getTable(new ConnectContext(), InfoSchemaDb.DATABASE_NAME, "tables"));
+    }
+
+    @Test
+    void testPrefetchTableMetadata(@Mocked ConnectorMetadata connectorMetadata) {
+        new Expectations() {
+            {
+                connectorMetadata.prefetchTableMetadataForAnalyze("test_db", "test_tbl", (ConnectContext) any);
+                times = 1;
+            }
+        };
+
+        CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
+                connectorMetadata,
+                informationSchemaMetadata,
+                metaMetadata
+        );
+
+        catalogConnectorMetadata.prefetchTableMetadataForAnalyze("test_db", "test_tbl", new ConnectContext());
+    }
+
+    @Test
+    void testPrefetchInformationSchemaMetadata(@Mocked ConnectorMetadata connectorMetadata) {
+        new Expectations() {
+            {
+                connectorMetadata.getTableType();
+                result = Table.TableType.HIVE;
+                times = 1;
+            }
+        };
+
+        CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
+                connectorMetadata,
+                informationSchemaMetadata,
+                metaMetadata
+        );
+
+        catalogConnectorMetadata.prefetchTableMetadataForAnalyze(InfoSchemaDb.DATABASE_NAME, "tables",
+                new ConnectContext());
+
+        new FullVerifications(connectorMetadata) {
+        };
     }
 
     @Test
