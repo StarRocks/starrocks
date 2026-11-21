@@ -502,7 +502,8 @@ public class SparkLoadPendingTask extends LoadTask {
         // check negative for sum aggregate type
         if (fileGroup.isNegative()) {
             for (Column column : table.getBaseSchema()) {
-                if (!column.isKey() && column.getAggregationType() != AggregateType.SUM) {
+                if (!column.isKey() && column.getAggregationType() != AggregateType.SUM
+                        && !(table.getKeysType() == KeysType.AGG_KEYS && column.isInternalGeneratedPartitionColumn())) {
                     throw new LoadException("Column is not SUM AggreateType. column:" + column.getName());
                 }
             }

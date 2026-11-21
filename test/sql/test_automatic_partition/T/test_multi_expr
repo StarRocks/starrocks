@@ -1,5 +1,5 @@
 -- name: test_primary_key_table
-create table t(k1 int, k2 bigint, v int) PRIMARY KEY(k1, k2) partition by from_unixtime(k2, '%Y-%m-%d');
+create table t(k1 int, k2 bigint, v int) PRIMARY KEY(k1, k2) partition by from_unixtime(k2, '%Y-%m-%d', 'Asia/Shanghai');
 insert into t values(1,UNIX_TIMESTAMP('2020-01-01 01:01:01'),1);
 insert into t values(2,UNIX_TIMESTAMP('2020-01-01 01:01:01'),1);
 insert into t values(2,UNIX_TIMESTAMP('2020-01-01 01:01:01'),2);
@@ -10,7 +10,7 @@ select * from t where k2=UNIX_TIMESTAMP('2007-11-30 10:30:19');
 select * from t where k2=1196389819;
 explain select * from t where k2=UNIX_TIMESTAMP('2007-11-30 10:30:19');
 explain select * from t where k2=1196389819;
-create table t1(k1 int, k2 bigint, v int) PRIMARY KEY(k1, k2) partition by from_unixtime(k2, '%Y-%m-%d'),k1;
+create table t1(k1 int, k2 bigint, v int) PRIMARY KEY(k1, k2) partition by from_unixtime(k2, '%Y-%m-%d', 'Asia/Shanghai'),k1;
 insert into t1 values(1,UNIX_TIMESTAMP('2020-01-01 01:01:01'),1);
 insert into t1 values(2,UNIX_TIMESTAMP('2020-01-01 01:01:01'),1);
 insert into t1 values(2,UNIX_TIMESTAMP('2020-01-01 01:01:01'),2);
@@ -23,8 +23,9 @@ explain select * from t1 where k2=UNIX_TIMESTAMP('2007-11-30 10:30:19');
 explain select * from t1 where k2=1196389819;
 
 -- name: test_create_error
-create table t(k1 int, k2 bigint, v int sum) AGGREGATE KEY(k1,k2) partition by from_unixtime(k2, '%Y-%m-%d');
-create table t(k1 int, k2 bigint, v int) PRIMARY KEY(k1) partition by from_unixtime(k2, '%Y-%m-%d');
+-- an aggregate table may partition on an expression over its key columns, but never over a value column
+create table t(k1 int, k2 bigint, v int sum) AGGREGATE KEY(k1,k2) partition by from_unixtime(v, '%Y-%m-%d', 'Asia/Shanghai');
+create table t(k1 int, k2 bigint, v int) PRIMARY KEY(k1) partition by from_unixtime(k2, '%Y-%m-%d', 'Asia/Shanghai');
 
 
 -- name: test_insert_into_select
@@ -58,7 +59,7 @@ select * from multi_level_expr_par_tbl;
 -- name: test_ctas_from_normal_table @native
 CREATE TABLE base_tbl_unix_ts (c1 bigint, c2 string, c3 date);
 insert into base_tbl_unix_ts values(1592841600, 'beijing', '2020-06-23');
-CREATE TABLE multi_level_expr_par_tbl_1 primary KEY(c1) PARTITION BY from_unixtime(c1) DISTRIBUTED BY HASH(c1) BUCKETS 3 as select * from base_tbl_unix_ts;
+CREATE TABLE multi_level_expr_par_tbl_1 primary KEY(c1) PARTITION BY from_unixtime(c1, '%Y-%m-%d %H:%i:%s', 'Asia/Shanghai') DISTRIBUTED BY HASH(c1) BUCKETS 3 as select * from base_tbl_unix_ts;
 select * from multi_level_expr_par_tbl_1;
 show create table multi_level_expr_par_tbl_1;
 
