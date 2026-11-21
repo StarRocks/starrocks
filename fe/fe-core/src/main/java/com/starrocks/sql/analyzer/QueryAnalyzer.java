@@ -48,7 +48,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.common.util.concurrent.lock.SnapshotCopyValidator;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.metadata.MetadataTable;
@@ -2872,14 +2871,10 @@ public class QueryAnalyzer {
                         Table mvTable = materializedIndex.first;
                         Preconditions.checkState(mvTable != null);
                         Preconditions.checkState(mvTable instanceof OlapTable);
-                        // Add read lock to avoid concurrent problems.
+                        // PlannerMetaLocker collects the base table of a [_SYNC_MV_] relation by its index name,
+                        // so the planner holds its READ lock while this copies it.
                         OlapTable mvOlapTable = new OlapTable(mvTable.getType());
-                        // Known: PlannerMetaLocker does not collect a [_SYNC_MV_] relation, so this copies the
-                        // base table without its lock. Tracked as 2-g in the FE lock todo, fixed on its own.
-                        try (SnapshotCopyValidator.KnownViolation known = SnapshotCopyValidator.exemptKnownViolation(
-                                "[_SYNC_MV_] relation is not in the planner lock set (2-g)")) {
-                            ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
-                        }
+                        ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
                         // Copy the necessary olap table meta to avoid changing original meta;
                         mvOlapTable.setBaseIndexMetaId(materializedIndex.second.getIndexMetaId());
                         // The selected index can give same-named columns different key or aggregate properties.
