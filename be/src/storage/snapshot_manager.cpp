@@ -73,6 +73,192 @@ using std::list;
 
 namespace starrocks {
 
+namespace {
+
+Status flatten_inverted_index_directories(const std::string& snapshot_dir) {
+    std::vector<std::string> snapshot_entries;
+    RETURN_IF_ERROR(FileSystem::Default()->get_children(snapshot_dir, &snapshot_entries));
+    for (const auto& entry : snapshot_entries) {
+        if (!entry.ends_with(".ivt")) {
+            continue;
+        }
+
+        const std::string index_dir = fmt::format("{}/{}", snapshot_dir, entry);
+        auto is_dir = fs::is_directory(index_dir);
+        RETURN_IF_ERROR(is_dir.status());
+        if (!is_dir.value()) {
+            continue;
+        }
+
+        std::vector<std::string> index_files;
+        RETURN_IF_ERROR(FileSystem::Default()->get_children(index_dir, &index_files));
+        const std::string flattened_prefix = entry.substr(0, entry.size() - 4);
+        for (const auto& index_file : index_files) {
+            const std::string old_name = fmt::format("{}/{}", index_dir, index_file);
+            const std::string new_name = fmt::format("{}/{}_{}", snapshot_dir, flattened_prefix, index_file);
+            RETURN_IF_ERROR(FileSystem::Default()->rename_file(old_name, new_name));
+        }
+        RETURN_IF_ERROR(FileSystem::Default()->delete_dir_recursive(index_dir));
+    }
+    return Status::OK();
+}
+
+Status restore_inverted_index_directories_impl(const std::string& clone_dir) {
+#ifndef __APPLE__
+    std::vector<std::string> clone_entries;
+    RETURN_IF_ERROR(FileSystem::Default()->get_children(clone_dir, &clone_entries));
+    for (const auto& entry : clone_entries) {
+        if (!CLucenePlugin::is_index_files(entry)) {
+            continue;
+        }
+
+        const auto first_separator = entry.find('_');
+        const auto second_separator =
+                first_separator == std::string::npos ? std::string::npos : entry.find('_', first_separator + 1);
+        const auto third_separator =
+                second_separator == std::string::npos ? std::string::npos : entry.find('_', second_separator + 1);
+        if (first_separator == std::string::npos || first_separator == 0 || second_separator == std::string::npos ||
+            second_separator == first_separator + 1 || third_separator == std::string::npos ||
+            third_separator == second_separator + 1 || third_separator + 1 == entry.size()) {
+            return Status::InternalError("invalid inverted index file name: " + entry);
+        }
+
+        const std::string index_dir = fmt::format("{}/{}.ivt", clone_dir, entry.substr(0, third_separator));
+        RETURN_IF_ERROR(fs::create_directories(index_dir));
+        RETURN_IF_ERROR(
+                FileSystem::Default()->rename_file(fmt::format("{}/{}", clone_dir, entry),
+                                                   fmt::format("{}/{}", index_dir, entry.substr(third_separator + 1))));
+    }
+#endif
+    return Status::OK();
+}
+
+struct RowsetIndexLayout {
+    std::string rowset_id;
+    int32_t num_segments;
+};
+
+// Builtin inverted indexes are stored in the segment footer and have no standalone .ivt directory. Keep the
+// property check here instead of calling is_builtin_inverted_index(), which is not available on branch-4.0.
+bool has_standalone_inverted_index(const TabletIndex& index) {
+    const auto& properties = index.common_properties();
+    const auto property = properties.find(INVERTED_IMP_KEY);
+    return property == properties.end() || !boost::iequals(property->second, "builtin");
+}
+
+Status link_inverted_index_directories_impl(const std::vector<RowsetIndexLayout>& rowset_layouts,
+                                            const TabletSchemaCSPtr& tablet_schema, const std::string& snapshot_dir,
+                                            const std::string& tablet_dir, std::set<std::string>* created_index_dirs) {
+    if (UNLIKELY(tablet_schema == nullptr)) {
+        return Status::InvalidArgument("tablet schema is null");
+    }
+    if (tablet_schema->indexes()->empty()) {
+        return Status::OK();
+    }
+
+    std::vector<std::string> created_directories;
+    std::vector<std::string> created_files;
+    CancelableDefer rollback([&]() {
+        for (auto it = created_files.rbegin(); it != created_files.rend(); ++it) {
+            auto st = FileSystem::Default()->delete_file(*it);
+            LOG_IF(WARNING, !st.ok() && !st.is_not_found())
+                    << "Fail to remove linked inverted index file " << *it << ": " << st;
+        }
+        for (auto it = created_directories.rbegin(); it != created_directories.rend(); ++it) {
+            auto st = fs::remove_all(*it);
+            LOG_IF(WARNING, !st.ok() && !st.is_not_found())
+                    << "Fail to remove linked inverted index directory " << *it << ": " << st;
+        }
+    });
+
+    for (const auto& rowset_layout : rowset_layouts) {
+        for (int segment_id = 0; segment_id < rowset_layout.num_segments; ++segment_id) {
+            for (const auto& index : *tablet_schema->indexes()) {
+                if (index.index_type() != GIN || !has_standalone_inverted_index(index)) {
+                    continue;
+                }
+
+                const std::string source = IndexDescriptor::inverted_index_file_path(
+                        snapshot_dir, rowset_layout.rowset_id, segment_id, index.index_id());
+                auto is_dir = fs::is_directory(source);
+                RETURN_IF_ERROR(is_dir.status());
+                if (!is_dir.value()) {
+                    return Status::InternalError("inverted index path is not a directory: " + source);
+                }
+
+                std::set<std::string> index_directories;
+                std::set<std::string> index_files;
+                RETURN_IF_ERROR(fs::list_dirs_files(source, &index_directories, &index_files));
+                if (!index_directories.empty()) {
+                    return Status::Corruption("inverted index directory contains nested directories: " + source);
+                }
+
+                const std::string destination = IndexDescriptor::inverted_index_file_path(
+                        tablet_dir, rowset_layout.rowset_id, segment_id, index.index_id());
+                bool created = false;
+                auto create_status = FileSystem::Default()->create_dir_if_missing(destination, &created);
+                if (!create_status.ok()) {
+                    if (create_status.is_already_exist()) {
+                        return Status::Corruption("inverted index path is not a directory: " + destination);
+                    }
+                    return create_status;
+                }
+
+                if (created) {
+                    created_directories.emplace_back(destination);
+                    for (const auto& index_file : index_files) {
+                        RETURN_IF_ERROR(
+                                FileSystem::Default()->link_file(fmt::format("{}/{}", source, index_file),
+                                                                 fmt::format("{}/{}", destination, index_file)));
+                    }
+                    continue;
+                }
+
+                std::set<std::string> destination_directories;
+                std::set<std::string> destination_files;
+                RETURN_IF_ERROR(fs::list_dirs_files(destination, &destination_directories, &destination_files));
+                if (!destination_directories.empty()) {
+                    return Status::Corruption("existing inverted index directory contains nested directories: " +
+                                              destination);
+                }
+                for (const auto& destination_file : destination_files) {
+                    if (!index_files.contains(destination_file)) {
+                        return Status::Corruption("existing inverted index directory contains an unexpected file: " +
+                                                  fmt::format("{}/{}", destination, destination_file));
+                    }
+                    ASSIGN_OR_RETURN(auto source_md5, fs::md5sum(fmt::format("{}/{}", source, destination_file)));
+                    ASSIGN_OR_RETURN(auto destination_md5,
+                                     fs::md5sum(fmt::format("{}/{}", destination, destination_file)));
+                    if (source_md5 != destination_md5) {
+                        return Status::Corruption("existing inverted index file has different content: " +
+                                                  fmt::format("{}/{}", destination, destination_file));
+                    }
+                }
+                bool completed_existing_directory = false;
+                for (const auto& index_file : index_files) {
+                    if (destination_files.contains(index_file)) {
+                        continue;
+                    }
+                    const std::string destination_file = fmt::format("{}/{}", destination, index_file);
+                    RETURN_IF_ERROR(FileSystem::Default()->link_file(fmt::format("{}/{}", source, index_file),
+                                                                     destination_file));
+                    created_files.emplace_back(destination_file);
+                    completed_existing_directory = true;
+                }
+                if (completed_existing_directory) {
+                    VLOG(2) << "Completed existing inverted index directory " << destination;
+                }
+            }
+        }
+    }
+
+    created_index_dirs->insert(created_directories.begin(), created_directories.end());
+    rollback.cancel();
+    return Status::OK();
+}
+
+} // namespace
+
 SnapshotManager* SnapshotManager::_s_instance = nullptr;
 std::mutex SnapshotManager::_mlock;
 
@@ -84,6 +270,36 @@ SnapshotManager* SnapshotManager::instance() {
         }
     }
     return _s_instance;
+}
+
+Status SnapshotManager::restore_inverted_index_directories(const std::string& snapshot_dir) {
+    return restore_inverted_index_directories_impl(snapshot_dir);
+}
+
+Status SnapshotManager::link_inverted_index_directories(const SnapshotMeta& snapshot_meta,
+                                                        const TabletSchemaCSPtr& tablet_schema,
+                                                        const std::string& snapshot_dir, const std::string& tablet_dir,
+                                                        std::set<std::string>* created_index_dirs) {
+    std::vector<RowsetIndexLayout> rowset_layouts;
+    rowset_layouts.reserve(snapshot_meta.rowset_metas().size());
+    for (const auto& rowset_meta : snapshot_meta.rowset_metas()) {
+        rowset_layouts.emplace_back(rowset_meta.rowset_id(), rowset_meta.num_segments());
+    }
+    return link_inverted_index_directories_impl(rowset_layouts, tablet_schema, snapshot_dir, tablet_dir,
+                                                created_index_dirs);
+}
+
+Status SnapshotManager::link_inverted_index_directories(const std::vector<RowsetMetaSharedPtr>& rowset_metas,
+                                                        const TabletSchemaCSPtr& tablet_schema,
+                                                        const std::string& snapshot_dir, const std::string& tablet_dir,
+                                                        std::set<std::string>* created_index_dirs) {
+    std::vector<RowsetIndexLayout> rowset_layouts;
+    rowset_layouts.reserve(rowset_metas.size());
+    for (const auto& rowset_meta : rowset_metas) {
+        rowset_layouts.emplace_back(rowset_meta->rowset_id().to_string(), rowset_meta->num_segments());
+    }
+    return link_inverted_index_directories_impl(rowset_layouts, tablet_schema, snapshot_dir, tablet_dir,
+                                                created_index_dirs);
 }
 
 Status SnapshotManager::make_snapshot(const TSnapshotRequest& request, string* snapshot_path) {
@@ -184,6 +400,8 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
     if (!has_header_file && !has_meta_file) {
         return Status::InternalError("fail to find header or meta file");
     }
+    RETURN_IF_ERROR(restore_inverted_index_directories(clone_dir));
+
     TabletMetaPB cloned_tablet_meta_pb;
     if (has_meta_file) {
         return Status::OK();
@@ -206,37 +424,6 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
     new_tablet_meta_pb.set_tablet_id(tablet_id);
     new_tablet_meta_pb.set_schema_hash(schema_hash);
     auto tablet_schema = std::make_shared<const TabletSchema>(new_tablet_meta_pb.schema());
-
-    // handle inverted index file
-    std::vector<std::string> all_files;
-    std::vector<std::string> new_inverted_index_files;
-    RETURN_IF_ERROR(FileSystem::Default()->get_children(clone_dir, &all_files));
-#ifndef __APPLE__
-    for (const auto& file : all_files) {
-        if (CLucenePlugin::is_index_files(file)) {
-            auto* p1 = (char*)std::memchr(file.data(), '_', file.size());
-            auto* p2 = (char*)std::memchr(p1 + 1, '_', file.size() - (p1 - file.data() + 1));
-            auto* p3 = (char*)std::memchr(p2 + 1, '_', file.size() - (p2 - file.data() + 1));
-            if (p1 == nullptr || p2 == nullptr || p3 == nullptr) {
-                return Status::InternalError("invalid index file name: " + file);
-            }
-
-            std::string rowsetid = file.substr(0, p1 - file.data());
-            std::string segment_id = file.substr(p1 - file.data() + 1, p2 - p1 - 1);
-            std::string index_id = file.substr(p2 - file.data() + 1, p3 - p2 - 1);
-            std::string inverted_index_path = IndexDescriptor::inverted_index_file_path(
-                    clone_dir, rowsetid, std::stoi(segment_id), std::stoi(index_id));
-
-            if (!fs::path_exist(inverted_index_path)) {
-                RETURN_IF_ERROR(fs::create_directories(inverted_index_path));
-            }
-
-            std::string new_file_name = file.substr(p3 - file.data() + 1, file.data() + file.size() - p3);
-            RETURN_IF_ERROR(FileSystem::Default()->rename_file(clone_dir + "/" + file,
-                                                               inverted_index_path + "/" + new_file_name));
-        }
-    }
-#endif
 
     std::unordered_map<string, string> old_to_new_rowsetid;
 
@@ -455,6 +642,12 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
         }
     }
 
+    if (auto st = flatten_inverted_index_directories(snapshot_dir); !st.ok()) {
+        LOG(WARNING) << "Fail to flatten inverted index directories in snapshot " << snapshot_dir << ": " << st;
+        (void)fs::remove_all(snapshot_id_path);
+        return st;
+    }
+
     return snapshot_id_path;
 }
 
@@ -521,6 +714,11 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
 
     // 4. Build snapshot header/meta file for the non-PrimaryKey tablet.
     if (tablet->updates() != nullptr) {
+        if (auto st = flatten_inverted_index_directories(snapshot_dir); !st.ok()) {
+            LOG(WARNING) << "Fail to flatten inverted index directories in snapshot " << snapshot_dir << ": " << st;
+            (void)fs::remove_all(snapshot_id_path);
+            return st;
+        }
         return snapshot_id_path;
     }
 
@@ -552,31 +750,10 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
     dcg_snapshot_path << snapshot_dir << "/" << tablet->tablet_id() << ".dcgs_snapshot";
     RETURN_IF_ERROR(DeltaColumnGroupListHelper::save_snapshot(dcg_snapshot_path.str(), dcg_snapshot_pb));
 
-    // handle inverted index files
-    std::vector<std::string> all_files;
-    RETURN_IF_ERROR(FileSystem::Default()->get_children(snapshot_dir, &all_files));
-    for (const auto& file : all_files) {
-        auto is_dir = fs::is_directory(snapshot_dir + "/" + file);
-        if (is_dir.ok() && is_dir.value() && file.find("ivt", 0) != std::string::npos) {
-            std::vector<std::string> index_files;
-            RETURN_IF_ERROR(FileSystem::Default()->get_children(snapshot_dir + "/" + file, &index_files));
-            for (const auto& index_file : index_files) {
-                auto* p1 = (char*)std::memchr(file.data(), '_', file.size());
-                auto* p2 = (char*)std::memchr(p1 + 1, '_', file.size() - (p1 - file.data() + 1));
-                auto* p3 = (char*)std::memchr(p2 + 1, '.', file.size() - (p2 - file.data() + 1));
-
-                std::string rowsetid = file.substr(0, p1 - file.data());
-                std::string segment_id = file.substr(p1 - file.data() + 1, p2 - p1 - 1);
-                std::string index_id = file.substr(p2 - file.data() + 1, p3 - p2 - 1);
-
-                std::string old_name = snapshot_dir + "/" + file + "/" + index_file;
-                std::string new_name =
-                        snapshot_dir + "/" + rowsetid + "_" + segment_id + "_" + index_id + "_" + index_file;
-
-                RETURN_IF_ERROR(FileSystem::Default()->rename_file(old_name, new_name));
-            }
-            RETURN_IF_ERROR(FileSystem::Default()->delete_dir_recursive(snapshot_dir + "/" + file));
-        }
+    if (auto st = flatten_inverted_index_directories(snapshot_dir); !st.ok()) {
+        LOG(WARNING) << "Fail to flatten inverted index directories in snapshot " << snapshot_dir << ": " << st;
+        (void)fs::remove_all(snapshot_id_path);
+        return st;
     }
 
     snapshot_tablet_meta->revise_inc_rs_metas(vector<RowsetMetaSharedPtr>());
@@ -675,6 +852,12 @@ StatusOr<std::string> SnapshotManager::snapshot_primary(const TabletSharedPtr& t
             (void)fs::remove_all(snapshot_id_path);
             return st;
         }
+    }
+
+    if (auto st = flatten_inverted_index_directories(snapshot_dir); !st.ok()) {
+        LOG(WARNING) << "Fail to flatten inverted index directories in snapshot " << snapshot_dir << ": " << st;
+        (void)fs::remove_all(snapshot_id_path);
+        return st;
     }
 
     return snapshot_id_path;
