@@ -74,8 +74,8 @@ public class SparkLauncherMonitorTest {
         try {
             Process process = Runtime.getRuntime().exec(cmd);
             handle = new SparkLoadAppHandle(process);
+            handle.setLogPath(logPath);
             SparkLauncherMonitor.LogMonitor logMonitor = SparkLauncherMonitor.createLogMonitor(handle);
-            logMonitor.setRedirectLogPath(logPath);
             logMonitor.start();
             try {
                 logMonitor.join();
