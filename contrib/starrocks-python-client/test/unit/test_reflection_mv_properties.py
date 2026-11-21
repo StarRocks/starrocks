@@ -15,7 +15,7 @@
 """Unit tests for materialized view PROPERTIES extraction during reflection.
 
 information_schema.tables_config does not report every property for an MV (notably
-colocate_with), so those properties are read from the CREATE MATERIALIZED VIEW ddl
+colocate_with and query_rewrite_consistency), so those properties are read from the CREATE MATERIALIZED VIEW ddl
 instead. See ReflectionMVDefaults._DDL_ONLY_PROPERTY_KEYS.
 """
 
@@ -54,6 +54,17 @@ def _ddl_properties(ddl: str = MV_DDL) -> dict:
 def test_colocate_with_taken_from_ddl():
     """tables_config omits colocate_with for MVs, so it must come from the ddl."""
     assert _ddl_properties()["colocate_with"] == "cg_test"
+
+
+@pytest.mark.parametrize("prop, value", [
+    ("query_rewrite_consistency", "LOOSE"),
+    ("force_external_table_query_rewrite", "CHECKED"),
+    ("refresh_mode", "pct"),
+])
+def test_rewrite_and_refresh_mode_properties_taken_from_ddl(prop, value):
+    """tables_config also omits these for MVs."""
+    ddl = MV_DDL.replace('"colocate_with" = "cg_test"', f'"colocate_with" = "cg_test",\n"{prop}" = "{value}"')
+    assert _ddl_properties(ddl)[prop] == value
 
 
 @pytest.mark.parametrize("prop", ["replicated_storage", "replication_num", "storage_medium"])
