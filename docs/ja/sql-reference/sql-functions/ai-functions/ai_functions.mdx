@@ -11,17 +11,33 @@ import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
 
 <Experimental />
 
-AI 関数は、SQL からモデルサービスを呼び出し、テキストの生成、分類、抽出、翻訳、要約、ベクトル化を行います。定数テキストに対して関数を呼び出すことも、クエリ内でテキスト列を処理することもできます。
+AI 関数を使うと、SQL からモデルサービスを呼び出せます。`ai_complete` はプロンプトからテキストを生成し、画像や動画についての質問にも答えます。`ai_embed` はテキスト、画像、動画の埋め込みベクトルを生成します。
+
+## 関数一覧 {/* #function-index */}
+
+| 関数 | 用途 | 戻り値の型 |
+| --- | --- | --- |
+| [ai_complete](ai_complete.md) | プロンプトと任意の画像または動画からテキストを生成 | VARCHAR |
+| [ai_embed](ai_embed.md) | テキスト、画像、動画の埋め込みベクトルを生成 | `ARRAY<FLOAT>` |
+| [ai_sentiment](ai_sentiment.md) | テキストの感情を分析 | VARCHAR |
+| [ai_classify](ai_classify.md) | 指定されたカテゴリにテキストを分類 | JSON |
+| [ai_extract](ai_extract.md) | 指定された情報を抽出 | JSON |
+| [ai_fix_grammar](ai_fix_grammar.md) | 文法とスペルを修正 | VARCHAR |
+| [ai_redact](ai_redact.md) | カテゴリに応じて機密情報をマスキング | VARCHAR |
+| [ai_translate](ai_translate.md) | テキストを翻訳 | VARCHAR |
+| [ai_similarity](ai_similarity.md) | 2 つのテキストの意味的な類似度を評価 | FLOAT |
+| [ai_summarize](ai_summarize.md) | 要約を生成 | VARCHAR |
+| [ai_filter](ai_filter.md) | テキストが条件を満たすか判定 | BOOLEAN |
 
 ## AI Provider と AI 関数
 
 AI Provider は、クラスター内で一元管理されるモデルサービスの設定です。エンドポイント、プロトコル、デフォルトモデル、オプションの認証情報を保持します。AI 関数は Provider からこれらの設定を取得するため、SQL でエンドポイントや認証情報を繰り返し指定する必要はありません。
 
-- `ai_embed` は `embedding` タイプの Provider を使用します。
-- `ai_complete` とその他のテキスト補助関数は `chat` タイプの Provider を使用します。
-- これらの AI 関数は現在、Provider が `openai` プロトコルを使用することを必要とします。エンドポイントとモデルも、対応するチャットまたは埋め込み機能をサポートしている必要があります。
+- [ai_embed](ai_embed.md) は `embedding` タイプの Provider を使用します。
+- [ai_complete](ai_complete.md) とその他のテキスト補助関数は `chat` タイプの Provider を使用します。
+- SQL の AI 関数は `openai` 互換プロトコルと `dashscope` ネイティブプロトコルに対応しています。画像や動画を扱う場合は、その入力に対応するエンドポイントとモデルを選んでください。[FILE 入力の対応表](#file-input)を参照してください。
 
-関数の呼び出し時には、`provider` で Provider を指定するか、対応するタイプのクラスターデフォルト Provider を使用できます。デフォルトはタイプごとに独立して管理されます。`model` を省略すると、選択した Provider のデフォルトモデルが使用されます。そのサービスがサポートする別のモデルを明示的に指定することもできます。
+Provider のエンドポイントは HTTP と HTTPS に対応しています。各実行プランは選択した Provider の設定のスナップショットを保持します。設定の変更やデフォルト Provider の切り替えは、クエリが再計画されると反映されます。
 
 Provider の作成、設定プロパティ、管理構文については [CREATE AI PROVIDER](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md) を、デフォルトの設定については [SET DEFAULT AI PROVIDER](../../sql-statements/cluster-management/ai_provider/SET_DEFAULT_AI_PROVIDER.md) を参照してください。
 
@@ -38,7 +54,7 @@ AI 関数を呼び出すには、次の両方の使用権限が必要です。
 
 ## はじめに
 
-次の例では、Alibaba Cloud Model Studio（Bailian）の北京リージョンの OpenAI 互換 API を使用します。モデルサービスを有効にし、`YOUR_DASHSCOPE_API_KEY` を北京リージョンの API キーに置き換えてください。Provider の管理権限と、該当する関数および Provider の使用権限を持つアカウントで実行してください。
+以下の例では、Alibaba Cloud Model Studio（Bailian）の北京リージョンを使用します。利用するモデルを有効にし、`YOUR_DASHSCOPE_API_KEY` をそのリージョンの API キーに置き換えてください。Provider の管理権限と、対象の関数および Provider の使用権限を持つアカウントで実行してください。
 
 ### Chat Provider: テキストの生成
 
@@ -95,7 +111,137 @@ SET bailian_embedding AS DEFAULT AI PROVIDER;
 SELECT ai_embed('列指向ストレージは分析クエリに適しています。');
 ```
 
-関数の完全な構文、引数のルール、例については、[AI テキスト関数](ai_text_functions.md)を参照してください。モデル呼び出しでは、入力テキストが Provider のエンドポイントに送信されます。データ送信の要件に応じてサービスを選び、クエリの行数、遅延、呼び出し費用を考慮してください。
+### 視覚モデルで画像を説明する {/* #vision-chat */}
+
+`vision_chat` は Model Studio の OpenAI 互換 Chat エンドポイントと視覚モデルを使用します。画像の URL を FILE に格納し、`file` 引数でプロンプトとともに渡します。
+
+```sql
+CREATE AI PROVIDER vision_chat TYPE chat
+PROPERTIES (
+    "protocol" = "openai",
+    "endpoint" = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+    "model" = "qwen3-vl-plus",
+    "api_key" = "YOUR_DASHSCOPE_API_KEY"
+);
+
+SELECT ai_complete(
+    prompt => 'この画像について説明してください。',
+    file => to_file(named_struct(
+        'uri', 'https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20241022/emyrja/dog_and_girl.jpeg'
+    )),
+    provider => 'vision_chat'
+);
+```
+
+### オブジェクトストレージ上の動画をベクトル化する {/* #video-embedding */}
+
+DashScope ネイティブのマルチモーダル埋め込みエンドポイントを使う `vision_embedding` を作成します。この例は `media_volume` という S3 タイプのストレージボリュームを使用します。[get_presigned_file](../file-functions/presigned_functions.md#get_presigned_file) を呼び出すには、このボリュームに対する USAGE 権限が必要です。オブジェクト URI を、そのボリュームで読み取れる MP4 動画の URI に置き換えてください。署名付き URL にはモデルサービスからアクセスできる必要があります。
+
+```sql
+CREATE AI PROVIDER vision_embedding TYPE embedding
+PROPERTIES (
+    "protocol" = "dashscope",
+    "endpoint" = "https://dashscope.aliyuncs.com/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding",
+    "model" = "tongyi-embedding-vision-plus",
+    "api_key" = "YOUR_DASHSCOPE_API_KEY"
+);
+
+SELECT ai_embed(
+    input => get_presigned_file(
+        'media_volume',
+        to_file(named_struct('uri', 's3://my-bucket/videos/clip.mp4'))
+    ),
+    provider => 'vision_embedding'
+);
+```
+
+StarRocks は、入力テキスト、インラインのメディアデータ、または署名パラメータを含むメディア URL 全体を Provider のエンドポイントに送信します。データの外部送信に関する要件を満たすサービスを選んでください。
+
+## 共通の呼び出しルール
+
+### 引数の指定
+
+関数は位置引数と、`引数名 => 値` 形式の名前付き引数をサポートします。名前付き引数では順序を変更でき、前の引数のデフォルト値を指定せずにオプション引数を直接指定できます。
+
+```sql
+-- デフォルトの chat AI Provider と、その Provider のデフォルトモデルを使用します。
+SELECT ai_complete('列指向ストレージについて説明してください。');
+
+-- 位置引数: chat_provider のデフォルトモデルを chat-model で上書きします。
+SELECT ai_complete('列指向ストレージについて説明してください。', 'chat_provider', 'chat-model');
+
+-- 名前付き引数: デフォルトの chat AI Provider のデフォルトモデルを上書きします。
+SELECT ai_complete(prompt => '列指向ストレージについて説明してください。', model => 'chat-model');
+```
+
+例の `chat_provider` は、作成済みの chat AI Provider を表します。
+
+### Provider とモデル
+
+すべての関数には、オプションの `provider` 引数と `model` 引数があります。いずれも VARCHAR 型の定数式である必要があります。クラスターは chat と embedding のデフォルト Provider を個別に管理します。
+
+| 引数 | 省略、空文字列、SQL NULL の場合 | 明示的に指定した場合 |
+| --- | --- | --- |
+| `provider` | 対応するタイプのクラスターデフォルト Provider を使用 | 指定された名前の Provider を使用。クラスターデフォルトの設定は不要 |
+| `model` | 選択した Provider のデフォルトモデルを使用 | 選択したサービスが提供する指定モデルを使用 |
+
+### JSON options {/* #json-options */}
+
+`options` を指定できるのは `ai_complete` と `ai_embed` だけです。JSON 型の定数式で、値は JSON オブジェクトまたは SQL NULL である必要があります。省略時の値は空のオブジェクトです。`json_object()` または SQL NULL を明示的に指定した場合も、モデルサービスに追加のパラメータは送信されません。
+
+```sql
+SELECT ai_complete(
+    prompt => '列指向ストレージについて一文で説明してください。',
+    options => json_object('temperature', 0.2)
+);
+```
+
+options は、モデルサービスがサポートする追加のリクエストパラメータを渡すために使用します。
+
+## FILE 入力の対応範囲 {/* #file-input */}
+
+1 回の呼び出しで渡せる [FILE](../../data-types/other-data-types/FILE.md) は 1 つまでです。以下の表は StarRocks が送信できる入力を示します。実際に渡す形式にモデルが対応していることも確認してください。
+
+| 関数 | プロトコルとエンドポイント | テキスト | 画像 FILE | 動画 FILE |
+| --- | --- | --- | --- | --- |
+| `ai_complete` | `openai` 互換 Chat | 対応 | インラインまたは URL | インラインまたは URL（エンドポイントとモデルが `video_url` に対応する場合） |
+| `ai_complete` | `dashscope` ネイティブのテキスト生成 | 対応 | 非対応 | 非対応 |
+| `ai_complete` | `dashscope` ネイティブのマルチモーダル生成 | 対応 | インラインまたは URL | インラインまたは URL |
+| `ai_embed` | `openai` 互換 Embeddings | 対応 | 非対応 | 非対応 |
+| `ai_embed` | `dashscope` ネイティブのテキスト埋め込み | 対応 | 非対応 | 非対応 |
+| `ai_embed` | `dashscope` ネイティブのマルチモーダル埋め込み | 対応 | インラインまたは URL | URL のみ |
+
+FILE を取るオーバーロードは画像と動画に対応しています。音声と PDF はサポートされません。OpenAI 互換 Chat で動画を渡すには、エンドポイントが `video_url` 拡張に対応している必要があります。[Model Studio の視覚モデル](https://www.alibabacloud.com/help/en/model-studio/vision)はこの形式に対応しています。他のサービスを使う場合はエンドポイントとモデルの対応状況を確認してください。
+
+- **インラインデータ**を `VARBINARY` 型の列 `image_bytes` から渡す場合は、`to_file(named_struct('inline', image_bytes))` で空でない生のバイト列を渡します。StarRocks がこれを data URI に変換します。デフォルトの上限は Base64 エンコード前のサイズで FILE あたり 10 MiB です。[`ai_function_max_input_file_bytes`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_input_file_bytes) を参照してください。
+- **URL で参照する場合**は、モデルサービスからアクセスできる HTTP(S) URL を指定します。非公開のオブジェクトには [get_presigned_file](../file-functions/presigned_functions.md#get_presigned_file) を使用できます。StarRocks は URL 全体を送信します。`offset` は NULL または 0 を指定します。`size` でモデルサービスが読み取るバイト範囲を指定することはできません。
+- **メディアタイプ**には空でない `content_type` が優先されます。NULL または空文字列の場合、StarRocks はインラインデータのファイルヘッダー、または URL パスの最後の要素の拡張子から JPEG、PNG、WebP、MP4 を識別します。対応する拡張子は `.jpg`、`.jpeg`、`.png`、`.webp`、`.mp4` です。大文字と小文字は区別せず、クエリパラメータとフラグメントは無視します。推定できない場合はモデルが対応する `content_type` を明示してください。
+- 実行時に FILE が **SQL NULL** の場合、モデルにリクエストを送らず SQL NULL を返します。無効なメディア入力を含む行は [`ai_function_on_error`](#エラー処理) の設定に従います。
+
+## エラー処理
+
+`ai_function_on_error` は行単位の失敗を制御します。デフォルトの `ignore` は失敗した行に NULL を返してクエリを続行し、`fail` はクエリを中止します。解析または設定のエラー、クエリのキャンセル、期限切れは無視されません。そのため、NULL が返っても入力が NULL だったとは限らず、モデル呼び出しやレスポンスの検証に失敗した可能性もあります。
+
+## ランタイム制限とリトライ
+
+- 各 BE は、エンドポイント、認証情報、機能の種類の組み合わせごとに、1 秒あたりのリクエスト数を制限します。テキスト生成と補助関数の上限は [`ai_function_rate_limit_qps_chat`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_rate_limit_qps_chat)、埋め込み関数の上限は [`ai_function_rate_limit_qps_embedding`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_rate_limit_qps_embedding) で設定します。BE プロセス全体の同時リクエスト数の上限は [`ai_function_max_inflight`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_inflight) で設定します。BE はリソースグループとクエリの間で偏りが出ないよう、待機中のリクエストを処理します。初回の送信にもリトライにも両方の制限が適用されます。
+- タイムアウトやエラーが発生しても、リクエストはすでにモデルサービスに届いている場合があります。リトライすると同じリクエストが再度処理され、追加料金が発生することがあります。サービスの重複リクエストの扱いと課金ルールに合わせて、[`ai_function_max_retries`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_retries) と [`ai_function_max_retries_on_throttle`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_retries_on_throttle) を設定してください。
+- リクエストとレスポンスのボディが使用するメモリは、クエリのメモリ使用量に含まれます。未完了のリクエストがある間は、実行パイプラインにバックプレッシャーがかかります。[`ai_function_max_response_bytes`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_response_bytes) は HTTP レスポンス 1 件あたりのボディサイズの上限です。
+- タスクのタイムアウトは作成時に決まり、リトライしてもタイマーはリセットされません。タスクの非同期実行中も、クエリのキャンセルや期限の変更は反映されます。タイムアウト、ワーカースレッド、スケジューリング粒度の設定は [BE の AI 関数設定](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_request_timeout_ms)を参照してください。
+
+リクエスト数、リトライ、タイムアウトのメトリクスについては、[AI HTTP メトリクス](../../../administration/management/monitoring/metric_details/a-c.md#ai_http_requests_total)を参照してください。
+
+## SQL の使用制限
+
+- AI 関数は `GROUP BY`、`SELECT DISTINCT`、集約関数の引数、ウィンドウ関数の式では使用できません。
+- `IF`、`IFNULL`、`NULLIF`、`COALESCE`、`CASE` の条件式内や、テーブル関数の引数として使用できません。
+- 同期マテリアライズドビューの定義、LOAD 式、生成列の式では使用できません。
+- Lambda 式の本体や SQL UDF の本体では使用できません。
+- AI 関数を含むステートメントでは SQL Plan Baseline の作成やバインドはできません。その他の AI 関数を含むクエリにも SPM 書き換えは適用されません。
+- `PREPARE` はサポートされますが、AI 関数を含むステートメントは `EXECUTE` ごとに完全に再計画され、実行プランは再利用されません。
+- 相関サブクエリのクエリブロック内では、`SELECT` リスト、`WHERE`、`HAVING`、`ORDER BY`、`JOIN ON` に含まれる AI 式は、
+  そのブロックの列のみを参照していても拒否されます。結合条件内の AI 式は、`INNER JOIN` と `CROSS JOIN` でのみサポートされます。
+- NULL 以外の入力行ごとに、リモートリクエストが発生する可能性があります。大量の行を処理する場合は、想定リクエスト数から費用を見積もり、サービスのクォータとネットワーク遅延を踏まえてクエリが期限内に完了できるか確認してください。
 
 ## AI 入力行数の削減 {/* #reducing-ai-input-rows */}
 

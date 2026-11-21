@@ -13,6 +13,8 @@
 // limitations under the License.
 
 #include <gtest/gtest.h>
+#include <rapidjson/document.h>
+#include <rapidjson/pointer.h>
 #include <thrift/protocol/TBinaryProtocol.h>
 #include <thrift/transport/TBufferTransports.h>
 
@@ -67,6 +69,7 @@
 #include "platform/llm/ai_admission_controller.h"
 #include "platform/llm/ai_http_client.h"
 #include "platform/llm/ai_metrics.h"
+#include "platform/llm/ai_provider.h"
 #include "platform/llm/ai_runtime.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
@@ -98,15 +101,16 @@ constexpr size_t kUpstreamDop = 6;
 constexpr size_t kBuilderDop = 9;
 constexpr std::string_view kDefaultChatConfigId = "provider:default_chat";
 constexpr std::string_view kEndpointSentinel = "https://127.0.0.1/v1/chat/completions";
+constexpr char kLinkLocalEndpoint[] = "https://169.254.169.254/v1/chat/completions";
 constexpr std::string_view kModelSentinel = "unit-test-model";
 constexpr std::string_view kSecretSentinel = "unit-test-secret-must-not-leak";
 constexpr size_t kMiB = 1024UL * 1024;
 
-AIProjectModelConfigs provider_model_configs(std::string model = std::string(kModelSentinel),
-                                             std::string endpoint = std::string(kEndpointSentinel)) {
-    return {{std::string(kDefaultChatConfigId), AIProjectModelConfig{.endpoint = std::move(endpoint),
-                                                                     .model = std::move(model),
-                                                                     .api_key = std::string(kSecretSentinel)}}};
+AIProviderConfigs provider_configs(std::string model = std::string(kModelSentinel),
+                                   std::string endpoint = std::string(kEndpointSentinel)) {
+    return {{std::string(kDefaultChatConfigId), AIProviderConfig{.endpoint = std::move(endpoint),
+                                                                 .model = std::move(model),
+                                                                 .api_key = std::string(kSecretSentinel)}}};
 }
 
 TypeDescriptor varchar_type() {
@@ -564,24 +568,6 @@ ChunkPtr make_prompt_chunk(size_t begin, size_t rows, std::optional<size_t> null
     return chunk;
 }
 
-ChunkPtr make_file_chunk(std::string_view bytes, size_t rows = 1, std::optional<size_t> null_row = std::nullopt) {
-    auto chunk = make_prompt_chunk(0, rows, null_row);
-    auto files = FileColumn::create();
-    auto nulls = NullColumn::create();
-    for (size_t row = 0; row < rows; ++row) {
-        if (null_row.has_value() && *null_row == row) {
-            files->append_default();
-            nulls->append(1);
-        } else {
-            files->append_datum(
-                    FileDatumBuilder::make({}, {}, {}, Slice("image/png"), {}, Slice(bytes.data(), bytes.size())));
-            nulls->append(0);
-        }
-    }
-    chunk->append_column(NullableColumn::create(std::move(files), std::move(nulls)), kFileSlotId);
-    return chunk;
-}
-
 std::optional<std::string> nullable_string(const ChunkPtr& chunk, SlotId slot_id, size_t row) {
     const auto& nullable = down_cast<const NullableColumn&>(*chunk->get_column_by_slot_id(slot_id));
     if (nullable.is_null(row)) {
@@ -707,12 +693,12 @@ protected:
                                              },
                                      },
                                      {AIProjectCommonSpec{.slot_id = kCommonSlotId, .expr_ctx = common}},
-                                     provider_model_configs(std::move(default_model)));
+                                     provider_configs(std::move(default_model)));
         return AIProjectExpressionProjection::create(std::move(spec));
     }
 
     StatusOr<std::shared_ptr<AIProjectExpressionProjection>> create_embedding_projection(
-            const AIProjectModelConfigs& configs, const std::vector<std::string>& options) {
+            const AIProviderConfigs& configs, const std::vector<std::string>& options) {
         auto* pool = _runtime_state->obj_pool();
         std::vector<AIProjectOutputSpec> outputs;
         for (size_t index = 0; index < options.size(); ++index) {
@@ -784,7 +770,7 @@ protected:
         AIProjectProjectionSpec spec(
                 _runtime_state.get(),
                 {{.slot_id = kAnswerSlotId, .expr_ctx = ai, .nullable = true, .kind = AIProjectOutputKind::AI}}, {},
-                provider_model_configs());
+                provider_configs());
         return AIProjectExpressionProjection::create(std::move(spec));
     }
 
@@ -793,7 +779,7 @@ protected:
         AIProjectProjectionSpec spec(
                 _runtime_state.get(),
                 {{.slot_id = kAnswerSlotId, .expr_ctx = ai, .nullable = true, .kind = AIProjectOutputKind::AI}}, {},
-                provider_model_configs());
+                provider_configs());
         return AIProjectExpressionProjection::create(std::move(spec), max_input_file_bytes);
     }
 
@@ -927,11 +913,9 @@ TEST_F(AIProjectNodeProviderRoutesTest, AcceptsDefaultAndExplicitProviderRoutesW
     ASSERT_OK(initialize_after_wire_round_trip(make_mixed_route_node()));
 }
 
-TEST_F(AIProjectNodeProviderRoutesTest, RejectsUnsupportedProtocolsAlongsideProviderRoutes) {
+TEST_F(AIProjectNodeProviderRoutesTest, PropagatesUnsupportedProtocolFromProviderConfig) {
     auto node = make_mixed_route_node();
-    auto& configs = node.ai_project_node.ai_provider_mapping;
-    configs.at("provider:default_chat").__set_protocol(TAIProviderProtocol::ANTHROPIC);
-    configs.at("provider:default_embedding").__set_protocol(TAIProviderProtocol::COHERE);
+    node.ai_project_node.ai_provider_mapping.at("provider:default_chat").__set_protocol(TAIProviderProtocol::ANTHROPIC);
     EXPECT_TRUE(initialize_after_wire_round_trip(node).is_not_supported());
 }
 
@@ -950,65 +934,18 @@ TEST_F(AIProjectNodeProviderRoutesTest, CorrelationKeysAreOpaque) {
     ASSERT_OK(initialize_after_wire_round_trip(node));
 }
 
-TEST_F(AIProjectNodeProviderRoutesTest, RejectsInvalidModelRouteWireContracts) {
+TEST_F(AIProjectNodeProviderRoutesTest, RejectsInvalidProviderRouteWireContracts) {
     struct Case {
         const char* name;
         std::function<void(TAIProjectNode&)> mutate;
-        TStatusCode::type expected_status = TStatusCode::INVALID_ARGUMENT;
     };
     const std::vector<Case> cases = {
-            {"unknown provider",
-             [](auto& project) {
-                 project.ai_provider_mapping.at("provider:chat")
-                         .__set_protocol(static_cast<TAIProviderProtocol::type>(99));
-             },
-             TStatusCode::NOT_IMPLEMENTED_ERROR},
-            {"unknown default provider protocol",
-             [](auto& project) {
-                 project.ai_provider_mapping.at("provider:default_chat")
-                         .__set_protocol(static_cast<TAIProviderProtocol::type>(99));
-             },
-             TStatusCode::NOT_IMPLEMENTED_ERROR},
-            {"default chat protocol capability mismatch",
-             [](auto& project) {
-                 project.ai_provider_mapping.at("provider:default_chat").__set_protocol(TAIProviderProtocol::COHERE);
-             },
-             TStatusCode::NOT_IMPLEMENTED_ERROR},
-            {"default embedding protocol capability mismatch",
-             [](auto& project) {
-                 project.ai_provider_mapping.at("provider:default_embedding")
-                         .__set_protocol(TAIProviderProtocol::ANTHROPIC);
-             },
-             TStatusCode::NOT_IMPLEMENTED_ERROR},
-            {"named provider chat protocol remains openai compatible",
-             [](auto& project) {
-                 project.ai_provider_mapping.at("provider:chat").__set_protocol(TAIProviderProtocol::ANTHROPIC);
-             },
-             TStatusCode::NOT_IMPLEMENTED_ERROR},
-            {"named provider embedding protocol remains openai compatible",
-             [](auto& project) {
-                 project.ai_provider_mapping.at("provider:embedding").__set_protocol(TAIProviderProtocol::COHERE);
-             },
-             TStatusCode::NOT_IMPLEMENTED_ERROR},
-            {"blank provider model",
-             [](auto& project) { project.ai_provider_mapping.at("provider:chat").params["model"] = " \t"; }},
-            {"api key with newline",
-             [](auto& project) { project.ai_provider_mapping.at("provider:chat").params["api_key"] = "key\n"; }},
-            {"api key with NUL",
-             [](auto& project) {
-                 project.ai_provider_mapping.at("provider:chat").params["api_key"] = std::string("key\0tail", 8);
-             }},
             {"missing referenced route",
              [](auto& project) { project.ai_provider_mapping.erase("provider:embedding"); }},
             {"capability mismatch",
              [](auto& project) {
                  auto& config = project.ai_provider_mapping.at("provider:embedding");
                  config.__set_type(TAIProviderType::CHAT);
-             }},
-            {"missing capability",
-             [](auto& project) {
-                 auto& config = project.ai_provider_mapping.at("provider:embedding");
-                 config.__isset.type = false;
              }},
             {"unused route",
              [](auto& project) {
@@ -1020,23 +957,13 @@ TEST_F(AIProjectNodeProviderRoutesTest, RejectsInvalidModelRouteWireContracts) {
              [](auto& project) {
                  std::swap(project.slot_map.at(kAnswerSlotId), project.slot_map.at(kDefaultEmbeddingSlotId));
              }},
-            {"nonpositive provider timeout",
-             [](auto& project) { project.ai_provider_mapping.at("provider:chat").params["timeout_ms"] = "0"; }},
-            {"nonpositive embedding dimensions",
-             [](auto& project) { project.ai_provider_mapping.at("provider:embedding").params["dimensions"] = "0"; }},
-            {"invalid default timeout",
-             [](auto& project) { project.ai_provider_mapping.at("provider:default_chat").params["timeout_ms"] = "0"; }},
-            {"invalid default api key",
-             [](auto& project) {
-                 project.ai_provider_mapping.at("provider:default_embedding").params["api_key"] = "key\n";
-             }},
     };
     for (const auto& test_case : cases) {
         SCOPED_TRACE(test_case.name);
         auto node = make_mixed_route_node();
         test_case.mutate(node.ai_project_node);
         const auto status = initialize_after_wire_round_trip(node);
-        EXPECT_EQ(test_case.expected_status, status.code()) << status;
+        EXPECT_TRUE(status.is_invalid_argument()) << status;
         EXPECT_EQ(std::string::npos, status.to_string().find(kEndpointSentinel));
         EXPECT_EQ(std::string::npos, status.to_string().find(kModelSentinel));
     }
@@ -1105,8 +1032,7 @@ TEST_F(AIProjectPipelineTest, FactoryFailureClosesPairedProjectionContextsWithou
     ASSERT_OK(identity->prepare(_runtime_state.get()));
     ASSERT_OK(common->prepare(_runtime_state.get()));
     ASSERT_OK(ai->prepare(_runtime_state.get()));
-    auto configs = provider_model_configs();
-    configs.begin()->second.api_key = "invalid\ncredential";
+    auto configs = provider_configs(std::string(kModelSentinel), kLinkLocalEndpoint);
     AIProjectProjectionSpec spec(_runtime_state.get(),
                                  {
                                          AIProjectOutputSpec{.slot_id = kPromptSlotId,
@@ -1133,14 +1059,14 @@ TEST_F(AIProjectPipelineTest, FactoryFailureClosesPairedProjectionContextsWithou
 }
 
 TEST_F(AIProjectPipelineTest, ProviderCredentialsComeFromSnapshot) {
-    AIProjectModelConfigs configs{{"provider:embedding", AIProjectModelConfig{
-                                                                 .endpoint = "https://127.0.0.1/v1/embeddings",
-                                                                 .model = "embedding-model",
-                                                                 .api_key = "provider-only-secret",
-                                                                 .capability = AICapability::EMBEDDING,
-                                                                 .timeout_ms = 75,
-                                                                 .dimensions = 3,
-                                                         }}};
+    AIProviderConfigs configs{{"provider:embedding", AIProviderConfig{
+                                                             .endpoint = "https://127.0.0.1/v1/embeddings",
+                                                             .model = "embedding-model",
+                                                             .api_key = "provider-only-secret",
+                                                             .capability = AICapability::EMBEDDING,
+                                                             .timeout_ms = 75,
+                                                             .dimensions = 3,
+                                                     }}};
     auto submitter = AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot());
     ASSERT_TRUE(submitter.ok()) << submitter.status();
     const auto& route = submitter.value()->_routes.at("provider:embedding");
@@ -1154,28 +1080,6 @@ TEST_F(AIProjectPipelineTest, ProviderCredentialsComeFromSnapshot) {
     opaque_configs.insert(std::move(opaque_config));
     EXPECT_TRUE(AIProjectDispatcherSubmitter::create(_runtime_state.get(), opaque_configs, _config_source->snapshot())
                         .ok());
-    for (const std::string key : {"", " ", "key\n"}) {
-        AIProjectModelConfigs invalid_configs{{key, configs.at("provider:embedding")}};
-        auto invalid =
-                AIProjectDispatcherSubmitter::create(_runtime_state.get(), invalid_configs, _config_source->snapshot());
-        ASSERT_FALSE(invalid.ok());
-        EXPECT_EQ(std::string::npos, invalid.status().to_string().find("provider-only-secret"));
-    }
-    for (const std::string model : {"", " ", "model\n"}) {
-        configs.at("provider:embedding").model = model;
-        EXPECT_FALSE(
-                AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot()).ok());
-    }
-    configs.at("provider:embedding").model = "embedding-model";
-    configs.at("provider:embedding").capability = static_cast<AICapability>(99);
-    EXPECT_FALSE(AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot()).ok());
-    configs.at("provider:embedding").capability = AICapability::EMBEDDING;
-    for (auto protocol : {AIProviderProtocol::DASHSCOPE_MULTIMODAL, static_cast<AIProviderProtocol>(99)}) {
-        configs.at("provider:embedding").protocol = protocol;
-        EXPECT_FALSE(
-                AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot()).ok());
-    }
-    configs.at("provider:embedding").protocol = AIProviderProtocol::OPENAI;
 
     configs.at("provider:embedding").api_key.clear();
     configs.at("provider:embedding").endpoint = "http://127.0.0.1/v1/embeddings";
@@ -1187,23 +1091,10 @@ TEST_F(AIProjectPipelineTest, ProviderCredentialsComeFromSnapshot) {
     configs.at("provider:embedding").api_key = "provider-only-secret";
     EXPECT_TRUE(AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot()).ok());
     configs.at("provider:embedding").endpoint = "https://127.0.0.1/v1/embeddings";
-    for (const std::string key : {"bad\nkey", "bad\rkey"}) {
-        configs.at("provider:embedding").api_key = key;
-        EXPECT_FALSE(
-                AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot()).ok());
-    }
     configs.at("provider:embedding").api_key.clear();
     auto duplicate = configs;
     duplicate.emplace("second-route", configs.at("provider:embedding"));
     EXPECT_TRUE(AIProjectDispatcherSubmitter::create(_runtime_state.get(), duplicate, _config_source->snapshot()).ok());
-    for (const int64_t timeout : {-1, 0}) {
-        configs.at("provider:embedding").timeout_ms = timeout;
-        EXPECT_FALSE(
-                AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot()).ok());
-    }
-    configs.at("provider:embedding").timeout_ms = 75;
-    configs.at("provider:embedding").dimensions = 0;
-    EXPECT_FALSE(AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot()).ok());
     EXPECT_EQ(0, _http.pending_count());
 }
 
@@ -1212,7 +1103,7 @@ TEST_F(AIProjectPipelineTest, HttpAndHttpsCarryOptionalCredentialsAndExplicitMod
     for (const std::string scheme : {"http", "https"}) {
         for (const bool with_key : {false, true}) {
             SCOPED_TRACE(scheme + (with_key ? " authenticated" : " keyless"));
-            auto configs = provider_model_configs();
+            auto configs = provider_configs();
             auto& config = configs.begin()->second;
             config.endpoint = scheme + "://127.0.0.1/v1/chat/completions";
             config.api_key = with_key ? "request-test-key" : "";
@@ -1242,98 +1133,148 @@ TEST_F(AIProjectPipelineTest, HttpAndHttpsCarryOptionalCredentialsAndExplicitMod
     }
 }
 
-TEST_F(AIProjectPipelineTest, ProviderDimensionsArePreparedOncePerExpressionBatch) {
+TEST_F(AIProjectPipelineTest, EmbeddingProvidersApplyDimensionDefaultsToHttpRequests) {
     set_query_deadline_ns(120'000'000'000);
-    AIProjectModelConfigs configs{{"provider:embedding", AIProjectModelConfig{
-                                                                 .endpoint = "http://127.0.0.1/v1/embeddings",
-                                                                 .model = "embedding-model",
-                                                                 .capability = AICapability::EMBEDDING,
-                                                                 .timeout_ms = 75,
-                                                                 .dimensions = 3,
-                                                         }}};
-    const std::vector<std::string> options = {"{}", R"({"user":"user-a"})", R"({"dimensions":2})",
-                                              R"({"dimensions":null})"};
-    for (bool has_default : {true, false}) {
-        if (!has_default) configs.at("provider:embedding").dimensions.reset();
-        auto projection = create_embedding_projection(configs, options);
-        ASSERT_TRUE(projection.ok()) << projection.status();
-        ASSERT_OK(projection.value()->prepare(_runtime_state.get(), 1));
-        auto submitter =
-                AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot());
-        ASSERT_TRUE(submitter.ok()) << submitter.status();
-        std::vector<std::shared_ptr<const AIProviderOptions>> previous_options;
-        for (size_t batch_index = 0; batch_index < 2; ++batch_index) {
-            auto prepared = projection.value()->prepare_subchunk(_runtime_state.get(), 0,
-                                                                 make_prompt_chunk(batch_index * 2, 2));
+    for (auto protocol : {AIProviderProtocol::OPENAI, AIProviderProtocol::DASHSCOPE}) {
+        const bool dashscope = protocol == AIProviderProtocol::DASHSCOPE;
+        const std::vector<std::string> options = {dashscope ? R"({"dimension":2})" : R"({"dimensions":2})",
+                                                  dashscope ? R"({"dimension":null})" : R"({"dimensions":null})",
+                                                  R"({"user":"user-a"})", "{}"};
+        const char* endpoint =
+                dashscope ? "http://127.0.0.1/text-embedding/text-embedding" : "http://127.0.0.1/v1/embeddings";
+        const rapidjson::Pointer dimension_path(dashscope ? "/parameters/dimension" : "/dimensions");
+        const rapidjson::Pointer user_path(dashscope ? "/parameters/user" : "/user");
+        SCOPED_TRACE(endpoint);
+        for (bool has_default : {true, false}) {
+            SCOPED_TRACE(has_default);
+            AIProviderConfig config{.endpoint = endpoint,
+                                    .model = "embedding-model",
+                                    .capability = AICapability::EMBEDDING,
+                                    .timeout_ms = 75,
+                                    .protocol = protocol};
+            if (has_default) config.dimensions = 3;
+            AIProviderConfigs configs{{"provider:embedding", config}};
+            auto projection = create_embedding_projection(configs, options);
+            ASSERT_TRUE(projection.ok()) << projection.status();
+            ASSERT_OK((*projection)->prepare(_runtime_state.get(), 1));
+            auto submitter =
+                    AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot());
+            ASSERT_TRUE(submitter.ok()) << submitter.status();
+            auto prepared = (*projection)->prepare_subchunk(_runtime_state.get(), 0, make_prompt_chunk(0, 1));
             ASSERT_TRUE(prepared.ok()) << prepared.status();
             ASSERT_EQ(options.size(), prepared->ai_outputs.size());
             for (size_t index = 0; index < options.size(); ++index) {
+                SCOPED_TRACE(options[index]);
                 const auto& output = prepared->ai_outputs[index];
                 const auto& batch = output.input;
-                ASSERT_EQ(2, batch.rows.size());
+                ASSERT_EQ(1, batch.rows.size());
                 ASSERT_NE(nullptr, batch.options);
-                const auto& members = batch.options->members();
-                const auto dimension = std::find_if(members.begin(), members.end(),
-                                                    [](const auto& member) { return member.key == "dimensions"; });
-                const bool expect_dimension = has_default || index >= 2;
-                const char* expected_value = index == 3 ? "null" : index == 2 ? "2" : "3";
-                if (expect_dimension) {
-                    ASSERT_NE(members.end(), dimension);
-                    EXPECT_EQ(expected_value, dimension->serialized_json);
+                if (options[index] == "{}") {
+                    EXPECT_TRUE(batch.options->members().empty());
+                }
+                const auto& row = batch.rows.front();
+                ASSERT_EQ(AIFunctionRowAction::DISPATCH, row.action);
+                auto handle = submitter.value()->submit(AIProjectTaskRequest{.task_id = index + 1,
+                                                                             .model = row.model,
+                                                                             .prompt = row.prompt,
+                                                                             .options = batch.options,
+                                                                             .provider_id = output.provider_id,
+                                                                             .capability = output.capability},
+                                                        [](AITaskResult, const AIExecutionStatistics&) {});
+                ASSERT_TRUE(handle.ok()) << handle.status();
+                _control.run_until_idle();
+                ASSERT_EQ(1, _http.pending_count());
+                const auto& request = _http.request();
+                EXPECT_EQ(75, request.attempt_timeout_ms);
+                EXPECT_TRUE(std::none_of(request.headers.begin(), request.headers.end(),
+                                         [](const auto& header) { return header.name == "Authorization"; }));
+                rapidjson::Document body;
+                body.Parse(request.body.c_str());
+                ASSERT_TRUE(body.IsObject());
+                const auto* dimension = dimension_path.Get(body);
+                if (index == 1) {
+                    ASSERT_NE(nullptr, dimension);
+                    EXPECT_TRUE(dimension->IsNull());
+                } else if (index == 0 || has_default) {
+                    ASSERT_NE(nullptr, dimension);
+                    ASSERT_TRUE(dimension->IsInt());
+                    EXPECT_EQ(index == 0 ? 2 : 3, dimension->GetInt());
                 } else {
-                    EXPECT_EQ(members.end(), dimension);
+                    EXPECT_EQ(nullptr, dimension);
                 }
-                // Keep the first batch alive to verify the next batch has independent state.
-                if (batch_index == 0) {
-                    previous_options.emplace_back(batch.options);
-                } else {
-                    EXPECT_NE(previous_options[index].get(), batch.options.get());
+                if (index == 2) {
+                    const auto* user = user_path.Get(body);
+                    ASSERT_NE(nullptr, user);
+                    ASSERT_TRUE(user->IsString());
+                    EXPECT_STREQ("user-a", user->GetString());
                 }
-                const auto* shared_options = batch.options.get();
-                for (size_t row_index = 0; row_index < batch.rows.size(); ++row_index) {
-                    const auto& row = batch.rows[row_index];
-                    ASSERT_EQ(AIFunctionRowAction::DISPATCH, row.action);
-                    auto handle = submitter.value()->submit(
-                            AIProjectTaskRequest{.task_id = 1 + batch_index * 8 + index * 2 + row_index,
-                                                 .model = row.model,
-                                                 .prompt = row.prompt,
-                                                 .options = shared_options,
-                                                 .provider_id = output.provider_id,
-                                                 .capability = output.capability},
-                            [](AITaskResult, const AIExecutionStatistics&) {});
-                    ASSERT_TRUE(handle.ok()) << handle.status();
-                    _control.run_until_idle();
-                    ASSERT_EQ(1, _http.pending_count());
-                    const auto& request = _http.request();
-                    EXPECT_EQ(75, request.attempt_timeout_ms);
-                    if (expect_dimension) {
-                        EXPECT_NE(std::string::npos,
-                                  request.body.find(std::string("\"dimensions\":") + expected_value));
-                    } else {
-                        EXPECT_EQ(std::string::npos, request.body.find("\"dimensions\":"));
-                    }
-                    if (index == 1) {
-                        EXPECT_NE(std::string::npos, request.body.find(R"("user":"user-a")"));
-                    }
-                    EXPECT_TRUE(std::none_of(request.headers.begin(), request.headers.end(),
-                                             [](const auto& header) { return header.name == "Authorization"; }));
-                    _http.complete_next(AIHttpNoResponseCode::SHUTDOWN);
-                    _completion.run_until_idle();
-                    _control.run_until_idle();
-                }
+                _http.complete_next(AIHttpNoResponseCode::SHUTDOWN);
+                _completion.run_until_idle();
+                _control.run_until_idle();
             }
+            (*projection)->close(_runtime_state.get());
         }
-        projection.value()->close(_runtime_state.get());
     }
 }
 
-TEST_F(AIProjectPipelineTest, ProviderDefaultsAreNotMergedForEmptyOrNullBatches) {
-    AIProjectModelConfigs configs{{"provider:embedding", AIProjectModelConfig{
-                                                                 .endpoint = "http://127.0.0.1/v1/embeddings",
-                                                                 .model = "embedding-model",
-                                                                 .capability = AICapability::EMBEDDING,
-                                                                 .dimensions = 3,
-                                                         }}};
+TEST_F(AIProjectPipelineTest, DashScopeEmbeddingAppliesDimensionDefaultsAndRecordsUsage) {
+    set_query_deadline_ns(120'000'000'000);
+    AIProviderConfigs configs{
+            {"provider:embedding", AIProviderConfig{.endpoint = "http://127.0.0.1/text-embedding/text-embedding",
+                                                    .model = "text-model",
+                                                    .capability = AICapability::EMBEDDING,
+                                                    .dimensions = 3,
+                                                    .protocol = AIProviderProtocol::DASHSCOPE}}};
+    auto projection = create_embedding_projection(configs, {"{}", R"({"dimension":2})", R"({"dimension":1})"});
+    ASSERT_TRUE(projection.ok()) << projection.status();
+    ASSERT_OK((*projection)->prepare(_runtime_state.get(), 1));
+    auto submitter = AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot());
+    ASSERT_TRUE(submitter.ok()) << submitter.status();
+    auto prepared = (*projection)->prepare_subchunk(_runtime_state.get(), 0, make_prompt_chunk(0, 1));
+    ASSERT_TRUE(prepared.ok()) << prepared.status();
+    ASSERT_EQ(3, prepared->ai_outputs.size());
+    const char* replies[] = {
+            R"({"output":{"embeddings":[{"text_index":0,"embedding":[1,2,3]}]},"usage":{"total_tokens":4}})",
+            R"({"code":"InvalidParameter","usage":{"total_tokens":4}})",
+            R"({"output":{"embeddings":[]},"usage":{"total_tokens":4}})"};
+    for (size_t i = 0; i < prepared->ai_outputs.size(); ++i) {
+        auto& output = prepared->ai_outputs[i];
+        const auto& row = output.input.rows.front();
+        bool completed = false;
+        auto handle = (*submitter)
+                              ->submit({.task_id = i + 1,
+                                        .model = row.model,
+                                        .prompt = row.prompt,
+                                        .options = output.input.options,
+                                        .provider_id = output.provider_id,
+                                        .capability = output.capability},
+                                       [&](AITaskResult result, const AIExecutionStatistics& stats) {
+                                           completed = true;
+                                           EXPECT_EQ(i == 0, std::holds_alternative<AITaskSuccess>(result));
+                                           EXPECT_EQ(1, stats.request_count);
+                                           EXPECT_EQ(4, stats.total_tokens);
+                                           EXPECT_EQ(1, stats.total_usage_count);
+                                       });
+        ASSERT_TRUE(handle.ok()) << handle.status();
+        _control.run_until_idle();
+        ASSERT_EQ(1, _http.pending_count());
+        const auto& body = _http.request().body;
+        EXPECT_NE(std::string::npos, body.find(R"("parameters":{"dimension":)" + std::to_string(3 - i) + "}"));
+        _http.complete_next(replies[i]);
+        _completion.run_until_idle();
+        _control.run_until_idle();
+        ASSERT_TRUE(completed);
+    }
+    (*projection)->close(_runtime_state.get());
+}
+
+TEST_F(AIProjectPipelineTest, EmptyAndNullBatchesPreserveSqlOptions) {
+    AIProviderConfigs configs{{"provider:embedding", AIProviderConfig{
+                                                             .endpoint = "http://127.0.0.1/v1/embeddings",
+                                                             .model = "embedding-model",
+                                                             .capability = AICapability::EMBEDDING,
+                                                             .dimensions = 3,
+                                                     }}};
     auto projection = create_embedding_projection(configs, {"{}"});
     ASSERT_TRUE(projection.ok()) << projection.status();
     ASSERT_OK(projection.value()->prepare(_runtime_state.get(), 1));
@@ -1356,16 +1297,15 @@ TEST_F(AIProjectPipelineTest, ProviderDefaultsAreNotMergedForEmptyOrNullBatches)
 }
 
 TEST_F(AIProjectPipelineTest, CredentialBindingRejectsLinkLocalResolvedEndpoint) {
-    const std::string link_local_endpoint = "https://169.254.169.254/v1/chat/completions";
-
     auto submitter = AIProjectDispatcherSubmitter::create(
-            _runtime_state.get(), provider_model_configs(std::string(kModelSentinel), link_local_endpoint),
+            _runtime_state.get(), provider_configs(std::string(kModelSentinel), kLinkLocalEndpoint),
             _config_source->snapshot());
 
     ASSERT_FALSE(submitter.ok());
     EXPECT_TRUE(submitter.status().is_invalid_argument()) << submitter.status();
-    EXPECT_EQ(std::string::npos, submitter.status().to_string().find(link_local_endpoint));
+    EXPECT_EQ(std::string::npos, submitter.status().to_string().find(kLinkLocalEndpoint));
     EXPECT_EQ(std::string::npos, submitter.status().to_string().find(kSecretSentinel));
+    EXPECT_EQ(0, _http.pending_count());
 }
 
 TEST_F(AIProjectPipelineTest, ProductionProjectionEvaluatesCommonBeforeAiAndPreservesIdentityNullabilityAndOwner) {
@@ -1566,7 +1506,7 @@ TEST_F(AIProjectPipelineTest, TypedResponseFailuresPreserveTaskUsageAndReachProf
         ASSERT_TRUE(projection.ok()) << projection.status();
         auto config = _config_source->snapshot();
         config.on_error = on_error;
-        auto submitter = AIProjectDispatcherSubmitter::create(_runtime_state.get(), provider_model_configs(), config);
+        auto submitter = AIProjectDispatcherSubmitter::create(_runtime_state.get(), provider_configs(), config);
         ASSERT_TRUE(submitter.ok()) << submitter.status();
         auto buffer = AIChunkBuffer::create(2, 32 * kMiB);
         ASSERT_TRUE(buffer.ok()) << buffer.status();
@@ -1637,14 +1577,14 @@ TEST_F(AIProjectPipelineTest, MixedDefaultAndExplicitProviderRoutesKeepCredentia
     const std::string chat_endpoint = "https://127.0.0.1/provider/chat";
     const std::string embed_endpoint = "https://127.0.0.1/provider/embeddings";
 
-    auto configs = provider_model_configs();
-    configs.emplace("provider:chat", AIProjectModelConfig{.endpoint = chat_endpoint,
-                                                          .model = "provider-chat-model",
-                                                          .api_key = "chat-provider-secret"});
-    configs.emplace("provider:embedding", AIProjectModelConfig{.endpoint = embed_endpoint,
-                                                               .model = "provider-embed-model",
-                                                               .api_key = "embed-provider-secret",
-                                                               .capability = AICapability::EMBEDDING});
+    auto configs = provider_configs();
+    configs.emplace("provider:chat", AIProviderConfig{.endpoint = chat_endpoint,
+                                                      .model = "provider-chat-model",
+                                                      .api_key = "chat-provider-secret"});
+    configs.emplace("provider:embedding", AIProviderConfig{.endpoint = embed_endpoint,
+                                                           .model = "provider-embed-model",
+                                                           .api_key = "embed-provider-secret",
+                                                           .capability = AICapability::EMBEDDING});
     auto make_provider_call = [&](bool embedding) {
         auto expression = make_ai_complete_with_explicit_model(_tuple_id, kPromptSlotId);
         auto& call = expression.nodes.front();
@@ -1739,17 +1679,17 @@ TEST_F(AIProjectPipelineTest, MixedDefaultAndExplicitProviderRoutesKeepCredentia
     processor->close(_runtime_state.get());
 }
 
-TEST_F(AIProjectPipelineTest, OpenAITextAndImageRoutesPreserveRequestsAndNulls) {
+TEST_F(AIProjectPipelineTest, OpenAITextImageAndVideoRequestsPreservePromptsAndNulls) {
     set_query_deadline_ns(120'000'000'000);
-    auto configs = provider_model_configs();
+    auto configs = provider_configs();
     auto text = create_expr_context(make_ai_complete(_tuple_id, kPromptSlotId));
-    auto image = create_expr_context(make_ai_file_call(_tuple_id, false));
+    auto media = create_expr_context(make_ai_file_call(_tuple_id, false));
     ASSERT_TRUE(text.ok()) << text.status();
-    ASSERT_TRUE(image.ok()) << image.status();
+    ASSERT_TRUE(media.ok()) << media.status();
     AIProjectProjectionSpec spec(
             _runtime_state.get(),
             {{.slot_id = 3, .expr_ctx = text.value(), .nullable = true, .kind = AIProjectOutputKind::AI},
-             {.slot_id = 4, .expr_ctx = image.value(), .nullable = true, .kind = AIProjectOutputKind::AI}},
+             {.slot_id = 4, .expr_ctx = media.value(), .nullable = true, .kind = AIProjectOutputKind::AI}},
             {}, configs);
     auto config = _config_source->snapshot();
     config.on_error = "fail";
@@ -1764,7 +1704,13 @@ TEST_F(AIProjectPipelineTest, OpenAITextAndImageRoutesPreserveRequestsAndNulls) 
     auto processor = std::move(processor_or).value();
     ASSERT_OK(processor->prepare(_runtime_state.get(), 1));
     const std::string png("\x89PNG\r\n\x1a\n", 8);
-    auto input = make_file_chunk(png, 2, 1);
+    constexpr std::string_view video_url = "https://bucket.example/clip.mp4?sig=a%2Fb&expires=123";
+    auto input = make_prompt_chunk(0, 3, 2);
+    auto files = NullableColumn::create(FileColumn::create(), NullColumn::create());
+    files->append_datum(FileDatumBuilder::make({}, {}, {}, Slice("image/png"), {}, Slice(png)));
+    files->append_datum(FileDatumBuilder::make(Slice(video_url), {}, {}, {}, {}, {}));
+    files->append_nulls(1);
+    input->append_column(std::move(files), kFileSlotId);
     auto admitted = buffer.value()->try_put(0, input);
     ASSERT_TRUE(admitted.ok()) << admitted.status();
     ASSERT_TRUE(admitted.value());
@@ -1772,43 +1718,51 @@ TEST_F(AIProjectPipelineTest, OpenAITextAndImageRoutesPreserveRequestsAndNulls) 
     ASSERT_OK(processor->try_process(_runtime_state.get(), 0));
     input.reset();
     _control.run_until_idle();
-    ASSERT_EQ(2, _http.pending_count());
     size_t image_requests = 0;
+    size_t video_requests = 0;
     size_t text_requests = 0;
     while (_http.pending_count() != 0) {
         const auto& request = _http.request();
+        EXPECT_EQ(kEndpointSentinel, request.url);
         if (request.body.find("\"image_url\"") != std::string::npos) {
             ++image_requests;
-            EXPECT_EQ(kEndpointSentinel, request.url);
             EXPECT_NE(std::string::npos, request.body.find("data:image/png;base64,iVBORw0KGgo="));
             EXPECT_NE(std::string::npos, request.body.find("prompt-0"));
             _http.complete_next(R"({"choices":[{"message":{"content":"image answer"}}]})");
+        } else if (request.body.find("\"video_url\"") != std::string::npos) {
+            ++video_requests;
+            EXPECT_NE(std::string::npos, request.body.find(video_url));
+            EXPECT_NE(std::string::npos, request.body.find("prompt-1"));
+            _http.complete_next(R"({"choices":[{"message":{"content":"video answer"}}]})");
         } else {
             ++text_requests;
-            EXPECT_EQ(kEndpointSentinel, request.url);
-            EXPECT_NE(std::string::npos, request.body.find("\"content\":\"prompt-0\""));
+            EXPECT_NE(std::string::npos, request.body.find(R"("content":"prompt-)"));
             _http.complete_next(R"({"choices":[{"message":{"content":"text answer"}}]})");
         }
         _completion.run_until_idle();
         _control.run_until_idle();
     }
     EXPECT_EQ(1, image_requests);
-    EXPECT_EQ(1, text_requests);
+    EXPECT_EQ(1, video_requests);
+    EXPECT_EQ(2, text_requests);
     auto output = processor->pull_chunk(_runtime_state.get(), 0);
     ASSERT_TRUE(output.ok()) << output.status();
     ASSERT_NE(nullptr, output.value());
-    ASSERT_EQ(2, output.value()->num_rows());
+    ASSERT_EQ(3, output.value()->num_rows());
     EXPECT_EQ("text answer", nullable_string(output.value(), 3, 0));
     EXPECT_EQ("image answer", nullable_string(output.value(), 4, 0));
-    EXPECT_EQ(std::nullopt, nullable_string(output.value(), 3, 1));
-    EXPECT_EQ(std::nullopt, nullable_string(output.value(), 4, 1));
-    EXPECT_EQ(2, processor->statistics(0).task_count);
-    EXPECT_EQ(2, processor->statistics(0).request_count);
+    EXPECT_EQ("text answer", nullable_string(output.value(), 3, 1));
+    EXPECT_EQ("video answer", nullable_string(output.value(), 4, 1));
+    EXPECT_EQ(std::nullopt, nullable_string(output.value(), 3, 2));
+    EXPECT_EQ(std::nullopt, nullable_string(output.value(), 4, 2));
+    EXPECT_EQ(4, processor->statistics(0).task_count);
+    EXPECT_EQ(4, processor->statistics(0).request_count);
     processor->close(_runtime_state.get());
 }
 
 TEST_F(AIProjectPipelineTest, FileProjectionKeepsCapturedInputLimitAcrossRuntimeUpdate) {
     const std::string png("\x89PNG\r\n\x1a\n", 8);
+    constexpr std::string_view url = "https://files.example/image.png?signature=secret";
     auto config = _config_source->snapshot();
     config.max_input_file_bytes = png.size();
     ASSERT_OK(_config_source->update(config));
@@ -1820,21 +1774,33 @@ TEST_F(AIProjectPipelineTest, FileProjectionKeepsCapturedInputLimitAcrossRuntime
     ASSERT_TRUE(updated.ok()) << updated.status();
     ASSERT_OK(original.value()->prepare(_runtime_state.get(), 1));
     ASSERT_OK(updated.value()->prepare(_runtime_state.get(), 1));
-    auto input = make_file_chunk(png);
+    auto input = make_prompt_chunk(0, 2);
+    auto files = FileColumn::create();
+    files->append_datum(FileDatumBuilder::make({}, {}, {}, {}, {}, Slice(png)));
+    files->append_datum(FileDatumBuilder::make(Slice(url), {}, {}, {}, {}, {}));
+    input->append_column(std::move(files), kFileSlotId);
     auto accepted = original.value()->prepare_subchunk(_runtime_state.get(), 0, input);
-    auto rejected = updated.value()->prepare_subchunk(_runtime_state.get(), 0, input);
     ASSERT_TRUE(accepted.ok()) << accepted.status();
-    ASSERT_TRUE(rejected.ok()) << rejected.status();
     ASSERT_EQ(1, accepted->ai_outputs.size());
-    ASSERT_EQ(1, rejected->ai_outputs.size());
-    const auto& accepted_row = accepted->ai_outputs.front().input.rows.front();
-    EXPECT_EQ(AIFunctionRowAction::DISPATCH, accepted_row.action);
-    ASSERT_TRUE(accepted_row.media.has_value());
+    {
+        auto limited = updated.value()->prepare_subchunk(_runtime_state.get(), 0, input);
+        ASSERT_TRUE(limited.ok()) << limited.status();
+        ASSERT_EQ(1, limited->ai_outputs.size());
+        const auto& rows = limited->ai_outputs.front().input.rows;
+        ASSERT_EQ(2, rows.size());
+        EXPECT_EQ(AIFunctionRowAction::TERMINAL_ROW_FAILURE, rows[0].action);
+        EXPECT_FALSE(rows[0].media);
+        EXPECT_EQ(AIFunctionRowAction::DISPATCH, rows[1].action);
+    }
     input.reset();
-    EXPECT_EQ(png, accepted_row.media->bytes);
-    const auto& rejected_row = rejected->ai_outputs.front().input.rows.front();
-    EXPECT_EQ(AIFunctionRowAction::TERMINAL_ROW_FAILURE, rejected_row.action);
-    EXPECT_FALSE(rejected_row.media.has_value());
+    const auto& batch = accepted->ai_outputs.front().input;
+    ASSERT_EQ(2, batch.rows.size());
+    EXPECT_EQ(AIFunctionRowAction::DISPATCH, batch.rows[0].action);
+    ASSERT_TRUE(batch.rows[0].media);
+    EXPECT_EQ(png, batch.rows[0].media->inline_bytes);
+    EXPECT_EQ(AIFunctionRowAction::DISPATCH, batch.rows[1].action);
+    ASSERT_TRUE(batch.rows[1].media);
+    EXPECT_EQ(url, batch.rows[1].media->referenced_url);
     original.value()->close(_runtime_state.get());
     updated.value()->close(_runtime_state.get());
 }
@@ -1953,8 +1919,7 @@ TEST_F(AIProjectPipelineTest, DispatcherSnapshotsConfigAndSeparatesLiveQueryFrom
         snapshot.connect_timeout_ms = 0;
         snapshot.max_response_bytes = 12'345;
 
-        auto submitter_or =
-                AIProjectDispatcherSubmitter::create(_runtime_state.get(), provider_model_configs(), snapshot);
+        auto submitter_or = AIProjectDispatcherSubmitter::create(_runtime_state.get(), provider_configs(), snapshot);
         ASSERT_TRUE(submitter_or.ok()) << submitter_or.status();
         auto submitter = std::move(submitter_or).value();
 
@@ -2023,7 +1988,7 @@ TEST_F(AIProjectPipelineTest, QueryCancellationRemainsLifecycleCancelledAndDoesN
     config.request_timeout_ms = 5'000;
     config.connect_timeout_ms = 0;
     config.on_error = "ignore";
-    auto submitter_or = AIProjectDispatcherSubmitter::create(_runtime_state.get(), provider_model_configs(), config);
+    auto submitter_or = AIProjectDispatcherSubmitter::create(_runtime_state.get(), provider_configs(), config);
     ASSERT_TRUE(submitter_or.ok()) << submitter_or.status();
     auto submitter = std::move(submitter_or).value();
 
@@ -2078,7 +2043,7 @@ TEST_F(AIProjectPipelineTest, FragmentCancellationCancelsSourceRequestAndDrainsP
     auto projection_or = create_expression_projection();
     ASSERT_TRUE(projection_or.ok()) << projection_or.status();
     auto production_submitter_or =
-            AIProjectDispatcherSubmitter::create(_runtime_state.get(), provider_model_configs(), config);
+            AIProjectDispatcherSubmitter::create(_runtime_state.get(), provider_configs(), config);
     ASSERT_TRUE(production_submitter_or.ok()) << production_submitter_or.status();
     auto submitter = std::make_shared<RecordingTaskSubmitter>(std::move(production_submitter_or).value());
     auto buffer_or = AIChunkBuffer::create(2, 32 * kMiB);

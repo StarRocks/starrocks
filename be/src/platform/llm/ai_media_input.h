@@ -16,23 +16,30 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
-#include <string_view>
 
 #include "base/statusor.h"
 
 namespace starrocks {
 
+struct FileRowRef;
+
 inline constexpr int64_t kDefaultAIMaxInputFileBytes = 10485760;
 
 struct AIMediaInput {
-    std::string mime_type;
-    std::string bytes;
+    std::string content_type;
+    // Exactly one source is populated for each FILE input.
+    std::optional<std::string> inline_bytes;
+    std::optional<std::string> referenced_url;
+
+    bool is_image() const;
+    bool is_audio() const;
+    bool is_video() const;
 };
 
-// Inspects bounded container headers, not a full codec decode. Enforces the raw byte limit before copying.
-// These helpers consume bytes only and never read files or fetch URLs.
-StatusOr<AIMediaInput> prepare_inline_ai_media(std::string_view bytes, std::string_view content_type, size_t max_bytes);
+// DataQualityError denotes invalid row content. Other errors apply to the batch.
+StatusOr<AIMediaInput> create_ai_media(const FileRowRef& file, size_t inline_max_bytes);
 StatusOr<std::string> encode_ai_media_data_uri(const AIMediaInput& media);
 
 } // namespace starrocks

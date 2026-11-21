@@ -27,12 +27,12 @@
 #include "column/chunk.h"
 #include "column/column_viewer.h"
 #include "column/const_column.h"
-#include "column/file_column.h"
 #include "common/object_pool.h"
 #include "exprs/ai/ai_provider_options_builder.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/ascii_ctype.h"
 #include "gutil/strings/substitute.h"
+#include "types/file_value.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
 
@@ -518,12 +518,7 @@ StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext
                            contains_only_ascii_whitespace(strings[index]->value(row));
             }
         }
-        Datum file;
-        if (spec.file_argument >= 0) {
-            file = columns[spec.file_argument]->get(row);
-            is_null |= file.is_null();
-        }
-        if (is_null) {
+        if (is_null || (spec.file_argument >= 0 && columns[spec.file_argument]->is_null(row))) {
             batch.rows.emplace_back();
             continue;
         }
@@ -535,38 +530,18 @@ StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext
             batch.rows.emplace_back(AIFunctionRowInput{.action = AIFunctionRowAction::TERMINAL_ROW_FAILURE});
             continue;
         }
-        std::optional<AIMediaInput> media;
+        std::shared_ptr<const AIMediaInput> media;
         if (spec.file_argument >= 0) {
-            const auto& fields = file.get_struct();
-            if (fields.size() != FileColumn::NUM_FIELDS) {
-                return invalid_ai_expression();
-            }
-            if (fields[FileColumn::INLINE].is_null() && !fields[FileColumn::URI].is_null()) {
-                // FILE is a value, not authority to fetch an arbitrary URI. Reference inputs must
-                // wait for the shared, authorized FILE reader; never forward their URI to a provider.
-                return Status::NotSupported(
-                        "AI reference FILE inputs require an authorized FILE reader; "
-                        "only inline FILE inputs are supported");
-            }
-            if (fields[FileColumn::INLINE].is_null() || !fields[FileColumn::URI].is_null() ||
-                !fields[FileColumn::OFFSET].is_null() || !fields[FileColumn::SIZE].is_null()) {
-                batch.rows.emplace_back(AIFunctionRowInput{.action = AIFunctionRowAction::TERMINAL_ROW_FAILURE});
-                continue;
-            }
-            const Slice bytes = fields[FileColumn::INLINE].get_slice();
-            const Slice content_type =
-                    fields[FileColumn::CONTENT_TYPE].is_null() ? Slice() : fields[FileColumn::CONTENT_TYPE].get_slice();
-            auto prepared = prepare_inline_ai_media(std::string_view(bytes.data, bytes.size),
-                                                    std::string_view(content_type.data, content_type.size),
-                                                    max_input_file_bytes);
+            ASSIGN_OR_RETURN(auto file, FileRowRef::from_datum(columns[spec.file_argument]->get(row)));
+            auto prepared = create_ai_media(file, max_input_file_bytes);
             if (!prepared.ok()) {
-                if (!prepared.status().is_invalid_argument()) {
+                if (!prepared.status().is_data_quality_error()) {
                     return prepared.status();
                 }
                 batch.rows.emplace_back(AIFunctionRowInput{.action = AIFunctionRowAction::TERMINAL_ROW_FAILURE});
                 continue;
             }
-            media.emplace(std::move(prepared).value());
+            media = std::make_shared<const AIMediaInput>(std::move(prepared).value());
         }
         auto input_value = [&](size_t input_index) -> std::string {
             if (input_index >= spec.input_count) {

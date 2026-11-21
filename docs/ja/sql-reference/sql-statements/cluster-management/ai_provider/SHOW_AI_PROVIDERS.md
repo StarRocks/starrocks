@@ -12,7 +12,7 @@ products: [oss, enterprise, cloud, anywhere]
 ## 構文
 
 ```SQL
-SHOW AI PROVIDERS [ LIKE '<pattern>' | TYPE { embedding | rerank | chat } ]
+SHOW AI PROVIDERS [ LIKE '<pattern>' | TYPE { embedding | chat } ]
 ```
 
 ## パラメータ
@@ -20,9 +20,11 @@ SHOW AI PROVIDERS [ LIKE '<pattern>' | TYPE { embedding | rerank | chat } ]
 | パラメータ         | 説明                                                                        |
 | ------------------ | --------------------------------------------------------------------------- |
 | `LIKE '<pattern>'` | 名前が SQL の `LIKE` パターンに一致するプロバイダーのみを表示します。          |
-| `TYPE <type>`      | 指定したタイプ (`embedding`、`rerank`、または `chat`) のプロバイダーのみを表示します。 |
+| `TYPE <type>`      | 指定したタイプ (`embedding` または `chat`) のプロバイダーのみを表示します。 |
 
 ## 戻り値の列
+
+次の表は、chat および embedding プロバイダーに該当する列を示します。
 
 | 列             | 説明                                                                 |
 | -------------- | -------------------------------------------------------------------- |
@@ -33,7 +35,6 @@ SHOW AI PROVIDERS [ LIKE '<pattern>' | TYPE { embedding | rerank | chat } ]
 | `Endpoint`     | エンドポイントの URL。                                                |
 | `Model`        | モデル名。                                                            |
 | `Dimensions`   | 埋め込みの次元数 (embedding プロバイダー)。                            |
-| `MaxDocuments` | 1 回の rerank リクエストあたりのドキュメントの最大数 (rerank プロバイダー)。 |
 | `TimeoutMs`    | リクエストごとの HTTP タイムアウト (ミリ秒)。                          |
 | `ApiKey`       | マスクされた API キー。                                               |
 | `Comment`      | プロバイダーのコメント。                                              |
@@ -43,7 +44,7 @@ SHOW AI PROVIDERS [ LIKE '<pattern>' | TYPE { embedding | rerank | chat } ]
 ```sql
 SHOW AI PROVIDERS;
 SHOW AI PROVIDERS LIKE 'open%';
-SHOW AI PROVIDERS TYPE rerank;
+SHOW AI PROVIDERS TYPE chat;
 ```
 
 ## 関連する SQL ステートメント

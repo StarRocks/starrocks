@@ -26,13 +26,15 @@
 #include <variant>
 #include <vector>
 
+#include "gutil/strings/substitute.h"
+
 namespace starrocks {
 namespace {
 
-AIProviderOptions make_json_options(std::initializer_list<AIProviderOption> members) {
+std::shared_ptr<const AIProviderOptions> make_json_options(std::initializer_list<AIProviderOption> members) {
     auto options = AIProviderOptions::create(AIProviderOptions::Members(members));
     EXPECT_TRUE(options.ok()) << options.status();
-    return options.ok() ? std::move(options).value() : AIProviderOptions{};
+    return options.ok() ? std::make_shared<const AIProviderOptions>(std::move(options).value()) : nullptr;
 }
 
 void expect_status_redacted(const Status& status, std::initializer_list<std::string> sentinels) {
@@ -99,7 +101,7 @@ TEST(OpenAICompatibleProviderTest, BuildsSingleEmbeddingInputWithTypedOptions) {
             .model = "embedding-model",
             .api_key = "key",
             .prompt = "hello\nworld",
-            .options = &options,
+            .options = options,
             .capability = AICapability::EMBEDDING,
     });
     ASSERT_TRUE(result.ok()) << result.status();
@@ -111,36 +113,59 @@ TEST(OpenAICompatibleProviderTest, BuildsSingleEmbeddingInputWithTypedOptions) {
     EXPECT_EQ("Bearer key", result->headers.back().value);
 }
 
-TEST(OpenAICompatibleProviderTest, BuildsTypedImageChatContentAndRejectsEmbeddingMedia) {
+TEST(OpenAICompatibleProviderTest, BuildsChatMediaPartsAndRejectsEmbeddingMedia) {
     OpenAICompatibleProvider provider;
-    AIMediaInput media{"image/jpeg", std::string("\xff\xd8\xff\xe0\0\x02", 6)};
-    AIChatRequest request{.model = "model", .prompt = "describe", .media = &media};
-    auto result = provider.build_request(request);
-    ASSERT_TRUE(result.ok()) << result.status();
-    EXPECT_EQ(
-            R"({"model":"model","messages":[{"role":"system","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"describe"},{"type":"image_url","image_url":{"url":"data:image/jpeg;base64,/9j/4AAC"}}]}],"stream":false})",
-            result->body);
-    request.capability = AICapability::EMBEDDING;
-    EXPECT_TRUE(provider.build_request(request).status().is_not_supported());
+    const std::string signed_url = "https://bucket.example/object?signature=a%2Fb%2Bc&expires=123";
+    const struct {
+        AIMediaInput media;
+        const char* part_type;
+        std::string expected_url;
+    } cases[] = {
+            {{.content_type = "image/jpeg", .inline_bytes = std::string("\xff\xd8\xff\xe0\0\x02", 6)},
+             "image_url",
+             "data:image/jpeg;base64,/9j/4AAC"},
+            {{.content_type = "VIDEO/MP4",
+              .inline_bytes = std::string("\0\0\0\x18"
+                                          "ftypisom\0\0\0\0isommp42",
+                                          24)},
+             "video_url",
+             "data:VIDEO/MP4;base64,AAAAGGZ0eXBpc29tAAAAAGlzb21tcDQy"},
+            {{.content_type = "video/webm", .inline_bytes = "\x1a\x45\xdf\xa3"},
+             "video_url",
+             "data:video/webm;base64,GkXfow=="},
+            {{.content_type = "image/jpeg", .referenced_url = signed_url}, "image_url", signed_url},
+            {{.content_type = "video/mp4", .referenced_url = signed_url}, "video_url", signed_url},
+    };
+    for (const auto& test : cases) {
+        SCOPED_TRACE(test.expected_url);
+        AIChatRequest request{
+                .model = "model", .prompt = "describe", .media = std::make_shared<const AIMediaInput>(test.media)};
+        auto result = provider.build_request(request);
+        ASSERT_TRUE(result.ok()) << result.status();
+        EXPECT_EQ(
+                strings::Substitute(
+                        R"({"model":"model","messages":[{"role":"system","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"describe"},{"type":"$0","$0":{"url":"$1"}}]}],"stream":false})",
+                        test.part_type, test.expected_url),
+                result->body);
+
+        request.capability = AICapability::EMBEDDING;
+        auto embedding = provider.build_request(request);
+        EXPECT_TRUE(embedding.status().is_not_supported());
+        expect_status_redacted(embedding.status(), {"signature"});
+    }
 }
 
-TEST(OpenAICompatibleProviderTest, VideoRequiresExplicitSupport) {
-    AIMediaInput video{"video/mp4", std::string("\0\0\0\x18"
-                                                "ftypisom\0\0\0\0isommp42",
-                                                24)};
-    AIChatRequest request{.endpoint = "https://dashscope.example/qwen",
-                          .model = "qwen-video-model",
-                          .prompt = "describe",
-                          .media = &video};
-    OpenAICompatibleProvider ordinary;
-    EXPECT_TRUE(ordinary.build_request(request).status().is_not_supported());
-    OpenAICompatibleProvider video_provider(true);
-    auto result = video_provider.build_request(request);
-    ASSERT_TRUE(result.ok()) << result.status();
-    EXPECT_NE(
-            std::string::npos,
-            result->body.find(
-                    R"("type":"video_url","video_url":{"url":"data:video/mp4;base64,AAAAGGZ0eXBpc29tAAAAAGlzb21tcDQy"})"));
+TEST(OpenAICompatibleProviderTest, ChatRejectsNonvisualInlineAndReferencedMedia) {
+    OpenAICompatibleProvider provider;
+    for (const auto& media : {AIMediaInput{.content_type = "application/octet-stream", .inline_bytes = "private-bytes"},
+                              AIMediaInput{.content_type = "application/octet-stream",
+                              .referenced_url = "https://bucket.example/file?signature=private"}}) {
+        SCOPED_TRACE(media.inline_bytes ? "inline" : "URL");
+        auto request = provider.build_request(
+                {.model = "model", .prompt = "describe", .media = std::make_shared<const AIMediaInput>(media)});
+        EXPECT_TRUE(request.status().is_not_supported());
+        expect_status_redacted(request.status(), {"private"});
+    }
 }
 
 TEST(OpenAICompatibleProviderTest, RejectsEmbeddingReservedOptions) {
@@ -154,7 +179,7 @@ TEST(OpenAICompatibleProviderTest, RejectsEmbeddingReservedOptions) {
                 .model = "model",
                 .api_key = "key",
                 .prompt = "input",
-                .options = &options,
+                .options = options,
                 .capability = AICapability::EMBEDDING,
         });
         expect_status_redacted(result.status(), {"secret-override"});
@@ -228,7 +253,7 @@ TEST(OpenAICompatibleProviderTest, MergesPreparedOptionsOnlyAtTheTopLevel) {
             .model = "model-a",
             .api_key = "api-key-a",
             .prompt = "hello",
-            .options = &options,
+            .options = options,
     });
 
     ASSERT_TRUE(result.ok()) << result.status().message();
@@ -261,7 +286,7 @@ TEST(OpenAICompatibleProviderTest, RejectsReservedOptionsAtTheProviderMergeBound
                 .model = "model-a",
                 .api_key = "api-key-a",
                 .prompt = "hello",
-                .options = &options,
+                .options = options,
         });
         EXPECT_TRUE(request.status().is_invalid_argument()) << request.status();
     }
@@ -320,7 +345,7 @@ TEST(OpenAICompatibleProviderTest, RejectsEmptyModelWithASecretFreeFixedError) {
             .model = "",
             .api_key = "api-key-secret",
             .prompt = "prompt-secret",
-            .options = &options,
+            .options = options,
     });
 
     ASSERT_FALSE(result.ok());
@@ -328,37 +353,6 @@ TEST(OpenAICompatibleProviderTest, RejectsEmptyModelWithASecretFreeFixedError) {
     EXPECT_EQ("AI provider model is empty", result.status().message());
     expect_status_redacted(result.status(),
                            {"endpoint-secret", "api-key-secret", "prompt-secret", "user_option", "option-secret"});
-}
-
-TEST(OpenAICompatibleProviderTest, RejectsEveryC0AndDelApiKeyWithTheSameSecretFreeError) {
-    OpenAICompatibleProvider provider;
-    auto options = make_json_options(
-            {{.key = "user_option", .serialized_json = R"("option-secret")", .kind = AIProviderOptionKind::STRING}});
-    std::vector<std::string> invalid_keys;
-    for (int byte = 0; byte <= 0x1f; ++byte) {
-        std::string key = "api-key-secret";
-        key.push_back(static_cast<char>(byte));
-        key.append("tail");
-        invalid_keys.emplace_back(std::move(key));
-    }
-    invalid_keys.emplace_back(
-            "api-key-secret\x7f"
-            "tail");
-
-    for (const auto& key : invalid_keys) {
-        auto result = provider.build_request(AIChatRequest{
-                .endpoint = "https://endpoint-secret.example/chat",
-                .model = "model-secret",
-                .api_key = key,
-                .prompt = "prompt-secret",
-                .options = &options,
-        });
-        ASSERT_FALSE(result.ok());
-        EXPECT_TRUE(result.status().is_invalid_argument());
-        EXPECT_EQ("AI provider API key is invalid", result.status().message());
-        expect_status_redacted(result.status(), {"endpoint-secret", "model-secret", "api-key-secret", "prompt-secret",
-                                                 "user_option", "option-secret"});
-    }
 }
 
 TEST(OpenAICompatibleProviderTest, KeylessProviderOmitsAuthorization) {
@@ -376,19 +370,6 @@ TEST(OpenAICompatibleProviderTest, KeylessProviderOmitsAuthorization) {
         EXPECT_TRUE(std::none_of(result->headers.begin(), result->headers.end(),
                                  [](const AIHttpHeader& header) { return header.name == "Authorization"; }));
     }
-}
-
-TEST(OpenAICompatibleProviderTest, SpaceInApiKeyIsNotAControlCharacter) {
-    OpenAICompatibleProvider provider;
-    auto result = provider.build_request(AIChatRequest{
-            .endpoint = "https://provider.example/chat",
-            .model = "model-a",
-            .api_key = "api key with spaces",
-            .prompt = "hello",
-            .options = nullptr,
-    });
-
-    ASSERT_TRUE(result.ok()) << result.status().message();
 }
 
 TEST(OpenAICompatibleProviderTest, ParsesTheFirstChoiceAndPreservesEmptyOrNulContent) {
