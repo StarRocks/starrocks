@@ -291,6 +291,13 @@ public class HDFSBackendSelector implements BackendSelector {
         return size;
     }
 
+    /**
+     * Workers used for connector scan-range assignment (label-matched when restricted).
+     */
+    private Collection<ComputeNode> connectorWorkers() {
+        return workerProvider.getWorkersForConnectorScan();
+    }
+
     @Override
     public void computeScanRangeAssignment() throws StarRocksException {
         try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "computeScanRangeAssignment")) {
@@ -301,7 +308,7 @@ public class HDFSBackendSelector implements BackendSelector {
                 end.setScan_range(new TScanRange());
                 end.setEmpty(true);
                 end.setHas_more(hasMore);
-                for (ComputeNode computeNode : workerProvider.getAllWorkers()) {
+                for (ComputeNode computeNode : connectorWorkers()) {
                     // Eager Lance scans need terminal markers only where this scan has data.
                     if (scanNode instanceof LanceScanNode &&
                             !assignment.getOrDefault(computeNode.getId(), Collections.emptyMap())
@@ -318,7 +325,7 @@ public class HDFSBackendSelector implements BackendSelector {
             StarRocksException {
         // be host -> bes
         Multimap<String, ComputeNode> hostToBackends = HashMultimap.create();
-        for (ComputeNode computeNode : workerProvider.getAllWorkers()) {
+        for (ComputeNode computeNode : connectorWorkers()) {
             hostToBackends.put(computeNode.getHost(), computeNode);
         }
 
@@ -350,9 +357,10 @@ public class HDFSBackendSelector implements BackendSelector {
             return;
         }
 
+        Collection<ComputeNode> workers = connectorWorkers();
         long totalSize = computeTotalSize();
-        long avgNodeScanRangeBytes = totalSize / Math.max(workerProvider.getAllWorkers().size(), 1) + 1;
-        for (ComputeNode computeNode : workerProvider.getAllWorkers()) {
+        long avgNodeScanRangeBytes = totalSize / Math.max(workers.size(), 1) + 1;
+        for (ComputeNode computeNode : workers) {
             assignedBytesPerComputeNode.put(computeNode, 0L);
             assignedScanRangesPerComputeNode.put(computeNode, 0L);
             reBalancedBytesPerComputeNode.put(computeNode, 0L);
@@ -360,9 +368,10 @@ public class HDFSBackendSelector implements BackendSelector {
 
         if (scanNode instanceof LanceScanNode) {
             // Whole-dataset Lance scans have no replica locality or native file-cache affinity.
-            // Rotate across the provider's connector workers, including its compute-node preference.
+            // Rotate across the same connector worker pool used to initialize assignment maps
+            // (preferred L when restricted), so we never select an N-only worker missing from those maps.
             for (TScanRangeLocations scanRangeLocations : locations) {
-                ComputeNode worker = LanceWorkerSelector.selectWorker(workerProvider);
+                ComputeNode worker = LanceWorkerSelector.selectWorker(workers, workerProvider.getComputeResource());
                 recordScanRangeAssignment(worker, null, List.of(worker), scanRangeLocations);
             }
             recordScanRangeStatistic();

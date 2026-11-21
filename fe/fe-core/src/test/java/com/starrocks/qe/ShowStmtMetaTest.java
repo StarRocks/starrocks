@@ -465,10 +465,11 @@ public class ShowStmtMetaTest {
     public void testShowCatalogsStmt() {
         ShowCatalogsStmt stmt = new ShowCatalogsStmt(null);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(3, metaData.getColumnCount());
+        Assertions.assertEquals(4, metaData.getColumnCount());
         Assertions.assertEquals("Catalog", metaData.getColumn(0).getName());
         Assertions.assertEquals("Type", metaData.getColumn(1).getName());
         Assertions.assertEquals("Comment", metaData.getColumn(2).getName());
+        Assertions.assertEquals("Location", metaData.getColumn(3).getName());
     }
 
     @Test

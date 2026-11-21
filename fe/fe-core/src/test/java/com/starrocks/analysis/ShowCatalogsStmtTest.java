@@ -39,6 +39,8 @@ import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
+import java.util.List;
+
 @TestMethodOrder(MethodName.class)
 public class ShowCatalogsStmtTest {
     private static StarRocksAssert starRocksAssert;
@@ -73,9 +75,11 @@ public class ShowCatalogsStmtTest {
         Assertions.assertEquals("Catalog", metaData.getColumn(0).getName());
         Assertions.assertEquals("Type", metaData.getColumn(1).getName());
         Assertions.assertEquals("Comment", metaData.getColumn(2).getName());
-        Assertions.assertEquals("[default_catalog, Internal, An internal catalog contains this cluster's self-managed tables.]",
+        Assertions.assertEquals("Location", metaData.getColumn(3).getName());
+        Assertions.assertEquals(
+                "[default_catalog, Internal, An internal catalog contains this cluster's self-managed tables., ]",
                 resultSet.getResultRows().get(0).toString());
-        Assertions.assertEquals("[hive_catalog_1, Hive, hive_catalog]", resultSet.getResultRows().get(1).toString());
+        Assertions.assertEquals("[hive_catalog_1, Hive, hive_catalog, ]", resultSet.getResultRows().get(1).toString());
     }
 
     @Test
@@ -83,5 +87,31 @@ public class ShowCatalogsStmtTest {
         String sql_1 = "SHOW CATALOGS";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
         Assertions.assertTrue(stmt instanceof ShowCatalogsStmt);
+    }
+
+    @Test
+    public void testShowCatalogsLocation() throws Exception {
+        String createCatalog = "CREATE EXTERNAL CATALOG hive_catalog_loc COMMENT \"hive_loc\" " +
+                "PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\", " +
+                "\"labels.location\"=\"rack:rack1\");";
+        StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(createCatalog);
+        Assertions.assertTrue(stmt instanceof CreateCatalogStmt);
+        ConnectContext connectCtx = new ConnectContext();
+        connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        DDLStmtExecutor.execute((CreateCatalogStmt) stmt, connectCtx);
+
+        ShowCatalogsStmt showStmt = new ShowCatalogsStmt(null);
+        ShowResultSet resultSet = ShowExecutor.execute(showStmt, ctx);
+        boolean found = false;
+        for (List<String> row : resultSet.getResultRows()) {
+            if ("hive_catalog_loc".equals(row.get(0))) {
+                Assertions.assertEquals("Hive", row.get(1));
+                Assertions.assertEquals("hive_loc", row.get(2));
+                Assertions.assertEquals("rack:rack1", row.get(3));
+                found = true;
+                break;
+            }
+        }
+        Assertions.assertTrue(found);
     }
 }
