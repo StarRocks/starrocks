@@ -17,6 +17,7 @@ package com.starrocks.paimon.reader;
 import org.apache.paimon.types.ArrayType;
 import org.apache.paimon.types.BigIntType;
 import org.apache.paimon.types.BinaryType;
+import org.apache.paimon.types.BlobType;
 import org.apache.paimon.types.BooleanType;
 import org.apache.paimon.types.CharType;
 import org.apache.paimon.types.DataType;
@@ -63,6 +64,10 @@ public class PaimonTypeUtils {
         }
 
         public String visit(BinaryType binaryType) {
+            return "binary";
+        }
+
+        public String visit(BlobType blobType) {
             return "binary";
         }
 
