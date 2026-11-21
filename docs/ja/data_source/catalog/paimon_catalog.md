@@ -27,6 +27,19 @@ Paimon クラスターで SQL ワークロードを成功させるには、StarR
 
 Paimon catalog では、データのクエリ、Paimon データベースとテーブルの作成・削除、および INSERT INTO と INSERT OVERWRITE による書き込みができます。UPDATE、DELETE、CREATE TABLE LIKE、CREATE TABLE AS SELECT はサポートされていません。
 
+### オプションの FE 拡張（GCS/COS/Azure/OBS）
+
+Google GCS、Tencent COS、Azure Storage、または Huawei OBS 上の Paimon テーブルにアクセスするには、追加のファイルシステム jar が必要で、これはオプションの FE 拡張として提供されます。
+
+1. `fe/fe-extension` モジュールをビルドする（またはビルド成果物を取得する）：
+
+   ```bash
+   cd fe && mvn package -pl fe-extension -am -DskipTests
+   ```
+
+2. `fe/fe-extension/target/fe-extension-lib/` 内のすべての jar を `${FE_HOME}/lib` にコピーする。
+3. FE ノードを再起動する。
+
 ## Paimon to StarRocks data types
 
 | Paimon Type           | StarRocks Type              |
