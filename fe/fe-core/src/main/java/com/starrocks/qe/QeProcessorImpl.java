@@ -101,6 +101,14 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
         return null;
     }
 
+    /**
+     * The ConnectContext of the statement registered under queryId, or null when no entry has one.
+     */
+    public ConnectContext getRegisteredConnectContext(TUniqueId queryId) {
+        QueryInfo queryInfo = coordinatorMap.get(queryId);
+        return queryInfo != null ? queryInfo.getConnectContext() : null;
+    }
+
     @Override
     public List<Coordinator> getCoordinators() {
         return coordinatorMap.values().stream()
