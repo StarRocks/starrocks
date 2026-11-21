@@ -1705,4 +1705,32 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 + "  |  \n"
                 + "  2:ANALYTIC");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testPartitionRangeGen() throws Exception {
+        String sql = "select * from lineitem_partition where L_SHIPDATE = cast(abs('19950101') as date);";
+        ExecPlan p = getExecPlan(sql);
+        OlapScanNode scanNodes = (OlapScanNode) p.getScanNodes().get(0);
+        List<TScanRangeLocations> locations = scanNodes.getScanRangeLocations(0);
+        List<TKeyRange> keyRange = locations.get(0).getScan_range().getInternal_scan_range().getPartition_column_ranges();
+        Assertions.assertEquals(1, keyRange.size());
+        Assertions.assertEquals(19920101, keyRange.get(0).begin_key);
+        Assertions.assertEquals(19930101, keyRange.get(0).end_key);
+        Assertions.assertEquals(1, scanNodes.getPartitionConjuncts().size());
+    }
+
+    @Test
+    public void testIntersectAddDistinctWithDuplicateOutputColumn() throws Exception {
+        // RB-1172: a child that outputs the same column twice must be deduplicated by grouping on it once; grouping
+        // on it twice put one slot twice into the aggregation output and the BE crashed in convert_hash_set_to_chunk.
+        String sql = "select l_returnflag, l_returnflag from lineitem " +
+                "intersect select o_orderstatus, o_orderstatus from orders";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "INTERSECT");
+        assertContains(plan, "group by: 9: L_RETURNFLAG\n");
+        assertNotContains(plan, "group by: 9: L_RETURNFLAG, 9: L_RETURNFLAG");
+    }
+>>>>>>> 76051dd ([BugFix][RB-1172] Group the INTERSECT distinct aggregation by distinct columns (#83777))
 }
