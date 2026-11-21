@@ -61,6 +61,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.thrift.TPaimonOverwriteMode.APPEND;
+import static com.starrocks.thrift.TPaimonOverwriteMode.DYNAMIC;
+import static com.starrocks.thrift.TPaimonOverwriteMode.FULL;
+import static com.starrocks.thrift.TPaimonOverwriteMode.STATIC;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -156,7 +160,7 @@ public class PaimonInsertPlanTest extends PlanTestBase {
     public void testValuesAndSelectDoNotBeginNativeTransaction() throws Exception {
         Planned values = plan("insert into " + target("target") + " values ('2026-10-29', 1, 'a')");
         Assertions.assertEquals(DmlStmt.INVALID_TXN_ID, values.statement().getTxnId());
-        Assertions.assertEquals("APPEND", values.sink().getPaimonSinkExtra().getOverwriteMode());
+        Assertions.assertEquals(APPEND, values.sink().getPaimonSinkExtra().getOverwriteMode());
         Assertions.assertEquals(3, values.plan().getOutputExprs().size());
         Assertions.assertEquals(connectContext.getQueryId().toString().replace('-', '_'),
                 values.sink().getPaimonSinkExtra().getOperationId());
@@ -207,6 +211,32 @@ public class PaimonInsertPlanTest extends PlanTestBase {
         Assertions.assertTrue(partition.plan().getOutputExprs().get(0).isNullable());
     }
 
+
+    @Test
+    public void testOverwriteModesAndEmptyStaticInput() throws Exception {
+        Assertions.assertEquals(FULL, plan("insert overwrite " + target("unpartitioned")
+                + " select 1, 'a' where false").sink().getPaimonSinkExtra().getOverwriteMode());
+        Assertions.assertEquals(STATIC, plan("insert overwrite " + target("target")
+                + " partition(p='2026-10-29') select 1, 'a' where false")
+                .sink().getPaimonSinkExtra().getOverwriteMode());
+        connectContext.getSessionVariable().setDynamicOverwrite(true);
+        Assertions.assertEquals(DYNAMIC, plan("insert overwrite " + target("target")
+                + " select cast('2026-10-29' as date), 1, 'a'").sink().getPaimonSinkExtra().getOverwriteMode());
+        Assertions.assertEquals(FULL, plan("insert overwrite " + target("unpartitioned")
+                + " values(1, 'a')").sink().getPaimonSinkExtra().getOverwriteMode());
+    }
+
+    @Test
+    public void testOverwriteModeUsesCurrentSessionWhenReplanned() throws Exception {
+        connectContext.getSessionVariable().setDynamicOverwrite(true);
+        Planned initial = plan("insert overwrite " + target("target") + " values ('2026-10-29', 1, 'a')");
+        Assertions.assertEquals(DYNAMIC, initial.sink().getPaimonSinkExtra().getOverwriteMode());
+
+        connectContext.getSessionVariable().setDynamicOverwrite(false);
+        ExecPlan replanned = StatementPlanner.plan(initial.statement(), connectContext);
+        PaimonTableSink sink = (PaimonTableSink) replanned.getTopFragment().getSink();
+        Assertions.assertEquals(FULL, sink.getPaimonSinkExtra().getOverwriteMode());
+    }
 
     @Test
     public void testFixedBucketsKeepParallelNativeOwnerRouting() throws Exception {
@@ -260,8 +290,6 @@ public class PaimonInsertPlanTest extends PlanTestBase {
 
     @Test
     public void testCapabilitiesAndSchemaFailuresAreSemanticErrors() {
-        Assertions.assertThrows(com.starrocks.sql.common.UnsupportedException.class,
-                () -> plan("insert overwrite " + target("unpartitioned") + " values (1, 'a')"));
         assertAnalysisError("insert into " + target("bad_format") + " values (1)", "Parquet");
         assertAnalysisError("insert into " + target("target") + " (value) values ('a')", "Paimon column 'id'");
         assertAnalysisError("insert into " + target("target") + " partition(unknown='x') values (1, 'a')",
