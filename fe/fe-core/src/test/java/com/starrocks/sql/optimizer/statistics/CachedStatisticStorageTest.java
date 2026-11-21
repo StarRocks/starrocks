@@ -56,6 +56,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -480,6 +482,258 @@ public class CachedStatisticStorageTest {
         } catch (Exception e) {
             Assertions.fail();
         }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testRefreshReplacesInFlightPartitionLoad(boolean isSync) {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t0");
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        storage.partitionStatistics = Caffeine.newBuilder().recordStats().executor(Runnable::run)
+                .buildAsync(new PartitionStatsCacheLoader());
+        ColumnStatsCacheKey key = new ColumnStatsCacheKey(table.getId(), "v1");
+        ColumnStatsCacheKey unrelated = new ColumnStatsCacheKey(table.getId(), "v2");
+        ColumnStatsCacheKey cold = new ColumnStatsCacheKey(table.getId(), "v3");
+        CompletableFuture<Optional<PartitionStats>> unrelatedLoad = new CompletableFuture<>();
+        storage.partitionStatistics.put(unrelated, unrelatedLoad);
+        PartitionStats previous = new PartitionStats();
+        previous.getDistinctCount().put(1L, 9.0);
+        PartitionStats current = new PartitionStats();
+        current.getDistinctCount().put(1L, 3.0);
+        CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> earlierLoad = new CompletableFuture<>();
+        AtomicInteger loads = new AtomicInteger();
+        new MockUp<PartitionStatsCacheLoader>() {
+            @Mock
+            public CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> asyncLoadAll(
+                    Iterable<? extends ColumnStatsCacheKey> keys, java.util.concurrent.Executor executor) {
+                Assertions.assertEquals(ImmutableList.of(key), ImmutableList.copyOf(keys));
+                return loads.incrementAndGet() == 1 ? earlierLoad :
+                        CompletableFuture.completedFuture(ImmutableMap.of(key, Optional.of(current)));
+            }
+        };
+        // A real bulk cache miss installs incomplete per-key proxy futures before ANALYZE finishes.
+        CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> queried =
+                storage.partitionStatistics.getAll(ImmutableList.of(key));
+        Assertions.assertFalse(queried.isDone());
+        long hits = storage.partitionStatistics.synchronous().stats().hitCount();
+        long misses = storage.partitionStatistics.synchronous().stats().missCount();
+
+        storage.refreshColumnStatistics(table, ImmutableList.of("v1", "v3"), isSync);
+        Assertions.assertEquals(2, loads.get());
+        earlierLoad.complete(ImmutableMap.of(key, Optional.of(previous)));
+
+        // The earlier query may finish with its old snapshot, but must not overwrite the refreshed cache entry.
+        Assertions.assertSame(previous, queried.join().get(key).orElseThrow());
+        Assertions.assertSame(current, storage.partitionStatistics.asMap().get(key).join().orElseThrow());
+        Assertions.assertSame(unrelatedLoad, storage.partitionStatistics.asMap().get(unrelated));
+        Assertions.assertFalse(storage.partitionStatistics.asMap().containsKey(cold));
+        Assertions.assertEquals(hits, storage.partitionStatistics.synchronous().stats().hitCount());
+        Assertions.assertEquals(misses, storage.partitionStatistics.synchronous().stats().missCount());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testAsyncPartitionRefreshHandlesBothCompletionOrders(boolean earlierLoadCompletesFirst) {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t0");
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        storage.partitionStatistics = Caffeine.newBuilder().executor(Runnable::run)
+                .buildAsync(new PartitionStatsCacheLoader());
+        ColumnStatsCacheKey key = new ColumnStatsCacheKey(table.getId(), "v1");
+        PartitionStats previous = new PartitionStats();
+        PartitionStats current = new PartitionStats();
+        CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> earlierLoad = new CompletableFuture<>();
+        CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> refreshedLoad = new CompletableFuture<>();
+        AtomicInteger loads = new AtomicInteger();
+        new MockUp<PartitionStatsCacheLoader>() {
+            @Mock
+            public CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> asyncLoadAll(
+                    Iterable<? extends ColumnStatsCacheKey> keys, java.util.concurrent.Executor executor) {
+                return loads.incrementAndGet() == 1 ? earlierLoad : refreshedLoad;
+            }
+        };
+        storage.partitionStatistics.getAll(ImmutableList.of(key));
+
+        storage.refreshColumnStatistics(table, ImmutableList.of("v1"), false);
+        Assertions.assertEquals(2, loads.get());
+        Assertions.assertFalse(refreshedLoad.isDone());
+        if (earlierLoadCompletesFirst) {
+            earlierLoad.complete(ImmutableMap.of(key, Optional.of(previous)));
+            Assertions.assertSame(previous, storage.partitionStatistics.asMap().get(key).join().orElseThrow());
+        }
+        refreshedLoad.complete(ImmutableMap.of(key, Optional.of(current)));
+        if (!earlierLoadCompletesFirst) {
+            earlierLoad.complete(ImmutableMap.of(key, Optional.of(previous)));
+        }
+        Assertions.assertSame(current, storage.partitionStatistics.asMap().get(key).join().orElseThrow());
+    }
+
+    @Test
+    public void testFailedPartitionRefreshInvalidatesInFlightLoad() {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t0");
+        ColumnStatsCacheKey key = new ColumnStatsCacheKey(table.getId(), "v1");
+        AtomicInteger outcome = new AtomicInteger();
+        new MockUp<PartitionStatsCacheLoader>() {
+            @Mock
+            public CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> asyncLoadAll(
+                    Iterable<? extends ColumnStatsCacheKey> keys, java.util.concurrent.Executor executor) {
+                return switch (outcome.get()) {
+                    case 0 -> CompletableFuture.completedFuture(ImmutableMap.of());
+                    case 1 -> CompletableFuture.completedFuture(null);
+                    default -> CompletableFuture.failedFuture(new RuntimeException("statistics query failure"));
+                };
+            }
+        };
+        for (boolean isSync : new boolean[] {true, false}) {
+            for (int i = 0; i < 3; i++) {
+                outcome.set(i);
+                CachedStatisticStorage storage = new CachedStatisticStorage();
+                CompletableFuture<Optional<PartitionStats>> earlierLoad = new CompletableFuture<>();
+                storage.partitionStatistics.put(key, earlierLoad);
+                storage.refreshColumnStatistics(table, ImmutableList.of("v1"), isSync);
+                Assertions.assertFalse(storage.partitionStatistics.asMap().containsKey(key));
+                earlierLoad.complete(Optional.of(new PartitionStats()));
+                Assertions.assertFalse(storage.partitionStatistics.asMap().containsKey(key),
+                        "A late pre-collection load must not undo invalidation: isSync=" + isSync + ", outcome=" + i);
+            }
+        }
+    }
+
+    @Test
+    public void testRefreshReloadsOnlyCachedPartitionStatistics() {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t0");
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        ColumnStatsCacheKey v1 = new ColumnStatsCacheKey(table.getId(), "v1");
+        ColumnStatsCacheKey v2 = new ColumnStatsCacheKey(table.getId(), "v2");
+        ColumnStatsCacheKey v3 = new ColumnStatsCacheKey(table.getId(), "v3");
+        PartitionStats previous = new PartitionStats();
+        previous.getDistinctCount().put(1L, 9.0);
+        storage.partitionStatistics.synchronous().put(v1, Optional.of(previous));
+        storage.partitionStatistics.synchronous().put(v2, Optional.of(previous));
+        new Expectations() {
+            {
+                statisticExecutor.queryPartitionLevelColumnNDV((ConnectContext) any, table.getId(),
+                        (List<Long>) any, ImmutableList.of("v1"));
+                TStatisticData data = new TStatisticData();
+                data.setColumnName("v1");
+                data.setPartitionId(1L);
+                data.setCountDistinct(3);
+                data.setRowCount(10);
+                data.setNullCount(2);
+                result = ImmutableList.of(data);
+            }
+        };
+
+        // ANALYZE v1 and v3: update the warm entry, without loading cold or unrelated columns.
+        storage.refreshColumnStatistics(table, ImmutableList.of("v1", "v3"), true);
+        PartitionStats refreshed = storage.partitionStatistics.synchronous().getIfPresent(v1).orElseThrow();
+        Assertions.assertEquals(3.0, refreshed.getDistinctCount().get(1L));
+        Assertions.assertEquals(0.2, refreshed.getNullFraction().get(1L));
+        Assertions.assertSame(previous, storage.partitionStatistics.synchronous().getIfPresent(v2).orElseThrow());
+        Assertions.assertNull(storage.partitionStatistics.synchronous().getIfPresent(v3));
+    }
+
+    @Test
+    public void testRefreshDoesNotLoadColdPartitionStatistics() {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t0");
+        AtomicInteger loads = new AtomicInteger();
+        new MockUp<PartitionStatsCacheLoader>() {
+            @Mock
+            public CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> asyncLoadAll(
+                    Iterable<? extends ColumnStatsCacheKey> keys, java.util.concurrent.Executor executor) {
+                loads.incrementAndGet();
+                return CompletableFuture.completedFuture(ImmutableMap.of());
+            }
+        };
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        storage.refreshColumnStatistics(table, ImmutableList.of("v1", "v2"), true);
+        Assertions.assertEquals(0, loads.get());
+        Assertions.assertEquals(0, storage.partitionStatistics.synchronous().estimatedSize());
+    }
+
+    @Test
+    @Timeout(10)
+    public void testAsyncRefreshAppliesPartitionStatisticsAfterCompletion() {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t0");
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        ColumnStatsCacheKey key = new ColumnStatsCacheKey(table.getId(), "v1");
+        PartitionStats previous = new PartitionStats();
+        storage.partitionStatistics.synchronous().put(key, Optional.of(previous));
+        CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> loaded = new CompletableFuture<>();
+        new MockUp<PartitionStatsCacheLoader>() {
+            @Mock
+            public CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> asyncLoadAll(
+                    Iterable<? extends ColumnStatsCacheKey> keys, java.util.concurrent.Executor executor) {
+                Assertions.assertEquals(ImmutableList.of(key), ImmutableList.copyOf(keys));
+                return loaded;
+            }
+        };
+
+        // Follower replay must return while the asynchronous load is still pending.
+        storage.refreshColumnStatistics(table, ImmutableList.of("v1"), false);
+        Assertions.assertSame(previous, storage.partitionStatistics.synchronous().getIfPresent(key).orElseThrow());
+        PartitionStats current = new PartitionStats();
+        current.getDistinctCount().put(1L, 3.0);
+        loaded.complete(ImmutableMap.of(key, Optional.of(current)));
+        Assertions.assertSame(current, storage.partitionStatistics.synchronous().getIfPresent(key).orElseThrow());
+    }
+
+    @Test
+    public void testPartitionRefreshDropsStaleValuesWhenNotLoaded() {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t0");
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        ColumnStatsCacheKey key = new ColumnStatsCacheKey(table.getId(), "v1");
+        AtomicInteger outcome = new AtomicInteger();
+        new MockUp<PartitionStatsCacheLoader>() {
+            @Mock
+            public CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> asyncLoadAll(
+                    Iterable<? extends ColumnStatsCacheKey> keys, java.util.concurrent.Executor executor) {
+                return switch (outcome.get()) {
+                    case 0 -> CompletableFuture.completedFuture(ImmutableMap.of());
+                    case 1 -> CompletableFuture.completedFuture(null);
+                    default -> CompletableFuture.failedFuture(new RuntimeException("statistics query failure"));
+                };
+            }
+        };
+
+        for (boolean isSync : new boolean[] {true, false}) {
+            for (int i = 0; i < 3; i++) {
+                outcome.set(i);
+                storage.partitionStatistics.synchronous().put(key, Optional.of(new PartitionStats()));
+                storage.refreshColumnStatistics(table, ImmutableList.of("v1"), isSync);
+                Assertions.assertNull(storage.partitionStatistics.synchronous().getIfPresent(key),
+                        "isSync=" + isSync + ", outcome=" + i);
+            }
+        }
+    }
+
+    @Test
+    public void testPartitionRefreshCachesConfirmedAbsence() {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t0");
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        ColumnStatsCacheKey key = new ColumnStatsCacheKey(table.getId(), "v1");
+        storage.partitionStatistics.synchronous().put(key, Optional.of(new PartitionStats()));
+
+        // The real loader distinguishes a successful query with no rows from a load failure.
+        storage.refreshColumnStatistics(table, ImmutableList.of("v1"), true);
+        Assertions.assertEquals(Optional.empty(), storage.partitionStatistics.synchronous().getIfPresent(key));
+    }
+
+    @Test
+    public void testExpireDropsOnlyRequestedPartitionStatistics() {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t0");
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        ColumnStatsCacheKey v1 = new ColumnStatsCacheKey(table.getId(), "v1");
+        ColumnStatsCacheKey v2 = new ColumnStatsCacheKey(table.getId(), "v2");
+        storage.partitionStatistics.synchronous().put(v1, Optional.of(new PartitionStats()));
+        storage.partitionStatistics.synchronous().put(v2, Optional.empty());
+        storage.addColumnStatistic(table, "v1", ColumnStatistic.builder().setDistinctValuesCount(9).build());
+
+        storage.expireTableAndColumnStatistics(table, ImmutableList.of("v1"));
+        Assertions.assertNull(storage.partitionStatistics.synchronous().getIfPresent(v1));
+        Assertions.assertNull(storage.columnStatistics.synchronous().getIfPresent(v1));
+        Assertions.assertEquals(Optional.empty(), storage.partitionStatistics.synchronous().getIfPresent(v2));
+        storage.expireTableAndColumnStatistics(table, ImmutableList.of("v2"));
+        Assertions.assertNull(storage.partitionStatistics.synchronous().getIfPresent(v2));
     }
 
     @Test
