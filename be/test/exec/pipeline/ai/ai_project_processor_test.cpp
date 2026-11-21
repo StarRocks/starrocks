@@ -149,6 +149,7 @@ public:
         output.slot_id = kAIOutputSlot;
         output.result_type = result_type;
         output.result_kind = result_kind;
+        output.input.options = options;
         const auto& prompts = down_cast<const BinaryColumn&>(*input->get_column_by_slot_id(kPromptSlot));
         output.input.rows.reserve(input->num_rows());
         for (size_t row = 0; row < input->num_rows(); ++row) {
@@ -171,7 +172,8 @@ public:
     std::optional<size_t> output_chunk_rows;
     bool output_chunk_contains_ai_slot = false;
     std::vector<AIFunctionRowAction> row_actions;
-    std::optional<AIMediaInput> media;
+    std::shared_ptr<const AIProviderOptions> options;
+    std::shared_ptr<const AIMediaInput> media;
     size_t prepare_calls = 0;
     std::vector<int32_t> observed_driver_sequences;
     std::vector<size_t> observed_rows;
@@ -261,6 +263,8 @@ public:
     struct Pending {
         std::string model;
         std::string prompt;
+        std::shared_ptr<const AIProviderOptions> options;
+        std::shared_ptr<const AIMediaInput> media;
         AITaskCallback callback;
         std::shared_ptr<ManualHandleState> handle_state;
     };
@@ -283,9 +287,6 @@ public:
         auto handle_state = std::make_shared<ManualHandleState>();
         handle_states.emplace_back(handle_state);
         submitted_prompts.emplace_back(request.prompt);
-        if (request.media != nullptr) {
-            submitted_media.emplace_back(*request.media);
-        }
 
         {
             std::unique_lock lock(block_mutex);
@@ -306,6 +307,7 @@ public:
         } else {
             const auto [iterator, inserted] =
                     pending.emplace(request.task_id, Pending{std::string(request.model), std::string(request.prompt),
+                                                             std::move(request.options), std::move(request.media),
                                                              std::move(callback), handle_state});
             if (!inserted) {
                 return Status::InternalError("duplicate test task id");
@@ -387,7 +389,6 @@ public:
     SubmitException submit_exception = SubmitException::NONE;
     size_t submit_calls = 0;
     std::vector<std::string> submitted_prompts;
-    std::vector<AIMediaInput> submitted_media;
     std::vector<std::shared_ptr<ManualHandleState>> handle_states;
     std::unordered_map<uint64_t, Pending> pending;
 
@@ -1085,11 +1086,15 @@ TEST(AIProjectProcessorTest, EarlyFinishCancelsExactlyOnceButWaitsForEveryCallba
     EXPECT_TRUE(buffer->all_sources_finished());
 }
 
-TEST(AIProjectProcessorTest, MediaIsConsumedBeforeSourceFinishAndCancellationDrainsOnce) {
+TEST(AIProjectProcessorTest, PendingTaskSharesMediaAndOptionsAcrossSourceFinish) {
     auto buffer = make_input_buffer();
     auto projection = std::make_shared<RecordingProjection>();
     const std::string png("\x89PNG\r\n\x1a\n", 8);
-    projection->media = AIMediaInput{.mime_type = "image/png", .bytes = png};
+    projection->media =
+            std::make_shared<const AIMediaInput>(AIMediaInput{.mime_type = "image/png", .inline_bytes = png});
+    projection->options = std::make_shared<const AIProviderOptions>();
+    std::weak_ptr<const AIMediaInput> media = projection->media;
+    std::weak_ptr<const AIProviderOptions> options = projection->options;
     projection->row_actions = {AIFunctionRowAction::DISPATCH, AIFunctionRowAction::SQL_NULL};
     auto submitter = std::make_shared<ManualTaskSubmitter>();
     auto processor = make_processor(buffer, projection, submitter);
@@ -1099,16 +1104,22 @@ TEST(AIProjectProcessorTest, MediaIsConsumedBeforeSourceFinishAndCancellationDra
     RuntimeState state;
     ASSERT_OK(processor->try_process(&state, 0));
     ASSERT_EQ(1, submitter->pending_count());
-    ASSERT_EQ(1, submitter->submitted_media.size());
+    const auto& pending = submitter->pending.begin()->second;
+    ASSERT_EQ(projection->media, pending.media);
+    ASSERT_EQ(projection->options, pending.options);
     projection->media.reset();
-    EXPECT_EQ("image/png", submitter->submitted_media.front().mime_type);
-    EXPECT_EQ(png, submitter->submitted_media.front().bytes);
+    projection->options.reset();
 
     ASSERT_OK(processor->set_source_finished(0));
     ASSERT_OK(processor->set_source_finished(0));
     EXPECT_EQ(1, submitter->cancel_calls("prompt-0"));
     EXPECT_TRUE(processor->pending_finish(0));
+    EXPECT_EQ("image/png", pending.media->mime_type);
+    EXPECT_EQ(png, pending.media->inline_bytes);
+    EXPECT_TRUE(pending.options->members().empty());
     submitter->complete_remaining_as_cancelled();
+    EXPECT_TRUE(media.expired());
+    EXPECT_TRUE(options.expired());
     EXPECT_FALSE(processor->pending_finish(0));
     EXPECT_FALSE(processor->has_output(0));
     EXPECT_TRUE(processor->status(0).ok());

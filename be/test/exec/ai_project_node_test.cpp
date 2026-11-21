@@ -268,11 +268,56 @@ TEST(AIProviderConfigTest, RejectsInvalidModelAndCredentials) {
         EXPECT_TRUE(AIProviderConfig::parse(provider.id, provider).status().is_invalid_argument());
     }
     provider.params["model"] = std::string(kModelSentinel);
-    for (const char* key : {"test-secret\nkey", "test-secret\rkey"}) {
-        provider.params["api_key"] = key;
+    for (char control : {'\n', '\r', '\0'}) {
+        provider.params["api_key"] = std::string("test-secret") + control + "key";
         auto parsed = AIProviderConfig::parse(provider.id, provider);
         ASSERT_TRUE(parsed.status().is_invalid_argument()) << parsed.status();
         EXPECT_EQ(std::string::npos, parsed.status().to_string().find("test-secret"));
+    }
+}
+
+TEST(AIProviderConfigTest, RoutesDashScopeFromThriftByEndpointPathAndType) {
+    auto provider = make_provider_chat_config(TAIProviderProtocol::DASHSCOPE);
+    const struct {
+        const char* suffix;
+        TAIProviderType::type type;
+        const char* serialized_input;
+    } routes[] = {
+            {"/text-generation/generation", TAIProviderType::CHAT, R"("content":"hello")"},
+            {"/multimodal-generation/generation", TAIProviderType::CHAT, R"("content":[{"text":"hello"}])"},
+            {"/text-embedding/text-embedding", TAIProviderType::EMBEDDING, R"("texts":["hello"])"},
+            {"/multimodal-embedding/multimodal-embedding", TAIProviderType::EMBEDDING,
+             R"("contents":[{"text":"hello"}])"},
+    };
+    for (const auto& [suffix, type, serialized_input] : routes) {
+        const auto endpoint =
+                std::string("https://proxy.example/prefix") + suffix + "?route=/text-generation/generation";
+        SCOPED_TRACE(suffix);
+        provider.__set_type(type);
+        provider.params["endpoint"] = endpoint;
+        auto config = AIProviderConfig::parse(provider.id, provider);
+        ASSERT_TRUE(config.ok()) << config.status();
+        EXPECT_EQ(AIProviderProtocol::DASHSCOPE, config->protocol);
+        auto instance = create_ai_provider(*config);
+        ASSERT_TRUE(instance.ok()) << instance.status();
+        auto request = (*instance)->build_request({.endpoint = config->endpoint,
+                                                   .model = "overridden-row-model",
+                                                   .prompt = "hello",
+                                                   .capability = config->capability});
+        ASSERT_TRUE(request.ok()) << request.status();
+        EXPECT_EQ(endpoint, request->url);
+        EXPECT_NE(std::string::npos, request->body.find(serialized_input));
+
+        config->capability = type == TAIProviderType::CHAT ? AICapability::EMBEDDING : AICapability::CHAT;
+        EXPECT_TRUE(create_ai_provider(*config).status().is_invalid_argument());
+    }
+    provider.__set_type(TAIProviderType::CHAT);
+    for (const auto* endpoint : {"https://text-generation/generation", "https://proxy.example/v1/chat/completions",
+                                 "https://proxy.example?route=/text-generation/generation"}) {
+        provider.params["endpoint"] = endpoint;
+        auto config = AIProviderConfig::parse(provider.id, provider);
+        ASSERT_TRUE(config.ok()) << config.status();
+        EXPECT_TRUE(create_ai_provider(*config).status().is_invalid_argument());
     }
 }
 
@@ -299,8 +344,8 @@ TEST(AIProviderConfigTest, RejectsInvalidMetadataWithoutExposingProperties) {
         missing.params.erase(key);
         EXPECT_FALSE(AIProviderConfig::parse(provider.id, missing).ok());
     }
-    for (auto protocol : {TAIProviderProtocol::ANTHROPIC, TAIProviderProtocol::COHERE, TAIProviderProtocol::DASHSCOPE,
-                          static_cast<TAIProviderProtocol::type>(99)}) {
+    for (auto protocol :
+         {TAIProviderProtocol::ANTHROPIC, TAIProviderProtocol::COHERE, static_cast<TAIProviderProtocol::type>(99)}) {
         provider.__set_protocol(protocol);
         provider.params["protocol"] = "openai";
         auto result = AIProviderConfig::parse(provider.id, provider);
