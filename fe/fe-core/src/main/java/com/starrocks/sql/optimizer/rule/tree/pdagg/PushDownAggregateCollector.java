@@ -904,9 +904,8 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
         if (connectContext == null || groupBys.isEmpty()) {
             return !certain;
         }
-        int execNodes = connectContext.isUseWarehouseExecNodes() ? connectContext.getQueryExecNodeNumber() :
-                connectContext.getAliveBackendNumber() +
-                        connectContext.getGlobalStateMgr().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
+        int execNodes = connectContext.getAliveBackendNumber() +
+                connectContext.getGlobalStateMgr().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
         int instances = Math.max(1, execNodes) *
                 Math.max(1, sessionVariable.getDegreeOfParallelism(connectContext.getCurrentWarehouseId()));
         double rows = statistics.getOutputRowCount();
