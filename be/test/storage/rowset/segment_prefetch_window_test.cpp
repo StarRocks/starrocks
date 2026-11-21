@@ -21,7 +21,9 @@
 #include <vector>
 
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
+#include "common/config_lake_fwd.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "storage/chunk_helper.h"
@@ -30,6 +32,7 @@
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "storage_primitive/storage_stats.h"
 #include "types/datum.h"
@@ -197,6 +200,99 @@ TEST_F(SegmentPrefetchWindowTest, advance_bounds_read_ahead) {
     const size_t asked = _stream.warms.size();
     window->advance(0);
     EXPECT_EQ(asked, _stream.warms.size());
+}
+
+// The windows of a node together hold no more blocks ahead than lake_scan_read_ahead_max_blocks; a window held back
+// asks for the rest once another one has released its blocks.
+TEST_F(SegmentPrefetchWindowTest, node_limit_bounds_all_windows) {
+    auto& node = StorageMetrics::instance()->lake_scan_read_ahead_blocks;
+    auto& capped = StorageMetrics::instance()->lake_scan_read_ahead_capped_total;
+    const int64_t base = node.value();
+    const int64_t old_limit = config::lake_scan_read_ahead_max_blocks;
+    DeferOp restore([&] { config::lake_scan_read_ahead_max_blocks = old_limit; });
+    config::lake_scan_read_ahead_max_blocks = base + 6;
+
+    SparseRange<> range(0, kRows);
+    auto first = make_window(&range, 0, 4);
+    first->advance(0);
+    EXPECT_EQ(4u, first->ahead_blocks());
+    EXPECT_EQ(base + 4, node.value());
+    EXPECT_TRUE(SegmentPrefetchWindow::node_has_room());
+
+    // The second window gets only what is left of the node's blocks.
+    const int64_t capped_before = capped.value();
+    auto second = make_window(&range, 0, 4);
+    second->advance(0);
+    EXPECT_EQ(2u, second->ahead_blocks());
+    EXPECT_EQ(base + 6, node.value());
+    EXPECT_GT(capped.value(), capped_before);
+    EXPECT_FALSE(SegmentPrefetchWindow::node_has_room());
+
+    first.reset();
+    EXPECT_EQ(base + 2, node.value());
+    second->advance(0);
+    EXPECT_EQ(4u, second->ahead_blocks());
+    EXPECT_EQ(base + 4, node.value());
+    second.reset();
+    EXPECT_EQ(base, node.value());
+}
+
+// A window that stops warming gives its blocks back to the node.
+TEST_F(SegmentPrefetchWindowTest, disabled_window_releases_node_blocks) {
+    auto& node = StorageMetrics::instance()->lake_scan_read_ahead_blocks;
+    const int64_t base = node.value();
+    SparseRange<> range(0, kRows);
+    auto window = make_window(&range, 0, 64);
+    window->advance(0);
+    // Several pages ahead, so that passing the first one leaves blocks held.
+    ASSERT_GT(_stream.warms.size(), 2u);
+    EXPECT_EQ(base + 64, node.value());
+    auto& windows = StorageMetrics::instance()->lake_scan_read_ahead_windows;
+    const int64_t reading = windows.value();
+    _stream.supported = false;
+    window->advance(_pages[1].first);
+    EXPECT_TRUE(window->disabled());
+    EXPECT_EQ(0u, window->ahead_blocks());
+    EXPECT_EQ(base, node.value());
+    // It no longer takes a share of the node limit, and is not counted twice when it goes away.
+    EXPECT_EQ(reading - 1, windows.value());
+    window.reset();
+    EXPECT_EQ(reading - 1, windows.value());
+}
+
+// The segment readers that read ahead share lake_scan_read_ahead_max_blocks equally, whichever asks first; one that reads
+// ahead alone keeps its own window again.
+TEST_F(SegmentPrefetchWindowTest, node_limit_is_shared_equally) {
+    auto& node = StorageMetrics::instance()->lake_scan_read_ahead_blocks;
+    auto& windows = StorageMetrics::instance()->lake_scan_read_ahead_windows;
+    auto& capped = StorageMetrics::instance()->lake_scan_read_ahead_capped_total;
+    ASSERT_EQ(0, node.value());
+    ASSERT_EQ(0, windows.value());
+    const int64_t old_limit = config::lake_scan_read_ahead_max_blocks;
+    DeferOp restore([&] { config::lake_scan_read_ahead_max_blocks = old_limit; });
+    config::lake_scan_read_ahead_max_blocks = 8;
+
+    SparseRange<> range(0, kRows);
+    auto first = make_window(&range, 0, 8);
+    auto second = make_window(&range, 0, 8);
+    EXPECT_EQ(2, windows.value());
+    // The first to ask takes its share, not all the node has left.
+    const int64_t capped_before = capped.value();
+    first->advance(0);
+    EXPECT_EQ(4u, first->ahead_blocks());
+    EXPECT_GT(capped.value(), capped_before);
+    second->advance(0);
+    EXPECT_EQ(4u, second->ahead_blocks());
+    EXPECT_EQ(8, node.value());
+
+    second.reset();
+    EXPECT_EQ(1, windows.value());
+    EXPECT_EQ(4, node.value());
+    first->advance(0);
+    EXPECT_EQ(8u, first->ahead_blocks());
+    first.reset();
+    EXPECT_EQ(0, windows.value());
+    EXPECT_EQ(0, node.value());
 }
 
 // Once the reader is past a page, its warm-up is withdrawn and the window moves on.

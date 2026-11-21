@@ -24,11 +24,12 @@ namespace starrocks {
 class UnionIterator final : public ChunkIterator {
 public:
     explicit UnionIterator(std::vector<ChunkIteratorPtr> children, size_t read_ahead_children = 0,
-                           size_t read_ahead_blocks = 0)
+                           size_t read_ahead_blocks = 0, std::function<bool()> may_read_ahead = nullptr)
             : ChunkIterator(children[0]->schema(), children[0]->chunk_size()),
               _children(std::move(children)),
               _read_ahead_children(read_ahead_children),
-              _read_ahead_budget(read_ahead_blocks) {
+              _read_ahead_budget(read_ahead_blocks),
+              _may_read_ahead(std::move(may_read_ahead)) {
 #ifndef NDEBUG
         for (auto& iter : _children) {
             const Schema& child_schema = iter->schema();
@@ -95,6 +96,7 @@ private:
     size_t _merged_rows = 0;
     size_t _read_ahead_children;
     const size_t _read_ahead_budget;
+    const std::function<bool()> _may_read_ahead;
     // One past the last child whose read-ahead has started.
     size_t _read_ahead_end = 0;
 };
@@ -115,6 +117,9 @@ inline void UnionIterator::_read_ahead() {
     }
     while (_read_ahead_end < _children.size() && _read_ahead_end <= _cur_idx + _read_ahead_children &&
            held < _read_ahead_budget) {
+        if (_may_read_ahead != nullptr && !_may_read_ahead()) {
+            return;
+        }
         auto& child = _children[_read_ahead_end++];
         bool started = false;
         Status st = child->start_read_ahead(&started);
@@ -195,12 +200,13 @@ inline void UnionIterator::close() {
 }
 
 ChunkIteratorPtr new_union_iterator(std::vector<ChunkIteratorPtr> children, size_t read_ahead_children,
-                                    size_t read_ahead_blocks) {
+                                    size_t read_ahead_blocks, std::function<bool()> may_read_ahead) {
     DCHECK(!children.empty());
     if (children.size() == 1) {
         return std::move(children[0]);
     }
-    return std::make_shared<UnionIterator>(std::move(children), read_ahead_children, read_ahead_blocks);
+    return std::make_shared<UnionIterator>(std::move(children), read_ahead_children, read_ahead_blocks,
+                                           std::move(may_read_ahead));
 }
 
 ChunkIteratorPtr new_union_iterator(std::vector<ChunkIteratorPtr> children) {

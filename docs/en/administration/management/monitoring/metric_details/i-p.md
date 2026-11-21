@@ -455,6 +455,24 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Gauge
 - Description: Cumulative number of tablet publishes since this BE/CN started that a retried publish answered from the new version's tablet metadata already written in storage, instead of applying the transactions again. Only a retry (a publish of a partition whose earlier request was sent and did not finish) whose new version is not in the metadata cache is counted; tablets answered from the metadata cache and first attempts are not. Shared-data clusters only. Exported through `/metrics` when `dump_metrics_with_bvar` is enabled.
 
+## `lake_scan_read_ahead_blocks`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Shared-data only. Cache blocks that the query scans on this BE/CN have asked to fetch ahead of their reads and have not read yet, all scans together. This covers the read-ahead window of each segment (`remote_prefetch_window_blocks`) and the segments started early (`lake_scan_read_ahead_segments`). `lake_scan_read_ahead_max_blocks` limits it.
+
+## `lake_scan_read_ahead_windows`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Shared-data only. Segments of the query scans on this BE/CN that are reading ahead. While `lake_scan_read_ahead_max_blocks` is set, each of them keeps at most that limit divided by this number of blocks ahead.
+
+## `lake_scan_read_ahead_capped_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Shared-data only. Number of times a query scan on this BE/CN asked for fewer blocks ahead, or did not start the next segment early, because the node already held `lake_scan_read_ahead_max_blocks` blocks ahead, or the segment already held its share of them. A steadily growing value means the limit is holding read-ahead back; those reads fetch their data when they reach it.
+
 ## `lake_segment_cache_hit_minute`
 
 - Unit: Count
