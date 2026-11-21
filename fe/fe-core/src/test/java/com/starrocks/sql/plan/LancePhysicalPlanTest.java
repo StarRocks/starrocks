@@ -15,13 +15,19 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LanceTable;
 import com.starrocks.common.Config;
+import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.planner.LanceScanNode;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
 import com.starrocks.qe.scheduler.slot.SlotEstimatorFactory;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.expression.BinaryType;
@@ -66,6 +72,10 @@ public class LancePhysicalPlanTest extends PlanTestBase {
     }
 
     private ExecPlan createPlan() {
+        return createPlan(false);
+    }
+
+    private ExecPlan createPlan(boolean unusedColumn) {
         ColumnRefFactory factory = new ColumnRefFactory();
         ColumnRefOperator id = factory.create("id", IntegerType.INT, true);
         Column column = new Column("id", IntegerType.INT);
@@ -74,6 +84,7 @@ public class LancePhysicalPlanTest extends PlanTestBase {
                 ConstantOperator.createInt(10));
         LogicalLanceScanOperator logical = new LogicalLanceScanOperator(table, Map.of(id, column),
                 Map.of(column, id), 3, predicate);
+        logical.getScanOptimizeOption().setCanUseAnyColumn(unusedColumn);
         // Populated side channels must not duplicate the complete predicate in the scan's Thrift.
         logical.getScanOperatorPredicates().getNonPartitionConjuncts().add(predicate);
         logical.getScanOperatorPredicates().getNoEvalPartitionConjuncts().add(predicate);
@@ -81,7 +92,7 @@ public class LancePhysicalPlanTest extends PlanTestBase {
         OptExpression physical = OptExpression.create(new PhysicalLanceScanOperator(logical));
         physical.setStatistics(Statistics.builder().setOutputRowCount(3)
                 .addColumnStatistic(id, ColumnStatistic.unknown()).build());
-        // Exercise fragment translation directly: this series layer intentionally has no SQL entry point yet.
+        // Exercise fragment translation directly to verify the scan predicate is serialized exactly once.
         return PlanFragmentBuilder.createPhysicalPlan(physical, connectContext, List.of(id), factory,
                 List.of("id"), TResultSinkType.MYSQL_PROTOCAL, false);
     }
@@ -138,6 +149,60 @@ public class LancePhysicalPlanTest extends PlanTestBase {
                 .getHdfs_scan_range().getFile_format());
         Assertions.assertFalse(scan.getScanRangeLocations(0).get(0).getScan_range()
                 .getHdfs_scan_range().isSetLance_split_info());
+    }
+
+    @Test
+    public void testCountSqlUsesEmptyProjectionOnlyWithoutRequiredValues() throws Exception {
+        CatalogConnector connector = mock(CatalogConnector.class, RETURNS_DEEP_STUBS);
+        when(connector.getMetadata().getCloudConfiguration()).thenReturn(new CloudConfiguration());
+        new MockUp<ConnectorMgr>() {
+            @Mock
+            public CatalogConnector getConnector(String catalogName) {
+                return connector;
+            }
+        };
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Column id = new Column("id", IntegerType.INT);
+        id.setIsAllowNull(true);
+        LanceTable table = new LanceTable(GlobalStateMgr.getCurrentState().getNextId(),
+                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "test", "lance_count", List.of(id),
+                "file:///tmp/count.lance");
+        db.registerTableUnlocked(table);
+        boolean original = connectContext.getSessionVariable().isEnableCountStarOptimization();
+        try {
+            connectContext.getSessionVariable().setEnableCountStarOptimization(true);
+            for (String sql : List.of("select count(*) from test.lance_count",
+                    "select count(1) from test.lance_count")) {
+                ExecPlan plan = getExecPlan(sql);
+                Assertions.assertEquals(1, plan.getScanNodes().size(), sql);
+                TPlanNode thrift = plan.getScanNodes().get(0).treeToThrift().getNodes().get(0);
+                Assertions.assertTrue(thrift.getHdfs_scan_node().isCan_use_any_column(), sql);
+            }
+            for (String sql : List.of("select count(id) from test.lance_count",
+                    "select count(*) from test.lance_count where id > 1",
+                    "select id, count(*) from test.lance_count group by id",
+                    "select sum(id) from test.lance_count")) {
+                ExecPlan plan = getExecPlan(sql);
+                TPlanNode thrift = plan.getScanNodes().get(0).treeToThrift().getNodes().get(0);
+                Assertions.assertFalse(thrift.getHdfs_scan_node().isCan_use_any_column(), sql);
+            }
+            connectContext.getSessionVariable().setEnableCountStarOptimization(false);
+            ExecPlan plan = getExecPlan("select count(*) from test.lance_count");
+            Assertions.assertFalse(plan.getScanNodes().get(0).treeToThrift().getNodes().get(0)
+                    .getHdfs_scan_node().isCan_use_any_column());
+        } finally {
+            connectContext.getSessionVariable().setEnableCountStarOptimization(original);
+            db.unRegisterTableUnlocked(table);
+        }
+    }
+
+    @Test
+    public void testUnusedColumnFlagReachesThrift() {
+        for (boolean unusedColumn : List.of(false, true)) {
+            ExecPlan plan = createPlan(unusedColumn);
+            TPlanNode thrift = plan.getScanNodes().get(0).treeToThrift().getNodes().get(0);
+            Assertions.assertEquals(unusedColumn, thrift.getHdfs_scan_node().isCan_use_any_column());
+        }
     }
 
     @Test
