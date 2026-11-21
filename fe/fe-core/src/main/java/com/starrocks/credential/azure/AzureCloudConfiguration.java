@@ -26,9 +26,15 @@ import java.util.Map;
 public class AzureCloudConfiguration extends CloudConfiguration {
 
     private final AzureStorageCloudCredential azureStorageCloudCredential;
+    private final boolean useNativeAdls;
 
     public AzureCloudConfiguration(AzureStorageCloudCredential azureStorageCloudCredential) {
+        this(azureStorageCloudCredential, false);
+    }
+
+    AzureCloudConfiguration(AzureStorageCloudCredential azureStorageCloudCredential, boolean useNativeAdls) {
         this.azureStorageCloudCredential = azureStorageCloudCredential;
+        this.useNativeAdls = useNativeAdls;
     }
 
     @Override
@@ -38,6 +44,9 @@ public class AzureCloudConfiguration extends CloudConfiguration {
         Map<String, String> properties = tCloudConfiguration.getCloud_properties();
         azureStorageCloudCredential.toThrift(properties);
         tCloudConfiguration.setCloud_properties(properties);
+        if (useNativeAdls) {
+            tCloudConfiguration.setAzure_use_native_sdk(true);
+        }
     }
 
     @Override
