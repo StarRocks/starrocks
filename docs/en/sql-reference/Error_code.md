@@ -149,3 +149,4 @@ This section describes the common error codes for query requests.
 |5070| The specified operation is disabled. |
 |5071| The number of replicas of the dynamic partition should be greater than 0.|
 |5072| The number of replicas of the dynamic partition is not a valid number. |
+|5402| The connection to the leader FE broke after a follower forwarded the statement to it, so the statement may or may not have been applied (SQLSTATE `08007`). Check its effect before running it again. |
