@@ -103,6 +103,17 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         super(db, mv, mvContext, mvEntity, refreshMode, MVIVMRefreshProcessor.class);
     }
 
+    /**
+     * IVM applies only base-table deltas and cannot rebuild the history of a partition created by a
+     * shape-change replacement. Keep the existing MV partition layout instead of dropping the old
+     * partitions for empty ones; a PCT refresh (or the hybrid processor's PCT fallback) will later
+     * apply the replacement and materialize it.
+     */
+    @Override
+    public boolean shouldRetainExistingPartitionLayout() {
+        return true;
+    }
+
     @Override
     public ProcessExecPlan getProcessExecPlan(TaskRunContext taskRunContext) throws Exception {
         if (!mvRefreshParams.isCompleteRefresh()) {

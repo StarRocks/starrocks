@@ -174,6 +174,13 @@ public abstract class MVPCTRefreshPartitioner {
      */
     public abstract boolean syncAddOrDropPartitions() throws AnalysisException, LockTimeoutException;
 
+    /**
+     * Called before partition sync. Range partitioners use it to keep existing partitions when the
+     * current refresh cannot materialize a shape-change replacement (IVM). Non-range partitioners
+     * ignore it.
+     */
+    public void setRetainExistingLayout(boolean retain) {
+    }
 
     protected final void publishTopology(PCTPartitionTopology topology) {
         mvContext.setPartitionTopology(topology);

@@ -16,27 +16,35 @@ package com.starrocks.scheduler.mv;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Range;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshPartitioner;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshRangePartitioner;
 import com.starrocks.scheduler.mv.pct.PCTPartitionTopology;
+import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.common.PCellNone;
 import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
+import com.starrocks.sql.common.PRangeCell;
+import com.starrocks.type.DateType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -169,5 +177,72 @@ public class MVPCTRefreshRangePartitionerTest {
         partitioner.filterPartitionsByTTL(toRefreshPartitions, true);
 
         Assertions.assertEquals(2, toRefreshPartitions.size());
+    }
+
+    /**
+     * A requested range that only touches a deferred shape change (adjacent ranges) does not conflict: the
+     * request holds no part of the component. Guava's {@code Range#isConnected} alone would report it.
+     */
+    @Test
+    public void testIntersectsRequestedRangeRequiresNonEmptyIntersection() throws Exception {
+        Range<PartitionKey> april = range("2021-04-01", "2021-05-01");
+        Range<PartitionKey> may = range("2021-05-01", "2021-06-01");
+        Range<PartitionKey> mayFirstHalf = range("2021-05-01", "2021-05-16");
+        Range<PartitionKey> june = range("2021-06-01", "2021-07-01");
+
+        Assertions.assertFalse(MVPCTRefreshRangePartitioner.intersectsRequestedRange(april, may),
+                "adjacent ranges ([Apr, May) and [May, Jun)) do not overlap");
+        Assertions.assertFalse(MVPCTRefreshRangePartitioner.intersectsRequestedRange(may, april),
+                "adjacent ranges are symmetric");
+        Assertions.assertFalse(MVPCTRefreshRangePartitioner.intersectsRequestedRange(april, june),
+                "disjoint ranges do not overlap");
+        Assertions.assertTrue(MVPCTRefreshRangePartitioner.intersectsRequestedRange(mayFirstHalf, may));
+        Assertions.assertTrue(MVPCTRefreshRangePartitioner.intersectsRequestedRange(may, mayFirstHalf));
+    }
+
+    /**
+     * The retained MV partitions, not the refresh scope, decide whether a deferred shape change leaves part of
+     * the requested range unmaterialized: two adjacent day partitions tile a request together, while the rest of
+     * a coarser component stays uncovered even when the retained days are refreshed in this run.
+     */
+    @Test
+    public void testFindUncoveredRangesUsesExistingMvPartitions() throws Exception {
+        PCellSortedSet existing = PCellSortedSet.of(Lists.newArrayList(
+                PCellWithName.of("p20210501_20210502", new PRangeCell(range("2021-05-01", "2021-05-02"))),
+                PCellWithName.of("p20210502_20210503", new PRangeCell(range("2021-05-02", "2021-05-03")))));
+        // the month component the mirror mapper wants to replace the day partitions with
+        Range<PartitionKey> mayComponent = range("2021-05-01", "2021-06-01");
+        Range<PartitionKey> juneComponent = range("2021-06-01", "2021-07-01");
+
+        // tiled by two adjacent partitions -> covered, even though only one of them may need a refresh
+        Assertions.assertTrue(MVPCTRefreshRangePartitioner.findUncoveredRanges(existing,
+                range("2021-05-01", "2021-05-03"), Lists.newArrayList(mayComponent)).isEmpty());
+
+        // the retained days cannot cover the rest of the deferred month component: only the uncovered part of
+        // the request is reported, not the whole component
+        Range<PartitionKey> maySecondToSixteenth = range("2021-05-02", "2021-05-16");
+        Assertions.assertEquals(Lists.newArrayList(maySecondToSixteenth),
+                MVPCTRefreshRangePartitioner.findUncoveredRanges(existing, maySecondToSixteenth,
+                        Lists.newArrayList(mayComponent)));
+
+        // a component the request does not take part in never conflicts, and neither does a whole-MV refresh
+        Assertions.assertTrue(MVPCTRefreshRangePartitioner.findUncoveredRanges(existing,
+                range("2021-05-01", "2021-05-03"),
+                Lists.newArrayList(mayComponent, juneComponent)).isEmpty());
+        Assertions.assertTrue(MVPCTRefreshRangePartitioner.findUncoveredRanges(existing, null,
+                Lists.newArrayList(mayComponent, juneComponent)).isEmpty());
+        Assertions.assertTrue(MVPCTRefreshRangePartitioner.findUncoveredRanges(existing,
+                range("2021-05-01", "2021-05-03"), Lists.newArrayList()).isEmpty());
+    }
+
+    private static Range<PartitionKey> range(String lower, String upper) throws AnalysisException {
+        Column partitionColumn = new Column("k1", DateType.DATETIME);
+        PartitionKey lo = PartitionKey.createPartitionKey(
+                Collections.singletonList(new PartitionValue(lower)),
+                Collections.singletonList(partitionColumn));
+        PartitionKey hi = PartitionKey.createPartitionKey(
+                Collections.singletonList(new PartitionValue(upper)),
+                Collections.singletonList(partitionColumn));
+        return Range.closedOpen(lo, hi);
     }
 }
