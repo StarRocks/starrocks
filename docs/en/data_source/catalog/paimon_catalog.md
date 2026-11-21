@@ -25,7 +25,7 @@ To ensure successful SQL workloads on your Paimon cluster, your StarRocks cluste
 
 ## Usage notes
 
-You can use Paimon catalogs to query data, create or drop Paimon databases and tables, and write data with INSERT INTO or INSERT OVERWRITE. UPDATE, DELETE, CREATE TABLE LIKE, and CREATE TABLE AS SELECT are not supported.
+You can use Paimon catalogs to query data, create or drop Paimon databases and tables, and write data with INSERT INTO, INSERT OVERWRITE, or CREATE TABLE AS SELECT. UPDATE, DELETE, and CREATE TABLE LIKE are not supported.
 
 ## Paimon to StarRocks data types
 
@@ -792,7 +792,19 @@ Alternatively, omit the `PRIMARY KEY (id, dt)` clause and add `"primary-key" = "
 
 - `DISTRIBUTED BY`, `ORDER BY`, `ROLLUP`, generated columns, aggregate columns, and `AUTO_INCREMENT` are not supported.
 - Non-NULL column defaults are not supported.
-- `CREATE TABLE LIKE`, `CREATE TABLE AS SELECT`, and writing data with `UPDATE` or `DELETE` are not supported.
+- `CREATE TABLE LIKE` and writing data with `UPDATE` or `DELETE` are not supported.
+
+### CREATE TABLE AS SELECT
+
+[CREATE TABLE AS SELECT](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) infers the target columns from the query, creates a Paimon table, and writes the query results using the same rules as `INSERT INTO`. Declare the target partition columns, primary key, and table properties in the statement when needed.
+
+```SQL
+CREATE TABLE paimon_catalog.write_db.orders_copy
+PROPERTIES ("bucket" = "-1", "file.format" = "parquet")
+AS SELECT id, amount FROM paimon_catalog.write_db.orders;
+```
+
+Table creation and snapshot publication are separate operations. If the write fails after creation, StarRocks retains the target table. Check its snapshots before deleting the table or retrying the statement. With `IF NOT EXISTS`, an existing target is left unchanged. Run Paimon CTAS outside an explicit transaction.
 
 ### DROP TABLE
 

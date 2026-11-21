@@ -14,6 +14,7 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
@@ -24,9 +25,13 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+import com.starrocks.connector.ConnectorType;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.paimon.PaimonCommitUnknownException;
+import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.connector.paimon.PaimonSinkExtra;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.metric.MetricRepo;
@@ -45,13 +50,16 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
+import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TPaimonCommitInfo;
@@ -62,13 +70,20 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.type.IntegerType;
+import org.apache.paimon.catalog.Catalog;
+import org.apache.paimon.catalog.CatalogContext;
+import org.apache.paimon.catalog.CatalogFactory;
+import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.fs.Path;
+import org.apache.paimon.options.Options;
 import org.apache.paimon.schema.Schema;
 import org.apache.paimon.schema.TableSchema;
 import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.types.DataTypes;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.mockito.MockedConstruction;
 import org.mockito.MockedStatic;
 
@@ -163,6 +178,42 @@ public class PaimonOperationPublicationTest {
             verify(fixture.metadata).abortSink("p", "db", "t", fixture.profile.getSinkCommitInfos(),
                     fixture.operation, fixture.context);
             verifyNoInteractions(fixture.transactions, fixture.loads);
+        }
+    }
+
+    @Test
+    public void testCtasRetainsCreatedTableWhenInsertFails(@TempDir java.nio.file.Path warehouse) throws Exception {
+        String sql = "CREATE TABLE p.db.t ENGINE=paimon AS SELECT 1 AS id";
+        CreateTableAsSelectStmt ctas = (CreateTableAsSelectStmt) SqlParser.parseSingleStatement(sql, 0);
+        ctas.getCreateTableStmt().setColumns(List.of(new Column("id", IntegerType.INT)));
+        Options options = Options.fromMap(Map.of("warehouse", warehouse.toUri().toString()));
+        Identifier identifier = Identifier.create("db", "t");
+        try (Fixture fixture = new Fixture(APPEND, 0, 0);
+                Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(options));
+                MockedStatic<StatementPlanner> planner = mockStatic(StatementPlanner.class);
+                MockedStatic<DDLStmtExecutor> ddl = mockStatic(DDLStmtExecutor.class)) {
+            catalog.createDatabase("db", false);
+            PaimonMetadata paimon = new PaimonMetadata("p", new HdfsEnvironment(), catalog,
+                    new ConnectorProperties(ConnectorType.PAIMON));
+            doAnswer(invocation -> paimon.createTable(fixture.context, ctas.getCreateTableStmt()))
+                    .when(fixture.metadata).createTable(fixture.context, ctas.getCreateTableStmt());
+
+            InsertStmt insert = ctas.getInsertStmt();
+            insert.setTargetTable(fixture.statement.getTargetTable());
+            planner.when(() -> StatementPlanner.plan(insert, fixture.context)).thenReturn(fixture.plan);
+            IllegalStateException writeFailure = new IllegalStateException("native writer failed");
+            doAnswer(invocation -> {
+                assertEquals(List.of("id"), catalog.getTable(identifier).rowType().getFieldNames());
+                throw writeFailure;
+            }).when(fixture.coordinator).exec();
+
+            StmtExecutor executor = new StmtExecutor(fixture.context, ctas);
+            StarRocksException failure = assertThrows(StarRocksException.class,
+                    () -> Deencapsulation.invoke(executor, "handleCreateTableAsSelectStmt", 0L));
+            assertSame(writeFailure, failure.getCause());
+            assertEquals(QueryState.MysqlStateType.ERR, fixture.queryState.getStateType());
+            ddl.verifyNoInteractions();
+            assertEquals(List.of("id"), catalog.getTable(identifier).rowType().getFieldNames());
         }
     }
 

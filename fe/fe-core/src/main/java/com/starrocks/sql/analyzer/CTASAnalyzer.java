@@ -95,9 +95,7 @@ public class CTASAnalyzer {
         createTableStmt.setTableRef(normalizedTableRef);
         TableName tableNameObject = TableName.fromTableRef(normalizedTableRef);
         CreateTableAnalyzer.analyzeEngineName(createTableStmt, tableNameObject.getCatalog());
-        if (Table.TableType.PAIMON.name().equalsIgnoreCase(createTableStmt.getEngineName())) {
-            throw new SemanticException("Paimon CREATE TABLE AS SELECT is not supported");
-        }
+        boolean isPaimon = Table.TableType.PAIMON.name().equalsIgnoreCase(createTableStmt.getEngineName());
 
         // Recursive CTE execution rewrites and analyzes the same CTAS AST again. Preserve the columns
         // inferred from the original query instead of appending columns derived from the rewritten query.
@@ -106,31 +104,38 @@ public class CTASAnalyzer {
                 Type type = AnalyzerUtils.transformTableColumnType(allFields.get(i).getType(),
                         createTableStmt.isOlapEngine(), /* preferStringForVarchar */ false);
                 Expr originExpression = allFields.get(i).getOriginExpression();
+                Boolean allowNull = originExpression.isNullable();
+                if (isPaimon && allowNull) {
+                    // The source expression does not declare NULL on the target column. Paimon
+                    // derives NOT NULL for primary keys, including keys specified in PROPERTIES.
+                    allowNull = null;
+                }
                 ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
-                        null, null, originExpression.isNullable(), ColumnDef.DefaultValueDef.NOT_SET, "");
-                if (isPKTable && keysDesc.containsCol(finalColumnNames.get(i))) {
+                        null, null, allowNull, ColumnDef.DefaultValueDef.NOT_SET, "");
+                if (!isPaimon && isPKTable && keysDesc.containsCol(finalColumnNames.get(i))) {
                     columnDef.setAllowNull(false);
                 }
                 createTableStmt.addColumnDef(columnDef);
             }
         }
 
-        // For replication_num, The behavior is the same as creating a table
-        int defaultReplicationNum = RunMode.defaultReplicationNum();
-
-        Map<String, String> stmtProperties = createTableStmt.getProperties();
-        if (null == stmtProperties) {
-            Map<String, String> properties = Maps.newHashMap();
-            properties.put("replication_num", String.valueOf(defaultReplicationNum));
-            createTableStmt.setProperties(properties);
-        } else if (!stmtProperties.containsKey("replication_num")) {
-            stmtProperties.put("replication_num", String.valueOf(defaultReplicationNum));
+        // Paimon validates PROPERTIES as native table options.
+        if (!isPaimon) {
+            int defaultReplicationNum = RunMode.defaultReplicationNum();
+            Map<String, String> stmtProperties = createTableStmt.getProperties();
+            if (stmtProperties == null) {
+                Map<String, String> properties = Maps.newHashMap();
+                properties.put("replication_num", String.valueOf(defaultReplicationNum));
+                createTableStmt.setProperties(properties);
+            } else if (!stmtProperties.containsKey("replication_num")) {
+                stmtProperties.put("replication_num", String.valueOf(defaultReplicationNum));
+            }
         }
 
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
         List<ColumnDef> columnDefs = createTableStmt.getColumnDefs();
 
-        if (partitionDesc instanceof ExpressionPartitionDesc) {
+        if (!isPaimon && partitionDesc instanceof ExpressionPartitionDesc) {
             ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expressionPartitionDesc.getExpr();
             AnalyzerUtils.checkAndExtractPartitionCol(functionCallExpr, columnDefs);

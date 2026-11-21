@@ -186,6 +186,7 @@ import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AnalyzeTypeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.DdlStmt;
@@ -1644,6 +1645,17 @@ public class StmtExecutor {
     }
 
     private void dropTableCreatedByCTAS(CreateTableAsSelectStmt stmt) throws Exception {
+        if (Table.TableType.PAIMON.name().equalsIgnoreCase(stmt.getCreateTableStmt().getEngineName())) {
+            // The catalog cannot conditionally drop this table by identity. Preserve it if the
+            // write may have committed or another client has replaced the table.
+            CreateTableStmt table = stmt.getCreateTableStmt();
+            PaimonSinkExtra.PublicationState state = paimonOperation == null ? null : paimonOperation.getPublicationState();
+            Tracers.record(Tracers.Module.EXTERNAL, "PaimonCTASCleanup", "TARGET_RETAINED");
+            LOG.warn("Paimon CTAS failed for {}.{}.{}. Target retained (operation: {}, publication state: {})",
+                    table.getCatalogName(), table.getDbName(), table.getTableName(),
+                    paimonOperation == null ? null : paimonOperation.getOperationId(), state);
+            return;
+        }
         if (stmt instanceof CreateTemporaryTableAsSelectStmt) {
             DropTemporaryTableStmt dropTemporaryTableStmt =
                     new DropTemporaryTableStmt(true, stmt.getCreateTableStmt().getTableRef(), true);

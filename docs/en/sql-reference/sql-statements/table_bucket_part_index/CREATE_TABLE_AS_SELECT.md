@@ -62,9 +62,9 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../loading_unloadin
 
 ## Usage notes
 
-- The CTAS statement can only create a new table that meets the following requirements:
-  - `ENGINE` is `OLAP`.
+- To create a Paimon target, use a fully qualified name in the Paimon catalog. See [Paimon CTAS](../../../data_source/catalog/paimon_catalog.md#create-table-as-select) for supported options and failure behavior.
 
+- The following defaults apply to OLAP targets.
   - The table is a Duplicate Key table by default. You can also specify it as a Primary Key table in `key_desc`.
 
   - The sort keys are the first three columns, and the storage space of the data types of these three columns does not exceed 36 bytes.
