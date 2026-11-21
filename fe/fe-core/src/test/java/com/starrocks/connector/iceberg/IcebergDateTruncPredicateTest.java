@@ -32,9 +32,13 @@ import org.apache.iceberg.expressions.Evaluator;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.types.Types;
+<<<<<<< HEAD
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
+=======
+import org.junit.jupiter.api.Assertions;
+>>>>>>> f5447c20d93... [BugFix][RB-888] Restore Iceberg pruning for day and integral decimal predicates (#67513)
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
@@ -50,6 +54,7 @@ public class IcebergDateTruncPredicateTest {
             Types.NestedField.optional(1, "ts", Types.TimestampType.withZone()));
     private final ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
 
+<<<<<<< HEAD
     @BeforeEach
     public void setUp() {
         // preimages are only derived inside a session
@@ -61,6 +66,8 @@ public class IcebergDateTruncPredicateTest {
         ConnectContext.remove();
     }
 
+=======
+>>>>>>> f5447c20d93... [BugFix][RB-888] Restore Iceberg pruning for day and integral decimal predicates (#67513)
     @Test
     public void testTimestampDayRangeAndMicrosecondBoundaries() {
         withSessionZone("Asia/Shanghai", () -> {
@@ -69,9 +76,14 @@ public class IcebergDateTruncPredicateTest {
             Expression expression = convert(predicate, TIMESTAMP_SCHEMA);
             // A timestamp without zone must not depend on the session time zone.
             assertDayRange(expression, TIMESTAMP_SCHEMA, day, ZoneOffset.UTC);
+<<<<<<< HEAD
             // the range only selects files, so a metadata-only delete must not use it
             Assertions.assertNull(converter.convertStrict(List.of(predicate),
                     new ScalarOperatorToIcebergExpr.IcebergContext(TIMESTAMP_SCHEMA.asStruct())));
+=======
+            Assertions.assertEquals(expression.toString(), converter.convertStrict(List.of(predicate),
+                    new ScalarOperatorToIcebergExpr.IcebergContext(TIMESTAMP_SCHEMA.asStruct())).toString());
+>>>>>>> f5447c20d93... [BugFix][RB-888] Restore Iceberg pruning for day and integral decimal predicates (#67513)
         });
     }
 
@@ -87,6 +99,7 @@ public class IcebergDateTruncPredicateTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testTimestampWithZoneDaylightSavingDays() {
         ZoneId zone = ZoneId.of("America/Los_Angeles");
         withSessionZone(zone.getId(), () -> {
@@ -94,6 +107,16 @@ public class IcebergDateTruncPredicateTest {
             for (LocalDateTime day : List.of(LocalDateTime.of(2026, 3, 8, 0, 0),
                     LocalDateTime.of(2026, 11, 1, 0, 0))) {
                 assertDayRange(convert(dayPredicate(TS, "day", day), TIMESTAMPTZ_SCHEMA), TIMESTAMPTZ_SCHEMA, day, zone);
+=======
+    public void testTimestampWithZoneDaylightSavingTransitionsRemainResidual() {
+        ZoneId zone = ZoneId.of("America/Los_Angeles");
+        withSessionZone(zone.getId(), () -> {
+            for (LocalDateTime day : List.of(LocalDateTime.of(2026, 3, 8, 0, 0),
+                    LocalDateTime.of(2026, 11, 1, 0, 0))) {
+                // The FE cannot tell whether a BE uses the current fixed offset (fast Parquet mode)
+                // or the date's true offset. Keep both 23-hour and 25-hour days residual.
+                assertResidual(dayPredicate(TS, "day", day), TIMESTAMPTZ_SCHEMA);
+>>>>>>> f5447c20d93... [BugFix][RB-888] Restore Iceberg pruning for day and integral decimal predicates (#67513)
             }
         });
     }
@@ -121,6 +144,7 @@ public class IcebergDateTruncPredicateTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testOtherUnitsComparisonsAndCasts() {
         LocalDateTime day = LocalDateTime.of(2026, 10, 28, 0, 0);
         // no value truncates to a month start of 10-28
@@ -133,11 +157,21 @@ public class IcebergDateTruncPredicateTest {
         assertConverted(BinaryType.GT, day, Expressions.greaterThanOrEqual("ts", upper));
         assertConverted(BinaryType.LE, day, Expressions.lessThan("ts", upper));
         assertConverted(BinaryType.LT, day, Expressions.lessThan("ts", lower));
+=======
+    public void testOtherUnitsComparisonsAndCastsRemainResidual() {
+        LocalDateTime day = LocalDateTime.of(2026, 10, 28, 0, 0);
+        assertResidual(dayPredicate(TS, "month", day), TIMESTAMP_SCHEMA);
+        for (BinaryType type : List.of(BinaryType.NE, BinaryType.GE, BinaryType.GT, BinaryType.LE, BinaryType.LT)) {
+            assertResidual(new BinaryPredicateOperator(type, dateTrunc(TS, "day"),
+                    ConstantOperator.createDatetime(day)), TIMESTAMP_SCHEMA);
+        }
+>>>>>>> f5447c20d93... [BugFix][RB-888] Restore Iceberg pruning for day and integral decimal predicates (#67513)
         ColumnRefOperator text = new ColumnRefOperator(2, VarcharType.VARCHAR, "text", true);
         Schema textSchema = new Schema(Types.NestedField.optional(2, "text", Types.StringType.get()));
         assertResidual(dayPredicate(new CastOperator(DateType.DATETIME, text), "day", day), textSchema);
         assertResidual(dayPredicate(new CastOperator(DateType.DATETIME, new CastOperator(DateType.DATE, TS)),
                 "day", day), TIMESTAMP_SCHEMA);
+<<<<<<< HEAD
         Schema dateSchema = new Schema(Types.NestedField.optional(1, "ts", Types.DateType.get()));
         long epochDay = day.toLocalDate().toEpochDay();
         Expression expected = Expressions.and(Expressions.greaterThanOrEqual("ts", epochDay),
@@ -168,6 +202,20 @@ public class IcebergDateTruncPredicateTest {
             long upper = micros(day.plusDays(1), zone);
             assertRange(convert(dayPredicate(TS, "day", day), TIMESTAMPTZ_SCHEMA), TIMESTAMPTZ_SCHEMA, lower, upper);
         });
+=======
+        assertResidual(dayPredicate(TS, "day", day),
+                new Schema(Types.NestedField.optional(1, "ts", Types.DateType.get())));
+    }
+
+    @Test
+    public void testMidnightTimeZoneTransitionsRemainResidual() {
+        // Midnight is nonexistent in Sao Paulo on this day; avoid depending on ambiguity-resolution rules.
+        withSessionZone("America/Sao_Paulo", () -> assertResidual(
+                dayPredicate(TS, "day", LocalDateTime.of(2018, 11, 4, 0, 0)), TIMESTAMPTZ_SCHEMA));
+        // Midnight occurs twice in Havana on this day.
+        withSessionZone("America/Havana", () -> assertResidual(
+                dayPredicate(TS, "day", LocalDateTime.of(2020, 11, 1, 0, 0)), TIMESTAMPTZ_SCHEMA));
+>>>>>>> f5447c20d93... [BugFix][RB-888] Restore Iceberg pruning for day and integral decimal predicates (#67513)
     }
 
     @Test
@@ -208,10 +256,15 @@ public class IcebergDateTruncPredicateTest {
     }
 
     private void assertDayRange(Expression expression, Schema schema, LocalDateTime day, ZoneId zone) {
+<<<<<<< HEAD
         assertRange(expression, schema, micros(day, zone), micros(day.plusDays(1), zone));
     }
 
     private void assertRange(Expression expression, Schema schema, long lower, long upper) {
+=======
+        long lower = micros(day, zone);
+        long upper = micros(day.plusDays(1), zone);
+>>>>>>> f5447c20d93... [BugFix][RB-888] Restore Iceberg pruning for day and integral decimal predicates (#67513)
         Expression expected = Expressions.and(Expressions.greaterThanOrEqual("ts", lower), Expressions.lessThan("ts", upper));
         Assertions.assertEquals(expected.toString(), expression.toString());
         Evaluator evaluator = new Evaluator(schema.asStruct(), expression);

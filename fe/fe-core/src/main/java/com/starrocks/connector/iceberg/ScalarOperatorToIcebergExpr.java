@@ -17,7 +17,10 @@ package com.starrocks.connector.iceberg;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.catalog.Column;
+=======
+>>>>>>> f5447c20d93... [BugFix][RB-888] Restore Iceberg pruning for day and integral decimal predicates (#67513)
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.util.TimeUtils;
@@ -58,7 +61,13 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.math.RoundingMode;
+<<<<<<< HEAD
 import java.time.LocalDateTime;
+=======
+import java.time.DateTimeException;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+>>>>>>> f5447c20d93... [BugFix][RB-888] Restore Iceberg pruning for day and integral decimal predicates (#67513)
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -300,8 +309,12 @@ public class ScalarOperatorToIcebergExpr {
         public Expression visitBinaryPredicate(BinaryPredicateOperator operator, IcebergContext context) {
             String columnName = getColumnName(operator.getChild(0));
             if (columnName == null) {
+<<<<<<< HEAD
                 return derivePreimage(operator.getChild(0), operator.getBinaryType(),
                         List.of(operator.getChild(1)), context);
+=======
+                return convertDateTruncDayEquality(operator, context);
+>>>>>>> f5447c20d93... [BugFix][RB-888] Restore Iceberg pruning for day and integral decimal predicates (#67513)
             }
 
             Type icebergType = getResultType(columnName, context);
@@ -339,6 +352,51 @@ public class ScalarOperatorToIcebergExpr {
                     return notEqual(columnName, literalValue);
                 default:
                     return null;
+            }
+        }
+
+        private Expression convertDateTruncDayEquality(BinaryPredicateOperator operator, IcebergContext context) {
+            // Leave NOT residual: Iceberg's two-valued negation must not turn a SQL UNKNOWN into a match.
+            if (context.isInsideNot() || operator.getBinaryType() != BinaryType.EQ
+                    || !(operator.getChild(0) instanceof CallOperator call)
+                    || !FunctionSet.DATE_TRUNC.equalsIgnoreCase(call.getFnName())
+                    || call.getChildren().size() != 2 || !call.getType().isDatetime()
+                    || !call.getChild(1).getType().isDatetime()
+                    || !(call.getChild(0) instanceof ConstantOperator unit)
+                    || unit.isNull() || !unit.getType().isStringType() || !"day".equalsIgnoreCase(unit.getVarchar())
+                    || !(operator.getChild(1) instanceof ConstantOperator value)
+                    || value.isNull() || !value.getType().isDatetime()) {
+                return null;
+            }
+
+            String columnName = getColumnName(call.getChild(1));
+            if (columnName == null) {
+                return null;
+            }
+            Type icebergType = getResultType(columnName, context);
+            if (icebergType == null || icebergType.typeId() != Type.TypeID.TIMESTAMP) {
+                return null;
+            }
+
+            LocalDateTime lower = value.getDatetime();
+            if (!lower.toLocalTime().equals(LocalTime.MIDNIGHT)) {
+                return null;
+            }
+            ZoneId zone = Types.TimestampType.withZone().equals(icebergType)
+                    ? TimeUtils.getTimeZone().toZoneId() : ZoneOffset.UTC;
+            // A BE may use parquet_fast_timezone_conversion, which reads TIMESTAMPTZ with the
+            // current fixed offset instead of each value's historical offset. FE cannot observe that
+            // per-BE setting, so only derive a range when both reading modes have identical semantics.
+            if (!zone.getRules().isFixedOffset()) {
+                return null;
+            }
+            try {
+                LocalDateTime upper = lower.plusDays(1);
+                long lowerMicros = Math.multiplyExact(lower.atZone(zone).toEpochSecond(), 1_000_000L);
+                long upperMicros = Math.multiplyExact(upper.atZone(zone).toEpochSecond(), 1_000_000L);
+                return and(greaterThanOrEqual(columnName, lowerMicros), lessThan(columnName, upperMicros));
+            } catch (DateTimeException | ArithmeticException e) {
+                return null;
             }
         }
 
