@@ -325,7 +325,10 @@ public class AstToSQLBuilder {
             StringBuilder sqlBuilder = new StringBuilder();
             sqlBuilder.append(node.getName().toSql());
 
-            if (StringUtils.isEmpty(node.getQueryPeriodString()) && node.getQueryPeriod() != null) {
+            if (StringUtils.isNotEmpty(node.getQueryPeriodString())) {
+                sqlBuilder.append(" ");
+                sqlBuilder.append(StringUtils.trim(node.getQueryPeriodString()));
+            } else if (node.getQueryPeriod() != null) {
                 // The raw clause text is only recorded by the StarRocks parser. Other producers - the Trino
                 // dialect - build the typed period alone, so render that here: without it a serialize/reparse
                 // round trip would drop the time travel clause and silently read the latest snapshot.
