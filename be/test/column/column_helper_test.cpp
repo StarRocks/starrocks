@@ -534,4 +534,45 @@ TEST_F(ColumnHelperTest, create_nested_geo_columns) {
     }
 }
 
+TEST_F(ColumnHelperTest, merge_nullable_filter_preserves_non_canonical_truthy_bytes) {
+    const std::vector<uint8_t> raw_bytes = {0x00, 0x01, 0x02, 0x7f, 0x80, 0xff};
+
+    // Case 1: NullableColumn with has_null() == false (all nulls == 0).
+    {
+        auto data_col = BooleanColumn::create();
+        data_col->get_data().assign(raw_bytes.begin(), raw_bytes.end());
+        auto null_col = NullColumn::create(raw_bytes.size(), 0);
+        auto nullable_col = NullableColumn::create(std::move(data_col), std::move(null_col));
+        ASSERT_FALSE(nullable_col->has_null());
+
+        Filter& merged = ColumnHelper::merge_nullable_filter(nullable_col.get());
+        ASSERT_EQ(raw_bytes.size(), merged.size());
+        EXPECT_EQ(0u, merged[0]);
+        for (size_t i = 1; i < raw_bytes.size(); ++i) {
+            EXPECT_NE(0u, merged[i]) << "i=" << i << " byte=" << static_cast<int>(raw_bytes[i]);
+        }
+    }
+
+    // Case 2: NullableColumn with has_null() == true (null on selected indices, non-null on others).
+    {
+        auto data_col = BooleanColumn::create();
+        data_col->get_data().assign(raw_bytes.begin(), raw_bytes.end());
+        auto null_col = NullColumn::create(raw_bytes.size(), 0);
+        null_col->get_data()[2] = 1; // null out 0x02 at index 2
+        null_col->get_data()[5] = 1; // null out 0xff at index 5
+        auto nullable_col = NullableColumn::create(std::move(data_col), std::move(null_col));
+        nullable_col->update_has_null();
+        ASSERT_TRUE(nullable_col->has_null());
+
+        Filter& merged = ColumnHelper::merge_nullable_filter(nullable_col.get());
+        ASSERT_EQ(raw_bytes.size(), merged.size());
+        EXPECT_EQ(0u, merged[0]);
+        EXPECT_NE(0u, merged[1]); // 0x01 not null -> truthy
+        EXPECT_EQ(0u, merged[2]); // 0x02 is null  -> 0
+        EXPECT_NE(0u, merged[3]); // 0x7f not null -> truthy
+        EXPECT_NE(0u, merged[4]); // 0x80 not null -> truthy
+        EXPECT_EQ(0u, merged[5]); // 0xff is null  -> 0
+    }
+}
+
 } // namespace starrocks

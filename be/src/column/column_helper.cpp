@@ -35,14 +35,16 @@ namespace starrocks {
 Filter& ColumnHelper::merge_nullable_filter(Column* column) {
     if (column->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(column);
-        auto nulls = nullable_column->null_column_data().data();
         auto& sel_vec = (down_cast<UInt8Column*>(nullable_column->data_column_raw_ptr()))->get_data();
-        // NOTE(zc): Must use uint8_t* to enable auto-vectorized.
-        auto selected = sel_vec.data();
-        size_t num_rows = sel_vec.size();
-        // we treat null(1) as false(0); compiler auto-vectorises this loop.
-        for (size_t i = 0; i < num_rows; ++i) {
-            selected[i] = static_cast<uint8_t>(selected[i] & !nulls[i]);
+        if (nullable_column->has_null()) {
+            auto nulls = nullable_column->null_column_data().data();
+            // NOTE(zc): Must use uint8_t* to enable auto-vectorized.
+            auto selected = sel_vec.data();
+            size_t num_rows = sel_vec.size();
+            // we treat null(1) as false(0); compiler auto-vectorises this loop.
+            for (size_t i = 0; i < num_rows; ++i) {
+                selected[i] = static_cast<uint8_t>((selected[i] != 0) & !nulls[i]);
+            }
         }
         return sel_vec;
     } else {
