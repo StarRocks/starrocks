@@ -12,8 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <numeric>
+#include <vector>
+
+#include "base/simd/filter.h"
+#include "column/adaptive_nullable_column.h"
 #include "column/append_with_mask.h"
 #include "column/binary_column.h"
+#include "column/column_helper.h"
+#include "column/column_view/column_view.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "gtest/gtest.h"
@@ -57,6 +64,874 @@ TEST(AppendWithMaskCoreTest, appendNullableColumnWithMask) {
     ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask, 3).ok());
 
     ASSERT_EQ("[10, NULL]", dst->debug_string());
+}
+
+TEST(AppendWithMaskCoreTest, appendAllSelectedRows) {
+    // 1. FixedLengthColumnBase<int64_t>
+    {
+        auto src = Int64Column::create();
+        for (int64_t i = 100; i < 110; ++i) {
+            src->append(i);
+        }
+        std::vector<uint8_t> mask(src->size(), 1);
+        auto dst = Int64Column::create();
+        dst->append(static_cast<int64_t>(99));
+        ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask.data(), src->size()).ok());
+        ASSERT_EQ(11, dst->size());
+        EXPECT_EQ(99, dst->get_data()[0]);
+        for (size_t i = 0; i < src->size(); ++i) {
+            EXPECT_EQ(src->get_data()[i], dst->get_data()[i + 1]);
+        }
+    }
+
+    // 2. BinaryColumn
+    {
+        auto src = BinaryColumn::create();
+        for (int i = 0; i < 20; ++i) {
+            src->append("str_" + std::to_string(i));
+        }
+        std::vector<uint8_t> mask(src->size(), 1);
+        auto dst = BinaryColumn::create();
+        dst->append("prefix");
+        ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask.data(), src->size()).ok());
+        ASSERT_EQ(21, dst->size());
+        EXPECT_EQ("prefix", dst->get_slice(0).to_string());
+        for (size_t i = 0; i < src->size(); ++i) {
+            EXPECT_EQ(src->get_slice(i).to_string(), dst->get_slice(i + 1).to_string());
+        }
+    }
+
+    // 3. NullableColumn (with nulls)
+    {
+        auto src = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        for (int32_t i = 0; i < 15; ++i) {
+            if (i % 3 == 0) {
+                src->append_nulls(1);
+            } else {
+                src->append_datum(Datum(i));
+            }
+        }
+        std::vector<uint8_t> mask(src->size(), 1);
+        auto dst = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        dst->append_datum(Datum(static_cast<int32_t>(-1)));
+        ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask.data(), src->size()).ok());
+        ASSERT_EQ(16, dst->size());
+        EXPECT_FALSE(dst->is_null(0));
+        EXPECT_EQ(-1, dst->get(0).get_int32());
+        for (size_t i = 0; i < src->size(); ++i) {
+            EXPECT_EQ(src->is_null(i), dst->is_null(i + 1));
+            if (!src->is_null(i)) {
+                EXPECT_EQ(src->get(i).get_int32(), dst->get(i + 1).get_int32());
+            }
+        }
+    }
+
+    // 4. NullableColumn (without nulls)
+    {
+        auto src = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        for (int32_t i = 0; i < 10; ++i) {
+            src->append_datum(Datum(i * 10));
+        }
+        std::vector<uint8_t> mask(src->size(), 1);
+        auto dst = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask.data(), src->size()).ok());
+        ASSERT_EQ(10, dst->size());
+        EXPECT_FALSE(dst->has_null());
+        for (size_t i = 0; i < src->size(); ++i) {
+            EXPECT_EQ(src->get(i).get_int32(), dst->get(i).get_int32());
+        }
+    }
+
+    // 5. NullableColumn (only nulls)
+    {
+        auto src = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        src->append_nulls(8);
+        std::vector<uint8_t> mask(src->size(), 1);
+        auto dst = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask.data(), src->size()).ok());
+        ASSERT_EQ(8, dst->size());
+        EXPECT_TRUE(dst->has_null());
+        for (size_t i = 0; i < 8; ++i) {
+            EXPECT_TRUE(dst->is_null(i));
+        }
+    }
+}
+
+TEST(AppendWithMaskCoreTest, appendNoneSelectedRows) {
+    // 1. FixedLengthColumnBase<int64_t>
+    {
+        auto src = Int64Column::create();
+        for (int64_t i = 0; i < 30; ++i) {
+            src->append(i);
+        }
+        std::vector<uint8_t> mask(src->size(), 0);
+        auto dst = Int64Column::create();
+        dst->append(static_cast<int64_t>(42));
+        ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask.data(), src->size()).ok());
+        ASSERT_EQ(1, dst->size());
+        EXPECT_EQ(42, dst->get_data()[0]);
+    }
+
+    // 2. BinaryColumn
+    {
+        auto src = BinaryColumn::create();
+        for (int i = 0; i < 20; ++i) {
+            src->append("data_" + std::to_string(i));
+        }
+        std::vector<uint8_t> mask(src->size(), 0);
+        auto dst = BinaryColumn::create();
+        dst->append("stay");
+        ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask.data(), src->size()).ok());
+        ASSERT_EQ(1, dst->size());
+        EXPECT_EQ("stay", dst->get_slice(0).to_string());
+    }
+
+    // 3. NullableColumn
+    {
+        auto src = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        for (int32_t i = 0; i < 10; ++i) {
+            src->append_datum(Datum(i));
+        }
+        std::vector<uint8_t> mask(src->size(), 0);
+        auto dst = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        dst->append_datum(Datum(static_cast<int32_t>(7)));
+        ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask.data(), src->size()).ok());
+        ASSERT_EQ(1, dst->size());
+        EXPECT_EQ(7, dst->get(0).get_int32());
+    }
+}
+
+TEST(AppendWithMaskCoreTest, appendContiguousRunsVaryingLengths) {
+    // Build a sequence with runs: 100 selected, 10 skipped, 50 selected, 5 skipped, 1 selected, 2 skipped, 30 selected
+    const size_t total_rows = 100 + 10 + 50 + 5 + 1 + 2 + 30;
+    std::vector<uint8_t> mask(total_rows, 0);
+
+    size_t idx = 0;
+    // 100 selected
+    for (size_t i = 0; i < 100; ++i) mask[idx++] = 1;
+    // 10 skipped
+    for (size_t i = 0; i < 10; ++i) mask[idx++] = 0;
+    // 50 selected
+    for (size_t i = 0; i < 50; ++i) mask[idx++] = 1;
+    // 5 skipped
+    for (size_t i = 0; i < 5; ++i) mask[idx++] = 0;
+    // 1 selected
+    for (size_t i = 0; i < 1; ++i) mask[idx++] = 1;
+    // 2 skipped
+    for (size_t i = 0; i < 2; ++i) mask[idx++] = 0;
+    // 30 selected
+    for (size_t i = 0; i < 30; ++i) mask[idx++] = 1;
+    ASSERT_EQ(idx, total_rows);
+
+    const size_t expected_selected = 100 + 50 + 1 + 30;
+
+    // Test on FixedLengthColumnBase<int64_t>
+    {
+        auto src = Int64Column::create();
+        for (size_t i = 0; i < total_rows; ++i) {
+            src->append(static_cast<int64_t>(1000 + i));
+        }
+
+        auto dst = Int64Column::create();
+        ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask.data(), total_rows).ok());
+        ASSERT_EQ(expected_selected, dst->size());
+
+        size_t out_idx = 0;
+        for (size_t i = 0; i < total_rows; ++i) {
+            if (mask[i]) {
+                EXPECT_EQ(src->get_data()[i], dst->get_data()[out_idx++]);
+            }
+        }
+        EXPECT_EQ(expected_selected, out_idx);
+    }
+
+    // Test on BinaryColumn
+    {
+        auto src = BinaryColumn::create();
+        for (size_t i = 0; i < total_rows; ++i) {
+            src->append("value_string_" + std::to_string(i));
+        }
+
+        auto dst = BinaryColumn::create();
+        ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask.data(), total_rows).ok());
+        ASSERT_EQ(expected_selected, dst->size());
+
+        size_t out_idx = 0;
+        for (size_t i = 0; i < total_rows; ++i) {
+            if (mask[i]) {
+                EXPECT_EQ(src->get_slice(i).to_string(), dst->get_slice(out_idx++).to_string());
+            }
+        }
+        EXPECT_EQ(expected_selected, out_idx);
+    }
+}
+
+TEST(AppendWithMaskCoreTest, appendNegativeSelection) {
+    // Negative selection: 0 means selected, non-zero means skipped.
+    const size_t total_rows = 60;
+    std::vector<uint8_t> mask(total_rows, 1);
+    // Mark rows [10, 20) and [40, 55) with 0 (selected under negative selection)
+    for (size_t i = 10; i < 20; ++i) mask[i] = 0;
+    for (size_t i = 40; i < 55; ++i) mask[i] = 0;
+    const size_t expected_selected = 10 + 15;
+
+    // Fixed length column
+    {
+        auto src = Int32Column::create();
+        for (size_t i = 0; i < total_rows; ++i) {
+            src->append(static_cast<int32_t>(i));
+        }
+        auto dst = Int32Column::create();
+        ASSERT_TRUE(append_with_mask<false>(dst.get(), *src, mask.data(), total_rows).ok());
+        ASSERT_EQ(expected_selected, dst->size());
+
+        size_t out_idx = 0;
+        for (size_t i = 0; i < total_rows; ++i) {
+            if (mask[i] == 0) {
+                EXPECT_EQ(src->get_data()[i], dst->get_data()[out_idx++]);
+            }
+        }
+        EXPECT_EQ(expected_selected, out_idx);
+    }
+
+    // Binary column
+    {
+        auto src = BinaryColumn::create();
+        for (size_t i = 0; i < total_rows; ++i) {
+            src->append("neg_str_" + std::to_string(i));
+        }
+        auto dst = BinaryColumn::create();
+        ASSERT_TRUE(append_with_mask<false>(dst.get(), *src, mask.data(), total_rows).ok());
+        ASSERT_EQ(expected_selected, dst->size());
+
+        size_t out_idx = 0;
+        for (size_t i = 0; i < total_rows; ++i) {
+            if (mask[i] == 0) {
+                EXPECT_EQ(src->get_slice(i).to_string(), dst->get_slice(out_idx++).to_string());
+            }
+        }
+        EXPECT_EQ(expected_selected, out_idx);
+    }
+
+    // All unselected under negative selection (all mask bytes are non-zero)
+    {
+        auto src = Int32Column::create();
+        src->append(100);
+        std::vector<uint8_t> all_ones = {1, 2, 255};
+        auto dst = Int32Column::create();
+        ASSERT_TRUE(append_with_mask<false>(dst.get(), *src, all_ones.data(), 1).ok());
+        EXPECT_EQ(0, dst->size());
+    }
+
+    // All selected under negative selection (all mask bytes are 0)
+    {
+        auto src = Int32Column::create();
+        for (int32_t i = 0; i < 8; ++i) {
+            src->append(i);
+        }
+        std::vector<uint8_t> all_zeros(8, 0);
+        auto dst = Int32Column::create();
+        ASSERT_TRUE(append_with_mask<false>(dst.get(), *src, all_zeros.data(), 8).ok());
+        ASSERT_EQ(8, dst->size());
+        for (int32_t i = 0; i < 8; ++i) {
+            EXPECT_EQ(i, dst->get_data()[i]);
+        }
+    }
+}
+
+TEST(AppendWithMaskCoreTest, appendArbitraryNonZeroMaskBytes) {
+    auto src = Int32Column::create();
+    for (int32_t i = 0; i < 6; ++i) {
+        src->append(i + 1);
+    }
+    // Non-zero mask bytes: 0xFF, 2, 0x80, 0, 127, 0
+    const uint8_t mask[] = {0xFF, 2, 0x80, 0, 127, 0};
+
+    // Positive selection: all non-zero bytes are selected (0xFF, 2, 0x80, 127) -> rows 0, 1, 2, 4
+    auto pos_dst = Int32Column::create();
+    ASSERT_TRUE(append_with_mask<true>(pos_dst.get(), *src, mask, 6).ok());
+    EXPECT_EQ("[1, 2, 3, 5]", pos_dst->debug_string());
+
+    // Negative selection: only 0 is selected -> rows 3, 5
+    auto neg_dst = Int32Column::create();
+    ASSERT_TRUE(append_with_mask<false>(neg_dst.get(), *src, mask, 6).ok());
+    EXPECT_EQ("[4, 6]", neg_dst->debug_string());
+}
+
+TEST(AppendWithMaskCoreTest, appendBinaryViewColumnFallback) {
+    auto base_col = BinaryColumn::create();
+    base_col->append("apple");
+    base_col->append("banana");
+    base_col->append("cherry");
+    base_col->append("date");
+
+    auto view = ColumnView::create(BinaryColumn::create(), 1, -1);
+    view->append(*base_col, 0, base_col->size());
+    ASSERT_TRUE(view->is_binary_view());
+    ASSERT_EQ(4, view->size());
+
+    const uint8_t mask[] = {1, 0, 1, 0};
+
+    auto dst = BinaryColumn::create();
+    ASSERT_TRUE(append_with_mask<true>(dst.get(), *view, mask, 4).ok());
+    ASSERT_EQ(2, dst->size());
+    EXPECT_EQ("apple", dst->get_slice(0).to_string());
+    EXPECT_EQ("cherry", dst->get_slice(1).to_string());
+
+    auto neg_dst = BinaryColumn::create();
+    ASSERT_TRUE(append_with_mask<false>(neg_dst.get(), *view, mask, 4).ok());
+    ASSERT_EQ(2, neg_dst->size());
+    EXPECT_EQ("banana", neg_dst->get_slice(0).to_string());
+    EXPECT_EQ("date", neg_dst->get_slice(1).to_string());
+}
+
+TEST(AppendWithMaskCoreTest, appendViewToNullableColumnAllSelected) {
+    auto base_col = BinaryColumn::create();
+    base_col->append("star");
+    base_col->append("rocks");
+    base_col->append("simd");
+    base_col->append("vector");
+
+    auto view = ColumnView::create(BinaryColumn::create(), 1, -1);
+    view->append(*base_col, 0, base_col->size());
+    ASSERT_TRUE(view->is_binary_view());
+    ASSERT_EQ(4, view->size());
+
+    // 1. Direct BinaryView into NullableColumn with all-selected mask
+    const uint8_t all_ones_mask[] = {1, 1, 1, 1};
+    auto dst = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    ASSERT_TRUE(append_with_mask<true>(dst.get(), *view, all_ones_mask, 4).ok());
+    ASSERT_EQ(4, dst->size());
+    EXPECT_EQ("star", dst->get(0).get_slice().to_string());
+    EXPECT_EQ("rocks", dst->get(1).get_slice().to_string());
+    EXPECT_EQ("simd", dst->get(2).get_slice().to_string());
+    EXPECT_EQ("vector", dst->get(3).get_slice().to_string());
+    for (size_t i = 0; i < 4; ++i) {
+        EXPECT_FALSE(dst->is_null(i));
+    }
+
+    // 2. Nullable-wrapped BinaryView into NullableColumn with all-selected mask
+    auto view_null = NullColumn::create();
+    view_null->append(0);
+    view_null->append(1); // "rocks" is null
+    view_null->append(0);
+    view_null->append(0);
+    auto nullable_view = NullableColumn::create(view, view_null);
+
+    auto dst2 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    ASSERT_TRUE(append_with_mask<true>(dst2.get(), *nullable_view, all_ones_mask, 4).ok());
+    ASSERT_EQ(4, dst2->size());
+    EXPECT_FALSE(dst2->is_null(0));
+    EXPECT_TRUE(dst2->is_null(1));
+    EXPECT_FALSE(dst2->is_null(2));
+    EXPECT_FALSE(dst2->is_null(3));
+    EXPECT_EQ("star", dst2->get(0).get_slice().to_string());
+    EXPECT_EQ("simd", dst2->get(2).get_slice().to_string());
+    EXPECT_EQ("vector", dst2->get(3).get_slice().to_string());
+}
+
+TEST(AppendWithMaskCoreTest, appendConstNullColumnToNullableColumn) {
+    for (size_t count : {4, 16, 64}) {
+        auto const_null = ColumnHelper::create_const_null_column(count);
+        ASSERT_TRUE(const_null->is_constant());
+        ASSERT_TRUE(const_null->only_null());
+        ASSERT_TRUE(const_null->is_nullable());
+
+        // 1. Partial selection with positive mask
+        {
+            std::vector<uint8_t> mask(count, 0);
+            for (size_t i = 0; i < count; i += 2) {
+                mask[i] = 1;
+            }
+            size_t expected_selected = (count + 1) / 2;
+
+            auto dst = NullableColumn::create(Int32Column::create(), NullColumn::create());
+            ASSERT_TRUE(append_with_mask<true>(dst.get(), *const_null, mask.data(), count).ok());
+            ASSERT_EQ(expected_selected, dst->size());
+            for (size_t i = 0; i < expected_selected; ++i) {
+                EXPECT_TRUE(dst->is_null(i));
+            }
+        }
+
+        // 2. All-selected with positive mask
+        {
+            std::vector<uint8_t> all_ones(count, 1);
+            auto dst = NullableColumn::create(Int32Column::create(), NullColumn::create());
+            ASSERT_TRUE(append_with_mask<true>(dst.get(), *const_null, all_ones.data(), count).ok());
+            ASSERT_EQ(count, dst->size());
+            for (size_t i = 0; i < count; ++i) {
+                EXPECT_TRUE(dst->is_null(i));
+            }
+        }
+
+        // 3. Negative selection (PositiveSelect = false)
+        {
+            std::vector<uint8_t> mask(count, 0);
+            mask[0] = 1; // row 0 is filtered out
+            size_t expected_selected = count - 1;
+
+            auto dst = NullableColumn::create(Int32Column::create(), NullColumn::create());
+            ASSERT_TRUE(append_with_mask<false>(dst.get(), *const_null, mask.data(), count).ok());
+            ASSERT_EQ(expected_selected, dst->size());
+            for (size_t i = 0; i < expected_selected; ++i) {
+                EXPECT_TRUE(dst->is_null(i));
+            }
+        }
+    }
+}
+
+TEST(AppendWithMaskCoreTest, appendFixedLengthStrictBufferBoundaryUnderAsan) {
+    // Under ASAN, if append_fixed_length resizes the destination buffer to only
+    // orig_size + selected, vectorised store instructions (e.g. AVX-512 _mm512_storeu_si512)
+    // could write past the end of the allocated buffer when selected is small and count is large.
+    // Here we test counts from 32 up to 256 with only 1 or 2 items selected at varying positions.
+    for (size_t count : {32, 48, 64, 96, 128, 256}) {
+        auto src = Int32Column::create();
+        for (size_t i = 0; i < count; ++i) {
+            src->append(static_cast<int32_t>(i));
+        }
+
+        // Test 1: Only the first element selected
+        {
+            std::vector<uint8_t> mask(count, 0);
+            mask[0] = 1;
+            auto dst = Int32Column::create();
+            ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask.data(), count).ok());
+            ASSERT_EQ(1, dst->size());
+            EXPECT_EQ(0, dst->get_data()[0]);
+        }
+
+        // Test 2: Only the last element selected
+        {
+            std::vector<uint8_t> mask(count, 0);
+            mask[count - 1] = 1;
+            auto dst = Int32Column::create();
+            ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask.data(), count).ok());
+            ASSERT_EQ(1, dst->size());
+            EXPECT_EQ(static_cast<int32_t>(count - 1), dst->get_data()[0]);
+        }
+
+        // Test 3: Only two elements selected in the middle
+        {
+            std::vector<uint8_t> mask(count, 0);
+            mask[count / 2] = 1;
+            mask[count / 2 + 1] = 1;
+            auto dst = Int32Column::create();
+            ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask.data(), count).ok());
+            ASSERT_EQ(2, dst->size());
+            EXPECT_EQ(static_cast<int32_t>(count / 2), dst->get_data()[0]);
+            EXPECT_EQ(static_cast<int32_t>(count / 2 + 1), dst->get_data()[1]);
+        }
+
+        // Test 4: Verify on Int64Column as well (AVX-512 8-byte compress)
+        {
+            auto src64 = Int64Column::create();
+            for (size_t i = 0; i < count; ++i) {
+                src64->append(static_cast<int64_t>(10000 + i));
+            }
+            std::vector<uint8_t> mask(count, 0);
+            mask[1] = 1;
+            mask[count - 2] = 1;
+            auto dst64 = Int64Column::create();
+            ASSERT_TRUE(append_with_mask<true>(dst64.get(), *src64, mask.data(), count).ok());
+            ASSERT_EQ(2, dst64->size());
+            EXPECT_EQ(10001, dst64->get_data()[0]);
+            EXPECT_EQ(static_cast<int64_t>(10000 + count - 2), dst64->get_data()[1]);
+        }
+    }
+}
+
+TEST(AppendWithMaskCoreTest, sparseSelectionDoesNotOverAllocateCapacity) {
+    constexpr size_t kCount = 4096;
+    auto src = Int32Column::create();
+    for (size_t i = 0; i < kCount; ++i) {
+        src->append(static_cast<int32_t>(i * 10));
+    }
+
+    // 1. Extreme sparsity (2 of 4096 = 0.05% < 5%): must take scalar path and allocate exact size (2), not 4096
+    {
+        std::vector<uint8_t> mask(kCount, 0);
+        mask[17] = 1;
+        mask[3999] = 1;
+        auto dst = Int32Column::create();
+        ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask.data(), kCount).ok());
+        ASSERT_EQ(2u, dst->size());
+        EXPECT_EQ(170, dst->get_data()[0]);
+        EXPECT_EQ(39990, dst->get_data()[1]);
+        EXPECT_LT(dst->get_data().capacity(), 64u);
+    }
+
+    // 2. Moderate density (10% = 410 of 4096 >= 5%): takes SIMD path, capacity bounded by selected + 16 (not 4096)
+    {
+        std::vector<uint8_t> mask(kCount, 0);
+        for (size_t i = 0; i < 410; ++i) {
+            mask[i * 10] = 1;
+        }
+        auto dst = Int32Column::create();
+        ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask.data(), kCount).ok());
+        ASSERT_EQ(410u, dst->size());
+        EXPECT_LE(dst->get_data().capacity(), 1024u);
+        for (size_t i = 0; i < 410; ++i) {
+            EXPECT_EQ(static_cast<int32_t>(i * 100), dst->get_data()[i]);
+        }
+    }
+
+    // 3. Small batch (_count = 16 < 32) at 50% selectivity: takes scalar path without padding
+    {
+        std::vector<uint8_t> mask(16, 0);
+        for (size_t i = 0; i < 16; i += 2) mask[i] = 1;
+        auto dst = Int32Column::create();
+        ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask.data(), 16).ok());
+        ASSERT_EQ(8u, dst->size());
+        EXPECT_LE(dst->get_data().capacity(), 16u);
+    }
+}
+
+TEST(AppendWithMaskCoreTest, appendWithPrecomputedSelectedCountAndSparseBitmask) {
+    // 1. Test 5-argument append_with_mask<true> and append_with_mask<false> on Int64Column,
+    // BinaryColumn, and NullableColumn (with nulls and without nulls) across all-selected,
+    // none-selected, and mixed masks.
+    constexpr size_t kRows = 64;
+    auto int_src = Int64Column::create();
+    auto bin_src = BinaryColumn::create();
+    auto null_with_nulls_src = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    auto null_no_nulls_src = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    for (size_t i = 0; i < kRows; ++i) {
+        int_src->append(static_cast<int64_t>(i * 7));
+        bin_src->append("val_" + std::to_string(i));
+        null_no_nulls_src->append_datum(Datum(static_cast<int64_t>(i * 3)));
+        if (i % 5 == 0) {
+            null_with_nulls_src->append_nulls(1);
+        } else {
+            null_with_nulls_src->append_datum(Datum(static_cast<int64_t>(i * 3)));
+        }
+    }
+
+    std::vector<uint8_t> all_mask(kRows, 1);
+    std::vector<uint8_t> none_mask(kRows, 0);
+    std::vector<uint8_t> mixed_mask(kRows, 0);
+    size_t mixed_pos_selected = 0;
+    for (size_t i = 0; i < kRows; ++i) {
+        if (i % 3 == 0) {
+            mixed_mask[i] = 1;
+            ++mixed_pos_selected;
+        }
+    }
+
+    struct MaskCase {
+        const std::vector<uint8_t>* mask;
+        size_t pos_selected;
+        size_t neg_selected;
+    };
+    const std::vector<MaskCase> cases = {
+            {&all_mask, kRows, 0},
+            {&none_mask, 0, kRows},
+            {&mixed_mask, mixed_pos_selected, kRows - mixed_pos_selected},
+    };
+
+    for (const auto& tc : cases) {
+        // PositiveSelect = true
+        {
+            auto int_dst = Int64Column::create();
+            ASSERT_TRUE(append_with_mask<true>(int_dst.get(), *int_src, tc.mask->data(), kRows, tc.pos_selected).ok());
+            ASSERT_EQ(tc.pos_selected, int_dst->size());
+
+            auto bin_dst = BinaryColumn::create();
+            ASSERT_TRUE(append_with_mask<true>(bin_dst.get(), *bin_src, tc.mask->data(), kRows, tc.pos_selected).ok());
+            ASSERT_EQ(tc.pos_selected, bin_dst->size());
+
+            auto null_with_dst = NullableColumn::create(Int64Column::create(), NullColumn::create());
+            ASSERT_TRUE(append_with_mask<true>(null_with_dst.get(), *null_with_nulls_src, tc.mask->data(), kRows,
+                                               tc.pos_selected)
+                                .ok());
+            ASSERT_EQ(tc.pos_selected, null_with_dst->size());
+
+            auto null_no_dst = NullableColumn::create(Int64Column::create(), NullColumn::create());
+            ASSERT_TRUE(append_with_mask<true>(null_no_dst.get(), *null_no_nulls_src, tc.mask->data(), kRows,
+                                               tc.pos_selected)
+                                .ok());
+            ASSERT_EQ(tc.pos_selected, null_no_dst->size());
+            EXPECT_FALSE(null_no_dst->has_null());
+
+            size_t out_idx = 0;
+            for (size_t i = 0; i < kRows; ++i) {
+                if ((*tc.mask)[i] != 0) {
+                    EXPECT_EQ(int_src->get_data()[i], int_dst->get_data()[out_idx]);
+                    EXPECT_EQ(bin_src->get_slice(i).to_string(), bin_dst->get_slice(out_idx).to_string());
+                    EXPECT_EQ(null_with_nulls_src->is_null(i), null_with_dst->is_null(out_idx));
+                    if (!null_with_nulls_src->is_null(i)) {
+                        EXPECT_EQ(null_with_nulls_src->get(i).get_int64(), null_with_dst->get(out_idx).get_int64());
+                    }
+                    EXPECT_EQ(null_no_nulls_src->get(i).get_int64(), null_no_dst->get(out_idx).get_int64());
+                    ++out_idx;
+                }
+            }
+            EXPECT_EQ(tc.pos_selected, out_idx);
+        }
+
+        // PositiveSelect = false
+        {
+            auto int_dst = Int64Column::create();
+            ASSERT_TRUE(append_with_mask<false>(int_dst.get(), *int_src, tc.mask->data(), kRows, tc.neg_selected).ok());
+            ASSERT_EQ(tc.neg_selected, int_dst->size());
+
+            auto bin_dst = BinaryColumn::create();
+            ASSERT_TRUE(append_with_mask<false>(bin_dst.get(), *bin_src, tc.mask->data(), kRows, tc.neg_selected).ok());
+            ASSERT_EQ(tc.neg_selected, bin_dst->size());
+
+            auto null_with_dst = NullableColumn::create(Int64Column::create(), NullColumn::create());
+            ASSERT_TRUE(append_with_mask<false>(null_with_dst.get(), *null_with_nulls_src, tc.mask->data(), kRows,
+                                                tc.neg_selected)
+                                .ok());
+            ASSERT_EQ(tc.neg_selected, null_with_dst->size());
+
+            auto null_no_dst = NullableColumn::create(Int64Column::create(), NullColumn::create());
+            ASSERT_TRUE(append_with_mask<false>(null_no_dst.get(), *null_no_nulls_src, tc.mask->data(), kRows,
+                                                tc.neg_selected)
+                                .ok());
+            ASSERT_EQ(tc.neg_selected, null_no_dst->size());
+            EXPECT_FALSE(null_no_dst->has_null());
+
+            size_t out_idx = 0;
+            for (size_t i = 0; i < kRows; ++i) {
+                if ((*tc.mask)[i] == 0) {
+                    EXPECT_EQ(int_src->get_data()[i], int_dst->get_data()[out_idx]);
+                    EXPECT_EQ(bin_src->get_slice(i).to_string(), bin_dst->get_slice(out_idx).to_string());
+                    EXPECT_EQ(null_with_nulls_src->is_null(i), null_with_dst->is_null(out_idx));
+                    if (!null_with_nulls_src->is_null(i)) {
+                        EXPECT_EQ(null_with_nulls_src->get(i).get_int64(), null_with_dst->get(out_idx).get_int64());
+                    }
+                    EXPECT_EQ(null_no_nulls_src->get(i).get_int64(), null_no_dst->get(out_idx).get_int64());
+                    ++out_idx;
+                }
+            }
+            EXPECT_EQ(tc.neg_selected, out_idx);
+        }
+    }
+
+    // 2. Test 1% sparse selectivity (count = 4096, 41 selected at i % 100 == 0) for both
+    // PositiveSelect = true and PositiveSelect = false on Int64Column, verifying exact output
+    // values and exact vector capacity (41) with zero over-allocation.
+    constexpr size_t kSparseCount = 4096;
+    constexpr size_t kExpectedSparseSelected = 41;
+    auto sparse_src = Int64Column::create();
+    for (size_t i = 0; i < kSparseCount; ++i) {
+        sparse_src->append(static_cast<int64_t>(100000 + i));
+    }
+
+    // PositiveSelect = true (mask[i] = 1 at i % 100 == 0)
+    {
+        std::vector<uint8_t> pos_mask(kSparseCount, 0);
+        for (size_t i = 0; i < kSparseCount; i += 100) {
+            pos_mask[i] = 1;
+        }
+        auto dst = Int64Column::create();
+        ASSERT_TRUE(
+                append_with_mask<true>(dst.get(), *sparse_src, pos_mask.data(), kSparseCount, kExpectedSparseSelected)
+                        .ok());
+        ASSERT_EQ(kExpectedSparseSelected, dst->size());
+        EXPECT_EQ(41u, dst->get_data().capacity());
+        for (size_t idx = 0; idx < kExpectedSparseSelected; ++idx) {
+            EXPECT_EQ(static_cast<int64_t>(100000 + idx * 100), dst->get_data()[idx]);
+        }
+    }
+
+    // PositiveSelect = false (mask[i] = 0 at i % 100 == 0, 1 elsewhere)
+    {
+        std::vector<uint8_t> neg_mask(kSparseCount, 1);
+        for (size_t i = 0; i < kSparseCount; i += 100) {
+            neg_mask[i] = 0;
+        }
+        auto dst = Int64Column::create();
+        ASSERT_TRUE(
+                append_with_mask<false>(dst.get(), *sparse_src, neg_mask.data(), kSparseCount, kExpectedSparseSelected)
+                        .ok());
+        ASSERT_EQ(kExpectedSparseSelected, dst->size());
+        EXPECT_EQ(41u, dst->get_data().capacity());
+        for (size_t idx = 0; idx < kExpectedSparseSelected; ++idx) {
+            EXPECT_EQ(static_cast<int64_t>(100000 + idx * 100), dst->get_data()[idx]);
+        }
+    }
+}
+
+TEST(AppendWithMaskCoreTest, tightlyReservedDestinationAndNullableMaskedAppendWithSimdStorePad) {
+    constexpr size_t kBatchSize = 64;
+    constexpr size_t kPadElems32 = (SIMD::Filter::kFilterSimdStorePadBytes + sizeof(int32_t) - 1) / sizeof(int32_t);
+    constexpr size_t kPadElems64 = (SIMD::Filter::kFilterSimdStorePadBytes + sizeof(int64_t) - 1) / sizeof(int64_t);
+
+    auto src32 = Int32Column::create();
+    auto src64 = Int64Column::create();
+    auto nullable_base = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    nullable_base->append_datum(Datum(static_cast<int64_t>(777)));
+    nullable_base->append_nulls(1);
+
+    auto nullable_src = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    // Populate nullable_src via NullableColumn::append_value_multiple_times (32 non-nulls, 32 nulls)
+    nullable_src->append_value_multiple_times(*nullable_base, 0, 32);
+    nullable_src->append_value_multiple_times(*nullable_base, 1, 32);
+    ASSERT_EQ(kBatchSize, nullable_src->size());
+
+    for (size_t i = 0; i < kBatchSize; ++i) {
+        src32->append(static_cast<int32_t>(1000 + i));
+        src64->append(static_cast<int64_t>(2000 + i));
+    }
+
+    // Exercise small selections (1, 2, 6, 7 elements near the end of a 64-element batch) as well
+    // as near-full selection (60 of 64 elements where selected + kPadElems > kBatchSize) on
+    // tightly pre-reserved destination columns.
+    for (size_t selected_count : {size_t(1), size_t(2), size_t(6), size_t(7), size_t(60)}) {
+        std::vector<uint8_t> mask(kBatchSize, 0);
+        for (size_t i = kBatchSize - selected_count; i < kBatchSize; ++i) {
+            mask[i] = 1;
+        }
+
+        // 1. Int32Column tightly reserved to selected_count
+        {
+            auto dst32 = Int32Column::create();
+            dst32->reserve(selected_count);
+            ASSERT_TRUE(append_with_mask<true>(dst32.get(), *src32, mask.data(), kBatchSize, selected_count).ok());
+            ASSERT_EQ(selected_count, dst32->size());
+            if (selected_count * 20 >= kBatchSize) {
+                EXPECT_GE(dst32->get_data().capacity(), selected_count + kPadElems32);
+            }
+            for (size_t i = 0; i < selected_count; ++i) {
+                EXPECT_EQ(static_cast<int32_t>(1000 + kBatchSize - selected_count + i), dst32->get_data()[i]);
+            }
+        }
+
+        // 2. Int64Column tightly reserved to selected_count
+        {
+            auto dst64 = Int64Column::create();
+            dst64->reserve(selected_count);
+            ASSERT_TRUE(append_with_mask<true>(dst64.get(), *src64, mask.data(), kBatchSize, selected_count).ok());
+            ASSERT_EQ(selected_count, dst64->size());
+            if (selected_count * 20 >= kBatchSize) {
+                EXPECT_GE(dst64->get_data().capacity(), selected_count + kPadElems64);
+            }
+            for (size_t i = 0; i < selected_count; ++i) {
+                EXPECT_EQ(static_cast<int64_t>(2000 + kBatchSize - selected_count + i), dst64->get_data()[i]);
+            }
+        }
+
+        // 3. NullableColumn (populated with append_value_multiple_times) tightly reserved to selected_count
+        {
+            auto dst_null = NullableColumn::create(Int64Column::create(), NullColumn::create());
+            dst_null->reserve(selected_count);
+            ASSERT_TRUE(append_with_mask<true>(dst_null.get(), *nullable_src, mask.data(), kBatchSize, selected_count)
+                                .ok());
+            ASSERT_EQ(selected_count, dst_null->size());
+            for (size_t i = 0; i < selected_count; ++i) {
+                size_t src_idx = kBatchSize - selected_count + i;
+                EXPECT_EQ(nullable_src->is_null(src_idx), dst_null->is_null(i));
+                if (!nullable_src->is_null(src_idx)) {
+                    EXPECT_EQ(nullable_src->get(src_idx).get_int64(), dst_null->get(i).get_int64());
+                }
+            }
+        }
+    }
+}
+
+TEST(AppendWithMaskCoreTest, appendAdaptiveNullableColumnToNullableColumn) {
+    // 1. Materialised AdaptiveNullableColumn with mixed NULL and non-NULL rows
+    {
+        auto src = AdaptiveNullableColumn::create(Int32Column::create(), NullColumn::create());
+        src->append_datum(Datum(static_cast<int32_t>(10)));
+        src->append_nulls(1);
+        src->append_datum(Datum(static_cast<int32_t>(30)));
+        src->append_nulls(1);
+        src->append_datum(Datum(static_cast<int32_t>(50)));
+        ASSERT_EQ(AdaptiveNullableColumn::State::kMaterialized, src->state());
+
+        const uint8_t partial_mask[] = {1, 1, 0, 1, 1};
+        auto pos_dst = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        ASSERT_TRUE(append_with_mask<true>(pos_dst.get(), *src, partial_mask, 5).ok());
+        ASSERT_EQ(4u, pos_dst->size());
+        EXPECT_TRUE(pos_dst->has_null());
+        EXPECT_FALSE(pos_dst->is_null(0));
+        EXPECT_EQ(10, pos_dst->get(0).get_int32());
+        EXPECT_TRUE(pos_dst->is_null(1));
+        EXPECT_TRUE(pos_dst->is_null(2));
+        EXPECT_FALSE(pos_dst->is_null(3));
+        EXPECT_EQ(50, pos_dst->get(3).get_int32());
+
+        const uint8_t neg_mask[] = {1, 0, 1, 0, 0};
+        auto neg_dst = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        ASSERT_TRUE(append_with_mask<false>(neg_dst.get(), *src, neg_mask, 5).ok());
+        ASSERT_EQ(3u, neg_dst->size());
+        EXPECT_TRUE(neg_dst->has_null());
+        EXPECT_TRUE(neg_dst->is_null(0));
+        EXPECT_TRUE(neg_dst->is_null(1));
+        EXPECT_FALSE(neg_dst->is_null(2));
+        EXPECT_EQ(50, neg_dst->get(2).get_int32());
+    }
+
+    // 2. Unmaterialised AdaptiveNullableColumn in State::kNotConstant
+    {
+        auto src = AdaptiveNullableColumn::create(Int32Column::create(), NullColumn::create());
+        src->append_datum(Datum(static_cast<int32_t>(100)));
+        src->append_datum(Datum(static_cast<int32_t>(200)));
+        src->append_datum(Datum(static_cast<int32_t>(300)));
+        src->append_datum(Datum(static_cast<int32_t>(400)));
+        ASSERT_EQ(AdaptiveNullableColumn::State::kNotConstant, src->state());
+
+        const uint8_t partial_mask[] = {0, 1, 0, 1};
+        auto partial_dst = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        ASSERT_TRUE(append_with_mask<true>(partial_dst.get(), *src, partial_mask, 4).ok());
+        ASSERT_EQ(2u, partial_dst->size());
+        EXPECT_FALSE(partial_dst->has_null());
+        EXPECT_EQ(200, partial_dst->get(0).get_int32());
+        EXPECT_EQ(400, partial_dst->get(1).get_int32());
+    }
+
+    // 3. Unmaterialised AdaptiveNullableColumn in State::kNotConstant with all-selected mask
+    {
+        auto src = AdaptiveNullableColumn::create(Int32Column::create(), NullColumn::create());
+        src->append_datum(Datum(static_cast<int32_t>(7)));
+        src->append_datum(Datum(static_cast<int32_t>(8)));
+        src->append_datum(Datum(static_cast<int32_t>(9)));
+        ASSERT_EQ(AdaptiveNullableColumn::State::kNotConstant, src->state());
+
+        const uint8_t all_mask[] = {1, 1, 1};
+        auto all_dst = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        ASSERT_TRUE(append_with_mask<true>(all_dst.get(), *src, all_mask, 3).ok());
+        ASSERT_EQ(3u, all_dst->size());
+        EXPECT_FALSE(all_dst->has_null());
+        EXPECT_EQ(7, all_dst->get(0).get_int32());
+        EXPECT_EQ(8, all_dst->get(1).get_int32());
+        EXPECT_EQ(9, all_dst->get(2).get_int32());
+    }
+
+    // 4. Unmaterialised AdaptiveNullableColumn in State::kConstant
+    {
+        auto src = AdaptiveNullableColumn::create(Int32Column::create(), NullColumn::create());
+        src->append_default_not_null_value();
+        src->append_default_not_null_value();
+        src->append_default_not_null_value();
+        ASSERT_EQ(AdaptiveNullableColumn::State::kConstant, src->state());
+
+        const uint8_t mask[] = {1, 0, 1};
+        auto dst = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask, 3).ok());
+        ASSERT_EQ(2u, dst->size());
+        EXPECT_FALSE(dst->has_null());
+        EXPECT_FALSE(dst->is_null(0));
+        EXPECT_FALSE(dst->is_null(1));
+    }
+
+    // 5. Unmaterialised AdaptiveNullableColumn in State::kNull
+    {
+        auto src = AdaptiveNullableColumn::create(Int32Column::create(), NullColumn::create());
+        src->append_nulls(4);
+        ASSERT_EQ(AdaptiveNullableColumn::State::kNull, src->state());
+
+        const uint8_t mask[] = {1, 0, 1, 0};
+        auto dst = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask, 4).ok());
+        ASSERT_EQ(2u, dst->size());
+        EXPECT_TRUE(dst->has_null());
+        EXPECT_TRUE(dst->is_null(0));
+        EXPECT_TRUE(dst->is_null(1));
+    }
 }
 
 } // namespace starrocks

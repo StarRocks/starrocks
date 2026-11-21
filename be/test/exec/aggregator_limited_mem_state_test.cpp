@@ -15,12 +15,19 @@
 
 #include <gtest/gtest.h>
 
+#include <optional>
+
 #include "base/testutil/assert.h"
+#include "column/chunk.h"
+#include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
 #include "common/config_exec_flow_fwd.h"
 #include "exec/aggregator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_streaming_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_streaming_sink_operator.h"
+#include "exec/sorted_streaming_aggregator.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -266,6 +273,122 @@ TEST_F(StreamingAggSinkHandoffTest, distinct_sink_skips_hash_set_handed_to_sourc
     ASSERT_OK(sink->set_finishing(&_state));
     EXPECT_FALSE(aggregator->is_ht_eos());
     EXPECT_TRUE(aggregator->is_sink_complete());
+}
+
+TEST_F(StreamingAggSinkExecuteModeTest,
+       selective_preaggregation_reuses_precomputed_zero_count_and_dispatches_all_branches) {
+    auto aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
+    AggregateStreamingSinkOperatorFactory factory(1, 1, aggregator_factory, _no_runtime_filters);
+    auto op = factory.create(1, 0);
+    auto* sink = static_cast<AggregateStreamingSinkOperator*>(op.get());
+    auto aggregator = aggregator_factory->get_or_create(0);
+
+    aggregator->_agg_stat = &_agg_stat;
+    aggregator->_hash_map_variant.init(&_state, AggHashMapVariant::Type::phase1_int32, &_agg_stat);
+    aggregator->_limited_buffer =
+            std::make_unique<LimitedPipelineChunkBuffer<AggStatistics>>(&_agg_stat, 1, 64 * 1024 * 1024, 4096 * 4);
+
+    SlotDescriptor slot_desc(1, "k", TypeDescriptor(TYPE_INT));
+    TTupleDescriptor ttuple;
+    ttuple.__set_id(1);
+    TupleDescriptor tuple_desc(ttuple);
+    tuple_desc.add_slot(&slot_desc);
+    aggregator->_intermediate_tuple_desc = &tuple_desc;
+    aggregator->_group_by_types = {{TypeDescriptor(TYPE_INT), false}};
+
+    auto make_chunk = [&]() {
+        auto col = Int32Column::create();
+        col->append(10);
+        col->append(20);
+        col->append(30);
+        col->append(40);
+        aggregator->_group_by_columns = {col};
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(col, 1);
+        return chunk;
+    };
+
+    // 1. All misses (_streaming_selection = {1, 1, 1, 1}, precomputed = 0u)
+    aggregator->_streaming_selection.assign({1, 1, 1, 1});
+    ASSERT_TRUE(sink->_push_chunk_by_selective_preaggregation(make_chunk(), 4, false, 0u).ok());
+    ASSERT_FALSE(aggregator->is_chunk_buffer_empty());
+    auto out_all_miss = aggregator->poll_chunk_buffer();
+    ASSERT_NE(nullptr, out_all_miss);
+    EXPECT_EQ(4u, out_all_miss->num_rows());
+    EXPECT_TRUE(aggregator->is_chunk_buffer_empty());
+
+    // 2. All hits (_streaming_selection = {0, 0, 0, 0}, precomputed = 4u)
+    aggregator->_streaming_selection.assign({0, 0, 0, 0});
+    ASSERT_TRUE(sink->_push_chunk_by_selective_preaggregation(make_chunk(), 4, false, 4u).ok());
+    EXPECT_TRUE(aggregator->is_chunk_buffer_empty());
+
+    // 3. Mixed hits/misses (_streaming_selection = {0, 1, 0, 1}, precomputed = 2u and default std::nullopt)
+    for (std::optional<size_t> precomputed : {std::optional<size_t>(2u), std::optional<size_t>(std::nullopt)}) {
+        aggregator->_streaming_selection.assign({0, 1, 0, 1});
+        ASSERT_TRUE(sink->_push_chunk_by_selective_preaggregation(make_chunk(), 4, false, precomputed).ok());
+        ASSERT_FALSE(aggregator->is_chunk_buffer_empty());
+        auto out_mixed = aggregator->poll_chunk_buffer();
+        ASSERT_NE(nullptr, out_mixed);
+        ASSERT_EQ(2u, out_mixed->num_rows());
+        const auto* out_col = down_cast<const Int32Column*>(out_mixed->get_column_by_slot_id(1).get());
+        EXPECT_EQ(20, out_col->get_data()[0]);
+        EXPECT_EQ(40, out_col->get_data()[1]);
+    }
+}
+
+TEST_F(StreamingAggSinkExecuteModeTest,
+       sorted_streaming_build_group_by_columns_precomputes_selected_and_short_circuits_empty) {
+    SortedStreamingAggregator aggregator(convert_to_aggregator_params(_tnode));
+    aggregator._agg_stat = &_agg_stat;
+    aggregator._cmp_vector = {0, 0, 0, 0};
+
+    auto col0 = Int32Column::create();
+    col0->append(10);
+    col0->append(20);
+    col0->append(30);
+    col0->append(40);
+
+    auto col1_data = Int64Column::create();
+    col1_data->append(100);
+    col1_data->append(200);
+    col1_data->append(300);
+    col1_data->append(400);
+    auto col1_null = NullColumn::create();
+    col1_null->append(0);
+    col1_null->append(1);
+    col1_null->append(1);
+    col1_null->append(0);
+    auto col1 = NullableColumn::create(std::move(col1_data), std::move(col1_null));
+
+    aggregator._group_by_columns = {col0, col1};
+
+    // Mixed selection (selector[i] == 0 means selected under PositiveSelect = false)
+    Filter mixed_selector = {0, 1, 0, 1};
+    MutableColumns out_cols;
+    out_cols.emplace_back(Int32Column::create());
+    out_cols.emplace_back(NullableColumn::create(Int64Column::create(), NullColumn::create()));
+
+    ASSERT_TRUE(aggregator._build_group_by_columns(4, mixed_selector, out_cols).ok());
+    ASSERT_EQ(2u, out_cols[0]->size());
+    ASSERT_EQ(2u, out_cols[1]->size());
+    const auto* out_col0 = down_cast<const Int32Column*>(out_cols[0].get());
+    EXPECT_EQ(10, out_col0->get_data()[0]);
+    EXPECT_EQ(30, out_col0->get_data()[1]);
+    const auto* out_col1 = down_cast<const NullableColumn*>(out_cols[1].get());
+    const auto* out_col1_data = down_cast<const Int64Column*>(out_col1->data_column().get());
+    EXPECT_EQ(100, out_col1_data->get_data()[0]);
+    EXPECT_EQ(300, out_col1_data->get_data()[1]);
+    EXPECT_FALSE(out_col1->is_null(0));
+    EXPECT_TRUE(out_col1->is_null(1));
+
+    // Empty selection (selector = {1, 1, 1, 1} -> selected_count == 0 under PositiveSelect = false).
+    // Place a nullptr sentinel in _group_by_columns to verify that _build_group_by_columns short-circuits
+    // before entering the per-column loop when selected_count == 0.
+    Filter none_selector = {1, 1, 1, 1};
+    aggregator._group_by_columns = {nullptr, nullptr};
+    ASSERT_TRUE(aggregator._build_group_by_columns(4, none_selector, out_cols).ok());
+    EXPECT_EQ(2u, out_cols[0]->size());
+    EXPECT_EQ(2u, out_cols[1]->size());
 }
 
 } // namespace starrocks::pipeline

@@ -332,8 +332,8 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
         }
 
         auto nullable_column = down_cast<NullableColumn*>(column);
-        RETURN_IF_ERROR(
-                append_with_mask</*PositiveSelect=*/true>(nullable_column, *temp_nullable_column, selection, num_rows));
+        RETURN_IF_ERROR(append_with_mask</*PositiveSelect=*/true>(nullable_column, *temp_nullable_column, selection,
+                                                                  num_rows, selected_count));
 
         return Status::OK();
     }

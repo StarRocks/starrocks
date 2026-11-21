@@ -19,6 +19,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/simd/simd.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/append_with_mask.h"
 #include "column/array_column.h"
@@ -480,10 +481,15 @@ Status SortedStreamingAggregator::_build_group_by_columns(size_t chunk_size, con
         }
     }
 
+    const size_t selected_count = SIMD::count_zero(selector.data(), selector.size());
+    if (selected_count == 0) {
+        return Status::OK();
+    }
+
     for (size_t i = 0; i < agg_group_by_columns.size(); ++i) {
         RETURN_IF_ERROR(append_with_mask</*PositiveSelect=*/false>(agg_group_by_columns[i]->as_mutable_raw_ptr(),
                                                                    *_group_by_columns[i], selector.data(),
-                                                                   selector.size()));
+                                                                   selector.size(), selected_count));
     }
     return Status::OK();
 }

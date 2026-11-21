@@ -14,27 +14,36 @@
 
 #pragma once
 
+#include <optional>
+
 #include "column/column_visitor_adapter.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 
 namespace starrocks {
 
-template <bool PositiveSelect>
-Status append_with_mask(Column* dst, const Column& src, const uint8_t* mask, size_t count);
+template <bool PositiveSelect = true>
+Status append_with_mask(Column* dst, const Column& src, const uint8_t* mask, size_t count,
+                        std::optional<size_t> precomputed_selected = std::nullopt);
 
-extern template Status append_with_mask<true>(Column*, const Column&, const uint8_t*, size_t);
-extern template Status append_with_mask<false>(Column*, const Column&, const uint8_t*, size_t);
+extern template Status append_with_mask<true>(Column*, const Column&, const uint8_t*, size_t, std::optional<size_t>);
+extern template Status append_with_mask<false>(Column*, const Column&, const uint8_t*, size_t, std::optional<size_t>);
 
 template <bool PositiveSelect>
 class AppendWithMaskVisitor : public ColumnVisitorMutableAdapter<AppendWithMaskVisitor<PositiveSelect>> {
     using Base = ColumnVisitorMutableAdapter<AppendWithMaskVisitor<PositiveSelect>>;
 
 public:
-    AppendWithMaskVisitor(const Column& src, const uint8_t* mask, size_t count);
+    AppendWithMaskVisitor(const Column& src, const uint8_t* mask, size_t count,
+                          std::optional<size_t> precomputed_selected = std::nullopt);
 
     Status do_visit(NullableColumn* column);
     Status do_visit(BinaryColumn* column);
+
+    template <typename T>
+    Status do_visit(FixedLengthColumn<T>* column) {
+        return append_fixed_length(column);
+    }
 
     template <typename T>
     Status do_visit(FixedLengthColumnBase<T>* column) {
@@ -48,6 +57,9 @@ public:
     }
 
 private:
+    template <typename TargetColumn, typename DstColumn>
+    const TargetColumn* try_down_cast(const DstColumn* dst_column) const noexcept;
+
     bool is_selected(uint8_t value) const;
     size_t count_selected() const;
 
@@ -56,7 +68,7 @@ private:
 
     Status append_binary(BinaryColumn* column);
 
-    Status apply(Column* dst, const Column* src);
+    Status apply(Column* dst, const Column* src, std::optional<size_t> precomputed_selected = std::nullopt);
 
     template <typename ColumnType>
     void append_fallback(ColumnType* column);
@@ -64,6 +76,7 @@ private:
     const Column& _src;
     const uint8_t* _mask;
     size_t _count;
+    mutable std::optional<size_t> _selected_count;
 };
 
 } // namespace starrocks

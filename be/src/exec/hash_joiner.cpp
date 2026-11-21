@@ -455,8 +455,7 @@ Status HashJoiner::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filt
     }
 
     if (!filter_all) {
-        int zero_count = SIMD::count_zero(filter.data(), filter.size());
-        if (zero_count == 0) {
+        if (!SIMD::contain_zero(filter.data(), filter.size())) {
             hit_all = true;
         }
     }
