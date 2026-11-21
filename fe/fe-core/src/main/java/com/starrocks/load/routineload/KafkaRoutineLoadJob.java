@@ -412,6 +412,21 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         this.progress.update(attachment.getProgress());
     }
 
+    // The broker can report "Offset out of range" for an offset it still holds, for example while a partition
+    // changes leader. Keep renewing the task until routine_load_offset_out_of_range_retry_timeout_second has
+    // passed since the first such abort; the renewed task checks the offsets before it runs again
+    // (KafkaTaskInfo.readyToExecute) and pauses the job if they are really out of range.
+    @Override
+    protected boolean retryOnOffsetOutOfRange(RoutineLoadTaskInfo routineLoadTaskInfo) {
+        KafkaTaskInfo kafkaTaskInfo = (KafkaTaskInfo) routineLoadTaskInfo;
+        long now = System.currentTimeMillis();
+        if (kafkaTaskInfo.getOffsetOutOfRangeStartTimeMs() == 0) {
+            kafkaTaskInfo.setOffsetOutOfRangeStartTimeMs(now);
+        }
+        return now - kafkaTaskInfo.getOffsetOutOfRangeStartTimeMs()
+                < Config.routine_load_offset_out_of_range_retry_timeout_second * 1000;
+    }
+
     @Override
     protected RoutineLoadTaskInfo unprotectRenewTask(long timeToExecuteMs, RoutineLoadTaskInfo routineLoadTaskInfo) {
         KafkaTaskInfo oldKafkaTaskInfo = (KafkaTaskInfo) routineLoadTaskInfo;
@@ -421,6 +436,10 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 ((KafkaTaskInfo) routineLoadTaskInfo).getLatestOffset());
         // cngroup
         kafkaTaskInfo.setComputeResource(routineLoadTaskInfo.getComputeResource());
+        if (oldKafkaTaskInfo.getTxnStatus() == TransactionStatus.ABORTED) {
+            // the retry window only restarts after a task commits or times out
+            kafkaTaskInfo.setOffsetOutOfRangeStartTimeMs(oldKafkaTaskInfo.getOffsetOutOfRangeStartTimeMs());
+        }
         // remove old task
         routineLoadTaskInfoList.remove(routineLoadTaskInfo);
         // add new task

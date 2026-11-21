@@ -1489,6 +1489,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Number of daily partitions to keep in the internal `_statistics_.rejected_records` system table. The value is passed to `TableKeeper` (clamped to a minimum of 1) and reconciled into the target table's `partition_live_number` property on every keeper tick. Adjust this value when you need rejected row history beyond the default week (for audit or longer replay windows) or when storage budgets are tight. The value only affects new daily partitions and the keeper's TTL reconciliation; it does not retroactively restore already-dropped partitions.
 - Introduced in: -
 
+### `routine_load_offset_out_of_range_retry_timeout_second`
+
+- Default: 600
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: How long a Kafka Routine Load job keeps retrying, instead of pausing, after a task first fails with "Offset out of range" while the offset is still between the partition's beginning and latest offsets. This can happen briefly during a partition leader change. Before each retry, the task checks the partition's offsets with Kafka, and the job pauses at once if the offset is really out of range. `0` pauses the job at the first such error, as in earlier versions.
+- Introduced in: -
+
 ### `routine_load_task_consume_second`
 
 - Default: 15

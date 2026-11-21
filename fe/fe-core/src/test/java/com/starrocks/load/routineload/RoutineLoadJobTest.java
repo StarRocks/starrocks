@@ -41,6 +41,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionNames;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.InternalErrorCode;
@@ -73,6 +74,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.thrift.TRoutineLoadJobInfo;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -107,7 +109,7 @@ public class RoutineLoadJobTest {
 
     @Test
     public void testAfterAbortedReasonOffsetOutOfRange(@Injectable TransactionState transactionState,
-                                                       @Injectable RoutineLoadTaskInfo routineLoadTaskInfo)
+                                                       @Injectable KafkaTaskInfo routineLoadTaskInfo)
             throws StarRocksException {
 
         List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
@@ -134,9 +136,104 @@ public class RoutineLoadJobTest {
         String txnStatusChangeReasonString = TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString();
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
-        routineLoadJob.afterAborted(transactionState, txnStatusChangeReasonString);
+        long retryTimeoutSecond = Config.routine_load_offset_out_of_range_retry_timeout_second;
+        Config.routine_load_offset_out_of_range_retry_timeout_second = 0;
+        try {
+            routineLoadJob.afterAborted(transactionState, txnStatusChangeReasonString);
+        } finally {
+            Config.routine_load_offset_out_of_range_retry_timeout_second = retryTimeoutSecond;
+        }
 
         Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+        ErrorReason pauseReason = Deencapsulation.getField(routineLoadJob, "pauseReason");
+        Assertions.assertEquals(InternalErrorCode.TASKS_ABORT_ERR, pauseReason.getCode());
+        Assertions.assertTrue(pauseReason.getMsg().contains(txnStatusChangeReasonString), pauseReason.getMsg());
+    }
+
+    @Test
+    public void testAfterAbortedReasonOffsetOutOfRangeRetriesUntilTimeout(@Injectable TransactionState transactionState)
+            throws StarRocksException {
+        long txnId = 1L;
+        RLTaskTxnCommitAttachment attachment = new RLTaskTxnCommitAttachment();
+        Deencapsulation.setField(attachment, "progress", new KafkaProgress(Maps.newHashMap()));
+        new Expectations() {
+            {
+                transactionState.getTransactionId();
+                minTimes = 0;
+                result = txnId;
+                transactionState.getTxnCommitAttachment();
+                minTimes = 0;
+                result = attachment;
+                transactionState.getTransactionStatus();
+                minTimes = 0;
+                result = TransactionStatus.ABORTED;
+            }
+        };
+        new MockUp<RoutineLoadJob>() {
+            @Mock
+            void writeUnlock() {
+            }
+        };
+
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        Map<Integer, Long> partitionOffsets = Maps.newHashMap();
+        partitionOffsets.put(0, 100L);
+        Deencapsulation.setField(routineLoadJob, "progress", new KafkaProgress(partitionOffsets));
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+        KafkaTaskInfo task = new KafkaTaskInfo(UUIDUtil.genUUID(), routineLoadJob, 0L, System.currentTimeMillis(),
+                Maps.newHashMap(partitionOffsets), Config.routine_load_task_timeout_second * 1000);
+        Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", Lists.newArrayList(task));
+
+        // Kafka reports the same offset out of range, e.g. "kafka consume failed, err: fetch failed due to requested
+        // offset not available on the broker: Broker: Offset out of range (broker 1)"
+        String reason = "kafka consume failed, err: fetch failed due to requested offset not available on the broker: " +
+                TxnStatusChangeReason.OFFSET_OUT_OF_RANGE + " (broker 1)";
+        // the first abort starts the retry window and the renewed tasks keep it
+        long startTimeMs = 0;
+        for (int i = 0; i < 2; i++) {
+            Deencapsulation.setField(task, "txnId", txnId);
+            routineLoadJob.afterAborted(transactionState, reason);
+
+            Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
+            List<RoutineLoadTaskInfo> tasks = Deencapsulation.getField(routineLoadJob, "routineLoadTaskInfoList");
+            Assertions.assertEquals(1, tasks.size());
+            Assertions.assertNotSame(task, tasks.get(0));
+            task = (KafkaTaskInfo) tasks.get(0);
+            if (startTimeMs == 0) {
+                startTimeMs = task.getOffsetOutOfRangeStartTimeMs();
+                Assertions.assertTrue(startTimeMs > 0);
+            }
+            Assertions.assertEquals(startTimeMs, task.getOffsetOutOfRangeStartTimeMs());
+            Assertions.assertEquals(partitionOffsets, Deencapsulation.getField(task, "partitionIdToOffset"));
+        }
+
+        // once the window has passed, the job pauses as before
+        task.setOffsetOutOfRangeStartTimeMs(
+                System.currentTimeMillis() - Config.routine_load_offset_out_of_range_retry_timeout_second * 1000);
+        Deencapsulation.setField(task, "txnId", txnId);
+        routineLoadJob.afterAborted(transactionState, reason);
+        Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+        ErrorReason pauseReason = Deencapsulation.getField(routineLoadJob, "pauseReason");
+        Assertions.assertEquals(InternalErrorCode.TASKS_ABORT_ERR, pauseReason.getCode());
+        Assertions.assertTrue(pauseReason.getMsg().contains(reason), pauseReason.getMsg());
+    }
+
+    @Test
+    public void testOffsetOutOfRangeRetryWindowResetWhenTaskIsNotAborted() {
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        Deencapsulation.setField(routineLoadJob, "progress", new KafkaProgress(Maps.newHashMap()));
+        KafkaTaskInfo task = new KafkaTaskInfo(UUIDUtil.genUUID(), routineLoadJob, 0L, System.currentTimeMillis(),
+                Maps.newHashMap(), Config.routine_load_task_timeout_second * 1000);
+        task.setOffsetOutOfRangeStartTimeMs(12345L);
+        Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", Lists.newArrayList(task));
+
+        task.setTxnStatus(TransactionStatus.ABORTED);
+        KafkaTaskInfo renewedAfterAbort = (KafkaTaskInfo) routineLoadJob.unprotectRenewTask(0L, task);
+        Assertions.assertEquals(12345L, renewedAfterAbort.getOffsetOutOfRangeStartTimeMs());
+
+        renewedAfterAbort.setTxnStatus(TransactionStatus.COMMITTED);
+        KafkaTaskInfo renewedAfterCommit = (KafkaTaskInfo) routineLoadJob.unprotectRenewTask(0L, renewedAfterAbort);
+        Assertions.assertEquals(0, renewedAfterCommit.getOffsetOutOfRangeStartTimeMs());
     }
 
     @Test
