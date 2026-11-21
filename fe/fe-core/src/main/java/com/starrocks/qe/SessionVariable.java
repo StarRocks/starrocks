@@ -607,6 +607,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
     public static final String CBO_PUSH_DOWN_AGGREGATE_MODE = "cbo_push_down_aggregate_mode";
     public static final String CBO_PUSH_DOWN_COUNT_AGGREGATE = "cbo_push_down_count_aggregate";
+    public static final String CBO_PUSH_DOWN_AGGREGATE_CHECK_REDUCTION = "cbo_push_down_aggregate_check_reduction";
     public static final String CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN = "cbo_push_down_aggregate_on_broadcast_join";
     public static final String CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN_ROW_COUNT_LIMIT =
             "cbo_push_down_aggregate_on_broadcast_join_row_count_limit";
@@ -2339,6 +2340,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_PUSH_DOWN_COUNT_AGGREGATE, flag = VariableMgr.INVISIBLE)
     private boolean cboPushDownCountAggregate = true;
+
+    // Refuse aggregation push downs that cannot reduce rows. Off restores the previous push down gate.
+    @VarAttr(name = CBO_PUSH_DOWN_AGGREGATE_CHECK_REDUCTION, flag = VariableMgr.INVISIBLE)
+    private boolean cboPushDownAggregateCheckReduction = true;
 
     @VarAttr(name = CBO_ENABLE_INTERSECT_ADD_DISTINCT)
     private boolean cboEnableIntersectAddDistinct = true;
@@ -5718,6 +5723,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboPushDownCountAggregate(boolean cboPushDownCountAggregate) {
         this.cboPushDownCountAggregate = cboPushDownCountAggregate;
+    }
+
+    public boolean isCboPushDownAggregateCheckReduction() {
+        return cboPushDownAggregateCheckReduction;
+    }
+
+    public void setCboPushDownAggregateCheckReduction(boolean cboPushDownAggregateCheckReduction) {
+        this.cboPushDownAggregateCheckReduction = cboPushDownAggregateCheckReduction;
     }
 
     public String getCboPushDownAggregate() {
