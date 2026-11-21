@@ -36,6 +36,17 @@ public:
         expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
     }
 
+protected:
+    static bool has_shared_state(FunctionContext* context) { return LikePredicate::shared_state(context) != nullptr; }
+
+    static const VolnitskyUTF8* substring_searcher(FunctionContext* context) {
+        return LikePredicate::shared_state(context)->substring_searcher.get();
+    }
+
+    static const StringSearcher* substring_fallback(FunctionContext* context) {
+        return LikePredicate::shared_state(context)->substring_fallback.get();
+    }
+
 public:
     TExprNode expr_node;
 };
@@ -1000,5 +1011,214 @@ TEST_F(LikeTest, issue76417RegexpAlternation) {
 
         ASSERT_TRUE(LikePredicate::regex_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
     }
+}
+
+TEST_F(LikeTest, SubstringSearcherHoistedSelectivelyAndStraddlingSparseBatch) {
+    // 1. Verify LIKE 'prefix%' does NOT allocate substring_searcher
+    {
+        auto context = FunctionContext::create_test_context();
+        std::unique_ptr<FunctionContext> ctx(context);
+        Columns cols{BinaryColumn::create(), ColumnHelper::create_const_column<TYPE_VARCHAR>("google%", 1)};
+        context->set_constant_columns(cols);
+        ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        EXPECT_EQ(nullptr, substring_searcher(context));
+        EXPECT_EQ(nullptr, substring_fallback(context));
+        ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    }
+
+    // 2. Verify LIKE '%google%' hoists substring_searcher and handles straddling + sparse (>16 row) jumps
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+
+    auto str = BinaryColumn::create();
+    // Row 0 & Row 1 straddle "google" across row boundary ("abcgoo" + "gle_google_hit"):
+    // Row 0 must be false, Row 1 must still find its own interior "google" and be true!
+    str->append("abcgoo");
+    str->append("gle_google_hit");
+    // 40 rows of empty strings and non-matching URLs (> 16 rows to exercise std::upper_bound offset jump)
+    for (int i = 2; i < 42; ++i) {
+        if (i % 5 == 0) {
+            str->append("");
+        } else {
+            str->append("http://yandex.ru/yandsearch?text=apartments&lr=213");
+        }
+    }
+    // Row 42: match after > 16 non-matching rows
+    str->append("https://www.google.com.au/search?q=starrocks");
+    // Trailing non-matching rows
+    str->append("http://example.com/1");
+    str->append("");
+
+    Columns columns;
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>("%google%", 1));
+    context->set_constant_columns(columns);
+
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(has_shared_state(context));
+    EXPECT_EQ(nullptr, substring_searcher(context));
+    ASSERT_NE(nullptr, substring_fallback(context));
+
+    auto result = LikePredicate::like(context, columns).value();
+    EXPECT_EQ(nullptr, substring_searcher(context));
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+    ASSERT_EQ(45, v->size());
+    EXPECT_EQ(0, v->immutable_data()[0]);
+    EXPECT_EQ(1, v->immutable_data()[1]);
+    for (int i = 2; i < 42; ++i) {
+        EXPECT_EQ(0, v->immutable_data()[i]) << "row " << i;
+    }
+    EXPECT_EQ(1, v->immutable_data()[42]);
+    EXPECT_EQ(0, v->immutable_data()[43]);
+    EXPECT_EQ(0, v->immutable_data()[44]);
+
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+    // 3. Verify >= 33B needle keeps substring_searcher == nullptr on small chunks and lazily initializes on >= 20KB
+    {
+        auto long_ctx_raw = FunctionContext::create_test_context();
+        std::unique_ptr<FunctionContext> long_ctx(long_ctx_raw);
+        const std::string long_needle = std::string(35, 'q') + "needle";
+        auto small_str = BinaryColumn::create();
+        small_str->append("short_miss");
+        small_str->append("prefix_" + long_needle + "_suffix");
+        Columns small_cols{std::move(small_str),
+                           ColumnHelper::create_const_column<TYPE_VARCHAR>("%" + long_needle + "%", 1)};
+        long_ctx_raw->set_constant_columns(small_cols);
+        ASSERT_TRUE(
+                LikePredicate::like_prepare(long_ctx_raw, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        ASSERT_TRUE(has_shared_state(long_ctx_raw));
+        EXPECT_EQ(nullptr, substring_searcher(long_ctx_raw));
+        ASSERT_NE(nullptr, substring_fallback(long_ctx_raw));
+
+        auto small_res = ColumnHelper::cast_to<TYPE_BOOLEAN>(LikePredicate::like(long_ctx_raw, small_cols).value());
+        EXPECT_EQ(nullptr, substring_searcher(long_ctx_raw));
+        EXPECT_EQ(0, small_res->immutable_data()[0]);
+        EXPECT_EQ(1, small_res->immutable_data()[1]);
+
+        auto large_str = BinaryColumn::create();
+        for (int i = 0; i < 300; ++i) {
+            large_str->append(std::string(80, 'x'));
+        }
+        large_str->append("hit_" + long_needle);
+        Columns large_cols{std::move(large_str),
+                           ColumnHelper::create_const_column<TYPE_VARCHAR>("%" + long_needle + "%", 1)};
+        auto large_res = ColumnHelper::cast_to<TYPE_BOOLEAN>(LikePredicate::like(long_ctx_raw, large_cols).value());
+        EXPECT_NE(nullptr, substring_searcher(long_ctx_raw));
+        EXPECT_EQ(1, large_res->immutable_data()[300]);
+        ASSERT_TRUE(LikePredicate::like_close(long_ctx_raw, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    }
+}
+
+TEST_F(LikeTest, RegexSubstringNullableWithResidualBytesAndLargeOffsets) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+
+    auto str = BinaryColumn::create();
+    auto null = NullColumn::create();
+    // Row 0: NULL row but underlying BinaryColumn has "google" bytes
+    str->append("https://www.google.com.au");
+    null->append(1);
+    // Row 1: non-null miss
+    str->append("https://starrocks.io");
+    null->append(0);
+    // Row 2: non-null hit
+    str->append("https://news.google.com.au");
+    null->append(0);
+
+    // Promote AdaptiveOffsets to 64-bit large_storage
+    str->get_offset().ensure_width_for_value(static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()) + 1ULL);
+    ASSERT_TRUE(str->get_offset().is_large());
+
+    Columns columns;
+    columns.emplace_back(NullableColumn::create(std::move(str), std::move(null)));
+    columns.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>(".*google.*", 1));
+    context->set_constant_columns(columns);
+
+    ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_NE(nullptr, substring_fallback(context));
+
+    auto result = LikePredicate::regex(context, columns).value();
+    ASSERT_TRUE(result->is_nullable());
+    EXPECT_TRUE(result->is_null(0));
+    EXPECT_FALSE(result->is_null(1));
+    EXPECT_FALSE(result->is_null(2));
+
+    auto data_col =
+            ColumnHelper::cast_to<TYPE_BOOLEAN>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
+    EXPECT_EQ(0, data_col->immutable_data()[1]);
+    EXPECT_EQ(1, data_col->immutable_data()[2]);
+
+    ASSERT_TRUE(LikePredicate::regex_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+}
+
+TEST_F(LikeTest, SubstringMatchesOracleAcrossChunkShapes) {
+    // 6 B needle -> StringSearcher; 46 B needle on a >= 20,000 byte chunk -> hoisted Volnitsky table.
+    for (const std::string& needle : {std::string("google"), std::string(40, 'q') + "needle"}) {
+        for (size_t rows :
+             {size_t(0), size_t(1), size_t(15), size_t(16), size_t(17), size_t(18), size_t(33), size_t(400)}) {
+            auto context = FunctionContext::create_test_context();
+            std::unique_ptr<FunctionContext> ctx(context);
+            auto str = BinaryColumn::create();
+            std::vector<uint8_t> expected;
+            for (size_t r = 0; r < rows; ++r) {
+                std::string row;
+                if (r % 7 != 0) { // every 7th row is empty (consecutive-empty and boundary shapes)
+                    row = "http://x/" + std::string(r % 5 == 0 ? needle : std::string("no")) + std::string(64, '.');
+                }
+                expected.push_back(row.find(needle) != std::string::npos);
+                str->append(row);
+            }
+            Columns columns;
+            columns.emplace_back(std::move(str));
+            columns.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>("%" + needle + "%", 1));
+            context->set_constant_columns(columns);
+
+            ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+            auto result = LikePredicate::like(context, columns).value();
+            auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+            ASSERT_EQ(rows, v->size());
+            for (size_t r = 0; r < rows; ++r) {
+                EXPECT_EQ(expected[r], v->immutable_data()[r])
+                        << "needle_len=" << needle.size() << " rows=" << rows << " r=" << r;
+            }
+            ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        }
+    }
+}
+
+TEST_F(LikeTest, SubstringSearcherScalarSseAndTailDecoyPaths) {
+    auto run_like = [](const std::string& pattern_str, const std::vector<std::string>& rows) {
+        auto context = FunctionContext::create_test_context();
+        std::unique_ptr<FunctionContext> ctx(context);
+        auto str = BinaryColumn::create();
+        for (const auto& r : rows) {
+            str->append(r);
+        }
+        Columns columns{std::move(str), ColumnHelper::create_const_column<TYPE_VARCHAR>(pattern_str, 1)};
+        context->set_constant_columns(columns);
+        EXPECT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        auto result = ColumnHelper::cast_to<TYPE_BOOLEAN>(LikePredicate::like(context, columns).value());
+        EXPECT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        std::vector<uint8_t> out(result->immutable_data().begin(), result->immutable_data().end());
+        return out;
+    };
+
+    // 1. 1-byte needle ("%g%") exercises search_scalar's needle_size == 1 (std::memchr) hit and miss paths.
+    EXPECT_EQ((std::vector<uint8_t>{0, 1, 0}), run_like("%g%", {"abc", "defg", "xyz"}));
+
+    // 2. Short chunk (< last_off + 16 = 21 bytes for 6B "google") exercises search_scalar's multi-byte loop.
+    EXPECT_EQ((std::vector<uint8_t>{0, 1}), run_like("%google%", {"gooxle", "google"}));
+
+    // 3. 16-byte SSE4.1 window (21 <= chunk_bytes < 37 for 6B "google") with a decoy ("gooxle" matches first='g',
+    //    last='e', mid='o' at offset 2, fails alt_off) in the first 16 positions (0..15) and real match at offset 6.
+    EXPECT_EQ((std::vector<uint8_t>{1}), run_like("%google%", {"gooxlegoogle............"}));
+
+    // 4. Overlapping < 16B tail in _search_sse41_from: chunk_bytes = 28 (one 16B step checks 0..15; overlapping tail
+    //    checks 16..22), with decoy "gooxle" at offset 16 and real match "google" at offset 22.
+    EXPECT_EQ((std::vector<uint8_t>{1}), run_like("%google%", {"................gooxlegoogle"}));
+
+    // 5. Homogeneous needle ("%aaaa%") exercises constructor when all interior bytes equal first == last.
+    EXPECT_EQ((std::vector<uint8_t>{0, 1}), run_like("%aaaa%", {"aaabaaabaaabaaab", "baaaab"}));
 }
 } // namespace starrocks
