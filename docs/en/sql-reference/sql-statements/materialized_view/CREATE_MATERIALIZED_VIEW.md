@@ -526,6 +526,8 @@ A materialized view whose `refresh_mode` is `INCREMENTAL` is a Primary Key table
 
 Incremental refresh supports only append-only operations on base tables. If unsupported operations such as `UPDATE`, `MERGE`, or `OVERWRITE` are performed, the refresh of materialized views whose `refresh_mode` is set to `INCREMENTAL` will fail.
 
+When a refresh fails because of such a non-append-only change (for example, `OVERWRITE`, dropping a partition, expiring snapshots, or replacing the base table), StarRocks marks the materialized view as inactive and suspends its refresh task, so the task stops running refreshes that cannot succeed. `is_active` of the materialized view becomes `false`, and its `inactive_reason` in [SHOW MATERIALIZED VIEWS](SHOW_MATERIALIZED_VIEW.md) and `information_schema.materialized_views` is `incremental refresh broken by non-append-only base change: <mv_name>`. StarRocks does not reactivate such a materialized view automatically. To make it refresh again, drop and re-create it.
+
 The following operators are currently supported for incremental refresh:
 
 | Operator                   | Incremental Refresh Support                                                                                               |
