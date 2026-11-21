@@ -62,6 +62,7 @@ import java.util.HashMap;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -119,6 +120,14 @@ public class InsertOverwriteJobRunnerEditLogTest {
         UtFrameUtils.tearDownForPersisTest();
     }
 
+    private InsertOverwriteJobRunner withVisibleTransaction(InsertOverwriteJobRunner runner) {
+        InsertOverwriteJobRunner visibleRunner = spy(runner);
+        TransactionState visibleState = mock(TransactionState.class);
+        when(visibleState.getTransactionStatus()).thenReturn(TransactionStatus.VISIBLE);
+        doReturn(visibleState).when(visibleRunner).getTransactionState();
+        return visibleRunner;
+    }
+
     /**
      * A tablet reshard (a pre-split job, or the background split/merge daemon) holds
      * {@code TABLET_RESHARD} on the table until it finishes, and it cannot be aborted once it has left
@@ -132,7 +141,8 @@ public class InsertOverwriteJobRunnerEditLogTest {
         job.setJobState(InsertOverwriteJobState.OVERWRITE_RUNNING);
         job.setTmpPartitionIds(Lists.newArrayList(tempPartitionId));
         job.setSourcePartitionNames(Lists.newArrayList(TABLE_NAME));
-        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job, contextWithBudget(3600), null);
+        InsertOverwriteJobRunner runner = withVisibleTransaction(
+                new InsertOverwriteJobRunner(job, contextWithBudget(3600), null));
 
         table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
         Thread restorer = new Thread(() -> {
@@ -292,7 +302,7 @@ public class InsertOverwriteJobRunnerEditLogTest {
         job.setTmpPartitionIds(Lists.newArrayList(tempPartitionId));
         job.setSourcePartitionNames(Lists.newArrayList(TABLE_NAME));
 
-        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
+        InsertOverwriteJobRunner runner = withVisibleTransaction(new InsertOverwriteJobRunner(job));
         runner.doCommit();
 
         Partition replaced = table.getPartition(TABLE_NAME);
@@ -386,7 +396,7 @@ public class InsertOverwriteJobRunnerEditLogTest {
         job.setTmpPartitionIds(Lists.newArrayList(tempPartitionId));
         job.setSourcePartitionNames(Lists.newArrayList(TABLE_NAME));
 
-        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
+        InsertOverwriteJobRunner runner = withVisibleTransaction(new InsertOverwriteJobRunner(job));
         runner.doCommit();
 
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
@@ -412,7 +422,7 @@ public class InsertOverwriteJobRunnerEditLogTest {
         job.setTmpPartitionIds(Lists.newArrayList(tempPartitionId));
         job.setSourcePartitionNames(Lists.newArrayList(TABLE_NAME));
 
-        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job, null, null);
+        InsertOverwriteJobRunner runner = withVisibleTransaction(new InsertOverwriteJobRunner(job, null, null));
         // the swap is journaled before post-commit work runs; a post-commit failure
         // must not escape doCommit, otherwise the job would be routed to gc(), which
         // would drop the partitions that just became live
@@ -442,7 +452,7 @@ public class InsertOverwriteJobRunnerEditLogTest {
         db.dropTable(TABLE_NAME);
 
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
-        Assertions.assertThrows(DmlException.class, runner::gc);
+        Assertions.assertDoesNotThrow(runner::gc);
 
         // the PREPARE transaction must not leak until the txn timeout checker reaps
         // it: gc() aborts it even though the table is gone
@@ -467,7 +477,7 @@ public class InsertOverwriteJobRunnerEditLogTest {
         GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
 
         try {
-            InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
+            InsertOverwriteJobRunner runner = withVisibleTransaction(new InsertOverwriteJobRunner(job));
             DmlException exception = Assertions.assertThrows(DmlException.class, runner::doCommit);
             Assertions.assertTrue(exception.getMessage().contains("replace partitions failed"));
 
@@ -505,7 +515,7 @@ public class InsertOverwriteJobRunnerEditLogTest {
         GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
 
         try {
-            InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
+            InsertOverwriteJobRunner runner = withVisibleTransaction(new InsertOverwriteJobRunner(job));
             DmlException exception = Assertions.assertThrows(DmlException.class, runner::doCommit);
             Assertions.assertTrue(exception.getMessage().contains("replace partitions failed"));
             Assertions.assertTrue(exception.getMessage().contains("leader is demoting"),
@@ -530,7 +540,7 @@ public class InsertOverwriteJobRunnerEditLogTest {
 
         try {
             InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
-            Assertions.assertDoesNotThrow(runner::gc);
+            Assertions.assertThrows(DmlException.class, runner::gc);
             Assertions.assertTrue(table.existTempPartitions());
         } finally {
             GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);

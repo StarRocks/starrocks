@@ -20,7 +20,9 @@ import com.starrocks.alter.reshard.presplit.InsertPreSplitHook;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -29,9 +31,11 @@ import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.context.ai.AIProviderType;
+import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.AIProviderMgr;
@@ -51,6 +55,10 @@ import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.thrift.TAIProvider;
 import com.starrocks.thrift.TAIProviderProtocol;
 import com.starrocks.thrift.TPlanNodeType;
+import com.starrocks.transaction.PartitionCommitInfo;
+import com.starrocks.transaction.TableCommitInfo;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Invocation;
@@ -66,6 +74,7 @@ import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.sql.SQLException;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -159,6 +168,150 @@ public class InsertOverwriteJobRunnerTest {
         runner2.replayStateChange(stateChangeInfo);
         runner2.cancel();
         Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob2.getJobState());
+    }
+
+    @Test
+    public void testReplayWaitingVisibleKeepsTemporaryPartitions() {
+        InsertOverwriteJob job = new InsertOverwriteJob(301L, 100L, 110L, Lists.newArrayList(10L), false);
+        job.setJobState(InsertOverwriteJobState.OVERWRITE_RUNNING);
+        InsertOverwriteStateChangeInfo waiting = new InsertOverwriteStateChangeInfo(301L,
+                InsertOverwriteJobState.OVERWRITE_RUNNING, InsertOverwriteJobState.OVERWRITE_WAITING_VISIBLE,
+                Lists.newArrayList(10L), Lists.newArrayList("p1"), Lists.newArrayList(20L), 40L, 1000L);
+
+        new InsertOverwriteJobRunner(job).replayStateChange(waiting);
+
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_WAITING_VISIBLE, job.getJobState());
+        Assertions.assertEquals(40L, job.getTxnId());
+        Assertions.assertEquals(1000L, job.getCommitTime());
+        Assertions.assertEquals(Lists.newArrayList(20L), job.getTmpPartitionIds());
+        Assertions.assertEquals(Lists.newArrayList("p1"), job.getSourcePartitionNames());
+    }
+
+    @Test
+    public void testRecoveryCleansUpRunningJobWithoutTransaction() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "t3");
+        long sourceId = table.getPartition("p1").getId();
+        InsertOverwriteJobMgr mgr = new InsertOverwriteJobMgr();
+        long jobId = 303L;
+        mgr.replayCreateInsertOverwrite(new CreateInsertOverwriteJobLog(
+                jobId, db.getId(), table.getId(), Lists.newArrayList(sourceId), false));
+        mgr.replayInsertOverwriteStateChange(new InsertOverwriteStateChangeInfo(jobId,
+                InsertOverwriteJobState.OVERWRITE_PENDING, InsertOverwriteJobState.OVERWRITE_RUNNING,
+                Lists.newArrayList(sourceId), Lists.newArrayList("p1"), Lists.newArrayList(999999L), 888888L));
+        InsertOverwriteJob job = mgr.getInsertOverwriteJob(jobId);
+
+        mgr.cancelRunningJobs();
+        for (int i = 0; i < 50 && mgr.getInsertOverwriteJob(jobId) != null; i++) {
+            Thread.sleep(100);
+        }
+
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, job.getJobState());
+        Assertions.assertNull(mgr.getInsertOverwriteJob(jobId));
+    }
+
+    @Test
+    public void testRecoverDynamicTempPartitionsWhenTxnSnapshotIsEmpty() {
+        OlapTable table = Mockito.mock(OlapTable.class);
+        TransactionState state = Mockito.mock(TransactionState.class);
+        Partition ownTemp = Mockito.mock(Partition.class);
+        Partition otherTemp = Mockito.mock(Partition.class);
+        Partition unusedTemp = Mockito.mock(Partition.class);
+        PhysicalPartition ownPhysical = Mockito.mock(PhysicalPartition.class);
+        PhysicalPartition unusedPhysical = Mockito.mock(PhysicalPartition.class);
+        TableCommitInfo commitInfo = Mockito.mock(TableCommitInfo.class);
+        Mockito.when(state.getCreatedPartitionNames(110L)).thenReturn(Lists.newArrayList());
+        Mockito.when(state.getIdToTableCommitInfos()).thenReturn(Map.of(110L, commitInfo));
+        Mockito.when(commitInfo.getIdToPartitionCommitInfo()).thenReturn(
+                Map.of(50L, Mockito.mock(PartitionCommitInfo.class)));
+        Mockito.when(ownTemp.getName()).thenReturn("txn40_p1");
+        Mockito.when(otherTemp.getName()).thenReturn("txn41_p2");
+        Mockito.when(unusedTemp.getName()).thenReturn("txn40_unused");
+        Mockito.when(ownPhysical.getId()).thenReturn(50L);
+        Mockito.when(unusedPhysical.getId()).thenReturn(60L);
+        Mockito.when(ownTemp.getSubPartitions()).thenReturn(Lists.newArrayList(ownPhysical));
+        Mockito.when(unusedTemp.getSubPartitions()).thenReturn(Lists.newArrayList(unusedPhysical));
+        Mockito.when(table.getTempPartitions()).thenReturn(Lists.newArrayList(ownTemp, otherTemp, unusedTemp));
+
+        Assertions.assertEquals(Lists.newArrayList("txn40_p1"),
+                Lists.newArrayList(InsertOverwriteJobRunner.collectDynamicTempPartitionNames(table, state, 110L, 40L)));
+    }
+
+    @Test
+    public void testDynamicOverwriteAllowsNewFormalPartitionName() {
+        OlapTable table = Mockito.mock(OlapTable.class);
+        Mockito.when(table.getPartition("p20260101")).thenReturn(null);
+        InsertOverwriteJob dynamicJob = new InsertOverwriteJob(303L, 100L, 110L, Lists.newArrayList(), true);
+        Set<Tablet> sourceTablets = new HashSet<>();
+
+        new InsertOverwriteJobRunner(dynamicJob).collectExistingSourceTablets(
+                table, Lists.newArrayList("p20260101"), sourceTablets);
+
+        Assertions.assertTrue(sourceTablets.isEmpty());
+        InsertOverwriteJob staticJob = new InsertOverwriteJob(304L, 100L, 110L, Lists.newArrayList(), false);
+        Assertions.assertThrows(DmlException.class, () -> new InsertOverwriteJobRunner(staticJob)
+                .collectExistingSourceTablets(table, Lists.newArrayList("p20260101"), new HashSet<>()));
+    }
+
+    @Test
+    public void testMvRefreshReportsPendingReplacementAsError() {
+        InsertOverwriteJob job = new InsertOverwriteJob(302L, 100L, 110L, Lists.newArrayList(10L), false);
+        job.setTxnId(40L);
+        ConnectContext mvContext = Mockito.mock(ConnectContext.class);
+        QueryState queryState = new QueryState();
+        Mockito.when(mvContext.getQuerySource()).thenReturn(QueryDetail.QuerySource.MV);
+        Mockito.when(mvContext.getState()).thenReturn(queryState);
+        TransactionState transaction = Mockito.mock(TransactionState.class);
+        Mockito.when(transaction.getTransactionStatus()).thenReturn(TransactionStatus.VISIBLE);
+
+        new InsertOverwriteJobRunner(job, mvContext, Mockito.mock(StmtExecutor.class), Estimates.ZERO)
+                .reportPendingOverwrite(transaction);
+
+        Assertions.assertEquals(QueryState.MysqlStateType.ERR, queryState.getStateType());
+        Assertions.assertTrue(queryState.getErrorMessage().contains("partition replacement"));
+    }
+
+    @Test
+    public void testForegroundAcceptsWorkerCompletedOverwrite() {
+        InsertOverwriteJob job = new InsertOverwriteJob(99005L, 100L, 110L, Lists.newArrayList(10L), false);
+        job.setTxnId(40L);
+        job.setJobState(InsertOverwriteJobState.OVERWRITE_SUCCESS);
+        ConnectContext mvContext = Mockito.mock(ConnectContext.class);
+        QueryState queryState = new QueryState();
+        Mockito.when(mvContext.getQuerySource()).thenReturn(QueryDetail.QuerySource.MV);
+        Mockito.when(mvContext.getState()).thenReturn(queryState);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(
+                job, mvContext, Mockito.mock(StmtExecutor.class));
+
+        Assertions.assertDoesNotThrow(() -> runner.prepareWaitingVisible(null));
+        runner.finishAfterInsert();
+
+        Assertions.assertEquals(QueryState.MysqlStateType.OK, queryState.getStateType());
+        Assertions.assertTrue(queryState.getInfoMessage().contains("'overwriteStatus':'SUCCESS'"));
+    }
+
+    @Test
+    public void testPermanentMissingSourceFailsAndCleansTemporaryPartition() throws Exception {
+        withClonedTemporaryPartition("t_static_source_removed", (db, table) -> {
+            long sourceId = table.getPartition("p1").getId();
+            long temporaryId = table.getPartition("tp1", true).getId();
+            InsertOverwriteJob job = new InsertOverwriteJob(99006L, db.getId(), table.getId(),
+                    Lists.newArrayList(sourceId), false);
+            job.setSourcePartitionNames(Lists.newArrayList("p_dropped"));
+            job.setTmpPartitionIds(Lists.newArrayList(temporaryId));
+            job.setJobState(InsertOverwriteJobState.OVERWRITE_WAITING_VISIBLE);
+            InsertOverwriteJobMgr mgr = GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr();
+            Assertions.assertTrue(mgr.registerOverwriteJob(job));
+            DmlException failure = Assertions.assertThrows(DmlException.class,
+                    new InsertOverwriteJobRunner(job)::testDoCommit);
+
+            Assertions.assertTrue(mgr.failPermanentReplacement(job, failure));
+            Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, job.getJobState());
+            Assertions.assertNull(mgr.getInsertOverwriteJob(job.getJobId()));
+            Assertions.assertNull(table.getPartition("tp1", true));
+            Assertions.assertNotNull(table.getPartition("p1"));
+        });
     }
 
     @Test
@@ -610,6 +763,31 @@ public class InsertOverwriteJobRunnerTest {
     }
 
     @Test
+    public void testDoCommitDoesNotReplaceCommittedTransaction() {
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(database.getFullName(), "t3");
+        long originalPartitionId = table.getPartition("p1").getId();
+        InsertOverwriteJob job = new InsertOverwriteJob(308L, database.getId(), table.getId(),
+                Lists.newArrayList(originalPartitionId), false);
+        job.setSourcePartitionNames(Lists.newArrayList("p1"));
+        job.setTmpPartitionIds(Lists.newArrayList(originalPartitionId));
+        job.setTxnId(42L);
+        TransactionState committed = Mockito.mock(TransactionState.class);
+        Mockito.when(committed.getTransactionStatus()).thenReturn(TransactionStatus.COMMITTED);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job) {
+            @Override
+            TransactionState getTransactionState() {
+                return committed;
+            }
+        };
+
+        DmlException failure = Assertions.assertThrows(DmlException.class, runner::testDoCommit);
+        Assertions.assertTrue(failure.getMessage().contains("not VISIBLE"));
+        Assertions.assertEquals(originalPartitionId, table.getPartition("p1").getId());
+    }
+
+    @Test
     public void testDoCommitWhenSourcePartitionMissing() {
         // A source partition recorded before the load can be dropped (e.g. by partition TTL) before the swap;
         // doCommit() must report it with a hint instead of a NullPointerException.
@@ -696,12 +874,15 @@ public class InsertOverwriteJobRunnerTest {
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job) {
             @Override
             protected boolean hasCommittedNotVisible(long partitionId) {
-                return partitionId == 10L;
+                return partitionId == 200L;
             }
         };
         OlapTable table = Mockito.mock(OlapTable.class);
         Partition partition = Mockito.mock(Partition.class);
+        PhysicalPartition physicalPartition = Mockito.mock(PhysicalPartition.class);
         Mockito.when(partition.getName()).thenReturn("tmp_part");
+        Mockito.when(partition.getSubPartitions()).thenReturn(Lists.newArrayList(physicalPartition));
+        Mockito.when(physicalPartition.getId()).thenReturn(200L);
         Mockito.when(table.getPartition(10L)).thenReturn(partition);
         Assertions.assertThrows(DmlException.class,
                 () -> runner.ensureTempPartitionsVisible(table, Lists.newArrayList(10L)));
@@ -718,6 +899,9 @@ public class InsertOverwriteJobRunnerTest {
         };
         OlapTable table = Mockito.mock(OlapTable.class);
         Partition partition = Mockito.mock(Partition.class);
+        PhysicalPartition physicalPartition = Mockito.mock(PhysicalPartition.class);
+        Mockito.when(partition.getSubPartitions()).thenReturn(Lists.newArrayList(physicalPartition));
+        Mockito.when(physicalPartition.getId()).thenReturn(20L);
         Mockito.when(table.getPartition(10L)).thenReturn(partition);
         Assertions.assertDoesNotThrow(
                 () -> runner.ensureTempPartitionsVisible(table, Lists.newArrayList(10L)));

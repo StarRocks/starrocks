@@ -1268,15 +1268,13 @@ public class GlobalTransactionMgr implements MemoryTrackable {
 
     public void loadTransactionStateV2(SRMetaBlockReader reader)
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        long now = System.currentTimeMillis();
         idGenerator = reader.readJson(TransactionIdGenerator.class);
 
         List<TransactionState> transactionStates = new ArrayList<>();
         reader.readCollection(TransactionState.class, transactionState -> {
-            if (transactionState.isExpired(now)) {
-                LOG.info("discard expired transaction state: {}", transactionState);
-                return;
-            } else if (transactionState.getTransactionStatus() == TransactionStatus.UNKNOWN) {
+            // The overwrite job image is loaded after the transaction image. Keep expired
+            // states until both images are available, then remove only unreferenced states.
+            if (transactionState.getTransactionStatus() == TransactionStatus.UNKNOWN) {
                 LOG.info("discard unknown transaction state: {}", transactionState);
                 return;
             }

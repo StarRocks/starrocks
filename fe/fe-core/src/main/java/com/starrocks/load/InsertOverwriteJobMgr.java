@@ -34,16 +34,26 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, MemoryTrackable {
@@ -57,6 +67,7 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, Mem
     private Map<Long, List<Long>> tableToOverwriteJobs;
 
     private transient ExecutorService cancelJobExecutorService;
+    private transient ScheduledExecutorService visibleJobExecutorService;
 
     // store the jobs which are still running after FE restart
     // it is used when replay, so no need to add concurrent control for it
@@ -75,6 +86,7 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, Mem
 
     public void executeJob(ConnectContext context, StmtExecutor stmtExecutor, InsertOverwriteJob job,
                            Estimates outputEstimates) throws Exception {
+        ensureVisibleJobWorkerStarted();
         boolean registered = registerOverwriteJob(job);
         if (!registered) {
             LOG.warn("register insert overwrite job:{} failed", job.getJobId());
@@ -85,8 +97,180 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, Mem
                     new InsertOverwriteJobRunner(job, context, stmtExecutor, outputEstimates);
             jobRunner.run();
         } finally {
-            deregisterOverwriteJob(job.getJobId());
+            if (job.isFinished()) {
+                deregisterOverwriteJob(job.getJobId());
+            }
         }
+    }
+
+    private synchronized void ensureVisibleJobWorkerStarted() {
+        if (visibleJobExecutorService != null) {
+            return;
+        }
+        visibleJobExecutorService = Executors.newSingleThreadScheduledExecutor(
+                new DefaultThreadFactory("overwrite-visible", true));
+        visibleJobExecutorService.scheduleWithFixedDelay(() -> {
+            try {
+                GlobalStateMgr servingState = GlobalStateMgr.getServingState();
+                if (servingState != null && servingState.isReady() && GlobalStateMgr.getCurrentState().isLeader()) {
+                    processPendingJobs();
+                }
+            } catch (Throwable t) {
+                LOG.warn("failed to process pending insert overwrite jobs", t);
+            }
+        }, 1, 1, TimeUnit.SECONDS);
+    }
+
+    void processPendingJobs() {
+        List<InsertOverwriteJob> jobs = new ArrayList<>(overwriteJobMap.values());
+        for (InsertOverwriteJob job : jobs) {
+            if (job.getJobState() != InsertOverwriteJobState.OVERWRITE_RUNNING || job.getTxnId() <= 0) {
+                continue;
+            }
+            InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
+            TransactionState state = runner.getTransactionState();
+            if (state != null && (state.getTransactionStatus() == TransactionStatus.COMMITTED
+                    || state.getTransactionStatus() == TransactionStatus.VISIBLE)) {
+                try {
+                    runner.prepareWaitingVisible(state);
+                } catch (Exception e) {
+                    if (!failPermanentReplacement(job, e)) {
+                        LOG.warn("failed to recover committed overwrite job {}", job.getJobId(), e);
+                    }
+                }
+            }
+        }
+        jobs.sort(Comparator.comparingLong(InsertOverwriteJob::getCommitTime)
+                .thenComparingLong(InsertOverwriteJob::getTxnId));
+        for (InsertOverwriteJob job : jobs) {
+            if (job.getJobState() != InsertOverwriteJobState.OVERWRITE_WAITING_VISIBLE) {
+                continue;
+            }
+            InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
+            TransactionState state = runner.getTransactionState();
+            if (state == null) {
+                LOG.debug("overwrite job {} is pending, but transaction {} is unavailable",
+                        job.getJobId(), job.getTxnId());
+                continue;
+            }
+            if (state.getTransactionStatus() == TransactionStatus.ABORTED) {
+                if (runner.cancel()) {
+                    deregisterOverwriteJob(job.getJobId());
+                }
+                continue;
+            }
+            if (state.getTransactionStatus() != TransactionStatus.VISIBLE) {
+                continue;
+            }
+            try {
+                tryFinishVisible(job);
+            } catch (Exception e) {
+                if (!failPermanentReplacement(job, e)) {
+                    LOG.warn("failed to replace partitions for visible overwrite job {}", job.getJobId(), e);
+                }
+            }
+        }
+    }
+
+    boolean failPermanentReplacement(InsertOverwriteJob job, Exception failure) {
+        if (!InsertOverwriteJobRunner.isPermanentReplacementFailure(failure)) {
+            return false;
+        }
+        synchronized (job) {
+            if (job.isFinished()) {
+                return true;
+            }
+            LOG.error("permanent partition replacement failure for overwrite job {}; "
+                    + "keep formal partitions and discard temporary partitions", job.getJobId(), failure);
+            if (new InsertOverwriteJobRunner(job).cancel()) {
+                deregisterOverwriteJob(job.getJobId());
+            }
+        }
+        return true;
+    }
+
+    boolean tryFinishVisible(InsertOverwriteJob job) throws Exception {
+        synchronized (job) {
+            if (job.isFinished()) {
+                return job.getJobState() == InsertOverwriteJobState.OVERWRITE_SUCCESS;
+            }
+            if (job.getJobState() != InsertOverwriteJobState.OVERWRITE_WAITING_VISIBLE) {
+                return false;
+            }
+            TransactionState state = new InsertOverwriteJobRunner(job).getTransactionState();
+            if (state == null || state.getTransactionStatus() != TransactionStatus.VISIBLE
+                    || hasEarlierOverlappingJob(job, new ArrayList<>(overwriteJobMap.values()))) {
+                return false;
+            }
+            new InsertOverwriteJobRunner(job).finishVisible();
+            deregisterOverwriteJob(job.getJobId());
+            return true;
+        }
+    }
+
+    boolean hasEarlierOverlappingJob(InsertOverwriteJob job, List<InsertOverwriteJob> jobs) {
+        Set<String> targetNames = getTargetPartitionNames(job, null);
+        for (InsertOverwriteJob other : jobs) {
+            if (other == job || other.isFinished() || other.getTargetTableId() != job.getTargetTableId()) {
+                continue;
+            }
+            TransactionState otherState = new InsertOverwriteJobRunner(other).getTransactionState();
+            if (otherState != null && otherState.getTransactionStatus() != TransactionStatus.COMMITTED
+                    && otherState.getTransactionStatus() != TransactionStatus.VISIBLE) {
+                continue;
+            }
+            long otherCommitTime = otherState == null ? other.getCommitTime() : otherState.getCommitTime();
+            if (otherCommitTime <= 0) {
+                // The transaction may have been pruned while an unfinished job remains. Do not
+                // allow an overlapping replacement to overtake an unresolved predecessor.
+                if (otherState == null && other.getTxnId() > 0) {
+                    Set<String> unknownTargets = getTargetPartitionNames(other, null);
+                    if (other.isDynamicOverwrite() && unknownTargets.isEmpty()) {
+                        return true;
+                    }
+                    if (!Collections.disjoint(unknownTargets, targetNames)) {
+                        return true;
+                    }
+                }
+                continue;
+            }
+            Set<String> otherTargets = getTargetPartitionNames(other, otherState);
+            if (other.isDynamicOverwrite() && otherTargets.isEmpty()) {
+                // A committed dynamic job whose target set cannot yet be reconstructed must
+                // not be overtaken by a later replacement.
+                if (otherCommitTime < job.getCommitTime()) {
+                    return true;
+                }
+            }
+            if (isEarlierOverlapping(otherCommitTime, other.getTxnId(), otherTargets,
+                    job.getCommitTime(), job.getTxnId(), targetNames)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static boolean isEarlierOverlapping(long firstCommitTime, long firstTxnId, Set<String> firstTargets,
+                                        long secondCommitTime, long secondTxnId, Set<String> secondTargets) {
+        return (firstCommitTime < secondCommitTime
+                || (firstCommitTime == secondCommitTime && firstTxnId < secondTxnId))
+                && !Collections.disjoint(firstTargets, secondTargets);
+    }
+
+    private Set<String> getTargetPartitionNames(InsertOverwriteJob job, TransactionState state) {
+        if (job.getSourcePartitionNames() != null && !job.getSourcePartitionNames().isEmpty()) {
+            return new HashSet<>(job.getSourcePartitionNames());
+        }
+        Set<String> names = new HashSet<>();
+        if (job.isDynamicOverwrite() && state != null) {
+            for (String tempName : state.getCreatedPartitionNames(job.getTargetTableId())) {
+                int separator = tempName.indexOf(AnalyzerUtils.PARTITION_NAME_PREFIX_SPLIT);
+                if (separator >= 0) {
+                    names.add(tempName.substring(separator + 1));
+                }
+            }
+        }
+        return names;
     }
 
     public boolean registerOverwriteJob(InsertOverwriteJob job) {
@@ -177,6 +361,7 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, Mem
         if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
+        ensureVisibleJobWorkerStarted();
         cancelJobExecutorService.submit(() -> {
             try {
                 // wait until serving catalog is ready
@@ -190,15 +375,37 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, Mem
                     }
                 }
                 if (runningJobs != null) {
-                    for (InsertOverwriteJob job : runningJobs) {
-                        LOG.info("start to cancel unfinished insert overwrite job:{}", job.getJobId());
-                        try {
-                            InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
-                            runner.cancel();
-                        } catch (Exception e) {
-                            LOG.warn("cancel insert overwrite job:{} failed.", job.getJobId(), e);
-                        } finally {
-                            deregisterOverwriteJob(job.getJobId());
+                    List<InsertOverwriteJob> pending = new ArrayList<>(runningJobs);
+                    while (!pending.isEmpty()) {
+                        List<InsertOverwriteJob> retry = new ArrayList<>();
+                        for (InsertOverwriteJob job : pending) {
+                            try {
+                                InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
+                                if (job.isFinished()
+                                        || job.getJobState() == InsertOverwriteJobState.OVERWRITE_WAITING_VISIBLE) {
+                                    continue;
+                                }
+                                TransactionState state = runner.getTransactionState();
+                                if (state != null && (state.getTransactionStatus() == TransactionStatus.COMMITTED
+                                        || state.getTransactionStatus() == TransactionStatus.VISIBLE)) {
+                                    runner.prepareWaitingVisible(state);
+                                    continue;
+                                }
+                                // A recovered RUNNING job without a committed transaction must be cleaned up.
+                                LOG.info("start to cancel unfinished insert overwrite job:{}", job.getJobId());
+                                if (runner.cancel()) {
+                                    deregisterOverwriteJob(job.getJobId());
+                                } else {
+                                    retry.add(job);
+                                }
+                            } catch (Exception e) {
+                                LOG.warn("cancel insert overwrite job:{} failed.", job.getJobId(), e);
+                                retry.add(job);
+                            }
+                        }
+                        pending = retry;
+                        if (!pending.isEmpty()) {
+                            Thread.sleep(1000);
                         }
                     }
                     runningJobs.clear();
@@ -211,6 +418,18 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, Mem
 
     public long getJobNum() {
         return overwriteJobMap.size();
+    }
+
+    // Called while a DatabaseTransactionMgr holds its write lock. The job map is concurrent
+    // and txnId is volatile, so this snapshot must not acquire a job or manager lock.
+    public Set<Long> getUnfinishedTransactionIds(long dbId) {
+        Set<Long> txnIds = new HashSet<>();
+        for (InsertOverwriteJob job : overwriteJobMap.values()) {
+            if (job.getTargetDbId() == dbId && job.getTxnId() > 0) {
+                txnIds.add(job.getTxnId());
+            }
+        }
+        return txnIds;
     }
 
     public long getRunningJobSize() {
