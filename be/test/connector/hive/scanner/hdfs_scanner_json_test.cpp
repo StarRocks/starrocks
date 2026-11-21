@@ -387,4 +387,72 @@ TEST_F(HdfsScannerJsonReaderTest, test_4byte_utf8_split_across_boundary) {
     ASSERT_EQ(col_value(chunk.get(), 1, 1), c2_1);
     ASSERT_EQ(col_value(chunk.get(), 1, 2), "end");
 }
+
+class HdfsScannerJsonTest : public HdfsScannerJsonReaderTest {};
+
+TEST_F(HdfsScannerJsonTest, test_exact_buffer_boundary_padding) {
+    const std::string head1 = R"({"c1":1,"c2":")";
+    const std::string head2 = R"({"c1":2,"c2":")";
+    const std::string head3 = R"({"c1":3,"c2":")";
+    const std::string tail = "\"}\n";
+    const std::string c2_row2(16, 'b');
+    const std::string row2 = head2 + c2_row2 + tail;
+    const std::string c2_row3(128, 'c');
+    const std::string row3 = head3 + c2_row3 + tail;
+
+    // Test record boundaries at INIT_BUF_SIZE - {0, 1, 31, 63, 64} = {1024, 1023, 993, 961, 960}.
+    // Placing row2 right at the end of the boundary ensures 512-bit (64-byte) vector loads in
+    // simdjson's icelake backend read past row2 into the 64-byte SIMDJSON_PADDING region.
+    for (size_t boundary_size : {1024UL, 1023UL, 993UL, 961UL, 960UL}) {
+        const size_t c2_row1_len = boundary_size - head1.size() - tail.size() - row2.size();
+        const std::string c2_row1(c2_row1_len, 'a');
+        const std::string row1 = head1 + c2_row1 + tail;
+        const std::string two_rows = row1 + row2;
+        ASSERT_EQ(boundary_size, two_rows.size());
+        ASSERT_EQ('\n', two_rows[boundary_size - 1]);
+
+        // 1. Exact boundary_size file (2 rows)
+        {
+            std::string path = "./be/test/connector/hive/scanner/test_data/exact_boundary_" +
+                               std::to_string(boundary_size) + ".json";
+            write_file(path, two_rows);
+            DeferOp clean([&]() { std::remove(path.c_str()); });
+
+            create_random_access_file(path);
+            auto* tuple_desc = create_tuple_descriptor();
+            HdfsJsonReader json_reader(_file.get(), tuple_desc->slots());
+            ASSERT_OK(json_reader.init());
+
+            auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+            EXPECT_STATUS(Status::EndOfFile(""), json_reader.next_record(chunk.get(), 4096));
+            ASSERT_EQ(chunk->num_rows(), 2);
+            ASSERT_EQ(chunk->get_column_by_slot_id(0)->debug_string(), "[1, 2]");
+            ASSERT_EQ(col_value(chunk.get(), 1, 0), c2_row1);
+            ASSERT_EQ(col_value(chunk.get(), 1, 1), c2_row2);
+        }
+
+        // 2. Boundary followed by a 3rd row spanning the 1024-byte buffer refill
+        {
+            const std::string three_rows = two_rows + row3;
+            ASSERT_GT(three_rows.size(), 1024UL);
+            std::string path = "./be/test/connector/hive/scanner/test_data/refill_boundary_" +
+                               std::to_string(boundary_size) + ".json";
+            write_file(path, three_rows);
+            DeferOp clean([&]() { std::remove(path.c_str()); });
+
+            create_random_access_file(path);
+            auto* tuple_desc = create_tuple_descriptor();
+            HdfsJsonReader json_reader(_file.get(), tuple_desc->slots());
+            ASSERT_OK(json_reader.init());
+
+            auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+            EXPECT_STATUS(Status::EndOfFile(""), json_reader.next_record(chunk.get(), 4096));
+            ASSERT_EQ(chunk->num_rows(), 3);
+            ASSERT_EQ(chunk->get_column_by_slot_id(0)->debug_string(), "[1, 2, 3]");
+            ASSERT_EQ(col_value(chunk.get(), 1, 0), c2_row1);
+            ASSERT_EQ(col_value(chunk.get(), 1, 1), c2_row2);
+            ASSERT_EQ(col_value(chunk.get(), 1, 2), c2_row3);
+        }
+    }
+}
 } // namespace starrocks

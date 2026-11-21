@@ -61,30 +61,10 @@ static Status add_column_with_numeric_value(FixedLengthColumn<T>* column, const 
     }
 
     case simdjson::ondemand::number_type::unsigned_integer: {
+        uint64_t in = value->get_uint64();
         T out{};
-        // When get_uint64 throws an exception here, we need to recheck it with get_int64.
-        // This is because currently there exists a bug in simdjson, for number <= -9223372036854775808,
-        // simdjson will recognized it as unsigned_integer, and use get_uint64() to parse it, which will
-        // raise an exception here. So here we need to recheck by get_int64().
-        // This bug in simdjson is expected to be solved by the following commit, later we can remove
-        // the redundant error handling logic here.
-        // https://github.com/simdjson/simdjson/commit/b169dc2ea71bc8e9296de9749c42d78f80c8a633
-        bool checked_cast_flag = true;
-        uint64_t in = 0;
-        try {
-            in = value->get_uint64();
-            checked_cast_flag = checked_cast(in, &out);
-        } catch (simdjson::simdjson_error& e) {
-            // only needs to handle int64_t::min here, throw exception for any other number
-            // get_int64() itself may also throw exception
-            if (value->get_int64() == std::numeric_limits<int64_t>::min()) {
-                checked_cast_flag = checked_cast(std::numeric_limits<int64_t>::min(), &out);
-            } else {
-                throw simdjson::simdjson_error(simdjson::error_code::NUMBER_OUT_OF_RANGE);
-            }
-        }
 
-        if (!checked_cast_flag) {
+        if (!checked_cast(in, &out)) {
             column->append_numbers(&out, sizeof(out));
         } else {
             auto err_msg = strings::Substitute("Value is overflow. column=$0, value=$1", name, in);
@@ -96,20 +76,30 @@ static Status add_column_with_numeric_value(FixedLengthColumn<T>* column, const 
     case simdjson::ondemand::number_type::big_integer: {
         auto s = value->raw_json_token();
         StringParser::ParseResult r;
-        auto in = StringParser::string_to_int<int128_t>(s.data(), s.size(), &r);
-        if (r != StringParser::PARSE_SUCCESS) {
-            auto err_msg = strings::Substitute("Fail to convert big integer. column=$0, value=$1", name, s);
-            return Status::InvalidArgument(err_msg);
-        }
-
-        T out{};
-        if (!checked_cast(in, &out)) {
-            column->append_numbers(&out, sizeof(out));
+        if constexpr (std::is_floating_point_v<T>) {
+            auto f = StringParser::string_to_float<T>(s.data(), s.size(), &r);
+            if (r != StringParser::PARSE_SUCCESS) {
+                auto err_msg = strings::Substitute("Fail to convert big integer. column=$0, value=$1", name, s);
+                return Status::InvalidArgument(err_msg);
+            }
+            column->append_numbers(&f, sizeof(f));
+            return Status::OK();
         } else {
-            auto err_msg = strings::Substitute("Value is overflow. column=$0, value=$1", name, in);
-            return Status::InvalidArgument(err_msg);
+            auto in = StringParser::string_to_int<int128_t>(s.data(), s.size(), &r);
+            if (r != StringParser::PARSE_SUCCESS) {
+                auto err_msg = strings::Substitute("Fail to convert big integer. column=$0, value=$1", name, s);
+                return Status::InvalidArgument(err_msg);
+            }
+
+            T out{};
+            if (!checked_cast(in, &out)) {
+                column->append_numbers(&out, sizeof(out));
+            } else {
+                auto err_msg = strings::Substitute("Value is overflow. column=$0, value=$1", name, in);
+                return Status::InvalidArgument(err_msg);
+            }
+            return Status::OK();
         }
-        return Status::OK();
     }
 
     case simdjson::ondemand::number_type::floating_point_number: {

@@ -70,7 +70,7 @@ Status HdfsJsonReader::_validate_fan_out_targets() const {
 
 Status HdfsJsonReader::init() {
     RETURN_IF_ERROR(_validate_fan_out_targets());
-    ASSIGN_OR_RETURN(_buf, ByteBuffer::allocate_with_tracker(INIT_BUF_SIZE));
+    ASSIGN_OR_RETURN(_buf, ByteBuffer::allocate_with_tracker(INIT_BUF_SIZE, simdjson::SIMDJSON_PADDING));
     return Status::OK();
 }
 
@@ -91,8 +91,9 @@ Status HdfsJsonReader::next_record(Chunk* chunk, int32_t rows_to_read) {
                 size_t truncated_bytes = _parser->truncated_bytes() + _utf8_partial_tail;
                 if (truncated_bytes == _buf->limit) {
                     // TODO: support later
-                    return Status::NotSupported(fmt::format(
-                            "Currently one json record size larger than buf size {} is not supported", _buf->capacity));
+                    return Status::NotSupported(
+                            fmt::format("Currently one json record size larger than buf size {} is not supported",
+                                        _buf->capacity - _buf->padding));
                 }
                 _buf->pos = _buf->limit - truncated_bytes;
                 _buf->flip_to_write();
