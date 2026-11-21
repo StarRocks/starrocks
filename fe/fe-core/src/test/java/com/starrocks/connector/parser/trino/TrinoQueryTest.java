@@ -14,10 +14,13 @@
 
 package com.starrocks.connector.parser.trino;
 
+import com.starrocks.sql.ast.QueryStatement;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 public class TrinoQueryTest extends TrinoTestBase {
     @BeforeAll
@@ -1204,6 +1207,36 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "cross join unnest(plat.pid) as t(plat_id);";
         assertPlanContains(sql, "[1,2]", "[10: expr,11: expr]", "returnTypes: [TINYINT, ARRAY<TINYINT>]",
                 "returnTypes: [TINYINT]");
+    }
+
+    @Test
+    public void testStandaloneUnnest() throws Exception {
+        // Only the UNNEST columns are visible, not the one-row relation it is joined to.
+        assertOutputColumns("select * from unnest(array[1, 2])", List.of("unnest"));
+        assertOutputColumns("select * from unnest(array[1, 2]) as t(x)", List.of("x"));
+        assertOutputColumns("select t.* from unnest(array[1, 2], array['a', 'b']) as t(x, y)", List.of("x", "y"));
+        assertPlanContains("select x from unnest(array[1, 2]) as t(x)", "tableFunctionName: unnest");
+
+        // UNNEST on the left side of a join
+        String sql = "select t.x, t0.v2 from unnest(array[1, 2]) as t(x) join t0 on t.x = t0.v1";
+        assertOutputColumns(sql, List.of("x", "v2"));
+        assertPlanContains(sql, "tableFunctionName: unnest");
+
+        // UNNEST in a CTE
+        sql = "with xs as (select x from unnest(array[1, 2, 3]) as t(x)) select count(*) from xs";
+        assertPlanContains(sql, "tableFunctionName: unnest");
+
+        // UNNEST on the right side of a join still references its left input.
+        sql = "select t0.v1, t.x from t0 cross join unnest(array[t0.v2, t0.v3]) as t(x)";
+        assertOutputColumns(sql, List.of("v1", "x"));
+        assertPlanContains(sql, "tableFunctionName: unnest", "[2: v2,3: v3]");
+
+        analyzeFail("select * from unnest(array[1, 2]) as t(x, y)", "has 1 columns available but 2 columns specified");
+    }
+
+    private static void assertOutputColumns(String sql, List<String> expected) {
+        QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
+        Assertions.assertEquals(expected, statement.getQueryRelation().getColumnOutputNames());
     }
 
     @Test
