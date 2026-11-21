@@ -15,8 +15,10 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
 #include <vector>
 
+#include "base/simd/simd.h"
 #include "base/simd/simd_utils.h"
 #include "column/runtime_type_traits.h"
 #include "glog/logging.h"
@@ -267,7 +269,7 @@ public:
             uint8x16_t loaded_datas[select_list_size];
             const uint8x16_t zero_vector = vdupq_n_u8(0);
 
-            while (processed_rows + 16 < row_sz) {
+            while (processed_rows + 16 <= row_sz) {
                 uint8x16_t selected_vec = zero_vector;
                 // load select vector
                 for (int i = 0; i < select_vec_size; ++i) {
@@ -276,6 +278,7 @@ public:
                     loaded_masks[i] = vtstq_u8(loaded_masks[i], loaded_masks[i]);
                 }
 
+                loaded_datas[select_list_size - 1] = zero_vector;
                 // load select data
                 for (int i = 0; i < select_list_size; ++i) {
                     // date columns except the last column, if mask is zero, no need to load it
@@ -335,162 +338,17 @@ public:
             }
 
         } else if constexpr (data_size == 2) {
-            uint8x16_t loaded_masks[select_vec_size];
-            uint16x8_t loaded_datas[select_list_size];
-
-            const uint16x8_t zero_vector = vdupq_n_u16(0);
-            // we handle 16 mask at one time
-            while (processed_rows + 16 < row_sz) {
-                // load select vector
-                for (int i = 0; i < select_vec_size; ++i) {
-                    loaded_masks[i] = vld1q_u8(handle_select_vec[i]);
-                    // loaded_mask[i] = selector[i] != 0 ? 0xFF : 0x00
-                    loaded_masks[i] = vtstq_u8(loaded_masks[i], loaded_masks[i]);
-                }
-
-                constexpr uint8_t each_loop_handle_sz = 16 / sizeof(RunTimeCppType<TYPE>);
-
-                for (int j = 0; j < data_size; j++) {
-                    // load select data
-                    for (int i = 0; i < select_list_size; ++i) {
-                        // date columns except the last column, if mask is zero, no need to load it
-                        if (i < select_list_size - 1 && vmaxvq_u8(loaded_masks[i]) == 0) {
-                            continue;
-                        }
-
-                        if (then_column_is_const[i]) {
-                            loaded_datas[i] = vdupq_n_u16(handle_select_data[i][0]);
-                        } else {
-                            loaded_datas[i] = vld1q_u16(reinterpret_cast<const uint16_t*>(handle_select_data[i]));
-                        }
-
-                        // if all 1, no need to load left data columns because they won't be selected
-                        if (i < select_list_size - 1 && vminvq_u8(loaded_masks[i])) {
-                            break;
-                        }
-                    }
-
-                    // selected_vec[i] == 1 means this row is selected already
-                    uint16x8_t selected_vec = zero_vector;
-                    bool all_selected = false;
-                    // let the default value be the last data column, which is 'else' column
-                    uint16x8_t selected_dst = loaded_datas[select_list_size - 1];
-                    const uint8x16_t index = {0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7};
-                    for (int i = 0; i < select_list_size - 1; ++i) {
-                        uint8x16_t expand_mask = vqtbl1q_u8(loaded_masks[i], index);
-
-                        if (vmaxvq_u8(expand_mask) == 0 || all_selected) {
-                            loaded_masks[i] = vextq_u8(loaded_masks[i], loaded_masks[i], 8);
-                            continue;
-                        }
-
-                        // get will select vector in this loop
-                        uint16x8_t not_selected_vec = ~selected_vec;
-                        uint16x8_t will_select = not_selected_vec & vreinterpretq_u16_u8(expand_mask);
-
-                        // select if: will_select[i] ? loaded_datas[i] : selected_dst
-                        selected_dst = vbslq_u16(will_select, loaded_datas[i], selected_dst);
-                        // update select_vec
-                        selected_vec |= will_select;
-
-                        // right shift mask
-                        loaded_masks[i] = vextq_u8(loaded_masks[i], loaded_masks[i], 8);
-
-                        all_selected = vminvq_u16(selected_vec);
-                    }
-                    vst1q_u16(reinterpret_cast<uint16_t*>(dst.data() + processed_rows), selected_dst);
-                    processed_rows += each_loop_handle_sz;
-                    for (int i = 0; i < select_list_size; ++i) {
-                        if (!then_column_is_const[i]) {
-                            handle_select_data[i] += each_loop_handle_sz;
-                        }
-                    }
-                }
-
-                // update handle_select_vec
-                for (int i = 0; i < select_vec_size; ++i) {
-                    handle_select_vec[i] += 16;
-                }
-            }
+            neon_disjoint16_select<uint16_t, uint16x8_t>(select_vec, select_vec_size, dst, handle_select_data,
+                                                         select_list_size, then_column_is_const, row_sz,
+                                                         processed_rows);
         } else if constexpr (data_size == 4) {
-            uint8x16_t loaded_masks[select_vec_size];
-            uint32x4_t loaded_datas[select_list_size];
-
-            const uint32x4_t zero_vector = vdupq_n_u32(0);
-            // we handle 16 mask at one time
-            while (processed_rows + 16 < row_sz) {
-                // load select vector
-                for (int i = 0; i < select_vec_size; ++i) {
-                    loaded_masks[i] = vld1q_u8(handle_select_vec[i]);
-                    // loaded_mask[i] = selector[i] != 0 ? 0xFF : 0x00
-                    loaded_masks[i] = vtstq_u8(loaded_masks[i], loaded_masks[i]);
-                }
-
-                constexpr uint8_t each_loop_handle_sz = 16 / sizeof(RunTimeCppType<TYPE>);
-
-                for (int j = 0; j < data_size; j++) {
-                    // load select data
-                    for (int i = 0; i < select_list_size; ++i) {
-                        // date columns except the last column, if mask is zero, no need to load it
-                        if (i < select_list_size - 1 && vmaxvq_u8(loaded_masks[i]) == 0) {
-                            continue;
-                        }
-
-                        if (then_column_is_const[i]) {
-                            loaded_datas[i] = vdupq_n_u32(*reinterpret_cast<const uint32_t*>(handle_select_data[i]));
-                        } else {
-                            loaded_datas[i] = vld1q_u32(reinterpret_cast<const uint32_t*>(handle_select_data[i]));
-                        }
-
-                        // if all 1, no need to load left data columns because they won't be selected
-                        if (i < select_list_size - 1 && vminvq_u8(loaded_masks[i])) {
-                            break;
-                        }
-                    }
-
-                    // selected_vec[i] == 1 means this row is selected already
-                    uint32x4_t selected_vec = zero_vector;
-                    bool all_selected = false;
-                    // let the default value be the last data column, which is 'else' column
-                    uint32x4_t selected_dst = loaded_datas[select_list_size - 1];
-                    const uint8x16_t index = {0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3};
-                    for (int i = 0; i < select_list_size - 1; ++i) {
-                        uint8x16_t expand_mask = vqtbl1q_u8(loaded_masks[i], index);
-
-                        if (vmaxvq_u8(expand_mask) == 0 || all_selected) {
-                            loaded_masks[i] = vextq_u8(loaded_masks[i], loaded_masks[i], 4);
-                            continue;
-                        }
-
-                        // get will select vector in this loop
-                        uint32x4_t not_selected_vec = ~selected_vec;
-                        uint32x4_t will_select = not_selected_vec & vreinterpretq_u32_u8(expand_mask);
-
-                        // select if: will_select[i] ? loaded_datas[i] : selected_dst
-                        selected_dst = vbslq_u32(will_select, loaded_datas[i], selected_dst);
-                        // update select_vec
-                        selected_vec |= will_select;
-
-                        // right shift mask
-                        loaded_masks[i] = vextq_u8(loaded_masks[i], loaded_masks[i], 4);
-
-                        // all 1
-                        all_selected = vminvq_u32(selected_vec);
-                    }
-                    vst1q_u32(reinterpret_cast<uint32_t*>(dst.data() + processed_rows), selected_dst);
-                    processed_rows += each_loop_handle_sz;
-                    for (int i = 0; i < select_list_size; ++i) {
-                        if (!then_column_is_const[i]) {
-                            handle_select_data[i] += each_loop_handle_sz;
-                        }
-                    }
-                }
-
-                // update handle_select_vec
-                for (int i = 0; i < select_vec_size; ++i) {
-                    handle_select_vec[i] += 16;
-                }
-            }
+            neon_disjoint16_select<uint32_t, uint32x4_t>(select_vec, select_vec_size, dst, handle_select_data,
+                                                         select_list_size, then_column_is_const, row_sz,
+                                                         processed_rows);
+        } else if constexpr (data_size == 8) {
+            neon_disjoint16_select<uint64_t, uint64x2_t>(select_vec, select_vec_size, dst, handle_select_data,
+                                                         select_list_size, then_column_is_const, row_sz,
+                                                         processed_rows);
         }
 #endif
         for (int i = processed_rows; i < row_sz; ++i) {
@@ -509,5 +367,185 @@ public:
             }
         }
     }
+
+#if defined(__ARM_NEON) && defined(__aarch64__)
+private:
+    // Disjoint16 multi-byte NEON selector for data_size in {2, 4, 8}:
+    // - Hoists constant-branch vectors (const_vecs) outside the 16-row loop
+    // - Resolves mutually disjoint 16-row winner masks and 64-bit nibble masks once per 16 rows
+    // - Fast-copies all 16 rows when single_winner >= 0 or select_nibble_mask == 0 (all-ELSE)
+    // - Lazily loads only active branches per 128-bit sub-chunk (skipping loads/blends when a sub-chunk
+    //   has 0 or 1 active winner)
+    template <typename UIntType, typename VecType>
+    static void neon_disjoint16_select(SelectVec __restrict select_vec[], int select_vec_size, Container& dst,
+                                       const CppType* __restrict handle_select_data[], int select_list_size,
+                                       const std::vector<bool>& then_column_is_const, int row_sz, int& processed_rows) {
+        constexpr int kDataSize = sizeof(UIntType);
+        static_assert(kDataSize == 2 || kDataSize == 4 || kDataSize == 8);
+        constexpr int kSubChunks = kDataSize;
+        constexpr int kLanes = 16 / kDataSize;
+        constexpr uint32_t kSubBits = 4 * kLanes;
+        constexpr uint64_t kSubMask = (kSubBits == 64) ? ~uint64_t(0) : ((uint64_t(1) << kSubBits) - 1ull);
+        constexpr int kMaxSimdWhenSize = 8;
+
+        if (select_vec_size > kMaxSimdWhenSize) {
+            return;
+        }
+
+        auto dup_vec = [](UIntType bits) -> VecType {
+            if constexpr (kDataSize == 2) {
+                return vdupq_n_u16(bits);
+            } else if constexpr (kDataSize == 4) {
+                return vdupq_n_u32(bits);
+            } else {
+                return vdupq_n_u64(bits);
+            }
+        };
+
+        auto load_vec = [](const UIntType* ptr) -> VecType {
+            if constexpr (kDataSize == 2) {
+                return vld1q_u16(ptr);
+            } else if constexpr (kDataSize == 4) {
+                return vld1q_u32(ptr);
+            } else {
+                return vld1q_u64(ptr);
+            }
+        };
+
+        auto store_vec = [](UIntType* ptr, VecType v) {
+            if constexpr (kDataSize == 2) {
+                vst1q_u16(ptr, v);
+            } else if constexpr (kDataSize == 4) {
+                vst1q_u32(ptr, v);
+            } else {
+                vst1q_u64(ptr, v);
+            }
+        };
+
+        auto bsl_vec = [](uint8x16_t mask_bytes, VecType if_true, VecType if_false) -> VecType {
+            if constexpr (kDataSize == 2) {
+                return vbslq_u16(vreinterpretq_u16_u8(mask_bytes), if_true, if_false);
+            } else if constexpr (kDataSize == 4) {
+                return vbslq_u32(vreinterpretq_u32_u8(mask_bytes), if_true, if_false);
+            } else {
+                return vbslq_u64(vreinterpretq_u64_u8(mask_bytes), if_true, if_false);
+            }
+        };
+
+        uint8x16_t win_masks[kMaxSimdWhenSize];
+        uint64_t win_nibbles[kMaxSimdWhenSize];
+        VecType const_vecs[kMaxSimdWhenSize + 1];
+        if (processed_rows + 16 <= row_sz) {
+            for (int i = 0; i < select_list_size; ++i) {
+                if (then_column_is_const[i]) {
+                    UIntType bits = 0;
+                    std::memcpy(&bits, handle_select_data[i], sizeof(bits));
+                    const_vecs[i] = dup_vec(bits);
+                }
+            }
+        }
+
+        uint8x16_t tbl_idx[kSubChunks];
+        for (int s = 0; s < kSubChunks; ++s) {
+            alignas(16) uint8_t idx_bytes[16];
+            for (int b = 0; b < 16; ++b) {
+                idx_bytes[b] = static_cast<uint8_t>(s * kLanes + (b / kDataSize));
+            }
+            tbl_idx[s] = vld1q_u8(idx_bytes);
+        }
+
+        const uint8x16_t zero_u8 = vdupq_n_u8(0);
+        const VecType zero_vec = dup_vec(0);
+        const int else_idx = select_list_size - 1;
+
+        auto fill_branch_16 = [&](int branch_idx, UIntType* out_ptr) {
+            if (then_column_is_const[branch_idx]) {
+                VecType v = const_vecs[branch_idx];
+                for (int s = 0; s < kSubChunks; ++s) {
+                    store_vec(out_ptr + s * kLanes, v);
+                }
+            } else {
+                std::memcpy(out_ptr, handle_select_data[branch_idx] + processed_rows, 16 * sizeof(UIntType));
+            }
+        };
+
+        auto load_sub = [&](int branch_idx, int sub_idx) -> VecType {
+            if (then_column_is_const[branch_idx]) {
+                return const_vecs[branch_idx];
+            }
+            const auto* bp = reinterpret_cast<const UIntType*>(handle_select_data[branch_idx] + processed_rows);
+            return load_vec(bp + sub_idx * kLanes);
+        };
+
+        while (processed_rows + 16 <= row_sz) {
+            auto* out_ptr = reinterpret_cast<UIntType*>(dst.data() + processed_rows);
+            uint8x16_t selected_16 = zero_u8;
+            uint64_t select_nibble_mask = 0;
+            int active_branches = 0;
+            int single_winner = -1;
+
+            for (int i = 0; i < select_vec_size; ++i) {
+                uint8x16_t raw = vld1q_u8(select_vec[i] + processed_rows);
+                uint8x16_t m = vtstq_u8(raw, raw);
+                uint8x16_t win = vbicq_u8(m, selected_16);
+                uint64_t win_nibble = SIMD::get_nibble_mask(win);
+                win_masks[i] = win;
+                win_nibbles[i] = win_nibble;
+                selected_16 = vorrq_u8(selected_16, m);
+                select_nibble_mask |= win_nibble;
+                active_branches = i + 1;
+                if (select_nibble_mask == 0xffff'ffff'ffff'ffffull) {
+                    if (win_nibble == 0xffff'ffff'ffff'ffffull) {
+                        single_winner = i;
+                    }
+                    break;
+                }
+            }
+
+            if (single_winner >= 0) {
+                fill_branch_16(single_winner, out_ptr);
+                processed_rows += 16;
+                continue;
+            }
+            if (select_nibble_mask == 0) {
+                fill_branch_16(else_idx, out_ptr);
+                processed_rows += 16;
+                continue;
+            }
+
+            const uint64_t else_nibble_mask = ~select_nibble_mask;
+            for (int s = 0; s < kSubChunks; ++s) {
+                const uint32_t bit_shift = s * kSubBits;
+                const uint64_t e_sub = (else_nibble_mask >> bit_shift) & kSubMask;
+                if (e_sub == kSubMask) {
+                    store_vec(out_ptr + s * kLanes, load_sub(else_idx, s));
+                    continue;
+                }
+                uint64_t resolved = e_sub;
+                VecType acc = (e_sub != 0) ? load_sub(else_idx, s) : zero_vec;
+                for (int i = 0; i < active_branches; ++i) {
+                    const uint64_t w_sub = (win_nibbles[i] >> bit_shift) & kSubMask;
+                    if (w_sub == 0) {
+                        continue;
+                    }
+                    VecType d_vec = load_sub(i, s);
+                    if (resolved == 0) {
+                        acc = d_vec;
+                    } else {
+                        uint8x16_t expand_mask = vqtbl1q_u8(win_masks[i], tbl_idx[s]);
+                        acc = bsl_vec(expand_mask, d_vec, acc);
+                    }
+                    resolved |= w_sub;
+                    if (resolved == kSubMask) {
+                        break;
+                    }
+                }
+                store_vec(out_ptr + s * kLanes, acc);
+            }
+
+            processed_rows += 16;
+        }
+    }
+#endif
 };
 } // namespace starrocks
