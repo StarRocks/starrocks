@@ -52,6 +52,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -376,28 +377,35 @@ public class TaskRun implements Comparable<TaskRun> {
      * Root-based: always use the ROOT to refresh the MV
      * - It's suitable for LDAP-based authorization system, which lacks a proper user for authorization
      */
-    private void switchUser(ConnectContext context) {
+    public void switchUser(ConnectContext context) {
         if (!Config.mv_use_creator_based_authorization) {
+            LOG.info("TaskRun switchUser: creator-based auth disabled, using ROOT identity");
             context.setQualifiedUser(AuthenticationMgr.ROOT_USER);
             context.setCurrentUserIdentity(UserIdentity.ROOT);
             context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         } else {
+            // SR-internal identity: always the creator's real identity/roles, or the ephemeral
+            // fallback if they have no persistent account. This is independent of whether a JWT
+            // is available below — a JWT authenticates the *external* REST catalog call, it does
+            // not imply the task should run as ROOT for StarRocks-internal (e.g. native table) auth.
             context.setQualifiedUser(status.getUser());
-            if (status.getUserIdentity() != null) {
-                context.setCurrentUserIdentity(status.getUserIdentity());
-            } else {
-                context.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
-            }
-            // For internal task runs (e.g., MV refresh), always activate all roles of the task user
-            // to avoid relying on session default roles which may be empty (causing privilege errors).
+            context.setCurrentUserIdentity(resolveCreatorIdentity());
             try {
                 context.setCurrentRoleIds(GlobalStateMgr.getCurrentState().getAuthorizationMgr()
                         .getRoleIdsByUser(context.getCurrentUserIdentity()));
             } catch (PrivilegeException e) {
                 LOG.warn("TaskRun {} set role failed", taskRunId, e);
-                // Fallback to previous behavior if fetching roles fails
                 context.setCurrentRoleIds(context.getCurrentUserIdentity());
             }
+            LOG.info("TaskRun switchUser: using creator identity (user={})", status.getUser());
+
+            // External-catalog auth token: orthogonal to the identity above. Prefer the caller's
+            // JWT (user-triggered REFRESH) over the bot's (background refresh).
+            String jwtToken = StatisticUtils.resolveExternalAuthToken(parentRunCtx);
+            if (jwtToken != null) {
+                context.setAuthToken(jwtToken);
+            }
+
             Set<String> groups = resolveCreatorGroups(context);
             context.setGroups(groups);
             if (!groups.isEmpty()) {
@@ -407,6 +415,25 @@ public class TaskRun implements Comparable<TaskRun> {
                 context.setCurrentRoleIds(roleIds);
             }
         }
+    }
+
+    private UserIdentity resolveCreatorIdentity() {
+        if (status.getUserIdentity() != null) {
+            return status.getUserIdentity();
+        }
+        // A restored legacy task may carry only the creator's name. Prefer a persistent identity
+        // (which keeps directly-granted privileges) over an ephemeral one, since ephemeral identities
+        // skip directly-granted user privileges in AuthorizationMgr.loadPrivilegeCollection().
+        try {
+            UserIdentity persistent = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+                    .getUserIdentityByName(status.getUser());
+            if (persistent != null) {
+                return persistent;
+            }
+        } catch (Exception e) {
+            // No persistent account for this creator; fall through to the ephemeral fallback.
+        }
+        return UserIdentity.createEphemeralUserIdent(status.getUser(), "%");
     }
 
     private Set<String> resolveCreatorGroups(ConnectContext context) {
