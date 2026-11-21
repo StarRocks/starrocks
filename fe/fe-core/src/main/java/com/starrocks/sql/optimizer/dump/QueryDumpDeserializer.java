@@ -251,6 +251,10 @@ public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
         // BE number
         int beNum = dumpJsonObject.get("be_number").getAsInt();
         dumpInfo.setBeNum(beNum);
+        // Execution node number, recorded by shared-data clusters only
+        if (dumpJsonObject.has("exec_node_number")) {
+            dumpInfo.setExecNodeNumber(dumpJsonObject.get("exec_node_number").getAsInt());
+        }
         // Be core stat
         if (dumpJsonObject.has("be_core_stat")) {
             JsonObject beCoreStat = dumpJsonObject.getAsJsonObject("be_core_stat");
