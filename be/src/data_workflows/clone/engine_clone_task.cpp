@@ -1000,25 +1000,47 @@ Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string&
 
     auto fs = FileSystem::Default();
     std::set<std::string> tablet_files;
+    std::set<std::string> tablet_index_dirs;
+    auto cleanup_linked_snapshot = [&]() {
+        for (const auto& filename : tablet_files) {
+            auto st = fs->delete_file(filename);
+            LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to remove tablet file " << filename << ": " << st;
+        }
+        for (const auto& index_dir : tablet_index_dirs) {
+            auto st = fs::remove_all(index_dir);
+            LOG_IF(WARNING, !st.ok() && !st.is_not_found())
+                    << "Fail to remove tablet index directory " << index_dir << ": " << st;
+        }
+    };
+
     for (const std::string& filename : clone_files) {
         std::string from = clone_dir + "/" + filename;
         std::string to = tablet_dir + "/" + filename;
+        auto st = fs->link_file(from, to);
+        if (!st.ok()) {
+            cleanup_linked_snapshot();
+            return st;
+        }
         tablet_files.insert(to);
-        RETURN_IF_ERROR(fs->link_file(from, to));
     }
     LOG(INFO) << "Linked " << clone_files.size() << " files from " << clone_dir << " to " << tablet_dir;
+
+    auto link_index_st = SnapshotManager::instance()->link_inverted_index_directories(
+            snapshot_meta, tablet->tablet_schema(), clone_dir, tablet_dir, &tablet_index_dirs);
+    if (!link_index_st.ok()) {
+        cleanup_linked_snapshot();
+        return link_index_st;
+    }
+    LOG(INFO) << "Linked " << tablet_index_dirs.size() << " inverted index directories from " << clone_dir << " to "
+              << tablet_dir;
+
     bool need_rebuild_pk_index = _clone_req.__isset.need_rebuild_pk_index && _clone_req.need_rebuild_pk_index;
     // Note that |snapshot_meta| may be modified by `load_snapshot`.
     Status st = tablet->updates()->load_snapshot(snapshot_meta, false, false, need_rebuild_pk_index,
                                                  config::pindex_rebuild_clone_wait_seconds);
     if (!st.ok()) {
-        Status clear_st;
-        for (const std::string& filename : tablet_files) {
-            clear_st = fs::delete_file(filename);
-            if (!clear_st.ok()) {
-                LOG(WARNING) << "remove tablet file:" << filename << " failed, status:" << clear_st;
-            }
-        }
+        cleanup_linked_snapshot();
+        return st;
     }
 
     int64_t expired_stale_sweep_endtime = UnixSeconds() - config::tablet_rowset_stale_sweep_time_sec;
