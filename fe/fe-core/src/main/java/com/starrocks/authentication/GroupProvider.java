@@ -18,6 +18,9 @@ import com.google.common.collect.ImmutableSet;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
+import com.starrocks.persist.image.ProtoKinds;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.GroupProviderPB;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.HashMap;
@@ -159,4 +162,40 @@ public abstract class GroupProvider {
     public abstract Set<String> getGroup(UserIdentity userIdentity, String distinguishedName);
 
     public abstract void checkProperty() throws SemanticException;
+
+    public GroupProviderPB toProto() {
+        GroupProviderPB.Builder builder = GroupProviderPB.newBuilder();
+        if (getClass() == FileGroupProvider.class) {
+            builder.setKind(GroupProviderPB.Kind.FILE);
+        } else if (getClass() == UnixGroupProvider.class) {
+            builder.setKind(GroupProviderPB.Kind.UNIX);
+        } else if (getClass() == LDAPGroupProvider.class) {
+            builder.setKind(GroupProviderPB.Kind.LDAP);
+        } else {
+            throw new IllegalArgumentException("unsupported GroupProvider class " + getClass().getName());
+        }
+        if (name != null) {
+            builder.setName(name);
+        }
+        if (properties != null) {
+            builder.setProperties(ProtoMaps.toStringMapProto(properties));
+        }
+        return builder.build();
+    }
+
+    public static GroupProvider fromProto(GroupProviderPB pb) {
+        ProtoKinds.checkKnown(pb.getKind(), pb.getKindValue());
+        String name = pb.hasName() ? pb.getName() : null;
+        Map<String, String> properties = pb.hasProperties() ? ProtoMaps.fromStringMapProto(pb.getProperties()) : null;
+        switch (pb.getKind()) {
+            case FILE:
+                return new FileGroupProvider(name, properties);
+            case UNIX:
+                return new UnixGroupProvider(name, properties);
+            case LDAP:
+                return new LDAPGroupProvider(name, properties);
+            default:
+                throw new IllegalArgumentException("missing GroupProvider kind");
+        }
+    }
 }

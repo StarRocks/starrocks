@@ -181,6 +181,8 @@ import com.starrocks.meta.SqlDigestBlackList;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.ImageFiles;
+import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.ImageHeader;
 import com.starrocks.persist.ImageLoader;
 import com.starrocks.persist.ImageWriter;
@@ -188,11 +190,19 @@ import com.starrocks.persist.OperationType;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.gson.SubtypeNotFoundException;
+import com.starrocks.persist.image.ImageModule;
+import com.starrocks.persist.image.ImageReaderV3;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionReader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockLoader;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.proto.GlobalStatePB;
 import com.starrocks.plugin.PluginMgr;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
@@ -268,6 +278,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -472,7 +483,7 @@ public class GlobalStateMgr {
 
     private StatisticStorage statisticStorage;
 
-    private long imageJournalId;
+    private volatile long imageJournalId;
 
     private long feStartTime;
 
@@ -1298,9 +1309,8 @@ public class GlobalStateMgr {
                 if (!imageDir.exists()) {
                     imageDir.mkdirs();
                 }
-                File imageV2Dir = new File(getImageDirPath() + "/v2");
-                if (!imageV2Dir.exists()) {
-                    imageV2Dir.mkdirs();
+                for (ImageFormatVersion format : ImageFiles.formats(true)) {
+                    Files.createDirectories(ImageFiles.directory(getImageDirPath(), format));
                 }
             } else {
                 LOG.error("Invalid edit log type: {}", Config.edit_log_type);
@@ -2153,15 +2163,32 @@ public class GlobalStateMgr {
         ImageLoader imageLoader = new ImageLoader(getImageDirPath());
         File curFile = imageLoader.getImageFile();
         if (!curFile.exists()) {
-            // image.0 may not exist
             LOG.info("image does not exist: {}", curFile.getAbsolutePath());
             return;
         }
-        replayedJournalId.set(imageLoader.getImageJournalId());
-        LOG.info("start load image from {}. is ckpt: {}", curFile.getAbsolutePath(),
-                GlobalStateMgr.isCheckpointThread());
-        long loadImageStartTime = System.currentTimeMillis();
+        long start = System.currentTimeMillis();
+        LOG.info("start load image from {}. is ckpt: {}", curFile, isCheckpointThread());
+        if (imageLoader.getImageFormatVersion() == ImageFormatVersion.v3) {
+            try (ImageReaderV3 reader = new ImageReaderV3(curFile.toPath())) {
+                ImageFiles.validateHeader(reader, imageLoader.getImageJournalId());
+                replayedJournalId.set(imageLoader.getImageJournalId());
+                List<Pair<SectionId, SectionLoader>> loaders = new ArrayList<>();
+                for (ImageModule module : getImageV3Modules()) {
+                    loaders.addAll(module.loaders());
+                }
+                reader.load(loaders);
+            }
+        } else {
+            replayedJournalId.set(imageLoader.getImageJournalId());
+            loadImageV2(imageLoader);
+        }
+        postLoadImageWithRecoveryPolicy();
+        this.imageJournalId = imageLoader.getImageJournalId();
+        LOG.info("finished loading {} image {} in {} ms", imageLoader.getImageFormatVersion(),
+                imageJournalId, System.currentTimeMillis() - start);
+    }
 
+    private void loadImageV2(ImageLoader imageLoader) throws IOException {
         Map<SRMetaBlockID, SRMetaBlockLoader> loadImages = ImmutableMap.<SRMetaBlockID, SRMetaBlockLoader>builder()
                 .put(SRMetaBlockID.NODE_MGR, nodeMgr::load)
                 .put(SRMetaBlockID.LOCAL_META_STORE, localMetastore::load)
@@ -2205,7 +2232,7 @@ public class GlobalStateMgr {
                 .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
-        InputStream in = Files.newInputStream(curFile.toPath());
+        InputStream in = Files.newInputStream(imageLoader.getImageFile().toPath());
         try {
             imageLoader.setInputStream(in);
             loadHeader(new DataInputStream(imageLoader.getCheckedInputStream()));
@@ -2262,12 +2289,6 @@ public class GlobalStateMgr {
         }
 
         imageLoader.checkCheckSum();
-
-        postLoadImageWithRecoveryPolicy();
-
-        long loadImageEndTime = System.currentTimeMillis();
-        this.imageJournalId = imageLoader.getImageJournalId();
-        LOG.info("finished to load image in " + (loadImageEndTime - loadImageStartTime) + " ms");
     }
 
     @VisibleForTesting
@@ -2399,23 +2420,108 @@ public class GlobalStateMgr {
         LOG.info("finished to replay header from image");
     }
 
-    // Only called by checkpoint thread
+    // Only called by checkpoint thread.
     public void saveImage() throws IOException {
-        String destDir = getImageDirPath() + "/v2";
-        // Write image.ckpt
-        Storage storage = new Storage(destDir);
-        File curFile = storage.getImageFile(replayedJournalId.get());
-        File ckpt = new File(destDir, Storage.IMAGE_NEW);
-        saveImage(new ImageWriter(destDir, replayedJournalId.get()), ckpt);
+        saveImage(!Config.disable_image_v2_write);
+    }
 
-        // Move image.ckpt to image.dataVersion
-        LOG.info("Move " + ckpt.getAbsolutePath() + " to " + curFile.getAbsolutePath());
-        if (!ckpt.renameTo(curFile)) {
-            if (!curFile.delete()) {
-                LOG.warn("Failed to delete file, filepath={}", curFile.getAbsolutePath());
+    public void saveImage(boolean writeV2) throws IOException {
+        long journalId = replayedJournalId.get();
+        List<ImageFormatVersion> formats = ImageFiles.formats(writeV2);
+        // Finish all required files before making any of them visible to discovery or HTTP.
+        for (ImageFormatVersion format : formats) {
+            Path directory = ImageFiles.directory(getImageDirPath(), format);
+            Files.createDirectories(directory);
+            if (ImageFiles.isValid(ImageFiles.image(directory, journalId), format, journalId)) {
+                continue;
             }
-            throw new IOException();
+            File image = directory.resolve(Storage.IMAGE_NEW).toFile();
+            if (format == ImageFormatVersion.v2) {
+                saveImage(new ImageWriter(directory.toString(), journalId), image);
+            } else {
+                saveImageV3(image, journalId);
+            }
         }
+        for (ImageFormatVersion format : formats) {
+            Path directory = ImageFiles.directory(getImageDirPath(), format);
+            if (!ImageFiles.isValid(ImageFiles.image(directory, journalId), format, journalId)) {
+                ImageFiles.publishImage(directory.resolve(Storage.IMAGE_NEW), directory, format, journalId);
+            }
+        }
+        LOG.info("published checkpoint {}, formats {}", journalId, formats);
+    }
+
+    public void saveImageV3(File file, long journalId) throws IOException {
+        long start = System.currentTimeMillis();
+        try (FileOutputStream out = new FileOutputStream(file);
+                ImageWriterV3 writer = new ImageWriterV3(out, journalId)) {
+            for (ImageModule module : getImageV3Modules()) {
+                module.saver().save(writer);
+            }
+            writer.finish();
+            out.getChannel().force(true);
+        }
+        LOG.info("finished saving v3 image {} in {} ms", file, System.currentTimeMillis() - start);
+    }
+
+    private void saveGlobalState(ImageWriterV3 writer) throws IOException {
+        try (SectionWriter section = writer.beginSection(SectionId.GLOBAL_STATE)) {
+            section.writeManager(GlobalStatePB.newBuilder()
+                    .setBatchEndId(idGenerator.getBatchEndId()).build());
+        }
+    }
+
+    private void loadGlobalState(SectionReader reader) throws IOException {
+        GlobalStatePB state = reader.readManager(GlobalStatePB.parser());
+        if (!state.hasBatchEndId()) {
+            throw new IOException("global image state is missing batch_end_id");
+        }
+        idGenerator.setId(state.getBatchEndId());
+    }
+
+    // Construct for each operation: some loaders capture state used only by that load.
+    // All method references must belong to this instance, including during checkpoint.
+    protected List<ImageModule> getImageV3Modules() {
+        return List.of(
+                new ImageModule(this::saveGlobalState, List.of(Pair.create(SectionId.GLOBAL_STATE, this::loadGlobalState))),
+                new ImageModule(nodeMgr::save, List.of(Pair.create(SectionId.NODE_MGR, nodeMgr::load))),
+                new ImageModule(localMetastore::save, localMetastore.getImageV3Loaders()),
+                new ImageModule(alterJobMgr::save, alterJobMgr.getImageV3Loaders()),
+                new ImageModule(recycleBin::save, recycleBin.getImageV3Loaders()),
+                new ImageModule(variableMgr::save, variableMgr.getImageV3Loaders()),
+                new ImageModule(resourceMgr::save, resourceMgr.getImageV3Loaders()),
+                new ImageModule(exportMgr::save, exportMgr.getImageV3Loaders()),
+                new ImageModule(backupHandler::save, backupHandler.getImageV3Loaders()),
+                new ImageModule(globalTransactionMgr::save, globalTransactionMgr.getImageV3Loaders()),
+                new ImageModule(colocateTableIndex::save, colocateTableIndex.getImageV3Loaders()),
+                new ImageModule(routineLoadMgr::save, routineLoadMgr.getImageV3Loaders()),
+                new ImageModule(loadMgr::save, loadMgr.getImageV3Loaders()),
+                new ImageModule(smallFileMgr::save, smallFileMgr.getImageV3Loaders()),
+                new ImageModule(pluginMgr::save, pluginMgr.getImageV3Loaders()),
+                new ImageModule(deleteMgr::save, deleteMgr.getImageV3Loaders()),
+                new ImageModule(analyzeMgr::save, analyzeMgr.getImageV3Loaders()),
+                new ImageModule(resourceGroupMgr::save, resourceGroupMgr.getImageV3Loaders()),
+                new ImageModule(authenticationMgr::save, authenticationMgr.getImageV3Loaders()),
+                new ImageModule(authorizationMgr::save, authorizationMgr.getImageV3Loaders()),
+                new ImageModule(taskManager::save, taskManager.getImageV3Loaders()),
+                new ImageModule(catalogMgr::save, catalogMgr.getImageV3Loaders()),
+                new ImageModule(insertOverwriteJobMgr::save, insertOverwriteJobMgr.getImageV3Loaders()),
+                new ImageModule(compactionMgr::save, compactionMgr.getImageV3Loaders()),
+                new ImageModule(streamLoadMgr::save, streamLoadMgr.getImageV3Loaders()),
+                new ImageModule(materializedViewMgr::save, materializedViewMgr.getImageV3Loaders()),
+                new ImageModule(globalFunctionMgr::save, globalFunctionMgr.getImageV3Loaders()),
+                new ImageModule(storageVolumeMgr::save, storageVolumeMgr.getImageV3Loaders()),
+                new ImageModule(dictionaryMgr::save, dictionaryMgr.getImageV3Loaders()),
+                new ImageModule(replicationMgr::save, replicationMgr.getImageV3Loaders()),
+                new ImageModule(keyMgr::save, keyMgr.getImageV3Loaders()),
+                new ImageModule(pipeManager.getRepo()::save, pipeManager.getRepo().getImageV3Loaders()),
+                new ImageModule(sqlBlackList::save, sqlBlackList.getImageV3Loaders()),
+                new ImageModule(clusterSnapshotMgr::save, clusterSnapshotMgr.getImageV3Loaders()),
+                new ImageModule(historicalNodeMgr::save, historicalNodeMgr.getImageV3Loaders()),
+                new ImageModule(tabletReshardJobMgr::save, tabletReshardJobMgr.getImageV3Loaders()),
+                new ImageModule(sqlDigestBlackList::save, sqlDigestBlackList.getImageV3Loaders()),
+                new ImageModule(aiProviderMgr::save, aiProviderMgr.getImageV3Loaders()),
+                new ImageModule(gtidGenerator::save, gtidGenerator.getImageV3Loaders()));
     }
 
     // The manager that saves meta to image must be a member of GlobalStateMgr and cannot be SINGLETON,
@@ -3727,13 +3833,14 @@ public class GlobalStateMgr {
                 LOG.info("acquired all the dbs' read lock.");
 
                 long journalId = getMaxJournalId();
-                File dumpFile = new File(Config.meta_dir, "image." + journalId);
+                File dumpFile = new File(Config.meta_dir, "image.v3." + journalId);
                 dumpFilePath = dumpFile.getAbsolutePath();
                 try {
                     LOG.info("begin to dump {}", dumpFilePath);
-                    saveImage(new ImageWriter(Config.meta_dir, journalId), dumpFile);
+                    saveImageV3(dumpFile, journalId);
                 } catch (IOException e) {
                     LOG.error("failed to dump image to {}", dumpFilePath, e);
+                    return null;
                 }
             } finally {
                 // unlock only the dbs we actually locked
@@ -3754,8 +3861,9 @@ public class GlobalStateMgr {
         return imageJournalId;
     }
 
-    public void setImageJournalId(long imageJournalId) {
-        this.imageJournalId = imageJournalId;
+    public synchronized void setImageJournalId(long imageJournalId) {
+        // A late worker or download completion must not move the durable image watermark backwards.
+        this.imageJournalId = Math.max(this.imageJournalId, imageJournalId);
     }
 
     public void clearExpiredJobs() {

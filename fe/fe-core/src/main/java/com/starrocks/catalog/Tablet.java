@@ -17,6 +17,9 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.persist.image.ProtoKinds;
+import com.starrocks.persist.proto.TabletPB;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
 import java.util.List;
@@ -56,6 +59,53 @@ public abstract class Tablet extends MetaObject implements Writable {
 
     public void setRange(TabletRange range) {
         this.range = range;
+    }
+
+    /**
+     * Image v3 form: the Tablet fields, then the variant of the concrete class. Named toProto like the other
+     * catalog classes; TabletRange keeps its own toProto for the BE-facing message.
+     */
+    public TabletPB toProto() {
+        TabletPB.Builder builder = TabletPB.newBuilder().setMeta(toMetaObjectProto()).setId(id);
+        if (range != null) {
+            builder.setRange(TabletRangeProtoConverter.toProto(range));
+        }
+        fillProtoVariant(builder);
+        return builder.build();
+    }
+
+    /** Sets the kind and the variant message of the concrete class. Only the persistable subclasses override it. */
+    protected void fillProtoVariant(TabletPB.Builder builder) {
+        throw new IllegalStateException("tablet class " + getClass().getName() + " cannot be persisted");
+    }
+
+    public static Tablet fromProto(TabletPB pb) {
+        ProtoKinds.checkKnown(pb.getKind(), pb.getKindValue());
+        Tablet tablet;
+        switch (pb.getKind()) {
+            case LOCAL: {
+                LocalTablet localTablet = new LocalTablet();
+                localTablet.fillFromVariantProto(pb.getLocal());
+                tablet = localTablet;
+                break;
+            }
+            case LAKE: {
+                LakeTablet lakeTablet = new LakeTablet();
+                lakeTablet.fillFromVariantProto(pb.getLake());
+                tablet = lakeTablet;
+                break;
+            }
+            default:
+                throw new IllegalArgumentException("unknown tablet kind " + pb.getKind());
+        }
+        if (pb.hasMeta()) {
+            tablet.fillFromMetaObjectProto(pb.getMeta());
+        }
+        tablet.id = pb.getId();
+        if (pb.hasRange()) {
+            tablet.range = TabletRangeProtoConverter.fromProto(pb.getRange());
+        }
+        return tablet;
     }
 
     public abstract long getDataSize(boolean singleReplica);

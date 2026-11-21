@@ -15,12 +15,11 @@
 package com.starrocks.lake.snapshot;
 
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.ha.FrontendNodeType;
-import com.starrocks.persist.ImageLoader;
-import com.starrocks.persist.Storage;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
@@ -34,21 +33,50 @@ import mockit.MockUp;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.starrocks.persist.image.ImageLifecycleTestSupport.writeV2;
+
 public class RestoreClusterSnapshotMgrTest {
     protected static ConnectContext connectContext;
     protected static StarRocksAssert starRocksAssert;
     protected static String DB_NAME = "test";
+
+    @TempDir
+    java.nio.file.Path temporary;
+    private String oldMetaDir;
+
+    @BeforeEach
+    public void setUpImages() throws Exception {
+        oldMetaDir = Config.meta_dir;
+        Config.meta_dir = temporary.toString();
+        createImages(10, 10);
+    }
+
+    @AfterEach
+    public void restoreMetaDir() {
+        Config.meta_dir = oldMetaDir;
+    }
+
+    private void createImages(long feJournalId, long starMgrJournalId) throws Exception {
+        java.nio.file.Path root = temporary.resolve("image");
+        writeV2(root, feJournalId, new byte[] {1});
+        Files.createDirectories(root.resolve("starmgr"));
+        Files.write(root.resolve("starmgr/image." + starMgrJournalId), new byte[] {1});
+    }
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -140,13 +168,6 @@ public class RestoreClusterSnapshotMgrTest {
             }
         };
 
-        new MockUp<Storage>() {
-            @Mock
-            public long getImageJournalId() {
-                return 10L;
-            }
-        };
-
         RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot.yaml", true);
 
         Assertions.assertTrue(RestoreClusterSnapshotMgr.getRestoredSnapshotInfo().getSnapshotName()
@@ -192,19 +213,7 @@ public class RestoreClusterSnapshotMgrTest {
 
     @Test
     public void testManualRestoreCollectSnapshotInfo() throws Exception {
-        new MockUp<ImageLoader>() {
-            @Mock
-            public long getImageJournalId() {
-                return 20L;
-            }
-        };
-
-        new MockUp<Storage>() {
-            @Mock
-            public long getImageJournalId() {
-                return 30L;
-            }
-        };
+        createImages(20, 30);
 
         RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot_manual.yaml", true);
 
@@ -268,13 +277,6 @@ public class RestoreClusterSnapshotMgrTest {
             }
         };
 
-        new MockUp<Storage>() {
-            @Mock
-            public long getImageJournalId() {
-                return 10L;
-            }
-        };
-
         RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot_auto.yaml", true);
         Assertions.assertTrue(RestoreClusterSnapshotMgr.isRestoring());
 
@@ -323,13 +325,6 @@ public class RestoreClusterSnapshotMgrTest {
             public void copyToLocal(String srcPath, String destPath, Map<String, String> properties)
                     throws StarRocksException {
                 copiedSrcPaths.add(srcPath);
-            }
-        };
-
-        new MockUp<Storage>() {
-            @Mock
-            public long getImageJournalId() {
-                return 10L;
             }
         };
 

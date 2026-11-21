@@ -16,7 +16,9 @@
 package com.starrocks.authorization;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.persist.proto.UserPrivilegeObjectPB;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.Objects;
@@ -136,5 +138,17 @@ public class UserPEntryObject implements PEntryObject {
         } else {
             return userIdentity.toString();
         }
+    }
+
+    public UserPrivilegeObjectPB toProto() {
+        UserPrivilegeObjectPB.Builder builder = UserPrivilegeObjectPB.newBuilder();
+        if (userIdentity != null) {
+            builder.setUserIdentity(UserIdentityUtils.toProto(userIdentity));
+        }
+        return builder.build();
+    }
+
+    public static UserPEntryObject fromProto(UserPrivilegeObjectPB pb) {
+        return new UserPEntryObject(pb.hasUserIdentity() ? UserIdentityUtils.fromProto(pb.getUserIdentity()) : null);
     }
 }

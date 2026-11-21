@@ -1,0 +1,438 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/column.proto";
+import "persist/common.proto";
+import "persist/partition.proto";
+import "persist/table.proto";
+import "persist/task.proto";
+import "persist/warehouse.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "AlterJobProto";
+
+// The AlterJobV2 hierarchy, written as the entries of the ALTER_JOB_MGR section, and the classes
+// only the jobs own. See common.proto for the conventions.
+
+// The manager message of the ALTER_JOB_MGR section. AlterJobMgr keeps no state besides the jobs,
+// which are the entries; every section starts with its manager message so that later fields have
+// a place to go.
+message AlterJobMgrPB {
+}
+
+// com.starrocks.alter.AlterJobV2. The kind names the concrete class; the persisted job type stays
+// in the core because it is not one-to-one with the class (eight classes are SCHEMA_CHANGE jobs).
+message AlterJobPB {
+  enum Kind {
+    UNSPECIFIED = 0;
+    ROLLUP_JOB_V2 = 1;
+    SCHEMA_CHANGE_JOB_V2 = 2;
+    OPTIMIZE_JOB_V2 = 3;
+    ONLINE_OPTIMIZE_JOB_V2 = 4;
+    MERGE_PARTITION_JOB = 5;
+    LAKE_TABLE_SCHEMA_CHANGE_JOB = 6;
+    LAKE_RANGE_REWRITE_SCHEMA_CHANGE_JOB = 7;
+    LAKE_RANGE_ROLLUP_JOB = 8;
+    LAKE_MV_SORT_KEY_REWRITE_JOB = 9;
+    LAKE_TABLE_ALTER_META_JOB = 10;
+    LAKE_ROLLUP_JOB = 11;
+    LAKE_TABLE_ASYNC_FAST_SCHEMA_CHANGE_JOB = 12;
+    LAKE_TABLE_ADD_INDEX_JOB = 13;
+    LAKE_TABLE_DROP_INDEX_JOB = 14;
+  }
+  Kind kind = 1;
+  AlterJobCorePB core = 2;
+
+  oneof instance {
+    RollupJobV2PB rollup_job_v2 = 11;
+    SchemaChangeJobV2PB schema_change_job_v2 = 12;
+    OptimizeJobV2PB optimize_job_v2 = 13;
+    OnlineOptimizeJobV2PB online_optimize_job_v2 = 14;
+    MergePartitionJobPB merge_partition_job = 15;
+    LakeTableSchemaChangeJobPB lake_table_schema_change_job = 16;
+    LakeRangeRewriteSchemaChangeJobPB lake_range_rewrite_schema_change_job = 17;
+    LakeRangeRollupJobPB lake_range_rollup_job = 18;
+    LakeMvSortKeyRewriteJobPB lake_mv_sort_key_rewrite_job = 19;
+    LakeTableAlterMetaJobPB lake_table_alter_meta_job = 20;
+    LakeRollupJobPB lake_rollup_job = 21;
+    LakeTableAsyncFastSchemaChangeJobPB lake_table_async_fast_schema_change_job = 22;
+    LakeTableAddIndexJobPB lake_table_add_index_job = 23;
+    LakeTableDropIndexJobPB lake_table_drop_index_job = 24;
+  }
+}
+
+// The fields declared by AlterJobV2 itself.
+message AlterJobCorePB {
+  // com.starrocks.alter.AlterJobV2.JobType.
+  enum JobType {
+    JOB_TYPE_UNSPECIFIED = 0;
+    ROLLUP = 1;
+    SCHEMA_CHANGE = 2;
+    DECOMMISSION_BACKEND = 3;
+    OPTIMIZE = 4;
+  }
+  // com.starrocks.alter.AlterJobV2.JobState.
+  enum JobState {
+    JOB_STATE_UNSPECIFIED = 0;
+    PENDING = 1;
+    WAITING_TXN = 2;
+    RUNNING = 3;
+    FINISHED = 4;
+    CANCELLED = 5;
+    FINISHED_REWRITING = 6;
+  }
+  optional JobType type = 1;
+  int64 job_id = 2;
+  optional JobState job_state = 3;
+  int64 db_id = 4;
+  int64 table_id = 5;
+  optional string table_name = 6;
+  optional string err_msg = 7;
+  int64 create_time_ms = 8;
+  int64 finished_time_ms = 9;
+  int64 timeout_ms = 10;
+  int64 warehouse_id = 11;
+  ComputeResourcePB compute_resource = 12;
+  bool force_skipped_at_committed = 13;
+}
+
+// One cell of a Guava Table<physical partition id, index meta id, MaterializedIndex>: a shadow
+// index of one physical partition.
+message PartitionIndexPB {
+  int64 physical_partition_id = 1;
+  int64 index_meta_id = 2;
+  MaterializedIndexPB index = 3;
+}
+
+// One cell of a Guava Table<physical partition id, index meta id, Map<tablet id, tablet id>>: the
+// shadow tablets of one shadow index, each mapped to the origin tablet it is built from.
+message PartitionIndexTabletsPB {
+  int64 physical_partition_id = 1;
+  int64 index_meta_id = 2;
+  map<int64, int64> tablet_ids = 3;
+}
+
+// com.starrocks.alter.RollupJobV2.
+message RollupJobV2PB {
+  // Physical partition id -> (rollup tablet id -> base tablet id).
+  map<int64, Int64MapPB> partition_id_to_base_rollup_tablet_ids = 1;
+  map<int64, MaterializedIndexPB> partition_id_to_rollup_index = 2;
+  int64 base_index_meta_id = 3;
+  int64 rollup_index_meta_id = 4;
+  optional string base_index_name = 5;
+  optional string rollup_index_name = 6;
+  repeated ColumnPB rollup_schema = 7;
+  int32 rollup_schema_version = 8;
+  int32 base_schema_hash = 9;
+  int32 rollup_schema_hash = 10;
+  optional KeysTypePB rollup_keys_type = 11;
+  // Java short.
+  int32 rollup_short_key_column_count = 12;
+  OriginStatementInfoPB orig_stmt = 13;
+  int64 watershed_txn_id = 14;
+  optional string view_define_sql = 15;
+  bool is_colocate_mv_index = 16;
+}
+
+// com.starrocks.alter.SchemaChangeJobV2.
+message SchemaChangeJobV2PB {
+  repeated PartitionIndexTabletsPB partition_index_tablets = 1;
+  repeated PartitionIndexPB partition_indexes = 2;
+  // Shadow index meta id -> origin index meta id.
+  map<int64, int64> index_meta_id_map = 3;
+  map<int64, string> index_meta_id_to_name = 4;
+  map<int64, ColumnListPB> index_meta_id_to_schema = 5;
+  map<int64, SchemaVersionAndHashPB> index_meta_id_to_schema_version_and_hash = 6;
+  // Java short values.
+  map<int64, int32> index_meta_id_to_short_key = 7;
+  bool has_bf_change = 8;
+  StringListPB bf_columns = 9;
+  double bf_fpp = 10;
+  bool index_change = 11;
+  IndexListPB indexes = 12;
+  int64 watershed_txn_id = 13;
+  int64 start_time = 14;
+  Int32ListPB sort_key_idxes = 15;
+  Int32ListPB sort_key_unique_ids = 16;
+  bool disable_replicated_storage_for_gin = 17;
+  OlapTableHistorySchemaPB history_schema = 18;
+  bool has_zstd_compression_change = 19;
+  StringListPB zstd_compression_columns = 20;
+  ZstdCompressionPageSizesPB zstd_compression_page_sizes = 21;
+}
+
+// com.starrocks.alter.OptimizeJobV2.
+message OptimizeJobV2PB {
+  int64 watershed_txn_id = 1;
+  repeated int64 tmp_partition_ids = 2;
+  repeated OptimizeTaskPB rewrite_tasks = 3;
+  repeated string source_partition_names = 4;
+  repeated string tmp_partition_names = 5;
+  optional bool all_partition_optimized = 6;
+  DistributionInfoPB distribution_info = 7;
+  optional string optimize_operation = 8;
+}
+
+// com.starrocks.alter.OnlineOptimizeJobV2: the same fields as OptimizeJobV2, a different class.
+message OnlineOptimizeJobV2PB {
+  int64 watershed_txn_id = 1;
+  repeated int64 tmp_partition_ids = 2;
+  repeated OptimizeTaskPB rewrite_tasks = 3;
+  repeated string source_partition_names = 4;
+  repeated string tmp_partition_names = 5;
+  optional bool all_partition_optimized = 6;
+  DistributionInfoPB distribution_info = 7;
+  optional string optimize_operation = 8;
+}
+
+// com.starrocks.alter.MergePartitionJob.
+message MergePartitionJobPB {
+  int64 watershed_txn_id = 1;
+  // Multimap: temporary partition id -> source partition ids.
+  map<int64, Int64ListPB> temp_partition_id_to_source_partition_ids = 2;
+  // Multimap: temporary partition name -> source partition names.
+  map<string, StringListPB> temp_partition_name_to_source_partition_names = 3;
+  repeated OptimizeTaskPB rewrite_tasks = 4;
+  DistributionInfoPB distribution_info = 5;
+  optional string optimize_operation = 6;
+}
+
+// The fields declared by com.starrocks.alter.LakeTableSchemaChangeJobBase.
+message LakeTableSchemaChangeJobCorePB {
+  int64 watershed_txn_id = 1;
+  int64 watershed_gtid = 2;
+}
+
+// com.starrocks.alter.LakeTableSchemaChangeJob.
+message LakeTableSchemaChangeJobPB {
+  LakeTableSchemaChangeJobCorePB lake_schema_change = 1;
+  repeated PartitionIndexTabletsPB partition_index_tablets = 2;
+  repeated PartitionIndexPB partition_indexes = 3;
+  // Shadow index meta id -> origin index meta id.
+  map<int64, int64> index_meta_id_map = 4;
+  map<int64, string> index_meta_id_to_name = 5;
+  map<int64, ColumnListPB> index_meta_id_to_schema = 6;
+  // Java short values.
+  map<int64, int32> index_meta_id_to_short_key = 7;
+  bool has_bf_change = 8;
+  StringListPB bf_columns = 9;
+  double bf_fpp = 10;
+  bool index_change = 11;
+  IndexListPB indexes = 12;
+  int64 start_time = 13;
+  Int64MapPB commit_version_map = 14;
+  Int32ListPB sort_key_idxes = 15;
+  Int32ListPB sort_key_unique_ids = 16;
+  bool has_zstd_compression_change = 17;
+  StringListPB zstd_compression_columns = 18;
+  ZstdCompressionPageSizesPB zstd_compression_page_sizes = 19;
+  // Sort keys owned by non-base shadow indexes, keyed by shadow index meta id.
+  map<int64, Int32ListPB> index_sort_key_idxes = 20;
+  map<int64, Int32ListPB> index_sort_key_unique_ids = 21;
+}
+
+// com.starrocks.alter.LakeRollupJob.
+message LakeRollupJobPB {
+  LakeTableSchemaChangeJobCorePB lake_schema_change = 1;
+  Int64MapPB commit_version_map = 2;
+  // Physical partition id -> (rollup tablet id -> base tablet id).
+  map<int64, Int64MapPB> partition_id_to_base_rollup_tablet_ids = 3;
+  map<int64, MaterializedIndexPB> partition_id_to_rollup_index = 4;
+  int64 base_index_meta_id = 5;
+  int64 rollup_index_meta_id = 6;
+  optional string base_index_name = 7;
+  optional string rollup_index_name = 8;
+  repeated ColumnPB rollup_schema = 9;
+  int32 rollup_schema_version = 10;
+  int32 base_schema_hash = 11;
+  int32 rollup_schema_hash = 12;
+  optional KeysTypePB rollup_keys_type = 13;
+  // Java short.
+  int32 rollup_short_key_column_count = 14;
+  OriginStatementInfoPB orig_stmt = 15;
+  optional string view_define_sql = 16;
+  bool is_colocate_mv_index = 17;
+}
+
+// The fields declared by com.starrocks.alter.LakeOnlineRewriteJobBase.
+message LakeOnlineRewriteJobCorePB {
+  LakeTableSchemaChangeJobCorePB lake_schema_change = 1;
+  int64 shadow_index_meta_id = 2;
+  int64 origin_index_meta_id = 3;
+  optional string shadow_index_name = 4;
+  // Keyed by physical partition id.
+  map<int64, PartitionRewriteStatePB> partition_states = 5;
+}
+
+// com.starrocks.alter.LakeOnlineRewriteJobBase.PartitionRewriteState.
+message PartitionRewriteStatePB {
+  MaterializedIndexPB shadow_index = 1;
+  int32 tablet_count = 2;
+  TupleListPB boundaries = 3;
+  optional int64 watershed_version = 4;
+  optional int64 rewrite_txn_id = 5;
+  optional int64 commit_version = 6;
+  optional bool source_empty = 7;
+  bool rewrite_finished = 8;
+}
+
+// The fields declared by com.starrocks.alter.LakeRangeRewriteSchemaChangeJob, which
+// LakeMvSortKeyRewriteJob extends.
+message LakeRangeRewriteSchemaChangeJobCorePB {
+  LakeOnlineRewriteJobCorePB online_rewrite = 1;
+  ColumnListPB new_schema = 2;
+  optional KeysTypePB new_keys_type = 3;
+  Int32ListPB new_sort_key_idxes = 4;
+  Int32ListPB new_sort_key_unique_ids = 5;
+  ColumnListPB new_sort_key_columns = 6;
+  // Java short.
+  int32 shadow_short_key_column_count = 7;
+  optional string pinned_colocate_with = 8;
+}
+
+// com.starrocks.alter.LakeRangeRewriteSchemaChangeJob.
+message LakeRangeRewriteSchemaChangeJobPB {
+  LakeRangeRewriteSchemaChangeJobCorePB range_rewrite = 1;
+}
+
+// com.starrocks.alter.LakeMvSortKeyRewriteJob.
+message LakeMvSortKeyRewriteJobPB {
+  LakeRangeRewriteSchemaChangeJobCorePB range_rewrite = 1;
+  bool refresh_was_active_at_submit = 2;
+}
+
+// com.starrocks.alter.LakeRangeRollupJob.
+message LakeRangeRollupJobPB {
+  LakeOnlineRewriteJobCorePB online_rewrite = 1;
+  ColumnListPB rollup_schema = 2;
+  optional KeysTypePB rollup_keys_type = 3;
+  Int32ListPB rollup_sort_key_idxes = 4;
+  Int32ListPB rollup_sort_key_unique_ids = 5;
+  ColumnListPB rollup_sort_key_columns = 6;
+  // Java short.
+  int32 shadow_short_key_column_count = 7;
+  SyncMaterializedViewDefinitionPB sync_mv_definition = 8;
+  OriginStatementInfoPB sync_mv_origin_statement = 9;
+  optional string view_define_sql = 10;
+}
+
+// The fields declared by com.starrocks.alter.LakeTableAlterMetaJobBase.
+message LakeTableAlterMetaJobCorePB {
+  int64 watershed_txn_id = 1;
+  int64 watershed_gtid = 2;
+  repeated PartitionIndexPB partition_indexes = 3;
+  map<int64, int64> commit_version_map = 4;
+}
+
+// com.starrocks.alter.LakeTableAlterMetaJob.
+message LakeTableAlterMetaJobPB {
+  // com.starrocks.thrift.TTabletMetaType.
+  enum MetaType {
+    UNSPECIFIED = 0;
+    PARTITIONID = 1;
+    INMEMORY = 2;
+    ENABLE_PERSISTENT_INDEX = 3;
+    WRITE_QUORUM = 4;
+    REPLICATED_STORAGE = 5;
+    DISABLE_BINLOG = 6;
+    BINLOG_CONFIG = 7;
+    BUCKET_SIZE = 8;
+    PRIMARY_INDEX_CACHE_EXPIRE_SEC = 9;
+    STORAGE_TYPE = 10;
+    MUTABLE_BUCKET_NUM = 11;
+    ENABLE_LOAD_PROFILE = 12;
+    BASE_COMPACTION_FORBIDDEN_TIME_RANGES = 13;
+    FLAT_JSON_CONFIG = 14;
+    ENABLE_FILE_BUNDLING = 15;
+    COMPACTION_STRATEGY = 16;
+  }
+  LakeTableAlterMetaJobCorePB alter_meta = 1;
+  optional MetaType meta_type = 2;
+  bool meta_value = 3;
+  optional string persistent_index_type = 4;
+  bool enable_file_bundling = 5;
+  optional string compaction_strategy = 6;
+  FlatJsonConfigPB flat_json_config = 7;
+}
+
+// com.starrocks.alter.LakeTableAsyncFastSchemaChangeJob (GSON label LakeTableFastSchemaEvolutionJob).
+message LakeTableAsyncFastSchemaChangeJobPB {
+  LakeTableAlterMetaJobCorePB alter_meta = 1;
+  IndexSchemaInfoListPB schema_infos = 2;
+  bool disable_fast_schema_evolution_v2 = 3;
+  OlapTableHistorySchemaPB history_schema = 4;
+  TabletRangeMapPB target_ranges = 5;
+  optional string pinned_colocate_with = 6;
+}
+
+// The fields declared by com.starrocks.alter.LakeTableIndexFastPathJobBase.
+message LakeTableIndexFastPathJobCorePB {
+  int64 watershed_txn_id = 1;
+  map<int64, Int64ListPB> partition_to_tablets = 2;
+  map<int64, int64> tablet_to_index_meta_id = 3;
+  map<int64, int64> commit_version_map = 4;
+  OlapTableHistorySchemaPB history_schema = 5;
+  optional int64 commit_gtid = 6;
+}
+
+// com.starrocks.alter.LakeTableAddIndexJob. indexes_to_add is the Thrift payload the job sends to
+// BE (TOlapTableIndex), carried as Thrift compact bytes.
+message LakeTableAddIndexJobPB {
+  LakeTableIndexFastPathJobCorePB index_fast_path = 1;
+  repeated IndexPB new_indexes = 2;
+  repeated bytes indexes_to_add = 3;
+  repeated string add_bf_columns = 4;
+  // Index meta id -> [schema id, schema version].
+  map<int64, Int64ListPB> index_meta_id_to_new_schema = 5;
+}
+
+// com.starrocks.alter.LakeTableDropIndexJob. drop_infos is the Thrift payload the job sends to BE
+// (TDropIndexInfo), carried as Thrift compact bytes.
+message LakeTableDropIndexJobPB {
+  LakeTableIndexFastPathJobCorePB index_fast_path = 1;
+  repeated int64 drop_index_ids = 2;
+  repeated string drop_index_names = 3;
+  repeated bytes drop_infos = 4;
+  repeated string drop_bf_columns = 5;
+}
+
+// com.starrocks.common.SchemaVersionAndHash.
+message SchemaVersionAndHashPB {
+  int32 schema_version = 1;
+  int32 schema_hash = 2;
+}
+
+// com.starrocks.alter.OlapTableHistorySchema: the schemas a table had before a fast schema change,
+// kept while transactions that started before the change may still read them.
+message OlapTableHistorySchemaPB {
+  int64 history_txn_id_threshold = 1;
+  IndexSchemaInfoListPB index_schema_infos = 2;
+}
+
+// com.starrocks.alter.IndexSchemaInfo.
+message IndexSchemaInfoPB {
+  int64 index_meta_id = 1;
+  optional string index_name = 2;
+  SchemaInfoPB schema_info = 3;
+}
+
+// A Java list of index schema infos that can be null.
+message IndexSchemaInfoListPB {
+  repeated IndexSchemaInfoPB values = 1;
+}

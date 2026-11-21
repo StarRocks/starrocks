@@ -15,6 +15,8 @@
 package com.starrocks.lake.compaction;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.CompactionTxnCommitAttachmentPB;
+import com.starrocks.persist.proto.TxnCommitAttachmentPB;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 
@@ -48,4 +50,22 @@ public class CompactionTxnCommitAttachment extends TxnCommitAttachment {
         return unshare;
     }
 
+    @Override
+    protected void fillProtoVariant(TxnCommitAttachmentPB.Builder parent) {
+        CompactionTxnCommitAttachmentPB.Builder builder = CompactionTxnCommitAttachmentPB.newBuilder();
+        builder.setForceCommit(forceCommit);
+        builder.setUnshare(unshare);
+        parent.setKind(TxnCommitAttachmentPB.Kind.COMPACTION).setCompaction(builder);
+    }
+
+    @Override
+    protected void fillFromVariantProto(TxnCommitAttachmentPB parent) {
+        CompactionTxnCommitAttachmentPB pb = parent.getCompaction();
+        if (pb.hasForceCommit()) {
+            forceCommit = pb.getForceCommit();
+        }
+        if (pb.hasUnshare()) {
+            unshare = pb.getUnshare();
+        }
+    }
 }

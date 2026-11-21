@@ -22,11 +22,15 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.DropWarehouseLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.WarehouseInternalOpLog;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -574,4 +578,13 @@ public class WarehouseManager implements Writable {
         }
         return cnt;
     }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of();
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+    }
+
+
 }

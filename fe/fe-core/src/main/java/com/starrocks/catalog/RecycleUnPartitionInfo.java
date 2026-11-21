@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.starrocks.common.DdlException;
 import com.starrocks.lake.DataCacheInfo;
+import com.starrocks.persist.proto.RecyclePartitionInfoPB;
 
 // This class is simply used as the Interface to trigger the background task
 // in CatalogRecycleBin
@@ -33,5 +34,10 @@ public class RecycleUnPartitionInfo extends RecyclePartitionInfoV2 {
 
     @Override
     public void recover(OlapTable table) {
+    }
+
+    @Override
+    protected RecyclePartitionInfoPB.Kind protoKind() {
+        return RecyclePartitionInfoPB.Kind.RECYCLE_UN_PARTITION_INFO;
     }
 }

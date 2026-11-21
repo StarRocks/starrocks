@@ -1544,6 +1544,15 @@ This topic introduces the following types of FE configurations:
 - Description: When `true`, the CheckpointController will only select the leader FE as the checkpoint worker; when `false`, the controller may pick any frontend and prefers nodes with lower heap usage. With `false`, workers are sorted by recent failure time and `heapUsedPercent` (the leader is treated as having infinite usage to avoid selecting it). For operations that require cluster snapshot metadata, the controller already forces leader selection regardless of this flag. Enabling `true` centralizes checkpoint work on the leader (simpler but increases leader CPU/memory and network load); keeping it `false` distributes checkpoint load to less-loaded FEs. This setting affects worker selection and interaction with timeouts such as `checkpoint_timeout_seconds` and RPC settings like `thrift_rpc_timeout_ms`.
 - Introduced in: v3.4.0, v3.5.0
 
+### `disable_image_v2_write`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: By default, each FE checkpoint writes and distributes both v2 and v3 images at the same journal ID. Set this parameter to `true` after the cluster is stable and rollback is no longer needed to stop v2 serialization, disk writes, and distribution. This parameter requires a restart. Use the same setting in the configuration files of all FEs. The leader decides whether to write v2 for each checkpoint and sends that decision to the worker, which follows the request. The setting controls subsequent checkpoints. Image loading always selects the latest journal ID and prefers v3 when IDs match. Upgrade followers and observers before the leader. To restore the v2 rollback path after disabling it, set this parameter back to `false`, restart the FEs, and complete a new checkpoint and distribution before rolling back. An old v2 image may no longer be recoverable after journal cleanup. StarMgr images are unaffected.
+- Introduced in: -
+
 ### `checkpoint_timeout_seconds`
 
 - Default: 24 * 3600

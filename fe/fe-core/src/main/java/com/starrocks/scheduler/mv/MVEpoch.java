@@ -18,6 +18,8 @@ package com.starrocks.scheduler.mv;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.MVEpochPB;
 
 import java.util.Objects;
 
@@ -143,5 +145,32 @@ public class MVEpoch implements Writable {
                 ", startTimeMilli=" + startTimeMilli +
                 ", commitTimeMilli=" + commitTimeMilli +
                 '}';
+    }
+
+    public MVEpochPB toProto() {
+        MVEpochPB.Builder builder = MVEpochPB.newBuilder().setDbId(dbId).setMvId(mvId)
+                .setStartTimeMilli(startTimeMilli).setCommitTimeMilli(commitTimeMilli);
+        if (state != null) {
+            builder.setState(ProtoEnums.toProto(state, MVEpochPB.State.class));
+        }
+        if (binlogState != null) {
+            builder.setBinlogState(binlogState.toProto());
+        }
+        return builder.build();
+    }
+
+    public static MVEpoch fromProto(MVEpochPB pb) {
+        return new MVEpoch(pb);
+    }
+
+    private MVEpoch(MVEpochPB pb) {
+        dbId = pb.getDbId();
+        mvId = pb.getMvId();
+        startTimeMilli = pb.getStartTimeMilli();
+        commitTimeMilli = pb.getCommitTimeMilli();
+        state = !pb.hasState() || pb.getState() == MVEpochPB.State.UNRECOGNIZED
+                || pb.getState() == MVEpochPB.State.UNSPECIFIED
+                ? null : ProtoEnums.fromProto(pb.getState(), EpochState.class);
+        binlogState = pb.hasBinlogState() ? BinlogConsumeStateVO.fromProto(pb.getBinlogState()) : null;
     }
 }

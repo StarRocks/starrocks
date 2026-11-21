@@ -17,6 +17,7 @@ package com.starrocks.catalog;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Int128;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
 
 import java.math.BigInteger;
 
@@ -30,6 +31,12 @@ public class LargeIntVariant extends Variant {
 
     public LargeIntVariant(Int128 value) {
         super(IntegerType.LARGEINT);
+        this.value = value;
+    }
+
+    // For the image load, which carries the persisted type instead of the LARGEINT constant.
+    LargeIntVariant(Type type, Int128 value) {
+        super(type);
         this.value = value;
     }
 

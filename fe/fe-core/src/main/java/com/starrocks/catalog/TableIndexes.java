@@ -38,7 +38,11 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.IndexPB;
+import com.starrocks.persist.proto.TableIndexesPB;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -65,6 +69,29 @@ public class TableIndexes implements Writable {
     public TableIndexes(List<Index> indexes, Map<String, String> properties) {
         this.indexes = indexes;
         this.properties = properties;
+    }
+
+    public TableIndexesPB toProto() {
+        TableIndexesPB.Builder builder = TableIndexesPB.newBuilder();
+        if (indexes != null) {
+            for (Index index : indexes) {
+                builder.addIndexes(index.toProto());
+            }
+        }
+        if (properties != null) {
+            builder.putAllProperties(ProtoMaps.withoutNullValues(properties));
+        }
+        return builder.build();
+    }
+
+    public static TableIndexes fromProto(TableIndexesPB pb) {
+        TableIndexes tableIndexes = new TableIndexes();
+        tableIndexes.indexes = new ArrayList<>(pb.getIndexesCount());
+        for (IndexPB index : pb.getIndexesList()) {
+            tableIndexes.indexes.add(Index.fromProto(index));
+        }
+        tableIndexes.properties = new HashMap<>(pb.getPropertiesMap());
+        return tableIndexes;
     }
 
     public List<Index> getIndexes() {

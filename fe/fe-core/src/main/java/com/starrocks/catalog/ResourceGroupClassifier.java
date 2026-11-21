@@ -14,9 +14,15 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.util.NetUtils;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoLists;
+import com.starrocks.persist.proto.ResourceGroupClassifierPB;
+import com.starrocks.persist.proto.ResourceGroupCostRangePB;
+import com.starrocks.persist.proto.ResourceGroupQueryTypesPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TQueryType;
 import org.apache.commons.collections.CollectionUtils;
@@ -306,5 +312,83 @@ public class ResourceGroupClassifier {
         public String toString() {
             return "[" + min + ", " + max + ")";
         }
+    }
+
+    public ResourceGroupClassifier() {
+    }
+
+    public ResourceGroupClassifierPB toProto() {
+        ResourceGroupClassifierPB.Builder builder = ResourceGroupClassifierPB.newBuilder();
+        builder.setId(id);
+        if (user != null) {
+            builder.setUser(user);
+        }
+        if (role != null) {
+            builder.setRole(role);
+        }
+        if (sourceIp != null) {
+            builder.setSourceIp(sourceIp);
+        }
+        builder.setResourceGroupId(resourceGroupId);
+        if (databaseIds != null) {
+            builder.setDatabaseIds(ProtoLists.int64List(databaseIds));
+        }
+        if (queryTypes != null) {
+            builder.setQueryTypes(ResourceGroupQueryTypesPB.newBuilder().addAllValues(queryTypes.stream()
+                    .map(value -> ProtoEnums.toProto(value, ResourceGroupQueryTypesPB.Type.class))
+                    .collect(Collectors.toList())));
+        }
+        if (planCpuCostRange != null) {
+            builder.setPlanCpuCostRange(costRangeToProto(planCpuCostRange));
+        }
+        if (planMemCostRange != null) {
+            builder.setPlanMemCostRange(costRangeToProto(planMemCostRange));
+        }
+        return builder.build();
+    }
+
+    private ResourceGroupClassifier(ResourceGroupClassifierPB pb) {
+        if (pb.hasId()) {
+            id = pb.getId();
+        }
+        if (pb.hasUser()) {
+            user = pb.getUser();
+        }
+        if (pb.hasRole()) {
+            role = pb.getRole();
+        }
+        if (pb.hasSourceIp()) {
+            sourceIp = pb.getSourceIp();
+        }
+        if (pb.hasResourceGroupId()) {
+            resourceGroupId = pb.getResourceGroupId();
+        }
+        if (pb.hasDatabaseIds()) {
+            databaseIds = new HashSet<>(ProtoLists.toLongs(pb.getDatabaseIds()));
+        }
+        if (pb.hasQueryTypes()) {
+            queryTypes = pb.getQueryTypes().getValuesList().stream()
+                    .map(value -> ProtoEnums.fromProto(value, QueryType.class)).collect(Collectors.toSet());
+        }
+        if (pb.hasPlanCpuCostRange()) {
+            planCpuCostRange = costRangeFromProto(pb.getPlanCpuCostRange());
+        }
+        if (pb.hasPlanMemCostRange()) {
+            planMemCostRange = costRangeFromProto(pb.getPlanMemCostRange());
+        }
+    }
+
+    public static ResourceGroupClassifier fromProto(ResourceGroupClassifierPB pb) {
+        return new ResourceGroupClassifier(pb);
+    }
+
+    private static ResourceGroupCostRangePB costRangeToProto(CostRange range) {
+        return ResourceGroupCostRangePB.newBuilder().setMin(range.min).setMax(range.max).build();
+    }
+
+    private static CostRange costRangeFromProto(ResourceGroupCostRangePB pb) {
+        Preconditions.checkArgument(pb.hasMin() && pb.hasMax() && Double.isFinite(pb.getMin())
+                && Double.isFinite(pb.getMax()) && pb.getMin() < pb.getMax(), "invalid resource group cost range");
+        return new CostRange(pb.getMin(), pb.getMax());
     }
 }

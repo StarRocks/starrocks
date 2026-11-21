@@ -1,0 +1,108 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/common.proto";
+
+import "persist/partition.proto";
+
+import "persist/type.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "ColocateProto";
+
+message GroupIdPB {
+  optional int64 db_id = 1;
+  optional int64 grp_id = 2;
+}
+
+message BackendBucketsPB {
+  repeated Int64ListPB values = 1;
+}
+
+message ColocatePersistInfoPB {
+  GroupIdPB group_id = 1;
+  optional int64 table_id = 2;
+  BackendBucketsPB backends_per_bucket_seq = 3;
+  ColocateRangeListPB colocate_ranges = 4;
+}
+
+message ColocateRangeListPB {
+  repeated ColocateRangePB values = 1;
+}
+
+message ColocateGroupSchemaPB {
+  enum DistributionType {
+    UNSPECIFIED = 0;
+    HASH = 1;
+    RANGE = 2;
+  }
+  GroupIdPB group_id = 1;
+  repeated TypePB distribution_col_types = 2;
+  optional int32 buckets_num = 3;
+  optional int32 replication_num = 4;
+  optional DistributionType distribution_type = 5;
+}
+
+message ColocateRangePB {
+  TabletRangePB range = 1;
+  optional int64 shard_group_id = 2;
+}
+
+message ColocateGroupRangesPB {
+  optional int64 group_id = 1;
+  repeated ColocateRangePB ranges = 2;
+}
+
+// Index maps remain independent, as in v2. In particular a stale table reference must reach the
+// existing cleanup step after loading, rather than disappear while deriving one index from another.
+
+message ColocateTableIndexPB {
+  repeated ColocateGroupNameEntryPB group_names = 1;
+  repeated ColocateGroupTablesEntryPB group_tables = 2;
+  repeated ColocateTableGroupEntryPB table_groups = 3;
+  repeated ColocateGroupSchemaEntryPB group_schemas = 4;
+  repeated ColocateGroupBucketsEntryPB group_buckets = 5;
+  repeated GroupIdPB unstable_groups = 6;
+  repeated ColocateGroupRangesPB group_ranges = 7;
+}
+
+message ColocateGroupNameEntryPB {
+  optional string name = 1;
+  GroupIdPB group_id = 2;
+}
+
+message ColocateGroupTablesEntryPB {
+  GroupIdPB group_id = 1;
+  repeated int64 table_ids = 2;
+}
+
+message ColocateTableGroupEntryPB {
+  optional int64 table_id = 1;
+  GroupIdPB group_id = 2;
+}
+
+message ColocateGroupSchemaEntryPB {
+  GroupIdPB group_id = 1;
+  ColocateGroupSchemaPB schema = 2;
+}
+
+message ColocateGroupBucketsEntryPB {
+  GroupIdPB group_id = 1;
+  BackendBucketsPB buckets = 2;
+}

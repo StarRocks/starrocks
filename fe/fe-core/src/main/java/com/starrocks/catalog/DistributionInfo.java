@@ -36,6 +36,9 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoKinds;
+import com.starrocks.persist.proto.DistributionInfoPB;
 import com.starrocks.sql.ast.DistributionDesc;
 import org.apache.commons.lang.NotImplementedException;
 
@@ -63,6 +66,48 @@ public abstract class DistributionInfo implements Writable {
     public DistributionInfo(DistributionInfoType type) {
         this.type = type;
         this.typeStr = this.type.name();
+    }
+
+    /**
+     * Image v3 form. `type` and `typeStr` are implied by the kind and rebuilt on load the way the typed
+     * constructors set them.
+     */
+    public DistributionInfoPB toProto() {
+        DistributionInfoPB.Builder builder = DistributionInfoPB.newBuilder();
+        fillProtoVariant(builder);
+        return builder.build();
+    }
+
+    /** Sets the kind and the variant message of the concrete class. Only the persistable subclasses override it. */
+    protected void fillProtoVariant(DistributionInfoPB.Builder builder) {
+        throw new IllegalStateException("distribution info class " + getClass().getName() + " cannot be persisted");
+    }
+
+    public static DistributionInfo fromProto(DistributionInfoPB pb) {
+        ProtoKinds.checkKnown(pb.getKind(), pb.getKindValue());
+        DistributionInfo info;
+        switch (pb.getKind()) {
+            case HASH: {
+                HashDistributionInfo hash = new HashDistributionInfo();
+                hash.fillFromVariantProto(pb.getHash());
+                info = hash;
+                break;
+            }
+            case RANDOM: {
+                RandomDistributionInfo random = new RandomDistributionInfo();
+                random.fillFromVariantProto(pb.getRandom());
+                info = random;
+                break;
+            }
+            case RANGE:
+                info = new RangeDistributionInfo();
+                break;
+            default:
+                throw new IllegalArgumentException("unknown distribution info kind " + pb.getKind());
+        }
+        info.type = ProtoEnums.fromProto(pb.getKind(), DistributionInfoType.class);
+        info.typeStr = info.type.name();
+        return info;
     }
 
     public String getTypeStr() {

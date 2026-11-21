@@ -68,6 +68,11 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.Load;
 import com.starrocks.metric.RoutineLoadLagTimeMetricMgr;
+import com.starrocks.persist.proto.Int32ListPB;
+import com.starrocks.persist.proto.KafkaPartitionOffsetsPB;
+import com.starrocks.persist.proto.KafkaRoutineLoadJobPB;
+import com.starrocks.persist.proto.RoutineLoadJobPB;
+import com.starrocks.persist.proto.StringMapPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -1180,5 +1185,74 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
     protected Long getKafkaDefaultOffSet() {
         return kafkaDefaultOffSet;
+    }
+
+    private KafkaRoutineLoadJobPB toSourceProto() {
+        KafkaRoutineLoadJobPB.Builder builder = KafkaRoutineLoadJobPB.newBuilder();
+        if (brokerList != null) {
+            builder.setBrokerList(brokerList);
+        }
+        if (topic != null) {
+            builder.setTopic(topic);
+        }
+        if (customKafkaPartitions != null) {
+            builder.setCustomKafkaPartitions(Int32ListPB.newBuilder().addAllValues(customKafkaPartitions).build());
+        }
+        if (currentKafkaPartitions != null) {
+            builder.setCurrentKafkaPartitions(Int32ListPB.newBuilder().addAllValues(currentKafkaPartitions).build());
+        }
+        if (customProperties != null) {
+            builder.setCustomProperties(StringMapPB.newBuilder().putAllValues(customProperties).build());
+        }
+        if (confluentSchemaRegistryUrl != null) {
+            builder.setConfluentSchemaRegistryUrl(confluentSchemaRegistryUrl);
+        }
+        if (customeKafkaPartitionOffsets != null) {
+            KafkaPartitionOffsetsPB.Builder offsets = KafkaPartitionOffsetsPB.newBuilder();
+            for (Pair<Integer, Long> pair : customeKafkaPartitionOffsets) {
+                offsets.addValues(KafkaPartitionOffsetsPB.Entry.newBuilder()
+                        .setPartition(pair.first).setOffset(pair.second));
+            }
+            builder.setCustomeKafkaPartitionOffsets(offsets);
+        }
+        return builder.build();
+    }
+
+    private void fillSourceFromProto(KafkaRoutineLoadJobPB pb) {
+        if (pb.hasBrokerList()) {
+            brokerList = pb.getBrokerList();
+        }
+        if (pb.hasTopic()) {
+            topic = pb.getTopic();
+        }
+        if (pb.hasCustomKafkaPartitions()) {
+            customKafkaPartitions = new ArrayList<>(pb.getCustomKafkaPartitions().getValuesList());
+        }
+        if (pb.hasCurrentKafkaPartitions()) {
+            currentKafkaPartitions = new ArrayList<>(pb.getCurrentKafkaPartitions().getValuesList());
+        }
+        if (pb.hasCustomProperties()) {
+            customProperties = new HashMap<>(pb.getCustomProperties().getValuesMap());
+        }
+        if (pb.hasConfluentSchemaRegistryUrl()) {
+            confluentSchemaRegistryUrl = pb.getConfluentSchemaRegistryUrl();
+        }
+        if (pb.hasCustomeKafkaPartitionOffsets()) {
+            customeKafkaPartitionOffsets = new ArrayList<>();
+            for (KafkaPartitionOffsetsPB.Entry pair : pb.getCustomeKafkaPartitionOffsets().getValuesList()) {
+                Preconditions.checkArgument(pair.hasPartition() && pair.hasOffset(), "incomplete Kafka partition offset");
+                customeKafkaPartitionOffsets.add(Pair.create(pair.getPartition(), pair.getOffset()));
+            }
+        }
+    }
+
+    @Override
+    protected void fillProtoVariant(RoutineLoadJobPB.Builder builder) {
+        builder.setKind(RoutineLoadJobPB.Kind.KAFKA_ROUTINE_LOAD_JOB).setKafka(toSourceProto());
+    }
+
+    @Override
+    protected void fillFromVariantProto(RoutineLoadJobPB pb) {
+        fillSourceFromProto(pb.getKafka());
     }
 }

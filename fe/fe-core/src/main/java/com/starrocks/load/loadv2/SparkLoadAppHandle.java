@@ -37,6 +37,7 @@ package com.starrocks.load.loadv2;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.proto.SparkLoadAppHandlePB;
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -220,4 +221,63 @@ public class SparkLoadAppHandle implements Writable {
         }
     }
 
+    public SparkLoadAppHandlePB toProto() {
+        SparkLoadAppHandlePB.Builder builder = SparkLoadAppHandlePB.newBuilder();
+        if (appId != null) {
+            builder.setAppId(appId);
+        }
+        if (state != null) {
+            builder.setState(SparkLoadAppHandlePB.State.valueOf(state.name()));
+        }
+        if (queue != null) {
+            builder.setQueue(queue);
+        }
+        builder.setStartTime(startTime);
+        if (finalStatus != null) {
+            builder.setFinalStatus(SparkLoadAppHandlePB.FinalStatus.valueOf("FINAL_STATUS_" + finalStatus.name()));
+        }
+        if (trackingUrl != null) {
+            builder.setTrackingUrl(trackingUrl);
+        }
+        if (user != null) {
+            builder.setUser(user);
+        }
+        if (logPath != null) {
+            builder.setLogPath(logPath);
+        }
+        return builder.build();
+    }
+
+    private void fillFromProto(SparkLoadAppHandlePB pb) {
+        if (pb.hasAppId()) {
+            appId = pb.getAppId();
+        }
+        if (pb.hasState()) {
+            state = State.valueOf(pb.getState().name());
+        }
+        if (pb.hasQueue()) {
+            queue = pb.getQueue();
+        }
+        if (pb.hasStartTime()) {
+            startTime = pb.getStartTime();
+        }
+        if (pb.hasFinalStatus()) {
+            finalStatus = FinalApplicationStatus.valueOf(pb.getFinalStatus().name().replace("FINAL_STATUS_", ""));
+        }
+        if (pb.hasTrackingUrl()) {
+            trackingUrl = pb.getTrackingUrl();
+        }
+        if (pb.hasUser()) {
+            user = pb.getUser();
+        }
+        if (pb.hasLogPath()) {
+            logPath = pb.getLogPath();
+        }
+    }
+
+    public static SparkLoadAppHandle fromProto(SparkLoadAppHandlePB pb) {
+        SparkLoadAppHandle handle = new SparkLoadAppHandle();
+        handle.fillFromProto(pb);
+        return handle;
+    }
 }

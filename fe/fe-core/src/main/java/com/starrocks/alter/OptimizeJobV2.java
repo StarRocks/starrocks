@@ -46,6 +46,9 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.PartitionUtils;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.proto.AlterJobPB;
+import com.starrocks.persist.proto.OptimizeJobV2PB;
+import com.starrocks.persist.proto.OptimizeTaskPB;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.SubmitResult;
@@ -66,6 +69,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -1047,5 +1051,55 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
     @Override
     public Optional<Long> getTransactionId() {
         return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
+    }
+
+    @Override
+    protected void fillFromVariantProto(AlterJobPB pb) {
+        OptimizeJobV2PB variant = pb.getOptimizeJobV2();
+        watershedTxnId = variant.getWatershedTxnId();
+        tmpPartitionIds = new ArrayList<>(variant.getTmpPartitionIdsList());
+        rewriteTasks = new ArrayList<>(variant.getRewriteTasksCount());
+        for (OptimizeTaskPB task : variant.getRewriteTasksList()) {
+            rewriteTasks.add(OptimizeTask.fromProto(task));
+        }
+        sourcePartitionNames = new ArrayList<>(variant.getSourcePartitionNamesList());
+        tmpPartitionNames = new ArrayList<>(variant.getTmpPartitionNamesList());
+        if (variant.hasAllPartitionOptimized()) {
+            allPartitionOptimized = variant.getAllPartitionOptimized();
+        }
+        if (variant.hasDistributionInfo()) {
+            distributionInfo = DistributionInfo.fromProto(variant.getDistributionInfo());
+        }
+        if (variant.hasOptimizeOperation()) {
+            optimizeOperation = variant.getOptimizeOperation();
+        }
+        rebuildPostfix();
+    }
+
+    @Override
+    protected void fillProtoVariant(AlterJobPB.Builder builder) {
+        OptimizeJobV2PB.Builder variant = OptimizeJobV2PB.newBuilder()
+                .setWatershedTxnId(watershedTxnId)
+                .addAllTmpPartitionIds(tmpPartitionIds)
+                .addAllSourcePartitionNames(sourcePartitionNames)
+                .addAllTmpPartitionNames(tmpPartitionNames);
+        for (OptimizeTask task : rewriteTasks) {
+            variant.addRewriteTasks(task.toProto());
+        }
+        if (allPartitionOptimized != null) {
+            variant.setAllPartitionOptimized(allPartitionOptimized);
+        }
+        if (distributionInfo != null) {
+            variant.setDistributionInfo(distributionInfo.toProto());
+        }
+        if (optimizeOperation != null) {
+            variant.setOptimizeOperation(optimizeOperation);
+        }
+        builder.setKind(AlterJobPB.Kind.OPTIMIZE_JOB_V2).setOptimizeJobV2(variant);
+    }
+
+    /** The postfix is derived from the job id. Shared by the GSON hook and the image v3 load. */
+    private void rebuildPostfix() {
+        this.postfix = "_" + jobId;
     }
 }

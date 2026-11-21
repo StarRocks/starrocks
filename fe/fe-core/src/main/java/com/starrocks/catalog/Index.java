@@ -39,6 +39,11 @@ import com.starrocks.catalog.IndexParams.IndexParamItem;
 import com.starrocks.catalog.IndexParams.IndexParamType;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.IndexListPB;
+import com.starrocks.persist.proto.IndexPB;
+import com.starrocks.persist.proto.StringMapPB;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.common.MetaUtils;
@@ -100,6 +105,51 @@ public class Index implements Writable {
         this.indexType = null;
         this.comment = null;
         this.properties = null;
+    }
+
+    public IndexPB toProto() {
+        IndexPB.Builder builder = IndexPB.newBuilder().setIndexId(indexId);
+        if (indexName != null) {
+            builder.setIndexName(indexName);
+        }
+        if (columns != null) {
+            for (ColumnId column : columns) {
+                builder.addColumns(column.getId());
+            }
+        }
+        if (indexType != null) {
+            builder.setIndexType(ProtoEnums.toProto(indexType, IndexPB.IndexType.class));
+        }
+        if (comment != null) {
+            builder.setComment(comment);
+        }
+        if (properties != null) {
+            builder.setProperties(StringMapPB.newBuilder().putAllValues(ProtoMaps.withoutNullValues(properties)));
+        }
+        return builder.build();
+    }
+
+    public static Index fromProto(IndexPB pb) {
+        // The same constructor GSON uses.
+        Index index = new Index();
+        index.indexId = pb.getIndexId();
+        if (pb.hasIndexName()) {
+            index.indexName = pb.getIndexName();
+        }
+        index.columns = new ArrayList<>(pb.getColumnsCount());
+        for (String column : pb.getColumnsList()) {
+            index.columns.add(ColumnId.create(column));
+        }
+        if (pb.hasIndexType()) {
+            index.indexType = ProtoEnums.fromProto(pb.getIndexType(), IndexDef.IndexType.class);
+        }
+        if (pb.hasComment()) {
+            index.comment = pb.getComment();
+        }
+        if (pb.hasProperties()) {
+            index.properties = new HashMap<>(pb.getProperties().getValuesMap());
+        }
+        return index;
     }
 
     public long getIndexId() {
@@ -277,5 +327,22 @@ public class Index implements Writable {
         }
 
         return tIndex;
+    }
+
+    /** Image v3 form of a list of indexes that can be null: the wrapper keeps the null / empty distinction. */
+    public static IndexListPB toListProto(List<Index> indexes) {
+        IndexListPB.Builder builder = IndexListPB.newBuilder();
+        for (Index index : indexes) {
+            builder.addIndexes(index.toProto());
+        }
+        return builder.build();
+    }
+
+    public static List<Index> fromListProto(IndexListPB pb) {
+        List<Index> indexes = new ArrayList<>(pb.getIndexesCount());
+        for (IndexPB index : pb.getIndexesList()) {
+            indexes.add(fromProto(index));
+        }
+        return indexes;
     }
 }

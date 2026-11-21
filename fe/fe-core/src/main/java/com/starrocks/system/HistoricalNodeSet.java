@@ -18,6 +18,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.proto.HistoricalNodeSetPB;
+import com.starrocks.persist.proto.Int64ListPB;
 
 import java.util.List;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -75,4 +77,25 @@ public class HistoricalNodeSet implements Writable {
         }
     }
 
+
+    public HistoricalNodeSetPB toProto() {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            HistoricalNodeSetPB.Builder builder = HistoricalNodeSetPB.newBuilder().setLastUpdateTime(lastUpdateTime);
+            if (backendIds != null) {
+                builder.setBackendIds(Int64ListPB.newBuilder().addAllValues(backendIds));
+            }
+            if (computeNodeIds != null) {
+                builder.setComputeNodeIds(Int64ListPB.newBuilder().addAllValues(computeNodeIds));
+            }
+            return builder.build();
+        }
+    }
+
+    public static HistoricalNodeSet fromProto(HistoricalNodeSetPB pb) {
+        HistoricalNodeSet nodeSet = new HistoricalNodeSet();
+        nodeSet.backendIds = pb.hasBackendIds() ? ImmutableList.copyOf(pb.getBackendIds().getValuesList()) : null;
+        nodeSet.computeNodeIds = pb.hasComputeNodeIds() ? ImmutableList.copyOf(pb.getComputeNodeIds().getValuesList()) : null;
+        nodeSet.lastUpdateTime = pb.getLastUpdateTime();
+        return nodeSet;
+    }
 }

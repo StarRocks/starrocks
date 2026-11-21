@@ -48,8 +48,16 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.io.Writable;
+import com.starrocks.lake.LakeMaterializedView;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoKinds;
+import com.starrocks.persist.proto.ColumnPB;
+import com.starrocks.persist.proto.MvIdPB;
+import com.starrocks.persist.proto.TableCorePB;
+import com.starrocks.persist.proto.TablePB;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -248,6 +256,184 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         updateSchemaIndex();
         this.createTime = Instant.now().getEpochSecond();
         this.relatedMaterializedViews = Sets.newConcurrentHashSet();
+    }
+
+    /**
+     * Image v3 form: the Table fields go into the core message and the concrete class fills its variant. The kind
+     * mirrors the TableType, which only restates the concrete class, so {@code type} is not written separately;
+     * only the classes GSON can persist are accepted.
+     */
+    public TablePB toProto() throws IOException {
+        TablePB.Builder builder = TablePB.newBuilder()
+                .setKind(ProtoEnums.toProto(type, TablePB.Kind.class))
+                .setCore(toTableCoreProto());
+        fillProtoVariant(builder);
+        return builder.build();
+    }
+
+    /** Sets the variant message of the concrete class. Only the persistable subclasses override it. */
+    protected void fillProtoVariant(TablePB.Builder builder) throws IOException {
+        throw new IllegalStateException("table class " + getClass().getName() + " cannot be persisted");
+    }
+
+    /**
+     * Whether the full schema is written. The OlapTable family rebuilds it from the index metas on load, exactly
+     * as the GSON load does, so it does not persist the copy.
+     */
+    protected boolean persistsFullSchema() {
+        return true;
+    }
+
+    public static Table fromProto(TablePB pb) throws IOException {
+        ProtoKinds.checkKnown(pb.getKind(), pb.getKindValue());
+        Table table;
+        switch (pb.getKind()) {
+            case OLAP: {
+                OlapTable olapTable = new OlapTable();
+                olapTable.fillFromVariantProto(pb.getOlap());
+                table = olapTable;
+                break;
+            }
+            case CLOUD_NATIVE: {
+                LakeTable lakeTable = new LakeTable();
+                lakeTable.fillFromVariantProto(pb.getLake());
+                table = lakeTable;
+                break;
+            }
+            case MATERIALIZED_VIEW: {
+                MaterializedView materializedView = new MaterializedView();
+                materializedView.fillFromVariantProto(pb.getMaterializedView());
+                table = materializedView;
+                break;
+            }
+            case CLOUD_NATIVE_MATERIALIZED_VIEW: {
+                LakeMaterializedView materializedView = new LakeMaterializedView();
+                materializedView.fillFromVariantProto(pb.getLakeMaterializedView());
+                table = materializedView;
+                break;
+            }
+            case OLAP_EXTERNAL: {
+                ExternalOlapTable externalOlapTable = new ExternalOlapTable();
+                externalOlapTable.fillFromVariantProto(pb.getExternalOlap());
+                table = externalOlapTable;
+                break;
+            }
+            case VIEW: {
+                View view = new View();
+                view.fillFromVariantProto(pb.getView());
+                table = view;
+                break;
+            }
+            case ELASTICSEARCH: {
+                EsTable esTable = new EsTable();
+                esTable.fillFromVariantProto(pb.getEs());
+                table = esTable;
+                break;
+            }
+            case MYSQL: {
+                MysqlTable mysqlTable = new MysqlTable();
+                mysqlTable.fillFromVariantProto(pb.getMysql());
+                table = mysqlTable;
+                break;
+            }
+            case HIVE: {
+                HiveTable hiveTable = new HiveTable();
+                hiveTable.fillFromVariantProto(pb.getHive());
+                table = hiveTable;
+                break;
+            }
+            case HUDI: {
+                HudiTable hudiTable = new HudiTable();
+                hudiTable.fillFromVariantProto(pb.getHudi());
+                table = hudiTable;
+                break;
+            }
+            case ICEBERG: {
+                IcebergTable icebergTable = new IcebergTable();
+                icebergTable.fillFromVariantProto(pb.getIceberg());
+                table = icebergTable;
+                break;
+            }
+            case JDBC: {
+                JDBCTable jdbcTable = new JDBCTable();
+                jdbcTable.fillFromVariantProto(pb.getJdbc());
+                table = jdbcTable;
+                break;
+            }
+            case FILE: {
+                FileTable fileTable = new FileTable();
+                fileTable.fillFromVariantProto(pb.getFile());
+                table = fileTable;
+                break;
+            }
+            default:
+                throw new IllegalArgumentException("unknown table kind " + pb.getKind());
+        }
+        table.type = ProtoEnums.fromProto(pb.getKind(), TableType.class);
+        table.fillFromTableCoreProto(pb.getCore());
+        table.rebuildTransientState();
+        return table;
+    }
+
+    /** The fields declared by this class, shared by every table kind. */
+    protected TableCorePB toTableCoreProto() {
+        TableCorePB.Builder builder = TableCorePB.newBuilder()
+                .setMeta(toMetaObjectProto())
+                .setId(id)
+                .setCreateTime(createTime);
+        if (name != null) {
+            builder.setName(name);
+        }
+        if (persistsFullSchema() && fullSchema != null) {
+            for (Column column : fullSchema) {
+                builder.addFullSchema(column.toProto());
+            }
+        }
+        if (comment != null) {
+            builder.setComment(comment);
+        }
+        if (relatedMaterializedViews != null) {
+            for (MvId mvId : relatedMaterializedViews) {
+                builder.addRelatedMaterializedViews(mvId.toProto());
+            }
+        }
+        return builder.build();
+    }
+
+    protected void fillFromTableCoreProto(TableCorePB pb) {
+        if (pb.hasMeta()) {
+            fillFromMetaObjectProto(pb.getMeta());
+        }
+        id = pb.getId();
+        if (pb.hasName()) {
+            name = pb.getName();
+        }
+        createTime = pb.getCreateTime();
+        fullSchema = Lists.newArrayList();
+        for (ColumnPB column : pb.getFullSchemaList()) {
+            fullSchema.add(Column.fromProto(column));
+        }
+        if (pb.hasComment()) {
+            comment = pb.getComment();
+        }
+        // An insertion-ordered set, as GSON delivers it.
+        relatedMaterializedViews = Sets.newLinkedHashSet();
+        for (MvIdPB mvId : pb.getRelatedMaterializedViewsList()) {
+            relatedMaterializedViews.add(MvId.fromProto(mvId));
+        }
+    }
+
+    /**
+     * Rebuilds the in-memory state that is not persisted, the way the GSON post-process hooks do. Subclasses
+     * extend or, like OlapTable, replace it; the image v3 load calls it once the whole table is filled.
+     */
+    protected void rebuildTransientState() {
+        rebuildTableTransientState();
+    }
+
+    private void rebuildTableTransientState() {
+        updateSchemaIndex();
+        relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
     public long getId() {

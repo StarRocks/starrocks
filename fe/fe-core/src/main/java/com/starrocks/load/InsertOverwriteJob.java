@@ -16,8 +16,13 @@
 package com.starrocks.load;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.InsertOverwriteJobPB;
+import com.starrocks.persist.proto.Int64ListPB;
+import com.starrocks.persist.proto.StringListPB;
 import com.starrocks.sql.ast.InsertStmt;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class InsertOverwriteJob {
@@ -152,5 +157,53 @@ public class InsertOverwriteJob {
 
     public void setTxnId(long txnId) {
         this.txnId = txnId;
+    }
+
+    public InsertOverwriteJobPB toProto() {
+        InsertOverwriteJobPB.Builder builder = InsertOverwriteJobPB.newBuilder();
+        builder.setJobId(jobId);
+        if (jobState != null) {
+            builder.setJobState(ProtoEnums.toProto(jobState, InsertOverwriteJobPB.State.class));
+        }
+        if (sourcePartitionIds != null) {
+            builder.setSourcePartitionIds(Int64ListPB.newBuilder().addAllValues(sourcePartitionIds));
+        }
+        if (tmpPartitionIds != null) {
+            builder.setTmpPartitionIds(Int64ListPB.newBuilder().addAllValues(tmpPartitionIds));
+        }
+        builder.setTargetDbId(targetDbId);
+        builder.setTargetTableId(targetTableId);
+        builder.setWarehouseId(warehouseId);
+        if (sourcePartitionNames != null) {
+            builder.setSourcePartitionNames(StringListPB.newBuilder().addAllValues(sourcePartitionNames));
+        }
+        builder.setDynamicOverwrite(dynamicOverwrite);
+        builder.setTxnId(txnId);
+        return builder.build();
+    }
+
+    public static InsertOverwriteJob fromProto(InsertOverwriteJobPB pb) {
+        InsertOverwriteJob result = new InsertOverwriteJob();
+        result.jobId = pb.getJobId();
+        if (pb.hasJobState()) {
+            result.jobState = ProtoEnums.fromProto(pb.getJobState(), InsertOverwriteJobState.class);
+        }
+        if (pb.hasSourcePartitionIds()) {
+            result.sourcePartitionIds = new ArrayList<>(pb.getSourcePartitionIds().getValuesList());
+        }
+        if (pb.hasTmpPartitionIds()) {
+            result.tmpPartitionIds = new ArrayList<>(pb.getTmpPartitionIds().getValuesList());
+        }
+        result.targetDbId = pb.getTargetDbId();
+        result.targetTableId = pb.getTargetTableId();
+        result.warehouseId = pb.getWarehouseId();
+        if (pb.hasSourcePartitionNames()) {
+            result.sourcePartitionNames = new ArrayList<>(pb.getSourcePartitionNames().getValuesList());
+        }
+        result.dynamicOverwrite = pb.getDynamicOverwrite();
+        if (pb.hasTxnId()) {
+            result.txnId = pb.getTxnId();
+        }
+        return result;
     }
 }

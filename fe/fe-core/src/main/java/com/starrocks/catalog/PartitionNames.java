@@ -17,9 +17,12 @@ package com.starrocks.catalog;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.PartitionNamesPB;
+import com.starrocks.persist.proto.StringListPB;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /*
@@ -85,4 +88,17 @@ public class PartitionNames implements ParseNode {
         return sb.toString();
     }
 
+    public PartitionNamesPB toProto() {
+        PartitionNamesPB.Builder builder = PartitionNamesPB.newBuilder();
+        if (partitionNames != null) {
+            builder.setPartitionNames(StringListPB.newBuilder().addAllValues(partitionNames).build());
+        }
+        builder.setIsTemp(isTemp);
+        return builder.build();
+    }
+
+    public static PartitionNames fromProto(PartitionNamesPB pb) {
+        return new PartitionNames(pb.getIsTemp(), pb.hasPartitionNames()
+                ? new ArrayList<>(pb.getPartitionNames().getValuesList()) : null);
+    }
 }

@@ -52,6 +52,10 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.ReleaseAlterJobHistorySchemaLog;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoKinds;
+import com.starrocks.persist.proto.AlterJobCorePB;
+import com.starrocks.persist.proto.AlterJobPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -868,5 +872,133 @@ public abstract class AlterJobV2 implements Writable {
     public synchronized void pruneAfterReplay() {
         metaPruned = false;
         pruneIfDone();
+    }
+
+    protected void fillFromAlterJobCoreProto(AlterJobCorePB pb) {
+        if (pb.hasType()) {
+            type = ProtoEnums.fromProto(pb.getType(), JobType.class);
+        }
+        jobId = pb.getJobId();
+        if (pb.hasJobState()) {
+            jobState = ProtoEnums.fromProto(pb.getJobState(), JobState.class);
+        }
+        dbId = pb.getDbId();
+        tableId = pb.getTableId();
+        if (pb.hasTableName()) {
+            tableName = pb.getTableName();
+        }
+        if (pb.hasErrMsg()) {
+            errMsg = pb.getErrMsg();
+        }
+        createTimeMs = pb.getCreateTimeMs();
+        finishedTimeMs = pb.getFinishedTimeMs();
+        timeoutMs = pb.getTimeoutMs();
+        warehouseId = pb.getWarehouseId();
+        if (pb.hasComputeResource()) {
+            computeResource = ComputeResource.fromProto(pb.getComputeResource());
+        }
+        forceSkippedAtCommitted = pb.getForceSkippedAtCommitted();
+    }
+
+    protected AlterJobCorePB toAlterJobCoreProto() {
+        AlterJobCorePB.Builder builder = AlterJobCorePB.newBuilder()
+                .setJobId(jobId)
+                .setDbId(dbId)
+                .setTableId(tableId)
+                .setCreateTimeMs(createTimeMs)
+                .setFinishedTimeMs(finishedTimeMs)
+                .setTimeoutMs(timeoutMs)
+                .setWarehouseId(warehouseId)
+                .setForceSkippedAtCommitted(forceSkippedAtCommitted);
+        if (type != null) {
+            builder.setType(ProtoEnums.toProto(type, AlterJobCorePB.JobType.class));
+        }
+        if (jobState != null) {
+            builder.setJobState(ProtoEnums.toProto(jobState, AlterJobCorePB.JobState.class));
+        }
+        if (tableName != null) {
+            builder.setTableName(tableName);
+        }
+        if (errMsg != null) {
+            builder.setErrMsg(errMsg);
+        }
+        if (computeResource != null) {
+            builder.setComputeResource(computeResource.toProto());
+        }
+        return builder.build();
+    }
+
+    public static AlterJobV2 fromProto(AlterJobPB pb) {
+        ProtoKinds.checkKnown(pb.getKind(), pb.getKindValue());
+        AlterJobV2 job;
+        switch (pb.getKind()) {
+            case ROLLUP_JOB_V2:
+                job = new RollupJobV2();
+                break;
+            case SCHEMA_CHANGE_JOB_V2:
+                job = SchemaChangeJobV2.newForImageV3();
+                break;
+            case OPTIMIZE_JOB_V2:
+                job = new OptimizeJobV2();
+                break;
+            case ONLINE_OPTIMIZE_JOB_V2:
+                job = new OnlineOptimizeJobV2();
+                break;
+            case MERGE_PARTITION_JOB:
+                job = new MergePartitionJob();
+                break;
+            case LAKE_TABLE_SCHEMA_CHANGE_JOB:
+                job = new LakeTableSchemaChangeJob();
+                break;
+            case LAKE_RANGE_REWRITE_SCHEMA_CHANGE_JOB:
+                job = new LakeRangeRewriteSchemaChangeJob();
+                break;
+            case LAKE_RANGE_ROLLUP_JOB:
+                job = new LakeRangeRollupJob();
+                break;
+            case LAKE_MV_SORT_KEY_REWRITE_JOB:
+                job = new LakeMvSortKeyRewriteJob();
+                break;
+            case LAKE_TABLE_ALTER_META_JOB:
+                job = new LakeTableAlterMetaJob();
+                break;
+            case LAKE_ROLLUP_JOB:
+                job = new LakeRollupJob();
+                break;
+            case LAKE_TABLE_ASYNC_FAST_SCHEMA_CHANGE_JOB:
+                job = new LakeTableAsyncFastSchemaChangeJob();
+                break;
+            case LAKE_TABLE_ADD_INDEX_JOB:
+                job = new LakeTableAddIndexJob();
+                break;
+            case LAKE_TABLE_DROP_INDEX_JOB:
+                job = new LakeTableDropIndexJob();
+                break;
+            default:
+                throw new IllegalArgumentException("unknown alter job kind " + pb.getKind());
+        }
+        job.fillFromAlterJobCoreProto(pb.getCore());
+        job.fillFromVariantProto(pb);
+        return job;
+    }
+
+    /** Reads the variant message of the concrete class, after the core has been read. */
+    protected void fillFromVariantProto(AlterJobPB pb) {
+        throw new IllegalStateException("alter job class " + getClass().getName() + " cannot be persisted");
+    }
+
+    /** Sets the kind and the variant message of the concrete class. Every persistable subclass overrides it. */
+    protected void fillProtoVariant(AlterJobPB.Builder builder) {
+        throw new IllegalStateException("alter job class " + getClass().getName() + " cannot be persisted");
+    }
+
+    /**
+     * Image v3 form: the AlterJobV2 fields go into the core message and the concrete class fills its variant. The
+     * kind names the concrete class; the job type stays a field of the core because several classes share one.
+     */
+    public AlterJobPB toProto() {
+        AlterJobPB.Builder builder = AlterJobPB.newBuilder().setCore(toAlterJobCoreProto());
+        fillProtoVariant(builder);
+        return builder.build();
     }
 }

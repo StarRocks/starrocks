@@ -35,6 +35,8 @@
 package com.starrocks.load.routineload;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.RLTaskTxnCommitAttachmentPB;
+import com.starrocks.persist.proto.TxnCommitAttachmentPB;
 import com.starrocks.thrift.TRLTaskTxnCommitAttachment;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
@@ -166,6 +168,50 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
                 + ", progress=" + progress.toString() + "]";
     }
 
+    @Override
+    protected void fillProtoVariant(TxnCommitAttachmentPB.Builder parent) {
+        RLTaskTxnCommitAttachmentPB.Builder builder = RLTaskTxnCommitAttachmentPB.newBuilder();
+        builder.setFilteredRows(filteredRows);
+        builder.setLoadedRows(loadedRows);
+        builder.setUnselectedRows(unselectedRows);
+        builder.setReceivedBytes(receivedBytes);
+        builder.setTaskExecutionTimeMs(taskExecutionTimeMs);
+        if (progress != null) {
+            builder.setProgress(progress.toProto());
+        }
+        if (timestampProgress != null) {
+            builder.setTimestampProgress(timestampProgress.toProto());
+        }
+        parent.setKind(TxnCommitAttachmentPB.Kind.ROUTINE_LOAD).setRoutineLoad(builder);
+    }
 
-
+    @Override
+    protected void fillFromVariantProto(TxnCommitAttachmentPB parent) {
+        RLTaskTxnCommitAttachmentPB pb = parent.getRoutineLoad();
+        if (pb.hasFilteredRows()) {
+            filteredRows = pb.getFilteredRows();
+        }
+        if (pb.hasLoadedRows()) {
+            loadedRows = pb.getLoadedRows();
+        }
+        if (pb.hasUnselectedRows()) {
+            unselectedRows = pb.getUnselectedRows();
+        }
+        if (pb.hasReceivedBytes()) {
+            receivedBytes = pb.getReceivedBytes();
+        }
+        if (pb.hasTaskExecutionTimeMs()) {
+            taskExecutionTimeMs = pb.getTaskExecutionTimeMs();
+        }
+        if (pb.hasProgress()) {
+            progress = RoutineLoadProgress.fromProto(pb.getProgress());
+        } else {
+            progress = null;
+        }
+        if (pb.hasTimestampProgress()) {
+            timestampProgress = RoutineLoadProgress.fromProto(pb.getTimestampProgress());
+        } else {
+            timestampProgress = null;
+        }
+    }
 }

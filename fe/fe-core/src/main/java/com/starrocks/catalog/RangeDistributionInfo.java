@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Objects;
+import com.starrocks.persist.proto.DistributionInfoPB;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.RangeDistributionDesc;
 
@@ -29,6 +30,11 @@ public class RangeDistributionInfo extends DistributionInfo {
 
     public RangeDistributionInfo() {
         super(DistributionInfoType.RANGE);
+    }
+
+    @Override
+    protected void fillProtoVariant(DistributionInfoPB.Builder builder) {
+        builder.setKind(DistributionInfoPB.Kind.RANGE);
     }
 
     @Override

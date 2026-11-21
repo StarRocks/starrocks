@@ -14,6 +14,7 @@
 
 package com.starrocks.authentication;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.authorization.AuthorizationMgr;
@@ -31,12 +32,22 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GroupProviderLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.SecurityIntegrationPersistInfo;
+import com.starrocks.persist.image.ImageFormatException;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.MapEntryConsumer;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.AuthenticationMgrPB;
+import com.starrocks.persist.proto.AuthenticationUserAuthenticationEntryPB;
+import com.starrocks.persist.proto.AuthenticationUserPropertyEntryPB;
+import com.starrocks.persist.proto.GroupProviderPB;
+import com.starrocks.persist.proto.SecurityIntegrationPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -638,6 +649,29 @@ public class AuthenticationMgr {
         }
     }
 
+    private void installLoadedAuthentication(AuthenticationMgr ret) {
+        // mark data is loaded
+        this.isLoaded = true;
+        this.userNameToProperty = ret.userNameToProperty;
+        this.userToAuthenticationInfo = ret.userToAuthenticationInfo;
+
+        this.nameToSecurityIntegrationMap = ret.nameToSecurityIntegrationMap;
+        // Copy rather than adopt: Gson builds the field from its declared type (Map), so an image
+        // that carries a "gp" entry - and saveV2 always writes one, even when empty - hands back a
+        // LinkedTreeMap, not the ConcurrentHashMap the field was initialized with. Readers of this
+        // map (getGroupProvider, getAllGroupProviders, and the login path through them) are
+        // deliberately lock-free, which only holds for a genuinely concurrent map.
+        this.nameToGroupProviderMap = new ConcurrentHashMap<>(ret.nameToGroupProviderMap);
+
+        for (Map.Entry<String, GroupProvider> entry : nameToGroupProviderMap.entrySet()) {
+            try {
+                entry.getValue().init();
+            } catch (Exception e) {
+                LOG.error("failed to init group provider", e);
+            }
+        }
+    }
+
     public UserProperty getUserProperty(String userName) {
         UserProperty userProperty = userNameToProperty.get(userName);
         if (userProperty == null) {
@@ -993,5 +1027,85 @@ public class AuthenticationMgr {
 
     public GroupProvider getGroupProvider(String name) {
         return nameToGroupProviderMap.get(name);
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.AUTHENTICATION_USER_PROPERTY)) {
+            writer.writeManager(AuthenticationMgrPB.getDefaultInstance());
+            for (Map.Entry<String, UserProperty> entry : userNameToProperty.entrySet()) {
+                writer.writeEntry(AuthenticationUserPropertyEntryPB.newBuilder().setUserName(entry.getKey())
+                        .setProperty(entry.getValue().toProto()).build());
+            }
+        }
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.AUTHENTICATION_GROUP_PROVIDER)) {
+            for (GroupProvider provider : nameToGroupProviderMap.values()) {
+                writer.writeEntry(provider.toProto());
+            }
+        }
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.AUTHENTICATION_SECURITY_INTEGRATION)) {
+            for (SecurityIntegration integration : nameToSecurityIntegrationMap.values()) {
+                writer.writeEntry(integration.toProto());
+            }
+        }
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.AUTHENTICATION_USER)) {
+            for (Map.Entry<UserIdentity, UserAuthenticationInfo> entry : userToAuthenticationInfo.entrySet()) {
+                writer.writeEntry(AuthenticationUserAuthenticationEntryPB.newBuilder()
+                        .setUser(UserIdentityUtils.toProto(entry.getKey()))
+                        .setAuthentication(entry.getValue().toProto()).build());
+            }
+        }
+        LOG.info("saved {} users", userToAuthenticationInfo.size());
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        AuthenticationMgr data = new AuthenticationMgr();
+        data.userNameToProperty.clear();
+        data.userToAuthenticationInfo.clear();
+        return List.of(
+                Pair.create(SectionId.AUTHENTICATION_USER_PROPERTY, checkedImageSection(reader -> {
+                    reader.readManager(AuthenticationMgrPB.parser());
+                    LOG.info("loading users");
+                    reader.readEntries(AuthenticationUserPropertyEntryPB.parser(), data::loadUserProperty);
+                })),
+                Pair.create(SectionId.AUTHENTICATION_GROUP_PROVIDER, checkedImageSection(reader ->
+                        reader.readEntries(GroupProviderPB.parser(), data::loadGroupProvider))),
+                Pair.create(SectionId.AUTHENTICATION_SECURITY_INTEGRATION, checkedImageSection(reader ->
+                        reader.readEntries(SecurityIntegrationPB.parser(), data::loadSecurityIntegration))),
+                Pair.create(SectionId.AUTHENTICATION_USER, checkedImageSection(reader -> {
+                    reader.readEntries(AuthenticationUserAuthenticationEntryPB.parser(), data::loadUserAuthentication);
+                    LOG.info("loaded {} users", data.userToAuthenticationInfo.size());
+                    installLoadedAuthentication(data);
+                })));
+    }
+
+    private static SectionLoader checkedImageSection(SectionLoader loader) {
+        return reader -> {
+            try {
+                loader.load(reader);
+            } catch (IllegalArgumentException | IllegalStateException | NullPointerException e) {
+                throw new ImageFormatException("invalid " + reader.id().getName() + " entry", e);
+            }
+        };
+    }
+
+    private void loadUserProperty(AuthenticationUserPropertyEntryPB property) {
+        Preconditions.checkArgument(property.hasUserName() && property.hasProperty(), "missing user property");
+        userNameToProperty.put(property.getUserName(), UserProperty.fromProto(property.getProperty()));
+    }
+
+    private void loadGroupProvider(GroupProviderPB pb) {
+        GroupProvider provider = GroupProvider.fromProto(pb);
+        nameToGroupProviderMap.put(provider.getName(), provider);
+    }
+
+    private void loadSecurityIntegration(SecurityIntegrationPB pb) {
+        SecurityIntegration integration = SecurityIntegration.fromProto(pb);
+        nameToSecurityIntegrationMap.put(integration.getName(), integration);
+    }
+
+    private void loadUserAuthentication(AuthenticationUserAuthenticationEntryPB auth) {
+        Preconditions.checkArgument(auth.hasUser() && auth.hasAuthentication(), "missing user authentication");
+        userToAuthenticationInfo.put(UserIdentityUtils.fromProto(auth.getUser()),
+                UserAuthenticationInfo.fromProto(auth.getAuthentication()));
     }
 }

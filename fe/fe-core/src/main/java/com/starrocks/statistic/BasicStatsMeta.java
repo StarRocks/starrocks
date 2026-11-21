@@ -24,6 +24,13 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.io.Writable;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.image.ProtoDateTimes;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoLists;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.AnalyzeTypePB;
+import com.starrocks.persist.proto.BasicStatsMetaPB;
+import com.starrocks.persist.proto.ColumnStatsMetaMapPB;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MapUtils;
@@ -360,5 +367,75 @@ public class BasicStatsMeta implements Writable {
                     .add("deltaRowCount=" + deltaRowCount)
                     .toString();
         }
+    }
+
+    public BasicStatsMetaPB toProto() {
+        BasicStatsMetaPB.Builder builder = BasicStatsMetaPB.newBuilder();
+        builder.setDbId(dbId);
+        builder.setTableId(tableId);
+        if (columns != null) {
+            builder.setColumns(ProtoLists.stringList(columns));
+        }
+        if (type != null) {
+            builder.setType(ProtoEnums.toProto(type, AnalyzeTypePB.class, "ANALYZE_"));
+        }
+        if (updateTime != null) {
+            builder.setUpdateTime(ProtoDateTimes.toEpochSecond(updateTime));
+        }
+        if (properties != null) {
+            builder.setProperties(ProtoMaps.toStringMapProto(properties));
+        }
+        builder.setTotalRows(totalRows);
+        builder.setDeltaRows(deltaRows);
+        if (columnStatsMetaMap != null) {
+            ColumnStatsMetaMapPB.Builder columns = ColumnStatsMetaMapPB.newBuilder();
+            ProtoMaps.withoutNullValues(columnStatsMetaMap).forEach((key, value) ->
+                    columns.putValues(key, value.toProto()));
+            builder.setColumnStatsMetaMap(columns);
+        }
+        if (tabletStatsReportTime != null) {
+            builder.setTabletStatsReportTime(ProtoDateTimes.toEpochSecond(tabletStatsReportTime));
+        }
+        return builder.build();
+    }
+
+    // A protobuf constructor leaves the existing GSON construction path unchanged.
+    private BasicStatsMeta(BasicStatsMetaPB pb) {
+        if (pb.hasDbId()) {
+            dbId = pb.getDbId();
+        }
+        if (pb.hasTableId()) {
+            tableId = pb.getTableId();
+        }
+        if (pb.hasColumns()) {
+            columns = ProtoLists.toStrings(pb.getColumns());
+        }
+        if (pb.hasType()) {
+            type = ProtoEnums.fromProto(pb.getType(), StatsConstants.AnalyzeType.class, "ANALYZE_");
+        }
+        if (pb.hasUpdateTime()) {
+            updateTime = ProtoDateTimes.fromEpochSecond(pb.getUpdateTime());
+        }
+        if (pb.hasProperties()) {
+            properties = ProtoMaps.fromStringMapProto(pb.getProperties());
+        }
+        if (pb.hasTotalRows()) {
+            totalRows = pb.getTotalRows();
+        }
+        if (pb.hasDeltaRows()) {
+            deltaRows = pb.getDeltaRows();
+        }
+        if (pb.hasColumnStatsMetaMap()) {
+            columnStatsMetaMap = new ConcurrentHashMap<>();
+            pb.getColumnStatsMetaMap().getValuesMap().forEach((key, value) ->
+                    columnStatsMetaMap.put(key, ColumnStatsMeta.fromProto(value)));
+        }
+        if (pb.hasTabletStatsReportTime()) {
+            tabletStatsReportTime = ProtoDateTimes.fromEpochSecond(pb.getTabletStatsReportTime());
+        }
+    }
+
+    public static BasicStatsMeta fromProto(BasicStatsMetaPB pb) {
+        return new BasicStatsMeta(pb);
     }
 }

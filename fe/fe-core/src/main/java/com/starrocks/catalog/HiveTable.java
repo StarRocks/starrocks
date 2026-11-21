@@ -52,6 +52,9 @@ import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.connector.hive.HiveUtils;
 import com.starrocks.connector.hive.Partition;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.HiveTablePB;
+import com.starrocks.persist.proto.TablePB;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.server.CatalogMgr;
@@ -142,6 +145,61 @@ public class HiveTable extends Table {
 
     public HiveTable() {
         super(TableType.HIVE);
+    }
+
+    @Override
+    protected void fillProtoVariant(TablePB.Builder builder) {
+        HiveTablePB.Builder hive = HiveTablePB.newBuilder();
+        if (hiveDbName != null) {
+            hive.setHiveDbName(hiveDbName);
+        }
+        if (hiveTableName != null) {
+            hive.setHiveTableName(hiveTableName);
+        }
+        if (resourceName != null) {
+            hive.setResourceName(resourceName);
+        }
+        if (tableLocation != null) {
+            hive.setTableLocation(tableLocation);
+        }
+        if (partColumnNames != null) {
+            hive.addAllPartColumnNames(partColumnNames);
+        }
+        if (dataColumnNames != null) {
+            hive.addAllDataColumnNames(dataColumnNames);
+        }
+        if (hiveProperties != null) {
+            hive.putAllHiveProperties(ProtoMaps.withoutNullValues(hiveProperties));
+        }
+        if (serdeProperties != null) {
+            hive.putAllSerdeProperties(ProtoMaps.withoutNullValues(serdeProperties));
+        }
+        if (avroSchemaJson != null) {
+            hive.setAvroSchemaJson(avroSchemaJson);
+        }
+        builder.setHive(hive);
+    }
+
+    void fillFromVariantProto(HiveTablePB pb) {
+        if (pb.hasHiveDbName()) {
+            hiveDbName = pb.getHiveDbName();
+        }
+        if (pb.hasHiveTableName()) {
+            hiveTableName = pb.getHiveTableName();
+        }
+        if (pb.hasResourceName()) {
+            resourceName = pb.getResourceName();
+        }
+        if (pb.hasTableLocation()) {
+            tableLocation = pb.getTableLocation();
+        }
+        partColumnNames = Lists.newArrayList(pb.getPartColumnNamesList());
+        dataColumnNames = Lists.newArrayList(pb.getDataColumnNamesList());
+        hiveProperties = Maps.newHashMap(pb.getHivePropertiesMap());
+        serdeProperties = Maps.newHashMap(pb.getSerdePropertiesMap());
+        if (pb.hasAvroSchemaJson()) {
+            avroSchemaJson = pb.getAvroSchemaJson();
+        }
     }
 
     public HiveTable(long id, String name, List<Column> fullSchema, String resourceName, String catalog,

@@ -15,6 +15,7 @@
 package com.starrocks.authorization;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.AIFunctionPrivilegeObjectPB;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
@@ -98,5 +99,17 @@ public class AIFunctionPEntryObject implements PEntryObject {
     @Override
     public String toString() {
         return isFuzzyMatching() ? "ALL AI FUNCTIONS" : name;
+    }
+
+    public static AIFunctionPEntryObject fromProto(AIFunctionPrivilegeObjectPB pb) {
+        return new AIFunctionPEntryObject(pb.hasName() ? pb.getName() : null);
+    }
+
+    public AIFunctionPrivilegeObjectPB toProto() {
+        AIFunctionPrivilegeObjectPB.Builder builder = AIFunctionPrivilegeObjectPB.newBuilder();
+        if (name != null) {
+            builder.setName(name);
+        }
+        return builder.build();
     }
 }

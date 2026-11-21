@@ -1,0 +1,117 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/warehouse.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "StreamLoadProto";
+
+message StreamLoadTaskPB {
+  enum State {
+    UNSPECIFIED = 0;
+    BEGIN = 1;
+    BEFORE_LOAD = 2;
+    LOADING = 3;
+    PREPARING = 4;
+    PREPARED = 5;
+    COMMITED = 6;
+    CANCELLED = 7;
+    FINISHED = 8;
+  }
+  int64 id = 1;
+  int64 load_id_hi = 2;
+  int64 load_id_lo = 3;
+  optional string label = 4;
+  int64 db_id = 5;
+  optional string db_name = 6;
+  int64 table_id = 7;
+  optional string table_name = 8;
+  optional string user = 9;
+  optional string client_ip = 10;
+  optional string error_msg = 11;
+  optional string tracking_url = 12;
+  int64 timeout_ms = 13;
+  int64 create_time_ms = 14;
+  optional State state = 15;
+  int64 before_load_time_ms = 16;
+  int64 start_loading_time_ms = 17;
+  int64 start_preparing_time_ms = 18;
+  int64 finish_preparing_time_ms = 19;
+  int64 commit_time_ms = 20;
+  int64 end_time_ms = 21;
+  int64 txn_id = 22;
+  int32 channel_num = 23;
+  int32 prepared_channel_num = 24;
+  int64 num_rows_normal = 25;
+  int64 num_rows_abnormal = 26;
+  int64 num_rows_unselected = 27;
+  int64 num_load_bytes_total = 28;
+  int64 warehouse_id = 29;
+  ComputeResourcePB compute_resource = 30;
+  int64 begin_txn_time_ms = 31;
+  int64 plan_time_ms = 32;
+  int64 receive_data_time_ms = 33;
+}
+
+message StreamLoadMultiStmtTaskPB {
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    STATE_BEGIN = 1;
+    STATE_BEFORE_LOAD = 2;
+    STATE_LOADING = 3;
+    STATE_PREPARING = 4;
+    STATE_PREPARED = 5;
+    STATE_COMMITING = 6;
+    STATE_ABORTING = 7;
+    STATE_COMMITED = 8;
+    STATE_CANCELLED = 9;
+    STATE_FINISHED = 10;
+  }
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    TYPE_STREAM_LOAD = 1;
+    TYPE_ROUTINE_LOAD = 2;
+    TYPE_PARALLEL_STREAM_LOAD = 3;
+    TYPE_MULTI_STATEMENT_STREAM_LOAD = 4;
+  }
+  int64 id = 1;
+  int64 load_id_hi = 2;
+  int64 load_id_lo = 3;
+  optional string label = 4;
+  int64 db_id = 5;
+  optional string db_name = 6;
+  int64 txn_id = 7;
+  int64 create_time_ms = 8;
+  optional State state = 9;
+  int64 warehouse_id = 10;
+  ComputeResourcePB compute_resource = 11;
+  optional Type type = 12;
+  StreamLoadTaskMapPB task_maps = 13;
+  int64 timeout_ms = 14;
+  optional string user = 15;
+  optional string client_ip = 16;
+  optional int64 end_time_ms = 17;
+  int32 abort_retry_count = 18;
+  int64 next_abort_retry_time_ms = 19;
+  optional string abort_reason = 20;
+}
+
+message StreamLoadTaskMapPB {
+  map<string, StreamLoadTaskPB> values = 1;
+}

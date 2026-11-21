@@ -18,11 +18,19 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.image.ProtoDateTimes;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoLists;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.AnalyzeTypePB;
+import com.starrocks.persist.proto.ColumnStatsMetaMapPB;
+import com.starrocks.persist.proto.ExternalBasicStatsMetaPB;
 import org.apache.commons.collections4.MapUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class ExternalBasicStatsMeta implements Writable {
@@ -150,5 +158,77 @@ public class ExternalBasicStatsMeta implements Writable {
     public ExternalBasicStatsMeta clone() {
         String json = GsonUtils.GSON.toJson(this);
         return GsonUtils.GSON.fromJson(json, ExternalBasicStatsMeta.class);
+    }
+
+    public ExternalBasicStatsMetaPB toProto() {
+        ExternalBasicStatsMetaPB.Builder builder = ExternalBasicStatsMetaPB.newBuilder();
+        if (catalogName != null) {
+            builder.setCatalogName(catalogName);
+        }
+        if (dbName != null) {
+            builder.setDbName(dbName);
+        }
+        if (tableName != null) {
+            builder.setTableName(tableName);
+        }
+        if (columns != null) {
+            builder.setColumns(ProtoLists.stringList(columns));
+        }
+        if (type != null) {
+            builder.setType(ProtoEnums.toProto(type, AnalyzeTypePB.class, "ANALYZE_"));
+        }
+        if (updateTime != null) {
+            builder.setUpdateTime(ProtoDateTimes.toEpochSecond(updateTime));
+        }
+        if (properties != null) {
+            builder.setProperties(ProtoMaps.toStringMapProto(properties));
+        }
+        if (columnStatsMetaMap != null) {
+            ColumnStatsMetaMapPB.Builder columns = ColumnStatsMetaMapPB.newBuilder();
+            ProtoMaps.withoutNullValues(columnStatsMetaMap).forEach((key, value) ->
+                    columns.putValues(key, value.toProto()));
+            builder.setColumnStatsMetaMap(columns);
+        }
+        if (tableUUID != null) {
+            builder.setTableUuid(tableUUID);
+        }
+        return builder.build();
+    }
+
+    // A protobuf constructor leaves the existing GSON construction path unchanged.
+    private ExternalBasicStatsMeta(ExternalBasicStatsMetaPB pb) {
+        if (pb.hasCatalogName()) {
+            catalogName = pb.getCatalogName();
+        }
+        if (pb.hasDbName()) {
+            dbName = pb.getDbName();
+        }
+        if (pb.hasTableName()) {
+            tableName = pb.getTableName();
+        }
+        if (pb.hasColumns()) {
+            columns = ProtoLists.toStrings(pb.getColumns());
+        }
+        if (pb.hasType()) {
+            type = ProtoEnums.fromProto(pb.getType(), StatsConstants.AnalyzeType.class, "ANALYZE_");
+        }
+        if (pb.hasUpdateTime()) {
+            updateTime = ProtoDateTimes.fromEpochSecond(pb.getUpdateTime());
+        }
+        if (pb.hasProperties()) {
+            properties = ProtoMaps.fromStringMapProto(pb.getProperties());
+        }
+        if (pb.hasColumnStatsMetaMap()) {
+            columnStatsMetaMap = new ConcurrentHashMap<>();
+            pb.getColumnStatsMetaMap().getValuesMap().forEach((key, value) ->
+                    columnStatsMetaMap.put(key, ColumnStatsMeta.fromProto(value)));
+        }
+        if (pb.hasTableUuid()) {
+            tableUUID = pb.getTableUuid();
+        }
+    }
+
+    public static ExternalBasicStatsMeta fromProto(ExternalBasicStatsMetaPB pb) {
+        return new ExternalBasicStatsMeta(pb);
     }
 }

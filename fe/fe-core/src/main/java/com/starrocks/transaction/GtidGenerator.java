@@ -17,17 +17,25 @@ package com.starrocks.transaction;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionReader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.GtidGeneratorPB;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.List;
 
 public class GtidGenerator {
     private static final Logger LOG = LogManager.getLogger(GtidGenerator.class);
@@ -213,5 +221,19 @@ public class GtidGenerator {
     protected void logFirstGtidAfterInit(long timestamp, long now) {
         LOG.info("first gtid after init is {} ms ahead of now (timestamp={}, now={}, batchEndGtid={})",
                 timestamp - now, timestamp, now, batchEndGtid);
+    }
+
+    private void load(SectionReader reader) throws IOException {
+        init(reader.readManager(GtidGeneratorPB.parser()).getBatchEndGtid());
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(Pair.create(SectionId.GTID_GENERATOR, this::load));
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.GTID_GENERATOR)) {
+            writer.writeManager(GtidGeneratorPB.newBuilder().setBatchEndGtid(getBatchEndGtid()).build());
+        }
     }
 }

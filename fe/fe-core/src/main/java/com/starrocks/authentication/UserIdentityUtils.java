@@ -18,6 +18,7 @@ import com.google.common.base.Strings;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.persist.proto.UserIdentityPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TAuthInfo;
@@ -139,4 +140,20 @@ public class UserIdentityUtils {
         }
     }
 
+    /** Image v3 form of a UserIdentity, which lives in fe-spi and cannot see the generated classes. */
+    public static UserIdentityPB toProto(UserIdentity identity) {
+        UserIdentityPB.Builder builder = UserIdentityPB.newBuilder().setIsDomain(identity.isDomain());
+        if (identity.getUser() != null) {
+            builder.setUser(identity.getUser());
+        }
+        if (identity.getHost() != null) {
+            builder.setHost(identity.getHost());
+        }
+        return builder.build();
+    }
+
+    public static UserIdentity fromProto(UserIdentityPB pb) {
+        return new UserIdentity(pb.hasUser() ? pb.getUser() : null, pb.hasHost() ? pb.getHost() : null,
+                pb.getIsDomain());
+    }
 }

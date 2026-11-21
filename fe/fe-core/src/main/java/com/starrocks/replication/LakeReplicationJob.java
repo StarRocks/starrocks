@@ -15,12 +15,15 @@
 package com.starrocks.replication;
 
 import com.google.gson.annotations.SerializedName;
+import com.google.protobuf.ByteString;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.gson.GsonPreProcessable;
+import com.starrocks.persist.proto.LakeReplicationJobPB;
+import com.starrocks.persist.proto.ReplicationJobPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.storagevolume.StorageVolume;
@@ -266,5 +269,26 @@ public class LakeReplicationJob extends ReplicationJob implements GsonPreProcess
                         + srcTableFilePathInfoBytes.length + ")", e);
             }
         }
+    }
+
+    protected LakeReplicationJob(LakeReplicationJobPB pb) {
+        super(pb.getCore());
+        virtualTabletId = pb.getVirtualTabletId();
+        srcDatabaseId = pb.getSrcDatabaseId();
+        srcTableId = pb.getSrcTableId();
+        srcTableFilePathInfoBytes = pb.hasSrcTableFilePathInfo() ? pb.getSrcTableFilePathInfo().toByteArray() : null;
+    }
+
+    @Override
+    public ReplicationJobPB toProto() {
+        LakeReplicationJobPB.Builder builder = LakeReplicationJobPB.newBuilder().setCore(toCoreProto())
+                .setVirtualTabletId(virtualTabletId).setSrcDatabaseId(srcDatabaseId).setSrcTableId(srcTableId);
+        if (srcTableFilePathInfo != null) {
+            builder.setSrcTableFilePathInfo(srcTableFilePathInfo.toByteString());
+        } else if (srcTableFilePathInfoBytes != null) {
+            builder.setSrcTableFilePathInfo(ByteString.copyFrom(srcTableFilePathInfoBytes));
+        }
+        return ReplicationJobPB.newBuilder().setKind(ReplicationJobPB.Kind.LAKE_REPLICATION)
+                .setLakeReplication(builder).build();
     }
 }

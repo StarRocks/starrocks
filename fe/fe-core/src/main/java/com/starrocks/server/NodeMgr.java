@@ -52,16 +52,24 @@ import com.starrocks.ha.LeaderInfo;
 import com.starrocks.http.meta.MetaBaseAction;
 import com.starrocks.leader.MetaHelper;
 import com.starrocks.persist.DropFrontendInfo;
+import com.starrocks.persist.ImageFormatVersion;
+import com.starrocks.persist.ImageLoader;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
 import com.starrocks.persist.UpdateFrontendInfo;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionReader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.FrontendPB;
+import com.starrocks.persist.proto.NodeMgrPB;
 import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
@@ -710,26 +718,24 @@ public class NodeMgr {
      * Exception are free to raise on initialized phase
      */
     private void getNewImageOnStartup(Pair<String, Integer> helperNode, String subDir) throws IOException {
-        String imageFileDir = MetaHelper.getImageFileDir(Strings.isNullOrEmpty(subDir));
-        Storage storage = new Storage(imageFileDir);
-        long localImageJournalId = storage.getImageJournalId();
-
+        boolean global = Strings.isNullOrEmpty(subDir);
+        long localJournalId = global ? new ImageLoader(GlobalStateMgr.getImageDirPath()).getImageJournalId()
+                : new Storage(MetaHelper.getImageFileDir(false)).getImageJournalId();
         String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, Config.http_port);
         URL infoUrl = new URL("http://" + accessibleHostPort + "/info?subdir=" + subDir);
-        StorageInfo remoteStorageInfo = getStorageInfo(infoUrl);
-        long remoteImageJournalId = remoteStorageInfo.getImageJournalId();
-        if (remoteImageJournalId > localImageJournalId) {
-            String url = "http://" + accessibleHostPort + "/image?"
-                    + "version=" + remoteImageJournalId
-                    + "&subdir=" + subDir
-                    + "&image_format_version=" + remoteStorageInfo.getImageFormatVersion();
-            LOG.info("start to download image.{} version:{}, from {}", remoteImageJournalId,
-                    remoteStorageInfo.getImageFormatVersion(), url);
-            MetaHelper.downloadImageFile(url, HTTP_TIMEOUT_SECOND * 1000,
-                    Long.toString(remoteImageJournalId), new File(imageFileDir));
+        StorageInfo remote = getStorageInfo(infoUrl);
+        long remoteJournalId = remote.getImageJournalId();
+        if (remoteJournalId > localJournalId) {
+            ImageFormatVersion format = remote.getImageFormatVersion();
+            File directory = new File(MetaHelper.getImageFileDir(subDir, format));
+            String url = "http://" + accessibleHostPort + "/image?version=" + remoteJournalId
+                    + "&subdir=" + subDir + "&image_format_version=" + format;
+            LOG.info("download image {} in format {} from {}", remoteJournalId, format, url);
+            MetaHelper.downloadImageFile(url, HTTP_TIMEOUT_SECOND * 1000, Long.toString(remoteJournalId),
+                    directory);
         } else {
             LOG.info("skip download image for {}, current version {} >= version {} from {}",
-                    imageFileDir, localImageJournalId, remoteImageJournalId, helperNode);
+                    subDir, localJournalId, remoteJournalId, helperNode);
         }
     }
 
@@ -1226,6 +1232,74 @@ public class NodeMgr {
 
         systemInfo = nodeMgr.systemInfo;
         brokerMgr = nodeMgr.brokerMgr;
+
+        //Sort by frontend name to ensure the order of assigned IDs is consistent
+        List<Frontend> sortedList = frontends.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey()).map(Map.Entry::getValue).collect(Collectors.toList());
+        for (Frontend fe : sortedList) {
+            if (fe.getFid() == 0) {
+                int frontendId = allocateNextFrontendId();
+                LOG.info("Frontend has no ID assigned, newly assigned ID {} to {}", frontendId, fe.getNodeName());
+                fe.setFid(frontendId);
+            }
+            frontendIds.put(fe.getFid(), fe);
+        }
+    }
+
+    /** Image format v3: the whole manager is one message, see persist/node_mgr.proto. */
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.NODE_MGR)) {
+            writer.writeManager(toProto());
+        }
+    }
+
+    public void load(SectionReader reader) throws IOException {
+        NodeMgrPB pb = reader.readManager(NodeMgrPB.parser());
+        ConcurrentHashMap<String, Frontend> loadedFrontends = new ConcurrentHashMap<>();
+        for (FrontendPB fePb : pb.getFrontendsList()) {
+            Frontend fe = Frontend.fromProto(fePb);
+            loadedFrontends.put(fe.getNodeName(), fe);
+        }
+        finishLoad(pb.getLeaderRpcPort(), pb.getLeaderHttpPort(), pb.hasLeaderIp() ? pb.getLeaderIp() : null,
+                loadedFrontends, new ConcurrentLinkedQueue<>(pb.getRemovedFrontendsList()),
+                SystemInfoService.fromProto(pb.getSystemInfo()), BrokerMgr.fromProto(pb.getBrokerMgr()));
+    }
+
+    public NodeMgrPB toProto() {
+        NodeMgrPB.Builder builder = NodeMgrPB.newBuilder()
+                .setLeaderRpcPort(leaderRpcPort)
+                .setLeaderHttpPort(leaderHttpPort)
+                .addAllRemovedFrontends(removedFrontends)
+                .setSystemInfo(systemInfo.toProto())
+                .setBrokerMgr(brokerMgr.toProto());
+        if (leaderIp != null) {
+            builder.setLeaderIp(leaderIp);
+        }
+        for (Frontend fe : frontends.values()) {
+            builder.addFrontends(fe.toProto());
+        }
+        return builder.build();
+    }
+
+    /** Installs the loaded state and runs the post-load steps shared by both image formats. */
+    private void finishLoad(int leaderRpcPort, int leaderHttpPort, String leaderIp,
+                            ConcurrentHashMap<String, Frontend> frontends, ConcurrentLinkedQueue<String> removedFrontends,
+                            SystemInfoService systemInfo, BrokerMgr brokerMgr) {
+        this.leaderRpcPort = leaderRpcPort;
+        this.leaderHttpPort = leaderHttpPort;
+        this.leaderIp = leaderIp;
+
+        this.frontends = frontends;
+        this.removedFrontends = removedFrontends;
+
+        for (Frontend fe : frontends.values()) {
+            if (fe.getRole() == FrontendNodeType.FOLLOWER) {
+                helperNodes.add(Pair.create(fe.getHost(), fe.getEditLogPort()));
+            }
+        }
+
+        this.systemInfo = systemInfo;
+        this.brokerMgr = brokerMgr;
 
         //Sort by frontend name to ensure the order of assigned IDs is consistent
         List<Frontend> sortedList = frontends.entrySet().stream()

@@ -37,6 +37,12 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ParseUtil;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoLists;
+import com.starrocks.persist.proto.AlterJobPB;
+import com.starrocks.persist.proto.KeysTypePB;
+import com.starrocks.persist.proto.LakeRangeRewriteSchemaChangeJobCorePB;
+import com.starrocks.persist.proto.LakeRangeRewriteSchemaChangeJobPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TStorageMedium;
@@ -572,5 +578,64 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
         // The WAL records a deep snapshot (not a live reference) so journaling never mutates the
         // running job. getTransactionId() (keyed off watershedTxnId) is inherited from the base.
         return new LakeRangeRewriteSchemaChangeJob(this);
+    }
+
+    /** Image v3 form of the fields of this class, embedded by its own variant and by LakeMvSortKeyRewriteJob's. */
+    protected LakeRangeRewriteSchemaChangeJobCorePB toLakeRangeRewriteSchemaChangeJobCoreProto() {
+        LakeRangeRewriteSchemaChangeJobCorePB.Builder builder = LakeRangeRewriteSchemaChangeJobCorePB.newBuilder()
+                .setOnlineRewrite(toLakeOnlineRewriteJobCoreProto())
+                .setShadowShortKeyColumnCount(shadowShortKeyColumnCount);
+        if (newSchema != null) {
+            builder.setNewSchema(Column.toListProto(newSchema));
+        }
+        if (newKeysType != null) {
+            builder.setNewKeysType(ProtoEnums.toProto(newKeysType, KeysTypePB.class, "KEYS_TYPE_"));
+        }
+        if (newSortKeyIdxes != null) {
+            builder.setNewSortKeyIdxes(ProtoLists.int32List(newSortKeyIdxes));
+        }
+        if (newSortKeyUniqueIds != null) {
+            builder.setNewSortKeyUniqueIds(ProtoLists.int32List(newSortKeyUniqueIds));
+        }
+        if (newSortKeyColumns != null) {
+            builder.setNewSortKeyColumns(Column.toListProto(newSortKeyColumns));
+        }
+        if (pinnedColocateWith != null) {
+            builder.setPinnedColocateWith(pinnedColocateWith);
+        }
+        return builder.build();
+    }
+
+    protected void fillFromLakeRangeRewriteSchemaChangeJobCoreProto(LakeRangeRewriteSchemaChangeJobCorePB pb) {
+        fillFromLakeOnlineRewriteJobCoreProto(pb.getOnlineRewrite());
+        if (pb.hasNewSchema()) {
+            newSchema = Column.fromListProto(pb.getNewSchema());
+        }
+        if (pb.hasNewKeysType()) {
+            newKeysType = ProtoEnums.fromProto(pb.getNewKeysType(), KeysType.class, "KEYS_TYPE_");
+        }
+        if (pb.hasNewSortKeyIdxes()) {
+            newSortKeyIdxes = ProtoLists.toIntegers(pb.getNewSortKeyIdxes());
+        }
+        if (pb.hasNewSortKeyUniqueIds()) {
+            newSortKeyUniqueIds = ProtoLists.toIntegers(pb.getNewSortKeyUniqueIds());
+        }
+        if (pb.hasNewSortKeyColumns()) {
+            newSortKeyColumns = Column.fromListProto(pb.getNewSortKeyColumns());
+        }
+        shadowShortKeyColumnCount = (short) pb.getShadowShortKeyColumnCount();
+        pinnedColocateWith = pb.hasPinnedColocateWith() ? pb.getPinnedColocateWith() : null;
+    }
+
+    @Override
+    protected void fillProtoVariant(AlterJobPB.Builder builder) {
+        builder.setKind(AlterJobPB.Kind.LAKE_RANGE_REWRITE_SCHEMA_CHANGE_JOB)
+                .setLakeRangeRewriteSchemaChangeJob(LakeRangeRewriteSchemaChangeJobPB.newBuilder()
+                        .setRangeRewrite(toLakeRangeRewriteSchemaChangeJobCoreProto()));
+    }
+
+    @Override
+    protected void fillFromVariantProto(AlterJobPB pb) {
+        fillFromLakeRangeRewriteSchemaChangeJobCoreProto(pb.getLakeRangeRewriteSchemaChangeJob().getRangeRewrite());
     }
 }

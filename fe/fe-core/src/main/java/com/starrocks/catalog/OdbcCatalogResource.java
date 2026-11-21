@@ -40,6 +40,9 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.OdbcCatalogResourcePB;
+import com.starrocks.persist.proto.ResourcePB;
 
 import java.util.Map;
 
@@ -122,5 +125,19 @@ public class OdbcCatalogResource extends Resource {
             result.addRow(Lists.newArrayList(name, lowerCaseType, entry.getKey(), entry.getValue()));
         }
     }
-}
 
+    @Override
+    protected void fillProtoVariant(ResourcePB.Builder builder) {
+        OdbcCatalogResourcePB.Builder variant = OdbcCatalogResourcePB.newBuilder();
+        if (configs != null) {
+            variant.setConfigs(ProtoMaps.toStringMapProto(configs));
+        }
+        builder.setKind(ResourcePB.Kind.ODBC_CATALOG_RESOURCE).setOdbcCatalogResource(variant);
+    }
+
+    @Override
+    protected void fillFromVariantProto(ResourcePB pb) {
+        OdbcCatalogResourcePB variant = pb.getOdbcCatalogResource();
+        configs = variant.hasConfigs() ? ProtoMaps.fromStringMapProto(variant.getConfigs()) : null;
+    }
+}

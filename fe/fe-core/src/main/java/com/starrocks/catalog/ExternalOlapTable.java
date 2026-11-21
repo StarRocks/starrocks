@@ -24,6 +24,10 @@ import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.PartitionKeySerializer;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.ExternalOlapTablePB;
+import com.starrocks.persist.proto.ExternalTableInfoPB;
+import com.starrocks.persist.proto.TablePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.DistributionDesc;
@@ -107,6 +111,59 @@ public class ExternalOlapTable extends OlapTable {
             this.dbId = -1;
             this.tableId = -1;
             this.tableType = TableType.OLAP;
+        }
+
+        public ExternalTableInfoPB toProto() {
+            ExternalTableInfoPB.Builder builder = ExternalTableInfoPB.newBuilder()
+                    .setPort(port)
+                    .setDbId(dbId)
+                    .setTableId(tableId);
+            if (host != null) {
+                builder.setHost(host);
+            }
+            if (user != null) {
+                builder.setUser(user);
+            }
+            if (password != null) {
+                builder.setPassword(password);
+            }
+            if (dbName != null) {
+                builder.setDbName(dbName);
+            }
+            if (tableName != null) {
+                builder.setTableName(tableName);
+            }
+            if (tableType != null) {
+                builder.setTableType(ProtoEnums.toProto(tableType, TablePB.Kind.class));
+            }
+            return builder.build();
+        }
+
+        public static ExternalTableInfo fromProto(ExternalTableInfoPB pb) {
+            // The same constructor GSON uses.
+            ExternalTableInfo info = new ExternalTableInfo();
+            if (pb.hasHost()) {
+                info.host = pb.getHost();
+            }
+            info.port = pb.getPort();
+            if (pb.hasUser()) {
+                info.user = pb.getUser();
+            }
+            if (pb.hasPassword()) {
+                info.password = pb.getPassword();
+            }
+            if (pb.hasDbName()) {
+                info.dbName = pb.getDbName();
+            }
+            if (pb.hasTableName()) {
+                info.tableName = pb.getTableName();
+            }
+            info.dbId = pb.getDbId();
+            info.tableId = pb.getTableId();
+            if (pb.hasTableType()) {
+                info.tableType = ProtoEnums.fromProto(pb.getTableType(), TableType.class);
+            }
+            return info;
         }
 
         public String getHost() {
@@ -238,6 +295,22 @@ public class ExternalOlapTable extends OlapTable {
         // sourceDbId = -1;
         lastExternalMeta = null;
         externalTableInfo = null;
+    }
+
+    @Override
+    protected void fillProtoVariant(TablePB.Builder builder) throws IOException {
+        ExternalOlapTablePB.Builder external = ExternalOlapTablePB.newBuilder().setOlap(toOlapCoreProto());
+        if (externalTableInfo != null) {
+            external.setExternalTableInfo(externalTableInfo.toProto());
+        }
+        builder.setExternalOlap(external);
+    }
+
+    void fillFromVariantProto(ExternalOlapTablePB pb) throws IOException {
+        fillFromOlapCoreProto(pb.getOlap());
+        if (pb.hasExternalTableInfo()) {
+            externalTableInfo = ExternalTableInfo.fromProto(pb.getExternalTableInfo());
+        }
     }
 
     public ExternalOlapTable(long dbId, long tableId, String tableName, List<Column> baseSchema, KeysType keysType,

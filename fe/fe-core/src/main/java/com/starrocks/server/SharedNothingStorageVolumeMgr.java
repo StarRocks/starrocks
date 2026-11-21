@@ -23,6 +23,8 @@ import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.proto.SharedNothingStorageVolumeMgrPB;
+import com.starrocks.persist.proto.StorageVolumeMgrPB;
 import com.starrocks.storagevolume.StorageVolume;
 
 import java.io.IOException;
@@ -180,5 +182,26 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
     @Override
     public boolean hasStorageVolumeBindAsVirtualGroup(long shardGroupId) {
         return false;
+    }
+
+    @Override
+    protected StorageVolumeMgrPB.Kind imageV3Kind() {
+        return StorageVolumeMgrPB.Kind.SHARED_NOTHING;
+    }
+
+    @Override
+    protected StorageVolumeMgrPB toProto() {
+        SharedNothingStorageVolumeMgrPB.Builder instance = SharedNothingStorageVolumeMgrPB.newBuilder()
+                .setSharedData(toSharedDataProto());
+        idToSV.forEach((id, volume) -> instance.putIdToStorageVolume(id, volume.toProto()));
+        return StorageVolumeMgrPB.newBuilder().setKind(imageV3Kind()).setSharedNothing(instance).build();
+    }
+
+    @Override
+    protected void loadFromProto(StorageVolumeMgrPB pb) throws IOException {
+        super.loadFromProto(pb);
+        idToSV = new HashMap<>();
+        pb.getSharedNothing().getIdToStorageVolumeMap().forEach((id, volume) ->
+                idToSV.put(id, StorageVolume.fromProto(volume)));
     }
 }

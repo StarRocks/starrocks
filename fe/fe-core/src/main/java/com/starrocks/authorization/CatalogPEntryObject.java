@@ -18,6 +18,7 @@ package com.starrocks.authorization;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.persist.proto.CatalogPrivilegeObjectPB;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaNotFoundException;
@@ -152,5 +153,22 @@ public class CatalogPEntryObject implements PEntryObject {
             Catalog catalog = catalogOptional.get();
             return catalog.getName();
         }
+    }
+
+    public CatalogPrivilegeObjectPB toProto() {
+        CatalogPrivilegeObjectPB.Builder builder = CatalogPrivilegeObjectPB.newBuilder();
+        builder.setId(id);
+        return builder.build();
+    }
+
+    // A protobuf constructor leaves the existing GSON construction path unchanged.
+    private CatalogPEntryObject(CatalogPrivilegeObjectPB pb) {
+        if (pb.hasId()) {
+            id = pb.getId();
+        }
+    }
+
+    public static CatalogPEntryObject fromProto(CatalogPrivilegeObjectPB pb) {
+        return new CatalogPEntryObject(pb);
     }
 }

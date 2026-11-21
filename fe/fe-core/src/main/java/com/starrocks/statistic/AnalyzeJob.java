@@ -15,6 +15,8 @@
 package com.starrocks.statistic;
 
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.persist.image.ProtoKinds;
+import com.starrocks.persist.proto.AnalyzeJobPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.type.Type;
 
@@ -70,4 +72,18 @@ public interface AnalyzeJob {
     void run(ConnectContext statsConnectContext,
              StatisticExecutor statisticExecutor,
              List<StatisticsCollectJob> jobs);
+
+    AnalyzeJobPB toProto();
+
+    static AnalyzeJob fromProto(AnalyzeJobPB pb) {
+        ProtoKinds.checkKnown(pb.getKind(), pb.getKindValue());
+        switch (pb.getKind()) {
+            case NATIVE:
+                return NativeAnalyzeJob.fromProto(pb);
+            case EXTERNAL:
+                return ExternalAnalyzeJob.fromProto(pb);
+            default:
+                throw new IllegalArgumentException("missing AnalyzeJob kind");
+        }
+    }
 }

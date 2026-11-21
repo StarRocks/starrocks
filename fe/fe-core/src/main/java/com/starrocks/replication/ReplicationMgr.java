@@ -20,14 +20,20 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.ReplicationJobPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.task.RemoteSnapshotTask;
@@ -283,5 +289,30 @@ public class ReplicationMgr extends LeaderDaemon {
         runningJobs.putAll(replicationMgr.runningJobs);
         committedJobs.putAll(replicationMgr.committedJobs);
         abortedJobs.putAll(replicationMgr.abortedJobs);
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.REPLICATION_MGR)) {
+            for (Map<Long, ReplicationJob> jobs : List.of(runningJobs, committedJobs, abortedJobs)) {
+                for (ReplicationJob job : jobs.values()) {
+                    writer.writeEntry(job.toProto());
+                }
+            }
+        }
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(Pair.create(SectionId.REPLICATION_MGR, reader -> reader.readEntries(ReplicationJobPB.parser(), pb -> {
+            ReplicationJob job = ReplicationJob.fromProto(pb);
+            // A newer running job and historical terminal jobs can share the same table ID.
+            // Install each entry without replay's removal of a running job for that table.
+            if (job.getState().equals(ReplicationJobState.COMMITTED)) {
+                committedJobs.put(job.getTableId(), job);
+            } else if (job.getState().equals(ReplicationJobState.ABORTED)) {
+                abortedJobs.put(job.getTableId(), job);
+            } else {
+                runningJobs.put(job.getTableId(), job);
+            }
+        })));
     }
 }

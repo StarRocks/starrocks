@@ -18,8 +18,11 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.persist.proto.CatalogPB;
+import com.starrocks.persist.proto.StringMapPB;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.HashMap;
 import java.util.Map;
 
 public class Catalog implements Writable {
@@ -88,4 +91,41 @@ public class Catalog implements Writable {
         result.addRow(Lists.newArrayList(this.getName(), StringUtils.capitalize(config.get(CATALOG_TYPE)), this.getComment()));
     }
 
+    public CatalogPB toProto() {
+        CatalogPB.Builder builder = CatalogPB.newBuilder();
+        builder.setId(id);
+        if (name != null) {
+            builder.setName(name);
+        }
+        if (comment != null) {
+            builder.setComment(comment);
+        }
+        if (config != null) {
+            builder.setConfig(StringMapPB.newBuilder().putAllValues(config).build());
+        }
+        return builder.build();
+    }
+
+    public static Catalog fromProto(CatalogPB pb) {
+        Catalog value = new Catalog(0, null, null, null);
+        if (pb.hasId()) {
+            value.id = pb.getId();
+        }
+        if (pb.hasName()) {
+            value.name = pb.getName();
+        } else {
+            value.name = null;
+        }
+        if (pb.hasComment()) {
+            value.comment = pb.getComment();
+        } else {
+            value.comment = null;
+        }
+        if (pb.hasConfig()) {
+            value.config = new HashMap<>(pb.getConfig().getValuesMap());
+        } else {
+            value.config = null;
+        }
+        return value;
+    }
 }

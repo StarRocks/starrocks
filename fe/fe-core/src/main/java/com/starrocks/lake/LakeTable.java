@@ -37,6 +37,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.persist.proto.LakeTablePB;
+import com.starrocks.persist.proto.TablePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.ast.KeysType;
@@ -215,6 +217,16 @@ public class LakeTable extends OlapTable {
         // And the max unique id will be reset while rebuilding full schema.
         LakeTableHelper.restoreColumnUniqueIdIfNeeded(this);
         super.gsonPostProcess();
+    }
+
+    @Override
+    protected void fillProtoVariant(TablePB.Builder builder) throws IOException {
+        builder.setLake(LakeTablePB.newBuilder().setOlap(toOlapCoreProto()));
+    }
+
+    // Public because Table.fromProto, in another package, dispatches to it.
+    public void fillFromVariantProto(LakeTablePB pb) throws IOException {
+        fillFromOlapCoreProto(pb.getOlap());
     }
 
     @Override

@@ -1,0 +1,105 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/local_metastore.proto";
+import "persist/partition.proto";
+import "persist/table.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "RecycleBinProto";
+
+// Four sections in v2 list order: recycled databases, tables, partitions and materialized indexes.
+// The database section also carries CatalogRecycleBinPB; each list stores its own record type directly.
+
+// The manager message of the CATALOG_RECYCLE_BIN_DB section.
+message CatalogRecycleBinPB {
+  // When each object was recycled (epoch milliseconds), keyed by the object's id: a database, table,
+  // partition or materialized index id, all drawn from the same id space.
+  map<int64, int64> id_to_recycle_time = 1;
+}
+
+// com.starrocks.catalog.CatalogRecycleBin.RecycleDatabaseInfo. The database is empty by the time it
+// is recycled: its tables were recycled one by one before it, and only their names stay here.
+message RecycleDatabaseInfoPB {
+  DatabasePB database = 1;
+  repeated string table_names = 2;
+  bool recoverable = 3;
+}
+
+// com.starrocks.catalog.CatalogRecycleBin.RecycleTableInfo. A recycled table is one complete record,
+// so unlike the LOCAL_METASTORE sections its partitions travel with it.
+message RecycleTableInfoPB {
+  int64 db_id = 1;
+  TablePB table = 2;
+  // The formal and the temporary partitions of an OlapTable; empty for other table classes.
+  repeated PartitionPB partitions = 3;
+  repeated PartitionPB temp_partitions = 4;
+  bool recoverable = 5;
+}
+
+// com.starrocks.catalog.RecyclePartitionInfo. The kind names the concrete class; the lake classes
+// add behaviour but no fields, so only the range classes have an instance payload. RecyclePartitionInfoV2,
+// the layer that adds data_cache_info, is folded into the core: RecyclePartitionInfoV1 is the only class
+// outside it and is never written (v2 converts it to RecycleRangePartitionInfo on save, and nothing
+// creates it any more).
+message RecyclePartitionInfoPB {
+  enum Kind {
+    UNSPECIFIED = 0;
+    RECYCLE_RANGE_PARTITION_INFO = 1;
+    RECYCLE_LAKE_RANGE_PARTITION_INFO = 2;
+    RECYCLE_LIST_PARTITION_INFO = 3;
+    RECYCLE_LAKE_LIST_PARTITION_INFO = 4;
+    RECYCLE_UN_PARTITION_INFO = 5;
+    RECYCLE_LAKE_UN_PARTITION_INFO = 6;
+  }
+  Kind kind = 1;
+  RecyclePartitionInfoCorePB core = 2;
+
+  oneof instance {
+    RecycleRangePartitionInfoPB range = 11;
+  }
+}
+
+message RecyclePartitionInfoCorePB {
+  int64 db_id = 1;
+  int64 table_id = 2;
+  PartitionPB partition = 3;
+  DataPropertyPB data_property = 4;
+  int32 replication_num = 5;
+  bool recoverable = 6;
+  // Seconds.
+  int64 retention_period = 7;
+  bool from_table_deletion = 8;
+  DataCacheInfoPB data_cache_info = 9;
+}
+
+// com.starrocks.catalog.RecycleRangePartitionInfo and its lake subclass.
+message RecycleRangePartitionInfoPB {
+  // Range<PartitionKey> in the RangeUtils encoding, as in RangePartitionInfoCorePB.id_to_range.
+  bytes range = 1;
+}
+
+// com.starrocks.catalog.RecycleMaterializedIndexInfo: only the coordinates of the index, which stays
+// installed on its live partition until it is erased.
+message RecycleMaterializedIndexInfoPB {
+  int64 db_id = 1;
+  int64 table_id = 2;
+  int64 physical_partition_id = 3;
+  int64 index_id = 4;
+}

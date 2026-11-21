@@ -14,6 +14,8 @@
 
 package com.starrocks.alter.reshard;
 
+import com.starrocks.persist.image.ProtoKinds;
+import com.starrocks.persist.proto.ReshardingTabletPB;
 import com.starrocks.proto.ReshardingTabletInfoPB;
 
 import java.util.List;
@@ -47,4 +49,22 @@ public interface ReshardingTablet {
     long getParallelTablets();
 
     ReshardingTabletInfoPB toProto();
+
+    default ReshardingTabletPB toImageProto() {
+        throw new IllegalStateException("resharding tablet class " + getClass().getName() + " cannot be persisted");
+    }
+
+    static ReshardingTablet fromImageProto(ReshardingTabletPB pb) {
+        ProtoKinds.checkKnown(pb.getKind(), pb.getKindValue());
+        switch (pb.getKind()) {
+            case SPLITTING:
+                return SplittingTablet.fromImageProto(pb.getSplitting());
+            case MERGING:
+                return MergingTablet.fromImageProto(pb.getMerging());
+            case IDENTICAL:
+                return IdenticalTablet.fromImageProto(pb.getIdentical());
+            default:
+                throw new IllegalArgumentException("unknown resharding tablet kind " + pb.getKind());
+        }
+    }
 }

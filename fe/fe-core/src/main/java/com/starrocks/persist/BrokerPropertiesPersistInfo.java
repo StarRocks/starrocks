@@ -16,6 +16,8 @@ package com.starrocks.persist;
 
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.BrokerPropertiesPersistInfoPB;
 
 import java.util.Map;
 
@@ -50,6 +52,20 @@ public class BrokerPropertiesPersistInfo {
     public Map<String, String> getProperties() {
         return properties;
     }
+
+    public BrokerPropertiesPersistInfoPB toProto() {
+        BrokerPropertiesPersistInfoPB.Builder builder = BrokerPropertiesPersistInfoPB.newBuilder();
+        if (name != null) {
+            builder.setName(name);
+        }
+        if (properties != null) {
+            builder.setProperties(ProtoMaps.toStringMapProto(properties));
+        }
+        return builder.build();
+    }
+
+    public static BrokerPropertiesPersistInfo fromProto(BrokerPropertiesPersistInfoPB pb) {
+        return new BrokerPropertiesPersistInfo(pb.hasName() ? pb.getName() : null,
+                pb.hasProperties() ? ProtoMaps.fromStringMapProto(pb.getProperties()) : null);
+    }
 }
-
-

@@ -45,17 +45,25 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionReader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.ExportJobPB;
+import com.starrocks.persist.proto.ExportMgrPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -416,6 +424,36 @@ public class ExportMgr implements MemoryTrackable {
             }
             unprotectAddJob(job);
         });
+    }
+
+    /** Image v3: one section, the manager message (it carries nothing yet) and then one entry per job. */
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.EXPORT_MGR)) {
+            writer.writeManager(ExportMgrPB.getDefaultInstance());
+            for (ExportJob job : idToJob.values()) {
+                writer.writeEntry(job.toProto());
+            }
+        }
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(Pair.<SectionId, SectionLoader>create(SectionId.EXPORT_MGR, this::loadSection));
+    }
+
+    private void loadSection(SectionReader reader) throws IOException {
+        reader.readManager(ExportMgrPB.parser());
+        long currentTimeMs = System.currentTimeMillis();
+        reader.readEntries(ExportJobPB.parser(), pb -> loadJob(ExportJob.fromProto(pb), currentTimeMs));
+    }
+
+    /** Installs a loaded job; a finished or cancelled job older than history_job_keep_max_second is dropped. */
+    private void loadJob(ExportJob job, long currentTimeMs) {
+        // discard expired job right away
+        if (isJobExpired(job, currentTimeMs)) {
+            LOG.info("discard expired job: {}", job);
+            return;
+        }
+        unprotectAddJob(job);
     }
 
     @Override

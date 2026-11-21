@@ -54,6 +54,8 @@ import com.starrocks.load.FailMsg;
 import com.starrocks.load.routineload.TxnStatusChangeReason;
 import com.starrocks.persist.BrokerPropertiesPersistInfo;
 import com.starrocks.persist.OriginStatementInfo;
+import com.starrocks.persist.proto.BulkLoadJobCorePB;
+import com.starrocks.persist.proto.StringMapPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
@@ -69,6 +71,7 @@ import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -414,5 +417,33 @@ public abstract class BulkLoadJob extends LoadJob {
             return;
         }
         unprotectReadEndOperation((LoadJobFinalOperation) txnState.getTxnCommitAttachment(), true);
+    }
+
+    protected BulkLoadJobCorePB toBulkCoreProto() {
+        BulkLoadJobCorePB.Builder builder = BulkLoadJobCorePB.newBuilder();
+        builder.addAllTableIds(tableIds);
+        if (brokerPersistInfo != null) {
+            builder.setBrokerPersistInfo(brokerPersistInfo.toProto());
+        }
+        if (originStmt != null) {
+            builder.setOriginStmt(originStmt.toProto());
+        }
+        if (sessionVariables != null) {
+            builder.setSessionVariables(StringMapPB.newBuilder().putAllValues(sessionVariables).build());
+        }
+        return builder.build();
+    }
+
+    protected void fillBulkCoreFromProto(BulkLoadJobCorePB pb) {
+        tableIds = Sets.newHashSet(pb.getTableIdsList());
+        if (pb.hasBrokerPersistInfo()) {
+            brokerPersistInfo = BrokerPropertiesPersistInfo.fromProto(pb.getBrokerPersistInfo());
+        }
+        if (pb.hasOriginStmt()) {
+            originStmt = OriginStatementInfo.fromProto(pb.getOriginStmt());
+        }
+        if (pb.hasSessionVariables()) {
+            sessionVariables = new HashMap<>(pb.getSessionVariables().getValuesMap());
+        }
     }
 }

@@ -15,10 +15,14 @@
 package com.starrocks.alter;
 
 import com.google.gson.annotations.SerializedName;
+import com.google.protobuf.ByteString;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.persist.image.ThriftBytes;
+import com.starrocks.persist.proto.AlterJobPB;
+import com.starrocks.persist.proto.LakeTableDropIndexJobPB;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.thrift.TDropIndexInfo;
 import com.starrocks.thrift.TIndexType;
@@ -287,5 +291,32 @@ public class LakeTableDropIndexJob extends LakeTableIndexFastPathJobBase {
 
     public List<String> getDropBfColumns() {
         return dropBfColumns;
+    }
+
+    @Override
+    protected void fillProtoVariant(AlterJobPB.Builder builder) {
+        LakeTableDropIndexJobPB.Builder variant = LakeTableDropIndexJobPB.newBuilder()
+                .setIndexFastPath(toLakeTableIndexFastPathJobCoreProto())
+                .addAllDropIndexIds(dropIndexIds)
+                .addAllDropIndexNames(dropIndexNames)
+                .addAllDropBfColumns(dropBfColumns);
+        // The Thrift payload travels as it is; the proto does not restate TDropIndexInfo.
+        for (TDropIndexInfo info : dropInfos) {
+            variant.addDropInfos(ThriftBytes.toBytes(info));
+        }
+        builder.setKind(AlterJobPB.Kind.LAKE_TABLE_DROP_INDEX_JOB).setLakeTableDropIndexJob(variant);
+    }
+
+    @Override
+    protected void fillFromVariantProto(AlterJobPB pb) {
+        LakeTableDropIndexJobPB variant = pb.getLakeTableDropIndexJob();
+        fillFromLakeTableIndexFastPathJobCoreProto(variant.getIndexFastPath());
+        dropIndexIds = new ArrayList<>(variant.getDropIndexIdsList());
+        dropIndexNames = new ArrayList<>(variant.getDropIndexNamesList());
+        dropInfos = new ArrayList<>(variant.getDropInfosCount());
+        for (ByteString bytes : variant.getDropInfosList()) {
+            dropInfos.add(ThriftBytes.fromBytes(bytes, new TDropIndexInfo()));
+        }
+        dropBfColumns = new ArrayList<>(variant.getDropBfColumnsList());
     }
 }

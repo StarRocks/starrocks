@@ -19,15 +19,21 @@ import com.staros.util.LockCloseable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.DeleteSqlDigestBlackLists;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.SqlDigestBlackListPersistInfo;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.SqlDigestBlackListPB;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -122,5 +128,23 @@ public class SqlDigestBlackList {
         try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
             sqlDigestBlackList.clear();
         }
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock());
+                SectionWriter writer = imageWriter.beginSection(SectionId.SQL_DIGEST_BLACKLIST)) {
+            for (String digest : sqlDigestBlackList) {
+                writer.writeEntry(SqlDigestBlackListPB.newBuilder().setDigest(digest).build());
+            }
+        }
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(Pair.create(SectionId.SQL_DIGEST_BLACKLIST, reader -> {
+            try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+                reader.readEntries(SqlDigestBlackListPB.parser(), pb -> sqlDigestBlackList.add(pb.getDigest()));
+                LOG.info("loaded {} SQL digest blacklist", sqlDigestBlackList.size());
+            }
+        }));
     }
 }

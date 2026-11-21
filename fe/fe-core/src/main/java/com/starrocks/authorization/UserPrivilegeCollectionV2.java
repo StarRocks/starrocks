@@ -16,6 +16,8 @@
 package com.starrocks.authorization;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.image.ProtoLists;
+import com.starrocks.persist.proto.UserPrivilegeHeaderPB;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -73,5 +75,30 @@ public class UserPrivilegeCollectionV2 extends PrivilegeCollectionV2 {
         }
         ret.typeToPrivilegeEntryList = cloneTypeToPrivilegeEntryList();
         return ret;
+    }
+
+    public UserPrivilegeHeaderPB toHeaderProto() {
+        UserPrivilegeHeaderPB.Builder builder = UserPrivilegeHeaderPB.newBuilder();
+        if (roleIds != null) {
+            builder.setRoleIds(ProtoLists.int64List(roleIds));
+        }
+        if (defaultRoleIds != null) {
+            builder.setDefaultRoleIds(ProtoLists.int64List(defaultRoleIds));
+        }
+        return builder.build();
+    }
+
+    private UserPrivilegeCollectionV2(UserPrivilegeHeaderPB pb) {
+        this();
+        if (pb.hasRoleIds()) {
+            roleIds = new HashSet<>(ProtoLists.toLongs(pb.getRoleIds()));
+        }
+        if (pb.hasDefaultRoleIds()) {
+            defaultRoleIds = new HashSet<>(ProtoLists.toLongs(pb.getDefaultRoleIds()));
+        }
+    }
+
+    public static UserPrivilegeCollectionV2 fromHeaderProto(UserPrivilegeHeaderPB pb) {
+        return new UserPrivilegeCollectionV2(pb);
     }
 }

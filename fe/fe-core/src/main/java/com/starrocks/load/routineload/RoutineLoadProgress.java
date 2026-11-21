@@ -36,6 +36,8 @@ package com.starrocks.load.routineload;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.image.ProtoKinds;
+import com.starrocks.persist.proto.RoutineLoadProgressPB;
 
 public abstract class RoutineLoadProgress implements Writable {
 
@@ -55,6 +57,40 @@ public abstract class RoutineLoadProgress implements Writable {
 
     abstract String toJsonString();
 
+    public RoutineLoadProgressPB toProto() {
+        RoutineLoadProgressPB.Builder builder = RoutineLoadProgressPB.newBuilder();
+        fillProtoVariant(builder);
+        return builder.build();
+    }
 
+    protected void fillProtoVariant(RoutineLoadProgressPB.Builder builder) {
+        throw new IllegalStateException("cannot persist " + getClass().getName());
+    }
 
+    protected void fillFromVariantProto(RoutineLoadProgressPB pb) {
+        throw new IllegalStateException("cannot load " + getClass().getName());
+    }
+
+    public static RoutineLoadProgress fromProto(RoutineLoadProgressPB pb) {
+        ProtoKinds.checkKnown(pb.getKind(), pb.getKindValue());
+        RoutineLoadProgress value;
+        switch (pb.getKind()) {
+            case KAFKA_PROGRESS:
+                if (!pb.hasKafkaProgress()) {
+                    throw new IllegalArgumentException("missing kafkaProgress variant");
+                }
+                value = new KafkaProgress();
+                break;
+            case PULSAR_PROGRESS:
+                if (!pb.hasPulsarProgress()) {
+                    throw new IllegalArgumentException("missing pulsarProgress variant");
+                }
+                value = new PulsarProgress();
+                break;
+            default:
+                throw new IllegalArgumentException("unknown RoutineLoadProgress kind " + pb.getKind());
+        }
+        value.fillFromVariantProto(pb);
+        return value;
+    }
 }

@@ -18,6 +18,7 @@ import com.google.common.base.Strings;
 import com.google.common.base.Supplier;
 import com.google.common.base.Suppliers;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.MvIdPB;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.Objects;
@@ -43,6 +44,14 @@ public class MvId {
 
     public long getId() {
         return id;
+    }
+
+    public MvIdPB toProto() {
+        return MvIdPB.newBuilder().setDbId(dbId).setId(id).build();
+    }
+
+    public static MvId fromProto(MvIdPB pb) {
+        return new MvId(pb.getDbId(), pb.getId());
     }
 
     @Override

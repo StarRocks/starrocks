@@ -3,6 +3,11 @@
 > Frontend-specific guidelines for AI coding agents.
 > The FE is written in Java and handles SQL parsing, query optimization, and metadata management.
 
+When implementing or reviewing image-persisted metadata, follow the
+[FE metadata persistence policy](../handbook/policies/fe-metadata-persistence.md). A Gson field addition does not
+update Image V3: check the protobuf schema, both conversion directions and recovery
+tests, including for in-flight PRs and backports.
+
 ## Architecture Overview
 
 Start with [`handbook/index.md`](../handbook/index.md) for repo-wide routing and [`handbook/domains/frontend.md`](../handbook/domains/frontend.md) for FE commands, guardrails, and open harness gaps.

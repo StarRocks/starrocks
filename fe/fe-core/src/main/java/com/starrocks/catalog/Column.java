@@ -46,6 +46,9 @@ import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.persist.ExpressionSerializedObject;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.ColumnListPB;
+import com.starrocks.persist.proto.ColumnPB;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
@@ -71,6 +74,7 @@ import com.starrocks.type.NullType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeProtoConverter;
 import com.starrocks.type.TypeSerializer;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.text.translate.UnicodeUnescaper;
@@ -1117,11 +1121,102 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         }
     }
 
+    /**
+     * Derives the in-memory state that is not persisted from the fields that are. Shared by the GSON hook and
+     * {@link #fromProto}.
+     */
+    private void rebuildTransientState() {
+        if (generatedColumnExprSerialized != null && generatedColumnExprSerialized.getExpressionSql() != null) {
+            generatedColumnExpr = generatedColumnExprSerialized.deserialize();
+        }
+        if (this.aggStateDesc != null) {
+            this.type.setAggStateDesc(this.aggStateDesc);
+        }
+        if (defaultExpr != null && defaultExpr.hasExprObject() && defaultExpr.getExprObject() != null) {
+            try {
+                Expr validatedExpr = ColumnDefAnalyzer.validateComplexTypeDefaultValue(
+                        type, defaultExpr.getExprObject(), true);
+                defaultExpr.setExprObject(validatedExpr);
+            } catch (Exception e) {
+                LOG.warn("Failed to re-validate complex default expression for column {}: {}", name, e.getMessage());
+            }
+        }
+    }
+
     @Override
     public void gsonPreProcess() throws IOException {
         if (generatedColumnExpr != null) {
             generatedColumnExprSerialized = ExpressionSerializedObject.create(generatedColumnExpr);
         }
+    }
+
+    public ColumnPB toProto() {
+        ColumnPB.Builder builder = ColumnPB.newBuilder()
+                .setName(name)
+                .setUniqueId(uniqueId)
+                .setType(TypeProtoConverter.toProto(type))
+                .setIsAggregationTypeImplicit(isAggregationTypeImplicit)
+                .setIsKey(isKey)
+                .setIsAllowNull(isAllowNull)
+                .setIsAutoIncrement(isAutoIncrement)
+                .setIsHidden(isHidden)
+                .setCreatedTime(createdTime);
+        if (columnId != null) {
+            builder.setColumnId(columnId.getId());
+        }
+        if (aggregationType != null) {
+            builder.setAggregationType(ProtoEnums.toProto(aggregationType, ColumnPB.AggregateType.class));
+        }
+        if (aggStateDesc != null) {
+            builder.setAggStateDesc(TypeProtoConverter.toProto(aggStateDesc));
+        }
+        if (defaultValue != null) {
+            builder.setDefaultValue(defaultValue);
+        }
+        if (defaultExpr != null) {
+            builder.setDefaultExpr(defaultExpr.toProto());
+        }
+        if (comment != null) {
+            builder.setComment(comment);
+        }
+        if (physicalName != null) {
+            builder.setPhysicalName(physicalName);
+        }
+        // Same rule as gsonPreProcess: the live expression wins over the serialized form it was loaded from.
+        if (generatedColumnExpr != null) {
+            builder.setGeneratedColumnExpr(ExpressionSerializedObject.create(generatedColumnExpr).getExpressionSql());
+        } else if (generatedColumnExprSerialized != null && generatedColumnExprSerialized.getExpressionSql() != null) {
+            builder.setGeneratedColumnExpr(generatedColumnExprSerialized.getExpressionSql());
+        }
+        return builder.build();
+    }
+
+    public static Column fromProto(ColumnPB pb) {
+        // The same constructor GSON uses.
+        Column column = new Column();
+        column.name = pb.getName();
+        column.columnId = pb.hasColumnId() ? ColumnId.create(pb.getColumnId()) : null;
+        column.uniqueId = pb.getUniqueId();
+        if (pb.hasType()) {
+            column.type = TypeProtoConverter.fromProto(pb.getType());
+        }
+        column.aggregationType = pb.hasAggregationType()
+                ? ProtoEnums.fromProto(pb.getAggregationType(), AggregateType.class) : null;
+        column.aggStateDesc = pb.hasAggStateDesc() ? TypeProtoConverter.fromProto(pb.getAggStateDesc()) : null;
+        column.isAggregationTypeImplicit = pb.getIsAggregationTypeImplicit();
+        column.isKey = pb.getIsKey();
+        column.isAllowNull = pb.getIsAllowNull();
+        column.isAutoIncrement = pb.getIsAutoIncrement();
+        column.defaultValue = pb.hasDefaultValue() ? pb.getDefaultValue() : null;
+        column.defaultExpr = pb.hasDefaultExpr() ? DefaultExpr.fromProto(pb.getDefaultExpr()) : null;
+        column.comment = pb.hasComment() ? pb.getComment() : null;
+        column.physicalName = pb.hasPhysicalName() ? pb.getPhysicalName() : null;
+        column.generatedColumnExprSerialized = pb.hasGeneratedColumnExpr()
+                ? new ExpressionSerializedObject(pb.getGeneratedColumnExpr()) : null;
+        column.isHidden = pb.getIsHidden();
+        column.createdTime = pb.getCreatedTime();
+        column.rebuildTransientState();
+        return column;
     }
 
     public ColumnId getColumnId() {
@@ -1193,5 +1288,22 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             return "row".equalsIgnoreCase(functionName);
         }
         return false;
+    }
+
+    /** Image v3 form of a list of columns that can be null: the wrapper keeps the null / empty distinction. */
+    public static ColumnListPB toListProto(List<Column> columns) {
+        ColumnListPB.Builder builder = ColumnListPB.newBuilder();
+        for (Column column : columns) {
+            builder.addColumns(column.toProto());
+        }
+        return builder.build();
+    }
+
+    public static List<Column> fromListProto(ColumnListPB pb) {
+        List<Column> columns = new ArrayList<>(pb.getColumnsCount());
+        for (ColumnPB column : pb.getColumnsList()) {
+            columns.add(fromProto(column));
+        }
+        return columns;
     }
 }

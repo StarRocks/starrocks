@@ -21,6 +21,9 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.AlterJobPB;
+import com.starrocks.persist.proto.LakeTableAlterMetaJobPB;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
 import com.starrocks.thrift.TTabletMetaType;
@@ -169,5 +172,46 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
     @Override
     public AlterJobV2 copyForPersist() {
         return new LakeTableAlterMetaJob(this);
+    }
+
+    @Override
+    protected void fillProtoVariant(AlterJobPB.Builder builder) {
+        LakeTableAlterMetaJobPB.Builder variant = LakeTableAlterMetaJobPB.newBuilder()
+                .setAlterMeta(toLakeTableAlterMetaJobCoreProto())
+                .setMetaValue(metaValue)
+                .setEnableFileBundling(enableFileBundling);
+        if (metaType != null) {
+            variant.setMetaType(ProtoEnums.toProto(metaType, LakeTableAlterMetaJobPB.MetaType.class));
+        }
+        if (persistentIndexType != null) {
+            variant.setPersistentIndexType(persistentIndexType);
+        }
+        if (compactionStrategy != null) {
+            variant.setCompactionStrategy(compactionStrategy);
+        }
+        if (flatJsonConfig != null) {
+            variant.setFlatJsonConfig(flatJsonConfig.toProto());
+        }
+        builder.setKind(AlterJobPB.Kind.LAKE_TABLE_ALTER_META_JOB).setLakeTableAlterMetaJob(variant);
+    }
+
+    @Override
+    protected void fillFromVariantProto(AlterJobPB pb) {
+        LakeTableAlterMetaJobPB variant = pb.getLakeTableAlterMetaJob();
+        fillFromLakeTableAlterMetaJobCoreProto(variant.getAlterMeta());
+        if (variant.hasMetaType()) {
+            metaType = ProtoEnums.fromProto(variant.getMetaType(), TTabletMetaType.class);
+        }
+        metaValue = variant.getMetaValue();
+        if (variant.hasPersistentIndexType()) {
+            persistentIndexType = variant.getPersistentIndexType();
+        }
+        enableFileBundling = variant.getEnableFileBundling();
+        if (variant.hasCompactionStrategy()) {
+            compactionStrategy = variant.getCompactionStrategy();
+        }
+        if (variant.hasFlatJsonConfig()) {
+            flatJsonConfig = FlatJsonConfig.fromProto(variant.getFlatJsonConfig());
+        }
     }
 }

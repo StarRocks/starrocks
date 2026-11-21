@@ -16,6 +16,11 @@ package com.starrocks.alter;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.SchemaInfo;
+import com.starrocks.persist.proto.IndexSchemaInfoListPB;
+import com.starrocks.persist.proto.IndexSchemaInfoPB;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static java.util.Objects.requireNonNull;
 
@@ -44,5 +49,39 @@ public class IndexSchemaInfo {
 
     public SchemaInfo getSchemaInfo() {
         return schemaInfo;
+    }
+
+    /** Image v3 form. */
+    public IndexSchemaInfoPB toProto() {
+        IndexSchemaInfoPB.Builder builder = IndexSchemaInfoPB.newBuilder().setIndexMetaId(indexMetaId);
+        if (indexName != null) {
+            builder.setIndexName(indexName);
+        }
+        if (schemaInfo != null) {
+            builder.setSchemaInfo(schemaInfo.toProto());
+        }
+        return builder.build();
+    }
+
+    public static IndexSchemaInfo fromProto(IndexSchemaInfoPB pb) {
+        return new IndexSchemaInfo(pb.getIndexMetaId(), pb.hasIndexName() ? pb.getIndexName() : null,
+                pb.hasSchemaInfo() ? SchemaInfo.fromProto(pb.getSchemaInfo()) : null);
+    }
+
+    /** A list that can be null travels in a wrapper; the caller handles the null case. */
+    static IndexSchemaInfoListPB toListProto(List<IndexSchemaInfo> infos) {
+        IndexSchemaInfoListPB.Builder builder = IndexSchemaInfoListPB.newBuilder();
+        for (IndexSchemaInfo info : infos) {
+            builder.addValues(info.toProto());
+        }
+        return builder.build();
+    }
+
+    static List<IndexSchemaInfo> fromListProto(IndexSchemaInfoListPB pb) {
+        List<IndexSchemaInfo> infos = new ArrayList<>(pb.getValuesCount());
+        for (IndexSchemaInfoPB info : pb.getValuesList()) {
+            infos.add(fromProto(info));
+        }
+        return infos;
     }
 }

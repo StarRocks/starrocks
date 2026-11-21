@@ -43,14 +43,21 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionReader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.VariableMgrPB;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -1005,6 +1012,99 @@ public class VariableMgr {
         public VariableInfo(String name, String variable) {
             this.name = name;
             this.variable = variable;
+        }
+    }
+
+    /** Installs one persisted variable; a name this build no longer knows is skipped, as v2 always did. */
+    private void loadVariable(String name, String value) throws IOException {
+        VarContext varContext = getVarContext(name);
+        if (varContext != null) {
+            try {
+                setValue(varContext.getObj(), varContext.getField(), value);
+            } catch (DdlException e) {
+                throw new IOException(e);
+            }
+        }
+    }
+
+    /** The persisted form of a variable field: the string form of its scalar or String value. */
+    private static String persistedValue(Field field, Object obj) throws IOException, IllegalAccessException {
+        switch (field.getType().getSimpleName()) {
+            case "boolean":
+            case "int":
+            case "long":
+            case "float":
+            case "double":
+            case "String":
+                return field.get(obj).toString();
+            default:
+                // Unsupported type variable.
+                throw new IOException("invalid type: " + field.getType().getSimpleName());
+        }
+    }
+
+    /** The variables that exist only globally: the GLOBAL fields of GlobalVariable, plus enable_table_name_case_insensitive. */
+    private static Map<String, String> collectGlobalVariables() throws IOException {
+        Map<String, String> g = new HashMap<>();
+        try {
+            for (Field field : GlobalVariable.class.getDeclaredFields()) {
+                field.setAccessible(true);
+                VarAttr attr = field.getAnnotation(VarAttr.class);
+                if (attr == null ||
+                        ((attr.flag() & GLOBAL) != GLOBAL &&
+                                !attr.name().equalsIgnoreCase(GlobalVariable.ENABLE_TABLE_NAME_CASE_INSENSITIVE))) {
+                    continue;
+                }
+                g.put(attr.name(), persistedValue(field, null));
+            }
+        } catch (Exception e) {
+            throw new IOException("failed to write global variable: " + e.getMessage());
+        }
+        return g;
+    }
+
+    /** The global defaults of the session variables: every @VarAttr field of SessionVariable that is not SESSION_ONLY. */
+    private Map<String, String> collectSessionVariableDefaults() throws IOException {
+        Map<String, String> m = new HashMap<>();
+        try {
+            for (Field field : SessionVariable.class.getDeclaredFields()) {
+                field.setAccessible(true);
+                VarAttr attr = field.getAnnotation(VarAttr.class);
+                if (attr == null || (attr.flag() & SESSION_ONLY) == SESSION_ONLY) {
+                    continue;
+                }
+                m.put(attr.name(), persistedValue(field, defaultSessionVariable));
+            }
+        } catch (Exception e) {
+            throw new IOException("failed to write session variable: " + e.getMessage());
+        }
+        return m;
+    }
+
+    private void loadSection(SectionReader reader) throws IOException {
+        VariableMgrPB pb = reader.readManager(VariableMgrPB.parser());
+        for (Map.Entry<String, String> e : pb.getSessionVariableDefaultsMap().entrySet()) {
+            loadVariable(e.getKey(), e.getValue());
+        }
+        for (Map.Entry<String, String> e : pb.getGlobalVariablesMap().entrySet()) {
+            loadVariable(e.getKey(), e.getValue());
+        }
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(Pair.<SectionId, SectionLoader>create(SectionId.VARIABLE_MGR, this::loadSection));
+    }
+
+    /**
+     * Image v3: one section with only the manager message, which carries the two maps of the v2 block: the global
+     * defaults of the session variables, then the global-only variables, both as the strings v2 wrote.
+     */
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.VARIABLE_MGR)) {
+            writer.writeManager(VariableMgrPB.newBuilder()
+                    .putAllSessionVariableDefaults(collectSessionVariableDefaults())
+                    .putAllGlobalVariables(collectGlobalVariables())
+                    .build());
         }
     }
 }

@@ -15,9 +15,13 @@
 package com.starrocks.alter.reshard;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.Int64ListPB;
+import com.starrocks.persist.proto.MergingTabletPB;
+import com.starrocks.persist.proto.ReshardingTabletPB;
 import com.starrocks.proto.MergingTabletInfoPB;
 import com.starrocks.proto.ReshardingTabletInfoPB;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /*
@@ -86,5 +90,19 @@ public class MergingTablet implements ReshardingTablet {
         reshardingTabletInfoPB.mergingTabletInfo.oldTabletIds = oldTabletIds;
         reshardingTabletInfoPB.mergingTabletInfo.newTabletId = newTabletId;
         return reshardingTabletInfoPB;
+    }
+
+    @Override
+    public ReshardingTabletPB toImageProto() {
+        MergingTabletPB.Builder builder = MergingTabletPB.newBuilder().setNewTabletId(newTabletId);
+        if (oldTabletIds != null) {
+            builder.setOldTabletIds(Int64ListPB.newBuilder().addAllValues(oldTabletIds));
+        }
+        return ReshardingTabletPB.newBuilder().setKind(ReshardingTabletPB.Kind.MERGING).setMerging(builder).build();
+    }
+
+    public static MergingTablet fromImageProto(MergingTabletPB pb) {
+        return new MergingTablet(pb.hasOldTabletIds() ? new ArrayList<>(pb.getOldTabletIds().getValuesList()) : null,
+                pb.getNewTabletId());
     }
 }
