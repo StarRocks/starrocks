@@ -14,7 +14,30 @@
 
 #include "column/field.h"
 
+#include "types/type_descriptor.h"
+
 namespace starrocks {
+
+StatusOr<Field> Field::create_geo(ColumnId id, std::string_view name, const TypeDescriptor& type, bool nullable) {
+    if (!type.geo_type) {
+        return Status::InvalidArgument("Missing GEO field descriptor");
+    }
+    const auto kind = type.geo_type->logical_type;
+    if (!((type.type == TYPE_GEOGRAPHY && kind == GEO_LOGICAL_TYPE_GEOGRAPHY) ||
+          (type.type == TYPE_GEOMETRY && kind == GEO_LOGICAL_TYPE_GEOMETRY))) {
+        return Status::InvalidArgument("GEO field descriptor kind does not match the logical type");
+    }
+    Field field(id, name, TypeInfoPtr{}, nullable);
+    field._geo_descriptor = std::make_shared<const GeoTypeDescriptor>(*type.geo_type);
+    return field;
+}
+
+LogicalType Field::logical_type() const {
+    if (_geo_descriptor) {
+        return _geo_descriptor->logical_type == GEO_LOGICAL_TYPE_GEOGRAPHY ? TYPE_GEOGRAPHY : TYPE_GEOMETRY;
+    }
+    return _type->type();
+}
 
 FieldPtr Field::convert_to(LogicalType to_type) const {
     FieldPtr new_field = std::make_shared<Field>(*this);

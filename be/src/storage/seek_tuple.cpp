@@ -16,18 +16,27 @@
 
 #include <sstream>
 #include <string>
+#include <utility>
 
 #include "column/datum_convert.h"
 #include "storage/convert_helper.h"
 
 namespace starrocks {
 
-void SeekTuple::convert_to(SeekTuple* new_tuple, const std::vector<LogicalType>& new_types) const {
-    _schema.convert_to(&new_tuple->_schema, new_types);
+Status SeekTuple::convert_to(SeekTuple* new_tuple, const std::vector<LogicalType>& new_types) const {
+    for (const auto& field : _schema.fields()) {
+        if (field->geo_descriptor()) {
+            return Status::NotSupported("Native GEO is not supported in seek tuples");
+        }
+    }
+    SeekTuple converted;
+    RETURN_IF_ERROR(_schema.convert_to(&converted._schema, new_types));
 
     RowConverter converter;
-    WARN_IF_ERROR(converter.init(_schema, new_tuple->_schema), "Cannot get field converter");
-    converter.convert(&new_tuple->_values, _values);
+    RETURN_IF_ERROR(converter.init(_schema, converted._schema));
+    converter.convert(&converted._values, _values);
+    *new_tuple = std::move(converted);
+    return Status::OK();
 }
 
 std::string SeekTuple::debug_string() const {

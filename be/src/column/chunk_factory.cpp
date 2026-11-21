@@ -25,6 +25,7 @@
 #include "column/decimalv3_column.h"
 #include "column/field.h"
 #include "column/fixed_length_column.h"
+#include "column/geo_column.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
@@ -95,6 +96,9 @@ struct ColumnPtrBuilder {
 };
 
 MutableColumnPtr column_from_pool(const Field& field) {
+    if (field.geo_descriptor()) {
+        return ChunkFactory::column_from_field(field);
+    }
     auto precision = field.type()->precision();
     auto scale = field.type()->scale();
     return field_type_dispatch_column(field.type()->type(), ColumnPtrBuilder(), field, precision, scale);
@@ -145,6 +149,9 @@ MutableColumnPtr ChunkFactory::column_from_field(const Field& field) {
         return field.is_nullable() ? MutableColumnPtr(NullableColumn::create(std::move(col), NullColumn::create()))
                                    : std::move(col);
     };
+    if (const auto* descriptor = field.geo_descriptor()) {
+        return NullableIfNeed(GeoColumn::create(GeoColumnDescriptor{*descriptor}));
+    }
     auto type = field.type()->type();
     switch (type) {
     case TYPE_DECIMAL32:
