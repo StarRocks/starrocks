@@ -101,6 +101,7 @@ import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
@@ -3966,6 +3967,97 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
                     .getRelation();
             selectRelation = (SelectRelation) subqueryRelation.getQueryStatement().getQueryRelation();
             Assertions.assertTrue(selectRelation.getOutputExpression().get(0) instanceof ArithmeticExpr);
+        }
+
+        Config.access_control = "native";
+    }
+
+    /**
+     * Regression test for the pre-analysis SELECT projection traversal gap: a table referenced only
+     * inside a scalar SELECT-list subquery must still receive the policy-marking visitor's
+     * {@code setNeedRewrittenByPolicy(true)} and the subsequent row-filter / column-mask rewrite, even
+     * though the policy-marking visitor runs on the raw, not-yet-analyzed AST (where
+     * {@code SelectRelation#getOutputExpression()} is null and the subquery is only reachable through the
+     * parser-populated {@code selectList}).
+     */
+    @Test
+    public void testPolicyRewriteProtectedTableInSelectListSubquery() throws Exception {
+        Config.access_control = "ranger";
+        ConnectContext context = starRocksAssert.getCtx();
+
+        final String testDbName = "db_for_ranger_projection";
+        starRocksAssert.withDatabase(testDbName);
+        starRocksAssert.withTable("create table " + testDbName +
+                ".protected_table(k1 varchar(32), k2 varchar(32)) " +
+                "DUPLICATE KEY(k1) distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+        starRocksAssert.withTable("create table " + testDbName +
+                ".outer_table(k1 varchar(32), k2 varchar(32)) " +
+                "DUPLICATE KEY(k1) distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+
+        TableName protectedTableName = new TableName("default_catalog", testDbName, "protected_table");
+
+        Expr rowFilter = SqlParser.parseSqlToExpr(
+                "exists (select * from " + testDbName + ".outer_table)", SqlModeHelper.MODE_DEFAULT);
+        Map<String, Expr> columnMask = new HashMap<>();
+        columnMask.put("k1", SqlParser.parseSqlToExpr("k1+1", SqlModeHelper.MODE_DEFAULT));
+
+        try (MockedStatic<Authorizer> authorizerMockedStatic =
+                     Mockito.mockStatic(Authorizer.class)) {
+            authorizerMockedStatic
+                    .when(() -> Authorizer.getRowAccessPolicy(Mockito.any(), eq(protectedTableName)))
+                    .thenReturn(rowFilter);
+            authorizerMockedStatic
+                    .when(() -> Authorizer.getColumnMaskingPolicy(
+                            Mockito.any(), eq(protectedTableName), Mockito.any()))
+                    .thenReturn(columnMask);
+            authorizerMockedStatic.when(Authorizer::getInstance)
+                    .thenCallRealMethod();
+            authorizerMockedStatic
+                    .when(() -> Authorizer.check(Mockito.any(), Mockito.any()))
+                    .thenCallRealMethod();
+            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(),
+                            Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any()))
+                    .thenCallRealMethod();
+            authorizerMockedStatic.when(() -> Authorizer.checkColumnAction(Mockito.any(),
+                            Mockito.any(), Mockito.any(), Mockito.any()))
+                    .thenCallRealMethod();
+
+            String sql = "select (select count(*) from " + testDbName + ".protected_table) from " +
+                    testDbName + ".outer_table";
+
+            // Raw parse only -- do NOT analyze before marking. The policy-marking visitor must run on the
+            // not-yet-analyzed AST, where getOutputExpression() is null and protected_table is only
+            // reachable through the parser-populated selectList of the inner SelectRelation.
+            StatementBase stmt = SqlParser.parse(sql, context.getSessionVariable().getSqlMode()).get(0);
+
+            //Build View SQL without Policy Rewrite
+            new AstTraverser<Void, Void>() {
+                @Override
+                public Void visitRelation(Relation relation, Void context) {
+                    relation.setNeedRewrittenByPolicy(true);
+                    return null;
+                }
+            }.visit(stmt);
+
+            Analyzer.analyze(stmt, context);
+
+            QueryStatement queryStatement = (QueryStatement) stmt;
+            SelectRelation outerSelectRelation = (SelectRelation) queryStatement.getQueryRelation();
+            Expr projectionExpr = outerSelectRelation.getOutputExpression().get(0);
+            Assertions.assertInstanceOf(Subquery.class, projectionExpr,
+                    "the select-list item must still be the scalar subquery over protected_table");
+            QueryStatement innerQueryStatement = ((Subquery) projectionExpr).getQueryStatement();
+            SelectRelation innerSelectRelation = (SelectRelation) innerQueryStatement.getQueryRelation();
+
+            Assertions.assertInstanceOf(SubqueryRelation.class, innerSelectRelation.getRelation(),
+                    "protected_table referenced from the projection subquery must be wrapped into a "
+                            + "SubqueryRelation by the policy rewrite, proving the policy-marking visitor "
+                            + "reached it through the pre-analysis selectList");
+            SubqueryRelation rewrittenRelation = (SubqueryRelation) innerSelectRelation.getRelation();
+            SelectRelation rewriteSelectRelation =
+                    (SelectRelation) rewrittenRelation.getQueryStatement().getQueryRelation();
+            Assertions.assertInstanceOf(ArithmeticExpr.class, rewriteSelectRelation.getOutputExpression().get(0),
+                    "column mask rewrite (k1+1) must be applied to protected_table");
         }
 
         Config.access_control = "native";
