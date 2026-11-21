@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cmath>
 #include <limits>
 #include <type_traits>
 
@@ -36,8 +37,17 @@ struct MaxAggregateData<LT, AggregateComplexLTGuard<LT>> {
     using T = AggDataValueType<LT>;
     T result = RunTimeTypeLimits<LT>::min_value();
 
-    void reset() { result = RunTimeTypeLimits<LT>::min_value(); }
+    bool has_value() const { return _has_value; }
+    void set_has_value() { _has_value = true; }
+
+    void reset() {
+        result = RunTimeTypeLimits<LT>::min_value();
+        _has_value = false;
+    }
     const T& get_result() const { return result; }
+
+private:
+    bool _has_value = false;
 };
 
 // TODO(murphy) refactor the guard with AggDataTypeTraits
@@ -72,8 +82,17 @@ struct MinAggregateData<LT, AggregateComplexLTGuard<LT>> {
     using T = AggDataValueType<LT>;
     T result = RunTimeTypeLimits<LT>::max_value();
 
-    void reset() { result = RunTimeTypeLimits<LT>::max_value(); }
+    bool has_value() const { return _has_value; }
+    void set_has_value() { _has_value = true; }
+
+    void reset() {
+        result = RunTimeTypeLimits<LT>::max_value();
+        _has_value = false;
+    }
     const T& get_result() const { return result; }
+
+private:
+    bool _has_value = false;
 };
 
 template <LogicalType LT>
@@ -105,9 +124,28 @@ struct MaxElement {
     // `is_sync` indicates whether to sync detail state to genreate the
     // final result. If retract's row is greater or equal to now maxest value,
     // need sync details from detail state table.
-    static bool is_sync(State& state, const T& right) { return state.result <= right; }
-    void operator()(State& state, const T& right) const { AggDataTypeTraits<LT>::update_max(state.result, right); }
+    static bool is_sync(State& state, const T& right) {
+        if constexpr (std::is_floating_point_v<T>) {
+            return !state.has_value() || state.result <= right;
+        }
+        return state.result <= right;
+    }
+    void operator()(State& state, const T& right) const {
+        if constexpr (std::is_floating_point_v<T>) {
+            if (!state.has_value()) {
+                state.set_has_value();
+                if (!std::isnan(right)) {
+                    state.result = right;
+                }
+                return;
+            }
+        }
+        AggDataTypeTraits<LT>::update_max(state.result, right);
+    }
     static bool equals(const State& state, const T& right) {
+        if constexpr (std::is_floating_point_v<T>) {
+            return !state.has_value() || AggDataTypeTraits<LT>::equals(state.result, right);
+        }
         return AggDataTypeTraits<LT>::equals(state.result, right);
     }
 };
@@ -118,9 +156,28 @@ struct MinElement {
     // `is_sync` indicates whether to sync detail state to genreate the
     // final result. If retract's row is smaller or equal to now maxest value,
     // need sync details from detail state table.
-    static bool is_sync(State& state, const T& right) { return state.result >= right; }
-    void operator()(State& state, const T& right) const { AggDataTypeTraits<LT>::update_min(state.result, right); }
+    static bool is_sync(State& state, const T& right) {
+        if constexpr (std::is_floating_point_v<T>) {
+            return !state.has_value() || state.result >= right;
+        }
+        return state.result >= right;
+    }
+    void operator()(State& state, const T& right) const {
+        if constexpr (std::is_floating_point_v<T>) {
+            if (!state.has_value()) {
+                state.set_has_value();
+                if (!std::isnan(right)) {
+                    state.result = right;
+                }
+                return;
+            }
+        }
+        AggDataTypeTraits<LT>::update_min(state.result, right);
+    }
     static bool equals(const State& state, const T& right) {
+        if constexpr (std::is_floating_point_v<T>) {
+            return !state.has_value() || AggDataTypeTraits<LT>::equals(state.result, right);
+        }
         return AggDataTypeTraits<LT>::equals(state.result, right);
     }
 };
