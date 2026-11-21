@@ -941,6 +941,41 @@ public class LakeRollupJobTest {
         Assertions.assertEquals(List.of(false, false, true, true, false, false), flags);
     }
 
+    @Test
+    public void testFinishInvalidatesPlansBeforeExposingTheRollup() throws Exception {
+        completeTasksAndPublishOnSend();
+        OlapTable baseTable = createBaseTable("base_table_invalidate_before_flip");
+        LakeRollupJob job = createJob("create materialized view mv_invalidate_before_flip as "
+                + "select k2, k1 from base_table_invalidate_before_flip order by k2;");
+        job.runPendingJob();
+        job.runWaitingTxnJob();
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        // A lock-free plan reads the versions its table copy recorded and the layout later: the invalidation has to be
+        // in place when each rollup index is exposed, not only once the flip is done.
+        long beforeFlip = baseTable.lastSchemaUpdateTime.get();
+        List<Long> invalidationAtExposure = new CopyOnWriteArrayList<>();
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public boolean visualiseShadowIndex(Invocation invocation, long shadowIndexId, boolean isBaseIndex) {
+                invalidationAtExposure.add(baseTable.lastSchemaUpdateTime.get());
+                return invocation.proceed(shadowIndexId, isBaseIndex);
+            }
+        };
+        long deadlineMs = System.currentTimeMillis() + 60_000L;
+        while (job.getJobState() != AlterJobV2.JobState.FINISHED) {
+            Assertions.assertTrue(System.currentTimeMillis() < deadlineMs, "job is still " + job.getJobState());
+            job.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+
+        Assertions.assertFalse(invalidationAtExposure.isEmpty(), "the flip exposed no rollup index");
+        Assertions.assertTrue(invalidationAtExposure.stream().allMatch(time -> time > beforeFlip),
+                "plans must be invalidated before the rollup index is exposed (before=" + beforeFlip
+                        + ", at exposure=" + invalidationAtExposure + ")");
+    }
+
     private static OlapTable createBaseTable(String tableName) throws Exception {
         starRocksAssert.withTable("CREATE TABLE " + tableName + "\n" +
                 "(\n" +

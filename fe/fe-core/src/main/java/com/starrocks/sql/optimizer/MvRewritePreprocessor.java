@@ -361,9 +361,11 @@ public class MvRewritePreprocessor {
         // metadata race for different operations.
         // Ensure to re-optimize if the mv's version has changed after the optimization.
         long timeoutMsPerTry = timeoutMs <= 0 ? 1000 : timeoutMs;
+        // A synchronous MV shares its base table's physical partitions, and so its lock.
+        Pair<Long, Long> lockTarget = mv.getPartitionLockTarget();
         Locker locker = new Locker();
         // Add a timeout to avoid waiting too long for the lock in some cases to avoid affecting query latency.
-        if (!locker.tryLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.READ,
+        if (!locker.tryLockTableWithIntensiveDbLock(lockTarget.first, lockTarget.second, LockType.READ,
                 timeoutMsPerTry, TimeUnit.MILLISECONDS)) {
             if (copyFailurePolicy == MvCopyFailurePolicy.FALLBACK_TO_LIVE_MV) {
                 logMVPrepare("Failed to lock mv {} for copying, use live mv to preserve transparent rewrite semantics",
@@ -379,7 +381,7 @@ public class MvRewritePreprocessor {
             mv.copyOnlyForQuery(copiedMV);
             return copiedMV;
         } finally {
-            locker.unLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(lockTarget.first, lockTarget.second, LockType.READ);
         }
     }
 
