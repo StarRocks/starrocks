@@ -997,6 +997,22 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testSignedIntervalLiteral() throws Exception {
+        // Trino keeps the sign in front of the quoted value apart from the value.
+        assertPlanContains("select date '2022-01-03' + interval -'1' day;", "<slot 2> : '2022-01-02'");
+        assertPlanContains("select date '2022-01-03' - interval -'1' day;", "<slot 2> : '2022-01-04'");
+        assertPlanContains("select date '2022-01-03' + interval -'-1' day;", "<slot 2> : '2022-01-04'");
+        assertPlanContains("select date '2022-01-03' + interval '-1' day;", "<slot 2> : '2022-01-02'");
+        assertPlanContains("select date '2022-03-31' + interval -'1' month;", "<slot 2> : '2022-02-28'");
+        assertPlanContains("select timestamp '2022-01-01 00:00:00' + interval -'90' minute;",
+                "<slot 2> : '2021-12-31 22:30:00'");
+
+        // A compound qualifier is rejected instead of losing its end field.
+        analyzeFail("select date '2022-01-03' + interval '1 12' day to hour",
+                "does not support the interval qualifier DAY TO HOUR");
+    }
+
+    @Test
     public void selectDoubleLiteral() throws Exception {
         String sql = "select 1.0";
         assertPlanContains(sql, "<slot 2> : 1.0");
