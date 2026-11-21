@@ -103,6 +103,11 @@ public class NativeGeoTypeTest {
             // A GEO type without a descriptor is still a plain ScalarType and differs from a described one.
             assertNotEquals(new ScalarType(primitive), type);
             assertNotEquals(type, new ScalarType(primitive));
+            // The descriptor lives on GeoType alone: a plain ScalarType has none, and a clone keeps the class.
+            assertNull(new ScalarType(primitive).getGeoDescriptor());
+            assertSame(GeoType.class, type.clone().getClass());
+            assertSame(descriptor, type.clone().getGeoDescriptor());
+            assertEquals(type, type.clone());
 
             // FE metadata is unchanged: like the other scalar type classes, GeoType has no subtype label of its
             // own, is read back as a ScalarType, and its descriptor is still not persisted.
