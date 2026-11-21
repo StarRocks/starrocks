@@ -43,15 +43,17 @@ Status StatisticsHelper::decode_min_max_into_columns(const MutableColumnPtr& min
                                                      const std::vector<std::string>& min_values,
                                                      const std::vector<std::string>& max_values,
                                                      const std::vector<bool>& null_pages, const TypeDescriptor& type,
-                                                     const ParquetField* field, const std::string& timezone) {
+                                                     const ParquetField* field, const std::string& timezone,
+                                                     const LegacyCalendar& calendar) {
     // Only an INT64 timestamp shown in a zone converts out of order.
     std::unique_ptr<ColumnConverter> converter;
     if (field->physical_type == tparquet::Type::type::INT64 && type.type == TYPE_DATETIME) {
         RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*field, type, timezone, &converter));
     }
     if (converter == nullptr || !converter->need_convert) {
-        RETURN_IF_ERROR(decode_value_into_column(min_column, min_values, null_pages, type, field, timezone));
-        return decode_value_into_column(max_column, max_values, null_pages, type, field, timezone);
+        // The legacy-calendar DATE rebase is non-decreasing, so it can rebase each bound alone.
+        RETURN_IF_ERROR(decode_value_into_column(min_column, min_values, null_pages, type, field, timezone, calendar));
+        return decode_value_into_column(max_column, max_values, null_pages, type, field, timezone, calendar);
     }
     auto decode = [&](const std::vector<std::string>& values, Column* src_column) -> Status {
         int64_t decode_value = 0;
@@ -77,9 +79,10 @@ Status StatisticsHelper::decode_min_max_into_columns(const MutableColumnPtr& min
 Status StatisticsHelper::decode_value_into_column(const MutableColumnPtr& column,
                                                   const std::vector<std::string>& values,
                                                   const std::vector<bool>& null_pages, const TypeDescriptor& type,
-                                                  const ParquetField* field, const std::string& timezone) {
+                                                  const ParquetField* field, const std::string& timezone,
+                                                  const LegacyCalendar& calendar) {
     std::unique_ptr<ColumnConverter> converter;
-    RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*field, type, timezone, &converter));
+    RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*field, type, timezone, &converter, calendar));
     bool ret = true;
     switch (field->physical_type) {
     case tparquet::Type::type::BOOLEAN: {

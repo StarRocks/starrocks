@@ -21,6 +21,7 @@
 #include "cache/mem_cache/page_handle_fwd.h"
 #include "common/bloom_filter.h"
 #include "common/status.h"
+#include "formats/parquet/calendar_rebase.h"
 #include "formats/parquet/schema.h"
 #include "formats/scan_context.h"
 #include "fs/fs.h"
@@ -139,6 +140,8 @@ public:
     bool is_encrypted() const { return _encryption_ctx.has_value(); }
     const std::optional<EncryptionContext>& encryption_ctx() const { return _encryption_ctx; }
     void set_encryption_ctx(EncryptionContext ctx) { _encryption_ctx = std::move(ctx); }
+    // Whether a Spark writer stored pre-Gregorian dates in the hybrid calendar.
+    const LegacyCalendar& legacy_calendar() const { return _legacy_calendar; }
 
 private:
     tparquet::FileMetaData _t_metadata;
@@ -146,6 +149,7 @@ private:
     SchemaDescriptor _schema;
     ApplicationVersion _writer_version;
     std::optional<EncryptionContext> _encryption_ctx;
+    LegacyCalendar _legacy_calendar;
 };
 
 using FileMetaDataPtr = std::shared_ptr<FileMetaData>;

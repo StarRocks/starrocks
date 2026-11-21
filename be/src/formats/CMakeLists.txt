@@ -124,6 +124,7 @@ target_link_libraries(FormatOrc PUBLIC FormatCore Cache)
 ADD_BE_LIB(FormatParquet
         parquet/arrow_memory_pool.cpp
         parquet/column_chunk_reader.cpp
+        parquet/calendar_rebase.cpp
         parquet/column_materializer.cpp
         parquet/lazy_materialization_context.cpp
         parquet/read_range_planner.cpp
