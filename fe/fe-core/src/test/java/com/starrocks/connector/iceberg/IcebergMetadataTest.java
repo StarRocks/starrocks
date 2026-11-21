@@ -113,9 +113,15 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TypeDef;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.ConnectorSinkShuffleSpec;
+import com.starrocks.sql.optimizer.base.IcebergSinkShuffleSpec;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -7093,6 +7099,7 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals(Optional.of(s1), tableRelation.getTvrVersionRange().end());
     }
 
+<<<<<<< HEAD
     private Schema createTableWithIdentifierFields(String identifierFields) throws DdlException {
         IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
         ArgumentCaptor<Schema> schemaCaptor = ArgumentCaptor.forClass(Schema.class);
@@ -7180,5 +7187,45 @@ public class IcebergMetadataTest extends TableTestBase {
         schema = new Schema(List.of(required(1, "id", Types.LongType.get()),
                 required(2, "ID", Types.LongType.get())), Set.of(2));
         Assertions.assertNull(IcebergApiConverter.toIdentifierFieldsProperty(schema));
+=======
+    // RB-1253: V1 keeps a removed partition field as a void field, so its source column can then be dropped. The
+    // sink shuffle skips that field, and the commit parses a partition path that leaves it out.
+    @Test
+    public void testInsertIntoV1TableWithVoidFieldWhoseSourceIsDropped() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster(); // the shuffle looks up the builtin __iceberg_transform_* functions
+        Schema schema = new Schema(required(1, "id", Types.IntegerType.get()),
+                required(2, "c", Types.StringType.get()),
+                required(3, "ts", Types.TimestampType.withoutZone()));
+        PartitionSpec spec = PartitionSpec.builderFor(schema).identity("c").day("ts").build();
+        TestTables.TestTable nativeTable = create(schema, spec, "void_dropped_source", 1);
+        nativeTable.updateSpec().removeField("c").commit();
+        nativeTable.updateSchema().deleteColumn("c").commit();
+
+        IcebergTable table = new IcebergTable(1, "t", "catalog", "resource", "db", "t", "",
+                IcebergApiConverter.toFullSchemas(nativeTable.schema()), nativeTable, Maps.newHashMap());
+        ColumnRefFactory factory = new ColumnRefFactory();
+        List<ColumnRefOperator> outputColumns = new ArrayList<>();
+        for (Column column : table.getFullSchema()) {
+            outputColumns.add(factory.create(column.getName(), column.getType(), column.isAllowNull()));
+        }
+        ConnectorSinkShuffleSpec.PreOptimizeResult result = new IcebergSinkShuffleSpec(table).prepare(null,
+                outputColumns, factory, OptExpression.create(new LogicalValuesOperator(outputColumns)),
+                new ColumnRefSet(outputColumns));
+        // shuffled on day(ts) only
+        Assertions.assertEquals(1, result.partitionColumnIDs.size());
+        ScalarOperator shuffleColumn = ((LogicalProjectOperator) result.root.getOp()).getColumnRefMap()
+                .get(factory.getColumnRef(result.partitionColumnIDs.get(0)));
+        Assertions.assertEquals("__iceberg_transform_day", ((CallOperator) shuffleColumn).getFnName());
+
+        // the sink writes no segment for the void field; it stays null
+        IcebergPartitionData partition =
+                IcebergPartitionData.partitionDataFromPath("ts_day=2026-01-03", "0", nativeTable.spec());
+        Assertions.assertNull(partition.get(0, Object.class));
+        Assertions.assertEquals((int) LocalDateTime.of(2026, 1, 3, 0, 0).toLocalDate().toEpochDay(),
+                partition.get(1, Integer.class));
+        // a field that is not void must still be in the path
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> IcebergPartitionData.partitionDataFromPath("ts_day=2026-01-03", "0", spec));
+>>>>>>> 005517f37ef... [BugFix][RB-1253] Fix INSERT into Iceberg V1 tables whose void partition field lost its source column (#70097)
     }
 }
