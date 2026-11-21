@@ -47,7 +47,7 @@ class TracerImpl extends Tracer {
         return new TracerImpl(
                 this.timing,                     // shared — unified time base
                 this.watcher.fork(retainScope),  // forked — retainScope copies levels
-                this.varTracer,                  // shared — no record/count calls in parallel paths
+                this.varTracer,                  // shared — synchronizes writes and snapshots
                 this.logTracer,                  // shared — already sync-safe
                 this.reasonTracer                // shared — already sync-safe
         );
