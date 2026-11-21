@@ -1,5 +1,4 @@
 -- name: test_clone_for_gin @native
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
 CREATE TABLE `t_clone_for_gin` (
@@ -30,7 +29,6 @@ function: set_first_tablet_bad_and_recover("t_clone_for_gin")
 SELECT * FROM t_clone_for_gin ORDER BY id1;
 
 -- name: test_alter_replicated_storage @native
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 CREATE TABLE `t_alter_replicated_storage` (
   `id` bigint(20) NOT NULL COMMENT "",
   `text` varchar(255) NULL COMMENT "",
@@ -50,7 +48,6 @@ SHOW CREATE TABLE t_alter_replicated_storage;
 DROP TABLE t_alter_replicated_storage;
 
 -- name: test_alter_gin_col_into_other_type @native
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 CREATE TABLE `t_alter_gin_col_into_other_type` (
   `id` bigint(20) NOT NULL COMMENT "",
   `v1` varchar(255) NULL COMMENT "",
@@ -75,7 +72,6 @@ SELECT * FROM t_alter_gin_col_into_other_type;
 DROP TABLE t_alter_gin_col_into_other_type;
 
 -- name: test_gin_var @sequential @native
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 CREATE TABLE `t_gin_var` (
   `id` bigint(20) NOT NULL COMMENT "",
   `v1` varchar(255) NULL COMMENT "",
@@ -98,36 +94,6 @@ SET enable_gin_filter = true;
 SELECT * FROM t_gin_var WHERE v1 MATCH "abc";
 DROP TABLE t_gin_var;
 
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "false");
-CREATE TABLE `t_gin_var` (
-  `id` bigint(20) NOT NULL COMMENT "",
-  `v1` varchar(255) NULL COMMENT "",
-  INDEX gin_none (`v1`) USING GIN ("parser" = "standard")
-) ENGINE=OLAP
-DUPLICATE KEY(`id`)
-DISTRIBUTED BY HASH(`id`) BUCKETS 1
-PROPERTIES (
-"replication_num" = "1",
-"enable_persistent_index" = "true",
-"replicated_storage" = "false",
-"compression" = "LZ4"
-);
-
-CREATE TABLE `t_gin_var` (
-  `id` bigint(20) NOT NULL COMMENT "",
-  `v1` varchar(255) NULL COMMENT ""
-) ENGINE=OLAP
-DUPLICATE KEY(`id`)
-DISTRIBUTED BY HASH(`id`) BUCKETS 1
-PROPERTIES (
-"replication_num" = "1",
-"enable_persistent_index" = "true",
-"replicated_storage" = "false",
-"compression" = "LZ4"
-);
-ALTER TABLE t_gin_var add index idx (v1) USING GIN('parser' = 'standard');
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
-DROP TABLE t_gin_var;
 CREATE TABLE `t_gin_var` (
   `id` bigint(20) NOT NULL COMMENT "",
   `v1` varchar(255) NULL COMMENT "",
@@ -142,13 +108,9 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 DROP TABLE t_gin_var;
-CLEANUP {
-    ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
-} END CLEANUP
 
 
 -- name: test_gin_view @native
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 CREATE TABLE `t_gin_view` (
   `id` bigint(20) NOT NULL COMMENT "",
   `v1` varchar(255) NULL COMMENT "",
@@ -225,7 +187,6 @@ SELECT id1 FROM t_gin_like_underscore WHERE text_column LIKE "abc" ORDER BY id1;
 DROP TABLE t_gin_like_underscore;
 
 -- name: test_gin_or_prune_after_index_filter @native
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 CREATE TABLE `t_gin_or_prune_${uuid0}` (
   `id` bigint NOT NULL,
   `k`  bigint NOT NULL,
@@ -254,7 +215,6 @@ select id from t_gin_or_prune_${uuid0} where v like '%red%' order by id;
 DROP TABLE t_gin_or_prune_${uuid0};
 
 -- name: test_gin_prune_primary_key_table @native
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
 CREATE TABLE `t_gin_prune_pk_${uuid0}` (
@@ -291,7 +251,6 @@ set enable_prune_column_after_index_filter = true;
 DROP TABLE t_gin_prune_pk_${uuid0};
 
 -- name: test_gin_prune_on_table_with_delete @native
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 CREATE TABLE `t_gin_del_prune_${uuid0}` (
   `id` bigint NOT NULL,
   `k`  bigint NOT NULL,
