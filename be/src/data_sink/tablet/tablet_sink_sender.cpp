@@ -401,7 +401,7 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
                         LOG(WARNING) << "close incremental channel failed. channel_name=" << ch->name()
                                      << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.message();
                         err_st = st;
-                        index_channel->mark_as_failed(ch);
+                        index_channel->mark_close_failed(ch);
                     }
                 } else {
                     ch->cancel();
@@ -419,7 +419,7 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
                         LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
                                      << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.message();
                         err_st = st;
-                        index_channel->mark_as_failed(ch);
+                        index_channel->mark_close_failed(ch);
                     }
                 } else {
                     ch->cancel();
@@ -480,7 +480,7 @@ Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, Ta
                                      << ", load_info=" << ch->print_load_info()
                                      << ", error_msg=" << channel_status.message();
                         err_st = channel_status;
-                        index_channel->mark_as_failed(ch);
+                        index_channel->mark_close_failed(ch);
                     }
                     ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns);
                 });

@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <functional>
 #include <thread>
 
 #include "base/testutil/assert.h"
@@ -202,6 +203,124 @@ protected:
         ThriftSerializer ser(false, 4096);
         ASSERT_OK(ser.serialize(&thrift_profile, &len, &buf));
         result->append((char*)buf, len);
+    }
+
+    TExprNode _int_literal(int64_t value) {
+        TExprNode node;
+        node.node_type = TExprNodeType::INT_LITERAL;
+        node.type = gen_type_desc(TPrimitiveType::INT);
+        node.num_children = 0;
+        node.is_nullable = false;
+        TIntLiteral literal;
+        literal.value = value;
+        node.__set_int_literal(literal);
+        return node;
+    }
+
+    // Replicated storage, MAJORITY, 3 replicas. primary_of_tablet[i] is replicas[0] of tablet i.
+    // list_on_c1: partition i is selected by c1 == i + 1. Otherwise one hash partition.
+    TDataSink _build_replicated_tablets_sink(const std::vector<int64_t>& primary_of_tablet, bool list_on_c1) {
+        TDataSink data_sink = _build_data_sink();
+        auto& table_sink = data_sink.olap_table_sink;
+        table_sink.num_replicas = 3;
+        table_sink.__set_enable_replicated_storage(true);
+        table_sink.__set_write_quorum_type(TWriteQuorumType::MAJORITY);
+        auto& partition = table_sink.partition;
+        auto& location = table_sink.location;
+        int n = static_cast<int>(primary_of_tablet.size());
+        partition.partitions.resize(list_on_c1 ? n : 1);
+        location.tablets.resize(n);
+        if (list_on_c1) {
+            partition.__set_partition_columns(std::vector<std::string>{"c1"});
+        }
+        for (int i = 0; i < n; ++i) {
+            location.tablets[i].tablet_id = i;
+            location.tablets[i].node_ids.clear();
+            location.tablets[i].node_ids.push_back(primary_of_tablet[i]);
+            for (int64_t id = 0; id < 3; ++id) {
+                if (id != primary_of_tablet[i]) {
+                    location.tablets[i].node_ids.push_back(id);
+                }
+            }
+        }
+        if (list_on_c1) {
+            for (int i = 0; i < n; ++i) {
+                auto& part = partition.partitions[i];
+                part.id = 10 + i;
+                part.indexes.resize(1);
+                part.indexes[0].index_id = 0;
+                part.indexes[0].tablet_ids = {static_cast<int64_t>(i)};
+                std::vector<std::vector<TExprNode>> keys(1);
+                keys[0].push_back(_int_literal(i + 1));
+                part.__set_in_keys(keys);
+            }
+        } else {
+            auto& part = partition.partitions[0];
+            part.id = 0;
+            part.indexes.resize(1);
+            part.indexes[0].index_id = 0;
+            part.indexes[0].tablet_ids.clear();
+            for (int i = 0; i < n; ++i) {
+                part.indexes[0].tablet_ids.push_back(i);
+            }
+        }
+        return data_sink;
+    }
+
+    // Open, optionally send one row, close. add_chunk RPC to nodes selected by should_fail returns E112.
+    Status _close_with_failed_nodes(TDataSink data_sink, const std::function<bool(int64_t)>& should_fail, bool send_row,
+                                    int c1, int num_senders = 1) {
+        _data_sink = std::move(data_sink);
+        TQueryOptions query_options;
+        query_options.__set_batch_size(4096);
+        query_options.__set_query_timeout(3600);
+        auto runtime_state = _build_runtime_state(query_options);
+        runtime_state->set_num_per_fragment_instances(num_senders);
+        auto sink = _build_prepared_sink(runtime_state.get());
+
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::open_send");
+            SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::open_join");
+            SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::add_chunk_send");
+            SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::add_chunk_join");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::open_send", [](void* arg) {
+            auto* rpc_pair =
+                    static_cast<std::pair<PTabletWriterOpenRequest*, RefCountClosure<PTabletWriterOpenResult>*>*>(arg);
+            rpc_pair->second->result.mutable_status()->set_status_code(TStatusCode::OK);
+            rpc_pair->second->Run();
+        });
+        SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::open_join", [](void* arg) {
+            auto* closure = static_cast<RefCountClosure<PTabletWriterOpenResult>*>(arg);
+            EXPECT_FALSE(closure->cntl.Failed());
+        });
+        SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::add_chunk_send", [should_fail](void* arg) {
+            auto* rpc_tuple = static_cast<std::tuple<int64_t, PTabletWriterAddChunksRequest*,
+                                                     ReusableClosure<PTabletWriterAddBatchResult>*>*>(arg);
+            auto* closure = std::get<2>(*rpc_tuple);
+            if (should_fail(std::get<0>(*rpc_tuple))) {
+                closure->cntl.SetFailed("[R1][E112]Not connected to [10.128.8.1:8060]");
+            } else {
+                closure->result.mutable_status()->set_status_code(TStatusCode::OK);
+            }
+            closure->Run();
+        });
+        SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::add_chunk_join", [](void* arg) {
+            auto* rpc_pair = static_cast<std::pair<ReusableClosure<PTabletWriterAddBatchResult>*, bool*>*>(arg);
+            *rpc_pair->second = true;
+        });
+
+        CHECK_OK(sink->open(runtime_state.get()));
+        if (send_row) {
+            auto tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(_desc_tbl.tupleDescriptors[0].id);
+            ChunkUniquePtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 1);
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(c1));
+            chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(int64_t(1)));
+            CHECK_OK(sink->send_chunk(runtime_state.get(), chunk.get()));
+        }
+        return sink->close(runtime_state.get(), Status::OK());
     }
 
     int64_t _db_id;
@@ -1020,6 +1139,40 @@ TEST_F(TabletSinkIndexChannelTest, DictionaryIdentityAggregationPreservesColumnO
         EXPECT_EQ(channel._valid_dict_cache_info.content_identities.at(column),
                   commit.valid_dict_content_identities[i]);
     }
+}
+
+// Node 1 is primary only of a partition this load did not write. Its close failure is still
+// counted, but has_primary_replica alone must not fail an rn=3 MAJORITY load.
+TEST_F(TabletSinkIndexChannelTest, close_primary_of_unwritten_partition_not_fail_load) {
+    Status status = _close_with_failed_nodes(
+            _build_replicated_tablets_sink({0, 1}, true), [](int64_t node_id) { return node_id == 1; }, true, 1);
+    ASSERT_OK(status);
+}
+
+// Node 1 is primary of the other tablet in the partition this row landed in. Eos to that primary
+// is required even though this channel may have received no row, so the close failure fails the load.
+TEST_F(TabletSinkIndexChannelTest, close_primary_of_written_partition_still_fails_load) {
+    Status status = _close_with_failed_nodes(
+            _build_replicated_tablets_sink({0, 1}, false), [](int64_t node_id) { return node_id == 1; }, true, 1);
+    ASSERT_FALSE(status.ok());
+    ASSERT_TRUE(status.message().find("[R1][E112]Not connected") != std::string::npos);
+}
+
+// Two empty secondary channels still count. rn=3 MAJORITY fails at two failures.
+TEST_F(TabletSinkIndexChannelTest, close_two_empty_secondary_channels_still_fails_load) {
+    Status status = _close_with_failed_nodes(
+            _build_replicated_tablets_sink({0}, false), [](int64_t node_id) { return node_id != 0; }, true, 1);
+    ASSERT_FALSE(status.ok());
+}
+
+// Another fragment instance may have written a partition this sender never saw. This node's
+// primary commits only after every sender's EOS, so the close failure stays fatal.
+TEST_F(TabletSinkIndexChannelTest, close_empty_primary_stays_fatal_with_other_senders) {
+    Status status = _close_with_failed_nodes(
+            _build_replicated_tablets_sink({0, 1}, true), [](int64_t node_id) { return node_id == 1; }, true, 1,
+            /*num_senders=*/2);
+    ASSERT_FALSE(status.ok());
+    ASSERT_TRUE(status.message().find("[R1][E112]Not connected") != std::string::npos);
 }
 
 } // namespace starrocks

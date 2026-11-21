@@ -635,6 +635,10 @@ Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_i
         }
     }
 
+    if (_cur_chunk->num_rows() > 0) {
+        _received_any_chunk = true;
+    }
+
     if (_cur_chunk->num_rows() <= 0 || (_cur_chunk->num_rows() < _runtime_state->chunk_size() &&
                                         _cur_chunk_mem_usage < config::max_tablet_write_chunk_bytes)) {
         // 2. chunk not full
@@ -683,6 +687,10 @@ Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64
         for (size_t i = from; i < size; ++i) {
             _accumulator.append_tablet_id(index_i, index_tablet_ids[index_i][indexes[from + i]]);
         }
+    }
+
+    if (_cur_chunk->num_rows() > 0) {
+        _received_any_chunk = true;
     }
 
     if (_cur_chunk->num_rows() <= 0 || (_cur_chunk->num_rows() < _runtime_state->chunk_size() &&
@@ -1433,6 +1441,44 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
         _write_quorum_type = _parent->_write_quorum_type;
     }
     return Status::OK();
+}
+
+bool NodeChannel::is_primary_of_written_partition() const {
+    if (!_has_primary_replica) {
+        return false;
+    }
+    for (const auto& [index_id, tablets] : _index_tablets_map) {
+        auto written = _parent->_index_id_partition_ids.find(index_id);
+        if (written == _parent->_index_id_partition_ids.end()) {
+            continue;
+        }
+        for (const auto& tablet : tablets) {
+            if (written->second.count(tablet.partition_id()) == 0) {
+                continue;
+            }
+            // replicas[0] is the primary, same order as IndexChannel::init.
+            if (tablet.replicas_size() > 0 && tablet.replicas(0).node_id() == _node_id) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void IndexChannel::mark_close_failed(const NodeChannel* ch) {
+    std::unique_lock<std::shared_mutex> lock(_failure_state_mutex);
+    // has_primary_replica is set for any opened tablet, including partitions this sender never
+    // wrote. One such BE disconnecting must not fail a single-sender load. It stays fatal when
+    // this channel carried rows, when this node is primary of a tablet in a partition this sender
+    // wrote, on a lake table, or when other fragment instances exist: their partitions are not in
+    // _index_id_partition_ids, and this primary commits only after every sender's EOS arrives.
+    bool primary_fatal =
+            ch->has_primary_replica() && (_parent->_is_lake_table || ch->received_any_chunk() ||
+                                          _parent->_num_senders != 1 || ch->is_primary_of_written_partition());
+    if (primary_fatal) {
+        _has_intolerable_failure = true;
+    }
+    _failed_channels.insert(ch->node_id());
 }
 
 void IndexChannel::mark_as_failed(const NodeChannel* ch) {
