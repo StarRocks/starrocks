@@ -329,17 +329,6 @@ public class ConstantOperatorTest {
             Assertions.assertEquals(-10, var2.distance(var1));
         }
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testCharAndVarcharWithOneValueHashAlike() {
-        // equals() treats CHAR and VARCHAR as one type, so hashCode() has to as well
-        ConstantOperator asChar = ConstantOperator.createChar("abc%", new CharType(4));
-        ConstantOperator asVarchar = ConstantOperator.createVarchar("abc%");
-        Assertions.assertEquals(asChar, asVarchar);
-        Assertions.assertEquals(asChar.hashCode(), asVarchar.hashCode());
-    }
 
     @Test
     public void testCompareToNegativeZero() {
@@ -361,5 +350,4 @@ public class ConstantOperatorTest {
         Assertions.assertEquals(0,
                 ConstantOperator.createDouble(1.5).compareTo(ConstantOperator.createDouble(1.5)));
     }
->>>>>>> 576d9cf ([BugFix] Fold DOUBLE/FLOAT comparisons with IEEE-754 semantics for negative zero (#82545))
 }
