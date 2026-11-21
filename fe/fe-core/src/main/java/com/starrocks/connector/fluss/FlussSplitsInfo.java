@@ -22,10 +22,14 @@ import java.util.List;
 public class FlussSplitsInfo {
     private final List<Predicate> predicates;
     private final List<SourceSplitBase> flussSplits;
+    // Lease on the KV snapshots the splits read. The scan node drops it.
+    private final FlussKvSnapshotLease kvSnapshotLease;
 
-    public FlussSplitsInfo(List<Predicate> predicates, List<SourceSplitBase> flussSplits) {
+    public FlussSplitsInfo(List<Predicate> predicates, List<SourceSplitBase> flussSplits,
+                           FlussKvSnapshotLease kvSnapshotLease) {
         this.predicates = predicates;
         this.flussSplits = flussSplits;
+        this.kvSnapshotLease = kvSnapshotLease;
     }
 
     public List<Predicate> getPredicates() {
@@ -34,5 +38,9 @@ public class FlussSplitsInfo {
 
     public List<SourceSplitBase> getFlussSplits() {
         return flussSplits;
+    }
+
+    public FlussKvSnapshotLease getKvSnapshotLease() {
+        return kvSnapshotLease;
     }
 }

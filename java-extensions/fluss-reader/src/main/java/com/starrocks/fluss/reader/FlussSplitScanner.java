@@ -23,9 +23,13 @@ import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.fluss.client.Connection;
 import org.apache.fluss.client.ConnectionFactory;
 import org.apache.fluss.client.table.Table;
+import org.apache.fluss.client.table.scanner.batch.KvSnapshotAndLogBatchScanner;
+import org.apache.fluss.client.table.scanner.batch.LakeSnapshotAndLogSplitScanner;
 import org.apache.fluss.config.Configuration;
+import org.apache.fluss.flink.lake.reader.LakeSnapshotScanner;
 import org.apache.fluss.flink.lake.split.LakeSnapshotAndFlussLogSplit;
 import org.apache.fluss.flink.lake.split.LakeSnapshotSplit;
+import org.apache.fluss.flink.source.split.HybridSnapshotLogSplit;
 import org.apache.fluss.flink.source.split.SourceSplitBase;
 import org.apache.fluss.flink.source.split.SourceSplitSerializer;
 import org.apache.fluss.lake.paimon.source.PaimonLakeSource;
@@ -48,6 +52,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -164,26 +169,7 @@ public class FlussSplitScanner extends ConnectorScanner {
             byte[] splitBytes = BASE64_DECODER.decode(splitInfo.getBytes(UTF_8));
             SourceSplitBase split = serializer.deserialize(serializer.getVersion(), splitBytes);
 
-            if (split.isLogSplit()) {
-                delegateScanner = new FlussLogScanner(table, split.asLogSplit(), projectedFields);
-            } else if (split.isLakeSplit()) {
-                if (split instanceof LakeSnapshotSplit) {
-                    lakeSource.withProject(Arrays.stream(projectedFields)
-                            .mapToObj(field -> new int[] {field})
-                            .toArray(int[][]::new));
-                    delegateScanner = new FlussSnapshotScanner(lakeSource, (LakeSnapshotSplit) split);
-                } else if (split instanceof LakeSnapshotAndFlussLogSplit) {
-                    delegateScanner = new FlussSnapshotAndLogScanner(
-                            table, lakeSource, (LakeSnapshotAndFlussLogSplit) split, projectedFields);
-                } else {
-                    throw new UnsupportedOperationException(
-                            "Unsupported lake split type: " + split.getClass().getName());
-                }
-            } else {
-                throw new UnsupportedOperationException(
-                        "Unsupported split type: " + split.getClass().getName());
-            }
-
+            delegateScanner = createScanner(table, lakeSource, split, projectedFields);
             delegateScanner.open();
         } catch (Exception e) {
             close();
@@ -191,6 +177,40 @@ public class FlussSplitScanner extends ConnectorScanner {
             LOG.error(msg, e);
             throw new IOException(msg, e);
         }
+    }
+
+    /** Picks the reader for one split; a bounded split must carry its stopping offset. */
+    static ConnectorScannerProxy createScanner(Table table, LakeSource<LakeSplit> lakeSource, SourceSplitBase split,
+                                               int[] projectedFields) {
+        if (split.isLogSplit()) {
+            return new FlussLogScanner(table, split.asLogSplit(), projectedFields);
+        }
+        if (split.isHybridSnapshotLogSplit()) {
+            HybridSnapshotLogSplit snapshotLogSplit = split.asHybridSnapshotLogSplit();
+            long stoppingOffset = requireStoppingOffset(snapshotLogSplit.getLogStoppingOffset(), split);
+            return new FlussBatchScanner(new KvSnapshotAndLogBatchScanner(table,
+                    snapshotLogSplit.getTableBucket(), snapshotLogSplit.getSnapshotId(),
+                    snapshotLogSplit.getLogStartingOffset(), stoppingOffset, projectedFields));
+        }
+        if (split instanceof LakeSnapshotSplit) {
+            lakeSource.withProject(Arrays.stream(projectedFields)
+                    .mapToObj(field -> new int[] {field})
+                    .toArray(int[][]::new));
+            return new FlussBatchScanner(new LakeSnapshotScanner(lakeSource, (LakeSnapshotSplit) split));
+        }
+        if (split instanceof LakeSnapshotAndFlussLogSplit) {
+            LakeSnapshotAndFlussLogSplit lakeAndLogSplit = (LakeSnapshotAndFlussLogSplit) split;
+            long stoppingOffset = requireStoppingOffset(lakeAndLogSplit.getStoppingOffset(), split);
+            return new FlussBatchScanner(new LakeSnapshotAndLogSplitScanner(table, lakeSource,
+                    lakeAndLogSplit.getLakeSplits(), lakeAndLogSplit.getTableBucket(),
+                    lakeAndLogSplit.getStartingOffset(), stoppingOffset, projectedFields));
+        }
+        throw new UnsupportedOperationException("Unsupported split type: " + split.getClass().getName());
+    }
+
+    private static long requireStoppingOffset(Optional<Long> stoppingOffset, SourceSplitBase split) {
+        return stoppingOffset.orElseThrow(
+                () -> new IllegalArgumentException("Stopping offset is required for Fluss split: " + split));
     }
 
     @Override
