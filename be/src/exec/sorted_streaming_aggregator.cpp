@@ -14,6 +14,7 @@
 
 #include "exec/sorted_streaming_aggregator.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <utility>
@@ -263,9 +264,33 @@ SortedStreamingAggregator::~SortedStreamingAggregator() {
 
 Status SortedStreamingAggregator::open(RuntimeState* state) {
     RETURN_IF_ERROR(Aggregator::open(state));
+    _num_created_states.resize(_agg_fn_ctxs.size(), 0);
     _streaming_state_allocator =
             std::make_shared<StateAllocator>(_mem_pool.get(), state->chunk_size(), _agg_states_total_size);
     return Status::OK();
+}
+
+void SortedStreamingAggregator::_release_agg_memory() {
+    _has_pending_batch = false;
+    _last_columns.clear();
+    if (_last_state == nullptr && _batch_state_begin == nullptr) {
+        return;
+    }
+
+    SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
+    SCOPED_TIMER(_agg_stat->state_destroy_timer);
+    for (size_t i = 0; i < _num_created_states.size(); ++i) {
+        for (size_t j = 0; j < _num_created_states[i]; ++j) {
+            _agg_functions[i]->destroy(_agg_fn_ctxs[i],
+                                       _batch_state_begin + j * _agg_states_total_size + _agg_states_offsets[i]);
+        }
+    }
+    if (_last_state != nullptr) {
+        _destroy_state(_last_state);
+        _last_state = nullptr;
+    }
+    _batch_state_begin = nullptr;
+    std::fill(_num_created_states.begin(), _num_created_states.end(), 0);
 }
 
 StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size, bool is_update_phase) {
@@ -273,6 +298,7 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_agg_state(size_t
         return std::make_shared<Chunk>();
     }
 
+    _has_pending_batch = true;
     _tmp_agg_states.resize(chunk_size);
     _cmp_vector.resize(chunk_size);
 
@@ -315,10 +341,10 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_agg_state(size_t
         _last_columns[i]->as_mutable_raw_ptr()->reset_column();
         _last_columns[i]->as_mutable_raw_ptr()->append(*_group_by_columns[i], chunk_size - 1, 1);
     }
-    _last_state = _tmp_agg_states[chunk_size - 1];
     DCHECK(!_group_by_columns[0]->empty());
     DCHECK(!_last_columns[0]->empty());
 
+    _has_pending_batch = false;
     return result_chunk;
 }
 
@@ -383,7 +409,8 @@ Status SortedStreamingAggregator::_update_states(size_t chunk_size, bool is_upda
     // allocate state stage
     {
         SCOPED_TIMER(_agg_stat->allocate_state_timer);
-        auto batch_allocated_states = _streaming_state_allocator->allocated(_last_state);
+        DCHECK(_batch_state_begin == nullptr);
+        _batch_state_begin = _streaming_state_allocator->allocated(_last_state);
         AggDataPtr last_state = _last_state;
         size_t cnt = 0;
         //
@@ -391,7 +418,7 @@ Status SortedStreamingAggregator::_update_states(size_t chunk_size, bool is_upda
             if (_cmp_vector[i] == 0) {
                 _tmp_agg_states[i] = last_state;
             } else {
-                _tmp_agg_states[i] = batch_allocated_states + cnt++ * _agg_states_total_size;
+                _tmp_agg_states[i] = _batch_state_begin + cnt++ * _agg_states_total_size;
             }
             last_state = _tmp_agg_states[i];
         }
@@ -405,7 +432,8 @@ Status SortedStreamingAggregator::_update_states(size_t chunk_size, bool is_upda
         //
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             _agg_functions[i]->batch_create_with_selection(_agg_fn_ctxs[i], chunk_size, _tmp_agg_states,
-                                                           _agg_states_offsets[i], create_selector);
+                                                           _agg_states_offsets[i], create_selector,
+                                                           &_num_created_states[i]);
         }
     }
 
@@ -469,6 +497,10 @@ void SortedStreamingAggregator::_close_group_by(size_t chunk_size, const Filter&
         _agg_functions[i]->batch_destroy_with_selection(_agg_fn_ctxs[i], chunk_size, _tmp_agg_states,
                                                         _agg_states_offsets[i], selector);
     }
+    // Transfer ownership before output construction can fail.
+    _last_state = _tmp_agg_states[chunk_size - 1];
+    _batch_state_begin = nullptr;
+    std::fill(_num_created_states.begin(), _num_created_states.end(), 0);
 }
 
 Status SortedStreamingAggregator::_build_group_by_columns(size_t chunk_size, const Filter& selector,
@@ -489,7 +521,9 @@ Status SortedStreamingAggregator::_build_group_by_columns(size_t chunk_size, con
 }
 
 StatusOr<ChunkPtr> SortedStreamingAggregator::pull_eos_chunk() {
-    if (_last_state == nullptr && _last_columns.empty()) {
+    // Cancellation must not finalize states from a batch that did not complete.
+    if (_has_pending_batch || _last_columns.empty() || _last_columns[0]->empty() ||
+        (_last_state == nullptr && !_is_only_group_by_columns)) {
         return nullptr;
     }
     SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
