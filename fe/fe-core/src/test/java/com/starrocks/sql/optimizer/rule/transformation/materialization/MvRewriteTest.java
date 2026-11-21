@@ -20,10 +20,14 @@ import com.google.common.collect.Range;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
@@ -2470,5 +2474,38 @@ public class MvRewriteTest extends MVTestBase {
                     PlanTestBase.assertContains(plan, "test_mv1");
                     connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(0);
                 });
+    }
+
+    @Test
+    public void testSelectDistinctConstantWithLimitTabletPrune() throws Exception {
+        // RB-1226: SELECT DISTINCT <constant> becomes a scan with LIMIT 1. In the multi-stage MV rewrite, which applies
+        // the partition prune rules iteratively, DistributionPruneRule restored every tablet and LimitPruneTabletsRule
+        // narrowed them again on every pass, so planning never finished. The tablets need rows for the limit pruning.
+        starRocksAssert.withTable("CREATE TABLE t_rb1226 (k1 INT NOT NULL, v1 INT) DUPLICATE KEY(k1) " +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 3 PROPERTIES ('replication_num' = '1')");
+        starRocksAssert.withRefreshedMaterializedView("CREATE MATERIALIZED VIEW mv_rb1226 " +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 1 REFRESH MANUAL AS SELECT k1, v1 FROM t_rb1226");
+        OlapTable table = (OlapTable) starRocksAssert.getTable("test", "t_rb1226");
+        for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
+            long version = partition.getVisibleVersion();
+            for (Tablet tablet : partition.getLatestBaseIndex().getTablets()) {
+                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                    replica.updateRowCount(version, 100, 10);
+                }
+            }
+        }
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        long timeout = sessionVariable.getOptimizerExecuteTimeout();
+        try {
+            sessionVariable.setOptimizerExecuteTimeout(3000);
+            String plan = getFragmentPlan("SELECT DISTINCT 1 FROM t_rb1226");
+            PlanTestBase.assertContains(plan, "OlapScanNode");
+            plan = getFragmentPlan("SELECT count(*) FROM t_rb1226 WHERE v1 = (SELECT DISTINCT 1 FROM t_rb1226 LIMIT 1)");
+            PlanTestBase.assertContains(plan, "OlapScanNode");
+        } finally {
+            sessionVariable.setOptimizerExecuteTimeout(timeout);
+            starRocksAssert.dropMaterializedView("mv_rb1226");
+            starRocksAssert.dropTable("t_rb1226");
+        }
     }
 }
