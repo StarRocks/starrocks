@@ -1703,9 +1703,9 @@ public class StmtExecutor {
             LOG.debug("need to transfer to Leader. stmt: {}", context.getStmtId());
             try {
                 leaderOpExecutor.execute();
-            } catch (TTransportException e) {
-                // The connection broke after the statement was sent, so the leader may have applied it.
-                // Reporting an ordinary error would tell the client it failed.
+            } catch (TTransportException | LeaderOpExecutor.ForwardAbortedException e) {
+                // The connection broke, or was closed because the leader changed, after the statement was sent,
+                // so the leader may have applied it. Reporting an ordinary error would tell the client it failed.
                 throw ErrorReportException.report(ErrorCode.ERR_FORWARD_RESULT_UNKNOWN, e.getMessage());
             }
         } finally {

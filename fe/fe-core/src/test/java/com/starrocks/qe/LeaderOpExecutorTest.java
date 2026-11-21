@@ -21,6 +21,7 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.ha.LeaderInfo;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.GlobalStateMgr;
@@ -40,6 +41,7 @@ import mockit.MockUp;
 import org.apache.commons.pool2.impl.GenericKeyedObjectPoolConfig;
 import org.apache.thrift.TException;
 import org.apache.thrift.transport.TTransportException;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -48,7 +50,13 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 public class LeaderOpExecutorTest {
     private static ConnectContext connectContext;
@@ -251,6 +259,156 @@ public class LeaderOpExecutorTest {
             return ctx;
         } finally {
             ThriftConnectionPool.frontendPool = savedPool;
+        }
+    }
+
+    /**
+     * A forward waiting for a reply from an FE that stops being the leader must end when this FE learns of
+     * the new leader, as an unknown outcome, instead of waiting out its read timeout (hours for an INSERT).
+     * The old leader here never replies and never closes the connection, as one that is partitioned away.
+     */
+    @Test
+    public void testForwardWaitingOnTheOldLeaderEndsWhenTheLeaderChanges() throws Exception {
+        forwardToSilentLeader(forward ->
+                withLeader(new LeaderInfo("127.0.0.2", 8030, 9020), () -> {
+                    Awaitility.await().atMost(10, TimeUnit.SECONDS).until(forward::done);
+                    Assertions.assertNotNull(forward.error());
+                    Assertions.assertTrue(
+                            forward.error().getMessage().contains("the leader changed to 127.0.0.2:9020"),
+                            forward.error().getMessage());
+                }));
+    }
+
+    /**
+     * A forward to the FE that is still the leader is left alone when the leader info is set again.
+     */
+    @Test
+    public void testForwardToTheCurrentLeaderIsNotFailedByALeaderUpdate() throws Exception {
+        forwardToSilentLeader(forward -> {
+            NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+            Pair<String, Integer> leader = nodeMgr.getLeaderIpAndRpcPort();
+            withLeader(new LeaderInfo(leader.first, 8030, leader.second), () ->
+                    Awaitility.await().during(1, TimeUnit.SECONDS).atMost(2, TimeUnit.SECONDS)
+                            .until(() -> !forward.done()));
+        });
+    }
+
+    /**
+     * Makes a stand-in leader that never replies the leader this FE knows, starts a forward of an INSERT to
+     * it, as a follower does, waits until the request has arrived, and runs the check. Everything it changed
+     * is put back afterwards.
+     */
+    private static void forwardToSilentLeader(Consumer<ForwardInThread> check)
+            throws Exception {
+        ThriftConnectionPool<FrontendService.Client> savedPool = ThriftConnectionPool.frontendPool;
+        ThriftConnectionPool.frontendPool = realFrontendPool();
+        try (SilentLeader silent = new SilentLeader()) {
+            withLeader(new LeaderInfo("127.0.0.1", 8030, silent.port()), () -> {
+                try {
+                    StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(
+                            "insert into d1.t1 select * from d1.t1", connectContext);
+                    // This constructor sends to the leader the FE knows, as StmtExecutor.forwardToLeader() does.
+                    LeaderOpExecutor executor = new LeaderOpExecutor(stmt, stmt.getOrigStmt(), connectContext,
+                            RedirectStatus.FORWARD_NO_SYNC, false, null);
+                    ForwardInThread forward = new ForwardInThread(executor);
+                    Awaitility.await().atMost(10, TimeUnit.SECONDS).until(() -> silent.requests() == 1);
+                    check.accept(forward);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        } finally {
+            ThriftConnectionPool.frontendPool = savedPool;
+        }
+    }
+
+    /**
+     * Sets the leader info as a follower does when it replays the new leader's record, runs the check, then
+     * puts the previous leader info back.
+     */
+    private static void withLeader(LeaderInfo leader, Runnable check) {
+        NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+        Pair<String, Integer> rpc = nodeMgr.getLeaderIpAndRpcPort();
+        Pair<String, Integer> http = nodeMgr.getLeaderIpAndHttpPort();
+        nodeMgr.setLeader(leader);
+        try {
+            check.run();
+        } finally {
+            nodeMgr.setLeader(new LeaderInfo(rpc.first, http.second, rpc.second));
+        }
+    }
+
+    /**
+     * Runs a forward on its own thread, as the follower's connection thread would, and keeps how it ended.
+     */
+    private static class ForwardInThread {
+        private final AtomicReference<Throwable> error = new AtomicReference<>();
+        private final AtomicBoolean done = new AtomicBoolean();
+
+        ForwardInThread(LeaderOpExecutor executor) {
+            Thread thread = new Thread(() -> {
+                try {
+                    executor.execute();
+                } catch (Throwable t) {
+                    error.set(t);
+                } finally {
+                    done.set(true);
+                }
+            }, "forward-under-test");
+            thread.setDaemon(true);
+            thread.start();
+        }
+
+        boolean done() {
+            return done.get();
+        }
+
+        Throwable error() {
+            return error.get();
+        }
+    }
+
+    /**
+     * A stand-in leader that accepts connections and reads the request, then neither replies nor closes the
+     * connection until the test ends, as a leader cut off by a network partition.
+     */
+    private static class SilentLeader implements AutoCloseable {
+        private final ServerSocket server = new ServerSocket(0, 50, InetAddress.getLoopbackAddress());
+        private final AtomicInteger requests = new AtomicInteger();
+        private final List<Socket> accepted = new CopyOnWriteArrayList<>();
+
+        SilentLeader() throws IOException {
+            Thread acceptor = new Thread(() -> {
+                while (!server.isClosed()) {
+                    try {
+                        Socket socket = server.accept();
+                        accepted.add(socket);
+                        if (socket.getInputStream().read(new byte[65536]) > 0) {
+                            requests.incrementAndGet();
+                        }
+                    } catch (IOException e) {
+                        return;
+                    }
+                }
+            }, "silent-leader");
+            acceptor.setDaemon(true);
+            acceptor.start();
+        }
+
+        int port() {
+            return server.getLocalPort();
+        }
+
+        int requests() {
+            return requests.get();
+        }
+
+        @Override
+        public void close() throws IOException {
+            server.close();
+            for (Socket socket : accepted) {
+                socket.close();
+            }
         }
     }
 

@@ -199,6 +199,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.JournalObservable;
+import com.starrocks.qe.LeaderOpExecutor;
 import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.SimpleScheduler;
@@ -901,6 +902,7 @@ public class GlobalStateMgr {
         this.variableMgr = new VariableMgr();
 
         nodeMgr.registerLeaderChangeListener(globalSlotProvider::leaderChangeListener);
+        nodeMgr.registerLeaderChangeListener(LeaderOpExecutor::onLeaderChange);
 
         this.memoryUsageTracker = new MemoryUsageTracker();
         this.procProfileCollector = new ProcProfileCollector();

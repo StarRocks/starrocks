@@ -43,6 +43,7 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.ha.LeaderInfo;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.rpc.ThriftConnectionPool;
@@ -71,15 +72,22 @@ import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TUserRoles;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TException;
+import org.apache.thrift.transport.TTransport;
+import org.apache.thrift.transport.TTransportException;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class LeaderOpExecutor {
     private static final Logger LOG = LogManager.getLogger(LeaderOpExecutor.class);
     public static final int MAX_FORWARD_TIMES = 30;
+    // Forwards waiting for the leader's reply, by connection; see onLeaderChange().
+    private static final Map<TTransport, InFlightForward> IN_FLIGHT_FORWARDS = new ConcurrentHashMap<>();
 
     private final OriginStatement originStmt;
     private StatementBase parsedStmt;
@@ -91,6 +99,9 @@ public class LeaderOpExecutor {
     // the total time of thrift connectTime add readTime and writeTime
     private int thriftTimeoutMs;
     private final Pair<String, Integer> ipAndPort;
+    // Whether ipAndPort is the leader this FE knew when the statement started, rather than an FE chosen by
+    // the caller (the KILL fan-out). Only such forwards are failed when the leader changes.
+    private boolean toLeader;
 
     private final CompletableFuture<ArrowFlightSqlResultDescriptor> deploymentFinished;
 
@@ -103,6 +114,7 @@ public class LeaderOpExecutor {
                             CompletableFuture<ArrowFlightSqlResultDescriptor> deploymentFinished) {
         this(GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort(), parsedStmt, originStmt, ctx, status,
                 isInternalStmt, deploymentFinished);
+        this.toLeader = true;
     }
 
     public LeaderOpExecutor(Pair<String, Integer> ipAndPort, StatementBase parsedStmt, OriginStatement originStmt,
@@ -242,7 +254,94 @@ public class LeaderOpExecutor {
                 thriftAddress,
                 thriftTimeoutMs,
                 1,
-                client -> client.forward(params));
+                client -> {
+                    TTransport transport = client.getInputProtocol() != null
+                            ? client.getInputProtocol().getTransport() : null;
+                    if (!toLeader || transport == null) {
+                        return client.forward(params);
+                    }
+                    InFlightForward inFlight = new InFlightForward(thriftAddress, transport);
+                    IN_FLIGHT_FORWARDS.put(transport, inFlight);
+                    try {
+                        // A leader change replayed since this executor was created would not reach this forward.
+                        Pair<String, Integer> leader = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
+                        if (leader != null && !inFlight.isTo(leader.first, leader.second)) {
+                            throw new TException("the leader changed to " + leader.first + ":" + leader.second +
+                                    " before the statement was sent to " + thriftAddress);
+                        }
+                        return client.forward(params);
+                    } catch (TTransportException e) {
+                        if (inFlight.newLeader != null) {
+                            // Not a TTransportException: the RPC helper would reopen the connection to the old
+                            // leader first, which waits out a connect timeout when that FE is unreachable.
+                            throw new ForwardAbortedException("the leader changed to " + inFlight.newLeader +
+                                    " while waiting for the reply from " + thriftAddress, e);
+                        }
+                        throw e;
+                    } finally {
+                        IN_FLIGHT_FORWARDS.remove(transport, inFlight);
+                        inFlight.finish();
+                    }
+                });
+    }
+
+    /**
+     * Fails the forwards still waiting for a reply from an FE that is no longer the leader, by closing their
+     * connections. Without this a forward waits until its read timeout (the statement's execution timeout,
+     * hours for an INSERT) or until TCP notices the connection is dead, which it does not if the old leader
+     * went away without a reset (host or container gone, network partition) and this FE sends nothing.
+     * The old leader may have applied the statement, so the forward ends as an unknown outcome.
+     */
+    public static void onLeaderChange(LeaderInfo leader) {
+        for (InFlightForward inFlight : IN_FLIGHT_FORWARDS.values()) {
+            if (!inFlight.isTo(leader.getIp(), leader.getRpcPort())) {
+                try {
+                    inFlight.abort(leader.getIp() + ":" + leader.getRpcPort());
+                } catch (Exception e) {
+                    LOG.warn("failed to fail a forward to {} after the leader changed", inFlight.leader, e);
+                }
+            }
+        }
+    }
+
+    private static final class InFlightForward {
+        private final TNetworkAddress leader;
+        private final TTransport transport;
+        private volatile String newLeader;
+        private boolean finished;
+
+        private InFlightForward(TNetworkAddress leader, TTransport transport) {
+            this.leader = leader;
+            this.transport = transport;
+        }
+
+        private boolean isTo(String host, int port) {
+            return leader.getHostname().equals(host) && leader.getPort() == port;
+        }
+
+        // Closes the connection only while the forward still holds it: once finish() ran, the connection may be
+        // back in the pool and in use by another forward.
+        private synchronized void abort(String newLeader) {
+            if (finished) {
+                return;
+            }
+            this.newLeader = newLeader;
+            LOG.warn("leader changed to {}, failing a forward still waiting for {}", newLeader, leader);
+            transport.close();
+        }
+
+        private synchronized void finish() {
+            finished = true;
+        }
+    }
+
+    /**
+     * A forward failed because the FE it was sent to stopped being the leader before it replied.
+     */
+    public static class ForwardAbortedException extends TException {
+        public ForwardAbortedException(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 
     public TMasterOpResult getResult() {
