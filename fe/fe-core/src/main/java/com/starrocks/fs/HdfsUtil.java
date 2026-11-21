@@ -190,8 +190,11 @@ public class HdfsUtil {
             writer.open();
             ByteBuffer byteBuffer = ByteBuffer.wrap(data);
             writer.write(byteBuffer, data.length);
-        } finally {
+            // Not in finally: a failed close is a failed write (see HdfsWriter.close()) and must reach the caller.
             writer.close();
+        } finally {
+            // No-op after close(); releases the stream when open() or write() failed.
+            writer.closeQuietly();
         }
     }
 
@@ -200,7 +203,7 @@ public class HdfsUtil {
         try {
             writer.open();
         } catch (StarRocksException e) {
-            writer.close();
+            writer.closeQuietly();
             return null;
         }
         return writer;
@@ -230,14 +233,16 @@ public class HdfsUtil {
                 writer.write(byteBuffer, readSize);
                 byteBuffer.clear();
             }
+            // Not in finally: a failed close is a failed write (see HdfsWriter.close()) and must reach the caller.
+            writer.close();
         } catch (IOException e) {
             String failMsg = "Write file exception. srcPath = " + srcFilePath +
                     ", destPath = " + destFilePath;
             LOG.warn(failMsg, e);
             throw new StarRocksException(failMsg);
         } finally {
-            // close broker file writer and local file input stream
-            writer.close();
+            // No-op after close(); releases the stream when reading or writing failed.
+            writer.closeQuietly();
         }
     }
 
@@ -378,18 +383,33 @@ public class HdfsUtil {
             currentOffset += bufferSize;
         }
 
-        public void close() {
-            // close writer
-            if (fd != null) {
-                TBrokerCloseWriterRequest tCloseWriterRequest = new TBrokerCloseWriterRequest(
-                        TBrokerVersion.VERSION_ONE, fd);
-                try {
-                    hdfsService.closeWriter(tCloseWriterRequest);
-                } catch (StarRocksException e) {
-                    LOG.warn("HDFS close writer failed. filePath={}", filePath);
-                }
-            }
+        /**
+         * Closes the remote stream and reports whether the data made it. Object stores such as S3A buffer
+         * the data and upload it when the stream is closed, so a failed close means the file was not
+         * written; callers must treat it as a failed write.
+         */
+        public void close() throws StarRocksException {
             isReady = false;
+            if (fd == null) {
+                return;
+            }
+            TBrokerCloseWriterRequest tCloseWriterRequest = new TBrokerCloseWriterRequest(
+                    TBrokerVersion.VERSION_ONE, fd);
+            // closeWriter drops the stream whether or not it succeeds, so the same fd must never be closed twice.
+            fd = null;
+            hdfsService.closeWriter(tCloseWriterRequest);
+        }
+
+        /**
+         * Best-effort close for error paths, where the original failure is what the caller reports.
+         * A close failure here is only logged, with its cause. No-op after close().
+         */
+        public void closeQuietly() {
+            try {
+                close();
+            } catch (StarRocksException e) {
+                LOG.warn("HDFS close writer failed. filePath={}", filePath, e);
+            }
         }
     }
 }
