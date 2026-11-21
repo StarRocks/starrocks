@@ -16,6 +16,7 @@ import logging
 from unittest.mock import Mock
 
 from alembic.autogenerate.api import AutogenContext
+from sqlalchemy.testing import fixtures
 
 from starrocks.alembic.ops import (
     AlterViewOp,
@@ -33,8 +34,8 @@ from test.unit.test_render import _normalize_py_call
 logger = logging.getLogger(__name__)
 
 
-class TestViewRendering:
-    def setup_method(self, method):
+class ViewRenderingTest(fixtures.TestBase):
+    def setup_test(self):
         self.ctx = Mock(spec=AutogenContext)
 
     def test_render_create_view_basic(self):
@@ -209,7 +210,7 @@ class TestViewRendering:
         rendered = _create_view(self.ctx, op)
         logger.debug(f"rendered={rendered}")
         expected_list = [
-            f"op.create_view('v_complex', ",
+            "op.create_view('v_complex', ",
             f"{repr(op.definition)}, ",
             f"schema={repr(op.schema)})"
         ]

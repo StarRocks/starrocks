@@ -12,12 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
-
-import pytest
-from sqlalchemy import Column, MetaData, Table
-from sqlalchemy.dialects import registry
-from sqlalchemy.schema import CreateTable
+from sqlalchemy import Column, MetaData, Table, testing
+from sqlalchemy.schema import CreateColumn
+from sqlalchemy.testing import expect_warnings, fixtures
+from sqlalchemy.testing.assertions import AssertsCompiledSQL
 
 from starrocks.datatype import (
     ARRAY,
@@ -43,133 +41,98 @@ from starrocks.datatype import (
     VARBINARY,
     VARCHAR,
 )
-from test.test_utils import normalize_sql
+from starrocks.dialect import StarRocksDialect
 
 
-# Test data for different type categories
-BASIC_TYPE_TEST_CASES = [
-    # (type_instance, expected_sql)
-    (TINYINT(), "col TINYINT"),
-    (TINYINT(1), "col TINYINT(1)"),
-    (SMALLINT(), "col SMALLINT"),
-    (INTEGER(), "col INTEGER"),
-    (BIGINT(), "col BIGINT"),
-    (BIGINT(20), "col BIGINT(20)"),
-    (LARGEINT(), "col LARGEINT"),
-    (BOOLEAN(), "col BOOLEAN"),
-    (DECIMAL(), "col DECIMAL"),
-    (DECIMAL(10), "col DECIMAL(10)"),
-    (DECIMAL(10, 2), "col DECIMAL(10,2)"),
-    (FLOAT(), "col FLOAT"),
-    (FLOAT(10), "col FLOAT"),
-    (DOUBLE(), "col DOUBLE"),
-    (CHAR(10), "col CHAR(10)"),
-    (VARCHAR(255), "col VARCHAR(255)"),
-    (STRING(), "col STRING"),
-    (BINARY(10), "col BINARY"),  # StarRocks BINARY might not preserve length in compilation
-    (VARBINARY(255), "col VARBINARY"),  # StarRocks VARBINARY might not preserve length in compilation
-    (DATE(), "col DATE"),
-    (DATETIME(), "col DATETIME"),
-    (HLL(), "col HLL"),
-    (BITMAP(), "col BITMAP"),
-    # (PERCENTILE(), "col PERCENTILE"),  # PERCENTILE type compiler not implemented yet
-    (JSON(), "col JSON"),
-]
+class DataTypeCompileTest(fixtures.TestBase, AssertsCompiledSQL):
+    """The DDL each StarRocks type renders, alone and as a column with constraints."""
 
-COMPLEX_TYPE_TEST_CASES = [
-    # ARRAY types
-    (ARRAY(INTEGER), "col ARRAY<INTEGER>"),
-    (ARRAY(VARCHAR(50)), "col ARRAY<VARCHAR(50)>"),
-    (ARRAY(ARRAY(INTEGER)), "col ARRAY<ARRAY<INTEGER>>"),
+    __dialect__ = StarRocksDialect()
 
-    # MAP types
-    (MAP(STRING, INTEGER), "col MAP<STRING,INTEGER>"),
-    (MAP(VARCHAR(50), DOUBLE), "col MAP<VARCHAR(50),DOUBLE>"),
-    (MAP(STRING, MAP(INTEGER, STRING)), "col MAP<STRING,MAP<INTEGER,STRING>>"),
+    @testing.combinations(
+        (TINYINT(), "TINYINT"),
+        (TINYINT(1), "TINYINT(1)"),
+        (SMALLINT(), "SMALLINT"),
+        (INTEGER(), "INTEGER"),
+        (BIGINT(), "BIGINT"),
+        (BIGINT(20), "BIGINT(20)"),
+        (LARGEINT(), "LARGEINT"),
+        (BOOLEAN(), "BOOLEAN"),
+        (DECIMAL(), "DECIMAL"),
+        (DECIMAL(10), "DECIMAL(10)"),
+        (DECIMAL(10, 2), "DECIMAL(10, 2)"),
+        (DECIMAL(38, 18), "DECIMAL(38, 18)"),
+        (FLOAT(), "FLOAT"),
+        (FLOAT(10), "FLOAT"),
+        (DOUBLE(), "DOUBLE"),
+        (CHAR(10), "CHAR(10)"),
+        (VARCHAR(255), "VARCHAR(255)"),
+        (VARCHAR(65533), "STRING"),
+        (STRING(), "STRING"),
+        (BINARY(10), "BINARY"),
+        (VARBINARY(255), "VARBINARY"),
+        (DATE(), "DATE"),
+        (DATETIME(), "DATETIME"),
+        (HLL(), "HLL"),
+        (BITMAP(), "BITMAP"),
+        (JSON(), "JSON"),
+        argnames="type_, expected",
+        id_="ra",
+    )
+    def test_scalar_type(self, type_, expected):
+        """BINARY and VARBINARY drop their length; VARCHAR at StarRocks' maximum length renders as STRING."""
+        self.assert_compile(type_, expected)
 
-    # STRUCT types
-    (STRUCT(name=STRING, age=INTEGER), "col STRUCT<name STRING,age INTEGER>"),
-    (STRUCT(id=INTEGER, name=VARCHAR(100), active=BOOLEAN),
-     "col STRUCT<id INTEGER,name VARCHAR(100),active BOOLEAN>"),
-    (STRUCT(user=STRUCT(id=INTEGER, name=STRING), metadata=MAP(STRING, STRING)),
-     "col STRUCT<user STRUCT<id INTEGER,name STRING>,metadata MAP<STRING,STRING>>"),
-]
+    @testing.combinations(
+        (ARRAY(INTEGER), "ARRAY<INTEGER>"),
+        (ARRAY(VARCHAR(50)), "ARRAY<VARCHAR(50)>"),
+        (ARRAY(ARRAY(INTEGER)), "ARRAY<ARRAY<INTEGER>>"),
+        (MAP(STRING, INTEGER), "MAP<STRING, INTEGER>"),
+        (MAP(VARCHAR(50), DOUBLE), "MAP<VARCHAR(50), DOUBLE>"),
+        (MAP(STRING, MAP(INTEGER, STRING)), "MAP<STRING, MAP<INTEGER, STRING>>"),
+        (STRUCT(name=STRING, age=INTEGER), "STRUCT<name STRING, age INTEGER>"),
+        (
+            STRUCT(id=INTEGER, name=VARCHAR(100), active=BOOLEAN),
+            "STRUCT<id INTEGER, name VARCHAR(100), active BOOLEAN>",
+        ),
+        (
+            STRUCT(user=STRUCT(id=INTEGER, name=STRING), metadata=MAP(STRING, STRING)),
+            "STRUCT<user STRUCT<id INTEGER, name STRING>, metadata MAP<STRING, STRING>>",
+        ),
+        (
+            ARRAY(
+                MAP(STRING, STRUCT(level1=ARRAY(MAP(INTEGER, STRUCT(level2=STRING, level2_array=ARRAY(INTEGER))))))
+            ),
+            "ARRAY<MAP<STRING, STRUCT<level1 ARRAY<MAP<INTEGER, "
+            "STRUCT<level2 STRING, level2_array ARRAY<INTEGER>>>>>>>",
+        ),
+        argnames="type_, expected",
+        id_="ra",
+    )
+    def test_complex_type(self, type_, expected):
+        """ARRAY, MAP and STRUCT do not set ``cache_ok``, so SQLAlchemy cannot cache statements that use them.
 
-CONSTRAINT_TEST_CASES = [
-    # (type_instance, nullable, comment, server_default, expected_sql)
-    (INTEGER(), False, None, None, "col INTEGER NOT NULL"),
-    (VARCHAR(100), None, 'A test column', None, "col VARCHAR(100) COMMENT 'A test column'"),
-    (INTEGER(), None, None, '0', "col INTEGER DEFAULT '0'"),
-    (VARCHAR(50), False, 'Full test column', 'test',
-     "col VARCHAR(50) NOT NULL DEFAULT 'test' COMMENT 'Full test column'"),
-    # Test empty string default value
-    (VARCHAR(50), None, None, '', "col VARCHAR(50) DEFAULT ''"),
-    (STRING(), None, None, '', "col STRING DEFAULT ''"),
-]
+        That is a dialect bug; drop the ``expect_warnings`` once the types declare whether they are cacheable.
+        """
+        with expect_warnings("UserDefinedType .* will not produce a cache key"):
+            self.assert_compile(type_, expected)
 
-EDGE_CASE_TEST_CASES = [
-    (VARCHAR(65533), ["col VARCHAR(65533)", "col STRING"]),
-    (DECIMAL(38, 18), "col DECIMAL(38,18)"),
-    (ARRAY(MAP(STRING, STRUCT(level1=ARRAY(MAP(INTEGER, STRUCT(level2=STRING, level2_array=ARRAY(INTEGER))))))),
-     "col ARRAY<MAP<STRING,STRUCT<level1 ARRAY<MAP<INTEGER,STRUCT<level2 STRING,level2_array ARRAY<INTEGER>>>>>>>"),
-]
-
-
-class TestDataTypeCompiler:
-    @classmethod
-    def setup_class(cls):
-        registry.register("starrocks", "starrocks.dialect", "StarRocksDialect")
-        cls.logger = logging.getLogger(__name__)
-        cls.dialect = registry.load("starrocks")()
-
-    def _compile_column_type(self, column: Column) -> str:
-        """Helper method to compile a single column type"""
-        # Use a fresh MetaData for each test to avoid table name conflicts
-        metadata = MetaData()
-        table = Table('test_table', metadata, column)
-        create_sql = str(CreateTable(table).compile(dialect=self.dialect))
-        # Extract just the column definition from the CREATE TABLE statement
-        # Format: CREATE TABLE test_table(column_definition)
-        start = create_sql.find('(') + 1
-        end = create_sql.rfind(')')
-        return create_sql[start:end].strip()
-
-    @pytest.mark.parametrize("type_instance, expected_sql", BASIC_TYPE_TEST_CASES)
-    def test_basic_types(self, type_instance, expected_sql):
-        """Test compilation of basic data types"""
-        col = Column('col', type_instance)
-        result = self._compile_column_type(col)
-        assert normalize_sql(result) == normalize_sql(expected_sql)
-
-    @pytest.mark.parametrize("type_instance, expected_sql", COMPLEX_TYPE_TEST_CASES)
-    def test_complex_types(self, type_instance, expected_sql):
-        """Test compilation of complex data types"""
-        col = Column('col', type_instance)
-        result = self._compile_column_type(col)
-        assert normalize_sql(result) == normalize_sql(expected_sql)
-
-    @pytest.mark.parametrize("type_instance, nullable, comment, server_default, expected_sql", CONSTRAINT_TEST_CASES)
-    def test_type_constraints(self, type_instance, nullable, comment, server_default, expected_sql):
-        """Test compilation of data types with constraints"""
-        kwargs = {}
-        if nullable is not None:
-            kwargs['nullable'] = nullable
-        if comment is not None:
-            kwargs['comment'] = comment
-        if server_default is not None:
-            kwargs['server_default'] = server_default
-
-        col = Column('col', type_instance, **kwargs)
-        result = self._compile_column_type(col)
-        assert normalize_sql(result) == normalize_sql(expected_sql)
-
-    @pytest.mark.parametrize("type_instance, expected_sql", EDGE_CASE_TEST_CASES)
-    def test_edge_cases(self, type_instance, expected_sql):
-        """Test edge cases and boundary conditions for type compilation"""
-        col = Column('col', type_instance)
-        result = self._compile_column_type(col)
-        normalized_result = normalize_sql(result)
-        if isinstance(expected_sql, list):
-            assert normalized_result in {normalize_sql(sql) for sql in expected_sql}
-        else:
-            assert normalized_result == normalize_sql(expected_sql)
+    @testing.combinations(
+        ("not_null", INTEGER(), {"nullable": False}, "col INTEGER NOT NULL"),
+        ("comment", VARCHAR(100), {"comment": "A test column"}, "col VARCHAR(100) COMMENT 'A test column'"),
+        ("default", INTEGER(), {"server_default": "0"}, "col INTEGER DEFAULT '0'"),
+        (
+            "all",
+            VARCHAR(50),
+            {"nullable": False, "comment": "Full test column", "server_default": "test"},
+            "col VARCHAR(50) NOT NULL DEFAULT 'test' COMMENT 'Full test column'",
+        ),
+        ("empty_varchar_default", VARCHAR(50), {"server_default": ""}, "col VARCHAR(50) DEFAULT ''"),
+        ("empty_string_default", STRING(), {"server_default": ""}, "col STRING DEFAULT ''"),
+        argnames="type_, column_kwargs, expected",
+        id_="iaaa",
+    )
+    def test_column_constraints(self, type_, column_kwargs, expected):
+        column = Column("col", type_, **column_kwargs)
+        Table("t", MetaData(), column)
+        self.assert_compile(CreateColumn(column), expected)

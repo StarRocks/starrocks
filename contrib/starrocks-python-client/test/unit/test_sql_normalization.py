@@ -14,10 +14,12 @@
 
 """Tests for SQL normalization functions."""
 
+from sqlalchemy.testing import fixtures
+
 from starrocks.common.utils import TableAttributeNormalizer
 
 
-class TestStripIdentifierBackticks:
+class StripIdentifierBackticksTest(fixtures.TestBase):
     """Test the _strip_identifier_backticks function."""
 
     def test_simple_backtick_removal(self):
@@ -96,7 +98,7 @@ class TestStripIdentifierBackticks:
         assert result == expected
 
 
-class TestNormalizeSQL:
+class NormalizeSQLTest(fixtures.TestBase):
     """Test the normalize_sql function (which uses _strip_identifier_backticks)."""
 
     def test_full_normalization(self):
@@ -179,7 +181,7 @@ class TestNormalizeSQL:
         assert result == expected
 
 
-class TestStarRocksSpecificScenarios:
+class StarRocksSpecificScenariosTest(fixtures.TestBase):
     """Test scenarios specific to StarRocks SQL patterns."""
 
     def test_distribution_clause(self):
@@ -219,7 +221,7 @@ class TestStarRocksSpecificScenarios:
         assert result == expected
 
 
-class TestRealCases():
+class RealCasesTest(fixtures.TestBase):
     """Test real cases."""
 
     def test_real_case_01(self):
