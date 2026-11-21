@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -45,6 +46,7 @@ public:
 struct WriterAndStream {
     std::unique_ptr<AsyncFlushOutputStream> stream;
     std::unique_ptr<FileWriter> writer;
+    std::function<void()> rollback_action;
 };
 
 class FileWriterFactory {

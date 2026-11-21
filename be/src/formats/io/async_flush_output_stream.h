@@ -79,6 +79,9 @@ public:
     // called exactly once
     Status close();
 
+    // For failed writer initialization, before any I/O is submitted or the stream is polled.
+    Status abort_before_flush();
+
     // called exactly once
     std::future<Status> io_status() { return _promise->get_future(); };
 
@@ -86,6 +89,7 @@ public:
 
 private:
     int64_t _total_size{0};
+    bool _aborted{false};
     // Held by shared_ptr so that it outlives the stream. Satisfying the promise hands this object
     // to the waiter, who may destroy it immediately -- AsyncFlushStreamPoller::poll() drops the
     // stream as soon as the future reads ready -- while set_value() is still finishing its wake of
