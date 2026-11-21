@@ -111,11 +111,7 @@ void GeoColumn::append(const Column& src, size_t offset, size_t count) {
     if (count == 0) {
         return;
     }
-    if (&src == this) {
-        auto copy = clone();
-        append(*copy, offset, count);
-        return;
-    }
+    DCHECK(this != &src) << "GeoColumn self append";
     const auto& geo = _source(src);
     _data->append(*geo._data, offset, count);
 }
@@ -124,11 +120,7 @@ void GeoColumn::append_selective(const Column& src, const uint32_t* indexes, uin
     if (count == 0) {
         return;
     }
-    if (&src == this) {
-        auto copy = clone();
-        append_selective(*copy, indexes, from, count);
-        return;
-    }
+    DCHECK(this != &src) << "GeoColumn self append";
     const auto& geo = _source(src);
     _data->append_selective(*geo._data, indexes, from, count);
 }
@@ -137,11 +129,7 @@ void GeoColumn::append_value_multiple_times(const Column& src, uint32_t index, u
     if (count == 0) {
         return;
     }
-    if (&src == this) {
-        auto copy = clone();
-        append_value_multiple_times(*copy, index, count);
-        return;
-    }
+    DCHECK(this != &src) << "GeoColumn self append";
     const auto& geo = _source(src);
     _data->append_value_multiple_times(*geo._data, index, count);
 }
@@ -164,11 +152,7 @@ void GeoColumn::fill_default(const Filter& filter) {
 
 void GeoColumn::update_rows(const Column& src, const uint32_t* indexes) {
     if (src.size() == 0) return;
-    if (&src == this) {
-        auto copy = clone();
-        update_rows(*copy, indexes);
-        return;
-    }
+    DCHECK(this != &src) << "GeoColumn self append";
     const auto& geo = _source(src);
     _data->update_rows(*geo._data, indexes);
 }
