@@ -23,9 +23,9 @@ ai_extract(input, labels[, provider[, model]])
 
 ## 戻り値
 
-NULL 許容の JSON オブジェクトを返します。要求する構造は `{"response":{"フィールド名":"値"}}` で、見つからないフィールドには JSON null を返すよう要求します。結果の例: `{"response":{"name":"Alice","city":"Paris"}}`。
+JSON オブジェクトまたは NULL を返します。StarRocks は、抽出したフィールド名と値を `response` オブジェクトに格納し、値が見つからないフィールドには JSON の `null` を入れるようモデルに指示します。例えば、名前と都市を抽出すると、`{"response":{"name":"Alice","city":"Paris"}}` のような結果が返ります。
 
-StarRocks は結果が JSON オブジェクトであることを検証しますが、response のフィールド構造や抽出内容の正確性は検証しません。
+StarRocks が確認するのは、結果が JSON オブジェクトかどうかだけです。`response` のフィールド構成や、抽出した値が正しいかどうかは確認しません。
 
 ## 例
 

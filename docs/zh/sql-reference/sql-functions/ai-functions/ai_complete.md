@@ -40,7 +40,7 @@ SELECT ai_complete(
 );
 ```
 
-[视觉模型示例](ai_functions.mdx#vision-chat)创建 `vision_chat` 并用它描述图片。使用同一个百炼 Provider 也可以描述 URL 指向的视频。
+[图片示例](ai_functions.mdx#vision-chat)使用了百炼 Provider `vision_chat`。下面用它描述一段通过 URL 传入的视频。
 
 ```sql
 SELECT ai_complete(

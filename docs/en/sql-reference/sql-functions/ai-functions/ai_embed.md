@@ -23,7 +23,7 @@ For the types and default behavior of `provider` and `model`, see [Common callin
 
 ## Return value
 
-Returns a nullable `ARRAY<FLOAT>`. The service response must contain one nonempty embedding at index 0, with finite FLOAT values. Invalid responses follow the [error handling](ai_functions.mdx#error-handling) rules.
+Returns a nullable `ARRAY<FLOAT>`. The service response must include a nonempty vector at index 0. Every element must be a finite FLOAT value. StarRocks treats an invalid response as a [row-level error](ai_functions.mdx#error-handling).
 
 ## Examples
 
@@ -38,7 +38,7 @@ SELECT ai_embed(
 );
 ```
 
-The following query uses the same image URL and the same [multimodal Provider](ai_functions.mdx#video-embedding). The first result represents the URL text. The second represents the image at that URL.
+Both calls use the [`vision_embedding` Provider](ai_functions.mdx#video-embedding). Pass `url` directly to embed the URL string (`url_text_embedding`), or wrap it in a FILE with `to_file` to embed the image at that URL (`image_embedding`).
 
 ```sql
 WITH media AS (

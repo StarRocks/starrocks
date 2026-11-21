@@ -23,9 +23,9 @@ ai_extract(input, labels[, provider[, model]])
 
 ## 返回值
 
-返回可空的 JSON 对象。请求的结构为 `{"response":{"字段名":"值"}}`，未找到的字段请求返回 JSON null。示意结果：`{"response":{"name":"Alice","city":"Paris"}}`。
+返回可空的 JSON 对象。StarRocks 要求模型把提取的字段和值放在 `response` 对象中，找不到值的字段填 JSON `null`。例如，提取姓名和城市时，模型可能返回 `{"response":{"name":"Alice","city":"Paris"}}`。
 
-StarRocks 校验结果是否为 JSON 对象，但不验证 response 的字段结构或提取内容的准确性。
+StarRocks 只检查返回值是否为 JSON 对象，不检查 `response` 的字段结构或提取结果是否准确。
 
 ## 示例
 

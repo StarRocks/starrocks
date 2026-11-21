@@ -23,9 +23,9 @@ ai_classify(input, categories[, provider[, model]])
 
 ## 返回值
 
-返回可空的 JSON 对象。请求的结构为 `{"labels":["选中的类别"]}`，例如 `{"labels":["support"]}`。
+返回可空的 JSON 对象。StarRocks 要求模型从 `categories` 中选择一个类别，放入 `labels` 数组，例如 `{"labels":["support"]}`。
 
-StarRocks 校验结果是否为 JSON 对象，但不验证 labels 的数量、类别成员关系或分类准确性。
+StarRocks 只检查返回值是否为 JSON 对象。它不会检查 `labels` 是否恰好包含一个类别、该类别是否在候选列表中，也不会验证分类是否准确。
 
 ## 示例
 

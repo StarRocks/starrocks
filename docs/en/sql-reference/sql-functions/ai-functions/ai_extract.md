@@ -23,9 +23,9 @@ For the types and default behavior of `provider` and `model`, see [Common callin
 
 ## Return value
 
-Returns a nullable JSON object. The requested structure is `{"response":{"field name":"value"}}`, with JSON null requested for fields that are not found. Example result: `{"response":{"name":"Alice","city":"Paris"}}`.
+Returns a nullable JSON object. StarRocks asks the model to put the extracted fields and their values in a `response` object and use JSON `null` for any value it cannot find. For example, when asked for a name and a city, the model might return `{"response":{"name":"Alice","city":"Paris"}}`.
 
-StarRocks checks that the result is a JSON object, but does not validate the field structure of response or the accuracy of the extracted content.
+StarRocks only checks that the result is a JSON object. It does not check the structure of `response` or the accuracy of the extracted values.
 
 ## Examples
 

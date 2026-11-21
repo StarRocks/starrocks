@@ -23,9 +23,9 @@ ai_classify(input, categories[, provider[, model]])
 
 ## 戻り値
 
-NULL 許容の JSON オブジェクトを返します。要求する構造は `{"labels":["選択されたカテゴリ"]}` で、例えば `{"labels":["support"]}` です。
+JSON オブジェクトまたは NULL を返します。StarRocks は、`categories` からカテゴリを 1 つ選び、`labels` 配列に入れて返すようモデルに指示します。例えば、`{"labels":["support"]}` が返ります。
 
-StarRocks は結果が JSON オブジェクトであることを検証しますが、labels の数、指定カテゴリへの所属、分類の正確性は検証しません。
+StarRocks が確認するのは、結果が JSON オブジェクトかどうかだけです。`labels` の要素数、選ばれたカテゴリが `categories` に含まれるかどうか、分類が正しいかどうかは確認しません。
 
 ## 例
 

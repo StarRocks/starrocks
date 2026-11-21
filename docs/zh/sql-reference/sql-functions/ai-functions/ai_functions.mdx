@@ -11,7 +11,7 @@ import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
 
 <Experimental />
 
-AI 函数支持在 SQL 中调用模型服务，完成文本生成、分类、提取、翻译、摘要和向量化。`ai_complete` 还可以根据图片或视频回答问题，`ai_embed` 可以为图片或视频生成向量。
+AI 函数可以在 SQL 中调用模型服务。`ai_complete` 根据提示词生成文本，也可以结合图片或视频回答问题。`ai_embed` 为文本、图片或视频生成向量。
 
 ## 函数索引 {/* #function-index */}
 
@@ -155,7 +155,7 @@ SELECT ai_embed(
 );
 ```
 
-模型调用会把文本、内联媒体内容或完整媒体 URL（包括预签名参数）发送到 Provider 端点。选择服务时请考虑数据出站要求、查询行数、延迟和调用费用。
+StarRocks 会将输入文本、内联媒体内容或完整的媒体 URL（含预签名参数）发送到 Provider 端点。请选择符合数据出站要求的服务。
 
 ## 公共调用规则
 
@@ -187,7 +187,7 @@ SELECT ai_complete(prompt => '解释列式存储。', model => 'chat-model');
 
 ### JSON options {/* #json-options */}
 
-仅 `ai_complete` 和 `ai_embed` 支持可选的 `options`，其类型为 JSON，必须是常量表达式，且非 SQL NULL 的值必须是 JSON 对象。省略时默认为空对象；`json_object()` 和 SQL NULL 都表示不传额外选项。
+只有 `ai_complete` 和 `ai_embed` 接受 `options`。它必须是 JSON 类型的常量表达式，取值为 JSON 对象或 SQL NULL。省略时默认为空对象。显式传入 `json_object()` 或 SQL NULL 也不会向模型服务发送额外参数。
 
 ```sql
 SELECT ai_complete(
@@ -224,20 +224,10 @@ FILE 重载支持图片和视频，不支持音频或 PDF。OpenAI 兼容 Chat �
 
 ## 运行时限制和重试
 
-- 文本生成及辅助函数使用 [`ai_function_rate_limit_qps_chat`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_rate_limit_qps_chat)，
-  向量函数使用 [`ai_function_rate_limit_qps_embedding`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_rate_limit_qps_embedding)。各自的 QPS 限制
-  和
-  [`ai_function_max_inflight`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_inflight)
-  在每个 BE 上独立生效。QPS 限制按 endpoint、credential 和 capability 分桶维护，in-flight 限制为进程级。基于 WorkGroup 和 Query 的公平准入机制会在排队请求之间共享适用的限制。每次初始或重试 HTTP attempt 都必须同时获得这两类准入许可。
-- StarRocks 无法保证模型提供商仅执行一次请求。已超时或以其他方式失败的 attempt 可能已经到达提供商，因此重试可能重复提供商侧的工作并产生额外费用。请根据提供商的行为和计费策略配置
-  [`ai_function_max_retries`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_retries)
-  和
-  [`ai_function_max_retries_on_throttle`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_retries_on_throttle)。
-- 请求和响应 payload 都会计入 Query 内存跟踪器；存在 outstanding 请求时，执行 Pipeline 会施加背压。
-  [`ai_function_max_response_bytes`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_response_bytes)
-  是每个 HTTP 响应体的硬上限。
-- 独立 task timeout 在 task 创建后保持不变，重试不会重新计时；Query 取消和 deadline 更新会在整个异步执行期间持续生效。超时、工作线程和调度粒度控制参见其他
-  [BE AI 函数配置项](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_request_timeout_ms)。
+- 每个 BE 单独限流，按端点、凭证和能力类型的组合限制每秒请求数。文本生成及辅助函数使用 [`ai_function_rate_limit_qps_chat`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_rate_limit_qps_chat)，向量函数使用 [`ai_function_rate_limit_qps_embedding`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_rate_limit_qps_embedding)。整个 BE 进程共用一个并发请求上限，由 [`ai_function_max_inflight`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_inflight) 设置。BE 按资源组和查询公平调度排队请求。首次发送和重试都受这两项限制。
+- 即使请求超时或报错，模型服务也可能已经收到请求。重试可能让服务再次执行同一请求并收取额外费用。请根据服务处理重复请求的方式和计费规则设置 [`ai_function_max_retries`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_retries) 和 [`ai_function_max_retries_on_throttle`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_retries_on_throttle)。
+- 请求体和响应体占用的内存都计入查询内存用量。请求尚未完成时，执行流水线会施加背压。[`ai_function_max_response_bytes`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_response_bytes) 限制单个 HTTP 响应体的大小。
+- 每个任务的超时时间在创建时确定，重试不会重新计时。异步执行期间，任务仍会响应查询取消和查询截止时间的更新。超时、工作线程和调度粒度的设置见 [BE AI 函数配置项](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_request_timeout_ms)。
 
 请求数、重试和超时的观测指标参见 [AI HTTP 指标](../../../administration/management/monitoring/metric_details/a-c.md#ai_http_requests_total)。
 
@@ -251,7 +241,7 @@ FILE 重载支持图片和视频，不支持音频或 PDF。OpenAI 兼容 Chat �
 - 支持 `PREPARE`，但包含 AI 函数的语句会在每次 `EXECUTE` 时完整重新规划，不会复用执行计划。
 - 在相关子查询的查询块中，`SELECT` 列表、`WHERE`、`HAVING`、`ORDER BY` 和 `JOIN ON` 中的 AI 表达式
   均会被拒绝，即使 AI 表达式自身只引用本层列。联接条件中的 AI 表达式仅支持 `INNER JOIN` 和 `CROSS JOIN`。
-- 每个非 NULL 输入行都可能产生一次远程请求。在对大量行使用 AI 函数前，请考虑网络延迟、提供商配额、查询截止时间、费用和数据出站策略。
+- 每个非 NULL 输入行都可能触发一次远程请求。处理大量行时，请根据预计的请求数估算费用，并结合模型服务的配额和网络延迟判断查询能否在截止时间前完成。
 
 ## 减少 AI 输入行数 {/* #reducing-ai-input-rows */}
 

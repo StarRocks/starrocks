@@ -23,7 +23,7 @@ ai_embed(input[, provider[, model[, options]]])
 
 ## 戻り値
 
-NULL 許容の `ARRAY<FLOAT>` を返します。サービスのレスポンスには、インデックス 0 に空でないベクトルが一つ含まれ、その要素はすべて有限の FLOAT 値である必要があります。不正なレスポンスは[エラー処理](ai_functions.mdx#エラー処理)のルールに従います。
+`ARRAY<FLOAT>` または NULL を返します。サービスのレスポンスには、インデックス 0 に空でないベクトルが必要です。各要素は有限の FLOAT 値でなければなりません。不正なレスポンスは[行単位のエラー](ai_functions.mdx#エラー処理)として扱います。
 
 ## 例
 
@@ -38,7 +38,7 @@ SELECT ai_embed(
 );
 ```
 
-次の例では同じ画像 URL と同じ[マルチモーダル埋め込み Provider](ai_functions.mdx#video-embedding)を使います。最初の結果は URL 文字列のベクトル、2 番目の結果はその URL が指す画像のベクトルです。
+どちらの列にも同じ Provider [`vision_embedding`](ai_functions.mdx#video-embedding) を使います。`url` をそのまま渡すと、`url_text_embedding` には URL 文字列のベクトルが入ります。同じ URL を `to_file` で FILE にして渡すと、`image_embedding` には画像のベクトルが入ります。
 
 ```sql
 WITH media AS (

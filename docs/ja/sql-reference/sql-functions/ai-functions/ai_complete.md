@@ -40,7 +40,7 @@ SELECT ai_complete(
 );
 ```
 
-[視覚モデルの例](ai_functions.mdx#vision-chat)では、`vision_chat` を作成して画像を説明します。同じ Model Studio Provider に動画の URL を渡すこともできます。
+[画像の例](ai_functions.mdx#vision-chat)では、Model Studio の Provider `vision_chat` を使っています。次のクエリでは、この Provider に URL で動画を渡し、その内容を説明させます。
 
 ```sql
 SELECT ai_complete(

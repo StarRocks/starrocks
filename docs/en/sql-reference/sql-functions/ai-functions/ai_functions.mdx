@@ -11,7 +11,7 @@ import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
 
 <Experimental />
 
-AI functions call model services from SQL to generate, classify, extract, translate, summarize, and embed text. `ai_complete` can also answer questions about an image or video, and `ai_embed` can generate an embedding for either.
+AI functions let you call model services from SQL. `ai_complete` generates text from a prompt and can answer questions about an image or video. `ai_embed` generates embeddings for text, images, or videos.
 
 ## Function index {/* #function-index */}
 
@@ -155,7 +155,7 @@ SELECT ai_embed(
 );
 ```
 
-Model calls send text, inline media, or the full media URL (including any signature) to the Provider endpoint. Consider data egress requirements, query row counts, latency, and invocation costs when choosing a service.
+StarRocks sends input text, inline media, or the full media URL (including any signature parameters) to the Provider endpoint. Choose a service that meets your data egress requirements.
 
 ## Common calling rules
 
@@ -187,7 +187,7 @@ All functions have optional `provider` and `model` arguments. Both must be const
 
 ### JSON options {/* #json-options */}
 
-Only `ai_complete` and `ai_embed` support the optional `options` argument. It must be a constant JSON expression, and any value other than SQL NULL must be a JSON object. When omitted, it defaults to an empty object. Both `json_object()` and SQL NULL mean that no additional options are passed.
+Only `ai_complete` and `ai_embed` accept `options`. It must be a constant JSON expression that evaluates to a JSON object or SQL NULL. The default is an empty object. Passing `json_object()` or SQL NULL also sends no extra parameters to the model service.
 
 ```sql
 SELECT ai_complete(
@@ -224,20 +224,10 @@ The FILE overloads support images and video. Audio and PDF inputs are unsupporte
 
 ## Runtime limits and retries
 
-- Text generation and helper functions use [`ai_function_rate_limit_qps_chat`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_rate_limit_qps_chat),
-  while embedding functions use [`ai_function_rate_limit_qps_embedding`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_rate_limit_qps_embedding). Their respective QPS limits
-  and
-  [`ai_function_max_inflight`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_inflight)
-  apply independently on each BE. QPS limits are maintained in buckets keyed by endpoint, credential, and capability, while the in-flight limit is process-wide. Fair admission based on WorkGroup and Query shares the applicable limits among queued requests. Every initial or retry HTTP attempt must acquire both kinds of admission permits.
-- StarRocks cannot guarantee that a model provider executes a request only once. An attempt that times out or otherwise fails may already have reached the provider, so retries can repeat work at the provider and incur additional charges. Configure
-  [`ai_function_max_retries`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_retries)
-  and
-  [`ai_function_max_retries_on_throttle`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_retries_on_throttle) according to the provider's behavior and billing policy.
-- Request and response payloads are accounted for in the Query memory tracker. The execution Pipeline applies backpressure while requests are outstanding.
-  [`ai_function_max_response_bytes`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_response_bytes)
-  is a hard limit for each HTTP response body.
-- The independent task timeout remains fixed after task creation and does not restart on retries. Query cancellation and deadline updates remain effective throughout asynchronous execution. For timeout, worker thread, and scheduling granularity controls, see the other
-  [BE AI function configuration items](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_request_timeout_ms).
+- Each BE limits requests per second for each combination of endpoint, credential, and capability. Text generation and helper functions use [`ai_function_rate_limit_qps_chat`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_rate_limit_qps_chat). Embedding functions use [`ai_function_rate_limit_qps_embedding`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_rate_limit_qps_embedding). The entire BE process shares one limit on concurrent requests, set by [`ai_function_max_inflight`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_inflight). The BE schedules queued requests fairly across resource groups and queries. Both limits apply to the first attempt and every retry.
+- A request may reach the model service even if it times out or returns an error. If StarRocks retries, the service may process the same request again and charge for it a second time. Set [`ai_function_max_retries`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_retries) and [`ai_function_max_retries_on_throttle`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_retries_on_throttle) according to how the service handles and bills for duplicate requests.
+- Request and response bodies count toward the query's memory usage. The execution pipeline applies backpressure while requests are outstanding. [`ai_function_max_response_bytes`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_response_bytes) limits the size of each HTTP response body.
+- Each task gets a fixed timeout at creation. Retries do not restart the timer. While a task runs asynchronously, it still responds to query cancellation and changes to the query deadline. For timeout, worker thread, and scheduling granularity settings, see [BE AI function configuration](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_request_timeout_ms).
 
 For request, retry, and timeout metrics, see [AI HTTP metrics](../../../administration/management/monitoring/metric_details/a-c.md#ai_http_requests_total).
 
@@ -251,7 +241,7 @@ For request, retry, and timeout metrics, see [AI HTTP metrics](../../../administ
 - `PREPARE` is supported, but statements containing AI functions are fully replanned on every `EXECUTE`; execution plans are not reused.
 - In a correlated subquery block, AI expressions in the `SELECT` list, `WHERE`, `HAVING`, `ORDER BY`, and `JOIN ON`
   are rejected even if the AI expression references only columns in that block. AI expressions in join conditions are supported only for `INNER JOIN` and `CROSS JOIN`.
-- Each non-NULL input row may produce a remote request. Before using AI functions on many rows, consider network latency, provider quotas, query deadlines, costs, and data egress policies.
+- Each non-NULL input row can trigger a remote request. For large queries, use the expected request count to estimate cost. Check the service quota and network latency when deciding whether the query can finish before its deadline.
 
 ## Reducing AI input rows {/* #reducing-ai-input-rows */}
 

@@ -40,7 +40,7 @@ SELECT ai_complete(
 );
 ```
 
-The [vision chat example](ai_functions.mdx#vision-chat) creates `vision_chat` and uses it to describe an image. The same Model Studio Provider can also describe a video supplied by URL.
+The [image example](ai_functions.mdx#vision-chat) uses the Model Studio Provider `vision_chat`. The following query uses it to describe a video supplied by URL.
 
 ```sql
 SELECT ai_complete(

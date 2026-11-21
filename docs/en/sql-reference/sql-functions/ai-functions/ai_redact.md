@@ -23,7 +23,7 @@ For the types and default behavior of `provider` and `model`, see [Common callin
 
 ## Return value
 
-Returns a nullable VARCHAR. The model is instructed to replace identified information with the uppercase category name in square brackets, such as `[EMAIL]`, and return the original text if no matching information is found.
+Returns a nullable VARCHAR. StarRocks asks the model to replace each match with its uppercase category name in square brackets, such as `[EMAIL]` for an email address. If it finds no matches, the model should return the original text.
 
 The original text is sent to the model service. This function does not redact data locally before transmission, and the model may miss sensitive information.
 

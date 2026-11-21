@@ -23,9 +23,9 @@ For the types and default behavior of `provider` and `model`, see [Common callin
 
 ## Return value
 
-Returns a nullable JSON object. The requested structure is `{"labels":["selected category"]}`, for example, `{"labels":["support"]}`.
+Returns a nullable JSON object. StarRocks asks the model to choose one category from `categories` and put it in the `labels` array, for example, `{"labels":["support"]}`.
 
-StarRocks checks that the result is a JSON object, but does not validate the number of labels, category membership, or classification accuracy.
+StarRocks only checks that the result is a JSON object. It does not check the length of `labels`, whether the category appears in `categories`, or whether the classification is correct.
 
 ## Examples
 

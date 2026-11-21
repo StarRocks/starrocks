@@ -23,7 +23,7 @@ ai_embed(input[, provider[, model[, options]]])
 
 ## 返回值
 
-返回可空的 `ARRAY<FLOAT>`。服务响应必须包含索引为 0 的一个非空向量，其元素均为有限 FLOAT 值；无效响应按 [错误处理](ai_functions.mdx#错误处理)处理。
+返回可空的 `ARRAY<FLOAT>`。服务响应中索引为 0 的向量必须非空，且每个元素都必须是有限的 FLOAT 值。无效响应按[行级错误](ai_functions.mdx#错误处理)处理。
 
 ## 示例
 
@@ -38,7 +38,7 @@ SELECT ai_embed(
 );
 ```
 
-下面对同一个图片地址使用同一个[多模态向量 Provider](ai_functions.mdx#video-embedding)。第一个结果是 URL 这段文本的向量，第二个结果是该 URL 所指图片的向量。
+两列都使用多模态向量 Provider [`vision_embedding`](ai_functions.mdx#video-embedding)。直接传入 `url` 时，`url_text_embedding` 返回 URL 字符串的向量。用 `to_file` 将这个地址转为 FILE 后，`image_embedding` 返回图片的向量。
 
 ```sql
 WITH media AS (
