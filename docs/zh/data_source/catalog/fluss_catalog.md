@@ -15,7 +15,11 @@ Fluss catalog 是一种 External Catalog，支持您无需将数据导入 StarRo
 
 ## 使用说明
 
-当前版本中，Fluss catalog 仅支持查询已启用 DataLake 且使用 Apache Paimon 作为湖存储的 Fluss 表。
+当前版本中：
+
+- Union read 和 Lake read 仅支持已启用 DataLake 且使用 Apache Paimon 作为湖存储的 Fluss 表。
+- 对 Log 表的 Real-time read（`$rt`）支持任意湖存储，也支持未启用湖存储的表，且不要求存在湖快照。
+- 对于无法进行 Union read 的主键表（未启用湖存储、湖格式不是 Paimon，或尚无湖快照），直接查询基表会从 Fluss 读取完整的当前数据：最新的 KV 快照加上其后的日志。合并时，BE 会在 Java 内存中保存每个 Bucket 自上次 KV 快照以来的日志，因此写入频繁的表若 `kv.snapshot.interval` 较长，需要更大的 BE Java 堆（`be.conf` 中的 `JAVA_OPTS`）。
 
 ## 创建 Fluss catalog
 

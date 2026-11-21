@@ -14,34 +14,28 @@
 
 package com.starrocks.fluss.reader;
 
-import org.apache.fluss.flink.lake.reader.LakeSnapshotScanner;
-import org.apache.fluss.flink.lake.split.LakeSnapshotSplit;
-import org.apache.fluss.lake.source.LakeSource;
-import org.apache.fluss.lake.source.LakeSplit;
+import org.apache.fluss.client.table.scanner.batch.BatchScanner;
 import org.apache.fluss.row.InternalRow;
 import org.apache.fluss.utils.CloseableIterator;
 
 import java.io.IOException;
 import java.time.Duration;
 
-public class FlussSnapshotScanner extends ConnectorScannerProxy {
+/** Reads one split through a Fluss {@link BatchScanner}, which returns null once the split is read. */
+public class FlussBatchScanner extends ConnectorScannerProxy {
     private static final Duration POLL_TIMEOUT = Duration.ofSeconds(5);
 
-    private final LakeSource<LakeSplit> lakeSource;
-    private final LakeSnapshotSplit lakeSnapshotSplit;
-    private LakeSnapshotScanner batchScanner;
+    private final BatchScanner batchScanner;
     private CloseableIterator<InternalRow> currentBatch;
     private boolean finished = false;
 
-    public FlussSnapshotScanner(LakeSource<LakeSplit> lakeSource,
-                                LakeSnapshotSplit lakeSnapshotSplit) {
-        this.lakeSource = lakeSource;
-        this.lakeSnapshotSplit = lakeSnapshotSplit;
+    public FlussBatchScanner(BatchScanner batchScanner) {
+        this.batchScanner = batchScanner;
     }
 
     @Override
-    void open() throws IOException {
-        batchScanner = new LakeSnapshotScanner(lakeSource, lakeSnapshotSplit);
+    void open() {
+        // The Fluss scanner is ready to read once constructed.
     }
 
     @Override
@@ -70,8 +64,6 @@ public class FlussSnapshotScanner extends ConnectorScannerProxy {
 
     @Override
     void close() throws IOException {
-        if (batchScanner != null) {
-            batchScanner.close();
-        }
+        batchScanner.close();
     }
 }

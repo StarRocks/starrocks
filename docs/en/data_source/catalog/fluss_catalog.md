@@ -15,7 +15,11 @@ A Fluss catalog is an external catalog that enables you to query Apache Fluss ta
 
 ## Usage notes
 
-In the current version, Fluss catalogs support querying only Fluss tables that have DataLake enabled and use Apache Paimon as the lake storage.
+In the current version:
+
+- Union reads and lake reads support only Fluss tables that have DataLake enabled and use Apache Paimon as the lake storage.
+- Real-time reads (`$rt`) on log tables work with any lake storage, or with no lake storage, and do not need a lake snapshot.
+- A plain query on a primary-key table that cannot be union-read (no lake storage, a lake format other than Paimon, or no lake snapshot yet) reads the full current rows from Fluss: the latest KV snapshot plus the log after it. The BE holds each bucket's log since its last KV snapshot in Java memory while it merges, so a long `kv.snapshot.interval` on a busy table needs a larger BE Java heap (`JAVA_OPTS` in `be.conf`).
 
 ## Create a Fluss catalog
 
