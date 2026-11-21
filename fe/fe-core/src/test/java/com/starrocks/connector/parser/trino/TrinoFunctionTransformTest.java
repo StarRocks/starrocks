@@ -371,6 +371,18 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "CAST(json_query(parse_json('{\"a\": {\"b\": 1}}'), '$.a.b') AS VARCHAR)");
     }
 
+    // refer to https://trino.io/docs/current/functions/json.html#cast-to-json
+    @Test
+    public void testCastComplexTypeToJson() throws Exception {
+        assertPlanContains("SELECT CAST(MAP(ARRAY['k1', 'k2', 'k3'], ARRAY[1, 23, 456]) AS JSON)",
+                "to_json(map_from_arrays(['k1','k2','k3'], [1,23,456]))");
+        assertPlanContains("SELECT json_format(CAST(ARRAY[CAST(1 AS JSON), CAST('a' AS JSON)] AS JSON))",
+                "CAST(to_json([CAST(1 AS JSON),CAST('a' AS JSON)]) AS VARCHAR)");
+        assertPlanContains("SELECT CAST(ARRAY[ARRAY['a', 'b'], ARRAY['c']] AS JSON)", "to_json([['a','b'],['c']])");
+        assertPlanContains("SELECT CAST(CAST(ROW(1, 'a') AS ROW(x BIGINT, y VARCHAR)) AS JSON)",
+                "to_json(CAST(row(1, 'a') AS struct<`x` bigint(20), `y` varchar>))");
+    }
+
     @Test
     public void testExtractFnTransform() throws Exception {
         String sql = "SELECT extract(dow FROM TIMESTAMP '2022-10-20 05:10:00')";

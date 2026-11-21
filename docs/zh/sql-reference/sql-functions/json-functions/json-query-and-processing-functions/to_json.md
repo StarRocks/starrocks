@@ -1,12 +1,12 @@
 ---
 displayed_sidebar: docs
-description: "将 Map 或 Struct 值转换为 JSON 字符串。"
+description: "将 Array、Map 或 Struct 值转换为 JSON 值。"
 products: [oss, enterprise, cloud, anywhere]
 ---
 
 # to_json
 
-将 Map 或 Struct 值转换为 JSON 字符串。如果输入值为 NULL，则返回 NULL。
+将 Array、Map 或 Struct 值转换为 JSON 值。如果输入值为 NULL，则返回 NULL。
 
 :::tip
 所有的 JSON 函数和运算符都列在导航栏和[概述页面](../overview-of-json-functions-and-operators.md)上
@@ -26,7 +26,7 @@ to_json(any_value)
 
 ## 参数
 
-`any_value`：您想要转换的 Map 或 Struct 表达式。如果输入值无效，则返回错误。Map 或 Struct 值中的每个键值对的值是可为空的。请参阅最后一个示例。
+`any_value`：您想要转换的 Array、Map 或 Struct 表达式。如果输入值无效，则返回错误。Array 值中的元素以及 Map 或 Struct 值中每个键值对的值是可为空的。请参阅最后一个示例。
 
 输入中任何层级的 `GEOGRAPHY` 和 `GEOMETRY` 均不受支持，包括这些类型的 NULL 值。若要在 JSON 中包含地理空间值的 WKT，请先使用 `ST_AsText` 转换这些值，再构造 Map 或 Struct。
 

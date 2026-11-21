@@ -220,6 +220,58 @@ public class JsonTypeTest extends PlanTestBase {
     }
 
     @Test
+    public void testCastComplexTypeToJson() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE tjson_complex (" +
+                " v_id INT," +
+                " v_array ARRAY<INT>," +
+                " v_nested ARRAY<ARRAY<VARCHAR(10)>>," +
+                " v_array_json ARRAY<JSON>," +
+                " v_map MAP<VARCHAR(10), BIGINT>," +
+                " v_map_int MAP<INT, DOUBLE>," +
+                " v_map_decimal MAP<DECIMAL(10, 2), INT>," +
+                " v_map_boolean MAP<BOOLEAN, INT>," +
+                " v_array_decimal ARRAY<DECIMAL(10, 2)>," +
+                " v_array_boolean ARRAY<BOOLEAN>," +
+                " v_struct STRUCT<a INT, b DECIMAL(10, 2), c ARRAY<DATETIME>>" +
+                ") DUPLICATE KEY (v_id) " +
+                "DISTRIBUTED BY HASH (v_id) " +
+                "properties(\"replication_num\"=\"1\") ;");
+
+        String plan = getFragmentPlan("select cast(v_array as json), cast(v_nested as json), " +
+                "cast(v_array_json as json), cast(v_map as json), cast(v_map_int as json), " +
+                "cast(v_array_decimal as json), cast(v_array_boolean as json), cast(v_struct as json) " +
+                "from tjson_complex");
+        assertContains(plan, "to_json(2: v_array)", "to_json(3: v_nested)", "to_json(4: v_array_json)",
+                "to_json(5: v_map)", "to_json(6: v_map_int)",
+                "to_json(CAST(9: v_array_decimal AS ARRAY<JSON>))", "to_json(CAST(10: v_array_boolean AS ARRAY<JSON>))",
+                "to_json(CAST(11: v_struct AS struct<`a` int(11), `b` json, `c` array<datetime>>))");
+        assertPlanContains("select cast([cast(1 as largeint)] as json)", "to_json(CAST([1] AS ARRAY<JSON>))");
+        assertPlanContains("select cast(map{'a': [1, 2]} as json), cast(named_struct('a', 1, 'b', 'x') as json)",
+                "to_json(map{'a':[1,2]})", "to_json(named_struct('a', 1, 'b', 'x'))");
+
+        // Aggregated values, as in CAST(map_agg(k, v) AS JSON).
+        assertPlanContains("select v_id, cast(array_agg(v_array) as json), cast(map_agg(v_id, v_array_decimal) as json) " +
+                        "from tjson_complex group by v_id",
+                "to_json(12: array_agg)", "to_json(CAST(13: map_agg AS MAP<INT,ARRAY<JSON>>))");
+        // A view keeps the conversion of decimals to JSON.
+        starRocksAssert.withView("CREATE VIEW tjson_complex_view AS " +
+                "SELECT cast(v_array_decimal as json) AS j FROM tjson_complex");
+        assertPlanContains("select j from tjson_complex_view", "to_json(CAST(9: v_array_decimal AS ARRAY<JSON>))");
+
+        assertExceptionMsgContains("select cast(v_map_decimal as json) from tjson_complex",
+                "Invalid type cast from map<decimal(10, 2),int(11)> to json");
+        assertExceptionMsgContains("select cast([cast(1 as decimal(50, 10))] as json)",
+                "Invalid type cast from array<DECIMAL256(50,10)> to json");
+        assertExceptionMsgContains("select cast([cast(1 as decimalv2(10, 2))] as json)",
+                "Invalid type cast from array<DECIMAL(10,2)> to json");
+        assertExceptionMsgContains("select cast(v_map_boolean as json) from tjson_complex",
+                "Invalid type cast from map<boolean,int(11)> to json");
+        // Only explicit casts are rewritten: a complex value is still not implicitly converted to JSON.
+        assertExceptionMsgContains("select json_length(v_array) from tjson_complex",
+                "No matching function with signature: json_length(array<int(11)>)");
+    }
+
+    @Test
     public void testFlatJsonMeta() throws Exception {
         String sql = "select flat_json_meta(v_json) from tjson_test[_META_]";
         String plan = getFragmentPlan(sql);

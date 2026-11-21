@@ -1,12 +1,12 @@
 ---
 displayed_sidebar: docs
-description: "Converts a Map or Struct value into a JSON string."
+description: "Converts an Array, Map, or Struct value into a JSON value."
 products: [oss, enterprise, cloud, anywhere]
 ---
 
 # to_json
 
-Converts a Map or Struct value into a JSON string. If the input value is NULL, NULL is returned.
+Converts an Array, Map, or Struct value into a JSON value. If the input value is NULL, NULL is returned.
 
 :::tip
 All of the JSON functions and operators are listed in the navigation and on the [overview page](../overview-of-json-functions-and-operators.md)
@@ -26,7 +26,7 @@ to_json(any_value)
 
 ## Parameters
 
-`any_value`: the Map or Struct expression you want to convert. If the input value is invalid, an error is returned. The value in each key-value pair of the Map or Struct value is nullable. See the last example.
+`any_value`: the Array, Map, or Struct expression you want to convert. If the input value is invalid, an error is returned. The elements of the Array value and the value in each key-value pair of the Map or Struct value are nullable. See the last example.
 
 `GEOGRAPHY` and `GEOMETRY` are unsupported anywhere inside the input, including typed NULLs. Use `ST_AsText` on the geo values before building the Map or Struct to include their WKT in JSON.
 

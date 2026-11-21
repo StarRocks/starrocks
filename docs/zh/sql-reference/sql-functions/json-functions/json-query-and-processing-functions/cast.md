@@ -34,7 +34,7 @@ cast(sql_expr AS JSON)
 
 - `sql_data_type`：要将 JSON 值转换为的 SQL 数据类型。仅支持 STRING、VARCHAR、CHAR、BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、DOUBLE 和 FLOAT 数据类型。
 
-- `sql_expr`：表示要转换为 JSON 值的 SQL 值的表达式。此参数支持 `sql_data_type` 参数支持的所有 SQL 数据类型。
+- `sql_expr`：表示要转换为 JSON 值的 SQL 值的表达式。此参数支持 `sql_data_type` 参数支持的所有 SQL 数据类型。此外还支持 ARRAY、MAP 和 STRUCT 值，要求其元素、值和字段为上述类型、DECIMAL（DECIMAL32、DECIMAL64 和 DECIMAL128）、DATE、DATETIME、JSON 或嵌套的 ARRAY、MAP 和 STRUCT 类型，且 MAP 的键为字符串或整数。
 
 ## 返回值
 
@@ -49,6 +49,8 @@ cast(sql_expr AS JSON)
   - 如果 SQL 值超过 JSON 支持的精度，cast 函数返回 `NULL` 以防止算术溢出。
 
   - 如果 SQL 值为 `NULL`，cast 函数不会将 SQL 值 `NULL` 转换为 JSON 值 `NULL`。返回值仍然是 SQL 值 `NULL`。
+
+  - ARRAY、MAP 或 STRUCT 值的转换方式与 [to_json](./to_json.md) 相同：ARRAY 转换为 JSON 数组，MAP 或 STRUCT 转换为 JSON 对象。`NULL` 元素、值和字段转换为 JSON `null`。其中的 BOOLEAN、LARGEINT 和 DECIMAL 值转换为 JSON 布尔值和 JSON 数字，与转换单个值时相同。例如，`cast([1, 2] AS JSON)` 返回 `[1, 2]`，`cast(map{'a': 1.5} AS JSON)` 返回 `{"a": 1.5}`。
 
 - 从 JSON 转换为 SQL
 
