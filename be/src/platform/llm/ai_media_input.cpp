@@ -149,8 +149,8 @@ StatusOr<AIMediaInput> create_ai_media(const FileRowRef& file, size_t inline_max
             return AIMediaInput{.content_type = std::string(content_type), .inline_bytes = std::string(bytes)};
         }
         if (file.uri) {
-            if (file.offset.value_or(0) > 0) {
-                return Status::DataQualityError("AI FILE URL does not support a positive offset");
+            if (file.offset.value_or(0) != 0) {
+                return Status::DataQualityError("AI FILE URL requires a NULL or zero offset");
             }
             std::string url = file.uri->to_string();
             RETURN_IF_ERROR(validate_file_url(url));
