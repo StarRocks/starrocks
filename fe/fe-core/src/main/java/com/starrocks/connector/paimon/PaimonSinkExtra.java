@@ -18,6 +18,7 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.thrift.TPaimonOverwriteMode;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.paimon.schema.TableSchema;
@@ -50,7 +51,7 @@ public final class PaimonSinkExtra {
     private final int bucketCount;
     private final Map<String, String> options;
     private final String operationId;
-    private final String overwriteMode;
+    private final TPaimonOverwriteMode overwriteMode;
     private final Map<String, String> staticPartition;
     private final String timeZone;
     private final String commitUser;
@@ -59,7 +60,7 @@ public final class PaimonSinkExtra {
     private PaimonSinkCommitValidator commitValidator;
     private Long loadedRows;
 
-    private PaimonSinkExtra(FileStoreTable table, String tableIdentity, String mode,
+    private PaimonSinkExtra(FileStoreTable table, String tableIdentity, TPaimonOverwriteMode mode,
                            Map<String, String> staticPartition, String operationId, String timeZone) {
         this.tracers = Tracers.get();
         TableSchema schema = table.schema();
@@ -83,7 +84,7 @@ public final class PaimonSinkExtra {
         recordPublicationState();
     }
 
-    public static PaimonSinkExtra from(PaimonTable table, String mode, Map<String, String> staticPartition,
+    public static PaimonSinkExtra from(PaimonTable table, TPaimonOverwriteMode mode, Map<String, String> staticPartition,
                                        String operationId, String timeZone) {
         if (!(table.getNativeTable() instanceof FileStoreTable nativeTable)) {
             throw new StarRocksConnectorException("Paimon writes require a file-store table");
@@ -92,12 +93,15 @@ public final class PaimonSinkExtra {
         if (operationId == null || !operationId.matches("[A-Za-z0-9_-]{1,128}")) {
             throw new StarRocksConnectorException("Invalid Paimon write operation identity");
         }
-        if (!"APPEND".equals(mode)) {
+        if (mode == null) {
             throw new StarRocksConnectorException("Unsupported Paimon overwrite mode");
         }
         Map<String, String> partition = staticPartition == null ? Map.of() : staticPartition;
         if (!nativeTable.partitionKeys().containsAll(partition.keySet())) {
             throw new StarRocksConnectorException("Paimon static partition contains an unknown column");
+        }
+        if (mode == TPaimonOverwriteMode.STATIC && partition.isEmpty()) {
+            throw new StarRocksConnectorException("Paimon static overwrite requires a partition target");
         }
         return new PaimonSinkExtra(nativeTable, table.getNativeWriteIdentity(), mode, partition, operationId, timeZone);
     }
@@ -171,7 +175,7 @@ public final class PaimonSinkExtra {
     }
 
     public boolean isOverwrite() {
-        return !overwriteMode.equals("APPEND");
+        return overwriteMode != TPaimonOverwriteMode.APPEND;
     }
 
     public String getLocation() {
@@ -218,7 +222,7 @@ public final class PaimonSinkExtra {
         return operationId;
     }
 
-    public String getOverwriteMode() {
+    public TPaimonOverwriteMode getOverwriteMode() {
         return overwriteMode;
     }
 

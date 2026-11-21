@@ -13,9 +13,11 @@
 // limitations under the License.
 package com.starrocks.authorization.ranger;
 
+import com.google.common.collect.Maps;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ExternalAccessController;
 import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.authorization.RejectedRecordsRowAccessPolicy;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
@@ -30,11 +32,14 @@ import org.apache.ranger.plugin.model.RangerPolicy;
 import org.apache.ranger.plugin.model.RangerServiceDef;
 import org.apache.ranger.plugin.policyengine.RangerAccessResourceImpl;
 import org.apache.ranger.plugin.policyengine.RangerAccessResult;
+import org.apache.ranger.plugin.policyengine.RangerAccessResultProcessor;
 import org.apache.ranger.plugin.policyengine.RangerPolicyEngine;
 import org.apache.ranger.plugin.service.RangerBasePlugin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
@@ -110,12 +115,84 @@ public abstract class RangerAccessController extends ExternalAccessController im
         return rangerPlugin;
     }
 
+    /** The resource of {@code tableName} in this controller's Ranger service. */
+    protected abstract RangerAccessResourceImpl tableResource(TableName tableName);
+
+    /** The resource of column {@code column} of {@code tableName} in this controller's Ranger service. */
+    protected abstract RangerAccessResourceImpl columnResource(TableName tableName, String column);
+
+    @Override
+    public Map<String, Expr> getColumnMaskingPolicy(ConnectContext context, TableName tableName, List<Column> columns) {
+        return columnMaskingPolicy(context, tableName, columns, true);
+    }
+
+    @Override
+    public Map<String, Expr> getColumnMaskingPolicyWithoutAudit(ConnectContext context, TableName tableName,
+                                                                List<Column> columns) {
+        return columnMaskingPolicy(context, tableName, columns, false);
+    }
+
+    @Override
+    public Expr getRowAccessPolicy(ConnectContext context, TableName tableName) {
+        return rowAccessPolicy(context, tableName, true);
+    }
+
+    @Override
+    public Expr getRowAccessPolicyWithoutAudit(ConnectContext context, TableName tableName) {
+        return rowAccessPolicy(context, tableName, false);
+    }
+
+    private Map<String, Expr> columnMaskingPolicy(ConnectContext context, TableName tableName, List<Column> columns,
+                                                  boolean audit) {
+        Map<String, Expr> maskingExprMap = Maps.newHashMap();
+        for (Column column : columns) {
+            RangerAccessResourceImpl resource = columnResource(tableName, column.getName());
+            Expr maskingExpr = audit
+                    ? getColumnMaskingExpression(resource, column, context)
+                    : getColumnMaskingExpressionWithoutAudit(resource, column, context);
+            if (maskingExpr != null) {
+                maskingExprMap.put(column.getName(), maskingExpr);
+            }
+        }
+        return maskingExprMap;
+    }
+
+    private Expr rowAccessPolicy(ConnectContext context, TableName tableName, boolean audit) {
+        // The built-in row access policy on _statistics_.rejected_records applies whether the cluster runs
+        // Ranger or the native authorizer, so it takes precedence over any Ranger-defined policy for that one
+        // table; every other table goes through Ranger.
+        if (RejectedRecordsRowAccessPolicy.matches(tableName)) {
+            return RejectedRecordsRowAccessPolicy.buildPolicy(context, tableName);
+        }
+        RangerAccessResourceImpl resource = tableResource(tableName);
+        return audit
+                ? getRowAccessExpression(resource, context)
+                : getRowAccessExpressionWithoutAudit(resource, context);
+    }
+
+    /**
+     * The plugin's result processor is its audit handler: a policy evaluation that gets it records the policy hit as
+     * an audit event, with the same handler {@link #hasPermission} uses through {@code isAccessAllowed}; one that
+     * gets null is not audited. A masking or row filter hit is an audit event of its own in Ranger (Hive's and
+     * Trino's plugins record it), so the lookups that apply a policy audit, and only a lookup that merely inspects
+     * one takes the {@code WithoutAudit} variant.
+     */
     public Expr getColumnMaskingExpression(RangerAccessResourceImpl resource, Column column, ConnectContext context) {
+        return evalColumnMasking(resource, column, context, rangerPlugin.getResultProcessor());
+    }
+
+    protected Expr getColumnMaskingExpressionWithoutAudit(RangerAccessResourceImpl resource, Column column,
+                                                          ConnectContext context) {
+        return evalColumnMasking(resource, column, context, null);
+    }
+
+    private Expr evalColumnMasking(RangerAccessResourceImpl resource, Column column, ConnectContext context,
+                                   RangerAccessResultProcessor auditHandler) {
         RangerStarRocksAccessRequest request = RangerStarRocksAccessRequest.createAccessRequest(
                 resource, context.getCurrentUserIdentity(), context.getGroups(),
                 PrivilegeType.SELECT.name().toLowerCase(ENGLISH));
 
-        RangerAccessResult result = rangerPlugin.evalDataMaskPolicies(request, null);
+        RangerAccessResult result = rangerPlugin.evalDataMaskPolicies(request, auditHandler);
         if (result != null && result.isMaskEnabled()) {
             String maskType = result.getMaskType();
             RangerServiceDef.RangerDataMaskTypeDef maskTypeDef = result.getMaskTypeDef();
@@ -143,11 +220,21 @@ public abstract class RangerAccessController extends ExternalAccessController im
         return null;
     }
 
+    /** See {@link #getColumnMaskingExpression}. */
     protected Expr getRowAccessExpression(RangerAccessResourceImpl resource, ConnectContext context) {
+        return evalRowAccess(resource, context, rangerPlugin.getResultProcessor());
+    }
+
+    protected Expr getRowAccessExpressionWithoutAudit(RangerAccessResourceImpl resource, ConnectContext context) {
+        return evalRowAccess(resource, context, null);
+    }
+
+    private Expr evalRowAccess(RangerAccessResourceImpl resource, ConnectContext context,
+                               RangerAccessResultProcessor auditHandler) {
         RangerStarRocksAccessRequest request = RangerStarRocksAccessRequest.createAccessRequest(
                 resource, context.getCurrentUserIdentity(), context.getGroups(),
                 PrivilegeType.SELECT.name().toLowerCase(ENGLISH));
-        RangerAccessResult result = rangerPlugin.evalRowFilterPolicies(request, null);
+        RangerAccessResult result = rangerPlugin.evalRowFilterPolicies(request, auditHandler);
         if (result != null && result.isRowFilterEnabled()) {
             return SqlParser.parseSqlToExpr(result.getFilterExpr(), context.getSessionVariable().getSqlMode());
         } else {

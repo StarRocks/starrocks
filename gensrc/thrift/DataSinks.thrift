@@ -341,6 +341,13 @@ struct TSplitDataStreamSink {
     3: optional list<Exprs.TExpr> splitExprs;
 }
 
+enum TPaimonOverwriteMode {
+    APPEND = 0,
+    FULL = 1,
+    STATIC = 2,
+    DYNAMIC = 3
+}
+
 // Frozen write contract. Native schema JSON retains field ids, nested nullability and
 // timestamp precision that cannot be reconstructed from the scan tuple alone.
 struct TPaimonTableSink {
@@ -359,6 +366,7 @@ struct TPaimonTableSink {
     13: optional string commit_user
     // Field 14 is reserved.
     15: optional string operation_id
+    // Legacy field for compatibility with backends that predate write_mode.
     16: optional string overwrite_mode
     17: optional map<string, string> static_partition
     18: optional CloudConfiguration.TCloudConfiguration cloud_configuration
@@ -366,6 +374,7 @@ struct TPaimonTableSink {
     20: optional i32 writer_protocol_version
     21: optional i32 routing_bucket_slot_id
     22: optional bool bucket_routed
+    23: optional TPaimonOverwriteMode write_mode
 }
 
 // Extension point for TDataSink. DO NOT MODIFY: do not add fields here, and do

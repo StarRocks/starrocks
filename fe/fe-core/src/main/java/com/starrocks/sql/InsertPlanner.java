@@ -121,6 +121,7 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.thrift.TPaimonOverwriteMode;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.type.IntegerType;
@@ -709,7 +710,9 @@ public class InsertPlanner {
                         isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable());
             } else if (targetTable instanceof PaimonTable paimonTable) {
                 try {
-                    PaimonSinkExtra extra = PaimonSinkExtra.from(paimonTable, "APPEND",
+                    TPaimonOverwriteMode overwriteMode = paimonOverwriteMode(insertStmt, paimonTable,
+                            session.getSessionVariable());
+                    PaimonSinkExtra extra = PaimonSinkExtra.from(paimonTable, overwriteMode,
                             PaimonUtils.getStaticPartitionValues(insertStmt, paimonTable),
                             PaimonUtils.getWriteOperationId(session), session.getSessionVariable().getTimeZone());
                     dataSink = new PaimonTableSink(paimonTable, tupleDesc, extra);
@@ -805,6 +808,7 @@ public class InsertPlanner {
         try (Timer ignore2 = Tracers.watchScope("Optimizer")) {
             OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
             optimizerContext.setSourceTablesCount(sourceTablesCount);
+            optimizerContext.setMaterializedViewRefresh(targetTable.isMaterializedView() && insertStmt.isSystem());
             if (session.getSessionVariable().isEnableIVMRefresh()) {
                 // Position i of outputColumns writes targetTable fullSchema[i]; IvmRewriter relies on
                 // this pairing to bind aggregates to MV state columns (bindMvColumnsForAggregate).
@@ -1387,6 +1391,18 @@ public class InsertPlanner {
         }
         Preconditions.checkState(dataColumnIndex == dataColumns.size(), "Paimon static partition output mismatch");
         return root.withNewRoot(new LogicalProjectOperator(projection));
+    }
+
+    private static TPaimonOverwriteMode paimonOverwriteMode(InsertStmt insertStmt, PaimonTable table,
+                                                          SessionVariable sessionVariable) {
+        if (!insertStmt.isOverwrite()) {
+            return TPaimonOverwriteMode.APPEND;
+        }
+        if (insertStmt.isStaticKeyPartitionInsert()) {
+            return TPaimonOverwriteMode.STATIC;
+        }
+        return !table.isUnPartitioned() && sessionVariable.isDynamicOverwrite()
+                ? TPaimonOverwriteMode.DYNAMIC : TPaimonOverwriteMode.FULL;
     }
 
     private OptExprBuilder fillKeyPartitionsColumn(ColumnRefFactory columnRefFactory,

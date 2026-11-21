@@ -118,6 +118,12 @@ public class ColumnPrivilege {
             optimizerOptions.disableRule(RuleType.GP_SINGLE_TABLE_MV_REWRITE);
             optimizerOptions.disableRule(RuleType.GP_MULTI_TABLE_MV_REWRITE);
             optimizerOptions.disableRule(RuleType.GP_PRUNE_EMPTY_OPERATOR);
+            // This pass only reports which columns each scan reads; its plan is discarded, the statement is planned
+            // again after the check. A rule that replaces a scan with an empty Values -- a predicate that is always
+            // false (a Ranger row filter of `0 = 1`, a user's `WHERE 1 = 0`) or LIMIT 0 -- would leave the table
+            // with no column to check, and so with no SELECT check at all. Keep such scans here.
+            optimizerOptions.disableRule(RuleType.TF_CAST_TO_EMPTY);
+            optimizerOptions.disableRule(RuleType.TF_ELIMINATE_LIMIT_ZERO);
             // Prune without the IVM rewrite: it needs the MV state-column bindings only InsertPlanner sets up, and it
             // changes how an IVM refresh scans its base tables, not which of their columns it reads. The optimizer also
             // detaches the query MV context, which carries what the statement's own planning still has to read.
@@ -159,6 +165,18 @@ public class ColumnPrivilege {
                     }
                 } else {
                     Set<String> columns = scanColumns.getOrDefault(tableName, new HashSet<>());
+                    if (columns.isEmpty()) {
+                        // No scan of this table survived the pass above, so there is no column to check. Check the
+                        // table rather than nothing, as Trino's Ranger plugin does for a table with no columns.
+                        try {
+                            Authorizer.checkTableAction(context, tableName, PrivilegeType.SELECT);
+                        } catch (AccessDeniedException e) {
+                            AccessDeniedException.reportAccessDenied(
+                                    tableName.getCatalog(),
+                                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                    PrivilegeType.SELECT.name(), ObjectType.TABLE.name(), tableName.getTbl());
+                        }
+                    }
                     for (String column : columns) {
                         try {
                             Authorizer.checkColumnAction(context,

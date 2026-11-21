@@ -14,10 +14,25 @@
 
 package com.starrocks.type;
 
+import com.google.gson.annotations.SerializedName;
+
 import java.util.Objects;
 
-/** Immutable semantic type metadata; column representation belongs to the column/transport layer. */
-public record GeoTypeDescriptor(LogicalType logicalType, EdgeAlgorithm edgeAlgorithm, String crs, Integer srid) {
+/**
+ * Immutable semantic type metadata; column representation belongs to the column/transport layer.
+ * <p>
+ * A plain class rather than a record: FE's GSON version cannot read a record back from FE metadata.
+ */
+public final class GeoTypeDescriptor {
+    @SerializedName(value = "logicalType")
+    private final LogicalType logicalType;
+    @SerializedName(value = "edgeAlgorithm")
+    private final EdgeAlgorithm edgeAlgorithm;
+    @SerializedName(value = "crs")
+    private final String crs;
+    @SerializedName(value = "srid")
+    private final Integer srid;
+
     public enum LogicalType {
         UNKNOWN, GEOGRAPHY, GEOMETRY
     }
@@ -26,10 +41,27 @@ public record GeoTypeDescriptor(LogicalType logicalType, EdgeAlgorithm edgeAlgor
         UNKNOWN, SPHERICAL, VINCENTY, THOMAS, ANDOYER, KARNEY, PLANAR
     }
 
-    public GeoTypeDescriptor {
-        Objects.requireNonNull(logicalType);
-        Objects.requireNonNull(edgeAlgorithm);
-        Objects.requireNonNull(crs);
+    public GeoTypeDescriptor(LogicalType logicalType, EdgeAlgorithm edgeAlgorithm, String crs, Integer srid) {
+        this.logicalType = Objects.requireNonNull(logicalType);
+        this.edgeAlgorithm = Objects.requireNonNull(edgeAlgorithm);
+        this.crs = Objects.requireNonNull(crs);
+        this.srid = srid;
+    }
+
+    public LogicalType logicalType() {
+        return logicalType;
+    }
+
+    public EdgeAlgorithm edgeAlgorithm() {
+        return edgeAlgorithm;
+    }
+
+    public String crs() {
+        return crs;
+    }
+
+    public Integer srid() {
+        return srid;
     }
 
     public static GeoTypeDescriptor geography(String crs) {
@@ -60,6 +92,30 @@ public record GeoTypeDescriptor(LogicalType logicalType, EdgeAlgorithm edgeAlgor
     public boolean isSemanticallyCompatible(GeoTypeDescriptor other) {
         return other != null && !crs.isEmpty() && logicalType == other.logicalType
                 && edgeAlgorithm == other.edgeAlgorithm && crs.equals(other.crs);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof GeoTypeDescriptor)) {
+            return false;
+        }
+        GeoTypeDescriptor other = (GeoTypeDescriptor) o;
+        return logicalType == other.logicalType && edgeAlgorithm == other.edgeAlgorithm
+                && Objects.equals(crs, other.crs) && Objects.equals(srid, other.srid);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(logicalType, edgeAlgorithm, crs, srid);
+    }
+
+    @Override
+    public String toString() {
+        return "GeoTypeDescriptor[logicalType=" + logicalType + ", edgeAlgorithm=" + edgeAlgorithm + ", crs=" + crs
+                + ", srid=" + srid + "]";
     }
 
     private static Integer deriveSrid(String crs) {

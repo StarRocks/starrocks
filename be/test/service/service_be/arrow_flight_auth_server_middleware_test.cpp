@@ -21,17 +21,11 @@
 #include <string>
 
 #include "arrow/util/base64.h"
+#include "service/service_be/arrow_flight_call_header_utils.h"
 
 namespace starrocks {
 
 namespace {
-
-// Literals mirror arrow_flight_call_header_utils.h, which defines non-inline functions and so cannot be
-// included from a second test translation unit.
-constexpr char kAuthHeader[] = "authorization";
-constexpr char kBearerPrefix[] = "Bearer ";
-constexpr char kBearerDefaultToken[] = "bearertoken";
-constexpr char kBasicPrefix[] = "Basic ";
 
 class FakeServerCallContext : public arrow::flight::ServerCallContext {
 public:

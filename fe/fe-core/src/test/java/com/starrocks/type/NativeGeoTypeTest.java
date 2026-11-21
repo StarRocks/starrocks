@@ -109,18 +109,49 @@ public class NativeGeoTypeTest {
             assertSame(descriptor, type.clone().getGeoDescriptor());
             assertEquals(type, type.clone());
 
-            // FE metadata is unchanged: like the other scalar type classes, GeoType has no subtype label of its
-            // own, is read back as a ScalarType, and its descriptor is still not persisted.
+            // FE metadata keeps the descriptor under the GeoType subtype label.
             Column column = new Column("shape", type);
             String json = GsonUtils.GSON.toJson(column);
-            assertFalse(json.contains("GeoType"));
-            assertFalse(json.contains("crs"));
+            assertTrue(json.contains("\"clazz\":\"GeoType\""));
             Type restored = GsonUtils.GSON.fromJson(json, Column.class).getType();
-            assertSame(ScalarType.class, restored.getClass());
-            assertEquals(primitive, restored.getPrimitiveType());
-            assertNull(((ScalarType) restored).getGeoDescriptor());
-            assertEquals(new ScalarType(primitive), restored);
+            assertSame(GeoType.class, restored.getClass());
+            assertEquals(type, restored);
+            assertEquals(descriptor, ((GeoType) restored).getGeoDescriptor());
         }
+        // The descriptor is written whole, as one nested object.
+        GeoType geometry3857 = GeoType.createGeometryType("EPSG:3857");
+        String geometryJson = "{\"clazz\":\"GeoType\",\"geo\":{\"logicalType\":\"GEOMETRY\",\"edgeAlgorithm\":\"PLANAR\","
+                + "\"crs\":\"EPSG:3857\",\"srid\":3857},\"type\":\"GEOMETRY\",\"len\":-1,\"precision\":0,\"scale\":0}";
+        assertEquals(geometryJson, GsonUtils.GSON.toJson(geometry3857, Type.class));
+        assertEquals(geometry3857, GsonUtils.GSON.fromJson(geometryJson, Type.class));
+        // A null SRID is omitted and read back as null.
+        GeoType custom = GeoType.createGeometryType("custom:local");
+        assertFalse(GsonUtils.GSON.toJson(custom, Type.class).contains("srid"));
+        assertEquals(custom, GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(custom, Type.class), Type.class));
+        // Nested in a complex type, the descriptor survives too.
+        Type nested = new ArrayType(new MapType(IntegerType.INT, new StructType(List.of(geometry3857))));
+        assertEquals(nested, GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(nested, Type.class), Type.class));
+        // GEO metadata written before descriptors were persisted stays a plain ScalarType and is written back as is.
+        String legacyJson = "{\"clazz\":\"ScalarType\",\"type\":\"GEOMETRY\",\"len\":-1,\"precision\":0,\"scale\":0}";
+        Type legacy = GsonUtils.GSON.fromJson(legacyJson, Type.class);
+        assertSame(ScalarType.class, legacy.getClass());
+        assertNull(((ScalarType) legacy).getGeoDescriptor());
+        assertEquals(legacyJson, GsonUtils.GSON.toJson(legacy, Type.class));
+        // The descriptor is a value: equal by content, with a stable text form.
+        GeoTypeDescriptor one = GeoTypeDescriptor.geometry("EPSG:3857");
+        assertEquals(one, one);
+        assertEquals(one, GeoTypeDescriptor.geometry("EPSG:3857"));
+        assertEquals(one.hashCode(), GeoTypeDescriptor.geometry("EPSG:3857").hashCode());
+        assertNotEquals(one, GeoTypeDescriptor.geometry("EPSG:4326"));
+        assertNotEquals(one, new GeoTypeDescriptor(one.logicalType(), one.edgeAlgorithm(), one.crs(), null));
+        assertNotEquals(one, GeoTypeDescriptor.geography("EPSG:3857"));
+        assertNotEquals(one, "EPSG:3857");
+        assertEquals("GeoTypeDescriptor[logicalType=GEOMETRY, edgeAlgorithm=PLANAR, crs=EPSG:3857, srid=3857]",
+                one.toString());
+        assertThrows(NullPointerException.class, () -> new GeoTypeDescriptor(null, one.edgeAlgorithm(), "x", null));
+        assertThrows(NullPointerException.class, () -> new GeoTypeDescriptor(one.logicalType(), null, "x", null));
+        assertThrows(NullPointerException.class, () -> new GeoTypeDescriptor(one.logicalType(), one.edgeAlgorithm(),
+                null, null));
         // The convenience factories fill in everything that follows from the kind and the CRS.
         assertEquals(new GeoType(PrimitiveType.GEOGRAPHY, descriptor(PrimitiveType.GEOGRAPHY)),
                 GeoType.createGeographyType("OGC:CRS84"));

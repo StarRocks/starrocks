@@ -19,15 +19,14 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -162,30 +161,7 @@ public class MVActiveChecker extends LeaderDaemon {
             return;
         }
 
-        boolean activeOk = false;
-        String mvFullName =
-                new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName.get(), mv.getName()).toString();
-        String sql = String.format("ALTER MATERIALIZED VIEW %s active", mvFullName);
-        LOG.info("[MVActiveChecker] Start to activate MV {} because of its inactive reason: {}",
-                mvFullName, mv.getInactiveReason());
-        try {
-            ConnectContext connect = StatisticUtils.buildConnectContext();
-            connect.setStatisticsContext(false);
-            connect.setDatabase(dbName.get());
-
-            connect.executeSql(sql);
-            if (mv.isActive()) {
-                activeOk = true;
-                LOG.info("[MVActiveChecker] activate MV {} successfully", mvFullName);
-            } else {
-                LOG.warn("[MVActiveChecker] activate MV {} failed", mvFullName);
-            }
-        } catch (Exception e) {
-            LOG.warn("[MVActiveChecker] activate MV {} failed", mvFullName, e);
-        } finally {
-            ConnectContext.remove();
-        }
-
+        boolean activeOk = executeActivate(mv, dbName.get());
         if (activeOk) {
             MV_ACTIVE_INFO.remove(mv.getMvId());
         } else {
@@ -195,6 +171,41 @@ public class MVActiveChecker extends LeaderDaemon {
                 MV_ACTIVE_INFO.put(mv.getMvId(), MvActiveInfo.firstFailure());
             }
         }
+    }
+
+    /**
+     * Runs ALTER MATERIALIZED VIEW ... ACTIVE whatever the view is inactive for, outside the backoff this checker
+     * keeps. Returns whether the view is active afterwards.
+     */
+    public static boolean activate(MaterializedView mv) {
+        Optional<String> dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(mv.getDbId())
+                .map(Database::getFullName);
+        return dbName.isPresent() && executeActivate(mv, dbName.get());
+    }
+
+    private static boolean executeActivate(MaterializedView mv, String dbName) {
+        String mvFullName = ParseUtil.backquote(dbName) + "." + ParseUtil.backquote(mv.getName());
+        String sql = String.format("ALTER MATERIALIZED VIEW %s active", mvFullName);
+        LOG.info("[MVActiveChecker] Start to activate MV {} because of its inactive reason: {}",
+                mvFullName, mv.getInactiveReason());
+        try {
+            ConnectContext connect = StatisticUtils.buildConnectContext();
+            connect.setStatisticsContext(false);
+            connect.setDatabase(dbName);
+            // Hand the caller's thread its own context back: a refresh activates its view from the thread it runs in.
+            try (ConnectContext.ScopeGuard ignored = connect.bindScope()) {
+                connect.executeSql(sql);
+            }
+        } catch (Exception e) {
+            LOG.warn("[MVActiveChecker] activate MV {} failed", mvFullName, e);
+            return false;
+        }
+        if (mv.isActive()) {
+            LOG.info("[MVActiveChecker] activate MV {} successfully", mvFullName);
+            return true;
+        }
+        LOG.warn("[MVActiveChecker] activate MV {} failed", mvFullName);
+        return false;
     }
 
     public static class MvActiveInfo {
