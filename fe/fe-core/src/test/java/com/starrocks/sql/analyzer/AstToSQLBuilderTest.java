@@ -16,6 +16,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.formatter.AST2SQLVisitor;
 import com.starrocks.sql.formatter.FormatOptions;
@@ -79,6 +80,56 @@ public class AstToSQLBuilderTest {
                         "\"aws.s3.secret_key\" = \"***\", \"format\" = \"parquet\", \"path\" = \"s3://xxx/zzz\")",
                 AstToSQLBuilder.toSQL(stmt));
     }
+    @Test
+    public void testInsertPropertiesRoundTrip() {
+        String properties = " properties('merge_condition'='version', 'strict_mode'='true', " +
+                "'max_filter_ratio'='0', 'timeout'='60') ";
+        String[] statements = {
+                "insert into t0 (id, version, value)" + properties + "values (1, 20, 'new')",
+                "insert into t0 with label load_batch (id, version, value)" + properties +
+                        "select id, version, value from src where id > 0",
+                "insert overwrite t0 (id, version, value)" + properties + "select id, version, value from src"
+        };
+        for (String sql : statements) {
+            InsertStmt original = (InsertStmt) SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+            String serialized = AstToSQLBuilder.toSQLWithCredential(original);
+            InsertStmt reparsed = (InsertStmt) SqlParser.parseSingleStatement(serialized, SqlModeHelper.MODE_DEFAULT);
+
+            Assertions.assertEquals(original.getProperties(), reparsed.getProperties(), sql);
+            Assertions.assertEquals(original.getTargetColumnNames(), reparsed.getTargetColumnNames(), sql);
+            Assertions.assertEquals(original.getLabel(), reparsed.getLabel(), sql);
+            Assertions.assertEquals(original.isOverwrite(), reparsed.isOverwrite(), sql);
+            Assertions.assertEquals(serialized, AstToSQLBuilder.toSQLWithCredential(reparsed), sql);
+            Assertions.assertTrue(AstToStringBuilder.toString(original).contains("PROPERTIES ("), sql);
+        }
+    }
+
+    @Test
+    public void testInsertPropertiesDoNotChangeDigest() {
+        String sql = "insert into t0 values (1, 20)";
+        StatementBase withoutProperties = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        StatementBase withProperties = SqlParser.parseSingleStatement(
+                "insert into t0 properties('merge_condition'='version', 'strict_mode'='true') values (1, 20)",
+                SqlModeHelper.MODE_DEFAULT);
+
+        Assertions.assertEquals(AstToSQLBuilder.toDigest(withoutProperties), AstToSQLBuilder.toDigest(withProperties));
+    }
+
+    @Test
+    public void testInsertPropertiesCredentialRedaction() {
+        // Parsing alone permits arbitrary properties; no load with this synthetic password is executed.
+        InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement(
+                "insert into t0 properties('password'='test-secret', 'merge_condition'='version') values (1, 20)",
+                SqlModeHelper.MODE_DEFAULT);
+
+        String displaySql = AstToSQLBuilder.toSQL(stmt);
+        String executableSql = AstToSQLBuilder.toSQLWithCredential(stmt);
+        Assertions.assertFalse(displaySql.contains("test-secret"));
+        Assertions.assertTrue(displaySql.contains("\"password\" = \"***\""));
+        InsertStmt reparsed = (InsertStmt) SqlParser.parseSingleStatement(executableSql, SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals(stmt.getProperties(), reparsed.getProperties());
+    }
+
     @Test
     public void testSelectStarExcludeToSQL() throws Exception {
         String sql = "SELECT * EXCLUDE (name, email) FROM test_exclude;";
