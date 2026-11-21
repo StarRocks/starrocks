@@ -78,6 +78,10 @@ import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.image.ProtoKinds;
+import com.starrocks.persist.proto.RoutineLoadJobCorePB;
+import com.starrocks.persist.proto.RoutineLoadJobPB;
+import com.starrocks.persist.proto.StringMapPB;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
@@ -2293,6 +2297,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         setRoutineLoadDesc(CreateRoutineLoadStmt.getLoadDesc(origStmt, sessionVariables));
     }
 
+    private void restoreLoadDesc() {
+        setRoutineLoadDesc(CreateRoutineLoadStmt.getLoadDesc(origStmt, sessionVariables));
+    }
+
     public TRoutineLoadJobInfo toThrift() {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         Table tbl = null;
@@ -2379,5 +2387,205 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         if (streamLoadTask != null) {
             streamLoadTask.replayOnVisible(txnState);
         }
+    }
+
+    protected RoutineLoadJobCorePB toJobCoreProto() {
+        RoutineLoadJobCorePB.Builder builder = RoutineLoadJobCorePB.newBuilder();
+        builder.setId(id);
+        if (name != null) {
+            builder.setName(name);
+        }
+        builder.setDbId(dbId);
+        builder.setTableId(tableId);
+        builder.setDesireTaskConcurrentNum(desireTaskConcurrentNum);
+        if (state != null) {
+            builder.setState(RoutineLoadJobCorePB.State.valueOf(state.name()));
+        }
+        if (dataSourceType != null) {
+            builder.setDataSourceType(RoutineLoadJobCorePB.SourceType.valueOf(dataSourceType.name()));
+        }
+        builder.setMaxFilterRatio(maxFilterRatio);
+        builder.setMaxErrorNum(maxErrorNum);
+        if (jobProperties != null) {
+            builder.setJobProperties(StringMapPB.newBuilder().putAllValues(jobProperties).build());
+        }
+        if (sessionVariables != null) {
+            builder.setSessionVariables(StringMapPB.newBuilder().putAllValues(sessionVariables).build());
+        }
+        builder.setTaskSchedIntervalS(taskSchedIntervalS);
+        builder.setMaxBatchRows(maxBatchRows);
+        builder.setMaxBatchSizeBytes(maxBatchSizeBytes);
+        if (progress != null) {
+            builder.setProgress(progress.toProto());
+        }
+        if (timestampProgress != null) {
+            builder.setTimestampProgress(timestampProgress.toProto());
+        }
+        builder.setCreateTimestamp(createTimestamp);
+        builder.setPauseTimestamp(pauseTimestamp);
+        builder.setEndTimestamp(endTimestamp);
+        builder.setCurrentErrorRows(currentErrorRows);
+        builder.setCurrentTotalRows(currentTotalRows);
+        builder.setErrorRows(errorRows);
+        builder.setTotalRows(totalRows);
+        builder.setUnselectedRows(unselectedRows);
+        builder.setReceivedBytes(receivedBytes);
+        builder.setTotalTaskExcutionTimeMs(totalTaskExcutionTimeMs);
+        builder.setCommittedTaskNum(committedTaskNum);
+        builder.setAbortedTaskNum(abortedTaskNum);
+        builder.setTaskConsumeSecond(taskConsumeSecond);
+        builder.setTaskTimeoutSecond(taskTimeoutSecond);
+        if (origStmt != null) {
+            builder.setOrigStmt(origStmt.toProto());
+        }
+        builder.setWarehouseId(warehouseId);
+        if (computeResource != null) {
+            builder.setComputeResource(computeResource.toProto());
+        }
+        return builder.build();
+    }
+
+    protected void fillJobCoreFromProto(RoutineLoadJobCorePB pb) {
+        if (pb.hasId()) {
+            id = pb.getId();
+        }
+        if (pb.hasName()) {
+            name = pb.getName();
+        }
+        if (pb.hasDbId()) {
+            dbId = pb.getDbId();
+        }
+        if (pb.hasTableId()) {
+            tableId = pb.getTableId();
+        }
+        if (pb.hasDesireTaskConcurrentNum()) {
+            desireTaskConcurrentNum = pb.getDesireTaskConcurrentNum();
+        }
+        if (pb.hasState()) {
+            state = JobState.valueOf(pb.getState().name());
+        }
+        if (pb.hasDataSourceType()) {
+            dataSourceType = LoadDataSourceType.valueOf(pb.getDataSourceType().name());
+        }
+        if (pb.hasMaxFilterRatio()) {
+            maxFilterRatio = pb.getMaxFilterRatio();
+        }
+        if (pb.hasMaxErrorNum()) {
+            maxErrorNum = pb.getMaxErrorNum();
+        }
+        if (pb.hasJobProperties()) {
+            jobProperties = new HashMap<>(pb.getJobProperties().getValuesMap());
+        }
+        if (pb.hasSessionVariables()) {
+            sessionVariables = new HashMap<>(pb.getSessionVariables().getValuesMap());
+        }
+        if (pb.hasTaskSchedIntervalS()) {
+            taskSchedIntervalS = pb.getTaskSchedIntervalS();
+        }
+        if (pb.hasMaxBatchRows()) {
+            maxBatchRows = pb.getMaxBatchRows();
+        }
+        if (pb.hasMaxBatchSizeBytes()) {
+            maxBatchSizeBytes = pb.getMaxBatchSizeBytes();
+        }
+        if (pb.hasProgress()) {
+            progress = RoutineLoadProgress.fromProto(pb.getProgress());
+        }
+        if (pb.hasTimestampProgress()) {
+            timestampProgress = RoutineLoadProgress.fromProto(pb.getTimestampProgress());
+        }
+        if (pb.hasCreateTimestamp()) {
+            createTimestamp = pb.getCreateTimestamp();
+        }
+        if (pb.hasPauseTimestamp()) {
+            pauseTimestamp = pb.getPauseTimestamp();
+        }
+        if (pb.hasEndTimestamp()) {
+            endTimestamp = pb.getEndTimestamp();
+        }
+        if (pb.hasCurrentErrorRows()) {
+            currentErrorRows = pb.getCurrentErrorRows();
+        }
+        if (pb.hasCurrentTotalRows()) {
+            currentTotalRows = pb.getCurrentTotalRows();
+        }
+        if (pb.hasErrorRows()) {
+            errorRows = pb.getErrorRows();
+        }
+        if (pb.hasTotalRows()) {
+            totalRows = pb.getTotalRows();
+        }
+        if (pb.hasUnselectedRows()) {
+            unselectedRows = pb.getUnselectedRows();
+        }
+        if (pb.hasReceivedBytes()) {
+            receivedBytes = pb.getReceivedBytes();
+        }
+        if (pb.hasTotalTaskExcutionTimeMs()) {
+            totalTaskExcutionTimeMs = pb.getTotalTaskExcutionTimeMs();
+        }
+        if (pb.hasCommittedTaskNum()) {
+            committedTaskNum = pb.getCommittedTaskNum();
+        }
+        if (pb.hasAbortedTaskNum()) {
+            abortedTaskNum = pb.getAbortedTaskNum();
+        }
+        if (pb.hasTaskConsumeSecond()) {
+            taskConsumeSecond = pb.getTaskConsumeSecond();
+        }
+        if (pb.hasTaskTimeoutSecond()) {
+            taskTimeoutSecond = pb.getTaskTimeoutSecond();
+        }
+        if (pb.hasOrigStmt()) {
+            origStmt = OriginStatementInfo.fromProto(pb.getOrigStmt());
+        }
+        if (pb.hasWarehouseId()) {
+            warehouseId = pb.getWarehouseId();
+        }
+        if (pb.hasComputeResource()) {
+            computeResource = ComputeResource.fromProto(pb.getComputeResource());
+        }
+    }
+
+    public RoutineLoadJobPB toProto() {
+        RoutineLoadJobPB.Builder builder = RoutineLoadJobPB.newBuilder().setCore(toJobCoreProto());
+        fillProtoVariant(builder);
+        return builder.build();
+    }
+
+    protected void fillProtoVariant(RoutineLoadJobPB.Builder builder) {
+        throw new IllegalStateException("cannot persist " + getClass().getName());
+    }
+
+    protected void fillFromVariantProto(RoutineLoadJobPB pb) {
+        throw new IllegalStateException("cannot persist " + getClass().getName());
+    }
+
+    public static RoutineLoadJob fromProto(RoutineLoadJobPB pb) {
+        ProtoKinds.checkKnown(pb.getKind(), pb.getKindValue());
+        Preconditions.checkArgument(pb.hasCore(), "missing routine load job core");
+        RoutineLoadJob job;
+        switch (pb.getKind()) {
+            case KAFKA_ROUTINE_LOAD_JOB:
+                Preconditions.checkArgument(pb.hasKafka(), "missing Kafka routine load variant");
+                job = new KafkaRoutineLoadJob();
+                break;
+            case PULSAR_ROUTINE_LOAD_JOB:
+                Preconditions.checkArgument(pb.hasPulsar(), "missing Pulsar routine load variant");
+                job = new PulsarRoutineLoadJob();
+                break;
+            default:
+                throw new IllegalArgumentException("unknown routine load job kind " + pb.getKind());
+        }
+        LoadDataSourceType expectedType = job.dataSourceType;
+        job.fillJobCoreFromProto(pb.getCore());
+        Preconditions.checkArgument(job.dataSourceType == expectedType, "routine load source type mismatch");
+        Preconditions.checkArgument(job.progress == null || job.progress.loadDataSourceType == expectedType,
+                "routine load progress type mismatch");
+        Preconditions.checkArgument(job.timestampProgress == null || job.timestampProgress.loadDataSourceType == expectedType,
+                "routine load timestamp progress type mismatch");
+        job.fillFromVariantProto(pb);
+        job.restoreLoadDesc();
+        return job;
     }
 }

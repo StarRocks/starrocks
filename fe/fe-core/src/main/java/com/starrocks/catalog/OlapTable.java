@@ -88,6 +88,16 @@ import com.starrocks.lake.StorageInfo;
 import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.OriginStatementInfo;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.KeysTypePB;
+import com.starrocks.persist.proto.MaterializedIndexMetaPB;
+import com.starrocks.persist.proto.OlapTableCorePB;
+import com.starrocks.persist.proto.OlapTablePB;
+import com.starrocks.persist.proto.PrimaryKeyEncodingTypePB;
+import com.starrocks.persist.proto.StringListPB;
+import com.starrocks.persist.proto.TablePB;
+import com.starrocks.persist.proto.ZstdCompressionPageSizesPB;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -899,7 +909,7 @@ public class OlapTable extends Table {
         if (column != null) {
             return column;
         }
-        
+
         // Check if this is a virtual column using registry
         return VirtualColumnRegistry.getColumn(name);
     }
@@ -1435,12 +1445,24 @@ public class OlapTable extends Table {
     }
 
     public void addPartition(Partition partition) {
+        attachPartition(partition);
+        invalidateMinMaxStats();
+    }
+
+    /**
+     * Restores the partition lookup maps during image loading.
+     * Invalidate MIN/MAX statistics only when changing the serving table.
+     */
+    public void addPartitionForImageLoad(Partition partition) {
+        attachPartition(partition);
+    }
+
+    private void attachPartition(Partition partition) {
         idToPartition.put(partition.getId(), partition);
         nameToPartition.put(partition.getName(), partition);
         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
             physicalPartitionIdToPartitionId.put(physicalPartition.getId(), partition.getId());
         }
-        invalidateMinMaxStats();
     }
 
     public void removePhysicalPartition(PhysicalPartition physicalPartition) {
@@ -1995,6 +2017,180 @@ public class OlapTable extends Table {
         // Keep the FE metadata of shared-data primary-key tables on the cloud-native persistent
         // index after an image load (mirrors the BE normalization). See the method for details.
         normalizeCloudNativePersistentIndex();
+    }
+
+    /**
+     * Rebuilds the in-memory state derived from the persisted fields. Shared by the GSON hook and the image v3
+     * load; the compatibility fix-ups for old images stay in the hook.
+     */
+    private void rebuildOlapTransientState() {
+        // In the present, the fullSchema could be rebuilt by schema change while the
+        // properties is changed by MV.
+        // After that, some properties of fullSchema and nameToColumn may be not same as
+        // properties of base columns.
+        // So, here we need to rebuild the fullSchema to ensure the correctness of the
+        // properties.
+        rebuildFullSchema();
+
+        // Recover nameToPartition from idToPartition
+        nameToPartition = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        physicalPartitionIdToPartitionId = Maps.newHashMap();
+        for (Partition partition : idToPartition.values()) {
+            nameToPartition.put(partition.getName(), partition);
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                physicalPartitionIdToPartitionId.put(physicalPartition.getId(), partition.getId());
+            }
+        }
+
+        if (partitionInfo instanceof ExpressionRangePartitionInfo) {
+            ((ExpressionRangePartitionInfo) partitionInfo).updateSlotRef(idToColumn);
+        } else if (partitionInfo instanceof ListPartitionInfo) {
+            ((ListPartitionInfo) partitionInfo).updateLiteralExprValues(idToColumn);
+        }
+
+        lastSchemaUpdateTime = new AtomicLong(-1);
+    }
+
+    @Override
+    protected void rebuildTransientState() {
+        // Like the GSON hook, this replaces the Table version instead of extending it.
+        rebuildOlapTransientState();
+    }
+
+    @Override
+    protected boolean persistsFullSchema() {
+        return false;
+    }
+
+    @Override
+    protected void fillProtoVariant(TablePB.Builder builder) throws IOException {
+        builder.setOlap(OlapTablePB.newBuilder().setOlap(toOlapCoreProto()));
+    }
+
+    void fillFromVariantProto(OlapTablePB pb) throws IOException {
+        fillFromOlapCoreProto(pb.getOlap());
+    }
+
+    /**
+     * The fields declared by this class, shared with the lake, external and materialized-view subclasses. The
+     * partitions are not here: they are the entries of the PARTITION section and are attached on load.
+     */
+    protected OlapTableCorePB toOlapCoreProto() throws IOException {
+        OlapTableCorePB.Builder builder = OlapTableCorePB.newBuilder()
+                .setBfFpp(bfFpp)
+                .setBaseIndexMetaId(baseIndexMetaId)
+                .setMaxColUniqueId(maxColUniqueId.get())
+                .setMaxIndexId(maxIndexId);
+        if (state != null) {
+            builder.setState(ProtoEnums.toProto(state, OlapTableCorePB.State.class));
+        }
+        for (MaterializedIndexMeta indexMeta : indexMetaIdToMeta.values()) {
+            builder.addIndexMetas(indexMeta.toProto());
+        }
+        builder.putAllIndexNameToMetaId(ProtoMaps.withoutNullValues(indexNameToMetaId));
+        if (keysType != null) {
+            builder.setKeysType(ProtoEnums.toProto(keysType, KeysTypePB.class, "KEYS_TYPE_"));
+        }
+        if (partitionInfo != null) {
+            builder.setPartitionInfo(partitionInfo.toProto());
+        }
+        if (defaultDistributionInfo != null) {
+            builder.setDefaultDistributionInfo(defaultDistributionInfo.toProto());
+        }
+        if (bfColumns != null) {
+            StringListPB.Builder columns = StringListPB.newBuilder();
+            for (ColumnId columnId : bfColumns) {
+                columns.addValues(columnId.getId());
+            }
+            builder.setBfColumns(columns);
+        }
+        if (colocateGroup != null) {
+            builder.setColocateGroup(colocateGroup);
+        }
+        if (indexes != null) {
+            builder.setIndexes(indexes.toProto());
+        }
+        if (tableProperty != null) {
+            builder.setTableProperty(tableProperty.toProto());
+        }
+        if (primaryKeyEncodingType != null) {
+            builder.setPrimaryKeyEncodingType(
+                    ProtoEnums.toProto(primaryKeyEncodingType, PrimaryKeyEncodingTypePB.class));
+        }
+        if (sessionId != null) {
+            builder.setSessionId(sessionId.toString());
+        }
+        if (zstdCompressionColumns != null) {
+            StringListPB.Builder columns = StringListPB.newBuilder();
+            for (ColumnId columnId : zstdCompressionColumns) {
+                columns.addValues(columnId.getId());
+            }
+            builder.setZstdCompressionColumns(columns);
+        }
+        if (zstdCompressionPageSizes != null) {
+            ZstdCompressionPageSizesPB.Builder sizes = ZstdCompressionPageSizesPB.newBuilder();
+            zstdCompressionPageSizes.forEach((columnId, size) -> sizes.putValues(columnId.getId(), size));
+            builder.setZstdCompressionPageSizes(sizes);
+        }
+        return builder.build();
+    }
+
+    protected void fillFromOlapCoreProto(OlapTableCorePB pb) throws IOException {
+        if (pb.hasState()) {
+            state = ProtoEnums.fromProto(pb.getState(), OlapTableState.class);
+        }
+        indexMetaIdToMeta = Maps.newHashMap();
+        for (MaterializedIndexMetaPB indexMetaPb : pb.getIndexMetasList()) {
+            MaterializedIndexMeta indexMeta = MaterializedIndexMeta.fromProto(indexMetaPb);
+            indexMetaIdToMeta.put(indexMeta.getIndexMetaId(), indexMeta);
+        }
+        indexNameToMetaId = Maps.newHashMap(pb.getIndexNameToMetaIdMap());
+        if (pb.hasKeysType()) {
+            keysType = ProtoEnums.fromProto(pb.getKeysType(), KeysType.class, "KEYS_TYPE_");
+        }
+        if (pb.hasPartitionInfo()) {
+            partitionInfo = PartitionInfo.fromProto(pb.getPartitionInfo());
+        }
+        if (pb.hasDefaultDistributionInfo()) {
+            defaultDistributionInfo = DistributionInfo.fromProto(pb.getDefaultDistributionInfo());
+        }
+        if (pb.hasBfColumns()) {
+            bfColumns = Sets.newLinkedHashSet();
+            for (String columnId : pb.getBfColumns().getValuesList()) {
+                bfColumns.add(ColumnId.create(columnId));
+            }
+        }
+        bfFpp = pb.getBfFpp();
+        if (pb.hasColocateGroup()) {
+            colocateGroup = pb.getColocateGroup();
+        }
+        if (pb.hasIndexes()) {
+            indexes = TableIndexes.fromProto(pb.getIndexes());
+        }
+        baseIndexMetaId = pb.getBaseIndexMetaId();
+        if (pb.hasTableProperty()) {
+            tableProperty = TableProperty.fromProto(pb.getTableProperty());
+        }
+        maxColUniqueId = new AtomicInteger(pb.getMaxColUniqueId());
+        maxIndexId = pb.getMaxIndexId();
+        if (pb.hasPrimaryKeyEncodingType()) {
+            primaryKeyEncodingType = ProtoEnums.fromProto(pb.getPrimaryKeyEncodingType(), TPrimaryKeyEncodingType.class);
+        }
+        if (pb.hasSessionId()) {
+            sessionId = UUID.fromString(pb.getSessionId());
+        }
+        if (pb.hasZstdCompressionColumns()) {
+            zstdCompressionColumns = Sets.newLinkedHashSet();
+            for (String columnId : pb.getZstdCompressionColumns().getValuesList()) {
+                zstdCompressionColumns.add(ColumnId.create(columnId));
+            }
+        }
+        if (pb.hasZstdCompressionPageSizes()) {
+            zstdCompressionPageSizes = Maps.newHashMap();
+            pb.getZstdCompressionPageSizes().getValuesMap().forEach(
+                    (columnId, size) -> zstdCompressionPageSizes.put(ColumnId.create(columnId), size));
+        }
+
     }
 
     // Shared-data primary-key tables only support the cloud-native persistent index; the local-disk
@@ -3936,4 +4132,14 @@ public class OlapTable extends Table {
 
         return isRangeDistribution() ? TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V2 : TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V1;
     }
+
+
+
+
+
+
+
+
+
+
 }

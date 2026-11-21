@@ -43,6 +43,9 @@ import com.starrocks.connector.elasticsearch.EsRestClient;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.connector.elasticsearch.SearchContext;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.EsTablePB;
+import com.starrocks.persist.proto.TablePB;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TEsTable;
@@ -377,6 +380,76 @@ public class EsTable extends Table implements GsonPostProcessable {
     public void gsonPostProcess() throws IOException {
         super.gsonPostProcess();
 
+        hosts = tableContext.get("hosts");
+        seeds = hosts.split(",");
+        userName = tableContext.get("userName");
+        passwd = tableContext.get("passwd");
+        indexName = tableContext.get("indexName");
+        mappingType = tableContext.get("mappingType");
+        transport = tableContext.get("transport");
+        if (tableContext.containsKey("majorVersion")) {
+            try {
+                majorVersion = EsMajorVersion.parse(tableContext.get("majorVersion"));
+            } catch (Exception e) {
+                majorVersion = EsMajorVersion.V_5_X;
+            }
+        }
+
+        enableDocValueScan = Boolean.parseBoolean(tableContext.get("enableDocValueScan"));
+        if (tableContext.containsKey("enableKeywordSniff")) {
+            enableKeywordSniff = Boolean.parseBoolean(tableContext.get("enableKeywordSniff"));
+        } else {
+            enableKeywordSniff = true;
+        }
+        if (tableContext.containsKey("maxDocValueFields")) {
+            try {
+                maxDocValueFields = Integer.parseInt(tableContext.get("maxDocValueFields"));
+            } catch (Exception e) {
+                maxDocValueFields = DEFAULT_MAX_DOCVALUE_FIELDS;
+            }
+        }
+        if (tableContext.containsKey(KEY_WAN_ONLY)) {
+            wanOnly = Boolean.parseBoolean(tableContext.get(KEY_WAN_ONLY));
+        } else {
+            wanOnly = false;
+        }
+        if (tableContext.containsKey(KEY_ES_NET_SSL)) {
+            sslEnabled = Boolean.parseBoolean(tableContext.get(KEY_ES_NET_SSL));
+        } else {
+            sslEnabled = false;
+        }
+    }
+
+    @Override
+    protected void rebuildTransientState() {
+        super.rebuildTransientState();
+        rebuildFromTableContext();
+    }
+
+    @Override
+    protected void fillProtoVariant(TablePB.Builder builder) throws IOException {
+        EsTablePB.Builder es = EsTablePB.newBuilder();
+        if (tableContext != null) {
+            es.putAllTableContext(ProtoMaps.withoutNullValues(tableContext));
+        }
+        if (partitionInfo != null) {
+            es.setPartitionInfo(partitionInfo.toProto());
+        }
+        builder.setEs(es);
+    }
+
+    void fillFromVariantProto(EsTablePB pb) throws IOException {
+        tableContext = new HashMap<>(pb.getTableContextMap());
+        if (pb.hasPartitionInfo()) {
+            partitionInfo = PartitionInfo.fromProto(pb.getPartitionInfo());
+        }
+    }
+
+    /**
+     * Derives the connection settings from the persisted table context. Shared by the GSON hook and the image v3
+     * load.
+     */
+    private void rebuildFromTableContext() {
         hosts = tableContext.get("hosts");
         seeds = hosts.split(",");
         userName = tableContext.get("userName");

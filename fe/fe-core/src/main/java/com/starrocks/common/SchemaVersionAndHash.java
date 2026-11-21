@@ -19,6 +19,7 @@ package com.starrocks.common;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.proto.SchemaVersionAndHashPB;
 
 /*
  * Currently just used for persisting schema version and schema hash pair
@@ -43,4 +44,12 @@ public class SchemaVersionAndHash implements Writable {
         return schemaVersion + ":" + schemaHash;
     }
 
+    /** Image v3 form. */
+    public SchemaVersionAndHashPB toProto() {
+        return SchemaVersionAndHashPB.newBuilder().setSchemaVersion(schemaVersion).setSchemaHash(schemaHash).build();
+    }
+
+    public static SchemaVersionAndHash fromProto(SchemaVersionAndHashPB pb) {
+        return new SchemaVersionAndHash(pb.getSchemaVersion(), pb.getSchemaHash());
+    }
 }

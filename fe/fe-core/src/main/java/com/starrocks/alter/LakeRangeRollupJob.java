@@ -45,6 +45,11 @@ import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoLists;
+import com.starrocks.persist.proto.AlterJobPB;
+import com.starrocks.persist.proto.KeysTypePB;
+import com.starrocks.persist.proto.LakeRangeRollupJobPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.OriginStatement;
@@ -550,5 +555,68 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase implements Gson
         // The WAL records a deep snapshot (not a live reference) so journaling never mutates the
         // running job.
         return new LakeRangeRollupJob(this);
+    }
+
+    @Override
+    protected void fillFromVariantProto(AlterJobPB pb) {
+        LakeRangeRollupJobPB variant = pb.getLakeRangeRollupJob();
+        fillFromLakeOnlineRewriteJobCoreProto(variant.getOnlineRewrite());
+        if (variant.hasRollupSchema()) {
+            rollupSchema = Column.fromListProto(variant.getRollupSchema());
+        }
+        if (variant.hasRollupKeysType()) {
+            rollupKeysType = ProtoEnums.fromProto(variant.getRollupKeysType(), KeysType.class, "KEYS_TYPE_");
+        }
+        if (variant.hasRollupSortKeyIdxes()) {
+            rollupSortKeyIdxes = ProtoLists.toIntegers(variant.getRollupSortKeyIdxes());
+        }
+        if (variant.hasRollupSortKeyUniqueIds()) {
+            rollupSortKeyUniqueIds = ProtoLists.toIntegers(variant.getRollupSortKeyUniqueIds());
+        }
+        if (variant.hasRollupSortKeyColumns()) {
+            rollupSortKeyColumns = Column.fromListProto(variant.getRollupSortKeyColumns());
+        }
+        shadowShortKeyColumnCount = (short) variant.getShadowShortKeyColumnCount();
+        syncMvDefinition = variant.hasSyncMvDefinition()
+                ? SyncMaterializedViewDefinition.fromProto(variant.getSyncMvDefinition()) : null;
+        syncMvOriginStatement = variant.hasSyncMvOriginStatement()
+                ? OriginStatementInfo.fromProto(variant.getSyncMvOriginStatement()) : null;
+        viewDefineSql = variant.hasViewDefineSql() ? variant.getViewDefineSql() : null;
+        if (isSyncMaterializedView()) {
+            syncMvDefinition.restore(rollupSchema);
+        }
+        resolveSortKeyColumns();
+    }
+
+    @Override
+    protected void fillProtoVariant(AlterJobPB.Builder builder) {
+        LakeRangeRollupJobPB.Builder variant = LakeRangeRollupJobPB.newBuilder()
+                .setOnlineRewrite(toLakeOnlineRewriteJobCoreProto())
+                .setShadowShortKeyColumnCount(shadowShortKeyColumnCount);
+        if (rollupSchema != null) {
+            variant.setRollupSchema(Column.toListProto(rollupSchema));
+        }
+        if (rollupKeysType != null) {
+            variant.setRollupKeysType(ProtoEnums.toProto(rollupKeysType, KeysTypePB.class, "KEYS_TYPE_"));
+        }
+        if (rollupSortKeyIdxes != null) {
+            variant.setRollupSortKeyIdxes(ProtoLists.int32List(rollupSortKeyIdxes));
+        }
+        if (rollupSortKeyUniqueIds != null) {
+            variant.setRollupSortKeyUniqueIds(ProtoLists.int32List(rollupSortKeyUniqueIds));
+        }
+        if (rollupSortKeyColumns != null) {
+            variant.setRollupSortKeyColumns(Column.toListProto(rollupSortKeyColumns));
+        }
+        if (syncMvDefinition != null) {
+            variant.setSyncMvDefinition(syncMvDefinition.toProto());
+        }
+        if (syncMvOriginStatement != null) {
+            variant.setSyncMvOriginStatement(syncMvOriginStatement.toProto());
+        }
+        if (viewDefineSql != null) {
+            variant.setViewDefineSql(viewDefineSql);
+        }
+        builder.setKind(AlterJobPB.Kind.LAKE_RANGE_ROLLUP_JOB).setLakeRangeRollupJob(variant);
     }
 }

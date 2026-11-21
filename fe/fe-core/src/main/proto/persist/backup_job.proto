@@ -1,0 +1,224 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/backup_meta.proto";
+import "persist/common.proto";
+import "persist/partition.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "BackupJobProto";
+
+message BackupStatusPB {
+  enum ErrCode {
+    UNSPECIFIED = 0;
+    OK = 1;
+    NOT_FOUND = 2;
+    BAD_FILE = 3;
+    CREATE_REMOTE_PATH_FAILED = 4;
+    IS_DIR = 5;
+    IS_FILE = 6;
+    TIMEOUT = 7;
+    BAD_CONNECTION = 8;
+    COMMON_ERROR = 9;
+    OLAP_VERSION_ALREADY_MERGED = 10;
+    UNSUPPORTED = 11;
+    BAD_REPLACE = 12;
+  }
+  optional ErrCode err_code = 1;
+  optional string err_msg = 2;
+}
+
+message RestoreFileMappingPB {
+  message IdChainPB {
+    int64 table_id = 1;
+    int64 partition_id = 2;
+    int64 index_id = 3;
+    int64 tablet_id = 4;
+    int64 replica_id = 5;
+  }
+  message Entry {
+    IdChainPB local = 1;
+    IdChainPB remote = 2;
+  }
+  repeated Entry entries = 1;
+  map<int64, bool> overwrite = 2;
+}
+
+message SnapshotInfoCorePB {
+  optional int64 db_id = 1;
+  optional int64 tbl_id = 2;
+  optional int64 partition_id = 3;
+  optional int64 index_id = 4;
+  optional int64 tablet_id = 5;
+  optional int64 be_id = 6;
+  optional int32 schema_hash = 7;
+  optional string path = 8;
+  StringListPB files = 9;
+}
+
+message SnapshotInfoPB {
+  enum Kind {
+    UNSPECIFIED = 0;
+    SNAPSHOT_INFO = 1;
+    LAKE_TABLE_SNAPSHOT_INFO = 2;
+  }
+  Kind kind = 1;
+  SnapshotInfoCorePB core = 2;
+  message SnapshotPB {}
+  message LakeSnapshotPB { int64 version = 1; }
+
+  oneof instance {
+    SnapshotPB snapshot_info = 11;
+    LakeSnapshotPB lake_table_snapshot_info = 12;
+  }
+}
+
+message BackupTaskErrorsPB {
+  map<int64, string> values = 1;
+}
+
+message AbstractJobCorePB {
+  optional int64 repo_id = 1;
+  optional int64 job_id = 2;
+  optional string label = 3;
+  optional int64 db_id = 4;
+  optional string db_name = 5;
+  BackupStatusPB status = 6;
+  optional int64 create_time = 7;
+  optional int64 finished_time = 8;
+  optional int64 timeout_ms = 9;
+  BackupTaskErrorsPB task_err_msg = 10;
+}
+
+message AbstractJobPB {
+  enum Kind {
+    UNSPECIFIED = 0;
+    BACKUP_JOB = 1;
+    RESTORE_JOB = 2;
+    LAKE_BACKUP_JOB = 3;
+    LAKE_RESTORE_JOB = 4;
+  }
+  Kind kind = 1;
+  AbstractJobCorePB core = 2;
+
+  oneof instance {
+    BackupJobPB backup_job = 11;
+    RestoreJobPB restore_job = 12;
+    LakeBackupJobPB lake_backup_job = 13;
+    LakeRestoreJobPB lake_restore_job = 14;
+  }
+}
+
+message BackupSnapshotsPB {
+  repeated SnapshotInfoPB values = 1;
+}
+
+message BackupJobCorePB {
+  enum BackupJobState {
+    UNSPECIFIED = 0;
+    PENDING = 1;
+    SNAPSHOTING = 2;
+    UPLOAD_SNAPSHOT = 3;
+    UPLOADING = 4;
+    SAVE_META = 5;
+    UPLOAD_INFO = 6;
+    FINISHED = 7;
+    CANCELLED = 8;
+  }
+  BackupTableRefListPB table_refs = 1;
+  optional BackupJobState state = 2;
+  optional int64 snapshot_finished_time = 3;
+  optional int64 snapshot_upload_finished_time = 4;
+  BackupSnapshotsPB snapshot_infos = 5;
+  BackupMetaPB backup_meta = 6;
+  optional string local_meta_info_file_path = 7;
+  optional string local_job_info_file_path = 8;
+  BackupFunctionListPB backup_functions = 9;
+  BackupCatalogListPB backup_catalogs = 10;
+  optional string ttl = 11;
+}
+
+message RestoredPartitionsPB {
+  message Entry {
+    string table_name = 1;
+    PartitionPB partition = 2;
+  }
+  repeated Entry values = 1;
+}
+message RestoredVersionsPB {
+  message Cell {
+    int64 table_id = 1;
+    int64 partition_id = 2;
+    int64 version = 3;
+  }
+  repeated Cell cells = 1;
+}
+message RestoreSnapshotsPB {
+  message Cell {
+    int64 tablet_id = 1;
+    int64 backend_id = 2;
+    SnapshotInfoPB snapshot = 3;
+  }
+  repeated Cell cells = 1;
+}
+
+message RestoreJobCorePB {
+  enum RestoreJobState {
+    UNSPECIFIED = 0;
+    PENDING = 1;
+    SNAPSHOTING = 2;
+    DOWNLOAD = 3;
+    DOWNLOADING = 4;
+    COMMIT = 5;
+    COMMITTING = 6;
+    FINISHED = 7;
+    CANCELLED = 8;
+  }
+  optional string backup_timestamp = 1;
+  BackupJobInfoPB job_info = 2;
+  optional bool allow_load = 3;
+  optional RestoreJobState state = 4;
+  BackupMetaPB backup_meta = 5;
+  RestoreFileMappingPB file_mapping = 6;
+  optional int64 meta_prepared_time = 7;
+  optional int64 snapshot_finished_time = 8;
+  optional int64 download_finished_time = 9;
+  optional int32 restore_replication_num = 10;
+  RestoredPartitionsPB restored_partitions = 11;
+  BackupTableListPB restored_tbls = 12;
+  RestoredVersionsPB restored_version_info = 13;
+  RestoreSnapshotsPB snapshot_infos = 14;
+  BackupColocateListPB colocate_persist_infos = 15;
+}
+
+message BackupJobPB {
+  BackupJobCorePB core = 1;
+}
+
+message RestoreJobPB {
+  RestoreJobCorePB core = 1;
+}
+
+message LakeBackupJobPB {
+  BackupJobCorePB core = 1;
+}
+
+message LakeRestoreJobPB {
+  RestoreJobCorePB core = 1;
+}

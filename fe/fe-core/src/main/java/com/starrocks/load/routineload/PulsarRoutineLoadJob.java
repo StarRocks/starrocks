@@ -46,6 +46,10 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.Load;
+import com.starrocks.persist.proto.PulsarRoutineLoadJobPB;
+import com.starrocks.persist.proto.RoutineLoadJobPB;
+import com.starrocks.persist.proto.StringListPB;
+import com.starrocks.persist.proto.StringMapPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -61,6 +65,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -788,5 +793,53 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
 
         LOG.info("modify the data source properties of pulsar routine load job: {}, datasource properties: {}",
                 this.id, dataSourceProperties);
+    }
+
+    private PulsarRoutineLoadJobPB toSourceProto() {
+        PulsarRoutineLoadJobPB.Builder builder = PulsarRoutineLoadJobPB.newBuilder();
+        if (serviceUrl != null) {
+            builder.setServiceUrl(serviceUrl);
+        }
+        if (topic != null) {
+            builder.setTopic(topic);
+        }
+        if (subscription != null) {
+            builder.setSubscription(subscription);
+        }
+        if (customPulsarPartitions != null) {
+            builder.setCustomPulsarPartitions(StringListPB.newBuilder().addAllValues(customPulsarPartitions).build());
+        }
+        if (customProperties != null) {
+            builder.setCustomProperties(StringMapPB.newBuilder().putAllValues(customProperties).build());
+        }
+        return builder.build();
+    }
+
+    private void fillSourceFromProto(PulsarRoutineLoadJobPB pb) {
+        if (pb.hasServiceUrl()) {
+            serviceUrl = pb.getServiceUrl();
+        }
+        if (pb.hasTopic()) {
+            topic = pb.getTopic();
+        }
+        if (pb.hasSubscription()) {
+            subscription = pb.getSubscription();
+        }
+        if (pb.hasCustomPulsarPartitions()) {
+            customPulsarPartitions = new ArrayList<>(pb.getCustomPulsarPartitions().getValuesList());
+        }
+        if (pb.hasCustomProperties()) {
+            customProperties = new HashMap<>(pb.getCustomProperties().getValuesMap());
+        }
+    }
+
+    @Override
+    protected void fillProtoVariant(RoutineLoadJobPB.Builder builder) {
+        builder.setKind(RoutineLoadJobPB.Kind.PULSAR_ROUTINE_LOAD_JOB).setPulsar(toSourceProto());
+    }
+
+    @Override
+    protected void fillFromVariantProto(RoutineLoadJobPB pb) {
+        fillSourceFromProto(pb.getPulsar());
     }
 }

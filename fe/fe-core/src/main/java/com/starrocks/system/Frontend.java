@@ -40,6 +40,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.io.JsonWriter;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.persist.proto.FrontendPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.staros.StarMgrServer;
@@ -299,5 +300,75 @@ public class Frontend extends JsonWriter {
         sb.append("name: ").append(nodeName).append(", role: ").append(role.name());
         sb.append(", ").append(host).append(":").append(editLogPort);
         return sb.toString();
+    }
+
+
+    // ---- image v3 -------------------------------------------------------------------------------
+
+    public FrontendPB toProto() {
+        FrontendPB.Builder builder = FrontendPB.newBuilder()
+                .setRole(toProto(role))
+                .setEditLogPort(editLogPort)
+                .setFid(fid);
+        if (nodeName != null) {
+            builder.setNodeName(nodeName);
+        }
+        if (host != null) {
+            builder.setHost(host);
+        }
+        if (macAddress != null) {
+            builder.setMacAddress(macAddress);
+        }
+        return builder.build();
+    }
+
+    public static Frontend fromProto(FrontendPB pb) {
+        Frontend fe = new Frontend();
+        fe.role = fromProto(pb.getRole());
+        fe.nodeName = pb.getNodeName();
+        fe.host = pb.getHost();
+        fe.editLogPort = pb.getEditLogPort();
+        fe.fid = pb.getFid();
+        fe.macAddress = pb.hasMacAddress() ? pb.getMacAddress() : null;
+        return fe;
+    }
+
+    private static FrontendPB.Role toProto(FrontendNodeType role) {
+        if (role == null) {
+            return FrontendPB.Role.UNSPECIFIED;
+        }
+        switch (role) {
+            case LEADER:
+                return FrontendPB.Role.LEADER;
+            case FOLLOWER:
+                return FrontendPB.Role.FOLLOWER;
+            case OBSERVER:
+                return FrontendPB.Role.OBSERVER;
+            case INIT:
+                return FrontendPB.Role.INIT;
+            case UNKNOWN:
+                return FrontendPB.Role.UNKNOWN;
+            default:
+                throw new IllegalArgumentException("unmapped frontend role " + role);
+        }
+    }
+
+    private static FrontendNodeType fromProto(FrontendPB.Role role) {
+        switch (role) {
+            case UNSPECIFIED:
+                return null;
+            case LEADER:
+                return FrontendNodeType.LEADER;
+            case FOLLOWER:
+                return FrontendNodeType.FOLLOWER;
+            case OBSERVER:
+                return FrontendNodeType.OBSERVER;
+            case INIT:
+                return FrontendNodeType.INIT;
+            case UNKNOWN:
+            default:
+                // a role added by a newer version: keep the node, treat its role as unknown
+                return FrontendNodeType.UNKNOWN;
+        }
     }
 }

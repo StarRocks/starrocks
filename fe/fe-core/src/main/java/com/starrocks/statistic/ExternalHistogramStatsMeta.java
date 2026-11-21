@@ -16,6 +16,11 @@ package com.starrocks.statistic;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.image.ProtoDateTimes;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.AnalyzeTypePB;
+import com.starrocks.persist.proto.ExternalHistogramStatsMetaPB;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -97,4 +102,65 @@ public class ExternalHistogramStatsMeta implements Writable {
         return properties;
     }
 
+
+    public ExternalHistogramStatsMetaPB toProto() {
+        ExternalHistogramStatsMetaPB.Builder builder = ExternalHistogramStatsMetaPB.newBuilder();
+        if (catalogName != null) {
+            builder.setCatalogName(catalogName);
+        }
+        if (dbName != null) {
+            builder.setDbName(dbName);
+        }
+        if (tableName != null) {
+            builder.setTableName(tableName);
+        }
+        if (column != null) {
+            builder.setColumn(column);
+        }
+        if (type != null) {
+            builder.setType(ProtoEnums.toProto(type, AnalyzeTypePB.class, "ANALYZE_"));
+        }
+        if (updateTime != null) {
+            builder.setUpdateTime(ProtoDateTimes.toEpochSecond(updateTime));
+        }
+        if (properties != null) {
+            builder.setProperties(ProtoMaps.toStringMapProto(properties));
+        }
+        if (tableUUID != null) {
+            builder.setTableUuid(tableUUID);
+        }
+        return builder.build();
+    }
+
+    // A protobuf constructor leaves the existing GSON construction path unchanged.
+    private ExternalHistogramStatsMeta(ExternalHistogramStatsMetaPB pb) {
+        if (pb.hasCatalogName()) {
+            catalogName = pb.getCatalogName();
+        }
+        if (pb.hasDbName()) {
+            dbName = pb.getDbName();
+        }
+        if (pb.hasTableName()) {
+            tableName = pb.getTableName();
+        }
+        if (pb.hasColumn()) {
+            column = pb.getColumn();
+        }
+        if (pb.hasType()) {
+            type = ProtoEnums.fromProto(pb.getType(), StatsConstants.AnalyzeType.class, "ANALYZE_");
+        }
+        if (pb.hasUpdateTime()) {
+            updateTime = ProtoDateTimes.fromEpochSecond(pb.getUpdateTime());
+        }
+        if (pb.hasProperties()) {
+            properties = ProtoMaps.fromStringMapProto(pb.getProperties());
+        }
+        if (pb.hasTableUuid()) {
+            tableUUID = pb.getTableUuid();
+        }
+    }
+
+    public static ExternalHistogramStatsMeta fromProto(ExternalHistogramStatsMetaPB pb) {
+        return new ExternalHistogramStatsMeta(pb);
+    }
 }

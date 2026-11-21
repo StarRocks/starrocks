@@ -41,6 +41,12 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.ColumnPB;
+import com.starrocks.persist.proto.Int32ListPB;
+import com.starrocks.persist.proto.KeysTypePB;
+import com.starrocks.persist.proto.MaterializedIndexMetaPB;
+import com.starrocks.persist.proto.StorageTypePB;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.KeysType;
@@ -49,6 +55,7 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageType;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -396,6 +403,109 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
 
     @Override
     public void gsonPostProcess() throws IOException {
+        if (schemaId <= 0) {
+            schemaId = indexMetaId;
+        }
+        setSyncMvRequiredTxnId(syncMvRequiredTxnId);
+        if (syncMvDefinition != null) {
+            whereClause = syncMvDefinition.restore(schema);
+            return;
+        }
+        // analyze define stmt
+        if (defineStmt == null) {
+            return;
+        }
+        Map<String, Expr> columnNameToDefineExpr = MetaUtils.parseColumnNameToDefineExpr(defineStmt);
+        if (columnNameToDefineExpr.containsKey(CreateSyncMVStmt.WHERE_PREDICATE_COLUMN_NAME)) {
+            whereClause = columnNameToDefineExpr.get(CreateSyncMVStmt.WHERE_PREDICATE_COLUMN_NAME);
+        }
+        setColumnsDefineExpr(columnNameToDefineExpr);
+    }
+
+    public static MaterializedIndexMeta fromProto(MaterializedIndexMetaPB pb) {
+        // The same constructor GSON uses.
+        MaterializedIndexMeta meta = new MaterializedIndexMeta();
+        meta.indexMetaId = pb.getIndexMetaId();
+        meta.schema = new ArrayList<>(pb.getSchemaCount());
+        for (ColumnPB column : pb.getSchemaList()) {
+            meta.schema.add(Column.fromProto(column));
+        }
+        if (pb.hasSortKeyIdxes()) {
+            meta.sortKeyIdxes = new ArrayList<>(pb.getSortKeyIdxes().getValuesList());
+        }
+        if (pb.hasSortKeyUniqueIds()) {
+            meta.sortKeyUniqueIds = new ArrayList<>(pb.getSortKeyUniqueIds().getValuesList());
+        }
+        meta.schemaVersion = pb.getSchemaVersion();
+        meta.schemaHash = pb.getSchemaHash();
+        meta.schemaId = pb.getSchemaId();
+        meta.shortKeyColumnCount = (short) pb.getShortKeyColumnCount();
+        if (pb.hasStorageType()) {
+            meta.storageType = ProtoEnums.fromProto(pb.getStorageType(), TStorageType.class, "STORAGE_TYPE_");
+        }
+        if (pb.hasKeysType()) {
+            meta.keysType = ProtoEnums.fromProto(pb.getKeysType(), KeysType.class, "KEYS_TYPE_");
+        }
+        if (pb.hasDefineStmt()) {
+            meta.defineStmt = OriginStatementInfo.fromProto(pb.getDefineStmt());
+        }
+        meta.dbId = pb.getDbId();
+        if (pb.hasViewDefineSql()) {
+            meta.viewDefineSql = pb.getViewDefineSql();
+        }
+        meta.isColocateMVIndex = pb.getIsColocateMvIndex();
+        if (pb.hasSyncMvDefinition()) {
+            meta.syncMvDefinition = SyncMaterializedViewDefinition.fromProto(pb.getSyncMvDefinition());
+        }
+        meta.syncMvRequiredTxnId = pb.getSyncMvRequiredTxnId();
+        meta.rebuildDefineExprs();
+        return meta;
+    }
+
+    public MaterializedIndexMetaPB toProto() {
+        MaterializedIndexMetaPB.Builder builder = MaterializedIndexMetaPB.newBuilder()
+                .setIndexMetaId(indexMetaId)
+                .setSchemaVersion(schemaVersion)
+                .setSchemaHash(schemaHash)
+                .setSchemaId(schemaId)
+                .setShortKeyColumnCount(shortKeyColumnCount)
+                .setDbId(dbId)
+                .setIsColocateMvIndex(isColocateMVIndex);
+        if (schema != null) {
+            for (Column column : schema) {
+                builder.addSchema(column.toProto());
+            }
+        }
+        if (sortKeyIdxes != null) {
+            builder.setSortKeyIdxes(Int32ListPB.newBuilder().addAllValues(sortKeyIdxes));
+        }
+        if (sortKeyUniqueIds != null) {
+            builder.setSortKeyUniqueIds(Int32ListPB.newBuilder().addAllValues(sortKeyUniqueIds));
+        }
+        if (storageType != null) {
+            builder.setStorageType(ProtoEnums.toProto(storageType, StorageTypePB.class, "STORAGE_TYPE_"));
+        }
+        if (keysType != null) {
+            builder.setKeysType(ProtoEnums.toProto(keysType, KeysTypePB.class, "KEYS_TYPE_"));
+        }
+        if (defineStmt != null) {
+            builder.setDefineStmt(defineStmt.toProto());
+        }
+        if (viewDefineSql != null) {
+            builder.setViewDefineSql(viewDefineSql);
+        }
+        if (syncMvDefinition != null) {
+            builder.setSyncMvDefinition(syncMvDefinition.toProto());
+        }
+        builder.setSyncMvRequiredTxnId(syncMvRequiredTxnId);
+        return builder.build();
+    }
+
+    /**
+     * Re-parses the define statement of a synchronous materialized view into the column define expressions.
+     * Shared by the GSON hook and {@link #fromProto}.
+     */
+    private void rebuildDefineExprs() {
         if (schemaId <= 0) {
             schemaId = indexMetaId;
         }

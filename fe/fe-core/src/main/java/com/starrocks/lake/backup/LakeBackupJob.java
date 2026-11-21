@@ -27,6 +27,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.TableRefPersist;
+import com.starrocks.persist.proto.AbstractJobPB;
+import com.starrocks.persist.proto.LakeBackupJobPB;
 import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.proto.LockTabletMetadataResponse;
 import com.starrocks.proto.Snapshot;
@@ -257,5 +259,16 @@ public class LakeBackupJob extends BackupJob {
         entry.getValue().get();
         unfinishedTaskIds.remove(entry.getKey());
         return true;
+    }
+
+    @Override
+    protected void fillProtoVariant(AbstractJobPB.Builder builder) {
+        builder.setKind(AbstractJobPB.Kind.LAKE_BACKUP_JOB)
+                .setLakeBackupJob(LakeBackupJobPB.newBuilder().setCore(toBackupJobCoreProto()));
+    }
+
+    @Override
+    protected void fillFromVariantProto(AbstractJobPB pb) {
+        fillFromBackupJobCoreProto(pb.getLakeBackupJob().getCore());
     }
 }

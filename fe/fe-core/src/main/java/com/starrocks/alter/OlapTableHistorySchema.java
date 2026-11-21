@@ -16,6 +16,7 @@ package com.starrocks.alter;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.SchemaInfo;
+import com.starrocks.persist.proto.OlapTableHistorySchemaPB;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -95,5 +96,25 @@ public class OlapTableHistorySchema {
         public OlapTableHistorySchema build() {
             return new OlapTableHistorySchema(this);
         }
+    }
+
+    /** Image v3 form. */
+    public OlapTableHistorySchemaPB toProto() {
+        OlapTableHistorySchemaPB.Builder builder = OlapTableHistorySchemaPB.newBuilder()
+                .setHistoryTxnIdThreshold(historyTxnIdThreshold);
+        List<IndexSchemaInfo> infos = indexSchemaInfos;
+        if (infos != null) {
+            builder.setIndexSchemaInfos(IndexSchemaInfo.toListProto(infos));
+        }
+        return builder.build();
+    }
+
+    public static OlapTableHistorySchema fromProto(OlapTableHistorySchemaPB pb) {
+        OlapTableHistorySchema schema = new OlapTableHistorySchema();
+        schema.historyTxnIdThreshold = pb.getHistoryTxnIdThreshold();
+        if (pb.hasIndexSchemaInfos()) {
+            schema.indexSchemaInfos = IndexSchemaInfo.fromListProto(pb.getIndexSchemaInfos());
+        }
+        return schema;
     }
 }

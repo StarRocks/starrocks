@@ -38,7 +38,11 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.proto.Int64ListPB;
+import com.starrocks.persist.proto.MultiDeleteInfoPB;
+import com.starrocks.persist.proto.StringListPB;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class MultiDeleteInfo implements Writable {
@@ -120,4 +124,57 @@ public class MultiDeleteInfo implements Writable {
         return multiDeleteInfo;
     }
 
+    // Deserialization must not assign a new creation time to a missing field.
+    private MultiDeleteInfo() {
+    }
+
+    public MultiDeleteInfoPB toProto() {
+        MultiDeleteInfoPB.Builder builder = MultiDeleteInfoPB.newBuilder();
+        builder.setDbId(dbId);
+        builder.setTableId(tableId);
+        if (tableName != null) {
+            builder.setTableName(tableName);
+        }
+        if (deleteConditions != null) {
+            builder.setDeleteConditions(StringListPB.newBuilder().addAllValues(deleteConditions));
+        }
+        builder.setCreateTimeMs(createTimeMs);
+        if (partitionIds != null) {
+            builder.setPartitionIds(Int64ListPB.newBuilder().addAllValues(partitionIds));
+        }
+        if (partitionNames != null) {
+            builder.setPartitionNames(StringListPB.newBuilder().addAllValues(partitionNames));
+        }
+        builder.setNoPartitionSpecified(noPartitionSpecified);
+        return builder.build();
+    }
+
+    public static MultiDeleteInfo fromProto(MultiDeleteInfoPB pb) {
+        MultiDeleteInfo result = new MultiDeleteInfo();
+        if (pb.hasDbId()) {
+            result.dbId = pb.getDbId();
+        }
+        if (pb.hasTableId()) {
+            result.tableId = pb.getTableId();
+        }
+        if (pb.hasTableName()) {
+            result.tableName = pb.getTableName();
+        }
+        if (pb.hasDeleteConditions()) {
+            result.deleteConditions = new ArrayList<>(pb.getDeleteConditions().getValuesList());
+        }
+        if (pb.hasCreateTimeMs()) {
+            result.createTimeMs = pb.getCreateTimeMs();
+        }
+        if (pb.hasPartitionIds()) {
+            result.partitionIds = new ArrayList<>(pb.getPartitionIds().getValuesList());
+        }
+        if (pb.hasPartitionNames()) {
+            result.partitionNames = new ArrayList<>(pb.getPartitionNames().getValuesList());
+        }
+        if (pb.hasNoPartitionSpecified()) {
+            result.noPartitionSpecified = pb.getNoPartitionSpecified();
+        }
+        return result;
+    }
 }

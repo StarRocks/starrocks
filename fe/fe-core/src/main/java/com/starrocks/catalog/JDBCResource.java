@@ -21,6 +21,9 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.JDBCResourcePB;
+import com.starrocks.persist.proto.ResourcePB;
 import org.apache.commons.codec.binary.Hex;
 
 import java.io.InputStream;
@@ -140,5 +143,20 @@ public class JDBCResource extends Resource {
             }
             result.addRow(Lists.newArrayList(name, lowerCaseType, entry.getKey(), entry.getValue()));
         }
+    }
+
+    @Override
+    protected void fillProtoVariant(ResourcePB.Builder builder) {
+        JDBCResourcePB.Builder variant = JDBCResourcePB.newBuilder();
+        if (configs != null) {
+            variant.setConfigs(ProtoMaps.toStringMapProto(configs));
+        }
+        builder.setKind(ResourcePB.Kind.JDBC_RESOURCE).setJdbcResource(variant);
+    }
+
+    @Override
+    protected void fillFromVariantProto(ResourcePB pb) {
+        JDBCResourcePB variant = pb.getJdbcResource();
+        configs = variant.hasConfigs() ? ProtoMaps.fromStringMapProto(variant.getConfigs()) : null;
     }
 }

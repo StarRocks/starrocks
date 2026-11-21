@@ -23,6 +23,8 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.load.pipe.filelist.FileListTableRepo;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.proto.FilePipeSourcePB;
+import com.starrocks.persist.proto.StringMapPB;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.BrokerDesc;
@@ -265,5 +267,43 @@ public class FilePipeSource implements GsonPostProcessable {
     @Override
     public String toString() {
         return "FILE_SOURCE(path=" + path + ")";
+    }
+
+    private FilePipeSource(FilePipeSourcePB pb) throws IOException {
+        pipeId = pb.hasPipeId() ? PipeId.fromProto(pb.getPipeId()) : null;
+        path = pb.hasPath() ? pb.getPath() : null;
+        format = pb.hasFormat() ? pb.getFormat() : null;
+        tableProperties = pb.hasTableProperties() ? new HashMap<>(pb.getTableProperties().getValuesMap()) : null;
+        autoIngest = pb.getAutoIngest();
+        batchSize = pb.getBatchSize();
+        batchFiles = pb.getBatchFiles();
+        eos = pb.getEos();
+        gsonPostProcess();
+    }
+
+    public FilePipeSourcePB toProto() {
+        FilePipeSourcePB.Builder builder = FilePipeSourcePB.newBuilder()
+                .setAutoIngest(autoIngest).setBatchSize(batchSize).setBatchFiles(batchFiles).setEos(eos);
+        if (pipeId != null) {
+            builder.setPipeId(pipeId.toProto());
+        }
+        if (path != null) {
+            builder.setPath(path);
+        }
+        if (format != null) {
+            builder.setFormat(format);
+        }
+        if (tableProperties != null) {
+            builder.setTableProperties(StringMapPB.newBuilder().putAllValues(tableProperties));
+        }
+        return builder.build();
+    }
+
+    public static FilePipeSource fromProto(FilePipeSourcePB pb) {
+        try {
+            return new FilePipeSource(pb);
+        } catch (IOException e) {
+            throw new IllegalArgumentException("invalid FilePipeSource metadata", e);
+        }
     }
 }

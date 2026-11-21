@@ -47,6 +47,9 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.PartitionUtils;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.proto.AlterJobPB;
+import com.starrocks.persist.proto.OnlineOptimizeJobV2PB;
+import com.starrocks.persist.proto.OptimizeTaskPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
@@ -65,6 +68,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -1064,5 +1068,55 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
     @Override
     public void gsonPostProcess() throws IOException {
         this.postfix = "_" + jobId;
+    }
+
+    /** The postfix is derived from the job id. Shared by the GSON hook and the image v3 load. */
+    private void rebuildPostfix() {
+        this.postfix = "_" + jobId;
+    }
+
+    @Override
+    protected void fillProtoVariant(AlterJobPB.Builder builder) {
+        OnlineOptimizeJobV2PB.Builder variant = OnlineOptimizeJobV2PB.newBuilder()
+                .setWatershedTxnId(watershedTxnId)
+                .addAllTmpPartitionIds(tmpPartitionIds)
+                .addAllSourcePartitionNames(sourcePartitionNames)
+                .addAllTmpPartitionNames(tmpPartitionNames);
+        for (OptimizeTask task : rewriteTasks) {
+            variant.addRewriteTasks(task.toProto());
+        }
+        if (allPartitionOptimized != null) {
+            variant.setAllPartitionOptimized(allPartitionOptimized);
+        }
+        if (distributionInfo != null) {
+            variant.setDistributionInfo(distributionInfo.toProto());
+        }
+        if (optimizeOperation != null) {
+            variant.setOptimizeOperation(optimizeOperation);
+        }
+        builder.setKind(AlterJobPB.Kind.ONLINE_OPTIMIZE_JOB_V2).setOnlineOptimizeJobV2(variant);
+    }
+
+    @Override
+    protected void fillFromVariantProto(AlterJobPB pb) {
+        OnlineOptimizeJobV2PB variant = pb.getOnlineOptimizeJobV2();
+        watershedTxnId = variant.getWatershedTxnId();
+        tmpPartitionIds = new ArrayList<>(variant.getTmpPartitionIdsList());
+        rewriteTasks = new ArrayList<>(variant.getRewriteTasksCount());
+        for (OptimizeTaskPB task : variant.getRewriteTasksList()) {
+            rewriteTasks.add(OptimizeTask.fromProto(task));
+        }
+        sourcePartitionNames = new ArrayList<>(variant.getSourcePartitionNamesList());
+        tmpPartitionNames = new ArrayList<>(variant.getTmpPartitionNamesList());
+        if (variant.hasAllPartitionOptimized()) {
+            allPartitionOptimized = variant.getAllPartitionOptimized();
+        }
+        if (variant.hasDistributionInfo()) {
+            distributionInfo = DistributionInfo.fromProto(variant.getDistributionInfo());
+        }
+        if (variant.hasOptimizeOperation()) {
+            optimizeOperation = variant.getOptimizeOperation();
+        }
+        rebuildPostfix();
     }
 }

@@ -40,6 +40,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.proto.FsBrokerPB;
 import com.starrocks.system.BrokerHbResponse;
 import com.starrocks.system.HeartbeatResponse;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
@@ -172,5 +173,27 @@ public class FsBroker implements Writable, Comparable<FsBroker> {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, FsBroker.class);
     }
-}
 
+
+    // ---- image v3 -------------------------------------------------------------------------------
+
+    public FsBrokerPB toProto() {
+        FsBrokerPB.Builder builder = FsBrokerPB.newBuilder()
+                .setPort(port)
+                .setLastStartTime(lastStartTime)
+                .setIsAlive(isAlive);
+        if (ip != null) {
+            builder.setIp(ip);
+        }
+        return builder.build();
+    }
+
+    public static FsBroker fromProto(FsBrokerPB pb) {
+        FsBroker broker = new FsBroker();
+        broker.ip = pb.getIp();
+        broker.port = pb.getPort();
+        broker.lastStartTime = pb.getLastStartTime();
+        broker.isAlive = pb.getIsAlive();
+        return broker;
+    }
+}

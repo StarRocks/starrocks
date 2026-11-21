@@ -45,6 +45,9 @@ import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.proto.LocalTabletPB;
+import com.starrocks.persist.proto.ReplicaPB;
+import com.starrocks.persist.proto.TabletPB;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -414,6 +417,30 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     public void gsonPostProcess() {
         // we need to update immutableReplicas, because replicas after deserialization from a json string
         // will be different from the replicas initiated in the constructor
+        immutableReplicas = Collections.unmodifiableList(replicas);
+    }
+
+    @Override
+    protected void fillProtoVariant(TabletPB.Builder builder) {
+        LocalTabletPB.Builder local = LocalTabletPB.newBuilder()
+                .setCheckedVersion(checkedVersion)
+                .setIsConsistent(isConsistent);
+        if (replicas != null) {
+            for (Replica replica : replicas) {
+                local.addReplicas(replica.toProto());
+            }
+        }
+        builder.setKind(TabletPB.Kind.LOCAL).setLocal(local);
+    }
+
+    void fillFromVariantProto(LocalTabletPB pb) {
+        replicas = new ArrayList<>(pb.getReplicasCount());
+        for (ReplicaPB replica : pb.getReplicasList()) {
+            replicas.add(Replica.fromProto(replica));
+        }
+        checkedVersion = pb.getCheckedVersion();
+        isConsistent = pb.getIsConsistent();
+        // Same as the GSON hook: the view must follow the new list.
         immutableReplicas = Collections.unmodifiableList(replicas);
     }
 

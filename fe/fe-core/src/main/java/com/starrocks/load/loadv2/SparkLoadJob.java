@@ -76,6 +76,9 @@ import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.BrokerPropertiesPersistInfo;
+import com.starrocks.persist.proto.LoadJobPB;
+import com.starrocks.persist.proto.SparkLoadFilesPB;
+import com.starrocks.persist.proto.SparkLoadJobPB;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TupleDescriptor;
@@ -1171,5 +1174,68 @@ public class SparkLoadJob extends BulkLoadJob {
             descTable.computeMemLayout();
             tDescriptorTable = descTable.toThrift();
         }
+    }
+
+    private SparkLoadJobPB toSparkProto() {
+        SparkLoadJobPB.Builder builder = SparkLoadJobPB.newBuilder();
+        if (sparkResource != null) {
+            builder.setSparkResource(sparkResource.toProto());
+        }
+        builder.setEtlStartTimestamp(etlStartTimestamp);
+        if (appId != null) {
+            builder.setAppId(appId);
+        }
+        if (etlOutputPath != null) {
+            builder.setEtlOutputPath(etlOutputPath);
+        }
+        if (sparkLoadAppHandle != null) {
+            builder.setSparkLoadAppHandle(sparkLoadAppHandle.toProto());
+        }
+        builder.setBulk(toBulkCoreProto());
+        if (tabletMetaToFileInfo != null) {
+            SparkLoadFilesPB.Builder files = SparkLoadFilesPB.newBuilder();
+            tabletMetaToFileInfo.forEach((key, file) -> files.putValues(key,
+                    SparkLoadFilesPB.FileInfo.newBuilder().setPath(file.first).setSize(file.second).build()));
+            builder.setTabletMetaToFileInfo(files);
+        }
+        return builder.build();
+    }
+
+    private void fillSparkFromProto(SparkLoadJobPB pb) {
+        if (pb.hasSparkResource()) {
+            Resource resource = Resource.fromProto(pb.getSparkResource());
+            Preconditions.checkArgument(resource instanceof SparkResource, "invalid Spark load resource");
+            sparkResource = (SparkResource) resource;
+        }
+        if (pb.hasEtlStartTimestamp()) {
+            etlStartTimestamp = pb.getEtlStartTimestamp();
+        }
+        if (pb.hasAppId()) {
+            appId = pb.getAppId();
+        }
+        if (pb.hasEtlOutputPath()) {
+            etlOutputPath = pb.getEtlOutputPath();
+        }
+        if (pb.hasSparkLoadAppHandle()) {
+            sparkLoadAppHandle = SparkLoadAppHandle.fromProto(pb.getSparkLoadAppHandle());
+        }
+        fillBulkCoreFromProto(pb.getBulk());
+        if (pb.hasTabletMetaToFileInfo()) {
+            tabletMetaToFileInfo = Maps.newHashMap();
+            pb.getTabletMetaToFileInfo().getValuesMap().forEach((key, file) -> {
+                Preconditions.checkArgument(file.hasPath() && file.hasSize(), "incomplete Spark load file info");
+                tabletMetaToFileInfo.put(key, Pair.create(file.getPath(), file.getSize()));
+            });
+        }
+    }
+
+    @Override
+    protected void fillProtoVariant(LoadJobPB.Builder builder) {
+        builder.setKind(LoadJobPB.Kind.SPARK_LOAD_JOB).setSpark(toSparkProto());
+    }
+
+    @Override
+    protected void fillFromVariantProto(LoadJobPB pb) {
+        fillSparkFromProto(pb.getSpark());
     }
 }

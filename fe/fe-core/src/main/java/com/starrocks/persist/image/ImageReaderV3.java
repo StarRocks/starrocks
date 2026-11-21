@@ -17,7 +17,9 @@ package com.starrocks.persist.image;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import com.google.protobuf.Parser;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.persist.gson.SubtypeNotFoundException;
 import com.starrocks.persist.proto.ChecksumType;
 import com.starrocks.persist.proto.FooterPB;
 import com.starrocks.persist.proto.ImageHeaderPB;
@@ -328,7 +330,15 @@ public final class ImageReaderV3 implements Closeable {
                         throw new ImageFormatException(String.format(
                                 "section %s: the entries ended after %d of %d", id, i, count));
                     }
-                    consume.accept(pb);
+                    try {
+                        consume.accept(pb);
+                    } catch (SubtypeNotFoundException e) {
+                        if (!Config.metadata_ignore_unknown_subtype) {
+                            throw new ImageFormatException(String.format(
+                                    "%s: section %s: unknown subtype %s in entry %d", path, id, e.getSubtype(), i), e);
+                        }
+                        LOG.warn("{}: skip unknown subtype {} in section {}, entry {}", path, e.getSubtype(), id, i, e);
+                    }
                 }
                 expectEnd(in, String.format(
                         "section %s: the entries region continues after the %d entries the index declares", id, count));

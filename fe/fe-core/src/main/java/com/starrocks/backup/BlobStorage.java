@@ -49,6 +49,8 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.fs.HdfsUtil.HdfsReader;
 import com.starrocks.fs.HdfsUtil.HdfsWriter;
 import com.starrocks.persist.BrokerPropertiesPersistInfo;
+import com.starrocks.persist.proto.BlobStoragePB;
+import com.starrocks.persist.proto.StringMapPB;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -94,6 +96,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -912,6 +915,41 @@ public class BlobStorage implements Writable {
         return Status.OK;
     }
 
+    public BlobStoragePB toProto() {
+        BlobStoragePB.Builder builder = BlobStoragePB.newBuilder();
+        if (brokerName != null) {
+            builder.setBrokerName(brokerName);
+        }
+        if (properties != null) {
+            builder.setProperties(StringMapPB.newBuilder().putAllValues(properties).build());
+        }
+        builder.setHasBroker(hasBroker);
+        if (brokerPersistInfo != null) {
+            builder.setBrokerPersistInfo(brokerPersistInfo.toProto());
+        }
+        return builder.build();
+    }
 
-
+    public static BlobStorage fromProto(BlobStoragePB pb) {
+        BlobStorage value = new BlobStorage();
+        if (pb.hasBrokerName()) {
+            value.brokerName = pb.getBrokerName();
+        } else {
+            value.brokerName = null;
+        }
+        if (pb.hasProperties()) {
+            value.properties = new HashMap<>(pb.getProperties().getValuesMap());
+        } else {
+            value.properties = null;
+        }
+        if (pb.hasHasBroker()) {
+            value.hasBroker = pb.getHasBroker();
+        }
+        if (pb.hasBrokerPersistInfo()) {
+            value.brokerPersistInfo = BrokerPropertiesPersistInfo.fromProto(pb.getBrokerPersistInfo());
+        } else {
+            value.brokerPersistInfo = null;
+        }
+        return value;
+    }
 }

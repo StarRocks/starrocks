@@ -1,0 +1,33 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "VariableMgrProto";
+
+// VariableMgr is one section, VARIABLE_MGR, with only its manager message: a few hundred short
+// strings. The values are the string forms v2 wrote; the load parses each one against the field it
+// belongs to, and a variable this build no longer has is skipped, as in v2.
+message VariableMgrPB {
+  // The global defaults of the session variables: every @VarAttr field of SessionVariable that is
+  // not SESSION_ONLY, keyed by variable name.
+  map<string, string> session_variable_defaults = 1;
+  // The variables that exist only globally: the GLOBAL fields of GlobalVariable, plus
+  // enable_table_name_case_insensitive.
+  map<string, string> global_variables = 2;
+}

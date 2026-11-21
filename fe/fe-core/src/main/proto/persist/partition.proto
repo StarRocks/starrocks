@@ -1,0 +1,241 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/table.proto";
+import "persist/type.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "PartitionProto";
+
+// The partition subtree of an OLAP table: Partition -> PhysicalPartition -> MaterializedIndex ->
+// Tablet -> Replica. One PartitionPB is one entry of the PARTITION section, so this is the bulk of
+// the image and is parsed in parallel. See common.proto for the conventions.
+
+// com.starrocks.catalog.Partition. The legacy physical-partition members that Partition still
+// declares (baseIndex, the index maps, the versions, shardGroupId, isImmutable) are written only
+// at construction time, never read afterwards, and duplicate the default physical partition; they
+// are not persisted here.
+message PartitionPB {
+  // com.starrocks.catalog.Partition.PartitionState.
+  enum State {
+    UNSPECIFIED = 0;
+    NORMAL = 1;
+    ROLLUP = 2;
+    SCHEMA_CHANGE = 3;
+  }
+  MetaObjectPB meta = 1;
+  int64 id = 2;
+  optional string name = 3;
+  optional State state = 4;
+  int64 default_physical_partition_id = 5;
+  // Keyed by id in memory.
+  repeated PhysicalPartitionPB sub_partitions = 6;
+  DistributionInfoPB distribution_info = 7;
+}
+
+// com.starrocks.catalog.PhysicalPartition. The deprecated `baseIndex` field is null for every
+// partition created after base indexes moved into idToVisibleIndex and is not persisted.
+message PhysicalPartitionPB {
+  // com.starrocks.transaction.TransactionType.
+  enum TransactionType {
+    UNSPECIFIED = 0;
+    TXN_NORMAL = 1;
+    TXN_REPLICATION = 2;
+  }
+  MetaObjectPB meta = 1;
+  int64 id = 2;
+  int64 parent_id = 3;
+  int64 shard_group_id = 4;
+  bool is_immutable = 5;
+  int64 base_index_meta_id = 6;
+  repeated IndexMetaIndexIdsPB index_meta_id_to_index_ids = 7;
+  map<int64, int64> query_index_meta_id_to_index_id = 8;
+  // Keyed by index id in memory.
+  repeated MaterializedIndexPB visible_indexes = 9;
+  // Keyed by index id in memory.
+  repeated MaterializedIndexPB shadow_indexes = 10;
+  int64 visible_version = 11;
+  int64 visible_version_time = 12;
+  int64 next_version = 13;
+  int64 last_update_time = 14;
+  int64 data_version = 15;
+  int64 next_data_version = 16;
+  int64 version_epoch = 17;
+  optional TransactionType version_txn_type = 18;
+  int64 metadata_switch_version = 19;
+  int32 bucket_num = 20;
+  optional int64 last_succ_vacuum_version = 21;
+  VacuumStatePB vacuum_state = 22;
+}
+
+message VacuumStatePB {
+  optional int64 to_delete_low = 1;
+  optional int64 to_delete_high = 2;
+  optional int64 next_propose_start_version = 3;
+  optional int64 pass_start_version = 4;
+  repeated int64 pass_start_index_ids = 5;
+  optional int64 min_retained_version = 6;
+}
+
+// One entry of PhysicalPartition.indexMetaIdToIndexIds.
+message IndexMetaIndexIdsPB {
+  int64 index_meta_id = 1;
+  repeated int64 index_ids = 2;
+}
+
+message MaterializedIndexPB {
+  // com.starrocks.catalog.MaterializedIndex.IndexState.
+  enum State {
+    UNSPECIFIED = 0;
+    NORMAL = 1;
+    ROLLUP = 2;
+    SCHEMA_CHANGE = 3;
+    SHADOW = 4;
+  }
+  MetaObjectPB meta = 1;
+  int64 id = 2;
+  int64 meta_id = 3;
+  optional State state = 4;
+  int64 row_count = 5;
+  repeated TabletPB tablets = 6;
+  int64 shard_group_id = 7;
+  int64 takeover_version = 8;
+  int64 shadow_watershed_txn_id = 20001;
+}
+
+// com.starrocks.catalog.Tablet.
+message TabletPB {
+  enum Kind {
+    UNSPECIFIED = 0;
+    LOCAL = 1;
+    LAKE = 2;
+  }
+  Kind kind = 1;
+  MetaObjectPB meta = 2;
+  int64 id = 3;
+  TabletRangePB range = 4;
+
+  oneof instance {
+    LocalTabletPB local = 11;
+    LakeTabletPB lake = 12;
+  }
+}
+
+message LocalTabletPB {
+  repeated ReplicaPB replicas = 1;
+  int64 checked_version = 2;
+  bool is_consistent = 3;
+}
+
+message LakeTabletPB {
+  int64 data_size = 1;
+  int64 row_count = 2;
+  int64 data_size_update_time = 3;
+  int64 vector_index_built_version = 4;
+}
+
+// com.starrocks.catalog.TabletRange: a com.starrocks.common.Range of tuples. An absent bound is an
+// unbounded side.
+message TabletRangePB {
+  TuplePB lower_bound = 1;
+  TuplePB upper_bound = 2;
+  bool lower_bound_included = 3;
+  bool upper_bound_included = 4;
+}
+
+// A Java map from an id to a tablet range that can be null.
+message TabletRangeMapPB {
+  map<int64, TabletRangePB> values = 1;
+}
+
+message TuplePB {
+  repeated VariantPB values = 1;
+}
+
+// A Java list of tuples that can be null.
+message TupleListPB {
+  repeated TuplePB values = 1;
+}
+
+// com.starrocks.catalog.Variant.
+message VariantPB {
+  enum Kind {
+    UNSPECIFIED = 0;
+    BOOL = 1;
+    INT = 2;
+    LARGE_INT = 3;
+    STRING = 4;
+    DATE = 5;
+    DECIMAL = 6;
+    NULL_VALUE = 20001;
+    MINIMUM = 20002;
+    MAXIMUM = 20003;
+  }
+  Kind kind = 1;
+  TypePB type = 2;
+
+  int64 date_seconds = 15 [deprecated = true];
+  int64 date_nanos = 16 [deprecated = true];
+
+  // Nullable payloads may be absent. Sentinel kinds carry only kind and type, with no instance fields.
+  oneof instance {
+    bool bool_value = 11;
+    int64 int_value = 12;
+    Int128PB large_int_value = 13;
+    string string_value = 14;
+    // java.math.BigDecimal.toString().
+    string decimal_value = 17;
+    DatePB date = 18;
+  }
+
+  // Dates were originally stored in fields 15 and 16. Writers keep those fields
+  // for older readers; new readers prefer the complete date instance.
+  message DatePB {
+    int64 seconds = 1;
+    int64 nanos = 2;
+  }
+}
+
+message Int128PB {
+  int64 high = 1;
+  int64 low = 2;
+}
+
+message ReplicaPB {
+  // com.starrocks.catalog.Replica.ReplicaState.
+  enum State {
+    UNSPECIFIED = 0;
+    NORMAL = 1;
+    ROLLUP = 2;
+    SCHEMA_CHANGE = 3;
+    CLONE = 4;
+    ALTER = 5;
+    DECOMMISSION = 6;
+    RECOVER = 7;
+  }
+  int64 id = 1;
+  int64 backend_id = 2;
+  int64 version = 3;
+  int64 min_readable_version = 4;
+  int64 data_size = 5;
+  int64 row_count = 6;
+  optional State state = 7;
+  int64 last_failed_version = 8;
+  int64 last_success_version = 9;
+}

@@ -41,6 +41,9 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.persist.AlterResourceInfo;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.image.ProtoKinds;
+import com.starrocks.persist.proto.ResourceCorePB;
+import com.starrocks.persist.proto.ResourcePB;
 import com.starrocks.sql.ast.CreateResourceStmt;
 
 import java.util.Map;
@@ -152,5 +155,58 @@ public abstract class Resource implements Writable {
     public String getDdlStmt() {
         return "";
     }
-}
 
+    /**
+     * Image v3 form: the name goes into the core message, the kind names the concrete class, which fills its
+     * variant. The type is not written: it only restates the class and the constructors rebuild it.
+     */
+    public ResourcePB toProto() {
+        ResourceCorePB.Builder core = ResourceCorePB.newBuilder();
+        if (name != null) {
+            core.setName(name);
+        }
+        ResourcePB.Builder builder = ResourcePB.newBuilder().setCore(core);
+        fillProtoVariant(builder);
+        return builder.build();
+    }
+
+    /** Sets the kind and the variant message of the concrete class. Every persistable subclass overrides it. */
+    protected void fillProtoVariant(ResourcePB.Builder builder) {
+        throw new IllegalStateException("resource class " + getClass().getName() + " cannot be persisted");
+    }
+
+    /** Reads the variant message of the concrete class. */
+    protected void fillFromVariantProto(ResourcePB pb) {
+        throw new IllegalStateException("resource class " + getClass().getName() + " cannot be persisted");
+    }
+
+    public static Resource fromProto(ResourcePB pb) {
+        ProtoKinds.checkKnown(pb.getKind(), pb.getKindValue());
+        String name = pb.getCore().hasName() ? pb.getCore().getName() : null;
+        Resource resource;
+        switch (pb.getKind()) {
+            case SPARK_RESOURCE:
+                resource = new SparkResource(name);
+                break;
+            case HIVE_RESOURCE:
+                resource = new HiveResource(name);
+                break;
+            case ICEBERG_RESOURCE:
+                resource = new IcebergResource(name);
+                break;
+            case HUDI_RESOURCE:
+                resource = new HudiResource(name);
+                break;
+            case ODBC_CATALOG_RESOURCE:
+                resource = new OdbcCatalogResource(name);
+                break;
+            case JDBC_RESOURCE:
+                resource = new JDBCResource(name);
+                break;
+            default:
+                throw new IllegalArgumentException("unknown resource kind " + pb.getKind());
+        }
+        resource.fillFromVariantProto(pb);
+        return resource;
+    }
+}

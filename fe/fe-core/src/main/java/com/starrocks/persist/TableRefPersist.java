@@ -38,8 +38,12 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.proto.StringListPB;
+import com.starrocks.persist.proto.TableRefPersistPB;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
+
+import java.util.Arrays;
 
 /**
  * Legacy table reference class used for metadata serialization and deserialization.
@@ -193,5 +197,39 @@ public class TableRefPersist implements ParseNode, Writable {
             sb.append(" AS ").append(aliases[0]);
         }
         return sb.toString();
+    }
+
+    public TableRefPersistPB toProto() {
+        TableRefPersistPB.Builder builder = TableRefPersistPB.newBuilder();
+        if (name != null) {
+            builder.setName(name.toProto());
+        }
+        if (partitionNames != null) {
+            builder.setPartitionNames(partitionNames.toProto());
+        }
+        if (aliases != null) {
+            builder.setAliases(StringListPB.newBuilder().addAllValues(Arrays.asList(aliases)).build());
+        }
+        return builder.build();
+    }
+
+    public static TableRefPersist fromProto(TableRefPersistPB pb) {
+        TableRefPersist value = new TableRefPersist(null, null, null);
+        if (pb.hasName()) {
+            value.name = TableName.fromProto(pb.getName());
+        } else {
+            value.name = null;
+        }
+        if (pb.hasPartitionNames()) {
+            value.partitionNames = PartitionNames.fromProto(pb.getPartitionNames());
+        } else {
+            value.partitionNames = null;
+        }
+        if (pb.hasAliases()) {
+            value.aliases = pb.getAliases().getValuesList().toArray(new String[0]);
+        } else {
+            value.aliases = null;
+        }
+        return value;
     }
 }

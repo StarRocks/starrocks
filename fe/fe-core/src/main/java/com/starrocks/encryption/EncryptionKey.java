@@ -13,6 +13,8 @@
 // limitations under the License.
 package com.starrocks.encryption;
 
+import com.starrocks.persist.image.ProtoKinds;
+import com.starrocks.persist.proto.ImageEncryptionKeyPB;
 import com.starrocks.proto.EncryptionKeyPB;
 
 public abstract class EncryptionKey {
@@ -102,6 +104,20 @@ public abstract class EncryptionKey {
             return NormalKey.createFromSpec(keySpec);
         } else {
             throw new IllegalArgumentException("key spec type not supported: " + type);
+        }
+    }
+
+    public ImageEncryptionKeyPB toProto(KeyMgr mgr) {
+        throw new IllegalStateException("encryption key class " + getClass().getName() + " cannot be persisted");
+    }
+
+    public static EncryptionKey fromProto(ImageEncryptionKeyPB pb, KeyMgr mgr) {
+        ProtoKinds.checkKnown(pb.getKind(), pb.getKindValue());
+        switch (pb.getKind()) {
+            case NORMAL:
+                return NormalKey.fromProto(pb, mgr);
+            default:
+                throw new IllegalArgumentException("unknown encryption key kind " + pb.getKind());
         }
     }
 }

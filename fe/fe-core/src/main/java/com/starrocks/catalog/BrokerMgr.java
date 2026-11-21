@@ -43,6 +43,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.persist.ModifyBrokerInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.proto.BrokerGroupPB;
+import com.starrocks.persist.proto.BrokerMgrPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 
@@ -305,6 +307,11 @@ public class BrokerMgr implements GsonPostProcessable {
         }
     }
 
+    /**
+     * @deprecated only reached when a v2 (GSON) image is loaded: this object is never deserialized
+     *             from the edit log. Remove together with the v2 image format; the v3 path calls
+     *             {@link #rebuildBrokersMap()} directly.
+     */
     @Override
     public void gsonPostProcess() throws IOException {
         for (Map.Entry<String, List<FsBroker>> brokers : brokerListMap.entrySet()) {
@@ -319,5 +326,47 @@ public class BrokerMgr implements GsonPostProcessable {
             }
         }
     }
-}
 
+    /** Rebuilds the address-keyed view from the persisted broker lists; runs after either image format is loaded. */
+    private void rebuildBrokersMap() {
+        for (Map.Entry<String, List<FsBroker>> brokers : brokerListMap.entrySet()) {
+            String name = brokers.getKey();
+            ArrayListMultimap<String, FsBroker> brokerAddrsMap = brokersMap.get(name);
+            if (brokerAddrsMap == null) {
+                brokerAddrsMap = ArrayListMultimap.create();
+                brokersMap.put(name, brokerAddrsMap);
+            }
+            for (FsBroker address : brokers.getValue()) {
+                brokerAddrsMap.put(address.ip, address);
+            }
+        }
+    }
+
+
+    // ---- image v3 -------------------------------------------------------------------------------
+
+    public BrokerMgrPB toProto() {
+        BrokerMgrPB.Builder builder = BrokerMgrPB.newBuilder();
+        for (Map.Entry<String, List<FsBroker>> entry : brokerListMap.entrySet()) {
+            BrokerGroupPB.Builder group = BrokerGroupPB.newBuilder().setName(entry.getKey());
+            for (FsBroker broker : entry.getValue()) {
+                group.addBrokers(broker.toProto());
+            }
+            builder.addGroups(group);
+        }
+        return builder.build();
+    }
+
+    public static BrokerMgr fromProto(BrokerMgrPB pb) {
+        BrokerMgr brokerMgr = new BrokerMgr();
+        for (BrokerGroupPB group : pb.getGroupsList()) {
+            List<FsBroker> brokers = Lists.newArrayList();
+            for (int i = 0; i < group.getBrokersCount(); i++) {
+                brokers.add(FsBroker.fromProto(group.getBrokers(i)));
+            }
+            brokerMgr.brokerListMap.put(group.getName(), brokers);
+        }
+        brokerMgr.rebuildBrokersMap();
+        return brokerMgr;
+    }
+}

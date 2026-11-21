@@ -49,6 +49,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LeaderDaemon;
@@ -56,11 +57,22 @@ import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.RecoverInfo;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionReader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.CatalogRecycleBinPB;
+import com.starrocks.persist.proto.PartitionPB;
+import com.starrocks.persist.proto.RecycleDatabaseInfoPB;
+import com.starrocks.persist.proto.RecycleMaterializedIndexInfoPB;
+import com.starrocks.persist.proto.RecyclePartitionInfoPB;
+import com.starrocks.persist.proto.RecycleTableInfoPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.thrift.TStorageMedium;
@@ -70,6 +82,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -1512,6 +1525,16 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
     }
 
     @VisibleForTesting
+    synchronized RecycleDatabaseInfo getRecycleDatabaseInfo(long dbId) {
+        return idToDatabase.get(dbId);
+    }
+
+    @VisibleForTesting
+    synchronized RecycleMaterializedIndexInfo getRecycleMaterializedIndexInfo(long indexId) {
+        return idToIndex.get(indexId);
+    }
+
+    @VisibleForTesting
     synchronized boolean isDeletingPartition(long id) {
         RecyclePartitionInfo info = getRecyclePartitionInfo(id);
         return info != null && asyncDeleteForPartitions.get(info) != null;
@@ -1597,8 +1620,18 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
             return recoverable;
         }
 
+        public RecycleDatabaseInfoPB toProto() {
+            return RecycleDatabaseInfoPB.newBuilder()
+                    .setDatabase(db.toProto())
+                    .addAllTableNames(tableNames)
+                    .setRecoverable(recoverable)
+                    .build();
+        }
 
-
+        public static RecycleDatabaseInfo fromProto(RecycleDatabaseInfoPB pb) {
+            return new RecycleDatabaseInfo(Database.fromProto(pb.getDatabase()),
+                    Sets.newLinkedHashSet(pb.getTableNamesList()), pb.getRecoverable());
+        }
     }
 
     static class RecycleTableInfo implements Writable {
@@ -1639,8 +1672,37 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
             return recoverable;
         }
 
+        /** Image v3 form: the table as TablePB, which carries no partitions, plus its partitions. */
+        public RecycleTableInfoPB toProto() throws IOException {
+            RecycleTableInfoPB.Builder builder = RecycleTableInfoPB.newBuilder()
+                    .setDbId(dbId)
+                    .setTable(table.toProto())
+                    .setRecoverable(recoverable);
+            if (table instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) table;
+                for (Partition partition : olapTable.getPartitions()) {
+                    builder.addPartitions(partition.toProto());
+                }
+                for (Partition partition : olapTable.getTempPartitions()) {
+                    builder.addTempPartitions(partition.toProto());
+                }
+            }
+            return builder.build();
+        }
 
-
+        public static RecycleTableInfo fromProto(RecycleTableInfoPB pb) throws IOException {
+            Table table = Table.fromProto(pb.getTable());
+            if (table instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) table;
+                for (PartitionPB partitionPb : pb.getPartitionsList()) {
+                    olapTable.addPartitionForImageLoad(Partition.fromProto(partitionPb));
+                }
+                for (PartitionPB partitionPb : pb.getTempPartitionsList()) {
+                    olapTable.addTempPartition(Partition.fromProto(partitionPb));
+                }
+            }
+            return new RecycleTableInfo(pb.getDbId(), table, pb.getRecoverable());
+        }
     }
 
     public synchronized List<Long> getAllDbIds() {
@@ -1721,6 +1783,114 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
             LOG.info("No recycled materialized indexes in image (older format), skip");
         }
 
+        if (!isCheckpointThread()) {
+            // add tablet in Recycle bin to TabletInvertedIndex
+            addTabletToInvertedIndex();
+        }
+        // create DatabaseTransactionMgr for db in recycle bin.
+        // these dbs do not exist in `idToDb` of the globalStateMgr.
+        for (Long dbId : getAllDbIds()) {
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
+        }
+    }
+
+    /** Image v3 stores each recycled object list in its own section, in v2 order. */
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.CATALOG_RECYCLE_BIN_DB)) {
+            writer.writeManager(CatalogRecycleBinPB.newBuilder().putAllIdToRecycleTime(idToRecycleTime).build());
+            for (RecycleDatabaseInfo info : idToDatabase.values()) {
+                writer.writeEntry(info.toProto());
+            }
+        }
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.CATALOG_RECYCLE_BIN_TABLE)) {
+            for (Map<Long, RecycleTableInfo> tables : idToTableInfo.rowMap().values()) {
+                for (RecycleTableInfo info : tables.values()) {
+                    writer.writeEntry(info.toProto());
+                }
+            }
+        }
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.CATALOG_RECYCLE_BIN_PARTITION)) {
+            for (RecyclePartitionInfo info : idToPartition.values()) {
+                writer.writeEntry(persistedForm(info).toProto());
+            }
+        }
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.CATALOG_RECYCLE_BIN_INDEX)) {
+            for (RecycleMaterializedIndexInfo info : idToIndex.values()) {
+                writer.writeEntry(info.toProto());
+            }
+        }
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(
+                Pair.create(SectionId.CATALOG_RECYCLE_BIN_DB, this::loadDatabaseSection),
+                Pair.create(SectionId.CATALOG_RECYCLE_BIN_TABLE, this::loadTableSection),
+                Pair.create(SectionId.CATALOG_RECYCLE_BIN_PARTITION, this::loadPartitionSection),
+                Pair.create(SectionId.CATALOG_RECYCLE_BIN_INDEX, this::loadIndexSection));
+    }
+
+    private void loadDatabaseSection(SectionReader reader) throws IOException {
+        physicalPartitionIdToPartitionId.clear();
+        CatalogRecycleBinPB pb = reader.readManager(CatalogRecycleBinPB.parser());
+        idToRecycleTime = Maps.newHashMap(pb.getIdToRecycleTimeMap());
+        reader.readEntries(RecycleDatabaseInfoPB.parser(), entry -> loadDatabaseInfo(RecycleDatabaseInfo.fromProto(entry)));
+    }
+
+    private void loadTableSection(SectionReader reader) throws IOException {
+        reader.readEntries(RecycleTableInfoPB.parser(), entry -> {
+            try {
+                loadTableInfo(RecycleTableInfo.fromProto(entry));
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        });
+    }
+
+    private void loadPartitionSection(SectionReader reader) throws IOException {
+        reader.readEntries(RecyclePartitionInfoPB.parser(), entry -> {
+            try {
+                putPartitionToRecycleBin(RecyclePartitionInfo.fromProto(entry));
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        });
+    }
+
+    private void loadIndexSection(SectionReader reader) throws IOException {
+        reader.readEntries(RecycleMaterializedIndexInfoPB.parser(),
+                entry -> loadIndexInfo(RecycleMaterializedIndexInfo.fromProto(entry)));
+        finishLoad();
+    }
+
+    // RecyclePartitionInfoV1 predates the RecyclePartitionInfoV2 hierarchy and is written in its
+    // RecycleRangePartitionInfo form.
+    private static RecyclePartitionInfo persistedForm(RecyclePartitionInfo recyclePartitionInfo) {
+        if (recyclePartitionInfo instanceof RecyclePartitionInfoV1) {
+            RecyclePartitionInfoV1 recyclePartitionInfoV1 = (RecyclePartitionInfoV1) recyclePartitionInfo;
+            return new RecycleRangePartitionInfo(
+                    recyclePartitionInfoV1.dbId, recyclePartitionInfoV1.tableId, recyclePartitionInfoV1.partition,
+                    recyclePartitionInfoV1.range, recyclePartitionInfoV1.dataProperty,
+                    recyclePartitionInfoV1.replicationNum,
+                    null);
+        }
+        return recyclePartitionInfo;
+    }
+
+    private void loadDatabaseInfo(RecycleDatabaseInfo recycleDatabaseInfo) {
+        idToDatabase.put(recycleDatabaseInfo.db.getId(), recycleDatabaseInfo);
+    }
+
+    private void loadTableInfo(RecycleTableInfo recycleTableInfo) {
+        idToTableInfo.put(recycleTableInfo.dbId, recycleTableInfo.table.getId(), recycleTableInfo);
+        nameToTableInfo.put(recycleTableInfo.getDbId(), recycleTableInfo.getTable().getName(), recycleTableInfo);
+    }
+
+    private void loadIndexInfo(RecycleMaterializedIndexInfo info) {
+        idToIndex.put(info.getIndexId(), info);
+    }
+
+    /** The post-load steps shared by the v2 and v3 loads. */
+    private void finishLoad() {
         if (!isCheckpointThread()) {
             // add tablet in Recycle bin to TabletInvertedIndex
             addTabletToInvertedIndex();

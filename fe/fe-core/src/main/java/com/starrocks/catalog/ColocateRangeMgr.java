@@ -14,9 +14,12 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Range;
+import com.starrocks.persist.proto.ColocateGroupRangesPB;
+import com.starrocks.persist.proto.ColocateRangePB;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -185,5 +188,26 @@ public class ColocateRangeMgr {
      */
     public void removeColocateGroup(long colocateGroupId) {
         colocateGroupToRanges.remove(colocateGroupId);
+    }
+
+    List<ColocateGroupRangesPB> toProto() {
+        List<ColocateGroupRangesPB> groups = new ArrayList<>();
+        for (Map.Entry<Long, List<ColocateRange>> entry : colocateGroupToRanges.entrySet()) {
+            ColocateGroupRangesPB.Builder ranges = ColocateGroupRangesPB.newBuilder().setGroupId(entry.getKey());
+            for (ColocateRange range : entry.getValue()) {
+                ranges.addRanges(range.toProto());
+            }
+            groups.add(ranges.build());
+        }
+        return groups;
+    }
+
+    void loadGroupRanges(ColocateGroupRangesPB pb) {
+        Preconditions.checkArgument(pb.hasGroupId(), "missing colocate range group id");
+        List<ColocateRange> ranges = new ArrayList<>();
+        for (ColocateRangePB range : pb.getRangesList()) {
+            ranges.add(ColocateRange.fromProto(range));
+        }
+        setColocateRanges(pb.getGroupId(), ranges);
     }
 }

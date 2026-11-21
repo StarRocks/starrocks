@@ -19,12 +19,17 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Pair;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.MapEntryConsumer;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.HistoricalNodePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.warehouse.Warehouse;
@@ -178,5 +183,31 @@ public class HistoricalNodeMgr {
         ComputeResource computeResource = computeResourceProvider.ofComputeResource(computeResourceId.first,
                 computeResourceId.second);
         return computeResourceProvider.isResourceAvailable(computeResource);
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        Map<String, HistoricalNodeSet> serializedHistoricalNodes = computeResourceToNodeSet.entrySet().stream()
+                .filter(entry -> isResourceAvailable(entry.getKey()))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.HISTORICAL_NODE_MGR)) {
+            for (Map.Entry<String, HistoricalNodeSet> entry : serializedHistoricalNodes.entrySet()) {
+                writer.writeEntry(HistoricalNodePB.newBuilder().setComputeResourceKey(entry.getKey())
+                        .setNodeSet(entry.getValue().toProto()).build());
+            }
+        }
+        LOG.info("save image for historical node manager, nodeSetSize: {}", serializedHistoricalNodes.size());
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(Pair.create(SectionId.HISTORICAL_NODE_MGR, reader -> {
+            reader.readEntries(HistoricalNodePB.parser(), pb -> {
+                Pair<Long, Long> resourceId = strToComputeResourceId(pb.getComputeResourceKey());
+                if (resourceId != null) {
+                    computeResourceToNodeSet.put(computeResourceIdToStr(resourceId),
+                            HistoricalNodeSet.fromProto(pb.getNodeSet()));
+                }
+            });
+            LOG.info("load image for historical node manager, nodeSetSize: {}", computeResourceToNodeSet.size());
+        }));
     }
 }

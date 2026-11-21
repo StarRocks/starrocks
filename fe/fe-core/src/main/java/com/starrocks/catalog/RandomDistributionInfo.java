@@ -37,6 +37,8 @@ package com.starrocks.catalog;
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.DistributionInfoPB;
+import com.starrocks.persist.proto.RandomDistributionInfoPB;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 
@@ -59,6 +61,16 @@ public class RandomDistributionInfo extends DistributionInfo {
     public RandomDistributionInfo(int bucketNum) {
         super(DistributionInfoType.RANDOM);
         this.bucketNum = bucketNum;
+    }
+
+    @Override
+    protected void fillProtoVariant(DistributionInfoPB.Builder builder) {
+        builder.setKind(DistributionInfoPB.Kind.RANDOM)
+                .setRandom(RandomDistributionInfoPB.newBuilder().setBucketNum(bucketNum));
+    }
+
+    void fillFromVariantProto(RandomDistributionInfoPB pb) {
+        bucketNum = pb.getBucketNum();
     }
 
     @Override

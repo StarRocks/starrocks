@@ -34,22 +34,32 @@
 
 package com.starrocks.plugin;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.UninstallPluginLog;
+import com.starrocks.persist.image.ImageFormatException;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionReader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.PluginInfoPB;
+import com.starrocks.persist.proto.PluginMgrPB;
 import com.starrocks.plugin.PluginInfo.PluginType;
 import com.starrocks.plugin.PluginLoader.PluginStatus;
 import com.starrocks.qe.AuditLogBuilder;
@@ -61,6 +71,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -376,5 +387,39 @@ public class PluginMgr implements Writable {
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         reader.readCollection(PluginInfo.class, this::replayLoadDynamicPlugin);
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        List<PluginInfo> pluginInfos = getAllDynamicPluginInfo();
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.PLUGIN_MGR)) {
+            writer.writeManager(PluginMgrPB.getDefaultInstance());
+            for (PluginInfo info : pluginInfos) {
+                writer.writeEntry(info.toProto());
+            }
+        }
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(Pair.create(SectionId.PLUGIN_MGR, this::loadSection));
+    }
+
+    private void loadSection(SectionReader reader) throws IOException {
+        reader.readManager(PluginMgrPB.parser());
+        try {
+            reader.readEntries(PluginInfoPB.parser(), pb -> {
+                PluginInfo info = PluginInfo.fromProto(pb);
+                Preconditions.checkArgument(info.getName() != null && info.getType() != null,
+                        "missing plugin name or type");
+                try {
+                    replayLoadDynamicPlugin(info);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            });
+        } catch (UncheckedIOException e) {
+            throw e.getCause();
+        } catch (IllegalArgumentException | IllegalStateException | NullPointerException e) {
+            throw new ImageFormatException("invalid PLUGIN_MGR entry", e);
+        }
     }
 }

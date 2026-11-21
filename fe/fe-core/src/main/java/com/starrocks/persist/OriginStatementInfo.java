@@ -19,6 +19,7 @@ package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.proto.OriginStatementInfoPB;
 
 /*
  * This class represents an origin statement
@@ -40,6 +41,18 @@ public class OriginStatementInfo implements Writable {
 
     public OriginStatementInfo(String singleOriginStmt) {
         this(singleOriginStmt, 0);
+    }
+
+    public OriginStatementInfoPB toProto() {
+        OriginStatementInfoPB.Builder builder = OriginStatementInfoPB.newBuilder().setIdx(idx);
+        if (originStmt != null) {
+            builder.setOriginStmt(originStmt);
+        }
+        return builder.build();
+    }
+
+    public static OriginStatementInfo fromProto(OriginStatementInfoPB pb) {
+        return new OriginStatementInfo(pb.hasOriginStmt() ? pb.getOriginStmt() : null, pb.getIdx());
     }
 
     @Override

@@ -1,0 +1,73 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/common.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "PipeProto";
+
+message PipeIdPB {
+  int64 db_id = 1;
+  int64 id = 2;
+}
+
+message PipePB {
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    FILE = 1;
+    KAFKA = 2;
+  }
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    SUSPEND = 1;
+    RUNNING = 2;
+    FINISHED = 3;
+    ERROR = 4;
+  }
+  optional string name = 1;
+  PipeIdPB id = 2;
+  optional Type type = 3;
+  optional State state = 4;
+  optional string origin_sql = 5;
+  FilePipeSourcePB pipe_source = 6;
+  TableNamePB target_table = 7;
+  StringMapPB properties = 8;
+  int64 created_time = 9;
+  PipeLoadStatusPB load_status = 10;
+  StringMapPB task_execution_variables = 11;
+}
+
+message FilePipeSourcePB {
+  PipeIdPB pipe_id = 1;
+  optional string path = 2;
+  optional string format = 3;
+  StringMapPB table_properties = 4;
+  bool auto_ingest = 5;
+  int64 batch_size = 6;
+  int64 batch_files = 7;
+  bool eos = 8;
+}
+
+message PipeLoadStatusPB {
+  int64 loaded_files = 1;
+  int64 loaded_bytes = 2;
+  // These are cleared on restart by LoadStatus.gsonPostProcess(), as in v2.
+  int64 loading_files = 3;
+  optional int64 last_loaded_time = 4;
+}

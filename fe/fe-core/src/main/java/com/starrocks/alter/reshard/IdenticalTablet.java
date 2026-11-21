@@ -15,6 +15,8 @@
 package com.starrocks.alter.reshard;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.IdenticalTabletPB;
+import com.starrocks.persist.proto.ReshardingTabletPB;
 import com.starrocks.proto.IdenticalTabletInfoPB;
 import com.starrocks.proto.ReshardingTabletInfoPB;
 
@@ -91,5 +93,15 @@ public class IdenticalTablet implements ReshardingTablet {
         reshardingTabletInfoPB.identicalTabletInfo.oldTabletId = oldTabletId;
         reshardingTabletInfoPB.identicalTabletInfo.newTabletId = newTabletId;
         return reshardingTabletInfoPB;
+    }
+
+    @Override
+    public ReshardingTabletPB toImageProto() {
+        return ReshardingTabletPB.newBuilder().setKind(ReshardingTabletPB.Kind.IDENTICAL)
+                .setIdentical(IdenticalTabletPB.newBuilder().setOldTabletId(oldTabletId).setNewTabletId(newTabletId)).build();
+    }
+
+    public static IdenticalTablet fromImageProto(IdenticalTabletPB pb) {
+        return new IdenticalTablet(pb.getOldTabletId(), pb.getNewTabletId());
     }
 }

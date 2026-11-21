@@ -18,6 +18,8 @@
 package com.starrocks.load.loadv2;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.MiniLoadTxnCommitAttachmentPB;
+import com.starrocks.persist.proto.TxnCommitAttachmentPB;
 import com.starrocks.thrift.TMiniLoadTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
@@ -56,6 +58,30 @@ public class MiniLoadTxnCommitAttachment extends TxnCommitAttachment {
         return errorLogUrl;
     }
 
+    @Override
+    protected void fillProtoVariant(TxnCommitAttachmentPB.Builder parent) {
+        MiniLoadTxnCommitAttachmentPB.Builder builder = MiniLoadTxnCommitAttachmentPB.newBuilder();
+        builder.setLoadedRows(loadedRows);
+        builder.setFilteredRows(filteredRows);
+        if (errorLogUrl != null) {
+            builder.setErrorLogUrl(errorLogUrl);
+        }
+        parent.setKind(TxnCommitAttachmentPB.Kind.MINI_LOAD).setMiniLoad(builder);
+    }
 
-
+    @Override
+    protected void fillFromVariantProto(TxnCommitAttachmentPB parent) {
+        MiniLoadTxnCommitAttachmentPB pb = parent.getMiniLoad();
+        if (pb.hasLoadedRows()) {
+            loadedRows = pb.getLoadedRows();
+        }
+        if (pb.hasFilteredRows()) {
+            filteredRows = pb.getFilteredRows();
+        }
+        if (pb.hasErrorLogUrl()) {
+            errorLogUrl = pb.getErrorLogUrl();
+        } else {
+            errorLogUrl = null;
+        }
+    }
 }

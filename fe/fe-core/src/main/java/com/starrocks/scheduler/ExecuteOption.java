@@ -19,8 +19,12 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.ExecuteOptionPB;
+import com.starrocks.persist.proto.StringMapPB;
 import org.apache.commons.collections4.CollectionUtils;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
@@ -156,5 +160,30 @@ public class ExecuteOption {
     @Override
     public String toString() {
         return GsonUtils.GSON.toJson(this);
+    }
+
+    public ExecuteOptionPB toProto() {
+        ExecuteOptionPB.Builder builder = ExecuteOptionPB.newBuilder();
+        builder.setPriority(priority);
+        if (taskRunProperties != null) {
+            builder.setTaskRunProperties(StringMapPB.newBuilder().putAllValues(ProtoMaps.withoutNullValues(taskRunProperties)));
+        }
+        builder.setIsMergeRedundant(isMergeRedundant);
+        builder.setIsManual(isManual);
+        builder.setIsSync(isSync);
+        builder.setIsReplay(isReplay);
+        return builder.build();
+    }
+
+    public static ExecuteOption fromProto(ExecuteOptionPB pb) {
+        ExecuteOption result = new ExecuteOption(pb.getPriority(), pb.getIsMergeRedundant(), null);
+        result.priority = pb.getPriority();
+        if (pb.hasTaskRunProperties()) {
+            result.taskRunProperties = new HashMap<>(pb.getTaskRunProperties().getValuesMap());
+        }
+        result.isManual = pb.getIsManual();
+        result.isSync = pb.getIsSync();
+        result.isReplay = pb.getIsReplay();
+        return result;
     }
 }

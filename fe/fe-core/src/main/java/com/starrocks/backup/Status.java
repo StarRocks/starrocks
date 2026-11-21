@@ -18,6 +18,8 @@
 package com.starrocks.backup;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.BackupStatusPB;
 
 public class Status {
     public enum ErrCode {
@@ -68,5 +70,21 @@ public class Status {
         }
         sb.append("]");
         return sb.toString();
+    }
+
+    public BackupStatusPB toProto() {
+        BackupStatusPB.Builder builder = BackupStatusPB.newBuilder();
+        if (errCode != null) {
+            builder.setErrCode(ProtoEnums.toProto(errCode, BackupStatusPB.ErrCode.class));
+        }
+        if (errMsg != null) {
+            builder.setErrMsg(errMsg);
+        }
+        return builder.build();
+    }
+
+    public static Status fromProto(BackupStatusPB pb) {
+        return new Status(pb.hasErrCode() ? ProtoEnums.fromProto(pb.getErrCode(), ErrCode.class) : null,
+                pb.hasErrMsg() ? pb.getErrMsg() : null);
     }
 }

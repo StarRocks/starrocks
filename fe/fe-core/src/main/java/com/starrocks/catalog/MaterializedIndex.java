@@ -44,6 +44,9 @@ import com.starrocks.common.Range;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.MaterializedIndexPB;
+import com.starrocks.persist.proto.TabletPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TIndexState;
 
@@ -430,6 +433,61 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         }
         // Share adjacent tablet range bounds to reduce memory usage
         shareAdjacentTabletRangeBounds();
+    }
+
+    /**
+     * Rebuilds the tablet lookup from the persisted tablet list. Shared by the GSON hook and {@link #fromProto}.
+     */
+    private void rebuildTabletIndex() {
+        // build "idToTablets" from "tablets"
+        for (Tablet tablet : tablets) {
+            idToTablets.put(tablet.getId(), tablet);
+        }
+        // Share adjacent tablet range bounds to reduce memory usage
+        shareAdjacentTabletRangeBounds();
+    }
+
+    public MaterializedIndexPB toProto() {
+        MaterializedIndexPB.Builder builder = MaterializedIndexPB.newBuilder()
+                .setMeta(toMetaObjectProto())
+                .setId(id)
+                .setMetaId(metaId)
+                .setRowCount(rowCount)
+                .setShardGroupId(shardGroupId)
+                .setTakeoverVersion(takeoverVersion)
+                .setShadowWatershedTxnId(shadowWatershedTxnId);
+        if (state != null) {
+            builder.setState(ProtoEnums.toProto(state, MaterializedIndexPB.State.class));
+        }
+        if (tablets != null) {
+            for (Tablet tablet : tablets) {
+                builder.addTablets(tablet.toProto());
+            }
+        }
+        return builder.build();
+    }
+
+    public static MaterializedIndex fromProto(MaterializedIndexPB pb) {
+        // The same constructor GSON uses.
+        MaterializedIndex index = new MaterializedIndex();
+        if (pb.hasMeta()) {
+            index.fillFromMetaObjectProto(pb.getMeta());
+        }
+        index.id = pb.getId();
+        index.metaId = pb.getMetaId();
+        if (pb.hasState()) {
+            index.state = ProtoEnums.fromProto(pb.getState(), IndexState.class);
+        }
+        index.rowCount = pb.getRowCount();
+        index.tablets = new ArrayList<>(pb.getTabletsCount());
+        for (TabletPB tablet : pb.getTabletsList()) {
+            index.tablets.add(Tablet.fromProto(tablet));
+        }
+        index.shardGroupId = pb.getShardGroupId();
+        index.takeoverVersion = pb.getTakeoverVersion();
+        index.shadowWatershedTxnId = pb.getShadowWatershedTxnId();
+        index.rebuildTabletIndex();
+        return index;
     }
 
     /**

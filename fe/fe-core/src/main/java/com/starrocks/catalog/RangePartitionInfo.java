@@ -39,12 +39,17 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.gson.annotations.SerializedName;
+import com.google.protobuf.ByteString;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.RangePartitionPersistInfo;
+import com.starrocks.persist.proto.ColumnPB;
+import com.starrocks.persist.proto.PartitionInfoPB;
+import com.starrocks.persist.proto.RangePartitionInfoCorePB;
+import com.starrocks.persist.proto.RangePartitionInfoPB;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
@@ -64,6 +69,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -575,6 +581,60 @@ public class RangePartitionInfo extends PartitionInfo {
         DataInput dataInput = new DataInputStream(inputStream);
         Range<PartitionKey> range = RangeUtils.readRange(dataInput);
         return range;
+    }
+
+    /** The fields declared by this class, shared with the expression subclasses. */
+    protected RangePartitionInfoCorePB toRangeCoreProto() throws IOException {
+        RangePartitionInfoCorePB.Builder builder = RangePartitionInfoCorePB.newBuilder();
+        if (deprecatedColumns != null) {
+            for (Column column : deprecatedColumns) {
+                builder.addPartitionColumns(column.toProto());
+            }
+        }
+        if (partitionColumnIds != null) {
+            for (ColumnId columnId : partitionColumnIds) {
+                builder.addPartitionColumnIds(columnId.getId());
+            }
+        }
+        // Same encoding as gsonPreProcess.
+        for (Map.Entry<Long, Range<PartitionKey>> entry : idToRange.entrySet()) {
+            builder.putIdToRange(entry.getKey(), ByteString.copyFrom(serializeRange(entry.getValue())));
+        }
+        for (Map.Entry<Long, Range<PartitionKey>> entry : idToTempRange.entrySet()) {
+            builder.putIdToTempRange(entry.getKey(), ByteString.copyFrom(serializeRange(entry.getValue())));
+        }
+        return builder.build();
+    }
+
+    protected void fillFromRangeCoreProto(RangePartitionInfoCorePB pb) throws IOException {
+        deprecatedColumns = new ArrayList<>();
+        for (ColumnPB column : pb.getPartitionColumnsList()) {
+            deprecatedColumns.add(Column.fromProto(column));
+        }
+        partitionColumnIds = new ArrayList<>();
+        for (String columnId : pb.getPartitionColumnIdsList()) {
+            partitionColumnIds.add(ColumnId.create(columnId));
+        }
+        // Same decoding as gsonPostProcess; the serialized maps stay null, as they do after a GSON load.
+        idToRange = Maps.newConcurrentMap();
+        for (Map.Entry<Long, ByteString> entry : pb.getIdToRangeMap().entrySet()) {
+            idToRange.put(entry.getKey(), deserializeRange(entry.getValue().toByteArray()));
+        }
+        idToTempRange = Maps.newConcurrentMap();
+        for (Map.Entry<Long, ByteString> entry : pb.getIdToTempRangeMap().entrySet()) {
+            idToTempRange.put(entry.getKey(), deserializeRange(entry.getValue().toByteArray()));
+        }
+        rebuildRangeIndexes();
+    }
+
+    @Override
+    protected void fillProtoVariant(PartitionInfoPB.Builder builder) throws IOException {
+        builder.setKind(PartitionInfoPB.Kind.KIND_RANGE)
+                .setRange(RangePartitionInfoPB.newBuilder().setRange(toRangeCoreProto()));
+    }
+
+    void fillFromVariantProto(RangePartitionInfoPB pb) throws IOException {
+        fillFromRangeCoreProto(pb.getRange());
     }
 
     @Override

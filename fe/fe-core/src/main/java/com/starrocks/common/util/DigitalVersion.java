@@ -17,7 +17,9 @@
 
 package com.starrocks.common.util;
 
+import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.DigitalVersionPB;
 import org.apache.commons.lang.StringUtils;
 
 import java.util.Objects;
@@ -129,5 +131,27 @@ public class DigitalVersion implements Comparable<DigitalVersion> {
     @Override
     public int hashCode() {
         return Objects.hash(id, major, minor, revision);
+    }
+
+    private DigitalVersion(int id, byte major, byte minor, byte revision) {
+        this.id = id;
+        this.major = major;
+        this.minor = minor;
+        this.revision = revision;
+    }
+
+    public DigitalVersionPB toProto() {
+        return DigitalVersionPB.newBuilder().setId(id).setMajor(major).setMinor(minor).setRevision(revision).build();
+    }
+
+    public static DigitalVersion fromProto(DigitalVersionPB pb) {
+        // Do not derive the components from id: Gson persisted these fields independently.
+        return new DigitalVersion(pb.getId(), versionByte(pb.getMajor()), versionByte(pb.getMinor()),
+                versionByte(pb.getRevision()));
+    }
+
+    private static byte versionByte(int value) {
+        Preconditions.checkArgument(value >= Byte.MIN_VALUE && value <= Byte.MAX_VALUE, "invalid version component");
+        return (byte) value;
     }
 }

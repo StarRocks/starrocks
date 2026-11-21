@@ -1,0 +1,135 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/common.proto";
+import "persist/partition.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "TabletReshardProto";
+
+message TabletReshardJobPB {
+  enum Kind {
+    UNSPECIFIED = 0;
+    SPLIT_TABLET = 1;
+    MERGE_TABLET = 2;
+  }
+  Kind kind = 1;
+  TabletReshardJobCorePB core = 2;
+  oneof instance {
+    SplitTabletJobPB split_tablet = 11;
+    MergeTabletJobPB merge_tablet = 12;
+  }
+}
+
+message TabletReshardJobCorePB {
+  enum JobState {
+    UNSPECIFIED = 0;
+    PENDING = 1;
+    PREPARING = 2;
+    RUNNING = 3;
+    CLEANING = 4;
+    FINISHED = 5;
+    ABORTING = 6;
+    ABORTED = 7;
+  }
+  int64 job_id = 1;
+  optional JobState job_state = 2;
+  int64 created_time_ms = 3;
+  int64 finished_time_ms = 4;
+  int64 state_started_time_ms = 5;
+  optional string error_message = 6;
+  optional int64 warehouse_id = 7;
+}
+
+message SplitTabletJobPB {
+  int64 db_id = 1;
+  int64 table_id = 2;
+  ReshardingPhysicalPartitionMapPB resharding_physical_partitions = 3;
+  int64 transaction_id = 4;
+  int64 gtid = 5;
+  int64 end_transaction_id = 6;
+}
+
+message MergeTabletJobPB {
+  int64 db_id = 1;
+  int64 table_id = 2;
+  ReshardingPhysicalPartitionMapPB resharding_physical_partitions = 3;
+  int64 transaction_id = 4;
+  int64 gtid = 5;
+  int64 end_transaction_id = 6;
+}
+
+message ReshardingPhysicalPartitionMapPB {
+  map<int64, ReshardingPhysicalPartitionPB> values = 1;
+}
+
+message ReshardingPhysicalPartitionPB {
+  int64 physical_partition_id = 1;
+  ReshardingMaterializedIndexMapPB resharding_indexes = 2;
+  int64 commit_version = 3;
+}
+
+message ReshardingMaterializedIndexMapPB {
+  map<int64, ReshardingMaterializedIndexPB> values = 1;
+}
+
+message ReshardingMaterializedIndexPB {
+  int64 materialized_index_id = 1;
+  MaterializedIndexPB materialized_index = 2;
+  ReshardingTabletListPB resharding_tablets = 3;
+}
+
+message ReshardingTabletListPB {
+  repeated ReshardingTabletPB values = 1;
+}
+
+message ReshardingTabletPB {
+  enum Kind {
+    UNSPECIFIED = 0;
+    SPLITTING = 1;
+    MERGING = 2;
+    IDENTICAL = 3;
+  }
+  Kind kind = 1;
+  oneof instance {
+    SplittingTabletPB splitting = 11;
+    MergingTabletPB merging = 12;
+    IdenticalTabletPB identical = 13;
+  }
+}
+
+message SplittingTabletPB {
+  int64 old_tablet_id = 1;
+  Int64ListPB new_tablet_ids = 2;
+  ReshardingTabletRangeListPB new_tablet_ranges = 3;
+}
+
+message ReshardingTabletRangeListPB {
+  repeated TabletRangePB values = 1;
+}
+
+message MergingTabletPB {
+  Int64ListPB old_tablet_ids = 1;
+  int64 new_tablet_id = 2;
+}
+
+message IdenticalTabletPB {
+  int64 old_tablet_id = 1;
+  int64 new_tablet_id = 2;
+}

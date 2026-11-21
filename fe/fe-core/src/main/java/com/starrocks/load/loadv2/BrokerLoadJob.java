@@ -69,6 +69,8 @@ import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.BrokerPropertiesPersistInfo;
+import com.starrocks.persist.proto.BrokerLoadJobPB;
+import com.starrocks.persist.proto.LoadJobPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.SessionVariable;
@@ -962,5 +964,15 @@ public class BrokerLoadJob extends BulkLoadJob {
         if (attachment instanceof BrokerLoadingTaskAttachment) {
             failInfos.addAll(((BrokerLoadingTaskAttachment) attachment).getFailInfoList());
         }
+    }
+
+    @Override
+    protected void fillProtoVariant(LoadJobPB.Builder builder) {
+        builder.setKind(LoadJobPB.Kind.BROKER_LOAD_JOB).setBroker(BrokerLoadJobPB.newBuilder().setBulk(toBulkCoreProto()));
+    }
+
+    @Override
+    protected void fillFromVariantProto(LoadJobPB pb) {
+        fillBulkCoreFromProto(pb.getBroker().getBulk());
     }
 }

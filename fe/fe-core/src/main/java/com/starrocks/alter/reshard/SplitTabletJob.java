@@ -50,6 +50,9 @@ import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
+import com.starrocks.persist.proto.SplitTabletJobPB;
+import com.starrocks.persist.proto.TabletReshardJobCorePB;
+import com.starrocks.persist.proto.TabletReshardJobPB;
 import com.starrocks.proto.ParentTabletPublishInfoPB;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
@@ -1499,5 +1502,27 @@ public class SplitTabletJob extends TabletReshardJob {
         Preconditions.checkState(packShardGroupId != PhysicalPartition.INVALID_SHARD_GROUP_ID,
                 "Tablet %s has no covering ColocateRange", newTabletId);
         return packShardGroupId;
+    }
+
+    @Override
+    public TabletReshardJobPB toProto() {
+        SplitTabletJobPB.Builder builder = SplitTabletJobPB.newBuilder().setDbId(dbId).setTableId(tableId)
+                .setTransactionId(transactionId).setGtid(gtid).setEndTransactionId(endTransactionId);
+        if (reshardingPhysicalPartitions != null) {
+            builder.setReshardingPhysicalPartitions(ReshardingPhysicalPartition.toProtoMap(reshardingPhysicalPartitions));
+        }
+        return TabletReshardJobPB.newBuilder().setKind(TabletReshardJobPB.Kind.SPLIT_TABLET)
+                .setCore(toCoreProto()).setSplitTablet(builder).build();
+    }
+
+    protected SplitTabletJob(TabletReshardJobCorePB core, SplitTabletJobPB pb) {
+        super(core, JobType.SPLIT_TABLET);
+        dbId = pb.getDbId();
+        tableId = pb.getTableId();
+        reshardingPhysicalPartitions = pb.hasReshardingPhysicalPartitions()
+                ? ReshardingPhysicalPartition.fromProtoMap(pb.getReshardingPhysicalPartitions()) : null;
+        transactionId = pb.getTransactionId();
+        gtid = pb.getGtid();
+        endTransactionId = pb.getEndTransactionId();
     }
 }

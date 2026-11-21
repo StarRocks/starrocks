@@ -16,12 +16,14 @@ package com.starrocks.authentication;
 
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
+import com.google.protobuf.ByteString;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.io.Writable;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.proto.UserAuthenticationInfoPB;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserRef;
 
@@ -151,5 +153,50 @@ public class UserAuthenticationInfo implements Writable, GsonPostProcessable {
     @Override
     public void gsonPostProcess() throws IOException {
         loadMysqlPattern();
+    }
+
+    public UserAuthenticationInfoPB toProto() {
+        UserAuthenticationInfoPB.Builder builder = UserAuthenticationInfoPB.newBuilder();
+        if (password != null) {
+            builder.setPassword(ByteString.copyFrom(password));
+        }
+        if (authPlugin != null) {
+            builder.setAuthPlugin(authPlugin);
+        }
+        if (authString != null) {
+            builder.setAuthString(authString);
+        }
+        if (origHost != null) {
+            builder.setOrigHost(origHost);
+        }
+        if (origUser != null) {
+            builder.setOrigUser(origUser);
+        }
+        return builder.build();
+    }
+
+    // A protobuf constructor leaves the existing GSON construction path unchanged.
+    private UserAuthenticationInfo(UserAuthenticationInfoPB pb) {
+        if (pb.hasPassword()) {
+            password = pb.getPassword().toByteArray();
+        }
+        if (pb.hasAuthPlugin()) {
+            authPlugin = pb.getAuthPlugin();
+        }
+        if (pb.hasAuthString()) {
+            authString = pb.getAuthString();
+        }
+        if (pb.hasOrigHost()) {
+            origHost = pb.getOrigHost();
+        }
+        if (pb.hasOrigUser()) {
+            origUser = pb.getOrigUser();
+        }
+    }
+
+    public static UserAuthenticationInfo fromProto(UserAuthenticationInfoPB pb) {
+        UserAuthenticationInfo info = new UserAuthenticationInfo(pb);
+        info.loadMysqlPattern();
+        return info;
     }
 }

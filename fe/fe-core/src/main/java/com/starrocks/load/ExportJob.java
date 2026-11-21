@@ -70,6 +70,10 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.persist.BrokerPropertiesPersistInfo;
 import com.starrocks.persist.TableRefPersist;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.ExportJobPB;
+import com.starrocks.persist.proto.StringListPB;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.ExportSink;
@@ -118,6 +122,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -1049,6 +1054,114 @@ public class ExportJob implements Writable, GsonPostProcessable {
         if (db != null) {
             exportTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         }
+    }
+
+    /** What a loaded job derives from its persisted fields: the query id and the exported table, and that it is a replay. */
+    private void rebuildTransientState() {
+        if (!Strings.isNullOrEmpty(queryIdString)) {
+            queryId = UUID.fromString(queryIdString);
+        }
+        isReplayed = true;
+        GlobalStateMgr stateMgr = GlobalStateMgr.getCurrentState();
+        Database db = null;
+        if (stateMgr.getLocalMetastore() != null) {
+            db = stateMgr.getLocalMetastore().getDb(dbId);
+        }
+        if (db != null) {
+            exportTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        }
+    }
+
+    /** Image v3 form: the persisted fields of the job, one to one. */
+    public ExportJobPB toProto() {
+        ExportJobPB.Builder builder = ExportJobPB.newBuilder()
+                .setId(id)
+                .setDbId(dbId)
+                .setTableId(tableId)
+                .setWithHeader(withHeader)
+                .setCreateTimeMs(createTimeMs)
+                .setStartTimeMs(startTimeMs)
+                .setFinishTimeMs(finishTimeMs)
+                .setProgress(progress)
+                .setWarehouseId(warehouseId);
+        if (queryIdString != null) {
+            builder.setQueryId(queryIdString);
+        }
+        if (brokerPersistInfo != null) {
+            builder.setBroker(brokerPersistInfo.toProto());
+        }
+        if (exportPath != null) {
+            builder.setExportPath(exportPath);
+        }
+        if (columnSeparator != null) {
+            builder.setColumnSeparator(columnSeparator);
+        }
+        if (rowDelimiter != null) {
+            builder.setRowDelimiter(rowDelimiter);
+        }
+        if (properties != null) {
+            builder.setProperties(ProtoMaps.toStringMapProto(properties));
+        }
+        if (partitions != null) {
+            builder.setPartitions(StringListPB.newBuilder().addAllValues(partitions));
+        }
+        if (tableName != null) {
+            builder.setTableName(tableName.toProto());
+        }
+        if (state != null) {
+            builder.setState(ProtoEnums.toProto(state, ExportJobPB.State.class));
+        }
+        if (failMsg != null) {
+            builder.setFailMsg(failMsg.toProto());
+        }
+        return builder.build();
+    }
+
+    public static ExportJob fromProto(ExportJobPB pb) {
+        // The same constructor GSON uses; a field the message does not carry keeps the constructor's default, as a
+        // missing JSON member does.
+        ExportJob job = new ExportJob();
+        job.id = pb.getId();
+        if (pb.hasQueryId()) {
+            job.queryIdString = pb.getQueryId();
+        }
+        job.dbId = pb.getDbId();
+        job.tableId = pb.getTableId();
+        if (pb.hasBroker()) {
+            job.brokerPersistInfo = BrokerPropertiesPersistInfo.fromProto(pb.getBroker());
+        }
+        if (pb.hasExportPath()) {
+            job.exportPath = pb.getExportPath();
+        }
+        if (pb.hasColumnSeparator()) {
+            job.columnSeparator = pb.getColumnSeparator();
+        }
+        if (pb.hasRowDelimiter()) {
+            job.rowDelimiter = pb.getRowDelimiter();
+        }
+        job.withHeader = pb.getWithHeader();
+        if (pb.hasProperties()) {
+            job.properties = ProtoMaps.fromStringMapProto(pb.getProperties());
+        }
+        if (pb.hasPartitions()) {
+            job.partitions = new ArrayList<>(pb.getPartitions().getValuesList());
+        }
+        if (pb.hasTableName()) {
+            job.tableName = TableName.fromProto(pb.getTableName());
+        }
+        if (pb.getState() != ExportJobPB.State.UNSPECIFIED) {
+            job.state = ProtoEnums.fromProto(pb.getState(), JobState.class);
+        }
+        job.createTimeMs = pb.getCreateTimeMs();
+        job.startTimeMs = pb.getStartTimeMs();
+        job.finishTimeMs = pb.getFinishTimeMs();
+        job.progress = pb.getProgress();
+        if (pb.hasFailMsg()) {
+            job.failMsg = ExportFailMsg.fromProto(pb.getFailMsg());
+        }
+        job.warehouseId = pb.getWarehouseId();
+        job.rebuildTransientState();
+        return job;
     }
 
     // for only persist op when switching job state.

@@ -57,11 +57,17 @@ import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
 import com.starrocks.persist.UpdateFrontendInfo;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionReader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.FrontendPB;
+import com.starrocks.persist.proto.NodeMgrPB;
 import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
@@ -1226,6 +1232,74 @@ public class NodeMgr {
 
         systemInfo = nodeMgr.systemInfo;
         brokerMgr = nodeMgr.brokerMgr;
+
+        //Sort by frontend name to ensure the order of assigned IDs is consistent
+        List<Frontend> sortedList = frontends.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey()).map(Map.Entry::getValue).collect(Collectors.toList());
+        for (Frontend fe : sortedList) {
+            if (fe.getFid() == 0) {
+                int frontendId = allocateNextFrontendId();
+                LOG.info("Frontend has no ID assigned, newly assigned ID {} to {}", frontendId, fe.getNodeName());
+                fe.setFid(frontendId);
+            }
+            frontendIds.put(fe.getFid(), fe);
+        }
+    }
+
+    /** Image format v3: the whole manager is one message, see persist/node_mgr.proto. */
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.NODE_MGR)) {
+            writer.writeManager(toProto());
+        }
+    }
+
+    public void load(SectionReader reader) throws IOException {
+        NodeMgrPB pb = reader.readManager(NodeMgrPB.parser());
+        ConcurrentHashMap<String, Frontend> loadedFrontends = new ConcurrentHashMap<>();
+        for (FrontendPB fePb : pb.getFrontendsList()) {
+            Frontend fe = Frontend.fromProto(fePb);
+            loadedFrontends.put(fe.getNodeName(), fe);
+        }
+        finishLoad(pb.getLeaderRpcPort(), pb.getLeaderHttpPort(), pb.hasLeaderIp() ? pb.getLeaderIp() : null,
+                loadedFrontends, new ConcurrentLinkedQueue<>(pb.getRemovedFrontendsList()),
+                SystemInfoService.fromProto(pb.getSystemInfo()), BrokerMgr.fromProto(pb.getBrokerMgr()));
+    }
+
+    public NodeMgrPB toProto() {
+        NodeMgrPB.Builder builder = NodeMgrPB.newBuilder()
+                .setLeaderRpcPort(leaderRpcPort)
+                .setLeaderHttpPort(leaderHttpPort)
+                .addAllRemovedFrontends(removedFrontends)
+                .setSystemInfo(systemInfo.toProto())
+                .setBrokerMgr(brokerMgr.toProto());
+        if (leaderIp != null) {
+            builder.setLeaderIp(leaderIp);
+        }
+        for (Frontend fe : frontends.values()) {
+            builder.addFrontends(fe.toProto());
+        }
+        return builder.build();
+    }
+
+    /** Installs the loaded state and runs the post-load steps shared by both image formats. */
+    private void finishLoad(int leaderRpcPort, int leaderHttpPort, String leaderIp,
+                            ConcurrentHashMap<String, Frontend> frontends, ConcurrentLinkedQueue<String> removedFrontends,
+                            SystemInfoService systemInfo, BrokerMgr brokerMgr) {
+        this.leaderRpcPort = leaderRpcPort;
+        this.leaderHttpPort = leaderHttpPort;
+        this.leaderIp = leaderIp;
+
+        this.frontends = frontends;
+        this.removedFrontends = removedFrontends;
+
+        for (Frontend fe : frontends.values()) {
+            if (fe.getRole() == FrontendNodeType.FOLLOWER) {
+                helperNodes.add(Pair.create(fe.getHost(), fe.getEditLogPort()));
+            }
+        }
+
+        this.systemInfo = systemInfo;
+        this.brokerMgr = brokerMgr;
 
         //Sort by frontend name to ensure the order of assigned IDs is consistent
         List<Frontend> sortedList = frontends.entrySet().stream()

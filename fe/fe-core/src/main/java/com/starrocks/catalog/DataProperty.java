@@ -41,6 +41,8 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.DataPropertyPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -78,6 +80,24 @@ public class DataProperty implements Writable {
     public DataProperty(TStorageMedium medium, long cooldown) {
         this.storageMedium = medium;
         this.cooldownTimeMs = cooldown;
+    }
+
+    public DataPropertyPB toProto() {
+        DataPropertyPB.Builder builder = DataPropertyPB.newBuilder().setCooldownTimeMs(cooldownTimeMs);
+        if (storageMedium != null) {
+            builder.setStorageMedium(ProtoEnums.toProto(storageMedium, DataPropertyPB.StorageMedium.class));
+        }
+        return builder.build();
+    }
+
+    public static DataProperty fromProto(DataPropertyPB pb) {
+        // The same constructor GSON uses.
+        DataProperty property = new DataProperty();
+        if (pb.hasStorageMedium()) {
+            property.storageMedium = ProtoEnums.fromProto(pb.getStorageMedium(), TStorageMedium.class);
+        }
+        property.cooldownTimeMs = pb.getCooldownTimeMs();
+        return property;
     }
 
     public static DataProperty getInferredDefaultDataProperty() {

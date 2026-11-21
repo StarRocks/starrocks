@@ -18,6 +18,7 @@ import com.staros.client.StarClientException;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.RecycleUnPartitionInfo;
+import com.starrocks.persist.proto.RecyclePartitionInfoPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
@@ -50,5 +51,10 @@ public class RecycleLakeUnPartitionInfo extends RecycleUnPartitionInfo {
         } catch (StarClientException e) {
             return false;
         }
+    }
+
+    @Override
+    protected RecyclePartitionInfoPB.Kind protoKind() {
+        return RecyclePartitionInfoPB.Kind.RECYCLE_LAKE_UN_PARTITION_INFO;
     }
 }

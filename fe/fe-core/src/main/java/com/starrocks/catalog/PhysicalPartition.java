@@ -25,6 +25,11 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.FeConstants;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.IndexMetaIndexIdsPB;
+import com.starrocks.persist.proto.MaterializedIndexPB;
+import com.starrocks.persist.proto.PhysicalPartitionPB;
 import com.starrocks.transaction.TransactionType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -1074,5 +1079,97 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
             // reset baseIndex to null
             baseIndex = null;
         }
+    }
+
+    public static PhysicalPartition fromProto(PhysicalPartitionPB pb) {
+        // The same constructor GSON uses.
+        PhysicalPartition partition = new PhysicalPartition();
+        if (pb.hasMeta()) {
+            partition.fillFromMetaObjectProto(pb.getMeta());
+        }
+        partition.id = pb.getId();
+        partition.parentId = pb.getParentId();
+        partition.shardGroupId = pb.getShardGroupId();
+        partition.isImmutable = new AtomicBoolean(pb.getIsImmutable());
+        partition.baseIndexMetaId = pb.getBaseIndexMetaId();
+        partition.indexMetaIdToIndexIds = Maps.newHashMap();
+        for (IndexMetaIndexIdsPB entry : pb.getIndexMetaIdToIndexIdsList()) {
+            partition.indexMetaIdToIndexIds.put(entry.getIndexMetaId(), Lists.newArrayList(entry.getIndexIdsList()));
+        }
+        // Concurrent, as the GSON hook restores it.
+        partition.queryIndexMetaIdToIndexId = new ConcurrentHashMap<>(pb.getQueryIndexMetaIdToIndexIdMap());
+        partition.idToVisibleIndex = Maps.newHashMap();
+        for (MaterializedIndexPB indexPb : pb.getVisibleIndexesList()) {
+            MaterializedIndex index = MaterializedIndex.fromProto(indexPb);
+            partition.idToVisibleIndex.put(index.getId(), index);
+        }
+        partition.idToShadowIndex = Maps.newHashMap();
+        for (MaterializedIndexPB indexPb : pb.getShadowIndexesList()) {
+            MaterializedIndex index = MaterializedIndex.fromProto(indexPb);
+            partition.idToShadowIndex.put(index.getId(), index);
+        }
+        partition.visibleVersion = pb.getVisibleVersion();
+        partition.visibleVersionTime = pb.getVisibleVersionTime();
+        partition.nextVersion = pb.getNextVersion();
+        partition.lastUpdateTime = pb.getLastUpdateTime();
+        partition.dataVersion = pb.getDataVersion();
+        partition.nextDataVersion = pb.getNextDataVersion();
+        partition.versionEpoch = pb.getVersionEpoch();
+        if (pb.hasVersionTxnType()) {
+            partition.versionTxnType = ProtoEnums.fromProto(pb.getVersionTxnType(), TransactionType.class);
+        }
+        partition.metadataSwitchVersion = pb.getMetadataSwitchVersion();
+        partition.bucketNum = pb.getBucketNum();
+        if (pb.hasVacuumState()) {
+            partition.vacuumState = VacuumState.fromProto(pb.getVacuumState());
+        }
+        // As in V2 and journal replay, a completed pass restores the watermark even if the image
+        // predates its dedicated field or carries a lower value.
+        partition.lastSuccVacuumVersion.set(Math.max(pb.getLastSuccVacuumVersion(),
+                partition.vacuumState.getMinRetainedVersion()));
+        return partition;
+    }
+
+    /**
+     * Image v3 form. The deprecated {@code baseIndex} field is null for every partition created since the base
+     * indexes moved into idToVisibleIndex and is not persisted.
+     */
+    public PhysicalPartitionPB toProto() {
+        PhysicalPartitionPB.Builder builder = PhysicalPartitionPB.newBuilder()
+                .setMeta(toMetaObjectProto())
+                .setId(id)
+                .setParentId(parentId)
+                .setShardGroupId(shardGroupId)
+                .setIsImmutable(isImmutable.get())
+                .setBaseIndexMetaId(baseIndexMetaId)
+                .setVisibleVersion(visibleVersion)
+                .setVisibleVersionTime(visibleVersionTime)
+                .setNextVersion(nextVersion)
+                .setLastUpdateTime(lastUpdateTime)
+                .setDataVersion(dataVersion)
+                .setNextDataVersion(nextDataVersion)
+                .setVersionEpoch(versionEpoch)
+                .setMetadataSwitchVersion(metadataSwitchVersion)
+                .setLastSuccVacuumVersion(lastSuccVacuumVersion.get())
+                .setBucketNum(bucketNum);
+        if (vacuumState != null) {
+            builder.setVacuumState(vacuumState.toProto());
+        }
+        for (Map.Entry<Long, List<Long>> entry : indexMetaIdToIndexIds.entrySet()) {
+            builder.addIndexMetaIdToIndexIds(IndexMetaIndexIdsPB.newBuilder()
+                    .setIndexMetaId(entry.getKey())
+                    .addAllIndexIds(entry.getValue()));
+        }
+        builder.putAllQueryIndexMetaIdToIndexId(ProtoMaps.withoutNullValues(queryIndexMetaIdToIndexId));
+        for (MaterializedIndex index : idToVisibleIndex.values()) {
+            builder.addVisibleIndexes(index.toProto());
+        }
+        for (MaterializedIndex index : idToShadowIndex.values()) {
+            builder.addShadowIndexes(index.toProto());
+        }
+        if (versionTxnType != null) {
+            builder.setVersionTxnType(ProtoEnums.toProto(versionTxnType, PhysicalPartitionPB.TransactionType.class));
+        }
+        return builder.build();
     }
 }

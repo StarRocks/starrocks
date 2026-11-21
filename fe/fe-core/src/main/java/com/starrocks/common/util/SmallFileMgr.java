@@ -43,14 +43,23 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.RemoveSmallFileLog;
+import com.starrocks.persist.image.ImageFormatException;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionReader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.SmallFileMgrPB;
+import com.starrocks.persist.proto.SmallFilePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.DropFileStmt;
@@ -122,9 +131,55 @@ public class SmallFileMgr implements Writable {
             return Base64.getDecoder().decode(content);
         }
 
+        public SmallFilePB toProto() {
+            SmallFilePB.Builder builder = SmallFilePB.newBuilder();
+            builder.setDbId(dbId);
+            if (catalog != null) {
+                builder.setCatalog(catalog);
+            }
+            if (name != null) {
+                builder.setName(name);
+            }
+            builder.setId(id);
+            if (content != null) {
+                builder.setContent(content);
+            }
+            builder.setSize(size);
+            if (md5 != null) {
+                builder.setMd5(md5);
+            }
+            builder.setIsContent(isContent);
+            return builder.build();
+        }
 
-
-
+        public static SmallFile fromProto(SmallFilePB pb) {
+            SmallFile result = new SmallFile();
+            if (pb.hasDbId()) {
+                result.dbId = pb.getDbId();
+            }
+            if (pb.hasCatalog()) {
+                result.catalog = pb.getCatalog();
+            }
+            if (pb.hasName()) {
+                result.name = pb.getName();
+            }
+            if (pb.hasId()) {
+                result.id = pb.getId();
+            }
+            if (pb.hasContent()) {
+                result.content = pb.getContent();
+            }
+            if (pb.hasSize()) {
+                result.size = pb.getSize();
+            }
+            if (pb.hasMd5()) {
+                result.md5 = pb.getMd5();
+            }
+            if (pb.hasIsContent()) {
+                result.isContent = pb.getIsContent();
+            }
+            return result;
+        }
     }
 
     public static class SmallFiles {
@@ -535,5 +590,27 @@ public class SmallFileMgr implements Writable {
             writer.writeJson(file);
         }
         writer.close();
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.SMALL_FILE_MGR)) {
+            writer.writeManager(SmallFileMgrPB.getDefaultInstance());
+            for (SmallFile file : idToFiles.values()) {
+                writer.writeEntry(file.toProto());
+            }
+        }
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(Pair.create(SectionId.SMALL_FILE_MGR, this::loadSection));
+    }
+
+    private void loadSection(SectionReader reader) throws IOException {
+        reader.readManager(SmallFileMgrPB.parser());
+        try {
+            reader.readEntries(SmallFilePB.parser(), pb -> putToFiles(SmallFile.fromProto(pb)));
+        } catch (IllegalArgumentException | IllegalStateException | NullPointerException e) {
+            throw new ImageFormatException("invalid SMALL_FILE_MGR entry", e);
+        }
     }
 }

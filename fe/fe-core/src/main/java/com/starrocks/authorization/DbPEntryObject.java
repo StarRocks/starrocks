@@ -21,6 +21,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.persist.proto.DbPrivilegeObjectPB;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaNotFoundException;
@@ -208,5 +209,28 @@ public class DbPEntryObject implements PEntryObject {
                 return ExternalCatalog.getDbNameFromUUID(uuid);
             }
         }
+    }
+
+    public DbPrivilegeObjectPB toProto() {
+        DbPrivilegeObjectPB.Builder builder = DbPrivilegeObjectPB.newBuilder();
+        builder.setCatalogId(catalogId);
+        if (uuid != null) {
+            builder.setUuid(uuid);
+        }
+        return builder.build();
+    }
+
+    // A protobuf constructor leaves the existing GSON construction path unchanged.
+    private DbPEntryObject(DbPrivilegeObjectPB pb) {
+        if (pb.hasCatalogId()) {
+            catalogId = pb.getCatalogId();
+        }
+        if (pb.hasUuid()) {
+            uuid = pb.getUuid();
+        }
+    }
+
+    public static DbPEntryObject fromProto(DbPrivilegeObjectPB pb) {
+        return new DbPEntryObject(pb);
     }
 }

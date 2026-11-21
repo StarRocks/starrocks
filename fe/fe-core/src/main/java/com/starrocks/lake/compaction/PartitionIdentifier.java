@@ -17,6 +17,7 @@ package com.starrocks.lake.compaction;
 
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.PartitionIdentifierPB;
 
 import java.util.Objects;
 
@@ -66,5 +67,17 @@ public class PartitionIdentifier {
     @Override
     public String toString() {
         return new Gson().toJson(this);
+    }
+
+    public PartitionIdentifierPB toProto() {
+        return PartitionIdentifierPB.newBuilder()
+                .setDbId(dbId)
+                .setTableId(tableId)
+                .setPartitionId(partitionId)
+                .build();
+    }
+
+    public static PartitionIdentifier fromProto(PartitionIdentifierPB pb) {
+        return new PartitionIdentifier(pb.getDbId(), pb.getTableId(), pb.getPartitionId());
     }
 }

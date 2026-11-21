@@ -49,6 +49,8 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
+import com.starrocks.persist.proto.InsertLoadJobPB;
+import com.starrocks.persist.proto.LoadJobPB;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TLoadJobType;
@@ -328,5 +330,17 @@ public class InsertLoadJob extends LoadJob {
 
     public long getTableId() {
         return tableId;
+    }
+
+    @Override
+    protected void fillProtoVariant(LoadJobPB.Builder builder) {
+        builder.setKind(LoadJobPB.Kind.INSERT_LOAD_JOB).setInsert(InsertLoadJobPB.newBuilder().setTableId(tableId));
+    }
+
+    @Override
+    protected void fillFromVariantProto(LoadJobPB pb) {
+        if (pb.getInsert().hasTableId()) {
+            tableId = pb.getInsert().getTableId();
+        }
     }
 }

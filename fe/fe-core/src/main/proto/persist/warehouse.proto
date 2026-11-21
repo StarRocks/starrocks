@@ -1,0 +1,42 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "WarehouseProto";
+
+// The warehouse domain: the compute resources jobs and loads run on now, the warehouses themselves
+// when WarehouseMgr is persisted. See common.proto for the conventions.
+
+// com.starrocks.warehouse.cngroup.ComputeResource.
+message ComputeResourcePB {
+  enum Kind {
+    UNSPECIFIED = 0;
+    WAREHOUSE = 1;
+  }
+  Kind kind = 1;
+
+  oneof instance {
+    WarehouseComputeResourcePB warehouse = 11;
+  }
+}
+
+// com.starrocks.warehouse.cngroup.WarehouseComputeResource.
+message WarehouseComputeResourcePB {
+  int64 warehouse_id = 1;
+}

@@ -20,6 +20,7 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RecycleRangePartitionInfo;
+import com.starrocks.persist.proto.RecyclePartitionInfoPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
@@ -51,5 +52,10 @@ public class RecycleLakeRangePartitionInfo extends RecycleRangePartitionInfo  {
         } catch (StarClientException e) {
             return false;
         }
+    }
+
+    @Override
+    protected RecyclePartitionInfoPB.Kind protoKind() {
+        return RecyclePartitionInfoPB.Kind.RECYCLE_LAKE_RANGE_PARTITION_INFO;
     }
 }
