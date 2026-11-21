@@ -189,7 +189,9 @@ public class HiveMetadataTest {
 
     @Test
     public void testGetTable() {
-        com.starrocks.catalog.Table table = hiveMetadata.getTable(new ConnectContext(), "db1", "tbl1");
+        ConnectContext context = new ConnectContext();
+        com.starrocks.catalog.Table table = hiveMetadata.prefetchTableMetadataForAnalyze("db1", "tbl1", context);
+        Assertions.assertSame(table, hiveMetadata.getTable(context, "db1", "tbl1"));
         HiveTable hiveTable = (HiveTable) table;
         Assertions.assertEquals("db1", hiveTable.getCatalogDBName());
         Assertions.assertEquals("tbl1", hiveTable.getCatalogTableName());
