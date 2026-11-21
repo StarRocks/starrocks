@@ -69,6 +69,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NoAliveBackendException;
@@ -1700,7 +1701,13 @@ public class StmtExecutor {
             leaderOpExecutor =
                     new LeaderOpExecutor(parsedStmt, originStmt, context, redirectStatus, isInternalStmt, deploymentFinished);
             LOG.debug("need to transfer to Leader. stmt: {}", context.getStmtId());
-            leaderOpExecutor.execute();
+            try {
+                leaderOpExecutor.execute();
+            } catch (TTransportException e) {
+                // The connection broke after the statement was sent, so the leader may have applied it.
+                // Reporting an ordinary error would tell the client it failed.
+                throw ErrorReportException.report(ErrorCode.ERR_FORWARD_RESULT_UNKNOWN, e.getMessage());
+            }
         } finally {
             context.decPendingForwardRequest();
         }
