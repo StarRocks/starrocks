@@ -178,7 +178,7 @@ public class JoinReorderCardinalityPreserving extends JoinOrder {
             }
             ScalarOperator lhs = binPredicate.getChild(0);
             ScalarOperator rhs = binPredicate.getChild(1);
-            if (!(lhs instanceof ColumnRefOperator) && (rhs instanceof ColumnRefOperator)) {
+            if (!(lhs instanceof ColumnRefOperator) || !(rhs instanceof ColumnRefOperator)) {
                 continue;
             }
 
