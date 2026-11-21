@@ -227,6 +227,110 @@ TEST_F(MergeIteratorTest, test_issue_6167) {
     ASSERT_TRUE(st.is_end_of_file());
 }
 
+// Many children whose keys interleave row by row, refilled every few rows, with one key that all of them share:
+// every heap pop moves a single row, and equal keys come out in child order.
+// NOLINTNEXTLINE
+TEST_F(MergeIteratorTest, heap_merge_interleaved_children_with_ties) {
+    constexpr int kChildren = 8;
+    constexpr int kRowsPerChild = 100;
+    constexpr int kTieKey = 1000000;
+    std::vector<ChunkIteratorPtr> subs;
+    for (int c = 0; c < kChildren; c++) {
+        std::vector<int32_t> v;
+        for (int i = 0; i < kRowsPerChild; i++) {
+            v.push_back(c + i * kChildren);
+        }
+        v.push_back(kTieKey);
+        auto sub = std::make_shared<VectorChunkIterator>(_schema, COL_INT(v));
+        sub->chunk_size(7);
+        subs.push_back(sub);
+    }
+    auto iter = new_heap_merge_iterator(subs);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+
+    std::vector<int32_t> real;
+    std::vector<RowSourceMask> source_masks;
+    ChunkPtr chunk = ChunkFactory::new_chunk(iter->schema(), 64);
+    while (iter->get_next(chunk.get(), &source_masks).ok()) {
+        ColumnPtr& col = chunk->get_column_by_index(0);
+        for (size_t i = 0; i < col->size(); i++) {
+            real.push_back(col->get(i).get_int32());
+        }
+        chunk->reset();
+    }
+    ASSERT_EQ(kChildren * (kRowsPerChild + 1), real.size());
+    ASSERT_EQ(real.size(), source_masks.size());
+    for (int i = 0; i < kChildren * kRowsPerChild; i++) {
+        EXPECT_EQ(i, real[i]);
+        EXPECT_EQ(i % kChildren, source_masks[i].get_source_num());
+    }
+    for (int c = 0; c < kChildren; c++) {
+        EXPECT_EQ(kTieKey, real[kChildren * kRowsPerChild + c]);
+        EXPECT_EQ(c, source_masks[kChildren * kRowsPerChild + c].get_source_num());
+    }
+}
+
+// The rows are ordered by the schema's sort key, here the second column, not by the key prefix.
+// NOLINTNEXTLINE
+TEST_F(MergeIteratorTest, heap_merge_by_sort_key_columns) {
+    auto f1 = std::make_shared<Field>(0, "c1", get_type_info(TYPE_INT), false);
+    auto f2 = std::make_shared<Field>(1, "c2", get_type_info(TYPE_INT), false);
+    f1->set_is_key(true);
+    f2->set_is_key(true);
+    Schema schema(std::vector<FieldPtr>{f1, f2}, DUP_KEYS, std::vector<ColumnId>{1});
+    auto sub1 = std::make_shared<VectorChunkIterator>(schema, COL_INT({5, 3, 9}), COL_INT({1, 4, 7}));
+    auto sub2 = std::make_shared<VectorChunkIterator>(schema, COL_INT({1, 8, 2}), COL_INT({2, 3, 9}));
+    auto iter = new_heap_merge_iterator(std::vector<ChunkIteratorPtr>{sub1, sub2});
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+
+    std::vector<int32_t> c1;
+    std::vector<int32_t> c2;
+    ChunkPtr chunk = ChunkFactory::new_chunk(iter->schema(), 1024);
+    while (iter->get_next(chunk.get()).ok()) {
+        for (size_t i = 0; i < chunk->num_rows(); i++) {
+            c1.push_back(chunk->get_column_by_index(0)->get(i).get_int32());
+            c2.push_back(chunk->get_column_by_index(1)->get(i).get_int32());
+        }
+        chunk->reset();
+    }
+    EXPECT_EQ("1,2,3,4,7,9", to_string(c2));
+    EXPECT_EQ("5,1,8,3,9,2", to_string(c1));
+}
+
+// With a merge condition, rows of equal keys are ordered by the condition column (the first column after the keys),
+// then by child order.
+// NOLINTNEXTLINE
+TEST_F(MergeIteratorTest, heap_merge_with_merge_condition) {
+    auto f1 = std::make_shared<Field>(0, "c1", get_type_info(TYPE_INT), false);
+    auto f2 = std::make_shared<Field>(1, "c2", get_type_info(TYPE_INT), false);
+    f1->set_is_key(true);
+    Schema schema(std::vector<FieldPtr>{f1, f2});
+    auto sub1 = std::make_shared<VectorChunkIterator>(schema, COL_INT({1, 2}), COL_INT({30, 10}));
+    auto sub2 = std::make_shared<VectorChunkIterator>(schema, COL_INT({1, 2}), COL_INT({20, 10}));
+    auto sub3 = std::make_shared<VectorChunkIterator>(schema, COL_INT({1}), COL_INT({10}));
+    auto iter = new_heap_merge_iterator(std::vector<ChunkIteratorPtr>{sub1, sub2, sub3}, std::string("c2"));
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+
+    std::vector<int32_t> c1;
+    std::vector<int32_t> c2;
+    std::vector<RowSourceMask> source_masks;
+    ChunkPtr chunk = ChunkFactory::new_chunk(iter->schema(), 1024);
+    while (iter->get_next(chunk.get(), &source_masks).ok()) {
+        for (size_t i = 0; i < chunk->num_rows(); i++) {
+            c1.push_back(chunk->get_column_by_index(0)->get(i).get_int32());
+            c2.push_back(chunk->get_column_by_index(1)->get(i).get_int32());
+        }
+        chunk->reset();
+    }
+    EXPECT_EQ("1,1,1,2,2", to_string(c1));
+    EXPECT_EQ("10,20,30,10,10", to_string(c2));
+    std::vector<int> sources;
+    for (const auto& m : source_masks) {
+        sources.push_back(m.get_source_num());
+    }
+    EXPECT_EQ("2,1,0,0,1", to_string(sources));
+}
+
 // NOLINTNEXTLINE
 TEST_F(MergeIteratorTest, mask_merge) {
     std::vector<int32_t> v1{1, 1, 2, 3, 4, 5};

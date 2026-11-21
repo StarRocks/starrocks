@@ -90,29 +90,32 @@ protected:
 };
 
 // Compare two chunks by the one specific row of each other.
+// How the chunks of one heap merge compare. Owned by the merge iterator and shared by all its ComparableChunks, so
+// that moving a chunk in and out of the heap, once per run of rows it contributes, copies no vector, string or
+// shared pointer.
+struct MergeKeys {
+    size_t key_columns = 0;
+    std::vector<uint32_t> sort_key_idxes;
+    std::shared_ptr<SortDescs> sort_descs;
+    std::string merge_condition;
+};
+
 class ComparableChunk : public MergingChunk {
 public:
-    explicit ComparableChunk(Chunk* chunk, size_t order, size_t key_columns, std::vector<uint32_t> sort_key_idxes,
-                             std::shared_ptr<SortDescs> sort_descs, std::string merge_condition)
-            : MergingChunk(chunk),
-              _order(order),
-              _key_columns(key_columns),
-              _sort_key_idxes(std::move(sort_key_idxes)),
-              _sort_descs(std::move(sort_descs)),
-              _merge_condition(std::move(merge_condition)) {}
+    // `keys` must outlive the chunk.
+    explicit ComparableChunk(Chunk* chunk, size_t order, const MergeKeys* keys)
+            : MergingChunk(chunk), _order(order), _keys(keys) {}
 
-    explicit ComparableChunk(Chunk* chunk, size_t order, size_t key_columns, std::vector<uint32_t> sort_key_idxes,
-                             std::shared_ptr<SortDescs> sort_descs, std::string merge_condition,
+    explicit ComparableChunk(Chunk* chunk, size_t order, const MergeKeys* keys,
                              std::shared_ptr<std::vector<uint64_t>> rssid_rowids)
-            : ComparableChunk(chunk, order, key_columns, std::move(sort_key_idxes), std::move(sort_descs),
-                              std::move(merge_condition)) {
+            : ComparableChunk(chunk, order, keys) {
         _rssid_rowids = std::move(rssid_rowids);
     }
 
     bool operator>(const ComparableChunk& rhs) const {
-        DCHECK_EQ(_key_columns, rhs._key_columns);
-        int r = compare_chunk(_key_columns, _sort_key_idxes, _sort_descs, *_chunk, _compared_row, *rhs._chunk,
-                              rhs._compared_row, _merge_condition);
+        DCHECK_EQ(_keys, rhs._keys);
+        int r = compare_chunk(_keys->key_columns, _keys->sort_key_idxes, _keys->sort_descs, *_chunk, _compared_row,
+                              *rhs._chunk, rhs._compared_row, _keys->merge_condition);
         return (r > 0) | ((r == 0) & (_order > rhs._order));
     }
 
@@ -137,8 +140,8 @@ public:
     }
 
     bool less_than(size_t lhs_row, const ComparableChunk& rhs) {
-        int r = compare_chunk(_key_columns, _sort_key_idxes, _sort_descs, *_chunk, lhs_row, *rhs._chunk,
-                              rhs._compared_row, _merge_condition);
+        int r = compare_chunk(_keys->key_columns, _keys->sort_key_idxes, _keys->sort_descs, *_chunk, lhs_row,
+                              *rhs._chunk, rhs._compared_row, _keys->merge_condition);
         return (r < 0) | ((r == 0) & (_order < rhs._order));
     }
 
@@ -147,10 +150,7 @@ private:
 
     // used to determinate the order of two rows when their key columns are all equals.
     uint16_t _order;
-    uint16_t _key_columns;
-    std::vector<uint32_t> _sort_key_idxes;
-    std::shared_ptr<SortDescs> _sort_descs;
-    std::string _merge_condition;
+    const MergeKeys* _keys;
     std::shared_ptr<std::vector<uint64_t>> _rssid_rowids;
 };
 
@@ -264,6 +264,9 @@ private:
     using ChunkHeap = MinPriorityQueue<ComparableChunk>;
 
     ChunkHeap _heap;
+    // Set up from the schema on the first fill, once the schema and merge_condition are final.
+    MergeKeys _keys;
+    bool _keys_ready = false;
 };
 
 inline Status HeapMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks,
@@ -375,12 +378,17 @@ inline Status HeapMergeIterator::fill(size_t child) {
             return Status::InternalError(strings::Substitute(
                     "Merge iterator only supports merging chunks with rows less than $0", max_merge_chunk_size));
         }
+        if (!_keys_ready) {
+            _keys.key_columns = _schema.num_key_fields();
+            _keys.sort_key_idxes = _schema.sort_key_idxes();
+            _keys.sort_descs = _schema.sort_descs();
+            _keys.merge_condition = merge_condition;
+            _keys_ready = true;
+        }
         if (need_rssid_rowids) {
-            _heap.emplace(chunk, child, _schema.num_key_fields(), _schema.sort_key_idxes(), _schema.sort_descs(),
-                          merge_condition, std::move(rssid_rowids));
+            _heap.emplace(chunk, child, &_keys, std::move(rssid_rowids));
         } else {
-            _heap.emplace(chunk, child, _schema.num_key_fields(), _schema.sort_key_idxes(), _schema.sort_descs(),
-                          merge_condition);
+            _heap.emplace(chunk, child, &_keys);
         }
     } else if (st.is_end_of_file()) {
         // ignore Status::EndOfFile.
