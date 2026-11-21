@@ -147,7 +147,7 @@ public final class ExternalTableCompensation extends TableCompensation {
             externalExtraPredicate = convertRangeCellsToPredicate(refPartitionColRefs, compensations, true);
         }
         Preconditions.checkState(externalExtraPredicate != null);
-        externalExtraPredicate.setRedundant(true);
+        // Keep the compensation predicate visible to subsequent stages of MV rewrite.
         ScalarOperator finalPredicate = Utils.compoundAnd(scanOperator.getPredicate(), externalExtraPredicate);
         builder.setPredicate(finalPredicate);
         return builder.build();
