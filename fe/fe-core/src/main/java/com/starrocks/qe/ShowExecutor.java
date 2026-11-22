@@ -55,6 +55,7 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.GroupProvider;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ActionSet;
 import com.starrocks.authorization.AuthorizationMgr;
@@ -977,11 +978,7 @@ public class ShowExecutor {
                     try {
                         TListConnectionRequest request = new TListConnectionRequest();
                         TAuthInfo tAuthInfo = new TAuthInfo();
-<<<<<<< HEAD
-                        tAuthInfo.setCurrent_user_ident(context.getCurrentUserIdentity().toThrift());
-=======
                         tAuthInfo.setCurrent_user_ident(UserIdentityUtils.callerToThrift(context));
->>>>>>> 9464cc0 ([BugFix] Keep the caller's groups when its identity is rebuilt on another FE or in a sub task (#83213))
                         request.setAuth_info(tAuthInfo);
                         request.setFor_user(statement.getForUser());
                         request.setShow_full(statement.showFull());

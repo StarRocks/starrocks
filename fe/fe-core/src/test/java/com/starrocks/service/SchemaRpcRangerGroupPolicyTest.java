@@ -20,10 +20,10 @@ import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessControlProvider;
 import com.starrocks.authorization.AccessController;
 import com.starrocks.authorization.ranger.hive.RangerHiveAccessController;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.thrift.TColumnDef;
 import com.starrocks.thrift.TDescribeTableParams;
@@ -67,7 +67,7 @@ public class SchemaRpcRangerGroupPolicyTest extends ConnectorPlanTestBase {
             void init() {
             }
         };
-        RangerHiveAccessController ranger = new RangerHiveAccessController("hive_rpc_test", false);
+        RangerHiveAccessController ranger = new RangerHiveAccessController("hive_rpc_test");
         ranger.getRangerPlugin().setPolicies(selectOnRegionForGroup());
         previous = Authorizer.getInstance().catalogToAccessControl.put(HIVE, ranger);
     }
