@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Queries the value of an element that can be located by the json_path expression in a JSON object and returns a JSON value."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # json_query

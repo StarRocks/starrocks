@@ -30,6 +30,7 @@
 #include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
 #include "common/thread/threadpool.h"
+#include "fs/remote_read_context.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
@@ -650,6 +651,10 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
         const AcquireTokenFunc& acquire_token, const ReleaseTokenFunc& release_token, bool is_unshare,
         int64_t handoff_in_queue_time_sec, int64_t handoff_queue_wait_ns, const ReturnTokenFunc& return_token,
         bool allow_base_compaction) {
+    // Planning reads as this compaction: the tablet metadata, and the footers and data pages range-split sampling
+    // opens (_collect_segment_key_bounds). The subtasks carry their own context.
+    ScopedRemoteReadContext remote_read_scope(
+            RemoteReadContext::for_background(RemoteReadContext::Workload::COMPACTION, static_cast<uint64_t>(txn_id)));
     // Validate configuration
     // max_parallel comes from table property (via FE)
     // max_bytes comes from BE config if FE passes 0
@@ -1746,6 +1751,9 @@ StatusOr<TxnLogPB> TabletParallelCompactionManager::get_merged_txn_log(int64_t t
     // An UNSHARE of a tablet whose sort key is not its primary key rewrites shared data files only, so it skips this
     // step, and the tablet metadata read it starts with, entirely.
     if (!state->is_unshare || state->unshare_rewrites_index) {
+        // Read the index sstables as this compaction, like CompactionTask::execute_index_major_compaction().
+        ScopedRemoteReadContext remote_read_scope(RemoteReadContext::for_background(
+                RemoteReadContext::Workload::COMPACTION, static_cast<uint64_t>(txn_id)));
         RETURN_IF_ERROR(execute_sst_compaction_for_parallel(tablet_id, version, op_parallel, state->is_unshare));
     }
 

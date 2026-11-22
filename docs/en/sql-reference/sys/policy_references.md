@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "System view listing which objects reference row access policies and column masking policies in a StarRocks cluster."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # policy_references

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从 WKT 构造原生 GEOGRAPHY 值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_GeogFromText

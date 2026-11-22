@@ -57,11 +57,11 @@ function: assert_query_contains("show create table t_arr", "AS array_contains([`
 -- result:
 None
 -- !result
-function: assert_query_contains("show create table t_map", "AS map{1:`s`}[1]")
+function: assert_query_contains("show create table t_map", "AS MAP{1:`s`}[1]")
 -- result:
 None
 -- !result
-function: assert_query_contains("show create table t_mapf", "AS map{1:`s`}[1]")
+function: assert_query_contains("show create table t_mapf", "AS MAP{1:`s`}[1]")
 -- result:
 None
 -- !result
@@ -73,7 +73,7 @@ CREATE TABLE t_arr_copy (id int, a int, b int, c boolean NULL AS array_contains(
 DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
 -- result:
 -- !result
-CREATE TABLE t_map_copy (id int, s varchar(20), m varchar(20) NULL AS map{1:`s`}[1])
+CREATE TABLE t_map_copy (id int, s varchar(20), m varchar(20) NULL AS MAP{1:`s`}[1])
 DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
 -- result:
 -- !result
@@ -97,7 +97,74 @@ function: assert_query_contains("show create table t_arr_copy", "AS array_contai
 -- result:
 None
 -- !result
-function: assert_query_contains("show create table t_map_copy", "AS map{1:`s`}[1]")
+function: assert_query_contains("show create table t_map_copy", "AS MAP{1:`s`}[1]")
+-- result:
+None
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result
+-- name: test_pk_generated_column_show_create
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_pk (id int NOT NULL, a int, b int, d date, s varchar(20),
+x int AS named_struct('f', a).f, y boolean AS array_contains(ARRAY<DATE>['2020-1-1'], d),
+c boolean AS array_contains([a, b], 3), m varchar(20) AS map{1: s}[1])
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE t_pk_like LIKE t_pk;
+-- result:
+-- !result
+insert into t_pk values (1, 10, 3, '2020-01-01', 'v1'), (2, 20, 2, '2020-01-02', NULL);
+-- result:
+-- !result
+insert into t_pk_like values (1, 10, 3, '2020-01-01', 'v1'), (2, 20, 2, '2020-01-02', NULL);
+-- result:
+-- !result
+select * from t_pk order by id;
+-- result:
+1	10	3	2020-01-01	v1	10	1	1	v1
+2	20	2	2020-01-02	None	20	0	0	None
+-- !result
+select * from t_pk_like order by id;
+-- result:
+1	10	3	2020-01-01	v1	10	1	1	v1
+2	20	2	2020-01-02	None	20	0	0	None
+-- !result
+function: assert_query_contains("show create table t_pk", "`a`).`f` COMMENT")
+-- result:
+None
+-- !result
+function: assert_query_contains("show create table t_pk", "AS array_contains(ARRAY<DATE>[")
+-- result:
+None
+-- !result
+function: assert_query_contains("show create table t_pk", "AS array_contains([`a`, `b`], 3)")
+-- result:
+None
+-- !result
+function: assert_query_contains("show create table t_pk", "AS MAP{1:`s`}[1]")
+-- result:
+None
+-- !result
+function: assert_query_contains("show create table t_pk_like", "`a`).`f` COMMENT")
+-- result:
+None
+-- !result
+function: assert_query_contains("show create table t_pk_like", "AS array_contains(ARRAY<DATE>[")
+-- result:
+None
+-- !result
+function: assert_query_contains("show create table t_pk_like", "AS array_contains([`a`, `b`], 3)")
+-- result:
+None
+-- !result
+function: assert_query_contains("show create table t_pk_like", "AS MAP{1:`s`}[1]")
 -- result:
 None
 -- !result

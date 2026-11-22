@@ -2,6 +2,7 @@
 sidebar_position: 100
 displayed_sidebar: docs
 description: "How to orchestrate and schedule StarRocks data workflows using Apache Airflow DAGs, SQLExecuteQueryOperator, and MySQLHook."
+products: [oss, anywhere]
 ---
 
 # Apache Airflow
@@ -648,7 +649,7 @@ def starrocks_materialized_view_example():
         create_sql = """
         CREATE MATERIALIZED VIEW IF NOT EXISTS quickstart.mv_daily_crash_stats
         DISTRIBUTED BY HASH(`crash_date`)
-        REFRESH ASYNC
+        REFRESH ON_CHANGE
         AS
         SELECT 
             DATE(CRASH_DATE) as crash_date,

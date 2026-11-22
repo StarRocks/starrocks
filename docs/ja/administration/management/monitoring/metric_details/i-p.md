@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 hide_table_of_contents: true
 description: "Alphabetical i - p"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 
@@ -381,6 +382,12 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 
 - 単位: 件数
 - 説明: 成功したストレージ・コンピュート分離（lake）コンパクションジョブのカウンタ。
+
+## `lake_idg_files_missing_total`
+
+- 単位: 操作回数
+- タイプ: Counter
+- 説明: 共有データモードで、Index Delta Group（IDG）の `.idx` 初期化時のファイル欠落によるフォールバックと、各ビットマップインデックスイテレータが遅延ページ読み取りで最初に検出したファイル欠落を計上します。ブルームフィルタページの遅延読み取り失敗は含みません。同じ欠落ファイルを再度開くと再計上されるため、ファイルの重複を除いた件数ではありません。値の増加はインデックスによる絞り込みの低下を示し、例えば Vacuum とクエリの競合や、ダウングレード後の再アップグレードで発生することがあります。
 
 ## `lake_pk_index_cache_delvec_bytes`
 

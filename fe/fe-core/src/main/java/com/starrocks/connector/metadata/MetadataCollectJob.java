@@ -99,6 +99,10 @@ public abstract class MetadataCollectJob {
         return resultQueue;
     }
 
+    public java.util.function.Consumer<TResultBatch> getResultConsumer() {
+        return resultQueue::add;
+    }
+
     public Coordinator getMetadataJobCoord() {
         return metadataExecutor.getCoordinator();
     }
@@ -115,6 +119,7 @@ public abstract class MetadataCollectJob {
         context.setCurrentWarehouse(originSessionVariable.getWarehouseName());
         context.getSessionVariable().setEnableProfile(originSessionVariable.isEnableMetadataProfile());
         context.getSessionVariable().setEnableMaterializedViewRewrite(false);
+        context.getSessionVariable().setEnableSPMRewrite(false);
         context.getSessionVariable().setParallelExecInstanceNum(1);
         context.getSessionVariable().setQueryTimeoutS(originSessionVariable.getMetadataCollectQueryTimeoutS());
         context.getSessionVariable().setEnablePipelineEngine(true);

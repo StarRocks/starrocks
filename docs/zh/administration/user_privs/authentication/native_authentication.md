@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Create and manage users in StarRocks using native password-based authentication through SQL commands for local identity verification."
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 本地身份验证

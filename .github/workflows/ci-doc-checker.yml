@@ -241,9 +241,10 @@ jobs:
           rm -rf ./i18n/zh/docusaurus-plugin-content-docs/current
           mkdir -p ./i18n/zh/docusaurus-plugin-content-docs
           mv ../en ./docs
-          rm -rf ./docs/release_notes ./docs/ecosystem_release
+          # Release notes for versions before 3.0 stay in git but are not published
+          rm -f ./docs/release_notes/release-1.* ./docs/release_notes/release-2.*
           mv ../zh ./i18n/zh/docusaurus-plugin-content-docs/current
-          rm -rf ./i18n/zh/docusaurus-plugin-content-docs/current/release_notes ./i18n/zh/docusaurus-plugin-content-docs/current/ecosystem_release
+          rm -f ./i18n/zh/docusaurus-plugin-content-docs/current/release_notes/release-1.* ./i18n/zh/docusaurus-plugin-content-docs/current/release_notes/release-2.*
           # Using package.json and yarn.lock from a PR is not safe, so copy from main branch.
           rm package.json
           rm yarn.lock

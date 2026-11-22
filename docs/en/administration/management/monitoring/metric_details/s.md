@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 hide_table_of_contents: true
 description: "Alphabetical s"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Metrics s
@@ -823,7 +824,7 @@ Values recorded by the derived tier, which refreshes a range-distributed increme
 
 - Unit: Count
 - Type: Instantaneous
-- Description: Indicates the highest Compaction Score on each BE node.
+- Description: Indicates the highest Compaction Score on each BE node, that is, the larger of `tablet_base_max_compaction_score` and `tablet_cumulative_max_compaction_score`. The compaction score of Primary Key tables (`tablet_update_max_compaction_score`) is not included.
 
 ## `starrocks_fe_tablet_num`
 

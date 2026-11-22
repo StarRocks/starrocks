@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "pipes provides information about all pipes stored in the current or specified database."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # pipes

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Aggregates values (excluding NULLs) in a column into a bitmap (multiple rows into one row)."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_agg

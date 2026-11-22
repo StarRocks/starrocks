@@ -2,6 +2,7 @@
 sidebar_position: 80
 displayed_sidebar: docs
 description: "FAQ for common StarRocks resource isolation questions."
+products: [oss, enterprise]
 ---
 
 # Troubleshooting Resource Isolation

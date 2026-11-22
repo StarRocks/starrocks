@@ -93,7 +93,9 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
 
     private ConnectorMetadata metadataOfTable(String tableName) {
         // Paimon system table shares the same pattern, ignore it here
-        if (getTableType() != Table.TableType.PAIMON && TableMetaMetadata.isMetadataTable(tableName)) {
+        if (TableMetaMetadata.isMetadataTable(tableName)
+                && (getTableType() != Table.TableType.PAIMON
+                || tableName.endsWith(com.starrocks.connector.paimon.PaimonGlobalIndexMetadataTable.SUFFIX))) {
             return tableMetadata;
         }
         return null;
@@ -297,6 +299,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     @Override
     public void invalidateTableForRead(String srDbName, Table table) {
         normal.invalidateTableForRead(srDbName, table);
+    }
+
+    @Override
+    public void invalidateCachedTable(String dbName, String tableName) {
+        normal.invalidateCachedTable(dbName, tableName);
     }
 
     @Override

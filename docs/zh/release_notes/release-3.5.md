@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 3.5 版本发布说明：Iceberg 视图创建、OAuth 2.0 和 JWT 认证、多分区列物化视图、多表事务。"
+products: [oss]
 ---
 
 # StarRocks version 3.5
@@ -1071,8 +1072,8 @@ description: "StarRocks 3.5 版本发布说明：Iceberg 视图创建、OAuth 2.
 ### 数据湖分析
 
 - **[Beta]** 支持在集成 Hive Metastore 的 Iceberg Catalog 中创建 Iceberg 视图，并支持通过 ALTER VIEW 语句添加或修改 Iceberg 视图的 SQL 方言，以增强与外部系统的语法兼容性。[#56120](https://github.com/StarRocks/starrocks/pull/56120)
-- 支持 [Iceberg REST Catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/iceberg/#rest) 的嵌套命名空间。[#58016](https://github.com/StarRocks/starrocks/pull/58016)
-- 支持使用 `IcebergAwsClientFactory` 在 [Iceberg REST Catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/iceberg/#rest) 创建 AWS 客户端以支持 Vended Credential。[#58296](https://github.com/StarRocks/starrocks/pull/58296)
+- 支持 [Iceberg REST Catalog](../data_source/catalog/iceberg/iceberg.md#rest) 的嵌套命名空间。[#58016](https://github.com/StarRocks/starrocks/pull/58016)
+- 支持使用 `IcebergAwsClientFactory` 在 [Iceberg REST Catalog](../data_source/catalog/iceberg/iceberg.md#rest) 创建 AWS 客户端以支持 Vended Credential。[#58296](https://github.com/StarRocks/starrocks/pull/58296)
 - Parquet Reader 支持使用 Bloom Filter 进行数据过滤。[#56445](https://github.com/StarRocks/starrocks/pull/56445)
 - 查询时，支持为 Parquet 格式的 Hive/Iceberg 表中低基数列自动创建全局字典。[#55167](https://github.com/StarRocks/starrocks/pull/55167)
 
@@ -1080,20 +1081,20 @@ description: "StarRocks 3.5 版本发布说明：Iceberg 视图创建、OAuth 2.
 
 - 统计信息优化：
   - 支持 Table Sample，通过对物理文件中的数据块采样，提升统计信息的准确性和查询性能。[#52787](https://github.com/StarRocks/starrocks/issues/52787)
-  - 支持[记录查询中的谓词列](https://docs.starrocks.io/zh/docs/using_starrocks/Cost_based_optimizer/#predicate-column)，便于进行有针对性的统计信息收集。[#53204](https://github.com/StarRocks/starrocks/issues/53204)
+  - 支持[记录查询中的谓词列](../using_starrocks/Cost_based_optimizer.md#predicate-column)，便于进行有针对性的统计信息收集。[#53204](https://github.com/StarRocks/starrocks/issues/53204)
   - 支持分区级基数估算。系统复用了 `_statistics_.column_statistics` 视图记录各分区的 NDV。[#51513](https://github.com/StarRocks/starrocks/pull/51513)
-  - 支持[多列联合 NDV 收集](https://docs.starrocks.io/zh/docs/using_starrocks/Cost_based_optimizer/#%E5%A4%9A%E5%88%97%E8%81%94%E5%90%88%E7%BB%9F%E8%AE%A1%E4%BF%A1%E6%81%AF)，用于优化 CBO 在列间存在关联场景下的查询计划生成。[#56481](https://github.com/StarRocks/starrocks/pull/56481) [#56715](https://github.com/StarRocks/starrocks/pull/56715) [#56766](https://github.com/StarRocks/starrocks/pull/56766) [#56836](https://github.com/StarRocks/starrocks/pull/56836)
+  - 支持[多列联合 NDV 收集](../using_starrocks/Cost_based_optimizer.md#%E5%A4%9A%E5%88%97%E8%81%94%E5%90%88%E7%BB%9F%E8%AE%A1%E4%BF%A1%E6%81%AF)，用于优化 CBO 在列间存在关联场景下的查询计划生成。[#56481](https://github.com/StarRocks/starrocks/pull/56481) [#56715](https://github.com/StarRocks/starrocks/pull/56715) [#56766](https://github.com/StarRocks/starrocks/pull/56766) [#56836](https://github.com/StarRocks/starrocks/pull/56836)
   - 支持使用直方图估算 Join 节点的基数和 in_predicate 的选择率，提高数据倾斜场景下的估算精度。[#57874](https://github.com/StarRocks/starrocks/pull/57874)
-  - 优化 [Query Feedback](https://docs.starrocks.io/zh/docs/using_starrocks/query_feedback/) 功能：结构相同但参数值不同的查询会归为同一类型，共享 Tuning Guide 信息。[#58306](https://github.com/StarRocks/starrocks/pull/58306)
+  - 优化 [Query Feedback](../using_starrocks/query_feedback.md) 功能：结构相同但参数值不同的查询会归为同一类型，共享 Tuning Guide 信息。[#58306](https://github.com/StarRocks/starrocks/pull/58306)
 - 在特定场景下，支持使用 Runtime Bitset Filter 替代 Bloom Filter 进行优化。[#57157](https://github.com/StarRocks/starrocks/pull/57157)
 - 支持将 Join Runtime Filter 下推到存储层。[#55124](https://github.com/StarRocks/starrocks/pull/55124)
 - 支持 Pipeline Event Scheduler。[#54259](https://github.com/StarRocks/starrocks/pull/54259)
 
 ### 分区管理
 
-- 支持通过 ALTER TABLE [合并基于时间函数的表达式分区](https://docs.starrocks.io/zh/docs/table_design/data_distribution/expression_partitioning/#%E8%A1%A8%E8%BE%BE%E5%BC%8F%E5%88%86%E5%8C%BA%E5%90%88%E5%B9%B6)，提升存储效率和查询性能。[#56840](https://github.com/StarRocks/starrocks/pull/56840)
+- 支持通过 ALTER TABLE [合并基于时间函数的表达式分区](../table_design/data_distribution/expression_partitioning.md#%E8%A1%A8%E8%BE%BE%E5%BC%8F%E5%88%86%E5%8C%BA%E5%90%88%E5%B9%B6)，提升存储效率和查询性能。[#56840](https://github.com/StarRocks/starrocks/pull/56840)
 - 支持为 List 分区表和物化视图设置分区 TTL（Time-to-live），并支持 `partition_retention_condition` 属性以设置更灵活的分区删除策略。[#53117](https://github.com/StarRocks/starrocks/issues/53117)
-- 支持通过 ALTER TABLE [删除通用表达式指定的分区](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE/#%E5%88%A0%E9%99%A4%E5%88%86%E5%8C%BA)，便于批量删除。[#53118](https://github.com/StarRocks/starrocks/pull/53118)
+- 支持通过 ALTER TABLE [删除通用表达式指定的分区](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#%E5%88%A0%E9%99%A4%E5%88%86%E5%8C%BA)，便于批量删除。[#53118](https://github.com/StarRocks/starrocks/pull/53118)
 
 ### 集群管理
 
@@ -1101,11 +1102,11 @@ description: "StarRocks 3.5 版本发布说明：Iceberg 视图创建、OAuth 2.
 
 ### 安全认证
 
-- 支持基于 MySQL 协议的 [SSL 加密连接](https://docs.starrocks.io/zh/docs/administration/user_privs/ssl_authentication/)。[#54877](https://github.com/StarRocks/starrocks/pull/54877)
+- 支持基于 MySQL 协议的 [SSL 加密连接](../administration/user_privs/ssl_authentication.md)。[#54877](https://github.com/StarRocks/starrocks/pull/54877)
 - 增强外部认证集成：
-  - 支持使用 [OAuth 2.0](https://docs.starrocks.io/zh/docs/administration/user_privs/authentication/oauth2_authentication/) 和 [JSON Web Token（JWT）](https://docs.starrocks.io/zh/docs/administration/user_privs/authentication/jwt_authentication/)创建 StarRocks 用户。
-  - 支持[安全集成](https://docs.starrocks.io/zh/docs/administration/user_privs/authentication/security_integration/)机制，简化与外部认证系统（如 LDAP、OAuth 2.0、JWT）的集成。[#55846](https://github.com/StarRocks/starrocks/pull/55846)
-- 支持 [Group Provider](https://docs.starrocks.io/zh/docs/administration/user_privs/group_provider/) 从外部认证服务中获取用户组信息，并可用于认证和权限控制。支持从 LDAP、操作系统或文件中获取组信息。用户可通过 `current_group()` 查询所属的组。[#56670](https://github.com/StarRocks/starrocks/pull/56670)
+  - 支持使用 [OAuth 2.0](../administration/user_privs/authentication/oauth2_authentication.md) 和 [JSON Web Token（JWT）](../administration/user_privs/authentication/jwt_authentication.md)创建 StarRocks 用户。
+  - 支持[安全集成](../administration/user_privs/authentication/security_integration.md)机制，简化与外部认证系统（如 LDAP、OAuth 2.0、JWT）的集成。[#55846](https://github.com/StarRocks/starrocks/pull/55846)
+- 支持 [Group Provider](../administration/user_privs/group_provider.md) 从外部认证服务中获取用户组信息，并可用于认证和权限控制。支持从 LDAP、操作系统或文件中获取组信息。用户可通过 `current_group()` 查询所属的组。[#56670](https://github.com/StarRocks/starrocks/pull/56670)
 
 ### 物化视图
 
@@ -1115,14 +1116,14 @@ description: "StarRocks 3.5 版本发布说明：Iceberg 视图创建、OAuth 2.
 ### 数据导入与导出
 
 - 支持设置 `pause_on_json_parse_error` 为 `true`，在 JSON 解析失败时暂停 Routine Load 作业。[#56062](https://github.com/StarRocks/starrocks/pull/56062)
-- **[Beta]** 支持包含[多个 SQL 语句的事务](https://docs.starrocks.io/zh/docs/loading/SQL_transaction/)（目前仅支持 INSERT 语句）。用户可启动、提交或撤销事务，以实现多次导入操作的 ACID 事务保障。[#53978](https://github.com/StarRocks/starrocks/issues/53978)
+- **[Beta]** 支持包含[多个 SQL 语句的事务](../loading/SQL_transaction.md)（目前仅支持 INSERT 语句）。用户可启动、提交或撤销事务，以实现多次导入操作的 ACID 事务保障。[#53978](https://github.com/StarRocks/starrocks/issues/53978)
 
 ### 函数支持
 
 - 引入系统变量 `lower_upper_support_utf8`（Session 级和全局级），增强大小写转换函数（如 `upper()`、`lower()`）对 UTF-8（特别是非 ASCII 字符）的支持。[#56192](https://github.com/StarRocks/starrocks/pull/56192)
 - 新增函数：
-  - [`field()`](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/string-functions/field/) [#55331](https://github.com/StarRocks/starrocks/pull/55331)
-  - [`ds_theta_count_distinct()`](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/aggregate-functions/ds_theta_count_distinct/) [#56960](https://github.com/StarRocks/starrocks/pull/56960)
-  - [`array_flatten()`](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_flatten/) [#50080](https://github.com/StarRocks/starrocks/pull/50080)
-  - [`inet_aton()`](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/string-functions/inet_aton/) [#51883](https://github.com/StarRocks/starrocks/pull/51883)
-  - [`percentile_approx_weight()`](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/aggregate-functions/percentile_approx_weight/) [#57410](https://github.com/StarRocks/starrocks/pull/57410)
+  - [`field()`](../sql-reference/sql-functions/string-functions/field.md) [#55331](https://github.com/StarRocks/starrocks/pull/55331)
+  - [`ds_theta_count_distinct()`](../sql-reference/sql-functions/aggregate-functions/ds_theta_count_distinct.md) [#56960](https://github.com/StarRocks/starrocks/pull/56960)
+  - [`array_flatten()`](../sql-reference/sql-functions/array-functions/array_flatten.md) [#50080](https://github.com/StarRocks/starrocks/pull/50080)
+  - [`inet_aton()`](../sql-reference/sql-functions/string-functions/inet_aton.md) [#51883](https://github.com/StarRocks/starrocks/pull/51883)
+  - [`percentile_approx_weight()`](../sql-reference/sql-functions/aggregate-functions/percentile_approx_weight.md) [#57410](https://github.com/StarRocks/starrocks/pull/57410)

@@ -2,6 +2,7 @@
 sidebar_position: 70
 description: StarRocks をデプロイするために Helm を使用する
 displayed_sidebar: docs
+products: [oss]
 ---
 
 import Tabs from '@theme/Tabs';
@@ -47,7 +48,7 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 ### Kubernetes 環境
 
-このガイドを作成する際に使用した Kubernetes 環境は、4 vCPUS と 16GB RAM を持つ 3 つのノードで構成されています（GCP `e2-standard-4` マシン）。Kubernetes クラスターは次の `gcloud` コマンドでデプロイされました。
+このガイドを作成する際に使用した Kubernetes 環境は、4 vCPUs と 16GB RAM を持つ 3 つのノードで構成されています（GCP `e2-standard-4` マシン）。Kubernetes クラスターは次の `gcloud` コマンドでデプロイされました。
 
 :::tip
 このコマンドは参考用です。AWS、Azure、または他の Kubernetes プロバイダーを使用している場合は、環境に合わせてこれを変更する必要があります。Google Cloud では、独自のプロジェクトと適切なロケーションを指定する必要があります。

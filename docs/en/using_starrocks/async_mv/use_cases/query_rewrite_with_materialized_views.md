@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 20
 description: "How StarRocks automatically rewrites queries to use asynchronous materialized views for transparent query acceleration, including supported rewrite..."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Query rewrite with materialized views
@@ -540,7 +541,7 @@ In the following example, StarRocks can rewrite the query with the materialized 
 ```SQL
 CREATE MATERIALIZED VIEW order_agg_mv1
 DISTRIBUTED BY HASH(`order_id`) BUCKETS 12
-REFRESH ASYNC START('2022-09-01 10:00:00') EVERY (interval 1 day)
+REFRESH SCHEDULE START('2022-09-01 10:00:00') EVERY (interval 1 day)
 AS
 SELECT
     order_date,

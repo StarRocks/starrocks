@@ -2,6 +2,7 @@
 sidebar_position: 60
 description: 直接从 Delta Lake 查询数据
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 import DatabricksParams from '../../_assets/catalog/_databricks_params.mdx'
 

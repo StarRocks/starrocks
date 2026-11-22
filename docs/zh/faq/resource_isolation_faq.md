@@ -2,6 +2,7 @@
 sidebar_position: 80
 displayed_sidebar: docs
 description: "StarRocks 资源隔离常见问题解答。"
+products: [oss, enterprise]
 ---
 
 # 资源隔离故障排查

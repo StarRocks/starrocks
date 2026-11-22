@@ -1,6 +1,7 @@
 ---
 description: データのパーティションとバケット化
 displayed_sidebar: docs
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # データ分散
@@ -971,7 +972,7 @@ Rollup のような集計ユースケースには、明示的な `REFRESH` 句�
 ```sql
 CREATE MATERIALIZED VIEW mv
 DISTRIBUTED BY HASH(col)
-REFRESH ASYNC
+REFRESH ON_CHANGE
 AS SELECT ... FROM range_table;
 ```
 

@@ -1,6 +1,7 @@
 ---
 sidebar_position: 100
 description: "Best practices guide for developing authentication and authorization workflows integrated with external identity systems in StarRocks."
+products: [oss, enterprise, anywhere]
 ---
 
 # 认证与授权

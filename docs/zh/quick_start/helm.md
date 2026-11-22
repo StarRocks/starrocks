@@ -2,6 +2,7 @@
 sidebar_position: 70
 description: 使用 Helm 部署 StarRocks
 displayed_sidebar: docs
+products: [oss]
 ---
 
 import Tabs from '@theme/Tabs';

@@ -36,6 +36,7 @@
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_memory.h"
+#include "fs/remote_read_context.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gtest/gtest.h"
 #include "storage/chunk_helper.h"
@@ -1917,6 +1918,155 @@ TEST_F(SegmentIteratorTest, ReuseSegmentIteratorAcrossScans) {
     iter3->close();
 }
 
+// A reused iterator keeps its column files open across the scans it serves, and their statistics are cumulative. Each
+// flush -- at the end of a scan, when the slot is rebuilt, at close -- adds only what was read since the last one, so
+// every scan reports its own IO and nothing is counted twice. The column files, opened lazily on the first read, are
+// attributed to the work that built the iterator when the options carry no remote read context.
+TEST_F(SegmentIteratorTest, ReusedIteratorFlushesStreamStatsOnce) {
+    using namespace starrocks::test;
+
+    // The cumulative counters every stream reports, relative to what was reported when it was opened.
+    static int64_t g_reported = 0;
+    class CumulativeStatsStream : public io::SeekableInputStreamWrapper {
+    public:
+        explicit CumulativeStatsStream(std::unique_ptr<RandomAccessFile> file)
+                : io::SeekableInputStreamWrapper(std::move(file)), _base(g_reported) {}
+
+        StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override {
+            auto stats = std::make_unique<io::NumericStatistics>();
+            const int64_t v = g_reported - _base;
+            stats->append(kBytesReadRemote, v);
+            stats->append(kIOCountRemote, v / 10);
+            stats->append(kIONsReadRemote, 1000 * v);
+            stats->append(kRemoteQueueWaitNs, 20 * v);
+            stats->append(kRemoteFillWaitNs, 30 * v);
+            stats->append(kRemoteFillJoins, v / 50);
+            return stats;
+        }
+
+    private:
+        const int64_t _base;
+    };
+    class CumulativeStatsFileSystem : public MemoryFileSystem {
+    public:
+        using MemoryFileSystem::new_random_access_file;
+        StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                           const std::string& path) override {
+            ++opened;
+            opened_with.push_back(opts.remote_read);
+            ASSIGN_OR_RETURN(auto file, MemoryFileSystem::new_random_access_file(opts, path));
+            return std::make_unique<RandomAccessFile>(std::make_shared<CumulativeStatsStream>(std::move(file)), path);
+        }
+        int opened = 0;
+        std::vector<RemoteReadContext> opened_with;
+    };
+
+    auto fs = std::make_shared<CumulativeStatsFileSystem>();
+    const std::string file_name = "/reused_iterator_stats.dat";
+    ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(file_name));
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            builder.create(1, false, TYPE_INT, true).create(2, false, TYPE_INT).build();
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, SegmentWriterOptions{});
+    const int32_t chunk_size = config::vector_chunk_size;
+    TabletDataBuilder data(writer, tablet_schema, chunk_size, 100);
+    ASSERT_OK(data.append(0, [](int32_t i) { return i; }));
+    ASSERT_OK(data.append(1, [](int32_t i) { return i * 2; }));
+    ASSERT_OK(data.finalize_footer());
+    auto segment = *Segment::open(fs, FileInfo{file_name}, 0, tablet_schema);
+
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_INT).add(1, "c1", TYPE_INT);
+    auto vec_schema = schema_builder.build();
+    OlapReaderStatistics stats;
+    SegmentReadOptions read_opts;
+    read_opts.fs = fs;
+    read_opts.stats = &stats;
+    read_opts.chunk_size = chunk_size;
+    auto drain = [&](const ChunkIteratorPtr& it) {
+        auto chunk = ChunkFactory::new_chunk(it->output_schema(), chunk_size);
+        while (true) {
+            chunk->reset();
+            auto st = it->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            CHECK_OK(st);
+        }
+    };
+
+    g_reported = 0;
+    fs->opened_with.clear();
+    const auto query = RemoteReadContext::for_query(3, 4, 5, 6);
+    ChunkIteratorPtr slot;
+    ChunkIteratorPtr scan;
+    {
+        ScopedRemoteReadContext scope(query);
+        ASSIGN_OR_ABORT(scan, segment->new_reusable_iterator(vec_schema, vec_schema, read_opts, &slot));
+    }
+    // The column files are opened here, outside the scope that built the iterator.
+    drain(scan);
+    scan->close();
+    const int opened = fs->opened;
+    ASSERT_GT(opened, 0);
+    ASSERT_FALSE(fs->opened_with.empty());
+    for (const auto& ctx : fs->opened_with) {
+        EXPECT_TRUE(ctx.is_set);
+        EXPECT_EQ(RemoteReadContext::Workload::QUERY, ctx.workload);
+        EXPECT_EQ(query.group_id, ctx.group_id);
+        EXPECT_EQ(query.group_config_version, ctx.group_config_version);
+        EXPECT_EQ(query.flow_id, ctx.flow_id);
+    }
+
+    // End of the first scan. Only the column files report through the iterator, one per column.
+    g_reported = 100;
+    flush_segment_iterator_io_stats(slot.get());
+    const int64_t files = stats.compressed_bytes_read_remote / 100;
+    ASSERT_EQ(2, files);
+    EXPECT_EQ(100 * files, stats.compressed_bytes_read_remote);
+    EXPECT_EQ(10 * files, stats.io_count_remote);
+    EXPECT_EQ(100000 * files, stats.io_ns_remote);
+    EXPECT_EQ(2000 * files, stats.remote_io_queue_wait_ns);
+    EXPECT_EQ(3000 * files, stats.remote_io_fill_wait_ns);
+    EXPECT_EQ(2 * files, stats.remote_io_fill_joins);
+    // A second flush with nothing read in between adds nothing.
+    flush_segment_iterator_io_stats(slot.get());
+    EXPECT_EQ(100 * files, stats.compressed_bytes_read_remote);
+
+    // The second scan reuses the iterator and its files; the scan's statistics start from zero, as
+    // LakeDataSource::release_for_reuse() resets them after reporting.
+    stats = OlapReaderStatistics();
+    ASSIGN_OR_ABORT(scan, segment->new_reusable_iterator(vec_schema, vec_schema, read_opts, &slot));
+    drain(scan);
+    scan->close();
+    ASSERT_EQ(opened, fs->opened);
+    g_reported = 150;
+    flush_segment_iterator_io_stats(slot.get());
+    EXPECT_EQ(50 * files, stats.compressed_bytes_read_remote);
+    EXPECT_EQ(5 * files, stats.io_count_remote);
+
+    // close() reports only the rest.
+    g_reported = 170;
+    slot->close();
+    EXPECT_EQ(70 * files, stats.compressed_bytes_read_remote);
+    EXPECT_EQ(7 * files, stats.io_count_remote);
+    EXPECT_EQ(70000 * files, stats.io_ns_remote);
+    EXPECT_EQ(1400 * files, stats.remote_io_queue_wait_ns);
+    EXPECT_EQ(2100 * files, stats.remote_io_fill_wait_ns);
+    // flush_segment_iterator_io_stats() ignores an iterator that is not a segment iterator.
+    flush_segment_iterator_io_stats(scan.get());
+
+    // An iterator that is not reused is never flushed before close(), which adds all its files read.
+    stats = OlapReaderStatistics();
+    auto plain = segment->new_iterator(vec_schema, read_opts);
+    ASSERT_OK(plain.status());
+    drain(*plain);
+    g_reported = 230;
+    (*plain)->close();
+    EXPECT_EQ(60 * files, stats.compressed_bytes_read_remote);
+    EXPECT_EQ(6 * files, stats.io_count_remote);
+}
+
 // Reusing a slot whose predicate column layout differs from the first scan must rebuild the underlying
 // iterator, not reset it: the stored schema was reordered (predicate columns first) for the first scan, and
 // reusing that stale ordering would mis-map predicate columns. Here scan 1 filters c1 and scan 2 filters c2,
@@ -2101,7 +2251,10 @@ TEST_F(SegmentIteratorTest, FooterAndIndexReadsReportStreamStatsOnce) {
                     .io_count_local_disk = 2,
                     .io_count_remote = 3,
                     .io_ns_read_local_disk = 1000,
-                    .io_ns_read_remote = 2000};
+                    .io_ns_read_remote = 2000,
+                    .remote_queue_wait_ns = 400,
+                    .remote_fill_wait_ns = 500,
+                    .remote_fill_joins = 1};
         }
     };
     class ReadStatsFileSystem : public MemoryFileSystem {
@@ -2136,6 +2289,10 @@ TEST_F(SegmentIteratorTest, FooterAndIndexReadsReportStreamStatsOnce) {
         EXPECT_EQ(1000, stats.io_ns_read_local_disk);
         EXPECT_EQ(2000, stats.io_ns_remote);
         EXPECT_GT(stats.io_ns, 0);
+        // The remote read scheduler's waits of footer and index reads reach the scan statistics too.
+        EXPECT_EQ(400, stats.remote_io_queue_wait_ns);
+        EXPECT_EQ(500, stats.remote_io_fill_wait_ns);
+        EXPECT_EQ(1, stats.remote_io_fill_joins);
     };
     LakeIOOptions io_opts;
     io_opts.use_page_cache = false;
@@ -2158,6 +2315,7 @@ TEST_F(SegmentIteratorTest, FooterAndIndexReadsReportStreamStatsOnce) {
     EXPECT_EQ(0, repeated_stats.compressed_bytes_read);
     EXPECT_EQ(0, repeated_stats.io_ns);
     EXPECT_EQ(0, repeated_stats.io_count_request);
+    EXPECT_EQ(0, repeated_stats.remote_io_queue_wait_ns);
 
     // Corrupt real footer/index bytes after writing a valid segment. Reads before the parse error
     // still reach the caller; an unsuccessful footer open must not count as an opened segment.

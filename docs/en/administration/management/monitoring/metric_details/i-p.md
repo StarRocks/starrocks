@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 hide_table_of_contents: true
 description: "Alphabetical i - p"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 
@@ -381,6 +382,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Description: Counter of successful lake compaction jobs.
+
+## `lake_idg_files_missing_total`
+
+- Unit: Operations
+- Type: Counter
+- Description: In shared-data mode, counts missing-file fallbacks during Index Delta Group (IDG) `.idx` initialization and the first missing lazy page read per bitmap-index iterator. Lazy bloom-filter page failures are excluded. Reopening the same missing file can increment the counter again; this is not a distinct-file count. An increase indicates reduced index pruning, for example after vacuum races with a query or after a downgrade and re-upgrade.
 
 ## `lake_pk_index_cache_delvec_bytes`
 

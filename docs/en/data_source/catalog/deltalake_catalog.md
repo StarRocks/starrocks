@@ -3,6 +3,7 @@ sidebar_position: 60
 displayed_sidebar: docs
 toc_max_heading_level: 5
 description: "Query data directly from Delta Lake"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Delta Lake catalog

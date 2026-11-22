@@ -2,6 +2,7 @@
 sidebar_position: 70
 displayed_sidebar: docs
 description: "How to load data into StarRocks using INSERT statements: INSERT VALUES, INSERT INTO SELECT, INSERT OVERWRITE, Dynamic Overwrite, and loading from files..."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Load data using INSERT

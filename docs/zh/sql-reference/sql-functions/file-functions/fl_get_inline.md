@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "提取 FILE 值的 inline 字段。"
 sidebar_position: 80
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'

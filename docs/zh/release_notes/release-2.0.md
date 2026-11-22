@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 2.0 版本发布说明：主键表 GA、Stream/Broker/Routine Load 支持、外部表支持、表达式下推。"
+products: [oss]
 ---
 
 # StarRocks version 2.0

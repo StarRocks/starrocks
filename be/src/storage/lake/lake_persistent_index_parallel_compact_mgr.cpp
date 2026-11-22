@@ -94,6 +94,7 @@ void LakePersistentIndexParallelCompactTask::cancel() {
 }
 
 Status LakePersistentIndexParallelCompactTask::do_run() {
+    ScopedRemoteReadContext remote_read_scope(_remote_read);
     Trace* trace = _cb->trace();
     scoped_refptr<Trace> child_trace(new Trace);
     Trace* sub_trace = child_trace.get();
@@ -143,13 +144,15 @@ Status LakePersistentIndexParallelCompactTask::do_run() {
 
             // Open sstable file
             RandomAccessFileOptions opts;
+            opts.remote_read = ScopedRemoteReadContext::current_or_load();
             if (!sstable_pb.encryption_meta().empty()) {
                 ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
                 opts.encryption_info = std::move(info);
             }
 
-            ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
-                                              opts, _tablet_mgr->sst_location(_metadata->id(), sstable_pb.filename())));
+            ASSIGN_OR_RETURN(auto rf, PersistentIndexSstable::open_sstable_file(
+                                              opts, _tablet_mgr->sst_location(_metadata->id(), sstable_pb.filename()),
+                                              sstable_pb.filesize()));
 
             // Create PersistentIndexSstable
             auto sst = std::make_unique<PersistentIndexSstable>();

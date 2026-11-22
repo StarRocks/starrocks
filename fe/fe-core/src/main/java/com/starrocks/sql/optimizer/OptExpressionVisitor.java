@@ -170,7 +170,7 @@ public abstract class OptExpressionVisitor<R, C> {
         return visitPhysicalScan(optExpression, context);
     }
 
-    public R visitPhysicalIcebergMetadataScan(OptExpression optExpression, C context) {
+    public R visitPhysicalMetadataScan(OptExpression optExpression, C context) {
         return visitPhysicalScan(optExpression, context);
     }
 

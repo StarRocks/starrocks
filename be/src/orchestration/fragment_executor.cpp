@@ -28,10 +28,13 @@
 #include "compute_env/compute_env.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/load/load_stream_mgr.h"
 #include "compute_env/load/stream_context_mgr.h"
 #include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/stream_load_context_handle.h"
+#include "compute_env/load/stream_load_pipe_attachment.h"
 #include "compute_env/pipeline/driver_limiter.h"
+#include "compute_env/query/query_remote_read.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
@@ -69,6 +72,7 @@
 #include "gutil/map_util.h"
 #include "runtime/descriptors.h"
 #include "runtime/descriptors_ext.h"
+#include "runtime/fragment_attachment.h"
 #include "runtime/runtime_filter_query_lifecycle.h"
 
 namespace starrocks::orchestration {
@@ -611,6 +615,55 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
 Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
     const TExecPlanFragmentParams& unique_request = request.unique();
+    if (request.common().query_options.query_type == TQueryType::LOAD) {
+        std::vector<std::unique_ptr<FragmentAttachment>> attachments;
+        auto bind_pipes = [&](const std::vector<TScanRangeParams>& scan_ranges) -> Status {
+            for (const auto& scan_range : scan_ranges) {
+                if (!scan_range.scan_range.__isset.broker_scan_range) {
+                    continue;
+                }
+                const auto& broker_range = scan_range.scan_range.broker_scan_range;
+                // Channel and merge-commit inputs are prepared below with StreamLoadContextHandle.
+                if (broker_range.__isset.channel_id) {
+                    continue;
+                }
+                for (const auto& range : broker_range.ranges) {
+                    if (range.file_type != TFileType::FILE_STREAM) {
+                        continue;
+                    }
+                    auto pipe = exec_env->load_stream_mgr()->get(range.load_id);
+                    if (pipe == nullptr) {
+                        auto status = Status::InternalError("Invalid or outdated load id " + print_id(range.load_id));
+                        for (const auto& attachment : attachments) {
+                            attachment->close(status);
+                        }
+                        return status;
+                    }
+                    attachments.emplace_back(std::make_unique<StreamLoadPipeAttachment>(std::move(pipe)));
+                }
+            }
+            return Status::OK();
+        };
+        for (const auto& [node_id, scan_ranges] : unique_request.params.per_node_scan_ranges) {
+            if (request.per_driver_seq_scan_ranges_of_node(node_id).empty()) {
+                RETURN_IF_ERROR(bind_pipes(scan_ranges));
+            }
+        }
+        if (unique_request.params.__isset.node_to_per_driver_seq_scan_ranges) {
+            for (const auto& [node_id, per_driver_ranges] : unique_request.params.node_to_per_driver_seq_scan_ranges) {
+                for (const auto& [driver_seq, scan_ranges] : per_driver_ranges) {
+                    RETURN_IF_ERROR(bind_pipes(scan_ranges));
+                }
+            }
+        }
+        // FE creates one input mode per fragment: existing BE-local pipes or channel inputs.
+        // Channel-only fragments fall through to StreamLoadContextHandle preparation below.
+        if (!attachments.empty()) {
+            _fragment_ctx->set_fragment_attachments(std::move(attachments));
+            return Status::OK();
+        }
+    }
+
     if (!unique_request.params.__isset.node_to_per_driver_seq_scan_ranges) {
         return Status::OK();
     }
@@ -736,6 +789,7 @@ bool FragmentExecutor::is_final_sink_type(TDataSinkType::type type) {
     case TDataSinkType::ICEBERG_DELETE_SINK:
     case TDataSinkType::ICEBERG_ROW_DELTA_SINK:
     case TDataSinkType::HIVE_TABLE_SINK:
+    case TDataSinkType::PAIMON_TABLE_SINK:
     case TDataSinkType::TABLE_FUNCTION_TABLE_SINK:
     case TDataSinkType::EXPORT_SINK:
     case TDataSinkType::BLACKHOLE_TABLE_SINK:
@@ -971,6 +1025,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
         auto mem_tracker = _fragment_ctx->runtime_state()->instance_mem_tracker();
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+        // The tablet metadata, schemas and indexes read to plan the scans are this query's remote reads.
+        ScopedRemoteReadContext remote_read_scope(query_remote_read_context(_fragment_ctx->runtime_state()));
 
         RETURN_IF_ERROR(_prepare_global_dict(request));
         RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
@@ -980,6 +1036,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
         auto mem_tracker = _fragment_ctx->runtime_state()->instance_mem_tracker();
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+        ScopedRemoteReadContext remote_read_scope(query_remote_read_context(_fragment_ctx->runtime_state()));
 
         RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
         RETURN_IF_ERROR(_prepare_stream_load_pipe(exec_env, request));

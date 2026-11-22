@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "How to create and use Aggregate tables in StarRocks with aggregate keys and functions to pre-aggregate data and accelerate aggregate queries."
 sidebar_position: 40
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 聚合表

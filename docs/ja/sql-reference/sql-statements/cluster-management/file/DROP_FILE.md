@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP FILE ステートメントでファイルを削除します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP FILE

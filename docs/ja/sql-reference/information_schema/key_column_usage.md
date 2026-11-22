@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "key_column_usageはStarRocksで実装されていないプレースホルダービューです。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # key_column_usage

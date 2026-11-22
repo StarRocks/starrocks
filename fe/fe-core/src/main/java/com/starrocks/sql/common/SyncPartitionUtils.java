@@ -323,9 +323,20 @@ public class SyncPartitionUtils {
                 }
             }
         }
+        return intersectSortedRanges(srcRanges, dstRanges);
+    }
 
+    /**
+     * {@link #getIntersectedPartitions(List, List)} without its type check: keys compare as {@link PartitionKey}s do,
+     * so integer keys of different widths still meet. {@code dstRanges} must be sorted and must not overlap.
+     */
+    public static PartitionNameSetMap intersectSortedRanges(List<PCellWithName> srcRanges,
+                                                            List<PCellWithName> dstRanges) {
         PartitionNameSetMap result = PartitionNameSetMap.of(srcRanges.stream().collect(
                 Collectors.toMap(PCellWithName::name, x -> Sets.newHashSet())));
+        if (dstRanges.isEmpty()) {
+            return result;
+        }
 
         List<PartitionKey> lowerPoints = dstRanges.stream()
                 .map(pCell -> (PRangeCell) pCell.cell())

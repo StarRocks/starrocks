@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CREATE USER creates a new StarRocks user with optional authentication and properties."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE USER

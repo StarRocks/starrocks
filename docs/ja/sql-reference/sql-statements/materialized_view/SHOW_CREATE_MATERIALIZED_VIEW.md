@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "特定の非同期マテリアライズドビューの定義を表示します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW CREATE MATERIALIZED VIEW
@@ -47,7 +48,7 @@ MySQL > SHOW CREATE MATERIALIZED VIEW lo_mv1\G
 Create Materialized View: CREATE MATERIALIZED VIEW `lo_mv1`
 COMMENT "MATERIALIZED_VIEW"
 DISTRIBUTED BY HASH(`lo_orderkey`) 
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PROPERTIES (
 "replication_num" = "3",
 "storage_medium" = "HDD"

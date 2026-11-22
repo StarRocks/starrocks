@@ -3,6 +3,7 @@ sidebar_position: 20
 displayed_sidebar: docs
 description: "FE configuration parameters for authentication, query execution, and data loading."
 sidebar_label: "用户管理、查询引擎和导入导出"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE 配置 - 用户管理、查询引擎和导入导出
@@ -96,7 +97,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位:
 - 是否可变: Yes
-- 描述: 用户可以拥有的最大角色数量。
+- 描述: 用户可以拥有的最大角色数量，包括通过已授予角色继承的角色。该限制在将角色授予用户时进行检查。
 - 引入版本: v3.0.0
 
 ### `ranger_hive_catalog_prefix_enabled`
@@ -1458,6 +1459,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: 分钟
 - 是否可变: Yes
 - 描述: Routine Load 作业自动恢复的间隔。
+- 引入版本: -
+
+### `pipe_max_consecutive_failed_task_executions`
+
+- 默认值: 5
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: Pipe 中允许连续失败的任务执行次数上限。连续失败的任务执行次数超过该值时，Pipe 进入 `ERROR` 状态并停止导入，直到手动恢复。失败任务的每次重试都计为一次执行。有任务成功导入文件，或执行 `ALTER PIPE <pipe_name> RESUME`、`ALTER PIPE <pipe_name> { RETRY ALL | RETRY FILE '<file_name>' }` 时，计数清零。失败的任务最多重试 5 次。如果将该参数设置为大于 5 的值，重试后仍然失败的任务会被放弃：其文件被标记为 `ERROR`，可以通过 `RETRY` 重新导入，Pipe 继续导入后续文件。
 - 引入版本: -
 
 ### `prepared_transaction_default_timeout_second`

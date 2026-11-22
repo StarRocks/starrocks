@@ -24,6 +24,7 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,6 +32,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -76,6 +79,7 @@ public class MetadataResultQueueScanReleaseTest extends ConnectorPlanTestBase {
     public void testExecutionFailureReleasesScansThroughCoordinator() throws Exception {
         ExecPlan plan = getExecPlan(HIVE_QUERY);
         AtomicInteger cleared = new AtomicInteger();
+        CountDownLatch cleanupAttemptsFinished = new CountDownLatch(2);
         new MockUp<DefaultCoordinator>() {
             @Mock
             public void exec() throws StarRocksException {
@@ -83,13 +87,26 @@ public class MetadataResultQueueScanReleaseTest extends ConnectorPlanTestBase {
             }
 
             @Mock
-            public void clearExternalResources() {
+            public void clearExternalResources(Invocation invocation) {
+                // Keep the coordinator's once-only guard for cancellation and finally cleanup.
+                try {
+                    invocation.proceed();
+                } finally {
+                    cleanupAttemptsFinished.countDown();
+                }
+            }
+        };
+        new MockUp<HdfsScanNode>() {
+            @Mock
+            public void clear() {
                 cleared.incrementAndGet();
             }
         };
 
         execute(plan);
 
+        // Cancellation cleans up asynchronously; observe both attempts before checking actual scan releases.
+        assertTrue(cleanupAttemptsFinished.await(10, TimeUnit.SECONDS), "Both cleanup attempts must finish");
         assertEquals(1, cleared.get());
         assertTrue(connectContext.getState().isError());
         assertTrue(connectContext.getState().getErrorMessage().contains("backend unavailable"));

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ETL ステートメントを非同期タスクとして送信し、バックグラウンドで実行またはスケジュール実行します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 

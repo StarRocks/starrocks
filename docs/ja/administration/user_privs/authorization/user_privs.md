@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "StarRocks が採用する RBAC・IBAC の 2 つ権限モデルの基本概念について説明します。"
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 権限の概要

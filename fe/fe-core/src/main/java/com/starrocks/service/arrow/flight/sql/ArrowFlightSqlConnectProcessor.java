@@ -20,6 +20,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCommand;
@@ -189,14 +190,15 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
             ctx.getState().setError("StarRocks process failed");
             ctx.getState().setErrType(QueryState.ErrType.IO_ERR);
         } catch (StarRocksException e) {
-            LOG.warn("Process one query failed. SQL: {}, because ", originStmt, e);
+            LOG.warn("Process one query failed. SQL: {}, because ", LogUtil.desensitizeText(originStmt), LogUtil.desensitize(e));
             ctx.getState().setError(e.getMessage());
             // set is as ANALYSIS_ERR so that it won't be treated as a query failure.
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
         } catch (Throwable e) {
             // Catch all throwable.
             // If reach here, maybe StarRocks bug.
-            LOG.warn("Process one query failed. SQL: {}, because unknown reason: ", originStmt, e);
+            LOG.warn("Process one query failed. SQL: {}, because unknown reason: ", LogUtil.desensitizeText(originStmt),
+                    LogUtil.desensitize(e));
             ctx.getState().setError("Unexpected exception: " + e.getMessage());
             if (parsedStmt instanceof KillStmt) {
                 // ignore kill stmt execute err(not monitor it)
@@ -253,8 +255,9 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
             notifyForwardDeploymentFinished(requestFE, backendResult);
             return executor;
         } catch (Exception e) {
-            LOG.warn("Process one query failed. SQL: {}", originStmt, e);
-            ctx.kill(true, "Proxy execute one query failed. SQL: " + originStmt + ", error: " + e.getMessage());
+            LOG.warn("Process one query failed. SQL: {}", LogUtil.desensitizeText(originStmt), LogUtil.desensitize(e));
+            ctx.kill(true, "Proxy execute one query failed. SQL: " + LogUtil.desensitizeText(originStmt)
+                    + ", error: " + LogUtil.desensitizeMessage(e));
             throw e;
         } finally {
             processorFinished.get(); // Wait for `executor.execute()` to finish

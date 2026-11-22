@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 51
 description: "座標を変換せずにネイティブ GEOMETRY の CRS メタデータを変更します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_SetSRID

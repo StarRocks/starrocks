@@ -3,6 +3,7 @@ displayed_sidebar: docs
 toc_max_heading_level: 5
 keywords: ['iceberg']
 description: "An Iceberg catalog is a type of external catalog that is supported by StarRocks from v2.4 onwards."
+products: [oss, enterprise, cloud, anywhere]
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
@@ -35,7 +36,21 @@ To ensure successful SQL workloads on your Iceberg cluster, your StarRocks clust
 
 :::
 
-An Iceberg column containing nested geography in a list, map, or struct is exposed as `UNKNOWN_TYPE` and cannot be queried, including its non-geo subfields. Other supported columns and scalar geography remain readable.
+## Iceberg type mapping
+
+| Iceberg type | StarRocks type | Supported reads |
+| --- | --- | --- |
+| `geometry` | `GEOMETRY` | Top-level and nested fields in Parquet-backed tables with Iceberg format version 3 or later. The CRS must be `OGC:CRS84` (the default) or `EPSG:<n>`, where `n` contains only ASCII digits and represents a positive 32-bit signed integer. Other CRS identifiers map to `UNKNOWN_TYPE`. |
+
+StarRocks preserves the CRS identifier as stored. `OGC:CRS84` and `EPSG:4326` are distinct. Use `ST_AsText(g)` or `ST_AsBinary(g)` to return a GEOMETRY value. Direct projection, including `SELECT *` when it includes a GEOMETRY column, fails during query analysis.
+
+For Parquet-backed Iceberg tables with format version 3 or later, SQL queries can read `GEOGRAPHY` and `GEOMETRY` in array elements, map values, and struct fields, including an array of structs with a GEO field. `GEOGRAPHY` supports `OGC:CRS84` and spherical edges. Nested `GEOMETRY` follows the same CRS rules as top-level `GEOMETRY`.
+
+To return a nested value, select its leaf and serialize it explicitly. For example, use `ST_AsText(places[1])` for an array, `ST_AsText(places_by_id[42])` for a map, or `ST_AsBinary(location.shape)` for a struct. Direct output of a container with GEO fields is unsupported.
+
+A container with a GEO map key at any depth or unsupported geo metadata maps to `UNKNOWN_TYPE` as a whole. GEO comparison, grouping, ordering, spatial bounds pruning, saved SQL definitions with nested GEO, and native table storage of these containers remain unsupported.
+
+During a rolling upgrade, first upgrade all BE and CN nodes to versions that can read the nested GEO types in Parquet. Then upgrade the FE nodes to the version that enables these reads in SQL.
 
 ## Usage notes
 

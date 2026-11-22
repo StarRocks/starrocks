@@ -99,14 +99,11 @@ static StatusOr<LogicalType> choose_common_logical_type(LogicalType lhs, Logical
         return TYPE_VARIANT;
     }
     if (is_float_type(lhs) || is_float_type(rhs)) {
-        // A double holds every FLOAT and every integer of 32 bits or less exactly, but not a BIGINT or LARGEINT: 2^53 + 1
-        // would come back as 2^53. Keep those mixed paths lossless by hoisting both sides to VARIANT, which keeps the
+        // Widening to DOUBLE would change the variant type of the other side's values: an integer 7 would read back
+        // as the double 7.0 and a FLOAT 0.1 as 0.10000000149011612, and a BIGINT above 2^53 would be rounded. A path
+        // must read the same whether or not its files were shredded, so hoist both sides to VARIANT, which keeps the
         // type of each value, like a decimal scale mismatch does.
-        const LogicalType other = is_float_type(lhs) ? rhs : lhs;
-        if (is_integer_type(other) && get_integer_rank(other) >= get_integer_rank(TYPE_BIGINT)) {
-            return TYPE_VARIANT;
-        }
-        return TYPE_DOUBLE;
+        return TYPE_VARIANT;
     }
     return wider_integer_type(lhs, rhs);
 }

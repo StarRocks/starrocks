@@ -714,6 +714,24 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
         return false;
     }
 
+    template <int64_t units_per_second>
+    static bool convert_subsecond_datetime(CppType& datum, int64_t timestamp, TzOffsetCache* offset_cache) {
+        int64_t second = timestamp / units_per_second;
+        int64_t fraction = timestamp % units_per_second;
+        // Civil-time conversion requires a nonnegative fraction, including before the Unix epoch.
+        if (fraction < 0) {
+            --second;
+            fraction += units_per_second;
+        }
+        int64_t microsecond;
+        if constexpr (units_per_second <= 1000000) {
+            microsecond = fraction * (1000000 / units_per_second);
+        } else {
+            microsecond = fraction / (units_per_second / 1000000);
+        }
+        return convert_one_datetime(datum, second, microsecond, offset_cache);
+    }
+
     static void fill_null(CppType* data, int num_elements, const uint8_t* null_data) {
         for (int i = 0; i < num_elements; ++i) {
             if constexpr (is_nullable) {
@@ -763,7 +781,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 }
             }
 
-            if (convert_one_datetime(data[i], arrow_data[i] / 1000, arrow_data[i] % 1000 * 1000, &offset_cache)) {
+            if (convert_subsecond_datetime<1000>(data[i], arrow_data[i], &offset_cache)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }
@@ -782,7 +800,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 }
             }
 
-            if (convert_one_datetime(data[i], arrow_data[i] / 1000000, arrow_data[i] % 1000000, &offset_cache)) {
+            if (convert_subsecond_datetime<1000000>(data[i], arrow_data[i], &offset_cache)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }
@@ -801,8 +819,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 }
             }
 
-            if (convert_one_datetime(data[i], arrow_data[i] / 1000000000, arrow_data[i] % 1000000000 / 1000,
-                                     &offset_cache)) {
+            if (convert_subsecond_datetime<1000000000>(data[i], arrow_data[i], &offset_cache)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }

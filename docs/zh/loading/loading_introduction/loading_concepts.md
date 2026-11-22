@@ -3,6 +3,7 @@ sidebar_position: 20
 displayed_sidebar: docs
 description: "数据导入基本概念：标签、权限、原子性、数据类型转换、列映射和错误容限。"
 toc_max_heading_level: 4
+products: [oss, enterprise, anywhere]
 ---
 
 # 概念介绍

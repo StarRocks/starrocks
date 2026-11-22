@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts an unsigned BIGINT to a BITMAP containing that single element."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # to_bitmap

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 keywords: ['session variable']
 description: "StarRocks provides many system variables that can be set and modified to suit your requirements."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # System variables
@@ -251,8 +252,8 @@ Used for MySQL client compatibility. No practical usage.
 * **Description**: Used to set the threshold for big queries. When the session variable `enable_profile` is set to `false` and the amount of time taken by a query exceeds the threshold specified by the variable `big_query_profile_threshold`, a profile is generated for that query.
 
   Note: In versions v3.1.5 to v3.1.7, as well as v3.2.0 to v3.2.2, we introduced the `big_query_profile_second_threshold` for setting the threshold for big queries. In versions v3.1.8, v3.2.3, and subsequent releases, this parameter has been replaced by `big_query_profile_threshold` to offer more flexible configuration options.
-* **Default**: 0
-* **Unit**: Second
+* **Default**: `30s` from v3.3.12, v3.4.2, and v3.5.0 onwards. `0` in earlier versions, which disables this feature.
+* **Unit**: Specified in the value with a time unit, for example, `30s`, `500ms`, or `1m`.
 * **Data type**: String
 * **Introduced in**: v3.1
 
@@ -626,8 +627,10 @@ Used for MySQL client compatibility. No practical usage.
 
 ### enable_adaptive_sink_dop
 
-* **Description**: Specifies whether to enable adaptive parallelism for data loading. After this feature is enabled, the system automatically sets load parallelism for INSERT INTO and Broker Load jobs, which is equivalent to the mechanism of `pipeline_dop`. The default value is `true`. A cluster whose persisted metadata already holds a value for this variable keeps that value. For example, a cluster upgraded from v2.4 or earlier keeps `false`. `SET enable_adaptive_sink_dop = DEFAULT` and `SET GLOBAL enable_adaptive_sink_dop = DEFAULT` set the variable to `true`, even if the cluster currently holds `false`.
-* **Default**: true
+* **Description**: Specifies whether to enable adaptive parallelism for data loading. After this feature is enabled, the system automatically sets load parallelism for INSERT INTO and Broker Load jobs, which is equivalent to the mechanism of `pipeline_dop`. The default behavior varies by version:
+  * Versions later than v4.2.0: The default value is `true`. A cluster whose persisted metadata already holds a value for this variable keeps that value. For example, a cluster upgraded from v2.4 or earlier keeps `false`. `SET enable_adaptive_sink_dop = DEFAULT` and `SET GLOBAL enable_adaptive_sink_dop = DEFAULT` set the variable to `true`, even if the cluster currently holds `false`.
+  * v4.2.0 and earlier: The default value is `false`, but a newly deployed cluster sets the global value to `true` at its first startup. A cluster upgraded from v2.4 or earlier keeps `false`.
+* **Default**: true (v4.2.0 and earlier: false)
 * **Introduced in**: v2.5
 
 ### enable_bucket_aware_execution_on_lake
@@ -1053,7 +1056,7 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 
   By default, a profile is sent to the FE only when a query error occurs in the BE. Profile sending causes network overhead and therefore affects high concurrency.
 
-  If you need to analyze the profile of a query, you can set this variable to `true`. After the query is completed, the profile can be viewed on the web page of the currently connected FE (address: `fe_host:fe_http_port/query`). This page displays the profiles of the latest 100 queries with `enable_profile` turned on.
+  If you need to analyze the profile of a query, you can set this variable to `true`. After the query is completed, the profile can be viewed on the web page of the currently connected FE (address: `fe_host:fe_http_port/query`). This page lists the most recent profiles cached on that FE, up to the number specified by the FE configuration item `profile_info_reserved_num` (default: 500).
 
 * **Default**: false
 
@@ -1073,6 +1076,7 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Default**: -1
 * **Data type**: long
 * **Unit**: Milliseconds
+* **Introduced in**: v4.2
 
 ### enable_query_cache
 
@@ -1329,23 +1333,25 @@ Used for MySQL client compatibility. No practical usage.
 
 Used to specify whether some commands will be forwarded to the leader FE for execution. Alias: `forward_to_master`. The default value is `false`, meaning not forwarding to the leader FE. There are multiple FEs in a StarRocks cluster, one of which is the leader FE. Normally, users can connect to any FE for full-featured operations. However, some information is only available on the leader FE.
 
-For example, if the SHOW BACKENDS command is not forwarded to the leader FE, only basic information (for example, whether the node is alive) can be viewed. Forwarding to the leader FE can get more detailed information including the node start time and last heartbeat time.
+SHOW FRONTENDS, SHOW BACKENDS, and SHOW COMPUTE NODES are always forwarded to the leader FE, regardless of this variable.
 
 The commands affected by this variable are as follows:
-
-* SHOW FRONTENDS: Forwarding to the leader FE allows users to view the last heartbeat message.
-
-* SHOW BACKENDS: Forwarding to the leader FE allows users to view the boot time, last heartbeat information, and disk capacity information.
 
 * SHOW BROKER: Forwarding to the leader FE allows users to view the boot time and last heartbeat information.
 
 * SHOW TABLET
 
+* SHOW RESOURCES
+
 * ADMIN SHOW REPLICA DISTRIBUTION
 
 * ADMIN SHOW REPLICA STATUS: Forwarding to the leader FE allows users to view the tablet information stored in the metadata of the leader FE. Normally, the tablet information should be the same in the metadata of different FEs. If an error occurs, you can use this method to compare the metadata of the current FE and the leader FE.
 
-* Show PROC: Forwarding to the leader FE allows users to view the PROC information stored in the metadata. This is mainly used for metadata comparison.
+* ADMIN SHOW TABLET STATUS
+
+* ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT
+
+* Show PROC: Forwarding to the leader FE allows users to view the PROC information stored in the metadata. This is mainly used for metadata comparison. Some PROC paths, such as `/transactions` and `/routine_loads`, are always forwarded to the leader FE, regardless of this variable.
 
 ### group_concat_max_len
 
@@ -1631,6 +1637,18 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: false
 * **Introduced in**: v3.1.10
 
+### paimon_global_index_mode
+
+* **Description**: Controls where Paimon Global Index predicates are evaluated during scan planning. Values are case-insensitive:
+  * `off`: Disables Global Index use, including during optimizer statistics collection. Ordinary partition and file pruning remain available.
+  * `local`: Uses the Paimon Java SDK on FE, respecting the table's `global-index.enabled` setting.
+  * `distributed`: Sends eligible scalar BTree index file information to BE/CN for evaluation, then passes the returned bitmap to the Java SDK to generate data splits. Automatic SDK index evaluation is disabled, including during optimizer statistics collection. If distributed evaluation is unavailable or fails, planning falls back to data scanning without Global Index pruning.
+* **Default**: local
+* **Data type**: String
+* **Introduced in**: v4.2
+* **Limits**: The distributed mode applies to snapshot reads of data evolution tables on the main branch with compatible key schemas and complete index coverage. At most 4096 index shards and 1 MiB of serialized bitmap per shard. FE collection sets a budget of one eighth of the query memory limit, capped at 64 MiB, with conservative bounds on serialized bytes and candidate row count. When distributed index evaluation is unavailable, fails or exceeds these limits, planning scans data without Global Index pruning. Query cancellation and an exhausted outer timeout stop planning. Row filtering or column masking policies disable this optimization.
+* **Diagnostics**: External traces include `PaimonGlobalIndex.Mode`, `PaimonGlobalIndex.Evaluate`, `PaimonGlobalIndex.ValidateCoverage`, `PaimonGlobalIndex.Result` and `PaimonGlobalIndex.Fallback`. With metadata profiling enabled, native scanner profiles include index open, evaluation and serialization times, serialized bytes and filesystem I/O counters.
+
 ### paimon_reader_mode
 
 * **Description**: Controls the reader used for Paimon tables. Valid values are `AUTO`, `JNI`, and `NATIVE` (case-insensitive).
@@ -1654,6 +1672,8 @@ In some aggregation query scenarios where the amount of data decreases drastical
 ### parallel_fragment_exec_instance_num
 
 Used to set the number of instances used to scan nodes on each BE. The default value is 1.
+
+This variable takes effect only when the pipeline engine is disabled (`enable_pipeline_engine` is `false`). When the pipeline engine is enabled (default), StarRocks does not use this variable to set query parallelism. Use [pipeline_dop](#pipeline_dop) instead. The only exception is that, when `enable_adaptive_sink_dop` is `false`, the sink parallelism of INSERT INTO, UPDATE, and DELETE jobs is set to the value of this variable.
 
 A query plan typically produces a set of scan ranges. This data is distributed across multiple BE nodes. A BE node will have one or more scan ranges, and by default, each BE node's set of scan ranges is processed by only one execution instance. When machine resources suffice, you can increase this variable to allow more execution instances to process a scan range simultaneously for efficiency purposes.
 
@@ -1700,9 +1720,10 @@ Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical u
 
 * **Description**: Controls the level of the query profile. A query profile often has five layers: Fragment, FragmentInstance, Pipeline, PipelineDriver, and Operator. Different levels provide different details of the profile:
 
-  * 0: StarRocks combines metrics of the profile and shows only a few core metrics.
   * 1: default value. StarRocks simplifies the profile and combines metrics of the profile to reduce profile layers.
   * 2: StarRocks retains all the layers of the profile. The profile size is large in this scenario, especially when the SQL query is complex. This value is not recommended.
+
+  From v3.1.3 onwards, level 0 is no longer supported, and any value other than `2` is treated as `1`.
 
 * **Default**: 1
 * **Data type**: Int
@@ -1743,6 +1764,16 @@ Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical u
 * **Default**: `1`
 * **Data type**: Double
 * **Scope**: Session
+
+### prefer_compute_node
+
+* **Description**: Specifies whether the FEs distribute query execution plans to CN nodes. This variable takes effect only in shared-nothing clusters. Valid values:
+  * `true`: indicates that the FEs distribute query execution plans to CN nodes.
+  * `false`: indicates that the FEs do not distribute query execution plans to CN nodes.
+
+  Regardless of this variable, scans of external tables run only on CN nodes whenever any CN node is alive.
+* **Default**: false
+* **Introduced in**: v2.4
 
 ### query_cache_agg_cardinality_limit
 
@@ -2109,6 +2140,16 @@ Used for MySQL client compatibility. No practical usage. The alias is `transacti
 * **Default**: `10`
 * **Data Type**: long
 * **Introduced in**: v3.2.0
+
+### use_compute_nodes
+
+* **Description**: The maximum number of CN nodes that can be used. This variable takes effect only in shared-nothing clusters. It limits the CN nodes used when `prefer_compute_node` is `true` and the CN nodes used to scan external tables. Valid values:
+
+  * A value less than or equal to `0` (for example, `-1`): indicates that all CN nodes are used.
+  * A positive integer: indicates that at most this number of CN nodes are used.
+* **Default**: -1
+* **Data type**: Int
+* **Introduced in**: v2.4
 
 ### use_page_cache
 

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the Y coordinate of a GEOGRAPHY or GEOMETRY point."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Y

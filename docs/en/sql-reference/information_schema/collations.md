@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "collations contains the available collations."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # collations

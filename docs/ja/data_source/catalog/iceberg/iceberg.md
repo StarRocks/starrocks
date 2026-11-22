@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "Iceberg catalog は Iceberg データを StarRocks に手動作成なしで直接クエリおよび変換ロード。"
 toc_max_heading_level: 5
 keywords: ['iceberg']
+products: [oss, enterprise, cloud, anywhere]
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
@@ -32,7 +33,21 @@ Iceberg クラスターで SQL ワークロードを成功させるためには�
 
 :::
 
-リスト、マップ、構造体に geography を含む Iceberg 列は、列全体が `UNKNOWN_TYPE` と表示され、地理空間型以外のサブフィールドも含めてクエリできません。他のサポート対象列とスカラーの geography は引き続き読み取れます。
+## Iceberg の型マッピング
+
+| Iceberg の型 | StarRocks の型 | 読み取り条件 |
+| --- | --- | --- |
+| `geometry` | `GEOMETRY` | Iceberg フォーマットバージョン 3 以降の Parquet テーブルのトップレベル列とネストされたフィールドに対応します。CRS は `OGC:CRS84`（既定値）または `EPSG:<n>` である必要があります。`n` は ASCII 数字のみで構成され、32 ビット符号付き整数の範囲内の正の値を表します。それ以外の CRS 識別子は `UNKNOWN_TYPE` にマッピングされます。 |
+
+StarRocks は保存された CRS 識別子をそのまま保持します。`OGC:CRS84` と `EPSG:4326` は別の識別子です。GEOMETRY の値を返すには `ST_AsText(g)` または `ST_AsBinary(g)` を使用します。GEOMETRY 列を直接出力するクエリは、その列を含む `SELECT *` も含め、クエリの解析時にエラーになります。
+
+Parquet データファイルを使用するフォーマットバージョン 3 以降の Iceberg テーブルでは、配列要素、マップの値、構造体フィールドの `GEOGRAPHY` と `GEOMETRY` を SQL で読み取れます。GEO フィールドを含む構造体の配列など、複数階層のネストにも対応します。`GEOGRAPHY` は `OGC:CRS84` と球面の辺アルゴリズムに対応します。ネストされた `GEOMETRY` には、トップレベルの `GEOMETRY` と同じ CRS の規則が適用されます。
+
+ネストされた値を返すには、末端の値を取り出して明示的にシリアライズします。例えば、配列には `ST_AsText(places[1])`、マップには `ST_AsText(places_by_id[42])`、構造体には `ST_AsBinary(location.shape)` を使用します。GEO フィールドを含むコンテナを直接出力することはできません。
+
+いずれかの階層に GEO 型のマップキーがある場合や、未対応の地理空間メタデータがある場合は、コンテナ全体が `UNKNOWN_TYPE` にマッピングされます。GEO の比較、グループ化、並べ替え、空間境界によるプルーニング、ネストされた GEO を含む SQL 定義の保存、これらのコンテナのネイティブテーブルへの格納には引き続き対応していません。
+
+ローリングアップグレードでは、まずすべての BE と CN ノードを Parquet 内の該当するネストされた GEO 型の読み取りに対応するバージョンにアップグレードしてください。その後、FE ノードを SQL での読み取りを有効にするバージョンにアップグレードしてください。
 
 ## 使用上の注意
 

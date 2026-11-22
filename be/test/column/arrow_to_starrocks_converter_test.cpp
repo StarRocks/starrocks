@@ -24,6 +24,7 @@
 #include <base/utility/guard.h>
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <random>
 #include <type_traits>
 #include <utility>
@@ -1515,6 +1516,100 @@ PARALLEL_TEST(ArrowConverterTest, test_timestamp_to_datetime) {
     }
 }
 
+// Expected UTC values are explicit calendar literals, independent of epoch division.
+PARALLEL_TEST(ArrowConverterTest, test_timestamp_fractional_epoch_boundaries) {
+    using Case = std::pair<int64_t, const char*>;
+    const std::vector<std::pair<arrow::TimeUnit::type, std::vector<Case>>> cases = {
+            {arrow::TimeUnit::SECOND,
+             {{-86401, "1969-12-30 23:59:59"},
+              {-1, "1969-12-31 23:59:59"},
+              {0, "1970-01-01 00:00:00"},
+              {1, "1970-01-01 00:00:01"}}},
+            {arrow::TimeUnit::MILLI,
+             {{-86400001, "1969-12-30 23:59:59.999000"},
+              {-1001, "1969-12-31 23:59:58.999000"},
+              {-1000, "1969-12-31 23:59:59"},
+              {-1, "1969-12-31 23:59:59.999000"},
+              {0, "1970-01-01 00:00:00"},
+              {1, "1970-01-01 00:00:00.001000"},
+              {1001, "1970-01-01 00:00:01.001000"}}},
+            {arrow::TimeUnit::MICRO,
+             {{-86400000001, "1969-12-30 23:59:59.999999"},
+              {-1000001, "1969-12-31 23:59:58.999999"},
+              {-1000000, "1969-12-31 23:59:59"},
+              {-1, "1969-12-31 23:59:59.999999"},
+              {0, "1970-01-01 00:00:00"},
+              {1, "1970-01-01 00:00:00.000001"},
+              {1000001, "1970-01-01 00:00:01.000001"}}},
+            {arrow::TimeUnit::NANO,
+             {{-9223372036854775807LL - 1, "1677-09-21 00:12:43.145224"},
+              {-86400000000001, "1969-12-30 23:59:59.999999"},
+              {-1000000001, "1969-12-31 23:59:58.999999"},
+              {-1000, "1969-12-31 23:59:59.999999"},
+              {-999, "1969-12-31 23:59:59.999999"},
+              {-1, "1969-12-31 23:59:59.999999"},
+              {0, "1970-01-01 00:00:00"},
+              {1, "1970-01-01 00:00:00"},
+              {999, "1970-01-01 00:00:00"},
+              {1000, "1970-01-01 00:00:00.000001"},
+              {1000000001, "1970-01-01 00:00:01"},
+              {9223372036854775807LL, "2262-04-11 23:47:16.854775"}}}};
+    for (const auto& [unit, values] : cases) {
+        for (const std::string zone : {"", "UTC", "Asia/Shanghai", "America/Los_Angeles"}) {
+            cctz::time_zone ctz;
+            ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone(zone.empty() ? "UTC" : zone, ctz));
+            for (bool nullable : {false, true}) {
+                SCOPED_TRACE(fmt::format("unit={} zone={} nullable={}", static_cast<int>(unit), zone, nullable));
+                auto type = std::make_shared<arrow::TimestampType>(unit, zone);
+                arrow::TimestampBuilder builder(type, arrow::default_memory_pool());
+                for (const auto& [value, expected] : values) {
+                    ASSERT_TRUE(builder.Append(value).ok());
+                    if (nullable) ASSERT_TRUE(builder.AppendNull().ok());
+                }
+                std::shared_ptr<arrow::Array> array;
+                ASSERT_TRUE(builder.Finish(&array).ok());
+                auto check = [&]<LogicalType LT>() {
+                    auto converter = get_arrow_converter(ArrowTypeId::TIMESTAMP, LT, nullable, false);
+                    ASSERT_TRUE(converter != nullptr);
+                    auto column = RunTimeColumnType<LT>::create();
+                    auto null_column = NullColumn::create();
+                    uint8_t* null_data = nullptr;
+                    if (nullable) {
+                        fill_null_column(array.get(), 0, array->length(), null_column.get(), 0);
+                        null_data = null_column->get_data().data();
+                    }
+                    Filter filter(array->length(), 1);
+                    ASSERT_STATUS_OK(converter(array.get(), 0, array->length(), column.get(), 0, null_data, &filter,
+                                               nullptr, nullptr));
+                    for (size_t i = 0; i < values.size(); ++i) {
+                        const auto& [value, literal] = values[i];
+                        const auto utc = string_to_datetime<TYPE_DATETIME>(literal);
+                        int year, month, day, hour, minute, second, microsecond;
+                        utc.to_timestamp(&year, &month, &day, &hour, &minute, &second, &microsecond);
+                        auto instant = cctz::convert(cctz::civil_second(year, month, day, hour, minute, second),
+                                                     cctz::utc_time_zone());
+                        auto local = cctz::convert(instant, ctz);
+                        const size_t row = nullable ? 2 * i : i;
+                        SCOPED_TRACE(fmt::format("value={} expected_utc={}", value, literal));
+                        if constexpr (lt_is_date<LT>) {
+                            ASSERT_EQ(DateValue::create(local.year(), local.month(), local.day()),
+                                      column->get_data()[row]);
+                        } else {
+                            TimestampValue expected;
+                            expected.from_timestamp(local.year(), local.month(), local.day(), local.hour(),
+                                                    local.minute(), local.second(), microsecond);
+                            ASSERT_EQ(expected, column->get_data()[row]);
+                        }
+                        if (nullable) ASSERT_EQ(DATUM_NULL, null_data[row + 1]);
+                    }
+                };
+                check.template operator()<TYPE_DATETIME>();
+                check.template operator()<TYPE_DATE>();
+            }
+        }
+    }
+}
+
 // Timestamps with a time zone convert to DATETIME / DATE with the zone's offset at each instant, matching the cctz
 // conversion row by row, for every unit, nullable or not, across DST changes and in any order.
 PARALLEL_TEST(ArrowConverterTest, test_timestamp_dst_zone_matches_cctz) {
@@ -1569,9 +1664,13 @@ PARALLEL_TEST(ArrowConverterTest, test_timestamp_dst_zone_matches_cctz) {
                             ASSERT_EQ(DATUM_NULL, null_data[i]);
                             continue;
                         }
+                        // These generated values fit in nanoseconds. Floor before extracting civil time.
+                        const auto nanos = std::chrono::nanoseconds(values[i] * (1000000000 / u.per_second));
+                        const auto micros = std::chrono::floor<std::chrono::microseconds>(nanos);
+                        const auto whole_seconds = std::chrono::floor<std::chrono::seconds>(micros);
+                        const auto fraction = micros - whole_seconds;
                         DateTimeValue dtv;
-                        ASSERT_TRUE(dtv.from_unixtime(values[i] / u.per_second,
-                                                      values[i] % u.per_second * 1000000 / u.per_second, ctz));
+                        ASSERT_TRUE(dtv.from_unixtime(whole_seconds.count(), fraction.count(), ctz));
                         if constexpr (lt_is_date<LT>) {
                             ASSERT_EQ(DateValue::create(dtv.year(), dtv.month(), dtv.day()), column->get_data()[i])
                                     << "value " << values[i];

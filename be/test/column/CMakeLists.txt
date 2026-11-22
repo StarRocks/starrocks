@@ -69,6 +69,7 @@ set(COLUMN_TEST_FILES
     variant_builder_test.cpp
     variant_encoder_test.cpp
     variant_subvalue_test.cpp
+    variant_strict_materialization_test.cpp
     buffer_test.cpp
     geo_column_test.cpp
 )

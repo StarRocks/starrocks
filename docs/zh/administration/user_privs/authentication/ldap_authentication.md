@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "In addition to native password-based authentication, StarRocks supports LDAP authentication for enterprise user directory integration."
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # LDAP 认证

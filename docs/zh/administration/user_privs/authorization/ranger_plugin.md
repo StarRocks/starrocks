@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Manage StarRocks access permissions with Apache Ranger for centralized, fine-grained access control across the data ecosystem."
 sidebar_position: 40
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 使用 Apache Ranger 管理权限

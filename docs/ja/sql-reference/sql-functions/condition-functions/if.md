@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "expr1 が TRUE と評価される場合、expr2 を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # if

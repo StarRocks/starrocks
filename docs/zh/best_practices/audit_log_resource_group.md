@@ -1,6 +1,7 @@
 ---
 sidebar_position: 120
 description: "Analyze StarRocks audit logs to identify query patterns and configure resource groups for effective workload isolation and resource optimization."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 基于审计日志的资源组配置
@@ -214,7 +215,7 @@ StarRocks 默认提供了一个系统定义的资源组 (`default_mv_wg`) 用于
 
     ```SQL
     CREATE MATERIALIZED VIEW mv_example
-    REFRESH ASYNC
+    REFRESH ON_CHANGE
     PROPERTIES (
         'resource_group' = 'rg_mv'
     )

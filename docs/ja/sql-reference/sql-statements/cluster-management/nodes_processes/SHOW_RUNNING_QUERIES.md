@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW RUNNING QUERIES は、実行中またはクエリキューで保留中のすべてのクエリの情報を表示します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # `SHOW RUNNING QUERIES`

@@ -777,7 +777,7 @@ class StarrocksSQLApiLib(object):
         catalog, since Iceberg HadoopCatalog's FE-side validation expects the
         warehouse path to exist.
         """
-        warehouse = "%s/sql_test/%s" % (self.iceberg_local_warehouse_root, self.uuid0)
+        warehouse = "%s/sql_test/%s" % (self.iceberg_local_warehouse_root, catalog_name)
         os.makedirs(warehouse, exist_ok=True)
         sql = (
             'create external catalog %s properties ('
@@ -788,11 +788,17 @@ class StarrocksSQLApiLib(object):
         res = self.execute_sql(sql)
         tools.assert_true(res["status"], "create hadoop iceberg catalog failed: %s" % res.get("msg"))
 
-    def create_paimon_ddl_catalog(self, catalog_name, warehouse_id):
-        """Create an isolated filesystem catalog; catalogs in one case share the warehouse."""
+    def create_paimon_ddl_catalog(self, catalog_name, warehouse_id, catalog_type="filesystem"):
+        """Create an isolated Paimon catalog; catalogs in one case share the warehouse."""
         # CLEANUP runs outside the normal statement UUID substitution.
         self.paimon_ddl_warehouse_id = warehouse_id
-        properties = {"type": "paimon", "paimon.catalog.type": "filesystem"}
+        properties = {"type": "paimon", "paimon.catalog.type": catalog_type}
+        if catalog_type == "hive":
+            metastore_uris = getattr(self, "hive_metastore_uris", "")
+            if not metastore_uris:
+                raise SkipTest("Paimon HMS tests require hive_metastore_uris")
+            properties["hive.metastore.uris"] = metastore_uris
+            properties["paimon.option.lock.enabled"] = "true"
         local_root = getattr(self, "paimon_ddl_local_warehouse_root", "")
         if local_root:
             warehouse = os.path.join(local_root, warehouse_id)
@@ -802,7 +808,7 @@ class StarrocksSQLApiLib(object):
             if not all(getattr(self, key, "") for key in ("oss_bucket", "oss_ak", "oss_sk", "oss_endpoint")):
                 raise SkipTest("Paimon DDL requires OSS settings or paimon_ddl_local_warehouse_root")
             warehouse_root = getattr(self, "paimon_ddl_warehouse_root", "") or (
-                "oss://%s/tmp/paimon_catalog_ddl" % self.oss_bucket)
+                "oss://%s/ci_catalog_test_data/paimon/tmp" % self.oss_bucket)
             properties.update({
                 "paimon.catalog.warehouse": "%s/%s" % (warehouse_root.rstrip("/"), warehouse_id),
                 "aws.s3.access_key": self.oss_ak,
@@ -3729,6 +3735,43 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 return
             time.sleep(0.5)
         tools.assert_true(False, "compaction of %s did not commit within %ss" % (table_name, timeout))
+
+    def wait_parallel_compaction_finished(self, table_name: str, timeout: int = 60):
+        """Wait for a completed parallel compaction of a fresh, single-tablet test table.
+
+        Callers must use a unique database/table so its compaction history cannot contain an
+        earlier run, and one tablet because the profile sums subtask counts across tablets.
+        Output rowsets can be merged across subtasks, so use the profile to prove parallelism.
+        """
+        res = self.execute_sql("SELECT DATABASE()", True)
+        tools.assert_true(res["status"], f'Fail to read current database, error=[{res["msg"]}]')
+        tools.assert_true(res["result"] and res["result"][0][0], "No current database selected")
+        partition_prefix = f"{res['result'][0][0]}.{table_name}."
+        empty_values = (None, "", "NULL", "None")
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            res = self.execute_sql("SHOW PROC '/compactions'", True)
+            tools.assert_true(res["status"], f'Fail to read compactions, error=[{res["msg"]}]')
+            # Read columns by name because newer servers also include a Warehouse column.
+            columns = [col[0] for col in res["desc"]]
+            for values in res["result"]:
+                row = dict(zip(columns, values))
+                if not row["Partition"].startswith(partition_prefix) or row["FinishTime"] in empty_values:
+                    continue
+                tools.assert_true(
+                    row["Error"] in empty_values, f"Compaction of {table_name} failed: {row['Error']}"
+                )
+                tools.assert_true(
+                    row["Profile"] not in empty_values, f"Completed compaction of {table_name} has no profile"
+                )
+                profile = json.loads(row["Profile"])
+                tools.assert_true(
+                    profile.get("sub_task_count", 0) > 1,
+                    f"Compaction of {table_name} was not parallel: {row['Profile']}",
+                )
+                return
+            time.sleep(0.5)
+        tools.assert_true(False, f"Parallel compaction of {table_name} did not finish within {timeout}s")
 
     def _get_backend_http_endpoints(self) -> List[Dict]:
         """Get the http host and port of all the backends.

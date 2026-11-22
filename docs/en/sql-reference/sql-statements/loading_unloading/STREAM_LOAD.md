@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 toc_max_heading_level: 4
 description: "STREAM LOAD allows you to load data from a local file system or a streaming data source."
+products: [oss, enterprise, cloud, anywhere]
 ---
 import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.mdx';
 import TableURLTip from '../../../_assets/commonMarkdown/stream_load_table_url_tip.mdx';
@@ -141,7 +142,10 @@ Description: Specifies the character that is used to wrap the field values in th
 
 Required: No
 
-Description: Specifies the character that is used to escape various special characters, such as row separators, column separators, escape characters, and `enclose`-specified characters, which are then considered to be common characters and are parsed as part of the field values in which they reside. Type: single-byte character. Default value: `NONE`. The most prevalent character is slash (`\`), which must be written as double slashes (`\\`) in SQL statements.<br />**NOTE**<br />The character specified by `escape` is applied to both inside and outside of each pair of `enclose`-specified characters.<br />Two examples are as follows:<ul><li>When you set `enclose` to `"` and `escape` to `\`, the system parses `"say \"Hello world\""` into `say "Hello world"`.</li><li>Assume that the column separator is comma (`,`). When you set `escape` to `\`, the system parses `a, b\, c` into two separate field values: `a` and `b, c`.</li></ul>
+Description: Specifies the character that is used to escape various special characters, such as row separators, column separators, escape characters, and `enclose`-specified characters, which are then considered to be common characters and are parsed as part of the field values in which they reside. Type: single-byte character. Default value: `NONE`. The most prevalent character is slash (`\`), which must be written as double slashes (`\\`) in SQL statements.<br />**NOTE**<br />The character specified by `escape` is applied to both inside and outside of each pair of `enclose`-specified characters.<br />Two examples are as follows:
+
+- When you set `enclose` to `"` and `escape` to `\`, the system parses `"say \"Hello world\""` into `say "Hello world"`.
+- Assume that the column separator is comma (`,`). When you set `escape` to `\`, the system parses `a, b\, c` into two separate field values: `a` and `b, c`.
 
 :::note
 - For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.

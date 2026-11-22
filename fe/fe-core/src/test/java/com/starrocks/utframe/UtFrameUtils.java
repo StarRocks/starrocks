@@ -468,6 +468,7 @@ public class UtFrameUtils {
         be.setBrpcPort(backend.getBrpcPort());
         be.setHttpPort(backend.getHttpPort());
         be.setStarletPort(backend.getStarletPort());
+        be.setSupportLakeIndexFastPath(MockedBackend.reportLakeIndexFastPath);
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(be);
         if (RunMode.isSharedDataMode()) {
             int starletPort = backend.getStarletPort();
@@ -486,6 +487,7 @@ public class UtFrameUtils {
         cn.setHttpPort(backend.getHttpPort());
         cn.setStarletPort(backend.getStarletPort());
         cn.setIsStoragePath(false);
+        cn.setSupportLakeIndexFastPath(MockedBackend.reportLakeIndexFastPath);
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn);
         if (RunMode.isSharedDataMode()) {
             int starletPort = backend.getStarletPort();

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "取消指定的数据导出作业。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CANCEL EXPORT

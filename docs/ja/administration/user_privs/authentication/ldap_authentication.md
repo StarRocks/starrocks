@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "StarRocks で LDAP を使用してユーザーを作成・認証し、外部 LDAP サーバーと統合します。"
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # LDAP 認証

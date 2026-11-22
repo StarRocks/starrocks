@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Tests whether a point is strictly within a polygon."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Within

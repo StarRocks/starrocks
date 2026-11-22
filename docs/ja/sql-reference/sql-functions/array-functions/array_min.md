@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ARRAY_MIN関数はARRAY内のすべてのデータの最小値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_min

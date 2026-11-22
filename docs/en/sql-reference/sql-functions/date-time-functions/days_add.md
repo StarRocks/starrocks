@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Adds a specified number of days to a given date or date time."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # days_add

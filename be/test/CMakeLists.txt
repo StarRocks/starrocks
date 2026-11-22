@@ -166,6 +166,7 @@ set(EXEC_FILES
         ./service/daemon_test.cpp
         ./service/mem_hook_test.cpp
         ./service/service_metrics_test.cpp
+        ./service/service_be/arrow_flight_auth_server_middleware_test.cpp
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
         ./service/service_be/backend_service_test.cpp
         ./base/auth/auth_info_test.cpp
@@ -398,8 +399,10 @@ SET(DW_TEST_FILES
     ./storage/rowset/page_io_test.cpp
     ./storage/rowset/plain_page_test.cpp
     ./storage/rowset/rle_page_test.cpp
+    ./storage/rowset/rowset_meta_test.cpp
     ./storage/rowset/rowset_test.cpp
     ./storage/rowset/segment_iterator_test.cpp
+    ./storage/rowset/segment_prefetch_window_test.cpp
     ./storage/rowset/segment_rewriter_test.cpp
     ./storage/rowset/segment_tail_index_region_test.cpp
     ./storage/rowset/segment_test.cpp
@@ -476,23 +479,27 @@ endif()
 # --without-paimon-cpp, so no other test binary depends on libpaimon.so.
 # The paimon include path comes from the imported `paimon` target, so other
 # test sources cannot include paimon headers.
-# The production sources are compiled directly into this binary: they ship in
-# the dlopen()ed libstarrocks_paimon.so shim and are no longer part of
-# ConnectorHive, while tests link paimon the ordinary build-time way.
+# Production sources come from the UT-only object library under src/ so their
+# coverage survives CI cleanup of the test build directory. Production builds
+# ship them in the dlopen()ed libstarrocks_paimon.so shim instead.
 if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
     ADD_BE_TEST(connector/paimon/paimon_cpp_test)
     target_sources(paimon_cpp_test PRIVATE
+        connector/paimon/paimon_test_main.cpp
+        connector/paimon/paimon_global_index_evaluator_test.cpp
+        connector/paimon/paimon_global_index_reader_test.cpp
+        connector/paimon/paimon_global_index_scanner_test.cpp
         connector/paimon/paimon_scanner_mem_usage_test.cpp
         connector/paimon/paimon_scanner_projection_test.cpp
         connector/paimon/paimon_predicate_converter_test.cpp
         connector/paimon/paimon_file_system_test.cpp
         connector/paimon/paimon_blob_converter_test.cpp
-        ${SRC_DIR}/connector/hive/paimon/paimon_predicate_converter.cpp
-        ${SRC_DIR}/connector/hive/paimon/paimon_file_system.cpp
-        ${SRC_DIR}/connector/hive/paimon/paimon_scanner.cpp
-        ${SRC_DIR}/connector/hive/paimon/paimon_blob_converter.cpp
+        connector/paimon/paimon_bucket_function_test.cpp
+        connector/paimon/paimon_chunk_sink_test.cpp
+        connector/paimon/paimon_file_system_write_test.cpp
+        connector/paimon/paimon_write_column_converter_test.cpp
     )
-    target_link_libraries(paimon_cpp_test paimon)
+    target_link_libraries(paimon_cpp_test paimon_cpp_test_support paimon)
 endif ()
 
 # you can simply add test case as single binary without adding `main`

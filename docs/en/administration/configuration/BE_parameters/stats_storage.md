@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "Statistics and Storage"
 description: "BE configuration parameters for statistics collection and storage engine settings."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -168,6 +169,8 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: The time interval since the last Base Compaction. For shared-nothing tables, this is one of the conditions that trigger Base Compaction. For shared-data Primary Key tables and non-Primary Key tables using the Base and Cumulative policy, automatic Base Compaction waits at least this many seconds after the previous successful Base Compaction finished on the same tablet. For non-Primary Key tables using the Size Tiered policy, this interval only disables the delete-version threshold that forces Base Compaction; normal level selection remains unchanged. Manual compaction bypasses the wait.
 - Introduced in: -
+
+This parameter predates v4.1; its existence does not imply support for shared-data interval controls in those releases. The 4.1 series does not use it to restrict shared-data Base Compaction. The shared-data interval control described above is supported from v4.2. It is a minimum interval for automatic Base Compaction, not a daily schedule, and manual requests bypass it. See [Version support](../../management/compaction.md#primary-key-base-compaction-versions) and [Time controls](../../management/compaction.md#base-compaction-time-controls).
 
 ### base_compaction_num_threads_per_disk
 
@@ -1081,7 +1084,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of threads for the release snapshot tasks on a BE node.
+- Description: The maximum number of threads for the release snapshot tasks on a BE node. In a shared-data cluster, this thread pool also runs vacuum, full vacuum, and transaction log deletion tasks.
 - Introduced in: -
 
 ### repair_compaction_interval_seconds

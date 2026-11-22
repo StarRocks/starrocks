@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 40
 description: "Overview of memory classification and memory management strategies in StarRocks."
+products: [oss, enterprise, anywhere]
 ---
 
 # Memory Management
@@ -20,7 +21,7 @@ Explanation:
 |  metadata   |   Metadata memory | S Schema, Tablet metadata, RowSet metadata, Column metadata, ColumnReader, IndexReader |
 |  compaction   |   Multi-version memory compaction  |  compaction that happens after data import is complete |
 |  clone  |   Clone memory  | Memory used by tablet clone tasks |
-|  page_cache   |   BE's own PageCache   | The default is off, the user can turn it on by modifying the BE file |
+|  page_cache   |   BE's own PageCache   | Enabled by default since v2.4. You can disable it by setting `disable_storage_page_cache` to `true` in the BE configuration file |
 
 ## Memory-related configuration
 

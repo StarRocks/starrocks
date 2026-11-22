@@ -2,6 +2,7 @@
 sidebar_position: 140
 displayed_sidebar: docs
 description: "How to perform INSERT, UPDATE, DELETE, partial update, and conditional update on Primary Key tables in StarRocks using Stream Load, Broker Load, or Routine..."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Change data through loading

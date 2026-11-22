@@ -19,6 +19,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 
 set(RUNTIME_SRCS
     byte_buffer.cpp
+    paimon_cpp_library.cpp
     message_body_sink.cpp
     current_thread.cpp
     chunk_accumulator.cpp

@@ -3,6 +3,7 @@ sidebar_position: 10
 displayed_sidebar: docs
 sidebar_label: "Logging, Server, and Metadata"
 description: "FE configuration parameters for logging, server settings, and metadata management."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE Configuration - Logging, Server, and Metadata
@@ -327,7 +328,7 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable profile logging. When this feature is enabled, the FE writes per-query profile logs (the serialized `queryDetail` JSON produced by `ProfileManager`) to the profile log sink. This logging is performed only if `enable_collect_query_detail_info` is also enabled; when `enable_profile_log_compress` is enabled, the JSON may be gzipped before logging. Profile log files are managed by `profile_log_dir`, `profile_log_roll_num`, `profile_log_roll_interval` and rotated/deleted according to `profile_log_delete_age` (supports formats like `7d`, `10h`, `60m`, `120s`). Disabling this feature stops writing profile logs (reducing disk I/O, compression CPU and storage usage). Which queries are logged can be further filtered by `profile_log_latency_threshold_ms`.
+- Description: Whether to enable profile logging. When this feature is enabled, the FE writes per-query profile logs (the serialized `queryDetail` JSON produced by `ProfileManager`) to the profile log sink. This logging is performed only if `enable_collect_query_detail_info` is also enabled. Profile log files are managed by `profile_log_dir`, `profile_log_roll_num`, `profile_log_roll_interval` and rotated/deleted according to `profile_log_delete_age` (supports formats like `7d`, `10h`, `60m`, `120s`). Disabling this feature stops writing profile logs (reducing disk I/O, compression CPU and storage usage). Which queries are logged can be further filtered by `profile_log_latency_threshold_ms`.
 - Introduced in: v3.2.5
 
 ### `enable_qe_slow_log`
@@ -616,7 +617,7 @@ This topic introduces the following types of FE configurations:
 - Unit: Milliseconds
 - Is mutable: Yes
 - Description: Minimum query latency (in milliseconds) for a profile to be written to `fe.profile.log`. Only queries whose execution time is greater than or equal to this value are logged. Set to 0 to log all profiles (no threshold). Use a positive value to reduce log volume by logging only slower queries.
-- Introduced in: -
+- Introduced in: v4.2.0
 
 
 ### `profile_log_roll_file_index`
@@ -652,7 +653,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: MB
 - Is mutable: No
-- Description: Sets the size threshold (in megabytes) that triggers a size-based rollover of the FE profile log file. This value is used by the Log4j RollingFile SizeBasedTriggeringPolicy for the `ProfileFile` appender; when a profile log exceeds `profile_log_roll_size_mb` it will be rotated. Rotation can also occur by time when `profile_log_roll_interval` is reached — either condition will trigger rollover. Combined with `profile_log_roll_num` and `profile_log_delete_age`, this item controls how many historical profile files are retained and when old files are deleted. Compression of rotated files is controlled by `enable_profile_log_compress`.
+- Description: Sets the size threshold (in megabytes) that triggers a size-based rollover of the FE profile log file. This value is used by the Log4j RollingFile SizeBasedTriggeringPolicy for the `ProfileFile` appender; when a profile log exceeds `profile_log_roll_size_mb` it will be rotated. Rotation can also occur by time when `profile_log_roll_interval` is reached — either condition will trigger rollover. Combined with `profile_log_roll_num` and `profile_log_delete_age`, this item controls how many historical profile files are retained and when old files are deleted.
 - Introduced in: v3.2.5
 
 ### `qe_slow_log_ms`
@@ -788,7 +789,7 @@ This topic introduces the following types of FE configurations:
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The severity levels into which system log entries are classified. Valid values: `INFO`, `WARN`, `ERROR`, and `FATAL`.
+- Description: The severity levels into which system log entries are classified. Valid values: `DEBUG`, `INFO`, `WARN`, `ERROR`, and `FATAL`.
 - Introduced in: -
 
 ### `sys_log_roll_file_index`
@@ -835,7 +836,7 @@ This topic introduces the following types of FE configurations:
 - Type: String[]
 - Unit: -
 - Is mutable: No
-- Description: The modules for which StarRocks generates system logs. If this parameter is set to `org.apache.starrocks.catalog`, StarRocks generates system logs only for the catalog module. Separate the module names with a comma (,) and a space.
+- Description: The modules for which StarRocks generates DEBUG-level system logs, in addition to the logs at the level specified by `sys_log_level`. If this parameter is set to `com.starrocks.catalog`, StarRocks also generates DEBUG-level system logs for the catalog module. Separate the module names with a comma (,) and a space.
 - Introduced in: -
 
 ### `sys_log_warn_modules`
@@ -1010,7 +1011,7 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Introduced in: v4.2.0
+- Introduced in: v4.1.3
 - Description: When true, most external FE HTTP endpoints require HTTP Basic Auth. Credentials are validated against the user store via `AuthenticationHandler.authenticate()`, so LDAP / security-integration login works on the HTTP path the same way it does for the MySQL protocol. The following are exempt:
   - Public probes / observability: `/api/bootstrap`, `/api/oauth2`.
   - Peer-FE / control-plane paths that are IP-whitelisted or token-gated inside the handler: `/image`, `/check`, `/journal_id`, `/info`, `/role`, `/static`, `/api/get_small_file`.
@@ -1622,6 +1623,15 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: The number of threads in the FE-global dispatch executor for asynchronous "refresh other FE" jobs. These threads only schedule background refresh tasks from connector write paths. They do not send peer FE refresh RPCs directly. Changes take effect on running FEs without restart.
+- Introduced in: -
+
+### `iceberg_commit_invalidate_other_fe_timeout_ms`
+
+- Default: 3000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The maximum time a commit to an Iceberg table (INSERT, INSERT OVERWRITE, DELETE, UPDATE, MERGE, or compaction) waits for the other FEs to drop their cached copy of the table, so that a query on any FE sees the commit once the statement returns. An FE that does not respond in time is left to the background refresh. During a rolling upgrade, an FE of an earlier version refreshes the table instead, so a commit can wait up to this long. Set it to 0 or less to disable the wait.
 - Introduced in: -
 
 ### `refresh_other_fe_rpc_executor_thread_num`

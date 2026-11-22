@@ -1,6 +1,7 @@
 ---
 sidebar_position: 120
 description: "How to use StarRocks audit logs to analyze query patterns and configure resource groups for workload isolation."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Audit Log-based Resource Group Configuration
@@ -215,7 +216,7 @@ The following example only provides guidance on creating and assign a dedicated 
 
     ```SQL
     CREATE MATERIALIZED VIEW mv_example
-    REFRESH ASYNC
+    REFRESH ON_CHANGE
     PROPERTIES (
         'resource_group' = 'rg_mv'
     )

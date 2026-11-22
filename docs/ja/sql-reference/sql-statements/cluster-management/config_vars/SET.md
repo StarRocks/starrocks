@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks の指定されたシステム変数またはユーザー定義変数を設定します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SET

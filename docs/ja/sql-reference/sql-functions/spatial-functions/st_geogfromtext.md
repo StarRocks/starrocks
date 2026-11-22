@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "WKT からネイティブ GEOGRAPHY 値を構築します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_GeogFromText

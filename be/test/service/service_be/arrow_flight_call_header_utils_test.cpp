@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "arrow/util/base64.h"
 #include "compute_env/result/result_buffer_mgr.h"
 #include "exec/arrow_flight_batch_reader.h"
 

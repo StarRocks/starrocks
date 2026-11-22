@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ADMIN SET REPLICA STATUS 用于设置指定副本的状态。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ADMIN SET REPLICA STATUS

@@ -1,0 +1,99 @@
+-- name: test_iceberg_variant_virtual_column_no_field_id
+create external catalog iceberg_variant_no_field_id_${uuid0}
+PROPERTIES (
+    "type"="iceberg",
+    "iceberg.catalog.type"="hadoop",
+    "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_variant_virtual_column_no_field_id/${uuid0}/warehouse/"
+);
+-- result:
+-- !result
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_variant_virtual_column_no_field_id/${uuid0}/warehouse/db_${uuid0} > /dev/null
+-- result:
+0
+
+-- !result
+use iceberg_variant_no_field_id_${uuid0}.db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_nested (id BIGINT, data VARIANT) properties('format-version' = '3');
+-- result:
+-- !result
+shell: ossutil64 cp ../be/test/formats/parquet/test_data/variant_shredding_nested_residual.parquet oss://${oss_bucket}/test_iceberg_variant_virtual_column_no_field_id/${uuid0}/data/nested.parquet > /dev/null
+-- result:
+0
+
+-- !result
+alter table t_nested execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_virtual_column_no_field_id/${uuid0}/data/nested.parquet', file_format='parquet');
+-- result:
+-- !result
+set cbo_variant_path_rewrite = true;
+-- result:
+-- !result
+function: assert_explain_verbose_contains("select get_variant_string(data, '$.kind') from t_nested", "ExtendedColumnAccessPath")
+-- result:
+None
+-- !result
+select id, get_variant_string(data, '$.kind'), get_variant_string(data, '$.commit.collection') from t_nested order by id;
+-- result:
+0	commit	post
+1	commit	like
+2	identity	None
+3	None	None
+4	None	None
+-- !result
+select count(*) from t_nested where get_variant_string(data, '$.kind') = 'commit';
+-- result:
+2
+-- !result
+select id, data, get_variant_string(data, '$.kind') from t_nested order by id;
+-- result:
+0	{"commit":{"collection":"post","record":{"text":"hello"}},"kind":"commit"}	commit
+1	{"commit":{"collection":"like"},"kind":"commit"}	commit
+2	{"extra":1,"kind":"identity","note":"n1"}	identity
+3	None	None
+4	{"commit":{"rev":"r1"}}	None
+-- !result
+set cbo_variant_path_rewrite = false;
+-- result:
+-- !result
+function: assert_explain_not_contains("select get_variant_string(data, '$.kind') from t_nested", "ExtendedColumnAccessPath")
+-- result:
+None
+-- !result
+select id, get_variant_string(data, '$.kind'), get_variant_string(data, '$.commit.collection') from t_nested order by id;
+-- result:
+0	commit	post
+1	commit	like
+2	identity	None
+3	None	None
+4	None	None
+-- !result
+select count(*) from t_nested where get_variant_string(data, '$.kind') = 'commit';
+-- result:
+2
+-- !result
+select id, data, get_variant_string(data, '$.kind') from t_nested order by id;
+-- result:
+0	{"commit":{"collection":"post","record":{"text":"hello"}},"kind":"commit"}	commit
+1	{"commit":{"collection":"like"},"kind":"commit"}	commit
+2	{"extra":1,"kind":"identity","note":"n1"}	identity
+3	None	None
+4	{"commit":{"rev":"r1"}}	None
+-- !result
+set cbo_variant_path_rewrite = true;
+-- result:
+-- !result
+drop table t_nested force;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_variant_no_field_id_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_virtual_column_no_field_id/${uuid0}/ > /dev/null
+-- result:
+0
+
+-- !result

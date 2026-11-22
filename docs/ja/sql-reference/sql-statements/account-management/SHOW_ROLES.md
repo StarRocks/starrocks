@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "システム内のすべてのロールを表示します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW ROLES

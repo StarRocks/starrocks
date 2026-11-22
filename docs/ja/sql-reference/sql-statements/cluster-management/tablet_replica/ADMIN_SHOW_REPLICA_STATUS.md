@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ADMIN SHOW REPLICA STATUS は、テーブルまたはパーティションのレプリカのステータスを表示するために使用されます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ADMIN SHOW REPLICA STATUS

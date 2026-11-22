@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Constructs native GEOMETRY from WKT with an explicit CRS, or uses the legacy one-argument format."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_GeomFromText, ST_GeometryFromText

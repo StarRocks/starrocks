@@ -4,6 +4,7 @@ displayed_sidebar: docs
 description: "BE configuration parameters for statistics collection and storage engine settings."
 sidebar_label: "统计报告和存储"
 keywords: ['Canshu']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -175,6 +176,8 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 是否动态：是
 - 描述：上一轮 Base Compaction 距今的间隔。对于存算一体表，此项为 Base Compaction 的触发条件之一。对于存算分离主键表和使用 Base and Cumulative 策略的非主键表，同一 Tablet 上次 Base Compaction 成功完成后，自动 Base Compaction 至少等待此间隔。对于使用 Size Tiered 策略的非主键表，此间隔仅禁用删除版本数达到阈值后强制触发 Base Compaction 的条件，不改变正常的层级选择。手动 Compaction 不受此限制。
 - 引入版本：-
+
+此参数早于 v4.1 已存在，不代表当时已支持存算分离的间隔控制。4.1 系列不使用此参数限制存算分离 Base Compaction；上述存算分离间隔控制从 v4.2 开始支持。它是自动 Base Compaction 的最小间隔，不是每天定时执行的周期，手动请求可绕过。详见[版本支持](../../management/compaction.md#primary-key-base-compaction-versions)和[执行时间控制](../../management/compaction.md#base-compaction-time-controls)。
 
 ### base_compaction_num_threads_per_disk
 
@@ -1072,7 +1075,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：BE 节点释放快照任务的最大线程数。
+- 描述：BE 节点释放快照任务的最大线程数。在存算分离集群中，该线程池还用于执行 Vacuum、Full Vacuum 以及事务日志删除任务。
 - 引入版本：-
 
 ### repair_compaction_interval_seconds

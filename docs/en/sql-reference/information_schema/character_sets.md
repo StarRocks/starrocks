@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "character_sets identifies the character sets available."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # character_sets

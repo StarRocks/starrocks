@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 hide_table_of_contents: true
 description: "Alphabetical i - p"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 
@@ -381,6 +382,12 @@ description: "Alphabetical i - p"
 
 - 单位：计数
 - 描述：成功的存算分离（lake）压缩任务计数。
+
+## `lake_idg_files_missing_total`
+
+- 单位：操作次数
+- 类型：Counter
+- 描述：在存算分离模式下，统计索引增量组（Index Delta Group，IDG）`.idx` 初始化期间因文件缺失而降级的次数，以及每个位图索引迭代器首次在延迟页面读取时遇到文件缺失的次数。布隆过滤器页的延迟读取失败不计入。重新打开同一缺失文件可以再次计数，因此该指标不是缺失文件的去重数量。指标增长表示索引过滤能力下降，例如 Vacuum 与查询并发，或降级后再次升级时可能出现这种情况。
 
 ## `lake_pk_index_cache_delvec_bytes`
 

@@ -64,6 +64,48 @@ public class ExpressionTest extends PlanTestBase {
                 + "  |  <slot 8> : 7: add + 3: v3\n"));
     }
 
+    // Different select-list items that translate to equal scalar operators share one output column
+    // (QueryTransformer.getOrCreateColumnRefOperator). Repeats of one Expr are already merged by ExpressionMapping,
+    // so they do not test it.
+    @Test
+    public void testEqualSelectExpressionsShareOneColumn() throws Exception {
+        // project(): one pattern is a CHAR(4) constant, the other a VARCHAR one; they are equal through matchesType()
+        assertContains(getFragmentPlan("select t1a like cast('abc%' as char(4)), t1a like 'abc%' from test_all_type"),
+                "OUTPUT EXPRS:11: expr | 11: expr");
+        // project(): AND is compared without regard to grouping
+        assertContains(getFragmentPlan("select (v1 > 1 and v2 > 2) and v3 > 3, v1 > 1 and (v2 > 2 and v3 > 3) from t0"),
+                "OUTPUT EXPRS:4: expr | 4: expr");
+        // projectForOrder(), without and with aggregation
+        assertContains(getFragmentPlan("select t1a like cast('abc%' as char(4)), t1a like 'abc%' from test_all_type " +
+                "order by t1b"), "OUTPUT EXPRS:11: expr | 11: expr");
+        assertContains(getFragmentPlan("select (v1 > 1 and v2 > 2) and v3 > 3, v1 > 1 and (v2 > 2 and v3 > 3) from t0 " +
+                "order by v1"), "OUTPUT EXPRS:4: expr | 4: expr");
+        assertContains(getFragmentPlan("select (sum(v1) > 1 and v2 > 2) and v2 < 9, sum(v1) > 1 and (v2 > 2 and v2 < 9) " +
+                "from t0 group by v2 order by v2"), "OUTPUT EXPRS:5: expr | 5: expr");
+    }
+
+    // A CHAR constant equals a VARCHAR one with the same value, so rules that keep constants in hash sets and maps
+    // treat the two alike: each query plans like its twin with only VARCHAR constants.
+    @Test
+    public void testCharConstantsPlanLikeEqualVarcharConstants() throws Exception {
+        String[][] twins = {
+                // InvertedCaseWhen: the CHAR branch also yields 'a'
+                {"select * from test_all_type where case when t1d = 1 then 'a' when t1d = 2 then cast('a' as char(1)) " +
+                        "else 'b' end = 'a'",
+                        "select * from test_all_type where case when t1d = 1 then 'a' when t1d = 2 then 'a' else 'b' end = 'a'"},
+                // InvertedCaseWhen: the second WHEN repeats the first, so it never matches
+                {"select * from test_all_type where case t1a when 'a' then 1 when cast('a' as char(1)) then 2 " +
+                        "else 3 end = 2",
+                        "select * from test_all_type where case t1a when 'a' then 1 when 'a' then 2 else 3 end = 2"},
+                // RangeExtractor: the two value sets intersect in 'a'
+                {"select * from test_all_type where t1a = 'a' and t1a in (cast('a' as char(1)), 'b')",
+                        "select * from test_all_type where t1a = 'a' and t1a in ('a', 'b')"},
+        };
+        for (String[] twin : twins) {
+            Assertions.assertEquals(getFragmentPlan(twin[1]), getFragmentPlan(twin[0]), twin[0]);
+        }
+    }
+
     @Test
     public void testReduceCast() throws Exception {
         String sql = "select t1a, t1b from test_all_type where t1c > 2000 + 1";
@@ -1145,6 +1187,20 @@ public class ExpressionTest extends PlanTestBase {
         planFragment = getFragmentPlan(sql);
         Assertions.assertTrue(
                 planFragment.contains("PREDICATES: 1: v1 <= 2, 2: v2 IS NOT NULL, NOT (if(3: v3 > 2, FALSE, TRUE))"));
+    }
+
+    /** <=> has no opposite operator, so inside a negated AND/OR it must stay as NOT (a <=> b). */
+    @Test
+    public void testNotOverNullSafeEqualInCompound() throws Exception {
+        String plan = getFragmentPlan("select v1 from t0 where not (v1 <=> 1 and v2 = 2)");
+        assertContains(plan, "PREDICATES: (NOT (1: v1 <=> 1)) OR (2: v2 != 2)");
+
+        plan = getFragmentPlan("select v1 from t0 where not (v1 <=> v2 or v3 > 2)");
+        assertContains(plan, "NOT (1: v1 <=> 2: v2), 3: v3 <= 2");
+
+        plan = getFragmentPlan("select v1, count(*) from t0 group by v1 having not (v1 <=> 1 or count(*) = 2)");
+        assertContains(plan, "NOT (1: v1 <=> 1)");
+        assertContains(plan, "4: count != 2");
     }
 
     @Test
