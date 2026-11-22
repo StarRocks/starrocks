@@ -300,28 +300,19 @@ public abstract class BaseAction implements IAction {
         }
     }
 
-    // We check whether user owns db_admin and user_admin role in new RBAC privilege framework for
-    // operation which checks `PrivPredicate.ADMIN` in global table in old Auth framework.
-    protected void checkUserOwnsAdminRole(UserIdentity currentUser) throws AccessDeniedException {
-        try {
-            Set<Long> userOwnedRoles = AuthorizationMgr.getOwnedRolesByUser(currentUser);
-            if (!(currentUser.equals(UserIdentity.ROOT) ||
-                    userOwnedRoles.contains(PrivilegeBuiltinConstants.ROOT_ROLE_ID) ||
-                    (userOwnedRoles.contains(PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID) &&
-                            userOwnedRoles.contains(PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID)))) {
-                throw new AccessDeniedException();
-            }
-        } catch (PrivilegeException e) {
-            throw new AccessDeniedException();
-        }
-    }
-
     // return currentUserIdentity from StarRocks auth
     public static UserIdentity checkPassword(ActionAuthorizationInfo authInfo) throws AccessDeniedException {
+        return checkPassword(new ConnectContext(), authInfo);
+    }
+
+    // Authenticates onto the given context, which also receives the user's groups and the roles they
+    // map to: a caller that authorizes afterwards reuses it.
+    public static UserIdentity checkPassword(ConnectContext context, ActionAuthorizationInfo authInfo)
+            throws AccessDeniedException {
         try {
             // HTTP Basic carries a cleartext password: declare that so security integrations that
             // consume a password (LDAP) are matched instead of skipped.
-            return AuthenticationHandler.authenticateWithClearPassword(new ConnectContext(), authInfo.fullUserName,
+            return AuthenticationHandler.authenticateWithClearPassword(context, authInfo.fullUserName,
                     authInfo.remoteIp, authInfo.password);
         } catch (AuthenticationException e) {
             throw new AccessDeniedException("Access denied for " + authInfo.fullUserName + "@" + authInfo.remoteIp);
@@ -407,6 +398,39 @@ public abstract class BaseAction implements IAction {
         LOG.debug("Parse result for the input [{} {} {}]: {}", fullUserName, password, host, authInfo);
 
         return authInfo;
+    }
+
+    /**
+     * The roles the user of {@code ctx} holds, granted to it or to one of its groups (for an
+     * ephemeral user, the roles of its session), together with their predecessors, the roles they
+     * inherit from. Whether a role is activated does not matter: a request to these endpoints
+     * cannot run SET ROLE, and a role granted to the user has always counted.
+     */
+    protected static Set<Long> getHeldRoleIdsWithPredecessors(ConnectContext ctx) throws PrivilegeException {
+        AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        return authorizationMgr.getApplicableRoleIdsWithPredecessors(
+                ctx.getCurrentUserIdentity(), ctx.getGroups(), ctx.getCurrentRoleIds());
+    }
+
+    // We check whether user owns db_admin and user_admin role in new RBAC privilege framework for
+    // operation which checks `PrivPredicate.ADMIN` in global table in old Auth framework. The roles
+    // are those of getHeldRoleIdsWithPredecessors.
+    protected void checkAdminRole(ConnectContext ctx) throws AccessDeniedException {
+        UserIdentity currentUser = ctx.getCurrentUserIdentity();
+        if (currentUser == null) {
+            throw new AccessDeniedException();
+        }
+        try {
+            Set<Long> heldRoles = getHeldRoleIdsWithPredecessors(ctx);
+            if (!(currentUser.equals(UserIdentity.ROOT) ||
+                    heldRoles.contains(PrivilegeBuiltinConstants.ROOT_ROLE_ID) ||
+                    (heldRoles.contains(PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID) &&
+                            heldRoles.contains(PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID)))) {
+                throw new AccessDeniedException();
+            }
+        } catch (PrivilegeException e) {
+            throw new AccessDeniedException();
+        }
     }
 
     protected int checkIntParam(String strParam) {

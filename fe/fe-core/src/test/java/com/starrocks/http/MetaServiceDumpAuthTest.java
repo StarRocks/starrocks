@@ -66,7 +66,11 @@ public class MetaServiceDumpAuthTest extends StarRocksHttpTestCase {
             public UserIdentity authenticateWithClearPassword(Invocation inv, ConnectContext context, String user,
                                                               String remoteHost, String password) {
                 if (NON_ADMIN_USER.equals(user) && NON_ADMIN_PASSWORD.equals(password)) {
-                    return UserIdentity.createAnalyzedUserIdentWithIp(NON_ADMIN_USER, "%");
+                    UserIdentity identity = UserIdentity.createAnalyzedUserIdentWithIp(NON_ADMIN_USER, "%");
+                    // Like the real authenticate(), record the user on the context: WebBaseAction checks the admin
+                    // privilege on the context it passed in.
+                    context.setCurrentUserIdentity(identity);
+                    return identity;
                 }
                 return inv.proceed();
             }
@@ -88,8 +92,8 @@ public class MetaServiceDumpAuthTest extends StarRocksHttpTestCase {
         };
         new MockUp<BaseAction>() {
             @Mock
-            public void checkUserOwnsAdminRole(Invocation inv, UserIdentity currentUser) throws AccessDeniedException {
-                if (NON_ADMIN_USER.equals(currentUser.getUser())) {
+            public void checkAdminRole(Invocation inv, ConnectContext ctx) throws AccessDeniedException {
+                if (NON_ADMIN_USER.equals(ctx.getCurrentUserIdentity().getUser())) {
                     throw new AccessDeniedException();
                 }
                 inv.proceed();
