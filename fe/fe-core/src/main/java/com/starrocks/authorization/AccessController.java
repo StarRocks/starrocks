@@ -189,6 +189,21 @@ public interface AccessController {
         return null;
     }
 
+    /**
+     * The two lookups above for a caller that only wants to know what the policies read -- the planner's unlocked
+     * pre-pass, which locks the tables a policy references and then leaves applying it to the analyzer. A controller
+     * that audits a policy lookup (Ranger records a policy hit as an audit event) must not audit these, or the one
+     * query is audited twice. The defaults forward to the lookups above, which audit nothing.
+     */
+    default Map<String, Expr> getColumnMaskingPolicyWithoutAudit(ConnectContext context, TableName tableName,
+                                                                 List<Column> columns) {
+        return getColumnMaskingPolicy(context, tableName, columns);
+    }
+
+    default Expr getRowAccessPolicyWithoutAudit(ConnectContext context, TableName tableName) {
+        return getRowAccessPolicy(context, tableName);
+    }
+
     default void checkWarehouseAction(ConnectContext context, String name, PrivilegeType privilegeType)
             throws AccessDeniedException {
         throw new AccessDeniedException();

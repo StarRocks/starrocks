@@ -14,18 +14,14 @@
 
 package com.starrocks.authorization.ranger.hive;
 
-import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.authorization.ranger.RangerAccessController;
-import com.starrocks.catalog.Column;
 import com.starrocks.qe.ConnectContext;
+import org.apache.ranger.plugin.policyengine.RangerAccessResourceImpl;
 
-import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 public class RangerHiveAccessController extends RangerAccessController {
     public RangerHiveAccessController(String serviceName) {
@@ -92,28 +88,20 @@ public class RangerHiveAccessController extends RangerAccessController {
     }
 
     @Override
-    public Map<String, Expr> getColumnMaskingPolicy(ConnectContext context, TableName tableName, List<Column> columns) {
-        Map<String, Expr> maskingExprMap = Maps.newHashMap();
-        for (Column column : columns) {
-            Expr columnMaskingExpression = getColumnMaskingExpression(RangerHiveResource.builder()
-                    .setDatabase(tableName.getDb())
-                    .setTable(tableName.getTbl())
-                    .setColumn(column.getName())
-                    .build(), column, context);
-            if (columnMaskingExpression != null) {
-                maskingExprMap.put(column.getName(), columnMaskingExpression);
-            }
-        }
-
-        return maskingExprMap;
+    protected RangerAccessResourceImpl tableResource(TableName tableName) {
+        return RangerHiveResource.builder()
+                .setDatabase(tableName.getDb())
+                .setTable(tableName.getTbl())
+                .build();
     }
 
     @Override
-    public Expr getRowAccessPolicy(ConnectContext context, TableName tableName) {
-        return getRowAccessExpression(RangerHiveResource.builder()
+    protected RangerAccessResourceImpl columnResource(TableName tableName, String column) {
+        return RangerHiveResource.builder()
                 .setDatabase(tableName.getDb())
                 .setTable(tableName.getTbl())
-                .build(), context);
+                .setColumn(column)
+                .build();
     }
 
     @Override
