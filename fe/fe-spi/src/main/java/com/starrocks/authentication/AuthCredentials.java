@@ -77,7 +77,17 @@ public record AuthCredentials(String userDeclared, byte[] rawSecret,
 
     /** Bearer-token credential; no explicit user (it is resolved from the token claim). */
     public static AuthCredentials ofBearer(String token, AuthChannel channel, String host) {
-        return new AuthCredentials(null, token.getBytes(StandardCharsets.UTF_8),
+        return ofBearer(null, token, channel, host);
+    }
+
+    /**
+     * Bearer-token credential that names the user it is for, the same shape as a MySQL OpenID
+     * Connect login. The token still has to prove that user: the provider checks its principal
+     * claim against {@code user}. A {@code null} user is the same as {@link #ofBearer(String,
+     * AuthChannel, String)}.
+     */
+    public static AuthCredentials ofBearer(String user, String token, AuthChannel channel, String host) {
+        return new AuthCredentials(user, token.getBytes(StandardCharsets.UTF_8),
                 AuthCredentialKind.BEARER_TOKEN, channel, host);
     }
 
