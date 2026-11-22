@@ -740,7 +740,7 @@ createMaterializedViewStatement
     ;
 
 mvPartitionExprs:
-    primaryExpression
+    primaryExpression (',' primaryExpression)*
     | '(' primaryExpression (',' primaryExpression)* ')'
     ;
 
