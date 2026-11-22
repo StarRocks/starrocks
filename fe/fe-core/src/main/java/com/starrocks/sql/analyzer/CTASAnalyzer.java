@@ -15,11 +15,9 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -33,7 +31,6 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.TableRef;
-import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.parser.ParsingException;
@@ -76,15 +73,10 @@ public class CTASAnalyzer {
             }
         }
 
-        boolean isPKTable = false;
         KeysDesc keysDesc = createTableStmt.getKeysDesc();
-        if (keysDesc != null) {
-            KeysType keysType = keysDesc.getKeysType();
-            if (keysType == KeysType.PRIMARY_KEYS) {
-                isPKTable = true;
-            } else if (keysType != KeysType.DUP_KEYS) {
-                throw new SemanticException("CTAS does not support %s table", keysDesc.getKeysType().toString());
-            }
+        if (keysDesc != null && keysDesc.getKeysType() != KeysType.PRIMARY_KEYS
+                && keysDesc.getKeysType() != KeysType.DUP_KEYS) {
+            throw new SemanticException("CTAS does not support %s table", keysDesc.getKeysType().toString());
         }
 
         TableRef tableRef = createTableStmt.getTableRef();
@@ -95,9 +87,6 @@ public class CTASAnalyzer {
         createTableStmt.setTableRef(normalizedTableRef);
         TableName tableNameObject = TableName.fromTableRef(normalizedTableRef);
         CreateTableAnalyzer.analyzeEngineName(createTableStmt, tableNameObject.getCatalog());
-        if (Table.TableType.PAIMON.name().equalsIgnoreCase(createTableStmt.getEngineName())) {
-            throw new SemanticException("Paimon CREATE TABLE AS SELECT is not supported");
-        }
 
         // Recursive CTE execution rewrites and analyzes the same CTAS AST again. Preserve the columns
         // inferred from the original query instead of appending columns derived from the rewritten query.
@@ -105,33 +94,20 @@ public class CTASAnalyzer {
             for (int i = 0; i < allFields.size(); i++) {
                 Type type = AnalyzerUtils.transformTableColumnType(allFields.get(i).getType(),
                         createTableStmt.isOlapEngine(), /* preferStringForVarchar */ false);
-                Expr originExpression = allFields.get(i).getOriginExpression();
+                // A nullable SELECT expression implies nullability without declaring NULL on the target column.
+                Boolean allowNull = allFields.get(i).getOriginExpression().isNullable() ? null : Boolean.FALSE;
                 ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
-                        null, null, originExpression.isNullable(), ColumnDef.DefaultValueDef.NOT_SET, "");
-                if (isPKTable && keysDesc.containsCol(finalColumnNames.get(i))) {
-                    columnDef.setAllowNull(false);
-                }
+                        null, null, allowNull, ColumnDef.DefaultValueDef.NOT_SET, "");
                 createTableStmt.addColumnDef(columnDef);
             }
         }
 
-        // For replication_num, The behavior is the same as creating a table
-        int defaultReplicationNum = RunMode.defaultReplicationNum();
-
-        Map<String, String> stmtProperties = createTableStmt.getProperties();
-        if (null == stmtProperties) {
-            Map<String, String> properties = Maps.newHashMap();
-            properties.put("replication_num", String.valueOf(defaultReplicationNum));
-            createTableStmt.setProperties(properties);
-        } else if (!stmtProperties.containsKey("replication_num")) {
-            stmtProperties.put("replication_num", String.valueOf(defaultReplicationNum));
-        }
+        CreateTableAnalyzer.applyCtasDefaultProperties(createTableStmt);
 
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
         List<ColumnDef> columnDefs = createTableStmt.getColumnDefs();
 
-        if (partitionDesc instanceof ExpressionPartitionDesc) {
-            ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
+        if (createTableStmt.isOlapEngine() && partitionDesc instanceof ExpressionPartitionDesc expressionPartitionDesc) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expressionPartitionDesc.getExpr();
             AnalyzerUtils.checkAndExtractPartitionCol(functionCallExpr, columnDefs);
             String currentGranularity = null;

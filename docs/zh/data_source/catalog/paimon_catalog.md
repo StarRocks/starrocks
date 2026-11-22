@@ -25,7 +25,7 @@ Paimon catalog 是一种 external catalog，可以让您在不进行数据导入
 
 ## 使用注意事项
 
-Paimon catalog 支持查询数据、创建和删除 Paimon 数据库与表，以及通过 INSERT INTO 和 INSERT OVERWRITE 写入数据。不支持 UPDATE、DELETE、CREATE TABLE LIKE 和 CREATE TABLE AS SELECT。
+Paimon catalog 支持查询数据、创建和删除 Paimon 数据库与表，以及通过 INSERT INTO、INSERT OVERWRITE 和 CREATE TABLE AS SELECT 写入数据。不支持 UPDATE、DELETE 和 CREATE TABLE LIKE。
 
 ## Paimon to StarRocks data types
 
@@ -792,7 +792,19 @@ PROPERTIES (
 
 - 不支持 `DISTRIBUTED BY`、`ORDER BY`、`ROLLUP`、生成列、聚合列和 `AUTO_INCREMENT`。
 - 不支持非 NULL 的列默认值。
-- 不支持 `CREATE TABLE LIKE`、`CREATE TABLE AS SELECT`，也不支持通过 `UPDATE`、`DELETE` 写入数据。
+- 不支持 `CREATE TABLE LIKE`，也不支持通过 `UPDATE`、`DELETE` 写入数据。
+
+### CREATE TABLE AS SELECT
+
+[CREATE TABLE AS SELECT](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 从查询推导目标列，创建 Paimon 表，再按 `INSERT INTO` 的规则写入查询结果。需要分区列、主键或表属性时，请在语句中声明。
+
+```SQL
+CREATE TABLE paimon_catalog.write_db.orders_copy
+PROPERTIES ("bucket" = "-1", "file.format" = "parquet")
+AS SELECT id, amount FROM paimon_catalog.write_db.orders;
+```
+
+建表和发布快照分两步进行。如果建表成功后写入失败，StarRocks 会尝试删除目标表。使用 `IF NOT EXISTS` 时，已有的目标表保持原样。请在显式事务之外执行 Paimon CTAS。
 
 ### DROP TABLE
 

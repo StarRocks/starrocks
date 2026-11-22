@@ -336,3 +336,7 @@ primary-key data. Every case has a `CLEANUP` block for the objects it creates.
 
 `test_paimon_insert_overwrite` covers full, static partition, and dynamic
 partition overwrites, including empty input and independent JNI readback.
+
+`test_paimon_ctas` uses the same temporary warehouse helper and checks append
+and primary-key targets, empty input, `IF NOT EXISTS`, and that a write failure
+triggers removal of the newly created target table.

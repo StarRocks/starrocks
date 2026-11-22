@@ -358,6 +358,17 @@ public class CTASAnalyzerTest {
     }
 
     @Test
+    public void testCtasInfersNotNullForPrimaryKeyFromNullableExpression() throws Exception {
+        String sql = "CREATE TABLE ctas_nullable_pk PRIMARY KEY (id) "
+                + "AS SELECT CAST(NULL AS INT) AS id, CAST(NULL AS INT) AS payload";
+        CreateTableAsSelectStmt stmt =
+                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        List<ColumnDef> columns = stmt.getCreateTableStmt().getColumnDefs();
+        Assertions.assertFalse(columns.get(0).isAllowNull());
+        Assertions.assertTrue(columns.get(1).isAllowNull());
+    }
+
+    @Test
     public void testCTASView() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "CREATE TABLE tbl as select vc1,vc2 from v1";

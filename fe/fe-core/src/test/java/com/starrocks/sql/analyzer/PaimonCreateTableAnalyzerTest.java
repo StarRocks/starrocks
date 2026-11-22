@@ -289,14 +289,36 @@ public class PaimonCreateTableAnalyzerTest {
     }
 
     @Test
-    public void testPaimonCtasIsRejectedBeforeCreatingATable() {
+    public void testCtasPreservesNullablePartitionAndPaimonDefaults() {
         for (String engine : List.of("", "engine=paimon")) {
             CreateTableAsSelectStmt ctas = (CreateTableAsSelectStmt) SqlParser.parse(
-                    "create table paimon_ddl.db.t " + engine + " as select 1 as id", 0L).get(0);
-            SemanticException error = Assertions.assertThrows(SemanticException.class,
-                    () -> CTASAnalyzer.analyze(ctas, context));
-            Assertions.assertTrue(error.getMessage().contains("Paimon CREATE TABLE AS SELECT is not supported"));
-            Assertions.assertTrue(ctas.getCreateTableStmt().getColumnDefs().isEmpty());
+                    "create table paimon_ddl.db.t " + engine + " partition by (dt)"
+                            + " as select 1 as id, cast(null as date) as dt", 0L).get(0);
+            CTASAnalyzer.analyze(ctas, context);
+            CreateTableStmt stmt = ctas.getCreateTableStmt();
+            Assertions.assertEquals("paimon", stmt.getEngineName());
+            Assertions.assertTrue(stmt.getProperties() == null || stmt.getProperties().isEmpty());
+            Assertions.assertNull(stmt.getDistributionDesc());
+            Schema schema = PaimonTableSchemaConverter.toSchema(stmt);
+            Assertions.assertEquals(List.of("dt"), schema.partitionKeys());
+            Assertions.assertFalse(schema.fields().get(0).type().isNullable());
+            Assertions.assertTrue(schema.fields().get(1).type().isNullable());
+        }
+    }
+
+    @Test
+    public void testCtasInfersNullabilityForBothPrimaryKeyDeclarations() {
+        for (String keys : List.of("primary key (ID) properties ('bucket'='2')",
+                "properties ('primary-key'='ID', 'bucket'='2')")) {
+            CreateTableAsSelectStmt ctas = (CreateTableAsSelectStmt) SqlParser.parse(
+                    "create table paimon_ddl.db.t " + keys
+                            + " as select cast(null as varchar(9)) as payload, cast(null as int) as id", 0L).get(0);
+            CTASAnalyzer.analyze(ctas, context);
+            Schema schema = PaimonTableSchemaConverter.toSchema(ctas.getCreateTableStmt());
+            Assertions.assertEquals(List.of("id"), schema.primaryKeys());
+            Assertions.assertTrue(schema.fields().get(0).type().isNullable());
+            Assertions.assertFalse(schema.fields().get(1).type().isNullable());
+            Assertions.assertFalse(schema.options().containsKey("replication_num"));
         }
     }
 
