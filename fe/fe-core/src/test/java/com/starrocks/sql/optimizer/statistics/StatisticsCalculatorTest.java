@@ -553,7 +553,7 @@ public class StatisticsCalculatorTest {
         new MockUp<MetadataMgr>() {
             @Mock
             public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator,
-                    Column> columns) {
+                    Column> columns, boolean queryTriggerAnalyzeEnabled) {
                 Statistics.Builder builder = Statistics.builder();
                 icebergScanOperator.getOutputColumns().forEach(col ->
                         builder.addColumnStatistic(col,
@@ -710,6 +710,75 @@ public class StatisticsCalculatorTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testLogicalIcebergTableScanCapturesAnalyzedStatsToDump() {
+        // A query dump records the per-column ANALYZE row counts and the iceberg format version of an external table
+        // planned from ANALYZE statistics, so replay can reproduce the scan row count and V3-only rewrites.
+        Table icebergTable = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "iceberg0", "partitioned_db", "t1");
+        Map<ColumnRefOperator, Column> refToColumn = Maps.newHashMap();
+        Map<Column, ColumnRefOperator> columnToRef = Maps.newHashMap();
+        List<Column> columns = icebergTable.getColumns();
+        for (int i = 0; i < columns.size(); i++) {
+            ColumnRefOperator ref = new ColumnRefOperator(i, columns.get(i).getType(), columns.get(i).getName(), true);
+            refToColumn.put(ref, columns.get(i));
+            columnToRef.put(columns.get(i), ref);
+        }
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator,
+                    Column> cols, boolean queryTriggerAnalyzeEnabled) {
+                Statistics.Builder builder = Statistics.builder();
+                cols.keySet().forEach(col -> builder.addColumnStatistic(col, new ColumnStatistic(0, 100, 0.0, 5.0, 100)));
+                return builder.setOutputRowCount(100).build();
+            }
+        };
+        String analyzed = columns.get(0).getName();
+        new MockUp<CachedStatisticStorage>() {
+            @Mock
+            public List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> cols,
+                                                                               boolean queryTriggerAnalyzeEnabled) {
+                return cols.stream().map(c -> c.equals(analyzed)
+                        ? new ConnectorTableColumnStats(new ColumnStatistic(0, 100, 0.0, 5.0, 100), 3612L, "")
+                        : ConnectorTableColumnStats.unknown()).collect(Collectors.toList());
+            }
+        };
+
+        DumpInfo previous = connectContext.getDumpInfo();
+        try {
+            QueryDumpInfo dumpInfo = new QueryDumpInfo(connectContext);
+            // the analyzer registers every table of a dumped query
+            dumpInfo.addTable("partitioned_db", icebergTable);
+            connectContext.setDumpInfo(dumpInfo);
+            estimateIcebergScan(icebergTable, refToColumn, columnToRef);
+            Assertions.assertEquals(Map.of("partitioned_db.t1", Map.of(analyzed, 3612L)),
+                    dumpInfo.getExternalColumnRowCountMap());
+            Assertions.assertEquals(1, dumpInfo.getExternalTableFormatVersionMap().size());
+
+            // a dump info that does not keep these sections, and no dump at all, plan the same way
+            connectContext.setDumpInfo(new MockDumpInfo());
+            estimateIcebergScan(icebergTable, refToColumn, columnToRef);
+            connectContext.setDumpInfo(null);
+            estimateIcebergScan(icebergTable, refToColumn, columnToRef);
+        } finally {
+            connectContext.setDumpInfo(previous);
+        }
+    }
+
+    private void estimateIcebergScan(Table icebergTable, Map<ColumnRefOperator, Column> refToColumn,
+                                     Map<Column, ColumnRefOperator> columnToRef) {
+        LogicalIcebergScanOperator scan = new LogicalIcebergScanOperator(icebergTable, refToColumn, columnToRef, -1,
+                null, TvrTableSnapshot.empty());
+        GroupExpression groupExpression = new GroupExpression(scan, Lists.newArrayList());
+        groupExpression.setGroup(new Group(0));
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+        new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+        Assertions.assertEquals(100, expressionContext.getStatistics().getOutputRowCount(), 0.001);
+    }
+
+    @Test
+>>>>>>> 0f1ce94 ([BugFix] Do not queue a query-triggered analyze from the authorization check's optimization (#83236))
     public void testLogicalOlapTableEmptyPartition() {
         ColumnRefOperator idDate = columnRefFactory.create("id_date", DateType.DATE, true);
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
