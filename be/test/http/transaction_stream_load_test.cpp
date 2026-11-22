@@ -1133,6 +1133,191 @@ TEST_F(TransactionStreamLoadActionTest, on_header_invalid_envelope) {
     ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Unknown envelope type: custom"));
 }
 
+<<<<<<< HEAD
+=======
+// fill_default_on_absent_key is parsed out of the header on the transaction path too. Both bool
+// spellings are accepted case insensitively, and anything else is rejected rather than guessed at.
+TEST_F(TransactionStreamLoadActionTest, on_header_fill_default_on_absent_key_true) {
+    TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
+    auto ctx = new StreamLoadContext(_env.load_stream_mgr());
+    ctx->ref();
+    ctx->db = "db";
+    ctx->table = "tbl";
+    ctx->label = "fill_default_true";
+    ctx->body_sink = std::make_shared<StreamLoadPipe>();
+    bool remove_from_stream_context_mgr = false;
+    DeferOp defer([&]() {
+        if (remove_from_stream_context_mgr) {
+            _env.stream_context_mgr()->remove(ctx->label);
+        }
+        if (ctx->unref()) {
+            delete ctx;
+        }
+    });
+    ASSERT_OK((_env.stream_context_mgr())->put(ctx->label, ctx));
+    remove_from_stream_context_mgr = true;
+
+    HttpRequest request(_evhttp_req);
+    request.set_handler(&action);
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "3");
+    request._headers.emplace(HTTP_DB_KEY, ctx->db);
+    request._headers.emplace(HTTP_TABLE_KEY, ctx->table);
+    request._headers.emplace(HTTP_LABEL_KEY, ctx->label);
+    request._headers.emplace(HTTP_FORMAT_KEY, "json");
+    request._headers.emplace(HTTP_FILL_DEFAULT_ON_ABSENT_KEY, "true");
+
+    ASSERT_EQ(0, action.on_header(&request));
+}
+
+TEST_F(TransactionStreamLoadActionTest, on_header_fill_default_on_absent_key_false) {
+    TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
+    auto ctx = new StreamLoadContext(_env.load_stream_mgr());
+    ctx->ref();
+    ctx->db = "db";
+    ctx->table = "tbl";
+    ctx->label = "fill_default_false";
+    ctx->body_sink = std::make_shared<StreamLoadPipe>();
+    bool remove_from_stream_context_mgr = false;
+    DeferOp defer([&]() {
+        if (remove_from_stream_context_mgr) {
+            _env.stream_context_mgr()->remove(ctx->label);
+        }
+        if (ctx->unref()) {
+            delete ctx;
+        }
+    });
+    ASSERT_OK((_env.stream_context_mgr())->put(ctx->label, ctx));
+    remove_from_stream_context_mgr = true;
+
+    HttpRequest request(_evhttp_req);
+    request.set_handler(&action);
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "3");
+    request._headers.emplace(HTTP_DB_KEY, ctx->db);
+    request._headers.emplace(HTTP_TABLE_KEY, ctx->table);
+    request._headers.emplace(HTTP_LABEL_KEY, ctx->label);
+    request._headers.emplace(HTTP_FORMAT_KEY, "json");
+    request._headers.emplace(HTTP_FILL_DEFAULT_ON_ABSENT_KEY, "False");
+
+    ASSERT_EQ(0, action.on_header(&request));
+}
+
+TEST_F(TransactionStreamLoadActionTest, on_header_invalid_fill_default_on_absent_key) {
+    TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
+    auto ctx = new StreamLoadContext(_env.load_stream_mgr());
+    ctx->ref();
+    ctx->db = "db";
+    ctx->table = "tbl";
+    ctx->label = "invalid_fill_default";
+    ctx->body_sink = std::make_shared<StreamLoadPipe>();
+    bool remove_from_stream_context_mgr = false;
+    DeferOp defer([&]() {
+        if (remove_from_stream_context_mgr) {
+            _env.stream_context_mgr()->remove(ctx->label);
+        }
+        if (ctx->unref()) {
+            delete ctx;
+        }
+    });
+    ASSERT_OK((_env.stream_context_mgr())->put(ctx->label, ctx));
+    remove_from_stream_context_mgr = true;
+
+    HttpRequest request(_evhttp_req);
+    request.set_handler(&action);
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "3");
+    request._headers.emplace(HTTP_DB_KEY, ctx->db);
+    request._headers.emplace(HTTP_TABLE_KEY, ctx->table);
+    request._headers.emplace(HTTP_LABEL_KEY, ctx->label);
+    request._headers.emplace(HTTP_FORMAT_KEY, "json");
+    request._headers.emplace(HTTP_FILL_DEFAULT_ON_ABSENT_KEY, "yes");
+
+    ASSERT_EQ(-1, action.on_header(&request));
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("INVALID_ARGUMENT", doc["Status"].GetString());
+    ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Invalid fill_default_on_absent_key format"));
+}
+
+// log_rejected_record_num is parsed on the transaction path as on the streaming path, and the plan request carries it
+// to the FE. Without it the FE plans the load with 0 and the compute nodes record none of its rejected rows.
+TEST_F(TransactionStreamLoadActionTest, on_header_log_rejected_record_num) {
+    struct Case {
+        const char* value; // nullptr leaves the header out of the request
+        bool expect_ok;
+        bool expect_set;
+        int64_t expect_value;
+        const char* expect_message; // a substring of "Message" when !expect_ok ("Status" is then INVALID_ARGUMENT)
+    };
+    const Case test_cases[] = {
+            {nullptr, true, false, 0, nullptr},
+            {"-1", true, true, -1, nullptr},
+            {"0", true, true, 0, nullptr},
+            {"10", true, true, 10, nullptr},
+            {"-2", false, false, 0, "log_rejected_record_num must be equal or greater than -1"},
+            {"abc", false, false, 0, "Invalid parameter log_rejected_record_num"},
+    };
+    for (const auto& tc : test_cases) {
+        const std::string value = tc.value == nullptr ? "<none>" : tc.value;
+        k_response_str = "";
+        TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
+        auto ctx = new StreamLoadContext(_env.load_stream_mgr());
+        ctx->ref();
+        ctx->db = "db";
+        ctx->table = "tbl";
+        ctx->label = "log_rejected_record_num";
+        ctx->body_sink = std::make_shared<StreamLoadPipe>();
+        bool remove_from_stream_context_mgr = false;
+        DeferOp defer([&]() {
+            if (remove_from_stream_context_mgr) {
+                _env.stream_context_mgr()->remove(ctx->label);
+            }
+            if (ctx->unref()) {
+                delete ctx;
+            }
+        });
+        ASSERT_OK((_env.stream_context_mgr())->put(ctx->label, ctx));
+        remove_from_stream_context_mgr = true;
+
+        HttpRequest request(_evhttp_req);
+        request.set_handler(&action);
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "3");
+        request._headers.emplace(HTTP_DB_KEY, ctx->db);
+        request._headers.emplace(HTTP_TABLE_KEY, ctx->table);
+        request._headers.emplace(HTTP_LABEL_KEY, ctx->label);
+        request._headers.emplace(HTTP_FORMAT_KEY, "json");
+        if (tc.value != nullptr) {
+            request._headers.emplace(HTTP_LOG_REJECTED_RECORD_NUM, tc.value);
+        }
+
+        if (!tc.expect_ok) {
+            ASSERT_EQ(-1, action.on_header(&request)) << value;
+            rapidjson::Document doc;
+            doc.Parse(k_response_str.c_str());
+            ASSERT_STREQ("INVALID_ARGUMENT", doc["Status"].GetString()) << value;
+            ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), tc.expect_message))
+                    << value << " -> " << doc["Message"].GetString();
+            continue;
+        }
+
+        ASSERT_EQ(0, action.on_header(&request)) << value << " -> " << k_response_str;
+        // Releases the context lock and sends the reply, as the real request flow does.
+        action.handle(&request);
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("OK", doc["Status"].GetString()) << value << " -> " << k_response_str;
+        // _exec_plan_fragment caches on the context the plan request it sends to the FE.
+        EXPECT_EQ(tc.expect_set, ctx->request.__isset.log_rejected_record_num) << value;
+        if (tc.expect_set) {
+            EXPECT_EQ(tc.expect_value, ctx->request.log_rejected_record_num) << value;
+        }
+    }
+}
+
+>>>>>>> 744d3776386... [BugFix][RB-1825] Record rejected rows of merge commit and transaction stream loads (#70647)
 TEST_F(TransactionStreamLoadActionTest, release_resource_for_not_handle) {
     TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
     auto ctx = new StreamLoadContext(_env.load_stream_mgr());

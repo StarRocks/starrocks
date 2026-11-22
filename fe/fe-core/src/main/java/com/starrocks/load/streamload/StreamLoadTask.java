@@ -924,6 +924,13 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         if (table == null) {
             getTable();
         }
+        // The compute nodes record rejected rows only when the plan's query options carry log_rejected_record_num,
+        // and the coordinator builds those options from this task's session (SessionVariable#toThrift). A request
+        // that sets it, 0 included, wins; one that does not keeps the session's value, which a new session takes from
+        // the global one.
+        if (streamLoadInfo.isLogRejectedRecordNumSet()) {
+            context.getSessionVariable().setLogRejectedRecordNum(streamLoadInfo.getLogRejectedRecordNum());
+        }
         LoadPlanner loadPlanner = new LoadPlanner(id, loadId, txnId, dbId, dbName, table,
                 streamLoadInfo.isStrictMode(), streamLoadInfo.getTimezone(), streamLoadInfo.isPartialUpdate(),
                 context, null, streamLoadInfo.getLoadMemLimit(), streamLoadInfo.getExecMemLimit(),
