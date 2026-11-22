@@ -564,7 +564,7 @@ public class StatisticsCalculatorTest {
         new MockUp<MetadataMgr>() {
             @Mock
             public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator,
-                    Column> columns) {
+                    Column> columns, boolean queryTriggerAnalyzeEnabled) {
                 Statistics.Builder builder = Statistics.builder();
                 icebergScanOperator.getOutputColumns().forEach(col ->
                         builder.addColumnStatistic(col,
@@ -737,7 +737,7 @@ public class StatisticsCalculatorTest {
         new MockUp<MetadataMgr>() {
             @Mock
             public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator,
-                    Column> cols) {
+                    Column> cols, boolean queryTriggerAnalyzeEnabled) {
                 Statistics.Builder builder = Statistics.builder();
                 cols.keySet().forEach(col -> builder.addColumnStatistic(col, new ColumnStatistic(0, 100, 0.0, 5.0, 100)));
                 return builder.setOutputRowCount(100).build();
@@ -746,7 +746,8 @@ public class StatisticsCalculatorTest {
         String analyzed = columns.get(0).getName();
         new MockUp<CachedStatisticStorage>() {
             @Mock
-            public List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> cols) {
+            public List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> cols,
+                                                                               boolean queryTriggerAnalyzeEnabled) {
                 return cols.stream().map(c -> c.equals(analyzed)
                         ? new ConnectorTableColumnStats(new ColumnStatistic(0, 100, 0.0, 5.0, 100), 3612L, "")
                         : ConnectorTableColumnStats.unknown()).collect(Collectors.toList());
