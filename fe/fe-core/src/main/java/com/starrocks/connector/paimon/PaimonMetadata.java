@@ -82,6 +82,7 @@ import org.apache.paimon.catalog.DelegateCatalog;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.data.Timestamp;
+import org.apache.paimon.globalindex.GlobalIndexResult;
 import org.apache.paimon.metrics.Gauge;
 import org.apache.paimon.metrics.Metric;
 import org.apache.paimon.operation.metrics.ScanMetrics;
@@ -927,27 +928,26 @@ public class PaimonMetadata implements ConnectorMetadata {
         ConnectContext caller = ConnectContext.get();
         PaimonGlobalIndexMode mode = caller == null ? PaimonGlobalIndexMode.LOCAL
                 : caller.getSessionVariable().getPaimonGlobalIndexMode();
-        boolean distributed = mode == PaimonGlobalIndexMode.DISTRIBUTED;
+        boolean usesDistributedIndex = mode == PaimonGlobalIndexMode.AUTO || mode == PaimonGlobalIndexMode.DISTRIBUTED;
         Tracers.record(EXTERNAL, "PaimonGlobalIndex.Mode", mode.modeName());
         boolean indexEnabled = versionedPaimonTable instanceof FileStoreTable fileStore
                 && fileStore.coreOptions().globalIndexEnabled();
         if (mode != PaimonGlobalIndexMode.LOCAL) {
-            // OFF disables index lookups, including optimizer probes. DISTRIBUTED leaves
-            // evaluation to BE and must not repeat the lookup on FE after a failure.
-            // Explicit withGlobalIndexResult still works when automatic SDK evaluation is disabled.
+            // OFF, AUTO and DISTRIBUTED disable automatic SDK index evaluation, including in probes.
+            // AUTO and DISTRIBUTED can still provide an explicit bitmap evaluated by the BE.
             options.put("global-index.enabled", "false");
         }
         // Pin data without rewinding the resolved read schema after a schema-only change.
         org.apache.paimon.table.Table paimonNativeTable = versionedPaimonTable instanceof FileStoreTable fileStoreTable
                 ? fileStoreTable.copyWithoutTimeTravel(options) : versionedPaimonTable.copy(options);
 
-        boolean evaluateIndex = distributed && forScan && indexEnabled && DEFAULT_MAIN_BRANCH.equals(currentBranch)
+        boolean evaluateIndex = usesDistributedIndex && forScan && indexEnabled && DEFAULT_MAIN_BRANCH.equals(currentBranch)
                 && tvrVersionRange.start().isEmpty();
         PaimonSplitsInfo splitsInfo;
-        if (distributed && forScan) {
+        if (usesDistributedIndex && forScan) {
             // Final distributed scans must plan their own splits, including after an index fallback.
             // Reusing optimizer/statistics probe splits here would skip index evaluation.
-            splitsInfo = planSplits(paimonTable, paimonNativeTable, params, evaluateIndex, snapshotId, caller);
+            splitsInfo = planSplits(paimonTable, paimonNativeTable, params, mode, evaluateIndex, snapshotId, caller);
         } else {
             PredicateSearchKey filter = PredicateSearchKey.of(paimonTable.getCatalogDBName(),
                     paimonTable.getCatalogTableName(), params.copy());
@@ -961,7 +961,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                     fileStore == null ? -1 : fileStore.schema().timeMillis(),
                     List.copyOf(params.getFieldNames()), params.getLimit());
             splitsInfo = paimonSplits.computeIfAbsent(splitKey, unused ->
-                    planSplits(paimonTable, paimonNativeTable, params, false, snapshotId, caller));
+                    planSplits(paimonTable, paimonNativeTable, params, mode, false, snapshotId, caller));
         }
         remoteFileInfo.setFiles(ImmutableList.of(PaimonRemoteFileDesc.createPaimonRemoteFileDesc(splitsInfo)));
 
@@ -969,8 +969,8 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     private PaimonSplitsInfo planSplits(PaimonTable paimonTable, org.apache.paimon.table.Table paimonNativeTable,
-                                      GetRemoteFilesParams params, boolean evaluateIndex, long snapshotId,
-                                      ConnectContext caller) {
+                                       GetRemoteFilesParams params, PaimonGlobalIndexMode mode, boolean evaluateIndex,
+                                       long snapshotId, ConnectContext caller) {
         ReadBuilder readBuilder = paimonNativeTable.newReadBuilder();
         List<String> nativeFieldNames = paimonNativeTable.rowType().getFieldNames();
         int[] projected = params.getFieldNames().stream().mapToInt(nativeFieldNames::indexOf).toArray();
@@ -986,39 +986,78 @@ public class PaimonMetadata implements ConnectorMetadata {
         if (pruneManifestsByLimit) {
             readBuilder = readBuilder.withLimit((int) params.getLimit());
         }
-        InnerTableScan scan = (InnerTableScan) readBuilder.newScan();
+        PaimonMetricRegistry paimonMetricRegistry = new PaimonMetricRegistry();
+        List<Split> splits = null;
+        RuntimeException indexFailure = null;
         if (evaluateIndex && paimonNativeTable instanceof FileStoreTable fileStore) {
             SimpleExecutor.checkInternalQueryState(caller);
-            try (Timer ignored = Tracers.watchScope(EXTERNAL, "PaimonGlobalIndex.Evaluate")) {
-                PaimonGlobalIndexRequest request = PaimonGlobalIndexPlanner.request(fileStore, snapshotId,
-                        params.getPredicate(), ((PaimonScanRangeParams) params).getColumnNames());
-                if (request != null) {
-                    var result = new PaimonGlobalIndexCollectJob(paimonTable, request,
-                            PaimonGlobalIndexRequest.resultBudget()).collect(caller);
-                    scan.withGlobalIndexResult(result);
-                    Tracers.record(EXTERNAL, "PaimonGlobalIndex.Result", "applied");
+            try {
+                GlobalIndexResult result = evaluateGlobalIndex(
+                        paimonTable, fileStore, (PaimonScanRangeParams) params, snapshotId, caller);
+                if (result != null) {
+                    SimpleExecutor.checkInternalQueryState(caller);
+                    splits = planDataSplits(readBuilder, paimonMetricRegistry, result);
                 } else {
                     Tracers.record(EXTERNAL, "PaimonGlobalIndex.Result", "no supported indexed scalar predicate");
                 }
             } catch (RuntimeException e) {
+                if (mode != PaimonGlobalIndexMode.AUTO) {
+                    throw e;
+                }
                 if (caller.isStatementCancelled() || SimpleExecutor.remainingQueryTimeoutS(caller) <= 0) {
                     throw new StarRocksConnectorException("Paimon index evaluation cancelled or timed out", e);
                 }
+                indexFailure = e;
                 Tracers.record(EXTERNAL, "PaimonGlobalIndex.Fallback", String.valueOf(e.getMessage()));
-                // Keep the original predicate and plan data splits without index pruning.
                 LOG.debug("Paimon Global Index unavailable for {}.{}", paimonTable.getCatalogDBName(),
                         paimonTable.getCatalogTableName(), e);
             }
         }
-        if (evaluateIndex) {
-            // Discovery or result collection may have exhausted the parent budget, even without an exception.
-            SimpleExecutor.checkInternalQueryState(caller);
+        if (splits != null) {
+            Tracers.record(EXTERNAL, "PaimonGlobalIndex.Result", "applied");
+        } else {
+            if (indexFailure != null) {
+                paimonMetricRegistry = new PaimonMetricRegistry();
+            }
+            try {
+                if (evaluateIndex) {
+                    SimpleExecutor.checkInternalQueryState(caller);
+                }
+                // Each attempt builds a fresh scan. The SDK can retain the bitmap even if injection fails.
+                splits = planDataSplits(readBuilder, paimonMetricRegistry, null);
+            } catch (RuntimeException e) {
+                if (indexFailure != null && indexFailure != e) {
+                    e.addSuppressed(indexFailure);
+                }
+                throw e;
+            }
         }
-        PaimonMetricRegistry paimonMetricRegistry = new PaimonMetricRegistry();
-        List<Split> splits = scan.withMetricRegistry(paimonMetricRegistry).plan().splits();
         traceScanMetrics(paimonMetricRegistry, splits, paimonTable.getCatalogTableName(), predicates);
 
         return new PaimonSplitsInfo(predicates, splits, paimonNativeTable);
+    }
+
+    private static GlobalIndexResult evaluateGlobalIndex(PaimonTable paimonTable, FileStoreTable fileStore,
+                                                         PaimonScanRangeParams params, long snapshotId,
+                                                         ConnectContext caller) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "PaimonGlobalIndex.Evaluate")) {
+            PaimonGlobalIndexRequest request = PaimonGlobalIndexPlanner.request(
+                    fileStore, snapshotId, params.getPredicate(), params.getColumnNames());
+            if (request == null) {
+                return null;
+            }
+            return new PaimonGlobalIndexCollectJob(paimonTable, request,
+                    PaimonGlobalIndexRequest.resultBudget()).collect(caller);
+        }
+    }
+
+    private static List<Split> planDataSplits(ReadBuilder readBuilder, PaimonMetricRegistry metricRegistry,
+                                             GlobalIndexResult result) {
+        InnerTableScan scan = (InnerTableScan) readBuilder.newScan();
+        if (result != null) {
+            scan.withGlobalIndexResult(result);
+        }
+        return scan.withMetricRegistry(metricRegistry).plan().splits();
     }
 
     @Override

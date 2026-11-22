@@ -28,6 +28,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.proc.ExternalSchemaProcNode;
 import com.starrocks.common.proc.ProcResult;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
@@ -49,15 +50,21 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.KeyPartitionRef;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TruncateTablePartitionStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
@@ -92,6 +99,7 @@ import com.starrocks.type.StringType;
 import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -112,6 +120,7 @@ import org.apache.paimon.data.Timestamp;
 import org.apache.paimon.disk.IOManager;
 import org.apache.paimon.disk.IOManagerImpl;
 import org.apache.paimon.fs.Path;
+import org.apache.paimon.globalindex.DataEvolutionBatchScan;
 import org.apache.paimon.globalindex.GlobalIndexResult;
 import org.apache.paimon.globalindex.IndexedSplit;
 import org.apache.paimon.globalindex.sorted.SortedGlobalIndexBuilder;
@@ -157,11 +166,15 @@ import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.utils.InstantiationUtil;
 import org.apache.paimon.utils.JsonSerdeUtil;
+import org.apache.paimon.utils.RoaringNavigableMap64;
 import org.apache.paimon.utils.SerializationUtils;
 import org.apache.paimon.utils.SnapshotManager;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.nio.file.Files;
 import java.time.Instant;
@@ -172,11 +185,14 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 
 import static com.starrocks.catalog.Table.TableType.PAIMON_VIEW;
 import static com.starrocks.type.IntegerType.INT;
@@ -186,6 +202,7 @@ import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
 import static org.apache.paimon.stats.SimpleStats.EMPTY_STATS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -1103,6 +1120,7 @@ public class PaimonMetadataTest {
         java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_scalar_index_");
         Identifier identifier = Identifier.create("test_db", "indexed_table");
         ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.getSessionVariable().setPaimonGlobalIndexMode("local");
         context.setThreadLocalInfo();
         try (Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())))) {
             catalog.createDatabase(identifier.getDatabaseName(), true);
@@ -1181,11 +1199,195 @@ public class PaimonMetadataTest {
     }
 
     @Test
+    public void testGlobalIndexModeVariableSettings() throws Exception {
+        VariableMgr variables = new VariableMgr();
+        SessionVariable session = variables.newSessionVariable();
+        assertEquals(PaimonGlobalIndexMode.AUTO, session.getPaimonGlobalIndexMode());
+        for (String mode : List.of("OFF", "LOCAL", "AUTO", "DisTributed")) {
+            SystemVariable variable = new SystemVariable(SetType.SESSION,
+                    SessionVariable.PAIMON_GLOBAL_INDEX_MODE, new StringLiteral(mode));
+            SetStmtAnalyzer.analyze(new SetStmt(List.of(variable)), connectContext);
+            variables.setSystemVariable(session, variable, false);
+            assertEquals(PaimonGlobalIndexMode.fromName(mode), session.getPaimonGlobalIndexMode());
+        }
+        variables.applySessionVariable(Map.of(SessionVariable.PAIMON_GLOBAL_INDEX_MODE, "AuTo"), session);
+        assertEquals(PaimonGlobalIndexMode.AUTO, session.getPaimonGlobalIndexMode());
+        assertThrows(com.starrocks.common.DdlException.class, () -> variables.applySessionVariable(
+                Map.of(SessionVariable.PAIMON_GLOBAL_INDEX_MODE, "invalid"), session));
+        assertEquals(PaimonGlobalIndexMode.AUTO, session.getPaimonGlobalIndexMode());
+        session.setPaimonGlobalIndexMode("local");
+        SystemVariable reset = new SystemVariable(SetType.SESSION, SessionVariable.PAIMON_GLOBAL_INDEX_MODE, null);
+        SetStmtAnalyzer.analyze(new SetStmt(List.of(reset)), connectContext);
+        variables.setSystemVariable(session, reset, false);
+        assertEquals(PaimonGlobalIndexMode.AUTO, session.getPaimonGlobalIndexMode());
+    }
+
+    private static Stream<Arguments> globalIndexPlanningCases() {
+        return Stream.of("auto", "distributed").flatMap(mode ->
+                Stream.of("collection", "attachment", "planning", "fallback", "empty", "success",
+                        "timeout", "cancelled", "unsupported").map(scenario -> Arguments.of(mode, scenario)));
+    }
+
+    @ParameterizedTest
+    @MethodSource("globalIndexPlanningCases")
+    public void testGlobalIndexFailurePolicy(String mode, String failure) throws Exception {
+        java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_index_failure_");
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.setQueryId(java.util.UUID.randomUUID());
+        context.getSessionVariable().setPaimonGlobalIndexMode(mode);
+        context.getSessionVariable().setQueryTimeoutS(30);
+        context.setStartTime();
+        context.setThreadLocalInfo();
+        RuntimeException indexFailure = new IllegalStateException("test index " + failure);
+        RuntimeException ordinaryFailure = new IllegalStateException("test ordinary planning failure");
+        AtomicInteger collections = new AtomicInteger();
+        AtomicBoolean injectFailure = new AtomicBoolean();
+        List<DataEvolutionBatchScan> scans = new ArrayList<>();
+        Map<DataEvolutionBatchScan, GlobalIndexResult> attached = new IdentityHashMap<>();
+        new MockUp<PaimonGlobalIndexPlanner>() {
+            @Mock
+            public PaimonGlobalIndexRequest request(Invocation invocation, FileStoreTable table, long snapshotId,
+                                                   ScalarOperator predicate, Map<Integer, String> columnNames) {
+                return failure.equals("unsupported") ? null : invocation.proceed(table, snapshotId, predicate, columnNames);
+            }
+        };
+        new MockUp<PaimonGlobalIndexCollectJob>() {
+            @Mock
+            public GlobalIndexResult collect(ConnectContext caller) {
+                collections.incrementAndGet();
+                if (failure.equals("collection")) {
+                    throw indexFailure;
+                }
+                if (failure.equals("timeout")) {
+                    context.setStartTime(Instant.now().minusSeconds(31));
+                    throw indexFailure;
+                }
+                if (failure.equals("cancelled")) {
+                    context.setKilled();
+                    throw indexFailure;
+                }
+                return failure.equals("empty")
+                        ? GlobalIndexResult.create(new RoaringNavigableMap64())
+                        : GlobalIndexResult.fromRange(new org.apache.paimon.utils.Range(0, 0));
+            }
+        };
+        new MockUp<DataEvolutionBatchScan>() {
+            @Mock
+            public DataEvolutionBatchScan withGlobalIndexResult(Invocation invocation, GlobalIndexResult result) {
+                if (!injectFailure.get()) {
+                    return invocation.proceed(result);
+                }
+                DataEvolutionBatchScan scan = invocation.getInvokedInstance();
+                attached.put(scan, result);
+                DataEvolutionBatchScan updated = invocation.proceed(result);
+                if (failure.equals("attachment")) {
+                    // The SDK stores the bitmap before rejecting incompatible row ranges.
+                    throw indexFailure;
+                }
+                return updated;
+            }
+
+            @Mock
+            public TableScan.Plan plan(Invocation invocation) {
+                if (!injectFailure.get()) {
+                    return invocation.proceed();
+                }
+                DataEvolutionBatchScan scan = invocation.getInvokedInstance();
+                scans.add(scan);
+                if (attached.containsKey(scan) && (failure.equals("planning") || failure.equals("fallback"))) {
+                    throw indexFailure;
+                }
+                if (!attached.containsKey(scan) && failure.equals("fallback")) {
+                    throw ordinaryFailure;
+                }
+                return invocation.proceed();
+            }
+        };
+        try (Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())))) {
+            catalog.createDatabase("test_db", true);
+            createEmptyTable(catalog, "indexed_table", true);
+            Identifier identifier = Identifier.create("test_db", "indexed_table");
+            FileStoreTable nativeTable = (FileStoreTable) catalog.getTable(identifier);
+            writeRows(nativeTable, GenericRow.of(1, BinaryString.fromString("match")),
+                    GenericRow.of(2, BinaryString.fromString("residual")));
+            buildBtreeIndex((FileStoreTable) catalog.getTable(identifier), "id", tmpDir);
+            long snapshotId = catalog.getTable(identifier).latestSnapshot().orElseThrow().id();
+            PaimonMetadata metadata = new PaimonMetadata("paimon", new HdfsEnvironment(), catalog,
+                    new ConnectorProperties(ConnectorType.PAIMON));
+            PaimonTable table = (PaimonTable) metadata.getTable(context, "test_db", "indexed_table");
+            ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
+                    new ColumnRefOperator(1, IntegerType.INT, "id", true), ConstantOperator.createInt(1));
+            GetRemoteFilesParams params = new PaimonScanRangeParams(GetRemoteFilesParams.newBuilder()
+                    .setFieldNames(List.of("id", "payload")).setPredicate(predicate)
+                    .setTableVersionRange(TvrTableSnapshot.of(snapshotId)), Map.of(1, "id", 2, "payload"));
+            Tracers.register(context);
+            Tracers.init(Tracers.Mode.VARS, Tracers.Module.EXTERNAL, true, false);
+            injectFailure.set(true);
+            if (failure.equals("timeout") || failure.equals("cancelled")) {
+                RuntimeException error = assertThrows(RuntimeException.class, () -> metadata.getRemoteFiles(table, params));
+                if (mode.equals("distributed")) {
+                    assertSame(indexFailure, error);
+                } else {
+                    assertTrue(error.getMessage().contains(failure.equals("timeout") ? "timed out" : "cancelled"),
+                            error.getMessage());
+                    assertSame(indexFailure, error.getCause());
+                }
+                assertTrue(scans.isEmpty());
+            } else if (!List.of("empty", "success", "unsupported").contains(failure) && mode.equals("distributed")) {
+                assertSame(indexFailure, assertThrows(RuntimeException.class, () -> metadata.getRemoteFiles(table, params)));
+                assertEquals(failure.equals("planning") || failure.equals("fallback") ? 1 : 0, scans.size());
+            } else if (failure.equals("fallback")) {
+                RuntimeException error = assertThrows(RuntimeException.class, () -> metadata.getRemoteFiles(table, params));
+                assertSame(ordinaryFailure, error);
+                assertEquals(List.of(indexFailure), Arrays.asList(error.getSuppressed()));
+                assertEquals(2, scans.size());
+                assertNotSame(scans.get(0), scans.get(1));
+            } else {
+                PaimonSplitsInfo planned = ((PaimonRemoteFileDesc) metadata.getRemoteFiles(table, params)
+                        .get(0).getFiles().get(0)).getPaimonSplitsInfo();
+                assertEquals("false", planned.getNativeTable().options().get("global-index.enabled"));
+                assertEquals(String.valueOf(snapshotId), planned.getNativeTable().options().get("scan.snapshot-id"));
+                assertEquals(failure.equals("empty") ? List.of() : List.of(1),
+                        readIds((FileStoreTable) planned.getNativeTable(), planned));
+                if (failure.equals("planning")) {
+                    assertEquals(2, scans.size());
+                    assertNotSame(scans.get(0), scans.get(1));
+                } else {
+                    assertEquals(1, scans.size());
+                }
+                if (failure.equals("success")) {
+                    assertTrue(planned.getPaimonSplits().stream().allMatch(IndexedSplit.class::isInstance));
+                } else if (!failure.equals("empty")) {
+                    assertFalse(attached.containsKey(scans.get(scans.size() - 1)));
+                    assertTrue(planned.getPaimonSplits().stream().noneMatch(IndexedSplit.class::isInstance));
+                    context.getSessionVariable().setPaimonGlobalIndexMode("off");
+                    PaimonSplitsInfo baseline = ((PaimonRemoteFileDesc) metadata.getRemoteFiles(table, params)
+                            .get(0).getFiles().get(0)).getPaimonSplitsInfo();
+                    assertEquals(readIds((FileStoreTable) baseline.getNativeTable(), baseline),
+                            readIds((FileStoreTable) planned.getNativeTable(), planned));
+                }
+            }
+            assertEquals(failure.equals("unsupported") ? 0 : 1, collections.get(), mode + ": " + failure);
+            Map<String, Object> trace = new HashMap<>();
+            Tracers.getAllVars().forEach(var -> trace.put(var.getName(), var.getValue()));
+            boolean applied = failure.equals("success") || failure.equals("empty");
+            assertEquals(applied, "applied".equals(trace.get("PaimonGlobalIndex.Result")));
+            boolean fellBack = mode.equals("auto") && List.of("collection", "attachment", "planning", "fallback")
+                    .contains(failure);
+            assertEquals(fellBack ? indexFailure.getMessage() : null, trace.get("PaimonGlobalIndex.Fallback"));
+        } finally {
+            Tracers.close();
+            ConnectContext.remove();
+            FileUtils.deleteDirectory(tmpDir.toFile());
+        }
+    }
+
+    @Test
     public void testExpiredIndexDiscoveryDoesNotPlanFallback() throws Exception {
         java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_index_deadline_");
         ConnectContext context = UtFrameUtils.createDefaultCtx();
         context.setQueryId(java.util.UUID.randomUUID());
-        context.getSessionVariable().setPaimonGlobalIndexMode("distributed");
+        context.getSessionVariable().setPaimonGlobalIndexMode("auto");
         context.getSessionVariable().setQueryTimeoutS(30);
         context.setThreadLocalInfo();
         AtomicInteger discoveries = new AtomicInteger();
@@ -1229,12 +1431,12 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testDistributedFinalPlanningBypassesProbeAndFallbackSplits() throws Exception {
+    public void testAutoFinalPlanningBypassesProbeAndFallbackSplits() throws Exception {
         java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_distributed_splits_");
         Identifier identifier = Identifier.create("test_db", "indexed_table");
         ConnectContext context = UtFrameUtils.createDefaultCtx();
         context.setQueryId(java.util.UUID.randomUUID());
-        context.getSessionVariable().setPaimonGlobalIndexMode("distributed");
+        context.getSessionVariable().setPaimonGlobalIndexMode("auto");
         context.setThreadLocalInfo();
         try (Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())))) {
             catalog.createDatabase(identifier.getDatabaseName(), true);
@@ -1370,7 +1572,7 @@ public class PaimonMetadataTest {
             OptimizerContext optimizer = OptimizerFactory.mockContext(context, new ColumnRefFactory());
             for (boolean columnStatistics : List.of(false, true)) {
                 context.getSessionVariable().setEnablePaimonColumnStatistics(columnStatistics);
-                for (String mode : List.of("off", "local", "distributed")) {
+                for (String mode : List.of("off", "local", "auto", "distributed")) {
                     context.getSessionVariable().setPaimonGlobalIndexMode(mode);
                     for (TvrVersionRange version : List.of(devVersion, mainVersion, devVersion)) {
                         long expected = version.equals(devVersion) ? 3 : 1;
@@ -1490,7 +1692,7 @@ public class PaimonMetadataTest {
             GetRemoteFilesParams params = new PaimonScanRangeParams(GetRemoteFilesParams.newBuilder()
                     .setFieldNames(List.of("id", "v")).setPredicate(predicate).setLimit(-1)
                     .setTableVersionRange(TvrTableSnapshot.of(snapshotId)));
-            for (String mode : List.of("off", "local", "distributed")) {
+            for (String mode : List.of("off", "local", "auto", "distributed")) {
                 context.getSessionVariable().setPaimonGlobalIndexMode(mode);
                 PaimonSplitsInfo planned = ((PaimonRemoteFileDesc) schemaMetadata.getRemoteFiles(table, params)
                         .get(0).getFiles().get(0)).getPaimonSplitsInfo();
@@ -1512,7 +1714,7 @@ public class PaimonMetadataTest {
                 assertEquals(List.of(2, 3), readIds(bound, planned));
                 PaimonSplitsInfo repeated = ((PaimonRemoteFileDesc) schemaMetadata.getRemoteFiles(table, params)
                         .get(0).getFiles().get(0)).getPaimonSplitsInfo();
-                if ("distributed".equals(mode)) {
+                if ("auto".equals(mode) || "distributed".equals(mode)) {
                     assertNotSame(planned, repeated);
                 } else {
                     assertSame(planned, repeated);

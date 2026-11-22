@@ -16,6 +16,7 @@ package com.starrocks.connector.paimon;
 
 /** Where Paimon Global Index predicates are evaluated during scan planning. */
 public enum PaimonGlobalIndexMode {
+    AUTO("auto"),
     OFF("off"),
     LOCAL("local"),
     DISTRIBUTED("distributed");
@@ -33,7 +34,7 @@ public enum PaimonGlobalIndexMode {
             }
         }
         throw new IllegalArgumentException("Unknown Paimon Global Index mode: " + modeName
-                + ", only support off, local, distributed");
+                + ", only support auto, off, local, distributed");
     }
 
     public String modeName() {
