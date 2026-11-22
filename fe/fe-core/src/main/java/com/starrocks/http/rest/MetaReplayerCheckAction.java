@@ -35,7 +35,6 @@
 package com.starrocks.http.rest;
 
 import com.starrocks.authorization.AccessDeniedException;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -64,8 +63,7 @@ public class MetaReplayerCheckAction extends RestBaseAction {
 
     @Override
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
-        UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
-        checkUserOwnsAdminRole(currentUser);
+        checkAdminRole(ConnectContext.get());
 
         Map<String, String> resultMap = GlobalStateMgr.getCurrentState().getMetaReplayState().getInfo();
 
