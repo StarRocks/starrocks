@@ -540,7 +540,7 @@ public class StatisticsCalculatorTest {
         new MockUp<MetadataMgr>() {
             @Mock
             public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator,
-                        Column> columns) {
+                        Column> columns, boolean queryTriggerAnalyzeEnabled) {
                 Statistics.Builder builder = Statistics.builder();
                 icebergScanOperator.getOutputColumns().forEach(col ->
                             builder.addColumnStatistic(col,
