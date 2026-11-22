@@ -372,7 +372,8 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
     }
 
     if (ctx->enable_batch_write) {
-        return Status::OK();
+        // Refused here already, before the body is received.
+        return check_merge_commit_skip_header(http_req->header(HTTP_FORMAT_KEY), http_req->header(HTTP_SKIP_HEADER));
     }
 
     // Check if the process is going to quit before beginning the transaction, to avoid
