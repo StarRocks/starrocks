@@ -123,6 +123,9 @@ public class ColumnPrivilege {
             // with no column to check, and so with no SELECT check at all. Keep such scans here.
             optimizerOptions.disableRule(RuleType.TF_CAST_TO_EMPTY);
             optimizerOptions.disableRule(RuleType.TF_ELIMINATE_LIMIT_ZERO);
+            // The statement is not authorized yet: looking up statistics here must not queue an analyze for
+            // its tables. The planning that follows a passed check queues it as usual.
+            optimizerOptions.setQueryTriggerAnalyzeEnabled(false);
             Optimizer optimizer =
                     OptimizerFactory.create(OptimizerFactory.initContext(context, columnRefFactory, optimizerOptions));
             optimizedPlan = optimizer.optimize(logicalPlan.getRoot(),

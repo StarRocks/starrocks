@@ -219,6 +219,12 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
 
     @Override
     public List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> columns) {
+        return getConnectorTableStatistics(table, columns, true);
+    }
+
+    @Override
+    public List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> columns,
+                                                                       boolean queryTriggerAnalyzeEnabled) {
         Preconditions.checkState(table != null);
 
         // get Statistics Table column info, just return default column statistics
@@ -242,13 +248,16 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             SessionVariable sessionVariable = ConnectContext.get() == null ?
                     GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable() :
                     ConnectContext.get().getSessionVariable();
+            // Decided here, on the query's thread: the callback runs on the refresher's, which has no
+            // ConnectContext, and possibly after the statement has moved on to its next optimization.
+            boolean triggerAnalyze = queryTriggerAnalyzeEnabled && sessionVariable.isEnableQueryTriggerAnalyze();
             result.whenCompleteAsync((res, e) -> {
                 if (e != null) {
                     LOG.warn("Get connector table column statistics filed, exception: ", e);
                     return;
                 }
                 // Followers too: the manager forwards their requests to the leader, which runs the analyze.
-                if (sessionVariable.isEnableQueryTriggerAnalyze()) {
+                if (triggerAnalyze) {
                     GlobalStateMgr.getCurrentState().getConnectorTableTriggerAnalyzeMgr().checkAndUpdateTableStats(res);
                 }
             }, statsCacheRefresherExecutor);

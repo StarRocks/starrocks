@@ -21,6 +21,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerOptions;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -36,6 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -95,12 +97,13 @@ public class MetadataMgrWidenColumnRangesTest {
         Statistics analyzed = Statistics.builder().setOutputRowCount(1000)
                 .addColumnStatistic(ts, stat(100, 200))
                 .setStatsSource(Statistics.StatsSource.ANALYZE).build();
-        doReturn(analyzed).when(metadataMgr).getTableStatisticsFromInternalStatistics(any(), any());
+        doReturn(analyzed).when(metadataMgr).getTableStatisticsFromInternalStatistics(any(), any(), anyBoolean());
         ConnectorMetadata connector = mock(ConnectorMetadata.class);
         TvrTableSnapshot version = TvrTableSnapshot.of(7L);
         when(connector.getPartitionSourceColumnRanges(table, version)).thenReturn(Map.of("ts", Pair.create(50.0, 300.0)));
         doReturn(Optional.of(connector)).when(metadataMgr).getOptionalMetadata("iceberg_catalog");
         OptimizerContext session = mock(OptimizerContext.class);
+        when(session.getOptimizerOptions()).thenReturn(new OptimizerOptions());
 
         boolean runningUnitTest = FeConstants.runningUnitTest;
         FeConstants.runningUnitTest = false;
