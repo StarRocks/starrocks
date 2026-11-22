@@ -249,12 +249,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                     LOG.warn("Get connector table column statistics filed, exception: ", e);
                     return;
                 }
-<<<<<<< HEAD
-                if (sessionVariable.isEnableQueryTriggerAnalyze() && GlobalStateMgr.getCurrentState().isLeader()) {
-=======
-                // Followers too: the manager forwards their requests to the leader, which runs the analyze.
-                if (triggerAnalyze) {
->>>>>>> 0f1ce94 ([BugFix] Do not queue a query-triggered analyze from the authorization check's optimization (#83236))
+                if (triggerAnalyze && GlobalStateMgr.getCurrentState().isLeader()) {
                     GlobalStateMgr.getCurrentState().getConnectorTableTriggerAnalyzeMgr().checkAndUpdateTableStats(res);
                 }
             }, statsCacheRefresherExecutor);
