@@ -749,32 +749,6 @@ public class MetadataMgr {
         return statistics.setStatsSource(Statistics.StatsSource.ANALYZE).build();
     }
 
-<<<<<<< HEAD
-=======
-    // An external table planned from ANALYZE statistics gets its scan row count from the max of the scanned columns'
-    // own row counts, each SAMPLE-analyzed column extrapolated separately; no single table row count reproduces it,
-    // so a query dump records them per column. They are read from the same (cached) statistics the plan just used.
-    private void captureAnalyzedColumnRowCountsToDump(OptimizerContext session, String catalogName, Table table,
-                                                      Map<ColumnRefOperator, Column> columns) {
-        if (session.getDumpInfo() == null || CatalogMgr.isInternalCatalog(catalogName)) {
-            return;
-        }
-        List<ColumnRefOperator> refs = columns.keySet().stream()
-                .filter(ref -> !FeNameFormat.FORBIDDEN_COLUMN_NAMES.contains(ref.getName()))
-                .collect(Collectors.toList());
-        List<String> columnNames = refs.stream().map(ref -> columns.get(ref).getName()).collect(Collectors.toList());
-        List<ConnectorTableColumnStats> stats = GlobalStateMgr.getCurrentState().getStatisticStorage()
-                .getConnectorTableStatistics(table, columnNames,
-                        session.getOptimizerOptions().isQueryTriggerAnalyzeEnabled());
-        for (int i = 0; i < refs.size() && i < stats.size(); i++) {
-            if (!stats.get(i).isUnknown()) {
-                session.getDumpInfo().addExternalColumnRowCount(table, refs.get(i).getName(),
-                        (long) stats.get(i).getRowCount());
-            }
-        }
-    }
-
->>>>>>> 0f1ce94 ([BugFix] Do not queue a query-triggered analyze from the authorization check's optimization (#83236))
     public Statistics getTableStatistics(OptimizerContext session,
                                          String catalogName,
                                          Table table,
