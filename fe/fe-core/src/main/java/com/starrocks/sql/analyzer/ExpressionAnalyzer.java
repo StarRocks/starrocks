@@ -1809,8 +1809,8 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitUserVariableExpr(UserVariableExpr node, Scope context) {
             UserVariableAssignments assignments = analyzeState.getUserVariableAssignments();
-            if (assignments != null && assignments.isAssignedPerRow(node.getName())) {
-                node.setAssignedPerRow(assignments.getType(node.getName()));
+            if (node.isAssignedPerRow() && assignments != null) {
+                node.setType(assignments.getType(node.getName()));
                 return null;
             }
 

@@ -30,6 +30,30 @@ select @c;
 -- result:
 5
 -- !result
+set @e = 1;
+-- result:
+-- !result
+[UC]explain select @e := @e + 1;
+select @e;
+-- result:
+1
+-- !result
+select @e := @e + 1, @f := (select max(id) from t0);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 21 to line 1, column 50. Detail message: In a SELECT without FROM, the value assigned to @f must be an expression that can be folded into a constant. Use SET for other values.')
+-- !result
+select @e;
+-- result:
+1
+-- !result
+select @e := @e + 1;
+-- result:
+2
+-- !result
+select @e;
+-- result:
+2
+-- !result
 select @rn := @rn + 1 as rn, id from t0, (select @rn := 0) r order by id desc;
 -- result:
 1	10
@@ -376,4 +400,8 @@ E: (1064, "Getting analyzing error from line 1, column 34 to line 1, column 39. 
 select @x := @x + 1, count(*) from t0 group by grp;
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 18. Detail message: @x := @x + 1 must appear in the GROUP BY clause or be used in an aggregate function.')
+-- !result
+select @x := @x + 1 as x, id from t0, (select @x := 0) i having x > 1 order by id;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: User variable assignment with ':=' is not supported together with HAVING.")
 -- !result

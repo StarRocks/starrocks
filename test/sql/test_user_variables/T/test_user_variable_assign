@@ -18,6 +18,14 @@ select @a := 1, @b := @a + 1;
 select @a, @b;
 set @c := 5;
 select @c;
+-- the variable is assigned when the query has run
+set @e = 1;
+[UC]explain select @e := @e + 1;
+select @e;
+select @e := @e + 1, @f := (select max(id) from t0);
+select @e;
+select @e := @e + 1;
+select @e;
 
 -- row number
 select @rn := @rn + 1 as rn, id from t0, (select @rn := 0) r order by id desc;
@@ -71,3 +79,4 @@ select @p as prev, @p := id from (select id from t0 order by val) s;
 select id from t0 where (@x := 1) = 1;
 select @x := @x + 1 from t0 where @x < 3;
 select @x := @x + 1, count(*) from t0 group by grp;
+select @x := @x + 1 as x, id from t0, (select @x := 0) i having x > 1 order by id;

@@ -927,7 +927,7 @@ public final class SqlToScalarOperatorTranslator {
             return visit(node.getValue(), context);
         }
 
-        // Only reached for a SELECT without FROM, where the variable was already assigned during analysis.
+        // Only reached for a SELECT without FROM, where the value was already computed during analysis.
         // Assignments that run once per row are replaced by UserVariableAssignPlanner before translation.
         @Override
         public ScalarOperator visitUserVariableAssignExpr(UserVariableAssignExpr node, Context context) {

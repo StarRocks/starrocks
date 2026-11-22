@@ -142,8 +142,8 @@ class UserVariableAssignPlanner {
         builder = subOpt;
         sourceScope = subOpt.getScope();
         for (String name : assignments.getPerRowVariables()) {
-            UserVariableExpr previous = new UserVariableExpr(name, NodePosition.ZERO);
-            previous.setAssignedPerRow(assignments.getType(name));
+            UserVariableExpr previous = new UserVariableExpr(name, NodePosition.ZERO, true);
+            previous.setType(assignments.getType(name));
             previousValues.put(name, previous);
             updates.put(name, new Keep());
             values.put(name, previous);

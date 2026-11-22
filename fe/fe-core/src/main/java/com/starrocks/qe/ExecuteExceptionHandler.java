@@ -397,6 +397,8 @@ public class ExecuteExceptionHandler {
 
     private static void rebuildExecPlan(Exception e, RetryContext context) throws Exception {
         try {
+            // Start again from the values the user variables had before the statement.
+            context.connectContext.resetUserVariableCopyInWrite();
             context.execPlan = StatementPlanner.plan(context.parsedStmt, context.connectContext);
         } catch (Exception e1) {
             // encounter exception when re-plan, just log the new error but throw the original cause.

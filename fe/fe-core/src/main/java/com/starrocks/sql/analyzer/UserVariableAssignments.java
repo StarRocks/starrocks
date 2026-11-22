@@ -44,6 +44,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -84,6 +85,11 @@ public class UserVariableAssignments {
         UserVariableAssignments assignments = new UserVariableAssignments(session, hasFrom);
         if (hasFrom) {
             assigns.forEach(assign -> assignments.types.put(assign.getName(), null));
+            for (SelectListItem item : selectList.getItems()) {
+                if (!item.isStar()) {
+                    item.setExpr(assignments.markReads(item.getExpr()));
+                }
+            }
             return assignments;
         }
 
@@ -100,6 +106,19 @@ public class UserVariableAssignments {
             }
         }
         return assignments;
+    }
+
+    // Replaces the reads of the variables that the select list assigns. Unlike other user variables they do not
+    // get a value when the statement is analyzed.
+    private Expr markReads(Expr expr) {
+        if (expr instanceof UserVariableExpr read) {
+            boolean isPlainRead = isAssignedPerRow(read.getName()) && !read.isAssignedPerRow();
+            return isPlainRead ? new UserVariableExpr(read.getName(), read.getPos(), true) : expr;
+        }
+        for (int i = 0; i < expr.getChildren().size(); i++) {
+            expr.setChild(i, markReads(expr.getChild(i)));
+        }
+        return expr;
     }
 
     /**
@@ -267,11 +286,12 @@ public class UserVariableAssignments {
                     " must be an expression that can be folded into a constant. Use SET for other values",
                     assign.getPos());
         }
-        if (session.getUserVariablesCopyInWrite() != null) {
-            session.modifyUserVariableCopyInWrite(variable);
-        } else {
-            session.modifyUserVariable(variable);
+        // Like SET, work on a copy of the user variables. StmtExecutor makes it the session's once the query has
+        // run, so that EXPLAIN, PREPARE and a query that fails assign nothing.
+        if (session.getUserVariablesCopyInWrite() == null) {
+            session.modifyUserVariablesCopyInWrite(new ConcurrentHashMap<>(session.getUserVariables()));
         }
+        session.modifyUserVariableCopyInWrite(variable);
         assign.setType(assign.getValue().getType());
     }
 
@@ -286,6 +306,10 @@ public class UserVariableAssignments {
         if (isAggregation || analyzeState.isDistinct()) {
             throw new SemanticException("User variable assignment with ':=' is not supported together with " +
                     "DISTINCT, GROUP BY or aggregate functions");
+        }
+        // MySQL applies HAVING to the rows after it has assigned the variables. Here it is a filter below them.
+        if (analyzeState.getHaving() != null) {
+            throw new SemanticException("User variable assignment with ':=' is not supported together with HAVING");
         }
         if (!analyzeState.getOutputAnalytic().isEmpty() || !analyzeState.getOrderByAnalytic().isEmpty()) {
             throw new SemanticException("User variable assignment with ':=' is not supported together with " +

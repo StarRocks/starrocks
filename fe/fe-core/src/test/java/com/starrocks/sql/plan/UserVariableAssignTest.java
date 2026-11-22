@@ -20,10 +20,17 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 public class UserVariableAssignTest extends PlanTestBase {
+
+    // Nothing here runs a query, so what a SELECT without FROM has assigned is never taken over or dropped.
+    @AfterEach
+    public void dropAssignments() {
+        connectContext.resetUserVariableCopyInWrite();
+    }
 
     private void assertFails(String sql, String message) {
         SemanticException e = Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
@@ -38,9 +45,9 @@ public class UserVariableAssignTest extends PlanTestBase {
                 "  |  <slot 4> : 1\n" +
                 "  |  <slot 5> : 2");
 
-        // The variables keep their values, like after a SET.
-        plan = getFragmentPlan("select @a * 10 + @b");
-        assertContains(plan, "<slot 2> : 12");
+        // Making a plan assigns nothing. StmtExecutor takes the values over once the query has run.
+        Assertions.assertNull(connectContext.getUserVariable("a"));
+        Assertions.assertNotNull(connectContext.getUserVariableCopyInWrite("a"));
 
         assertFails("select if(1 = 2, @a := 5, 0)", "must be the outermost operator of a select item");
         assertFails("select @a := (select max(v1) from t0)", "can be folded into a constant");
@@ -215,6 +222,9 @@ public class UserVariableAssignTest extends PlanTestBase {
         assertFails("select @x := @x + 1 as c from t0 order by @x", "cannot be used in ORDER BY");
         assertFails("select @x := @x + 1, count(*) from t0 group by v1", "@x := @x + 1");
         assertFails("select distinct @x := @x + 1 from t0", "not supported together with DISTINCT");
+        assertFails("select @x := v1 from t0 having (@y := 1) = 1", "not supported together with HAVING");
+        assertFails("select @x := @x + 1 as x from t0 having x > 1", "not supported together with HAVING");
+        assertFails("select @x := t0.v1 from t0 join t1 on (@y := 1) = t0.v1", "only supported in the select list");
         assertFails("select @x := @x + 1, row_number() over (order by v1) from t0",
                 "not supported together with window functions");
         assertFails("select @x := @x * 2 from t0", "Unsupported assignment to user variable @x");

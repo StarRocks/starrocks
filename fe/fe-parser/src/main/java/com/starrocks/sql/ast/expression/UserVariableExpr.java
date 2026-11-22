@@ -17,7 +17,6 @@ package com.starrocks.sql.ast.expression;
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.type.Type;
 
 import java.util.Objects;
 
@@ -27,13 +26,18 @@ public class UserVariableExpr extends Expr {
 
     private Expr value;
 
-    // True when the query block that reads the variable also assigns it with ':='. The variable then changes from
-    // row to row and has no value that could be substituted while the statement is analyzed.
-    private boolean assignedPerRow;
+    // True for a variable that the select list of its query block also assigns with ':='. Such a variable changes
+    // from row to row and has no value that could be substituted while the statement is analyzed.
+    private final boolean assignedPerRow;
 
     public UserVariableExpr(String name, NodePosition pos) {
+        this(name, pos, false);
+    }
+
+    public UserVariableExpr(String name, NodePosition pos, boolean assignedPerRow) {
         super(pos);
         this.name = name;
+        this.assignedPerRow = assignedPerRow;
     }
 
 
@@ -59,11 +63,6 @@ public class UserVariableExpr extends Expr {
 
     public boolean isAssignedPerRow() {
         return assignedPerRow;
-    }
-
-    public void setAssignedPerRow(Type type) {
-        this.assignedPerRow = true;
-        this.type = type;
     }
 
     @Override

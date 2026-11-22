@@ -81,7 +81,7 @@ In addition to the SET statement, StarRocks supports the MySQL assignment operat
 
 ### Queries without a FROM clause
 
-The assignment has the same effect as a SET statement. `expr` must be an expression that StarRocks can fold into a constant when it analyzes the statement, such as a literal or `@v1 + 1`. To assign the result of a subquery or of a function that is not folded, use SET.
+The assignment has the same effect as a SET statement. It takes effect when the query has run, so EXPLAIN and PREPARE do not assign the variable. `expr` must be an expression that StarRocks can fold into a constant when it analyzes the statement, such as a literal or `@v1 + 1`. To assign the result of a subquery or of a function that is not folded, use SET.
 
 ```SQL
 SELECT @v1 := 1, @v2 := @v1 + 1;
@@ -127,6 +127,6 @@ StarRocks does not evaluate such a query row by row. It derives window functions
 
 - The rows are evaluated in the order of the ORDER BY clause of the query. If the query has no ORDER BY clause, or if the clause sorts by a select item that reads or assigns one of the variables, the rows are evaluated in the order of the ORDER BY clause of the subquery in the FROM clause, as in Example 4. The subquery must return the columns that it sorts by. If neither applies, the order is undefined. For a query that joins tables, MySQL may assign the variables before it sorts the rows. Sort in a subquery, as in Example 4, to get the same result from both.
 - The new value of a variable must either not depend on its old value, or be the old value with something added to or subtracted from it. Both can depend on a condition (CASE, IF, IFNULL, COALESCE) that does not read the variable itself. For example, `@v := @v + c1`, `@v := IF(c1 > 0, c2, @v)`, and `@v := IFNULL(c1, @v)` are supported, whereas `@v := @v * 2` returns an error.
-- `:=` can be used only in the select list. A query that assigns variables for each row cannot use DISTINCT, GROUP BY, aggregate functions, window functions, or OFFSET in the same SELECT, and its WHERE and ORDER BY clauses cannot reference these variables. To filter or sort by such a select item, give it an alias and put the query into a subquery, or sort by the alias.
+- `:=` can be used only in the select list. A query that assigns variables for each row cannot use DISTINCT, GROUP BY, HAVING, aggregate functions, window functions, or OFFSET in the same SELECT, and its WHERE and ORDER BY clauses cannot reference these variables. To filter or sort by such a select item, give it an alias and put the query into a subquery, or sort by the alias.
 - Within the query, each variable has a single data type, which is derived from its initial value and from the values assigned to it. Integer values are stored as BIGINT, and date values as strings.
 - The assignments take effect only within the select list that contains them. An outer query, another branch of a UNION, and the statements that follow still see the value that the variable had before.
