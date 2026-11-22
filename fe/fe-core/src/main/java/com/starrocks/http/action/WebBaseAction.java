@@ -37,7 +37,6 @@ package com.starrocks.http.action;
 import com.google.common.base.Strings;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -177,31 +176,24 @@ public class WebBaseAction extends BaseAction {
         ActionAuthorizationInfo authInfo;
         try {
             authInfo = getAuthorizationInfo(request);
-            UserIdentity currentUser = checkPassword(authInfo);
+            ConnectContext ctx = new ConnectContext(null);
+            checkPassword(ctx, authInfo);
             if (needAdmin()) {
                 try {
-                    ConnectContext context = new ConnectContext();
-                    context.setCurrentUserIdentity(currentUser);
-                    context.setCurrentRoleIds(currentUser);
-
-                    Authorizer.checkSystemAction(context, PrivilegeType.NODE);
+                    Authorizer.checkSystemAction(ctx, PrivilegeType.NODE);
                 } catch (AccessDeniedException e) {
-                    checkUserOwnsAdminRole(currentUser);
+                    checkAdminRole(ctx);
                 }
             }
             request.setAuthorized(true);
             SessionValue value = new SessionValue();
-            value.currentUser = currentUser;
+            value.connectContext = ctx;
             addSession(request, response, value);
 
-            ConnectContext ctx = new ConnectContext(null);
             ctx.setQualifiedUser(authInfo.fullUserName);
             ctx.setQueryId(UUIDUtil.genUUID());
             ctx.setRemoteIP(authInfo.remoteIp);
-            ctx.setCurrentUserIdentity(currentUser);
             ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-            ctx.setCurrentRoleIds(currentUser);
-
             ctx.setThreadLocalInfo();
 
             return true;
@@ -225,12 +217,9 @@ public class WebBaseAction extends BaseAction {
 
             try {
                 try {
-                    ConnectContext context = new ConnectContext();
-                    context.setCurrentUserIdentity(sessionValue.currentUser);
-                    context.setCurrentRoleIds(sessionValue.currentUser);
-                    Authorizer.checkSystemAction(context, PrivilegeType.NODE);
+                    Authorizer.checkSystemAction(sessionValue.connectContext, PrivilegeType.NODE);
                 } catch (AccessDeniedException e) {
-                    checkUserOwnsAdminRole(sessionValue.currentUser);
+                    checkAdminRole(sessionValue.connectContext);
                 }
                 authorized = true;
             } catch (AccessDeniedException e) {
@@ -242,12 +231,14 @@ public class WebBaseAction extends BaseAction {
                 request.setAuthorized(true);
 
                 ConnectContext ctx = new ConnectContext(null);
-                ctx.setQualifiedUser(sessionValue.currentUser.getUser());
+                ctx.setQualifiedUser(sessionValue.connectContext.getCurrentUserIdentity().getUser());
                 ctx.setQueryId(UUIDUtil.genUUID());
                 ctx.setRemoteIP(request.getHostString());
-                ctx.setCurrentUserIdentity(sessionValue.currentUser);
+                ctx.setCurrentUserIdentity(sessionValue.connectContext.getCurrentUserIdentity());
                 ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-                ctx.setCurrentRoleIds(sessionValue.currentUser);
+                ctx.setCurrentRoleIds(sessionValue.connectContext.getCurrentRoleIds());
+                // Group-mapped roles and Ranger evaluate the groups; the stored context already resolved them.
+                ctx.setGroups(sessionValue.connectContext.getGroups());
 
                 ctx.setThreadLocalInfo();
                 return true;
