@@ -1315,6 +1315,13 @@ public class ConnectProcessor {
         if (executor != null && executor.isForwardToLeader()) {
             return false;
         }
+        // Only append after a statement that actually returned a result set (EOF-terminated).
+        // OK-terminated statements (SET, COMMIT, DML/DDL) are frequently issued by the driver
+        // itself (autocommit setup, liveness) and read as a single packet, so a trailing result
+        // set would be parsed as the reply to the client's next command and desync the session.
+        if (ctx.getState().getStateType() != QueryState.MysqlStateType.EOF) {
+            return false;
+        }
         return ctx.getQueryId() != null;
     }
 
