@@ -663,7 +663,8 @@ public class MetadataMgr {
         return ImmutableList.copyOf(partitionNames.build());
     }
 
-    public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator, Column> columns) {
+    public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator, Column> columns,
+                                                               boolean queryTriggerAnalyzeEnabled) {
         Statistics.Builder statistics = Statistics.builder();
 
         List<ColumnRefOperator> requiredColumnRefs = new ArrayList<>();
@@ -677,8 +678,8 @@ public class MetadataMgr {
 
         List<String> columnNames = requiredColumnRefs.stream().map(col -> columns.get(col).getName()).collect(
                 Collectors.toList());
-        List<ConnectorTableColumnStats> columnStatisticList =
-                GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorTableStatistics(table, columnNames);
+        List<ConnectorTableColumnStats> columnStatisticList = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .getConnectorTableStatistics(table, columnNames, queryTriggerAnalyzeEnabled);
 
         Map<String, Histogram> histogramStatistics =
                 GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorHistogramStatistics(table, columnNames);
@@ -705,7 +706,34 @@ public class MetadataMgr {
                 }
             }
         }
+<<<<<<< HEAD
         return statistics.build();
+=======
+        return statistics.setStatsSource(Statistics.StatsSource.ANALYZE).build();
+    }
+
+    // An external table planned from ANALYZE statistics gets its scan row count from the max of the scanned columns'
+    // own row counts, each SAMPLE-analyzed column extrapolated separately; no single table row count reproduces it,
+    // so a query dump records them per column. They are read from the same (cached) statistics the plan just used.
+    private void captureAnalyzedColumnRowCountsToDump(OptimizerContext session, String catalogName, Table table,
+                                                      Map<ColumnRefOperator, Column> columns) {
+        if (session.getDumpInfo() == null || CatalogMgr.isInternalCatalog(catalogName)) {
+            return;
+        }
+        List<ColumnRefOperator> refs = columns.keySet().stream()
+                .filter(ref -> !FeNameFormat.FORBIDDEN_COLUMN_NAMES.contains(ref.getName()))
+                .collect(Collectors.toList());
+        List<String> columnNames = refs.stream().map(ref -> columns.get(ref).getName()).collect(Collectors.toList());
+        List<ConnectorTableColumnStats> stats = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .getConnectorTableStatistics(table, columnNames,
+                        session.getOptimizerOptions().isQueryTriggerAnalyzeEnabled());
+        for (int i = 0; i < refs.size() && i < stats.size(); i++) {
+            if (!stats.get(i).isUnknown()) {
+                session.getDumpInfo().addExternalColumnRowCount(table, refs.get(i).getName(),
+                        (long) stats.get(i).getRowCount());
+            }
+        }
+>>>>>>> 0f1ce94 ([BugFix] Do not queue a query-triggered analyze from the authorization check's optimization (#83236))
     }
 
     public Statistics getTableStatistics(OptimizerContext session,
@@ -719,7 +747,8 @@ public class MetadataMgr {
         // FIXME: In testing env, `_statistics_.external_column_statistics` is not created, ignore query columns stats from it.
         // Get basic/histogram stats from internal statistics.
         Statistics internalStatistics = FeConstants.runningUnitTest ? null :
-                getTableStatisticsFromInternalStatistics(table, columns);
+                getTableStatisticsFromInternalStatistics(table, columns,
+                        session.getOptimizerOptions().isQueryTriggerAnalyzeEnabled());
         if (internalStatistics == null ||
                 internalStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
             // Get basic stats from connector metadata.
