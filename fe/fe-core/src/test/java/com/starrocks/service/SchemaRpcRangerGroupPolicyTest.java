@@ -67,7 +67,7 @@ public class SchemaRpcRangerGroupPolicyTest extends ConnectorPlanTestBase {
             void init() {
             }
         };
-        RangerHiveAccessController ranger = new RangerHiveAccessController("hive_rpc_test", false);
+        RangerHiveAccessController ranger = new RangerHiveAccessController("hive_rpc_test");
         ranger.getRangerPlugin().setPolicies(selectOnRegionForGroup());
         previous = Authorizer.getInstance().catalogToAccessControl.put(HIVE, ranger);
     }
