@@ -18,11 +18,8 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.MockedLocalMetaStore;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorReportException;
-<<<<<<< HEAD
-import com.starrocks.persist.EditLog;
-=======
 import com.starrocks.common.StarRocksException;
->>>>>>> 87ba5c0 ([BugFix] Count group roles and security-integration users in SHOW GRANTS FOR ROLE, SHOW AUTHENTICATION and the HTTP admin check (#83211))
+import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.UpdateGroupToRoleLog;
 import com.starrocks.persist.gson.GsonUtils;

@@ -278,7 +278,6 @@ public abstract class BaseAction implements IAction {
         }
     }
 
-<<<<<<< HEAD
     public static class ActionAuthorizationInfo {
         public String fullUserName;
         public String remoteIp;
@@ -301,115 +300,25 @@ public abstract class BaseAction implements IAction {
         }
     }
 
-    // We check whether user owns db_admin and user_admin role in new RBAC privilege framework for
-    // operation which checks `PrivPredicate.ADMIN` in global table in old Auth framework.
-    protected void checkUserOwnsAdminRole(UserIdentity currentUser) throws AccessDeniedException {
-        try {
-            Set<Long> userOwnedRoles = AuthorizationMgr.getOwnedRolesByUser(currentUser);
-            if (!(currentUser.equals(UserIdentity.ROOT) ||
-                    userOwnedRoles.contains(PrivilegeBuiltinConstants.ROOT_ROLE_ID) ||
-                    (userOwnedRoles.contains(PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID) &&
-                            userOwnedRoles.contains(PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID)))) {
-                throw new AccessDeniedException();
-            }
-        } catch (PrivilegeException e) {
-            throw new AccessDeniedException();
-        }
-    }
-
     // return currentUserIdentity from StarRocks auth
     public static UserIdentity checkPassword(ActionAuthorizationInfo authInfo) throws AccessDeniedException {
-=======
-    /**
-     * Parse the {@code Authorization} header into a protocol-neutral {@link AuthCredentials},
-     * supporting both Basic (plaintext password) and Bearer (token). Returns {@code null} when the
-     * header is missing or its scheme is unknown / malformed (the caller then returns 401).
-     */
-    public AuthCredentials parseAuthCredentials(BaseRequest request) {
-        String header = request.getAuthorizationHeader();
-        if (Strings.isNullOrEmpty(header)) {
-            return null;
-        }
-        String[] parts = header.split(" ", 2);
-        String host = request.getHostString();
-        if (parts.length != 2) {
-            return parts[0].equalsIgnoreCase("Basic") ? malformedBasic(host) : null;
-        }
-        if (parts[0].equalsIgnoreCase("Basic")) {
-            ByteBuf buf = null;
-            ByteBuf decodeBuf = null;
-            try {
-                buf = Unpooled.copiedBuffer(ByteBuffer.wrap(parts[1].getBytes()));
-                try {
-                    decodeBuf = Base64.decode(buf);
-                } catch (IllegalArgumentException e) {
-                    // Not Base64 at all: as unusable as a missing header, so the caller answers
-                    // 401 rather than letting the decoder's exception surface as a 500.
-                    return malformedBasic(host);
-                }
-                String authString = decodeBuf.toString(CharsetUtil.UTF_8);
-                if (authString.isEmpty()) {
-                    return malformedBasic(host);
-                }
-                // Note that the password may contain a colon, so split on the first one only.
-                int index = authString.indexOf(':');
-                if (index == -1) {
-                    return malformedBasic(host);
-                }
-                String fullUserName = authString.substring(0, index);
-                String[] elements = fullUserName.split("@");
-                if (elements.length == 2) {
-                    fullUserName = elements[0];
-                }
-                return AuthCredentials.ofPassword(fullUserName, authString.substring(index + 1), AuthChannel.HTTP, host);
-            } finally {
-                if (buf != null) {
-                    buf.release();
-                }
-                if (decodeBuf != null) {
-                    decodeBuf.release();
-                }
-            }
-        } else if (parts[0].equalsIgnoreCase("Bearer")) {
-            return AuthCredentials.ofBearer(parts[1].trim(), AuthChannel.HTTP, host);
-        }
-        return null;
+        return checkPassword(new ConnectContext(), authInfo);
     }
 
-    // A Basic header that yields no user and password is refused like a missing one (401). Unlike
-    // a missing one it is a failed login attempt, and it never reaches
-    // AuthenticationHandler.authenticate, where failures are counted, so count it here.
-    private static AuthCredentials malformedBasic(String host) {
-        AuthenticationHandler.recordMalformedCredential(
-                AuthCredentials.ofPassword("", "", AuthChannel.HTTP, host));
-        return null;
-    }
-
-    /**
-     * Authenticate onto the caller's own {@link ConnectContext}.
-     *
-     * <p>Use this whenever anything downstream authorizes: authentication resolves the user's
-     * groups and the roles those groups map to onto the context it is handed. A user that comes
-     * from a security integration owns no roles of its own - every privilege it has arrives that
-     * way - so authorizing on a different context would see an identity with no roles at all.
-     *
-     */
-    public static void checkCredential(ConnectContext ctx, AuthCredentials cred) throws AccessDeniedException {
-        if (cred == null) {
-            throw new AccessDeniedException("Need auth information.");
-        }
->>>>>>> 87ba5c0 ([BugFix] Count group roles and security-integration users in SHOW GRANTS FOR ROLE, SHOW AUTHENTICATION and the HTTP admin check (#83211))
+    // Authenticates onto the given context, which also receives the user's groups and the roles they
+    // map to: a caller that authorizes afterwards reuses it.
+    public static UserIdentity checkPassword(ConnectContext context, ActionAuthorizationInfo authInfo)
+            throws AccessDeniedException {
         try {
             // HTTP Basic carries a cleartext password: declare that so security integrations that
             // consume a password (LDAP) are matched instead of skipped.
-            return AuthenticationHandler.authenticateWithClearPassword(new ConnectContext(), authInfo.fullUserName,
+            return AuthenticationHandler.authenticateWithClearPassword(context, authInfo.fullUserName,
                     authInfo.remoteIp, authInfo.password);
         } catch (AuthenticationException e) {
             throw new AccessDeniedException("Access denied for " + authInfo.fullUserName + "@" + authInfo.remoteIp);
         }
     }
 
-<<<<<<< HEAD
     public ActionAuthorizationInfo getAuthorizationInfo(BaseRequest request)
             throws AccessDeniedException {
         ActionAuthorizationInfo authInfo = new ActionAuthorizationInfo();
@@ -489,7 +398,8 @@ public abstract class BaseAction implements IAction {
         LOG.debug("Parse result for the input [{} {} {}]: {}", fullUserName, password, host, authInfo);
 
         return authInfo;
-=======
+    }
+
     /**
      * The roles the user of {@code ctx} holds, granted to it or to one of its groups (for an
      * ephemeral user, the roles of its session), together with their predecessors, the roles they
@@ -521,7 +431,6 @@ public abstract class BaseAction implements IAction {
         } catch (PrivilegeException e) {
             throw new AccessDeniedException();
         }
->>>>>>> 87ba5c0 ([BugFix] Count group roles and security-integration users in SHOW GRANTS FOR ROLE, SHOW AUTHENTICATION and the HTTP admin check (#83211))
     }
 
     protected int checkIntParam(String strParam) {

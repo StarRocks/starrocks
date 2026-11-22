@@ -175,20 +175,9 @@ public class WebBaseAction extends BaseAction {
         // cookie is invalid.
         ActionAuthorizationInfo authInfo;
         try {
-<<<<<<< HEAD
             authInfo = getAuthorizationInfo(request);
-            UserIdentity currentUser = checkPassword(authInfo);
-=======
-            // Authenticate onto the context the NODE check below uses, so the roles an LDAP or
-            // security-integration group maps to are present on it. Authenticating onto a throwaway
-            // context and copying only the UserIdentity across would leave that check looking at
-            // user-owned roles alone, and deny a user whose NODE privilege comes from a group.
             ConnectContext ctx = new ConnectContext(null);
-            ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-            ctx.setRemoteIP(request.getHostString());
-            checkCredential(ctx, parseAuthCredentials(request));
-
->>>>>>> 87ba5c0 ([BugFix] Count group roles and security-integration users in SHOW GRANTS FOR ROLE, SHOW AUTHENTICATION and the HTTP admin check (#83211))
+            checkPassword(ctx, authInfo);
             if (needAdmin()) {
                 try {
                     Authorizer.checkSystemAction(ctx, PrivilegeType.NODE);
@@ -201,14 +190,10 @@ public class WebBaseAction extends BaseAction {
             value.connectContext = ctx;
             addSession(request, response, value);
 
-            ConnectContext ctx = new ConnectContext(null);
             ctx.setQualifiedUser(authInfo.fullUserName);
             ctx.setQueryId(UUIDUtil.genUUID());
             ctx.setRemoteIP(authInfo.remoteIp);
-            ctx.setCurrentUserIdentity(currentUser);
             ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-            ctx.setCurrentRoleIds(currentUser);
-
             ctx.setThreadLocalInfo();
 
             return true;
