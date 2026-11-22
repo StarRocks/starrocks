@@ -38,6 +38,7 @@ public class StreamLoadHttpHeader {
     public static final String HTTP_STRICT_MODE = "strict_mode";
     public static final String HTTP_TIMEZONE = "timezone";
     public static final String HTTP_LOAD_MEM_LIMIT = "load_mem_limit";
+    public static final String HTTP_EXEC_MEM_LIMIT = "exec_mem_limit";
     public static final String HTTP_PARTIAL_UPDATE = "partial_update";
     public static final String HTTP_PARTIAL_UPDATE_MODE = "partial_update_mode";
     public static final String HTTP_TRANSMISSION_COMPRESSION_TYPE = "transmission_compression_type";
@@ -73,7 +74,12 @@ public class StreamLoadHttpHeader {
             HTTP_FORMAT, HTTP_COLUMNS, HTTP_WHERE, HTTP_COLUMN_SEPARATOR, HTTP_ROW_DELIMITER, HTTP_SKIP_HEADER,
             HTTP_TRIM_SPACE, HTTP_ENCLOSE, HTTP_ESCAPE, HTTP_MAX_FILTER_RATIO, HTTP_TIMEOUT, HTTP_PARTITIONS,
             HTTP_TEMP_PARTITIONS, HTTP_NEGATIVE, HTTP_STRICT_MODE, HTTP_TIMEZONE, HTTP_LOAD_MEM_LIMIT,
+<<<<<<< HEAD
             HTTP_JSONPATHS, HTTP_JSONROOT, HTTP_STRIP_OUTER_ARRAY, HTTP_ENVELOPE, HTTP_PARTIAL_UPDATE, HTTP_PARTIAL_UPDATE_MODE,
+=======
+            HTTP_EXEC_MEM_LIMIT, HTTP_JSONPATHS, HTTP_JSONROOT, HTTP_STRIP_OUTER_ARRAY, HTTP_ENVELOPE,
+            HTTP_FILL_DEFAULT_ON_ABSENT_KEY, HTTP_PARTIAL_UPDATE, HTTP_PARTIAL_UPDATE_MODE,
+>>>>>>> b3e288aa492... [BugFix][RB-1837] Honor transmission_compression_type and exec_mem_limit in merge commit and FE-planned transaction stream loads (#70663)
             HTTP_TRANSMISSION_COMPRESSION_TYPE, HTTP_LOAD_DOP, HTTP_ENABLE_REPLICATED_STORAGE, HTTP_MERGE_CONDITION,
             HTTP_LOG_REJECTED_RECORD_NUM, HTTP_COMPRESSION, HTTP_WAREHOUSE, HTTP_ENABLE_BATCH_WRITE,
             HTTP_BATCH_WRITE_ASYNC, HTTP_BATCH_WRITE_INTERVAL_MS, HTTP_BATCH_WRITE_PARALLEL

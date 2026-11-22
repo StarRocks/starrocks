@@ -40,6 +40,11 @@ import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_REP
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENCLOSE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENVELOPE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ESCAPE;
+<<<<<<< HEAD
+=======
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_EXEC_MEM_LIMIT;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_FILL_DEFAULT_ON_ABSENT_KEY;
+>>>>>>> b3e288aa492... [BugFix][RB-1837] Honor transmission_compression_type and exec_mem_limit in merge commit and FE-planned transaction stream loads (#70663)
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_FORMAT;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_HEADER_LIST;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_JSONPATHS;
@@ -187,6 +192,31 @@ public class StreamLoadKvParams implements StreamLoadParams {
     @Override
     public Optional<Long> getLoadMemLimit() {
         return getLongParam(HTTP_LOAD_MEM_LIMIT);
+    }
+
+    /**
+     * The memory limit of the load's plan, checked as the compute node checks it for the classic Stream Load. Unlike
+     * the other getters this one is not part of {@link StreamLoadParams}: a classic or transaction Stream Load gets
+     * the limit from the compute node, which sets it on the plan the FE returns. Only the loads the FE plans from
+     * these parameters itself, merge commit and the transaction stream loads of {@link StreamLoadTask}, read it here.
+     */
+    public Optional<Long> getExecMemLimit() throws StarRocksException {
+        String value = params.get(HTTP_EXEC_MEM_LIMIT);
+        // An empty header is one the request does not set, as the compute node reads it.
+        if (value == null || value.isEmpty()) {
+            return Optional.empty();
+        }
+        long execMemLimit;
+        try {
+            // The compute node's parser accepts blanks around the number as well.
+            execMemLimit = Long.parseLong(value.trim());
+        } catch (NumberFormatException e) {
+            throw new StarRocksException("Invalid parameter exec_mem_limit. The value must be an integer");
+        }
+        if (execMemLimit <= 0) {
+            throw new StarRocksException("exec_mem_limit must be greater than 0");
+        }
+        return Optional.of(execMemLimit);
     }
 
     @Override
