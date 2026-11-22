@@ -17,11 +17,6 @@ package com.starrocks.authorization.ranger.hive;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.authorization.ranger.RangerAccessController;
-<<<<<<< HEAD
-import com.starrocks.catalog.Column;
-=======
-import com.starrocks.authorization.ranger.RangerAccessResourceBuilder;
->>>>>>> a4341b3 ([BugFix] Audit Ranger row-filter and masking hits, and keep the SELECT check when a scan is optimized away (#83212))
 import com.starrocks.catalog.TableName;
 import com.starrocks.qe.ConnectContext;
 import org.apache.ranger.plugin.policyengine.RangerAccessResourceImpl;
@@ -93,38 +88,17 @@ public class RangerHiveAccessController extends RangerAccessController {
     }
 
     @Override
-<<<<<<< HEAD
-    public Map<String, Expr> getColumnMaskingPolicy(ConnectContext context, TableName tableName, List<Column> columns) {
-        Map<String, Expr> maskingExprMap = Maps.newHashMap();
-        for (Column column : columns) {
-            Expr columnMaskingExpression = getColumnMaskingExpression(RangerHiveResource.builder()
-                    .setDatabase(tableName.getDb())
-                    .setTable(tableName.getTbl())
-                    .setColumn(column.getName())
-                    .build(), column, context);
-            if (columnMaskingExpression != null) {
-                maskingExprMap.put(column.getName(), columnMaskingExpression);
-            }
-        }
-
-        return maskingExprMap;
-    }
-
-    @Override
-    public Expr getRowAccessPolicy(ConnectContext context, TableName tableName) {
-        return getRowAccessExpression(RangerHiveResource.builder()
-                .setDatabase(tableName.getDb())
-=======
     protected RangerAccessResourceImpl tableResource(TableName tableName) {
-        return resourceOf(tableName.getCatalog(), tableName.getDb())
+        return RangerHiveResource.builder()
+                .setDatabase(tableName.getDb())
                 .setTable(tableName.getTbl())
                 .build();
     }
 
     @Override
     protected RangerAccessResourceImpl columnResource(TableName tableName, String column) {
-        return resourceOf(tableName.getCatalog(), tableName.getDb())
->>>>>>> a4341b3 ([BugFix] Audit Ranger row-filter and masking hits, and keep the SELECT check when a scan is optimized away (#83212))
+        return RangerHiveResource.builder()
+                .setDatabase(tableName.getDb())
                 .setTable(tableName.getTbl())
                 .setColumn(column)
                 .build();

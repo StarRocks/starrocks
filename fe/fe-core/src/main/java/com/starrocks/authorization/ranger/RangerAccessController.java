@@ -17,7 +17,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ExternalAccessController;
 import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.authorization.RejectedRecordsRowAccessPolicy;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
@@ -158,12 +157,6 @@ public abstract class RangerAccessController extends ExternalAccessController im
     }
 
     private Expr rowAccessPolicy(ConnectContext context, TableName tableName, boolean audit) {
-        // The built-in row access policy on _statistics_.rejected_records applies whether the cluster runs
-        // Ranger or the native authorizer, so it takes precedence over any Ranger-defined policy for that one
-        // table; every other table goes through Ranger.
-        if (RejectedRecordsRowAccessPolicy.matches(tableName)) {
-            return RejectedRecordsRowAccessPolicy.buildPolicy(context, tableName);
-        }
         RangerAccessResourceImpl resource = tableResource(tableName);
         return audit
                 ? getRowAccessExpression(resource, context)

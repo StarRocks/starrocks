@@ -130,7 +130,7 @@ public class RangerRowFilterAuthorizationTest extends ConnectorPlanTestBase {
     private static Captured check(String sql, String rowFilter) {
         Captured captured = mockPlugin(rowFilter);
         AccessControlProvider provider = Authorizer.getInstance();
-        RangerHiveAccessController controller = new RangerHiveAccessController("hive-service", false);
+        RangerHiveAccessController controller = new RangerHiveAccessController("hive-service");
         captured.pluginHandler = controller.getRangerPlugin().getResultProcessor();
         provider.setAccessControl(CATALOG, controller);
         try {
@@ -192,7 +192,7 @@ public class RangerRowFilterAuthorizationTest extends ConnectorPlanTestBase {
     @Test
     public void testLookupWithoutAuditCarriesNoHandler() {
         Captured captured = mockPlugin("0 = 1");
-        RangerHiveAccessController controller = new RangerHiveAccessController("hive-service", false);
+        RangerHiveAccessController controller = new RangerHiveAccessController("hive-service");
         ConnectContext ctx = newContext();
         TableName table = new TableName(CATALOG, "tpch", "region");
         Assertions.assertNotNull(controller.getRowAccessPolicyWithoutAudit(ctx, table));

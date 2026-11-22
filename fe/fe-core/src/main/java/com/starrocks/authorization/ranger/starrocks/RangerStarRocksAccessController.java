@@ -443,31 +443,8 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     }
 
     @Override
-<<<<<<< HEAD
-    public Map<String, Expr> getColumnMaskingPolicy(ConnectContext context, TableName tableName, List<Column> columns) {
-        Map<String, Expr> maskingExprMap = Maps.newHashMap();
-        for (Column column : columns) {
-            Expr columnMaskingExpression = getColumnMaskingExpression(RangerStarRocksResource.builder()
-                    .setCatalog(tableName.getCatalog())
-                    .setDatabase(tableName.getDb())
-                    .setTable(tableName.getTbl())
-                    .setColumn(column.getName())
-                    .build(), column, context);
-            if (columnMaskingExpression != null) {
-                maskingExprMap.put(column.getName(), columnMaskingExpression);
-            }
-        }
-
-        return maskingExprMap;
-    }
-
-    @Override
-    public Expr getRowAccessPolicy(ConnectContext context, TableName tableName) {
-        return getRowAccessExpression(RangerStarRocksResource.builder()
-=======
     protected RangerAccessResourceImpl tableResource(TableName tableName) {
         return RangerStarRocksResource.builder()
->>>>>>> a4341b3 ([BugFix] Audit Ranger row-filter and masking hits, and keep the SELECT check when a scan is optimized away (#83212))
                 .setCatalog(tableName.getCatalog())
                 .setDatabase(tableName.getDb())
                 .setTable(tableName.getTbl())
