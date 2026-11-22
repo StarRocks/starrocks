@@ -618,8 +618,16 @@ static StatusOr<TabletMetadataPtr> do_publish_version(TabletManager* tablet_mgr,
             // init log_applier
             DCHECK_EQ(base_version, base_metadata->version());
             new_metadata = std::make_shared<TabletMetadataPB>(*base_metadata);
+            // base_metadata goes along so that a primary key publish takes the base version's delete vectors
+            // from it -- for the old segments it deletes rows from and for an index it rebuilds -- rather than
+            // reading that version back from storage.
             log_applier = new_txn_log_applier(Tablet(tablet_mgr, tablet_info.get_tablet_id_in_metadata()), new_metadata,
+<<<<<<< HEAD
                                               new_version, txns[i].rebuild_pindex(), skip_write_tablet_metadata);
+=======
+                                              new_version, txns[i].rebuild_pindex(), skip_write_tablet_metadata,
+                                              publish_property, base_metadata);
+>>>>>>> bd892e1ece7... [BugFix][RB-792] Reuse the base tablet metadata in lake PK publish (#67182)
 
             if (new_metadata->compaction_inputs_size() > 0) {
                 new_metadata->mutable_compaction_inputs()->Clear();

@@ -953,6 +953,70 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     return seg_iterators;
 }
 
+<<<<<<< HEAD
+=======
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_delvec(
+        const Schema& schema, int64_t version, const MetaFileBuilder* builder, OlapReaderStatistics* stats,
+        const std::vector<SparseRangePtr>* rowid_range_per_segment,
+        const std::vector<OlapReaderStatistics*>* per_segment_stats, const TabletMetadataPtr& delvec_metadata) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_iterator_with_delvec_us");
+    auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
+    SegmentReadOptions seg_options;
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(root_loc));
+    seg_options.stats = stats;
+    seg_options.lake_io_opts.fs = seg_options.fs;
+    seg_options.lake_io_opts.location_provider = _tablet_mgr->location_provider();
+    seg_options.is_primary_keys = true;
+    // Hand the delvec loader the metadata to read the delete vectors from, so that it does not read |version|
+    // back from object storage for every segment: the caller's |delvec_metadata|, else the complete tablet
+    // metadata this rowset was built from. Aggregate publish needs the latter: query-parent synthesis flushes
+    // child PK indexes before the new-version bundle has been persisted, so that version exists only in the
+    // RPC response here. The loader reads |version| back only when the metadata it holds is not this tablet at
+    // |version|.
+    DCHECK(delvec_metadata == nullptr ||
+           (delvec_metadata->id() == tablet_id() && delvec_metadata->version() == version));
+    seg_options.delvec_loader =
+            std::make_shared<LakeDelvecLoader>(_tablet_mgr, builder, true /*fill cache*/, seg_options.lake_io_opts,
+                                               delvec_metadata != nullptr ? delvec_metadata : _tablet_metadata);
+    seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
+    seg_options.idg_loader = std::make_shared<LakeIndexDeltaGroupLoader>(_tablet_metadata);
+    seg_options.version = version;
+    seg_options.tablet_id = tablet_id();
+    seg_options.rowset_id = metadata().id();
+
+    return _build_segment_iterators(schema, std::move(seg_options), rowid_range_per_segment, per_segment_stats);
+}
+
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_no_delvec(
+        const Schema& schema, const RowsetReadOptions& options, bool apply_dcg,
+        const std::vector<SparseRangePtr>* rowid_range_per_segment) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_iterator_no_delvec_us");
+    if (!options.is_primary_keys) {
+        return Status::InvalidArgument("get_each_segment_iterator_no_delvec requires options.is_primary_keys");
+    }
+    SegmentReadOptions seg_options;
+    RETURN_IF_ERROR(init_segment_read_options(options, options.lake_io_opts,
+                                              /*delete_predicates=*/DisjunctivePredicates{}, options.stats,
+                                              &seg_options));
+    seg_options.lake_io_opts.location_provider = _tablet_mgr->location_provider();
+    // Never re-filter the caller-selected rows with a delete vector; keep the delta column group overlay
+    // only for a column-update read (apply_dcg), otherwise read the stored bytes raw.
+    seg_options.delvec_loader = nullptr;
+    if (!apply_dcg) {
+        seg_options.dcg_loader = nullptr;
+    }
+
+    ASSIGN_OR_RETURN(auto iterators, _build_segment_iterators(schema, std::move(seg_options), rowid_range_per_segment,
+                                                              /*per_segment_stats=*/nullptr));
+    // This read does not derive the rssid from segment position, so drop the null placeholders that
+    // _build_segment_iterators leaves for empty segments and return only the live iterators.
+    iterators.erase(std::remove_if(iterators.begin(), iterators.end(),
+                                   [](const ChunkIteratorPtr& it) { return it == nullptr; }),
+                    iterators.end());
+    return iterators;
+}
+
+>>>>>>> bd892e1ece7... [BugFix][RB-792] Reuse the base tablet metadata in lake PK publish (#67182)
 RowsetId Rowset::rowset_id() const {
     RowsetId rowset_id;
     rowset_id.init(id());

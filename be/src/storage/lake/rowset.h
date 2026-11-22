@@ -236,10 +236,14 @@ public:
     // as its OlapReaderStatistics, so callers that later scan different segments concurrently do not
     // race on one shared stats object; else all segments share |stats|. Size must equal the segment
     // count if provided.
+    // |delvec_metadata|: if non-null, this tablet's metadata at |version|, which the delete vectors are
+    // read from. A caller that builds iterators over many rowsets resolves it once and passes it to each,
+    // so that no segment reads |version|'s metadata back from storage on its own.
     StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_with_delvec(
             const Schema& schema, int64_t version, const MetaFileBuilder* builder, OlapReaderStatistics* stats,
             const std::vector<SparseRangePtr>* rowid_range_per_segment = nullptr,
-            const std::vector<OlapReaderStatistics*>* per_segment_stats = nullptr);
+            const std::vector<OlapReaderStatistics*>* per_segment_stats = nullptr,
+            const TabletMetadataPtr& delvec_metadata = nullptr);
 
     [[nodiscard]] bool is_overlapped() const override { return metadata().overlapped(); }
 

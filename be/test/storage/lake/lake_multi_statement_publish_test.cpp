@@ -29,7 +29,12 @@
 #include <gtest/gtest.h>
 #include <unistd.h>
 
+#include <atomic>
 #include <ctime>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
@@ -44,6 +49,7 @@
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
 #include "storage/lake/tablet_reader.h"
@@ -676,6 +682,92 @@ TEST_P(LakeMultiStatementPublishTest, publish_log_version_retry_after_txn_logs_d
     ASSERT_OK(publish_multi_statement_log_version(log_version, txn_id, {load_id_1, load_id_2}));
     auto st = publish_multi_statement_log_version(log_version + 1, next_id(), {load_id_1, load_id_2});
     ASSERT_TRUE(st.is_not_found()) << st;
+}
+
+// The statements of a multi-statement transaction are applied together, and a statement that overwrites
+// rows of old segments adds its deletes to each of those segments' delete vector at the publish's base
+// version -- through the metadata the publish already read, not by reading that version back from storage
+// once per segment (RB-792). With a metacache that keeps nothing, a transaction that deletes rows from many
+// old segments reads its base version exactly as often as one that deletes from none.
+TEST_P(LakeMultiStatementPublishTest, deletes_from_old_segments_reuse_base_metadata) {
+    if (GetParam() != PRIMARY_KEYS) {
+        GTEST_SKIP() << "only a primary key tablet has delete vectors";
+    }
+    const int64_t tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+    // Writes one statement of kChunkSize keys per element of |first_keys|, starting at that key, and
+    // returns the transaction's id and the statements' load ids.
+    auto write_txn = [&](const std::vector<int>& first_keys) {
+        const int64_t txn_id = next_id();
+        std::vector<PUniqueId> load_ids;
+        for (size_t i = 0; i < first_keys.size(); i++) {
+            load_ids.push_back(make_load_id(txn_id, static_cast<int64_t>(i) + 1));
+            write_statement(txn_id, load_ids.back(), first_keys[i]);
+        }
+        return std::make_pair(txn_id, std::move(load_ids));
+    };
+    // kOldLoads transactions of one statement each: keys [0, kOldLoads * kChunkSize), one segment per load.
+    constexpr int kOldLoads = 4;
+    for (int i = 0; i < kOldLoads; i++) {
+        auto [txn_id, load_ids] = write_txn({i * kChunkSize});
+        ASSERT_OK(publish_multi_statement(version + 1, txn_id, load_ids).status());
+        version++;
+    }
+
+    // A metacache that keeps nothing once it is released, like a shard the base metadata outgrew: every
+    // read of the base version goes to storage.
+    const size_t metacache_capacity = _tablet_mgr->metacache()->tablet_metadata_capacity();
+    _tablet_mgr->metacache()->update_tablet_metadata_capacity(1);
+    DeferOp restore_metacache([&]() { _tablet_mgr->metacache()->update_tablet_metadata_capacity(metacache_capacity); });
+    ASSERT_EQ(1, _tablet_mgr->metacache()->tablet_metadata_capacity());
+    _tablet_mgr->metacache()->prune();
+
+    // While one publish runs, count its reads of the version it publishes on. The callback fires for the
+    // whole process, so this relies on nothing else reading this tablet's metadata meanwhile, which holds
+    // here: the test runs nothing in the background.
+    std::atomic<const std::string*> counted_file = nullptr;
+    std::atomic<int> base_metadata_reads = 0;
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::load_tablet_metadata:path", [&](void* arg) {
+        const std::string* file = counted_file.load();
+        if (file != nullptr && std::string_view(*static_cast<std::string*>(arg)).ends_with(*file)) {
+            ++base_metadata_reads;
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_callbacks([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::load_tablet_metadata:path");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    auto publish_counting = [&](const std::pair<int64_t, std::vector<PUniqueId>>& txn) {
+        const std::string base_file = tablet_metadata_filename(tablet_id, version);
+        base_metadata_reads = 0;
+        counted_file = &base_file;
+        auto metadata_or = publish_multi_statement(version + 1, txn.first, txn.second);
+        counted_file = nullptr;
+        version++;
+        return metadata_or;
+    };
+
+    // New keys only: the publish deletes rows from no old segment and reads its base version for itself.
+    ASSERT_OK(publish_counting(write_txn({kOldLoads * kChunkSize, (kOldLoads + 1) * kChunkSize})).status());
+    const int own_reads = base_metadata_reads.load();
+    ASSERT_GE(own_reads, 1) << "the publish should have read its base version from storage";
+
+    // One statement per old load, each overwriting all of it: the publish deletes rows from every old segment.
+    std::vector<int> first_keys;
+    for (int i = 0; i < kOldLoads; i++) {
+        first_keys.push_back(i * kChunkSize);
+    }
+    ASSERT_OK(publish_counting(write_txn(first_keys)).status());
+    // Nothing beyond the publish's own reads. Before RB-792 it read the base version once more for each of
+    // the old segments.
+    EXPECT_EQ(own_reads, base_metadata_reads.load());
+
+    // Keys [0, (kOldLoads + 2) * kChunkSize), each once.
+    constexpr int64_t kRows = (kOldLoads + 2) * kChunkSize;
+    auto [rows, sum_c0] = read_back(version);
+    EXPECT_EQ(kRows, rows);
+    EXPECT_EQ(kRows * (kRows - 1) / 2, sum_c0);
 }
 
 // FE sends the load ids of every statement of the transaction, but a statement that loaded another table or
