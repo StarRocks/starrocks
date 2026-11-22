@@ -13,15 +13,12 @@
 // limitations under the License.
 package com.starrocks.authorization.ranger;
 
-<<<<<<< HEAD
-import com.starrocks.analysis.Expr;
-=======
 import com.google.common.collect.Maps;
->>>>>>> a4341b3 ([BugFix] Audit Ranger row-filter and masking hits, and keep the SELECT check when a scan is optimized away (#83212))
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ExternalAccessController;
 import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.authorization.RejectedRecordsRowAccessPolicy;
 import com.starrocks.catalog.Column;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.UserIdentity;
@@ -154,12 +151,6 @@ public abstract class RangerAccessController extends ExternalAccessController im
     }
 
     private Expr rowAccessPolicy(ConnectContext context, TableName tableName, boolean audit) {
-        // The built-in row access policy on _statistics_.rejected_records applies whether the cluster runs
-        // Ranger or the native authorizer, so it takes precedence over any Ranger-defined policy for that one
-        // table; every other table goes through Ranger.
-        if (RejectedRecordsRowAccessPolicy.matches(tableName)) {
-            return RejectedRecordsRowAccessPolicy.buildPolicy(context, tableName);
-        }
         RangerAccessResourceImpl resource = tableResource(tableName);
         return audit
                 ? getRowAccessExpression(resource, context)

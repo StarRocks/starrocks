@@ -14,11 +14,10 @@
 
 package com.starrocks.authorization.ranger;
 
+import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.AccessControlProvider;
 import com.starrocks.authorization.ColumnPrivilege;
 import com.starrocks.authorization.ranger.hive.RangerHiveAccessController;
-import com.starrocks.catalog.TableName;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -26,6 +25,7 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -130,7 +130,7 @@ public class RangerRowFilterAuthorizationTest extends ConnectorPlanTestBase {
     private static Captured check(String sql, String rowFilter) {
         Captured captured = mockPlugin(rowFilter);
         AccessControlProvider provider = Authorizer.getInstance();
-        RangerHiveAccessController controller = new RangerHiveAccessController("hive-service", false);
+        RangerHiveAccessController controller = new RangerHiveAccessController("hive-service");
         captured.pluginHandler = controller.getRangerPlugin().getResultProcessor();
         provider.setAccessControl(CATALOG, controller);
         try {
@@ -192,7 +192,7 @@ public class RangerRowFilterAuthorizationTest extends ConnectorPlanTestBase {
     @Test
     public void testLookupWithoutAuditCarriesNoHandler() {
         Captured captured = mockPlugin("0 = 1");
-        RangerHiveAccessController controller = new RangerHiveAccessController("hive-service", false);
+        RangerHiveAccessController controller = new RangerHiveAccessController("hive-service");
         ConnectContext ctx = newContext();
         TableName table = new TableName(CATALOG, "tpch", "region");
         Assertions.assertNotNull(controller.getRowAccessPolicyWithoutAudit(ctx, table));

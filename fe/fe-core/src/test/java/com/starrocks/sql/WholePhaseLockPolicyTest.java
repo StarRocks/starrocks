@@ -14,12 +14,8 @@
 
 package com.starrocks.sql;
 
-<<<<<<< HEAD
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
-=======
-import com.starrocks.authorization.NativeAccessController;
->>>>>>> a4341b3 ([BugFix] Audit Ranger row-filter and masking hits, and keep the SELECT check when a scan is optimized away (#83212))
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -82,19 +78,40 @@ public class WholePhaseLockPolicyTest extends PlanTestBase {
     @BeforeEach
     public void installPolicy() {
         // A row access policy on the guarded table that reads the mapping table, as an access controller returns it.
-        // Installed on the controller, not on Authorizer, so that every Authorizer lookup sees it -- including the
-        // unaudited ones the planner's lock-set pre-pass uses, which reach the controller without going through
-        // Authorizer#getRowAccessPolicy.
-        new MockUp<NativeAccessController>() {
+        // NativeAccessController on this branch declares no row policy lookup to hook, so the
+        // policy goes on Authorizer: on the audited lookups and on the unaudited ones the
+        // planner's lock-set pre-pass takes.
+        new MockUp<Authorizer>() {
             @Mock
-            public Expr getRowAccessPolicy(Invocation invocation, ConnectContext context, TableName tableName) {
-                if (!"t_policy_lock".equalsIgnoreCase(tableName.getTbl())) {
-                    return invocation.proceed(context, tableName);
-                }
-                return SqlParser.parseSqlToExpr("EXISTS (SELECT 1 FROM " + MAP_DB + ".t_map m WHERE m.k = k1)",
-                        context.getSessionVariable().getSqlMode());
+            public Expr getRowAccessPolicy(ConnectContext context, TableName tableName) {
+                return policyOf(context, tableName);
+            }
+
+            @Mock
+            public Expr getRowAccessPolicyWithoutAudit(ConnectContext context, TableName tableName) {
+                return policyOf(context, tableName);
+            }
+
+            @Mock
+            public Map<String, Expr> getColumnMaskingPolicy(ConnectContext context, TableName tableName,
+                                                            List<Column> columns) {
+                return null;
+            }
+
+            @Mock
+            public Map<String, Expr> getColumnMaskingPolicyWithoutAudit(ConnectContext context, TableName tableName,
+                                                                        List<Column> columns) {
+                return null;
             }
         };
+    }
+
+    private static Expr policyOf(ConnectContext context, TableName tableName) {
+        if (!"t_policy_lock".equalsIgnoreCase(tableName.getTbl())) {
+            return null;
+        }
+        return SqlParser.parseSqlToExpr("EXISTS (SELECT 1 FROM " + MAP_DB + ".t_map m WHERE m.k = k1)",
+                context.getSessionVariable().getSqlMode());
     }
 
     @BeforeEach
