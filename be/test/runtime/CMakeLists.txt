@@ -26,6 +26,11 @@ set(RUNTIME_TEST_FILES
     diagnose_daemon_test.cpp
     exception_stack_test.cpp
     runtime_chunk_helper_test.cpp
+<<<<<<< HEAD
+=======
+    process_memory_test.cpp
+    kafka_scan_range_report_test.cpp
+>>>>>>> f6fd0df6fef... [Enhancement][RB-787] Execute Kafka scan ranges of routine load rounds on BE (#69438)
     mem_tracker_test.cpp
     mem_pool_test.cpp
     message_body_sink_test.cpp

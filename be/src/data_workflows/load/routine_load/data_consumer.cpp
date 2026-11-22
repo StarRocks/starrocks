@@ -49,6 +49,7 @@
 #include "exec/exec_env.h"
 #include "fmt/format.h"
 #include "gutil/strings/split.h"
+#include "librdkafka/rdkafka.h"
 #include "platform/platform_env.h"
 #include "platform/small_file_mgr.h"
 
@@ -56,6 +57,22 @@ namespace starrocks {
 
 // the largest fetch.queue.backoff.ms librdkafka accepts
 static constexpr int32_t MAX_KAFKA_FETCH_QUEUE_BACKOFF_MS = 300000;
+
+KafkaDataConsumer::~KafkaDataConsumer() {
+    VLOG(3) << "deconstruct consumer";
+    // Nothing waits for the results of the commits still on their way any more; closing waits for the commits.
+    for (rd_kafka_queue_t* queue : _commit_result_queues) {
+        rd_kafka_queue_destroy(queue);
+    }
+    if (_k_consumer) {
+        // consumer may be already closed when get partition meta failed
+        if (!_k_consumer->closed()) {
+            _k_consumer->close();
+        }
+        delete _k_consumer;
+        _k_consumer = nullptr;
+    }
+}
 
 // init kafka consumer will only set common configs such as
 // brokers, groupid
@@ -209,7 +226,12 @@ Status KafkaDataConsumer::assign_topic_partitions(const std::map<int32_t, int64_
     return Status::OK();
 }
 
-Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* queue, int64_t max_running_time_ms) {
+// How long a consumer that does not stop at the end of its partitions waits for a message at a time, so that it sees
+// the cancellation soon after the consumption it feeds has ended.
+static constexpr int64_t CONSUME_POLL_MS_WITHOUT_STOP_AT_EOF = 100;
+
+Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* queue, int64_t max_running_time_ms,
+                                        bool stop_at_eof) {
     DCHECK(!_k_consumer->closed());
     _last_visit_time = time(nullptr);
     int64_t left_time = max_running_time_ms;
@@ -238,7 +260,9 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
         bool done = false;
         // consume 1 message at a time
         consumer_watch.start();
-        int64_t consume_timeout = std::min<int64_t>(left_time, config::routine_load_kafka_timeout_second * 1000);
+        int64_t consume_timeout =
+                std::min<int64_t>(left_time, stop_at_eof ? config::routine_load_kafka_timeout_second * 1000
+                                                         : CONSUME_POLL_MS_WITHOUT_STOP_AT_EOF);
         std::unique_ptr<RdKafka::Message> msg(_k_consumer->consume(consume_timeout /* timeout, ms */));
         consumer_watch.stop();
         switch (msg->err()) {
@@ -257,9 +281,12 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
         case RdKafka::ERR__TIMED_OUT: {
             // leave the status as OK, because this may happened
             // if there is no data in kafka.
-            std::stringstream ss;
-            ss << msg->errstr() << ", timeout " << consume_timeout;
-            LOG(INFO) << "kafka consume timeout: " << _id << " msg " << ss.str();
+            // Without stopping at the end, the short polls of idle partitions time out all the time.
+            if (stop_at_eof) {
+                std::stringstream ss;
+                ss << msg->errstr() << ", timeout " << consume_timeout;
+                LOG(INFO) << "kafka consume timeout: " << _id << " msg " << ss.str();
+            }
             break;
         }
         case RdKafka::ERR_OFFSET_OUT_OF_RANGE: {
@@ -291,7 +318,7 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
             if (!queue->blocking_put(msg.get())) {
                 finish_reason = "queue closed";
                 done = true;
-            } else if (all_partitions_eof) {
+            } else if (all_partitions_eof && stop_at_eof) {
                 msg.release();
                 finish_reason = "all partitions EOF";
                 done = true;
@@ -493,8 +520,45 @@ Status KafkaDataConsumer::reset() {
 }
 
 // The offsets is the last consumed message for every partition. We need to +1 when we commit offset.
-Status KafkaDataConsumer::commit(const std::string& topic, const std::map<int32_t, int64_t>& offsets) {
+Status KafkaDataConsumer::commit(const std::string& topic, const std::map<int32_t, int64_t>& offsets, int timeout_ms) {
     DCHECK(!_k_consumer->closed());
+    if (timeout_ms > 0) {
+        // commitSync() takes no timeout: the commit posts its result to a queue of its own instead, which is waited
+        // for at most timeout_ms. A commit still on its way then completes or fails by itself, and its queue is kept
+        // to tell when.
+        const int partition_count = static_cast<int>(offsets.size());
+        rd_kafka_topic_partition_list_t* partitions = rd_kafka_topic_partition_list_new(partition_count);
+        DeferOp destroy_partitions([partitions] { rd_kafka_topic_partition_list_destroy(partitions); });
+        for (const auto& [partition, offset] : offsets) {
+            rd_kafka_topic_partition_list_add(partitions, topic.c_str(), partition)->offset = offset + 1;
+        }
+        rd_kafka_t* rk = _k_consumer->c_ptr();
+        rd_kafka_queue_t* queue = rd_kafka_queue_new(rk);
+        DeferOp destroy_queue([&queue] {
+            if (queue != nullptr) {
+                rd_kafka_queue_destroy(queue);
+            }
+        });
+        rd_kafka_resp_err_t err = rd_kafka_commit_queue(rk, partitions, queue, nullptr, nullptr);
+        if (err == RD_KAFKA_RESP_ERR_NO_ERROR) {
+            rd_kafka_event_t* event = rd_kafka_queue_poll(queue, timeout_ms);
+            if (event == nullptr) {
+                std::unique_lock<std::mutex> l(_lock);
+                _commit_result_queues.push_back(queue);
+                queue = nullptr;
+                return Status::TimedOut(fmt::format("kafka offset commit did not finish in {}ms", timeout_ms));
+            }
+            err = rd_kafka_event_error(event);
+            rd_kafka_event_destroy(event);
+        }
+        if (err != RD_KAFKA_RESP_ERR_NO_ERROR) {
+            std::stringstream ss;
+            ss << "failed to commit kafka offset, topic: " << topic << ", group id: " << _group_id
+               << ", err: " << rd_kafka_err2str(err);
+            return Status::InternalError(ss.str());
+        }
+        return Status::OK();
+    }
     std::vector<RdKafka::TopicPartition*> topic_partitions;
     // delete TopicPartition finally
     auto tp_deleter = [&topic_partitions]() {
@@ -516,6 +580,23 @@ Status KafkaDataConsumer::commit(const std::string& topic, const std::map<int32_
         return Status::InternalError(ss.str());
     }
     return Status::OK();
+}
+
+bool KafkaDataConsumer::has_commit_in_flight() {
+    std::unique_lock<std::mutex> l(_lock);
+    // A commit has completed once its result has come. librdkafka counts the commit out before it posts the result, so
+    // the consumer fetches for a new assignment again by then.
+    for (auto it = _commit_result_queues.begin(); it != _commit_result_queues.end();) {
+        rd_kafka_event_t* event = rd_kafka_queue_poll(*it, 0);
+        if (event == nullptr) {
+            ++it;
+            continue;
+        }
+        rd_kafka_event_destroy(event);
+        rd_kafka_queue_destroy(*it);
+        it = _commit_result_queues.erase(it);
+    }
+    return !_commit_result_queues.empty();
 }
 
 // if the kafka brokers and topic are same,
