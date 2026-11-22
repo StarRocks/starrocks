@@ -23,23 +23,30 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadKvParams;
+import com.starrocks.planner.LoadScanNode;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TEnvelopeType;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.warehouse.Utils;
+import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.arrow.util.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
@@ -154,7 +161,15 @@ public class BatchWriteMgr extends LeaderDaemon {
             if (result.first.getStatus_code() != TStatusCode.OK) {
                 return new RequestCoordinatorBackendResult(result.first, null);
             }
-            return result.second.requestCoordinatorBackends();
+            RequestCoordinatorBackendResult backendResult = result.second.requestCoordinatorBackends();
+            if (backendResult.getStatus().getStatus_code() == TStatusCode.SERVICE_UNAVAILABLE) {
+                MergeCommitJob newJob =
+                        switchCnGroupIfUnavailable(new BatchWriteId(tableId, params), result.second, null);
+                if (newJob != null) {
+                    backendResult = newJob.requestCoordinatorBackends();
+                }
+            }
+            return backendResult;
         } finally {
             lock.readLock().unlock();
         }
@@ -180,7 +195,18 @@ public class BatchWriteMgr extends LeaderDaemon {
             }
 
             String user = userIdentity != null ? userIdentity.getUser() : "";
-            return result.second.requestLoad(user, backendId, backendHost);
+            RequestLoadResult loadResult = result.second.requestLoad(user, backendId, backendHost);
+            if (loadResult.getStatus().getStatus_code() == TStatusCode.SERVICE_UNAVAILABLE) {
+                MergeCommitJob newJob =
+                        switchCnGroupIfUnavailable(new BatchWriteId(tableId, params), result.second, backendId);
+                // Retry only when the requesting node is in the new job's CN group. A task cannot run on a node
+                // outside the group of its job, so the new job turns down a request from any other node, and such a
+                // request returns the original failure.
+                if (newJob != null && isInCnGroup(backendId, newJob.getComputeResource())) {
+                    loadResult = newJob.requestLoad(user, backendId, backendHost);
+                }
+            }
+            return loadResult;
         } finally {
             lock.readLock().unlock();
         }
@@ -246,8 +272,7 @@ public class BatchWriteMgr extends LeaderDaemon {
 
         StreamLoadInfo streamLoadInfo;
         try {
-            CRAcquireContext acquireContext = CRAcquireContext.of(warehouseName);
-            streamLoadInfo = StreamLoadInfo.fromHttpStreamLoadRequest(null, -1, Optional.empty(), params, acquireContext);
+            streamLoadInfo = buildStreamLoadInfo(warehouseName, params);
         } catch (Exception e) {
             TStatus status = new TStatus();
             status.setStatus_code(TStatusCode.INVALID_ARGUMENT);
@@ -288,15 +313,8 @@ public class BatchWriteMgr extends LeaderDaemon {
 
         try {
             String finalWarehouseName = warehouseName;
-            load = mergeCommitJobs.computeIfAbsent(uniqueId, uid -> {
-                long id = idGenerator.getAndIncrement();
-                MergeCommitJob newLoad = new MergeCommitJob(
-                        id, tableId, finalWarehouseName, streamLoadInfo, batchWriteIntervalMs, batchWriteParallel,
-                        params, coordinatorBackendAssigner, threadPoolExecutor, txnStateDispatcher);
-                coordinatorBackendAssigner.registerBatchWrite(id, newLoad.getComputeResource(), tableId,
-                        newLoad.getBatchWriteParallel());
-                return newLoad;
-            });
+            load = mergeCommitJobs.computeIfAbsent(uniqueId, uid -> createJob(
+                    tableId, finalWarehouseName, streamLoadInfo, batchWriteIntervalMs, batchWriteParallel, params));
 
             String user = userIdentity != null ? userIdentity.getUser() : "";
             LOG.info("Create merge commit job, user: {}, id: {}, {}, {}", user, load.getId(), tableId, params);
@@ -309,6 +327,179 @@ public class BatchWriteMgr extends LeaderDaemon {
         }
         MergeCommitMetricRegistry.getInstance().setJobNum(mergeCommitJobs.size());
         return new Pair<>(new TStatus(TStatusCode.OK), load);
+    }
+
+    private static StreamLoadInfo buildStreamLoadInfo(String warehouseName, StreamLoadKvParams params)
+            throws Exception {
+        CRAcquireContext acquireContext = CRAcquireContext.of(warehouseName);
+        return StreamLoadInfo.fromHttpStreamLoadRequest(null, -1, Optional.empty(), params, acquireContext);
+    }
+
+    // Creates a job and registers it with the assigner, which gives it coordinator nodes of the job's CN group.
+    private MergeCommitJob createJob(TableId tableId, String warehouseName, StreamLoadInfo streamLoadInfo,
+                                     int batchWriteIntervalMs, int batchWriteParallel, StreamLoadKvParams params) {
+        long id = idGenerator.getAndIncrement();
+        MergeCommitJob job = new MergeCommitJob(
+                id, tableId, warehouseName, streamLoadInfo, batchWriteIntervalMs, batchWriteParallel,
+                params, coordinatorBackendAssigner, threadPoolExecutor, txnStateDispatcher);
+        coordinatorBackendAssigner.registerBatchWrite(id, job.getComputeResource(), tableId, job.getBatchWriteParallel());
+        return job;
+    }
+
+    /**
+     * Moves a job to another CN group of its warehouse when no compute node of its own CN group can coordinate
+     * loads any more: all of them are dead, decommissioned or in the blocklist, as when the availability zone of
+     * the group is down. A job keeps the CN group it got at creation, so without this every request for the table
+     * fails with "Can't find available backends" until a node of that group is back or the job has been idle for
+     * {@link Config#merge_commit_idle_ms}, while the other CN groups of the warehouse could take the load.
+     *
+     * <p>Called only after a request on the job failed as unavailable, because it found no coordinator backend or
+     * came from a node outside the job's CN group, so requests that succeed pay nothing, and the check runs at most
+     * once per {@link MergeCommitJob#CN_GROUP_CHECK_INTERVAL_MS} for a job. The new job is registered with the
+     * assigner before it replaces the old one in {@link #mergeCommitJobs}, and the old job is unregistered only
+     * after that, so a request never finds a job the assigner does not know. Tasks of the old job keep running and
+     * report to it. A job is not moved back when its old CN group recovers.
+     *
+     * @param uniqueId the key of the job
+     * @param job the job a request failed on as unavailable
+     * @param requestBackendId the compute node that asked for a load on the BE RPC path, null on the HTTP path
+     * @return the job to retry the request on, or null to return the original failure
+     */
+    @VisibleForTesting
+    MergeCommitJob switchCnGroupIfUnavailable(BatchWriteId uniqueId, MergeCommitJob job, Long requestBackendId) {
+        MergeCommitJob current = mergeCommitJobs.get(uniqueId);
+        if (current != job) {
+            // Another request has moved the job already
+            return current;
+        }
+        if (!job.tryClaimCnGroupCheck(TimeUnit.NANOSECONDS.toMillis(System.nanoTime()))) {
+            return null;
+        }
+        ComputeResource oldResource = job.getComputeResource();
+        if (hasAvailableNodes(oldResource)) {
+            // Other nodes of the group can coordinate the job, and the assigner moves it to them
+            return null;
+        }
+        StreamLoadInfo streamLoadInfo = buildStreamLoadInfoOnAnotherCnGroup(job, requestBackendId);
+        if (streamLoadInfo == null) {
+            LOG.warn("No compute node of CN group {} can coordinate merge commit job {} of {}, and no other enabled " +
+                    "CN group of warehouse {} has one", oldResource, job.getId(), job.getTableId(), job.getWarehouseName());
+            return null;
+        }
+        MergeCommitJob newJob;
+        try {
+            newJob = createJob(job.getTableId(), job.getWarehouseName(), streamLoadInfo, job.getBatchWriteIntervalMs(),
+                    job.getBatchWriteParallel(), job.getLoadParameters());
+        } catch (Exception e) {
+            LOG.warn("Failed to move merge commit job {} of {} from CN group {} to {}", job.getId(), job.getTableId(),
+                    oldResource, streamLoadInfo.getComputeResource(), e);
+            return null;
+        }
+        if (!mergeCommitJobs.replace(uniqueId, job, newJob)) {
+            // Another request moved the job while this one was registering its replacement
+            coordinatorBackendAssigner.unregisterBatchWrite(newJob.getId());
+            return mergeCommitJobs.get(uniqueId);
+        }
+        coordinatorBackendAssigner.unregisterBatchWrite(job.getId());
+        MergeCommitMetricRegistry.getInstance().incJobCnGroupSwitch();
+        LOG.warn("Move merge commit job of {} from CN group {} to {} because no compute node of the group can " +
+                "coordinate loads, old job id: {}, new job id: {}, params: {}", job.getTableId(), oldResource,
+                newJob.getComputeResource(), job.getId(), newJob.getId(), job.getLoadParameters());
+        return newJob;
+    }
+
+    /**
+     * Builds the stream load info for a replacement of the job on another CN group of the job's warehouse that is
+     * enabled and has a node to coordinate loads. DISABLE CNGROUP leaves the nodes of a group alive, so a disabled
+     * group is skipped wherever it comes from. On the BE RPC path the group of the requesting compute node comes
+     * first, because a task cannot run on a node outside the CN group of its job, so any other group would fail that
+     * request. Otherwise the group is acquired the same way as for a new job. If that gives the job's own group again
+     * (its nodes still count as alive while they are in the blocklist or decommissioned), a disabled group or a group
+     * without such a node, one of the other usable groups of the warehouse is taken at random.
+     *
+     * @return null if no other enabled CN group of the warehouse can coordinate loads
+     */
+    private StreamLoadInfo buildStreamLoadInfoOnAnotherCnGroup(MergeCommitJob job, Long requestBackendId) {
+        ComputeResource oldResource = job.getComputeResource();
+        StreamLoadInfo streamLoadInfo;
+        try {
+            streamLoadInfo = buildStreamLoadInfo(job.getWarehouseName(), job.getLoadParameters());
+        } catch (Exception e) {
+            LOG.warn("Failed to acquire a CN group of warehouse {} for merge commit job {} of {}",
+                    job.getWarehouseName(), job.getId(), job.getTableId(), e);
+            return null;
+        }
+        ComputeResource requestNodeResource = requestBackendId == null ? null : getCnGroupOfNode(requestBackendId);
+        if (requestNodeResource != null && requestNodeResource.getWarehouseId() == oldResource.getWarehouseId()
+                && isUsableReplacement(requestNodeResource, oldResource)) {
+            streamLoadInfo.setComputeResource(requestNodeResource);
+            return streamLoadInfo;
+        }
+        if (isUsableReplacement(streamLoadInfo.getComputeResource(), oldResource)) {
+            return streamLoadInfo;
+        }
+        List<ComputeResource> candidates;
+        try {
+            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            Warehouse warehouse = warehouseManager.getWarehouse(job.getWarehouseName());
+            candidates = new ArrayList<>(warehouseManager.getComputeResourceProvider().getComputeResources(warehouse));
+        } catch (Exception e) {
+            LOG.warn("Failed to list the CN groups of warehouse {}", job.getWarehouseName(), e);
+            return null;
+        }
+        Collections.shuffle(candidates);
+        for (ComputeResource candidate : candidates) {
+            if (isUsableReplacement(candidate, oldResource)) {
+                streamLoadInfo.setComputeResource(candidate);
+                return streamLoadInfo;
+            }
+        }
+        return null;
+    }
+
+    // The CN group of a compute node, or null if the node is unknown
+    private static ComputeResource getCnGroupOfNode(long nodeId) {
+        try {
+            ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
+            if (node == null) {
+                return null;
+            }
+            return GlobalStateMgr.getCurrentState().getWarehouseMgr().getComputeResourceProvider()
+                    .ofComputeResource(node.getWarehouseId(), node.getWorkerGroupId());
+        } catch (Exception e) {
+            LOG.warn("Failed to get the CN group of compute node {}", nodeId, e);
+            return null;
+        }
+    }
+
+    private static boolean isInCnGroup(long nodeId, ComputeResource computeResource) {
+        ComputeResource nodeResource = getCnGroupOfNode(nodeId);
+        return nodeResource != null && isSameCnGroup(nodeResource, computeResource);
+    }
+
+    private static boolean isUsableReplacement(ComputeResource candidate, ComputeResource oldResource) {
+        return candidate != null && !isSameCnGroup(candidate, oldResource)
+                && !GlobalStateMgr.getCurrentState().getWarehouseMgr().isComputeResourceDisabled(candidate)
+                && hasAvailableNodes(candidate);
+    }
+
+    private static boolean isSameCnGroup(ComputeResource left, ComputeResource right) {
+        return left.getWarehouseId() == right.getWarehouseId() && left.getWorkerGroupId() == right.getWorkerGroupId();
+    }
+
+    // Whether a compute node of the CN group can coordinate loads. The assigner picks coordinators the same way.
+    private static boolean hasAvailableNodes(ComputeResource computeResource) {
+        try {
+            return !LoadScanNode.getAvailableComputeNodes(computeResource).isEmpty();
+        } catch (Exception e) {
+            LOG.warn("Failed to get the available compute nodes of CN group {}", computeResource, e);
+            return false;
+        }
+    }
+
+    @VisibleForTesting
+    MergeCommitJob getJob(TableId tableId, StreamLoadKvParams params) {
+        return mergeCommitJobs.get(new BatchWriteId(tableId, params));
     }
 
     /**

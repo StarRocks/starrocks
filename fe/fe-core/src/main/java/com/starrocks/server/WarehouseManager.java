@@ -264,6 +264,16 @@ public class WarehouseManager implements Writable {
     }
 
     /**
+     * Check whether DISABLE CNGROUP has disabled the CN group of the compute resource. The compute nodes of a disabled
+     * CN group can stay alive, so {@link #isResourceAvailable} may still return true for it.
+     * @param computeResource: the compute resource to check
+     * @return: true if its CN group exists and is disabled, false otherwise
+     */
+    public boolean isComputeResourceDisabled(ComputeResource computeResource) {
+        return false;
+    }
+
+    /**
      * Get all compute node ids in the warehouse.
      * @param warehouseId: the id of the warehouse
      * @return: a list of compute node ids in the warehouse, empty if the warehouse is not available

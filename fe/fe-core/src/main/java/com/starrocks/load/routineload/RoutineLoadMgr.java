@@ -688,11 +688,13 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     }
 
     public void updateRoutineLoadJob() throws StarRocksException {
+        // the jobs of a CN group share what this round finds out about the group from StarOS
+        final RoutineLoadJob.CnGroupView cnGroupView = new RoutineLoadJob.CnGroupView();
         readLock();
         try {
             for (RoutineLoadJob routineLoadJob : idToRoutineLoadJob.values()) {
                 if (!routineLoadJob.state.isFinalState()) {
-                    routineLoadJob.update();
+                    routineLoadJob.update(cnGroupView);
                 }
             }
         } finally {

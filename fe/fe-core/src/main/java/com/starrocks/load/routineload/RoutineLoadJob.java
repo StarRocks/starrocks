@@ -121,6 +121,7 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -152,6 +153,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     public static final boolean DEFAULT_PAUSE_ON_FATAL_PARSE_ERROR = false;
 
     protected static final String STAR_STRING = "*";
+
+    // How long a job waiting for another CN group waits after its first failure to be scheduled; every further failure
+    // doubles the wait, up to the maximum
+    private static final long RESCHEDULE_RETRY_MIN_DELAY_MS = 10_000L;
+    private static final long RESCHEDULE_RETRY_MAX_DELAY_MS = 300_000L;
 
     /*
                      +-----------------+
@@ -322,6 +328,13 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     @SerializedName("wcr")
     protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
+
+    // The CN group that rescheduleIfComputeResourceUnavailable() moved this job off, kept until the job is divided into
+    // tasks again, paused, stopped or cancelled. Not persisted: only the leader that moved the job uses it.
+    private volatile ComputeResource rescheduledFromComputeResource = null;
+    // While the job waits for another CN group: no prepare() before this time, and the delay after the next failure
+    private volatile long rescheduleRetryAtMs = 0;
+    private long rescheduleRetryDelayMs = 0;
 
     protected QueryableReentrantReadWriteLock lock = new QueryableReentrantReadWriteLock(true);
 
@@ -942,7 +955,17 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     // (e.g. after a Kafka partition-count change).
     // derived class can override this.
     public void prepare() throws StarRocksException {
-        this.computeResource = acquireComputeResource();
+        final ComputeResource previous = this.computeResource;
+        // a job moved off its CN group skips a disabled CN group, as the move itself does
+        this.computeResource = isWaitingForAnotherCnGroup() ? acquireReplacementComputeResource() : acquireComputeResource();
+        if (previous != WarehouseManager.DEFAULT_RESOURCE && !isSameCnGroup(previous, this.computeResource)) {
+            LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
+                    .add("name", name)
+                    .add("previous_compute_resource", previous)
+                    .add("compute_resource", this.computeResource)
+                    .add("msg", "the job uses another CN group")
+                    .build());
+        }
     }
 
     // Acquire a compute resource for this job's warehouse and return it WITHOUT mutating the
@@ -962,6 +985,34 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         } catch (ErrorReportException e) {
             throw new LoadException(e.getMessage(), e);
         }
+    }
+
+    /**
+     * Acquires the CN group for a job that rescheduleIfComputeResourceUnavailable() moves off its CN group, without
+     * writing the field: the acquisition's choice when that group is enabled, else a random other enabled CN group of
+     * the job's warehouse with an alive compute node. DISABLE CNGROUP keeps the compute nodes of a group alive, and the
+     * acquisition does not look at the flag.
+     */
+    protected ComputeResource acquireReplacementComputeResource() throws LoadException {
+        final ComputeResource acquired = acquireComputeResource();
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        if (acquired == null || !warehouseManager.isComputeResourceDisabled(acquired)) {
+            return acquired;
+        }
+        final List<ComputeResource> candidates;
+        try {
+            final Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
+            candidates = new ArrayList<>(warehouseManager.getComputeResourceProvider().getComputeResources(warehouse));
+        } catch (ErrorReportException e) {
+            throw new LoadException(e.getMessage(), e);
+        }
+        Collections.shuffle(candidates);
+        for (ComputeResource candidate : candidates) {
+            if (!warehouseManager.isComputeResourceDisabled(candidate) && warehouseManager.isResourceAvailable(candidate)) {
+                return candidate;
+            }
+        }
+        throw new LoadException("No enabled CN group of warehouse " + warehouseId + " has an alive compute node");
     }
 
     // Pick the compute resource that the scheduler's partition-list RPC is routed through, WITHOUT
@@ -1597,6 +1648,12 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     private void transformState(JobState jobState, ErrorReason reason) {
+        if (jobState != JobState.NEED_SCHEDULE) {
+            // divided into tasks, paused, stopped or cancelled: the job no longer waits for another CN group
+            rescheduledFromComputeResource = null;
+            rescheduleRetryAtMs = 0;
+            rescheduleRetryDelayMs = 0;
+        }
         switch (jobState) {
             case RUNNING:
                 executeRunning();
@@ -1690,6 +1747,13 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     public void update() throws StarRocksException {
+        update(new CnGroupView());
+    }
+
+    /**
+     * @param cnGroupView what the scheduler round knows about the CN groups, shared by all jobs of the round
+     */
+    public void update(CnGroupView cnGroupView) throws StarRocksException {
         // check if db and table exist
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
@@ -1726,8 +1790,186 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             }
         }
 
+        // A job waiting for another CN group sends no broker request until the delay after its last failure to be
+        // scheduled has passed; the partition refresh would send one through a CN group in every round.
+        if (isRescheduleRetryDelayed(System.currentTimeMillis())) {
+            return;
+        }
+
+        // Runs before the partition refresh, so that a job whose CN group has no alive compute node waits for another
+        // CN group even when the refresh of the same round finds a partition change and reschedules the job as well.
+        // A failed refresh does not pause a job that waits for another CN group.
+        rescheduleIfComputeResourceUnavailable(cnGroupView);
+
         // check if partition has been changed
         refreshPartitionsIfNeeded();
+    }
+
+    /**
+     * Reschedules a RUNNING job whose CN group has no alive compute node while another enabled CN group of the job's
+     * warehouse has one, if {@link #canRescheduleOnAnotherCnGroup} allows. Only prepare() picks the job's compute
+     * resource, and every task sends its offset requests, its plan and its transaction through it, so a job left
+     * alone keeps failing its tasks until that CN group comes back. Back in NEED_SCHEDULE, as after a partition
+     * change, the job gets a CN group with alive compute nodes from prepare() in the same scheduler round, and keeps
+     * it when the old CN group recovers. A job is left as it is when no other enabled CN group of its warehouse has an
+     * alive compute node. Until the job is divided into tasks again, a failure to schedule it does not pause it, see
+     * {@link #retryRescheduleLater}.
+     *
+     * @param cnGroupView what the scheduler round knows about the CN groups
+     */
+    protected void rescheduleIfComputeResourceUnavailable(CnGroupView cnGroupView) throws StarRocksException {
+        if (!RunMode.isSharedDataMode() || state != JobState.RUNNING || !canRescheduleOnAnotherCnGroup()) {
+            return;
+        }
+        final ComputeResource current = computeResource;
+        if (cnGroupView.isAvailable(current)) {
+            return;
+        }
+        // the CN group that prepare() would give the job: it skips the current CN group because that group has no
+        // alive compute node, and there is none when no other enabled CN group of the warehouse has one
+        final Optional<ComputeResource> candidate = cnGroupView.replacementOf(this, current);
+        if (candidate.isEmpty() || isSameCnGroup(candidate.get(), current)) {
+            return;
+        }
+        writeLock();
+        try {
+            // paused, stopped or rescheduled while the lock was not held
+            if (state != JobState.RUNNING || computeResource != current) {
+                return;
+            }
+            final Warehouse warehouse =
+                    GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(current.getWarehouseId());
+            final String msg = String.format("CN group with worker group id %d in warehouse %s has no alive compute " +
+                            "node, reschedule the job to another CN group", current.getWorkerGroupId(),
+                    warehouse != null ? warehouse.getName() : String.valueOf(current.getWarehouseId()));
+            LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
+                    .add("name", name)
+                    .add("compute_resource", current)
+                    .add("msg", msg)
+                    .build());
+            setOtherMsg(msg);
+            unprotectUpdateState(JobState.NEED_SCHEDULE, null);
+            rescheduledFromComputeResource = current;
+            rescheduleRetryAtMs = 0;
+            rescheduleRetryDelayMs = 0;
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    /**
+     * Whether {@link #rescheduleIfComputeResourceUnavailable} may move this job to another CN group. Only a Kafka job
+     * may. The tasks of a job share its partitions, with one task for each alive compute node of the CN group at most,
+     * and a BE fails a Pulsar task that has more partitions than max_pulsar_consumer_num_per_group, so a Pulsar job
+     * moved to a CN group with fewer compute nodes could end up paused.
+     */
+    protected boolean canRescheduleOnAnotherCnGroup() {
+        return false;
+    }
+
+    /**
+     * Whether {@link #rescheduleIfComputeResourceUnavailable} moved this job off its CN group and the job has not been
+     * divided into tasks since.
+     */
+    public boolean isWaitingForAnotherCnGroup() {
+        return rescheduledFromComputeResource != null;
+    }
+
+    /**
+     * Whether this job, waiting for another CN group, still waits out the delay after its last failure to be
+     * scheduled. The scheduler does not prepare it before then.
+     */
+    public boolean isRescheduleRetryDelayed(long nowMs) {
+        return rescheduledFromComputeResource != null && nowMs < rescheduleRetryAtMs;
+    }
+
+    /**
+     * Called when the scheduler fails to schedule this NEED_SCHEDULE job in prepare() or in its division into tasks.
+     * A job waiting for another CN group is not paused but stays in NEED_SCHEDULE: left on its CN group it would have
+     * stayed RUNNING until the group recovered, so a failure on the way to another CN group, e.g. because that group
+     * failed as well or does not reach the brokers, must not pause it. The job's compute resource goes back to the old
+     * CN group, so that the next acquisition takes that group again once it has an alive compute node. The next
+     * partition refresh and prepare() wait 10 seconds after the first failure, twice as long after each further one
+     * and 5 minutes at most, so that requests that time out against the brokers do not hold up the scheduling of other
+     * jobs. The job waits until it is divided into tasks; PAUSE and STOP end the wait as for any job.
+     *
+     * @param errorMsg why the job could not be scheduled, shown in the job's OtherMsg
+     * @return whether the job stays in NEED_SCHEDULE; the caller pauses any other job as before
+     */
+    public boolean retryRescheduleLater(String errorMsg) {
+        writeLock();
+        try {
+            return unprotectRetryRescheduleLater(errorMsg, true);
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    /**
+     * {@link #retryRescheduleLater} under the job's write lock. The partition refresh calls it with
+     * {@code delayNextTry} false: only a failed prepare() starts or lengthens the delay, during which neither runs.
+     */
+    protected boolean unprotectRetryRescheduleLater(String errorMsg, boolean delayNextTry) {
+        final ComputeResource rescheduledFrom = rescheduledFromComputeResource;
+        if (state != JobState.NEED_SCHEDULE || rescheduledFrom == null) {
+            return false;
+        }
+        computeResource = rescheduledFrom;
+        String retry = "retry later";
+        if (delayNextTry) {
+            rescheduleRetryDelayMs = rescheduleRetryDelayMs == 0 ? RESCHEDULE_RETRY_MIN_DELAY_MS
+                    : Math.min(rescheduleRetryDelayMs * 2, RESCHEDULE_RETRY_MAX_DELAY_MS);
+            rescheduleRetryAtMs = System.currentTimeMillis() + rescheduleRetryDelayMs;
+            retry = "retry in " + rescheduleRetryDelayMs / 1000 + " s";
+        }
+        final String msg = "failed to schedule the job on another CN group, " + retry + ": " + errorMsg;
+        LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
+                .add("name", name)
+                .add("rescheduled_from_compute_resource", rescheduledFrom)
+                .add("msg", msg)
+                .build());
+        setOtherMsg(msg);
+        return true;
+    }
+
+    private static boolean isSameCnGroup(ComputeResource left, ComputeResource right) {
+        return left.getWarehouseId() == right.getWarehouseId() && left.getWorkerGroupId() == right.getWorkerGroupId();
+    }
+
+    /**
+     * What one scheduler round knows about the CN groups: whether a CN group has an alive compute node, and which CN
+     * group the jobs of a CN group without one move to. The jobs of a CN group ask the same questions, so the round
+     * asks StarOS once per CN group instead of once per job. A CN group that loses its last alive compute node during
+     * a round moves its jobs in the next round.
+     */
+    public static class CnGroupView {
+        private final Map<Pair<Long, Long>, Boolean> available = new HashMap<>();
+        private final Map<Pair<Long, Long>, Optional<ComputeResource>> replacements = new HashMap<>();
+
+        boolean isAvailable(ComputeResource computeResource) {
+            return available.computeIfAbsent(keyOf(computeResource),
+                    key -> GlobalStateMgr.getCurrentState().getWarehouseMgr().isResourceAvailable(computeResource));
+        }
+
+        // The CN group that the jobs of the given CN group move to, as acquired for the first job that asks; empty if
+        // there is none
+        Optional<ComputeResource> replacementOf(RoutineLoadJob job, ComputeResource computeResource) {
+            final Pair<Long, Long> key = keyOf(computeResource);
+            Optional<ComputeResource> replacement = replacements.get(key);
+            if (replacement == null) {
+                try {
+                    replacement = Optional.ofNullable(job.acquireReplacementComputeResource());
+                } catch (LoadException e) {
+                    replacement = Optional.empty();
+                }
+                replacements.put(key, replacement);
+            }
+            return replacement;
+        }
+
+        private static Pair<Long, Long> keyOf(ComputeResource computeResource) {
+            return Pair.create(computeResource.getWarehouseId(), computeResource.getWorkerGroupId());
+        }
     }
 
     /**

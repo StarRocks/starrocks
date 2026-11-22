@@ -75,6 +75,10 @@ public class RoutineLoadScheduler extends LeaderDaemon {
     }
 
     private void process() throws StarRocksException {
+        // Taken before the jobs are updated: update() checks the retry delay of a job waiting for another CN group no
+        // earlier, so a job whose partition refresh update() skipped for the delay is not prepared in this round with
+        // the partitions from before its wait.
+        final long nowMs = System.currentTimeMillis();
         // update
         routineLoadManager.updateRoutineLoadJob();
         // get need schedule routine jobs
@@ -84,6 +88,10 @@ public class RoutineLoadScheduler extends LeaderDaemon {
             LOG.info("there are {} job(s) need to be scheduled", routineLoadJobList.size());
         }
         for (RoutineLoadJob routineLoadJob : routineLoadJobList) {
+            if (routineLoadJob.isRescheduleRetryDelayed(nowMs)) {
+                // a job waiting for another CN group waits out the delay after its last failure to be scheduled
+                continue;
+            }
             RoutineLoadJob.JobState errorJobState = null;
             StarRocksException userException = null;
             try {
@@ -105,9 +113,12 @@ public class RoutineLoadScheduler extends LeaderDaemon {
                 userException = e;
                 LOG.warn(userException.getMessage(), userException);
             } catch (StarRocksException e) {
-                errorJobState = RoutineLoadJob.JobState.PAUSED;
-                userException = e;
-                LOG.warn(userException.getMessage(), userException);
+                LOG.warn(e.getMessage(), e);
+                // a job waiting for another CN group is retried later instead
+                if (!routineLoadJob.retryRescheduleLater(e.getMessage())) {
+                    errorJobState = RoutineLoadJob.JobState.PAUSED;
+                    userException = e;
+                }
             }
 
             if (errorJobState != null) {

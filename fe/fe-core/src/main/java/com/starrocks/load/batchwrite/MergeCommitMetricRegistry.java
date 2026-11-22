@@ -32,6 +32,9 @@ public class MergeCommitMetricRegistry {
 
     private final GaugeMetricImpl<Integer> jobNum = new GaugeMetricImpl<>("merge_commit_job_num",
             Metric.MetricUnit.NOUNIT, "the number of merge commit jobs", 0);
+    private final LongCounterMetric jobCnGroupSwitchNum = new LongCounterMetric("merge_commit_job_cngroup_switch_num",
+            Metric.MetricUnit.NOUNIT, "the number of times a merge commit job moved to another CN group " +
+            "because no compute node of its CN group could coordinate loads");
     private final LongCounterMetric taskSuccessNum = new LongCounterMetric("merge_commit_task_success_num",
             Metric.MetricUnit.NOUNIT, "the number of merge commit success tasks");
     private final LongCounterMetric taskFailNum = new LongCounterMetric("merge_commit_task_fail_num",
@@ -73,6 +76,7 @@ public class MergeCommitMetricRegistry {
 
     private MergeCommitMetricRegistry() {
         registerGauge(jobNum);
+        registerCounter(jobCnGroupSwitchNum);
         registerCounter(taskSuccessNum);
         registerCounter(taskFailNum);
         registerCounter(taskRunningNum);
@@ -118,6 +122,14 @@ public class MergeCommitMetricRegistry {
 
     public void setJobNum(int num) {
         jobNum.setValue(num);
+    }
+
+    public void incJobCnGroupSwitch() {
+        jobCnGroupSwitchNum.increase(1L);
+    }
+
+    public long getJobCnGroupSwitchNum() {
+        return jobCnGroupSwitchNum.getValue();
     }
 
     public void incSuccessTask() {

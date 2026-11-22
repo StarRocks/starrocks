@@ -619,6 +619,12 @@ products: [oss, enterprise, cloud, anywhere]
 - 类型：累计
 - 描述：失败的合并提交请求。
 
+## `merge_commit_job_cngroup_switch_num`
+
+- 单位：计数
+- 类型：累计
+- 描述：合并提交作业因所在 CN Group 中没有可以协调导入的计算节点（例如该 CN Group 所在的可用区故障），切换到同一 Warehouse 中其他 CN Group 的次数。只有运行合并提交作业的 Leader FE 会累加该值。
+
 ## `merge_commit_pending`
 
 - 单位：微秒

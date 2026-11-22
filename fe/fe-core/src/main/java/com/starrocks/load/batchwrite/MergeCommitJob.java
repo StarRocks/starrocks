@@ -24,6 +24,7 @@ import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
@@ -52,6 +53,10 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
     private static final Logger LOG = LoggerFactory.getLogger(MergeCommitJob.class);
 
     private static final String LABEL_PREFIX = "merge_commit_";
+
+    // How often a job may check whether a node of its CN group can still coordinate loads, once requests on it
+    // find no coordinator backend. Bounds the cost while every CN group of the warehouse is unavailable.
+    static final long CN_GROUP_CHECK_INTERVAL_MS = 1000;
 
     private final long id;
     private final TableId tableId;
@@ -93,6 +98,10 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
 
     private final AtomicLong lastLoadCreateTimeMs;
 
+    // The earliest time of the next check whether a node of the CN group can still coordinate loads, on the
+    // monotonic clock that the caller of tryClaimCnGroupCheck uses
+    private final AtomicLong nextCnGroupCheckTimeMs;
+
     public MergeCommitJob(
             long id,
             TableId tableId,
@@ -119,6 +128,7 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
         this.mergeCommitTasks = new ConcurrentHashMap<>();
         this.lock = new ReentrantReadWriteLock();
         this.lastLoadCreateTimeMs = new AtomicLong(System.currentTimeMillis());
+        this.nextCnGroupCheckTimeMs = new AtomicLong(Long.MIN_VALUE);
         this.computeResource = streamLoadInfo.getComputeResource();
     }
 
@@ -140,6 +150,14 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
 
     public int getBatchWriteParallel() {
         return batchWriteParallel;
+    }
+
+    public int getBatchWriteIntervalMs() {
+        return batchWriteIntervalMs;
+    }
+
+    public StreamLoadKvParams getLoadParameters() {
+        return loadParameters;
     }
 
     public int numRunningLoads() {
@@ -236,6 +254,16 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
                             String.format("Backend [%s, %s] is not available", backendId, backendHost)));
                     return new RequestLoadResult(status, null);
                 }
+                // In shared-data mode a task runs only on the nodes of the job's CN group, so a node outside it
+                // would fail the whole task, together with the requests of the group's nodes that join the task.
+                // Such a node asks when a client writes to it directly, or after the job moved off its CN group.
+                if (RunMode.isSharedDataMode() && !isInCnGroup(backend)) {
+                    status.setStatus_code(TStatusCode.SERVICE_UNAVAILABLE);
+                    status.setError_msgs(Collections.singletonList(String.format(
+                            "Backend [%s, %s] is not in CN group %s of merge commit job %s",
+                            backendId, backendHost, computeResource, id)));
+                    return new RequestLoadResult(status, null);
+                }
                 backendIds.add(backendId);
             }
 
@@ -284,6 +312,11 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
         }
     }
 
+    private boolean isInCnGroup(ComputeNode node) {
+        return node.getWarehouseId() == computeResource.getWarehouseId()
+                && node.getWorkerGroupId() == computeResource.getWorkerGroupId();
+    }
+
     /**
      * Checks if the batch write operation is active.
      *
@@ -293,6 +326,15 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
     public boolean isActive() {
         long idleTime = System.currentTimeMillis() - lastLoadCreateTimeMs.get();
         return !mergeCommitTasks.isEmpty() || idleTime < Config.merge_commit_idle_ms;
+    }
+
+    /**
+     * Claims the next check whether a node of this job's CN group can still coordinate loads. At most one
+     * caller gets it per {@link #CN_GROUP_CHECK_INTERVAL_MS}.
+     */
+    boolean tryClaimCnGroupCheck(long nowMs) {
+        long next = nextCnGroupCheckTimeMs.get();
+        return nowMs >= next && nextCnGroupCheckTimeMs.compareAndSet(next, nowMs + CN_GROUP_CHECK_INTERVAL_MS);
     }
 
     @Override

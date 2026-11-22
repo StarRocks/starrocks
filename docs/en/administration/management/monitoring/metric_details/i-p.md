@@ -619,6 +619,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Cumulative
 - Description: Merge commit requests that failed.
 
+## `merge_commit_job_cngroup_switch_num`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of times a merge commit job moved to another CN Group of its warehouse because no compute node of its own CN Group could coordinate loads, for example when the availability zone of that CN Group was down. Only the Leader FE, where merge commit jobs run, increments it.
+
 ## `merge_commit_pending`
 
 - Unit: microsecond

@@ -238,12 +238,24 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     @Override
     public void prepare() throws StarRocksException {
         super.prepare();
+        if (isWaitingForAnotherCnGroup() && customKafkaPartitions.isEmpty()) {
+            // A job moved off its CN group goes on only once the brokers answer through the CN group it got, which the
+            // check of kafka_partitions below makes sure of for a job that has them. Its offset requests take the same
+            // way, so on a CN group that does not reach the brokers the job would stay RUNNING without loading.
+            getAllKafkaPartitions(computeResource);
+        }
         checkCustomPartition(customKafkaPartitions, computeResource);
         // should reset converted properties each time the job being prepared.
         // because the file info can be changed anytime.
         convertCustomProperties(true);
 
         ((KafkaProgress) progress).convertOffset(brokerList, topic, convertedCustomProperties, computeResource);
+    }
+
+    // A BE consumes any number of partitions in a Kafka task, so the job can move to a CN group with fewer compute nodes
+    @Override
+    protected boolean canRescheduleOnAnotherCnGroup() {
+        return true;
     }
 
     public synchronized void convertCustomProperties(boolean rebuild) throws DdlException {
@@ -564,8 +576,9 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                         .build(), fetchError);
                 // Only PAUSE jobs that were waiting to be (re)scheduled; jobs already RUNNING
                 // keep their current tasks so a transient broker hiccup does not nuke an
-                // otherwise-healthy pipeline. The next scheduler tick will retry.
-                if (this.state == JobState.NEED_SCHEDULE) {
+                // otherwise-healthy pipeline. The next scheduler tick will retry, and so it does
+                // for a job waiting for another CN group.
+                if (this.state == JobState.NEED_SCHEDULE && !unprotectRetryRescheduleLater(msg, false)) {
                     unprotectUpdateState(JobState.PAUSED,
                             new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg));
                 }
