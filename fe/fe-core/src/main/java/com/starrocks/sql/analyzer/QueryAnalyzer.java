@@ -657,6 +657,8 @@ public class QueryAnalyzer {
 
         private Scope analyzeSelectRelation(SelectRelation selectRelation, Scope scope,
                                             AnalyzeState analyzeState) {
+            UserVariableAssignments.restoreRowOrder(selectRelation);
+
             //Record aliases at this level to prevent alias conflicts
             Set<TableName> aliasSet = new HashSet<>();
             Relation resolvedRelation = resolveTableRef(selectRelation.getRelation(), scope, aliasSet);

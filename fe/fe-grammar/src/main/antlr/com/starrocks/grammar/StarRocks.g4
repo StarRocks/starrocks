@@ -2315,7 +2315,7 @@ setVar
         (COLLATE (collate = identifierOrString | DEFAULT))?                                     #setNames
     | PASSWORD '=' (string | PASSWORD '(' string ')')                                           #setPassword
     | PASSWORD FOR user '=' (string | PASSWORD '(' string ')')                                  #setPassword
-    | userVariable '=' expression                                                               #setUserVar
+    | userVariable ('=' | ASSIGN) expression                                                    #setUserVar
     | varType? identifier '=' setExprOrDefault                                                  #setSystemVar
     | systemVariable '=' setExprOrDefault                                                       #setSystemVar
     | varType? TRANSACTION transaction_characteristics                                          #setTransaction
@@ -2767,7 +2767,7 @@ replicaList
  * AND, &&
  * XOR
  * OR, ||
- * = (assignment)
+ * = (assignment), :=
  */
 
 expressionsWithDefault
@@ -2795,6 +2795,7 @@ expression
     | NOT expression                                                                      #logicalNot
     | left=expression operator=(AND|LOGICAL_AND) right=expression                         #logicalBinary
     | left=expression operator=(OR|LOGICAL_OR) right=expression                           #logicalBinary
+    | userVariable ASSIGN expression                                                      #userVariableAssign
     ;
 
 expressionList

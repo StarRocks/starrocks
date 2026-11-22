@@ -67,6 +67,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.UserVariableAssignExpr;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.expression.VarBinaryLiteral;
 import com.starrocks.sql.ast.expression.VariableExpr;
@@ -504,6 +505,11 @@ public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Voi
     @Override
     public String visitUserVariableExpr(UserVariableExpr node, Void context) {
         return "@" + node.getName();
+    }
+
+    @Override
+    public String visitUserVariableAssignExpr(UserVariableAssignExpr node, Void context) {
+        return "@" + node.getName() + " := " + node.getValue().accept(this, context);
     }
 
     @Override

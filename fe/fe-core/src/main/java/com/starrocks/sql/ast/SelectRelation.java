@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.FieldId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.analyzer.UserVariableAssignments;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
@@ -74,6 +75,11 @@ public class SelectRelation extends QueryRelation {
     private Relation relation;
 
     private Map<Expr, FieldId> columnReferences;
+
+    /**
+     * Set when the select list assigns user variables with ':='.
+     */
+    private UserVariableAssignments userVariableAssignments;
 
     public SelectRelation(
             SelectList selectList,
@@ -149,8 +155,13 @@ public class SelectRelation extends QueryRelation {
         this.orderByAnalytic = analyzeState.getOrderByAnalytic();
 
         this.columnReferences = analyzeState.getColumnReferences();
+        this.userVariableAssignments = analyzeState.getUserVariableAssignments();
 
         this.setScope(analyzeState.getOutputScope());
+    }
+
+    public UserVariableAssignments getUserVariableAssignments() {
+        return userVariableAssignments;
     }
 
     public Expr getPredicate() {

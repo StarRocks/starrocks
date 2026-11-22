@@ -17,6 +17,7 @@ package com.starrocks.sql.ast.expression;
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.Type;
 
 import java.util.Objects;
 
@@ -25,6 +26,10 @@ public class UserVariableExpr extends Expr {
     private final String name;
 
     private Expr value;
+
+    // True when the query block that reads the variable also assigns it with ':='. The variable then changes from
+    // row to row and has no value that could be substituted while the statement is analyzed.
+    private boolean assignedPerRow;
 
     public UserVariableExpr(String name, NodePosition pos) {
         super(pos);
@@ -36,6 +41,7 @@ public class UserVariableExpr extends Expr {
         super(other);
         name = other.name;
         value = other.value;
+        assignedPerRow = other.assignedPerRow;
     }
 
     public String getName() {
@@ -49,6 +55,15 @@ public class UserVariableExpr extends Expr {
     public void setValue(Expr value) {
         this.value = value;
         this.type = value.getType();
+    }
+
+    public boolean isAssignedPerRow() {
+        return assignedPerRow;
+    }
+
+    public void setAssignedPerRow(Type type) {
+        this.assignedPerRow = true;
+        this.type = type;
     }
 
     @Override
@@ -67,18 +82,27 @@ public class UserVariableExpr extends Expr {
             return false;
         }
         UserVariableExpr that = (UserVariableExpr) o;
-        return Objects.equals(name, that.name) && Objects.equals(value, that.value);
+        return Objects.equals(name, that.name) && Objects.equals(value, that.value)
+                && assignedPerRow == that.assignedPerRow;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), name, value);
+        return Objects.hash(super.hashCode(), name, value, assignedPerRow);
     }
 
     @Override
     public boolean isNullable() {
+        if (assignedPerRow) {
+            return true;
+        }
         Preconditions.checkState(value != null, "should analyze UserVariableExpr first then invoke isNullable");
         return value.isNullable();
+    }
+
+    @Override
+    protected boolean isConstantImpl() {
+        return !assignedPerRow;
     }
 
 }

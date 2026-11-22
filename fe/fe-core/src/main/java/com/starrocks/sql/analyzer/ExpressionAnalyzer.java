@@ -96,6 +96,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.UserVariableAssignExpr;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.sql.common.LargeInPredicateException;
@@ -1807,6 +1808,12 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitUserVariableExpr(UserVariableExpr node, Scope context) {
+            UserVariableAssignments assignments = analyzeState.getUserVariableAssignments();
+            if (assignments != null && assignments.isAssignedPerRow(node.getName())) {
+                node.setAssignedPerRow(assignments.getType(node.getName()));
+                return null;
+            }
+
             UserVariable userVariable;
             if (session.getUserVariablesCopyInWrite() == null) {
                 userVariable = session.getUserVariable(node.getName());
@@ -1819,6 +1826,17 @@ public class ExpressionAnalyzer {
             } else {
                 node.setValue(userVariable.getEvaluatedExpression());
             }
+            return null;
+        }
+
+        @Override
+        public Void visitUserVariableAssignExpr(UserVariableAssignExpr node, Scope context) {
+            UserVariableAssignments assignments = analyzeState.getUserVariableAssignments();
+            if (assignments == null) {
+                throw new SemanticException("User variable assignment with ':=' is only supported in the select list",
+                        node.getPos());
+            }
+            assignments.analyze(node);
             return null;
         }
 

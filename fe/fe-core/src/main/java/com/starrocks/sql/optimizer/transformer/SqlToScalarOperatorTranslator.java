@@ -74,6 +74,7 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.UserVariableAssignExpr;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.sql.common.ErrorType;
@@ -923,6 +924,13 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitUserVariableExpr(UserVariableExpr node, Context context) {
+            return visit(node.getValue(), context);
+        }
+
+        // Only reached for a SELECT without FROM, where the variable was already assigned during analysis.
+        // Assignments that run once per row are replaced by UserVariableAssignPlanner before translation.
+        @Override
+        public ScalarOperator visitUserVariableAssignExpr(UserVariableAssignExpr node, Context context) {
             return visit(node.getValue(), context);
         }
 

@@ -58,6 +58,7 @@ import com.starrocks.sql.ast.expression.SetVarHint;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.UserVariableAssignExpr;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.expression.VarBinaryLiteral;
 import com.starrocks.sql.ast.expression.VariableExpr;
@@ -1383,6 +1384,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitUserVariableExpr(UserVariableExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitUserVariableAssignExpr(UserVariableAssignExpr node, C context) {
         return visitExpression(node, context);
     }
 

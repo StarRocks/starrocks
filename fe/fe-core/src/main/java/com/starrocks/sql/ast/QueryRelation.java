@@ -28,6 +28,8 @@ import java.util.stream.Collectors;
 
 public abstract class QueryRelation extends Relation {
     protected List<OrderByElement> sortClause;
+    // What clearOrder() removed from sortClause.
+    private List<OrderByElement> clearedSortClause;
     protected LimitElement limit;
     private final List<CTERelation> cteRelations = new ArrayList<>();
     private boolean hasRecursiveCTE = false;
@@ -70,8 +72,19 @@ public abstract class QueryRelation extends Relation {
     }
 
     public void clearOrder() {
-        if (sortClause != null) {
+        if (hasOrderByClause()) {
+            clearedSortClause = new ArrayList<>(sortClause);
             sortClause.clear();
+        }
+    }
+
+    /**
+     * Undoes clearOrder(), for the rare query block whose result depends on the order of the rows of a subquery.
+     */
+    public void restoreOrder() {
+        if (clearedSortClause != null) {
+            sortClause.addAll(clearedSortClause);
+            clearedSortClause = null;
         }
     }
 

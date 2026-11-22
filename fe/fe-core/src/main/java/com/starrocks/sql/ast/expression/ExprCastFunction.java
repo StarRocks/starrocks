@@ -345,6 +345,10 @@ public final class ExprCastFunction {
     }
 
     private static Expr castUserVariableExpr(UserVariableExpr expr, Type targetType) throws AnalysisException {
+        // A variable that is assigned with ':=' changes from row to row and has no value that could be cast here.
+        if (expr.isAssignedPerRow()) {
+            return null;
+        }
         Preconditions.checkState(expr.getValue() != null,
                 "should analyze UserVariableExpr first then cast its value");
         UserVariableExpr userVariableExpr = new UserVariableExpr(expr);

@@ -502,6 +502,7 @@ import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.ast.expression.TypeDef;
+import com.starrocks.sql.ast.expression.UserVariableAssignExpr;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.expression.VarBinaryLiteral;
 import com.starrocks.sql.ast.expression.VariableExpr;
@@ -9275,6 +9276,12 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitUserVariable(com.starrocks.sql.parser.StarRocksParser.UserVariableContext context) {
         String variable = ((Identifier) visit(context.identifierOrString())).getValue();
         return new UserVariableExpr(variable, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitUserVariableAssign(com.starrocks.sql.parser.StarRocksParser.UserVariableAssignContext context) {
+        UserVariableExpr variable = (UserVariableExpr) visit(context.userVariable());
+        return new UserVariableAssignExpr(variable.getName(), (Expr) visit(context.expression()), createPos(context));
     }
 
     @Override

@@ -136,6 +136,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.UserVariableAssignExpr;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
@@ -1579,6 +1580,11 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
         sb.append("@");
         sb.append(node.getName());
         return sb.toString();
+    }
+
+    @Override
+    public String visitUserVariableAssignExpr(UserVariableAssignExpr node, Void context) {
+        return "@" + node.getName() + " := " + visit(node.getValue());
     }
 
     @Override

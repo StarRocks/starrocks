@@ -1,0 +1,73 @@
+-- name: test_user_variable_assign
+CREATE TABLE `t0` (
+  `id` int(11) NULL COMMENT "",
+  `grp` varchar(20) NULL COMMENT "",
+  `val` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into t0 values (1, 'a', 10), (2, 'a', 20), (3, 'b', 5), (4, 'b', null), (5, 'b', 7), (6, null, 1), (7, 'c', 3), (8, 'a', 15), (9, '2x', 4), (10, '2x', 6);
+
+-- without FROM, := assigns like SET
+select @a := 1, @b := @a + 1;
+select @a, @b;
+set @c := 5;
+select @c;
+
+-- row number
+select @rn := @rn + 1 as rn, id from t0, (select @rn := 0) r order by id desc;
+select @rn := @rn + 1 as rn, id, val from t0, (select @rn := 0) r where val > 5 order by val, id;
+-- the variable itself keeps the value it had before the query
+set @rn = 100;
+select @rn := @rn + 1 as rn, id from t0 order by id limit 3;
+select @rn;
+
+select @rn := @rn + 1 as rn, id from t0, (select @rn := 0) r order by id % 3, id desc;
+-- the order of the rows comes from the subquery
+select * from (select @rn := @rn + 1 as rn, s.id from (select id, val from t0 order by val, id desc) s join (select @rn := 0) r on true) x order by rn;
+select * from (select @rn := @rn + 1 as rn, s.id from (select id, val from t0 order by val desc, id) s, (select @rn := 0) r) x order by rn;
+select id, rn from (select @rn := @rn + 1 as rn, id from t0, (select @rn := 0) r order by grp desc, id) x where rn <= 3 order by rn;
+
+-- row number within a group
+select if(@g = grp, @n := @n + 1, @n := 1) as n, @g := grp as g, id from t0, (select @n := 0, @g := '') i order by grp, val desc, id;
+select if(@grp = grp, @n := @n + 1, @n := 1) as n, @grp := grp as grp, val from t0, (select @n := 0, @grp := '') i order by grp, val desc, id;
+select case grp when @g then @n := @n + 1 else @n := 1 and @g := grp end as n, id, grp from t0, (select @n := 0, @g := '') i order by grp, id;
+select id, grp, val from (select if(@g = grp, @n := @n + 1, @n := 1) as n, @g := grp, t0.* from t0, (select @n := 0, @g := '') i where grp is not null order by grp, val desc, id) x where n = 1 order by grp;
+
+-- running total
+select @s := @s + val as total, id from t0, (select @s := 0) i where val is not null order by id;
+select @s := @s + val as total, id from t0, (select @s := 0) i order by id;
+select if(@g = grp, @s := @s + val, @s := val) as total, @g := grp as g, id from t0, (select @s := 0, @g := '') i where grp is not null and val is not null order by grp, id;
+select @s := @s - 1.5 as total, id from t0, (select @s := 10) i order by id;
+select @s := @s + val - id as total, id from t0, (select @s := 0) i where val is not null order by id;
+select @s := if(@g = grp, @s, 0) + val as total, @g := grp as g, id from t0, (select @s := 0, @g := '') i where grp is not null and val is not null order by grp, id;
+
+-- previous row
+select @p as prev, @p := val as cur, id from t0, (select @p := -1) i order by id;
+select val - @p as diff, @p := val as cur, id from t0, (select @p := 0) i where val is not null order by id;
+select (@pg is not null and @pg = grp) as same_group, @pg := grp as g, id from t0, (select @pg := null) i order by grp, id;
+select @m := ifnull(val, @m) as last_val, id from t0, (select @m := 0) i order by id;
+select @d as prev, @d := cast(concat('2024-01-0', id) as date) as cur from t0, (select @d := 0) i where id < 4 order by id;
+select timestampdiff(day, @d, cast(concat('2024-01-0', id * 2) as date)) as days, @d := cast(concat('2024-01-0', id * 2) as date) as cur from t0, (select @d := '2023-12-31') i where id < 4 order by id;
+select @m := if(val >= 10, id, @m) as last_big, id from t0, (select @m := 0) i order by id;
+
+-- several variables
+select @a := @a + 1 as a, @b := @b + 1 as b, id from t0, (select @a := 0, @b := 10) i order by id;
+select if(@g = grp, @n := @n + 1, @n := 1) as n, if(@g = grp, @s := @s + val, @s := val) as total, @g := grp as g, id from t0, (select @n := 0, @s := 0, @g := '') i where val is not null order by grp, id;
+select @x := @x + 1 as x, @y := @y + @x as y, @z := concat('row ', @x) as z from t0, (select @x := 0, @y := 0) i order by id;
+
+-- unsupported
+select @x := @x * 2 from t0;
+select @x := @x + 1 as x, (select @x) as y from t0, (select @x := 0) i order by id;
+select @x := (select max(id) from t0);
+select @x := if(id > 1, cast('2024-01-01' as date), @x) from t0, (select @x := 0) i order by id;
+select @x := @x + 1 as x, id from t0, (select @x := 0) i order by id limit 3 offset 2;
+select @p as prev, @p := id from (select id from t0 order by val) s;
+select id from t0 where (@x := 1) = 1;
+select @x := @x + 1 from t0 where @x < 3;
+select @x := @x + 1, count(*) from t0 group by grp;
