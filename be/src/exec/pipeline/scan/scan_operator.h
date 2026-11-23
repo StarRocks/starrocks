@@ -14,6 +14,11 @@
 
 #pragma once
 
+#include <atomic>
+#include <functional>
+#include <memory>
+#include <mutex>
+
 #include "base/concurrency/race_detect.h"
 #include "base/concurrency/spinlock.h"
 #include "compute_env/pipeline/driver_scan_operator.h"
@@ -89,6 +94,11 @@ public:
     }
 
     void set_query_ctx(const QueryContextPtr& query_ctx) override;
+
+    // A callback that clears `waiting` and wakes the operator, for a chunk source whose input became readable
+    // (ChunkSource::is_waiting_for_input). It may run on any thread, also after the operator closed, when it only
+    // clears the flag.
+    std::function<void()> input_ready_callback(std::shared_ptr<std::atomic<bool>> waiting);
 
     virtual int available_pickup_morsel_count() { return _io_tasks_per_scan_operator; }
     bool output_chunk_by_bucket() const { return _output_chunk_by_bucket; }
@@ -304,6 +314,13 @@ private:
     Status _scan_status;
     // we should hold a weak ptr because query context may be released before running io task
     std::weak_ptr<QueryContext> _query_ctx;
+
+    class InputReadyWaker;
+    // Created by the first chunk source that waits for its input, and detached when the operator closes; one created
+    // after that is detached from the start.
+    std::mutex _input_ready_waker_lock;
+    std::shared_ptr<InputReadyWaker> _input_ready_waker;
+    bool _input_ready_waker_detached = false;
 
     workgroup::WorkGroupPtr _workgroup = nullptr;
 

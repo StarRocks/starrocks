@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -63,6 +64,13 @@ public:
     virtual int64_t io_time_spent() const { return 0; }
     virtual bool can_estimate_mem_usage() const { return false; }
     virtual int64_t estimated_mem_usage() const { return 0; }
+
+    // For an input that something else fills while the scan reads it without blocking, such as the pipe of a Kafka
+    // scan range, which get_next() finds empty with TimedOut: whether the scan can wait for it with wait_for_input().
+    virtual bool can_wait_for_input() const { return false; }
+    // Registers on_readable to run once the input becomes readable and returns true, or returns false when it is
+    // readable already. on_readable may run on another thread, also after close().
+    virtual bool wait_for_input(std::function<void()> on_readable) { return false; }
 
     // following fields are set by framework
     // 1. runtime profile: any metrics you want to record
