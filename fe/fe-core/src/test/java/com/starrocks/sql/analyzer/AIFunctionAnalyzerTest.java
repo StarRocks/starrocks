@@ -299,6 +299,7 @@ public class AIFunctionAnalyzerTest {
     @Test
     public void testJsonOptions() {
         for (String options : new String[] {"json_object()", "NULL", "cast(NULL as json)",
+                "if(true, cast(NULL as json), json_object('a', 1))",
                 "json_object('guardrails', true, 'temperature', 0.7)",
                 "json_object('payload', json_object('nested', parse_json('[1,true,null]')))",
                 "parse_json('{\"dimensions\":512}')", "to_json(map{'dimensions':512})"}) {
@@ -306,6 +307,7 @@ public class AIFunctionAnalyzerTest {
         }
         analyzeFail("select ai_complete(prompt => 'p', options => json_object('temperature', te)) from tall",
                 "constant options");
+        analyzeFail("select ai_complete('p', '', 'model', '')", "constant JSON");
         for (String options : new String[] {"map{}", "map{'guardrails':true}", "'{}'", "cast(NULL as varchar)"}) {
             analyzeFail("select ai_complete(prompt => 'p', options => " + options + ")");
         }

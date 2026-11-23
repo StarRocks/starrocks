@@ -23,7 +23,6 @@
 #include <utility>
 
 #include "exec/pipeline/ai/ai_project_operator.h"
-#include "exec/pipeline/ai/ai_provider_config_parser.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -32,6 +31,7 @@
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_factory.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "platform/llm/ai_provider.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
@@ -105,9 +105,9 @@ Status AIProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
         }
     }
 
-    pipeline::AIProjectModelConfigs configs;
+    AIProviderConfigs configs;
     for (const auto& [id, provider] : thrift_project.ai_provider_mapping) {
-        ASSIGN_OR_RETURN(auto config, pipeline::AIProviderConfigParser::parse(id, provider));
+        ASSIGN_OR_RETURN(auto config, AIProviderConfig::parse(id, provider));
         configs.emplace(id, std::move(config));
     }
 
@@ -147,8 +147,8 @@ Status AIProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
         if (ai_expr == nullptr || count_ai_expressions(root) != 1 || ai_expr->type() != slot_desc->type()) {
             return invalid_ai_project_plan();
         }
-        const auto route = projection_spec.model_configs().find(ai_expr->provider_id());
-        if (route == projection_spec.model_configs().end() || route->second.capability != ai_expr->capability()) {
+        const auto route = projection_spec.provider_configs().find(ai_expr->provider_id());
+        if (route == projection_spec.provider_configs().end() || route->second.capability != ai_expr->capability()) {
             return invalid_ai_project_plan();
         }
         output.kind = pipeline::AIProjectOutputKind::AI;
@@ -157,7 +157,7 @@ Status AIProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
         used_configs.emplace(ai_expr->provider_id());
     }
 
-    if (!has_ai_output || used_configs.size() != projection_spec.model_configs().size()) {
+    if (!has_ai_output || used_configs.size() != projection_spec.provider_configs().size()) {
         return invalid_ai_project_plan();
     }
     for (const pipeline::AIProjectOutputSpec& output : projection_spec.outputs()) {
