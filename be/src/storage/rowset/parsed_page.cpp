@@ -271,7 +271,8 @@ public:
             return Status::OK();
         }
 
-        RETURN_IF_ERROR(append_with_mask</*PositiveSelect=*/true>(column, *temp_column, selection, num_rows));
+        RETURN_IF_ERROR(
+                append_with_mask</*PositiveSelect=*/true>(column, *temp_column, selection, num_rows, selected_count));
 
         size_t added_col_size = column->size() - original_col_size;
         if (selected_count != added_col_size) {
