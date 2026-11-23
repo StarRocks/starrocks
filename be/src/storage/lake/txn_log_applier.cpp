@@ -428,12 +428,7 @@ void collect_idg_orphan_files(const IndexDeltaGroupMetadataPB& old_idg_meta,
 class PrimaryKeyTxnLogApplier : public TxnLogApplier {
 public:
     PrimaryKeyTxnLogApplier(const Tablet& tablet, MutableTabletMetadataPtr metadata, int64_t new_version,
-<<<<<<< HEAD
-                            bool rebuild_pindex, bool skip_write_tablet_metadata)
-=======
-                            bool rebuild_pindex, bool skip_write_tablet_metadata,
-                            std::optional<PublishPropertyPBRef> publish_property, TabletMetadataPtr base_metadata)
->>>>>>> bd892e1ece7... [BugFix][RB-792] Reuse the base tablet metadata in lake PK publish (#67182)
+                            bool rebuild_pindex, bool skip_write_tablet_metadata, TabletMetadataPtr base_metadata)
             : _tablet(tablet),
               _metadata(std::move(metadata)),
               _base_metadata(std::move(base_metadata)),
@@ -493,12 +488,8 @@ public:
             _guard.reset(nullptr);
             _index_entry = nullptr;
             ASSIGN_OR_RETURN(_index_entry, _tablet.primary_key_mgr()->rebuild_primary_index(
-<<<<<<< HEAD
-                                                   _metadata, &_builder, _base_version, _new_version, _guard));
-=======
                                                    _metadata, &_builder, _base_version, _new_version, _guard,
-                                                   _publish_property, _base_metadata));
->>>>>>> bd892e1ece7... [BugFix][RB-792] Reuse the base tablet metadata in lake PK publish (#67182)
+                                                   _base_metadata));
             _rebuild_pindex = false;
         }
         return Status::OK();
@@ -704,12 +695,8 @@ private:
     Status prepare_primary_index() {
         if (_index_entry == nullptr) {
             ASSIGN_OR_RETURN(_index_entry, _tablet.primary_key_mgr()->prepare_primary_index(
-<<<<<<< HEAD
-                                                   _metadata, &_builder, _base_version, _new_version, _guard));
-=======
                                                    _metadata, &_builder, _base_version, _new_version, _guard,
-                                                   _publish_property, _base_metadata));
->>>>>>> bd892e1ece7... [BugFix][RB-792] Reuse the base tablet metadata in lake PK publish (#67182)
+                                                   _base_metadata));
             // Reset publish SST stats so we only count SSTs flushed during this publish session
             _index_entry->value().reset_publish_sst_stats();
             _publish_begin_time = UnixMillis();
@@ -769,14 +756,7 @@ private:
             return Status::OK();
         }
         RETURN_IF_ERROR(prepare_primary_index());
-<<<<<<< HEAD
         if (is_column_mode_partial_update(op_write)) {
-=======
-        if (op_write.has_position_delete()) {
-            return _tablet.primary_key_mgr()->publish_position_delete(
-                    op_write, txn_id, _metadata, &_tablet, _index_entry, &_builder, _base_version, _base_metadata);
-        } else if (is_column_mode_partial_update(op_write)) {
->>>>>>> bd892e1ece7... [BugFix][RB-792] Reuse the base tablet metadata in lake PK publish (#67182)
             return _tablet.primary_key_mgr()->publish_column_mode_partial_update(
                     op_write, txn_id, _metadata, &_tablet, _index_entry, &_builder, _base_version, _base_metadata);
         } else {
@@ -1697,20 +1677,10 @@ private:
 
 std::unique_ptr<TxnLogApplier> new_txn_log_applier(const Tablet& tablet, MutableTabletMetadataPtr metadata,
                                                    int64_t new_version, bool rebuild_pindex,
-<<<<<<< HEAD
-                                                   bool skip_write_tablet_metadata) {
+                                                   bool skip_write_tablet_metadata, TabletMetadataPtr base_metadata) {
     if (metadata->schema().keys_type() == PRIMARY_KEYS) {
         return std::make_unique<PrimaryKeyTxnLogApplier>(tablet, std::move(metadata), new_version, rebuild_pindex,
-                                                         skip_write_tablet_metadata);
-=======
-                                                   bool skip_write_tablet_metadata,
-                                                   std::optional<PublishPropertyPBRef> publish_property,
-                                                   TabletMetadataPtr base_metadata) {
-    if (metadata->schema().keys_type() == PRIMARY_KEYS) {
-        return std::make_unique<PrimaryKeyTxnLogApplier>(tablet, std::move(metadata), new_version, rebuild_pindex,
-                                                         skip_write_tablet_metadata, publish_property,
-                                                         std::move(base_metadata));
->>>>>>> bd892e1ece7... [BugFix][RB-792] Reuse the base tablet metadata in lake PK publish (#67182)
+                                                         skip_write_tablet_metadata, std::move(base_metadata));
     }
     return std::make_unique<NonPrimaryKeyTxnLogApplier>(tablet, std::move(metadata), new_version,
                                                         skip_write_tablet_metadata);

@@ -70,12 +70,7 @@ protected:
 // an index that is cold.
 std::unique_ptr<TxnLogApplier> new_txn_log_applier(const Tablet& tablet, MutableTabletMetadataPtr metadata,
                                                    int64_t new_version, bool rebuild_pindex,
-<<<<<<< HEAD
-                                                   bool skip_write_tablet_metadata);
-=======
                                                    bool skip_write_tablet_metadata,
-                                                   std::optional<PublishPropertyPBRef> publish_property,
                                                    TabletMetadataPtr base_metadata = nullptr);
->>>>>>> bd892e1ece7... [BugFix][RB-792] Reuse the base tablet metadata in lake PK publish (#67182)
 
 } // namespace starrocks::lake

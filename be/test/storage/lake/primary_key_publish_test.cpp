@@ -3619,7 +3619,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_schema_change_replay_reuses_saved_base_me
     const auto txns = std::vector<TxnInfoPB>{TEST_txn_info(schema_change_log->txn_id(), time(nullptr))};
     counting = true;
     auto published = publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), /*base_version=*/1, kNewVersion,
-                                     txns, false, std::nullopt);
+                                     txns, false);
     counting = false;
     ASSERT_OK(published.status());
     EXPECT_EQ(kNewVersion, published.value()->version());
@@ -3634,85 +3634,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_schema_change_replay_reuses_saved_base_me
     // Keys [0, kConvertedRowsets * kChunkSize), each once: a delete vector read wrong would have brought back a
     // row a replayed load deleted.
     ASSERT_EQ(kChunkSize * kConvertedRowsets, read_rows(tablet_id, kNewVersion));
-}
-
-// A position delete adds its live candidate rows to the delete vector each of their segments has at the publish's base
-// version. The publish has already read that version for itself, so the position delete takes the delete vectors
-// through it instead of reading it back from storage, which it did once per segment before. With a metacache that
-// keeps nothing, a position delete over many segments reads its base version exactly as often as a load of new keys.
-TEST_P(LakePrimaryKeyPublishTest, test_position_delete_reuses_base_metadata) {
-    const int64_t tablet_id = _tablet_metadata->id();
-    // kOldLoads loads of kChunkSize keys each, one segment per load: rssid i + 1 holds keys
-    // [i * kChunkSize, (i + 1) * kChunkSize), key k at rowid k - i * kChunkSize.
-    constexpr int kOldLoads = 4;
-    int64_t version = 1;
-    for (int i = 0; i < kOldLoads; i++) {
-        ASSERT_OK(publish_single_version(tablet_id, version + 1,
-                                         write_load(tablet_id, keys_chunk(key_range(i * kChunkSize, kChunkSize))))
-                          .status());
-        version++;
-    }
-
-    // A metacache that keeps nothing once it is released, like a shard the base metadata outgrew: every read of the
-    // base version goes to storage.
-    const size_t metacache_capacity = _tablet_mgr->metacache()->tablet_metadata_capacity();
-    _tablet_mgr->metacache()->update_tablet_metadata_capacity(1);
-    DeferOp restore_metacache([&]() { _tablet_mgr->metacache()->update_tablet_metadata_capacity(metacache_capacity); });
-    ASSERT_EQ(1, _tablet_mgr->metacache()->tablet_metadata_capacity());
-    _tablet_mgr->metacache()->prune();
-
-    // While one publish runs, count its reads of the version it publishes on. The callback fires for the whole process,
-    // so this relies on nothing else reading this tablet's metadata meanwhile, which holds here: the test runs nothing
-    // in the background.
-    std::atomic<const std::string*> counted_file = nullptr;
-    std::atomic<int> base_metadata_reads = 0;
-    SyncPoint::GetInstance()->SetCallBack("TabletManager::load_tablet_metadata:path", [&](void* arg) {
-        const std::string* file = counted_file.load();
-        if (file != nullptr && std::string_view(*static_cast<std::string*>(arg)).ends_with(*file)) {
-            ++base_metadata_reads;
-        }
-    });
-    SyncPoint::GetInstance()->EnableProcessing();
-    DeferOp clear_callbacks([]() {
-        SyncPoint::GetInstance()->ClearCallBack("TabletManager::load_tablet_metadata:path");
-        SyncPoint::GetInstance()->DisableProcessing();
-    });
-    auto publish_counting = [&](int64_t txn_id) {
-        const std::string base_file = tablet_metadata_filename(tablet_id, version);
-        base_metadata_reads = 0;
-        counted_file = &base_file;
-        auto metadata_or = publish_single_version(tablet_id, version + 1, txn_id);
-        counted_file = nullptr;
-        version++;
-        return metadata_or;
-    };
-
-    // A load of new keys: the publish deletes rows from no old segment and reads its base version for itself.
-    ASSERT_OK(publish_counting(write_load(tablet_id, keys_chunk(key_range(kOldLoads * kChunkSize, kChunkSize))))
-                      .status());
-    const int own_reads = base_metadata_reads.load();
-    ASSERT_GE(own_reads, 1) << "the publish should have read its base version from storage";
-
-    // A position delete, read at the current version, of the row at rowid 1 of each old segment.
-    ASSIGN_OR_ABORT(auto snapshot, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    CandidateSet candidate_set;
-    for (int i = 0; i < kOldLoads; i++) {
-        CandidateRows rows = {{i * kChunkSize + 1, 1}};
-        candidate_set.emplace_back(static_cast<uint32_t>(i + 1), std::move(rows));
-    }
-    const int64_t txn_id = next_id();
-    ASSERT_OK(write_position_delete_sets(_tablet_mgr.get(), txn_id, snapshot, {candidate_set}).status());
-    ASSERT_OK(publish_counting(txn_id).status());
-    // Nothing beyond the publish's own reads. Before, it read the base version once more for each of the old segments.
-    EXPECT_EQ(own_reads, base_metadata_reads.load());
-
-    // Each old segment lost its row at rowid 1 and nothing else: a delete vector read wrong would have dropped the
-    // rows it held before or brought them back.
-    for (int i = 0; i < kOldLoads; i++) {
-        EXPECT_EQ((std::vector<uint32_t>{1}), deleted_rowids(tablet_id, version, static_cast<uint32_t>(i + 1)))
-                << "rssid " << i + 1;
-    }
-    ASSERT_EQ(kChunkSize * (kOldLoads + 1) - kOldLoads, read_rows(tablet_id, version));
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels) {

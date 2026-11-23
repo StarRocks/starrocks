@@ -228,12 +228,7 @@ void RssidFileInfoContainer::add_pending_rowset(const MetaFileBuilder& builder, 
 
 StatusOr<IndexEntry*> PrimaryKeyManager::prepare_primary_index(
         const TabletMetadataPtr& metadata, MetaFileBuilder* builder, int64_t base_version, int64_t new_version,
-<<<<<<< HEAD
-        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard) {
-=======
-        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard,
-        std::optional<PublishPropertyPBRef> publish_property, const TabletMetadataPtr& base_metadata) {
->>>>>>> bd892e1ece7... [BugFix][RB-792] Reuse the base tablet metadata in lake PK publish (#67182)
+        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard, const TabletMetadataPtr& base_metadata) {
     auto index_entry = _index_cache.get_or_create(metadata->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
@@ -245,22 +240,7 @@ StatusOr<IndexEntry*> PrimaryKeyManager::prepare_primary_index(
         TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_lock_wait_us");
         guard = index.fetch_guard();
     }
-<<<<<<< HEAD
-    Status st = index.lake_load(_tablet_mgr, metadata, base_version, builder);
-=======
-    // Before lake_load, not after: an index that is new or was evicted rebuilds inside it, and that
-    // rebuild inserts every key through the memtable -- which is the work the table's memtable count
-    // and size are there to bound, and the point at which this publish holds the most memory.
-    //
-    // Under the guard taken above, so the values this publish reads cannot change under it. A request
-    // that carried nothing leaves the index on what it already holds: an FE too old to send the field
-    // and a table that has never set one are indistinguishable here, and clearing on either would drop
-    // a table's settings for the length of a rolling upgrade.
-    if (publish_property.has_value()) {
-        index.update_publish_config(publish_property.value().get());
-    }
     Status st = index.lake_load(_tablet_mgr, metadata, base_version, builder, base_metadata);
->>>>>>> bd892e1ece7... [BugFix][RB-792] Reuse the base tablet metadata in lake PK publish (#67182)
     update_index_cache_size(index_entry);
     if (!st.ok()) {
         if (st.is_already_exist()) {
@@ -393,18 +373,10 @@ StatusOr<TabletMetadataPtr> PrimaryKeyManager::flush_pk_memtable(const TabletMet
 
 StatusOr<IndexEntry*> PrimaryKeyManager::rebuild_primary_index(
         const TabletMetadataPtr& metadata, MetaFileBuilder* builder, int64_t base_version, int64_t new_version,
-<<<<<<< HEAD
-        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard) {
+        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard, const TabletMetadataPtr& base_metadata) {
     LOG(INFO) << "rebuild tablet: " << metadata->id() << " primary index, version: " << base_version;
     unload_and_remove_primary_index(metadata->id());
-    return prepare_primary_index(metadata, builder, base_version, new_version, guard);
-=======
-        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard,
-        std::optional<PublishPropertyPBRef> publish_property, const TabletMetadataPtr& base_metadata) {
-    LOG(INFO) << "rebuild tablet: " << metadata->id() << " primary index, version: " << base_version;
-    unload_and_remove_primary_index(metadata->id());
-    return prepare_primary_index(metadata, builder, base_version, new_version, guard, publish_property, base_metadata);
->>>>>>> bd892e1ece7... [BugFix][RB-792] Reuse the base tablet metadata in lake PK publish (#67182)
+    return prepare_primary_index(metadata, builder, base_version, new_version, guard, base_metadata);
 }
 
 // Plan for interleaving del files with segments during a primary-key publish. Per del file:
@@ -777,14 +749,8 @@ Status PrimaryKeyManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_
             tsid.tablet_id = tablet->id();
             tsid.segment_id = rssid;
             DelVectorPtr old_del_vec;
-<<<<<<< HEAD
-            RETURN_IF_ERROR(get_del_vec(tsid, base_version, builder, false /* file cache */, &old_del_vec));
-=======
-            FAIL_POINT_TRIGGER_RETURN(lake_pk_apply_get_del_vec_failed,
-                                      Status::InternalError("inject lake_pk_apply_get_del_vec_failed"));
             RETURN_IF_ERROR(
                     get_del_vec(tsid, base_version, builder, base_metadata, false /* file cache */, &old_del_vec));
->>>>>>> bd892e1ece7... [BugFix][RB-792] Reuse the base tablet metadata in lake PK publish (#67182)
             new_del_vecs[idx].first = rssid;
             old_del_vec->add_dels_as_new_version(new_delete.second, metadata->version(), &(new_del_vecs[idx].second));
             size_t cur_old = old_del_vec->cardinality();
@@ -860,21 +826,6 @@ Status PrimaryKeyManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_
     return Status::OK();
 }
 
-<<<<<<< HEAD
-=======
-Status PrimaryKeyManager::publish_position_delete(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
-                                                  const TabletMetadataPtr& metadata, Tablet* tablet,
-                                                  IndexEntry* index_entry, MetaFileBuilder* builder,
-                                                  int64_t base_version, const TabletMetadataPtr& base_metadata) {
-    auto& index = index_entry->value();
-    PositionDeletePublishHandler handler(tablet, metadata, builder, &index, _parallel_compact_mgr, base_version,
-                                         base_metadata, txn_id);
-    Status st = handler.execute(op_write.position_delete());
-    update_index_cache_size(index_entry);
-    return st;
-}
-
->>>>>>> bd892e1ece7... [BugFix][RB-792] Reuse the base tablet metadata in lake PK publish (#67182)
 Status PrimaryKeyManager::_open_upsert_source_segment(const TxnLogPB_OpWrite& op_write,
                                                       const TabletSchemaCSPtr& tschema, Tablet* tablet,
                                                       const std::shared_ptr<FileSystem>& fs, uint32_t seg,

@@ -145,15 +145,6 @@ public:
                                               IndexEntry* index_entry, MetaFileBuilder* builder, int64_t base_version,
                                               const TabletMetadataPtr& base_metadata);
 
-<<<<<<< HEAD
-=======
-    // Publishes |op_write|'s position delete with PositionDeletePublishHandler. |metadata| is the metadata this publish
-    // is building. |base_metadata|: as for publish_primary_key_tablet().
-    Status publish_position_delete(const TxnLogPB_OpWrite& op_write, int64_t txn_id, const TabletMetadataPtr& metadata,
-                                   Tablet* tablet, IndexEntry* index_entry, MetaFileBuilder* builder,
-                                   int64_t base_version, const TabletMetadataPtr& base_metadata);
-
->>>>>>> bd892e1ece7... [BugFix][RB-792] Reuse the base tablet metadata in lake PK publish (#67182)
     // get rowids from primary index by each upserts
     Status get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version, const MutableColumns& upserts,
                                    std::vector<std::vector<uint64_t>*>* rss_rowids, bool need_lock);
@@ -248,13 +239,8 @@ public:
     // storage; see LakePersistentIndex::load_from_lake_tablet().
     StatusOr<IndexEntry*> prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                 int64_t base_version, int64_t new_version,
-<<<<<<< HEAD
-                                                std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock);
-=======
                                                 std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock,
-                                                std::optional<PublishPropertyPBRef> publish_property,
                                                 const TabletMetadataPtr& base_metadata = nullptr);
->>>>>>> bd892e1ece7... [BugFix][RB-792] Reuse the base tablet metadata in lake PK publish (#67182)
 
     // Charge |index_entry| at its index's current memory_usage() and refresh the lake_pk_index_cache_* gauges.
     // Caller holds the index lock.
@@ -287,19 +273,8 @@ public:
     // |base_metadata|: as for prepare_primary_index().
     StatusOr<IndexEntry*> rebuild_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                 int64_t base_version, int64_t new_version,
-<<<<<<< HEAD
-                                                std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock);
-=======
                                                 std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock,
-                                                std::optional<PublishPropertyPBRef> publish_property,
                                                 const TabletMetadataPtr& base_metadata = nullptr);
-
-    // What the table set for the primary key index of `tablet_id`, for a reader outside any publish.
-    // Null when no index is loaded for that tablet -- it has never published, its entry was evicted,
-    // or it is not a primary key tablet. Neither creates an entry nor loads an index, so asking does
-    // not change what the node is doing.
-    PkPublishConfigPtr get_publish_config(int64_t tablet_id);
->>>>>>> bd892e1ece7... [BugFix][RB-792] Reuse the base tablet metadata in lake PK publish (#67182)
 
     DynamicCache<uint64_t, LakePersistentIndex>& index_cache() { return _index_cache; }
 
