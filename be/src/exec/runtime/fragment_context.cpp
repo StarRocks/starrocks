@@ -17,6 +17,7 @@
 #include <atomic>
 #include <chrono>
 #include <future>
+#include <iterator>
 #include <memory>
 #include <thread>
 
@@ -353,6 +354,12 @@ Status FragmentContext::prepare_all_pipelines() {
 
 void FragmentContext::set_fragment_attachments(std::vector<std::unique_ptr<FragmentAttachment>>&& attachments) {
     _fragment_attachments = std::move(attachments);
+}
+
+void FragmentContext::append_fragment_attachments(std::vector<std::unique_ptr<FragmentAttachment>>&& attachments) {
+    _fragment_attachments.insert(_fragment_attachments.end(), std::make_move_iterator(attachments.begin()),
+                                 std::make_move_iterator(attachments.end()));
+    attachments.clear();
 }
 
 // Note: this function should be thread safe

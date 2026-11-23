@@ -341,6 +341,27 @@ struct TBrokerScanRangeParams {
     35: optional list<TRoutineLoadMetaColumn> stream_source_meta_columns
 }
 
+// The Kafka partitions that one instance of a routine load round consumes in the coordinated execution mode. The BE
+// consumes them from their begin offsets into the stream load pipe identified by TBrokerRangeDesc.load_id, and
+// reports the offsets it consumed in TReportExecStatusParams.kafka_scan_range_report.
+struct TKafkaScanRange {
+    1: optional i64 job_id
+    2: optional string brokers
+    3: optional string topic
+    // partition -> the first offset to consume
+    4: optional map<i32, i64> partition_begin_offset
+    5: optional map<string, string> properties
+    // The consumption stops at whichever comes first: this duration, this many bytes, or every partition at its end
+    // for idle_end_ms. Until then it consumes every partition, including one that has caught up.
+    6: optional i64 max_consume_ms
+    7: optional i64 max_consume_bytes
+    8: optional bool need_source_metadata
+    9: optional bool need_message_key
+    10: optional bool need_message_headers
+    // how long every partition must have been at its end, with no new message, for the consumption to stop
+    11: optional i64 idle_end_ms
+}
+
 // Broker scan range
 struct TBrokerScanRange {
     1: required list<TBrokerRangeDesc> ranges
@@ -352,6 +373,10 @@ struct TBrokerScanRange {
     5: optional bool enable_batch_write
     6: optional i32 batch_write_interval_ms
     7: optional map<string, string> batch_write_parameters;
+    // Enterprise-only fields start at 300, reserve some fields for upstream StarRocks so a sync
+    // never collides on ordinals.
+    // available when this is a routine load round in the coordinated execution mode
+    300: optional TKafkaScanRange kafka_scan_range
 }
 
 // Es scan range

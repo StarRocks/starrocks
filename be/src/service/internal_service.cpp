@@ -412,8 +412,11 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
             std::make_shared<std::vector<orchestration::FragmentExecutor>>(unique_requests.size());
     size_t failed_idx = unique_requests.size();
     bool submitted = true;
+    auto* routine_load_task_executor =
+            _orchestration_env != nullptr ? _orchestration_env->routine_load_task_executor() : nullptr;
     for (int i = 0; i < unique_requests.size(); ++i) {
         fragment_executors->at(i).set_batch_write_mgr(_batch_write_mgr);
+        fragment_executors->at(i).set_routine_load_task_executor(routine_load_task_executor);
         PromiseStatusSharedPtr ms = std::make_shared<PromiseStatus>();
         submitted = _exec_env->execution_services().pipeline_prepare_pool->try_offer(
                 [ms, i, fragment_executors, t_batch_requests, exec_env = _exec_env] {
@@ -639,6 +642,9 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecP
     SCOPED_SET_MODULE_TYPE(ThreadModuleType::QUERY);
     DUMP_TRACE_IF_TIMEOUT(config::pipeline_prepare_timeout_guard_ms);
     orchestration::FragmentExecutor fragment_executor(_batch_write_mgr);
+    if (_orchestration_env != nullptr) {
+        fragment_executor.set_routine_load_task_executor(_orchestration_env->routine_load_task_executor());
+    }
     auto status = fragment_executor.prepare(_exec_env, t_common_param, t_unique_request);
     if (status.ok()) {
         return fragment_executor.execute(_exec_env);
@@ -962,6 +968,9 @@ void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, P
                 result->add_latest_offsets(latest_offsets[i]);
             }
         }
+    } else if (request->has_kafka_commit_offset_request()) {
+        st = routine_load_task_executor->commit_kafka_offsets(request->kafka_commit_offset_request(), timeout_ms,
+                                                              &group_id, &evicted_consumers);
     } else if (request->has_kafka_offset_batch_request()) {
         for (const auto& offset_req : request->kafka_offset_batch_request().requests()) {
             std::vector<int64_t> beginning_offsets;

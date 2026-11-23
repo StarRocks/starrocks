@@ -61,6 +61,9 @@ struct TBackendInfo {
     // only_drop_index). FE sends that request only to nodes that report this: a node that predates
     // the fast path ignores the flags and rewrites the tablet into itself, duplicating its rows.
     50: optional bool support_lake_index_fast_path
+
+    // whether the node can consume Kafka scan ranges (PlanNodes.TKafkaScanRange) of routine load rounds
+    300: optional bool kafka_scan_range_supported
 }
 
 struct THeartbeatResult {

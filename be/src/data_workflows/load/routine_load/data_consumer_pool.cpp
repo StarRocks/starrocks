@@ -63,6 +63,17 @@ Status DataConsumerPool::get_consumer(StreamLoadContext* ctx, std::shared_ptr<Da
         }
     }
 
+    // A consumer kept apart for its commits is reused once its commits have completed and no commit uses it.
+    for (auto committing = std::begin(_committing); committing != std::end(_committing); ++committing) {
+        if (committing->use_count() == 1 && (*committing)->match(ctx) && !(*committing)->has_commit_in_flight()) {
+            VLOG(3) << "get a data consumer whose commits have completed: " << (*committing)->id();
+            (void)(*committing)->reset();
+            *ret = std::move(*committing);
+            _committing.erase(committing);
+            return Status::OK();
+        }
+    }
+
     // no available consumer, create a new one
     std::shared_ptr<DataConsumer> consumer;
     switch (ctx->load_src_type) {
@@ -88,6 +99,22 @@ Status DataConsumerPool::get_consumer(StreamLoadContext* ctx, std::shared_ptr<Da
     VLOG(3) << "create new data consumer: " << consumer->id();
     *ret = consumer;
     return Status::OK();
+}
+
+Status DataConsumerPool::get_consumer_for_commit(StreamLoadContext* ctx, std::shared_ptr<DataConsumer>* ret) {
+    {
+        std::unique_lock<std::mutex> l(_lock);
+        // The commits of a group share a consumer kept apart for its commits: a group whose coordinator is slow keeps
+        // one consumer then instead of one for each commit, and its commits reach the coordinator in order.
+        for (const auto& consumer : _committing) {
+            if (consumer->match(ctx)) {
+                VLOG(3) << "share a data consumer kept apart for its commits: " << consumer->id();
+                *ret = consumer;
+                return Status::OK();
+            }
+        }
+    }
+    return get_consumer(ctx, ret);
 }
 
 Status DataConsumerPool::get_consumer_grp(StreamLoadContext* ctx, std::shared_ptr<DataConsumerGroup>* ret) {
@@ -148,6 +175,25 @@ Status DataConsumerPool::get_consumer_grp(StreamLoadContext* ctx, std::shared_pt
 
 std::vector<std::shared_ptr<DataConsumer>> DataConsumerPool::return_consumer(
         const std::shared_ptr<DataConsumer>& consumer) {
+    {
+        std::unique_lock<std::mutex> l(_lock);
+        // A consumer kept apart for its commits stays apart, and one whose commit is still on its way is kept apart
+        // from now on: get_consumer() or the background worker pools them again once their commits have completed.
+        // Asking a consumer about its commits frees the results of those that have completed. One kept apart is asked
+        // too: the later commits of its group may keep using it, and get_consumer() and the background worker only
+        // ask a consumer that no commit uses.
+        const bool commit_in_flight = consumer->has_commit_in_flight();
+        const bool kept_apart = std::find(_committing.begin(), _committing.end(), consumer) != _committing.end();
+        if (kept_apart || commit_in_flight) {
+            consumer->set_last_visit_time(time(nullptr));
+            if (!kept_apart) {
+                VLOG(3) << "keep the data consumer apart for its commit on its way: " << consumer->id();
+                _committing.push_back(consumer);
+            }
+            return {};
+        }
+    }
+
     // The caller still owns the consumer, so reset it before taking the pool lock: a Kafka consumer drops the
     // messages fetched for its last assignment and a Pulsar consumer closes its subscription with the broker.
     (void)consumer->reset();
@@ -241,6 +287,32 @@ void DataConsumerPool::_clean_idle_consumer_bg() {
                 iter = _pool.erase(iter);
             } else {
                 ++iter;
+            }
+        }
+
+        // A consumer kept apart for its commits and not in use goes back to the pool once its commits have completed,
+        // or is closed when the pool has no room for it. Like a pooled one, it is closed once idle for too long,
+        // whether its commits have completed or not.
+        const auto max_pool_size =
+                static_cast<size_t>(std::max<int32_t>(config::routine_load_kafka_consumer_pool_size, 0));
+        auto committing = std::begin(_committing);
+        while (committing != std::end(_committing)) {
+            if (committing->use_count() > 1) {
+                ++committing;
+            } else if (difftime(now, (*committing)->last_visit_time()) >= max_idle_time_second) {
+                LOG(INFO) << "remove data consumer " << (*committing)->id() << " kept apart for its commits"
+                          << ", since it last visit: " << (*committing)->last_visit_time() << ", now: " << now;
+                idle_consumers.emplace_back(std::move(*committing));
+                committing = _committing.erase(committing);
+            } else if (!(*committing)->has_commit_in_flight()) {
+                if (_pool.size() < max_pool_size) {
+                    _pool.push_back(std::move(*committing));
+                } else {
+                    idle_consumers.emplace_back(std::move(*committing));
+                }
+                committing = _committing.erase(committing);
+            } else {
+                ++committing;
             }
         }
     }
