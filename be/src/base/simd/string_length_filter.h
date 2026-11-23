@@ -28,12 +28,25 @@ namespace SIMD {
 #if defined(__AVX2__)
 constexpr int kStringLenSimdWidth = 8;
 #elif defined(__ARM_NEON) && defined(__aarch64__)
-constexpr int kStringLenSimdWidth = 4;
+constexpr int kStringLenSimdWidth = 8;
 #else
 constexpr int kStringLenSimdWidth = 1;
 #endif
 
 constexpr uint32_t kStringLenSimdMask = (1u << kStringLenSimdWidth) - 1;
+
+#if defined(__ARM_NEON) && defined(__aarch64__)
+namespace detail {
+alignas(16) inline constexpr uint16_t kStringLenBitWeights[8] = {1, 2, 4, 8, 16, 32, 64, 128};
+
+inline uint32_t reduce_8lane_mask(uint32x4_t m0, uint32x4_t m1) {
+    uint16x8_t weights = vld1q_u16(kStringLenBitWeights);
+    uint16x8_t narrowed = vuzp1q_u16(vreinterpretq_u16_u32(m0), vreinterpretq_u16_u32(m1));
+    uint16x8_t masked = vandq_u16(narrowed, weights);
+    return vaddvq_u16(masked);
+}
+} // namespace detail
+#endif
 
 inline uint32_t length_eq_mask(const uint32_t* offsets, size_t base, uint32_t target_len) {
 #if defined(__AVX2__)
@@ -44,14 +57,19 @@ inline uint32_t length_eq_mask(const uint32_t* offsets, size_t base, uint32_t ta
     __m256i len_match = _mm256_cmpeq_epi32(lengths, target_vec);
     return static_cast<uint32_t>(_mm256_movemask_ps(_mm256_castsi256_ps(len_match)));
 #elif defined(__ARM_NEON) && defined(__aarch64__)
-    uint32x4_t off_curr = vld1q_u32(offsets + base);
-    uint32x4_t off_next = vld1q_u32(offsets + base + 1);
-    uint32x4_t lengths = vsubq_u32(off_next, off_curr);
+    uint32x4_t off_curr0 = vld1q_u32(offsets + base);
+    uint32x4_t off_next0 = vld1q_u32(offsets + base + 1);
+    uint32x4_t lengths0 = vsubq_u32(off_next0, off_curr0);
+
+    uint32x4_t off_curr1 = vld1q_u32(offsets + base + 4);
+    uint32x4_t off_next1 = vld1q_u32(offsets + base + 5);
+    uint32x4_t lengths1 = vsubq_u32(off_next1, off_curr1);
+
     uint32x4_t target_vec = vdupq_n_u32(target_len);
-    uint32x4_t len_match = vceqq_u32(lengths, target_vec);
-    uint32_t mask_arr[4];
-    vst1q_u32(mask_arr, len_match);
-    return (mask_arr[0] ? 1u : 0u) | (mask_arr[1] ? 2u : 0u) | (mask_arr[2] ? 4u : 0u) | (mask_arr[3] ? 8u : 0u);
+    uint32x4_t m0 = vceqq_u32(lengths0, target_vec);
+    uint32x4_t m1 = vceqq_u32(lengths1, target_vec);
+
+    return detail::reduce_8lane_mask(m0, m1);
 #else
     uint32_t len = offsets[base + 1] - offsets[base];
     return (len == target_len) ? 1u : 0u;
@@ -75,17 +93,26 @@ inline uint32_t length_in_range_mask(const uint32_t* offsets, size_t base, uint3
     __m256i in_range = _mm256_and_si256(ge_min, le_max);
     return static_cast<uint32_t>(_mm256_movemask_ps(_mm256_castsi256_ps(in_range)));
 #elif defined(__ARM_NEON) && defined(__aarch64__)
-    uint32x4_t off_curr = vld1q_u32(offsets + base);
-    uint32x4_t off_next = vld1q_u32(offsets + base + 1);
-    uint32x4_t lengths = vsubq_u32(off_next, off_curr);
+    uint32x4_t off_curr0 = vld1q_u32(offsets + base);
+    uint32x4_t off_next0 = vld1q_u32(offsets + base + 1);
+    uint32x4_t lengths0 = vsubq_u32(off_next0, off_curr0);
+
+    uint32x4_t off_curr1 = vld1q_u32(offsets + base + 4);
+    uint32x4_t off_next1 = vld1q_u32(offsets + base + 5);
+    uint32x4_t lengths1 = vsubq_u32(off_next1, off_curr1);
+
     uint32x4_t min_vec = vdupq_n_u32(min_len);
     uint32x4_t max_vec = vdupq_n_u32(max_len);
-    uint32x4_t ge_min = vcgeq_u32(lengths, min_vec);
-    uint32x4_t le_max = vcleq_u32(lengths, max_vec);
-    uint32x4_t in_range = vandq_u32(ge_min, le_max);
-    uint32_t mask_arr[4];
-    vst1q_u32(mask_arr, in_range);
-    return (mask_arr[0] ? 1u : 0u) | (mask_arr[1] ? 2u : 0u) | (mask_arr[2] ? 4u : 0u) | (mask_arr[3] ? 8u : 0u);
+
+    uint32x4_t ge_min0 = vcgeq_u32(lengths0, min_vec);
+    uint32x4_t le_max0 = vcleq_u32(lengths0, max_vec);
+    uint32x4_t in_range0 = vandq_u32(ge_min0, le_max0);
+
+    uint32x4_t ge_min1 = vcgeq_u32(lengths1, min_vec);
+    uint32x4_t le_max1 = vcleq_u32(lengths1, max_vec);
+    uint32x4_t in_range1 = vandq_u32(ge_min1, le_max1);
+
+    return detail::reduce_8lane_mask(in_range0, in_range1);
 #else
     uint32_t len = offsets[base + 1] - offsets[base];
     return (len >= min_len && len <= max_len) ? 1u : 0u;
