@@ -44,11 +44,7 @@ import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.persist.EditLog;
-<<<<<<< HEAD
-=======
 import com.starrocks.persist.WALApplier;
-import com.starrocks.persist.gson.GsonUtils;
->>>>>>> 29bb4231394... [BugFix][RB-96] Finish the split of an empty ORDER BY != PK partition without waiting for UNSHARE (#70710)
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;

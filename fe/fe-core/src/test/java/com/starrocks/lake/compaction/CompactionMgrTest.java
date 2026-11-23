@@ -43,11 +43,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
-<<<<<<< HEAD
-=======
 import java.util.ArrayList;
-import java.util.Collection;
->>>>>>> 29bb4231394... [BugFix][RB-96] Finish the split of an empty ORDER BY != PK partition without waiting for UNSHARE (#70710)
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
