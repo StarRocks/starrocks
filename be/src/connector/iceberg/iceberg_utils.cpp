@@ -14,6 +14,8 @@
 
 #include "connector/iceberg/iceberg_utils.h"
 
+#include <fmt/format.h>
+
 #include <ctime>
 #include <sstream>
 
@@ -78,42 +80,30 @@ StatusOr<std::string> IcebergUtils::iceberg_column_value(const TypeDescriptor& t
         is_null = true;
     } else if (transform_expr == "year") {
         const auto years_from_epoch = ColumnViewer<TYPE_BIGINT>(column).value(idx);
-        value = std::to_string(years_from_epoch + 1970);
+        value = fmt::format("{:04d}", 1970 + years_from_epoch);
     } else if (transform_expr == "month") {
+        // Match Iceberg's human string: floor split of the ordinal, zero-padded year.
         const auto months_from_epoch = ColumnViewer<TYPE_BIGINT>(column).value(idx);
-        int year = 1970 + months_from_epoch / 12;
-        int month = months_from_epoch % 12 + 1;
-        std::tm timeinfo = {};
-        timeinfo.tm_year = year - 1900;
-        timeinfo.tm_mon = month - 1;
-        char buffer[10];
-        size_t written = std::strftime(buffer, sizeof(buffer), "%Y-%m", &timeinfo);
-        if (written == 0) {
-            return Status::InternalError("strftime overflow formatting iceberg month partition");
+        int64_t years = months_from_epoch / 12;
+        int64_t month = months_from_epoch % 12;
+        if (month < 0) {
+            years--;
+            month += 12;
         }
-        value = std::string(buffer, written);
+        value = fmt::format("{:04d}-{:02d}", 1970 + years, month + 1);
     } else if (transform_expr == "day") {
         const auto days_from_epoch = ColumnViewer<TYPE_BIGINT>(column).value(idx);
         std::time_t seconds = static_cast<std::time_t>(days_from_epoch) * 86400;
         std::tm tm_utc;
         gmtime_r(&seconds, &tm_utc);
-        char buffer[20];
-        size_t written = std::strftime(buffer, sizeof(buffer), "%Y-%m-%d", &tm_utc);
-        if (written == 0) {
-            return Status::InternalError("strftime overflow formatting iceberg day partition");
-        }
-        value = std::string(buffer, written);
+        value = fmt::format("{:04d}-{:02d}-{:02d}", tm_utc.tm_year + 1900, tm_utc.tm_mon + 1, tm_utc.tm_mday);
     } else if (transform_expr == "hour") {
         const auto hours_from_epoch = ColumnViewer<TYPE_BIGINT>(column).value(idx);
         std::time_t seconds = static_cast<std::time_t>(hours_from_epoch) * 3600;
         std::tm tm_utc;
         gmtime_r(&seconds, &tm_utc);
-        char buffer[20];
-        size_t written = std::strftime(buffer, sizeof(buffer), "%Y-%m-%d-%H", &tm_utc);
-        if (written == 0) {
-            return Status::InternalError("strftime overflow formatting iceberg hour partition");
-        }
-        value = std::string(buffer, written);
+        value = fmt::format("{:04d}-{:02d}-{:02d}-{:02d}", tm_utc.tm_year + 1900, tm_utc.tm_mon + 1, tm_utc.tm_mday,
+                            tm_utc.tm_hour);
     } else if (transform_expr.compare(0, 8, "truncate") == 0) {
         ASSIGN_OR_RETURN(value, HivePartitionUtils::column_value(type_desc, column, idx));
     } else if (transform_expr.compare(0, 6, "bucket") == 0) {

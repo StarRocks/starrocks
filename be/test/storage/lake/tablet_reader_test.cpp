@@ -52,6 +52,7 @@
 #include "fs/fs_util.h"
 #include "fs/remote_read_context.h"
 #include "gen_cpp/InternalService_types.h"
+#include "io/seekable_input_stream.h"
 #include "platform/key_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
@@ -72,6 +73,7 @@
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/seek_range.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "storage_primitive/column_predicate_factory.h"
 #include "storage_primitive/predicate_tree/predicate_tree.hpp"
@@ -1518,6 +1520,377 @@ TEST_F(LakeDuplicateTabletReaderTest, test_parallel_read_error_waits_all_futures
     EXPECT_EQ(2, reader->stats().rowsets_read_count);
     EXPECT_EQ(1, reader->stats().segments_read_count);
     EXPECT_EQ(1, reader->stats().phy_segments_count);
+}
+
+// A local file system whose files accept cache warm-ups, as starlet's do, so that segment readers build real read-ahead
+// windows on local segment files. A warm-up only returns a handle; the reads go to the local file as before.
+class WarmableFileSystem final : public FileSystem {
+public:
+    explicit WarmableFileSystem(std::shared_ptr<FileSystem> fs) : _fs(std::move(fs)) {}
+
+    std::atomic<int64_t> warms{0};
+    // The next segment reader that opens a file whose name ends with this fails to open it, once.
+    std::string fail_once;
+
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                       const std::string& fname) override {
+        if (opts.remote_read_retainable && !fail_once.empty() && fname.ends_with(fail_once)) {
+            fail_once.clear();
+            return Status::IOError("injected");
+        }
+        ASSIGN_OR_RETURN(auto file, _fs->new_random_access_file(opts, fname));
+        std::shared_ptr<io::SeekableInputStream> stream = std::make_shared<WarmableStream>(std::move(file), &warms);
+        return std::make_unique<RandomAccessFile>(std::move(stream), fname);
+    }
+    Type type() const override { return _fs->type(); }
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
+                                                                  const std::string& fname) override {
+        return _fs->new_sequential_file(opts, fname);
+    }
+    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableFileOptions& opts,
+                                                              const std::string& fname) override {
+        return _fs->new_writable_file(opts, fname);
+    }
+    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& fname) override {
+        return _fs->new_writable_file(fname);
+    }
+    Status path_exists(const std::string& fname) override { return _fs->path_exists(fname); }
+    Status get_children(const std::string& dir, std::vector<std::string>* result) override {
+        return _fs->get_children(dir, result);
+    }
+    Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override {
+        return _fs->iterate_dir(dir, cb);
+    }
+    Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override {
+        return _fs->iterate_dir2(dir, cb);
+    }
+    Status delete_file(const std::string& fname) override { return _fs->delete_file(fname); }
+    Status create_dir(const std::string& dirname) override { return _fs->create_dir(dirname); }
+    Status create_dir_if_missing(const std::string& dirname, bool* created) override {
+        return _fs->create_dir_if_missing(dirname, created);
+    }
+    Status create_dir_recursive(const std::string& dirname) override { return _fs->create_dir_recursive(dirname); }
+    Status delete_dir(const std::string& dirname) override { return _fs->delete_dir(dirname); }
+    Status delete_dir_recursive(const std::string& dirname) override { return _fs->delete_dir_recursive(dirname); }
+    Status sync_dir(const std::string& dirname) override { return _fs->sync_dir(dirname); }
+    StatusOr<bool> is_directory(const std::string& path) override { return _fs->is_directory(path); }
+    Status canonicalize(const std::string& path, std::string* result) override {
+        return _fs->canonicalize(path, result);
+    }
+    StatusOr<uint64_t> get_file_size(const std::string& fname) override { return _fs->get_file_size(fname); }
+    StatusOr<uint64_t> get_file_modified_time(const std::string& fname) override {
+        return _fs->get_file_modified_time(fname);
+    }
+    Status rename_file(const std::string& src, const std::string& target) override {
+        return _fs->rename_file(src, target);
+    }
+    Status link_file(const std::string& old_path, const std::string& new_path) override {
+        return _fs->link_file(old_path, new_path);
+    }
+
+private:
+    class Handle final : public io::CacheWarmHandle {
+    public:
+        size_t submitted_blocks() const override { return 1; }
+        size_t pending_blocks() const override { return 0; }
+    };
+    class WarmableStream final : public io::SeekableInputStreamWrapper {
+    public:
+        WarmableStream(std::unique_ptr<RandomAccessFile> file, std::atomic<int64_t>* warms)
+                : io::SeekableInputStreamWrapper(file.get(), kDontTakeOwnership),
+                  _file(std::move(file)),
+                  _warms(warms) {}
+        StatusOr<std::shared_ptr<io::CacheWarmHandle>> warm_cache_async(int64_t, size_t, bool) override {
+            _warms->fetch_add(1);
+            return std::make_shared<Handle>();
+        }
+
+    private:
+        std::unique_ptr<RandomAccessFile> _file;
+        std::atomic<int64_t>* _warms;
+    };
+
+    std::shared_ptr<FileSystem> _fs;
+};
+
+// Real read-ahead windows: with files that can warm the cache, a non-split query scan of one rowset of three segments
+// starts the read-ahead of the two segments after the first while it reads the first, and reports them in
+// SegmentReadAheadStarted. Nothing starts early with lake_scan_read_ahead_segments = 0 or without the scheduler, and
+// the rows are the same in every case.
+TEST_F(LakeDuplicateTabletReaderTest, test_read_ahead_starts_segment_windows) {
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    std::vector<std::pair<int, int>> expected;
+    {
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+        ASSERT_OK(writer->open());
+        for (int s = 0; s < 3; s++) {
+            std::vector<int> k(20000);
+            std::vector<int> v(20000);
+            for (int i = 0; i < 20000; i++) {
+                k[i] = s * 20000 + i;
+                v[i] = k[i] * 3;
+                expected.emplace_back(k[i], v[i]);
+            }
+            auto c0 = Int32Column::create();
+            auto c1 = Int32Column::create();
+            c0->append_numbers(k.data(), k.size() * sizeof(int));
+            c1->append_numbers(v.data(), v.size() * sizeof(int));
+            ASSERT_OK(writer->write(Chunk({std::move(c0), std::move(c1)}, _schema)));
+            ASSERT_OK(writer->finish());
+        }
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(false);
+        rowset->set_id(1);
+        for (const auto& file : writer->segments()) {
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
+        }
+        ASSERT_EQ(3, rowset->segment_metas_size());
+        writer->close();
+    }
+    _tablet_metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    ASSIGN_OR_ABORT(auto local_fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
+    auto fs = std::make_shared<WarmableFileSystem>(local_fs);
+    const bool scheduler_was_enabled = remote_io_scheduler_enabled();
+    DeferOp restore([&] { g_remote_io_scheduler_enabled.store(scheduler_was_enabled); });
+    ConfigResetGuard<int32_t> window_guard(&config::remote_prefetch_window_blocks, 128);
+
+    auto scan = [&](bool scheduler, int32_t segments_ahead, OlapReaderStatistics* stats) {
+        g_remote_io_scheduler_enabled.store(scheduler);
+        ConfigResetGuard<int32_t> ahead_guard(&config::lake_scan_read_ahead_segments, segments_ahead);
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+        CHECK_OK(reader->prepare());
+        TabletReaderParams params;
+        params.reader_type = ReaderType::READER_QUERY;
+        params.lake_io_opts.fill_data_cache = true;
+        params.lake_io_opts.fs = fs;
+        params.lake_io_opts.remote_read = RemoteReadContext::for_query(1, 1, 0, 42);
+        CHECK_OK(reader->open(params));
+        std::vector<std::pair<int, int>> rows;
+        auto chunk = ChunkFactory::new_chunk(*_schema, 4096);
+        while (true) {
+            chunk->reset();
+            Status st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            CHECK_OK(st);
+            for (size_t i = 0; i < chunk->num_rows(); i++) {
+                rows.emplace_back(chunk->get(i)[0].get_int32(), chunk->get(i)[1].get_int32());
+            }
+        }
+        reader->close();
+        *stats = reader->stats();
+        return rows;
+    };
+
+    OlapReaderStatistics stats;
+    EXPECT_EQ(expected, scan(true, 16, &stats));
+    // The first segment reads ahead at its own turn; the two after it start while it is read.
+    EXPECT_EQ(2, stats.segment_read_ahead_started);
+    EXPECT_GT(fs->warms.load(), 0);
+
+    // Each segment still reads ahead at its own turn.
+    int64_t warms = fs->warms.load();
+    EXPECT_EQ(expected, scan(true, 0, &stats));
+    EXPECT_EQ(0, stats.segment_read_ahead_started);
+    EXPECT_GT(fs->warms.load(), warms);
+
+    warms = fs->warms.load();
+    EXPECT_EQ(expected, scan(false, 16, &stats));
+    EXPECT_EQ(0, stats.segment_read_ahead_started);
+    EXPECT_EQ(warms, fs->warms.load());
+}
+
+// A segment reader that fails to initialize while it is started early is not initialized again when its turn comes,
+// which could read with what the failed initialization left behind: its read returns the error, as it does when the
+// reader is initialized at its turn.
+TEST_F(LakeDuplicateTabletReaderTest, test_read_ahead_keeps_init_error) {
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    std::string last_segment;
+    {
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+        ASSERT_OK(writer->open());
+        for (int s = 0; s < 3; s++) {
+            std::vector<int> k(20000);
+            std::iota(k.begin(), k.end(), s * 20000);
+            auto c0 = Int32Column::create();
+            auto c1 = Int32Column::create();
+            c0->append_numbers(k.data(), k.size() * sizeof(int));
+            c1->append_numbers(k.data(), k.size() * sizeof(int));
+            ASSERT_OK(writer->write(Chunk({std::move(c0), std::move(c1)}, _schema)));
+            ASSERT_OK(writer->finish());
+        }
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(false);
+        rowset->set_id(1);
+        for (const auto& file : writer->segments()) {
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
+            last_segment = file.path;
+        }
+        writer->close();
+    }
+    _tablet_metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    ASSIGN_OR_ABORT(auto local_fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
+    auto fs = std::make_shared<WarmableFileSystem>(local_fs);
+    const bool scheduler_was_enabled = remote_io_scheduler_enabled();
+    DeferOp restore([&] { g_remote_io_scheduler_enabled.store(scheduler_was_enabled); });
+    g_remote_io_scheduler_enabled.store(true);
+    ConfigResetGuard<int32_t> window_guard(&config::remote_prefetch_window_blocks, 128);
+
+    // Reads the whole tablet with the last segment's file failing to open once; returns the first error.
+    auto scan = [&](int32_t segments_ahead, int64_t* rows, OlapReaderStatistics* stats) {
+        ConfigResetGuard<int32_t> ahead_guard(&config::lake_scan_read_ahead_segments, segments_ahead);
+        fs->fail_once = last_segment;
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+        CHECK_OK(reader->prepare());
+        TabletReaderParams params;
+        params.reader_type = ReaderType::READER_QUERY;
+        params.lake_io_opts.fill_data_cache = true;
+        params.lake_io_opts.fs = fs;
+        params.lake_io_opts.remote_read = RemoteReadContext::for_query(1, 1, 0, 42);
+        CHECK_OK(reader->open(params));
+        auto chunk = ChunkFactory::new_chunk(*_schema, 4096);
+        *rows = 0;
+        Status st;
+        while (true) {
+            chunk->reset();
+            st = reader->get_next(chunk.get());
+            if (!st.ok()) {
+                break;
+            }
+            *rows += chunk->num_rows();
+        }
+        reader->close();
+        *stats = reader->stats();
+        return st;
+    };
+
+    int64_t rows = 0;
+    OlapReaderStatistics stats;
+    // Started early: the failed start stops the read-ahead, and the reader's turn returns the error.
+    Status st = scan(16, &rows, &stats);
+    EXPECT_TRUE(st.is_io_error()) << st;
+    EXPECT_EQ(1, stats.segment_read_ahead_started);
+    EXPECT_EQ(40000, rows);
+    // Initialized at its turn: the same error.
+    st = scan(0, &rows, &stats);
+    EXPECT_TRUE(st.is_io_error()) << st;
+    EXPECT_EQ(0, stats.segment_read_ahead_started);
+    EXPECT_EQ(40000, rows);
+}
+
+// A non-split query scan reads ahead across the segments of a rowset, not only across rowsets. While the remote I/O
+// scheduler runs, every rowset hands each of its segments to the union of the tablet, which gets the next segment
+// ready (SegmentIterator::start_read_ahead initializes it) while it reads the current one. A local segment has no
+// read-ahead window, so the union starts only the first segment ahead and then reads on as usual.
+TEST_F(LakeDuplicateTabletReaderTest, test_read_ahead_across_segments_of_a_rowset) {
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    std::vector<int> expected;
+    // Writes a rowset whose segments do not overlap, 10 keys each from |first_key| up.
+    auto write_rowset = [&](uint32_t id, int segments, int first_key) {
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+        ASSERT_OK(writer->open());
+        for (int i = 0; i < segments; i++) {
+            std::vector<int> k(10);
+            std::iota(k.begin(), k.end(), first_key + 10 * i);
+            expected.insert(expected.end(), k.begin(), k.end());
+            auto c0 = Int32Column::create();
+            auto c1 = Int32Column::create();
+            c0->append_numbers(k.data(), k.size() * sizeof(int));
+            c1->append_numbers(k.data(), k.size() * sizeof(int));
+            ASSERT_OK(writer->write(Chunk({std::move(c0), std::move(c1)}, _schema)));
+            ASSERT_OK(writer->finish());
+        }
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(false);
+        rowset->set_id(id);
+        for (const auto& file : writer->segments()) {
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
+        }
+        ASSERT_EQ(segments, rowset->segment_metas_size());
+        writer->close();
+        _tablet_metadata->set_version(_tablet_metadata->version() + 1);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    };
+
+    const bool scheduler_was_enabled = remote_io_scheduler_enabled();
+    DeferOp restore([&] { g_remote_io_scheduler_enabled.store(scheduler_was_enabled); });
+    ConfigResetGuard<int32_t> segments_guard(&config::lake_scan_read_ahead_segments, 16);
+    ConfigResetGuard<int32_t> window_guard(&config::remote_prefetch_window_blocks, 128);
+
+    // Reads the tablet as a query that fills the cache (or not, |fill_cache|), returning the keys and setting
+    // |early_inits| to the segment readers initialized by the first chunk beyond the one it is read from.
+    int64_t started = -1;
+    auto scan = [&](bool scheduler, bool asc, int64_t* early_inits, bool fill_cache = true) {
+        g_remote_io_scheduler_enabled.store(scheduler);
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+        reader->set_is_asc_hint(asc);
+        CHECK_OK(reader->prepare());
+        TabletReaderParams params;
+        params.reader_type = ReaderType::READER_QUERY;
+        params.lake_io_opts.fill_data_cache = fill_cache;
+        params.lake_io_opts.remote_read = RemoteReadContext::for_query(1, 1, 0, 42);
+        CHECK_OK(reader->open(params));
+        std::vector<int> keys;
+        auto chunk = ChunkFactory::new_chunk(*_schema, 1024);
+        auto& inits = StorageMetrics::instance()->segment_read_total;
+        const int64_t inits_before = inits.value();
+        for (bool first = true;; first = false) {
+            chunk->reset();
+            Status st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            CHECK_OK(st);
+            if (first) {
+                *early_inits = inits.value() - inits_before - 1;
+            }
+            for (size_t i = 0; i < chunk->num_rows(); i++) {
+                keys.push_back(chunk->get(i)[0].get_int32());
+            }
+        }
+        reader->close();
+        started = reader->stats().segment_read_ahead_started;
+        return keys;
+    };
+
+    for (int rowsets = 1; rowsets <= 2; rowsets++) {
+        // One compacted rowset of three segments, then a second rowset of two.
+        if (rowsets == 1) {
+            write_rowset(1, 3, 0);
+        } else {
+            write_rowset(2, 2, 100);
+        }
+        int64_t early_inits = -1;
+        EXPECT_EQ(expected, scan(true, true, &early_inits)) << rowsets;
+        EXPECT_EQ(1, early_inits) << rowsets;
+        // Local files cannot warm: the first warm-up of the segment started early disables its window, so it does not
+        // count as started and the segments after it are not prepared early.
+        EXPECT_EQ(0, started) << rowsets;
+        // A scan that does not fill the cache has no read-ahead windows, so nothing is prepared early either.
+        EXPECT_EQ(expected, scan(true, true, &early_inits, false)) << rowsets;
+        EXPECT_EQ(0, early_inits) << rowsets;
+        EXPECT_EQ(expected, scan(false, true, &early_inits)) << rowsets;
+        EXPECT_EQ(0, early_inits) << rowsets;
+        // A descending scan does not read ahead, and keeps its order of the rowsets.
+        scan(true, false, &early_inits);
+        EXPECT_EQ(0, early_inits) << rowsets;
+        {
+            ConfigResetGuard<int32_t> off(&config::lake_scan_read_ahead_segments, 0);
+            EXPECT_EQ(expected, scan(true, true, &early_inits)) << rowsets;
+            EXPECT_EQ(0, early_inits) << rowsets;
+        }
+    }
 }
 
 // Regression: TabletReaderParams::has_predicate_above_iterator must reach SegmentReadOptions
@@ -4260,6 +4633,73 @@ TEST_F(LakeTabletReaderSpit, test_nosplit_index_warm_gates_and_lifetime) {
     run(true, true, READER_CUMULATIVE_COMPACTION, true, true);
     run(true, true, READER_BYPASS_QUERY, true, true);
     run(true, true, READER_QUERY, true, false); // a refused warm falls back to ordinary reads
+}
+
+TEST_F(LakeTabletReaderSpit, test_index_warm_respects_scan_cache_policy) {
+    ASSERT_NO_FATAL_FAILURE(write_two_rowsets_with_three_segments());
+    TInternalScanRange internal;
+    internal.__set_tablet_id(_tablet_metadata->id());
+    internal.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan;
+    scan.__set_internal_scan_range(internal);
+
+    ConfigResetGuard<bool> warm_guard(&config::lake_scan_warm_index, true);
+    ConfigResetGuard<bool> open_guard(&config::lake_scan_parallel_segment_open, false);
+    ConfigResetGuard<bool> parallel_guard(&config::enable_load_segment_parallel, false);
+    const bool old_scheduler = g_remote_io_scheduler_enabled.exchange(true);
+    auto* sync = SyncPoint::GetInstance();
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+        g_remote_io_scheduler_enabled.store(old_scheduler);
+    });
+    int warm_calls = 0;
+    int eager_open_calls = 0;
+    sync->SetCallBack("TabletReader::warm_prepared_indexes::warm", [&](void*) { ++warm_calls; });
+    sync->SetCallBack("TabletReader::open_segment_task", [&](void*) { ++eager_open_calls; });
+
+    auto run = [&](const LakeIOOptions& policy, bool split, bool prepared) {
+        SCOPED_TRACE(::testing::Message() << "split=" << split << " prepared=" << prepared);
+        _tablet_mgr->metacache()->prune();
+        warm_calls = 0;
+        eager_open_calls = 0;
+        auto params = generate_tablet_reader_params(&scan);
+        params.reader_type = READER_QUERY;
+        params.lake_io_opts = policy;
+        params.enable_prepared_physical_split_scan = prepared;
+        params.range = TabletReaderParams::RangeStartOperation::GE;
+        params.end_range = TabletReaderParams::RangeEndOperation::LE;
+        params.start_key = {OlapTuple({"1"})};
+        params.end_key = {OlapTuple({"100"})};
+        TabletReader reader(_tablet_mgr.get(), _tablet_metadata, *_schema, split, split);
+        ASSERT_OK(reader.prepare());
+        ASSERT_OK(reader.open(params));
+        EXPECT_EQ(0, warm_calls);
+        EXPECT_EQ(0, reader.stats().lake_prepared_tablet_warm_index_ranges);
+        if (split) {
+            std::vector<pipeline::ScanSplitContextPtr> tasks;
+            reader.get_split_tasks(&tasks);
+            ASSERT_FALSE(tasks.empty());
+            if (!prepared) {
+                for (const auto& task : tasks) {
+                    const auto* ctx = down_cast<const pipeline::LakeSplitContext*>(task.get());
+                    EXPECT_EQ(nullptr, ctx->classic_tablet_read_state);
+                }
+            }
+        } else {
+            EXPECT_EQ(0, eager_open_calls);
+        }
+        reader.close();
+    };
+    for (const auto& [name, policy] : {std::pair{"no cache fill", LakeIOOptions{.fill_data_cache = false}},
+                                       std::pair{"skip disk cache", LakeIOOptions{.skip_disk_cache = true}},
+                                       std::pair{"cache file only", LakeIOOptions{.cache_file_only = true}}}) {
+        SCOPED_TRACE(name);
+        ASSERT_NO_FATAL_FAILURE(run(policy, /*split=*/false, /*prepared=*/false));
+        ASSERT_NO_FATAL_FAILURE(run(policy, /*split=*/true, /*prepared=*/false));
+        ASSERT_NO_FATAL_FAILURE(run(policy, /*split=*/true, /*prepared=*/true));
+    }
 }
 
 // Ordinal metadata for a one-page column may be loaded without reading that data page, so the warm path still

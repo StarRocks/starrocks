@@ -1022,6 +1022,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：MySQL 以外のチャネル（HTTP、Arrow Flight、BE 直結の Stream Load）における Bearer トークン認証のマスタースイッチ。`false` に設定すると、これらのチャネルは `Authorization: Bearer ...` を含むリクエストをすべて HTTP 401 で拒否し、「トークン認証は MySQL プロトコルのみ」という以前の動作に戻ります。Basic 認証と既存の Arrow Flight UUID セッショントークンは影響を受けません。MySQL プロトコルの認証がこのスイッチで制限されることはありません。
 - 導入時期：v4.2
 
+### `authentication_chain_accept_jwt_as_password`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：セキュリティインテグレーションのユーザーが、MySQL ログインのパスワード（`mysql_clear_password` プラグイン）として JWT を渡せるようにするかどうか。`true` に設定すると、そのパスワードが JWT の形をしている場合、StarRocks はまずそれをトークンとして `authentication_chain` 上の JWT および OAuth 2.0 セキュリティインテグレーションに渡し、どれも受け入れなかった場合にのみパスワードとして LDAP セキュリティインテグレーションに渡します。これにより、`authentication_openid_connect_client` プラグインを持たない MySQL クライアントでも、LDAP セキュリティインテグレーションと `authentication_chain` を共有する JWT セキュリティインテグレーションでログインできます。`false` の場合、そのようなパスワードはそのまま LDAP セキュリティインテグレーションに渡されます。この設定項目は MySQL プロトコルにのみ適用されます。HTTP と Arrow Flight はトークンを `Bearer` で運ぶため、`Basic` のパスワードがトークンとして扱われることはありません。たまたまトークンの形をしたパスワードは、パスワードの経路に入る前にトークン検証が 1 回拒否されるだけのコストがかかります。認証メトリクスにはそのログインの最終結果だけが計上されます。
+- 導入時期：-
+
 ### `http_web_page_display_hardware`
 
 - デフォルト：true

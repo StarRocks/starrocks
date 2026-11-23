@@ -43,6 +43,7 @@ import com.starrocks.qe.scheduler.dag.ExecutionSchedule;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.ValuesRelation;
@@ -72,6 +73,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -108,6 +110,106 @@ public class CoordinatorTest extends PlanTestBase {
         coordinator = new DefaultCoordinator.Factory().createQueryScheduler(ctx, Lists.newArrayList(), Lists.newArrayList(),
                 new TDescriptorTable(), null);
         coordinatorPreprocessor = coordinator.getPrepareInfo();
+    }
+
+    @Test
+    public void testMetadataParentDeadlineAfterQueueing() {
+        ConnectContext parent = UtFrameUtils.createDefaultCtx();
+        parent.getSessionVariable().setQueryTimeoutS(30);
+        parent.setStartTime();
+        ctx.setParentConnectContext(parent);
+        ctx.setMetadataContext(true);
+        ctx.setStartTime();
+        ctx.getSessionVariable().setQueryTimeoutS(300);
+        new MockUp<QueryQueueManager>() {
+            @Mock
+            public void maybeWait(ConnectContext context, DefaultCoordinator coord) {
+                parent.setStartTime(Instant.now().minusSeconds(31));
+            }
+        };
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void prepareExec() {
+                throw new AssertionError("Expired metadata query must not prepare or deploy fragments");
+            }
+        };
+        SemanticException error = Assertions.assertThrows(SemanticException.class, () -> coordinator.exec());
+        Assertions.assertTrue(error.getMessage().contains("timed out"));
+    }
+
+    @Test
+    public void testMetadataParentCancellationAfterQueueing() {
+        ConnectContext parent = UtFrameUtils.createDefaultCtx();
+        ctx.setParentConnectContext(parent);
+        ctx.setMetadataContext(true);
+        new MockUp<QueryQueueManager>() {
+            @Mock
+            public void maybeWait(ConnectContext context, DefaultCoordinator coord) {
+                parent.setKilled();
+            }
+        };
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void prepareExec() {
+                throw new AssertionError("Cancelled metadata query must not prepare or deploy fragments");
+            }
+        };
+        SemanticException error = Assertions.assertThrows(SemanticException.class, () -> coordinator.exec());
+        Assertions.assertTrue(error.getMessage().contains("cancelled"));
+    }
+
+    @Test
+    public void testMetadataDeadlineDuringFragmentPreparation() {
+        ConnectContext parent = UtFrameUtils.createDefaultCtx();
+        parent.getSessionVariable().setQueryTimeoutS(30);
+        parent.setStartTime();
+        ctx.setParentConnectContext(parent);
+        ctx.setMetadataContext(true);
+        ctx.setStartTime();
+        ctx.getSessionVariable().setQueryTimeoutS(300);
+        new MockUp<QueryQueueManager>() {
+            @Mock
+            public void maybeWait(ConnectContext context, DefaultCoordinator coord) {
+            }
+        };
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void prepareExec() {
+                parent.setStartTime(Instant.now().minusSeconds(31));
+            }
+        };
+        SemanticException error = Assertions.assertThrows(SemanticException.class, () -> coordinator.exec());
+        Assertions.assertTrue(error.getMessage().contains("timed out"));
+    }
+
+    @Test
+    public void testMetadataExecutionBudgetIncludesQueueTime() {
+        ConnectContext parent = UtFrameUtils.createDefaultCtx();
+        parent.getSessionVariable().setQueryTimeoutS(30);
+        parent.setStartTime();
+        ctx.setParentConnectContext(parent);
+        ctx.setMetadataContext(true);
+        ctx.setStartTime();
+        ctx.getSessionVariable().setQueryTimeoutS(300);
+        new MockUp<QueryQueueManager>() {
+            @Mock
+            public void maybeWait(ConnectContext context, DefaultCoordinator coord) {
+                parent.setStartTime(Instant.now().minusSeconds(10));
+            }
+        };
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void prepareExec() throws StarRocksException {
+                JobSpec spec = Deencapsulation.getField(coordinator, "jobSpec");
+                int timeout = spec.getQueryOptions().getQuery_timeout();
+                Assertions.assertTrue(timeout > 15 && timeout <= 20, "timeout=" + timeout);
+                throw new StarRocksException("stop before fragment preparation");
+            }
+        };
+        StarRocksException error = Assertions.assertThrows(StarRocksException.class, () -> coordinator.exec());
+        Assertions.assertEquals("stop before fragment preparation", error.getMessage());
+        Assertions.assertEquals(300, ctx.getSessionVariable().getQueryTimeoutS());
+        Assertions.assertEquals(30, parent.getSessionVariable().getQueryTimeoutS());
     }
 
     private PlanFragment genFragment() {

@@ -616,10 +616,10 @@ static void warm_prepared_indexes(PreparedTabletReadState* state, const TabletSc
     }
 }
 
-// lake_scan_warm_index applies to the query scans of a tablet, split or not, while the remote I/O scheduler is on.
-// It does not depend on lake_scan_parallel_segment_open.
-static bool should_warm_index_pages(ReaderType reader_type) {
-    return config::lake_scan_warm_index && reader_type == ReaderType::READER_QUERY && remote_io_scheduler_enabled();
+// Index warming fills the disk cache ahead of ordinary query reads and is independent of parallel segment opening.
+static bool should_warm_index_pages(ReaderType reader_type, const LakeIOOptions& lake_io_opts) {
+    return config::lake_scan_warm_index && reader_type == ReaderType::READER_QUERY && remote_io_scheduler_enabled() &&
+           lake_io_opts.fill_data_cache && !lake_io_opts.skip_disk_cache && !lake_io_opts.cache_file_only;
 }
 
 static rowid_t rows_per_split(const TabletReaderParams& params) {
@@ -894,7 +894,7 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         PreparedTabletReadStatePtr classic_state;
         if (_could_split_physically && read_params.grouped_range_task == nullptr &&
             (should_open_segments_in_parallel(read_params.reader_type) ||
-             should_warm_index_pages(read_params.reader_type)) &&
+             should_warm_index_pages(read_params.reader_type, read_params.lake_io_opts)) &&
             std::all_of(_rowsets.begin(), _rowsets.end(),
                         [](const RowsetPtr& rowset) { return rowset->can_hold_segments(); })) {
             classic_state = std::make_shared<PreparedTabletReadState>();
@@ -920,7 +920,7 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
             }
             // lake_scan_warm_index: the splits share these segments, and the state keeps the warm handles until the
             // last split that holds it is done.
-            if (should_warm_index_pages(read_params.reader_type)) {
+            if (should_warm_index_pages(read_params.reader_type, read_params.lake_io_opts)) {
                 RowsetReadOptions classic_read_options;
                 LakeIOOptions classic_io_options;
                 RETURN_IF_ERROR(
@@ -1188,7 +1188,7 @@ void TabletReader::record_tablet_prepare_stats(const OlapReaderStatistics& prepa
 // the segments of |state|.
 void TabletReader::warm_index_pages(PreparedTabletReadState* state, const TabletReaderParams& params,
                                     const RowsetReadOptions& options, const LakeIOOptions& lake_io_opts) {
-    if (!should_warm_index_pages(params.reader_type) || options.tablet_schema == nullptr) {
+    if (!should_warm_index_pages(params.reader_type, lake_io_opts) || options.tablet_schema == nullptr) {
         return;
     }
     const auto& predicate_ids = options.pred_tree_for_zone_map.column_ids();
@@ -1569,6 +1569,8 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(const 
 Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters) {
     RowsetReadOptions rs_opts;
     RETURN_IF_ERROR(init_rowset_read_options(params, &rs_opts));
+    // A rowset's own union of its segments would hide them from the union that reads ahead.
+    rs_opts.union_segments = !_union_reads_ahead;
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
 
@@ -1631,8 +1633,9 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     // Per rowset, whether all its segments were open in the metadata cache before this scan opened them. Filled only
     // when the segments are opened up front below.
     std::vector<bool> cached_rowsets;
-    if (!_need_split && classic_state == nullptr && should_warm_index_pages(params.reader_type) &&
-        params.rowid_range_option == nullptr && params.short_key_ranges_option == nullptr) {
+    if (!_need_split && classic_state == nullptr && params.rowid_range_option == nullptr &&
+        params.short_key_ranges_option == nullptr &&
+        should_warm_index_pages(params.reader_type, rs_opts.lake_io_opts)) {
         // lake_scan_warm_index: open the segments once, warm all of them before building any iterator, and build the
         // iterators on these same segments. The reader keeps the warm handles until close() or the next open(), so
         // the queued fills keep their demand while the scan reads.
@@ -1896,7 +1899,29 @@ Status TabletReader::init_delete_predicates(const TabletReaderParams& params, De
     return Status::OK();
 }
 
+bool TabletReader::union_reads_ahead(const TabletReaderParams& params) const {
+    // A query scan that walks all the segments of the tablet one after another, in ascending order, through the
+    // union below starts the read-ahead of the next segments while it reads the current one; a split scan reads its
+    // segments from several scan tasks at once already. Only the key types that always take the union branch
+    // qualify, as the segments are known to reach it before they are read.
+    const KeysType keys_type = _tablet_schema->keys_type();
+    const bool union_branch =
+            !params.sorted_by_keys_per_tablet && (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS ||
+                                                  (keys_type == UNIQUE_KEYS && params.skip_aggregation));
+    // The segment readers read ahead only for an attributed query read that fills the cache (see
+    // SegmentIterator::_should_read_ahead()); starting the others early would only initialize them before their turn.
+    const auto& io = params.lake_io_opts;
+    const bool cache_read_ahead = io.fill_data_cache && !io.skip_disk_cache && !io.cache_file_only &&
+                                  io.remote_read.is_set &&
+                                  io.remote_read.workload == RemoteReadContext::Workload::QUERY;
+    return union_branch && cache_read_ahead && params.reader_type == ReaderType::READER_QUERY && !_need_split &&
+           _is_asc_hint && params.rowid_range_option == nullptr && params.short_key_ranges_option == nullptr &&
+           remote_io_scheduler_enabled() && config::lake_scan_read_ahead_segments > 0 &&
+           config::remote_prefetch_window_blocks > 0;
+}
+
 Status TabletReader::init_collector(const TabletReaderParams& params) {
+    _union_reads_ahead = union_reads_ahead(params);
     std::vector<ChunkIteratorPtr> seg_iters;
     RETURN_IF_ERROR(get_segment_iterators(params, &seg_iters));
 
@@ -1962,7 +1987,13 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
         //       |           |           |
         // SegmentIterator  ...    SegmentIterator
         //
-        _collect_iter = new_union_iterator(std::move(seg_iters));
+        // With _union_reads_ahead, each child is one segment (see union_reads_ahead()).
+        if (_union_reads_ahead) {
+            _collect_iter = new_union_iterator(std::move(seg_iters), config::lake_scan_read_ahead_segments,
+                                               config::remote_prefetch_window_blocks);
+        } else {
+            _collect_iter = new_union_iterator(std::move(seg_iters));
+        }
     } else if ((keys_type == AGG_KEYS || keys_type == UNIQUE_KEYS) && !skip_aggr) {
         //                 Timer
         //                   |

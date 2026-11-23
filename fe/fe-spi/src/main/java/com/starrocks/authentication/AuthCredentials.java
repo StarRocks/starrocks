@@ -15,6 +15,8 @@
 package com.starrocks.authentication;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.Base64;
 import java.util.Locale;
 import java.util.Objects;
 
@@ -75,7 +77,17 @@ public record AuthCredentials(String userDeclared, byte[] rawSecret,
 
     /** Bearer-token credential; no explicit user (it is resolved from the token claim). */
     public static AuthCredentials ofBearer(String token, AuthChannel channel, String host) {
-        return new AuthCredentials(null, token.getBytes(StandardCharsets.UTF_8),
+        return ofBearer(null, token, channel, host);
+    }
+
+    /**
+     * Bearer-token credential that names the user it is for, the same shape as a MySQL OpenID
+     * Connect login. The token still has to prove that user: the provider checks its principal
+     * claim against {@code user}. A {@code null} user is the same as {@link #ofBearer(String,
+     * AuthChannel, String)}.
+     */
+    public static AuthCredentials ofBearer(String user, String token, AuthChannel channel, String host) {
+        return new AuthCredentials(user, token.getBytes(StandardCharsets.UTF_8),
                 AuthCredentialKind.BEARER_TOKEN, channel, host);
     }
 
@@ -102,5 +114,40 @@ public record AuthCredentials(String userDeclared, byte[] rawSecret,
     /** Decode {@link #rawSecret} as a UTF-8 string (for token kinds). */
     public String tokenString() {
         return new String(rawSecret, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * Whether the bytes have the shape of a compact JWS: three base64url segments, the first one
+     * decoding to a JSON object header. The header is decoded rather than matched on its
+     * {@code eyJ} prefix because JSON allows whitespace before the first key. A shape test only -
+     * it says nothing about the signature - so a password that happens to look like this is merely
+     * offered to the token integrations first, which then refuse it.
+     */
+    public boolean looksLikeJwt() {
+        if (rawSecret.length < 16) {
+            return false;
+        }
+        int dots = 0;
+        int headerEnd = -1;
+        for (int i = 0; i < rawSecret.length; i++) {
+            byte b = rawSecret[i];
+            if (b == '.') {
+                if (dots++ == 0) {
+                    headerEnd = i;
+                }
+            } else if (!((b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9')
+                    || b == '-' || b == '_' || b == '=')) {
+                return false;
+            }
+        }
+        if (dots != 2 || headerEnd <= 0) {
+            return false;
+        }
+        try {
+            byte[] header = Base64.getUrlDecoder().decode(Arrays.copyOf(rawSecret, headerEnd));
+            return new String(header, StandardCharsets.UTF_8).trim().startsWith("{");
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 }

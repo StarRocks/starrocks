@@ -25,7 +25,7 @@ namespace starrocks {
 // Process-wide loader for the optional Paimon shim. No SDK or connector types cross this boundary.
 class PaimonCppLibrary {
 public:
-    enum class Capability { SCANNER, SINK, BUCKET_CALCULATOR };
+    enum class Capability { SCANNER, SINK, BUCKET_CALCULATOR, GLOBAL_INDEX_SCANNER };
 
     static PaimonCppLibrary& instance();
     StatusOr<void*> get_symbol(Capability capability);
@@ -36,7 +36,7 @@ private:
     std::mutex _mutex;
     // Never unload: live scanners, sinks and calculators retain vtables in this library.
     void* _handle = nullptr;
-    std::array<std::atomic<void*>, 3> _symbols{};
+    std::array<std::atomic<void*>, 4> _symbols{};
 };
 
 } // namespace starrocks

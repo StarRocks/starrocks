@@ -972,8 +972,8 @@ public class InsertAnalyzer {
         }
 
         if (insertStmt.isOverwrite()) {
-            if (!(table instanceof OlapTable) && !table.isIcebergTable() && !table.isHiveTable()) {
-                throw unsupportedException("Only support insert overwrite olap/iceberg/hive table");
+            if (!(table instanceof OlapTable) && !table.isIcebergTable() && !table.isHiveTable() && !table.isPaimonTable()) {
+                throw unsupportedException("Only support insert overwrite olap/iceberg/hive/paimon table");
             }
             if (table instanceof OlapTable olapTable && olapTable.getState() != NORMAL
                     && !(olapTable.getState() == OlapTable.OlapTableState.TABLET_RESHARD

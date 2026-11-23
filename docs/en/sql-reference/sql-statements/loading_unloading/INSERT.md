@@ -97,7 +97,7 @@ The behavior of the new Dynamic Overwrite semantic is much different:
 
 When overwriting a partitioned table as a whole, new data records will replace the data in their corresponding partitions. If there are partitions that are not involved, they will be left alone, instead of being truncated or deleted. And if there are new data records correspond to a non-existent partition, the system will create the partition.
 
-The Dynamic Overwrite semantic is disabled by default. To enable it, you need to set the system variable `dynamic_overwrite` to `true`. This variable applies only to StarRocks native tables. INSERT OVERWRITE into an Iceberg table always overwrites only the partitions that receive new data, regardless of this variable.
+Dynamic Overwrite is disabled by default. Set `dynamic_overwrite` to `true` to enable it for StarRocks native tables and for `INSERT OVERWRITE` on partitioned Paimon tables when you omit the `PARTITION` clause. `INSERT OVERWRITE` into an Iceberg table always overwrites only the partitions that receive new data, regardless of this variable.
 
 Enable Dynamic Overwrite in the current session:
 

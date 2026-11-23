@@ -137,6 +137,15 @@ public abstract class MVTimelinessArbiter {
             return isQueryRewrite;
         }
 
+        /**
+         * Whether a candidate MV may be judged by what its owner tolerates for queries: its staleness and its
+         * query_rewrite_consistency. Not when the rewritten statement refreshes another MV: that refresh records
+         * the base versions it consumed, so whatever the candidate lacks would be kept as fresh.
+         */
+        public boolean toleratesStaleMv() {
+            return isQueryRewrite && (optimizerContext == null || !optimizerContext.isMaterializedViewRefresh());
+        }
+
         /** Whether internal base tables are read without their READ lock: query rewrite, or an unlocked refresh. */
         public boolean readsBaseTablesUnlocked() {
             return isQueryRewrite || !lockBaseTables;
@@ -213,7 +222,8 @@ public abstract class MVTimelinessArbiter {
                 return true;
             }
             // If the non-ref table has already changed, need refresh all materialized views' partitions.
-            if (needsToRefreshTable(mv, tableInfo, baseTable, queryRewriteParams)) {
+            if (needsToRefreshTable(mv, tableInfo, baseTable, queryRewriteParams,
+                    /* pinnedVersionRange */ null)) {
                 return true;
             }
             if (hasDeletedPartitions(mv, baseTable, /* pinnedVersionRange */ null)) {
@@ -265,7 +275,7 @@ public abstract class MVTimelinessArbiter {
         Map<Table, PCellSortedSet> baseChangedPartitionNames = Maps.newHashMap();
         for (Table baseTable : refBaseTableAndColumns.keySet()) {
             MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(mv, baseTable,
-                    true, queryRewriteParams);
+                    true, queryRewriteParams, /* pinnedVersionRange */ null);
             if (mvBaseTableUpdateInfo == null) {
                 logMVPrepare(mv, "Failed to collect update info for ref base table {}, fallback to full refresh",
                         baseTable.getName());
