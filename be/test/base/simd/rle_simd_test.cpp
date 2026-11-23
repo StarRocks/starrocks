@@ -134,13 +134,41 @@ PARALLEL_TEST(RleSimdTest, simd_minmax_int32) {
             ASSERT_EQ(avx2_min, expected_min) << "n=" << n;
             ASSERT_EQ(avx2_max, expected_max) << "n=" << n;
         }
-        if (__builtin_cpu_supports("avx512f") && __builtin_cpu_supports("avx512vl") &&
-            __builtin_cpu_supports("avx512bw") && __builtin_cpu_supports("avx512vbmi2")) {
+#if !defined(ADDRESS_SANITIZER)
+        if (__builtin_cpu_supports("avx512f")) {
             int32_t avx512_min = 0, avx512_max = 0;
             simd_minmax_int32_avx512(data.data(), n, avx512_min, avx512_max);
             ASSERT_EQ(avx512_min, expected_min) << "n=" << n;
             ASSERT_EQ(avx512_max, expected_max) << "n=" << n;
         }
+#endif
+#endif
+    }
+
+    // Edge: negative count <= 0 returns [INT32_MAX, INT32_MIN].
+    {
+        int32_t dummy = 42;
+        int32_t mn = 0, mx = 0;
+        simd_minmax_int32(&dummy, -1, mn, mx);
+        ASSERT_EQ(mn, std::numeric_limits<int32_t>::max());
+        ASSERT_EQ(mx, std::numeric_limits<int32_t>::min());
+#if defined(__x86_64__)
+        if (__builtin_cpu_supports("avx2")) {
+            mn = 0;
+            mx = 0;
+            simd_minmax_int32_avx2(&dummy, -1, mn, mx);
+            ASSERT_EQ(mn, std::numeric_limits<int32_t>::max());
+            ASSERT_EQ(mx, std::numeric_limits<int32_t>::min());
+        }
+#if !defined(ADDRESS_SANITIZER)
+        if (__builtin_cpu_supports("avx512f")) {
+            mn = 0;
+            mx = 0;
+            simd_minmax_int32_avx512(&dummy, -1, mn, mx);
+            ASSERT_EQ(mn, std::numeric_limits<int32_t>::max());
+            ASSERT_EQ(mx, std::numeric_limits<int32_t>::min());
+        }
+#endif
 #endif
     }
 
@@ -371,12 +399,13 @@ PARALLEL_TEST(RleSimdTest, simd_widen_int8_to_int32) {
             simd_widen_int8_to_int32_avx2(avx2_dest.data(), src.data(), n);
             ASSERT_EQ(avx2_dest, dest) << "n=" << n;
         }
-        if (__builtin_cpu_supports("avx512f") && __builtin_cpu_supports("avx512vl") &&
-            __builtin_cpu_supports("avx512bw") && __builtin_cpu_supports("avx512vbmi2")) {
+#if !defined(ADDRESS_SANITIZER)
+        if (__builtin_cpu_supports("avx512f")) {
             std::vector<int32_t> avx512_dest(static_cast<size_t>(n) + 1, static_cast<int32_t>(0xDEADBEEFu));
             simd_widen_int8_to_int32_avx512(avx512_dest.data(), src.data(), n);
             ASSERT_EQ(avx512_dest, dest) << "n=" << n;
         }
+#endif
 #endif
     }
     // Sign-extension on the extreme negative explicitly.
@@ -424,12 +453,13 @@ PARALLEL_TEST(RleSimdTest, simd_widen_int16_to_int32) {
             simd_widen_int16_to_int32_avx2(avx2_dest.data(), src.data(), n);
             ASSERT_EQ(avx2_dest, dest) << "n=" << n;
         }
-        if (__builtin_cpu_supports("avx512f") && __builtin_cpu_supports("avx512vl") &&
-            __builtin_cpu_supports("avx512bw") && __builtin_cpu_supports("avx512vbmi2")) {
+#if !defined(ADDRESS_SANITIZER)
+        if (__builtin_cpu_supports("avx512f")) {
             std::vector<int32_t> avx512_dest(static_cast<size_t>(n) + 1, static_cast<int32_t>(0xDEADBEEFu));
             simd_widen_int16_to_int32_avx512(avx512_dest.data(), src.data(), n);
             ASSERT_EQ(avx512_dest, dest) << "n=" << n;
         }
+#endif
 #endif
     }
     {
