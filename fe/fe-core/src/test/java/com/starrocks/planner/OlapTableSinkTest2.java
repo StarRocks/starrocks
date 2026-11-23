@@ -15,6 +15,11 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -29,15 +34,10 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD
 import com.starrocks.sql.ast.UserIdentity;
-=======
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
->>>>>>> 4be514e ([BugFix] Bind the partition expr of an OlapTableSink on a copy (#84147))
 import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TOlapTablePartitionParam;
 import com.starrocks.thrift.TWriteQuorumType;
@@ -246,19 +246,19 @@ public class OlapTableSinkTest2 {
         Assertions.assertInstanceOf(ExpressionRangePartitionInfoV2.class, rangeTable.getPartitionInfo());
 
         for (OlapTable table : List.of(autoTable, rangeTable)) {
-            SlotDescriptor tableSlotDesc = getPartitionSlotRef(table).getDesc();
+            SlotDescriptor tableSlotDesc = getPartitionSlotRef(table).getSlotDescriptorWithoutCheck();
             List<Long> partitionIds = table.getPartitions().stream()
                     .map(Partition::getId).collect(Collectors.toList());
 
             // k2 is the second column: slot 1 when the table columns start at 0, slot 189 after 188 other slots.
             TOlapTablePartitionParam loadParam = OlapTableSink.createPartition(db.getId(), table,
-                    buildTableTuple(table, 0), true, 0, partitionIds, null, null);
+                    buildTableTuple(table, 0), true, 0, partitionIds);
             TOlapTablePartitionParam insertParam = OlapTableSink.createPartition(db.getId(), table,
-                    buildTableTuple(table, 188), true, 0, partitionIds, null, null);
+                    buildTableTuple(table, 188), true, 0, partitionIds);
 
             Assertions.assertEquals(List.of(1), getPartitionExprSlotIds(loadParam), table.getName());
             Assertions.assertEquals(List.of(189), getPartitionExprSlotIds(insertParam), table.getName());
-            Assertions.assertSame(tableSlotDesc, getPartitionSlotRef(table).getDesc(), table.getName());
+            Assertions.assertSame(tableSlotDesc, getPartitionSlotRef(table).getSlotDescriptorWithoutCheck(), table.getName());
         }
     }
 

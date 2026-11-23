@@ -651,42 +651,6 @@ public class OlapTableSink extends DataSink {
         return false;
     }
 
-<<<<<<< HEAD
-=======
-    // Restricts the partition's materialized index list to a single target index when requested.
-    // Returns the full list unchanged when targetWriteIndexId is null (write-all, today's behavior).
-    // Throws when the target index is not present in this partition, so the schema and partition
-    // index lists stay consistent with the BE 1:1 invariant.
-    private static List<MaterializedIndex> filterTargetWriteIndexes(List<MaterializedIndex> indexes,
-                                                                    PhysicalPartition physicalPartition,
-                                                                    @Nullable Long targetWriteIndexId)
-            throws StarRocksException {
-        if (targetWriteIndexId == null) {
-            return indexes;
-        }
-        // Key on the index META id: createSchema filters on the meta id, the thrift outputs
-        // (TOlapTableIndexSchema / TOlapTableIndexTablets) carry the meta id, and the BE 1:1 check
-        // compares meta ids. getId() != getMetaId() for split/merge-rewritten indexes.
-        List<MaterializedIndex> filtered = indexes.stream()
-                .filter(idx -> idx.getMetaId() == targetWriteIndexId)
-                .collect(Collectors.toList());
-        if (filtered.isEmpty()) {
-            throw new StarRocksException("target write index " + targetWriteIndexId
-                    + " not found in partition " + physicalPartition.getId());
-        }
-        return filtered;
-    }
-
-    private static List<MaterializedIndex> selectWriteIndexes(
-            OlapTable table, PhysicalPartition physicalPartition,
-            @Nullable TransactionState txnState, @Nullable Long targetWriteIndexId)
-            throws StarRocksException {
-        List<MaterializedIndex> candidates = txnState == null
-                ? physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL)
-                : txnState.getPartitionLoadedIndexes(table.getId(), physicalPartition);
-        return filterTargetWriteIndexes(candidates, physicalPartition, targetWriteIndexId);
-    }
-
     // Returns a copy of the table's partition expr with its slot ref bound to the partition column's slot in
     // tupleDescriptor. The partition expr is table metadata, shared with the table copies that planners use, and
     // plans of the same table can be built at the same time (a stream load and an INSERT, for example). Binding
@@ -709,7 +673,6 @@ public class OlapTableSink extends DataSink {
         return expr;
     }
 
->>>>>>> 4be514e ([BugFix] Bind the partition expr of an OlapTableSink on a copy (#84147))
     public static TOlapTablePartitionParam createPartition(long dbId, OlapTable table,
                                                            TupleDescriptor tupleDescriptor,
                                                            boolean enableAutomaticPartition,
@@ -763,52 +726,16 @@ public class OlapTableSink extends DataSink {
                     Preconditions.checkArgument(partitionExprs.size() == 1,
                             "Number of partition expr is not 1 for automatic partition table, expr num="
                                     + partitionExprs.size());
-<<<<<<< HEAD
-                    Expr expr = partitionExprs.get(0);
-                    List<SlotRef> slotRefs = Lists.newArrayList();
-                    expr.collect(SlotRef.class, slotRefs);
-                    Preconditions.checkState(slotRefs.size() == 1);
-                    // default slot is table column slot, when there are some expr on column
-                    // the slot desc will change, so we need to reset the slot desc
-                    for (SlotDescriptor slotDesc : tupleDescriptor.getSlots()) {
-                        Column column = slotDesc.getColumn();
-                        if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
-                            slotRefs.get(0).setDesc(slotDesc);
-                            break;
-                        }
-                    }
-                    partitionParam.setPartition_exprs(Expr.treesToThrift(exprPartitionInfo
-                            .getPartitionExprs(table.getIdToColumn())));
-=======
                     Expr expr = bindPartitionExprToTuple(partitionExprs.get(0), tupleDescriptor);
-                    partitionParam.setPartition_exprs(ExprToThrift.treesToThrift(Lists.newArrayList(expr)));
->>>>>>> 4be514e ([BugFix] Bind the partition expr of an OlapTableSink on a copy (#84147))
+                    partitionParam.setPartition_exprs(Expr.treesToThrift(Lists.newArrayList(expr)));
                 } else if (rangePartitionInfo instanceof ExpressionRangePartitionInfoV2) {
                     ExpressionRangePartitionInfoV2 expressionRangePartitionInfoV2 = (ExpressionRangePartitionInfoV2) rangePartitionInfo;
                     List<Expr> partitionExprs = expressionRangePartitionInfoV2.getPartitionExprs(table.getIdToColumn());
                     Preconditions.checkArgument(partitionExprs.size() == 1,
                             "Number of partition expr is not 1 for expression partition table, expr num="
                                     + partitionExprs.size());
-<<<<<<< HEAD
-                    Expr expr = partitionExprs.get(0);
-                    List<SlotRef> slotRefs = Lists.newArrayList();
-                    expr.collect(SlotRef.class, slotRefs);
-                    Preconditions.checkState(slotRefs.size() == 1);
-                    // default slot is table column slot, when there are some expr on column
-                    // the slot desc will change, so we need to reset the slot desc
-                    for (SlotDescriptor slotDesc : tupleDescriptor.getSlots()) {
-                        Column column = slotDesc.getColumn();
-                        if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
-                            slotRefs.get(0).setDesc(slotDesc);
-                            break;
-                        }
-                    }
-                    partitionParam.setPartition_exprs(Expr
-                            .treesToThrift(expressionRangePartitionInfoV2.getPartitionExprs(table.getIdToColumn())));
-=======
                     Expr expr = bindPartitionExprToTuple(partitionExprs.get(0), tupleDescriptor);
-                    partitionParam.setPartition_exprs(ExprToThrift.treesToThrift(Lists.newArrayList(expr)));
->>>>>>> 4be514e ([BugFix] Bind the partition expr of an OlapTableSink on a copy (#84147))
+                    partitionParam.setPartition_exprs(Expr.treesToThrift(Lists.newArrayList(expr)));
                 }
                 break;
             }
