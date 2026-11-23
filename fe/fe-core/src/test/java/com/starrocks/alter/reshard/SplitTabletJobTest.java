@@ -32,6 +32,7 @@ import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.lock.LockTestUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTable;
@@ -39,7 +40,11 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.lake.compaction.PartitionIdentifier;
+import com.starrocks.lake.compaction.PartitionStatistics;
+import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
@@ -54,8 +59,10 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.TabletList;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.type.IntegerType;
@@ -79,6 +86,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -442,6 +450,407 @@ public class SplitTabletJobTest {
         Assertions.assertTrue(splittingTablet.getNewTabletRanges().isEmpty(),
                 "ordinary split must let BE derive PK boundaries from the cloud-native PK index");
         Assertions.assertTrue(splittingTablet.getNewTabletIds().size() > 1);
+    }
+
+    /**
+     * The pre-split that INSERT OVERWRITE runs on its new, empty temporary partition leaves the ORDER BY != PK
+     * children nothing inherited from the parent, so CLEANING does not wait for an UNSHARE compaction. The parent
+     * stays queryable until the FINISHED record is durable, and only then is it unpinned and recycled.
+     */
+    @Test
+    public void testEmptyTemporaryPartitionSplitFinishesWithoutUnshare() throws Exception {
+        installLakeServiceMock(this::addDataDrivenRanges);
+        OlapTable pkTable = createSeparateSortKeyTable("split_empty_partition_pk_sort");
+        PhysicalPartition partition = temporaryPartition(pkTable, "tp1");
+        InsertOverwriteJob overwrite = registerOverwriteJob(pkTable, partition);
+        long baseMetaId = pkTable.getBaseIndexMetaId();
+        long oldIndexId = partition.getLatestBaseIndex().getId();
+        Assertions.assertEquals(PhysicalPartition.PARTITION_INIT_VERSION, partition.getVisibleVersion());
+        Map<Long, Integer> unshareTriggers = countUnshareTriggers();
+        SplitTabletJob job = (SplitTabletJob) createTabletReshardJob(pkTable, partition);
+
+        AtomicBoolean unsharingAtFinish = new AtomicBoolean();
+        AtomicBoolean recycledAtFinish = new AtomicBoolean(true);
+        AtomicLong schemaUpdateTimeAtFinish = new AtomicLong();
+        AtomicInteger parentInfosAtFinish = new AtomicInteger(-1);
+        new MockUp<EditLog>() {
+            @Mock
+            public void logUpdateTabletReshardJob(Invocation invocation, TabletReshardJob record, WALApplier applier) {
+                if (record.getJobState() == TabletReshardJob.JobState.FINISHED) {
+                    unsharingAtFinish.set(partition.isUnsharing());
+                    recycledAtFinish.set(GlobalStateMgr.getCurrentState().getRecycleBin()
+                            .isMaterializedIndexRecycled(oldIndexId));
+                    schemaUpdateTimeAtFinish.set(pkTable.lastSchemaUpdateTime.get());
+                    parentInfosAtFinish.set(job.collectParentPublishInfos(
+                            Set.copyOf(partition.getLatestBaseIndex().getTabletIdsInOrder())).size());
+                }
+                invocation.proceed();
+            }
+        };
+
+        job.init();
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, job.getJobState());
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, job.getJobState());
+        Assertions.assertTrue(unshareTriggers.isEmpty(), "no UNSHARE was needed: " + unshareTriggers);
+
+        MaterializedIndex newIndex = partition.getLatestBaseIndex();
+        Assertions.assertNotEquals(oldIndexId, newIndex.getId());
+        Assertions.assertFalse(partition.isUnsharing());
+        Assertions.assertEquals(newIndex.getId(), partition.getQueryableIndex(baseMetaId).getId());
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().isMaterializedIndexRecycled(oldIndexId));
+
+        // Until the FINISHED record was durable the parent stayed queryable, with its metadata pages still produced
+        // for every publish, and was not recycled yet.
+        Assertions.assertTrue(unsharingAtFinish.get());
+        Assertions.assertFalse(recycledAtFinish.get());
+        Assertions.assertTrue(parentInfosAtFinish.get() > 0);
+        // The cutover after it invalidated optimistic plans, and no publish produces parent pages any more.
+        Assertions.assertTrue(pkTable.lastSchemaUpdateTime.get() > schemaUpdateTimeAtFinish.get());
+        Assertions.assertTrue(job.collectParentPublishInfos(Set.copyOf(newIndex.getTabletIdsInOrder())).isEmpty());
+        deregisterOverwriteJob(overwrite);
+    }
+
+    /**
+     * An empty partition that is not temporary can still be written by a writer that resolved the old layout before
+     * the split but takes its transaction id after it, as a bypass write or a replication job can; such a commit after
+     * the resharding tablets are unregistered would publish the parent only, and the file bundle of that version would
+     * lack the children. So it keeps waiting for UNSHARE.
+     */
+    @Test
+    public void testEmptyFormalPartitionSplitStillWaitsForUnshare() throws Exception {
+        installLakeServiceMock(this::addDataDrivenRanges);
+        OlapTable pkTable = createSeparateSortKeyTable("split_empty_formal_partition_pk_sort");
+        PhysicalPartition partition = pkTable.getPartition("p1").getDefaultPhysicalPartition();
+        Assertions.assertEquals(PhysicalPartition.PARTITION_INIT_VERSION, partition.getVisibleVersion());
+        Map<Long, Integer> unshareTriggers = countUnshareTriggers();
+        TabletReshardJob job = createTabletReshardJob(pkTable, partition);
+
+        job.init();
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, job.getJobState());
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, job.getJobState());
+        Assertions.assertTrue(partition.isUnsharing());
+        Assertions.assertTrue(unshareTriggers.getOrDefault(partition.getId(), 0) >= 1);
+
+        Assertions.assertTrue(partition.finishUnshare());
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, job.getJobState());
+    }
+
+    /**
+     * A temporary partition that a user added, rather than one an INSERT OVERWRITE created for its own write, is
+     * listed to clients and can be written by a bypass write, so its empty split keeps waiting for UNSHARE too.
+     */
+    @Test
+    public void testEmptyUserTemporaryPartitionSplitStillWaitsForUnshare() throws Exception {
+        installLakeServiceMock(this::addDataDrivenRanges);
+        OlapTable pkTable = createSeparateSortKeyTable("split_empty_user_temp_partition_pk_sort");
+        PhysicalPartition partition = temporaryPartition(pkTable, "tp1");
+        Map<Long, Integer> unshareTriggers = countUnshareTriggers();
+        TabletReshardJob job = createTabletReshardJob(pkTable, partition);
+
+        job.init();
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, job.getJobState());
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, job.getJobState());
+        Assertions.assertTrue(partition.isUnsharing());
+        Assertions.assertTrue(unshareTriggers.getOrDefault(partition.getId(), 0) >= 1);
+
+        Assertions.assertTrue(partition.finishUnshare());
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, job.getJobState());
+    }
+
+    /**
+     * A FINISHED record that cannot be journaled -- the FE is giving up leadership -- leaves the parent pinned and not
+     * recycled, and the job in CLEANING, so the leader that runs the job next finishes it.
+     */
+    @Test
+    public void testFailedFinishedJournalKeepsThePin() throws Exception {
+        installLakeServiceMock(this::addDataDrivenRanges);
+        OlapTable pkTable = createSeparateSortKeyTable("split_empty_partition_failed_finish");
+        PhysicalPartition partition = temporaryPartition(pkTable, "tp1");
+        InsertOverwriteJob overwrite = registerOverwriteJob(pkTable, partition);
+        long oldIndexId = partition.getLatestBaseIndex().getId();
+        TabletReshardJob job = createTabletReshardJob(pkTable, partition);
+
+        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+        AtomicBoolean closeBeforeFinished = new AtomicBoolean(true);
+        new MockUp<EditLog>() {
+            @Mock
+            public void logUpdateTabletReshardJob(Invocation invocation, TabletReshardJob record, WALApplier applier) {
+                if (record.getJobState() == TabletReshardJob.JobState.FINISHED && closeBeforeFinished.getAndSet(false)) {
+                    editLog.closeWalGate();
+                }
+                invocation.proceed();
+            }
+        };
+
+        job.init();
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, job.getJobState());
+        try {
+            job.run();
+        } finally {
+            editLog.openWalGate();
+        }
+        Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, job.getJobState());
+        Assertions.assertTrue(partition.isUnsharing());
+        Assertions.assertFalse(GlobalStateMgr.getCurrentState().getRecycleBin().isMaterializedIndexRecycled(oldIndexId));
+
+        runUntilDone(job);
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, job.getJobState());
+        Assertions.assertFalse(partition.isUnsharing());
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().isMaterializedIndexRecycled(oldIndexId));
+        deregisterOverwriteJob(overwrite);
+    }
+
+    /**
+     * A partition that held data when it was split has children sharing the parent's rowsets: CLEANING still waits for
+     * the UNSHARE that rewrites them, and the FINISHED record that follows that UNSHARE has no pin left to release.
+     */
+    @Test
+    public void testNonEmptyPartitionSplitStillWaitsForUnshare() throws Exception {
+        installLakeServiceMock(this::addDataDrivenRanges);
+        OlapTable pkTable = createSeparateSortKeyTable("split_loaded_partition_pk_sort");
+        PhysicalPartition partition = temporaryPartition(pkTable, "tp1");
+        InsertOverwriteJob overwrite = registerOverwriteJob(pkTable, partition);
+        // As if one load had been published.
+        partition.setVisibleVersion(PhysicalPartition.PARTITION_INIT_VERSION + 1, System.currentTimeMillis());
+        partition.setNextVersion(PhysicalPartition.PARTITION_INIT_VERSION + 2);
+        Map<Long, Integer> unshareTriggers = countUnshareTriggers();
+        TabletReshardJob job = createTabletReshardJob(pkTable, partition);
+
+        job.init();
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, job.getJobState());
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, job.getJobState());
+        Assertions.assertTrue(partition.isUnsharing());
+        Assertions.assertTrue(unshareTriggers.getOrDefault(partition.getId(), 0) >= 1);
+
+        // The UNSHARE becomes visible and cuts the queries over.
+        Assertions.assertTrue(partition.finishUnshare());
+        long schemaUpdateTime = pkTable.lastSchemaUpdateTime.get();
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, job.getJobState());
+        Assertions.assertEquals(schemaUpdateTime, pkTable.lastSchemaUpdateTime.get());
+        deregisterOverwriteJob(overwrite);
+    }
+
+    /**
+     * A load that wrote the old layout of an empty partition and commits above the split's version is cross-published
+     * into every child as shared rowsets. CLEANING waits for it, and once it is visible the partition is no longer the
+     * split's output, so it waits for the UNSHARE as before.
+     */
+    @Test
+    public void testEmptyPartitionSplitStillWaitsForUnshareAfterAnOldLayoutLoad() throws Exception {
+        installLakeServiceMock(this::addDataDrivenRanges);
+        ConcurrentLoad.holdPublishDaemon();
+        OlapTable pkTable = createSeparateSortKeyTable("split_empty_partition_old_layout_load");
+        PhysicalPartition partition = temporaryPartition(pkTable, "tp1");
+        InsertOverwriteJob overwrite = registerOverwriteJob(pkTable, partition);
+        long commitVersion = partition.getVisibleVersion() + 1;
+        Map<Long, Integer> unshareTriggers = countUnshareTriggers();
+        long loadId = ConcurrentLoad.begin(db, pkTable);
+        TabletReshardJob job = createTabletReshardJob(pkTable, partition);
+
+        job.init();
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, job.getJobState());
+        TransactionState load = ConcurrentLoad.commit(db, pkTable, loadId);
+        Assertions.assertEquals(commitVersion + 1, ConcurrentLoad.versionIn(load, pkTable, partition.getId()));
+
+        // Installed, but CLEANING waits for the committed load before it looks at UNSHARE at all.
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, job.getJobState());
+        Assertions.assertTrue(partition.isUnsharing());
+        Assertions.assertTrue(unshareTriggers.isEmpty());
+
+        ConcurrentLoad.makeVisible(db, load);
+        Assertions.assertEquals(commitVersion + 1, partition.getVisibleVersion());
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, job.getJobState());
+        Assertions.assertTrue(partition.isUnsharing());
+        Assertions.assertTrue(unshareTriggers.getOrDefault(partition.getId(), 0) >= 1);
+
+        Assertions.assertTrue(partition.finishUnshare());
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, job.getJobState());
+        deregisterOverwriteJob(overwrite);
+    }
+
+    /**
+     * A writer that resolved the old layout before the split installed the new one but took its transaction id
+     * afterwards -- a bypass write registers the index of the tablets it wrote -- is not waited on by CLEANING. Once
+     * it has committed above the split's version, its publish is cross-published into every child even though the
+     * partition's visible version is still the split's, so the partition keeps waiting for UNSHARE and the resharding
+     * tablets stay registered for that publish.
+     */
+    @Test
+    public void testEmptyPartitionSplitStillWaitsForUnshareAfterACommitAboveTheWatermark() throws Exception {
+        installLakeServiceMock(this::addDataDrivenRanges);
+        ConcurrentLoad.holdPublishDaemon();
+        OlapTable pkTable = createSeparateSortKeyTable("split_empty_partition_late_writer");
+        PhysicalPartition partition = temporaryPartition(pkTable, "tp1");
+        InsertOverwriteJob overwrite = registerOverwriteJob(pkTable, partition);
+        long commitVersion = partition.getVisibleVersion() + 1;
+        MaterializedIndex oldIndex = partition.getLatestBaseIndex();
+        Map<Long, Integer> unshareTriggers = countUnshareTriggers();
+        // Keeps CLEANING in its wait for earlier transactions until the late writer has committed.
+        long blockerId = ConcurrentLoad.begin(db, pkTable);
+        SplitTabletJob job = (SplitTabletJob) createTabletReshardJob(pkTable, partition);
+
+        job.init();
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, job.getJobState());
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, job.getJobState());
+
+        // CLEANING waits for transactions up to and including the end transaction id; take one above it.
+        GlobalTransactionMgr txnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long lateId = ConcurrentLoad.begin(db, pkTable);
+        while (lateId <= job.endTransactionId) {
+            txnMgr.abortTransaction(db.getId(), lateId, "below the end transaction id");
+            lateId = ConcurrentLoad.begin(db, pkTable);
+        }
+        txnMgr.getTransactionState(db.getId(), lateId)
+                .addPartitionLoadedIndexes(pkTable.getId(), partition.getId(), List.of(oldIndex.getId()));
+        long backendId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds().get(0);
+        List<TabletCommitInfo> oldTablets = oldIndex.getTablets().stream()
+                .map(tablet -> new TabletCommitInfo(tablet.getId(), backendId)).collect(Collectors.toList());
+        try (AutoCloseableLock ignored = new AutoCloseableLock(db.getId(), pkTable.getId(), LockType.WRITE)) {
+            txnMgr.commitTransaction(db.getId(), lateId, oldTablets, new ArrayList<>(), null);
+        }
+        TransactionState late = txnMgr.getTransactionState(db.getId(), lateId);
+        Assertions.assertEquals(commitVersion + 1, ConcurrentLoad.versionIn(late, pkTable, partition.getId()));
+        Assertions.assertEquals(commitVersion, partition.getVisibleVersion());
+        txnMgr.abortTransaction(db.getId(), blockerId, "unblock cleaning");
+
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, job.getJobState());
+        Assertions.assertTrue(partition.isUnsharing());
+        Assertions.assertTrue(unshareTriggers.getOrDefault(partition.getId(), 0) >= 1);
+        Assertions.assertNotNull(GlobalStateMgr.getCurrentState().getTabletReshardJobMgr()
+                .getReshardingTablet(oldIndex.getTablets().get(0).getId(), commitVersion + 1));
+
+        ConcurrentLoad.makeVisible(db, late);
+        Assertions.assertTrue(partition.finishUnshare());
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, job.getJobState());
+        deregisterOverwriteJob(overwrite);
+    }
+
+    /**
+     * One pre-split job over an empty partition and a loaded one: only the loaded one is sent to UNSHARE. The empty
+     * one keeps serving queries from its parent until the job finishes, and is unpinned with the FINISHED record.
+     */
+    @Test
+    public void testMixedPartitionsReleaseTheEmptyOneOnlyAtFinish() throws Exception {
+        installLakeServiceMock(this::addEchoedRanges);
+        OlapTable pkTable = createSeparateSortKeyTable("split_mixed_partitions_pk_sort");
+        long baseMetaId = pkTable.getBaseIndexMetaId();
+        PhysicalPartition empty = temporaryPartition(pkTable, "tp1");
+        PhysicalPartition loaded = temporaryPartition(pkTable, "tp2");
+        InsertOverwriteJob overwrite = registerOverwriteJob(pkTable, empty, loaded);
+        loaded.setVisibleVersion(PhysicalPartition.PARTITION_INIT_VERSION + 1, System.currentTimeMillis());
+        loaded.setNextVersion(PhysicalPartition.PARTITION_INIT_VERSION + 2);
+        Map<Long, Integer> unshareTriggers = countUnshareTriggers();
+
+        // Two children per old tablet, split at pk1 = 50, as a sample-based pre-split asks for.
+        Map<Long, List<TabletRange>> boundaries = new HashMap<>();
+        for (PhysicalPartition partition : List.of(empty, loaded)) {
+            Tablet oldTablet = partition.getLatestBaseIndex().getTablets().get(0);
+            oldTablet.setRange(new TabletRange());
+            Tuple boundary = new Tuple(List.of(Variant.of(IntegerType.INT, "50")));
+            boundaries.put(oldTablet.getId(),
+                    List.of(new TabletRange(Range.lt(boundary)), new TabletRange(Range.ge(boundary))));
+        }
+        SplitTabletJob job = (SplitTabletJob) SplitTabletJobFactory.forExternalBoundaries(db, pkTable, boundaries);
+        Assertions.assertEquals(Set.of(empty.getId(), loaded.getId()), job.getReshardingPhysicalPartitions().keySet());
+
+        job.init();
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, job.getJobState());
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, job.getJobState());
+        Assertions.assertEquals(Set.of(loaded.getId()), unshareTriggers.keySet());
+        Assertions.assertTrue(empty.isUnsharing());
+        Assertions.assertFalse(
+                job.collectParentPublishInfos(Set.copyOf(empty.getLatestBaseIndex().getTabletIdsInOrder())).isEmpty());
+
+        Assertions.assertTrue(loaded.finishUnshare());
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, job.getJobState());
+        Assertions.assertFalse(empty.isUnsharing());
+        Assertions.assertEquals(empty.getLatestBaseIndex().getId(), empty.getQueryableIndex(baseMetaId).getId());
+        Assertions.assertEquals(Set.of(loaded.getId()), unshareTriggers.keySet());
+        deregisterOverwriteJob(overwrite);
+    }
+
+    @Test
+    public void testEmptyTemporaryPartitionSplitReleasesPinOnReplay() throws Exception {
+        installLakeServiceMock(this::addDataDrivenRanges);
+        OlapTable pkTable = createSeparateSortKeyTable("split_empty_partition_replay");
+        PhysicalPartition partition = temporaryPartition(pkTable, "tp1");
+        InsertOverwriteJob overwrite = registerOverwriteJob(pkTable, partition);
+        TabletReshardJob job = createTabletReshardJob(pkTable, partition);
+
+        ReshardJournalReplay.checkFinishedRecordReleasesQueryPin(db, pkTable, partition, job);
+        deregisterOverwriteJob(overwrite);
+    }
+
+    // An ORDER BY != PK table with partitions p1 [, 100) and p2 [100, 200), and empty temporary partitions tp1 and tp2
+    // over the same ranges, as INSERT OVERWRITE adds them.
+    private OlapTable createSeparateSortKeyTable(String tableName) throws Exception {
+        starRocksAssert.withTable("CREATE TABLE " + tableName + " (pk1 int not null, sort_col int not null, v int) "
+                + "PRIMARY KEY(pk1) PARTITION BY RANGE(pk1) (PARTITION p1 VALUES LESS THAN (\"100\"), "
+                + "PARTITION p2 VALUES LESS THAN (\"200\")) ORDER BY(sort_col) "
+                + "PROPERTIES('replication_num' = '1', 'file_bundling' = 'true')");
+        starRocksAssert.alterTable("ALTER TABLE " + tableName
+                + " ADD TEMPORARY PARTITION tp1 VALUES LESS THAN (\"100\")");
+        starRocksAssert.alterTable("ALTER TABLE " + tableName
+                + " ADD TEMPORARY PARTITION tp2 VALUES [(\"100\"), (\"200\"))");
+        OlapTable pkTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), tableName);
+        Assertions.assertTrue(MetaUtils.hasSeparateSortKey(pkTable, pkTable.getBaseIndexMetaId()));
+        return pkTable;
+    }
+
+    private static PhysicalPartition temporaryPartition(OlapTable table, String name) {
+        return table.getPartition(name, true).getDefaultPhysicalPartition();
+    }
+
+    // A running static INSERT OVERWRITE job on the table that owns the given temporary partitions, as the overwrite
+    // that creates and pre-splits them does. The caller deregisters it.
+    private static InsertOverwriteJob registerOverwriteJob(OlapTable table, PhysicalPartition... temporaryPartitions) {
+        InsertOverwriteJob job = new InsertOverwriteJob(GlobalStateMgr.getCurrentState().getNextId(), db.getId(),
+                table.getId(), List.of(), false);
+        job.setTmpPartitionIds(Arrays.stream(temporaryPartitions).map(PhysicalPartition::getParentId)
+                .collect(Collectors.toList()));
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr().registerOverwriteJob(job));
+        return job;
+    }
+
+    private static void deregisterOverwriteJob(InsertOverwriteJob job) {
+        GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr().deregisterOverwriteJob(job.getJobId());
+    }
+
+    // UNSHARE requests by physical partition id, from now on.
+    private static Map<Long, Integer> countUnshareTriggers() {
+        Map<Long, Integer> triggers = new ConcurrentHashMap<>();
+        new MockUp<CompactionMgr>() {
+            @Mock
+            public PartitionStatistics triggerUnshareCompaction(Invocation invocation, PartitionIdentifier partition) {
+                triggers.merge(partition.getPartitionId(), 1, Integer::sum);
+                return invocation.proceed();
+            }
+        };
+        return triggers;
     }
 
     @Test
