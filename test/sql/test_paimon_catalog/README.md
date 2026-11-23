@@ -338,5 +338,6 @@ primary-key data. Every case has a `CLEANUP` block for the objects it creates.
 partition overwrites, including empty input and independent JNI readback.
 
 `test_paimon_ctas` uses the same temporary warehouse helper and checks append
-and primary-key targets, empty input, `IF NOT EXISTS`, and that a write failure
-triggers removal of the newly created target table.
+and primary-key targets, empty input, `IF NOT EXISTS`, and cleanup after a write
+failure. It also covers CTAS in both directions between Paimon and
+`default_catalog`.

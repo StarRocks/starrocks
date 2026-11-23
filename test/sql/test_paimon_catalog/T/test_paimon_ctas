@@ -51,3 +51,43 @@ CLEANUP {
   drop database if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db;
   drop catalog if exists paimon_ctas_${paimon_ddl_warehouse_id};
 } END CLEANUP
+
+-- name: test_paimon_ctas_to_internal_catalog
+function: create_paimon_ddl_catalog("paimon_ctas_${uuid0}", "${uuid0}")
+set paimon_reader_mode = 'native';
+create database default_catalog.ctas_internal_${uuid0};
+create database paimon_ctas_${uuid0}.writer_db;
+create table paimon_ctas_${uuid0}.writer_db.source_rows (id int, payload varchar(20))
+properties ('bucket'='-1', 'file.format'='parquet');
+insert into paimon_ctas_${uuid0}.writer_db.source_rows values (1, 'paimon'), (2, null);
+create table default_catalog.ctas_internal_${uuid0}.copied_rows
+properties ('replication_num'='1')
+as select id, payload from paimon_ctas_${uuid0}.writer_db.source_rows;
+[ORDER]select id, payload from default_catalog.ctas_internal_${uuid0}.copied_rows order by id;
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db.source_rows;
+  drop database if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_ctas_${paimon_ddl_warehouse_id};
+  drop database if exists default_catalog.ctas_internal_${paimon_ddl_warehouse_id} force;
+} END CLEANUP
+
+-- name: test_paimon_ctas_from_internal_catalog
+function: create_paimon_ddl_catalog("paimon_ctas_${uuid0}", "${uuid0}")
+set paimon_reader_mode = 'native';
+create database default_catalog.ctas_internal_${uuid0};
+create database paimon_ctas_${uuid0}.writer_db;
+create table default_catalog.ctas_internal_${uuid0}.source_rows (id int not null, payload varchar(20))
+duplicate key (id) distributed by hash(id) buckets 1 properties ('replication_num'='1');
+insert into default_catalog.ctas_internal_${uuid0}.source_rows values (3, 'internal'), (4, null);
+create table paimon_ctas_${uuid0}.writer_db.copied_rows
+properties ('bucket'='-1', 'file.format'='parquet')
+as select id, payload from default_catalog.ctas_internal_${uuid0}.source_rows;
+[ORDER]select id, payload from paimon_ctas_${uuid0}.writer_db.copied_rows order by id;
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db.copied_rows;
+  drop database if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_ctas_${paimon_ddl_warehouse_id};
+  drop database if exists default_catalog.ctas_internal_${paimon_ddl_warehouse_id} force;
+} END CLEANUP
