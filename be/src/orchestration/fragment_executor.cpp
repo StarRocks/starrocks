@@ -32,11 +32,8 @@
 #include "compute_env/load/stream_context_mgr.h"
 #include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/stream_load_context_handle.h"
-<<<<<<< HEAD
-#include "compute_env/load/stream_load_pipe_attachment.h"
-=======
 #include "compute_env/load/stream_load_metrics.h"
->>>>>>> f6fd0df6fef... [Enhancement][RB-787] Execute Kafka scan ranges of routine load rounds on BE (#69438)
+#include "compute_env/load/stream_load_pipe_attachment.h"
 #include "compute_env/pipeline/driver_limiter.h"
 #include "compute_env/query/query_remote_read.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
@@ -78,11 +75,8 @@
 #include "orchestration/routine_load_task_executor.h"
 #include "runtime/descriptors.h"
 #include "runtime/descriptors_ext.h"
-<<<<<<< HEAD
 #include "runtime/fragment_attachment.h"
-=======
 #include "runtime/kafka_scan_range_report.h"
->>>>>>> f6fd0df6fef... [Enhancement][RB-787] Execute Kafka scan ranges of routine load rounds on BE (#69438)
 #include "runtime/runtime_filter_query_lifecycle.h"
 
 namespace starrocks::orchestration {
