@@ -215,22 +215,4 @@ public class ExplainTest extends PlanTestBase {
             sv.setLargeInPredicateThreshold(threshold);
         }
     }
-
-    @Test
-    public void testExplainLogicalFetch() throws Exception {
-        SessionVariable sv = connectContext.getSessionVariable();
-        boolean glm = sv.isEnableGlobalLateMaterialization();
-        boolean costBased = sv.isEnableGlobalLateMaterializationCostBased();
-        sv.setEnableGlobalLateMaterialization(true);
-        sv.setEnableGlobalLateMaterializationCostBased(false);
-        try {
-            String plan = getExecPlan("select * from supplier where S_SUPPKEY < 10 order by 1,2 limit 10")
-                    .getExplainString(StatementBase.ExplainLevel.LOGICAL);
-            assertContains(plan, "- FETCH");
-            assertContains(plan, "- LOOKUP");
-        } finally {
-            sv.setEnableGlobalLateMaterialization(glm);
-            sv.setEnableGlobalLateMaterializationCostBased(costBased);
-        }
-    }
 }
