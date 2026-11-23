@@ -233,7 +233,7 @@ void RssidFileInfoContainer::add_pending_rowset(const MetaFileBuilder& builder, 
 
 StatusOr<IndexEntry*> PrimaryKeyManager::prepare_primary_index(
         const TabletMetadataPtr& metadata, MetaFileBuilder* builder, int64_t base_version, int64_t new_version,
-        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard) {
+        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard, const TabletMetadataPtr& base_metadata) {
     auto index_entry = _index_cache.get_or_create(metadata->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
@@ -245,7 +245,7 @@ StatusOr<IndexEntry*> PrimaryKeyManager::prepare_primary_index(
         TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_lock_wait_us");
         guard = index.fetch_guard();
     }
-    Status st = index.lake_load(_tablet_mgr, metadata, base_version, builder);
+    Status st = index.lake_load(_tablet_mgr, metadata, base_version, builder, base_metadata);
     update_index_cache_size(index_entry);
     if (!st.ok()) {
         if (st.is_already_exist()) {
@@ -378,10 +378,10 @@ StatusOr<TabletMetadataPtr> PrimaryKeyManager::flush_pk_memtable(const TabletMet
 
 StatusOr<IndexEntry*> PrimaryKeyManager::rebuild_primary_index(
         const TabletMetadataPtr& metadata, MetaFileBuilder* builder, int64_t base_version, int64_t new_version,
-        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard) {
+        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard, const TabletMetadataPtr& base_metadata) {
     LOG(INFO) << "rebuild tablet: " << metadata->id() << " primary index, version: " << base_version;
     unload_and_remove_primary_index(metadata->id());
-    return prepare_primary_index(metadata, builder, base_version, new_version, guard);
+    return prepare_primary_index(metadata, builder, base_version, new_version, guard, base_metadata);
 }
 
 // Plan for interleaving del files with segments during a primary-key publish. Per del file:
@@ -427,7 +427,8 @@ DEFINE_FAIL_POINT(hook_publish_primary_key_tablet);
 Status PrimaryKeyManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                                      const TabletMetadataPtr& metadata, Tablet* tablet,
                                                      IndexEntry* index_entry, MetaFileBuilder* builder,
-                                                     int64_t base_version, bool batch_apply) {
+                                                     int64_t base_version, const TabletMetadataPtr& base_metadata,
+                                                     bool batch_apply) {
     FAIL_POINT_TRIGGER_EXECUTE(hook_publish_primary_key_tablet, {
         if (batch_apply) {
             builder->batch_apply_opwrite(op_write, {}, {});
@@ -753,7 +754,8 @@ Status PrimaryKeyManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_
             tsid.tablet_id = tablet->id();
             tsid.segment_id = rssid;
             DelVectorPtr old_del_vec;
-            RETURN_IF_ERROR(get_del_vec(tsid, base_version, builder, false /* file cache */, &old_del_vec));
+            RETURN_IF_ERROR(
+                    get_del_vec(tsid, base_version, builder, base_metadata, false /* file cache */, &old_del_vec));
             new_del_vecs[idx].first = rssid;
             old_del_vec->add_dels_as_new_version(new_delete.second, metadata->version(), &(new_del_vecs[idx].second));
             size_t cur_old = old_del_vec->cardinality();
@@ -928,7 +930,8 @@ Status PrimaryKeyManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_writ
 Status PrimaryKeyManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                                      const TabletMetadataPtr& metadata, Tablet* tablet,
                                                      LakePersistentIndex& index, MetaFileBuilder* builder,
-                                                     int64_t base_version, uint32_t rowset_id,
+                                                     int64_t base_version, const TabletMetadataPtr& base_metadata,
+                                                     uint32_t rowset_id,
                                                      const std::vector<std::vector<uint32_t>>& insert_rowids_by_segment,
                                                      uint32_t* new_del_rebuild_rssid) {
     if (op_write.txn_meta().partial_update_mode() != PartialUpdateMode::COLUMN_UPSERT_MODE) {
@@ -1087,7 +1090,7 @@ Status PrimaryKeyManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_
         tsid.tablet_id = tablet->id();
         tsid.segment_id = rssid;
         DelVectorPtr old_delvec;
-        RETURN_IF_ERROR(get_del_vec(tsid, base_version, builder, false, &old_delvec));
+        RETURN_IF_ERROR(get_del_vec(tsid, base_version, builder, base_metadata, false, &old_delvec));
         DelVectorPtr dv_new;
         old_delvec->add_dels_as_new_version(del_ids, metadata->version(), &dv_new);
         builder->append_delvec(dv_new, rssid);
@@ -1149,7 +1152,8 @@ Status PrimaryKeyManager::_handle_delete_files(const TxnLogPB_OpWrite& op_write,
                                                const TabletMetadataPtr& metadata, Tablet* tablet,
                                                LakePersistentIndex& index, IndexEntry* index_entry,
                                                MetaFileBuilder* builder, int64_t base_version,
-                                               uint32_t del_rebuild_rssid, const RowsetUpdateStateParams& params) {
+                                               const TabletMetadataPtr& base_metadata, uint32_t del_rebuild_rssid,
+                                               const RowsetUpdateStateParams& params) {
     if (op_write.dels_meta_size() == 0) {
         return Status::OK();
     }
@@ -1178,7 +1182,7 @@ Status PrimaryKeyManager::_handle_delete_files(const TxnLogPB_OpWrite& op_write,
         tsid.tablet_id = tablet->id();
         tsid.segment_id = rssid;
         DelVectorPtr old_delvec;
-        RETURN_IF_ERROR(get_del_vec(tsid, base_version, builder, false, &old_delvec));
+        RETURN_IF_ERROR(get_del_vec(tsid, base_version, builder, base_metadata, false, &old_delvec));
         DelVectorPtr dv_new;
         old_delvec->add_dels_as_new_version(del_ids, metadata->version(), &dv_new);
         new_del_vecs.emplace_back(rssid, dv_new);
@@ -1195,7 +1199,8 @@ Status PrimaryKeyManager::_handle_delete_files(const TxnLogPB_OpWrite& op_write,
 Status PrimaryKeyManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                                              const TabletMetadataPtr& metadata, Tablet* tablet,
                                                              IndexEntry* index_entry, MetaFileBuilder* builder,
-                                                             int64_t base_version) {
+                                                             int64_t base_version,
+                                                             const TabletMetadataPtr& base_metadata) {
     DCHECK(index_entry != nullptr);
 
     auto tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
@@ -1226,11 +1231,12 @@ Status PrimaryKeyManager::publish_column_mode_partial_update(const TxnLogPB_OpWr
 
     // 1. handle inserted rows: for COLUMN_UPSERT_MODE, build full segments with only inserted rows and append to meta
     RETURN_IF_ERROR(_handle_column_upsert_mode(op_write, txn_id, metadata, tablet, index, builder, base_version,
-                                               rowset_id, insert_rowids_by_segment, &new_del_rebuild_rssid));
+                                               base_metadata, rowset_id, insert_rowids_by_segment,
+                                               &new_del_rebuild_rssid));
 
     // 2. handle delete files and generate delvecs for existing rssids only
     RETURN_IF_ERROR(_handle_delete_files(op_write, txn_id, metadata, tablet, index, index_entry, builder, base_version,
-                                         new_del_rebuild_rssid, params));
+                                         base_metadata, new_del_rebuild_rssid, params));
 
     return Status::OK();
 }
@@ -2154,7 +2160,7 @@ Status PrimaryKeyManager::get_column_values(const RowsetUpdateStateParams& param
 }
 
 Status PrimaryKeyManager::get_del_vec(const TabletSegmentId& tsid, int64_t version, const MetaFileBuilder* builder,
-                                      bool fill_cache, DelVectorPtr* pdelvec) {
+                                      const TabletMetadataPtr& base_metadata, bool fill_cache, DelVectorPtr* pdelvec) {
     if (builder != nullptr) {
         // 1. find in meta builder first
         auto found = builder->find_delvec(tsid, pdelvec);
@@ -2166,7 +2172,13 @@ Status PrimaryKeyManager::get_del_vec(const TabletSegmentId& tsid, int64_t versi
         }
     }
     *pdelvec = std::make_shared<DelVector>();
-    // 2. find in delvec file
+    // 2. find in delvec file, through the caller's metadata at |version| when it holds it
+    if (base_metadata != nullptr && base_metadata->id() == tsid.tablet_id && base_metadata->version() == version) {
+        LakeIOOptions lake_io_opts;
+        lake_io_opts.fill_data_cache = fill_cache;
+        return lake::get_del_vec(_tablet_mgr, *base_metadata, tsid.segment_id, fill_cache, lake_io_opts,
+                                 pdelvec->get());
+    }
     return get_del_vec_in_meta(tsid, version, fill_cache, pdelvec->get());
 }
 
@@ -2238,7 +2250,8 @@ size_t PrimaryKeyManager::get_rowset_num_deletes(int64_t tablet_id, int64_t vers
         TabletSegmentId tsid;
         tsid.tablet_id = tablet_id;
         tsid.segment_id = get_rssid(rowset_meta, i);
-        auto st = get_del_vec(tsid, version, nullptr, false /* fill cache */, &delvec);
+        auto st = get_del_vec(tsid, version, /*builder=*/nullptr, /*base_metadata=*/nullptr, false /* fill cache */,
+                              &delvec);
         if (!st.ok()) {
             LOG(WARNING) << "get_rowset_num_deletes: error get del vector " << st;
             continue;

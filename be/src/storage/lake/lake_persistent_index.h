@@ -120,8 +120,10 @@ public:
     // on its pointer to this class, and that pointer became non-null as soon as the object existed.
     // Most tests drive init() alone, so a stricter guard would reject them -- and would be a change
     // in behaviour, not just in strictness.
+    //
+    // |base_metadata| goes to load_from_lake_tablet(); see there.
     Status lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
-                     const MetaFileBuilder* builder);
+                     const MetaFileBuilder* builder, const TabletMetadataPtr& base_metadata = nullptr);
 
     // Put this back to its just-constructed shape, so the next lake_load() rebuilds from scratch.
     // [thread-safe]
@@ -238,8 +240,14 @@ public:
 
     Status commit(MetaFileBuilder* builder, int64_t generation_version = 0);
 
+    // Every rebuilt segment reads its delete vector at |base_version|, from one tablet metadata at that
+    // version that the rebuild resolves once. |base_metadata| is that metadata when the caller already holds
+    // it, else null: when |metadata| is another version (publish passes the metadata it is building, already
+    // stamped with the new version), the rebuild takes the delete vectors from |base_metadata| instead of
+    // reading the base version back from storage, which it does once when it has neither. A |base_metadata|
+    // of another tablet or version is ignored.
     Status load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
-                                 const MetaFileBuilder* builder);
+                                 const MetaFileBuilder* builder, const TabletMetadataPtr& base_metadata = nullptr);
 
     size_t memory_usage() const;
 
@@ -379,7 +387,8 @@ private:
 
     void _unload_without_lock();
 
-    Status _do_lake_load(const TabletMetadataPtr& metadata, int64_t base_version, const MetaFileBuilder* builder);
+    Status _do_lake_load(const TabletMetadataPtr& metadata, int64_t base_version, const MetaFileBuilder* builder,
+                         const TabletMetadataPtr& base_metadata);
 
     // Open all SSTables in parallel using thread pool.
     // Returns opened SSTables in the same order as sstable_meta.sstables().
