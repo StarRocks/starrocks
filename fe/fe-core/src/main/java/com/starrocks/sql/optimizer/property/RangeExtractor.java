@@ -161,6 +161,12 @@ public class RangeExtractor {
             if (left.isConstant() || right.isConstant()) {
                 return null;
             }
+            // `v > v` says nothing about the range of v. Deriving a bound from v's own range would give v a
+            // second descriptor whose source count includes v's range predicates again, so the conjuncts
+            // look fully covered by the derived range and the caller drops `v > v` and the others.
+            if (left.equals(right)) {
+                return null;
+            }
             BinaryType binaryType = predicate.getBinaryType();
             generateBound(left, binaryType, right);
             generateBound(right, binaryType.commutative(), left);

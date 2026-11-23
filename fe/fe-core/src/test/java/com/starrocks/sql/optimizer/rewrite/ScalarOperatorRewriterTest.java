@@ -46,6 +46,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.List;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -203,6 +204,25 @@ public class ScalarOperatorRewriterTest {
         String expect = "date_trunc(YEAR, 1: dt) = 2024-01-01 AND 2: mode = Buzz";
         String actual = result.toString();
         Assertions.assertEquals(expect, actual, actual);
+    }
+
+    // v > v AND v > 1 AND v IS NULL: the self comparison must not let the derived `v > 1` stand in for all three
+    // conjuncts, which dropped `v > v` and `v IS NULL` and kept rows the filter rejects.
+    @Test
+    public void testRangeExtractSelfComparison() {
+        for (BinaryType selfOp : new BinaryType[] {BinaryType.GT, BinaryType.GE, BinaryType.LT}) {
+            ColumnRefOperator v = new ColumnRefOperator(1, IntegerType.INT, "v", false);
+            ScalarOperator self = new BinaryPredicateOperator(selfOp, v, v);
+            ScalarOperator range = new BinaryPredicateOperator(BinaryType.GT, v, ConstantOperator.createInt(1));
+            ScalarOperator isNull = new IsNullPredicateOperator(false, v);
+            ScalarOperator predicate = Utils.compoundAnd(self, range, isNull);
+
+            ScalarOperator result = new ScalarRangePredicateExtractor().rewriteAll(predicate);
+            List<ScalarOperator> conjuncts = Utils.extractConjuncts(result);
+            Assertions.assertTrue(conjuncts.contains(self), result.toString());
+            Assertions.assertTrue(conjuncts.contains(isNull), result.toString());
+            Assertions.assertTrue(conjuncts.contains(range), result.toString());
+        }
     }
 
     @Test
