@@ -262,6 +262,15 @@ bool SpillablePartitionWiseDistinctSourceOperator::has_output() const {
         return false;
     }
 
+    // the current partition is fully drained, but the restore task that read it has not retired yet.
+    // Report not-ready instead of letting pull_chunk switch partitions underneath a live task. The
+    // restore completion notifies the source observers, so this cannot stall. Keep it ahead of the
+    // check below: has_output_data() can still be true for a partition we are already done with.
+    if (_curr_partition_eos && _pw_distinct->is_finished() && _curr_partition_reader &&
+        _curr_partition_reader->has_restore_task()) {
+        return false;
+    }
+
     // if current partition reader is not created, or no async store task trigger, or has output data.
     // we must invoke pull_chunk to try to obtain chunk from current partition reader and push it to pw_agg
     if (!_curr_partition_reader || !_curr_partition_reader->has_restore_task() ||
@@ -349,11 +358,11 @@ StatusOr<ChunkPtr> SpillablePartitionWiseDistinctSourceOperator::_pull_spilled_c
     if (!_curr_partition_eos) {
         if (!_curr_partition_reader->has_restore_task()) {
             RETURN_IF_ERROR(_curr_partition_reader->trigger_restore(
-                    state, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_curr_partition_reader))));
+                    state, TRACKER_WITH_SPILLER_RES_GUARD(state, spiller, std::weak_ptr(_curr_partition_reader))));
         }
         if (_curr_partition_reader->has_output_data()) {
             auto maybe_chunk = _curr_partition_reader->restore(
-                    state, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_curr_partition_reader)));
+                    state, TRACKER_WITH_SPILLER_RES_GUARD(state, spiller, std::weak_ptr(_curr_partition_reader)));
             if (maybe_chunk.ok() && maybe_chunk.value() && !maybe_chunk.value()->is_empty()) {
                 DCHECK(_pw_distinct->need_input() && !_pw_distinct->is_finished());
                 RETURN_IF_ERROR(_pw_distinct->push_chunk(state, maybe_chunk.value()));
@@ -372,8 +381,15 @@ StatusOr<ChunkPtr> SpillablePartitionWiseDistinctSourceOperator::_pull_spilled_c
     } else {
         // the _pw_distinct has processed all the data of the current partition, so we switch to next partition
         DCHECK(_curr_partition_eos && _pw_distinct->is_finished());
-        DCHECK(!_curr_partition_reader->has_restore_task());
-        DCHECK(_curr_partition_reader->restore_finished());
+        // A restore task submitted before EOF can still be in flight: the task publishes its data and
+        // the operator reaches EOF before the task's completion runs, and it is that completion which
+        // drops _running_restore_tasks. Switching now would leave a live task reading a partition
+        // nobody consumes any more, and a late failure from it lands on the spiller-wide task status,
+        // failing the NEXT partition's restore. Wait it out -- the task has already finished its read
+        // at this point, and its completion notifies the source observers.
+        if (_curr_partition_reader->has_restore_task()) {
+            return nullptr;
+        }
         //switch to next partition
         ++_curr_partition_idx;
         _curr_partition_eos = false;

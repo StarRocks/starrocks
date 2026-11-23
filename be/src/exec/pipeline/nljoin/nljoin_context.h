@@ -109,9 +109,12 @@ public:
     StatusOr<ChunkPtr> get_next(RuntimeState* state);
 
     // reset stream
-    Status reset(RuntimeState* state, spill::Spiller* dummy_spiller);
+    Status reset(RuntimeState* state, const std::shared_ptr<spill::Spiller>& dummy_spiller);
 
 private:
+    // The reader completes its restore IO through a raw Spiller*, so every restore task pins this spiller
+    // along with the reader; the probe operator that owns it may be torn down while a prefetch is in flight.
+    std::shared_ptr<spill::Spiller> _dummy_spiller;
     std::shared_ptr<spill::SpillerReader> _reader;
 
     std::vector<ChunkPtr> _build_chunks;
