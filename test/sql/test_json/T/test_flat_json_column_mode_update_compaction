@@ -1,0 +1,37 @@
+-- name: test_flat_json_column_mode_update_compaction
+-- A column-mode partial update writes the JSON column of the updated rows into a delta column group (a .cols
+-- file). Lake compaction derived the flat JSON layout of its output from the segments' own column readers, so
+-- the .cols values were read through a layout they do not fit: a key only the .cols file held came back NULL,
+-- and a value whose type differs from the segment's sub-column was cast to it (k1 = 2.5 read as 2). Compaction
+-- now derives the layout from the .cols file's reader for such a segment. Six loads: the primary key compaction
+-- policy picks a tablet only from lake_pk_compaction_min_input_segments (5) segments on.
+create table t1 (id bigint not null, a int, counters json) primary key(id) distributed by hash(id) buckets 1
+  properties("replication_num"="1", "flat_json.enable"="true", "flat_json.column.max"="0",
+             "flat_json.sparsity.factor"="0.001", "flat_json.null.factor"="0.99");
+insert into t1 select n, n % 100, parse_json(concat('{"k1":', n, ',"k2":', n * 2, ',"g":{"x":', n, '}}'))
+  from table(generate_series(1, 500)) x(n);
+insert into t1 select n, n % 100, parse_json(concat('{"k1":', n, ',"k2":', n * 2, ',"g":{"x":', n, '}}'))
+  from table(generate_series(501, 1000)) x(n);
+insert into t1 select n, n % 100, parse_json(concat('{"k1":', n, ',"k2":', n * 2, ',"g":{"x":', n, '}}'))
+  from table(generate_series(1001, 1500)) x(n);
+insert into t1 select n, n % 100, parse_json(concat('{"k1":', n, ',"k2":', n * 2, ',"g":{"x":', n, '}}'))
+  from table(generate_series(1501, 2000)) x(n);
+insert into t1 select n, n % 100, parse_json(concat('{"k1":', n, ',"k2":', n * 2, ',"g":{"x":', n, '}}'))
+  from table(generate_series(2001, 2500)) x(n);
+insert into t1 select n, n % 100, parse_json(concat('{"k1":', n, ',"k2":', n * 2, ',"g":{"x":', n, '}}'))
+  from table(generate_series(2501, 3000)) x(n);
+set partial_update_mode = 'column';
+update t1 set counters = parse_json(concat('{"k1":2.5,"kNew":', id, ',"g":{"x":"str"}}')) where id % 10 = 0;
+set partial_update_mode = 'auto';
+select count(*), count(get_json_int(counters, '$.kNew')), sum(get_json_double(counters, '$.k1')),
+  count(get_json_string(counters, '$.g.x')) from t1;
+alter table t1 compact;
+function: wait_compaction_finish("t1", 1)
+select count(*), count(get_json_int(counters, '$.kNew')), sum(get_json_double(counters, '$.k1')),
+  count(get_json_string(counters, '$.g.x')) from t1;
+select id, get_json_double(counters, '$.k1'), get_json_int(counters, '$.kNew'), get_json_string(counters, '$.g.x'),
+  get_json_int(counters, '$.k2') from t1 where id in (9, 10, 20, 1000, 2990) order by id;
+set cbo_json_v2_rewrite = false;
+select id, get_json_double(counters, '$.k1'), get_json_int(counters, '$.kNew'), get_json_string(counters, '$.g.x')
+  from t1 where id in (9, 10, 20) order by id;
+set cbo_json_v2_rewrite = true;
