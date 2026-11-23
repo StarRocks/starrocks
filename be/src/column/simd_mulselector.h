@@ -75,7 +75,7 @@ public:
         if constexpr (data_size == 1) {
             __m256i loaded_masks[select_vec_size];
             __m256i loaded_datas[select_list_size];
-            int loaded_masks_value[select_vec_size];
+            uint32_t loaded_masks_value[select_vec_size];
 
             const __m256i all_zero_vec = _mm256_setzero_si256();
 
@@ -83,9 +83,7 @@ public:
                 __m256i selected_vec = all_zero_vec;
                 // load select vector
                 for (int i = 0; i < select_vec_size; ++i) {
-                    loaded_masks[i] = _mm256_loadu_si256(reinterpret_cast<__m256i*>(handle_select_vec[i]));
-                    loaded_masks[i] = _mm256_cmpgt_epi8(loaded_masks[i], _mm256_setzero_si256());
-                    loaded_masks_value[i] = _mm256_movemask_epi8(loaded_masks[i]);
+                    loaded_masks[i] = SIMDUtils::load_selector_mask(handle_select_vec[i], &loaded_masks_value[i]);
                 }
 
                 // load select data
@@ -149,15 +147,13 @@ public:
             constexpr int data_size = sizeof(RunTimeCppType<TYPE>);
             __m256i loaded_masks[select_vec_size];
             __m256i loaded_datas[select_list_size];
-            int loaded_masks_value[select_vec_size];
+            uint32_t loaded_masks_value[select_vec_size];
 
             const __m256i all_zero_vec = _mm256_setzero_si256();
             while (processed_rows + 32 < row_sz) {
                 // load select vector
                 for (int i = 0; i < select_vec_size; ++i) {
-                    loaded_masks[i] = _mm256_loadu_si256(reinterpret_cast<__m256i*>(handle_select_vec[i]));
-                    loaded_masks[i] = _mm256_cmpgt_epi8(loaded_masks[i], _mm256_setzero_si256());
-                    loaded_masks_value[i] = _mm256_movemask_epi8(loaded_masks[i]);
+                    loaded_masks[i] = SIMDUtils::load_selector_mask(handle_select_vec[i], &loaded_masks_value[i]);
                 }
 
                 constexpr uint32_t mask_table[] = {0, 0xFFFFFFFF, 0xFFFF, 0, 0xFF, 0, 0, 0,   0x0F,
