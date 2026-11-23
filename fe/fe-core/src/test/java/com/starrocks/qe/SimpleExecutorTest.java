@@ -134,6 +134,66 @@ public class SimpleExecutorTest {
         ConnectContext.remove();
     }
 
+    @Test
+    public void testRemainingTimeoutExcludesCompletedQueueWait() {
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.getSessionVariable().setQueryTimeoutS(60);
+        context.setStartTime(Instant.now().minusSeconds(125));
+        context.setPendingTimeSecond(120);
+
+        int remaining = SimpleExecutor.checkInternalQueryState(context);
+        assertTrue(remaining > 50 && remaining <= 55, "remaining=" + remaining);
+
+        context.setStartTime(Instant.now().minusSeconds(181));
+        context.setPendingTimeSecond(120);
+        assertThrows(SemanticException.class, () -> SimpleExecutor.checkInternalQueryState(context));
+    }
+
+    @Test
+    public void testRemainingTimeoutAccountsForEachContextsOwnQueueWait() {
+        ConnectContext parent = UtFrameUtils.createDefaultCtx();
+        parent.getSessionVariable().setQueryTimeoutS(60);
+        parent.setStartTime(Instant.now().minusSeconds(125));
+        parent.setPendingTimeSecond(120);
+        ConnectContext child = UtFrameUtils.createDefaultCtx();
+        child.setParentConnectContext(parent);
+        child.getSessionVariable().setQueryTimeoutS(60);
+        child.setStartTime(Instant.now().minusSeconds(140));
+        child.setPendingTimeSecond(90);
+
+        // The child has 10 seconds left; the parent has 55.
+        int remaining = SimpleExecutor.checkInternalQueryState(child);
+        assertTrue(remaining > 5 && remaining <= 10, "remaining=" + remaining);
+
+        // The parent's execution deadline must still bound the child after excluding its own queue wait.
+        parent.setStartTime(Instant.now().minusSeconds(170));
+        parent.setPendingTimeSecond(115);
+        remaining = SimpleExecutor.checkInternalQueryState(child);
+        assertTrue(remaining > 0 && remaining <= 5, "remaining=" + remaining);
+        parent.setPendingTimeSecond(100);
+        assertThrows(SemanticException.class, () -> SimpleExecutor.checkInternalQueryState(child));
+    }
+
+    @Test
+    public void testPendingAllowanceDoesNotIncreaseExecutionBudget() {
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.getSessionVariable().setQueryTimeoutS(60);
+        context.setStartTime(Instant.now().minusSeconds(125));
+        context.setPending(true);
+        context.setPendingTimeSecond(300);
+        assertEquals(60, SimpleExecutor.checkInternalQueryState(context));
+        context.setPendingTimeSecond(Integer.MAX_VALUE);
+        assertEquals(60, SimpleExecutor.checkInternalQueryState(context));
+
+        // On admission the queue manager replaces the allowance with the actual wait.
+        context.setPendingTimeSecond(120);
+        context.setPending(false);
+        int remaining = SimpleExecutor.checkInternalQueryState(context);
+        assertTrue(remaining > 50 && remaining <= 55, "remaining=" + remaining);
+        assertEquals(60, context.getSessionVariable().getQueryTimeoutS());
+        assertEquals(120, context.getPendingTimeSecond());
+    }
+
     /**
      * The internal task_run_history read (fired while filling information_schema.materialized_views /
      * SHOW MATERIALIZED VIEWS) must inherit the OUTER user query's remaining query_timeout, not the

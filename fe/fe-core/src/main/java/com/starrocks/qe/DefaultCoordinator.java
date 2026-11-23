@@ -682,7 +682,7 @@ public class DefaultCoordinator extends Coordinator {
             QueryQueueManager.getInstance().maybeWait(connectContext, this);
         }
         if (connectContext != null && connectContext.isMetadataContext()) {
-            // Planning and queueing consume both the metadata task's budget and its parent's budget.
+            // Recheck both execution budgets after maybeWait() records the actual queue waiting time.
             setTimeoutSecond(SimpleExecutor.checkInternalQueryState(connectContext));
         }
 

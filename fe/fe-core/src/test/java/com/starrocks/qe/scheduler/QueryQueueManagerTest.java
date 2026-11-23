@@ -33,6 +33,7 @@ import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
@@ -245,6 +246,44 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     }
 
     @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testMetadataQueueWaitUsesQueueDeadline(boolean queueTimesOut) throws Exception {
+        GlobalVariable.setEnableQueryQueueSelect(true);
+        GlobalVariable.setQueryQueueConcurrencyLimit(1);
+        GlobalVariable.setQueryQueuePendingTimeoutSecond(queueTimesOut ? 3 : 30);
+        DefaultCoordinator blocker = getSchedulerWithQueryId("select count(1) from lineitem");
+        manager.maybeWait(connectContext, blocker);
+        ConnectContext caller = newMetadataCaller();
+        caller.getSessionVariable().setMetadataCollectQueryTimeoutS(2);
+        DefaultCoordinator child = metadataScheduler(caller);
+        long timeoutsBefore = MetricRepo.COUNTER_QUERY_QUEUE_TIMEOUT.getValue();
+        CompletableFuture<Void> waiting = queueMetadata(child);
+        try {
+            awaitQueued(child);
+            if (queueTimesOut) {
+                assertThatThrownBy(() -> waiting.get(5, TimeUnit.SECONDS))
+                        .hasMessageContaining("query_queue_pending_timeout_second");
+                Assertions.assertEquals(LogicalSlot.State.CANCELLED, child.getSlot().getState());
+                Assertions.assertEquals(timeoutsBefore + 1, MetricRepo.COUNTER_QUERY_QUEUE_TIMEOUT.getValue().longValue());
+            } else {
+                // The execution budget is only two seconds, but the queue permits a longer wait.
+                Assertions.assertThrows(TimeoutException.class, () -> waiting.get(2200, TimeUnit.MILLISECONDS));
+                blocker.onReleaseSlots();
+                waiting.get(5, TimeUnit.SECONDS);
+                Assertions.assertEquals(LogicalSlot.State.ALLOCATED, child.getSlot().getState());
+                Assertions.assertTrue(child.getConnectContext().getPendingTimeSecond() >= 2);
+                int remaining = SimpleExecutor.checkInternalQueryState(child.getConnectContext());
+                Assertions.assertTrue(remaining > 0 && remaining <= 2, "remaining=" + remaining);
+                Assertions.assertEquals(timeoutsBefore, MetricRepo.COUNTER_QUERY_QUEUE_TIMEOUT.getValue().longValue());
+            }
+            Assertions.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
+        } finally {
+            child.onReleaseSlots();
+            blocker.onReleaseSlots();
+        }
+    }
+
+    @ParameterizedTest
     @CsvSource({"false, false", "false, true", "true, false", "true, true"})
     public void testMetadataSharesAdmittedParentUntilBothFinish(boolean parentFinishesFirst,
                                                                boolean groupLimit) throws Exception {
@@ -328,7 +367,10 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 caller.getExecutor().cancel("Cancelled by test");
             } else {
                 ConnectContext expired = reason.equals("parent timeout") ? caller : child.getConnectContext();
-                expired.setStartTime(Instant.now().minusSeconds(expired.getSessionVariable().getQueryTimeoutS() + 1));
+                long pendingAllowance = expired.getPendingTimeSecond();
+                expired.setStartTime(Instant.now().minusSeconds(
+                        expired.getSessionVariable().getQueryTimeoutS() + pendingAllowance + 1));
+                expired.setPendingTimeSecond((int) pendingAllowance);
             }
             assertThatThrownBy(() -> waiting.get(5, TimeUnit.SECONDS))
                     .hasMessageContaining(reason.equals("cancelled")

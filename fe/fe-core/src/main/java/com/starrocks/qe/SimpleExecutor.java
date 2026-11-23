@@ -248,7 +248,7 @@ public class SimpleExecutor {
 
     /**
      * Remaining time budget (in seconds) derived from the outer (triggering) user query's
-     * {@code query_timeout}: {@code query_timeout - elapsed}. Serving-path internal queries should be
+     * {@code query_timeout}, excluding query-queue waiting time. Serving-path internal queries should be
      * bounded by this so a single one cannot outlive the outer query. When there is no outer user query
      * (background jobs), falls back to {@code statistic_collect_query_timeout} to keep the old behavior.
      * The returned value may be {@code <= 0}, meaning the outer query has already exhausted its budget.
@@ -268,7 +268,13 @@ public class SimpleExecutor {
         for (ConnectContext current = context; current != null; current = current.getParent()) {
             long elapsedSeconds = current.getStartTime() > 0
                     ? Math.max(0, (now - current.getStartTime()) / 1000) : 0;
-            remaining = Math.min(remaining, current.getSessionVariable().getQueryTimeoutS() - elapsedSeconds);
+            long queryTimeout = current.getSessionVariable().getQueryTimeoutS();
+            // Match ConnectContext's timeout accounting. While queued, pendingTimeSecond is the queue
+            // timeout allowance; after admission, it is the actual wait. Cap the remaining execution
+            // budget so that the allowance cannot become extra BE execution time. Scheduling rechecks
+            // this budget after maybeWait() records the actual wait.
+            long remainingWithPendingTime = queryTimeout + current.getPendingTimeSecond() - elapsedSeconds;
+            remaining = Math.min(remaining, Math.min(queryTimeout, remainingWithPendingTime));
         }
         return (int) Math.max(Integer.MIN_VALUE, remaining);
     }

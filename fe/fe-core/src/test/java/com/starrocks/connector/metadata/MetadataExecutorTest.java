@@ -28,6 +28,7 @@ import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
@@ -48,7 +49,9 @@ import mockit.Verifications;
 import mockit.VerificationsInOrder;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Instant;
@@ -114,6 +117,22 @@ public class MetadataExecutorTest {
         assertEquals(parent.getCurrentWarehouseId(), child.getCurrentWarehouseId());
     }
 
+
+    @Test
+    public void testIcebergJobStartsAfterCallerQueueWait() {
+        ConnectContext parent = newParent();
+        parent.getSessionVariable().setQueryTimeoutS(60);
+        parent.setStartTime(Instant.now().minusSeconds(125));
+        parent.setPendingTimeSecond(120);
+        MetadataCollectJob job = new IcebergMetadataCollectJob("iceberg", "db", "table",
+                TResultSinkType.METADATA_ICEBERG, 1, "");
+
+        job.init(parent);
+
+        assertSame(parent, job.getContext().getParent());
+        int remaining = SimpleExecutor.checkInternalQueryState(job.getContext());
+        assertTrue(remaining > 50 && remaining <= 55, "remaining=" + remaining);
+    }
 
     @ParameterizedTest
     @ValueSource(strings = {"success", "dispatch failure", "result failure"})
@@ -244,9 +263,9 @@ public class MetadataExecutorTest {
     }
 
     @ParameterizedTest
-    @ValueSource(booleans = {false, true})
-    public void testExecutionUsesSmallerRemainingBudget(boolean parentIsShorter, @Mocked DefaultCoordinator coordinator)
-            throws Exception {
+    @CsvSource({"false, false", "false, true", "true, false", "true, true"})
+    public void testExecutionUsesSmallerRemainingBudget(boolean parentIsShorter, boolean queued,
+                                                       @Mocked DefaultCoordinator coordinator) throws Exception {
         ConnectContext parent = newParent();
         parent.getSessionVariable().setQueryTimeoutS(parentIsShorter ? 30 : 300);
         parent.getSessionVariable().setEnableSPMRewrite(true);
@@ -257,9 +276,13 @@ public class MetadataExecutorTest {
                 assertSame(job.getContext(), ConnectContext.get());
                 assertFalse(context.getSessionVariable().isEnableSPMRewrite());
                 assertFalse(context.getSessionVariable().isEnableMaterializedViewRewrite());
-                // Simulate planning time without sleeping. Both deadlines must keep counting from their own start.
-                parent.setStartTime(Instant.now().minusSeconds(10));
-                context.setStartTime(Instant.now().minusSeconds(20));
+                // Planning consumes execution time; each context's own queue wait does not.
+                int parentPendingSeconds = queued ? 120 : 0;
+                int childPendingSeconds = queued ? 90 : 0;
+                parent.setStartTime(Instant.now().minusSeconds(parentPendingSeconds + 10));
+                parent.setPendingTimeSecond(parentPendingSeconds);
+                context.setStartTime(Instant.now().minusSeconds(childPendingSeconds + 20));
+                context.setPendingTimeSecond(childPendingSeconds);
                 return new ExecPlan();
             }
         };
