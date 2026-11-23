@@ -18,6 +18,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -27,6 +29,11 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.thrift.TExpr;
+import com.starrocks.thrift.TExprNode;
+import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TOlapTablePartitionParam;
 import com.starrocks.thrift.TWriteQuorumType;
@@ -72,6 +79,19 @@ public class OlapTableSinkTest2 {
                 "  PARTITION p2 VALUES IN ('4', '5', '6')" +
                 ") DISTRIBUTED BY HASH(k1) BUCKETS 3 PROPERTIES('replication_num' = '1');";
         starRocksAssert.withTable(createListTableStmt);
+
+        String createAutoPartitionTableStmt = "create table db2.tbl_expr_auto(k1 int, k2 date, v1 int) " +
+                "DUPLICATE KEY(k1, k2) " +
+                "PARTITION BY date_trunc('month', k2) " +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 3 PROPERTIES('replication_num' = '1');";
+        starRocksAssert.withTable(createAutoPartitionTableStmt);
+
+        String createExprRangeTableStmt = "create table db2.tbl_expr_range(k1 int, k2 varchar(20), v1 int) " +
+                "DUPLICATE KEY(k1, k2) " +
+                "PARTITION BY RANGE(str2date(k2, '%Y%m%d')) (" +
+                "  START (\"2021-01-01\") END (\"2021-01-03\") EVERY (INTERVAL 1 DAY)" +
+                ") DISTRIBUTED BY HASH(k1) BUCKETS 3 PROPERTIES('replication_num' = '1');";
+        starRocksAssert.withTable(createExprRangeTableStmt);
     }
 
     @Test
@@ -206,5 +226,80 @@ public class OlapTableSinkTest2 {
             published.clearDoubleWritePartition();
             starRocksAssert.alterTable("ALTER TABLE db2.tbl_range DROP TEMPORARY PARTITION tp1");
         }
+    }
+
+    // Plans of the same table can be built at the same time and number their slots differently: a load plan
+    // starts the table columns at slot 0, while an INSERT ... FROM FILES plan numbers the file columns first.
+    // Each plan must serialize the partition column's slot of its own tuple, and building a plan must not rebind
+    // the table's partition expr, which every plan of the table reads.
+    @Test
+    public void testPartitionExprBindsOnlyItsOwnTuple() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db2");
+        OlapTable autoTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "tbl_expr_auto");
+        OlapTable rangeTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "tbl_expr_range");
+        Assertions.assertInstanceOf(ExpressionRangePartitionInfo.class, autoTable.getPartitionInfo());
+        Assertions.assertInstanceOf(ExpressionRangePartitionInfoV2.class, rangeTable.getPartitionInfo());
+
+        for (OlapTable table : List.of(autoTable, rangeTable)) {
+            SlotDescriptor tableSlotDesc = getPartitionSlotRef(table).getDesc();
+            List<Long> partitionIds = table.getPartitions().stream()
+                    .map(Partition::getId).collect(Collectors.toList());
+
+            // k2 is the second column: slot 1 when the table columns start at 0, slot 189 after 188 other slots.
+            TOlapTablePartitionParam loadParam = OlapTableSink.createPartition(db.getId(), table,
+                    buildTableTuple(table, 0), true, 0, partitionIds, null, null);
+            TOlapTablePartitionParam insertParam = OlapTableSink.createPartition(db.getId(), table,
+                    buildTableTuple(table, 188), true, 0, partitionIds, null, null);
+
+            Assertions.assertEquals(List.of(1), getPartitionExprSlotIds(loadParam), table.getName());
+            Assertions.assertEquals(List.of(189), getPartitionExprSlotIds(insertParam), table.getName());
+            Assertions.assertSame(tableSlotDesc, getPartitionSlotRef(table).getDesc(), table.getName());
+        }
+    }
+
+    // Builds a plan's destination tuple for the table. Slot ids are allocated in order, so the slotIdOffset slots
+    // of another tuple that the plan creates first push the table columns back.
+    private static TupleDescriptor buildTableTuple(OlapTable table, int slotIdOffset) {
+        DescriptorTable descTable = new DescriptorTable();
+        TupleDescriptor sourceTuple = descTable.createTupleDescriptor("Source");
+        for (int i = 0; i < slotIdOffset; i++) {
+            descTable.addSlotDescriptor(sourceTuple);
+        }
+        TupleDescriptor tuple = descTable.createTupleDescriptor("DstTable");
+        for (Column column : table.getFullSchema()) {
+            SlotDescriptor slotDesc = descTable.addSlotDescriptor(tuple);
+            slotDesc.setColumn(column);
+            slotDesc.setIsMaterialized(true);
+            slotDesc.setIsNullable(column.isAllowNull());
+        }
+        return tuple;
+    }
+
+    private static SlotRef getPartitionSlotRef(OlapTable table) {
+        PartitionInfo partitionInfo = table.getPartitionInfo();
+        List<Expr> partitionExprs;
+        if (partitionInfo instanceof ExpressionRangePartitionInfo) {
+            partitionExprs = ((ExpressionRangePartitionInfo) partitionInfo).getPartitionExprs(table.getIdToColumn());
+        } else {
+            partitionExprs = ((ExpressionRangePartitionInfoV2) partitionInfo).getPartitionExprs(table.getIdToColumn());
+        }
+        List<SlotRef> slotRefs = Lists.newArrayList();
+        partitionExprs.get(0).collect(SlotRef.class, slotRefs);
+        Assertions.assertEquals(1, slotRefs.size());
+        return slotRefs.get(0);
+    }
+
+    private static List<Integer> getPartitionExprSlotIds(TOlapTablePartitionParam partitionParam) {
+        List<Integer> slotIds = Lists.newArrayList();
+        for (TExpr expr : partitionParam.getPartition_exprs()) {
+            for (TExprNode node : expr.getNodes()) {
+                if (node.getNode_type() == TExprNodeType.SLOT_REF) {
+                    slotIds.add(node.getSlot_ref().getSlot_id());
+                }
+            }
+        }
+        return slotIds;
     }
 }
