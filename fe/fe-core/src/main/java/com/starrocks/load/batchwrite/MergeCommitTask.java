@@ -381,7 +381,10 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
                 if (localTxnId != -1) {
                     // remove callback before abortTransaction(), so that the afterAborted() callback will not be called again
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(taskId);
-                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(dbId, localTxnId, abortReason);
+                    // Pass the tablets the load has written. A shared-data abort without them tells the compute nodes
+                    // to skip the cleanup, and the segments of this transaction are left on the object storage.
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(dbId, localTxnId, abortReason,
+                            Coordinator.getCommitInfos(coordinator), Coordinator.getFailInfos(coordinator), null);
                 }
             } catch (Exception ie) {
                 LOG.warn("Failed to abort transaction. db={}, table={}, label={}, txnId={}, reason={}",
