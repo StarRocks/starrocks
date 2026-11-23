@@ -1,0 +1,73 @@
+-- name: test_paimon_insert_overwrite_full
+function: create_paimon_ddl_catalog("paimon_overwrite_${uuid0}", "${uuid0}")
+set paimon_reader_mode = 'native';
+set dynamic_overwrite = false;
+set pipeline_dop = 4;
+create database paimon_overwrite_${uuid0}.writer_db;
+create table paimon_overwrite_${uuid0}.writer_db.overwrite_rows (id int, p varchar(32), value varchar(64)) partition by(p) properties ('bucket'='-1', 'file.format'='parquet');
+insert into paimon_overwrite_${uuid0}.writer_db.overwrite_rows values (1, 'a', 'old'), (2, 'b', 'old');
+insert overwrite paimon_overwrite_${uuid0}.writer_db.overwrite_rows values (3, 'c', 'new');
+[ORDER]select * from paimon_overwrite_${uuid0}.writer_db.overwrite_rows order by id;
+insert overwrite paimon_overwrite_${uuid0}.writer_db.overwrite_rows select 4, 'd', 'empty' where false;
+select count(*) from paimon_overwrite_${uuid0}.writer_db.overwrite_rows;
+create table paimon_overwrite_${uuid0}.writer_db.unpartitioned (id bigint not null, value varchar(64)) primary key(id) properties ('bucket'='4', 'file.format'='parquet');
+insert into paimon_overwrite_${uuid0}.writer_db.unpartitioned values (1, 'old'), (2, 'old');
+insert overwrite paimon_overwrite_${uuid0}.writer_db.unpartitioned values (1, 'new');
+[ORDER]select * from paimon_overwrite_${uuid0}.writer_db.unpartitioned order by id;
+insert overwrite paimon_overwrite_${uuid0}.writer_db.unpartitioned select 3, 'empty' where false;
+select count(*) from paimon_overwrite_${uuid0}.writer_db.unpartitioned;
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_overwrite_${paimon_ddl_warehouse_id}.writer_db.unpartitioned;
+  drop table if exists paimon_overwrite_${paimon_ddl_warehouse_id}.writer_db.overwrite_rows;
+  drop database if exists paimon_overwrite_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_overwrite_${paimon_ddl_warehouse_id};
+} END CLEANUP
+
+-- name: test_paimon_insert_overwrite_static
+function: create_paimon_ddl_catalog("paimon_overwrite_${uuid0}", "${uuid0}")
+set paimon_reader_mode = 'native';
+set dynamic_overwrite = true;
+create database paimon_overwrite_${uuid0}.writer_db;
+create table paimon_overwrite_${uuid0}.writer_db.overwrite_rows (id int, p varchar(32), value varchar(64)) partition by(p) properties ('bucket'='4', 'bucket-key'='id', 'file.format'='parquet');
+insert into paimon_overwrite_${uuid0}.writer_db.overwrite_rows values (1, 'a/b', 'old'), (2, 'keep', 'two'), (3, NULL, 'null');
+-- An explicit partition takes precedence over the dynamic overwrite setting.
+insert overwrite paimon_overwrite_${uuid0}.writer_db.overwrite_rows partition(p='a/b') values (4, 'new');
+[ORDER]select * from paimon_overwrite_${uuid0}.writer_db.overwrite_rows order by id;
+insert overwrite paimon_overwrite_${uuid0}.writer_db.overwrite_rows partition(p=NULL) values (5, 'null replacement');
+[ORDER]select * from paimon_overwrite_${uuid0}.writer_db.overwrite_rows order by id;
+insert overwrite paimon_overwrite_${uuid0}.writer_db.overwrite_rows partition(p='a/b') select 6, 'empty' where false;
+insert overwrite paimon_overwrite_${uuid0}.writer_db.overwrite_rows partition(p=NULL) select 7, 'empty' where false;
+function: create_paimon_ddl_catalog("paimon_overwrite_reader_${uuid0}", "${uuid0}")
+set paimon_reader_mode = 'jni';
+[ORDER]select * from paimon_overwrite_reader_${uuid0}.writer_db.overwrite_rows order by id;
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_overwrite_${paimon_ddl_warehouse_id}.writer_db.overwrite_rows;
+  drop database if exists paimon_overwrite_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_overwrite_reader_${paimon_ddl_warehouse_id};
+  drop catalog if exists paimon_overwrite_${paimon_ddl_warehouse_id};
+} END CLEANUP
+
+-- name: test_paimon_insert_overwrite_dynamic
+function: create_paimon_ddl_catalog("paimon_overwrite_${uuid0}", "${uuid0}")
+set paimon_reader_mode = 'native';
+set dynamic_overwrite = true;
+set pipeline_dop = 4;
+create database paimon_overwrite_${uuid0}.writer_db;
+create table paimon_overwrite_${uuid0}.writer_db.overwrite_rows (id int not null, p varchar(32) not null, value varchar(64)) primary key(id, p) partition by(p) properties ('bucket'='4', 'file.format'='parquet');
+insert into paimon_overwrite_${uuid0}.writer_db.overwrite_rows values (1, 'a', 'old'), (2, 'a', 'remove'), (3, 'b', 'keep');
+insert overwrite paimon_overwrite_${uuid0}.writer_db.overwrite_rows values (1, 'a', 'new'), (4, 'c', 'added');
+[ORDER]select * from paimon_overwrite_${uuid0}.writer_db.overwrite_rows order by id;
+insert overwrite paimon_overwrite_${uuid0}.writer_db.overwrite_rows select 5, 'b', 'empty' where false;
+[ORDER]select * from paimon_overwrite_${uuid0}.writer_db.overwrite_rows order by id;
+function: create_paimon_ddl_catalog("paimon_overwrite_reader_${uuid0}", "${uuid0}")
+set paimon_reader_mode = 'jni';
+[ORDER]select * from paimon_overwrite_reader_${uuid0}.writer_db.overwrite_rows order by id;
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_overwrite_${paimon_ddl_warehouse_id}.writer_db.overwrite_rows;
+  drop database if exists paimon_overwrite_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_overwrite_reader_${paimon_ddl_warehouse_id};
+  drop catalog if exists paimon_overwrite_${paimon_ddl_warehouse_id};
+} END CLEANUP

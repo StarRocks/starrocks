@@ -25,7 +25,7 @@ Paimon クラスターで SQL ワークロードを成功させるには、StarR
 
 ## 使用上の注意
 
-Paimon catalog では、データのクエリ、Paimon データベースとテーブルの作成・削除、および INSERT INTO による書き込みができます。INSERT OVERWRITE、UPDATE、DELETE、CREATE TABLE LIKE、CREATE TABLE AS SELECT はサポートされていません。
+Paimon catalog では、データのクエリ、Paimon データベースとテーブルの作成・削除、および INSERT INTO と INSERT OVERWRITE による書き込みができます。UPDATE、DELETE、CREATE TABLE LIKE、CREATE TABLE AS SELECT はサポートされていません。
 
 ## Paimon to StarRocks data types
 
@@ -792,7 +792,7 @@ PROPERTIES (
 
 - `DISTRIBUTED BY`、`ORDER BY`、`ROLLUP`、生成列、集約列、`AUTO_INCREMENT` はサポートされていません。
 - NULL 以外の列デフォルト値はサポートされていません。
-- `CREATE TABLE LIKE`、`CREATE TABLE AS SELECT`、および `INSERT OVERWRITE`、`UPDATE`、`DELETE` によるデータの書き込みはサポートされていません。
+- `CREATE TABLE LIKE`、`CREATE TABLE AS SELECT`、および `UPDATE`、`DELETE` によるデータの書き込みはサポートされていません。
 
 ### DROP TABLE
 
@@ -850,9 +850,17 @@ SELECT 2, 'two';
 
 明示的な列リストと `BY NAME` をサポートします。静的パーティションを指定する場合は入力からパーティション列を除外します。ネイティブ schema 内での列の位置は問いません。省略した NULL 許容列には NULL が入り、必須列には値の指定が必要です。Paimon ネイティブのデフォルト値を持つ列は、値を明示的に指定してください。列の省略と `DEFAULT` はサポートされていません。
 
+`INSERT OVERWRITE` はデフォルトでテーブル全体を上書きします。`PARTITION` を指定すると対象パーティションのみを上書きします。`dynamic_overwrite = true` でパーティションを指定しない場合は、入力に含まれるパーティションのみを上書きします。入力が空の場合、全体または静的パーティションの上書きでは対象を消去し、動的上書きではデータを変更しません。
+
+:::warning
+
+`PARTITION (...)` には、テーブルの NULL パーティションの予約名を文字列として指定しないでください。Paimon は上書き対象を特定する際、`partition.default-name`（デフォルトは `__DEFAULT_PARTITION__`）と同じパーティション値を NULL として扱います。例えば、`PARTITION (p = '__DEFAULT_PARTITION__')` を指定して入力が 0 行の場合、NULL パーティションのデータが消去されることがあります。NULL パーティションを上書きする場合は、`PARTITION (p = NULL)` を使用してください。
+
+:::
+
 書き込みには Parquet データファイル、同一バージョンの FE/BE、および BE のネイティブ Paimon writer が必要です。catalog のストレージ認証情報を使用します。`paimon_reader_mode` は読み取り方式のみを選択し、書き込み方式は変更しません。明示的トランザクション、部分更新、主キーテーブルの動的バケット、パーティションをまたぐ主キー更新、data evolution、row tracking、グローバルインデックス、外部データパスはサポートされていません。
 
-パーティション列には boolean、整数、文字列、日付型を使用できます。空文字列、空白のみの文字列、予約済みのデフォルトパーティション名は、ネイティブ SDK が NULL パーティションと区別して保存できないため拒否されます。各 Sink Driver のデフォルト上限は、アクティブなパーティション/バケット writer が 64 個、ネイティブ/Arrow メモリ割り当てが 256 MiB です。上限を超えると、公開前にステートメントが失敗します。テーブルオプション `starrocks.paimon.max-active-writers`（1–4096）と `starrocks.paimon.max-writer-memory-bytes`（2 MiB–4 GiB、バイト単位）で変更できます。クエリのメモリ制限も適用されます。
+パーティション列には boolean、整数、文字列、日付型を使用できます。データ行の書き込み時に、StarRocks は空文字列、空白のみの文字列、およびデフォルトパーティションの予約名と同じ文字列をパーティション値として拒否します。ネイティブ SDK はこれらの値を NULL と区別して保存できません。各 Sink Driver のデフォルト上限は、アクティブなパーティション/バケット writer が 64 個、ネイティブ/Arrow メモリ割り当てが 256 MiB です。上限を超えると、公開前にステートメントが失敗します。テーブルオプション `starrocks.paimon.max-active-writers`（1–4096）と `starrocks.paimon.max-writer-memory-bytes`（2 MiB–4 GiB、バイト単位）で変更できます。クエリのメモリ制限も適用されます。
 
 FE が Paimon ネイティブスナップショットを公開するとデータが読み取り可能になります。入力が空の INSERT INTO はデータを変更しません。コミット結果が不明というエラーが返った場合は、再試行する前に操作結果を確認してください。スナップショットが既に公開されている可能性があり、再試行で追加行が重複することがあります。Query Profile の `PaimonOperationId` と `PaimonPublicationState` で操作を確認できます。
 
