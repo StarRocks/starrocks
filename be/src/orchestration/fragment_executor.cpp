@@ -631,6 +631,10 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
                 if (broker_range.__isset.channel_id) {
                     continue;
                 }
+                // Kafka scan ranges get their pipes registered and attached later, by _prepare_kafka_scan_ranges.
+                if (broker_range.__isset.kafka_scan_range) {
+                    continue;
+                }
                 for (const auto& range : broker_range.ranges) {
                     if (range.file_type != TFileType::FILE_STREAM) {
                         continue;

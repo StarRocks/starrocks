@@ -307,14 +307,17 @@ protected:
         TExecPlanFragmentParams params;
         params.__set_params(exec_params);
         TQueryOptions query_options;
+        query_options.__set_query_type(TQueryType::LOAD);
         query_options.__set_load_job_type(TLoadJobType::ROUTINE_LOAD);
         params.__set_query_options(query_options);
         return params;
     }
 
-    // What FragmentExecutor::prepare() does for the rows a fragment of a round loads and for its Kafka scan ranges.
-    static Status prepare_round_fragment(FragmentExecutor* fragment_executor,
-                                         const pipeline::UnifiedExecPlanFragmentParams& request) {
+    // What FragmentExecutor::prepare() does, in its order, for the stream load pipes of a fragment of a round, the rows
+    // it loads and its Kafka scan ranges.
+    Status prepare_round_fragment(FragmentExecutor* fragment_executor,
+                                  const pipeline::UnifiedExecPlanFragmentParams& request) const {
+        RETURN_IF_ERROR(fragment_executor->_prepare_stream_load_pipe(_exec_env, request));
         fragment_executor->_prepare_routine_load_rows_count(request);
         return fragment_executor->_prepare_kafka_scan_ranges(request);
     }
