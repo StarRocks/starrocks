@@ -21,6 +21,8 @@
 
 #include <string>
 
+#include "base/base64.h"
+
 namespace starrocks {
 
 TEST(UrlCodingTest, UrlDecodeBasic) {
@@ -111,7 +113,7 @@ TEST(Base64CodingTest, DecodeInvalidInputClearsOut) {
     // Pre-fill *out so we can verify it gets cleared when decode fails — the
     // contract is that on failure the caller observes no half-written buffer.
     std::string out = "PRE-EXISTING";
-    // '*' is not a valid base64 character (decoding_table[*] == -2).
+    // '*' is not a valid base64 character.
     EXPECT_FALSE(base64_decode("abc*def", &out));
     EXPECT_TRUE(out.empty());
 }
@@ -131,6 +133,52 @@ TEST(Base64CodingTest, DecodeEmptyInput) {
     std::string out = "leftover";
     ASSERT_TRUE(base64_decode("", &out));
     EXPECT_EQ(out, "");
+}
+
+TEST(Base64CodingTest, RejectsEmbeddedNullMidPaddingAndHighBitBytes) {
+    std::string out = "initial";
+    EXPECT_FALSE(base64_decode(std::string("SGVs\0bG8=", 9), &out));
+    EXPECT_TRUE(out.empty());
+
+    out = "initial";
+    EXPECT_FALSE(base64_decode("====SGVsbG8=", &out));
+    EXPECT_TRUE(out.empty());
+
+    out = "initial";
+    EXPECT_FALSE(base64_decode("SG==VsbG8=", &out));
+    EXPECT_TRUE(out.empty());
+
+    out = "initial";
+    EXPECT_FALSE(base64_decode(std::string("\x80\xff\xfe\xfd", 4), &out));
+    EXPECT_TRUE(out.empty());
+}
+
+TEST(Base64CodingTest, Base64Encode2AndDecode2EmptyAndNullBoundary) {
+    unsigned char enc_buf[8] = {0};
+    char dec_buf[8] = {0};
+
+    // An all-empty BinaryColumn yields Slice(nullptr, 0); length == 0 must succeed with 0 bytes.
+    EXPECT_EQ(0u, base64_encode2(nullptr, 0, enc_buf));
+    EXPECT_EQ(0, base64_decode2(nullptr, 0, dec_buf));
+
+    // Non-zero length with nullptr input or output must fail safely.
+    EXPECT_EQ(0u, base64_encode2(nullptr, 4, enc_buf));
+    EXPECT_EQ(0u, base64_encode2(reinterpret_cast<const unsigned char*>("abcd"), 4, nullptr));
+    EXPECT_EQ(-1, base64_decode2(nullptr, 4, dec_buf));
+    EXPECT_EQ(-1, base64_decode2("YWJjZA==", 8, nullptr));
+}
+
+TEST(Base64CodingTest, InPlaceAliasedEncodeAndDecode) {
+    std::string s = "Hello, StarRocks in-place Base64!";
+    base64_encode(s, &s);
+    EXPECT_EQ("SGVsbG8sIFN0YXJSb2NrcyBpbi1wbGFjZSBCYXNlNjQh", s);
+
+    ASSERT_TRUE(base64_decode(s, &s));
+    EXPECT_EQ("Hello, StarRocks in-place Base64!", s);
+
+    std::string invalid = "abc*def";
+    EXPECT_FALSE(base64_decode(invalid, &invalid));
+    EXPECT_TRUE(invalid.empty());
 }
 
 } // namespace starrocks
