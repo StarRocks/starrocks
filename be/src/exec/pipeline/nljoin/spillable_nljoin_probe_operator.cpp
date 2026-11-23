@@ -188,7 +188,7 @@ StatusOr<ChunkPtr> SpillableNLJoinProbeOperator::pull_chunk(RuntimeState* state)
         if (chunk_st.status().is_end_of_file()) {
             _prober.reset();
             _set_current_build_probe_finished(true);
-            RETURN_IF_ERROR(_chunk_stream->reset(state, _spiller.get()));
+            RETURN_IF_ERROR(_chunk_stream->reset(state, _spiller));
             return nullptr;
         }
         ASSIGN_OR_RETURN(_build_chunk, std::move(chunk_st));
@@ -218,7 +218,7 @@ Status SpillableNLJoinProbeOperator::push_chunk(RuntimeState* state, const Chunk
     }
     _set_current_build_probe_finished(false);
     RETURN_IF_ERROR(_prober.push_probe_chunk(chunk));
-    RETURN_IF_ERROR(_chunk_stream->reset(state, _spiller.get()));
+    RETURN_IF_ERROR(_chunk_stream->reset(state, _spiller));
     RETURN_IF_ERROR(_chunk_stream->prefetch(state));
     return Status::OK();
 }
