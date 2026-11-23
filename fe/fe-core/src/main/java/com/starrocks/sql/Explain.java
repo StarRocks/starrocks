@@ -807,6 +807,36 @@ public class Explain {
             return new OperatorStr(sb.toString(), context.step,
                     buildChildOperatorStr(optExpression, context.step));
         }
+
+        // The defaults of these visitors end in visit(), which dispatches again and recurses forever.
+        @Override
+        public OperatorStr visitPhysicalRawValues(OptExpression optExpression, ExplainContext context) {
+            return visitUnhandled(optExpression, context);
+        }
+
+        @Override
+        public OperatorStr visitPhysicalFetch(OptExpression optExpression, ExplainContext context) {
+            return visitUnhandled(optExpression, context);
+        }
+
+        @Override
+        public OperatorStr visitPhysicalLookUp(OptExpression optExpression, ExplainContext context) {
+            return visitUnhandled(optExpression, context);
+        }
+
+        private OperatorStr visitUnhandled(OptExpression optExpression, ExplainContext context) {
+            PhysicalOperator op = (PhysicalOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder("- ")
+                    .append(op.getOpType().name().replaceFirst("^PHYSICAL_", "").replace('_', '-'))
+                    .append(buildOutputColumns(op, ""))
+                    .append("\n");
+            // LookUp carries no statistics
+            if (optExpression.getStatistics() != null) {
+                buildCostEstimate(sb, optExpression, context.step);
+            }
+            buildCommonProperty(sb, op, context.step);
+            return new OperatorStr(sb.toString(), context.step, buildChildOperatorStr(optExpression, context.step));
+        }
     }
 
     private void buildCostEstimate(StringBuilder sb, OptExpression optExpression, int step) {
