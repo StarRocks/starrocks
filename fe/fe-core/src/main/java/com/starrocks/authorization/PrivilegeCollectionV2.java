@@ -252,7 +252,7 @@ public class PrivilegeCollectionV2 implements GsonPostProcessable {
             Iterator<PrivilegeEntry> entryIterator = list.iterator();
             while (entryIterator.hasNext()) {
                 PrivilegeEntry entry = entryIterator.next();
-                if (entry.object != null && !entry.object.isFuzzyMatching() && !entry.object.validate()) {
+                if (entry.object != null && !entry.object.validateForCleanup()) {
                     String entryStr = GsonUtils.GSON.toJson(entry);
                     LOG.info("find invalid object, will remove the entry now: {}", entryStr);
                     entryIterator.remove();

@@ -217,6 +217,17 @@ public class TablePEntryObject implements PEntryObject {
     }
 
     @Override
+    public boolean validateForCleanup() {
+        if (catalogId == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID
+                && !Objects.equals(databaseUUID, PrivilegeBuiltinConstants.ALL_DATABASES_UUID)
+                && Objects.equals(tableUUID, PrivilegeBuiltinConstants.ALL_TABLES_UUID)) {
+            return GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getDbIncludeRecycleBin(Long.parseLong(databaseUUID)) != null;
+        }
+        return PEntryObject.super.validateForCleanup();
+    }
+
+    @Override
     public int compareTo(PEntryObject obj) {
         if (!(obj instanceof TablePEntryObject)) {
             throw new ClassCastException("cannot cast " + obj.getClass().toString() + " to " + this.getClass());

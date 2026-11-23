@@ -60,6 +60,14 @@ public interface PEntryObject extends Comparable<PEntryObject> {
     boolean validate();
 
     /**
+     * Check whether cleanup must keep this object.
+     * Keep fuzzy objects unless an implementation validates their parent scope.
+     */
+    default boolean validateForCleanup() {
+        return isFuzzyMatching() || validate();
+    }
+
+    /**
      * used in Collections.sort() to accelerate lookup
      * make sure fuzzy matching is smaller than precise matching
      */
