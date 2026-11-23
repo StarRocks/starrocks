@@ -50,6 +50,8 @@ FILE get_presigned_file(VARCHAR storage_volume, FILE file_expr [, BIGINT expirat
 
 Returns a new FILE with only its `uri` replaced by the presigned URL. All other fields remain unchanged. If `uri` is NULL, an empty string, or an HTTP/HTTPS URL, returns the FILE unchanged.
 
+To pass a private image or video to `ai_complete` or `ai_embed`, use `get_presigned_file`. The model service reads the object using the full signed URL. Passing the `VARCHAR` from `get_presigned_url` directly to `ai_embed` embeds the URL text. See [Embed a video from object storage](../ai-functions/ai_functions.mdx#video-embedding).
+
 ## Examples
 
 The following examples use a storage volume named `media_volume`.

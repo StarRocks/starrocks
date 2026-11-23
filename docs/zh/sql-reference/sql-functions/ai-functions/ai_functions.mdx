@@ -11,17 +11,33 @@ import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
 
 <Experimental />
 
-AI 函数支持在 SQL 中调用模型服务，对文本进行生成、分类、提取、翻译、摘要和向量化处理。您可以对常量文本调用函数，也可以在查询中处理文本列。
+AI 函数可以在 SQL 中调用模型服务。`ai_complete` 根据提示词生成文本，也可以结合图片或视频回答问题。`ai_embed` 为文本、图片或视频生成向量。
+
+## 函数索引 {/* #function-index */}
+
+| 函数 | 用途 | 返回类型 |
+| --- | --- | --- |
+| [ai_complete](ai_complete.md) | 根据提示词生成文本，可附带图片或视频 | VARCHAR |
+| [ai_embed](ai_embed.md) | 为文本、图片或视频生成向量 | `ARRAY<FLOAT>` |
+| [ai_sentiment](ai_sentiment.md) | 判断文本情感倾向 | VARCHAR |
+| [ai_classify](ai_classify.md) | 按给定类别分类 | JSON |
+| [ai_extract](ai_extract.md) | 提取指定信息 | JSON |
+| [ai_fix_grammar](ai_fix_grammar.md) | 纠正语法和拼写 | VARCHAR |
+| [ai_redact](ai_redact.md) | 按类别遮蔽敏感信息 | VARCHAR |
+| [ai_translate](ai_translate.md) | 翻译文本 | VARCHAR |
+| [ai_similarity](ai_similarity.md) | 判断两段文本的语义相似度 | FLOAT |
+| [ai_summarize](ai_summarize.md) | 生成摘要 | VARCHAR |
+| [ai_filter](ai_filter.md) | 判断文本是否满足条件 | BOOLEAN |
 
 ## AI Provider 与 AI 函数
 
 AI Provider 是集群中统一管理的模型服务配置，保存端点、协议、默认模型和可选的访问凭证。AI 函数通过 Provider 获取这些配置，SQL 中不需要重复填写端点和凭证。
 
-- `ai_embed` 使用 `embedding` 类型的 Provider。
-- `ai_complete` 及其他文本辅助函数使用 `chat` 类型的 Provider。
-- 这些 AI 函数当前要求 Provider 使用 `openai` 协议，端点和模型也需要支持对应的聊天或向量能力。
+- [ai_embed](ai_embed.md) 使用 `embedding` 类型的 Provider。
+- [ai_complete](ai_complete.md) 及其他文本辅助函数使用 `chat` 类型的 Provider。
+- SQL AI 函数支持 `openai` 兼容协议和 `dashscope` 原生协议。处理图片或视频时，所选端点和模型都必须支持相应的输入。参见[媒体支持表](#file-input)。
 
-调用函数时，可以通过 `provider` 指定 Provider，也可以使用对应类型的集群默认 Provider。不同类型的默认值独立维护。省略 `model` 时使用所选 Provider 的默认模型，也可以显式指定该服务支持的其他模型。
+Provider 端点支持 HTTP 和 HTTPS。每个执行计划使用所选 Provider 的配置快照。修改配置或切换默认 Provider 后，新规划的查询才会使用新配置。
 
 Provider 的创建、配置属性和管理语法参见 [CREATE AI PROVIDER](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md)；默认值的设置参见 [SET DEFAULT AI PROVIDER](../../sql-statements/cluster-management/ai_provider/SET_DEFAULT_AI_PROVIDER.md)。
 
@@ -38,7 +54,7 @@ Provider 的创建、配置属性和管理语法参见 [CREATE AI PROVIDER](../.
 
 ## 开始使用
 
-以下示例使用阿里云百炼北京地域的 OpenAI 兼容接口。请先开通百炼模型服务，将 `YOUR_DASHSCOPE_API_KEY` 替换为北京地域的 API Key，并使用具备 Provider 管理权限及相应函数、Provider 使用权限的账号执行。
+以下示例使用阿里云百炼北京地域的服务。请开通相应模型，将 `YOUR_DASHSCOPE_API_KEY` 替换为该地域的 API Key，并使用具备 Provider 管理权限及相应函数、Provider 使用权限的账号执行。
 
 ### Chat Provider：生成文本
 
@@ -95,7 +111,137 @@ SET bailian_embedding AS DEFAULT AI PROVIDER;
 SELECT ai_embed('列式存储适合分析查询。');
 ```
 
-完整的函数语法、参数规则和示例参见 [AI 文本类函数](ai_text_functions.md)。模型调用会把输入文本发送到 Provider 的端点；请根据数据出站要求选择服务，并考虑查询行数、延迟和调用费用。
+### 用视觉模型描述图片 {/* #vision-chat */}
+
+下面的 `vision_chat` 使用百炼的 OpenAI 兼容 Chat 端点和视觉模型。把图片地址封装成 FILE，通过 `file` 参数随提示词一起传入。
+
+```sql
+CREATE AI PROVIDER vision_chat TYPE chat
+PROPERTIES (
+    "protocol" = "openai",
+    "endpoint" = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+    "model" = "qwen3-vl-plus",
+    "api_key" = "YOUR_DASHSCOPE_API_KEY"
+);
+
+SELECT ai_complete(
+    prompt => '描述这张图。',
+    file => to_file(named_struct(
+        'uri', 'https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20241022/emyrja/dog_and_girl.jpeg'
+    )),
+    provider => 'vision_chat'
+);
+```
+
+### 为对象存储中的视频生成向量 {/* #video-embedding */}
+
+创建使用 DashScope 原生多模态向量端点的 `vision_embedding`。示例使用 S3 类型的存储卷 `media_volume`，调用 [get_presigned_file](../file-functions/presigned_functions.md#get_presigned_file) 需要该卷的 USAGE 权限。请将对象 URI 换成该存储卷能够读取的 MP4 视频，并确保模型服务能访问签名后的 URL。
+
+```sql
+CREATE AI PROVIDER vision_embedding TYPE embedding
+PROPERTIES (
+    "protocol" = "dashscope",
+    "endpoint" = "https://dashscope.aliyuncs.com/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding",
+    "model" = "tongyi-embedding-vision-plus",
+    "api_key" = "YOUR_DASHSCOPE_API_KEY"
+);
+
+SELECT ai_embed(
+    input => get_presigned_file(
+        'media_volume',
+        to_file(named_struct('uri', 's3://my-bucket/videos/clip.mp4'))
+    ),
+    provider => 'vision_embedding'
+);
+```
+
+StarRocks 会将输入文本、内联媒体内容或完整的媒体 URL（含预签名参数）发送到 Provider 端点。请选择符合数据出站要求的服务。
+
+## 公共调用规则
+
+### 参数传递
+
+函数支持位置参数和 `参数名 => 值` 形式的命名参数。命名参数可以调整顺序，也可以直接指定可选参数，无需填写前面的默认值。
+
+```sql
+-- 使用 default chat ai provider 和 ai provider 上面绑定的默认模型。
+SELECT ai_complete('解释列式存储。');
+
+-- 位置参数：用 chat-model 模型覆盖 chat_provider 上面的默认模型。
+SELECT ai_complete('解释列式存储。', 'chat_provider', 'chat-model');
+
+-- 命名参数：覆盖 default chat ai provider 的默认模型。
+SELECT ai_complete(prompt => '解释列式存储。', model => 'chat-model');
+```
+
+示例中的 `chat_provider` 表示已创建的 chat AI Provider。
+
+### Provider 和模型
+
+所有函数都具有可选的 `provider`、`model` 参数，类型为 VARCHAR，必须是常量表达式。集群分别维护 chat 和 embedding 类型的默认 Provider。
+
+| 参数 | 省略、空字符串或 SQL NULL 时的行为 | 显式指定时的行为 |
+| --- | --- | --- |
+| `provider` | 使用对应类型的集群默认 Provider | 使用指定名称的 Provider；无需设置集群默认值 |
+| `model` | 使用所选 Provider 的默认模型 | 使用所选服务提供的指定模型 |
+
+### JSON options {/* #json-options */}
+
+只有 `ai_complete` 和 `ai_embed` 接受 `options`。它必须是 JSON 类型的常量表达式，取值为 JSON 对象或 SQL NULL。省略时默认为空对象。显式传入 `json_object()` 或 SQL NULL 也不会向模型服务发送额外参数。
+
+```sql
+SELECT ai_complete(
+    prompt => '用一句话解释列式存储。',
+    options => json_object('temperature', 0.2)
+);
+```
+
+options 用于传递模型服务支持的额外请求参数。
+
+## FILE 输入支持范围 {/* #file-input */}
+
+每次调用最多接受一个 [FILE](../../data-types/other-data-types/FILE.md)。下表列出 StarRocks 可以发送的输入，所选模型也必须支持实际的文件格式。
+
+| 函数 | 协议和端点 | 文本 | 图片 FILE | 视频 FILE |
+| --- | --- | --- | --- | --- |
+| `ai_complete` | `openai` 兼容 Chat | 支持 | 内联或 URL | 不支持 |
+| `ai_complete` | `dashscope` 原生文本生成 | 支持 | 不支持 | 不支持 |
+| `ai_complete` | `dashscope` 原生多模态生成 | 支持 | 内联或 URL | 内联或 URL |
+| `ai_embed` | `openai` 兼容 Embeddings | 支持 | 不支持 | 不支持 |
+| `ai_embed` | `dashscope` 原生文本向量 | 支持 | 不支持 | 不支持 |
+| `ai_embed` | `dashscope` 原生多模态向量 | 支持 | 内联或 URL | 仅 URL |
+
+传入视频时，请选择 `dashscope` 原生多模态端点。FILE 重载不支持音频或 PDF。
+
+- 使用 **内联字节** 时，可以用 `to_file(named_struct('inline', image_bytes))` 传入 `VARBINARY` 列 `image_bytes` 中的原始字节。字节串不能为空。StarRocks 会将其编码成 data URI。每个 FILE 默认最多可传 10 MiB，以 Base64 编码前的大小为准。参见 [`ai_function_max_input_file_bytes`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_input_file_bytes)。
+- 使用 **URL 引用** 时，HTTP(S) 地址必须能从模型服务访问。私有对象可通过 [get_presigned_file](../file-functions/presigned_functions.md#get_presigned_file) 生成预签名引用。StarRocks 发送完整 URL。`offset` 必须为 NULL 或 0，`size` 不会裁剪模型读取的远端对象。
+- **媒体类型**优先取自非空的 `content_type`。字段为 NULL 或空字符串时，StarRocks 根据内联文件头或 URL 路径最后一段的扩展名识别 JPEG、PNG、WebP、MP4。扩展名匹配支持 `.jpg`、`.jpeg`、`.png`、`.webp`、`.mp4`，忽略大小写、查询参数和片段。无法推断时，需显式指定模型支持的 `content_type`。
+- 若 FILE 在运行时为 **SQL NULL**，函数直接返回 NULL，不发送模型请求。非法媒体行按 [`ai_function_on_error`](#错误处理) 处理。
+
+## 错误处理
+
+`ai_function_on_error` 控制行级失败：默认 `ignore` 对失败行返回 NULL 并继续查询；`fail` 终止查询。分析或配置错误、查询取消和截止时间到期不被忽略。返回 NULL 因而不一定表示输入为 NULL，也可能表示模型调用或响应校验失败。
+
+## 运行时限制和重试
+
+- 每个 BE 单独限流，按端点、凭证和能力类型的组合限制每秒请求数。文本生成及辅助函数使用 [`ai_function_rate_limit_qps_chat`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_rate_limit_qps_chat)，向量函数使用 [`ai_function_rate_limit_qps_embedding`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_rate_limit_qps_embedding)。整个 BE 进程共用一个并发请求上限，由 [`ai_function_max_inflight`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_inflight) 设置。BE 按资源组和查询公平调度排队请求。首次发送和重试都受这两项限制。
+- 即使请求超时或报错，模型服务也可能已经收到请求。重试可能让服务再次执行同一请求并收取额外费用。请根据服务处理重复请求的方式和计费规则设置 [`ai_function_max_retries`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_retries) 和 [`ai_function_max_retries_on_throttle`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_retries_on_throttle)。
+- 请求体和响应体占用的内存都计入查询内存用量。请求尚未完成时，执行流水线会施加背压。[`ai_function_max_response_bytes`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_response_bytes) 限制单个 HTTP 响应体的大小。
+- 每个任务的超时时间在创建时确定，重试不会重新计时。异步执行期间，任务仍会响应查询取消和查询截止时间的更新。超时、工作线程和调度粒度的设置见 [BE AI 函数配置项](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_request_timeout_ms)。
+
+请求数、重试和超时的观测指标参见 [AI HTTP 指标](../../../administration/management/monitoring/metric_details/a-c.md#ai_http_requests_total)。
+
+## SQL 使用限制
+
+- AI 函数不能用于 `GROUP BY`、`SELECT DISTINCT`、聚合函数参数或窗口函数表达式。
+- 不能用于 `IF`、`IFNULL`、`NULLIF`、`COALESCE` 或 `CASE` 条件表达式中，也不能作为表函数参数。
+- 不能用于同步物化视图定义、LOAD 表达式或生成列表达式。
+- 不能用于 Lambda 表达式 body 或 SQL UDF body。
+- 包含 AI 函数的语句不能创建或绑定 SQL Plan Baseline；其他包含 AI 函数的查询也不会应用 SPM 改写。
+- 支持 `PREPARE`，但包含 AI 函数的语句会在每次 `EXECUTE` 时完整重新规划，不会复用执行计划。
+- 在相关子查询的查询块中，`SELECT` 列表、`WHERE`、`HAVING`、`ORDER BY` 和 `JOIN ON` 中的 AI 表达式
+  均会被拒绝，即使 AI 表达式自身只引用本层列。联接条件中的 AI 表达式仅支持 `INNER JOIN` 和 `CROSS JOIN`。
+- 每个非 NULL 输入行都可能触发一次远程请求。处理大量行时，请根据预计的请求数估算费用，并结合模型服务的配额和网络延迟判断查询能否在截止时间前完成。
 
 ## 减少 AI 输入行数 {/* #reducing-ai-input-rows */}
 
