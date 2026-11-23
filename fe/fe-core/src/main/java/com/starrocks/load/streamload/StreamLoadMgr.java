@@ -89,9 +89,6 @@ public class StreamLoadMgr implements MemoryTrackable {
     // added task evicts about one instead of scanning all of them.
     protected Deque<StreamLoadTask> syncStreamLoadTaskQueue;
 
-<<<<<<< HEAD
-    private Map<Long, Map<String, AbstractStreamLoadTask>> dbToLabelToStreamLoadTask;
-=======
     // Tasks that left idToStreamLoadTask (evicted, expired or replaced by a task of the same label) while
     // loads_history may still lack them. information_schema.loads keeps listing them until LoadsHistorySyncer has
     // copied them, so leaving the manager does not drop them from loads_history. Guarded by the manager lock.
@@ -102,8 +99,7 @@ public class StreamLoadMgr implements MemoryTrackable {
     private long droppedPendingLoadsHistoryTasks = 0;
     private long lastDroppedPendingLoadsHistoryWarnMs = 0;
 
-    protected Map<Long, Map<String, AbstractStreamLoadTask>> dbToLabelToStreamLoadTask;
->>>>>>> 1a2f8c8f5e3... [BugFix][RB-1893] Keep stream load tasks listed until loads_history has copied them (#70875)
+    private Map<Long, Map<String, AbstractStreamLoadTask>> dbToLabelToStreamLoadTask;
 
     protected final WarehouseLoadInfoBuilder warehouseLoadStatusInfoBuilder =
             new WarehouseLoadInfoBuilder();
