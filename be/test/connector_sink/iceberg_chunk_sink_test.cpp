@@ -192,6 +192,73 @@ TEST_F(IcebergChunkSinkTest, test_factory) {
     }
 }
 
+<<<<<<< HEAD:be/test/connector_sink/iceberg_chunk_sink_test.cpp
+=======
+TEST_F(IcebergChunkSinkTest, test_factory_with_encryption) {
+    SCOPED_UPDATE(bool, config::enable_connector_sink_spill, false);
+
+    // The FE's encryption signal reaches the Parquet writer as factory options; a sink built from an
+    // encrypted context must come up like any other.
+    auto sink_ctx = std::make_shared<connector::IcebergChunkSinkContext>();
+    sink_ctx->path = "/path/to/directory/";
+    sink_ctx->column_names = {"k1", "k2"};
+    sink_ctx->executor = nullptr;
+    sink_ctx->format = formats::PARQUET;
+    sink_ctx->compression_type = TCompressionType::NO_COMPRESSION;
+    sink_ctx->options = {};
+    sink_ctx->parquet_field_ids = {};
+    sink_ctx->max_file_size = 1 << 30;
+    sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types({TYPE_VARCHAR_DESC, TYPE_INT_DESC});
+    sink_ctx->runtime_state = _runtime_state.get();
+    sink_ctx->encryption_enabled = true;
+    sink_ctx->encryption_algorithm = "AES_GCM_V1";
+    sink_ctx->encryption_dek_length = 16;
+    IcebergChunkSinkProvider provider(sink_ctx);
+    formats::AsyncFlushStreamPoller poller;
+    SinkMemoryManager mgr(nullptr, nullptr);
+    ASSIGN_OR_ABORT(auto sink, provider.create_sink(0));
+    EXPECT_OK(sink->init(&poller, nullptr, &mgr));
+    // The options are copied for the writer, not written back into the shared context.
+    EXPECT_TRUE(sink_ctx->options.empty());
+}
+
+TEST_F(IcebergChunkSinkTest, test_factory_requires_runtime_state) {
+    auto sink_ctx = std::make_shared<connector::IcebergChunkSinkContext>();
+    IcebergChunkSinkProvider provider(sink_ctx);
+
+    auto result = provider.create_sink(0);
+    ASSERT_FALSE(result.ok());
+    EXPECT_THAT(std::string(result.status().message()), testing::HasSubstr("requires runtime_state"));
+}
+
+// Path values must match Iceberg's human strings: floor month split and zero-padded years.
+TEST_F(IcebergChunkSinkTest, test_time_transform_partition_value_before_epoch) {
+    struct Case {
+        std::string transform;
+        int64_t ordinal;
+        std::string expected;
+    };
+    const std::vector<Case> cases = {
+            {"year", -971, "0999"},        {"year", -1, "1969"},           {"year", 0, "1970"},
+            {"month", -11641, "0999-12"},  {"month", -12, "1969-01"},      {"month", -7, "1969-06"},
+            {"month", -2, "1969-11"},      {"month", -1, "1969-12"},       {"month", 0, "1970-01"},
+            {"month", 677, "2026-06"},     {"day", -719162, "0001-01-01"}, {"day", -354286, "0999-12-31"},
+            {"day", -1, "1969-12-31"},     {"day", 20619, "2026-06-15"},   {"hour", -8502841, "0999-12-31-23"},
+            {"hour", -1, "1969-12-31-23"}, {"hour", 1, "1970-01-01-01"},
+    };
+    for (const auto& c : cases) {
+        SCOPED_TRACE(c.transform + " " + std::to_string(c.ordinal));
+        auto column = ColumnHelper::create_column(TYPE_BIGINT_DESC, false);
+        column->append_datum(Datum(c.ordinal));
+        int8_t is_null = true;
+        ASSIGN_OR_ABORT(auto value,
+                        IcebergUtils::iceberg_column_value(TYPE_BIGINT_DESC, column, 0, c.transform, is_null));
+        EXPECT_EQ(c.expected, value);
+        EXPECT_FALSE(is_null);
+    }
+}
+
+>>>>>>> f8415aa ([BugFix] Fix Iceberg year/month/day partition values for dates before 1970 or with year < 1000 (#82529)):be/test/connector/iceberg/iceberg_chunk_sink_test.cpp
 TEST_F(IcebergChunkSinkTest, test_utils) {
     int128_t val = 123;
     std::string str128 = integer_to_string(val);
