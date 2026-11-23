@@ -598,9 +598,21 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return visitOperator(node, context);
     }
 
+    /**
+     * Whether the statistics already in the context can be reused as the scan's table statistics.
+     * The context may be pre-filled with the group's statistics, which describe the scan's output after its
+     * projection (e.g. a scan rebuilt by ReorderJoinRule and copied into a new memo group). Those are keyed by
+     * projection outputs, not by the scanned columns its predicate refers to, so they must not be reused.
+     */
+    private static boolean hasScanColumnStatistics(ExpressionContext context,
+                                                   Map<ColumnRefOperator, Column> scanColumns) {
+        Statistics statistics = context.getStatistics();
+        return statistics != null && statistics.getColumnStatistics().keySet().containsAll(scanColumns.keySet());
+    }
+
     private Void computeIcebergScanNode(Operator node, ExpressionContext context, Table table,
                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-        if (context.getStatistics() == null) {
+        if (!hasScanColumnStatistics(context, colRefToColumnMetaMap)) {
             String catalogName = table.getCatalogName();
             TvrVersionRange version;
             IcebergMORParams icebergMORParams;
@@ -644,7 +656,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Void computeDeltaLakeScanNode(Operator node, ExpressionContext context, Table table,
                                           Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
-        if (context.getStatistics() == null) {
+        if (!hasScanColumnStatistics(context, columnRefOperatorColumnMap)) {
             String catalogName = table.getCatalogName();
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
                     optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
@@ -776,7 +788,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     private Void computePaimonScanNode(Operator node, ExpressionContext context, Table table,
                                        Map<ColumnRefOperator, Column> columnRefOperatorColumnMap,
                                        TvrVersionRange tvrVersionRange) {
-        if (context.getStatistics() == null) {
+        if (!hasScanColumnStatistics(context, columnRefOperatorColumnMap)) {
             String catalogName = table.getCatalogName();
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
                     optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
@@ -804,7 +816,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Void computeOdpsScanNode(Operator node, ExpressionContext context, Table table,
                                      Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
-        if (context.getStatistics() == null) {
+        if (!hasScanColumnStatistics(context, columnRefOperatorColumnMap)) {
             String catalogName = table.getCatalogName();
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
                     optimizerContext, catalogName, table, columnRefOperatorColumnMap, null, node.getPredicate());
@@ -853,7 +865,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Void computeLanceScanNode(Operator node, ExpressionContext context, Table table,
                                       Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
-        if (context.getStatistics() == null) {
+        if (!hasScanColumnStatistics(context, columnRefOperatorColumnMap)) {
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
                     optimizerContext, table.getCatalogName(), table, columnRefOperatorColumnMap, null,
                     node.getPredicate(), -1, TvrTableSnapshot.empty());
@@ -875,7 +887,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Void computeFlussScanNode(Operator node, ExpressionContext context, Table table,
                                       Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
-        if (context.getStatistics() == null) {
+        if (!hasScanColumnStatistics(context, columnRefOperatorColumnMap)) {
             String catalogName = table.getCatalogName();
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
                     optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,

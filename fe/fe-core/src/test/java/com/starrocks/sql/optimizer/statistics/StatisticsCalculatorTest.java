@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.IcebergTable;
@@ -30,6 +31,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -56,6 +58,7 @@ import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -73,6 +76,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -111,6 +115,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -785,6 +790,60 @@ public class StatisticsCalculatorTest {
         ExpressionContext expressionContext = new ExpressionContext(groupExpression);
         new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
         Assertions.assertEquals(100, expressionContext.getStatistics().getOutputRowCount(), 0.001);
+    }
+
+    @Test
+    public void testLogicalDeltaLakeScanIgnoresGroupStatisticsWithoutScanColumns() {
+        // ReorderJoinRule can rebuild a scan and copy it into a new memo group together with the scan's
+        // post-projection statistics. Those are keyed by projection outputs, so a predicate on a scanned
+        // column must not be estimated against them: the scan has to load its table statistics instead.
+        Column column = new Column("c1", IntegerType.INT);
+        DeltaLakeTable deltaLakeTable = new DeltaLakeTable(1, "delta0", "db1", "table1",
+                Lists.newArrayList(column), Lists.newArrayList(), null, null,
+                new MetastoreTable("db1", "table1", "s3://bucket/path/to/table", 0));
+
+        ColumnRefOperator scanRef = new ColumnRefOperator(1, IntegerType.INT, "c1", true);
+        ColumnRefOperator projectedRef = new ColumnRefOperator(2, IntegerType.BIGINT, "cast", true);
+        Map<ColumnRefOperator, Column> refToColumn = Maps.newHashMap();
+        Map<Column, ColumnRefOperator> columnToRef = Maps.newHashMap();
+        refToColumn.put(scanRef, column);
+        columnToRef.put(column, scanRef);
+
+        ScalarOperator predicate = new IsNullPredicateOperator(true, scanRef);
+        LogicalDeltaLakeScanOperator deltaLakeScanOperator = new LogicalDeltaLakeScanOperator(deltaLakeTable,
+                refToColumn, columnToRef, -1, predicate);
+
+        Group group = new Group(0);
+        group.setStatistics(Statistics.builder()
+                .setOutputRowCount(10)
+                .addColumnStatistic(projectedRef, ColumnStatistic.unknown())
+                .build());
+        GroupExpression groupExpression = new GroupExpression(deltaLakeScanOperator, Lists.newArrayList());
+        groupExpression.setGroup(group);
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+        AtomicBoolean tableStatisticsLoaded = new AtomicBoolean(false);
+
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Statistics getTableStatistics(OptimizerContext session, String catalogName, Table table,
+                                                 Map<ColumnRefOperator, Column> columns,
+                                                 List<PartitionKey> partitionKeys, ScalarOperator predicate,
+                                                 long limit, TvrVersionRange version) {
+                tableStatisticsLoaded.set(true);
+                return Statistics.builder()
+                        .setOutputRowCount(100)
+                        .addColumnStatistic(scanRef, new ColumnStatistic(0, 100, 0.5, 4, 100))
+                        .build();
+            }
+        };
+
+        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
+                columnRefFactory, optimizerContext);
+        Assertions.assertDoesNotThrow(statisticsCalculator::estimatorStats);
+
+        Assertions.assertTrue(tableStatisticsLoaded.get());
+        Assertions.assertTrue(expressionContext.getStatistics().getColumnStatistics().containsKey(scanRef));
+        Assertions.assertEquals(50, expressionContext.getStatistics().getOutputRowCount(), 0.001);
     }
 
     @Test
