@@ -91,3 +91,20 @@ CLEANUP {
   drop catalog if exists paimon_ctas_${paimon_ddl_warehouse_id};
   drop database if exists default_catalog.ctas_internal_${paimon_ddl_warehouse_id} force;
 } END CLEANUP
+
+-- name: test_paimon_ctas_nullable_union
+function: create_paimon_ddl_catalog("paimon_ctas_${uuid0}", "${uuid0}")
+set paimon_reader_mode = 'native';
+create database paimon_ctas_${uuid0}.writer_db;
+set catalog paimon_ctas_${uuid0};
+use writer_db;
+create table union_rows
+properties ('bucket'='-1', 'file.format'='parquet')
+as select 1 as id union all select cast(null as int);
+[ORDER]select id from union_rows order by id nulls last;
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db.union_rows;
+  drop database if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_ctas_${paimon_ddl_warehouse_id};
+} END CLEANUP

@@ -64,7 +64,7 @@ CREATE TABLE AS SELECT (CTAS) 文を使用して、同期または非同期で�
 
 ## 使用上の注意
 
-- Paimon テーブルを作成する場合は、Paimon catalog の完全修飾テーブル名を使用します。サポートされるオプションと失敗時の動作については、[Paimon CTAS](../../../data_source/catalog/paimon_catalog.md#create-table-as-select) を参照してください。
+- Paimon CTAS の対象テーブル名で catalog またはデータベースを省略すると、セッションの現在の catalog またはデータベースが使用されます。サポートされるオプションと失敗時の動作については、[Paimon CTAS](../../../data_source/catalog/paimon_catalog.md#create-table-as-select) を参照してください。
 
 - OLAP テーブルには以下のデフォルトが適用されます。
   - テーブルはデフォルトで重複キーテーブルです。`key_desc` で主キーテーブルとして指定することもできます。

@@ -63,7 +63,7 @@ CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原�
 
 ## 注意事项
 
-- 要创建 Paimon 目标表，请使用 Paimon catalog 中的全限定表名。支持的选项和失败时的行为请参见 [Paimon CTAS](../../../data_source/catalog/paimon_catalog.md#create-table-as-select)。
+- Paimon CTAS 的目标表名省略 catalog 或数据库时，使用会话中的当前 catalog 或数据库。支持的选项和失败时的行为请参见 [Paimon CTAS](../../../data_source/catalog/paimon_catalog.md#create-table-as-select)。
 
 - OLAP 目标表采用以下默认设置。
   - 表类型默认为明细表，您也可以在 `key_desc` 中指定为主键表。

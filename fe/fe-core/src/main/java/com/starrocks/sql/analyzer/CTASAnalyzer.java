@@ -92,10 +92,11 @@ public class CTASAnalyzer {
         // inferred from the original query instead of appending columns derived from the rewritten query.
         if (createTableStmt.getColumnDefs().isEmpty()) {
             for (int i = 0; i < allFields.size(); i++) {
-                Type type = AnalyzerUtils.transformTableColumnType(allFields.get(i).getType(),
+                Field field = allFields.get(i);
+                Type type = AnalyzerUtils.transformTableColumnType(field.getType(),
                         createTableStmt.isOlapEngine(), /* preferStringForVarchar */ false);
-                // A nullable SELECT expression implies nullability without declaring NULL on the target column.
-                Boolean allowNull = allFields.get(i).getOriginExpression().isNullable() ? null : Boolean.FALSE;
+                // Leave inferred nullability implicit so CREATE TABLE can apply primary key constraints.
+                Boolean allowNull = field.isNullable() ? null : Boolean.FALSE;
                 ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
                         null, null, allowNull, ColumnDef.DefaultValueDef.NOT_SET, "");
                 createTableStmt.addColumnDef(columnDef);
