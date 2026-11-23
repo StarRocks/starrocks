@@ -31,10 +31,16 @@ import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import org.apache.iceberg.BaseMetastoreTableOperations;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
+<<<<<<< HEAD
+=======
+import org.apache.iceberg.DeleteFileIndexCache;
+import org.apache.iceberg.HasTableOperations;
+>>>>>>> 1d838c1 ([BugFix] Reload a cached Iceberg table that lost its metadata to a dropped-table refresh (#83787))
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionSpec;
@@ -280,6 +286,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         if (ConnectContext.get() == null || ConnectContext.get().getCommand() == MysqlCommand.COM_QUERY) {
             tableLatestAccessTime.put(icebergTableName, System.currentTimeMillis());
         }
+        evictIfMetadataLost(icebergTableName);
         try {
             if (shouldOnlyReadCache(connectContext)) {
                 Table cachedTable = tables.getIfPresent(icebergTableName);
@@ -298,6 +305,74 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         }
     }
 
+<<<<<<< HEAD
+=======
+    // A refresh that finds the table dropped clears the shared operations' metadata, and once refreshed again while
+    // the table is still missing, current() stays null for good. Drop such an entry so the table is loaded again.
+    private void evictIfMetadataLost(IcebergTableName key) {
+        Table cachedTable = tables.getIfPresent(key);
+        if (cachedTable instanceof HasTableOperations hasOps
+                && hasOps.operations() instanceof BaseMetastoreTableOperations ops
+                && ops.currentMetadataLocation() == null
+                && tables.asMap().remove(key, cachedTable)) {
+            LOG.warn("Evicted cached iceberg table {}.{}.{}: it lost its metadata to a refresh that did not find it",
+                    catalogName, key.dbName, key.tableName);
+        }
+    }
+
+    // do not cache if jwt or oauth2 is used AND it is a REST Catalog.
+    private boolean tableCacheAllowed(ConnectContext connectContext) {
+        return icebergProperties.isEnableIcebergTableCache() &&
+                (Strings.isNullOrEmpty(connectContext.getAuthToken()) || !(delegate instanceof IcebergRESTCatalog));
+    }
+
+    private Table recordLoadTime(Table table) {
+        if (table != null) {
+            tableLoadTimes.put(table, System.currentTimeMillis());
+        }
+        return table;
+    }
+
+    @Override
+    public OptionalLong tableLoadedAtMs(ConnectContext connectContext, String dbName, String tableName, Table table,
+                                        long nowMs) {
+        if (connectContext != null && !tableCacheAllowed(connectContext)) {
+            return OptionalLong.of(nowMs);
+        }
+        Long loadedAt = tableLoadTimes.getIfPresent(table);
+        return loadedAt == null ? OptionalLong.empty() : OptionalLong.of(loadedAt);
+    }
+
+    @Override
+    public Set<String> statsColumnsKeptByManifestCache(Table table, Schema schema, Set<String> columnNames) {
+        if (columnNames.isEmpty() || !icebergProperties.isIcebergManifestCacheWithColumnStatistics()) {
+            return Set.of();
+        }
+        Map<Integer, String> namesById = new HashMap<>();
+        for (String name : columnNames) {
+            Types.NestedField field = schema.findField(name);
+            if (field != null) {
+                namesById.put(field.fieldId(), name);
+            }
+        }
+        if (namesById.isEmpty()) {
+            return Set.of();
+        }
+        int limit = Math.max(icebergProperties.getIcebergManifestCacheStatisticsMaxColumns(), 0);
+        Set<String> kept = new HashSet<>();
+        for (Integer id : StarRocksIcebergTableScan.statsColumnIdsKeptByCache(table, schema, limit, namesById.keySet())) {
+            kept.add(namesById.get(id));
+        }
+        return kept;
+    }
+
+    @Override
+    public Table getTableUncached(ConnectContext connectContext, String dbName, String tableName)
+            throws StarRocksConnectorException {
+        return delegate.getTableUncached(connectContext, dbName, tableName);
+    }
+
+>>>>>>> 1d838c1 ([BugFix] Reload a cached Iceberg table that lost its metadata to a dropped-table refresh (#83787))
     @Override
     public boolean tableExists(ConnectContext connectContext, String dbName, String tableName)
             throws StarRocksConnectorException {
