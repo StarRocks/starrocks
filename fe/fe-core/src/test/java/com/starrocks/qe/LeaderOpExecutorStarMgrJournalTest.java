@@ -92,7 +92,7 @@ public class LeaderOpExecutorStarMgrJournalTest {
                 MockedStatic<StarMgrServer> starMgrMock =
                         Mockito.mockStatic(StarMgrServer.class)) {
             thriftMock.when(() -> ThriftRPCRequestExecutor.call(
-                    Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.any()))
+                    Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.anyInt(), Mockito.any()))
                     .thenReturn(tMasterOpResult);
             gsmMock.when(GlobalStateMgr::getCurrentState).thenReturn(mockGsm);
             runModeMock.when(RunMode::isSharedDataMode).thenReturn(true);
@@ -136,7 +136,7 @@ public class LeaderOpExecutorStarMgrJournalTest {
                         Mockito.mockStatic(StarMgrServer.class)) {
 
             thriftMock.when(() -> ThriftRPCRequestExecutor.call(
-                    Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.any()))
+                    Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.anyInt(), Mockito.any()))
                     .thenReturn(tMasterOpResult);
             gsmMock.when(GlobalStateMgr::getCurrentState).thenReturn(mockGsm);
             runModeMock.when(RunMode::isSharedDataMode).thenReturn(true);
@@ -176,7 +176,7 @@ public class LeaderOpExecutorStarMgrJournalTest {
                         Mockito.mockStatic(StarMgrServer.class)) {
 
             thriftMock.when(() -> ThriftRPCRequestExecutor.call(
-                    Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.any()))
+                    Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.anyInt(), Mockito.any()))
                     .thenReturn(tMasterOpResult);
             gsmMock.when(GlobalStateMgr::getCurrentState).thenReturn(mockGsm);
             runModeMock.when(RunMode::isSharedDataMode).thenReturn(false);
@@ -209,7 +209,7 @@ public class LeaderOpExecutorStarMgrJournalTest {
                         Mockito.mockStatic(StarMgrServer.class)) {
 
             thriftMock.when(() -> ThriftRPCRequestExecutor.call(
-                    Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.any()))
+                    Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.anyInt(), Mockito.any()))
                     .thenReturn(tMasterOpResult);
             gsmMock.when(GlobalStateMgr::getCurrentState).thenReturn(mockGsm);
             runModeMock.when(RunMode::isSharedDataMode).thenReturn(true);
@@ -249,7 +249,7 @@ public class LeaderOpExecutorStarMgrJournalTest {
                         Mockito.mockStatic(StarMgrServer.class)) {
 
             thriftMock.when(() -> ThriftRPCRequestExecutor.call(
-                    Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.any()))
+                    Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.anyInt(), Mockito.any()))
                     .thenReturn(tMasterOpResult);
             gsmMock.when(GlobalStateMgr::getCurrentState).thenReturn(mockGsm);
             runModeMock.when(RunMode::isSharedDataMode).thenReturn(true);
