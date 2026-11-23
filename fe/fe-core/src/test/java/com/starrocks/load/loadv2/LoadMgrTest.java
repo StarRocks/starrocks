@@ -54,6 +54,7 @@ import java.io.File;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class LoadMgrTest {
     private LoadMgr loadManager;
@@ -248,6 +249,55 @@ public class LoadMgrTest {
         // recover config
         Config.label_keep_max_second = origLabelKeepMaxSecond;
         Config.label_keep_max_num = origLabelKeepMaxNum;
+    }
+
+    @Test
+    public void testRemoveOldLoadJobKeepsJobsLoadsHistoryHasNotSynced(@Mocked GlobalStateMgr globalStateMgr,
+                                                                      @Mocked WarehouseManager warehouseMgr)
+            throws Exception {
+        int origLabelKeepMaxSecond = Config.label_keep_max_second;
+        int origLabelKeepMaxNum = Config.label_keep_max_num;
+        Config.label_keep_max_second = 3600;
+        Config.label_keep_max_num = 2;
+        try {
+            long currentTimeMs = System.currentTimeMillis();
+            // six finished jobs, the oldest finished 6 s ago and the newest 1 s ago
+            loadManager = newLoadMgrWithFinishedJobs(currentTimeMs, 6);
+            Map<Long, LoadJob> idToLoadJob = Deencapsulation.getField(loadManager, "idToLoadJob");
+
+            // loads_history has the three that finished more than 3.5 s ago: they go, the other three stay
+            loadManager.setLoadsHistorySyncedBeforeMs(currentTimeMs - 3500);
+            loadManager.removeOldLoadJob();
+            Assertions.assertEquals(Set.of(4L, 5L, 6L), idToLoadJob.keySet());
+
+            // once synced, the next cleanup trims them to label_keep_max_num
+            loadManager.setLoadsHistorySyncedBeforeMs(currentTimeMs - 1500);
+            loadManager.removeOldLoadJob();
+            Assertions.assertEquals(Set.of(5L, 6L), idToLoadJob.keySet());
+
+            // with nothing synced, at most twice label_keep_max_num jobs stay
+            loadManager = newLoadMgrWithFinishedJobs(currentTimeMs, 6);
+            idToLoadJob = Deencapsulation.getField(loadManager, "idToLoadJob");
+            loadManager.setLoadsHistorySyncedBeforeMs(0L);
+            loadManager.removeOldLoadJob();
+            Assertions.assertEquals(Set.of(3L, 4L, 5L, 6L), idToLoadJob.keySet());
+        } finally {
+            Config.label_keep_max_second = origLabelKeepMaxSecond;
+            Config.label_keep_max_num = origLabelKeepMaxNum;
+        }
+    }
+
+    // finished broker load jobs 1..n, job i finishing (n + 1 - i) seconds before currentTimeMs
+    private static LoadMgr newLoadMgrWithFinishedJobs(long currentTimeMs, int n) throws Exception {
+        LoadMgr loadMgr = new LoadMgr(new LoadJobScheduler());
+        for (int i = 1; i <= n; i++) {
+            LoadJob job = new BrokerLoadJob(1L, "lh_job" + i, null, null, null);
+            job.id = i;
+            job.state = JobState.FINISHED;
+            job.finishTimestamp = currentTimeMs - (n + 1 - i) * 1000L;
+            Deencapsulation.invoke(loadMgr, "addLoadJob", job);
+        }
+        return loadMgr;
     }
 
     @Test
