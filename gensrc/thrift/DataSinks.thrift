@@ -50,6 +50,7 @@ include "PlanNodes.thrift"
 // Rules for this enum:
 //   - append new members with the next free value; never renumber or reuse one;
 //   - values >= 300 are reserved for extension fields and must not be used here.
+// REMOTE_SCAN_RESULT_SINK reserves the value used by the enterprise build.
 enum TDataSinkType {
     DATA_STREAM_SINK = 0,
     RESULT_SINK = 1,
@@ -70,7 +71,8 @@ enum TDataSinkType {
     NOOP_SINK = 16,
     ICEBERG_DELETE_SINK = 17,
     ICEBERG_ROW_DELTA_SINK = 18,
-    PAIMON_TABLE_SINK = 19
+    REMOTE_SCAN_RESULT_SINK = 19,
+    PAIMON_TABLE_SINK = 20
 }
 
 enum TResultSinkType {
