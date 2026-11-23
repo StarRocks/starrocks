@@ -252,8 +252,9 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
                         if (arguments.isEmpty()) {
                             // count()/count(*)
                             return true;
-                        } else if (arguments.size() == 1 && !arguments.get(0).isConstantNull()) {
-                            // count(non-null constant)
+                        } else if (arguments.size() == 1 && arguments.get(0) instanceof ConstantOperator constant
+                                && !constant.isNull()) {
+                            // count(non-null literal); a column-free expression can still be NULL at runtime
                             return true;
                         }
                         return false;

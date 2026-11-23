@@ -1,0 +1,14 @@
+-- name: test_count_null_constant_expr
+-- COUNT of a column-free expression that is NULL at runtime counts no row; it must not be answered with the
+-- row count from tablet metadata.
+CREATE TABLE t_cnt_${uuid0} (id INT, v INT) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO t_cnt_${uuid0} VALUES (1, 10), (2, NULL), (3, 30);
+SET enable_rewrite_simple_agg_to_meta_scan = true;
+SELECT COUNT((NOT 5) OR NULL) FROM t_cnt_${uuid0};
+SELECT COUNT(CAST(5 AS BOOLEAN) = false OR NULL) FROM t_cnt_${uuid0};
+SELECT COUNT((NOT 5) OR NULL) FROM t_cnt_${uuid0} WHERE id > 0;
+SELECT COUNT(NULL) FROM t_cnt_${uuid0};
+SELECT COUNT(1), COUNT(*) FROM t_cnt_${uuid0};
+SELECT COUNT((NOT 5) OR true) FROM t_cnt_${uuid0};
+DROP TABLE t_cnt_${uuid0};

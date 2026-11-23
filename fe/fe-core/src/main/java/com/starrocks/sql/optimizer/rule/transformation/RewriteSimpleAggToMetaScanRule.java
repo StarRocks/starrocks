@@ -300,7 +300,10 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                                 // count()/count(*)
                                 return true;
                             } else {
-                                return arguments.size() == 1 && !arguments.get(0).isConstantNull();
+                                // Only a non-null literal counts every row. A column-free expression that is
+                                // not folded yet, such as `(NOT 5) OR NULL`, can still be NULL at runtime.
+                                return arguments.size() == 1 && arguments.get(0) instanceof ConstantOperator constant
+                                        && !constant.isNull();
                             }
                         }
                         return false;

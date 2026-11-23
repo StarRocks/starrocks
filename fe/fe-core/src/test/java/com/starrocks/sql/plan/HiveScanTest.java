@@ -130,6 +130,8 @@ public class HiveScanTest extends ConnectorPlanTestBase {
                     "select count(*), count(l_orderkey), l_shipdate from lineitem_par where l_shipdate = '1998-01-01' group by " +
                             "l_shipdate",
                     "select count(*) as x, l_shipdate from lineitem_par group by l_shipdate having x > 10",
+                    // column-free argument that is NULL at runtime: counting files' rows would be wrong
+                    "select count((not 5) or null) from lineitem_par",
             };
             for (int i = 0; i < sqlString.length; i++) {
                 String sql = sqlString[i];

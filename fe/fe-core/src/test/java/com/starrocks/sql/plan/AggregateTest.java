@@ -1962,6 +1962,16 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
+        // count of a non-null literal still counts every row
+        sql = "select count(1) from test_all_type_not_null";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "0:MetaScan");
+        // count of a column-free expression that is NULL at runtime must not be answered with the row count
+        for (String arg : new String[] {"(not 5) or null", "cast(5 as boolean) = false or null"}) {
+            sql = "select count(" + arg + ") from test_all_type_not_null";
+            plan = getFragmentPlan(sql);
+            assertNotContains(plan, "MetaScan");
+        }
         // with count distinct, shouldn't apply RewriteSimpleAggToMetaScanRule
         sql = "select count(distinct t1b) from test_all_type_not_null";
         plan = getFragmentPlan(sql);
