@@ -68,7 +68,8 @@ void NJJoinBuildInputChannel::close() {
 }
 
 Status SpillableNLJoinChunkStream::prefetch(RuntimeState* state) {
-    return _reader->trigger_restore(state, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_reader)));
+    return _reader->trigger_restore(state,
+                                    TRACKER_WITH_SPILLER_RES_GUARD(state, _dummy_spiller, std::weak_ptr(_reader)));
 }
 
 bool SpillableNLJoinChunkStream::has_output() {
@@ -76,13 +77,14 @@ bool SpillableNLJoinChunkStream::has_output() {
 }
 
 StatusOr<ChunkPtr> SpillableNLJoinChunkStream::get_next(RuntimeState* state) {
-    return _reader->restore(state, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_reader)));
+    return _reader->restore(state, TRACKER_WITH_SPILLER_RES_GUARD(state, _dummy_spiller, std::weak_ptr(_reader)));
 }
 
-Status SpillableNLJoinChunkStream::reset(RuntimeState* state, spill::Spiller* dummy_spiller) {
+Status SpillableNLJoinChunkStream::reset(RuntimeState* state, const std::shared_ptr<spill::Spiller>& dummy_spiller) {
     std::vector<spill::InputStreamPtr> spilled_input_streams;
 
-    auto stream = spill::SpillInputStream::as_stream(_build_chunks, dummy_spiller);
+    _dummy_spiller = dummy_spiller;
+    auto stream = spill::SpillInputStream::as_stream(_build_chunks, dummy_spiller.get());
     spilled_input_streams.emplace_back(std::move(stream));
 
     //
@@ -93,7 +95,7 @@ Status SpillableNLJoinChunkStream::reset(RuntimeState* state, spill::Spiller* du
     }
 
     stream = spill::SpillInputStream::union_all(spilled_input_streams);
-    _reader = std::make_shared<spill::SpillerReader>(dummy_spiller);
+    _reader = std::make_shared<spill::SpillerReader>(dummy_spiller.get());
     _reader->set_stream(std::move(stream));
 
     return Status::OK();
