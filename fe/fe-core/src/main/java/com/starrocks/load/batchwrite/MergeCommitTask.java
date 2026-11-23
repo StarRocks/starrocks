@@ -467,6 +467,13 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
         context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         context.setQualifiedUser(UserIdentity.ROOT.getUser());
         context.setCurrentComputeResource(streamLoadInfo.getComputeResource());
+        // The compute nodes record rejected rows only when the plan's query options carry log_rejected_record_num,
+        // and the coordinator builds those options from this session (SessionVariable#toThrift), not from the request.
+        // A request that sets it, 0 included, wins; one that does not keeps the session's value, which a new session
+        // takes from the global one.
+        if (streamLoadInfo.isLogRejectedRecordNumSet()) {
+            context.getSessionVariable().setLogRejectedRecordNum(streamLoadInfo.getLogRejectedRecordNum());
+        }
 
         if (table.enableLoadProfile()) {
             long sampleIntervalMs = Config.load_profile_collect_interval_second * 1000;

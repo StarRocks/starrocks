@@ -97,6 +97,8 @@ public class StreamLoadInfo {
     // INCLUDE METADATA clause (routine load); null otherwise.
     private ImportMetadataStmt metadata;
     private long logRejectedRecordNum = 0;
+    // Whether the load set log_rejected_record_num, so that an explicit 0 can be told from an absent header.
+    private boolean logRejectedRecordNumSet = false;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
     private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
@@ -289,6 +291,11 @@ public class StreamLoadInfo {
 
     public void setLogRejectedRecordNum(long logRejectedRecordNum) {
         this.logRejectedRecordNum = logRejectedRecordNum;
+        this.logRejectedRecordNumSet = true;
+    }
+
+    public boolean isLogRejectedRecordNumSet() {
+        return logRejectedRecordNumSet;
     }
 
     public void setComputeResource(ComputeResource computeResource) {
@@ -428,7 +435,7 @@ public class StreamLoadInfo {
         params.getLoadDop().ifPresent(value -> loadParallelRequestNum = value);
         params.getEnableReplicatedStorage().ifPresent(value -> enableReplicatedStorage = value);
         params.getMergeCondition().ifPresent(value -> mergeConditionStr = value);
-        params.getLogRejectedRecordNum().ifPresent(value -> logRejectedRecordNum = value);
+        params.getLogRejectedRecordNum().ifPresent(this::setLogRejectedRecordNum);
         params.getPartialUpdate().ifPresent(value -> partialUpdate = value);
         params.getPartialUpdateMode().ifPresent(value -> partialUpdateMode = value);
 

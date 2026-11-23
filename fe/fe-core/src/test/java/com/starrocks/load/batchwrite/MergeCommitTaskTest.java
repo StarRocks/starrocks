@@ -24,12 +24,15 @@ import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.streamload.StreamLoadHttpHeader;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadKvParams;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TLoadInfo;
+import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStreamLoadInfo;
 import com.starrocks.thrift.TUniqueId;
@@ -51,6 +54,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -303,6 +307,81 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
         assertEquals(label, loadExecuteCallback.getFinishedLoads().get(0));
         assertEquals(TransactionStatus.ABORTED, getTxnStatus(label));
         assertTrue(task.getTxnId() > 0);
+    }
+
+    @Test
+    public void testLogRejectedRecordNumReachesQueryOptions() throws Exception {
+        // The compute nodes record rejected rows only when the load's query options carry log_rejected_record_num:
+        // -1 records every rejected row, a positive value caps how many.
+        assertEquals(-1L, runAndGetQueryOptions("-1").getLog_rejected_record_num());
+        assertEquals(10L, runAndGetQueryOptions("10").getLog_rejected_record_num());
+    }
+
+    @Test
+    public void testNoLogRejectedRecordNumLeavesQueryOptionsUnset() throws Exception {
+        // A load that does not ask for rejected records, such as the rejected record sync daemon's own loads into
+        // _statistics_.rejected_records, keeps the query options it had.
+        assertFalse(runAndGetQueryOptions(null).isSetLog_rejected_record_num());
+    }
+
+    @Test
+    public void testGlobalLogRejectedRecordNumOnlyWithoutHeader() throws Exception {
+        // The task's session starts from the global variables: a request without the header keeps the global value,
+        // and one with it, 0 included, uses its own.
+        SessionVariable globalDefault = GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable();
+        long saved = globalDefault.getLogRejectedRecordNum();
+        globalDefault.setLogRejectedRecordNum(-1);
+        try {
+            assertEquals(-1L, runAndGetQueryOptions(null).getLog_rejected_record_num());
+            assertEquals(10L, runAndGetQueryOptions("10").getLog_rejected_record_num());
+            assertFalse(runAndGetQueryOptions("0").isSetLog_rejected_record_num());
+        } finally {
+            globalDefault.setLogRejectedRecordNum(saved);
+        }
+    }
+
+    /**
+     * Runs a merge commit task whose request sets {@code log_rejected_record_num} to the given value (null: not set)
+     * and returns the query options the compute nodes would execute its plan with.
+     */
+    private TQueryOptions runAndGetQueryOptions(String logRejectedRecordNum) throws Exception {
+        Map<String, String> map = new HashMap<>(kvParams.toMap());
+        if (logRejectedRecordNum != null) {
+            map.put(StreamLoadHttpHeader.HTTP_LOG_REJECTED_RECORD_NUM, logRejectedRecordNum);
+        }
+        StreamLoadKvParams params = new StreamLoadKvParams(map);
+        StreamLoadInfo info = StreamLoadInfo.fromHttpStreamLoadRequest(null, -1, Optional.empty(), params,
+                CRAcquireContext.of(WarehouseManager.DEFAULT_WAREHOUSE_NAME));
+        TUniqueId taskLoadId = UUIDUtil.genTUniqueId();
+        String taskLabel = "merge_commit_" + DebugUtil.printId(taskLoadId);
+        MergeCommitTask task = new MergeCommitTask(
+                GlobalStateMgr.getCurrentState().getNextId(),
+                DATABASE_1.getId(),
+                new TableId(DB_NAME_1, TABLE_NAME_1_1),
+                taskLabel,
+                taskLoadId,
+                info,
+                1000,
+                params,
+                "root",
+                warehouseName,
+                new HashSet<>(Arrays.asList(10002L, 10003L)),
+                coordinatorFactory,
+                loadExecuteCallback);
+
+        stubCoordinatorSuccess();
+        // Build the job spec from the planned load the way DefaultCoordinator.Factory does.
+        AtomicReference<TQueryOptions> queryOptions = new AtomicReference<>();
+        when(coordinatorFactory.createStreamLoadScheduler(any(LoadPlanner.class))).thenAnswer(invocation -> {
+            LoadPlanner loadPlanner = invocation.getArgument(0);
+            queryOptions.set(JobSpec.Factory.fromStreamLoadJobSpec(loadPlanner).getQueryOptions());
+            return coordinator;
+        });
+
+        task.run();
+        assertEquals(TransactionStatus.VISIBLE, getTxnStatus(taskLabel));
+        assertNotNull(queryOptions.get());
+        return queryOptions.get();
     }
 
     @Test
