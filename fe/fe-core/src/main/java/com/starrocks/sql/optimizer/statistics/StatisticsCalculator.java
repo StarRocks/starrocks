@@ -179,6 +179,7 @@ import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.columns.PredicateColumnsMgr;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.type.DateType;
+import com.starrocks.type.Type;
 import io.delta.kernel.internal.actions.Metadata;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
@@ -1573,8 +1574,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                         ErrorType.INTERNAL_ERROR);
         }
         Statistics joinStats = joinStatsBuilder.build();
+        ColumnRefSet preservedColumns = new ColumnRefSet();
         if (joinType.isOuterJoin()) {
-            ColumnRefSet preservedColumns = new ColumnRefSet();
             if (!joinType.isRightOuterJoin()) {
                 preservedColumns.union(leftStatistics.getUsedColumns());
             }
@@ -1600,6 +1601,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     Math.max(Math.min(estimateStatistics.getOutputRowCount(), leftRowCount), 1));
         } else if (joinType.isAsofLeftOuterJoin()) {
             estimateStatistics = estimateStatistics.withOutputRowCount(Math.max(1, leftRowCount));
+        }
+        // Restore stats for outer joins after the residual ON predicates are evaluated
+        if (joinType.isOuterJoin()) {
+            estimateStatistics = restorePreservedColumnsStats(estimateStatistics, rawCrossJoinStats,
+                    preservedColumns);
         }
 
         context.setStatistics(estimateStatistics);
@@ -2031,6 +2037,60 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             }
         }
         return builder == null ? joinStats : builder.build();
+    }
+
+    // Restore the original NDV and range of the preserved columns for preserved sides of the outer join
+    // For the histogram we keep the joined version and match the old NDV count to it buckets so it stays accurate
+    private static Statistics restorePreservedColumnsStats(Statistics joinStats, Statistics rawCrossJoinStats,
+                                                           ColumnRefSet preservedColumns) {
+        double outputRowCount = Math.max(1, joinStats.getOutputRowCount());
+        Map<ColumnRefOperator, ColumnStatistic> restored = new HashMap<>();
+        joinStats.getColumnStatistics().forEach((column, current) -> {
+            if (!preservedColumns.contains(column) || current.isUnknown()) {
+                return;
+            }
+            ColumnStatistic raw = rawCrossJoinStats.getColumnStatistics().get(column);
+            if (raw == null || raw.isUnknown()) {
+                return;
+            }
+
+            double ndv = Math.min(raw.getDistinctValuesCount(), outputRowCount);
+            // The joined histogram covers only the matched rows, so set its bucket NDVs according to the matched NDV
+            // If we have a larger NDV count as the joined stats we cannot restore the histogram
+            Histogram joined = current.getHistogram();
+            Histogram histogram = raw.getHistogram();
+            if (joined != null && joined != raw.getHistogram()) {
+                histogram = ndv > current.getDistinctValuesCount()
+                        ? null
+                        : setHistogramNDV(joined, current.getDistinctValuesCount(), column.getType());
+            }
+            restored.put(column, ColumnStatistic.buildFrom(current)
+                    .setMinValue(raw.getMinValue())
+                    .setMaxValue(raw.getMaxValue())
+                    .setDistinctValuesCount(ndv)
+                    .setHistogram(histogram)
+                    .build());
+        });
+        if (restored.isEmpty()) {
+            return joinStats;
+        }
+        return Statistics.buildFrom(joinStats).addColumnStatistics(restored).build();
+    }
+
+    // Copy the histogram and set each buckets NDV count to the correct distinctCount
+    static Histogram setHistogramNDV(Histogram histogram, double distinctCount, Type type) {
+        // Fixed point types estimate the bucket NDV from the bucket bounds
+        if (histogram == null || histogram.getBuckets().isEmpty() || type.isFixedPointType()) {
+            return histogram;
+        }
+        List<Bucket> buckets = histogram.getBuckets();
+        long bucketNdv = Math.max(1, Math.round(distinctCount / buckets.size()));
+        List<Bucket> newHistogram = new ArrayList<>(buckets.size());
+        for (Bucket bucket : buckets) {
+            newHistogram.add(new Bucket(bucket.getLower(), bucket.getUpper(), bucket.getCount(), bucket.getUpperRepeats(),
+                    bucketNdv + 1));
+        }
+        return new Histogram(newHistogram, histogram.getMCV());
     }
 
     // For an equi-join key whose statistics are unknown on one side only, assume its values are contained in the
