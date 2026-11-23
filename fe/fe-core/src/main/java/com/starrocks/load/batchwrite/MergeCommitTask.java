@@ -36,6 +36,7 @@ import com.starrocks.common.TimeoutWatcher;
 import com.starrocks.common.Version;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.ProfileKeyDictionary;
@@ -479,6 +480,13 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
             // do not enable runtime profile report currently
             context.getSessionVariable().setRuntimeProfileReportInterval(-1);
         }
+        // The coordinator takes the transmission compression of the plan from this session (SessionVariable#toThrift),
+        // not from the request. A request that does not set it, or names a compression the load cannot send its data
+        // with, keeps the session's value, which a new session takes from the global one.
+        loadKvParams.getTransmissionCompressionType()
+                .filter(CompressionUtils::isSupportedLoadTransmissionCompression)
+                .ifPresent(compressionType ->
+                        context.getSessionVariable().setLoadTransmissionCompressionType(compressionType));
         return context;
     }
 

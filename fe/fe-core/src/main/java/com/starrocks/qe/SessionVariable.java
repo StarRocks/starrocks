@@ -5862,6 +5862,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return loadTransmissionCompressionType;
     }
 
+    public void setLoadTransmissionCompressionType(String loadTransmissionCompressionType) {
+        this.loadTransmissionCompressionType = loadTransmissionCompressionType;
+    }
+
     public boolean isInterpolatePassthrough() {
         return interpolatePassthrough;
     }
