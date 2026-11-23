@@ -34,10 +34,20 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
+import org.apache.logging.log4j.core.config.Configurator;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+<<<<<<< HEAD
+=======
+import java.util.ArrayList;
+import java.util.Collection;
+>>>>>>> 29bb4231394... [BugFix][RB-96] Finish the split of an empty ORDER BY != PK partition without waiting for UNSHARE (#70710)
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -248,6 +258,44 @@ public class CompactionMgrTest {
         } finally {
             Config.lake_compaction_selector = oldSelector;
         }
+    }
+
+    // A split waiting for UNSHARE re-triggers its pending request on every reshard tick. Only the request itself is
+    // worth an INFO line; the repeats go to DEBUG.
+    @Test
+    public void testUnshareTriggerLogsOncePerRequest() {
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+
+        List<String> logs = new ArrayList<>();
+        AbstractAppender appender = new AbstractAppender("unshare-trigger-log-capture", null, null) {
+            @Override
+            public void append(LogEvent event) {
+                String message = event.getMessage().getFormattedMessage();
+                if (message.startsWith("Trigger UNSHARE compaction")) {
+                    logs.add(event.getLevel().name());
+                }
+            }
+        };
+        org.apache.logging.log4j.core.Logger logger =
+                (org.apache.logging.log4j.core.Logger) LogManager.getLogger(CompactionMgr.class);
+        Level oldLevel = logger.getLevel();
+        appender.start();
+        logger.addAppender(appender);
+        Configurator.setLevel(CompactionMgr.class.getName(), Level.DEBUG);
+        try {
+            compactionManager.triggerUnshareCompaction(partition);
+            compactionManager.triggerUnshareCompaction(partition);
+            // Once the request has run (or been dropped) its priority is reset, so the next trigger is a new request.
+            compactionManager.resetPriority(partition);
+            compactionManager.triggerUnshareCompaction(partition);
+        } finally {
+            Configurator.setLevel(CompactionMgr.class.getName(), oldLevel);
+            logger.removeAppender(appender);
+            appender.stop();
+        }
+
+        Assertions.assertEquals(List.of("INFO", "DEBUG", "INFO"), logs);
     }
 
     @Test

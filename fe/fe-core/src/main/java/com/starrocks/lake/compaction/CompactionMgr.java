@@ -30,6 +30,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
+import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -351,6 +352,7 @@ public class CompactionMgr implements MemoryTrackable {
     }
 
     public PartitionStatistics triggerUnshareCompaction(PartitionIdentifier partition) {
+        boolean[] newRequest = new boolean[1];
         PartitionStatistics statistics = partitionStatisticsHashMap.compute(partition, (k, v) -> {
             if (v == null) {
                 v = new PartitionStatistics(partition);
@@ -365,11 +367,14 @@ public class CompactionMgr implements MemoryTrackable {
                 // re-triggers a pending UNSHARE on every reshard tick, so keep the retry deadline of a request
                 // that is already pending, or one the scheduler deferred would be retried every cycle.
                 v.clearCompactionRetryTimes();
+                newRequest[0] = true;
             }
             v.setPriority(PartitionStatistics.CompactionPriority.UNSHARE);
             return v;
         });
-        LOG.info("Trigger UNSHARE compaction, {}", statistics);
+        // The priority stays UNSHARE until the compaction starts or the request is dropped, so the reshard tick's
+        // repeats of a pending request are logged at DEBUG only.
+        LOG.log(newRequest[0] ? Level.INFO : Level.DEBUG, "Trigger UNSHARE compaction, {}", statistics);
         return statistics;
     }
 
