@@ -974,6 +974,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 所有 Delta Lake Catalog 共用的一份 Delta Log JSON 文件缓存可以使用的 FE JVM 堆比例。默认值 `0` 表示每个 Catalog 独占一份缓存，大小由 Catalog 属性 `deltalake_json_meta_cache_memory_usage_ratio` 限制。大于 `0` 时，该 Catalog 属性不生效。取值范围为 `0` 到 `1`。修改后需要重启 FE 才能生效。
 - 引入版本: -
 
+### `enable_delta_lake_s3_start_after_listing`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: Delta Lake Catalog 列举 S3（`s3://`、`s3a://`、`s3n://`）上表的 `_delta_log` 目录时，是否通过 S3 的 `start-after` 参数从所需版本开始列举，而不是列举其中的全部文件。对于日志较长的表，可以加快 Snapshot 的加载。当存储拒绝该请求时（例如不支持 `start-after` 的 S3 兼容服务），FE 会对该请求回退到完整列举。设置为 `false` 时始终使用 Delta 默认的完整列举。取值范围：`true` 和 `false`。修改后立即对所有 Catalog 生效，无需重启 FE。
+- 引入版本: -
+
 ### `iceberg_data_file_cache_global_memory_ratio`
 
 - 默认值: 0
