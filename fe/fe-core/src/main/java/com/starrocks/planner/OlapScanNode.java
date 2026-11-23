@@ -1271,14 +1271,8 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 sample.toThrift(sampleOptions);
             }
 
-<<<<<<< HEAD
             msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
-=======
-            if (!groupedRangeScan) {
-                msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
-                partitionKeyAscHint.ifPresent(aBoolean -> msg.lake_scan_node.setPartition_order_hint(aBoolean));
-            }
->>>>>>> a9a9fd7 ([BugFix] Forward partition_order_hint to the lake scan node (#82959))
+            partitionKeyAscHint.ifPresent(aBoolean -> msg.lake_scan_node.setPartition_order_hint(aBoolean));
             msg.lake_scan_node.setSchema_key(getSchemaKey());
         } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
