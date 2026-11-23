@@ -18,6 +18,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
@@ -25,6 +26,8 @@ import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.connector.paimon.PaimonTableSchemaConverter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.QueryState;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -39,6 +42,7 @@ import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import mockit.Expectations;
+import mockit.Verifications;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.CatalogContext;
 import org.apache.paimon.catalog.CatalogFactory;
@@ -285,6 +289,52 @@ public class PaimonCreateTableAnalyzerTest {
                 executeDdl("drop table paimon_ddl.ddl_cache.t");
             }
             executeDdl("drop database paimon_ddl.ddl_cache");
+        }
+    }
+
+    @Test
+    public void testUnifiedPaimonCtasFailsBeforeCreateTable() throws Exception {
+        String catalog = "paimon_unified";
+        CatalogMgr catalogs = GlobalStateMgr.getCurrentState().getCatalogMgr();
+        MetadataMgr metadata = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        new Expectations(catalogs, metadata) {
+            {
+                catalogs.catalogExists(catalog);
+                result = true;
+                minTimes = 0;
+                catalogs.getCatalogType(catalog);
+                result = ConnectorType.UNIFIED.getName();
+                minTimes = 0;
+                metadata.getDb(context, catalog, "db");
+                result = new Database(100003, "db");
+                minTimes = 0;
+                metadata.tableExists(context, catalog, "db", "t");
+                result = false;
+                minTimes = 0;
+                metadata.createTable(context, (CreateTableStmt) any);
+                result = false;
+                minTimes = 0;
+            }
+        };
+
+        context.setQueryId(UUIDUtil.genUUID());
+        try {
+            new StmtExecutor(context, SqlParser.parseSingleStatement(
+                    "CREATE TABLE paimon_unified.db.t ENGINE=paimon AS SELECT 1 AS id", 0)).execute();
+
+            new Verifications() {
+                {
+                    metadata.createTable(context, (CreateTableStmt) any);
+                    times = 0;
+                }
+            };
+            Assertions.assertEquals(QueryState.MysqlStateType.ERR, context.getState().getStateType());
+            Assertions.assertEquals(QueryState.ErrType.ANALYSIS_ERR, context.getState().getErrType());
+            String error = context.getState().getErrorMessage();
+            Assertions.assertTrue(error.contains(
+                    "Paimon CTAS is not supported in Unified Catalog. Use a Paimon catalog instead."), error);
+        } finally {
+            context.getState().reset();
         }
     }
 

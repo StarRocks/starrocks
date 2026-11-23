@@ -17,7 +17,9 @@ package com.starrocks.sql.analyzer;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -87,6 +89,11 @@ public class CTASAnalyzer {
         createTableStmt.setTableRef(normalizedTableRef);
         TableName tableNameObject = TableName.fromTableRef(normalizedTableRef);
         CreateTableAnalyzer.analyzeEngineName(createTableStmt, tableNameObject.getCatalog());
+        if (Table.TableType.PAIMON.name().equalsIgnoreCase(createTableStmt.getEngineName())
+                && ConnectorType.UNIFIED.getName().equalsIgnoreCase(
+                        GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogType(tableNameObject.getCatalog()))) {
+            throw new SemanticException("Paimon CTAS is not supported in Unified Catalog. Use a Paimon catalog instead");
+        }
 
         // Recursive CTE execution rewrites and analyzes the same CTAS AST again. Preserve the columns
         // inferred from the original query instead of appending columns derived from the rewritten query.
