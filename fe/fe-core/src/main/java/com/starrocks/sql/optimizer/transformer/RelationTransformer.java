@@ -118,7 +118,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFlussScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
@@ -126,6 +125,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalKuduScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOdpsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -756,7 +756,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         } else if (Table.TableType.METADATA.equals(node.getTable().getType())) {
             MetadataTable metadataTable = (MetadataTable) node.getTable();
             if (metadataTable.supportBuildPlan()) {
-                scanOperator = new LogicalIcebergMetadataScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
+                scanOperator = new LogicalMetadataScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                         columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null, tableVersionRange);
             } else {
                 throw new StarRocksPlannerException("Not support metadata table type: " + metadataTable.getMetadataTableType(),

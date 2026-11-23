@@ -17,6 +17,7 @@
 
 #include "connector/hive/paimon/paimon_chunk_sink.h"
 #include "connector/hive/paimon/paimon_cpp_shim_api.h"
+#include "connector/hive/paimon/paimon_global_index_scanner.h"
 #include "connector/hive/paimon/paimon_scanner.h"
 
 extern "C" starrocks::HdfsScanner* starrocks_paimon_create_scanner() {
@@ -26,4 +27,8 @@ extern "C" starrocks::HdfsScanner* starrocks_paimon_create_scanner() {
 extern "C" starrocks::connector::ConnectorSink* starrocks_paimon_create_sink_v1(
         std::shared_ptr<starrocks::connector::PaimonChunkSinkContext> context, int32_t driver_id) {
     return new starrocks::connector::PaimonChunkSink(std::move(context), driver_id);
+}
+
+extern "C" starrocks::HdfsScanner* starrocks_paimon_create_global_index_scanner() {
+    return new starrocks::PaimonGlobalIndexScanner();
 }

@@ -48,7 +48,7 @@ public class TableMetaMetadata implements ConnectorMetadata {
         MetadataTableName metadataTableName = MetadataTableName.from(tblName);
         MetadataTableType tableType = metadataTableName.getTableType();
         String tableName = metadataTableName.getTableName();
-        AbstractMetadataTableFactory tableFactory = MetadataTableFactoryProvider.getFactory(catalogType);
+        AbstractMetadataTableFactory tableFactory = MetadataTableFactoryProvider.getFactory(catalogType, tableType);
         return tableFactory.createTable(context, catalogName, dbName, tableName, tableType);
     }
 

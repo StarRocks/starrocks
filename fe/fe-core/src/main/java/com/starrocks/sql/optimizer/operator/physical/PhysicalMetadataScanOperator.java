@@ -18,21 +18,21 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergMetadataScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalMetadataScanOperator;
 
-public class PhysicalIcebergMetadataScanOperator extends PhysicalScanOperator {
-    public PhysicalIcebergMetadataScanOperator(LogicalIcebergMetadataScanOperator scanOperator) {
-        super(OperatorType.PHYSICAL_ICEBERG_METADATA_SCAN, scanOperator);
+public class PhysicalMetadataScanOperator extends PhysicalScanOperator {
+    public PhysicalMetadataScanOperator(LogicalMetadataScanOperator scanOperator) {
+        super(OperatorType.PHYSICAL_METADATA_SCAN, scanOperator);
     }
 
 
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitPhysicalIcebergMetadataScan(this, context);
+        return visitor.visitPhysicalMetadataScan(this, context);
     }
 
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
-        return visitor.visitPhysicalIcebergMetadataScan(optExpression, context);
+        return visitor.visitPhysicalMetadataScan(optExpression, context);
     }
 }
