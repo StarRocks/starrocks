@@ -512,10 +512,9 @@ protected:
     // that kBytesPerSubtask can be a constant; nothing on the read path consults it.
     static constexpr int64_t kSampledRowsetDataSize = 1000000;
     // One rowset's worth, so ceil(total_bytes / kBytesPerSubtask) == the rowset count. With
-    // max_parallel equal to that count, target_subtasks is the count AND the greedy loop's target
-    // is total/count rather than this cap -- calculate_range_split_boundaries uses
-    // min(total / actual_split_count, target_value_per_split), so a smaller value here would make
-    // it place every boundary inside the first few candidate ranges.
+    // max_parallel equal to that count, target_subtasks is the count. A smaller value would only
+    // let max_parallel cap the width; it must not skew the boundaries, which
+    // range_split_subtasks_stay_balanced_when_max_parallel_caps_the_width pins.
     static constexpr int64_t kBytesPerSubtask = kSampledRowsetDataSize;
     // Subtasks _create_range_split_groups produced for
     // build_rowsets_with_varchar_sort_key(4, 25'000) at max_parallel 4 BEFORE sampling was wired
@@ -3978,6 +3977,66 @@ TEST_F(TabletParallelCompactionManagerTest, test_submit_subtasks_token_partial_a
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
+// A plan that needs more limiter tokens than are free is made again for the tokens obtained, instead of being
+// given up for a serial compaction. Three groups are planned and two tokens are free, so the tablet runs as
+// two subtasks.
+TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_plans_again_for_the_free_tokens) {
+    int64_t tablet_id = 10263;
+    int64_t txn_id = 20263;
+    int64_t version = 11;
+
+    // The tablet of test_create_parallel_tasks_multiple_groups: 10 rowsets of 10MB at 25MB per subtask make
+    // three groups of two rowsets at max_parallel = 3.
+    create_tablet_with_rowsets(tablet_id, 10, 10 * 1024 * 1024);
+
+    TabletParallelConfig config;
+    config.set_max_parallel_per_tablet(3);
+    config.set_max_bytes_per_subtask(25 * 1024 * 1024);
+
+    CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    BlockedThreadPool pool;
+
+    // A limiter with two free tokens.
+    int acquire_count = 0;
+    int granted = 0;
+    auto acquire_token = [&acquire_count, &granted]() {
+        acquire_count++;
+        if (granted >= 2) {
+            return false;
+        }
+        granted++;
+        return true;
+    };
+    int release_count = 0;
+    auto release_token = [&release_count](bool) { release_count++; };
+
+    auto st = _manager->create_parallel_tasks(tablet_id, txn_id, version, config, callback, false, pool.get(),
+                                              acquire_token, release_token);
+    ASSERT_TRUE(st.ok()) << st.status();
+    ASSERT_EQ(2, st.value());
+    // The third acquire is the refused one; the second plan needs no token beyond the two it holds.
+    EXPECT_EQ(3, acquire_count);
+    EXPECT_EQ(0, release_count) << "Both tokens are in use";
+
+    auto state = _manager->get_tablet_state(tablet_id, txn_id);
+    ASSERT_NE(nullptr, state);
+    ASSERT_EQ(2, state->running_subtasks.size());
+    ASSERT_EQ(2, state->running_subtasks[0].input_rowset_ids.size());
+    ASSERT_EQ(2, state->running_subtasks[1].input_rowset_ids.size());
+
+    // Each subtask gives its token back when it finishes.
+    pool.release();
+    EXPECT_EQ(2, release_count);
+
+    _manager->cleanup_tablet(tablet_id, txn_id);
+}
+
 // Test fallback not_enough_segments: total_segments < 4 (same condition in split_rowsets_into_groups
 // and _create_subtask_groups). We test via split_rowsets_into_groups so we don't depend on
 // compaction policy returning few rowsets.
@@ -4829,6 +4888,47 @@ TEST_F(TabletParallelCompactionManagerTest, test_can_use_range_split) {
 
         EXPECT_TRUE(TabletParallelCompactionManager::_can_use_range_split(rowsets));
     }
+
+    // Case 4: a rowset in partial segments compaction → false, although every segment has bounds. Each
+    // range-split subtask would list the segments outside this round's window in its own output, and the merge
+    // would reference them once per subtask.
+    {
+        int64_t tablet_id = 10265;
+        auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        metadata->set_id(tablet_id);
+        metadata->set_version(2);
+
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(0);
+        // The Rowset ctor keeps compaction_segment_limit only for an overlapped rowset.
+        rowset->set_overlapped(true);
+        rowset->set_num_rows(400);
+        rowset->set_data_size(4 * 1024 * 1024);
+        for (int i = 0; i < 4; i++) {
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("seg_partial_{}.dat", i));
+            segment_meta->mutable_deprecated_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
+            segment_meta->mutable_deprecated_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 99));
+            segment_meta->set_num_rows(100);
+        }
+
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 2));
+        auto meta = tablet.metadata();
+
+        // The same rowset as a whole can be range split ...
+        std::vector<RowsetPtr> whole;
+        whole.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, 0, 0));
+        ASSERT_FALSE(whole[0]->partial_segments_compaction());
+        EXPECT_TRUE(TabletParallelCompactionManager::_can_use_range_split(whole));
+
+        // ... but not when only its first two segments are compacted in this round.
+        std::vector<RowsetPtr> partial;
+        partial.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, 0, /*compaction_segment_limit=*/2));
+        ASSERT_TRUE(partial[0]->partial_segments_compaction());
+        EXPECT_FALSE(TabletParallelCompactionManager::_can_use_range_split(partial));
+    }
 }
 
 TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds) {
@@ -4869,6 +4969,43 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds) {
         ASSERT_EQ(3, result.value().size());
         EXPECT_EQ(200, result.value()[0].num_rows);
         EXPECT_EQ(2000, result.value()[0].data_size);
+    }
+
+    // Case 1b: a rowset large enough for data_size * num_rows to exceed int64. 200GB over two segments of
+    // 100 million rows each is 100GB per segment; the product, 2.1e19, does not fit in 63 bits.
+    {
+        int64_t tablet_id = 10266;
+        constexpr int64_t kRowsPerSegment = 100'000'000;
+        constexpr int64_t kRowsetDataSize = 200LL * 1024 * 1024 * 1024;
+        auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        metadata->set_id(tablet_id);
+        metadata->set_version(2);
+
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(0);
+        rowset->set_overlapped(true);
+        rowset->set_num_rows(2 * kRowsPerSegment);
+        rowset->set_data_size(kRowsetDataSize);
+        for (int i = 0; i < 2; i++) {
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("seg_wide_{}.dat", i));
+            segment_meta->mutable_deprecated_sort_key_min()->CopyFrom(make_int_tuple(i * 10));
+            segment_meta->mutable_deprecated_sort_key_max()->CopyFrom(make_int_tuple(i * 10 + 5));
+            segment_meta->set_num_rows(kRowsPerSegment);
+        }
+
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 2));
+        auto meta = tablet.metadata();
+
+        std::vector<RowsetPtr> rowsets;
+        rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, 0, 0));
+
+        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets, /*split_width=*/2);
+        ASSERT_TRUE(result.ok());
+        ASSERT_EQ(2, result.value().size());
+        EXPECT_EQ(kRowsetDataSize / 2, result.value()[0].data_size);
+        EXPECT_EQ(kRowsetDataSize / 2, result.value()[1].data_size);
     }
 
     // Case 2: zero num_rows - fallback to data_size / num_segments
@@ -5366,6 +5503,36 @@ TEST_F(TabletParallelCompactionManagerTest, range_split_subtasks_are_balanced_wi
     EXPECT_EQ(kTotalRows, total) << "the emitted subtask ranges must tile every written row";
 }
 
+// Once max_parallel caps target_subtasks, max_bytes_per_subtask is unreachable: the subtask ranges
+// must tile every input row, so the data cannot fit under it. It must therefore not become the
+// splitter's per-range target. If it did, the first three subtasks here would close at about a
+// quarter of a rowset's rows each (one sampled sub-range each at the 1-byte limit) and the last
+// one would take the remaining ~80% to ~97% of the tablet.
+TEST_F(TabletParallelCompactionManagerTest, range_split_subtasks_stay_balanced_when_max_parallel_caps_the_width) {
+    constexpr int64_t kRowsEach = 25000;
+    constexpr int64_t kTotalRows = 4 * kRowsEach;
+    auto rowsets = build_rowsets_with_varchar_sort_key(/*num_rowsets=*/4, kRowsEach);
+
+    // ceil(total_bytes / max_bytes_per_subtask) is 16 and 4,000,000 respectively, both above
+    // max_parallel, so target_subtasks is max_parallel in both cases.
+    for (const int64_t max_bytes_per_subtask : {kBytesPerSubtask / 4, int64_t{1}}) {
+        SCOPED_TRACE(fmt::format("max_bytes_per_subtask={}", max_bytes_per_subtask));
+        auto groups = _manager->_create_range_split_groups(_sampling_tablet_id, rowsets, /*max_parallel=*/4,
+                                                           max_bytes_per_subtask);
+        ASSERT_EQ(kExpectedSubtaskCount, groups.size());
+
+        const double ideal = static_cast<double>(kTotalRows) / kExpectedSubtaskCount;
+        int64_t total = 0;
+        for (size_t i = 0; i < groups.size(); ++i) {
+            SCOPED_TRACE(fmt::format("subtask={}", i));
+            const int64_t rows = written_rows_in_group(groups[i]);
+            total += rows;
+            EXPECT_NEAR(static_cast<double>(rows), ideal, ideal * kSubtaskEvennessTolerance);
+        }
+        EXPECT_EQ(kTotalRows, total) << "the emitted subtask ranges must tile every written row";
+    }
+}
+
 // The width requested from the sampler must be floored at 2. Both terms of target_subtasks --
 // max_parallel and ceil(total_bytes / max_bytes_per_subtask) -- can be 1 while target_subtasks is
 // still 2, and allocate_sort_key_sample_budget returns an all-zero budget below a width of 2, so
@@ -5379,8 +5546,7 @@ TEST_F(TabletParallelCompactionManagerTest, range_split_subtasks_are_balanced_wi
 TEST_F(TabletParallelCompactionManagerTest, requested_width_is_floored_at_two) {
     constexpr int64_t kRowsEach = 25000;
     constexpr int64_t kTotalRows = 4 * kRowsEach;
-    // Two rowsets' worth, so ceil(total_bytes / this) == 2 == the floored subtask count, which
-    // keeps the greedy loop's target at total/2 rather than at this cap.
+    // Two rowsets' worth, so ceil(total_bytes / this) == 2 == the floored subtask count.
     constexpr int64_t kBytesPerHalf = 2 * kBytesPerSubtask;
     auto rowsets = build_rowsets_with_varchar_sort_key(/*num_rowsets=*/4, kRowsEach);
 
@@ -7969,6 +8135,212 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_spl
         VariantTuple lower, upper;
         _manager->execute_subtask_range_split(99999, 99999, 0, std::move(empty_rowsets), lower, upper, true, true, true,
                                               true, 1, false, [](bool) {});
+    }
+}
+
+// A range-split plan that needs more limiter tokens than are free is cut again for the tokens obtained: the
+// tablet of test_create_parallel_tasks_range_split is planned as three key ranges, two tokens are free, and it
+// is compacted as two ranges that cover the whole input between them.
+TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_split_plans_again_for_the_free_tokens) {
+    int64_t tablet_id = 10264;
+    constexpr int kNumRowsets = 5;
+    constexpr int32_t kRowsPerRowset = 250;
+    constexpr int64_t kLogicalRowsetSize = 50 * 1024 * 1024;
+
+    auto old_enable = config::enable_lake_compaction_range_split;
+    config::enable_lake_compaction_range_split = true;
+    DeferOp restore_range_split([&]() { config::enable_lake_compaction_range_split = old_enable; });
+
+    auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+    metadata->set_id(tablet_id);
+    metadata->set_version(kNumRowsets + 1);
+    metadata->set_next_rowset_id(kNumRowsets);
+
+    for (int i = 0; i < kNumRowsets; i++) {
+        const int32_t start_key = static_cast<int32_t>(i * kRowsPerRowset);
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(i);
+        rowset->set_overlapped(true);
+        rowset->set_num_rows(kRowsPerRowset);
+        rowset->set_data_size(kLogicalRowsetSize);
+
+        std::string segment_name = fmt::format("rs_narrow_seg_{}.dat", i);
+        const uint64_t segment_size =
+                write_int_key_segment(tablet_id, metadata->schema(), segment_name, kRowsPerRowset, start_key);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(segment_name);
+        segment_meta->set_size(segment_size);
+        segment_meta->mutable_deprecated_sort_key_min()->CopyFrom(make_int_tuple(start_key));
+        segment_meta->mutable_deprecated_sort_key_max()->CopyFrom(make_int_tuple(start_key + kRowsPerRowset - 1));
+        segment_meta->set_num_rows(kRowsPerRowset);
+    }
+
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    int64_t txn_id = 20264;
+    int64_t version = kNumRowsets + 1;
+
+    // 250MB at 80MB per subtask and max_parallel = 3 is planned as three ranges.
+    TabletParallelConfig pconfig;
+    pconfig.set_max_parallel_per_tablet(3);
+    pconfig.set_max_bytes_per_subtask(80 * 1024 * 1024);
+
+    CompactRequest request;
+    request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    BlockedThreadPool pool;
+
+    // A limiter with two free tokens.
+    int acquire_count = 0;
+    int granted = 0;
+    auto acquire_token = [&acquire_count, &granted]() {
+        acquire_count++;
+        if (granted >= 2) {
+            return false;
+        }
+        granted++;
+        return true;
+    };
+    int release_count = 0;
+    auto release_token = [&release_count](bool) { release_count++; };
+
+    auto st = _manager->create_parallel_tasks(tablet_id, txn_id, version, pconfig, callback, false, pool.get(),
+                                              acquire_token, release_token);
+    ASSERT_OK(st.status());
+    ASSERT_EQ(2, st.value());
+    // The third acquire is the refused one, so the first plan had three subtasks.
+    EXPECT_EQ(3, acquire_count);
+
+    auto state = _manager->get_tablet_state(tablet_id, txn_id);
+    ASSERT_NE(nullptr, state);
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        EXPECT_TRUE(state->is_range_split);
+        EXPECT_EQ(2, state->expected_range_split_count);
+        ASSERT_EQ(2, state->running_subtasks.size());
+    }
+
+    // Both ranges are compacted and the tablet completes: the two of them leave no key range out.
+    pool.release();
+    ASSERT_TRUE(closure.wait_finish());
+    EXPECT_EQ(1, _manager->task_success_total());
+    EXPECT_EQ(0, _manager->task_failure_total());
+    EXPECT_EQ(2, _manager->subtask_success_total());
+    EXPECT_EQ(0, _manager->subtask_failure_total());
+    EXPECT_EQ(2, release_count);
+
+    _manager->cleanup_tablet(tablet_id, txn_id);
+}
+
+// A range-split plan samples the sort keys of the input segments, so it is not made for a tablet that cannot
+// get the two limiter tokens every parallel plan needs: with one token free the request is refused before any
+// rowset is opened.
+TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_split_needs_two_tokens_before_sampling) {
+    int64_t tablet_id = 10267;
+    constexpr int kNumRowsets = 5;
+    constexpr int32_t kRowsPerRowset = 250;
+    constexpr int64_t kLogicalRowsetSize = 50 * 1024 * 1024;
+
+    auto old_enable = config::enable_lake_compaction_range_split;
+    config::enable_lake_compaction_range_split = true;
+    DeferOp restore_range_split([&]() { config::enable_lake_compaction_range_split = old_enable; });
+
+    // The tablet of test_create_parallel_tasks_range_split.
+    auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+    metadata->set_id(tablet_id);
+    metadata->set_version(kNumRowsets + 1);
+    metadata->set_next_rowset_id(kNumRowsets);
+
+    for (int i = 0; i < kNumRowsets; i++) {
+        const int32_t start_key = static_cast<int32_t>(i * kRowsPerRowset);
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(i);
+        rowset->set_overlapped(true);
+        rowset->set_num_rows(kRowsPerRowset);
+        rowset->set_data_size(kLogicalRowsetSize);
+
+        std::string segment_name = fmt::format("rs_gate_seg_{}.dat", i);
+        const uint64_t segment_size =
+                write_int_key_segment(tablet_id, metadata->schema(), segment_name, kRowsPerRowset, start_key);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(segment_name);
+        segment_meta->set_size(segment_size);
+        segment_meta->mutable_deprecated_sort_key_min()->CopyFrom(make_int_tuple(start_key));
+        segment_meta->mutable_deprecated_sort_key_max()->CopyFrom(make_int_tuple(start_key + kRowsPerRowset - 1));
+        segment_meta->set_num_rows(kRowsPerRowset);
+    }
+
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    int64_t version = kNumRowsets + 1;
+
+    TabletParallelConfig pconfig;
+    pconfig.set_max_parallel_per_tablet(3);
+    pconfig.set_max_bytes_per_subtask(80 * 1024 * 1024);
+
+    // One free token: refused, the token handed back, and no rowset opened to sample it.
+    {
+        int64_t txn_id = 20267;
+        CompactRequest request;
+        request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
+        request.add_tablet_ids(tablet_id);
+        CompactResponse response;
+        TestClosure closure;
+        auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+        BlockedThreadPool pool;
+
+        int acquire_count = 0;
+        int granted = 0;
+        auto acquire_token = [&acquire_count, &granted]() {
+            acquire_count++;
+            if (granted >= 1) {
+                return false;
+            }
+            granted++;
+            return true;
+        };
+        int release_count = 0;
+        auto release_token = [&release_count](bool) { release_count++; };
+
+        const int64_t opened_before = sort_key_sampling_rowsets_opened_count();
+        auto st = _manager->create_parallel_tasks(tablet_id, txn_id, version, pconfig, callback, false, pool.get(),
+                                                  acquire_token, release_token);
+        EXPECT_TRUE(st.status().is_resource_busy()) << st.status();
+        EXPECT_EQ(opened_before, sort_key_sampling_rowsets_opened_count())
+                << "a tablet that cannot get two tokens must not be sampled";
+        EXPECT_EQ(2, acquire_count);
+        EXPECT_EQ(1, release_count) << "One token was acquired then released";
+        EXPECT_EQ(nullptr, _manager->get_tablet_state(tablet_id, txn_id));
+    }
+
+    // Enough tokens: the same tablet is sampled and planned, which is what makes the block above a statement
+    // about the tokens and not about a tablet that is never sampled.
+    {
+        int64_t txn_id = 20268;
+        CompactRequest request;
+        request.set_skip_write_txnlog(true); // aggregate-path: inspect merged log via response.txn_logs
+        request.add_tablet_ids(tablet_id);
+        CompactResponse response;
+        TestClosure closure;
+        auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+        BlockedThreadPool pool;
+
+        const int64_t opened_before = sort_key_sampling_rowsets_opened_count();
+        auto st = _manager->create_parallel_tasks(
+                tablet_id, txn_id, version, pconfig, callback, false, pool.get(), []() { return true; }, [](bool) {});
+        ASSERT_OK(st.status());
+        ASSERT_GT(st.value(), 0);
+        EXPECT_GT(sort_key_sampling_rowsets_opened_count(), opened_before);
+
+        pool.release();
+        ASSERT_TRUE(closure.wait_finish());
+        _manager->cleanup_tablet(tablet_id, txn_id);
     }
 }
 

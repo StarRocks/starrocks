@@ -703,14 +703,65 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
     // and small rowset grouping. _split_large_rowset and execute_subtask_segment_range
     // are segment-based and do not depend on primary index, so this works for all table
     // types (PK, duplicate key, unique key, aggregate key).
-    // Step 2: Create subtask groups (handles both large rowset split and small rowset grouping)
-    auto subtask_groups = is_unshare
-                                  ? _create_unshare_subtask_groups(tablet_id, all_rowsets, max_parallel, max_bytes)
-                                  : _create_subtask_groups(tablet_id, std::move(all_rowsets), max_parallel, max_bytes);
+    // Step 2: Create subtask groups (handles both large rowset split and small rowset grouping), and reserve
+    // one limiter token for each.
+    //
+    // The subtasks have to be submitted all together (see submit_subtasks_from_groups()), so each needs its
+    // token before the first one is submitted. That does not make the number of subtasks all or nothing,
+    // though: a tablet that wanted five subtasks and found three tokens free is better off as three subtasks
+    // than as a serial compaction, which is what giving the tokens back would make it. Only with fewer than
+    // two tokens is there nothing to run in parallel. Before this, one other compaction on the node -- of a
+    // statistics table, say -- was enough to turn every parallel compaction planned at the limiter's full
+    // width into a serial one.
+    //
+    // A token reserved for a subtask that never ran goes back through `return_token`, which records no
+    // outcome. Callers that supply none (tests) get the old behaviour of reporting it as a completion.
+    const ReturnTokenFunc return_unused = return_token ? return_token : ReturnTokenFunc([&release_token]() {
+        if (release_token) {
+            release_token(false);
+        }
+    });
+    int32_t reserved_tokens = 0;
+    bool tokens_handed_over = false;
+    DeferOp return_reserved_tokens([&] {
+        if (tokens_handed_over) {
+            return;
+        }
+        for (int32_t i = 0; i < reserved_tokens; i++) {
+            return_unused();
+        }
+    });
+    const auto too_few_tokens = [&](int32_t wanted) {
+        return Status::ResourceBusy(
+                strings::Substitute("Failed to acquire two limiter tokens: tablet_id=$0, txn_id=$1, acquired=$2, "
+                                    "wanted=$3",
+                                    tablet_id, txn_id, reserved_tokens, wanted));
+    };
 
-    if (is_unshare && !subtask_groups.empty()) {
-        RETURN_IF_ERROR(_validate_unshare_group_coverage(all_rowsets, subtask_groups));
+    // A range-split plan is the one plan that reads segment files: it samples the sort keys of its input.
+    // Take the two tokens any parallel plan needs before paying for that, so that a tablet which cannot run
+    // in parallel now is not sampled first. The other plans read metadata only and are made before any token
+    // is taken, which keeps a tablet that is not split at all away from the limiter.
+    if (!is_unshare && _plans_range_split(all_rowsets, max_parallel, max_bytes)) {
+        while (reserved_tokens < 2 && acquire_token()) {
+            reserved_tokens++;
+        }
+        if (reserved_tokens < 2) {
+            return too_few_tokens(2);
+        }
     }
+
+    // |width| is the largest number of subtasks the plan may have. The plan is made for max_parallel first,
+    // and again in step 3 if the limiter has fewer tokens free than that plan needs.
+    auto plan_subtask_groups = [&](int32_t width) -> StatusOr<std::vector<SubtaskGroup>> {
+        auto groups = is_unshare ? _create_unshare_subtask_groups(tablet_id, all_rowsets, width, max_bytes)
+                                 : _create_subtask_groups(tablet_id, all_rowsets, width, max_bytes);
+        if (is_unshare && !groups.empty()) {
+            RETURN_IF_ERROR(_validate_unshare_group_coverage(all_rowsets, groups));
+        }
+        return groups;
+    };
+    ASSIGN_OR_RETURN(auto subtask_groups, plan_subtask_groups(max_parallel));
 
     if (subtask_groups.empty()) {
         VLOG(1) << "Parallel compaction: tablet=" << tablet_id << " txn=" << txn_id
@@ -721,7 +772,26 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
     VLOG(1) << "Parallel compaction: tablet=" << tablet_id << " created " << subtask_groups.size()
             << " subtask groups from " << total_rowsets_count << " rowsets";
 
-    // Step 3: Create and register tablet state
+    // Step 3: Reserve the tokens the plan still needs, and plan again for the tokens obtained when the limiter
+    // has fewer free than that.
+    const auto planned_subtasks = static_cast<int32_t>(subtask_groups.size());
+    while (reserved_tokens < planned_subtasks && acquire_token()) {
+        reserved_tokens++;
+    }
+    if (reserved_tokens < planned_subtasks) {
+        if (reserved_tokens < 2) {
+            return too_few_tokens(planned_subtasks);
+        }
+        ASSIGN_OR_RETURN(subtask_groups, plan_subtask_groups(reserved_tokens));
+        LOG(INFO) << "Parallel compaction: tablet=" << tablet_id << " txn=" << txn_id << " got " << reserved_tokens
+                  << " of the " << planned_subtasks << " limiter tokens its plan needs and is planned again for "
+                  << subtask_groups.size() << " subtasks";
+        if (subtask_groups.empty()) {
+            return 0;
+        }
+    }
+
+    // Step 4: Create and register tablet state
     ASSIGN_OR_RETURN(auto state_ptr,
                      create_and_register_tablet_state(tablet_id, txn_id, version, max_parallel, max_bytes, is_unshare,
                                                       std::move(callback), release_token));
@@ -734,7 +804,7 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
         state_ptr->handoff_queue_wait_ns = handoff_queue_wait_ns;
     }
 
-    // Step 4: Submit subtasks
+    // Step 5: Submit subtasks
     //
     // Decide here whether an escaping exception may be reported to the caller, because only here is the
     // "did anything get submitted" answer race-free. `submitted` is on this stack, so it survives; the
@@ -743,14 +813,12 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
     // before the exception is even handled, which would make the state look like "nothing was submitted".
     // Acting on that stale answer lets the caller fall back to normal compaction for a tablet that has
     // already completed, producing a second finish_task() for one tablet id and a SIGSEGV in it.
-    // A token reserved for a subtask that never ran goes back through `return_token`, which records no
-    // outcome. Callers that supply none (tests) get the old behaviour of reporting it as a completion.
-    const ReturnTokenFunc return_unused =
-            return_token ? return_token : ReturnTokenFunc([&release_token]() { release_token(false); });
     int submitted = 0;
     try {
+        // submit_subtasks_from_groups() settles the reserved tokens from here on.
+        tokens_handed_over = true;
         return submit_subtasks_from_groups(state_ptr, std::move(subtask_groups), force_base_compaction, thread_pool,
-                                           acquire_token, release_token, return_unused, &submitted);
+                                           acquire_token, release_token, return_unused, &submitted, reserved_tokens);
     } catch (const std::exception& e) {
         if (submitted > 0) {
             LOG(WARNING) << "Exception after submitting " << submitted << " parallel compaction subtask(s); they own "
@@ -2546,31 +2614,40 @@ std::vector<SubtaskGroup> TabletParallelCompactionManager::_create_subtask_group
 StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
         const std::shared_ptr<TabletParallelCompactionState>& state_ptr, std::vector<SubtaskGroup> groups,
         bool force_base_compaction, ThreadPool* thread_pool, const AcquireTokenFunc& acquire_token,
-        const ReleaseTokenFunc& release_token, const ReturnTokenFunc& return_token, int* submitted_out) {
+        const ReleaseTokenFunc& release_token, const ReturnTokenFunc& return_token, int* submitted_out,
+        int32_t reserved_tokens) {
     int64_t tablet_id = state_ptr->tablet_id;
     int64_t txn_id = state_ptr->txn_id;
     int64_t version = state_ptr->version;
     int32_t max_parallel = state_ptr->max_parallel;
+
+    // The tokens the caller reserved are settled here from now on. A plan that needs fewer of them than were
+    // reserved -- or no plan at all -- gives the surplus back before anything else can fail.
+    int32_t total_groups = static_cast<int32_t>(groups.size());
+    int32_t tokens_acquired = std::max<int32_t>(0, reserved_tokens);
+    for (; tokens_acquired > total_groups; tokens_acquired--) {
+        return_token();
+    }
 
     if (groups.empty()) {
         cleanup_tablet(tablet_id, txn_id);
         return Status::NotFound(strings::Substitute("No groups to submit: tablet_id=$0, txn_id=$1", tablet_id, txn_id));
     }
 
-    // Acquire all tokens upfront to ensure atomic submission of all subtasks.
+    // Hold one token per subtask before submitting any, to ensure atomic submission of all subtasks.
     // This prevents partial large-rowset splits which would cause data loss:
     // if only some subtasks of a large rowset split are created, get_merged_txn_log()
     // would treat the partial split as complete and the first subtask would delete
     // the original rowset, dropping segments that never got a subtask.
-    int32_t total_groups = static_cast<int32_t>(groups.size());
-    int32_t tokens_acquired = 0;
-
+    //
+    // create_parallel_tasks() reserves the tokens before it settles the plan and passes them in, so this
+    // loop has nothing left to acquire for it. A caller that reserved none gets them here, all or nothing.
     if (state_ptr->is_unshare) {
         std::lock_guard<std::mutex> lock(state_ptr->mutex);
         state_ptr->expected_unshare_subtask_count = total_groups;
     }
 
-    for (int32_t i = 0; i < total_groups; i++) {
+    for (int32_t i = tokens_acquired; i < total_groups; i++) {
         if (!acquire_token()) {
             LOG(WARNING) << "Parallel compaction: failed to acquire limiter token " << i << "/" << total_groups
                          << " for tablet " << tablet_id << ", txn_id=" << txn_id << ". Releasing " << tokens_acquired
@@ -3141,11 +3218,34 @@ Status TabletParallelCompactionManager::_merge_subtask_lcrm_files(int64_t tablet
 // Range split related functions
 // ================================================================================
 
+bool TabletParallelCompactionManager::_plans_range_split(const std::vector<RowsetPtr>& rowsets, int32_t max_parallel,
+                                                         int64_t max_bytes_per_subtask) {
+    // The conditions under which _create_subtask_groups() gets to its range-split branch. They are repeated
+    // here, not shared, because a difference only moves the point at which tokens are taken: the tokens are
+    // accounted for either way.
+    const RowsetStats stats = _calculate_rowset_stats(rowsets);
+    constexpr int64_t kMinSegmentsForParallel = 4;
+    if (stats.total_bytes <= max_bytes_per_subtask || max_parallel <= 1 || stats.has_delete_predicate ||
+        stats.total_segments < kMinSegmentsForParallel) {
+        return false;
+    }
+    return config::enable_lake_compaction_range_split && _can_use_range_split(rowsets);
+}
+
 bool TabletParallelCompactionManager::_can_use_range_split(const std::vector<RowsetPtr>& rowsets) {
     if (rowsets.empty()) {
         return false;
     }
     for (const auto& rowset : rowsets) {
+        // A rowset in partial segments compaction (enable_lake_compaction_use_partial_segments) keeps the
+        // segments this round does not compact: the ones compacted before and the ones left for later. A
+        // task that compacts it lists them in its own output (Rowset::add_partial_compaction_segments_info).
+        // Every range-split subtask is such a task over the same rowset, and the range-split merge
+        // concatenates the outputs of all subtasks into one non-overlapping rowset, so those segments would
+        // be referenced once per subtask and their rows read that many times.
+        if (rowset->partial_segments_compaction()) {
+            return false;
+        }
         const auto& rowset_meta = rowset->metadata();
         if (rowset_meta.segment_metas_size() == 0) {
             return false;
@@ -3263,7 +3363,11 @@ StatusOr<std::vector<SegmentSplitInfo>> TabletParallelCompactionManager::_collec
             RETURN_IF_ERROR(decode_segment_sort_key_bounds(segment_meta, &segment.min_key, &segment.max_key));
             segment.num_rows = segment_meta.has_num_rows() ? segment_meta.num_rows() : 0;
             if (segment.num_rows > 0 && rowset_num_rows > 0) {
-                segment.data_size = rowset_data_size * segment.num_rows / rowset_num_rows;
+                // In double: the int64 product overflows for a large rowset with many rows in one segment
+                // (100GB with 86 million rows in a segment is enough), and a wrapped size skews the ranges or
+                // makes the splitter give up. The size is an estimate, so the rounding does not matter.
+                segment.data_size = static_cast<int64_t>(static_cast<double>(rowset_data_size) * segment.num_rows /
+                                                         rowset_num_rows);
             } else if (num_segments > 0) {
                 segment.data_size = rowset_data_size / num_segments;
             }
@@ -3357,8 +3461,17 @@ std::vector<SubtaskGroup> TabletParallelCompactionManager::_create_range_split_g
             max_parallel, static_cast<int32_t>((total_bytes + max_bytes_per_subtask - 1) / max_bytes_per_subtask));
     target_subtasks = std::max(2, target_subtasks);
 
-    // Use calculate_range_split_boundaries from tablet_splitter to compute boundaries
-    auto split_result_or = calculate_range_split_boundaries(segments, target_subtasks, max_bytes_per_subtask,
+    // max_bytes_per_subtask only sizes target_subtasks; it is deliberately NOT passed as the per-split
+    // target. Every range-split subtask reads all input rowsets restricted to its key range, so the
+    // ranges must tile the whole key space and no data can be left for a later round. Once max_parallel
+    // caps target_subtasks (total_bytes > max_parallel * max_bytes_per_subtask), the per-subtask limit
+    // is unreachable, and as a target it would make the greedy loop close the first N - 1 ranges at
+    // max_bytes_per_subtask each and leave everything else to the last one (100GB at max_parallel = 3
+    // and 5GB per subtask came out as 5/5/90GB). Below the cap, total / target_subtasks is already at
+    // most max_bytes_per_subtask, so the limit did nothing there -- unless the input had fewer candidate
+    // ranges than target_subtasks, where it skewed the split in the same way. Passing 0 lets the splitter
+    // balance on total / actual_split_count in every case.
+    auto split_result_or = calculate_range_split_boundaries(segments, target_subtasks, /*target_value_per_split=*/0,
                                                             /*use_num_rows=*/false);
     if (!split_result_or.ok() || split_result_or.value().boundaries.empty()) {
         VLOG(1) << "Range split: tablet=" << tablet_id << " failed to calculate boundaries, fallback";
@@ -3403,7 +3516,9 @@ std::vector<SubtaskGroup> TabletParallelCompactionManager::_create_range_split_g
 
     VLOG(1) << "Range split: tablet=" << tablet_id << " created " << groups.size() << " range split subtasks"
             << " from " << rowsets.size() << " rowsets, " << segments.size() << " segments"
-            << ", boundaries=" << boundaries.size() << ", total_bytes=" << total_bytes;
+            << ", boundaries=" << boundaries.size() << ", total_bytes=" << total_bytes
+            << ", target_subtasks=" << target_subtasks << ", max_bytes_per_subtask=" << max_bytes_per_subtask
+            << ", range_bytes=[" << JoinInts(split_result.range_data_sizes, ",") << "]";
 
     return groups;
 }
