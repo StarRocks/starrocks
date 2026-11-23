@@ -386,6 +386,7 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache,
     fslib::FLAGS_star_cache_async_init = config::starlet_star_cache_async_init;
     fslib::FLAGS_star_cache_skip_fresh_block_checksum_verification =
             config::starlet_star_cache_skip_fresh_block_checksum_verification;
+    fslib::FLAGS_star_cache_write_overwrite = config::starlet_star_cache_write_overwrite;
     fslib::FLAGS_star_cache_mem_size_percent = config::starlet_star_cache_mem_size_percent;
     fslib::FLAGS_star_cache_mem_size_bytes = config::starlet_star_cache_mem_size_bytes;
     fslib::FLAGS_star_cache_disk_size_percent = config::starlet_star_cache_disk_size_percent;

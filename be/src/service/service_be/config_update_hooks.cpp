@@ -715,7 +715,11 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     UPDATE_STARLET_CONFIG(starlet_fslib_azure_storage_max_single_part_size, fslib_azure_storage_max_single_part_size);
     UPDATE_STARLET_CONFIG(starlet_fslib_azure_storage_min_upload_part_size, fslib_azure_storage_min_upload_part_size);
     UPDATE_STARLET_CONFIG(s3_multipart_equal_part_size, fslib_s3_multipart_equal_part_size);
+<<<<<<< HEAD
     UPDATE_STARLET_CONFIG(remote_read_skip_contended_cache_writes, remote_read_skip_contended_cache_writes);
+=======
+    UPDATE_STARLET_CONFIG(starlet_star_cache_write_overwrite, star_cache_write_overwrite);
+>>>>>>> 023e89bdc0a... [Enhancement] Add BE config starlet_star_cache_write_overwrite for the StarCache write overwrite flag (#70100)
 #undef UPDATE_STARLET_CONFIG
     registry->register_callback("remote_read_retain_prefetched_bytes", update_remote_read_retain_prefetched_bytes);
 

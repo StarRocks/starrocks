@@ -47,7 +47,13 @@
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "exec/exec_env.h"
 #include "fs/fs_util.h"
+<<<<<<< HEAD
 #include "fs/remote_read_context.h"
+=======
+#ifdef USE_STAROS
+#include "fslib/star_cache_configuration.h"
+#endif
+>>>>>>> 023e89bdc0a... [Enhancement] Add BE config starlet_star_cache_write_overwrite for the StarCache write overwrite flag (#70100)
 #include "gen_cpp/Types_types.h"
 #include "platform/platform_env.h"
 #include "platform/store_path.h"
@@ -757,6 +763,25 @@ TEST_F(ConfigUpdateHooksTest, update_skip_contended_cache_writes_with_small_reta
         EXPECT_EQ(bytes, fslib::FLAGS_remote_read_retain_prefetched_bytes);
         EXPECT_TRUE(config::remote_read_skip_contended_cache_writes);
         EXPECT_TRUE(fslib::FLAGS_remote_read_skip_contended_cache_writes);
+    }
+}
+
+TEST_F(ConfigUpdateHooksTest, update_starlet_star_cache_write_overwrite) {
+    const bool saved = config::starlet_star_cache_write_overwrite;
+    gflags::FlagSaver flag_saver;
+    DeferOp restore_config([saved] {
+        auto st = config::set_config("starlet_star_cache_write_overwrite", saved ? "true" : "false");
+        EXPECT_TRUE(st.ok()) << st;
+    });
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    // Start from the opposite flag value each time, so both directions are really forwarded.
+    for (bool value : {true, false}) {
+        staros::starlet::fslib::FLAGS_star_cache_write_overwrite = !value;
+        auto st = registry->update_config("starlet_star_cache_write_overwrite", value ? "true" : "false");
+        ASSERT_TRUE(st.ok()) << st;
+        EXPECT_EQ(value, config::starlet_star_cache_write_overwrite);
+        EXPECT_EQ(value, staros::starlet::fslib::FLAGS_star_cache_write_overwrite);
     }
 }
 

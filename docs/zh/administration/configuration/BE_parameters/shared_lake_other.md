@@ -708,6 +708,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群中，对于由当前 CN 进程写入且此后未被淘汰的 Data Cache 磁盘 Block，后续请求首次访问时是否跳过整块 Checksum 校验读取。该校验会从磁盘重新读取整个 Block，以校验进程刚刚写入且仍在内存中跟踪的数据，因此每个新写入 Block 的首次访问都会多一次磁盘读取。将该项设置为 `false` 可在首次访问时校验每个 Block，仅当怀疑缓存磁盘存在静态数据损坏时才值得付出该开销。无论该项如何设置，从进程上一次运行继承下来的 Block 始终会被校验，因为当前进程并未见证其写入过程。该项仅在 Data Cache 初始化时读取一次。
 - 引入版本：v4.2.0
 
+### starlet_star_cache_write_overwrite
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，Data Cache 写入时是否覆盖同一 Key 下已缓存的对象。设为 `false` 时保留已有对象并将本次写入视为成功，适用于读穿透填充路径，此时写入的字节与已缓存的内容相同。设为 `true` 可让重新读取刷新疑似过期或损坏的 Block。Data Cache 在每次写入时都会读取该项，因此修改后在下一次写入即生效，无需重新初始化缓存。
+- 引入版本：-
+
 ### starlet_starmgr_client_compression_type
 
 - 默认值：none
