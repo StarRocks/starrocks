@@ -304,6 +304,65 @@ TEST_F(BatchWriteMgrTest, stream_load_rpc_success) {
     ASSERT_STREQ("Success", doc["Status"].GetString());
 }
 
+// The brpc interface reaches merge commit as Stream Load does, and merge commit loads the requests of a merge window
+// as one file: a CSV request with skip_header above 0 is refused before it reaches a merge window, while skip_header
+// 0, or skip_header with JSON, where it means nothing, is appended as before.
+TEST_F(BatchWriteMgrTest, stream_load_rpc_refuses_skip_header) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("BatchWriteMgr::append_data::cb");
+        SyncPoint::GetInstance()->ClearCallBack("BatchWriteMgr::append_data::success");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    int num_appended = 0;
+    SyncPoint::GetInstance()->SetCallBack("BatchWriteMgr::append_data::cb", [&](void*) { ++num_appended; });
+    // A request that gets through is appended at once, with no FE to ask for a load.
+    SyncPoint::GetInstance()->SetCallBack("BatchWriteMgr::append_data::success",
+                                          [](void* arg) { *(Status*)arg = Status::OK(); });
+
+    struct Case {
+        std::string format; // empty: no format parameter, which is CSV
+        std::string skip_header;
+        bool refused;
+    };
+    const std::vector<Case> cases = {
+            {"csv", "1", true}, {"", "1", true}, {"gzip", "1", true}, {"csv", "0", false}, {"json", "1", false}};
+    for (const auto& c : cases) {
+        brpc::Controller cntl;
+        cntl.request_attachment().append("k,v\n1,1\n");
+        PStreamLoadRequest request;
+        request.set_db("db");
+        request.set_table("tbl");
+        request.set_user("root");
+        request.set_passwd("123456");
+        ADD_KEY_VALUE(request, HTTP_ENABLE_MERGE_COMMIT, "true");
+        ADD_KEY_VALUE(request, HTTP_MERGE_COMMIT_INTERVAL_MS, "1000");
+        ADD_KEY_VALUE(request, HTTP_MERGE_COMMIT_PARALLEL, "1");
+        ADD_KEY_VALUE(request, HTTP_MERGE_COMMIT_ASYNC, "true");
+        if (!c.format.empty()) {
+            ADD_KEY_VALUE(request, HTTP_FORMAT_KEY, c.format);
+        }
+        ADD_KEY_VALUE(request, HTTP_SKIP_HEADER, c.skip_header);
+        PStreamLoadResponse response;
+        const int appended_before = num_appended;
+        _batch_write_mgr->receive_stream_load_rpc(&cntl, &request, &response);
+
+        ASSERT_TRUE(response.has_json_result());
+        rapidjson::Document doc;
+        doc.Parse(response.json_result().c_str());
+        if (c.refused) {
+            ASSERT_STREQ("Fail", doc["Status"].GetString()) << "format '" << c.format << "'";
+            ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "skip_header is not supported by merge commit"))
+                    << "format '" << c.format << "': " << doc["Message"].GetString();
+            ASSERT_EQ(appended_before, num_appended) << "format '" << c.format << "'";
+        } else {
+            ASSERT_STREQ("Success", doc["Status"].GetString())
+                    << "format '" << c.format << "', skip_header " << c.skip_header;
+            ASSERT_EQ(appended_before + 1, num_appended) << "format '" << c.format << "'";
+        }
+    }
+}
+
 TEST_F(BatchWriteMgrTest, stream_load_rpc_fail) {
     std::string data = "{\"c0\":\"a\",\"c1\":\"b\"}";
     // HTTP_ENABLE_MERGE_COMMIT is invalid
