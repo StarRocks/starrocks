@@ -58,6 +58,7 @@
 #include "storage/del_vector.h"
 #include "storage/lake/lake_persistent_index_key_value_merger.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/parallel_task_runner.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/rowset.h"
@@ -271,12 +272,13 @@ protected:
         return md;
     }
 
-    // Write rows with keys ["k%08d" % start .. start+n) as ONE rowset (one segment) and append it to
-    // `md` (no SSTs, so load_from_lake_tablet does a full cold rebuild). `rowset_id` becomes the rssid
-    // base; keep it >=1 so no row lands on value 0 (which the rebuild treats as <= rebuild point). The
-    // written keys are appended to `out_keys`.
+    // Write rows with keys ["k%08d" % start .. start+n) as ONE rowset and append it to `md` (no SSTs, so
+    // load_from_lake_tablet does a full cold rebuild). The rows are split evenly, in key order, over
+    // `num_segments` segments. `rowset_id` becomes the rssid base (segment i is rssid rowset_id + i);
+    // keep it >=1 so no row lands on value 0 (which the rebuild treats as <= rebuild point). The written
+    // keys are appended to `out_keys`.
     void append_cold_rowset(TabletMetadata* md, int start, int n, uint32_t rowset_id,
-                            std::vector<std::string>* out_keys) {
+                            std::vector<std::string>* out_keys, int num_segments = 1) {
         auto tablet_schema = std::make_shared<TabletSchema>(md->schema());
         auto schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
         ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(md->id()));
@@ -291,15 +293,22 @@ protected:
             snprintf(buf, sizeof(buf), "k%08d", start + i);
             keys.emplace_back(buf);
         }
-        auto kc = BinaryColumn::create();
-        auto vc = Int32Column::create();
-        for (int i = 0; i < n; i++) {
-            kc->append(Slice(keys[i]));
-            vc->append(start + i);
+        for (int s = 0; s < num_segments; s++) {
+            auto kc = BinaryColumn::create();
+            auto vc = Int32Column::create();
+            for (int i = n * s / num_segments; i < n * (s + 1) / num_segments; i++) {
+                kc->append(Slice(keys[i]));
+                vc->append(start + i);
+            }
+            Chunk chunk({std::move(kc), std::move(vc)}, schema);
+            ASSERT_OK(writer->write(chunk));
+            if (s + 1 < num_segments) {
+                // Close this segment, so that the next write starts a new one.
+                ASSERT_OK(writer->flush());
+            }
         }
-        Chunk chunk({std::move(kc), std::move(vc)}, schema);
-        ASSERT_OK(writer->write(chunk));
         ASSERT_OK(writer->finish());
+        ASSERT_EQ(num_segments, static_cast<int>(writer->segments().size()));
 
         auto* rs = md->add_rowsets();
         rs->set_id(rowset_id);
@@ -2286,6 +2295,167 @@ TEST_F(LakePersistentIndexTest, test_load_from_lake_tablet_parallel_matches_seri
         EXPECT_EQ(serial_values[i].get_value(), parallel_values[i].get_value())
                 << "parallel vs serial mismatch for key " << keys[i];
     }
+}
+
+// A cold rebuild reads every segment's delete vector at the base version, but the publish path hands
+// load_from_lake_tablet() the metadata it is building, already stamped with the new version, so the
+// rowsets' own metadata cannot serve that lookup. The delvec loader then read the base version back
+// from storage for every rebuilt segment, and once that metadata no longer fit its metacache shard
+// every one of those reads went to object storage: on a tablet with tens of thousands of segments,
+// rebuilding a few dozen of them took minutes and its publish timed out on every retry. Pin that a
+// rebuild reads the base version at most once, however many segments it rebuilds, on both scan
+// paths, and not at all when the caller passes the base version it holds -- and that the delete
+// vectors still come from the base version, not from the metadata being built nor from a metadata
+// the caller passed for another version or tablet.
+TEST_F(LakePersistentIndexTest, test_cold_rebuild_reads_base_metadata_once) {
+    constexpr int kSingleSegmentRowsets = 7;
+    constexpr int kLastRowsetSegments = 3;
+    constexpr int kSegmentCount = kSingleSegmentRowsets + kLastRowsetSegments;
+    constexpr int kRowsPerSegment = 10;
+    constexpr int64_t kBaseVersion = 2;
+
+    // Segment k (0-based, in key order) holds keys [k * kRowsPerSegment, (k + 1) * kRowsPerSegment) as
+    // rssid k + 1: one rowset per segment first, then one rowset that holds several segments.
+    auto base = make_varchar_pk_metadata();
+    base->set_version(kBaseVersion);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*base));
+    std::vector<std::string> keys;
+    for (int r = 0; r < kSingleSegmentRowsets; r++) {
+        append_cold_rowset(base.get(), /*start=*/r * kRowsPerSegment, kRowsPerSegment, /*rowset_id=*/r + 1, &keys);
+    }
+    append_cold_rowset(base.get(), /*start=*/kSingleSegmentRowsets * kRowsPerSegment,
+                       kLastRowsetSegments * kRowsPerSegment, /*rowset_id=*/kSingleSegmentRowsets + 1, &keys,
+                       kLastRowsetSegments);
+    ASSERT_EQ(kSegmentCount * kRowsPerSegment, static_cast<int>(keys.size()));
+    base->set_next_rowset_id(kSegmentCount + 1);
+
+    // Delete the first row of rssid 1 at the base version. finalize() writes the delvec file and
+    // persists the base version with that delvec in its delvec_meta.
+    Tablet tablet(_tablet_mgr.get(), base->id());
+    {
+        MetaFileBuilder builder(tablet, base);
+        DelVector empty;
+        empty.set_empty();
+        DelVectorPtr delvec;
+        std::vector<uint32_t> dels = {0};
+        empty.add_dels_as_new_version(dels, kBaseVersion, &delvec);
+        builder.append_delvec(delvec, /*segment_id=*/1);
+        ASSERT_OK(builder.finalize(next_id()));
+    }
+    ASSERT_EQ(1, base->delvec_meta().delvecs_size());
+
+    // What the publish applier hands the index: the base version's content stamped with the new
+    // version. Its delvec_meta is dropped so that a rebuild taking delete vectors from it instead of
+    // from the base version brings the deleted row back.
+    auto building = std::make_shared<TabletMetadata>(*base);
+    building->set_version(kBaseVersion + 1);
+    building->mutable_delvec_meta()->Clear();
+
+    // A metacache that keeps nothing once it is released, like a shard the base metadata outgrew:
+    // every lookup of the base version that is not served by the caller goes to storage.
+    const size_t metacache_capacity = _tablet_mgr->metacache()->tablet_metadata_capacity();
+    _tablet_mgr->metacache()->update_tablet_metadata_capacity(1);
+    DeferOp restore_metacache([&]() { _tablet_mgr->metacache()->update_tablet_metadata_capacity(metacache_capacity); });
+    ASSERT_EQ(1, _tablet_mgr->metacache()->tablet_metadata_capacity());
+    _tablet_mgr->metacache()->prune();
+
+    const std::string base_metadata_file = tablet_metadata_filename(base->id(), kBaseVersion);
+    std::atomic<int> base_metadata_reads = 0;
+    std::atomic<int> parallel_callbacks = 0;
+    std::atomic<int> serial_callbacks = 0;
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::load_tablet_metadata:path", [&](void* arg) {
+        if (std::string_view(*static_cast<std::string*>(arg)).ends_with(base_metadata_file)) {
+            ++base_metadata_reads;
+        }
+    });
+    SyncPoint::GetInstance()->SetCallBack("LakePersistentIndex::load_from_lake_tablet:parallel",
+                                          [&](void*) { ++parallel_callbacks; });
+    SyncPoint::GetInstance()->SetCallBack("LakePersistentIndex::load_from_lake_tablet:serial",
+                                          [&](void*) { ++serial_callbacks; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_callbacks([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::load_tablet_metadata:path");
+        SyncPoint::GetInstance()->ClearCallBack("LakePersistentIndex::load_from_lake_tablet:parallel");
+        SyncPoint::GetInstance()->ClearCallBack("LakePersistentIndex::load_from_lake_tablet:serial");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    std::vector<Slice> slices(keys.begin(), keys.end());
+    auto rebuild = [&](const TabletMetadataPtr& metadata, const TabletMetadataPtr& base_metadata) {
+        base_metadata_reads = 0;
+        parallel_callbacks = 0;
+        serial_callbacks = 0;
+        auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), metadata->id());
+        CHECK_OK(index->init(metadata));
+        MetaFileBuilder builder(tablet, std::make_shared<TabletMetadata>(*metadata));
+        CHECK_OK(index->load_from_lake_tablet(_tablet_mgr.get(), metadata, kBaseVersion, &builder, base_metadata));
+        std::vector<IndexValue> values(keys.size());
+        CHECK_OK(index->get(keys.size(), slices.data(), values.data()));
+        return values;
+    };
+    auto expect_base_version_rows = [&](const std::vector<IndexValue>& values) {
+        ASSERT_EQ(keys.size(), values.size());
+        EXPECT_EQ(NullIndexValue, values[0].get_value()) << "the row deleted at the base version came back";
+        for (size_t i = 1; i < keys.size(); i++) {
+            const uint64_t rssid = i / kRowsPerSegment + 1;
+            const uint64_t rowid = i % kRowsPerSegment;
+            EXPECT_EQ((rssid << 32) | rowid, values[i].get_value()) << "key " << keys[i];
+        }
+    };
+
+    for (bool parallel : {true, false}) {
+        SCOPED_TRACE(parallel ? "parallel rebuild" : "serial rebuild");
+        std::optional<RebuildMemPressureGuard> serial_guard;
+        std::optional<ConfigResetGuard<int32_t>> ratio_guard;
+        if (parallel) {
+            ratio_guard.emplace(&config::pk_index_parallel_rebuild_mem_ratio, 100);
+            ASSERT_FALSE(RuntimeEnv::GetInstance()->update_mem_tracker()->limit_exceeded_by_ratio(
+                    config::pk_index_parallel_rebuild_mem_ratio));
+        } else {
+            serial_guard.emplace();
+        }
+        auto values = rebuild(building, nullptr);
+        EXPECT_EQ(parallel ? 1 : 0, parallel_callbacks.load());
+        EXPECT_EQ(parallel ? 0 : 1, serial_callbacks.load());
+        // Once for the whole rebuild, not once for each of the kSegmentCount segments.
+        EXPECT_EQ(1, base_metadata_reads.load());
+        expect_base_version_rows(values);
+
+        // Publish also passes the base version it has already read: nothing is read back.
+        values = rebuild(building, base);
+        EXPECT_EQ(0, base_metadata_reads.load());
+        expect_base_version_rows(values);
+    }
+
+    // A metadata passed for another version or another tablet is not the base version: the rebuild
+    // ignores it and reads the base version instead, so none of its delete vectors reach the index.
+    auto other_tablet = std::make_shared<TabletMetadata>(*base);
+    other_tablet->set_id(base->id() + 1);
+    other_tablet->mutable_delvec_meta()->Clear();
+    const std::vector<std::pair<std::string, TabletMetadataPtr>> not_base_versions = {{"another version", building},
+                                                                                      {"another tablet", other_tablet}};
+    for (const auto& [what, not_base] : not_base_versions) {
+        SCOPED_TRACE(what);
+        auto values = rebuild(building, not_base);
+        EXPECT_EQ(1, base_metadata_reads.load());
+        expect_base_version_rows(values);
+    }
+
+    // When the caller's metadata already is the base version (the PK memtable flush path), nothing is
+    // read back at all.
+    auto values = rebuild(base, nullptr);
+    EXPECT_EQ(0, base_metadata_reads.load());
+    expect_base_version_rows(values);
+
+    // Nor when the only rowset to rebuild has no segments (a delete-only load): it builds no iterator,
+    // so it needs no delete vector.
+    auto segmentless = std::make_shared<TabletMetadata>(*building);
+    segmentless->clear_rowsets();
+    auto* empty_rowset = segmentless->add_rowsets();
+    empty_rowset->set_id(kSegmentCount + 1);
+    empty_rowset->set_num_rows(0);
+    (void)rebuild(segmentless, nullptr);
+    EXPECT_EQ(0, base_metadata_reads.load());
 }
 
 // A scalar max-RSSID rebuild watermark is only safe when rowset RSSIDs increase with rowset version.

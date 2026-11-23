@@ -877,7 +877,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_delvec(
         const Schema& schema, int64_t version, const MetaFileBuilder* builder, OlapReaderStatistics* stats,
         const std::vector<SparseRangePtr>* rowid_range_per_segment,
-        const std::vector<OlapReaderStatistics*>* per_segment_stats) {
+        const std::vector<OlapReaderStatistics*>* per_segment_stats, const TabletMetadataPtr& delvec_metadata) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_iterator_with_delvec_us");
     std::vector<LoadedSegment> segments;
     {
@@ -897,12 +897,17 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     seg_options.lake_io_opts.fs = seg_options.fs;
     seg_options.lake_io_opts.location_provider = _tablet_mgr->location_provider();
     seg_options.is_primary_keys = true;
-    // The caller already supplied the complete tablet metadata used to build this rowset. Reuse it
-    // for delvec lookup instead of reading the same version back from object storage. This is
-    // required by aggregate publish: query-parent synthesis flushes child PK indexes before the
-    // new-version bundle has been persisted, so that version exists only in the RPC response here.
-    seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet_mgr, builder, true /*fill cache*/,
-                                                                   seg_options.lake_io_opts, _tablet_metadata);
+    // Hand the delvec loader the metadata to read the delete vectors from, so that it does not read |version|
+    // back from object storage for every segment: the caller's |delvec_metadata|, else the complete tablet
+    // metadata this rowset was built from. Aggregate publish needs the latter: query-parent synthesis flushes
+    // child PK indexes before the new-version bundle has been persisted, so that version exists only in the
+    // RPC response here. The loader reads |version| back only when the metadata it holds is not this tablet at
+    // |version|.
+    DCHECK(delvec_metadata == nullptr ||
+           (delvec_metadata->id() == tablet_id() && delvec_metadata->version() == version));
+    seg_options.delvec_loader =
+            std::make_shared<LakeDelvecLoader>(_tablet_mgr, builder, true /*fill cache*/, seg_options.lake_io_opts,
+                                               delvec_metadata != nullptr ? delvec_metadata : _tablet_metadata);
     seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
     seg_options.idg_loader = std::make_shared<LakeIndexDeltaGroupLoader>(_tablet_metadata);
     seg_options.version = version;
