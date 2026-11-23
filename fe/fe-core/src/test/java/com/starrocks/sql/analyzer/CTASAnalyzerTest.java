@@ -43,6 +43,8 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.util.List;
 import java.util.Map;
@@ -233,6 +235,26 @@ public class CTASAnalyzerTest {
         UtFrameUtils.parseStmtWithNewParser(sql, ctx);
     }
 
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+            "false | select 1 as id",
+            "false | select * from (select 1 as id) s",
+            "false | with s as (select 1 as id) select * from s",
+            "false | with s(id) as (select 1), t as (select * from s) select * from (select * from t) d",
+            "false | select * from (values (1), (2)) v(id)",
+            "true | select * from (values (1), (null)) v(id)",
+            "false | select id from (values (1, 10), (2, null)) v(id, amount)",
+            "true | select * from (select 1 as id union all select cast(null as int)) s",
+            "true | with s as (select 1 as id union all select cast(null as int)) select * from s",
+            "true | select r.id from (select 1 as id) l left join (select 2 as id) r on l.id = r.id"
+    })
+    public void testCtasPreservesQueryOutputNullability(boolean nullable, String query) throws Exception {
+        CreateTableAsSelectStmt ctas = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(
+                "create table ctas_nullability as " + query, starRocksAssert.getCtx());
+
+        Assertions.assertEquals(nullable, ctas.getCreateTableStmt().getColumns().get(0).isAllowNull(), query);
+    }
+
     @Test
     public void testCTASWithDatePartition() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
@@ -355,6 +377,17 @@ public class CTASAnalyzerTest {
         KeysDesc keysDesc
                 = createTableStmt.getCreateTableStmt().getKeysDesc();
         Assertions.assertEquals(KeysType.PRIMARY_KEYS, keysDesc.getKeysType());
+    }
+
+    @Test
+    public void testCtasInfersNotNullForPrimaryKeyFromNullableExpression() throws Exception {
+        String sql = "CREATE TABLE ctas_nullable_pk PRIMARY KEY (id) "
+                + "AS SELECT CAST(NULL AS INT) AS id, CAST(NULL AS INT) AS payload";
+        CreateTableAsSelectStmt stmt =
+                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        List<ColumnDef> columns = stmt.getCreateTableStmt().getColumnDefs();
+        Assertions.assertFalse(columns.get(0).isAllowNull());
+        Assertions.assertTrue(columns.get(1).isAllowNull());
     }
 
     @Test

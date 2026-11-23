@@ -62,9 +62,9 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../loading_unloadin
 
 ## Usage notes
 
-- The CTAS statement can only create a new table that meets the following requirements:
-  - `ENGINE` is `OLAP`.
+- For Paimon CTAS, use a Paimon catalog for the target table. StarRocks rejects a Unified Catalog target before creating the table. If you omit the catalog or database from the target name, StarRocks uses the session's current catalog or database. See [Paimon CTAS](../../../data_source/catalog/paimon_catalog.md#create-table-as-select) for supported options and failure behavior.
 
+- The following defaults apply to OLAP targets.
   - The table is a Duplicate Key table by default. You can also specify it as a Primary Key table in `key_desc`.
 
   - The sort keys are the first three columns, and the storage space of the data types of these three columns does not exceed 36 bytes.
