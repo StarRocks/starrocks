@@ -729,7 +729,8 @@ public class PartitionDescAnalyzer {
             String storageCoolDownTTL = tableProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
             if (Strings.isNotBlank(storageCoolDownTTL)) {
                 PeriodDuration periodDuration = TimeUtils.parseHumanReadablePeriodOrDuration(storageCoolDownTTL);
-                if (partitionKeyDesc.isMax()) {
+                // SHOW CREATE TABLE writes LESS THAN MAXVALUE as a fixed range with MAXVALUE in its upper tuple.
+                if (partitionKeyDesc.isMax() || partitionKeyDesc.getUpperValues().get(0).isMax()) {
                     partitionDataProperty = new DataProperty(TStorageMedium.SSD, DataProperty.MAX_COOLDOWN_TIME_MS);
                 } else {
                     String stringUpperValue = partitionKeyDesc.getUpperValues().get(0).getStringValue();

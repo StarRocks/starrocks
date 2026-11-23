@@ -21,6 +21,7 @@ import com.google.common.collect.Range;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ConnectorView;
+import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.FileTable;
@@ -44,12 +45,14 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.formatter.AST2StringVisitor;
 import com.starrocks.sql.formatter.FormatOptions;
+import com.starrocks.thrift.TStorageMedium;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.commons.lang.StringEscapeUtils;
@@ -83,6 +86,16 @@ public class AstToStringBuilder {
                         .setAddFunctionDbName(addFunctionDbName)
                         .setWithBackquote(withBackquote))
                 .visit(expr);
+    }
+
+    private static boolean canReplayInferredSsd(OlapTable table) {
+        if (DataProperty.getInferredDefaultDataProperty().getStorageMedium() == TStorageMedium.SSD) {
+            return true;
+        }
+        // The BE topology may have changed since CREATE inferred SSD for the source partitions.
+        return !table.getPartitions().isEmpty() && table.getPartitions().stream()
+                .map(p -> table.getPartitionInfo().getDataProperty(p.getId()))
+                .allMatch(data -> data != null && data.getStorageMedium() == TStorageMedium.SSD);
     }
 
     public static void getDdlStmt(Table table, List<String> createTableStmt, List<String> addPartitionStmt,
@@ -234,8 +247,18 @@ public class AstToStringBuilder {
             }
 
             // properties
+            Map<String, String> properties = olapTable.getProperties();
+            if (olapTable.isOlapTable() && partitionInfo.getType() == PartitionType.RANGE) {
+                // ALTER stores an empty string when clearing a cooldown TTL.
+                properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL, "");
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)
+                        && !properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
+                        && canReplayInferredSsd(olapTable)) {
+                    properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, TStorageMedium.SSD.name());
+                }
+            }
             sb.append("\nPROPERTIES (\n");
-            sb.append(new PrintableMap<>(olapTable.getProperties(), "=", true, true, hidePassword).toString());
+            sb.append(new PrintableMap<>(properties, "=", true, true, hidePassword).toString());
             sb.append("\n)");
         } else if (table.getType() == Table.TableType.MYSQL) {
             MysqlTable mysqlTable = (MysqlTable) table;

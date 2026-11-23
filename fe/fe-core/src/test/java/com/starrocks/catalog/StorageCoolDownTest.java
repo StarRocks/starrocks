@@ -23,11 +23,14 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 public class StorageCoolDownTest {
 
@@ -322,6 +325,47 @@ public class StorageCoolDownTest {
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
 
+    }
+
+    @Test
+    public void testPrimaryKeyMaxValueCooldownReplay() throws Exception {
+        String source = "pk_max_cooldown";
+        String replay = source + "_replay";
+        String like = source + "_like";
+        List<String> tableNames = List.of(source, replay, like);
+        try {
+            createTable("""
+                    CREATE TABLE %s (dt DATE NOT NULL, id BIGINT NOT NULL)
+                    PRIMARY KEY(dt, id)
+                    PARTITION BY RANGE(dt) (
+                        PARTITION p_finite VALUES LESS THAN ("2099-01-02"),
+                        PARTITION p_max VALUES LESS THAN MAXVALUE)
+                    DISTRIBUTED BY HASH(id) BUCKETS 1
+                    PROPERTIES ("replication_num" = "1", "storage_medium" = "SSD", "storage_cooldown_ttl" = "2 DAY")
+                    """.formatted(source));
+            String ddl = starRocksAssert.showCreateTable("SHOW CREATE TABLE " + source);
+            createTable(ddl.replace("`" + source + "`", "`" + replay + "`"));
+            starRocksAssert.ddl("CREATE TABLE " + like + " LIKE " + source);
+
+            for (String name : tableNames) {
+                OlapTable table = (OlapTable) starRocksAssert.getTable("test", name);
+                RangePartitionInfo info = (RangePartitionInfo) table.getPartitionInfo();
+                long finiteId = table.getPartition("p_finite").getId();
+                long maxId = table.getPartition("p_max").getId();
+                DataProperty finite = info.getDataProperty(finiteId);
+                DataProperty max = info.getDataProperty(maxId);
+                Assertions.assertEquals(TStorageMedium.SSD, finite.getStorageMedium());
+                Assertions.assertEquals("2099-01-04 00:00:00", TimeUtils.longToTimeString(finite.getCooldownTimeMs()));
+                Assertions.assertEquals(info.getRange(finiteId).upperEndpoint(), info.getRange(maxId).lowerEndpoint());
+                Assertions.assertTrue(info.getRange(maxId).upperEndpoint().isMaxValue());
+                Assertions.assertEquals(TStorageMedium.SSD, max.getStorageMedium());
+                Assertions.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, max.getCooldownTimeMs());
+            }
+        } finally {
+            for (String name : tableNames) {
+                starRocksAssert.ddl("DROP TABLE IF EXISTS " + name);
+            }
+        }
     }
 
     @Test
