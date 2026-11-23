@@ -3703,6 +3703,13 @@ public class Config extends ConfigBase {
     public static double deltalake_json_meta_cache_global_memory_ratio = 0;
 
     /**
+     * Whether Delta Lake catalogs list an S3 (s3/s3a/s3n) _delta_log from the requested version instead of
+     * listing all of its files. When off, listings behave like Delta's stock S3SingleDriverLogStore.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_delta_lake_s3_start_after_listing = true;
+
+    /**
      * Whether to enable commit queue for Iceberg tables to avoid concurrent commit conflicts.
      * <p>
      * Iceberg uses optimistic concurrency control (OCC) for metadata commits. When multiple threads
