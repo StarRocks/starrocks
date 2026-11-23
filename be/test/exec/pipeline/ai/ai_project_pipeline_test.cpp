@@ -1679,7 +1679,7 @@ TEST_F(AIProjectPipelineTest, MixedDefaultAndExplicitProviderRoutesKeepCredentia
     processor->close(_runtime_state.get());
 }
 
-TEST_F(AIProjectPipelineTest, OpenAITextImageAndVideoRequestsPreservePromptsAndNulls) {
+TEST_F(AIProjectPipelineTest, OpenAITextAndImageRequestsSucceedAndVideoReturnsNullOnIgnore) {
     set_query_deadline_ns(120'000'000'000);
     auto configs = provider_configs();
     auto text = create_expr_context(make_ai_complete(_tuple_id, kPromptSlotId));
@@ -1692,7 +1692,7 @@ TEST_F(AIProjectPipelineTest, OpenAITextImageAndVideoRequestsPreservePromptsAndN
              {.slot_id = 4, .expr_ctx = media.value(), .nullable = true, .kind = AIProjectOutputKind::AI}},
             {}, configs);
     auto config = _config_source->snapshot();
-    config.on_error = "fail";
+    config.on_error = "ignore";
     auto projection = AIProjectExpressionProjection::create(std::move(spec), config.max_input_file_bytes);
     auto submitter = AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, config);
     auto buffer = AIChunkBuffer::create(2, 32 * kMiB);
@@ -1719,7 +1719,6 @@ TEST_F(AIProjectPipelineTest, OpenAITextImageAndVideoRequestsPreservePromptsAndN
     input.reset();
     _control.run_until_idle();
     size_t image_requests = 0;
-    size_t video_requests = 0;
     size_t text_requests = 0;
     while (_http.pending_count() != 0) {
         const auto& request = _http.request();
@@ -1729,11 +1728,6 @@ TEST_F(AIProjectPipelineTest, OpenAITextImageAndVideoRequestsPreservePromptsAndN
             EXPECT_NE(std::string::npos, request.body.find("data:image/png;base64,iVBORw0KGgo="));
             EXPECT_NE(std::string::npos, request.body.find("prompt-0"));
             _http.complete_next(R"({"choices":[{"message":{"content":"image answer"}}]})");
-        } else if (request.body.find("\"video_url\"") != std::string::npos) {
-            ++video_requests;
-            EXPECT_NE(std::string::npos, request.body.find(video_url));
-            EXPECT_NE(std::string::npos, request.body.find("prompt-1"));
-            _http.complete_next(R"({"choices":[{"message":{"content":"video answer"}}]})");
         } else {
             ++text_requests;
             EXPECT_NE(std::string::npos, request.body.find(R"("content":"prompt-)"));
@@ -1743,7 +1737,6 @@ TEST_F(AIProjectPipelineTest, OpenAITextImageAndVideoRequestsPreservePromptsAndN
         _control.run_until_idle();
     }
     EXPECT_EQ(1, image_requests);
-    EXPECT_EQ(1, video_requests);
     EXPECT_EQ(2, text_requests);
     auto output = processor->pull_chunk(_runtime_state.get(), 0);
     ASSERT_TRUE(output.ok()) << output.status();
@@ -1752,11 +1745,12 @@ TEST_F(AIProjectPipelineTest, OpenAITextImageAndVideoRequestsPreservePromptsAndN
     EXPECT_EQ("text answer", nullable_string(output.value(), 3, 0));
     EXPECT_EQ("image answer", nullable_string(output.value(), 4, 0));
     EXPECT_EQ("text answer", nullable_string(output.value(), 3, 1));
-    EXPECT_EQ("video answer", nullable_string(output.value(), 4, 1));
+    EXPECT_EQ(std::nullopt, nullable_string(output.value(), 4, 1));
     EXPECT_EQ(std::nullopt, nullable_string(output.value(), 3, 2));
     EXPECT_EQ(std::nullopt, nullable_string(output.value(), 4, 2));
     EXPECT_EQ(4, processor->statistics(0).task_count);
-    EXPECT_EQ(4, processor->statistics(0).request_count);
+    EXPECT_EQ(3, processor->statistics(0).request_count);
+    EXPECT_EQ(1, processor->statistics(0).error_count);
     processor->close(_runtime_state.get());
 }
 

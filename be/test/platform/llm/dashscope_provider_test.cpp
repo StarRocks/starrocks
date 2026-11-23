@@ -100,15 +100,20 @@ TEST(DashScopeProviderTest, TextAndMultimodalChatKeepTheirFormatForTextOnlyRows)
         EXPECT_EQ(std::string(R"({"model":"row-model","input":{"messages":[{"role":"user","content":)") + content +
                           R"(}]},"parameters":{"result_format":"message","max_tokens":128}})",
                   request->body);
-        auto result = provider.parse_response(
-                text_chat ? R"({"output":{"choices":[{"message":{"content":"answer"}}]}})"
-                          : R"({"output":{"choices":[{"message":{"content":[{"text":"an"},{"text":"swer"}]}}]}})");
-        ASSERT_TRUE(std::holds_alternative<AIProviderSuccess>(result));
-        EXPECT_EQ("answer", std::get<std::string>(std::get<AIProviderSuccess>(result).value));
-        for (const char* bad_content :
-             {text_chat ? R"([{"text":"unexpected"}])" : R"("unexpected")", "null", "[]", R"([{"text":1}])"}) {
-            auto body = std::string(R"({"output":{"choices":[{"message":{"content":)") + bad_content + "}}]}}";
-            EXPECT_TRUE(std::holds_alternative<AIProviderMalformed>(provider.parse_response(body)));
+        const std::pair<const char*, bool> replies[] = {{R"("answer")", true},
+                                                        {R"([{"text":"an"},{"text":"swer"}])", !text_chat},
+                                                        {"null", false},
+                                                        {"[]", false},
+                                                        {R"([{"text":1}])", false}};
+        for (const auto& [reply, valid] : replies) {
+            const auto body = std::string(R"({"output":{"choices":[{"message":{"content":)") + reply + "}}]}}";
+            auto result = provider.parse_response(body);
+            if (valid) {
+                ASSERT_TRUE(std::holds_alternative<AIProviderSuccess>(result));
+                EXPECT_EQ("answer", std::get<std::string>(std::get<AIProviderSuccess>(result).value));
+            } else {
+                EXPECT_TRUE(std::holds_alternative<AIProviderMalformed>(result));
+            }
         }
     }
 }

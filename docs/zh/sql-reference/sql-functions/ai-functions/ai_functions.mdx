@@ -204,14 +204,14 @@ options 用于传递模型服务支持的额外请求参数。
 
 | 函数 | 协议和端点 | 文本 | 图片 FILE | 视频 FILE |
 | --- | --- | --- | --- | --- |
-| `ai_complete` | `openai` 兼容 Chat | 支持 | 内联或 URL | 内联或 URL，端点和模型须支持 `video_url` |
+| `ai_complete` | `openai` 兼容 Chat | 支持 | 内联或 URL | 不支持 |
 | `ai_complete` | `dashscope` 原生文本生成 | 支持 | 不支持 | 不支持 |
 | `ai_complete` | `dashscope` 原生多模态生成 | 支持 | 内联或 URL | 内联或 URL |
 | `ai_embed` | `openai` 兼容 Embeddings | 支持 | 不支持 | 不支持 |
 | `ai_embed` | `dashscope` 原生文本向量 | 支持 | 不支持 | 不支持 |
 | `ai_embed` | `dashscope` 原生多模态向量 | 支持 | 内联或 URL | 仅 URL |
 
-FILE 重载支持图片和视频，不支持音频或 PDF。OpenAI 兼容 Chat 端点需要支持 `video_url` 扩展才能接收视频。[百炼视觉模型](https://help.aliyun.com/zh/model-studio/vision)支持该形式，使用其他服务时请确认端点和模型的能力。
+传入视频时，请选择 `dashscope` 原生多模态端点。FILE 重载不支持音频或 PDF。
 
 - 使用 **内联字节** 时，可以用 `to_file(named_struct('inline', image_bytes))` 传入 `VARBINARY` 列 `image_bytes` 中的原始字节。字节串不能为空。StarRocks 会将其编码成 data URI。每个 FILE 默认最多可传 10 MiB，以 Base64 编码前的大小为准。参见 [`ai_function_max_input_file_bytes`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_input_file_bytes)。
 - 使用 **URL 引用** 时，HTTP(S) 地址必须能从模型服务访问。私有对象可通过 [get_presigned_file](../file-functions/presigned_functions.md#get_presigned_file) 生成预签名引用。StarRocks 发送完整 URL。`offset` 必须为 NULL 或 0，`size` 不会裁剪模型读取的远端对象。

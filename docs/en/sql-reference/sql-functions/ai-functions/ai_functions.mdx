@@ -204,14 +204,14 @@ Each call accepts at most one [FILE](../../data-types/other-data-types/FILE.md).
 
 | Function | Protocol and endpoint | Text | Image FILE | Video FILE |
 | --- | --- | --- | --- | --- |
-| `ai_complete` | `openai` compatible Chat | Yes | Inline or URL | Inline or URL if the endpoint and model accept `video_url` |
+| `ai_complete` | `openai` compatible Chat | Yes | Inline or URL | No |
 | `ai_complete` | `dashscope` native text generation | Yes | No | No |
 | `ai_complete` | `dashscope` native multimodal generation | Yes | Inline or URL | Inline or URL |
 | `ai_embed` | `openai` compatible Embeddings | Yes | No | No |
 | `ai_embed` | `dashscope` native text embedding | Yes | No | No |
 | `ai_embed` | `dashscope` native multimodal embedding | Yes | Inline or URL | URL only |
 
-The FILE overloads support images and video. Audio and PDF inputs are unsupported. The OpenAI-compatible Chat adapter sends video as `video_url`, which is supported by [Model Studio vision models](https://www.alibabacloud.com/help/en/model-studio/vision). Check the endpoint and model before using this extension with another service.
+For video input, use a native `dashscope` multimodal endpoint. The FILE overloads do not support audio or PDF files.
 
 - To supply **inline bytes** from a `VARBINARY` column `image_bytes`, use `to_file(named_struct('inline', image_bytes))`. The bytes must be nonempty. StarRocks encodes them as a data URI. The default limit is 10 MiB per FILE before Base64 encoding. See [`ai_function_max_input_file_bytes`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_input_file_bytes).
 - For a **URL reference**, supply an HTTP(S) URL the model service can access. For private objects, use [get_presigned_file](../file-functions/presigned_functions.md#get_presigned_file). StarRocks forwards the full URL. `offset` must be NULL or 0, and `size` does not restrict the byte range available to the service.

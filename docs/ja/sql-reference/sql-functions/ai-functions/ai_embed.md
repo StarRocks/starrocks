@@ -17,7 +17,7 @@ ai_embed(input[, provider[, model[, options]]])
 ## 引数
 
 - `input`: ベクトル化するテキストの `VARCHAR` 式、または画像や動画を 1 つ指定する `FILE` 式。[FILE 入力の対応範囲](ai_functions.mdx#file-input)を参照してください。
-- `options`: オプションの定数 JSON オブジェクト。`dimensions` はデフォルトで Provider の設定を継承し、options で上書きできます。モデルとサービスが指定された次元数をサポートしている必要があります。
+- `options`: オプションの定数 JSON オブジェクト。Provider の `dimensions` で設定した次元数を上書きするには、`dashscope` ネイティブプロトコルでは `json_object('dimension', 512)` のように `dimension` を指定します。`openai` プロトコル（Model Studio の OpenAI 互換エンドポイントを含む）では `dimensions` を指定します。モデルとサービスが指定した次元数をサポートしている必要があります。
 
 `provider` と `model` の型およびデフォルトの動作については、[共通の呼び出しルール](ai_functions.mdx#共通の呼び出しルール)を参照してください。
 
@@ -30,6 +30,7 @@ ai_embed(input[, provider[, model[, options]]])
 ```sql
 SELECT ai_embed('列指向ストレージは分析クエリに適しています。');
 
+-- この例では text_embedding に openai プロトコルを設定しています。
 SELECT ai_embed(
     input => '列指向ストレージは分析クエリに適しています。',
     provider => 'text_embedding',

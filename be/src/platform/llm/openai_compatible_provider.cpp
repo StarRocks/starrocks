@@ -86,9 +86,8 @@ Status write_chat_messages(const AIChatRequest& request, RequestWriter& writer) 
         user.AddMember("content", prompt, allocator);
     } else {
         const auto& media = *request.media;
-        const bool is_video = media.is_video();
-        if (!is_video && !media.is_image()) {
-            return Status::NotSupported("OpenAI-compatible chat requires an image or video");
+        if (!media.is_image()) {
+            return Status::NotSupported("OpenAI-compatible chat only supports images as FILE input");
         }
         std::string_view uri;
         if (media.referenced_url) {
@@ -105,12 +104,11 @@ Status write_chat_messages(const AIChatRequest& request, RequestWriter& writer) 
         text.AddMember("text", prompt, allocator);
         content.PushBack(text, allocator);
 
-        const auto type = rapidjson::StringRef(is_video ? "video_url" : "image_url");
         rapidjson::Value url(rapidjson::kObjectType);
         url.AddMember("url", rapidjson::StringRef(uri.data(), uri.size()), allocator);
         rapidjson::Value part(rapidjson::kObjectType);
-        part.AddMember("type", type, allocator);
-        part.AddMember(type, url, allocator);
+        part.AddMember("type", "image_url", allocator);
+        part.AddMember("image_url", url, allocator);
         content.PushBack(part, allocator);
         user.AddMember("content", content, allocator);
     }

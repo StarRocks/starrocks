@@ -113,28 +113,16 @@ TEST(OpenAICompatibleProviderTest, BuildsSingleEmbeddingInputWithTypedOptions) {
     EXPECT_EQ("Bearer key", result->headers.back().value);
 }
 
-TEST(OpenAICompatibleProviderTest, BuildsChatMediaPartsAndRejectsEmbeddingMedia) {
+TEST(OpenAICompatibleProviderTest, BuildsChatImageUrlsAndRejectsEmbeddingMedia) {
     OpenAICompatibleProvider provider;
     const std::string signed_url = "https://bucket.example/object?signature=a%2Fb%2Bc&expires=123";
     const struct {
         AIMediaInput media;
-        const char* part_type;
         std::string expected_url;
     } cases[] = {
             {{.content_type = "image/jpeg", .inline_bytes = std::string("\xff\xd8\xff\xe0\0\x02", 6)},
-             "image_url",
              "data:image/jpeg;base64,/9j/4AAC"},
-            {{.content_type = "VIDEO/MP4",
-              .inline_bytes = std::string("\0\0\0\x18"
-                                          "ftypisom\0\0\0\0isommp42",
-                                          24)},
-             "video_url",
-             "data:VIDEO/MP4;base64,AAAAGGZ0eXBpc29tAAAAAGlzb21tcDQy"},
-            {{.content_type = "video/webm", .inline_bytes = "\x1a\x45\xdf\xa3"},
-             "video_url",
-             "data:video/webm;base64,GkXfow=="},
-            {{.content_type = "image/jpeg", .referenced_url = signed_url}, "image_url", signed_url},
-            {{.content_type = "video/mp4", .referenced_url = signed_url}, "video_url", signed_url},
+            {{.content_type = "image/jpeg", .referenced_url = signed_url}, signed_url},
     };
     for (const auto& test : cases) {
         SCOPED_TRACE(test.expected_url);
@@ -144,8 +132,8 @@ TEST(OpenAICompatibleProviderTest, BuildsChatMediaPartsAndRejectsEmbeddingMedia)
         ASSERT_TRUE(result.ok()) << result.status();
         EXPECT_EQ(
                 strings::Substitute(
-                        R"({"model":"model","messages":[{"role":"system","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"describe"},{"type":"$0","$0":{"url":"$1"}}]}],"stream":false})",
-                        test.part_type, test.expected_url),
+                        R"({"model":"model","messages":[{"role":"system","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"describe"},{"type":"image_url","image_url":{"url":"$0"}}]}],"stream":false})",
+                        test.expected_url),
                 result->body);
 
         request.capability = AICapability::EMBEDDING;
@@ -155,11 +143,15 @@ TEST(OpenAICompatibleProviderTest, BuildsChatMediaPartsAndRejectsEmbeddingMedia)
     }
 }
 
-TEST(OpenAICompatibleProviderTest, ChatRejectsNonvisualInlineAndReferencedMedia) {
+TEST(OpenAICompatibleProviderTest, ChatRejectsNonImageInlineAndReferencedMedia) {
     OpenAICompatibleProvider provider;
-    for (const auto& media : {AIMediaInput{.content_type = "application/octet-stream", .inline_bytes = "private-bytes"},
-                              AIMediaInput{.content_type = "application/octet-stream",
-                              .referenced_url = "https://bucket.example/file?signature=private"}}) {
+    for (const auto& media :
+         {AIMediaInput{.content_type = "video/mp4", .inline_bytes = "private-bytes"},
+          AIMediaInput{.content_type = "video/mp4", .referenced_url = "https://bucket.example/private.mp4"},
+          AIMediaInput{.content_type = "application/octet-stream", .inline_bytes = "private-bytes"},
+          AIMediaInput{.content_type = "application/octet-stream",
+          .referenced_url = "https://bucket.example/file?signature=private"}}) {
+        SCOPED_TRACE(media.content_type);
         SCOPED_TRACE(media.inline_bytes ? "inline" : "URL");
         auto request = provider.build_request(
                 {.model = "model", .prompt = "describe", .media = std::make_shared<const AIMediaInput>(media)});

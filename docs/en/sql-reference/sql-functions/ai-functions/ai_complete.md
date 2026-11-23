@@ -40,7 +40,7 @@ SELECT ai_complete(
 );
 ```
 
-The [image example](ai_functions.mdx#vision-chat) uses the Model Studio Provider `vision_chat`. The following query uses it to describe a video supplied by URL.
+For an image, see the [OpenAI-compatible Chat example](ai_functions.mdx#vision-chat). For a video, the following query uses the native multimodal Provider `dashscope_chat` from [CREATE AI PROVIDER](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md).
 
 ```sql
 SELECT ai_complete(
@@ -48,6 +48,6 @@ SELECT ai_complete(
     file => to_file(named_struct(
         'uri', 'https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20250107/lbcemt/new+video.mp4'
     )),
-    provider => 'vision_chat'
+    provider => 'dashscope_chat'
 );
 ```

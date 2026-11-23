@@ -40,7 +40,7 @@ SELECT ai_complete(
 );
 ```
 
-[图片示例](ai_functions.mdx#vision-chat)使用了百炼 Provider `vision_chat`。下面用它描述一段通过 URL 传入的视频。
+图片用法见 [OpenAI 兼容 Chat 示例](ai_functions.mdx#vision-chat)。下面用 [CREATE AI PROVIDER](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md) 中的百炼原生多模态 Provider `dashscope_chat` 描述一段视频。
 
 ```sql
 SELECT ai_complete(
@@ -48,6 +48,6 @@ SELECT ai_complete(
     file => to_file(named_struct(
         'uri', 'https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20250107/lbcemt/new+video.mp4'
     )),
-    provider => 'vision_chat'
+    provider => 'dashscope_chat'
 );
 ```

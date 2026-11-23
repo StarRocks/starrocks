@@ -17,7 +17,7 @@ ai_embed(input[, provider[, model[, options]]])
 ## 参数
 
 - `input`：需要向量化的文本（`VARCHAR` 表达式），或一张图片、一个视频（`FILE` 表达式）。参见 [FILE 输入支持范围](ai_functions.mdx#file-input)。
-- `options`：可选常量 JSON 对象。`dimensions` 默认继承 Provider 配置，也可通过 options 覆盖；模型和服务必须支持请求的维度。
+- `options`：可选常量 JSON 对象。要覆盖 Provider 配置的默认维度（`dimensions`），原生 `dashscope` 协议用 `dimension`，例如 `json_object('dimension', 512)`。`openai` 协议（包括百炼的 OpenAI 兼容端点）用 `dimensions`。所选模型和服务必须支持指定的维度。
 
 `provider`、`model` 的类型及默认行为见 [公共调用规则](ai_functions.mdx#公共调用规则)。
 
@@ -30,6 +30,7 @@ ai_embed(input[, provider[, model[, options]]])
 ```sql
 SELECT ai_embed('列式存储适合分析查询。');
 
+-- 本例的 text_embedding 使用 openai 协议。
 SELECT ai_embed(
     input => '列式存储适合分析查询。',
     provider => 'text_embedding',

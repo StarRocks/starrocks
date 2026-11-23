@@ -17,7 +17,7 @@ ai_embed(input[, provider[, model[, options]]])
 ## Arguments
 
 - `input`: A `VARCHAR` expression for text or a `FILE` expression for one image or video. See [FILE input support](ai_functions.mdx#file-input).
-- `options`: An optional constant JSON object. `dimensions` defaults to the Provider configuration and can be overridden through options. The model and service must support the requested dimensions.
+- `options`: An optional constant JSON object. To override the Provider's `dimensions` setting with the native `dashscope` protocol, use `dimension`, for example `json_object('dimension', 512)`. With the `openai` protocol (including Model Studio's OpenAI-compatible endpoint), use `dimensions`. The model and service must support the requested dimension.
 
 For the types and default behavior of `provider` and `model`, see [Common calling rules](ai_functions.mdx#common-calling-rules).
 
@@ -30,6 +30,7 @@ Returns a nullable `ARRAY<FLOAT>`. The service response must include a nonempty 
 ```sql
 SELECT ai_embed('Columnar storage is suitable for analytical queries.');
 
+-- This example assumes text_embedding uses the openai protocol.
 SELECT ai_embed(
     input => 'Columnar storage is suitable for analytical queries.',
     provider => 'text_embedding',

@@ -204,12 +204,13 @@ AIProviderParseResult parse_chat(const rapidjson::Value& output, EndpointType en
     if (message == choice.MemberEnd() || !message->value.IsObject()) return AIProviderMalformed{.usage = usage};
     auto content = message->value.FindMember("content");
     if (content == message->value.MemberEnd()) return AIProviderMalformed{.usage = usage};
-    if (endpoint_type == EndpointType::TEXT_CHAT) {
-        if (!content->value.IsString()) return AIProviderMalformed{.usage = usage};
+    if (content->value.IsString()) {
         return AIProviderSuccess{.value = std::string(content->value.GetString(), content->value.GetStringLength()),
                                  .usage = usage};
     }
-    if (!content->value.IsArray() || content->value.Empty()) return AIProviderMalformed{.usage = usage};
+    if (endpoint_type != EndpointType::MULTIMODAL_CHAT || !content->value.IsArray() || content->value.Empty()) {
+        return AIProviderMalformed{.usage = usage};
+    }
     std::string answer;
     for (const auto& part : content->value.GetArray()) {
         if (!part.IsObject()) return AIProviderMalformed{.usage = usage};

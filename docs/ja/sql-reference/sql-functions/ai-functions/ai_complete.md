@@ -40,7 +40,7 @@ SELECT ai_complete(
 );
 ```
 
-[画像の例](ai_functions.mdx#vision-chat)では、Model Studio の Provider `vision_chat` を使っています。次のクエリでは、この Provider に URL で動画を渡し、その内容を説明させます。
+画像を渡す方法は [OpenAI 互換 Chat の例](ai_functions.mdx#vision-chat)を参照してください。次のクエリは、[CREATE AI PROVIDER](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md) で作成したネイティブのマルチモーダル Provider `dashscope_chat` を使って動画の内容を説明します。
 
 ```sql
 SELECT ai_complete(
@@ -48,6 +48,6 @@ SELECT ai_complete(
     file => to_file(named_struct(
         'uri', 'https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20250107/lbcemt/new+video.mp4'
     )),
-    provider => 'vision_chat'
+    provider => 'dashscope_chat'
 );
 ```

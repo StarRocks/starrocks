@@ -204,14 +204,14 @@ options は、モデルサービスがサポートする追加のリクエスト
 
 | 関数 | プロトコルとエンドポイント | テキスト | 画像 FILE | 動画 FILE |
 | --- | --- | --- | --- | --- |
-| `ai_complete` | `openai` 互換 Chat | 対応 | インラインまたは URL | インラインまたは URL（エンドポイントとモデルが `video_url` に対応する場合） |
+| `ai_complete` | `openai` 互換 Chat | 対応 | インラインまたは URL | 非対応 |
 | `ai_complete` | `dashscope` ネイティブのテキスト生成 | 対応 | 非対応 | 非対応 |
 | `ai_complete` | `dashscope` ネイティブのマルチモーダル生成 | 対応 | インラインまたは URL | インラインまたは URL |
 | `ai_embed` | `openai` 互換 Embeddings | 対応 | 非対応 | 非対応 |
 | `ai_embed` | `dashscope` ネイティブのテキスト埋め込み | 対応 | 非対応 | 非対応 |
 | `ai_embed` | `dashscope` ネイティブのマルチモーダル埋め込み | 対応 | インラインまたは URL | URL のみ |
 
-FILE を取るオーバーロードは画像と動画に対応しています。音声と PDF はサポートされません。OpenAI 互換 Chat で動画を渡すには、エンドポイントが `video_url` 拡張に対応している必要があります。[Model Studio の視覚モデル](https://www.alibabacloud.com/help/en/model-studio/vision)はこの形式に対応しています。他のサービスを使う場合はエンドポイントとモデルの対応状況を確認してください。
+動画を渡す場合は、`dashscope` ネイティブのマルチモーダルエンドポイントを使用してください。FILE を取るオーバーロードは音声と PDF に対応していません。
 
 - **インラインデータ**を `VARBINARY` 型の列 `image_bytes` から渡す場合は、`to_file(named_struct('inline', image_bytes))` で空でない生のバイト列を渡します。StarRocks がこれを data URI に変換します。デフォルトの上限は Base64 エンコード前のサイズで FILE あたり 10 MiB です。[`ai_function_max_input_file_bytes`](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_input_file_bytes) を参照してください。
 - **URL で参照する場合**は、モデルサービスからアクセスできる HTTP(S) URL を指定します。非公開のオブジェクトには [get_presigned_file](../file-functions/presigned_functions.md#get_presigned_file) を使用できます。StarRocks は URL 全体を送信します。`offset` は NULL または 0 を指定します。`size` でモデルサービスが読み取るバイト範囲を指定することはできません。
