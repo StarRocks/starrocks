@@ -29,6 +29,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.Version;
+import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
@@ -929,6 +930,13 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 context, null, streamLoadInfo.getLoadMemLimit(), streamLoadInfo.getExecMemLimit(),
                 streamLoadInfo.getNegative(), channelNum, streamLoadInfo.getColumnExprDescs(), streamLoadInfo, label,
                 streamLoadInfo.getTimeout());
+        // The coordinator takes the transmission compression of the plan from this task's session
+        // (SessionVariable#toThrift), not from the request. A request that does not set it, or names a compression the
+        // load cannot send its data with, keeps the session's value, which a new session takes from the global one.
+        streamLoadParams.getTransmissionCompressionType()
+                .filter(CompressionUtils::isSupportedLoadTransmissionCompression)
+                .ifPresent(compressionType ->
+                        context.getSessionVariable().setLoadTransmissionCompressionType(compressionType));
 
         // Unlike the other load paths, a transaction stream load reaches the planner holding no table lock, so let the
         // planner take it: a schema change committing mid-plan would split the load's slots from its sink schema.
