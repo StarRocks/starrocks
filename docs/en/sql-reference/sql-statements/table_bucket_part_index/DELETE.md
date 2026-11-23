@@ -52,6 +52,8 @@ column_name1 op { value | value_list } [ AND column_name2 op { value | value_lis
 
 After you execute the DELETE statement, the query performance of your cluster may deteriorate for a period of time (before compaction is completed). The degree of deterioration varies based on the number of conditions that you specify. A larger number of conditions indicates a higher degree of deterioration.
 
+In a shared-data cluster, if the table uses hash bucketing and the DELETE conditions specify every bucketing column with `=` or `IN`, StarRocks writes the delete predicate only to the tablets (buckets) that can hold the matching rows. Queries and compactions on the other tablets are not affected by the DELETE. This behavior is controlled by the FE configuration `lake_enable_delete_bucket_pruning`.
+
 :::warning Bulk removal: prefer `TRUNCATE PARTITION` over `DELETE`
 
 On Duplicate Key, Aggregate, and Unique Key tables, `DELETE` does **not** physically remove rows. It writes a delete predicate (a "delete marker") attached to a new tablet version. Every subsequent read must scan the affected tablets, evaluate the delete predicates per row, and merge the result on the fly (merge-on-read). This cost persists until base compaction merges the delete predicates with the base data.

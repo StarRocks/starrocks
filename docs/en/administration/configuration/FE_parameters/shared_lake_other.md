@@ -584,6 +584,15 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Description: Whether to balance the number of tablets among Compute Nodes during the tablet migration of cloud-native tables in a shared-data cluster. `true` indicates to balance the tablets among Compute Nodes, and `false` indicates to disabling this feature.
 - Introduced in: v3.3.4
 
+### `lake_enable_delete_bucket_pruning`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a DELETE on a hash-bucketed Duplicate Key, Aggregate, or Unique Key table in a shared-data cluster writes its delete predicate only to the tablets (buckets) that can hold the matching rows. It takes effect when the DELETE conditions specify every bucketing column with `=` or `IN`. The other tablets of the partition receive the transaction without the delete predicate, so queries and compactions on them are not affected by the DELETE. Set it to `false` to write the delete predicate to every tablet of the partition. This configuration only takes effect when `run_mode` is set to `shared_data`.
+- Introduced in: -
+
 ### `lake_enable_ingest_slowdown`
 
 - Default: true

@@ -585,6 +585,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 在存算分离集群中，云原生表 tablet 迁移期间是否平衡计算节点之间的 tablet 数量。`true` 表示在计算节点之间平衡 tablet，`false` 表示禁用此功能。
 - 引入版本: v3.3.4
 
+### `lake_enable_delete_bucket_pruning`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 在存算分离集群中，对使用 Hash 分桶的明细表、聚合表或更新表执行 DELETE 时，是否只把删除谓词写入可能包含匹配行的 Tablet（分桶）。当 DELETE 条件通过 `=` 或 `IN` 指定了所有分桶列时生效。分区中的其他 Tablet 会参与该事务，但不写入删除谓词，因此其上的查询和 Compaction 不受该 DELETE 影响。设置为 `false` 时，删除谓词会写入分区的所有 Tablet。此配置项仅在 `run_mode` 为 `shared_data` 时生效。
+- 引入版本: -
+
 ### `lake_enable_ingest_slowdown`
 
 - 默认值: true

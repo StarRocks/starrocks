@@ -17,10 +17,12 @@ package com.starrocks.lake.delete;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
@@ -33,6 +35,7 @@ import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.load.DeleteBucketPruner;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.MultiDeleteInfo;
@@ -68,7 +71,9 @@ import org.apache.logging.log4j.Logger;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Future;
+import java.util.stream.Collectors;
 
 /**
  * LakeDeleteJob is used to delete data for lake table.
@@ -88,6 +93,9 @@ public class LakeDeleteJob extends DeleteJob {
     private final ComputeResource computeResource;
 
     private Map<Long, List<Long>> beToTablets;
+    // Tablets that cannot hold a row matching the delete conditions (see DeleteBucketPruner). They are sent to
+    // BE with the other tablets, so that every tablet of a partition has a txn log, but get no delete predicate.
+    private final Set<Long> prunedTablets = Sets.newHashSet();
 
     public LakeDeleteJob(long id, long transactionId, String label, TableSchemaKeyPB schemaKey,
                          MultiDeleteInfo deleteInfo, ComputeResource computeResource) {
@@ -110,14 +118,20 @@ public class LakeDeleteJob extends DeleteJob {
         }
 
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        List<Predicate> conditions = getDeleteConditions();
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
+            DeleteBucketPruner bucketPruner = Config.lake_enable_delete_bucket_pruning
+                    ? DeleteBucketPruner.create((OlapTable) table, conditions) : null;
             for (Partition partition : partitions) {
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    List<MaterializedIndex> indexes = physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
+                    // null when every tablet can hold rows matching the delete conditions
+                    Set<Long> selectedTablets = bucketPruner == null ? null : bucketPruner.selectTablets(partition, indexes);
                     List<Long> indexIds = Lists.newArrayList();
-                    for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                    for (MaterializedIndex index : indexes) {
                         indexIds.add(index.getId());
                         for (Tablet tablet : index.getTablets()) {
                             ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource,
@@ -126,6 +140,9 @@ public class LakeDeleteJob extends DeleteJob {
                                 throw new NoAliveBackendException("no alive backend");
                             }
                             beToTablets.computeIfAbsent(computeNode.getId(), k -> Lists.newArrayList()).add(tablet.getId());
+                            if (selectedTablets != null && !selectedTablets.contains(tablet.getId())) {
+                                prunedTablets.add(tablet.getId());
+                            }
                         }
                     }
 
@@ -141,8 +158,14 @@ public class LakeDeleteJob extends DeleteJob {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
 
+        if (!prunedTablets.isEmpty()) {
+            LOG.info("delete job {} (txn {}) on table {} writes its delete predicate to {} of {} tablets, " +
+                            "the other tablets cannot hold matching rows",
+                    getId(), getTransactionId(), table.getName(), getTotalTabletNum() - prunedTablets.size(),
+                    getTotalTabletNum());
+        }
+
         // create delete predicate
-        List<Predicate> conditions = getDeleteConditions();
         DeletePredicatePB deletePredicate = createDeletePredicate(table, conditions);
 
         // send delete data request to BE
@@ -161,6 +184,10 @@ public class LakeDeleteJob extends DeleteJob {
                 request.txnId = getTransactionId();
                 request.deletePredicate = deletePredicate;
                 request.setSchemaKey(schemaKey);
+                if (!prunedTablets.isEmpty()) {
+                    request.prunedTabletIds = entry.getValue().stream().filter(prunedTablets::contains)
+                            .collect(Collectors.toList());
+                }
 
                 LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
                 Future<DeleteDataResponse> responseFuture = lakeService.deleteData(request);
@@ -229,9 +256,13 @@ public class LakeDeleteJob extends DeleteJob {
         return deletePredicate;
     }
 
+    private long getTotalTabletNum() {
+        return beToTablets.values().stream().mapToLong(List::size).sum();
+    }
+
     @Override
     public long getTimeoutMs() {
-        long totalTablets = beToTablets.values().stream().flatMap(List::stream).count();
+        long totalTablets = getTotalTabletNum();
         // timeout is between 30 seconds to 5 min
         long timeout = Math.max(totalTablets * Config.tablet_delete_timeout_second * 1000L, 30000L);
         return Math.min(timeout, Config.load_straggler_wait_second * 1000L);

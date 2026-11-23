@@ -3308,7 +3308,7 @@ TEST_F(SchemaChangeBaseTabletReadSchemaTest, delete_predicate_rowset_is_not_conv
 
     ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(base_tablet_id));
     int64_t delete_txn_id = next_id();
-    ASSERT_OK(tablet.delete_data(delete_txn_id, delete_predicate, nullptr));
+    ASSERT_OK(tablet.delete_data(delete_txn_id, &delete_predicate, nullptr));
     ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, delete_txn_id).status());
     version++;
 
@@ -3415,7 +3415,7 @@ TEST_F(SchemaChangeBaseTabletReadSchemaTest, fully_deleted_rowset_contributes_no
 
     ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(base_tablet_id));
     int64_t delete_txn_id = next_id();
-    ASSERT_OK(tablet.delete_data(delete_txn_id, delete_predicate, nullptr));
+    ASSERT_OK(tablet.delete_data(delete_txn_id, &delete_predicate, nullptr));
     ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, delete_txn_id).status());
     version++;
 

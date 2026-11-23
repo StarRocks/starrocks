@@ -50,6 +50,8 @@ column_name1 op { value | value_list } [ AND column_name2 op { value | value_lis
 
 执行 DELETE 语句后，可能会导致接下来一段时间内（Compaction 完成之前）的查询效率降低。影响程度取决于语句中指定的删除条件的数量。指定的条件越多，影响越大。
 
+在存算分离集群中，如果表使用 Hash 分桶，并且 DELETE 条件通过 `=` 或 `IN` 指定了所有分桶列，StarRocks 只会把删除谓词写入可能包含匹配行的 Tablet（分桶）。其他 Tablet 上的查询和 Compaction 不受该 DELETE 影响。该行为由 FE 配置项 `lake_enable_delete_bucket_pruning` 控制。
+
 :::warning 批量删除分区数据请优先使用 `TRUNCATE PARTITION`
 
 在明细表、聚合表、更新表上执行 `DELETE` **不会立即物理删除数据**，只会在 Tablet 上写入一个新的版本及对应的删除谓词（delete predicate / 删除标记）。在 Base Compaction 把删除谓词与基线数据合并之前，每一次读取都要扫描受影响的 Tablet，逐行评估删除谓词、实时合并结果（merge-on-read），因此这段时间内查询性能会显著下降。

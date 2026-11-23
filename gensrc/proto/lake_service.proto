@@ -299,6 +299,12 @@ message DeleteDataRequest {
     // delete operation, allowing the backend to update tablet metadata schema 
     // during transaction publishing if needed.
     optional TableSchemaKeyPB schema_key = 4;
+    // Subset of |tablet_ids| that FE has pruned by hash bucket: no row stored in these tablets can match
+    // |delete_predicate|. The transaction still needs a txn log on every tablet of the partition to publish,
+    // so BE writes a txn log for them as well, but without the delete predicate: publishing it only advances
+    // the tablet version, and reads and compactions of these tablets do not pay for the predicate.
+    // Absent from an older FE. An older BE ignores it and writes the predicate to every tablet, as before.
+    repeated int64 pruned_tablet_ids = 5;
 }
 
 message DeleteDataResponse {

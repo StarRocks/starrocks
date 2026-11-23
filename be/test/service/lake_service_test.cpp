@@ -5500,6 +5500,44 @@ TEST_F(LakeServiceTest, test_delete_data_ok) {
     EXPECT_EQ(0L, response.failed_tablets().size());
 }
 
+// A tablet listed in pruned_tablet_ids gets a txn log without the delete predicate; the others get the predicate.
+TEST_F(LakeServiceTest, test_delete_data_with_pruned_tablets) {
+    auto make_request = [&](int64_t txn_id) {
+        DeleteDataRequest request;
+        request.add_tablet_ids(_tablet_id);
+        request.set_txn_id(txn_id);
+        auto* binary_predicate = request.mutable_delete_predicate()->add_binary_predicates();
+        binary_predicate->set_column_name("c0");
+        binary_predicate->set_op("=");
+        binary_predicate->set_value("1");
+        request.mutable_delete_predicate()->set_version(-1);
+        return request;
+    };
+
+    // Pruned tablets that are not in tablet_ids do not matter.
+    const int64_t txn_id = next_id();
+    auto request = make_request(txn_id);
+    request.add_pruned_tablet_ids(_tablet_id + 1);
+    DeleteDataResponse response;
+    _lake_service.delete_data(nullptr, &request, &response, nullptr);
+    ASSERT_EQ(0, response.failed_tablets_size());
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(_tablet_id, txn_id));
+    ASSERT_TRUE(txn_log->op_write().rowset().has_delete_predicate());
+    ASSERT_EQ(1, txn_log->op_write().rowset().delete_predicate().binary_predicates_size());
+
+    const int64_t pruned_txn_id = next_id();
+    auto pruned_request = make_request(pruned_txn_id);
+    pruned_request.add_pruned_tablet_ids(_tablet_id);
+    DeleteDataResponse pruned_response;
+    _lake_service.delete_data(nullptr, &pruned_request, &pruned_response, nullptr);
+    ASSERT_EQ(0, pruned_response.failed_tablets_size());
+    ASSIGN_OR_ABORT(auto pruned_txn_log, _tablet_mgr->get_txn_log(_tablet_id, pruned_txn_id));
+    ASSERT_TRUE(pruned_txn_log->has_op_write());
+    ASSERT_FALSE(pruned_txn_log->op_write().rowset().has_delete_predicate());
+    ASSERT_EQ(0, pruned_txn_log->op_write().rowset().num_rows());
+    ASSERT_EQ(0, pruned_txn_log->op_write().rowset().segment_metas_size());
+}
+
 TEST_F(LakeServiceTest, test_aggregate_publish_version_normal) {
     brpc::Server server;
     MockLakeServiceImpl mock_service;
