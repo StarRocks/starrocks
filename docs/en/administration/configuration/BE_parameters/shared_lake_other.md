@@ -812,6 +812,33 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Description: The maximum number of inline cache items in Data Cache. For some particularly small cache blocks, Data Cache stores them in `inline` mode, which caches the block data and metadata together in memory.
 - Introduced in: v3.4.0
 
+### datacache_lru_shard_evict_fallback_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether an LRU shard of Data Cache can evict entries from the other shards when it is being refilled or cannot supply the whole charge by itself. `false` restores the behavior that a shard only evicts its own entries, and `datacache_lru_shard_refill_low_watermark_percent` and `datacache_lru_shard_refill_high_watermark_percent` are ignored.
+- Introduced in: -
+
+### datacache_lru_shard_refill_low_watermark_percent
+
+- Default: 50
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: An LRU shard of Data Cache is refilled from the largest shards instead of evicting its own entries once its usage drops below this percentage of its capacity, until it reaches `datacache_lru_shard_refill_high_watermark_percent`. The value must not exceed `datacache_lru_shard_refill_high_watermark_percent`. Setting both parameters to `0` disables the refill.
+- Introduced in: -
+
+### datacache_lru_shard_refill_high_watermark_percent
+
+- Default: 70
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The percentage of the shard capacity at which the refill of an LRU shard of Data Cache stops. Valid values: `datacache_lru_shard_refill_low_watermark_percent` to `100`. Setting both parameters to `0` disables the refill.
+- Introduced in: -
+
 ### datacache_mem_size
 
 - Default: 20%
