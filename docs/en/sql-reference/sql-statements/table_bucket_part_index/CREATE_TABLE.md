@@ -594,7 +594,7 @@ PROPERTIES (
 - Expression and List partitioning are not supported.
 - The partition column need to be of date type.
 - Multiple partition columns are not supported.
-- Primary Key tables are not supported.
+- Primary Key tables support storage cooldown in shared-nothing clusters with single-column `DATE` or `DATETIME` range partitioning. After the cooldown deadline, physical migration also requires an eligible destination disk on the same BE and is subject to `primary_key_disk_schedule_time`.
 
 #### Set the number of replicas for each tablet in partitions
 
