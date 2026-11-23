@@ -16,6 +16,7 @@ package com.starrocks.qe;
 
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
@@ -58,6 +59,12 @@ public class QueryQueueManager {
         if (LOG.isDebugEnabled()) {
             LOG.debug("Maybe wait for query queue, queryId: {}", UUIDUtil.fromTUniqueid(coord.getQueryId()).toString());
         }
+        if (context.isMetadataContext()) {
+            SimpleExecutor.checkInternalQueryState(context);
+            if (borrowParentSlot(context, coord)) {
+                return;
+            }
+        }
         final JobSpec jobSpec = coord.getJobSpec();
         final SlotProvider slotProvider = jobSpec.getSlotProvider();
         long startMs = System.currentTimeMillis();
@@ -94,7 +101,6 @@ public class QueryQueueManager {
 
             while (allocatedSlot == null) {
                 // Check timeout.
-                long currentMs = System.currentTimeMillis();
                 if (slotRequirement.isPendingTimeout()) {
                     MetricRepo.COUNTER_QUERY_QUEUE_TIMEOUT.increase(1L);
                     slotProvider.cancelSlotRequirement(slotRequirement);
@@ -110,7 +116,11 @@ public class QueryQueueManager {
 
                 // Wait for slot allocated.
                 try {
-                    allocatedSlot = slotFuture.get(deadlineEpochMs - currentMs, TimeUnit.MILLISECONDS);
+                    if (!awaitSlot(context, coord, slotFuture, deadlineEpochMs)) {
+                        return;
+                    }
+                    allocatedSlot = slotRequirement;
+                    coord.markSlotAdmitted();
                 } catch (ExecutionException e) {
                     LOG.warn("[Slot] failed to allocate resource to query [slot={}]", slotRequirement, e);
                     if (e.getCause() instanceof RecoverableException) {
@@ -128,6 +138,11 @@ public class QueryQueueManager {
                     throw new StarRocksException("Cancelled", e);
                 }
             }
+        } catch (StarRocksException | InterruptedException | RuntimeException e) {
+            if (context.isMetadataContext()) {
+                coord.onReleaseSlots();
+            }
+            throw e;
         } finally {
             if (isPending) {
                 long pendingTimeMs = System.currentTimeMillis() - startMs;
@@ -138,6 +153,45 @@ public class QueryQueueManager {
                 MetricRepo.COUNTER_QUERY_QUEUE_PENDING.increase(-1L);
                 ResourceGroupMetricMgr.increaseQueuedQuery(context, -1L);
                 context.setPending(false);
+            }
+        }
+    }
+
+    private boolean borrowParentSlot(ConnectContext context, DefaultCoordinator coord) {
+        for (ConnectContext parent = context.getParent(); parent != null; parent = parent.getParent()) {
+            StmtExecutor executor = parent.getExecutor();
+            if (executor != null && executor.getCoordinator() instanceof DefaultCoordinator parentCoordinator
+                    && coord.borrowQueueSlot(parentCoordinator)) {
+                Tracers.record(Tracers.Module.SCHEDULER, "InternalQuery.QueueAdmission", "shared with parent");
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean awaitSlot(ConnectContext context, DefaultCoordinator coord, Future<LogicalSlot> future,
+                              long deadlineMs) throws InterruptedException, ExecutionException, TimeoutException {
+        if (!context.isMetadataContext()) {
+            future.get(deadlineMs - System.currentTimeMillis(), TimeUnit.MILLISECONDS);
+            return true;
+        }
+        // Do not submit a new request on each poll. The parent may gain admission while this child is queued.
+        while (true) {
+            SimpleExecutor.checkInternalQueryState(context);
+            if (!future.isDone() && borrowParentSlot(context, coord)) {
+                return false;
+            }
+            long waitMs = deadlineMs - System.currentTimeMillis();
+            if (waitMs <= 0) {
+                throw new TimeoutException();
+            }
+            try {
+                future.get(Math.min(waitMs, 100), TimeUnit.MILLISECONDS);
+                SimpleExecutor.checkInternalQueryState(context);
+                Tracers.record(Tracers.Module.SCHEDULER, "InternalQuery.QueueAdmission", "independent");
+                return true;
+            } catch (TimeoutException e) {
+                // Recheck both query deadlines and cancellation even when the queue timeout is much longer.
             }
         }
     }

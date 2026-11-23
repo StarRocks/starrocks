@@ -14,26 +14,38 @@
 
 package com.starrocks.connector.metadata;
 
+import com.starrocks.catalog.ResourceGroupClassifier;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Status;
+import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.connector.metadata.iceberg.IcebergMetadataCollectJob;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.RowBatch;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import mockit.Verifications;
+import mockit.VerificationsInOrder;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -42,6 +54,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -66,12 +79,96 @@ public class MetadataExecutorTest {
                 return "select 1";
             }
         };
-        job.init(parent.getSessionVariable());
-        job.getContext().setParentConnectContext(parent);
+        job.init(parent);
         job.getContext().getSessionVariable().setEnableProfile(false);
         job.getContext().getSessionVariable().setQueryTimeoutS(60);
         parent.setThreadLocalInfo();
         return job;
+    }
+
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testIcebergJobInheritsCallerAdmissionPolicy(boolean queueEnabled) throws Exception {
+        ConnectContext parent = newParent();
+        parent.getSessionVariable().setEnableQueryQueue(queueEnabled);
+        GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(parent.getSessionVariable(),
+                new SystemVariable(SessionVariable.QUERY_MEM_LIMIT, new IntLiteral(1234567)), false);
+        new MockUp<CoordinatorPreprocessor>() {
+            @Mock
+            public TWorkGroup prepareResourceGroup(ConnectContext context, ResourceGroupClassifier.QueryType type) {
+                assertSame(parent, context);
+                return new TWorkGroup().setId(123).setName("caller_group");
+            }
+        };
+        MetadataCollectJob job = new IcebergMetadataCollectJob("iceberg", "db", "table",
+                TResultSinkType.METADATA_ICEBERG, 1, "");
+        job.init(parent);
+        ConnectContext child = job.getContext();
+        assertSame(parent, child.getParent());
+        assertEquals(UserIdentity.ROOT, child.getCurrentUserIdentity());
+        assertTrue(child.isNeedQueued());
+        assertEquals(queueEnabled, child.getSessionVariable().isEnableQueryQueue());
+        assertEquals("caller_group", child.getSessionVariable().getResourceGroup());
+        assertEquals(1234567, child.getSessionVariable().getQueryMemLimit());
+        assertEquals(parent.getCurrentWarehouseId(), child.getCurrentWarehouseId());
+    }
+
+
+    @ParameterizedTest
+    @ValueSource(strings = {"success", "dispatch failure", "result failure"})
+    public void testReleaseSlotBeforeAsyncProfile(String outcome, @Mocked DefaultCoordinator coordinator) throws Exception {
+        MetadataCollectJob job = newJob(newParent());
+        job.getContext().getSessionVariable().setEnableProfile(true);
+        new MockUp<StatementPlanner>() {
+            @Mock
+            public ExecPlan plan(StatementBase statement, ConnectContext context, TResultSinkType sink) {
+                return new ExecPlan();
+            }
+        };
+        new MockUp<DefaultCoordinator.Factory>() {
+            @Mock
+            public DefaultCoordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
+                    List<ScanNode> scans, TDescriptorTable descriptor, ExecPlan plan) {
+                return coordinator;
+            }
+        };
+        new Expectations() {
+            {
+                coordinator.getExecStatus();
+                result = new Status();
+                minTimes = 0;
+                coordinator.getQueryProfile();
+                result = new RuntimeProfile("Execution");
+                coordinator.tryProcessProfileAsync((Consumer<Boolean>) any);
+                result = true;
+                if (outcome.equals("dispatch failure")) {
+                    coordinator.exec();
+                    result = new IllegalStateException(outcome);
+                } else {
+                    coordinator.getNext();
+                    result = outcome.equals("result failure") ? new IllegalStateException(outcome) : new RowBatch();
+                }
+            }
+        };
+        try {
+            job.asyncCollectMetadata();
+            assertEquals(outcome.equals("success") ? QueryState.MysqlStateType.EOF : QueryState.MysqlStateType.ERR,
+                    job.getContext().getState().getStateType());
+            // The profile is still collecting, but its admission must already have been returned.
+            assertSame(coordinator, QeProcessorImpl.INSTANCE.getCoordinator(job.getContext().getExecutionId()));
+            new VerificationsInOrder() {
+                {
+                    coordinator.onReleaseSlots();
+                    times = 1;
+                    coordinator.tryProcessProfileAsync((Consumer<Boolean>) any);
+                    times = 1;
+                }
+            };
+        } finally {
+            QeProcessorImpl.INSTANCE.unMonitorQuery(job.getContext().getExecutionId());
+            QeProcessorImpl.INSTANCE.unregisterQuery(job.getContext().getExecutionId());
+        }
     }
 
     private void stopQuery(ConnectContext parent, ConnectContext child, String reason) {

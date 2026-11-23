@@ -4456,8 +4456,11 @@ public class StmtExecutor {
             }
         } finally {
             try {
-                if (context.isProfileEnabled()) {
-                    tryProcessProfileAsync(plan, 0);
+                if (coord != null) {
+                    coord.onReleaseSlots();
+                }
+                boolean asyncProfile = context.isProfileEnabled() && tryProcessProfileAsync(plan, 0);
+                if (asyncProfile) {
                     QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
                             context.getSessionVariable().getProfileTimeout() * 1000L);
                 } else {

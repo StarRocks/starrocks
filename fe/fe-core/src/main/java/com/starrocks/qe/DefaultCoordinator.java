@@ -94,6 +94,7 @@ import com.starrocks.qe.scheduler.dag.PhasedExecutionSchedule;
 import com.starrocks.qe.scheduler.dag.SingleNodeSchedule;
 import com.starrocks.qe.scheduler.slot.DeployState;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
+import com.starrocks.qe.scheduler.slot.SharedQueryQueueSlot;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
@@ -200,7 +201,9 @@ public class DefaultCoordinator extends Coordinator {
 
     private boolean thriftServerHighLoad;
 
-    private LogicalSlot slot = null;
+    private volatile LogicalSlot slot = null;
+    // Guarded by this. Each coordinator owns one reference, including a child borrowing parent admission.
+    private SharedQueryQueueSlot sharedQueueSlot;
 
     private ShortCircuitExecutor shortCircuitExecutor = null;
     private boolean isShortCircuit = false;
@@ -352,8 +355,49 @@ public class DefaultCoordinator extends Coordinator {
         return slot;
     }
 
-    public void setSlot(LogicalSlot slot) {
+    public synchronized void setSlot(LogicalSlot slot) {
         this.slot = slot;
+        this.sharedQueueSlot = new SharedQueryQueueSlot(slot, jobSpec.getSlotProvider());
+    }
+
+    public synchronized void markSlotAdmitted() {
+        if (sharedQueueSlot != null) {
+            sharedQueueSlot.markAdmitted();
+        }
+    }
+
+    private synchronized SharedQueryQueueSlot retainQueueSlot() {
+        return sharedQueueSlot != null && sharedQueueSlot.retain() ? sharedQueueSlot : null;
+    }
+
+    public boolean borrowQueueSlot(DefaultCoordinator parent) {
+        if (parent == this || !jobSpec.isEnableQueue() || !jobSpec.isNeedQueued()
+                || connectContext.getCurrentWarehouseId() != parent.connectContext.getCurrentWarehouseId()) {
+            return false;
+        }
+        long groupId = jobSpec.getResourceGroup() == null ? LogicalSlot.ABSENT_GROUP_ID
+                : jobSpec.getResourceGroup().getId();
+        long parentGroupId = parent.jobSpec.getResourceGroup() == null ? LogicalSlot.ABSENT_GROUP_ID
+                : parent.jobSpec.getResourceGroup().getId();
+        if (groupId != parentGroupId) {
+            return false;
+        }
+        SharedQueryQueueSlot inherited = parent.retainQueueSlot();
+        if (inherited == null) {
+            return false;
+        }
+        SharedQueryQueueSlot previous;
+        synchronized (this) {
+            previous = sharedQueueSlot;
+            sharedQueueSlot = inherited;
+            // Never cancel the parent's request or apply its adaptive DOP to the metadata query.
+            slot = null;
+        }
+        if (previous != null) {
+            previous.release();
+        }
+        LOG.debug("Metadata query {} shares admitted slot {}", getQueryId(), inherited.getSlot().getSlotId());
+        return true;
     }
 
     @Override
@@ -558,9 +602,13 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public void onReleaseSlots() {
-        if (slot != null) {
-            jobSpec.getSlotProvider().cancelSlotRequirement(slot);
-            jobSpec.getSlotProvider().releaseSlot(slot);
+        SharedQueryQueueSlot owned;
+        synchronized (this) {
+            owned = sharedQueueSlot;
+            sharedQueueSlot = null;
+        }
+        if (owned != null) {
+            owned.release();
         }
     }
 
