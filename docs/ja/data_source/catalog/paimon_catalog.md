@@ -798,6 +798,8 @@ PROPERTIES (
 
 [CREATE TABLE AS SELECT](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) はクエリから対象列を推論して Paimon テーブルを作成し、`INSERT INTO` と同じ規則でクエリ結果を書き込みます。必要に応じて、パーティション列、主キー、テーブルプロパティを文で指定します。
 
+Paimon CTAS の対象テーブルには Paimon カタログを使用してください。Unified Catalog を対象に指定すると、StarRocks はテーブルを作成する前にエラーを返します。
+
 ```SQL
 CREATE TABLE paimon_catalog.write_db.orders_copy
 PROPERTIES ("bucket" = "-1", "file.format" = "parquet")

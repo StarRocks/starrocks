@@ -798,6 +798,8 @@ PROPERTIES (
 
 [CREATE TABLE AS SELECT](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 从查询推导目标列，创建 Paimon 表，再按 `INSERT INTO` 的规则写入查询结果。需要分区列、主键或表属性时，请在语句中声明。
 
+Paimon CTAS 的目标表必须位于 Paimon Catalog。若目标位于 Unified Catalog，StarRocks 会在建表前报错。
+
 ```SQL
 CREATE TABLE paimon_catalog.write_db.orders_copy
 PROPERTIES ("bucket" = "-1", "file.format" = "parquet")

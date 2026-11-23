@@ -798,6 +798,8 @@ Alternatively, omit the `PRIMARY KEY (id, dt)` clause and add `"primary-key" = "
 
 [CREATE TABLE AS SELECT](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) infers the target columns from the query, creates a Paimon table, and writes the query results using the same rules as `INSERT INTO`. Declare the target partition columns, primary key, and table properties in the statement when needed.
 
+Use a Paimon catalog for the target table. StarRocks rejects a Unified Catalog target before creating the table.
+
 ```SQL
 CREATE TABLE paimon_catalog.write_db.orders_copy
 PROPERTIES ("bucket" = "-1", "file.format" = "parquet")
