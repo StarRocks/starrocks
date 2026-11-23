@@ -212,8 +212,7 @@ TEST_F(IcebergChunkSinkTest, test_time_transform_partition_value_before_epoch) {
         auto column = ColumnHelper::create_column(TYPE_BIGINT_DESC, false);
         column->append_datum(Datum(c.ordinal));
         int8_t is_null = true;
-        ASSIGN_OR_ABORT(auto value,
-                        HiveUtils::iceberg_column_value(TYPE_BIGINT_DESC, column, 0, c.transform, is_null));
+        ASSIGN_OR_ABORT(auto value, HiveUtils::iceberg_column_value(TYPE_BIGINT_DESC, column, 0, c.transform, is_null));
         EXPECT_EQ(c.expected, value);
         EXPECT_FALSE(is_null);
     }
