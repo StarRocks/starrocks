@@ -631,7 +631,7 @@ public class QueryAnalyzer {
                         originField.getRelationAlias() == null ? session.getDatabase() : originField.getRelationAlias().getDb();
                 TableName tableName = new TableName(database, cteName);
                 outputFields.add(new Field(withQuery.getColumnOutputNames().get(fieldIdx), originField.getType(), tableName,
-                        originField.getOriginExpression()));
+                        originField.getOriginExpression(), true, originField.isNullable()));
             }
 
             /*
@@ -840,7 +840,7 @@ public class QueryAnalyzer {
                             Field originField = withRelationFields.getAllFields().get(fieldIdx);
                             outputFields.add(new Field(
                                     originField.getName(), originField.getType(), tableRelation.getResolveTableName(),
-                                    originField.getOriginExpression()));
+                                    originField.getOriginExpression(), true, originField.isNullable()));
                         }
 
                         // The CTERelation stored in the Scope is not used directly here, but a new Relation is copied.
@@ -1213,7 +1213,7 @@ public class QueryAnalyzer {
                         originField.getName() : cteRelation.getColumnOutputNames().get(fieldIdx),
                         originField.getType(),
                         cteRelation.getResolveTableName(),
-                        originField.getOriginExpression()));
+                        originField.getOriginExpression(), true, originField.isNullable()));
             }
             Scope scope = new Scope(RelationId.of(cteRelation), new RelationFields(outputFields.build()));
             cteRelation.setScope(scope);
@@ -1650,7 +1650,7 @@ public class QueryAnalyzer {
                 }
 
                 outputFields.add(new Field(fieldResolveName, field.getType(), subquery.getResolveTableName(),
-                        field.getOriginExpression()));
+                        field.getOriginExpression(), true, field.isNullable()));
 
             }
             Scope scope = new Scope(RelationId.of(subquery), new RelationFields(outputFields.build()));
@@ -1863,10 +1863,14 @@ public class QueryAnalyzer {
         @Override
         public Scope visitValues(ValuesRelation node, Scope scope) {
             Type[] outputTypes;
+            boolean[] nullableColumns;
             List<List<Expr>> rows = node.getRows();
             List<Type> outputColumnTypes = node.getOutputColumnTypes();
             if (!outputColumnTypes.isEmpty()) {
                 outputTypes = outputColumnTypes.toArray(new Type[0]);
+                nullableColumns = new boolean[outputTypes.length];
+                // Pretyped VALUES may have no rows from which to infer nullability.
+                Arrays.fill(nullableColumns, true);
             } else {
                 Preconditions.checkState(!rows.isEmpty());
                 AnalyzeState analyzeState = new AnalyzeState();
@@ -1874,19 +1878,21 @@ public class QueryAnalyzer {
                 List<Expr> firstRow = node.getRow(0);
                 firstRow.forEach(e -> analyzeExpression(e, analyzeState, scope));
                 outputTypes = firstRow.stream().map(Expr::getType).toArray(Type[]::new);
+                nullableColumns = new boolean[outputTypes.length];
                 for (List<Expr> row : rows) {
                     if (row.size() != firstRow.size()) {
                         throw new SemanticException("Values have unequal number of columns");
                     }
                     for (int fieldIdx = 0; fieldIdx < row.size(); ++fieldIdx) {
-                        analyzeExpression(row.get(fieldIdx), analyzeState, scope);
-                        Type commonType =
-                                TypeManager.getCommonSuperType(outputTypes[fieldIdx], row.get(fieldIdx).getType());
+                        Expr value = row.get(fieldIdx);
+                        analyzeExpression(value, analyzeState, scope);
+                        Type commonType = TypeManager.getCommonSuperType(outputTypes[fieldIdx], value.getType());
                         if (!commonType.isValid()) {
                             throw new SemanticException(String.format("Incompatible return types '%s' and '%s'",
-                                    outputTypes[fieldIdx], row.get(fieldIdx).getType()));
+                                    outputTypes[fieldIdx], value.getType()));
                         }
                         outputTypes[fieldIdx] = commonType;
+                        nullableColumns[fieldIdx] |= value.isNullable();
                     }
                 }
             }
@@ -1894,7 +1900,8 @@ public class QueryAnalyzer {
             List<Field> fields = new ArrayList<>();
             for (int fieldIdx = 0; fieldIdx < outputTypes.length; ++fieldIdx) {
                 fields.add(new Field(node.getColumnOutputNames().get(fieldIdx), outputTypes[fieldIdx],
-                        node.getResolveTableName(), rows.isEmpty() ? null : rows.get(0).get(fieldIdx)));
+                        node.getResolveTableName(), rows.isEmpty() ? null : rows.get(0).get(fieldIdx),
+                        true, nullableColumns[fieldIdx]));
             }
 
             Scope valuesScope = new Scope(RelationId.of(node), new RelationFields(fields));
