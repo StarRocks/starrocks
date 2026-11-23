@@ -389,6 +389,19 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
             return AggregatePushDownContext.EMPTY;
         }
 
+        JoinOperator type = join.getJoinType();
+        boolean nullSupplyingChild = type.isFullOuterJoin()
+                || (child == 0 ? type.isRightOuterJoin() : type.isLeftOuterJoin());
+        // A NULL-extended aggregate result cannot stand in for evaluating an expression
+        // such as COALESCE on a NULL-extended input row. Only push direct column inputs
+        // or NULL literals through this side of an outer join.
+        if (nullSupplyingChild && context.aggregations.values().stream()
+                .flatMap(aggregate -> aggregate.getChildren().stream())
+                .anyMatch(argument -> !argument.isColumnRef()
+                        && !(argument instanceof ConstantOperator constant && constant.isNull()))) {
+            return AggregatePushDownContext.EMPTY;
+        }
+
         // count over a join is N0*N1, unrecoverable from sum(cnt_left) and sum(cnt_right), so it must be
         // pushed to exactly one side. count(*)/count(col) has no aggregationsRefs to source-check above,
         // so without this strip both sides would otherwise accept it.
