@@ -1982,9 +1982,16 @@ public class CreateTableTest extends StarRocksTestBase {
                 DISTRIBUTED BY HASH(id) BUCKETS 1
                 PROPERTIES ("replication_num" = "1", "storage_medium" = "SSD", "%s" = "%s")
                 """;
-        createTable(ddl.formatted("pk_range_cooldown_ttl", "DATE", "storage_cooldown_ttl", "2 DAY"));
-        createTable(ddl.formatted("pk_range_cooldown_time", "DATETIME",
-                "storage_cooldown_time", "2099-01-03 16:00:00"));
+        boolean strictStorageMediumCheck = Config.enable_strict_storage_medium_check;
+        try {
+            // The mock backends only have HDD paths. This test checks partition metadata.
+            Config.enable_strict_storage_medium_check = false;
+            createTable(ddl.formatted("pk_range_cooldown_ttl", "DATE", "storage_cooldown_ttl", "2 DAY"));
+            createTable(ddl.formatted("pk_range_cooldown_time", "DATETIME",
+                    "storage_cooldown_time", "2099-01-03 16:00:00"));
+        } finally {
+            Config.enable_strict_storage_medium_check = strictStorageMediumCheck;
+        }
 
         assertPartitionCoolDown("pk_range_cooldown_ttl", "2099-01-04 00:00:00");
         assertPartitionCoolDown("pk_range_cooldown_time", "2099-01-03 16:00:00");
@@ -1995,6 +2002,21 @@ public class CreateTableTest extends StarRocksTestBase {
         DataProperty property = table.getPartitionInfo().getDataProperty(table.getPartition("p1").getId());
         Assertions.assertEquals(TStorageMedium.SSD, property.getStorageMedium());
         Assertions.assertEquals(expectedTime, TimeUtils.longToTimeString(property.getCooldownTimeMs()));
+    }
+
+    @Test
+    public void testExternalPrimaryKeyRangeRejectsStorageCoolDown() {
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Storage medium cooldown for primary key tables requires",
+                () -> createTable("""
+                        CREATE EXTERNAL TABLE test.pk_external_range_cooldown (dt DATE NOT NULL, id BIGINT NOT NULL)
+                        ENGINE=OLAP PRIMARY KEY(dt, id)
+                        PARTITION BY RANGE(dt) (PARTITION p1 VALUES LESS THAN ("2099-01-02"))
+                        DISTRIBUTED BY HASH(id) BUCKETS 1
+                        PROPERTIES ("host" = "127.0.0.2", "port" = "9020", "user" = "root", "password" = "",
+                                    "database" = "remote_db", "table" = "remote_table",
+                                    "storage_medium" = "SSD", "storage_cooldown_ttl" = "2 DAY")
+                        """));
     }
 
     @Test

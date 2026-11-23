@@ -647,7 +647,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)) {
                     if (table.getKeysType() == KeysType.PRIMARY_KEYS
-                            && (table.isCloudNativeTable() || partitionInfo.getType() != PartitionType.RANGE)) {
+                            && (!table.isOlapTable() || partitionInfo.getType() != PartitionType.RANGE)) {
                         throw new DdlException("Storage medium cooldown for primary key tables requires "
                                 + "a shared-nothing table with single-column DATE or DATETIME range partitioning.");
                     }
