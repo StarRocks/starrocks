@@ -19,9 +19,18 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.LightWeightDeltaLakeTable;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.metastore.MetastoreTable;
+import com.starrocks.scheduler.MvTaskRunContext;
+import com.starrocks.scheduler.TaskRunContext;
+import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
+import com.starrocks.scheduler.mv.MVRefreshParams;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshNonPartitioner;
+import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
 import io.delta.kernel.engine.Engine;
@@ -102,6 +111,41 @@ public class DeltaLakePartitionTraitsTest {
         DeltaLakeTable table = table(7);
         assertEquals(Set.of(TBL), updatedPartitionNames(table, baseTableInfo(table),
                 new MaterializedView.AsyncRefreshContext()));
+    }
+
+    @Test
+    public void nonPartitionedMvRefreshChecksDeltaTableVersion() {
+        DeltaLakeTable table = table(7);
+        BaseTableInfo baseTableInfo = baseTableInfo(table);
+        MaterializedView mv = Mockito.spy(new MaterializedView(2L, 1L, "delta_mv",
+                List.of(new Column("col1", IntegerType.INT)), KeysType.DUP_KEYS, new SinglePartitionInfo(),
+                new RandomDistributionInfo(1), new MaterializedView.MvRefreshScheme()));
+        mv.setBaseTableInfos(List.of(baseTableInfo));
+        Mockito.when(mv.getVisiblePartitionNames()).thenReturn(Set.of("delta_mv"));
+        TaskRunContext taskContext = new TaskRunContext();
+        MvTaskRunContext mvContext = new MvTaskRunContext(taskContext);
+        MVRefreshParams params = Mockito.mock(MVRefreshParams.class);
+        MVPCTRefreshNonPartitioner partitioner =
+                new MVPCTRefreshNonPartitioner(mvContext, taskContext, null, mv, params);
+        PCTTableSnapshotInfo snapshotInfo = new PCTTableSnapshotInfo(baseTableInfo, table);
+        Map<Long, BaseTableSnapshotInfo> snapshot = Map.of(table.getId(), snapshotInfo);
+
+        assertTrue(partitioner.isNonPartitionedMVNeedToRefresh(snapshot));
+        snapshotInfo.updatePartitionInfos(List.of(TBL));
+        mv.getBaseTableRefreshInfo(baseTableInfo).putAll(snapshotInfo.getRefreshedPartitionInfos());
+        assertFalse(partitioner.isNonPartitionedMVNeedToRefresh(snapshot));
+        assertTrue(partitioner.getMVPartitionsToRefreshWithCheck(snapshot).isEmpty());
+
+        DeltaLakeTable updated = table(8);
+        assertTrue(partitioner.isNonPartitionedMVNeedToRefresh(
+                Map.of(updated.getId(), new PCTTableSnapshotInfo(baseTableInfo, updated))));
+        DeltaLakeTable unknown = table(-1);
+        assertTrue(partitioner.isNonPartitionedMVNeedToRefresh(
+                Map.of(unknown.getId(), new PCTTableSnapshotInfo(baseTableInfo, unknown))));
+
+        Mockito.when(params.isForce()).thenReturn(true);
+        assertEquals(Set.of("delta_mv"),
+                partitioner.getMVPartitionsToRefreshWithCheck(snapshot).getPartitionNames());
     }
 
     @Test
