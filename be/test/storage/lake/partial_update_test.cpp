@@ -32,10 +32,12 @@
 #include "column/datum_convert.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
+#include "column/json_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_ingest_fwd.h"
+#include "common/config_json_flat_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
@@ -43,6 +45,7 @@
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
+#include "gutil/strings/substitute.h"
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/datum_variant.h"
@@ -7027,24 +7030,7 @@ TEST_F(LakePcuSchemaDriftTest, WriteThenDropTargetColumn_ReturnsInternalError) {
             << "expected 'unique id' in message; got: " << st.message();
 }
 
-<<<<<<< HEAD
-=======
-// A table's flat JSON properties must survive a lake column-mode partial update whose tablet
-// metadata happens not to be in TabletManager's cache.
-//
-// ColumnModePartialUpdateHandler::_prepare_delta_column_group_writer builds the SegmentWriterOptions
-// for the .cols delta column group by hand, so it does not go through RowsetWriterContext where the
-// other writers pick the table config up. It used to read the config through
-// TabletManager::get_latest_cached_tablet_metadata(), which only probes the metacache and never
-// falls back to the object store, and it treated "not cached" as "this table sets no config".
-// That probe misses right after a BE restart, after an LRU eviction, and on any node that has not
-// itself published this tablet -- the options then carry no config and SegmentWriter falls back to
-// config::enable_json_flat, so a table created with "flat_json.enable" = "false" has its JSON
-// column silently flattened, with the table property still reading "false" and nothing in the log
-// or the metrics to say otherwise.
-//
-// The publish metadata the handler is already handed is version-pinned, so reading the config from
-// there is both correct and free. Pruning the metacache below is what a BE restart does to it.
+// A primary key tablet with a JSON column, for a column-mode partial update followed by a compaction.
 class LakeColumnModeFlatJsonConfigTest : public TestBase {
 public:
     LakeColumnModeFlatJsonConfigTest() : TestBase(kTestDirectory) {
@@ -7176,71 +7162,6 @@ public:
             }
         }
         return forms;
-    }
-
-    // One full load, then one COLUMN_UPDATE_MODE partial update of the JSON column, with the
-    // metacache pruned in between so the publish runs against a cold cache the way it does after a
-    // BE restart. Returns the physical form of the JSON column everywhere it landed.
-    std::vector<std::pair<std::string, bool>> load_then_column_update_with_cold_cache(int64_t chunk_size) {
-        const auto tablet_id = _tablet_metadata->id();
-        auto indexes = std::vector<uint32_t>(chunk_size);
-        std::iota(indexes.begin(), indexes.end(), 0);
-        int64_t version = 1;
-
-        // A load carries the table's flat_json.* settings only when the table sets any, the way the
-        // FE fills TOlapTableSink.flat_json_config; otherwise the writers follow the globals.
-        std::shared_ptr<FlatJsonConfig> table_flat_json_config;
-        if (_tablet_metadata->has_flat_json_config()) {
-            table_flat_json_config = std::make_shared<FlatJsonConfig>();
-            table_flat_json_config->update(_tablet_metadata->flat_json_config());
-        }
-
-        auto chunk_full = generate_data(chunk_size, false, 3);
-        {
-            const auto txn_id = next_id();
-            auto delta_writer = DeltaWriterBuilder()
-                                        .set_tablet_manager(_tablet_mgr.get())
-                                        .set_tablet_id(tablet_id)
-                                        .set_txn_id(txn_id)
-                                        .set_partition_id(_partition_id)
-                                        .set_mem_tracker(_mem_tracker.get())
-                                        .set_schema_id(_tablet_schema->id())
-                                        .set_flat_json_config(table_flat_json_config)
-                                        .build()
-                                        .value();
-            CHECK_OK(delta_writer->open());
-            CHECK_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
-            CHECK_OK(delta_writer->finish_with_txnlog());
-            delta_writer->close();
-            CHECK_OK(publish_single_version(tablet_id, ++version, txn_id).status());
-        }
-
-        auto chunk_partial = generate_data(chunk_size, true, 5);
-        const auto txn_id = next_id();
-        auto delta_writer = DeltaWriterBuilder()
-                                    .set_tablet_manager(_tablet_mgr.get())
-                                    .set_tablet_id(tablet_id)
-                                    .set_txn_id(txn_id)
-                                    .set_partition_id(_partition_id)
-                                    .set_mem_tracker(_mem_tracker.get())
-                                    .set_schema_id(_tablet_schema->id())
-                                    .set_slot_descriptors(&_slot_pointers)
-                                    .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
-                                    .set_flat_json_config(table_flat_json_config)
-                                    .build()
-                                    .value();
-        CHECK_OK(delta_writer->open());
-        CHECK_OK(delta_writer->write(chunk_partial, indexes.data(), indexes.size()));
-        CHECK_OK(delta_writer->finish_with_txnlog());
-        delta_writer->close();
-
-        // What a BE restart leaves behind: the tablet metadata is no longer cached, so a writer that
-        // asks the cache for the table's flat JSON config gets nothing back.
-        _tablet_mgr->metacache()->prune();
-        CHECK(_tablet_mgr->get_latest_cached_tablet_metadata(tablet_id) == nullptr);
-
-        CHECK_OK(publish_single_version(tablet_id, ++version, txn_id).status());
-        return collect_json_column_forms(version);
     }
 
     // Whether a delta column group of |metadata| holds the column with |unique_id|.
@@ -7389,48 +7310,6 @@ protected:
     Chunk::SlotHashMap _partial_slot_cid_map;
 };
 
-TEST_F(LakeColumnModeFlatJsonConfigTest, column_update_keeps_table_flat_json_config_on_cold_cache) {
-    // The defect only shows when the be.conf global says "flatten": the table's "do not" is then the
-    // only thing that can stop it.
-    ASSERT_TRUE(config::enable_json_flat) << "test assumes the be.conf default";
-    set_table_flat_json_enable(false);
-
-    auto forms = load_then_column_update_with_cold_cache(kChunkSize);
-
-    size_t num_segments = 0;
-    size_t num_cols = 0;
-    for (const auto& [where, is_flat] : forms) {
-        (where.rfind("cols ", 0) == 0 ? num_cols : num_segments)++;
-    }
-    // Guard against a vacuous pass: without a .cols file the loop below proves nothing about the
-    // SegmentWriter the column-mode apply builds.
-    ASSERT_GT(num_segments, 0u);
-    ASSERT_GT(num_cols, 0u) << "the update did not produce a delta column group";
-    for (const auto& [where, is_flat] : forms) {
-        EXPECT_FALSE(is_flat) << where << " ignored the table's flat_json.enable=false";
-    }
-}
-
-// Control: a table that sets no flat_json property at all carries no flat_json_config, and every
-// writer must keep following config::enable_json_flat -- a cold cache must not change that either.
-TEST_F(LakeColumnModeFlatJsonConfigTest, column_update_follows_globals_when_table_sets_no_config) {
-    ASSERT_TRUE(config::enable_json_flat) << "test assumes the be.conf default";
-    ASSERT_FALSE(_tablet_metadata->has_flat_json_config());
-
-    auto forms = load_then_column_update_with_cold_cache(kChunkSize);
-
-    size_t num_cols = 0;
-    for (const auto& [where, is_flat] : forms) {
-        if (where.rfind("cols ", 0) == 0) {
-            num_cols++;
-        }
-    }
-    ASSERT_GT(num_cols, 0u) << "the update did not produce a delta column group";
-    for (const auto& [where, is_flat] : forms) {
-        EXPECT_TRUE(is_flat) << where << " should still follow config::enable_json_flat";
-    }
-}
-
 // A column-mode partial update gives a segment a .cols delta column group holding the whole new JSON column, and
 // the segment iterator reads that column from the .cols file. Compaction derived the flat JSON layout from the
 // segments' own column readers and read the .cols values through it, so a string written over the segments' BIGINT
@@ -7453,7 +7332,6 @@ TEST_F(LakeColumnModeFlatJsonConfigTest, compaction_streams_json_of_delta_column
     ASSERT_NO_FATAL_FAILURE(column_update_then_compaction([](int key) { return key < 43 && key % 2 == 0; }, true));
 }
 
->>>>>>> a2cb22e1f87... [BugFix][RB-1351] Read a flat JSON column whole in lake compaction when a delta column group holds its values (#68931)
 // A publish iterator narrowed to this tablet's slice of a shared post-split segment reports NO
 // ownership mask -- every row it emitted is this tablet's -- so an empty mask cannot be read as "the
 // iterator emitted the whole segment". Reading it that way sends the segment down the copy-and-append
