@@ -497,9 +497,6 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_basic) {
     // Since we're testing the code path, we verify it didn't crash
 }
 
-<<<<<<< HEAD
-// Test parallel compaction with single tablet fallback on failure
-=======
 // A tablet whose table allows more subtasks than there are free limiter tokens is planned for the free tokens
 // instead of falling back to serial compaction. One of the four tokens is held here, as another compaction on
 // the node would hold it, and the table allows five subtasks, more than the limiter has tokens at all: the
@@ -546,19 +543,29 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_narrows_to_the_free
     parallel_config->set_max_parallel_per_tablet(5);
     parallel_config->set_max_bytes_per_subtask(2 * 1024 * 1024);
 
+    // Counted when a subtask is registered, before it can run and complete the request.
+    std::atomic<int> subtasks{0};
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->SetCallBack("TabletParallelCompactionManager::submit_subtasks_from_groups:after_register",
+                            [&](void* /*arg*/) { subtasks.fetch_add(1); });
+    sync_point->EnableProcessing();
+    SCOPED_CLEANUP({
+        sync_point->ClearCallBack("TabletParallelCompactionManager::submit_subtasks_from_groups:after_register");
+        sync_point->DisableProcessing();
+    });
+
     auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
     _compaction_scheduler.compact(nullptr, &request, &response, cb);
     latch->wait();
 
-    EXPECT_EQ(0, _compaction_scheduler.parallel_fallback_total());
-    // The segment files do not exist, so every subtask fails; what matters is that there were subtasks. Three
-    // is the expected number. An idle worker holding a token at the instant the free ones are counted leaves two.
-    EXPECT_GE(_compaction_scheduler.subtask_failure_total(), 2);
-    EXPECT_LE(_compaction_scheduler.subtask_failure_total(), 3);
+    // The segment files do not exist, so every subtask fails; what matters is that there were subtasks, which a
+    // tablet compacted serially does not have. Three is the expected number. An idle worker holding a token at the
+    // instant the free ones are counted leaves two.
+    EXPECT_GE(subtasks.load(), 2);
+    EXPECT_LE(subtasks.load(), 3);
 }
 
-// Test parallel compaction fallback is counted for each tablet task.
->>>>>>> d964beb35d6... [Enhancement][RB-1867] Enable range-split parallel compaction by default at up to 5 subtasks per tablet, and balance its ranges (#70658)
+// Test parallel compaction with single tablet fallback on failure
 TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_fallback) {
     // Create a tablet with rowsets
     auto metadata = generate_simple_tablet_metadata(DUP_KEYS);

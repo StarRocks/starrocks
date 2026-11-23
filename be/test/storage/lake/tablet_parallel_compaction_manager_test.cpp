@@ -8227,10 +8227,14 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_spl
     // Both ranges are compacted and the tablet completes: the two of them leave no key range out.
     pool.release();
     ASSERT_TRUE(closure.wait_finish());
-    EXPECT_EQ(1, _manager->task_success_total());
-    EXPECT_EQ(0, _manager->task_failure_total());
-    EXPECT_EQ(2, _manager->subtask_success_total());
-    EXPECT_EQ(0, _manager->subtask_failure_total());
+    ASSERT_EQ(0, response.failed_tablets_size());
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        ASSERT_EQ(2, state->completed_subtasks.size());
+        for (const auto& context : state->completed_subtasks) {
+            ASSERT_OK(context->status);
+        }
+    }
     EXPECT_EQ(2, release_count);
 
     _manager->cleanup_tablet(tablet_id, txn_id);

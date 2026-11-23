@@ -161,13 +161,9 @@ class CompactionScheduler {
         void return_token();
 
         int16_t concurrency() const;
-<<<<<<< HEAD
-=======
-        int16_t max_concurrency() const;
         // The number of tokens acquire() could hand out right now. A snapshot: another holder can take or
         // return a token as soon as this has returned.
         int32_t free_tokens() const;
->>>>>>> d964beb35d6... [Enhancement][RB-1867] Enable range-split parallel compaction by default at up to 5 subtasks per tablet, and balance its ranges (#70658)
 
         void adapt_to_task_queue_size(int16_t new_val);
 
@@ -346,20 +342,12 @@ inline int16_t CompactionScheduler::Limiter::concurrency() const {
     return _total - _reserved;
 }
 
-<<<<<<< HEAD
-=======
-inline int16_t CompactionScheduler::Limiter::max_concurrency() const {
-    std::lock_guard l(_mtx);
-    return _total;
-}
-
 inline int32_t CompactionScheduler::Limiter::free_tokens() const {
     std::lock_guard l(_mtx);
     // _free is negative while the tasks in flight exceed a concurrency that was just lowered.
     return static_cast<int32_t>(std::max<int64_t>(0, _free));
 }
 
->>>>>>> d964beb35d6... [Enhancement][RB-1867] Enable range-split parallel compaction by default at up to 5 subtasks per tablet, and balance its ranges (#70658)
 inline void CompactionScheduler::Limiter::adapt_to_task_queue_size(int16_t new_val) {
     std::lock_guard l(_mtx);
     if (new_val <= 0 || new_val == _total) {
