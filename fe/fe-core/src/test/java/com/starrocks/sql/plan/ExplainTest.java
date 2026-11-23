@@ -14,13 +14,26 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.Config;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergEqualityDeleteScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergEqualityDeleteScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+
+import java.util.List;
+import java.util.Map;
 
 public class ExplainTest extends PlanTestBase {
     @Test
@@ -157,5 +170,49 @@ public class ExplainTest extends PlanTestBase {
         Assertions.assertTrue(queryStatement.isExplain());
         Assertions.assertEquals(StatementBase.ExplainLevel.NORMAL, queryStatement.getExplainLevel());
 
+    }
+
+    @Test
+    public void testExplainLogicalIcebergEqualityDeleteScan() {
+        IcebergTable table = Mockito.mock(IcebergTable.class);
+        Mockito.when(table.getName()).thenReturn("eqd_repro");
+        Column column = new Column("id", IntegerType.INT);
+        ColumnRefOperator ref = new ColumnRefOperator(1, IntegerType.INT, "id", true);
+        LogicalIcebergEqualityDeleteScanOperator logicalScan = new LogicalIcebergEqualityDeleteScanOperator(
+                table, Map.of(ref, column), Map.of(column, ref), -1, null);
+        OptExpression root = OptExpression.create(new PhysicalIcebergEqualityDeleteScanOperator(logicalScan));
+
+        String plan = new Explain(false, false, "    ", "    ").print(root, List.of(ref));
+        assertContains(plan, "- ICEBERG-EQUALITY-DELETE-SCAN [eqd_repro] => [1:id]");
+    }
+
+    @Test
+    public void testExplainLogicalIcebergEqualityDeleteScanWithRows() {
+        IcebergTable table = Mockito.mock(IcebergTable.class);
+        Mockito.when(table.getName()).thenReturn("eqd_repro");
+        Column column = new Column("id", IntegerType.INT);
+        ColumnRefOperator ref = new ColumnRefOperator(1, IntegerType.INT, "id", true);
+        LogicalIcebergEqualityDeleteScanOperator logicalScan = new LogicalIcebergEqualityDeleteScanOperator(
+                table, Map.of(ref, column), Map.of(column, ref), -1, null);
+        OptExpression root = OptExpression.create(new PhysicalIcebergEqualityDeleteScanOperator(logicalScan));
+        root.setStatistics(Statistics.builder().setOutputRowCount(5).build());
+
+        String plan = new Explain(true, true, " ", " |").print(root, List.of(ref));
+        assertContains(plan, "- ICEBERG-EQUALITY-DELETE-SCAN [eqd_repro] => [1:id] {rows: 5}");
+    }
+
+    @Test
+    public void testExplainLogicalRawValues() throws Exception {
+        SessionVariable sv = connectContext.getSessionVariable();
+        int threshold = sv.getLargeInPredicateThreshold();
+        sv.setLargeInPredicateThreshold(3);
+        try {
+            String plan = getExecPlan("select * from t0 where v1 in (1, 2, 3, 4)")
+                    .getExplainString(StatementBase.ExplainLevel.LOGICAL);
+            assertContains(plan, "LEFT SEMI JOIN");
+            assertContains(plan, "- RAW-VALUES");
+        } finally {
+            sv.setLargeInPredicateThreshold(threshold);
+        }
     }
 }
