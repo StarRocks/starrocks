@@ -40,11 +40,7 @@ import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_REP
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENCLOSE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENVELOPE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ESCAPE;
-<<<<<<< HEAD
-=======
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_EXEC_MEM_LIMIT;
-import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_FILL_DEFAULT_ON_ABSENT_KEY;
->>>>>>> b3e288aa492... [BugFix][RB-1837] Honor transmission_compression_type and exec_mem_limit in merge commit and FE-planned transaction stream loads (#70663)
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_FORMAT;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_HEADER_LIST;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_JSONPATHS;
