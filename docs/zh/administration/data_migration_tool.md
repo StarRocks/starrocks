@@ -151,12 +151,13 @@ ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
        "aws.s3.use_instance_profile" = "false",
        "aws.s3.access_key" = "<access_key>",
        "aws.s3.secret_key" = "<secret_key>",
-       "aws.s3.enable_partitioned_prefix" = "false"
+       "aws.s3.enable_partitioned_prefix" = "<same_as_source>",
+       "aws.s3.num_partitioned_prefix" = "<same_as_source>"
    );
    ```
 
    :::note
-   - 无论源集群的设置如何，请将 `aws.s3.enable_partitioned_prefix` 设置为 `false`。迁移工具直接使用源分区的完整路径读取文件，因此不能对镜像存储卷应用分区前缀。
+   - 对于 S3 源，请将目标集群上的 `src_<source_volume_name>` 镜像存储卷配置为与源存储卷的磁盘分区前缀布局一致。如果源存储卷启用了分区前缀，请将 `aws.s3.enable_partitioned_prefix` 设为 `true`，并将 `aws.s3.num_partitioned_prefix` 设为与源存储卷相同的有效值。该有效值可在启用该功能时通过 `DESCRIBE STORAGE VOLUME` 的 `Params` 查看；如果源存储卷启用了该功能但未指定数量，则有效值为 `256`。如果源存储卷使用无前缀的对象键，请保持 `aws.s3.enable_partitioned_prefix` 为禁用，并省略 `aws.s3.num_partitioned_prefix`。这些属性仅作用于用于读取源对象的镜像存储卷，目标表自身的存储卷可以使用不同的布局。
    - 对**每个**待迁移表所使用的唯一存储卷重复此步骤。例如，如果源集群使用 `builtin_storage_volume`，则在目标集群上创建 `src_builtin_storage_volume`。
    - 建议为源存储卷使用临时凭证（access key / secret key），迁移完成后可以将其吊销。
    :::

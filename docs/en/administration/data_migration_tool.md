@@ -151,12 +151,13 @@ These storage volumes are used **only during migration** to give target CNs read
        "aws.s3.use_instance_profile" = "false",
        "aws.s3.access_key" = "<access_key>",
        "aws.s3.secret_key" = "<secret_key>",
-       "aws.s3.enable_partitioned_prefix" = "false"
+       "aws.s3.enable_partitioned_prefix" = "<same_as_source>",
+       "aws.s3.num_partitioned_prefix" = "<same_as_source>"
    );
    ```
 
    :::note
-   - Set `aws.s3.enable_partitioned_prefix` to `false` regardless of the source cluster's setting. The migration tool reads files using the source partition's full path directly, so partitioned prefix must not be applied to the mirrored volume.
+   - For an S3 source, configure the `src_<source_volume_name>` mirror to match the on-disk partitioned-prefix layout of the source volume. If the source uses partitioned prefixes, set `aws.s3.enable_partitioned_prefix` to `true` and set `aws.s3.num_partitioned_prefix` to the same effective value as the source. You can read that effective value from the source volume's `Params` in `DESCRIBE STORAGE VOLUME` when the feature is enabled. If the source enabled the feature without setting a count, the effective value is `256`. If the source uses unprefixed keys, leave `aws.s3.enable_partitioned_prefix` disabled and omit `aws.s3.num_partitioned_prefix`. These properties apply only to the mirror used to read source objects. The target table's own storage volume can use a different layout.
    - Repeat this step for **each** unique storage volume used by the tables to be migrated. For example, if the source uses `builtin_storage_volume`, create `src_builtin_storage_volume` on the target cluster.
    - It is recommended to use temporary credentials (access key / secret key) for the source storage volume. These can be revoked after migration is complete.
    :::
