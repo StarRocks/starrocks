@@ -47,13 +47,10 @@
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "exec/exec_env.h"
 #include "fs/fs_util.h"
-<<<<<<< HEAD
 #include "fs/remote_read_context.h"
-=======
 #ifdef USE_STAROS
 #include "fslib/star_cache_configuration.h"
 #endif
->>>>>>> 023e89bdc0a... [Enhancement] Add BE config starlet_star_cache_write_overwrite for the StarCache write overwrite flag (#70100)
 #include "gen_cpp/Types_types.h"
 #include "platform/platform_env.h"
 #include "platform/store_path.h"
