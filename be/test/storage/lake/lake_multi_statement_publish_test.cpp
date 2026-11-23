@@ -941,7 +941,7 @@ TEST_P(LakeMultiStatementPublishTest, batch_after_txn_published_alone_reads_ever
     ASSIGN_OR_ABORT(auto second_log, _tablet_mgr->get_txn_log(second_log_path, false));
 
     ASSERT_OK(publish_multi_statement(2, txn_id, {load_id_1, load_id_2}).status());
-    StorageEngine::instance()->wait_storage_cleanup_tasks();
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
     EXPECT_TRUE(txn_log_exists(txn_id, &load_id_1));
     EXPECT_TRUE(txn_log_exists(txn_id, &load_id_2));
     ASSERT_OK(_tablet_mgr->put_txn_log(second_log, second_log_path));
@@ -968,7 +968,7 @@ TEST_P(LakeMultiStatementPublishTest, retry_after_txn_published_alone_reads_ever
     ASSIGN_OR_ABORT(auto second_log, _tablet_mgr->get_txn_log(second_log_path, false));
 
     ASSERT_OK(publish_multi_statement(2, txn_id, {load_id_1, load_id_2}).status());
-    StorageEngine::instance()->wait_storage_cleanup_tasks();
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
     EXPECT_TRUE(txn_log_exists(txn_id, &load_id_1));
     EXPECT_TRUE(txn_log_exists(txn_id, &load_id_2));
     ASSERT_OK(_tablet_mgr->put_txn_log(second_log, second_log_path));

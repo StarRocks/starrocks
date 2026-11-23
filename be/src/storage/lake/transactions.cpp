@@ -487,18 +487,6 @@ static StatusOr<TabletMetadataPtr> do_publish_version(TabletManager* tablet_mgr,
                     auto tablet_log_path =
                             tablet_mgr->txn_log_location(tablet_id_in_txn_log, txns[i].txn_id(), load_id);
                     if (tablet_info.can_delete_txn_log()) {
-<<<<<<< HEAD
-                        // Delete the logs only when this transaction is published alone, as for a single txn log
-                        // below, and leave them to vacuum otherwise. A batch writes the metadata of its last
-                        // version only, and FE retries a batch it did not see succeed with the batch it builds
-                        // then -- other transactions, other versions, maybe on another node. That retry applies
-                        // this transaction again and cannot without its logs: the partition would never publish
-                        // again. With skip_write_tablet_metadata the new metadata may not be written yet.
-                        if (txns.size() == 1 && !skip_write_tablet_metadata) {
-                            files_to_delete.emplace_back(tablet_log_path);
-                        }
-                        tablet_mgr->metacache()->erase(tablet_log_path);
-=======
                         // Never delete the statement logs here, not even when this transaction is published
                         // alone and its metadata is written: vacuum deletes them by txn id once the transaction
                         // is visible. Unlike a single txn log, which is there or not, the statements' logs are
@@ -510,8 +498,7 @@ static StatusOr<TabletMetadataPtr> do_publish_version(TabletManager* tablet_mgr,
                         // apply those statements alone and write a version without the rows of the others. A
                         // batch needs the logs for its retry as well: it writes the metadata of its last
                         // version only.
-                        tablet_mgr->metacache()->erase(MetacacheKey::txn_log(tablet_log_path));
->>>>>>> af47622 ([BugFix] Keep a lake explicit transaction's statement logs when it is published alone (#84150))
+                        tablet_mgr->metacache()->erase(tablet_log_path);
                     }
                 }
                 continue;
