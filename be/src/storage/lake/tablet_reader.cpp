@@ -616,10 +616,10 @@ static void warm_prepared_indexes(PreparedTabletReadState* state, const TabletSc
     }
 }
 
-// lake_scan_warm_index applies to the query scans of a tablet, split or not, while the remote I/O scheduler is on.
-// It does not depend on lake_scan_parallel_segment_open.
-static bool should_warm_index_pages(ReaderType reader_type) {
-    return config::lake_scan_warm_index && reader_type == ReaderType::READER_QUERY && remote_io_scheduler_enabled();
+// Index warming fills the disk cache ahead of ordinary query reads and is independent of parallel segment opening.
+static bool should_warm_index_pages(ReaderType reader_type, const LakeIOOptions& lake_io_opts) {
+    return config::lake_scan_warm_index && reader_type == ReaderType::READER_QUERY && remote_io_scheduler_enabled() &&
+           lake_io_opts.fill_data_cache && !lake_io_opts.skip_disk_cache && !lake_io_opts.cache_file_only;
 }
 
 static rowid_t rows_per_split(const TabletReaderParams& params) {
@@ -894,7 +894,7 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         PreparedTabletReadStatePtr classic_state;
         if (_could_split_physically && read_params.grouped_range_task == nullptr &&
             (should_open_segments_in_parallel(read_params.reader_type) ||
-             should_warm_index_pages(read_params.reader_type)) &&
+             should_warm_index_pages(read_params.reader_type, read_params.lake_io_opts)) &&
             std::all_of(_rowsets.begin(), _rowsets.end(),
                         [](const RowsetPtr& rowset) { return rowset->can_hold_segments(); })) {
             classic_state = std::make_shared<PreparedTabletReadState>();
@@ -920,7 +920,7 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
             }
             // lake_scan_warm_index: the splits share these segments, and the state keeps the warm handles until the
             // last split that holds it is done.
-            if (should_warm_index_pages(read_params.reader_type)) {
+            if (should_warm_index_pages(read_params.reader_type, read_params.lake_io_opts)) {
                 RowsetReadOptions classic_read_options;
                 LakeIOOptions classic_io_options;
                 RETURN_IF_ERROR(
@@ -1188,7 +1188,7 @@ void TabletReader::record_tablet_prepare_stats(const OlapReaderStatistics& prepa
 // the segments of |state|.
 void TabletReader::warm_index_pages(PreparedTabletReadState* state, const TabletReaderParams& params,
                                     const RowsetReadOptions& options, const LakeIOOptions& lake_io_opts) {
-    if (!should_warm_index_pages(params.reader_type) || options.tablet_schema == nullptr) {
+    if (!should_warm_index_pages(params.reader_type, lake_io_opts) || options.tablet_schema == nullptr) {
         return;
     }
     const auto& predicate_ids = options.pred_tree_for_zone_map.column_ids();
@@ -1633,8 +1633,9 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     // Per rowset, whether all its segments were open in the metadata cache before this scan opened them. Filled only
     // when the segments are opened up front below.
     std::vector<bool> cached_rowsets;
-    if (!_need_split && classic_state == nullptr && should_warm_index_pages(params.reader_type) &&
-        params.rowid_range_option == nullptr && params.short_key_ranges_option == nullptr) {
+    if (!_need_split && classic_state == nullptr && params.rowid_range_option == nullptr &&
+        params.short_key_ranges_option == nullptr &&
+        should_warm_index_pages(params.reader_type, rs_opts.lake_io_opts)) {
         // lake_scan_warm_index: open the segments once, warm all of them before building any iterator, and build the
         // iterators on these same segments. The reader keeps the warm handles until close() or the next open(), so
         // the queued fills keep their demand while the scan reads.
