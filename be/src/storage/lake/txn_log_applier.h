@@ -64,8 +64,13 @@ protected:
     bool _skip_write_tablet_metadata = false;
 };
 
+// |base_metadata| is the metadata |metadata| was copied from, at the version the publish starts from, or
+// null. A primary key tablet takes the delete vectors at that version from |base_metadata| instead of
+// reading that version back from storage: for the old segments a write deletes rows from, and to rebuild
+// an index that is cold.
 std::unique_ptr<TxnLogApplier> new_txn_log_applier(const Tablet& tablet, MutableTabletMetadataPtr metadata,
                                                    int64_t new_version, bool rebuild_pindex,
-                                                   bool skip_write_tablet_metadata);
+                                                   bool skip_write_tablet_metadata,
+                                                   TabletMetadataPtr base_metadata = nullptr);
 
 } // namespace starrocks::lake
