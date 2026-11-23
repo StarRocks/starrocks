@@ -323,8 +323,6 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
-<<<<<<< HEAD
-=======
     public void testReloadCachedTableThatLostItsMetadata(@Mocked IcebergCatalog icebergCatalog) {
         AtomicReference<String> location = new AtomicReference<>("hdfs://path/to/table/metadata/v1.metadata.json");
         BaseMetastoreTableOperations ops = Mockito.mock(BaseMetastoreTableOperations.class);
@@ -350,33 +348,6 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
-    public void testTableLoadedAtMs(@Mocked IcebergCatalog icebergCatalog) {
-        Table nativeTable = createBaseTableWithManifests(1, 1);
-        new Expectations() {
-            {
-                icebergCatalog.getTable(connectContext, "test", "table");
-                result = nativeTable;
-                minTimes = 1;
-            }
-        };
-        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
-                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
-        long before = System.currentTimeMillis();
-        Table cached = cachingIcebergCatalog.getTable(connectContext, "test", "table");
-        long now = System.currentTimeMillis();
-        OptionalLong loadedAt = cachingIcebergCatalog.tableLoadedAtMs(connectContext, "test", "table", cached, now);
-        Assertions.assertTrue(loadedAt.isPresent());
-        Assertions.assertTrue(loadedAt.getAsLong() >= before - 1000 && loadedAt.getAsLong() <= now,
-                before + " <= " + loadedAt + " <= " + now);
-
-        // A table object the cache did not load: its age is unknown.
-        Assertions.assertFalse(cachingIcebergCatalog.tableLoadedAtMs(connectContext, "test", "table",
-                createBaseTableWithManifests(1, 1), now).isPresent());
-        cachingIcebergCatalog.invalidateCache("test", "table");
-    }
-
-    @Test
->>>>>>> 1d838c1 ([BugFix] Reload a cached Iceberg table that lost its metadata to a dropped-table refresh (#83787))
     public void testGetTableIOError(@Mocked IcebergCatalog icebergCatalog) {
         new Expectations() {
             {
