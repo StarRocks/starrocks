@@ -40,7 +40,7 @@ import java.util.Date;
 import java.util.Map;
 
 public class MockTokenUtils {
-    String getOpenIdConnect(String fileName) throws IOException {
+    public String getOpenIdConnect(String fileName) throws IOException {
         String path = ClassLoader.getSystemClassLoader().getResource("auth").getPath();
         File file = new File(path + "/" + fileName);
         BufferedReader reader = new BufferedReader(new FileReader(file));
