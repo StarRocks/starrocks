@@ -487,9 +487,9 @@ public:
             _metadata->clear_sstable_meta();
             _guard.reset(nullptr);
             _index_entry = nullptr;
-            ASSIGN_OR_RETURN(_index_entry, _tablet.primary_key_mgr()->rebuild_primary_index(
-                                                   _metadata, &_builder, _base_version, _new_version, _guard,
-                                                   _base_metadata));
+            ASSIGN_OR_RETURN(_index_entry,
+                             _tablet.primary_key_mgr()->rebuild_primary_index(_metadata, &_builder, _base_version,
+                                                                              _new_version, _guard, _base_metadata));
             _rebuild_pindex = false;
         }
         return Status::OK();
@@ -694,9 +694,9 @@ private:
     // in `TxnLogApplier.init`, because we have to build primary index after apply `schema_change_log` finish.
     Status prepare_primary_index() {
         if (_index_entry == nullptr) {
-            ASSIGN_OR_RETURN(_index_entry, _tablet.primary_key_mgr()->prepare_primary_index(
-                                                   _metadata, &_builder, _base_version, _new_version, _guard,
-                                                   _base_metadata));
+            ASSIGN_OR_RETURN(_index_entry,
+                             _tablet.primary_key_mgr()->prepare_primary_index(_metadata, &_builder, _base_version,
+                                                                              _new_version, _guard, _base_metadata));
             // Reset publish SST stats so we only count SSTs flushed during this publish session
             _index_entry->value().reset_publish_sst_stats();
             _publish_begin_time = UnixMillis();
