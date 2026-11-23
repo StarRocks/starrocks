@@ -302,10 +302,20 @@ protected:
         return offset;
     }
 
+    // The parameters of a fragment instance. UnifiedExecPlanFragmentParams requires every instance to carry its backend
+    // number, pipeline dop and sender id, and checks them in debug builds.
+    static TExecPlanFragmentParams fragment_params(const TPlanFragmentExecParams& exec_params) {
+        TExecPlanFragmentParams params;
+        params.__set_backend_num(0);
+        params.__set_pipeline_dop(1);
+        params.__set_params(exec_params);
+        params.params.__set_sender_id(0);
+        return params;
+    }
+
     // The parameters of a fragment of a round, as the FE deploys it.
     static TExecPlanFragmentParams round_fragment_params(const TPlanFragmentExecParams& exec_params) {
-        TExecPlanFragmentParams params;
-        params.__set_params(exec_params);
+        TExecPlanFragmentParams params = fragment_params(exec_params);
         TQueryOptions query_options;
         query_options.__set_query_type(TQueryType::LOAD);
         query_options.__set_load_job_type(TLoadJobType::ROUTINE_LOAD);
@@ -830,8 +840,7 @@ TEST_F(RoutineLoadKafkaScanRangeTest, fragment_without_kafka_scan_ranges_prepare
 
     TPlanFragmentExecParams exec_params;
     exec_params.per_node_scan_ranges[1] = {to_scan_range_params(stream_load_range), hdfs_range};
-    TExecPlanFragmentParams params;
-    params.__set_params(exec_params);
+    TExecPlanFragmentParams params = fragment_params(exec_params);
     pipeline::UnifiedExecPlanFragmentParams request(params, params);
 
     // nothing is touched: this executor has neither a fragment context nor a routine load executor
@@ -843,8 +852,7 @@ TEST_F(RoutineLoadKafkaScanRangeTest, fragment_without_kafka_scan_ranges_prepare
 TEST_F(RoutineLoadKafkaScanRangeTest, fragment_kafka_scan_ranges_need_the_routine_load_executor) {
     TPlanFragmentExecParams exec_params;
     exec_params.per_node_scan_ranges[1] = {to_scan_range_params(make_scan_range(make_load_id(4), {{0, 0}}))};
-    TExecPlanFragmentParams params;
-    params.__set_params(exec_params);
+    TExecPlanFragmentParams params = fragment_params(exec_params);
     pipeline::UnifiedExecPlanFragmentParams request(params, params);
 
     FragmentExecutor fragment_executor;
@@ -1012,8 +1020,7 @@ TEST_F(RoutineLoadKafkaScanRangeTest, scan_range_that_fails_to_prepare_closes_th
     TPlanFragmentExecParams exec_params;
     exec_params.per_node_scan_ranges[1] = {to_scan_range_params(make_scan_range(prepared_load_id, {{0, 0}})),
                                            to_scan_range_params(make_scan_range(make_load_id(9), {}))};
-    TExecPlanFragmentParams params;
-    params.__set_params(exec_params);
+    TExecPlanFragmentParams params = fragment_params(exec_params);
     pipeline::UnifiedExecPlanFragmentParams request(params, params);
 
     auto query_ctx = std::make_shared<pipeline::QueryContext>();
