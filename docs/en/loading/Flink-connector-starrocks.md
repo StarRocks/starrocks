@@ -20,11 +20,9 @@ The Flink connector supports DataStream API, Table API & SQL, and Python API. It
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.17    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.16    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 and later | 8    | 2.11,2.12 |
 
 ## Obtain Flink connector
 
@@ -219,6 +217,18 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 - **Required**: No
 - **Default value**: 10000
 - **Description**: Supported since 1.2.7. The timeout for waiting response of HTTP 100-continue from the FE. Valid values: `3000` to `60000`. Unit: ms
+
+#### sink.http.keep-alive.enabled
+
+- **Required**: No
+- **Default value**: false
+- **Description**: Supported since 1.2.17. Whether Stream Load requests and transaction requests (begin, prepare, commit, rollback) reuse HTTP connections (keep-alive) instead of opening a new connection for every request. Each sink subtask keeps at most `sink.io.thread-count` + 2 connections to each host. Takes effect when `sink.version` is `V2`. Off by default: every request opens a new connection, as in earlier versions, unless this is set to `true`.
+
+#### sink.http.keep-alive.idle-timeout-ms
+
+- **Required**: No
+- **Default value**: 60000
+- **Description**: Supported since 1.2.17. A kept-alive connection that has been idle for longer than this is no longer reused, and is closed within 10 seconds after the timeout. Unit: ms. It must be shorter than the idle timeout of every proxy or load balancer between Flink and StarRocks. For example, an AWS Network Load Balancer drops TCP connections that have been idle for 350 seconds by default.
 
 #### sink.ignore.update-before
 
@@ -503,6 +513,7 @@ The Flink connector provides the following metrics to monitor loading.
 | totalFlushSucceededTimes | counter | number of times that the data is successfully flushed.          |
 | totalFlushFailedTimes    | counter | number of times that the data fails to be flushed.              |
 | totalFilteredRows        | counter | number of rows filtered, which is also included in totalFlushRows. |
+| sharedTxnLatencyMs       | histogram | multi-table transaction mode only: time in ms from when the earliest row of a shared transaction entered the sink buffer until the transaction committed. |
 
 ## Examples
 
