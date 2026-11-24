@@ -19,6 +19,11 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <chrono>
+#include <future>
+#include <thread>
+
 namespace starrocks {
 
 TEST(FailPointTest, enable_disable_mode) {
@@ -120,6 +125,54 @@ TEST(FailPointTest, sfp_demo) {
     }
 
     ASSERT_TRUE(test_func());
+}
+
+TEST(FailPointTest, one_to_any_barrier_a_waits_for_b) {
+    failpoint::OneToAnyBarrier barrier;
+    std::atomic<bool> a_passed{false};
+    std::thread a([&] {
+        ASSERT_TRUE(barrier.arrive_A());
+        a_passed = true;
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    ASSERT_FALSE(a_passed.load());
+    barrier.arrive_B();
+    a.join();
+    ASSERT_TRUE(a_passed.load());
+    // Later A threads are not blocked.
+    ASSERT_TRUE(barrier.arrive_A());
+}
+
+// B used to wait for A. When B ran first on the thread that later runs A (a global runtime filter installed from the
+// cache before the drivers of the fragment instance are prepared), that thread waited forever.
+TEST(FailPointTest, one_to_any_barrier_b_before_a_on_same_thread) {
+    failpoint::OneToAnyBarrier barrier;
+    std::promise<void> done;
+    auto future = done.get_future();
+    std::thread t([&] {
+        barrier.arrive_B();
+        barrier.arrive_B();
+        barrier.arrive_A();
+        barrier.arrive_A();
+        done.set_value();
+    });
+    const bool finished = future.wait_for(std::chrono::seconds(10)) == std::future_status::ready;
+    if (!finished) {
+        // Unblock the thread so the test fails instead of hanging.
+        barrier.arrive_A();
+    }
+    t.join();
+    ASSERT_TRUE(finished);
+}
+
+TEST(FailPointTest, one_to_any_barrier_a_times_out) {
+    failpoint::OneToAnyBarrier barrier;
+    auto start = std::chrono::steady_clock::now();
+    ASSERT_FALSE(barrier.arrive_A(std::chrono::milliseconds(100)));
+    ASSERT_GE(std::chrono::steady_clock::now() - start, std::chrono::milliseconds(100));
+    // A B arriving after the timeout does not block, and later A threads pass.
+    barrier.arrive_B();
+    ASSERT_TRUE(barrier.arrive_A(std::chrono::milliseconds(100)));
 }
 
 } // namespace starrocks
