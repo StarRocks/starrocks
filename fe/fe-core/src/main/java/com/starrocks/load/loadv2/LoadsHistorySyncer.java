@@ -134,8 +134,6 @@ public class LoadsHistorySyncer extends FrontendDaemon {
         }
     }
 
-<<<<<<< HEAD
-=======
     @VisibleForTesting
     void syncIfNewLoadsFinished(long latestFinishTime) {
         if (syncedLoadFinishTime < latestFinishTime) {
@@ -153,17 +151,6 @@ public class LoadsHistorySyncer extends FrontendDaemon {
         }
     }
 
-    @Override
-    protected void onStopped() {
-        // Reset leader-session bookkeeping: firstSync re-arms the "wait one cycle for table
-        // keeper" warm-up, and syncedLoadFinishTime resets so the next leader does not skip
-        // syncing rows whose finish times pre-date its activation.
-        firstSync = true;
-        syncedLoadFinishTime = -1L;
-        // This FE no longer syncs loads_history, so the load managers stop keeping jobs and tasks for it.
-        setLoadsHistorySyncedBeforeMs(Long.MAX_VALUE);
-    }
-
     // Tells the load managers which finished loads loads_history has, see StreamLoadMgr#setLoadsHistorySyncedBeforeMs.
     private static void setLoadsHistorySyncedBeforeMs(long syncedBeforeMs) {
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
@@ -171,7 +158,6 @@ public class LoadsHistorySyncer extends FrontendDaemon {
         state.getStreamLoadMgr().setLoadsHistorySyncedBeforeMs(syncedBeforeMs);
     }
 
->>>>>>> afd478d ([BugFix] Keep stream load tasks listed until loads_history has copied them (#84217))
     /**
      * Generate SQL for operations
      */

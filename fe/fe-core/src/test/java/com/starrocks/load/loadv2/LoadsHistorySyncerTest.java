@@ -120,13 +120,11 @@ public class LoadsHistorySyncerTest {
         FeConstants.runningUnitTest = false;
         try {
             // the warm-up round of a new leader
-            syncer.runAfterLeaseValid();
+            syncer.runAfterCatalogReady();
         } finally {
             FeConstants.runningUnitTest = savedRunningUnitTest;
         }
         Assertions.assertEquals(List.of(0L), syncedBeforeMs);
-        syncer.onStopped();
-        Assertions.assertEquals(List.of(0L, Long.MAX_VALUE), syncedBeforeMs);
-        Assertions.assertEquals(List.of(0L, Long.MAX_VALUE), loadJobsSyncedBeforeMs);
+        Assertions.assertEquals(List.of(0L), loadJobsSyncedBeforeMs);
     }
 }
