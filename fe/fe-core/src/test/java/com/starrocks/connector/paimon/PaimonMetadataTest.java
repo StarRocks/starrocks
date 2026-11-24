@@ -137,6 +137,7 @@ import org.apache.paimon.schema.SchemaManager;
 import org.apache.paimon.schema.TableSchema;
 import org.apache.paimon.stats.ColStats;
 import org.apache.paimon.stats.Statistics;
+import org.apache.paimon.table.FallbackReadFileStoreTable.FallbackDataSplit;
 import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.FormatTable;
 import org.apache.paimon.table.sink.BatchTableCommit;
@@ -1493,6 +1494,67 @@ public class PaimonMetadataTest {
             assertSame(probe, ((PaimonRemoteFileDesc) scanMetadata.getRemoteFiles(table, probeParams)
                     .get(0).getFiles().get(0)).getPaimonSplitsInfo());
             assertEquals(3, evaluations.get());
+        } finally {
+            ConnectContext.remove();
+            FileUtils.deleteDirectory(tmpDir.toFile());
+        }
+    }
+
+    @Test
+    public void testDistributedIndexSkipsFallbackBranchScan() throws Exception {
+        java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_index_branch_fallback_");
+        Identifier identifier = Identifier.create("test_db", "indexed_table");
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.setQueryId(java.util.UUID.randomUUID());
+        context.getSessionVariable().setQueryTimeoutS(30);
+        context.setThreadLocalInfo();
+        AtomicInteger collections = new AtomicInteger();
+        new MockUp<PaimonGlobalIndexCollectJob>() {
+            @Mock
+            public GlobalIndexResult collect(ConnectContext caller) {
+                collections.incrementAndGet();
+                return GlobalIndexResult.fromRange(new org.apache.paimon.utils.Range(0, 0));
+            }
+        };
+        try (Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())))) {
+            catalog.createDatabase(identifier.getDatabaseName(), true);
+            catalog.createTable(identifier, Schema.newBuilder()
+                    .column("id", DataTypes.INT())
+                    .column("part", DataTypes.INT())
+                    .partitionKeys("part")
+                    .option(CoreOptions.BUCKET.key(), "-1")
+                    .option(CoreOptions.ROW_TRACKING_ENABLED.key(), "true")
+                    .option(CoreOptions.DATA_EVOLUTION_ENABLED.key(), "true")
+                    .build(), false);
+            FileStoreTable main = (FileStoreTable) catalog.getTable(identifier);
+            writeRows(main, GenericRow.of(1, 1), GenericRow.of(0, 1));
+            main.createBranch("archive");
+            writeRows(main.switchToBranch("archive"), GenericRow.of(2, 2));
+            // The fallback snapshot is resolved as of the selected main snapshot's commit time.
+            buildBtreeIndex(main, "id", tmpDir);
+            catalog.alterTable(identifier, SchemaChange.setOption(CoreOptions.SCAN_FALLBACK_BRANCH.key(), "archive"),
+                    false);
+
+            PaimonMetadata scanMetadata = new PaimonMetadata("paimon", new HdfsEnvironment(), catalog,
+                    new ConnectorProperties(ConnectorType.PAIMON));
+            PaimonTable table = (PaimonTable) scanMetadata.getTable(context, "test_db", "indexed_table");
+            long snapshotId = table.getNativeTable().latestSnapshot().orElseThrow().id();
+            ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.GT,
+                    new ColumnRefOperator(1, INT, "id", true), ConstantOperator.createInt(0));
+            GetRemoteFilesParams params = new PaimonScanRangeParams(GetRemoteFilesParams.newBuilder()
+                    .setFieldNames(List.of("id", "part")).setPredicate(predicate)
+                    .setTableVersionRange(TvrTableSnapshot.of(snapshotId)), Map.of(1, "id"));
+            for (String mode : List.of("off", "auto", "distributed")) {
+                context.getSessionVariable().setPaimonGlobalIndexMode(mode);
+                context.setStartTime();
+                PaimonSplitsInfo planned = ((PaimonRemoteFileDesc) scanMetadata.getRemoteFiles(table, params)
+                        .get(0).getFiles().get(0)).getPaimonSplitsInfo();
+                FileStoreTable scanTable = (FileStoreTable) planned.getNativeTable();
+                assertTrue(planned.getPaimonSplits().stream()
+                        .anyMatch(split -> split instanceof FallbackDataSplit fallback && fallback.isFallback()));
+                assertEquals(List.of(1, 2), readIds(scanTable, planned), mode);
+            }
+            assertEquals(0, collections.get(), "A fallback-branch scan cannot consume a single-branch bitmap");
         } finally {
             ConnectContext.remove();
             FileUtils.deleteDirectory(tmpDir.toFile());
