@@ -803,6 +803,33 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: Data Cache のインラインキャッシュアイテムの最大数。特に小さいキャッシュブロックの場合、Data Cache はそれらを `inline` モードで保存し、ブロックデータとメタデータをメモリに一緒にキャッシュします。
 - 導入バージョン: v3.4.0
 
+### datacache_lru_shard_evict_fallback_enable
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: Data Cache の LRU シャードが補充中、または自身で十分な空きを確保できない場合に、他のシャードのエントリを削除できるかどうか。`false` に設定すると、シャードが自身のエントリのみを削除する動作に戻り、`datacache_lru_shard_refill_low_watermark_percent` と `datacache_lru_shard_refill_high_watermark_percent` は無視されます。
+- 導入バージョン: -
+
+### datacache_lru_shard_refill_low_watermark_percent
+
+- デフォルト: 50
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: Data Cache の LRU シャードの使用量が容量のこの割合を下回ると、自身のエントリを削除する代わりに最大のシャードから補充され、`datacache_lru_shard_refill_high_watermark_percent` に達するまで続きます。この値は `datacache_lru_shard_refill_high_watermark_percent` を超えてはいけません。両方のパラメータを `0` に設定すると補充は無効になります。
+- 導入バージョン: -
+
+### datacache_lru_shard_refill_high_watermark_percent
+
+- デフォルト: 70
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: Data Cache の LRU シャードの補充を停止する容量の割合。有効な値: `datacache_lru_shard_refill_low_watermark_percent` から `100`。両方のパラメータを `0` に設定すると補充は無効になります。
+- 導入バージョン: -
+
 ### datacache_mem_size
 
 - デフォルト: 0
