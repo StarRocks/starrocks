@@ -273,10 +273,30 @@ TEST_P(LakeMultiStatementPublishTest, retry_after_txn_logs_deleted_keeps_publish
     EXPECT_EQ(kSumC0, sum_c0);
 }
 
-// The reader-first rollout must not change the default on-disk format. Older CNs must still be able
-// to read a newly materialized multi-statement version log until group writing is explicitly enabled.
-TEST_P(LakeMultiStatementPublishTest, publish_log_version_defaults_to_legacy_format) {
-    ASSERT_FALSE(config::lake_enable_txn_vlog_group);
+// Group writes are on by default: a newly materialized multi-statement version log is a statement group in a
+// file of its own, so replay applies each statement with its own schema, segments and delete positions.
+TEST_P(LakeMultiStatementPublishTest, publish_log_version_defaults_to_group_format) {
+    ASSERT_TRUE(config::lake_enable_txn_vlog_group);
+    const int64_t txn_id = next_id();
+    const auto first_load = make_load_id(381, 382);
+    const auto second_load = make_load_id(391, 392);
+    write_statement(txn_id, first_load, 0);
+    write_statement(txn_id, second_load, kChunkSize);
+
+    ASSERT_OK(publish_multi_statement_log_version(2, txn_id, {first_load, second_load}));
+    _tablet_mgr->metacache()->prune();
+    EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_metadata->id(), 2)));
+    const auto path = _tablet_mgr->txn_vlog_group_location(_tablet_metadata->id(), 2);
+    ASSIGN_OR_ABORT(auto logs, _tablet_mgr->get_txn_vlog_group(path, false));
+    ASSERT_EQ(2, logs.size());
+    EXPECT_EQ(first_load.SerializeAsString(), logs[0]->load_id().SerializeAsString());
+    EXPECT_EQ(second_load.SerializeAsString(), logs[1]->load_id().SerializeAsString());
+}
+
+// With group writes disabled the legacy merged writer is unchanged, so a cluster that still has CNs without the
+// group reader keeps writing a multi-statement version log they can read.
+TEST_P(LakeMultiStatementPublishTest, publish_log_version_writes_legacy_format_with_group_writes_disabled) {
+    ConfigResetGuard group_write_guard(&config::lake_enable_txn_vlog_group, false);
     const int64_t txn_id = next_id();
     const auto first_load = make_load_id(71, 72);
     const auto second_load = make_load_id(81, 82);
@@ -297,7 +317,7 @@ TEST_P(LakeMultiStatementPublishTest, publish_log_version_defaults_to_legacy_for
     EXPECT_EQ(legacy_log.value()->SerializeAsString(), new_reader_logs.front()->SerializeAsString());
 }
 
-TEST_P(LakeMultiStatementPublishTest, publish_log_version_group_write_is_opt_in) {
+TEST_P(LakeMultiStatementPublishTest, publish_log_version_group_write_uses_its_own_file) {
     ConfigResetGuard group_write_guard(&config::lake_enable_txn_vlog_group, true);
     const int64_t txn_id = next_id();
     const auto first_load = make_load_id(91, 92);
@@ -664,24 +684,31 @@ TEST_P(LakeMultiStatementPublishTest, publish_log_version_retry_across_enabling_
     EXPECT_EQ(kTotalRows, logs[0]->op_write().rowset().num_rows());
 }
 
-// During a schema change publish_log_version folds the statements of a shadow tablet into one .vlog. A retry
-// after the statements' logs were deleted finds the .vlog and succeeds; without either there is nothing to
-// publish.
+// During a schema change publish_log_version materializes the statements of a shadow tablet into a version log: a
+// statement group by default, one merged .vlog with group writes disabled. A retry after the statements' logs were
+// deleted finds that log and succeeds; without either there is nothing to publish.
 TEST_P(LakeMultiStatementPublishTest, publish_log_version_retry_after_txn_logs_deleted) {
-    const int64_t txn_id = next_id();
-    const auto load_id_1 = make_load_id(51, 52);
-    const auto load_id_2 = make_load_id(61, 62);
-    write_statement(txn_id, load_id_1, 0);
-    write_statement(txn_id, load_id_2, kChunkSize);
+    ConfigResetGuard group_write_guard(&config::lake_enable_txn_vlog_group, false);
+    for (bool group_writes : {false, true}) {
+        SCOPED_TRACE(fmt::format("group_writes={}", group_writes));
+        config::lake_enable_txn_vlog_group = group_writes;
+        const int64_t txn_id = next_id();
+        const auto load_id_1 = make_load_id(51, group_writes);
+        const auto load_id_2 = make_load_id(61, group_writes);
+        write_statement(txn_id, load_id_1, 0);
+        write_statement(txn_id, load_id_2, kChunkSize);
 
-    const int64_t log_version = 2;
-    ASSERT_OK(publish_multi_statement_log_version(log_version, txn_id, {load_id_1, load_id_2}));
-    ASSERT_TRUE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_metadata->id(), log_version)));
-    delete_statement_logs(txn_id, {load_id_1, load_id_2});
+        const int64_t log_version = group_writes ? 4 : 2;
+        ASSERT_OK(publish_multi_statement_log_version(log_version, txn_id, {load_id_1, load_id_2}));
+        const auto target = group_writes ? _tablet_mgr->txn_vlog_group_location(_tablet_metadata->id(), log_version)
+                                         : _tablet_mgr->txn_vlog_location(_tablet_metadata->id(), log_version);
+        ASSERT_TRUE(fs::path_exist(target));
+        delete_statement_logs(txn_id, {load_id_1, load_id_2});
 
-    ASSERT_OK(publish_multi_statement_log_version(log_version, txn_id, {load_id_1, load_id_2}));
-    auto st = publish_multi_statement_log_version(log_version + 1, next_id(), {load_id_1, load_id_2});
-    ASSERT_TRUE(st.is_not_found()) << st;
+        ASSERT_OK(publish_multi_statement_log_version(log_version, txn_id, {load_id_1, load_id_2}));
+        auto st = publish_multi_statement_log_version(log_version + 1, next_id(), {load_id_1, load_id_2});
+        ASSERT_TRUE(st.is_not_found()) << st;
+    }
 }
 
 // FE sends the load ids of every statement of the transaction, but a statement that loaded another table or
