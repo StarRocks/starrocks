@@ -1,0 +1,127 @@
+# PR CI always builds BE with --enable-shared-data (USE_STAROS=ON), but
+# build.sh defaults to USE_STAROS=OFF, which is what anyone building from
+# source gets. Code that only compiles under USE_STAROS (e.g. #83084, fixed by
+# #83698) breaks the default build without any PR check noticing. This job
+# builds main with default flags every weekday night and tracks the result in a
+# single GitHub issue: opened (or commented) on failure, closed on recovery.
+
+name: NIGHTLY BUILD WITHOUT SHARED-DATA
+
+on:
+  schedule:
+    - cron: "0 18 * * 0-4"   # 02:00 Asia/Shanghai, Mon-Fri
+  workflow_dispatch:
+    inputs:
+      BRANCH:
+        description: "Branch to build"
+        type: string
+        default: main
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: nightly-build-no-staros
+  cancel-in-progress: false
+
+env:
+  BRANCH: ${{ inputs.BRANCH || 'main' }}
+  ISSUE_LABEL: ci-build-no-shared-data
+  ASSIGNEES: kevincai,yongbingwang
+
+jobs:
+  build-be:
+    if: github.repository == 'StarRocks/starrocks'
+    runs-on: [self-hosted, normal]
+    timeout-minutes: 300
+    container:
+      image: starrocks/dev-env-ubuntu:main-latest
+    outputs:
+      sha: ${{ steps.rev.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.BRANCH }}
+
+      - id: rev
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build BE with default flags (USE_STAROS=OFF)
+        shell: bash
+        run: |
+          set -o pipefail
+          ./build.sh --be --without-java-ext 2>&1 | tee build.log
+
+      - name: Extract compiler errors
+        if: failure()
+        shell: bash
+        run: |
+          grep -E 'error:|Error [0-9]+' build.log | head -60 > errors.txt || true
+          tail -n 80 build.log > tail.txt
+
+      - uses: actions/upload-artifact@v6
+        if: failure()
+        with:
+          name: build-log
+          path: |
+            build.log
+            errors.txt
+            tail.txt
+          retention-days: 14
+
+  report:
+    needs: build-be
+    if: always() && github.repository == 'StarRocks/starrocks' && needs.build-be.result != 'cancelled' && needs.build-be.result != 'skipped'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RESULT: ${{ needs.build-be.result }}
+      SHA: ${{ needs.build-be.outputs.sha }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/download-artifact@v7
+        if: needs.build-be.result == 'failure'
+        with:
+          name: build-log
+        continue-on-error: true
+
+      - name: Open, update or close the tracking issue
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh label create "$ISSUE_LABEL" --color B60205 \
+            --description "Nightly BE build without --enable-shared-data" 2>/dev/null || true
+          open=$(gh issue list --label "$ISSUE_LABEL" --state open --json number --jq '.[0].number // empty')
+
+          if [[ "$RESULT" == "success" ]]; then
+            [[ -n "$open" ]] && gh issue close "$open" \
+              --comment "Build without \`--enable-shared-data\` is green again on \`$BRANCH\` @ $SHA ($RUN_URL)."
+            exit 0
+          fi
+
+          {
+            echo "Nightly BE build **without** \`--enable-shared-data\` (\`USE_STAROS=OFF\`, the \`build.sh\` default) failed."
+            echo
+            echo "| Branch | Commit | Run |"
+            echo "|---|---|---|"
+            echo "| \`$BRANCH\` | $SHA | $RUN_URL |"
+            echo
+            echo "PR CI builds with \`--enable-shared-data\`, so code referencing symbols defined only under \`#ifdef USE_STAROS\` passes PR checks but breaks this build. Typical fix: guard the new code with \`#ifdef USE_STAROS\` or move the config/symbol out of the guarded block."
+            echo
+            echo "<details><summary>Compiler errors</summary>"
+            echo
+            echo '```'
+            if [[ -s errors.txt ]]; then cat errors.txt; elif [[ -s tail.txt ]]; then cat tail.txt; else echo "(no log captured; see run)"; fi
+            echo '```'
+            echo "</details>"
+          } > body.md
+
+          if [[ -n "$open" ]]; then
+            gh issue comment "$open" --body-file body.md
+          else
+            gh issue create \
+              --title "[CI] BE build fails without --enable-shared-data on $BRANCH" \
+              --label "$ISSUE_LABEL" --assignee "$ASSIGNEES" --body-file body.md
+          fi
