@@ -214,8 +214,6 @@ public class JoinPredicatePushdown {
             }
         }
 
-        pushDownPredicate(joinOptExpression, leftPushDown, rightPushDown);
-
         LogicalJoinOperator newJoinOperator;
         if (!remainingFilter.isEmpty()) {
             if (join.getJoinType().isAnyInnerJoin()) {
@@ -230,7 +228,11 @@ public class JoinPredicatePushdown {
             newJoinOperator = join;
         }
 
-        return OptExpression.create(newJoinOperator, joinOptExpression.getInputs());
+        // Push into the new expression, never into the caller's: a caller may keep using the one it passed in (the
+        // MV union rewrite falls back to it when the rewrite fails).
+        OptExpression root = OptExpression.create(newJoinOperator, joinOptExpression.getInputs());
+        pushDownPredicate(root, leftPushDown, rightPushDown);
+        return root;
     }
 
     // A filter above an ASOF join applies to the match it picked for each left row. Filtering the right input first
@@ -266,13 +268,14 @@ public class JoinPredicatePushdown {
                 remainingFilter.add(e);
             }
         }
-        pushDownPredicate(joinOptExpression, leftPushDown, rightPushDown);
         LogicalJoinOperator newJoinOperator = join;
         if (!remainingFilter.isEmpty()) {
             newJoinOperator = new LogicalJoinOperator.Builder().withOperator(join)
                     .setPredicate(Utils.compoundAnd(Utils.compoundAnd(remainingFilter), join.getPredicate())).build();
         }
-        return OptExpression.create(newJoinOperator, joinOptExpression.getInputs());
+        OptExpression root = OptExpression.create(newJoinOperator, joinOptExpression.getInputs());
+        pushDownPredicate(root, leftPushDown, rightPushDown);
+        return root;
     }
 
     private OptExpression pushdownOnPredicate(ScalarOperator predicateToPush) {

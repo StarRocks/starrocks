@@ -145,6 +145,28 @@ public class MvRewriteUnionTest extends MVTestBase {
         dropMv("test", "union_mv_1");
     }
 
+    // StarRocks/starrocks#84295: the union rewrite of this LEFT JOIN aggregate MV fails on the MV side. It must not
+    // leave its compensation predicate (NOT b = 0) in the query, which then loses the b = 0 groups.
+    @Test
+    public void testFailedUnionRewriteOfLeftJoinAggregateKeepsTheQuery() throws Exception {
+        starRocksAssert.withTable("create table t84295 (k date not null, b int) duplicate key(k) " +
+                "distributed by hash(k) buckets 1 properties ('replication_num' = '1')");
+        createAndRefreshMv("create materialized view mv84295 distributed by random refresh manual as " +
+                "select a0.b c0, a1.b c1, a1.k c2, min(a1.k) m0, count(*) m1 " +
+                "from t84295 a0 left join t84295 a1 on a0.b = a1.b where a0.b = 0 group by a0.b, a1.b, a1.k");
+        String plan = getFragmentPlan("select a0.b, a1.b, a1.k, min(a1.k), count(*) " +
+                "from t84295 a0 left join t84295 a1 on a0.b = a1.b group by a0.b, a1.b, a1.k");
+        if (plan.contains("mv84295")) {
+            // the MV supplies the b = 0 groups
+            PlanTestBase.assertContains(plan, ":UNION");
+        } else {
+            // the base tables supply every group
+            PlanTestBase.assertNotContains(plan, "!= 0");
+        }
+        dropMv("test", "mv84295");
+        starRocksAssert.dropTable("t84295");
+    }
+
     @Test
     public void testUnionRewrite2() throws Exception {
         // multi tables query

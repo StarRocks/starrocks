@@ -1,0 +1,28 @@
+-- name: test_mv_union_rewrite_left_join_agg
+-- description: The union rewrite of a LEFT JOIN aggregate MV failed on the MV side but left its compensation
+--              predicate (NOT b = 0) in the query, which then lost the b = 0 groups (StarRocks/starrocks#84295).
+--              The answer must be the same with the MV rewrite on and off.
+
+CREATE TABLE ti (k DATE NOT NULL, b INT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO ti VALUES ('2011-02-20', 1), ('2011-12-01', NULL), ('2015-08-31', 0), ('2018-06-17', 0);
+
+CREATE MATERIALIZED VIEW mv_left_join_agg REFRESH MANUAL PROPERTIES ("replication_num" = "1")
+AS SELECT a0.b AS c0, a1.b AS c1, a1.k AS c2, MIN(a1.k) AS m0, COUNT(*) AS m1
+FROM ti AS a0 LEFT JOIN ti AS a1 ON a0.b = a1.b
+WHERE a0.b = 0
+GROUP BY a0.b, a1.b, a1.k;
+REFRESH MATERIALIZED VIEW mv_left_join_agg WITH SYNC MODE;
+
+SET enable_materialized_view_rewrite = false;
+SELECT a0.b, a1.b, a1.k, MIN(a1.k), COUNT(*) FROM ti AS a0 LEFT JOIN ti AS a1 ON a0.b = a1.b
+GROUP BY a0.b, a1.b, a1.k ORDER BY 3;
+
+SET enable_materialized_view_rewrite = true;
+SET enable_materialized_view_union_rewrite = true;
+SELECT a0.b, a1.b, a1.k, MIN(a1.k), COUNT(*) FROM ti AS a0 LEFT JOIN ti AS a1 ON a0.b = a1.b
+GROUP BY a0.b, a1.b, a1.k ORDER BY 3;
+SELECT a0.b, a1.b, a1.k, MIN(a1.k), COUNT(*) FROM ti AS a0 LEFT JOIN ti AS a1 ON a0.b = a1.b
+WHERE a0.b = 0 GROUP BY a0.b, a1.b, a1.k ORDER BY 3;
+SELECT a0.b, a1.b, a1.k, MIN(a1.k), COUNT(*) FROM ti AS a0 LEFT JOIN ti AS a1 ON a0.b = a1.b
+WHERE a0.b >= 0 GROUP BY a0.b, a1.b, a1.k ORDER BY 3;

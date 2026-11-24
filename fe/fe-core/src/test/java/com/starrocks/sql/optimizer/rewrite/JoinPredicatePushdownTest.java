@@ -14,14 +14,59 @@
 
 package com.starrocks.sql.optimizer.rewrite;
 
+import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.type.IntegerType;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 public class JoinPredicatePushdownTest extends PlanTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
+    }
+
+    // The MV union rewrite pushes its compensation predicate into the query's join and falls back to that join when
+    // the MV side cannot be rewritten (StarRocks/starrocks#84295), so pushing a filter must not change the join given.
+    @Test
+    public void testFilterPushdownLeavesTheGivenJoinAlone() {
+        ColumnRefFactory factory = new ColumnRefFactory();
+        ColumnRefOperator a = factory.create("a", IntegerType.INT, true);
+        ColumnRefOperator b = factory.create("b", IntegerType.INT, true);
+        ScalarOperator filter = BinaryPredicateOperator.ne(a, ConstantOperator.createInt(0));
+        for (JoinOperator joinType : List.of(JoinOperator.LEFT_OUTER_JOIN, JoinOperator.LEFT_SEMI_JOIN,
+                JoinOperator.LEFT_ANTI_JOIN, JoinOperator.INNER_JOIN)) {
+            for (boolean directToChild : new boolean[] {true, false}) {
+                OptExpression left = OptExpression.create(new LogicalValuesOperator(List.of(a), List.of()));
+                OptExpression right = OptExpression.create(new LogicalValuesOperator(List.of(b), List.of()));
+                left.deriveLogicalPropertyItself();
+                right.deriveLogicalPropertyItself();
+                OptExpression join = OptExpression.create(
+                        new LogicalJoinOperator(joinType, BinaryPredicateOperator.eq(a, b)), left, right);
+                join.deriveLogicalPropertyItself();
+
+                OptExpression pushed = new JoinPredicatePushdown(join, false, directToChild, factory,
+                        OptimizerFactory.mockContext(connectContext, factory)).pushdown(filter);
+
+                String what = joinType + ", directToChild=" + directToChild;
+                Assertions.assertNotSame(left, pushed.inputAt(0), what + ": the filter is pushed to the left input");
+                Assertions.assertSame(left, join.inputAt(0), what);
+                Assertions.assertSame(right, join.inputAt(1), what);
+                Assertions.assertNull(left.getOp().getPredicate(), what);
+            }
+        }
     }
 
     @Test
