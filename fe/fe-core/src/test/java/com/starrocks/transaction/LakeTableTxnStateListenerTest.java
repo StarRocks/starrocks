@@ -15,12 +15,9 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
-=======
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.HashDistributionInfo;
->>>>>>> 40143fc ([BugFix] Re-add a resharding job's new tablets to the inverted index when an FE loads an image taken before CLEANING (#84315))
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -35,11 +32,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TStorageMedium;
-<<<<<<< HEAD
-=======
-import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.IntegerType;
->>>>>>> 40143fc ([BugFix] Re-add a resharding job's new tablets to the inverted index when an FE loads an image taken before CLEANING (#84315))
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.iceberg.exceptions.CommitFailedException;

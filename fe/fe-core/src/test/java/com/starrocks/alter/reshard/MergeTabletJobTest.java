@@ -25,6 +25,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
@@ -58,11 +59,8 @@ import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.TabletGroupList;
 import com.starrocks.sql.ast.TabletList;
 import com.starrocks.thrift.TStatusCode;
-<<<<<<< HEAD
-=======
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.transaction.DatabaseTransactionMgr;
->>>>>>> 40143fc ([BugFix] Re-add a resharding job's new tablets to the inverted index when an FE loads an image taken before CLEANING (#84315))
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.LakeTableTxnStateListener;
 import com.starrocks.transaction.TabletCommitInfo;
@@ -1705,39 +1703,6 @@ public class MergeTabletJobTest {
             physicalPartition.setNextVersion(physicalPartition.getVisibleVersion() + 1);
         }
     }
-<<<<<<< HEAD
-=======
-
-    // The partitions' cache settings are read under the table READ lock: PartitionInfo keeps them in a plain
-    // HashMap that a concurrent ADD PARTITION may be rehashing. The StarOS RPC itself runs without the lock.
-    @Test
-    public void testCreateShardsReadsPartitionCacheInfoUnderTheLockAndCallsStarOSWithoutIt() throws Exception {
-        MergeTabletJob mergeJob = createMergeTabletReshardJob();
-        AtomicBoolean cacheInfoReadUnderLock = new AtomicBoolean(false);
-        AtomicBoolean starOSCalledWithoutLock = new AtomicBoolean(false);
-        new MockUp<LakeTable>() {
-            @Mock
-            public FileCacheInfo getPartitionFileCacheInfo(Invocation invocation, long partitionId) {
-                cacheInfoReadUnderLock.set(LockHoldDepth.current() > 0);
-                return invocation.proceed(partitionId);
-            }
-        };
-        new MockUp<StarOSAgent>() {
-            @Mock
-            public void createShardsForMerge(Map<Long, List<Long>> newToOldTabletIds,
-                                             Map<Long, List<Long>> newShardIdToGroupIds,
-                                             FilePathInfo pathInfo,
-                                             FileCacheInfo cacheInfo,
-                                             Map<String, String> properties,
-                                             ComputeResource computeResource) {
-                starOSCalledWithoutLock.set(LockHoldDepth.current() == 0);
-            }
-        };
-        mergeJob.createShardsOnStarOS();
-        Assertions.assertTrue(cacheInfoReadUnderLock.get());
-        Assertions.assertTrue(starOSCalledWithoutLock.get());
-    }
-
     /**
      * The inverted index is not in the image: an FE that starts from one rebuilds it from the tablets
      * installed on partitions, and a merge job installs its merged tablets only at CLEANING. When that FE
@@ -1753,12 +1718,12 @@ public class MergeTabletJobTest {
         // The 10 ms leader daemon would drive the replayed job on between the steps below.
         new MockUp<TabletReshardJobMgr>() {
             @Mock
-            protected void runAfterLeaseValid() {
+            protected void runAfterCatalogReady() {
             }
         };
         TabletReshardJobMgr tabletReshardJobMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
-        MergeCandidateFixture fx = newMergeCandidateFixture(2);
-        MergeTabletJob origin = createMergeTabletReshardJob(fx.table());
+        OlapTable isolatedTable = newTwoTabletTable();
+        MergeTabletJob origin = createMergeTabletReshardJob(isolatedTable);
         try {
             tabletReshardJobMgr.replayUpdateTabletReshardJob(mergeJobCopy(origin));
             origin.setJobState(TabletReshardJob.JobState.PREPARING);
@@ -1786,25 +1751,25 @@ public class MergeTabletJobTest {
 
             long physicalPartitionId = reshardingPartition.getPhysicalPartitionId();
             long newIndexId = reshardingIndex.getMaterializedIndex().getId();
-            PhysicalPartition physicalPartition = fx.table().getPhysicalPartition(physicalPartitionId);
+            PhysicalPartition physicalPartition = isolatedTable.getPhysicalPartition(physicalPartitionId);
             Assertions.assertEquals(newIndexId, physicalPartition.getLatestBaseIndex().getId());
 
             DatabaseTransactionMgr dbTxnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                     .getDatabaseTransactionMgr(db.getId());
             long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
                     .getNextTransactionId();
-            TransactionState txnState = new TransactionState(db.getId(), List.of(fx.table().getId()), txnId,
+            TransactionState txnState = new TransactionState(db.getId(), List.of(isolatedTable.getId()), txnId,
                     "image_recovery_merge_load_" + txnId, null,
                     TransactionState.LoadJobSourceType.BACKEND_STREAMING, null, 0, 60_000);
             List<TabletCommitInfo> finishedTablets = new ArrayList<>();
             for (Tablet tablet : physicalPartition.getLatestBaseIndex().getTablets()) {
                 finishedTablets.add(new TabletCommitInfo(tablet.getId(), 1));
             }
-            LakeTableTxnStateListener listener = new LakeTableTxnStateListener(dbTxnMgr, fx.table());
+            LakeTableTxnStateListener listener = new LakeTableTxnStateListener(dbTxnMgr, isolatedTable);
             listener.prePrepared(txnState, finishedTablets, Collections.emptyList());
             txnState.setTransactionStatus(TransactionStatus.COMMITTED);
             listener.preWriteCommitLog(txnState);
-            Assertions.assertTrue(txnState.getTableCommitInfo(fx.table().getId()).getIdToPartitionCommitInfo()
+            Assertions.assertTrue(txnState.getTableCommitInfo(isolatedTable.getId()).getIdToPartitionCommitInfo()
                             .containsKey(physicalPartitionId),
                     "a load into the merged tablets must commit their partition, not an empty transaction");
 
@@ -1867,5 +1832,25 @@ public class MergeTabletJobTest {
         reader.close();
         return (MergeTabletJob) tabletReshardJobMgr.getTabletReshardJob(record.getJobId());
     }
->>>>>>> 40143fc ([BugFix] Re-add a resharding job's new tablets to the inverted index when an FE loads an image taken before CLEANING (#84315))
+
+    // An isolated table whose base index holds two tablets known only to FE, enough for a merge job.
+    private OlapTable newTwoTabletTable() throws Exception {
+        String tableName = "merge_image_recovery_test";
+        starRocksAssert.withTable("create table " + tableName + " (key1 int, key2 varchar(10))\n"
+                + "order by(key1)\n"
+                + "properties('replication_num' = '1'); ");
+        OlapTable freshTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), tableName);
+        PhysicalPartition physicalPartition = freshTable.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex index = physicalPartition.getLatestBaseIndex();
+        for (long tabletId : new ArrayList<>(index.getTabletIdsInOrder())) {
+            index.removeTablet(tabletId);
+        }
+        for (int i = 0; i < 2; i++) {
+            index.addTablet(new LakeTablet(GlobalStateMgr.getCurrentState().getNextId()),
+                    new TabletMeta(db.getId(), freshTable.getId(), physicalPartition.getId(), index.getId(),
+                            TStorageMedium.HDD, true));
+        }
+        return freshTable;
+    }
 }
