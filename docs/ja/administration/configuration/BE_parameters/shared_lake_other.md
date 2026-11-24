@@ -842,6 +842,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: プロセスのメモリ上限に対する割合で表されるハイウォーターメモリ閾値。総メモリ使用量がこの割合を超えると、BE はメモリ圧力を緩和するために徐々にメモリを解放し始めます（現在はデータキャッシュと更新キャッシュの追い出しで実施）。モニタはこの値を用いて memory_high = mem_limit * memory_high_level / 100 を計算し、消費量が `>` memory_high の場合は GC アドバイザに導かれた制御されたエビクションを行います；消費量が別の設定である memory_urgent_level を超えると、より攻撃的な即時削減が行われます。この値は閾値超過時に一部のメモリ集約的な操作（例えば primary-key preload）を無効化するかどうかの判断にも使われます。memory_urgent_level と合わせた検証を満たす必要があります（memory_urgent_level `>` memory_high_level、memory_high_level `>=` 1、memory_urgent_level `<=` 100）。
 - 導入バージョン: v3.2.0
 
+### olap_string_max_length
+
+- デフォルト: 1048576
+- タイプ: Int
+- 単位: バイト
+- 変更可能: はい
+- 説明: `repeat` や `concat` などの BE 文字列関数が、各結果のサイズを制限するために使用する文字列の最大長です。デフォルトは 1 MiB です。結果がこの上限を超えると、これらの関数は `NULL` を返します。上限は文字数ではなくバイト数で計算されます。
+- 導入バージョン: -
+
 ### report_exec_rpc_request_retry_num
 
 - デフォルト: 10
