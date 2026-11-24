@@ -2535,8 +2535,11 @@ public class QueryAnalyzer {
             Table table = null;
             if (tableRelation.isSyncMVQuery()) {
                 try (Timer ignored = Tracers.watchScope("AnalyzeSyncMV")) {
+                    // [_SYNC_MV_] gives a materialized index name where a table name goes.
+                    String indexName = tbName;
                     Pair<Table, MaterializedIndexMeta> materializedIndex =
-                            GlobalStateMgr.getCurrentState().getLocalMetastore().getMaterializedViewIndex(dbName, tbName);
+                            GlobalStateMgr.getCurrentState().getLocalMetastore().getMaterializedViewIndex(dbName,
+                                    indexName, session.getSessionId());
                     if (materializedIndex != null) {
                         Table mvTable = materializedIndex.first;
                         Preconditions.checkState(mvTable != null);
