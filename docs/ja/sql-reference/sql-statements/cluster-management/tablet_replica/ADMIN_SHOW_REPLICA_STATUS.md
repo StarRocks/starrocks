@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ADMIN SHOW REPLICA STATUS は、テーブルまたはパーティションのレプリカのステータスを表示するために使用されます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ADMIN SHOW REPLICA STATUS
@@ -8,6 +9,8 @@ description: "ADMIN SHOW REPLICA STATUS は、テーブルまたはパーティ�
 ## 説明
 
 このステートメントは、テーブルまたはパーティションのレプリカのステータスを表示するために使用されます。
+
+このステートメントは、共有データクラスタ内のクラウドネイティブテーブルおよびマテリアライズドビューをサポートしていません。クラウドネイティブテーブルに対しては `Unsupported operation on lake table` で始まるエラーを返し、マテリアライズドビューに対してはエラー `Table does not exist or is not OLAP table` を返します。
 
 :::tip
 

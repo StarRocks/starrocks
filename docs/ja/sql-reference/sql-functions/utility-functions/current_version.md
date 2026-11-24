@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocksの現在のバージョンを返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # current_version

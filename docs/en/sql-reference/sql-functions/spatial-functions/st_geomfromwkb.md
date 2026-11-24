@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Constructs a native GEOMETRY value from WKB with an explicit CRS."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_GeomFromWKB

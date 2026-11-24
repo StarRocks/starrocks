@@ -138,7 +138,8 @@ Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyInde
                 const auto& [start_key, end_key] = key_pair;
                 if (comparator->Compare(keys[key_index], Slice(end_key)) <= 0) {
                     // key in range [start_key, end_key]
-                    sstable_key_indexes_map[sstable.get()].insert(key_index);
+                    auto& sstable_key_indexes = sstable_key_indexes_map[sstable.get()];
+                    sstable_key_indexes.insert(sstable_key_indexes.end(), key_index);
                 }
             }
         }

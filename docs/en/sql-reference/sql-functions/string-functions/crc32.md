@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the 32-bit cyclic redundancy check (CRC) value of a string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # crc32

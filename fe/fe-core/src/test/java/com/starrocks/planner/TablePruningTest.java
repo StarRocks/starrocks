@@ -15,7 +15,11 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
@@ -23,10 +27,13 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -269,7 +276,189 @@ public class TablePruningTest extends TablePruningTestBase {
         starRocksAssert.withTable(tableB);
         starRocksAssert.withTable(tableC);
         starRocksAssert.withView(viewA);
+
+        // Tables with several partitions and tablets, for scans that name some of them.
+        starRocksAssert.withTable("CREATE TABLE `pk_partitioned` (\n" +
+                "  `k1` date NOT NULL,\n" +
+                "  `city` varchar(20) NOT NULL,\n" +
+                "  `pk` bigint NOT NULL,\n" +
+                "  `v1` bigint NULL\n" +
+                ") PRIMARY KEY(`k1`, `city`, `pk`)\n" +
+                "PARTITION BY RANGE(`k1`) (\n" +
+                "  PARTITION p1 VALUES LESS THAN ('2025-02-01'),\n" +
+                "  PARTITION p2 VALUES LESS THAN ('2025-03-01'),\n" +
+                "  PARTITION p3 VALUES LESS THAN ('2025-04-01')\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        starRocksAssert.withTable("CREATE TABLE `uk_partitioned` (\n" +
+                "  `pk` bigint NOT NULL,\n" +
+                "  `v1` bigint NULL\n" +
+                ") PRIMARY KEY(`pk`)\n" +
+                "PARTITION BY RANGE(`pk`) (\n" +
+                "  PARTITION p1 VALUES LESS THAN ('100'),\n" +
+                "  PARTITION p2 VALUES LESS THAN ('200'),\n" +
+                "  PARTITION p3 VALUES LESS THAN ('300')\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
+                "PROPERTIES (\"replication_num\" = \"1\", \"unique_constraints\" = \"pk\");");
+        starRocksAssert.withTable("CREATE TABLE `fk_to_uk_partitioned` (\n" +
+                "  `id` bigint NOT NULL,\n" +
+                "  `fk` bigint NOT NULL,\n" +
+                "  `v2` bigint NULL\n" +
+                ") DUPLICATE KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 3\n" +
+                "PROPERTIES (\"replication_num\" = \"1\", " +
+                "\"foreign_key_constraints\" = \"(fk) REFERENCES uk_partitioned(pk)\");");
+        for (String table : List.of("pk_partitioned", "uk_partitioned", "fk_to_uk_partitioned")) {
+            for (Partition partition : olapTableOf(table).getPartitions()) {
+                UtFrameUtils.setPartitionVersion(partition, Partition.PARTITION_INIT_VERSION + 1);
+            }
+        }
         FeConstants.runningUnitTest = true;
+    }
+
+    // A way to turn table pruning on: its name, for failure messages, and the session settings it changes.
+    private record PruningMode(String name, Consumer<SessionVariable> settings) {
+    }
+
+    private static final PruningMode CBO_WITHOUT_JOIN_REORDER = new PruningMode(
+            "CBO table pruning without join reordering", sv -> {
+                sv.setEnableCboTablePrune(true);
+                sv.disableJoinReorder();
+            });
+    private static final PruningMode CBO_WITH_JOIN_REORDER = new PruningMode(
+            "CBO table pruning with join reordering", sv -> sv.setEnableCboTablePrune(true));
+    private static final PruningMode RBO = new PruningMode(
+            "RBO table pruning", sv -> sv.setEnableRboTablePrune(true));
+    private static final PruningMode RBO_ON_UPDATE = new PruningMode(
+            "RBO table pruning, on UPDATE too", sv -> {
+                sv.setEnableRboTablePrune(true);
+                sv.setEnableTablePruneOnUpdate(true);
+            });
+
+    // Table pruning merges two scans of a table joined on its primary key into one scan, but not when either scan
+    // names partitions, tablets or replicas: that scan reads only part of the table, so the other scan cannot stand
+    // in for it.
+    @Test
+    public void testSameTableScansNamingPartitionsTabletsOrReplicasAreNotMerged() {
+        List<Long> p1 = tabletsOf("pk_partitioned", "p1");
+        List<Long> p1AndP2 = tabletsOf("pk_partitioned", "p1", "p2");
+        List<Long> p2AndP3 = tabletsOf("pk_partitioned", "p2", "p3");
+        List<Long> all = tabletsOf("pk_partitioned", "p1", "p2", "p3");
+        long tablet = p1.get(0);
+        long replica = replicaOf("pk_partitioned", "p1", tablet);
+        String on = " on a.k1 = b.k1 and a.city = b.city and a.pk = b.pk";
+        String where = " where pk_partitioned.k1 = b.k1 and pk_partitioned.city = b.city and pk_partitioned.pk = b.pk";
+        Object[][] cases = {
+                // statement, the tablets each scan of pk_partitioned reads
+                {"select a.pk, b.v1 from pk_partitioned partition (p1) a join pk_partitioned b" + on,
+                        List.of(p1, all)},
+                {"select a.pk, b.v1 from pk_partitioned a join pk_partitioned partition (p1) b" + on,
+                        List.of(p1, all)},
+                {"select a.pk, b.v1 from pk_partitioned partition (p1, p2) a join pk_partitioned partition (p2, p3) b" +
+                        on, List.of(p1AndP2, p2AndP3)},
+                {"select a.pk, b.v1 from pk_partitioned tablet (" + tablet + ") a join pk_partitioned b" + on,
+                        List.of(List.of(tablet), all)},
+                {"select a.pk, b.v1 from pk_partitioned replica (" + replica + ") a join pk_partitioned b" + on,
+                        List.of(List.of(tablet), all)},
+                {"select a.pk, b.v1 from pk_partitioned a left join pk_partitioned partition (p1) b" + on,
+                        List.of(p1, all)},
+                {"select a.pk, b.v1 from pk_partitioned partition (p1) a left join pk_partitioned b" + on,
+                        List.of(p1, all)},
+                {"update pk_partitioned set v1 = b.v1 + 1 from pk_partitioned partition (p1) b" + where,
+                        List.of(p1, all)},
+                // Without these clauses the two scans are merged into one.
+                {"select a.pk, b.v1 from pk_partitioned a join pk_partitioned b" + on + " where b.v1 > 0",
+                        List.of(all)},
+        };
+        assertScannedTablets("pk_partitioned", List.of(CBO_WITHOUT_JOIN_REORDER, CBO_WITH_JOIN_REORDER, RBO,
+                RBO_ON_UPDATE), cases);
+    }
+
+    // Table pruning removes the referenced side of a join on a foreign key when only the key is read from it, but
+    // not when that side names partitions, tablets or replicas: it then reads only part of the table and can miss
+    // rows the foreign key refers to.
+    @Test
+    public void testReferencedScanNamingPartitionsTabletsOrReplicasIsNotRemoved() {
+        List<Long> p1 = tabletsOf("uk_partitioned", "p1");
+        long tablet = p1.get(0);
+        long replica = replicaOf("uk_partitioned", "p1", tablet);
+        long referencingTablet = tabletsOf("fk_to_uk_partitioned", "fk_to_uk_partitioned").get(0);
+        String join = "select f.id, f.fk from fk_to_uk_partitioned f join uk_partitioned";
+        Object[][] cases = {
+                // statement, the tablets each scan of uk_partitioned reads
+                {join + " partition (p1) u on f.fk = u.pk", List.of(p1)},
+                {join + " tablet (" + tablet + ") u on f.fk = u.pk", List.of(List.of(tablet))},
+                {join + " replica (" + replica + ") u on f.fk = u.pk", List.of(List.of(tablet))},
+                // The referencing side may name some of its tablets: the referenced side is still removed.
+                {"select f.id, f.fk from fk_to_uk_partitioned tablet (" + referencingTablet + ") f " +
+                        "join uk_partitioned u on f.fk = u.pk", List.of()},
+        };
+        assertScannedTablets("uk_partitioned", List.of(CBO_WITHOUT_JOIN_REORDER, CBO_WITH_JOIN_REORDER, RBO), cases);
+    }
+
+    // Plans each statement under each mode and checks the tablets each scan of the table reads, reporting every
+    // statement and mode that reads something else.
+    @SuppressWarnings("unchecked")
+    private static void assertScannedTablets(String table, List<PruningMode> modes, Object[][] cases) {
+        List<Executable> checks = Lists.newArrayList();
+        for (PruningMode mode : modes) {
+            for (Object[] c : cases) {
+                checks.add(() -> {
+                    mode.settings().accept(ctx.getSessionVariable());
+                    try {
+                        ExecPlan plan = UtFrameUtils.getPlanAndFragment(ctx, (String) c[0]).second;
+                        Assertions.assertEquals(sortedScans((List<List<Long>>) c[1]), scannedTablets(plan, table),
+                                mode.name() + ": " + c[0]);
+                    } finally {
+                        SessionVariable sv = ctx.getSessionVariable();
+                        sv.setEnableCboTablePrune(false);
+                        sv.setEnableRboTablePrune(false);
+                        sv.setEnableTablePruneOnUpdate(false);
+                        sv.enableJoinReorder();
+                    }
+                });
+            }
+        }
+        Assertions.assertAll(checks);
+    }
+
+    // The tablets each scan of the table reads, taken from its scan ranges: REPLICA does not narrow the tablets a scan
+    // selects, it drops the scan ranges of the tablets that have none of the named replicas.
+    private static List<List<Long>> scannedTablets(ExecPlan plan, String table) {
+        return sortedScans(plan.getScanNodes().stream()
+                .filter(scan -> scan instanceof OlapScanNode && scan.getTableName().equals(table))
+                .map(scan -> ((OlapScanNode) scan).getScanRangeLocations(0).stream()
+                        .map(range -> range.getScan_range().getInternal_scan_range().getTablet_id())
+                        .collect(Collectors.toList()))
+                .collect(Collectors.toList()));
+    }
+
+    // Sorts the tablets of each scan, and then the scans, so that scans compare in whatever order a plan lists them.
+    private static List<List<Long>> sortedScans(List<List<Long>> scans) {
+        return scans.stream()
+                .map(tablets -> tablets.stream().sorted().collect(Collectors.toList()))
+                .sorted(Comparator.<List<Long>>comparingInt(List::size).thenComparing(Object::toString))
+                .collect(Collectors.toList());
+    }
+
+    private static List<Long> tabletsOf(String table, String... partitions) {
+        OlapTable olapTable = olapTableOf(table);
+        return Arrays.stream(partitions)
+                .flatMap(partition -> olapTable.getPartition(partition).getDefaultPhysicalPartition()
+                        .getQueryableBaseIndex().getTabletIdsInOrder().stream())
+                .sorted()
+                .collect(Collectors.toList());
+    }
+
+    private static long replicaOf(String table, String partition, long tablet) {
+        return olapTableOf(table).getPartition(partition).getDefaultPhysicalPartition().getQueryableBaseIndex()
+                .getTablet(tablet).getAllReplicas().get(0).getId();
+    }
+
+    private static OlapTable olapTableOf(String table) {
+        return (OlapTable) ctx.getGlobalStateMgr().getLocalMetastore().getDb("table_prune_db").getTable(table);
     }
 
     @Test

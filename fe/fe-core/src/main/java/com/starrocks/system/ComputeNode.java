@@ -28,6 +28,7 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LeaderLease;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TNetworkAddress;
@@ -119,6 +120,17 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
     @SerializedName("isSetStoragePath")
     private volatile boolean isSetStoragePath = false;
 
+    // Whether the node reported in its last heartbeat that it handles the lake ADD/DROP INDEX fast path.
+    // Persisted for admission checks, but dispatch still requires a live heartbeat of the current leader session.
+    @SerializedName("supportLakeIndexFastPath")
+    private volatile boolean supportLakeIndexFastPath = false;
+
+    // Only a live heartbeat can certify the capability in a leader session. Images and replayed heartbeat
+    // timestamps belong to another FE's wall clock and must never certify the current leader's session.
+    // A failed heartbeat withdraws it: the node may come back on another binary, and only its next successful
+    // heartbeat says which.
+    private transient volatile LeaderLease lakeIndexFastPathHeartbeatLease = LeaderLease.INVALID;
+
     // Tracking the heartbeat status, CONNECTING/ALIVE/SHUTDOWN/DISCONNECTED
     @SerializedName("status")
     private Status status;
@@ -209,6 +221,19 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
     // for test only
     public void setIsStoragePath(boolean isSetStoragePath) {
         this.isSetStoragePath = isSetStoragePath;
+    }
+
+    public boolean isSupportLakeIndexFastPath() {
+        return supportLakeIndexFastPath;
+    }
+
+    public boolean hasLakeIndexFastPathHeartbeat(LeaderLease leaderLease) {
+        return leaderLease != null && leaderLease.isValid() && leaderLease.equals(lakeIndexFastPathHeartbeatLease);
+    }
+
+    // for test only
+    public void setSupportLakeIndexFastPath(boolean supportLakeIndexFastPath) {
+        this.supportLakeIndexFastPath = supportLakeIndexFastPath;
     }
 
     public long getId() {
@@ -587,6 +612,15 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
                 this.isSetStoragePath = hbResponse.isSetStoragePath();
             }
 
+            if (this.supportLakeIndexFastPath != hbResponse.isSupportLakeIndexFastPath()) {
+                isChanged = true;
+                this.supportLakeIndexFastPath = hbResponse.isSupportLakeIndexFastPath();
+            }
+            if (!isReplay) {
+                // Publish the session after the flag so a reader that observes this lease sees its capability.
+                this.lakeIndexFastPathHeartbeatLease = GlobalStateMgr.getCurrentState().captureLeaderLease();
+            }
+
             this.lastUpdateMs = hbResponse.getHbTime();
             // NOTE: remove the compatibility where the reboot time is not set.
             // The RebootTime must be set in the heartbeat response if the backend version is >= 2.4.
@@ -631,6 +665,12 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
             heartbeatErrMsg = "";
             this.heartbeatRetryTimes = 0;
         } else {
+            if (!isReplay) {
+                // The node may be down, restarting or shutting down. It is not marked dead until several heartbeats
+                // fail, so without this a node restarted on an older binary within that time would still pass for
+                // a node with the fast path until its next successful heartbeat.
+                this.lakeIndexFastPathHeartbeatLease = LeaderLease.INVALID;
+            }
             boolean isShutdown = (hbResponse.getStatusCode() == TStatusCode.SHUTDOWN);
             String deadMessage = "";
             boolean needSetAlive = false;

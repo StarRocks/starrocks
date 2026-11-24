@@ -1,0 +1,42 @@
+-- name: test_spill_partition_wise_agg_restore_cancelled @sequential
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  1000000));
+-- result:
+-- !result
+admin enable failpoint 'spill_restore_sleep';
+-- result:
+-- !result
+select /*+SET_VAR(query_timeout=20,pipeline_dop=1,new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true,spill_operator_min_bytes=1024,spill_mem_table_size=1024) */ count(*), sum(murmur_hash3_32(c1, cnt)) from (select c1, count(*) cnt from t0 group by c1) t;
+-- result:
+[REGEX].*reached its timeout of 20 seconds.*
+-- !result
+admin disable failpoint 'spill_restore_sleep';
+-- result:
+-- !result
+function: wait_util_no_queries()
+-- result:
+
+-- !result
+shell: sleep 25
+-- result:
+0
+
+-- !result
+select /*+SET_VAR(pipeline_dop=1,new_planner_agg_stage=3,spill_mode='force',enable_spill=true,spill_partitionwise_agg=true,spill_operator_min_bytes=1024,spill_mem_table_size=1024) */ count(*), sum(murmur_hash3_32(c1, cnt)) from (select c1, count(*) cnt from t0 group by c1) t;
+-- result:
+1000000	381860149057
+-- !result
+CLEANUP {
+  admin disable failpoint 'spill_restore_sleep';
+} END CLEANUP

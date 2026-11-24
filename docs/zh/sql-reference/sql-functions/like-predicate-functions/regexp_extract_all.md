@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "提取字符串中匹配正则表达式的所有子字符串至指定分组。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # regexp_extract_all

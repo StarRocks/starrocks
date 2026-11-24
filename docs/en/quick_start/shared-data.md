@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 30
 description: "Quick start guide for deploying StarRocks in shared-data mode with separate compute and storage."
+products: [oss]
 ---
 
 # Separate storage and compute
@@ -10,6 +11,7 @@ import DDL from '../_assets/quick-start/_DDL.mdx'
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 import SQL from '../_assets/quick-start/_SQL.mdx'
 import Curl from '../_assets/quick-start/_curl.mdx'
+import AIStorLicense from '../_assets/commonMarkdown/aistor_license.mdx'
 
 In systems that separate storage from compute data is stored in low-cost reliable remote storage systems such as Amazon S3, Google Cloud Storage, Azure Blob Storage, and other S3-compatible storage like MinIO. Hot data is cached locally and When the cache is hit, the query performance is comparable to that of storage-compute coupled architecture. Compute nodes (CN) can be added or removed on demand within seconds. This architecture reduces storage cost, ensures better resource isolation, and provides elasticity and scalability.
 
@@ -49,6 +51,10 @@ You can use the SQL client provided in the Docker environment, or use one on you
 ### curl
 
 `curl` is used to issue the data load job to StarRocks, and to download the datasets. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/).
+
+### MinIO AIStor license
+
+This guide uses MinIO AIStor for object storage, which requires a license. A free tier license is sufficient. The instructions for acquiring a license are provided later in this guide.
 
 ### `/etc/hosts`
 
@@ -96,7 +102,7 @@ There are three files to download:
 - New York City crash data
 - Weather data
 
-This guide uses MinIO, which is S3 compatible Object Storage provided under the GNU Affero General Public License.
+This guide uses MinIO AIStor, which is S3 compatible Object Storage. MinIO AIStor requires a license.
 
 ### Create a directory to store the lab files
 
@@ -126,6 +132,10 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 ```bash
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/72505394728.csv
 ```
+
+### Acquire a MinIO AIStor license
+
+<AIStorLicense />
 
 ---
 
@@ -196,7 +206,7 @@ Open [http://localhost:9001/buckets](http://localhost:9001/buckets) and add a bu
 
 ## StarRocks configuration for shared-data
 
-At this point you have StarRocks running, and you have MinIO running. The MinIO access key is used to connect StarRocks and Minio.
+At this point you have StarRocks running, and you have MinIO running. The MinIO access key is used to connect StarRocks and MinIO.
 
 This is the part of the `FE` configuration that specifies that the StarRocks deployment will use shared data. This was added to the file `fe.conf` when Docker Compose created the deployment.
 
@@ -247,7 +257,7 @@ Empty set (0.04 sec)
 
 #### Create a shared-data storage volume
 
-Earlier you created a bucket in MinIO named `my-starrocks-volume`, and you verified that MinIO has an access key named `AAAAAAAAAAAAAAAAAAAA`. The following SQL will create a storage volume in the MionIO bucket using the access key and secret.
+Earlier you created a bucket in MinIO named `my-starrocks-volume`, and you verified that MinIO has an access key named `AAAAAAAAAAAAAAAAAAAA`. The following SQL will create a storage volume in the MinIO bucket using the access key and secret.
 
 ```sql
 CREATE STORAGE VOLUME s3_volume
@@ -279,7 +289,7 @@ SHOW STORAGE VOLUMES;
 1 row in set (0.02 sec)
 ```
 
-View the details of the storage volume and note that this is nott yet the default volume, and that it is configured to use your bucket:
+View the details of the storage volume and note that this is not yet the default volume, and that it is configured to use your bucket:
 
 ```
 DESC STORAGE VOLUME s3_volume\G
@@ -572,7 +582,7 @@ These three changes allow traffic between the host network and the CN:
 
 In this tutorial you:
 
-- Deployed StarRocks and Minio in Docker
+- Deployed StarRocks and MinIO in Docker
 - Created a MinIO access key
 - Configured a StarRocks Storage Volume that uses MinIO
 - Loaded crash data provided by New York City and weather data provided by NOAA

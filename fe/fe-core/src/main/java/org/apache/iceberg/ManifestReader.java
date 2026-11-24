@@ -43,6 +43,8 @@ import org.apache.iceberg.relocated.com.google.common.collect.Sets;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.PartitionSet;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.Collection;
@@ -51,11 +53,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 import static org.apache.iceberg.expressions.Expressions.alwaysTrue;
 
-// copy from https://github.com/apache/iceberg/blob/apache-iceberg-1.11.0/core/src/main/java/org/apache/iceberg/ManifestReader.java
+// copy from https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/core/src/main/java/org/apache/iceberg/ManifestReader.java
 // KEEP THIS TAG IN SYNC WITH ${iceberg.version} IN fe/pom.xml. This class shadows the one in
 // iceberg-core (identical FQN, and fe-core's classes precede the jar on the classpath), so if
 // upstream changes a constructor or method that iceberg-core itself calls, this copy still
@@ -64,7 +67,16 @@ import static org.apache.iceberg.expressions.Expressions.alwaysTrue;
 // existed upstream.
 public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         implements CloseableIterable<F> {
+    private static final Logger LOG = LogManager.getLogger(ManifestReader.class);
+
     static final ImmutableList<String> ALL_COLUMNS = ImmutableList.of("*");
+
+    private static final Types.NestedField UNPARTITIONED_PARTITION_FIELD =
+            Types.NestedField.optional(
+                    DataFile.PARTITION_ID,
+                    DataFile.PARTITION_NAME,
+                    Types.StructType.of(),
+                    DataFile.PARTITION_DOC);
 
     private static final Set<String> STATS_COLUMNS =
             ImmutableSet.of(
@@ -114,9 +126,9 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
     private Cache<String, Set<DataFile>> dataFileCache;
     private Cache<String, Set<DeleteFile>> deleteFileCache;
     private Set<Integer> identifierFieldIds = null;
-    // >= 0: cache statistics column by column (ManifestColumnStats), keeping identifierFieldIds plus other columns up
-    // to this many in total; < 0: cache per-file copies with statistics of identifierFieldIds only.
-    private int cacheStatsColumnLimit = -1;
+    // statistics are cached column by column (ManifestColumnStats), keeping identifierFieldIds plus other columns up
+    // to this many in total
+    private int cacheStatsColumnLimit = 0;
     // columns other than identifierFieldIds that may be kept in the column-wise layout, lower rank first; null for
     // any column ranked by field id
     private Map<Integer, Long> cacheStatsCandidateRanks = null;
@@ -188,6 +200,12 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
     }
 
     private static <T extends ContentFile<T>> Map<String, String> readMetadata(InputFile inputFile) {
+        FileFormat manifestFormat = FileFormat.fromFileName(inputFile.location());
+        Preconditions.checkArgument(
+                manifestFormat == FileFormat.AVRO,
+                "Reading manifest metadata is only supported for Avro manifests: %s",
+                inputFile.location());
+
         Map<String, String> metadata;
         try (CloseableIterable<ManifestEntry<T>> headerReader =
                      InternalData.read(FileFormat.AVRO, inputFile)
@@ -340,7 +358,8 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         }
     }
 
-    // when the identifier field ids is null, it will copy all metrics.
+    // With metrics, the statistics of identifierFieldIds plus other columns up to cacheStatsColumnLimit are cached
+    // column by column; without, the files are cached without statistics.
     private CloseableIterable<ManifestEntry<F>> fillCacheIfNeeded(
             CloseableIterable<ManifestEntry<F>> entries, boolean shouldCacheDataFiles, boolean shouldCacheDeleteFiles) {
         if (!shouldCacheDataFiles && !shouldCacheDeleteFiles) {
@@ -352,31 +371,28 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         Set<DataFile> tmpDataFiles = ConcurrentHashMap.newKeySet();
         Set<DeleteFile> tmpDeleteFiles = ConcurrentHashMap.newKeySet();
         // Compact statistics: copies without statistics are wrapped once the whole manifest has been read.
-        final ManifestColumnStats.Builder statsBuilder = shouldCacheDataFiles && dataFileCacheWithMetrics &&
-                cacheStatsColumnLimit >= 0 ?
+        final ManifestColumnStats.Builder statsBuilder = shouldCacheDataFiles && dataFileCacheWithMetrics ?
                 ManifestColumnStats.builder(identifierFieldIds, cacheStatsCandidateRanks, cacheStatsColumnLimit,
                         cacheStatsExpectedFileCount, cacheStatsTruncatedTypes) : null;
         Map<Integer, DataFile> tmpStatslessDataFiles = new ConcurrentHashMap<>();
+        // live data entries read, to log a fill that does not match the manifest
+        AtomicInteger liveDataEntries = new AtomicInteger();
         if (statsBuilder != null) {
             entries = CloseableIterable.transform(entries,
                     entry -> {
                         if (entry.isLive()) {
+                            liveDataEntries.incrementAndGet();
                             DataFile dataFile = (DataFile) entry.file();
                             tmpStatslessDataFiles.put(statsBuilder.add(dataFile), dataFile.copyWithoutStats());
                         }
                         return entry;
                     });
         } else if (shouldCacheDataFiles) {
-            final Set<Integer> requestedColumnIds =
-                    identifierFieldIds != null && !identifierFieldIds.isEmpty() ? identifierFieldIds : null;
             entries = CloseableIterable.transform(entries,
                     entry -> {
                         if (entry.isLive()) {
-                            DataFile dataFile = (DataFile) entry.file();
-                            DataFile copiedDataFile = dataFileCacheWithMetrics ?
-                                    dataFile.copyWithStats(requestedColumnIds) :
-                                    dataFile.copyWithoutStats();
-                            tmpDataFiles.add(DataFileWrapper.wrap(copiedDataFile));
+                            liveDataEntries.incrementAndGet();
+                            tmpDataFiles.add(DataFileWrapper.wrap(((DataFile) entry.file()).copyWithoutStats()));
                         }
                         return entry;
                     });
@@ -430,6 +446,7 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
                                     tmpDataFiles.add(DataFileWrapper.wrap(dataFile, columnStats, index)));
                         }
                         if (!tmpDataFiles.isEmpty()) {
+                            logDataFileCacheFill(liveDataEntries.get(), tmpDataFiles);
                             dataFileCache.put(file.location(), tmpDataFiles); // to recalculate the weight
                         }
                         if (!tmpDeleteFiles.isEmpty()) {
@@ -441,6 +458,17 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
                 }
             }
         };
+    }
+
+    // Records a fill whose size differs from the manifest's declared live file count, which the read side will drop;
+    // a fill happens once per cache miss, so this stays rare. Only counts are compared: no extra memory per fill.
+    private void logDataFileCacheFill(int liveEntries, Set<DataFile> files) {
+        // cacheStatsExpectedFileCount is the manifest's added + existing file count, 0 when unknown
+        int declared = cacheStatsExpectedFileCount;
+        if (declared > 0 && (liveEntries != declared || files.size() != declared)) {
+            LOG.warn("Iceberg manifest cache fill for {} does not match the manifest: read {} live entries, "
+                    + "cached {} files, manifest declares {}", file.location(), liveEntries, files.size(), declared);
+        }
     }
 
     private boolean shouldCacheDataFiles() {
@@ -455,7 +483,12 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
     private Collection<String> withStatsColumnsForDataFileCache(
             Collection<String> projectColumns, boolean shouldCacheDataFiles) {
         if (shouldCacheDataFiles && dataFileCacheWithMetrics && projectColumns != null) {
-            return withStatsColumns(projectColumns);
+            List<String> withStats = withStatsColumns(projectColumns);
+            // the column sizes are cached too (the column statistics estimate row width from them)
+            if (!withStats.containsAll(ALL_COLUMNS)) {
+                withStats.add("column_sizes");
+            }
+            return withStats;
         }
         return projectColumns;
     }
@@ -478,8 +511,21 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         Preconditions.checkArgument(
                 format != null, "Unable to determine format of manifest: %s", file.location());
 
+        boolean unpartitioned = spec.rawPartitionType().fields().isEmpty();
+
+        // V4+ manifests omit the partition field when unpartitioned (Parquet cannot represent
+        // empty structs, and the field is meaningless regardless of format). Mark it optional so
+        // the reader returns null for the missing field instead of throwing. The field must stay
+        // in the projection to preserve positional access for callers like StructProjection.
+        // For older versions where the empty struct is present, making it optional is harmless.
         List<Types.NestedField> fields = Lists.newArrayList();
-        fields.addAll(projection.asStruct().fields());
+        for (Types.NestedField field : projection.asStruct().fields()) {
+            if (unpartitioned && field.fieldId() == DataFile.PARTITION_ID) {
+                fields.add(UNPARTITIONED_PARTITION_FIELD);
+            } else {
+                fields.add(field);
+            }
+        }
         if (projection.findField(DataFile.RECORD_COUNT.fieldId()) == null) {
             fields.add(DataFile.RECORD_COUNT);
         }

@@ -97,7 +97,7 @@ TabletMetadataPtr lookup_exact_cached_metadata(TabletManager* tablet_manager, in
                                                int64_t gtid) {
     if (gtid <= 0) return nullptr;
     auto metadata = tablet_manager->metacache()->lookup_tablet_metadata(
-            tablet_manager->tablet_metadata_location(tablet_id, version));
+            MetacacheKey::tablet_metadata(tablet_manager->tablet_metadata_location(tablet_id, version)));
     if (metadata != nullptr && metadata->id() == tablet_id && metadata->version() == version &&
         metadata->gtid() == gtid)
         return metadata;
@@ -128,9 +128,9 @@ Status handle_splitting_tablet(TabletManager* tablet_manager, const SplittingTab
                     cached_metadatas.at(splitting_tablet.new_tablet_ids(0))->range().SerializeAsString()) {
             complete = true;
             for (int i = 1; i < splitting_tablet.new_tablet_ids_size(); ++i) {
-                complete &=
-                        tablet_manager->metacache()->lookup_tablet_metadata(tablet_manager->tablet_metadata_location(
-                                splitting_tablet.new_tablet_ids(i), new_version)) == nullptr;
+                complete &= tablet_manager->metacache()->lookup_tablet_metadata(
+                                    MetacacheKey::tablet_metadata(tablet_manager->tablet_metadata_location(
+                                            splitting_tablet.new_tablet_ids(i), new_version))) == nullptr;
             }
         }
         if (complete) {

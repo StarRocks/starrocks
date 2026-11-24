@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "Reference for partitioning and bucketing feature support in StarRocks: expression, range, list partitioning, and random bucketing capabilities."
 sidebar_label: "能力边界"
 sidebar_position: 50
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 功能边界：数据分布

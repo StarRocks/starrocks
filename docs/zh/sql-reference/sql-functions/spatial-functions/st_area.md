@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回原生 GEOGRAPHY 或 GEOMETRY 值的二维面积。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Area

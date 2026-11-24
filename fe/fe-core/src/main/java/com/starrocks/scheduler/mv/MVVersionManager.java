@@ -115,6 +115,10 @@ public class MVVersionManager {
                 }
                 mvTvrVersionRangeMap.put(entry.getKey(), TvrTableSnapshot.of(versionRange.to()));
             }
+            // The promotion ends the pinned job: journal its slot as released, or a replay revives the finished owner.
+            if (!tvrDeltaToPromote.isEmpty()) {
+                refreshContext.clearTempBaseTableInfoTvrDeltaState();
+            }
         }
 
         long maxChangedTableRefreshTime = 0L;
@@ -179,6 +183,25 @@ public class MVVersionManager {
         } finally {
             locker.unLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.WRITE);
         }
+    }
+
+    public void clearTvrBaseline(boolean ownsFrozenSnapshot) {
+        MaterializedView.MvRefreshScheme copiedScheme = mv.getRefreshScheme().copy();
+        MaterializedView.AsyncRefreshContext refreshContext = copiedScheme.getAsyncRefreshContext();
+        Map<BaseTableInfo, TvrVersionRange> baseline = refreshContext.getBaseTableInfoTvrVersionRangeMap();
+        Map<BaseTableInfo, TvrVersionRange> frozen = refreshContext.getTempBaseTableInfoTvrDeltaMap();
+        // A table the frozen snapshot does not move is read at its baseline, and the last batch promotes only the
+        // tables that moved, so its entry has to stay.
+        Set<BaseTableInfo> readPastBaseline = baseline.keySet().stream()
+                .filter(table -> !ownsFrozenSnapshot || frozen.get(table) == null || !frozen.get(table).isEmpty())
+                .collect(Collectors.toSet());
+        if (readPastBaseline.isEmpty()) {
+            return;
+        }
+        logger.info("Clear the incremental baseline of {} for materialized view {} before a pct write, " +
+                "pinning owner: {}", readPastBaseline, mv.getName(), refreshContext.getTempTvrOwnerStartTaskRunId());
+        baseline.keySet().removeAll(readPastBaseline);
+        persistRefreshScheme(copiedScheme);
     }
 
     // Every refresh scheme this run publishes goes through here.

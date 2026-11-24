@@ -68,19 +68,35 @@ public:
     double score;
 };
 
+// The overfull level that pick_max_level merged into the picked one (see lake_pk_compaction_max_rowsets_per_level):
+// its size and the number of rowsets merged from it. Zero when none was merged.
+struct OverfullMergeInfo {
+    int64_t level_size = 0;
+    int64_t rowsets = 0;
+};
+
 struct PKSizeTieredLevel {
     PKSizeTieredLevel(const std::vector<RowsetCandidate>& rs, int64_t compact_level)
             : rowsets(rs.begin(), rs.end()), compact_level(compact_level) {
         calc_compaction_score(rs);
     }
     PKSizeTieredLevel(const PKSizeTieredLevel& level)
-            : rowsets(level.rowsets), score(level.score), compact_level(level.compact_level) {}
+            : rowsets(level.rowsets),
+              score(level.score),
+              compact_level(level.compact_level),
+              num_compactable_rowsets(level.num_compactable_rowsets),
+              compactable_bytes(level.compactable_bytes),
+              overfull(level.overfull) {}
 
     // caculate the score of this level.
     void calc_compaction_score(const std::vector<RowsetCandidate>& rs) {
         std::stringstream debug_ss;
         for (const auto& rowset : rs) {
             score += rowset.score;
+            if (rowset.score > 0) {
+                num_compactable_rowsets++;
+                compactable_bytes += rowset.read_bytes();
+            }
             debug_ss << "[Rowset: " << rowset.rowset_meta_ptr->id() << " Size: " << rowset.rowset_meta_ptr->data_size()
                      << " Rows: " << rowset.rowset_meta_ptr->num_rows()
                      << " Dels: " << rowset.rowset_meta_ptr->num_dels() << " Score: " << rowset.score << "] ";
@@ -94,6 +110,19 @@ struct PKSizeTieredLevel {
             const auto& top_rowset = other.rowsets.top();
             rowsets.push(top_rowset);
             score += top_rowset.score;
+            other.rowsets.pop();
+        }
+    }
+
+    // Merge another level's rowsets that still need compaction (score > 0), i.e. leave out the large,
+    // already well-compacted ones.
+    void merge_compactable_rowsets(PKSizeTieredLevel& other) {
+        while (!other.rowsets.empty()) {
+            const auto& top_rowset = other.rowsets.top();
+            if (top_rowset.score > 0) {
+                rowsets.push(top_rowset);
+                score += top_rowset.score;
+            }
             other.rowsets.pop();
         }
     }
@@ -115,6 +144,12 @@ struct PKSizeTieredLevel {
     std::vector<RowsetCandidate> other_level_rowsets;
     double score = 0.0;
     int64_t compact_level = 0;
+    // Rowsets of this level that still need compaction (score > 0) and their live bytes, counted when the level
+    // is built.
+    int64_t num_compactable_rowsets = 0;
+    double compactable_bytes = 0;
+    // Set on the picked level when pick_max_level merged an overfull level into it.
+    OverfullMergeInfo overfull;
 };
 
 class PrimaryCompactionPolicy : public CompactionPolicy {
@@ -142,8 +177,10 @@ public:
     // Common function to return the picked rowset indexes.
     // For compaction score, only picked rowset indexes are needed.
     // For compaction, picked rowsets can be constructed by picked rowset indexes.
+    // When overfull is non-null, it is set to the overfull level merged into the pick, if any.
     StatusOr<std::vector<int64_t>> pick_rowset_indexes(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata,
-                                                       std::vector<bool>* has_dels);
+                                                       std::vector<bool>* has_dels,
+                                                       OverfullMergeInfo* overfull = nullptr);
 
     // When using Sized-tiered compaction policy, we need this function to pick highest score level.
     static StatusOr<std::unique_ptr<PKSizeTieredLevel>> pick_max_level(std::vector<RowsetCandidate>& rowsets);

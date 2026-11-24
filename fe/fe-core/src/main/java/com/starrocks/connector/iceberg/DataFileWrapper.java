@@ -20,6 +20,7 @@ import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.StructLike;
 
 import java.nio.ByteBuffer;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -63,6 +64,35 @@ public class DataFileWrapper implements DataFile {
         return columnStats == null ? this : dataFile;
     }
 
+    // Like withoutSharedStats(), but keeps the statistics of `columnIds`, copied out of the shared store into maps
+    // of just those columns.
+    public DataFile withStats(Set<Integer> columnIds) {
+        if (columnStats == null) {
+            return this;
+        }
+        return new WithStats(dataFile,
+                select(columnStats.columnSizes(columnStatsIndex), columnIds),
+                select(columnStats.valueCounts(columnStatsIndex), columnIds),
+                select(columnStats.nullValueCounts(columnStatsIndex), columnIds),
+                select(columnStats.nanValueCounts(columnStatsIndex), columnIds),
+                select(columnStats.lowerBounds(columnStatsIndex), columnIds),
+                select(columnStats.upperBounds(columnStatsIndex), columnIds));
+    }
+
+    private static <V> Map<Integer, V> select(Map<Integer, V> values, Set<Integer> columnIds) {
+        if (values == null) {
+            return null;
+        }
+        Map<Integer, V> selected = new HashMap<>();
+        for (Integer id : columnIds) {
+            V value = values.get(id);
+            if (value != null) {
+                selected.put(id, value);
+            }
+        }
+        return selected;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -75,12 +105,17 @@ public class DataFileWrapper implements DataFile {
 
         DataFileWrapper that = (DataFileWrapper) o;
 
-        return dataFile.path().toString().equals(that.dataFile.path().toString());
+        // pos() is the entry's row in its manifest: a manifest can list the same file twice (a file committed twice
+        // and then merged into one manifest), and Iceberg plans it once per entry. Keeping both entries keeps the
+        // cached set in step with the manifest's live entry count, which the read side checks.
+        return dataFile.path().toString().equals(that.dataFile.path().toString())
+                && Objects.equals(dataFile.pos(), that.dataFile.pos());
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(dataFile.path());
+        // path() is a CharSequence; hash its string form so it stays consistent with equals().
+        return Objects.hash(dataFile.path().toString(), dataFile.pos());
     }
 
     @Override
@@ -120,7 +155,7 @@ public class DataFileWrapper implements DataFile {
 
     @Override
     public Map<Integer, Long> columnSizes() {
-        return dataFile.columnSizes();
+        return columnStats == null ? dataFile.columnSizes() : columnStats.columnSizes(columnStatsIndex);
     }
 
     @Override
@@ -159,8 +194,8 @@ public class DataFileWrapper implements DataFile {
     }
 
     // A file whose statistics live in the shared store cannot be copied with them: the wrapped copy has none, and
-    // no production path copies a cached file with statistics (scans that need them bypass the cache). Fail loudly
-    // instead of returning a copy that silently lost them.
+    // no production path copies a cached file with statistics (scan tasks get withStats() or withoutSharedStats()).
+    // Fail loudly instead of returning a copy that silently lost them.
     @Override
     public DataFile copy() {
         checkCopyWithStats();
@@ -203,5 +238,71 @@ public class DataFileWrapper implements DataFile {
     @Override
     public Long firstRowId() {
         return dataFile.firstRowId();
+    }
+
+    // A scan task's file: the wrapped copy without statistics plus the statistics of a few columns. Not cached.
+    private static final class WithStats extends DataFileWrapper {
+        private final Map<Integer, Long> columnSizes;
+        private final Map<Integer, Long> valueCounts;
+        private final Map<Integer, Long> nullValueCounts;
+        private final Map<Integer, Long> nanValueCounts;
+        private final Map<Integer, ByteBuffer> lowerBounds;
+        private final Map<Integer, ByteBuffer> upperBounds;
+
+        private WithStats(DataFile dataFile, Map<Integer, Long> columnSizes, Map<Integer, Long> valueCounts,
+                          Map<Integer, Long> nullValueCounts, Map<Integer, Long> nanValueCounts,
+                          Map<Integer, ByteBuffer> lowerBounds, Map<Integer, ByteBuffer> upperBounds) {
+            super(dataFile, null, -1);
+            this.columnSizes = columnSizes;
+            this.valueCounts = valueCounts;
+            this.nullValueCounts = nullValueCounts;
+            this.nanValueCounts = nanValueCounts;
+            this.lowerBounds = lowerBounds;
+            this.upperBounds = upperBounds;
+        }
+
+        @Override
+        public Map<Integer, Long> columnSizes() {
+            return columnSizes;
+        }
+
+        @Override
+        public Map<Integer, Long> valueCounts() {
+            return valueCounts;
+        }
+
+        @Override
+        public Map<Integer, Long> nullValueCounts() {
+            return nullValueCounts;
+        }
+
+        @Override
+        public Map<Integer, Long> nanValueCounts() {
+            return nanValueCounts;
+        }
+
+        @Override
+        public Map<Integer, ByteBuffer> lowerBounds() {
+            return lowerBounds;
+        }
+
+        @Override
+        public Map<Integer, ByteBuffer> upperBounds() {
+            return upperBounds;
+        }
+
+        // The statistics are never modified, so a copy can share them.
+        @Override
+        public DataFile copy() {
+            return this;
+        }
+
+        @Override
+        public DataFile copyWithStats(Set<Integer> requestedColumnIds) {
+            return new WithStats(super.copyWithoutStats(),
+                    select(columnSizes, requestedColumnIds), select(valueCounts, requestedColumnIds),
+                    select(nullValueCounts, requestedColumnIds), select(nanValueCounts, requestedColumnIds),
+                    select(lowerBounds, requestedColumnIds), select(upperBounds, requestedColumnIds));
+        }
     }
 }

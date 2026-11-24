@@ -345,7 +345,10 @@ public class TransactionState implements Writable, GsonPreProcessable, GsonPostP
     // these states need not be serialized
     private final Map<Long, PublishVersionTask> publishVersionTasks; // Only for OlapTable
     private boolean hasSendTask;
+    // Start of the latest publish attempt, see updateSendTaskTime().
     private long publishVersionTime = -1;
+    // When the first publish request carrying this txn went out, see recordPublishRequestSentTime().
+    private long publishRequestSentTime = -1;
     private long publishVersionFinishTime = -1;
     // The time when canTxnFinish() first returns true. -1 means unset.
     private volatile long readyToFinishTime = -1;
@@ -615,6 +618,7 @@ public class TransactionState implements Writable, GsonPreProcessable, GsonPostP
         this.publishVersionTasks = txnState.publishVersionTasks;
         this.hasSendTask = txnState.hasSendTask;
         this.publishVersionTime = txnState.publishVersionTime;
+        this.publishRequestSentTime = txnState.publishRequestSentTime;
         this.publishVersionFinishTime = txnState.publishVersionFinishTime;
         this.writeEndTimeMs = txnState.writeEndTimeMs;
         this.writeDurationMs = txnState.writeDurationMs;
@@ -744,9 +748,17 @@ public class TransactionState implements Writable, GsonPreProcessable, GsonPostP
         this.publishVersionTasks.put(backendId, task);
     }
 
+    // A lake publish sets it right before a request goes out, once per partition, so it leaves publishVersionTime,
+    // the start of the attempt stamped by updateSendTaskTime(), alone.
     public void setHasSendTask(boolean hasSendTask) {
         this.hasSendTask = hasSendTask;
-        this.publishVersionTime = System.currentTimeMillis();
+    }
+
+    // Called when a publish request carrying this txn goes out; only the first call records the time.
+    public void recordPublishRequestSentTime() {
+        if (publishRequestSentTime == -1) {
+            publishRequestSentTime = System.currentTimeMillis();
+        }
     }
 
     public void updateSendTaskTime() {
@@ -755,6 +767,10 @@ public class TransactionState implements Writable, GsonPreProcessable, GsonPostP
 
     public void updatePublishTaskFinishTime() {
         this.publishVersionFinishTime = System.currentTimeMillis();
+    }
+
+    public long getPublishRequestSentTime() {
+        return publishRequestSentTime;
     }
 
     public long getPublishVersionTime() {
@@ -1276,6 +1292,9 @@ public class TransactionState implements Writable, GsonPreProcessable, GsonPostP
         if (publishVersionTime != -1 && publishVersionFinishTime != -1) {
             if (publishVersionTime > commitTime) {
                 sb.append(", wait for publish cost: ").append(publishVersionTime - commitTime).append("ms");
+            }
+            if (publishRequestSentTime > commitTime) {
+                sb.append(", first publish request after: ").append(publishRequestSentTime - commitTime).append("ms");
             }
             if (publishVersionFinishTime > publishVersionTime) {
                 sb.append(", publish rpc cost: ").append(publishVersionFinishTime - publishVersionTime).append("ms");

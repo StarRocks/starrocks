@@ -63,6 +63,8 @@ Status StreamLoadPipe::append(ByteBufferPtr&& buf) {
         _buffered_bytes += buf->remaining();
         _buf_queue.emplace_back(std::move(buf));
         _get_cond.notify_one();
+        l.unlock();
+        _run_readable_callback();
     }
     return Status::OK();
 }
@@ -99,7 +101,7 @@ StatusOr<ByteBufferPtr> StreamLoadPipe::read() {
 
     // cancelled
     if (_cancelled) {
-        return Status::EndOfFile("all data has been read");
+        return _err_st;
     }
 
     // finished
@@ -226,6 +228,7 @@ Status StreamLoadPipe::finish() {
     }
     _put_cond.notify_all();
     _get_cond.notify_all();
+    _run_readable_callback();
     return Status::OK();
 }
 
@@ -239,6 +242,40 @@ void StreamLoadPipe::cancel(const Status& status) {
     }
     _get_cond.notify_all();
     _put_cond.notify_all();
+    _run_readable_callback();
+}
+
+bool StreamLoadPipe::notify_when_readable(std::function<void()> callback) {
+    std::lock_guard<std::mutex> l(_lock);
+    if (_cancelled || _finished || !_buf_queue.empty()) {
+        return false;
+    }
+    _readable_callback = std::move(callback);
+    _has_readable_callback.store(true, std::memory_order_release);
+    return true;
+}
+
+void StreamLoadPipe::clear_readable_callback() {
+    std::lock_guard<std::mutex> l(_lock);
+    _readable_callback = nullptr;
+    _has_readable_callback.store(false, std::memory_order_release);
+}
+
+// Called after the pipe became readable, outside _lock. A callback registered before that is seen here: it was
+// stored under _lock before the data or the state that made the pipe readable.
+void StreamLoadPipe::_run_readable_callback() {
+    if (!_has_readable_callback.load(std::memory_order_acquire)) {
+        return;
+    }
+    std::function<void()> callback;
+    {
+        std::lock_guard<std::mutex> l(_lock);
+        callback.swap(_readable_callback);
+        _has_readable_callback.store(false, std::memory_order_release);
+    }
+    if (callback) {
+        callback();
+    }
 }
 
 Status StreamLoadPipe::_append(const ByteBufferPtr& buf) {
@@ -255,6 +292,8 @@ Status StreamLoadPipe::_append(const ByteBufferPtr& buf) {
         _buf_queue.push_back(buf);
         _buffered_bytes += buf->remaining();
         _get_cond.notify_one();
+        l.unlock();
+        _run_readable_callback();
     }
     return Status::OK();
 }

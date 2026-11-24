@@ -224,8 +224,8 @@ public:
         _tablet_metadata->set_enable_persistent_index(true);
         _tablet_metadata->set_persistent_index_type(GetParam().persistent_index_type);
 
-        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_VARCHAR});
-        _partial_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_VARCHAR});
+        _slots.emplace_back(0, "c0", TYPE_VARCHAR_DESC);
+        _partial_slots.emplace_back(0, "c0", TYPE_VARCHAR_DESC);
         _slots.emplace_back(1, "c1", TYPE_INT_DESC);
         _partial_slots.emplace_back(1, "c1", TYPE_INT_DESC);
         _slots.emplace_back(2, "c2", TYPE_INT_DESC);

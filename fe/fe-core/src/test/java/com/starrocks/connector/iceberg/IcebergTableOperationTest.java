@@ -17,11 +17,15 @@ package com.starrocks.connector.iceberg;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
+import com.starrocks.connector.iceberg.procedure.IcebergTableProcedure;
 import com.starrocks.connector.iceberg.procedure.RemoveOrphanFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.RollbackToSnapshotProcedure;
+import com.starrocks.connector.iceberg.procedure.RollbackToTimestampProcedure;
+import com.starrocks.connector.iceberg.procedure.SetCurrentSnapshotProcedure;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -32,6 +36,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnPosition;
 import com.starrocks.sql.ast.DropFieldClause;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.ProcedureArgument;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.StructFieldDesc;
@@ -51,11 +56,15 @@ import mockit.Mocked;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.exceptions.ValidationException;
 import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -138,6 +147,56 @@ public class IcebergTableOperationTest extends TableTestBase {
                 connectContext,
                 HDFS_ENVIRONMENT);
         executor.execute();
+    }
+
+    private void executeProcedure(org.apache.iceberg.Table table, IcebergTableProcedure procedure,
+                                  String argName, ConstantOperator arg) throws Exception {
+        AlterTableOperationClause clause = new AlterTableOperationClause(
+                NodePosition.ZERO, procedure.getProcedureName(), List.of(), null);
+        clause.setTableProcedure(procedure);
+        clause.setAnalyzedArgs(Map.of(argName, arg));
+        new IcebergAlterTableExecutor(new AlterTableStmt(
+                new TableRef(QualifiedName.of(List.of(CATALOG_NAME, "db", table.name())), null, NodePosition.ZERO),
+                List.of(clause)), table, null, connectContext, HDFS_ENVIRONMENT).execute();
+        table.refresh();
+    }
+
+    @Test
+    public void testRollbackToTimestampAndSetCurrentSnapshot() throws Exception {
+        org.apache.iceberg.Table table = mockedNativeTableA;
+        table.newAppend().appendFile(FILE_A).commit();
+        Snapshot s1 = table.currentSnapshot();
+        Thread.sleep(5);
+        table.newAppend().appendFile(FILE_A_2).commit();
+        Snapshot s2 = table.currentSnapshot();
+        Assertions.assertTrue(s2.timestampMillis() > s1.timestampMillis());
+
+        // rollback_to_timestamp picks the latest snapshot committed strictly before the timestamp
+        LocalDateTime atS2 = LocalDateTime.ofInstant(Instant.ofEpochMilli(s2.timestampMillis()),
+                TimeUtils.getTimeZone().toZoneId());
+        executeProcedure(table, RollbackToTimestampProcedure.getInstance(),
+                RollbackToTimestampProcedure.TIMESTAMP, ConstantOperator.createDatetime(atS2));
+        Assertions.assertEquals(s1.snapshotId(), table.currentSnapshot().snapshotId());
+
+        // s2 is not an ancestor of the current snapshot: rollback_to_snapshot refuses it, set_current_snapshot does not
+        Assertions.assertThrows(ValidationException.class, () -> executeProcedure(table,
+                RollbackToSnapshotProcedure.getInstance(), RollbackToSnapshotProcedure.SNAPSHOT_ID,
+                ConstantOperator.createBigint(s2.snapshotId())));
+        executeProcedure(table, SetCurrentSnapshotProcedure.getInstance(), SetCurrentSnapshotProcedure.SNAPSHOT_ID,
+                ConstantOperator.createBigint(s2.snapshotId()));
+        Assertions.assertEquals(s2.snapshotId(), table.currentSnapshot().snapshotId());
+
+        // no snapshot before the timestamp
+        LocalDateTime beforeS1 = LocalDateTime.ofInstant(Instant.ofEpochMilli(s1.timestampMillis() - 1000),
+                TimeUtils.getTimeZone().toZoneId());
+        Assertions.assertThrows(IllegalArgumentException.class, () -> executeProcedure(table,
+                RollbackToTimestampProcedure.getInstance(), RollbackToTimestampProcedure.TIMESTAMP,
+                ConstantOperator.createDatetime(beforeS1)));
+        // unknown snapshot id
+        Assertions.assertThrows(ValidationException.class, () -> executeProcedure(table,
+                SetCurrentSnapshotProcedure.getInstance(), SetCurrentSnapshotProcedure.SNAPSHOT_ID,
+                ConstantOperator.createBigint(-1L)));
+        Assertions.assertEquals(s2.snapshotId(), table.currentSnapshot().snapshotId());
     }
 
     @Test
@@ -353,5 +412,91 @@ public class IcebergTableOperationTest extends TableTestBase {
                 () -> addColumns(v2, intColumnDef("c1", true, null), intColumnDef("c2", false, "7")));
         v2.refresh();
         Assertions.assertNull(v2.schema().findField("c1"));
+    }
+
+    private void setProperties(org.apache.iceberg.Table table, Map<String, String> properties) throws Exception {
+        new IcebergAlterTableExecutor(new AlterTableStmt(
+                new TableRef(QualifiedName.of(List.of(CATALOG_NAME, "db", table.name())), null, NodePosition.ZERO),
+                List.of(new ModifyTablePropertiesClause(new LinkedHashMap<>(properties)))),
+                table, null, connectContext, HDFS_ENVIRONMENT).execute();
+        table.refresh();
+    }
+
+    @Test
+    public void testModifyTablePropertiesRejectsValuesIcebergCannotParse() throws Exception {
+        Schema schema = new Schema(Types.NestedField.optional(1, "id", Types.IntegerType.get()));
+        org.apache.iceberg.Table table = create(schema, PartitionSpec.unpartitioned(), "props", 2);
+        Map<String, String> before = Map.copyOf(table.properties());
+
+        List<Map<String, String>> invalid = List.of(
+                Map.of("write.parquet.compression-codec", "xxx"),
+                Map.of("write.parquet.compression-codec", "zlib"),
+                Map.of("write.parquet.compression-codec", "none"),
+                Map.of("write.delete.parquet.compression-codec", "xxx"),
+                Map.of("write.format.default", "xxx"),
+                Map.of("write.format.default", "puffin"),
+                Map.of("write.target-file-size-bytes", "-100"),
+                Map.of("write.target-file-size-bytes", "0"),
+                Map.of("write.target-file-size-bytes", "abc"),
+                Map.of("write.target-file-size-bytes", " 134217728 "),
+                // SR aliases resolve to the same native keys
+                Map.of("file_format", "puffin"),
+                Map.of("compression_codec", "zlib"),
+                Map.of("compression_codec", "none"));
+        for (Map<String, String> properties : invalid) {
+            Map.Entry<String, String> entry = properties.entrySet().iterator().next();
+            DdlException e = Assertions.assertThrows(DdlException.class, () -> setProperties(table, properties),
+                    properties.toString());
+            Assertions.assertTrue(e.getMessage().contains("'" + entry.getValue() + "'"), e.getMessage());
+            Assertions.assertEquals(before, table.properties(), properties.toString());
+        }
+
+        // the alias codec follows the format set in the same statement, so an invalid one is reported first
+        Map<String, String> codecFirst = new LinkedHashMap<>();
+        codecFirst.put("compression_codec", "snappy");
+        codecFirst.put("write.format.default", "xxx");
+        DdlException e = Assertions.assertThrows(DdlException.class, () -> setProperties(table, codecFirst));
+        Assertions.assertTrue(e.getMessage().contains("'xxx'"), e.getMessage());
+        Assertions.assertEquals(before, table.properties());
+    }
+
+    @Test
+    public void testModifyTablePropertiesKeepsValidValues() throws Exception {
+        Schema schema = new Schema(Types.NestedField.optional(1, "id", Types.IntegerType.get()));
+        org.apache.iceberg.Table table = create(schema, PartitionSpec.unpartitioned(), "props_ok", 2);
+
+        // codecs are case-insensitive, and every codec Iceberg recognizes is allowed, even one SR cannot write
+        setProperties(table, Map.of("write.parquet.compression-codec", "ZSTD",
+                "write.delete.parquet.compression-codec", "lz4_raw",
+                "write.target-file-size-bytes", "134217728"));
+        Assertions.assertEquals("ZSTD", table.properties().get("write.parquet.compression-codec"));
+        Assertions.assertEquals("lz4_raw", table.properties().get("write.delete.parquet.compression-codec"));
+        Assertions.assertEquals("134217728", table.properties().get("write.target-file-size-bytes"));
+
+        // an alias codec on a parquet table lands on the parquet codec key
+        setProperties(table, Map.of("compression_codec", "snappy"));
+        Assertions.assertEquals("snappy", table.properties().get("write.parquet.compression-codec"));
+
+        // native keys are case-sensitive: an upper-case key is just a custom property
+        setProperties(table, Map.of("WRITE.PARQUET.COMPRESSION-CODEC", "xxx", "foo.bar", "baz"));
+        Assertions.assertEquals("xxx", table.properties().get("WRITE.PARQUET.COMPRESSION-CODEC"));
+        Assertions.assertEquals("baz", table.properties().get("foo.bar"));
+
+        // formats SR cannot write stay settable for other engines
+        setProperties(table, Map.of("write.format.default", "avro"));
+        Assertions.assertEquals("avro", table.properties().get("write.format.default"));
+
+        // an alias codec that lands on the ORC key is not checked against the parquet codecs
+        setProperties(table, Map.of("file_format", "orc", "compression_codec", "zlib"));
+        Assertions.assertEquals("ORC", table.properties().get("write.format.default"));
+        Assertions.assertEquals("zlib", table.properties().get("write.orc.compression-codec"));
+
+        // the alias codec follows a native default format set in the same statement, not the table's
+        org.apache.iceberg.Table parquet = create(schema, PartitionSpec.unpartitioned(), "props_native_orc", 2);
+        String parquetCodec = parquet.properties().get("write.parquet.compression-codec");
+        setProperties(parquet, Map.of("write.format.default", "orc", "compression_codec", "zlib"));
+        Assertions.assertEquals("orc", parquet.properties().get("write.format.default"));
+        Assertions.assertEquals("zlib", parquet.properties().get("write.orc.compression-codec"));
+        Assertions.assertEquals(parquetCodec, parquet.properties().get("write.parquet.compression-codec"));
     }
 }

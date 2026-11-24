@@ -34,6 +34,11 @@ CONF_Bool(python_worker_reuse, "true");
 
 CONF_Int32(python_worker_expire_time_sec, "300");
 
+// The most local Python worker processes one pipeline driver uses. A driver's call stubs (one per
+// concurrent UDF call, e.g. per scan IO task) are spread over these workers, and since each worker
+// runs Python under its own GIL, this bounds how many Python UDF calls of a driver run in parallel.
+CONF_mInt32(python_worker_max_per_driver, "3");
+
 // Timeout (ms) for the Arrow Flight call to a Python UDF worker (local or external service_url).
 // Applied as the gRPC deadline on the DoExchange stream, so a dead/unreachable/hung worker fails
 // the query instead of hanging forever. Note it bounds the whole stream's lifetime, so set it above

@@ -105,6 +105,16 @@ public class ExplicitTxnState {
 
         private DmlStmt dmlStmt;
         private TUniqueId loadId;
+        // Stream load items have their own lifecycle and do not register an InsertLoadJob.
+        private long insertLoadJobId = -1;
+
+        public long getInsertLoadJobId() {
+            return insertLoadJobId;
+        }
+
+        public void setInsertLoadJobId(long insertLoadJobId) {
+            this.insertLoadJobId = insertLoadJobId;
+        }
 
         public TUniqueId getLoadId() {
             return loadId;

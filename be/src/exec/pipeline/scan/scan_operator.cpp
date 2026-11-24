@@ -23,6 +23,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "compute_env/pipeline/pipeline_timer_context.h"
+#include "compute_env/query/query_remote_read.h"
 #include "compute_env/workgroup/scan_executor.h"
 #include "compute_env/workgroup/work_group.h"
 #include "exec/exec_env.h"
@@ -156,7 +157,53 @@ Status ScanOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
+// Wakes the operator for its chunk sources whose input became readable, from whatever thread made it readable. The
+// operator detaches it when it closes, and from then on a wake-up only clears the waiting flag.
+class ScanOperator::InputReadyWaker {
+public:
+    explicit InputReadyWaker(ScanOperator* op) : _op(op) {}
+
+    void wake(std::atomic<bool>* waiting) {
+        std::lock_guard guard(_lock);
+        waiting->store(false, std::memory_order_release);
+        if (_op != nullptr) {
+            // notifies when it goes out of scope, before the lock is released: the operator stays open meanwhile
+            auto notify = scan_defer_notify(_op);
+        }
+    }
+
+    void detach() {
+        std::lock_guard guard(_lock);
+        _op = nullptr;
+    }
+
+private:
+    std::mutex _lock;
+    ScanOperator* _op;
+};
+
+std::function<void()> ScanOperator::input_ready_callback(std::shared_ptr<std::atomic<bool>> waiting) {
+    std::shared_ptr<InputReadyWaker> waker;
+    {
+        std::lock_guard guard(_input_ready_waker_lock);
+        if (_input_ready_waker == nullptr) {
+            _input_ready_waker = std::make_shared<InputReadyWaker>(_input_ready_waker_detached ? nullptr : this);
+        }
+        waker = _input_ready_waker;
+    }
+    return [waker = std::move(waker), waiting = std::move(waiting)]() { waker->wake(waiting.get()); };
+}
+
 void ScanOperator::close(RuntimeState* state) {
+    {
+        // An input that becomes readable from now on must not touch the operator. Not under _task_mutex: a wake-up
+        // holds the waker's lock while has_output() takes _task_mutex.
+        std::lock_guard guard(_input_ready_waker_lock);
+        _input_ready_waker_detached = true;
+        if (_input_ready_waker != nullptr) {
+            _input_ready_waker->detach();
+        }
+    }
     // For the running io task, we close its chunk sources in ~ScanOperator not in ScanOperator::close.
     for (size_t i = 0; i < _chunk_sources.size(); i++) {
         std::lock_guard guard(_task_mutex);
@@ -304,15 +351,28 @@ bool ScanOperator::has_output() const {
     // Can pick up more morsels or submit more tasks
     if (!_morsel_queue->empty()) {
         std::shared_lock guard(_task_mutex);
-        auto status_or_is_ready = _morsel_queue->ready_for_next();
-        if (status_or_is_ready.ok() && status_or_is_ready.value()) {
-            return true;
+        // A chunk source that waits for its input keeps its slot without an IO task: a morsel needs a slot that neither
+        // runs an IO task nor waits, and without one the operator waits until an input wakes it.
+        bool has_slot_for_morsel = false;
+        for (int i = 0; i < _io_tasks_per_scan_operator; ++i) {
+            const bool waiting = _chunk_sources[i] != nullptr && _chunk_sources[i]->is_waiting_for_input();
+            if (!_is_io_task_running[i] && !waiting) {
+                has_slot_for_morsel = true;
+                break;
+            }
+        }
+        if (has_slot_for_morsel) {
+            auto status_or_is_ready = _morsel_queue->ready_for_next();
+            if (status_or_is_ready.ok() && status_or_is_ready.value()) {
+                return true;
+            }
         }
     }
 
     for (int i = 0; i < _io_tasks_per_scan_operator; ++i) {
         std::shared_lock guard(_task_mutex);
-        if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk()) {
+        if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk() &&
+            !_chunk_sources[i]->is_waiting_for_input()) {
             return true;
         }
     }
@@ -339,7 +399,7 @@ bool ScanOperator::is_finished() const {
         return false;
     }
 
-    // Any shared chunk source from other ScanOperator
+    // Any chunk source that may still produce output or work for this operator.
     if (has_shared_chunk_source()) {
         return false;
     }
@@ -486,6 +546,9 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
             if (_is_io_task_running[i]) {
                 skip[i] = true;
                 total_cnt -= 1;
+            } else if (_chunk_sources[i] != nullptr && _chunk_sources[i]->is_waiting_for_input()) {
+                // keeps its slot without an IO task until its input wakes the operator
+                skip[i] = true;
             } else if (_chunk_sources[i] != nullptr && _chunk_sources[i]->has_next_chunk()) {
                 RETURN_IF_ERROR(_trigger_next_scan(state, i));
                 skip[i] = true;
@@ -605,6 +668,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             SCOPED_SET_TRACE_PLAN_NODE_ID(get_plan_node_id());
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
             DUMP_TRACE_IF_TIMEOUT(config::pipeline_scan_timeout_guard_ms);
+            // The files the scan opens here without a remote read context of their own are this query's.
+            ScopedRemoteReadContext remote_read_scope(query_remote_read_context(state));
 
             auto chunk_source = _chunk_sources[chunk_source_index];
             SCOPED_SET_CUSTOM_COREDUMP_MSG(chunk_source->get_custom_coredump_msg());
@@ -678,6 +743,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
 
 Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index) {
     DCHECK(_morsel_queue != nullptr);
+    // A split morsel queue loads the rowsets and indexes it splits while handing out morsels, on this thread.
+    ScopedRemoteReadContext remote_read_scope(query_remote_read_context(state));
     _close_chunk_source(state, chunk_source_index);
 
     // NOTE: attach an active source before really creating it, to avoid the race condition

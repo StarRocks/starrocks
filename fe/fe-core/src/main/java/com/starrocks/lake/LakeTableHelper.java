@@ -58,6 +58,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Future;
+import java.util.stream.Collectors;
 
 public class LakeTableHelper {
     private static final Logger LOG = LogManager.getLogger(LakeTableHelper.class);
@@ -405,6 +406,37 @@ public class LakeTableHelper {
         } catch (NumberFormatException e) {
             return Optional.empty();
         }
+    }
+
+    // Rollups created by old versions placed their tablets under the logical partition's directory instead of
+    // the physical partition's, and publishing such tablets with file bundling fails.
+    public static boolean checkLakeRollupAllowFileBundling(OlapTable table) {
+        return table.getPartitions().stream()
+                .flatMap(partition -> partition.getSubPartitions().stream())
+                .allMatch(physicalPartition -> {
+                    long physicalPartitionId = physicalPartition.getId();
+                    List<Long> shardIds = physicalPartition.getAllMaterializedIndices(MaterializedIndex.IndexExtState.ALL)
+                            .stream()
+                            .flatMap(index -> index.getTablets().stream())
+                            .map(tablet -> ((LakeTablet) tablet).getShardId())
+                            .collect(Collectors.toList());
+
+                    if (shardIds.isEmpty()) {
+                        return true;
+                    }
+                    List<ShardInfo> shardInfos = new ArrayList<>();
+                    try {
+                        shardInfos = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                                .getShardInfo(shardIds, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                    } catch (Exception e) {
+                        LOG.warn("checkLakeRollupAllowFileBundling got exception: {}", e.getMessage());
+                        return false;
+                    }
+                    return shardInfos.stream()
+                            .allMatch(shardInfo -> extractIdFromPath(shardInfo.getFilePath().getFullPath())
+                                    .map(id -> id == physicalPartitionId)
+                                    .orElse(false));
+                });
     }
 
     /**

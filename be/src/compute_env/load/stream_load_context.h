@@ -39,6 +39,7 @@
 #include <cstdint>
 #include <functional>
 #include <future>
+#include <optional>
 #include <vector>
 
 #include "base/auth/auth_info.h"
@@ -268,12 +269,16 @@ public:
     // the following members control the max progress of a consuming
     // process. if any of them reach, the consuming will finish.
     int64_t max_interval_s = 5;
+    // the consuming time in milliseconds, which overrides max_interval_s when positive
+    int64_t max_interval_ms = -1;
     int64_t max_batch_rows = 100000;
     int64_t max_batch_size = 100 * 1024 * 1024; // 100MB
 
     // only used to check if we receive whole body
     size_t body_bytes = 0;
     size_t receive_bytes = 0;
+    // the number of messages a routine load consumption received
+    int64_t receive_rows = 0;
     size_t total_receive_bytes = 0;
 
     // when use_streaming is true, we use stream_pipe to send source data,
@@ -371,6 +376,25 @@ public:
     int64_t mc_wait_finish_cost_nanos = 0;
     // The left time of the merge window after writing the data to the plan
     int64_t mc_left_merge_time_nanos = -1;
+
+    // =================== kafka scan range of routine load ===================
+    // A routine load round in the coordinated mode consumes each Kafka scan range of a fragment into a pipe that the
+    // fragment's file scan reads, and the FE commits the round's transaction from the final exec status reports.
+
+    // Finish the pipe instead of cancelling it when a consumption ends with nothing consumed, since the FE commits
+    // the partitions without new data in the round as well.
+    bool kafka_scan_range_mode = false;
+    // The CSV row delimiter of the scan range; a classic routine load task takes it from the plan in put_result.
+    std::optional<char> kafka_row_delimiter;
+    // Invoked when a consumption ends normally, after the consumed offsets are set in kafka_info and before the pipe
+    // finishes, so that they are published before the scanner can reach the end of the pipe.
+    std::function<void(StreamLoadContext*)> kafka_consumed_callback;
+    // Whether the consumption ended with every partition at its end, i.e. it caught up. It is false when the
+    // consumption stopped at its time or size limit with data left, and the FE then starts the next round at once.
+    bool kafka_reached_end = false;
+    // The consumption of a scan range ends, before its time or size limit, once every partition has been at its end
+    // with no new message for this long.
+    int64_t kafka_idle_end_ms = 1000;
 
 public:
     bool is_channel_stream_load_context() { return channel_id != -1; }

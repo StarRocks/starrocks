@@ -2,10 +2,10 @@
 displayed_sidebar: docs
 toc_max_heading_level: 4
 description: "STREAM LOAD 允许您从本地文件系统或流式数据源加载数据。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.mdx';
-import TableURL from '../../../_assets/commonMarkdown/stream_load_table_url.mdx';
 import TableURLTip from '../../../_assets/commonMarkdown/stream_load_table_url_tip.mdx';
 
 # STREAM LOAD
@@ -60,7 +60,22 @@ curl --location-trusted -u <username>:<password> -XPUT <url>
 
 指定表的 URL。语法：
 
-<TableURL />
+```Plain
+http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
+```
+
+下表描述了 URL 中的参数。
+
+| 参数 | 是否必填 | 描述 |
+| ------------- | -------- | ------------------------------------------------------------ |
+| fe_host | 是 | 集群中 FE 节点的 IP 地址。<br />**注意**<br />如果您将导入作业提交到特定的 BE 或 CN 节点，则必须输入该 BE 或 CN 节点的 IP 地址。 |
+| fe_http_port | 是 | 集群中 FE 节点的 HTTP 端口号。默认端口号为 `8030`。<br />**注意**<br />如果您将导入作业提交到特定的 BE 或 CN 节点，则必须输入该 BE 或 CN 节点的 HTTP 端口号。默认端口号为 `8030`。 |
+| database_name | 是 | 表所属的数据库名称。 |
+| table_name | 是 | 表的名称。 |
+
+:::note
+您可以使用 [SHOW FRONTENDS](../cluster-management/nodes_processes/SHOW_FRONTENDS.md) 来查看 FE 节点的 IP 地址和 HTTP 端口。
+:::
 
 ### data_desc
 
@@ -129,7 +144,10 @@ curl --location-trusted -u <username>:<password> -XPUT <url>
 
 必填：否
 
-描述：指定用于转义各种特殊字符（例如行分隔符、列分隔符、转义字符以及 `enclose` 指定的字符）的字符，这些特殊字符将被视为普通字符，并作为其所在字段值的一部分进行解析。类型：单字节字符。默认值：`NONE`。最常用的字符为斜杠（`\`），在 SQL 语句中必须写成双斜杠（`\\`）。<br />**注意**<br />`escape` 指定的字符在每对 `enclose` 指定字符的内部和外部均适用。<br />以下是两个示例：<ul><li>当将 `enclose` 设置为 `"`，并将 `escape` 设置为 `\` 时，系统将 `"say \"Hello world\""` 解析为 `say "Hello world"`。</li><li>假设列分隔符为逗号（`,`）。当将 `escape` 设置为 `\` 时，系统将 `a, b\, c` 解析为两个独立的字段值：`a` 和 `b, c`。</li></ul>
+描述：指定用于转义各种特殊字符（例如行分隔符、列分隔符、转义字符以及 `enclose` 指定的字符）的字符，这些特殊字符将被视为普通字符，并作为其所在字段值的一部分进行解析。类型：单字节字符。默认值：`NONE`。最常用的字符为斜杠（`\`），在 SQL 语句中必须写成双斜杠（`\\`）。<br />**注意**<br />`escape` 指定的字符在每对 `enclose` 指定字符的内部和外部均适用。<br />以下是两个示例：
+
+- 当将 `enclose` 设置为 `"`，并将 `escape` 设置为 `\` 时，系统将 `"say \"Hello world\""` 解析为 `say "Hello world"`。
+- 假设列分隔符为逗号（`,`）。当将 `escape` 设置为 `\` 时，系统将 `a, b\, c` 解析为两个独立的字段值：`a` 和 `b, c`。
 
 :::note
 

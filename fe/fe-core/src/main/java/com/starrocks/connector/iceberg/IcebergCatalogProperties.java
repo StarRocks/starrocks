@@ -18,12 +18,16 @@ import com.google.common.base.Strings;
 import com.starrocks.common.Config;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.iceberg.util.PropertyUtil;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 
 import static org.apache.iceberg.TableProperties.MANIFEST_TARGET_SIZE_BYTES_DEFAULT;
 
 public class IcebergCatalogProperties {
+    private static final Logger LOG = LogManager.getLogger(IcebergCatalogProperties.class);
+
     public static final String ICEBERG_CATALOG_TYPE = "iceberg.catalog.type";
     @Deprecated
     public static final String ICEBERG_CATALOG_LEGACY = "starrocks.catalog-type";
@@ -116,8 +120,16 @@ public class IcebergCatalogProperties {
                     properties, ICEBERG_PARTITION_CACHE_MEMORY_SIZE_RATIO, 0.1);
         this.icebergManifestCacheWithColumnStatistics = PropertyUtil.propertyAsBoolean(
                 properties, ICEBERG_MANIFEST_CACHE_WITH_COLUMN_STATISTICS, true);
-        this.icebergManifestCacheStatisticsMaxColumns = PropertyUtil.propertyAsInt(
+        int statisticsMaxColumns = PropertyUtil.propertyAsInt(
                 properties, ICEBERG_MANIFEST_CACHE_STATISTICS_MAX_COLUMNS, 100);
+        if (statisticsMaxColumns < 0) {
+            // negative values selected a per-file statistics layout that no longer exists; a catalog created with
+            // one must still load, so it is treated as 0 (the keep-set only)
+            LOG.warn("{}={} is negative, treated as 0", ICEBERG_MANIFEST_CACHE_STATISTICS_MAX_COLUMNS,
+                    statisticsMaxColumns);
+            statisticsMaxColumns = 0;
+        }
+        this.icebergManifestCacheStatisticsMaxColumns = statisticsMaxColumns;
         this.refreshIcebergManifestMinLength = PropertyUtil.propertyAsLong(properties, REFRESH_ICEBERG_MANIFEST_MIN_LENGTH,
                 2 * 1024 * 1024);
         this.enableCacheDataFileIdentifierColumnStatistics = PropertyUtil.propertyAsBoolean(properties,

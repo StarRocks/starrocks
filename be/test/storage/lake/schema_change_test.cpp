@@ -17,6 +17,8 @@
 #include <gtest/gtest.h>
 #include <unistd.h>
 
+#include <functional>
+#include <numeric>
 #include <thread>
 
 #include "base/testutil/assert.h"
@@ -27,8 +29,12 @@
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
+#include "column/json_column.h"
 #include "common/config_ingest_fwd.h"
+#include "common/config_json_flat_fwd.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -43,7 +49,10 @@
 #include "storage/lake/test_util.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/metadata_util.h"
+#include "storage/rowset/column_reader.h"
+#include "storage/rowset/segment.h"
 #include "testutil/column_test_helper.h"
+#include "types/json_value.h"
 
 namespace starrocks::lake {
 
@@ -866,6 +875,294 @@ INSTANTIATE_TEST_SUITE_P(SchemaChangeModifyColumnTypeTest, SchemaChangeModifyCol
                                            SchemaChangeParam{PRIMARY_KEYS, 2, 4, 3}),
                          to_string_param_name);
 // clang-format on
+
+class SchemaChangeKeyConversionTest : public SchemaChangeModifyColumnTypeTest {
+public:
+    SchemaChangeKeyConversionTest() {
+        auto base_schema = _base_tablet_metadata->mutable_schema();
+        base_schema->mutable_column(0)->set_type("BIGINT");
+        _base_tablet_schema = TabletSchema::create(*base_schema);
+        _base_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(_base_tablet_schema));
+        auto new_schema = _new_tablet_metadata->mutable_schema();
+        new_schema->mutable_column(0)->set_type("VARCHAR");
+        new_schema->mutable_column(0)->set_length(32);
+        _new_tablet_schema = TabletSchema::create(*new_schema);
+        _new_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(_new_tablet_schema));
+    }
+};
+
+TEST_P(SchemaChangeKeyConversionTest, test_key_conversion_order) {
+    auto keys = Int64Column::create();
+    auto values = Int32Column::create();
+    for (int64_t key : {9, 10, 90, 100}) {
+        keys->append_datum(Datum(key));
+        values->append_datum(Datum(static_cast<int32_t>(values->size() + 1)));
+    }
+    VChunk chunk({std::move(keys), std::move(values)}, _base_schema);
+    const uint32_t indexes[] = {0, 1, 2, 3};
+    auto base_id = _base_tablet_metadata->id();
+    auto target_id = _new_tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_manager.get())
+                                         .set_tablet_id(base_id)
+                                         .set_txn_id(1000)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_base_tablet_schema->id())
+                                         .build());
+    ASSERT_OK(writer->open());
+    ASSERT_OK(writer->write(chunk, indexes, 4));
+    ASSERT_OK(writer->finish_with_txnlog());
+    writer->close();
+    ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_id, 2, 1000).status());
+
+    TAlterTabletReqV2 request;
+    request.base_tablet_id = base_id;
+    request.new_tablet_id = target_id;
+    request.alter_version = 2;
+    request.txn_id = 1001;
+    SchemaChangeHandler handler(_tablet_manager.get());
+    ASSERT_OK(handler.process_alter_tablet(request));
+    ASSERT_OK(publish_version_for_schema_change(target_id, 3, 1001));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(target_id, 3));
+    auto result = read(tablet, false);
+    ASSERT_EQ(4, result->num_rows());
+    const std::vector<std::string> expected_keys{"10", "100", "9", "90"};
+    const std::vector<int64_t> expected_values{2, 4, 1, 3};
+    for (size_t i = 0; i < expected_keys.size(); ++i) {
+        EXPECT_EQ(expected_keys[i], result->get(i)[0].get_slice().to_string());
+        EXPECT_EQ(expected_values[i], result->get(i)[1].get_int64());
+    }
+}
+
+TEST_P(SchemaChangeKeyConversionTest, test_sorted_generated_columns) {
+    for (int mode = 0; mode < 4; ++mode) {
+        SCOPED_TRACE(mode); // ADD, MODIFY, constant NULL, invalid target index.
+        auto base_metadata = *_base_tablet_metadata;
+        auto target_metadata = *_new_tablet_metadata;
+        base_metadata.set_id(next_id());
+        target_metadata.set_id(next_id());
+        auto base_pb = base_metadata.mutable_schema();
+        auto target_pb = target_metadata.mutable_schema();
+        base_pb->set_id(next_id());
+        target_pb->set_id(next_id());
+        base_pb->mutable_column(1)->set_is_nullable(true);
+        target_pb->mutable_column(1)->set_is_nullable(true);
+        auto* generated = target_pb->add_column();
+        generated->set_unique_id(next_id());
+        generated->set_name("g");
+        generated->set_type("BIGINT");
+        generated->set_is_key(false);
+        generated->set_is_nullable(true);
+        generated->set_aggregation(GetParam().keys_type == DUP_KEYS ? "NONE" : "REPLACE");
+        if (mode == 1) *base_pb->add_column() = *generated;
+        ASSERT_OK(_tablet_manager->put_tablet_metadata(base_metadata));
+        ASSERT_OK(_tablet_manager->put_tablet_metadata(target_metadata));
+        auto base_schema = TabletSchema::create(*base_pb);
+        auto chunk = ChunkFactory::new_chunk(*base_schema->schema(), 4);
+        const std::vector<int64_t> keys{9, 10, 90, 100};
+        for (size_t i = 0; i < keys.size(); ++i) {
+            chunk->get_column_by_index(0)->as_mutable_raw_ptr()->append_datum(Datum(keys[i]));
+            chunk->get_column_by_index(1)->as_mutable_raw_ptr()->append_datum(
+                    i == 1 ? Datum() : Datum(static_cast<int32_t>(i + 1)));
+            if (mode == 1) chunk->get_column_by_index(2)->as_mutable_raw_ptr()->append_datum(Datum(int64_t{99}));
+        }
+        const uint32_t indexes[] = {0, 1, 2, 3};
+        const auto base_id = base_metadata.id();
+        const auto target_id = target_metadata.id();
+        const auto load_txn = next_id();
+        ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
+                                             .set_tablet_manager(_tablet_manager.get())
+                                             .set_tablet_id(base_id)
+                                             .set_txn_id(load_txn)
+                                             .set_partition_id(_partition_id)
+                                             .set_mem_tracker(_mem_tracker.get())
+                                             .set_schema_id(base_schema->id())
+                                             .build());
+        ASSERT_OK(writer->open());
+        ASSERT_OK(writer->write(*chunk, indexes, 4));
+        ASSERT_OK(writer->finish_with_txnlog());
+        writer->close();
+        ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_id, 2, load_txn).status());
+
+        TExprNode node;
+        node.__set_node_type(mode == 2 ? TExprNodeType::NULL_LITERAL : TExprNodeType::SLOT_REF);
+        node.__set_type(gen_type_desc(TPrimitiveType::BIGINT));
+        node.__set_num_children(0);
+        node.__set_is_nullable(true);
+        if (mode != 2) {
+            TSlotRef slot;
+            slot.__set_slot_id(1);
+            slot.__set_tuple_id(0);
+            node.__set_slot_ref(slot);
+        }
+        TExpr expr;
+        expr.__set_nodes({node});
+        TAlterTabletMaterializedColumnReq materialized;
+        materialized.__set_query_options(TQueryOptions());
+        materialized.__set_query_globals(TQueryGlobals());
+        materialized.__set_mc_exprs({{mode == 3 ? 3 : 2, expr}});
+        TAlterTabletReqV2 request;
+        request.__set_base_tablet_id(base_id);
+        request.__set_new_tablet_id(target_id);
+        request.__set_alter_version(2);
+        request.__set_txn_id(next_id());
+        request.__set_materialized_column_req(materialized);
+        SchemaChangeHandler handler(_tablet_manager.get());
+        auto status = handler.process_alter_tablet(request);
+        if (mode == 3) {
+            ASSERT_FALSE(status.ok());
+            EXPECT_NE(std::string::npos, status.message().find("generated column index out of range"));
+            EXPECT_FALSE(_tablet_manager->get_txn_log(target_id, request.txn_id).ok());
+            continue;
+        }
+        ASSERT_OK(status);
+        ASSERT_OK(publish_version_for_schema_change(target_id, 3, request.txn_id));
+        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(target_id, 3));
+        auto result = read(tablet, false);
+        ASSERT_EQ(4, result->num_rows());
+        const std::vector<std::string> expected_keys{"10", "100", "9", "90"};
+        const std::vector<int64_t> expected_values{0, 4, 1, 3};
+        for (size_t i = 0; i < 4; ++i) {
+            EXPECT_EQ(expected_keys[i], result->get(i)[0].get_slice().to_string());
+            const auto value = result->get_column_by_index(2)->get(i);
+            ASSERT_EQ(mode == 2 || i == 0, value.is_null());
+            if (!value.is_null()) {
+                EXPECT_EQ(expected_values[i], value.get_int64());
+            }
+        }
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(SchemaChangeKeyConversionTest, SchemaChangeKeyConversionTest,
+                         ::testing::Values(SchemaChangeParam{DUP_KEYS, 1, 0}, SchemaChangeParam{AGG_KEYS, 1, 0}),
+                         to_string_param_name);
+
+// BEGIN; INSERT INTO t1 ...; INSERT INTO t2 ...; COMMIT on a shared-data cluster while t1 is being altered. Each
+// statement writes its txn logs under its own load id, and FE publishes every tablet of the transaction with the
+// load ids of all statements: the base tablets of t1 through publish_version, its shadow tablets through
+// publish_log_version, whose .vlog the schema change replays when it finishes. The second statement loads t2
+// only, so neither tablet of t1 has a log under its load id.
+class SchemaChangeMultiStatementTxnTest : public SchemaChangeModifyColumnTypeTest {
+protected:
+    void write_statement(int64_t tablet_id, int64_t schema_id, const std::shared_ptr<VSchema>& schema, int64_t txn_id,
+                         const PUniqueId& load_id, int32_t key, int64_t value) {
+        auto c0 = Int32Column::create();
+        c0->append_datum(Datum(key));
+        MutableColumnPtr c1;
+        if (schema_id == _base_tablet_schema->id()) {
+            c1 = Int32Column::create();
+            c1->append_datum(Datum(static_cast<int32_t>(value)));
+        } else {
+            c1 = Int64Column::create();
+            c1->append_datum(Datum(value));
+        }
+        VChunk chunk({std::move(c0), std::move(c1)}, schema);
+        uint32_t indexes[1] = {0};
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_manager.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(schema_id)
+                                                   .set_load_id(load_id)
+                                                   .set_is_multi_statements_txn(true)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes, 1));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+};
+
+TEST_P(SchemaChangeMultiStatementTxnTest, test_statement_loading_another_table) {
+    int64_t version = 1;
+    int64_t txn_id = 1000;
+    auto base_tablet_id = _base_tablet_metadata->id();
+    auto new_tablet_id = _new_tablet_metadata->id();
+    for (int i = 0; i < GetParam().writes_before; i++) {
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_datum(Datum(i));
+        c1->append_datum(Datum(i * 2));
+        VChunk chunk({std::move(c0), std::move(c1)}, _base_schema);
+        uint32_t indexes[1] = {0};
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_manager.get())
+                                                   .set_tablet_id(base_tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_base_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes, 1));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, txn_id).status());
+        version++;
+        txn_id++;
+    }
+
+    int64_t alter_txn_id = txn_id++;
+    {
+        TAlterTabletReqV2 request;
+        request.base_tablet_id = base_tablet_id;
+        request.new_tablet_id = new_tablet_id;
+        request.alter_version = version;
+        request.txn_id = alter_txn_id;
+        SchemaChangeHandler handler(_tablet_manager.get());
+        ASSERT_OK(handler.process_alter_tablet(request));
+    }
+
+    // Statement 1 loads (100, 200) into t1, i.e. into its base tablet and its shadow tablet. Statement 2 loads t2.
+    int64_t explicit_txn_id = txn_id++;
+    PUniqueId load_id_1;
+    load_id_1.set_hi(explicit_txn_id);
+    load_id_1.set_lo(1);
+    PUniqueId load_id_2;
+    load_id_2.set_hi(explicit_txn_id);
+    load_id_2.set_lo(2);
+    write_statement(base_tablet_id, _base_tablet_schema->id(), _base_schema, explicit_txn_id, load_id_1, 100, 200);
+    write_statement(new_tablet_id, _new_tablet_schema->id(), _new_schema, explicit_txn_id, load_id_1, 100, 200);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(explicit_txn_id);
+    txn_info.set_txn_type(TXN_NORMAL);
+    txn_info.set_combined_txn_log(false);
+    txn_info.set_commit_time(time(nullptr));
+    txn_info.add_load_ids()->CopyFrom(load_id_1);
+    txn_info.add_load_ids()->CopyFrom(load_id_2);
+    auto txns = std::span<const TxnInfoPB>(&txn_info, 1);
+
+    ASSERT_OK(
+            publish_version(_tablet_manager.get(), PublishTabletInfo(base_tablet_id), version, version + 1, txns, false)
+                    .status());
+    int64_t log_version = version + 1;
+    ASSERT_OK(publish_log_version(_tablet_manager.get(), new_tablet_id, txns, &log_version));
+    // FE retries when it lost the response.
+    ASSERT_OK(publish_log_version(_tablet_manager.get(), new_tablet_id, txns, &log_version));
+    version++;
+
+    ASSERT_OK(publish_version_for_schema_change(new_tablet_id, version + 1, alter_txn_id));
+    version++;
+
+    ASSIGN_OR_ABORT(auto new_tablet, _tablet_manager->get_tablet(new_tablet_id, version));
+    auto chunk = read(new_tablet, /*sorted=*/true);
+    ASSERT_EQ(GetParam().writes_before + 1, chunk->num_rows());
+    for (int i = 0; i < GetParam().writes_before; i++) {
+        EXPECT_EQ(i, chunk->get(i)[0].get_int32());
+        EXPECT_EQ(i * 2, chunk->get(i)[1].get_int64());
+    }
+    EXPECT_EQ(100, chunk->get(GetParam().writes_before)[0].get_int32());
+    EXPECT_EQ(200, chunk->get(GetParam().writes_before)[1].get_int64());
+}
+
+INSTANTIATE_TEST_SUITE_P(SchemaChangeMultiStatementTxnTest, SchemaChangeMultiStatementTxnTest,
+                         ::testing::Values(SchemaChangeParam{DUP_KEYS, 2, 0}, SchemaChangeParam{AGG_KEYS, 2, 0},
+                                           SchemaChangeParam{UNIQUE_KEYS, 2, 0}, SchemaChangeParam{PRIMARY_KEYS, 2, 0}),
+                         to_string_param_name);
 
 class SchemaChangeModifyColumnOrderTest : public SchemaChangeTest {
 public:
@@ -3474,6 +3771,199 @@ TEST_F(DropIndexOnlyValidationTest, alter_version_propagates_to_op_drop_version)
     ASSERT_EQ(1, log->op_drop_index().dropped_size());
     EXPECT_EQ(101, log->op_drop_index().dropped(0).index_id());
     EXPECT_EQ(2, log->op_drop_index().dropped(0).col_unique_id());
+}
+
+// A lake schema change rewrites the table's existing JSON columns with the table's flat_json.*
+// settings, read from the BASE tablet's metadata. The shadow tablet's own metadata may carry none: FE
+// created schema-change shadow tablets without flat_json_config, so reading the new tablet (or the
+// metadata cache) would rewrite a flat_json.enable=false table with the be.conf globals.
+class SchemaChangeFlatJsonConfigTest : public testing::Test {
+public:
+    SchemaChangeFlatJsonConfigTest() {
+        _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
+        _location_provider = std::make_unique<FixedLocationProvider>(kTestDirectory);
+        _primary_key_manager = std::make_unique<PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024,
+                                                          1024 * 1024);
+    }
+
+protected:
+    constexpr static const char* const kTestDirectory = "test_lake_schema_change_flat_json_config";
+    constexpr static int kNumRows = 256;
+
+    void SetUp() override {
+        (void)fs::remove_all(kTestDirectory);
+        CHECK_OK(fs::create_directories(lake::join_path(kTestDirectory, lake::kSegmentDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestDirectory, lake::kMetadataDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestDirectory, lake::kTxnLogDirectoryName)));
+    }
+
+    void TearDown() override { (void)fs::remove_all(kTestDirectory); }
+
+    static void add_column(TabletSchemaPB* schema, int64_t unique_id, const std::string& name, const std::string& type,
+                           bool is_key) {
+        auto* column = schema->add_column();
+        column->set_unique_id(unique_id);
+        column->set_name(name);
+        column->set_type(type);
+        column->set_is_key(is_key);
+        column->set_is_nullable(false);
+        if (!is_key) {
+            column->set_aggregation("NONE");
+        }
+    }
+
+    // Base tablet: c0 INT key, c1 INT key, c2 INT value, j JSON value; created with
+    // flat_json.enable=false. New tablet: built by `make_new_schema`, without any flat_json_config.
+    // Loads rows whose JSON values the flattener does extract, runs the schema change, and returns
+    // whether each segment of the new tablet wrote the JSON column flat.
+    std::vector<bool> run_schema_change(
+            const std::function<void(TabletSchemaPB*, int64_t, int64_t, int64_t, int64_t)>& make_new_schema) {
+        const int64_t c0_id = next_id();
+        const int64_t c1_id = next_id();
+        const int64_t c2_id = next_id();
+        const int64_t j_id = next_id();
+
+        TabletMetadata base_metadata;
+        base_metadata.set_id(next_id());
+        base_metadata.set_version(1);
+        auto* base_schema = base_metadata.mutable_schema();
+        base_schema->set_id(next_id());
+        base_schema->set_num_short_key_columns(1);
+        base_schema->set_keys_type(DUP_KEYS);
+        base_schema->set_num_rows_per_row_block(65535);
+        add_column(base_schema, c0_id, "c0", "INT", true);
+        add_column(base_schema, c1_id, "c1", "INT", true);
+        add_column(base_schema, c2_id, "c2", "INT", false);
+        add_column(base_schema, j_id, "j", "JSON", false);
+        auto* flat_json_config = base_metadata.mutable_flat_json_config();
+        flat_json_config->set_flat_json_enable(false);
+        flat_json_config->set_flat_json_null_factor(config::json_flat_null_factor);
+        flat_json_config->set_flat_json_sparsity_factor(config::json_flat_sparsity_factor);
+        flat_json_config->set_flat_json_max_column_max(config::json_flat_column_max);
+        CHECK_OK(_tablet_manager->put_tablet_metadata(base_metadata));
+
+        TabletMetadata new_metadata;
+        new_metadata.set_id(next_id());
+        new_metadata.set_version(1);
+        auto* new_schema = new_metadata.mutable_schema();
+        new_schema->set_id(next_id());
+        new_schema->set_num_short_key_columns(1);
+        new_schema->set_keys_type(DUP_KEYS);
+        new_schema->set_num_rows_per_row_block(65535);
+        make_new_schema(new_schema, c0_id, c1_id, c2_id, j_id);
+        CHECK_OK(_tablet_manager->put_tablet_metadata(new_metadata));
+
+        auto base_tablet_schema = TabletSchema::create(base_metadata.schema());
+        auto base_chunk_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(base_tablet_schema));
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto c2 = Int32Column::create();
+        auto j = JsonColumn::create();
+        for (int i = 0; i < kNumRows; i++) {
+            c0->append(i % 7);
+            c1->append(i);
+            c2->append(i * 3);
+            auto json = JsonValue::parse(strings::Substitute(R"({"a": $0, "b": $1})", i, i * 3));
+            CHECK(json.ok());
+            j->append(&json.value());
+        }
+        VChunk chunk({std::move(c0), std::move(c1), std::move(c2), std::move(j)}, base_chunk_schema);
+        std::vector<uint32_t> indexes(kNumRows);
+        std::iota(indexes.begin(), indexes.end(), 0);
+
+        const int64_t base_tablet_id = base_metadata.id();
+        const int64_t load_txn_id = next_id();
+        auto delta_writer = DeltaWriterBuilder()
+                                    .set_tablet_manager(_tablet_manager.get())
+                                    .set_tablet_id(base_tablet_id)
+                                    .set_txn_id(load_txn_id)
+                                    .set_partition_id(_partition_id)
+                                    .set_mem_tracker(_mem_tracker.get())
+                                    .set_schema_id(base_tablet_schema->id())
+                                    .build()
+                                    .value();
+        CHECK_OK(delta_writer->open());
+        CHECK_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        CHECK_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, 2, load_txn_id).status());
+
+        // Nothing of either tablet is cached, as on a CN that did not serve their loads.
+        _tablet_manager->prune_metacache();
+
+        const int64_t new_tablet_id = new_metadata.id();
+        const int64_t alter_txn_id = next_id();
+        TAlterTabletReqV2 request;
+        request.base_tablet_id = base_tablet_id;
+        request.new_tablet_id = new_tablet_id;
+        request.alter_version = 2;
+        request.txn_id = alter_txn_id;
+        SchemaChangeHandler handler(_tablet_manager.get());
+        CHECK_OK(handler.process_alter_tablet(request));
+
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(alter_txn_id);
+        txn_info.set_combined_txn_log(false);
+        txn_info.set_commit_time(time(nullptr));
+        CHECK_OK(publish_version(_tablet_manager.get(), lake::PublishTabletInfo(new_tablet_id), 1, 2,
+                                 std::span<const TxnInfoPB>(&txn_info, 1), false)
+                         .status());
+
+        auto metadata = _tablet_manager->get_tablet_metadata(new_tablet_id, 2).value();
+        auto new_tablet_schema = TabletSchema::create(metadata->schema());
+        auto fs = FileSystemFactory::CreateSharedFromString(kTestDirectory).value();
+        std::vector<bool> flat;
+        for (const auto& rowset : metadata->rowsets()) {
+            for (const auto& seg_meta : rowset.segment_metas()) {
+                auto path = _tablet_manager->segment_location(new_tablet_id, seg_meta.filename());
+                auto segment = Segment::open(fs, FileInfo{path}, 0, new_tablet_schema).value();
+                const ColumnReader* reader = segment->column_with_uid(j_id);
+                CHECK(reader != nullptr);
+                flat.push_back(reader->is_flat_json());
+            }
+        }
+        return flat;
+    }
+
+    std::unique_ptr<MemTracker> _mem_tracker;
+    std::shared_ptr<FixedLocationProvider> _location_provider;
+    std::unique_ptr<PrimaryKeyManager> _primary_key_manager;
+    std::unique_ptr<TabletManager> _tablet_manager;
+    int64_t _partition_id = next_id();
+};
+
+// Reordering the keys sorts the data: SortedSchemaChange, which writes through a DeltaWriter.
+TEST_F(SchemaChangeFlatJsonConfigTest, sorted_schema_change_keeps_base_flat_json_config) {
+    ASSERT_TRUE(config::enable_json_flat) << "test assumes the be.conf default";
+    auto flat =
+            run_schema_change([](TabletSchemaPB* schema, int64_t c0_id, int64_t c1_id, int64_t c2_id, int64_t j_id) {
+                add_column(schema, c1_id, "c1", "INT", true);
+                add_column(schema, c0_id, "c0", "INT", true);
+                add_column(schema, c2_id, "c2", "INT", false);
+                add_column(schema, j_id, "j", "JSON", false);
+            });
+    ASSERT_FALSE(flat.empty());
+    for (bool is_flat : flat) {
+        EXPECT_FALSE(is_flat) << "the rewrite ignored the table's flat_json.enable=false";
+    }
+}
+
+// Widening a value column converts it in place: DirectSchemaChange, which writes through a
+// VersionedTablet writer of the new tablet.
+TEST_F(SchemaChangeFlatJsonConfigTest, direct_schema_change_keeps_base_flat_json_config) {
+    ASSERT_TRUE(config::enable_json_flat) << "test assumes the be.conf default";
+    auto flat =
+            run_schema_change([](TabletSchemaPB* schema, int64_t c0_id, int64_t c1_id, int64_t c2_id, int64_t j_id) {
+                add_column(schema, c0_id, "c0", "INT", true);
+                add_column(schema, c1_id, "c1", "INT", true);
+                add_column(schema, c2_id, "c2", "BIGINT", false);
+                add_column(schema, j_id, "j", "JSON", false);
+            });
+    ASSERT_FALSE(flat.empty());
+    for (bool is_flat : flat) {
+        EXPECT_FALSE(is_flat) << "the rewrite ignored the table's flat_json.enable=false";
+    }
 }
 
 } // namespace starrocks::lake

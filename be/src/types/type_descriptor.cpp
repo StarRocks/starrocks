@@ -467,7 +467,7 @@ TypeDescriptor TypeDescriptor::promote_types(const TypeDescriptor& type1, const 
         return TypeDescriptor::create_varbinary_type(len);
     }
     // treat other conflicted types as varchar.
-    return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    return TYPE_VARCHAR_DESC;
 }
 
 TypeDescriptor TypeDescriptor::promote_decimal_type(int precision, int scale) {
@@ -475,7 +475,7 @@ TypeDescriptor TypeDescriptor::promote_decimal_type(int precision, int scale) {
     if (precision <= 0 || precision > decimal_precision_limit<int128_t>) {
         // if precision is invalid, use varchar
         LOG(WARNING) << "failed to promote decimal type, use varchar. precision: " << precision;
-        return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        return TYPE_VARCHAR_DESC;
     } else if (precision <= decimal_precision_limit<int32_t>) {
         return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, precision, scale);
     } else if (precision <= decimal_precision_limit<int64_t>) {
@@ -491,7 +491,11 @@ bool TypeDescriptor::is_geo_type() const {
 }
 
 TypeDescriptor TypeDescriptor::create_geo_type(LogicalType type, GeoTypeDescriptor descriptor) {
-    TypeDescriptor result(type);
+    // Callers guarantee a concrete kind that matches the primitive; a geo type without one has no meaning.
+    DCHECK(type == TYPE_GEOGRAPHY || type == TYPE_GEOMETRY);
+    DCHECK_EQ(type == TYPE_GEOGRAPHY ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY, descriptor.logical_type);
+    TypeDescriptor result;
+    result.type = type;
     result.geo_type = std::move(descriptor);
     return result;
 }

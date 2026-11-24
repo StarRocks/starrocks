@@ -72,7 +72,7 @@ protected:
 TEST_F(EncodeDictTest, scalar_value_in_dict) {
     Columns columns = {ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("b"), 1),
                        ColumnHelper::create_const_column<TYPE_INT>(kSlotId, 1)};
-    auto ctx = makeContext(TypeDescriptor(TYPE_VARCHAR), &_state, columns);
+    auto ctx = makeContext(TYPE_VARCHAR_DESC, &_state, columns);
 
     ASSERT_TRUE(DictFunctions::dict_encode_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     ColumnPtr result = DictFunctions::dict_encode(ctx.get(), columns).value();
@@ -83,7 +83,7 @@ TEST_F(EncodeDictTest, scalar_value_in_dict) {
 TEST_F(EncodeDictTest, scalar_value_absent_uses_no_match_code) {
     Columns columns = {ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("z"), 1),
                        ColumnHelper::create_const_column<TYPE_INT>(kSlotId, 1)};
-    auto ctx = makeContext(TypeDescriptor(TYPE_VARCHAR), &_state, columns);
+    auto ctx = makeContext(TYPE_VARCHAR_DESC, &_state, columns);
 
     ASSERT_TRUE(DictFunctions::dict_encode_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     ColumnPtr result = DictFunctions::dict_encode(ctx.get(), columns).value();
@@ -94,7 +94,7 @@ TEST_F(EncodeDictTest, scalar_value_absent_uses_no_match_code) {
 TEST_F(EncodeDictTest, scalar_null_value_returns_null) {
     Columns columns = {ColumnHelper::create_const_null_column(1),
                        ColumnHelper::create_const_column<TYPE_INT>(kSlotId, 1)};
-    auto ctx = makeContext(TypeDescriptor(TYPE_VARCHAR), &_state, columns);
+    auto ctx = makeContext(TYPE_VARCHAR_DESC, &_state, columns);
 
     ASSERT_TRUE(DictFunctions::dict_encode_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     ColumnPtr result = DictFunctions::dict_encode(ctx.get(), columns).value();

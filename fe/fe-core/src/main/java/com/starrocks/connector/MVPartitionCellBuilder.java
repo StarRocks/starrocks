@@ -14,6 +14,7 @@
 
 package com.starrocks.connector;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
@@ -28,14 +29,17 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.iceberg.IcebergPartitionKeyResolver;
 import com.starrocks.mv.pct.BaseToMVPartitionMapping;
+import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.type.PrimitiveType;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -43,7 +47,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.zip.CRC32;
 
 /**
  * Builds MV partition cells (range or list) from external base table partition names.
@@ -57,6 +63,9 @@ import java.util.stream.Collectors;
  * scattered across {@link PartitionUtil}.
  */
 public class MVPartitionCellBuilder {
+
+    // Digits first, then digits and the separators of a date or time: 2024-01-01, 2024/01/01 10:00:00.5.
+    private static final Pattern DATE_LIKE_STRING = Pattern.compile("\\d[\\d\\-:/. T]*");
 
     private MVPartitionCellBuilder() {
     }
@@ -84,7 +93,8 @@ public class MVPartitionCellBuilder {
                     partitionKeyResolver.resolve(mappingContext, basePartitionName);
             PartitionKey mvPartitionKey = resolutionResult.getSingleKey();
             String mvPartitionName = generateMVPartitionName(mvPartitionKey);
-            mvPartitionKeysByName.put(mvPartitionName, mvPartitionKey);
+            checkNameUnclaimed(mvPartitionName, mvPartitionKeysByName.put(mvPartitionName, mvPartitionKey),
+                    mvPartitionKey);
             sourceMapping.computeIfAbsent(mvPartitionName, k -> new java.util.HashSet<>()).add(basePartitionName);
         }
         LinkedHashMap<String, PartitionKey> sortedKeys = mvPartitionKeysByName.entrySet().stream()
@@ -113,11 +123,14 @@ public class MVPartitionCellBuilder {
 
         PCellSortedSet mvPartitionListMap = PCellSortedSet.of();
         Map<String, Set<String>> sourceMapping = new HashMap<>();
+        Map<String, PartitionKey> mvPartitionKeysByName = Maps.newHashMap();
         for (String basePartitionName : basePartitionNames) {
             PartitionKeyResolutionResult resolutionResult =
                     partitionKeyResolver.resolve(mappingContext, basePartitionName);
             for (PartitionKey mvPartitionKey : resolutionResult.getKeys()) {
                 String mvPartitionName = generateMVPartitionName(mvPartitionKey);
+                checkNameUnclaimed(mvPartitionName, mvPartitionKeysByName.put(mvPartitionName, mvPartitionKey),
+                        mvPartitionKey);
                 List<List<String>> mvPartitionItems = generateMVPartitionList(mvPartitionKey);
                 mvPartitionListMap.add(PCellWithName.of(mvPartitionName, new PListCell(mvPartitionItems)));
                 sourceMapping.computeIfAbsent(mvPartitionName, k -> new java.util.HashSet<>()).add(basePartitionName);
@@ -203,6 +216,19 @@ public class MVPartitionCellBuilder {
      */
     public static List<String> getPartitionNames(Table table, TvrVersionRange pinnedVersionRange) {
         return ConnectorPartitionTraits.build(table, pinnedVersionRange).getPartitionNames();
+    }
+
+    /**
+     * Refuse two different partition values under one view partition name. The later one would replace the
+     * earlier, whose rows would then never reach the view: a refresh that fails is the lesser harm.
+     */
+    private static void checkNameUnclaimed(String mvPartitionName, PartitionKey previous, PartitionKey current)
+            throws AnalysisException {
+        if (previous != null && !previous.equals(current)) {
+            throw new AnalysisException(String.format(
+                    "Partition values %s and %s map to the same materialized view partition name %s",
+                    previous, current, mvPartitionName));
+        }
     }
 
     /**
@@ -302,12 +328,25 @@ public class MVPartitionCellBuilder {
 
     // ========== Internal: helpers ==========
 
-    private static PartitionKey nextPartitionKey(PartitionKey currentPartitionKey,
-                                                 PartitionUtil.DateTimeInterval dateTimeInterval,
-                                                 PrimitiveType partitionColumnPrimitiveType)
+    @VisibleForTesting
+    static PartitionKey nextPartitionKey(PartitionKey currentPartitionKey,
+                                         PartitionUtil.DateTimeInterval dateTimeInterval,
+                                         PrimitiveType partitionColumnPrimitiveType)
             throws AnalysisException {
-        LiteralExpr literalExpr = PartitionUtil.addOffsetForLiteral(
-                currentPartitionKey.getKeys().get(0), 1, dateTimeInterval);
+        LiteralExpr lowerBound = currentPartitionKey.getKeys().get(0);
+        LiteralExpr literalExpr;
+        if (dateTimeInterval == PartitionUtil.DateTimeInterval.NONE
+                && partitionColumnPrimitiveType == PrimitiveType.DATETIME && lowerBound instanceof DateLiteral) {
+            // An identity partition on a DATETIME column (Iceberg's, which has no granularity) holds one
+            // instant, so its range ends just past it. Stretched to a day, as for a DATE, two values on the
+            // same day overlapped and every refresh of a view partitioned on the column failed. One second,
+            // not one microsecond: a view partition bound keeps whole seconds, and a microsecond later
+            // would read back equal to the lower bound.
+            literalExpr = new DateLiteral(((DateLiteral) lowerBound).toLocalDateTime().plusSeconds(1),
+                    lowerBound.getType());
+        } else {
+            literalExpr = PartitionUtil.addOffsetForLiteral(lowerBound, 1, dateTimeInterval);
+        }
         PartitionKey nextPartitionKey = new PartitionKey();
         nextPartitionKey.pushColumn(literalExpr, partitionColumnPrimitiveType);
         return nextPartitionKey;
@@ -321,7 +360,27 @@ public class MVPartitionCellBuilder {
     }
 
     private static String generateLiteralPartitionName(LiteralExpr literalExpr) {
-        return literalExpr.getStringValue().replaceAll("[^a-zA-Z0-9_]*", "");
+        String value = literalExpr.getStringValue();
+        String name = value.replaceAll("[^a-zA-Z0-9_]*", "");
+        if (name.equals(value) || isDateLike(literalExpr, value)) {
+            return name;
+        }
+        // Stripping lost something that told this value apart: -1 and 1 both become "1", 'a-b' and 'ab'
+        // both "ab". Two base partitions would then share one view partition name, one would replace the
+        // other, and its rows would never reach the view. A digest of the full value keeps them apart.
+        CRC32 crc = new CRC32();
+        crc.update(value.getBytes(StandardCharsets.UTF_8));
+        return name + "_" + String.format("%08x", crc.getValue());
+    }
+
+    /**
+     * A date, or a string holding one, keeps its stripped name. Its separators sit in fixed places, so
+     * dropping them loses nothing, and this is the name every existing view over such a column already
+     * uses -- a Hive table partitioned on a string '2024-01-01' among them.
+     */
+    private static boolean isDateLike(LiteralExpr literalExpr, String value) {
+        return literalExpr instanceof DateLiteral
+                || (literalExpr instanceof StringLiteral && DATE_LIKE_STRING.matcher(value).matches());
     }
 
     private static List<List<String>> generateMVPartitionList(PartitionKey mvPartitionKey) {

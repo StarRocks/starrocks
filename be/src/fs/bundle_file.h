@@ -100,6 +100,8 @@ public:
             : _stream(std::move(stream)), _offset(offset), _size(size) {}
 
     Status init();
+    // This stream serves _size bytes starting at _offset of the physical file.
+    int64_t bundle_offset() const override { return _offset; }
     Status seek(int64_t position) override;
     StatusOr<int64_t> position() override;
     StatusOr<int64_t> read_at(int64_t offset, void* out, int64_t count) override;
@@ -110,6 +112,8 @@ public:
     const std::string& filename() const override;
     StatusOr<int64_t> read(void* data, int64_t count) override;
     Status touch_cache(int64_t offset, size_t length) override;
+    StatusOr<std::shared_ptr<io::CacheWarmHandle>> warm_cache_async(int64_t offset, size_t length,
+                                                                    bool urgent = false) override;
     StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override;
     io::IoStatsSnapshot get_io_stats_snapshot() const override;
 

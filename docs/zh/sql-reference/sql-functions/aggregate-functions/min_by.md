@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "min_by 返回与 y 的最小值关联的 x 值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # min_by

@@ -38,6 +38,7 @@ import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.Range;
@@ -48,6 +49,9 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.lake.compaction.PartitionIdentifier;
+import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
@@ -85,7 +89,11 @@ import com.starrocks.thrift.TAlterTabletReqV2;
 import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStateBatch;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.StarRocksAssert;
@@ -111,9 +119,11 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -560,6 +570,37 @@ public class LakeTableSchemaChangeJobTest {
         siblingJob.cancel("test");
     }
 
+    // The shadow tablets carry the table's flat_json.* settings in their create request, so their metadata
+    // has them for every later write and compaction of the new index.
+    @Test
+    public void testShadowTabletsCarryTableFlatJsonConfig() throws Exception {
+        LakeTable flatJsonTable = createTable(connectContext,
+                    "CREATE TABLE t_flat_json(c0 INT, j1 JSON) duplicate key(c0) "
+                                + "distributed by hash(c0) buckets " + NUM_BUCKETS
+                                + " properties('flat_json.enable' = 'false', 'light_weight_tablet_creation' = 'false')");
+        Assertions.assertNotNull(flatJsonTable.getFlatJsonConfig());
+
+        List<CreateReplicaTask> sent = new ArrayList<>();
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendCreateReplicaTasks(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(task -> sent.add((CreateReplicaTask) task));
+            }
+        };
+
+        alterTable(connectContext, "ALTER TABLE t_flat_json ADD COLUMN c1 BIGINT key NOT NULL default \"0\"");
+        LakeTableSchemaChangeJob schemaChangeJob = getAlterJob(flatJsonTable);
+        schemaChangeJob.runPendingJob(); // dispatch round
+        Assertions.assertEquals(NUM_BUCKETS, sent.size());
+        for (CreateReplicaTask task : sent) {
+            Assertions.assertTrue(task.toThrift().isSetFlat_json_config());
+            Assertions.assertFalse(task.toThrift().getFlat_json_config().isFlat_json_enable());
+        }
+
+        schemaChangeJob.cancel("test");
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+    }
+
     @Test
     public void testCreateTabletSuccess() throws Exception {
         LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
@@ -708,6 +749,57 @@ public class LakeTableSchemaChangeJobTest {
 
         schemaChangeJob.cancel("test");
         Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+    }
+
+    /**
+     * StarRocksTest#12647: the table does not compact while the job waits for earlier transactions. Once a
+     * partition's compaction score is above lake_compaction_score_upper_bound, every commit into it is rejected, the
+     * commits of those transactions included, so the job is cancelled: the table is NORMAL again and compacts.
+     */
+    @Test
+    public void testCancelledWhileWaitingTxnOnceCommitsAreRejected() throws Exception {
+        long txnId = ConcurrentLoad.begin(db, table);
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
+        drivePendingJob(schemaChangeJob);
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+
+        PhysicalPartition physicalPartition =
+                table.getPartitions().stream().findFirst().get().getDefaultPhysicalPartition();
+        long externalPinVersion = physicalPartition.getVisibleVersion();
+        physicalPartition.setMinRetainVersion(externalPinVersion);
+        PartitionIdentifier partition = new PartitionIdentifier(db.getId(), table.getId(), physicalPartition.getId());
+        CompactionMgr compactionMgr = GlobalStateMgr.getCurrentState().getCompactionMgr();
+        boolean oldSlowdown = Config.lake_enable_ingest_slowdown;
+        long oldUpperBound = Config.lake_compaction_score_upper_bound;
+        Config.lake_enable_ingest_slowdown = true;
+        Config.lake_compaction_score_upper_bound = 100;
+        try {
+            // At the bound commits still go through, and the job keeps waiting.
+            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
+                    System.currentTimeMillis(), new Quantiles(1.0, 1.0, 100.0));
+            schemaChangeJob.runWaitingTxnJob();
+            Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+
+            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
+                    System.currentTimeMillis(), new Quantiles(1.0, 1.0, 101.0));
+            schemaChangeJob.run();
+            Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+            Assertions.assertTrue(schemaChangeJob.errMsg.contains("partition " + physicalPartition.getId()),
+                    schemaChangeJob.errMsg);
+            Assertions.assertTrue(schemaChangeJob.errMsg.contains("lake_compaction_score_upper_bound 100"),
+                    schemaChangeJob.errMsg);
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+            Assertions.assertEquals(externalPinVersion, physicalPartition.getMinRetainVersion());
+            Assertions.assertEquals(0,
+                    physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+        } finally {
+            physicalPartition.setMinRetainVersion(0);
+            Config.lake_enable_ingest_slowdown = oldSlowdown;
+            Config.lake_compaction_score_upper_bound = oldUpperBound;
+            compactionMgr.handleLoadingFinished(partition, physicalPartition.getVisibleVersion(),
+                    System.currentTimeMillis(), new Quantiles(0.0, 0.0, 0.0));
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(db.getId(), txnId, "test done");
+        }
     }
 
     @Test
@@ -1039,6 +1131,82 @@ public class LakeTableSchemaChangeJobTest {
                 "shadow tablets must be cleaned up by removeShadowIndex on force-cancel");
     }
 
+    private void cancelAlterColumn(boolean force) throws Exception {
+        String sql = "CANCEL ALTER TABLE COLUMN FROM " + DB_NAME + "." + table.getName() + (force ? " FORCE" : "");
+        CancelAlterTableStmt stmt = (CancelAlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().getSchemaChangeHandler().cancel(stmt);
+    }
+
+    @Test
+    public void testNoNormalPublishAfterPartialForceNoOpPublish() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+        drivePendingJob(schemaChangeJob);
+        schemaChangeJob.runWaitingTxnJob();
+        schemaChangeJob.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+
+        // The no-op publish fails, and a normal publish succeeds as it does on BE when it finds the version the
+        // no-op publish wrote in the metacache. Sending one would finish the job without the schema change.
+        AtomicBoolean noOpFails = new AtomicBoolean(true);
+        List<Long> normalPublishTxnIds = new ArrayList<>();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       ComputeResource computeResource, boolean useAggregatePublish,
+                                       boolean isRetryPublish) {
+                if (Boolean.TRUE.equals(txnInfo.noOpPublish)) {
+                    if (noOpFails.get()) {
+                        throw new RuntimeException("injected no-op publish failure");
+                    }
+                    return;
+                }
+                normalPublishTxnIds.add(txnInfo.txnId);
+            }
+        };
+        // Go through the statement so the error the operator sees is checked too.
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        handler.addAlterJobV2(schemaChangeJob);
+        boolean oldForceEnabled = Config.enable_admin_skip_committed_txn;
+        Config.enable_admin_skip_committed_txn = true;
+        try {
+            DdlException e = Assertions.assertThrows(DdlException.class, () -> cancelAlterColumn(false));
+            Assertions.assertTrue(e.getMessage().contains("consider retrying with CANCEL ALTER TABLE ... FORCE"),
+                    e.getMessage());
+            e = Assertions.assertThrows(DdlException.class, () -> cancelAlterColumn(true));
+            Assertions.assertTrue(e.getMessage().contains("the no-op publish failed; retry CANCEL ALTER TABLE ... FORCE"),
+                    e.getMessage());
+        } finally {
+            Config.enable_admin_skip_committed_txn = oldForceEnabled;
+            handler.clearJobs();
+        }
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+        for (int i = 0; i < 3 && schemaChangeJob.getJobState() == AlterJobV2.JobState.FINISHED_REWRITING; i++) {
+            schemaChangeJob.runFinishedRewritingJob();
+            if (schemaChangeJob.publishVersionFuture != null) {
+                schemaChangeJob.publishVersionFuture.get();
+            }
+        }
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+        Assertions.assertTrue(normalPublishTxnIds.isEmpty());
+
+        // A FORCE cancel retry finishes the job and drops the shadow index.
+        noOpFails.set(false);
+        Assertions.assertTrue(schemaChangeJob.cancel("force-cancel", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertTrue(schemaChangeJob.isForceSkippedAtCommitted());
+        Assertions.assertTrue(normalPublishTxnIds.isEmpty());
+        Partition partition = table.getPartitions().stream().findFirst().orElse(null);
+        Assertions.assertNotNull(partition);
+        Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+    }
+
     @Test
     public void testForceCancelAuditFlagPersisted() throws Exception {
         // forceSkippedAtCommitted is the post-mortem audit marker for a FORCE
@@ -1091,7 +1259,7 @@ public class LakeTableSchemaChangeJobTest {
             @Mock
             public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
                                        long newVersion, com.starrocks.warehouse.cngroup.ComputeResource computeResource,
-                                       boolean useAggregatePublish) {
+                                       boolean useAggregatePublish, boolean isRetryPublish) {
                 publishCalls.incrementAndGet();
                 lastNoOp.set(txnInfo.noOpPublish);
             }
@@ -1171,6 +1339,102 @@ public class LakeTableSchemaChangeJobTest {
             Assertions.assertEquals(expectedCommitVersion.get(pp.getId()).longValue(), pp.getVisibleVersion(),
                     "replay must bump VisibleVersion to commitVersion when forceSkippedAtCommitted=true");
         }
+    }
+
+    @Test
+    public void testForceCancelRefusedUntilEarlierLoadIsVisible() throws Exception {
+        // A load committed at C-1 after the watershed, then the job reserved C at FINISHED_REWRITING.
+        // The load can already be published on BE while its FE finishTransaction has not run yet, so the
+        // no-op publish of C (base C-1) succeeds on BE, but FE visible is still C-2 and the visible bump to
+        // C would be skipped. Once the load finished, visible would stay at C-1 with nextVersion C+1 and no
+        // later load could ever finish. So the force cancel must be refused until the load is visible.
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+
+            // BE already has C-1, so the no-op publish of C succeeds there.
+            @Mock
+            public boolean lakePublishVersionWithSkip(String reason) {
+                return true;
+            }
+        };
+        keepLoadsCommitted();
+        LakeTableSchemaChangeJob job = alterTableAddColumn();
+        drivePendingJob(job);
+        job.runWaitingTxnJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+
+        PhysicalPartition partition = table.getPhysicalPartitions().iterator().next();
+        long load1 = commitLoad();
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        long commitVersion = partition.getNextVersion() - 1;
+        Assertions.assertEquals(commitVersion - 2, partition.getVisibleVersion());
+
+        Assertions.assertFalse(job.cancel("force cancel", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        Assertions.assertFalse(job.isForceSkippedAtCommitted());
+
+        Assertions.assertEquals(TransactionStatus.VISIBLE, finishLoad(load1).getTransactionStatus());
+        Assertions.assertEquals(commitVersion - 1, partition.getVisibleVersion());
+        Assertions.assertTrue(job.cancel("force cancel", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        Assertions.assertEquals(commitVersion, partition.getVisibleVersion());
+
+        // The next load gets C+1 and can finish on top of the no-op published C.
+        long load2 = commitLoad();
+        Assertions.assertEquals(TransactionStatus.VISIBLE, finishLoad(load2).getTransactionStatus());
+        Assertions.assertEquals(commitVersion + 1, partition.getVisibleVersion());
+    }
+
+    /**
+     * Keeps the background publish daemon away from committed loads, so the test decides when each one finishes.
+     */
+    private static void keepLoadsCommitted() {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public List<TransactionState> getReadyToPublishTransactions(boolean nodep) {
+                return new ArrayList<>();
+            }
+
+            @Mock
+            public List<TransactionStateBatch> getReadyPublishTransactionsBatch() {
+                return new ArrayList<>();
+            }
+        };
+    }
+
+    /**
+     * Begins and commits a load into every tablet of the table, shadow tablets included, as a load that started
+     * after the watershed does.
+     */
+    private long commitLoad() throws Exception {
+        List<TabletCommitInfo> commitInfos = new ArrayList<>();
+        for (PhysicalPartition partition : table.getPhysicalPartitions()) {
+            for (MaterializedIndex index : partition.getAllMaterializedIndices(IndexExtState.ALL)) {
+                for (Tablet tablet : index.getTablets()) {
+                    // Lake tablets have no replicas: the commit only looks at the tablet id.
+                    commitInfos.add(new TabletCommitInfo(tablet.getId(), /*backendId=*/ 0L));
+                }
+            }
+        }
+        GlobalTransactionMgr txnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long txnId = txnMgr.beginTransaction(db.getId(), List.of(table.getId()), UUID.randomUUID().toString(),
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "127.0.0.1"),
+                TransactionState.LoadJobSourceType.FRONTEND, 600);
+        txnMgr.commitTransaction(db.getId(), txnId, commitInfos, new ArrayList<>(), null);
+        return txnId;
+    }
+
+    /**
+     * Runs the FE half of a load's publish, as PublishVersionDaemon does once BE has published it.
+     */
+    private TransactionState finishLoad(long txnId) throws Exception {
+        GlobalTransactionMgr txnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        txnMgr.finishTransaction(db.getId(), txnId, null);
+        return txnMgr.getTransactionState(db.getId(), txnId);
     }
 
     @Test
@@ -1302,6 +1566,46 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
+    public void testPublishRetrySetsIsRetryPublish() throws Exception {
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+        LakeTable retryTable = createTable(connectContext,
+                "CREATE TABLE t_publish_retry(c0 INT) duplicate key(c0) distributed by hash(c0) buckets 3 " +
+                        "PROPERTIES('file_bundling'='false')");
+        Config.enable_fast_schema_evolution_in_share_data_mode = false;
+        alterTable(connectContext, "ALTER TABLE t_publish_retry ADD COLUMN c1 BIGINT AS c0 + 2");
+        LakeTableSchemaChangeJob job = getAlterJob(retryTable);
+        drivePendingJob(job);
+        job.runWaitingTxnJob();
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        // The first publish of the origin tablets fails after the shadow tablets were sent.
+        List<Boolean> shadowFlags = new ArrayList<>();
+        List<Boolean> originFlags = new ArrayList<>();
+        AtomicBoolean failOrigin = new AtomicBoolean(true);
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       ComputeResource computeResource, boolean useAggregatePublish,
+                                       boolean isRetryPublish) {
+                (txnInfo.txnId == -1L ? originFlags : shadowFlags).add(isRetryPublish);
+                if (txnInfo.txnId == -1L && failOrigin.getAndSet(false)) {
+                    throw new RuntimeException("injected publish failure");
+                }
+            }
+        };
+        Assertions.assertFalse(job.lakePublishVersion());
+        Assertions.assertTrue(job.lakePublishVersion());
+        Assertions.assertEquals(List.of(false, true), shadowFlags);
+        Assertions.assertEquals(List.of(false, true), originFlags);
+    }
+
+    @Test
     public void testPublishVersion() throws Exception {
         LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
@@ -1385,6 +1689,69 @@ public class LakeTableSchemaChangeJobTest {
         // Does not support cancel job in FINISHED state.
         schemaChangeJob.cancel("test");
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED, schemaChangeJob.getJobState());
+    }
+
+    /**
+     * A load that commits while the job rewrites the tablets takes a version below the one the job commits, so
+     * the gtid that labels the job's version must be drawn after the load's: when the job reserves the version,
+     * and journaled with the reservation so that a new leader publishes the same gtid. The WAITING_TXN entry
+     * carries a gtid as well, so that an older FE resuming the job from it still publishes a positive one.
+     */
+    @Test
+    public void testCommitVersionGtid() throws Exception {
+        LakeTable gtidTable = createTable(connectContext, "CREATE TABLE t_gtid(c0 INT) duplicate key(c0) "
+                + "distributed by hash(c0) buckets 2 PROPERTIES('file_bundling'='false')");
+        alterTable(connectContext, "ALTER TABLE t_gtid ADD COLUMN c1 BIGINT key NOT NULL default \"0\"");
+        LakeTableSchemaChangeJob job = getAlterJob(gtidTable);
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+        List<TxnInfoPB> publishedTxns = new CopyOnWriteArrayList<>();
+        List<Long> publishedVersions = new CopyOnWriteArrayList<>();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       ComputeResource computeResource, boolean useAggregatePublish,
+                                       boolean isRetryPublish) {
+                publishedTxns.add(txnInfo);
+                publishedVersions.add(newVersion);
+            }
+        };
+        ConcurrentLoad.holdPublishDaemon();
+
+        drivePendingJob(job);
+        job.runWaitingTxnJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        TransactionState load = ConcurrentLoad.commit(db, gtidTable);
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        ConcurrentLoad.makeVisible(db, load);
+        runToFinished(job);
+
+        long loadVersion = ConcurrentLoad.versionIn(load, gtidTable,
+                gtidTable.getAllPhysicalPartitions().iterator().next().getId());
+        Assertions.assertFalse(publishedTxns.isEmpty());
+        Assertions.assertEquals(Set.of(loadVersion + 1), Set.copyOf(publishedVersions));
+        // The shadow tablets and the unchanged origin tablets advance to the same version under one gtid.
+        Set<Long> publishedGtids = publishedTxns.stream().map(txn -> txn.gtid).collect(Collectors.toSet());
+        Assertions.assertEquals(1, publishedGtids.size(), publishedGtids.toString());
+        long commitGtid = publishedGtids.iterator().next();
+        Assertions.assertTrue(load.getGlobalTransactionId() > 0);
+        Assertions.assertTrue(commitGtid > load.getGlobalTransactionId(),
+                "commit version gtid " + commitGtid + " is not after the gtid " + load.getGlobalTransactionId()
+                        + " of the load committed below it");
+
+        List<LakeTableSchemaChangeJob> entries = readJournaledEntries(job.getJobId());
+        LakeTableSchemaChangeJob waitingTxnEntry = entries.stream()
+                .filter(entry -> entry.getJobState() == AlterJobV2.JobState.WAITING_TXN).findFirst().orElseThrow();
+        Assertions.assertTrue(waitingTxnEntry.commitGtid > 0);
+        LakeTableSchemaChangeJob finishedRewritingEntry = entries.stream()
+                .filter(entry -> entry.getJobState() == AlterJobV2.JobState.FINISHED_REWRITING)
+                .findFirst().orElseThrow();
+        Assertions.assertEquals(commitGtid, finishedRewritingEntry.commitGtid);
     }
 
     @Test
@@ -2011,7 +2378,10 @@ public class LakeTableSchemaChangeJobTest {
         // The follower starts from the catalog as it was before the alter.
         UtFrameUtils.PseudoImage initialImage = saveMetastore();
         LakeTableSchemaChangeJob job = runningJobWithUnfinishedTasks();
+        PhysicalPartition partition = table.getPhysicalPartitions().iterator().next();
+        Assertions.assertEquals(partition.getVisibleVersion(), partition.getMinRetainVersion());
         Assertions.assertTrue(job.cancel("cancel"));
+        Assertions.assertEquals(0, partition.getMinRetainVersion());
         List<LakeTableSchemaChangeJob> entries = readJournaledEntries(job.getJobId());
         Assertions.assertEquals(
                 List.of(AlterJobV2.JobState.PENDING, AlterJobV2.JobState.WAITING_TXN, AlterJobV2.JobState.CANCELLED),
@@ -2023,7 +2393,11 @@ public class LakeTableSchemaChangeJobTest {
         replayOn(followerMetastore, followerHandler, entries.get(0));
         replayOn(followerMetastore, followerHandler, entries.get(1));
         Assertions.assertEquals(1, shadowIndexCount(followerTable));
+        PhysicalPartition followerPartition = followerTable.getPhysicalPartitions().iterator().next();
+        long externalPinVersion = followerPartition.getVisibleVersion();
+        followerPartition.setMinRetainVersion(externalPinVersion);
         replayOn(followerMetastore, followerHandler, entries.get(2));
+        Assertions.assertEquals(externalPinVersion, followerPartition.getMinRetainVersion());
 
         // The CANCELLED replay drops the shadow indexes it reads from the entry; the prune comes after it.
         LakeTableSchemaChangeJob retained = entries.get(0);

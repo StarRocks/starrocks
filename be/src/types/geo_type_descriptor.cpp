@@ -14,15 +14,16 @@
 
 #include "types/geo_type_descriptor.h"
 
+#include <charconv>
+
+#include "types/geo_srid.h"
+
 namespace starrocks {
 namespace {
 
 static_assert(static_cast<int>(TGeoLogicalType::UNKNOWN) == GEO_LOGICAL_TYPE_UNKNOWN);
 static_assert(static_cast<int>(TGeoLogicalType::GEOGRAPHY) == GEO_LOGICAL_TYPE_GEOGRAPHY);
 static_assert(static_cast<int>(TGeoLogicalType::GEOMETRY) == GEO_LOGICAL_TYPE_GEOMETRY);
-static_assert(static_cast<int>(TGeoCoordinateSystem::UNKNOWN) == GEO_COORDINATE_SYSTEM_UNKNOWN);
-static_assert(static_cast<int>(TGeoCoordinateSystem::SPHERICAL) == GEO_COORDINATE_SYSTEM_SPHERICAL);
-static_assert(static_cast<int>(TGeoCoordinateSystem::CARTESIAN) == GEO_COORDINATE_SYSTEM_CARTESIAN);
 static_assert(static_cast<int>(TGeoEdgeAlgorithm::UNKNOWN) == GEO_EDGE_ALGORITHM_UNKNOWN);
 static_assert(static_cast<int>(TGeoEdgeAlgorithm::SPHERICAL) == GEO_EDGE_ALGORITHM_SPHERICAL);
 static_assert(static_cast<int>(TGeoEdgeAlgorithm::VINCENTY) == GEO_EDGE_ALGORITHM_VINCENTY);
@@ -33,16 +34,23 @@ static_assert(static_cast<int>(TGeoEdgeAlgorithm::PLANAR) == GEO_EDGE_ALGORITHM_
 
 } // namespace
 
+std::optional<int32_t> derive_geo_srid(std::string_view crs) {
+    if (crs == "OGC:CRS84") return kCrs84Srid;
+    constexpr std::string_view prefix = "EPSG:";
+    if (!crs.starts_with(prefix)) return std::nullopt;
+    int32_t srid;
+    const auto* begin = crs.data() + prefix.size();
+    const auto* end = crs.data() + crs.size();
+    auto [parsed_end, error] = std::from_chars(begin, end, srid);
+    return error == std::errc() && parsed_end == end ? std::optional<int32_t>(srid) : std::nullopt;
+}
+
 // Normalize unknown Thrift enum numbers at the input boundary; support policy belongs to callers.
 GeoTypeDescriptor GeoTypeDescriptor::from_thrift(const TGeoTypeDesc& thrift) {
     GeoTypeDescriptor result;
     result.logical_type = thrift.__isset.logical_type && GeoLogicalTypePB_IsValid(thrift.logical_type)
                                   ? static_cast<GeoLogicalTypePB>(thrift.logical_type)
                                   : GEO_LOGICAL_TYPE_UNKNOWN;
-    result.coordinate_system =
-            thrift.__isset.coordinate_system && GeoCoordinateSystemPB_IsValid(thrift.coordinate_system)
-                    ? static_cast<GeoCoordinateSystemPB>(thrift.coordinate_system)
-                    : GEO_COORDINATE_SYSTEM_UNKNOWN;
     result.edge_algorithm = thrift.__isset.edge_algorithm && GeoEdgeAlgorithmPB_IsValid(thrift.edge_algorithm)
                                     ? static_cast<GeoEdgeAlgorithmPB>(thrift.edge_algorithm)
                                     : GEO_EDGE_ALGORITHM_UNKNOWN;
@@ -54,7 +62,6 @@ GeoTypeDescriptor GeoTypeDescriptor::from_thrift(const TGeoTypeDesc& thrift) {
 GeoTypeDescriptor GeoTypeDescriptor::from_protobuf(const GeoTypeDescPB& protobuf) {
     GeoTypeDescriptor result;
     result.logical_type = protobuf.logical_type();
-    result.coordinate_system = protobuf.coordinate_system();
     result.edge_algorithm = protobuf.edge_algorithm();
     result.crs = protobuf.crs();
     if (protobuf.has_srid()) result.srid = protobuf.srid();
@@ -64,7 +71,6 @@ GeoTypeDescriptor GeoTypeDescriptor::from_protobuf(const GeoTypeDescPB& protobuf
 TGeoTypeDesc GeoTypeDescriptor::to_thrift() const {
     TGeoTypeDesc result;
     result.__set_logical_type(static_cast<TGeoLogicalType::type>(logical_type));
-    result.__set_coordinate_system(static_cast<TGeoCoordinateSystem::type>(coordinate_system));
     result.__set_edge_algorithm(static_cast<TGeoEdgeAlgorithm::type>(edge_algorithm));
     result.__set_crs(crs);
     if (srid) result.__set_srid(*srid);
@@ -74,45 +80,26 @@ TGeoTypeDesc GeoTypeDescriptor::to_thrift() const {
 GeoTypeDescPB GeoTypeDescriptor::to_protobuf() const {
     GeoTypeDescPB result;
     result.set_logical_type(logical_type);
-    result.set_coordinate_system(coordinate_system);
     result.set_edge_algorithm(edge_algorithm);
     result.set_crs(crs);
     if (srid) result.set_srid(*srid);
     return result;
 }
 
-GeoStorageDescriptor GeoStorageDescriptor::from_protobuf(const GeoStorageDescPB& protobuf) {
-    GeoStorageDescriptor result;
-    result.encoding = protobuf.encoding();
-    result.dimension = protobuf.dimension();
-    result.validation_state = protobuf.validation_state();
-    return result;
-}
-
-GeoStorageDescPB GeoStorageDescriptor::to_protobuf() const {
-    GeoStorageDescPB result;
-    result.set_encoding(encoding);
-    result.set_dimension(dimension);
-    result.set_validation_state(validation_state);
-    return result;
-}
-
 GeoColumnDescriptor GeoColumnDescriptor::from_protobuf(const GeoColumnDescPB& protobuf) {
-    return {GeoTypeDescriptor::from_protobuf(protobuf.type()), GeoStorageDescriptor::from_protobuf(protobuf.storage())};
+    return {GeoTypeDescriptor::from_protobuf(protobuf.type())};
 }
 
 GeoColumnDescPB GeoColumnDescriptor::to_protobuf() const {
     GeoColumnDescPB result;
     *result.mutable_type() = type.to_protobuf();
-    *result.mutable_storage() = storage.to_protobuf();
     return result;
 }
 
 bool is_geo_semantically_compatible(const GeoTypeDescriptor& lhs, const GeoTypeDescriptor& rhs) {
-    return lhs.logical_type != GEO_LOGICAL_TYPE_UNKNOWN && lhs.coordinate_system != GEO_COORDINATE_SYSTEM_UNKNOWN &&
-           lhs.edge_algorithm != GEO_EDGE_ALGORITHM_UNKNOWN && !lhs.crs.empty() &&
-           lhs.logical_type == rhs.logical_type && lhs.coordinate_system == rhs.coordinate_system &&
-           lhs.edge_algorithm == rhs.edge_algorithm && lhs.crs == rhs.crs;
+    return lhs.logical_type != GEO_LOGICAL_TYPE_UNKNOWN && lhs.edge_algorithm != GEO_EDGE_ALGORITHM_UNKNOWN &&
+           !lhs.crs.empty() && lhs.logical_type == rhs.logical_type && lhs.edge_algorithm == rhs.edge_algorithm &&
+           lhs.crs == rhs.crs;
 }
 
 bool is_geo_compute_compatible(const GeoColumnDescriptor& lhs, const GeoColumnDescriptor& rhs) {

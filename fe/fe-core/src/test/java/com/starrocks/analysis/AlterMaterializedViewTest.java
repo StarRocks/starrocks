@@ -207,20 +207,24 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         MaterializedView mv = starRocksAssert.getMv("test", mvName);
         String taskDefinition = mv.getTaskDefinition();
         for (String refresh : refreshSchemes) {
-            // alter — ASYNC is kept as a legacy synonym; SCHEDULE is the preferred keyword
-            // for the EVERY form and is what SHOW CREATE displays.
+            // Inputs stay spelled ASYNC on purpose: this asserts the legacy synonym still
+            // parses on the ALTER path.
             String sql = String.format("alter materialized view %s refresh %s", mvName, refresh);
             starRocksAssert.ddl(sql);
 
             mv = starRocksAssert.getMv("test", mvName);
             String showCreateStmt = mv.getMaterializedViewDdlStmt(false);
-            // SHOW CREATE rewrites "ASYNC ... EVERY ..." to "SCHEDULE ... EVERY ..." but leaves
-            // bare ASYNC (no EVERY) unchanged.
-            String expected = refresh.contains("EVERY")
-                    ? refresh.replaceFirst("^ASYNC", "SCHEDULE")
+            // SHOW CREATE always renders the preferred keyword: SCHEDULE for the EVERY form,
+            // ON_CHANGE for bare ASYNC.
+            String expected = refresh.startsWith("ASYNC")
+                    ? refresh.replaceFirst("^ASYNC", refresh.contains("EVERY") ? "SCHEDULE" : "ON_CHANGE")
                     : refresh;
             Assertions.assertTrue(showCreateStmt.contains(expected),
                     String.format("alter to %s \nbut got \n%s", refresh, showCreateStmt));
+            if (!refresh.contains("EVERY")) {
+                Assertions.assertFalse(showCreateStmt.contains("START(") || showCreateStmt.contains("EVERY("),
+                        String.format("alter to %s \nbut got \n%s", refresh, showCreateStmt));
+            }
             Assertions.assertEquals(taskDefinition, mv.getTaskDefinition());
         }
     }
@@ -249,6 +253,14 @@ public class AlterMaterializedViewTest extends MVTestBase  {
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
             Assertions.assertThrows(SemanticException.class, () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
+        }
+
+        {
+            String alterMvSql = "alter materialized view mv1 set (\"file_bundling\" = \"true\")";
+            Exception e = Assertions.assertThrows(AnalysisException.class,
+                    () -> UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext));
+            Assertions.assertTrue(e.getMessage().contains("only support cloud native table or materialized view"),
+                    e.getMessage());
         }
     }
 
@@ -495,7 +507,7 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         starRocksAssert.withView("CREATE VIEW view1 as select v1, sum(v2) as k2 from t0 group by v1");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName +
                 "                DISTRIBUTED BY HASH(v1) BUCKETS 10\n" +
-                "                REFRESH DEFERRED ASYNC\n" +
+                "                REFRESH DEFERRED ON_CHANGE\n" +
                 "                PROPERTIES(\n" +
                 "                    \"replication_num\" = \"1\"\n" +
                 "                )\n" +
@@ -806,6 +818,25 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         starRocksAssert.refreshMV("refresh materialized view mv_on_renamed_mv with sync mode");
         Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
         assertTracks(mv, starRocksAssert.getTable("test", "renamed_base_mv"));
+    }
+
+    @Test
+    public void testActivateAViewWhoseNamesNeedQuoting() throws Exception {
+        String dbName = "db-active-quoted";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName);
+        try {
+            starRocksAssert.withTable("create table base_tbl_quoted (k1 int, k2 int) properties('replication_num'='1')");
+            starRocksAssert.withMaterializedView("create materialized view `mv-active-quoted` " +
+                    "refresh manual as select * from base_tbl_quoted");
+            MaterializedView mv = starRocksAssert.getMv(dbName, "mv-active-quoted");
+            AlterMVJobExecutor.inactiveMvAndLog(mv, AlterJobMgr.MANUAL_INACTIVE_MV_REASON);
+
+            Assertions.assertTrue(MVActiveChecker.activate(mv), mv.getInactiveReason());
+            Assertions.assertTrue(mv.isActive());
+        } finally {
+            starRocksAssert.useDatabase("test");
+            starRocksAssert.dropDatabase("`" + dbName + "`");
+        }
     }
 
     @Test
@@ -1139,7 +1170,7 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         Assertions.assertNotNull(thrown, "the breaking error must propagate, not be swallowed");
         Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(mv);
         Assertions.assertEquals(1, task.getConsecutiveFailCount());
-        Assertions.assertNotEquals(Constants.TaskState.PAUSE, task.getState());
+        Assertions.assertEquals(Constants.TaskState.PAUSE, task.getState());
         Assertions.assertFalse(mv.isActive());
         Assertions.assertTrue(mv.getInactiveReason().contains("incremental refresh broken"),
                 "inactive reason: " + mv.getInactiveReason());

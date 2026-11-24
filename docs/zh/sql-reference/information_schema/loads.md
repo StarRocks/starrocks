@@ -1,11 +1,14 @@
 ---
 displayed_sidebar: docs
 description: "loads 提供导入作业的结果信息。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # loads
 
 提供导入作业的结果信息。此视图自 StarRocks v3.1 版本起支持。
+
+对导入作业的每一张目标表都拥有至少一项权限，或者拥有 OPERATE 权限的用户，可以在 `loads` 中看到该作业。如果没有每一张目标表的 SELECT 权限，可能暴露导入数据的字段会被隐藏：`TRACKING_SQL`、`REJECTED_RECORD_PATH` 和 `PROPERTIES` 为 NULL；`ERROR_MSG` 对 Broker Load 和 INSERT 作业只保留失败类型（例如 `type:ETL_QUALITY_UNSATISFIED`），对其他作业为 NULL；`RUNTIME_DETAILS` 不含导入 ID、BE 节点和事务错误信息。`root` 用户可以看到所有导入作业的完整信息。目标表已被删除的导入作业，只有 `root` 用户能看到完整信息，拥有 OPERATE 权限的用户看到的是隐藏上述字段后的信息。
 
 `loads` 提供以下字段：
 
@@ -20,7 +23,7 @@ description: "loads 提供导入作业的结果信息。"
 | WAREHOUSE            | 导入作业所属的仓库。                 |
 | STATE                | 导入作业的状态。有效值：<ul><li>`PENDING`/`BEGIN`：导入作业已创建。</li><li>`QUEUEING`/`BEFORE_LOAD`：导入作业在队列中等待调度。</li><li>`LOADING`：导入作业正在运行。</li><li>`PREPARING`：事务正在预提交。</li><li>`PREPARED`：事务已预提交。</li><li>`COMMITED`：事务已提交。</li><li>`FINISHED`：导入作业成功。</li><li>`CANCELLED`：导入作业失败。</li></ul> |
 | PROGRESS             | 导入作业的 ETL 阶段和 LOADING 阶段的进度。 |
-| TYPE                 | 导入作业的类型。对于 Broker Load，返回值为 `BROKER`。对于 INSERT，返回值为 `INSERT`。对于 Stream Load，返回值为 `STREAM`。对于 Routine Load，返回值为 `ROUTINE`。 |
+| TYPE                 | 导入作业的类型。对于 Broker Load，返回值为 `BROKER`。对于 INSERT，返回值为 `INSERT`。对于 Spark Load，返回值为 `SPARK`。对于 Stream Load，返回值为 `STREAM_LOAD`。对于 Routine Load，返回值为 `ROUTINE_LOAD`。 |
 | PRIORITY             | 导入作业的优先级。有效值：`HIGHEST`、`HIGH`、`NORMAL`、`LOW` 和 `LOWEST`。 |
 | SCAN_ROWS            | 扫描的数据行数。                    |
 | SCAN_BYTES           | 扫描的字节数。                        |

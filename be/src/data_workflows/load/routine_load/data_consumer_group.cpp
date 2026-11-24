@@ -33,7 +33,10 @@
 // under the License.
 #include "data_workflows/load/routine_load/data_consumer_group.h"
 
+#include <atomic>
+#include <chrono>
 #include <limits>
+#include <set>
 #include <sstream>
 
 #include "base/utility/defer_op.h"
@@ -44,6 +47,10 @@
 #include "librdkafka/rdkafkacpp.h"
 
 namespace starrocks {
+
+// How long a Kafka scan range waits for a message at a time, to tell when its partitions have all been at their end
+// for kafka_idle_end_ms, and how often it checks whether its pipe was cancelled.
+static constexpr int64_t SCAN_RANGE_IDLE_CHECK_MS = 20;
 
 int32_t parse_pulsar_partition_index(const std::string& logical_topic, const std::string& message_topic) {
     static const std::string kSuffix = "-partition-";
@@ -196,22 +203,33 @@ KafkaDataConsumerGroup::~KafkaDataConsumerGroup() {
 
 Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
     Status result_st = Status::OK();
+    const int64_t max_interval_ms = ctx->max_interval_ms > 0 ? ctx->max_interval_ms : ctx->max_interval_s * 1000;
+    // A Kafka scan range consumes every partition until the consumption ends: at its consume time or size limit, or
+    // once every partition has been at its end with no new message for kafka_idle_end_ms. Its consumers do not stop at
+    // the end of their own partitions: the round goes on while other partitions are still being consumed, and what
+    // arrived meanwhile in theirs would wait for the next round.
+    const bool scan_range = ctx->kafka_scan_range_mode;
+    // whether a consumer failed, which then ends a scan range at once rather than when the others stop
+    std::atomic<bool> consumer_failed{false};
     // start all consumers
     for (auto& consumer : _consumers) {
-        if (!_thread_pool.offer([this, consumer, capture0 = &_queue, capture1 = ctx->max_interval_s * 1000,
-                                 capture2 = [this, &result_st](const Status& st) {
-                                     std::unique_lock<std::mutex> lock(_mutex);
-                                     _counter--;
-                                     VLOG(2) << "group counter is: " << _counter << ", grp: " << _grp_id;
-                                     if (_counter == 0) {
-                                         _queue.shutdown();
-                                         LOG(INFO)
-                                                 << "all consumers are finished. shutdown queue. group id: " << _grp_id;
-                                     }
-                                     if (result_st.ok() && !st.ok()) {
-                                         result_st = st;
-                                     }
-                                 }] { actual_consume(consumer, capture0, capture1, capture2); })) {
+        if (!_thread_pool.offer(
+                    [this, consumer, capture0 = &_queue, capture1 = max_interval_ms, stop_at_eof = !scan_range,
+                     capture2 = [this, &result_st, &consumer_failed](const Status& st) {
+                         std::unique_lock<std::mutex> lock(_mutex);
+                         _counter--;
+                         VLOG(2) << "group counter is: " << _counter << ", grp: " << _grp_id;
+                         if (_counter == 0) {
+                             _queue.shutdown();
+                             LOG(INFO) << "all consumers are finished. shutdown queue. group id: " << _grp_id;
+                         }
+                         if (result_st.ok() && !st.ok()) {
+                             result_st = st;
+                         }
+                         if (!st.ok()) {
+                             consumer_failed.store(true, std::memory_order_release);
+                         }
+                     }] { actual_consume(consumer, capture0, capture1, stop_at_eof, capture2); })) {
             LOG(WARNING) << "failed to submit data consumer: " << consumer->id() << ", group id: " << _grp_id;
             return Status::InternalError("failed to submit data consumer");
         } else {
@@ -220,7 +238,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
     }
 
     // consuming from queue and put data to stream load pipe
-    int64_t left_time = ctx->max_interval_s * 1000;
+    int64_t left_time = max_interval_ms;
     int64_t received_rows = 0;
     int64_t left_bytes = ctx->max_batch_size;
 
@@ -232,6 +250,8 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
     // copy one
     std::map<int32_t, int64_t> cmt_offset = ctx->kafka_info->cmt_offset;
     std::map<int32_t, int64_t> cmt_offset_timestamp;
+    // the partitions whose latest message here was their end
+    std::set<int32_t> partitions_at_end;
 
     // JSON/Avro: one message per buffer (with source metadata). CSV: rows separated by row_delimiter.
     const bool append_as_message =
@@ -240,7 +260,9 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
     if (!append_as_message) {
         auto& per_node_scan_ranges = ctx->put_result.params.params.per_node_scan_ranges;
 
-        if (!per_node_scan_ranges.empty()) {
+        if (ctx->kafka_row_delimiter.has_value()) {
+            row_delimiter = ctx->kafka_row_delimiter.value();
+        } else if (!per_node_scan_ranges.empty()) {
             DCHECK_GE(per_node_scan_ranges.begin()->second.size(), 1);
 
             auto& scan_range = per_node_scan_ranges.begin()->second[0].scan_range;
@@ -258,12 +280,19 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
     MonotonicStopWatch watch;
     watch.start();
     bool eos = false;
+    // A scan range waits for messages in short steps, to see how long all its partitions have been at their end: since
+    // when, or -1 while one of them is not.
+    const size_t partition_num = ctx->kafka_info->begin_offset.size();
+    int64_t all_at_end_since_ms = -1;
+    bool idle_at_end = false;
+    // when a scan range last checked whether its pipe was cancelled
+    int64_t cancel_checked_ms = 0;
     while (true) {
         if (eos || left_time <= 0 || left_bytes <= 0) {
-            LOG(INFO) << "consumer group done: " << _grp_id
-                      << ". consume time(ms)=" << ctx->max_interval_s * 1000 - left_time
+            LOG(INFO) << "consumer group done: " << _grp_id << ". consume time(ms)=" << max_interval_ms - left_time
                       << ", received rows=" << received_rows << ", received bytes=" << ctx->max_batch_size - left_bytes
-                      << ", eos: " << eos << ", left_time: " << left_time << ", left_bytes: " << left_bytes
+                      << ", eos: " << eos << ", idle at end: " << idle_at_end << ", left_time: " << left_time
+                      << ", left_bytes: " << left_bytes
                       << ", blocking get time(us): " << _queue.total_get_wait_time() / 1000
                       << ", blocking put time(us): " << _queue.total_put_wait_time() / 1000;
 
@@ -285,39 +314,52 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
 
             ctx->kafka_info->cmt_offset_timestamp = cmt_offset_timestamp;
 
-            if (left_bytes == ctx->max_batch_size) {
+            if (left_bytes == ctx->max_batch_size && !ctx->kafka_scan_range_mode) {
                 // nothing to be consumed, we have to cancel it, because
                 // we do not allow finishing stream load pipe without data.
                 //
                 // But if the offset have already moved, such as the control msg,
                 // we need to commit and tell fe to move offset to the newest offset, otherwise, fe will retry consume.
+                bool offset_moved = false;
                 for (auto& item : cmt_offset) {
                     if (item.second > ctx->kafka_info->cmt_offset[item.first]) {
-                        RETURN_IF_ERROR(kafka_pipe->finish());
-                        ctx->kafka_info->cmt_offset = std::move(cmt_offset);
-                        ctx->receive_bytes = 0;
-                        return Status::OK();
+                        offset_moved = true;
+                        break;
                     }
                 }
-                kafka_pipe->cancel(Status::Cancelled("Cancelled"));
-                return Status::Cancelled("Cancelled");
-            } else {
-                DCHECK(left_bytes < ctx->max_batch_size);
-                RETURN_IF_ERROR(kafka_pipe->finish());
-                ctx->kafka_info->cmt_offset = std::move(cmt_offset);
-                ctx->receive_bytes = ctx->max_batch_size - left_bytes;
-                return Status::OK();
+                if (!offset_moved) {
+                    kafka_pipe->cancel(Status::Cancelled("Cancelled"));
+                    return Status::Cancelled("Cancelled");
+                }
             }
+
+            // Set the consumed offsets before finishing the pipe: once it finishes, the scanner can reach its end and
+            // the fragment can finish, so whoever reads them from then on must see them.
+            ctx->kafka_info->cmt_offset = std::move(cmt_offset);
+            ctx->receive_bytes = ctx->max_batch_size - left_bytes;
+            ctx->receive_rows = received_rows;
+            ctx->kafka_reached_end = partitions_at_end.size() == ctx->kafka_info->begin_offset.size();
+            if (ctx->kafka_consumed_callback) {
+                ctx->kafka_consumed_callback(ctx);
+            }
+            return kafka_pipe->finish();
         }
 
         RdKafka::Message* msg;
-        bool res = _queue.blocking_get(&msg);
-        if (res) {
+        // 1 with a message, 0 when none came in time, -1 when the queue is empty and shut down
+        int got;
+        if (scan_range) {
+            got = _queue.timed_get(&msg, std::chrono::milliseconds(SCAN_RANGE_IDLE_CHECK_MS));
+        } else {
+            got = _queue.blocking_get(&msg) ? 1 : -1;
+        }
+        if (got > 0) {
             VLOG(3) << "get kafka message"
                     << ", partition: " << msg->partition() << ", offset: " << msg->offset() << ", len: " << msg->len();
             DeferOp msgDeleter([&] { delete msg; });
 
             if (msg->err() == RdKafka::ERR__PARTITION_EOF) {
+                partitions_at_end.insert(msg->partition());
                 // For transaction producer, producer will append one control msg to the group of msgs,
                 // but the control msg will not return to consumer,
                 // so we use the offset of eof to compute the last offset.
@@ -336,6 +378,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                     }
                 }
             } else {
+                partitions_at_end.erase(msg->partition());
                 auto timestamp = msg->timestamp();
                 Status st;
                 if (append_as_message) {
@@ -370,12 +413,42 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                     }
                 }
             }
-        } else {
+        } else if (got < 0) {
             // queue is empty and shutdown
             eos = true;
         }
 
-        left_time = ctx->max_interval_s * 1000 - watch.elapsed_time() / 1000 / 1000;
+        if (scan_range && !eos) {
+            const int64_t now_ms = watch.elapsed_time() / 1000 / 1000;
+            // The fragment that reads the pipe cancels it when it fails or is cancelled: nothing reads what the scan
+            // range consumes then, so it stops now instead of at the end of its consume time, and ends with the
+            // reason the pipe was cancelled. Appending a small message to a cancelled pipe still succeeds while the
+            // message fits the write buffer of the pipe, so the scan range checks the pipe every
+            // SCAN_RANGE_IDLE_CHECK_MS, whether messages come or not.
+            Status cancelled;
+            if (now_ms - cancel_checked_ms >= SCAN_RANGE_IDLE_CHECK_MS) {
+                cancel_checked_ms = now_ms;
+                cancelled = kafka_pipe->cancel_status();
+            }
+            if (!cancelled.ok()) {
+                eos = true;
+                std::unique_lock<std::mutex> lock(_mutex);
+                if (result_st.ok()) {
+                    result_st = std::move(cancelled);
+                }
+            } else if (consumer_failed.load(std::memory_order_acquire)) {
+                eos = true;
+            } else if (partitions_at_end.size() < partition_num) {
+                all_at_end_since_ms = -1;
+            } else if (all_at_end_since_ms < 0) {
+                all_at_end_since_ms = now_ms;
+            } else if (now_ms - all_at_end_since_ms >= ctx->kafka_idle_end_ms) {
+                idle_at_end = true;
+                eos = true;
+            }
+        }
+
+        left_time = max_interval_ms - watch.elapsed_time() / 1000 / 1000;
     }
 
     return Status::OK();
@@ -383,8 +456,9 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
 
 void KafkaDataConsumerGroup::actual_consume(const std::shared_ptr<DataConsumer>& consumer,
                                             TimedBlockingQueue<RdKafka::Message*>* queue, int64_t max_running_time_ms,
-                                            const ConsumeFinishCallback& cb) {
-    Status st = std::static_pointer_cast<KafkaDataConsumer>(consumer)->group_consume(queue, max_running_time_ms);
+                                            bool stop_at_eof, const ConsumeFinishCallback& cb) {
+    Status st = std::static_pointer_cast<KafkaDataConsumer>(consumer)->group_consume(queue, max_running_time_ms,
+                                                                                     stop_at_eof);
     cb(st);
 }
 

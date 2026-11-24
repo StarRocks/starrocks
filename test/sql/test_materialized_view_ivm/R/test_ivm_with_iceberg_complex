@@ -1,4 +1,4 @@
--- name: test_ivm_with_iceberg_complex @slow
+-- name: test_ivm_with_iceberg_complex
 create external catalog mv_iceberg_${uuid0}
 properties
 (
@@ -346,7 +346,7 @@ SELECT COUNT(*) FROM test_mv1;
 -- !result
 SELECT * FROM test_mv1 ORDER BY dt, col11, col17, col18 limit 5;
 -- result:
-None	None	None	None	None	None	5	0
+None	None	None	None	None	None	0	0
 2023-12-01	a	14007	1077.4615384615386	1	2000	13	3
 2023-12-01	b	4000	2000.0	2000	2000	2	1
 2023-12-01	c	4000	2000.0	2000	2000	2	1
@@ -366,7 +366,7 @@ SELECT COUNT(*) FROM test_mv1;
 -- !result
 SELECT * FROM test_mv1 ORDER BY dt, col11, col17, col18 limit 5;
 -- result:
-None	None	None	None	None	None	5	0
+None	None	None	None	None	None	0	0
 2023-12-01	a	16007	1143.357142857143	1	2000	14	3
 2023-12-01	b	4000	2000.0	2000	2000	2	1
 2023-12-01	c	4000	2000.0	2000	2000	2	1
@@ -394,7 +394,7 @@ SELECT COUNT(*) FROM test_mv1;
 -- !result
 SELECT * FROM test_mv1 ORDER BY dt, col11, col17, col18 limit 5;
 -- result:
-None	None	None	None	None	None	5	0
+None	None	None	None	None	None	0	0
 2023-12-01	a	16007	1143.357142857143	1	2000	14	3
 2023-12-01	b	4000	2000.0	2000	2000	2	1
 2023-12-01	c	4000	2000.0	2000	2000	2	1
@@ -430,7 +430,7 @@ SELECT COUNT(*) FROM test_mv1;
 -- !result
 SELECT * FROM test_mv1 ORDER BY dt, col11, col17, col18 limit 5;
 -- result:
-None	None	None	None	None	None	5	0
+None	None	None	None	None	None	0	0
 2023-12-01	a	16007	1143.357142857143	1	2000	14	3
 2023-12-01	b	4000	2000.0	2000	2000	2	1
 2023-12-01	c	4000	2000.0	2000	2000	2	1
@@ -474,7 +474,7 @@ SELECT COUNT(*) FROM test_mv1;
 -- !result
 SELECT * FROM test_mv1 ORDER BY dt, col11, col17, col18 limit 5;
 -- result:
-None	None	None	None	None	None	5	0
+None	None	None	None	None	None	0	0
 None	a	2000	2000.0	2000	2000	1	1
 2023-12-01	a	16007	1143.357142857143	1	2000	14	3
 2023-12-01	b	4000	2000.0	2000	2000	2	1

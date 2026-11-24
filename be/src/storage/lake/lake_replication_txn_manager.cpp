@@ -40,6 +40,7 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/replication_schema_utils.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
@@ -53,6 +54,75 @@
 
 namespace starrocks::lake {
 namespace {
+constexpr std::string_view kHistoricalRowsetSchemaError = "LAKE_REPLICATION_SOURCE_HAS_HISTORICAL_ROWSET_SCHEMA";
+constexpr std::string_view kDcgColumnUidRemapError = "LAKE_REPLICATION_SOURCE_DCG_REQUIRES_COLUMN_UID_REMAP";
+
+Status validate_source_snapshot_rowset_schemas(const TabletMetadataPB& source_metadata, int64_t src_tablet_id,
+                                               int64_t src_visible_version) {
+    if (!source_metadata.has_schema()) {
+        return Status::OK();
+    }
+    const auto current_schema_id = source_metadata.schema().id();
+    const auto& rowset_to_schema = source_metadata.rowset_to_schema();
+    for (const auto& rowset : source_metadata.rowsets()) {
+        auto it = rowset_to_schema.find(rowset.id());
+        if (it == rowset_to_schema.end() || it->second == current_schema_id) {
+            continue;
+        }
+        return Status::NotSupported(
+                fmt::format("{}: src_tablet_id={}, src_visible_version={}, rowset_id={}, mapped_schema_id={}, "
+                            "current_schema_id={}",
+                            kHistoricalRowsetSchemaError, src_tablet_id, src_visible_version, rowset.id(), it->second,
+                            current_schema_id));
+    }
+    return Status::OK();
+}
+
+// Lake-to-lake replication copies DCG files byte-for-byte, so their column UIDs must already match the target.
+Status validate_source_snapshot_dcg_column_uids(const TabletMetadataPB& source_metadata,
+                                                const std::unordered_map<uint32_t, uint32_t>& column_unique_id_map,
+                                                int64_t src_tablet_id, int64_t src_visible_version) {
+    if (column_unique_id_map.empty() || !source_metadata.has_dcg_meta()) {
+        return Status::OK();
+    }
+    const auto& dcgs = source_metadata.dcg_meta().dcgs();
+    for (const auto& rowset : source_metadata.rowsets()) {
+        for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+            const auto segment_index =
+                    rowset.segment_metas(i).has_segment_idx() ? rowset.segment_metas(i).segment_idx() : i;
+            const auto segment_id = rowset.id() + segment_index;
+            auto it = dcgs.find(segment_id);
+            if (it == dcgs.end() || it->second.column_files().empty()) {
+                continue;
+            }
+            const auto& dcg = it->second;
+            for (int file_index = 0; file_index < dcg.column_files_size(); ++file_index) {
+                if (file_index >= dcg.unique_column_ids_size() ||
+                    dcg.unique_column_ids(file_index).column_ids().empty()) {
+                    return Status::NotSupported(fmt::format(
+                            "{}: src_tablet_id={}, src_visible_version={}, segment_id={}, "
+                            "dcg_file_index={}, reason=missing_column_uids",
+                            kDcgColumnUidRemapError, src_tablet_id, src_visible_version, segment_id, file_index));
+                }
+                for (const auto source_column_uid : dcg.unique_column_ids(file_index).column_ids()) {
+                    auto uid_it = column_unique_id_map.find(source_column_uid);
+                    if (uid_it != column_unique_id_map.end() && uid_it->second == source_column_uid) {
+                        continue;
+                    }
+                    const int64_t mapped_column_uid =
+                            uid_it == column_unique_id_map.end() ? -1 : static_cast<int64_t>(uid_it->second);
+                    return Status::NotSupported(
+                            fmt::format("{}: src_tablet_id={}, src_visible_version={}, segment_id={}, "
+                                        "dcg_file_index={}, source_column_uid={}, mapped_column_uid={}",
+                                        kDcgColumnUidRemapError, src_tablet_id, src_visible_version, segment_id,
+                                        file_index, source_column_uid, mapped_column_uid));
+                }
+            }
+        }
+    }
+    return Status::OK();
+}
+
 std::unordered_set<std::string> collect_shared_file_names(const TabletMetadataPB& metadata) {
     std::unordered_set<std::string> files;
     for (const auto& rowset : metadata.rowsets()) {
@@ -298,6 +368,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     // - has_full_path=false: Non-S3 storage type (OSS/Azure/HDFS/GFS), use RemoteStarletLocationProvider
     bool has_full_path = request.__isset.src_partition_full_path && !request.src_partition_full_path.empty();
     std::string src_partition_full_path = has_full_path ? request.src_partition_full_path : "";
+    const bool light_schema_change_enabled = config::lake_replication_enable_light_schema_change;
 
     LOG(INFO) << "Start to replicate lake remote storage, txn_id: " << txn_id << ", tablet_id: " << target_tablet_id
               << ", src_tablet_id: " << src_tablet_id << ", src_db_id: " << src_db_id
@@ -382,6 +453,11 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
             << ", data dir: " << src_data_dir << ", txn_id: " << txn_id << ", src_tablet_id: " << src_tablet_id
             << ", tablet_id: " << target_tablet_id;
 
+    const auto rowset_schema_status =
+            validate_source_snapshot_rowset_schemas(*src_tablet_meta, src_tablet_id, src_visible_version);
+    const bool normalize_rowset_schema = !rowset_schema_status.ok() && light_schema_change_enabled;
+    if (!normalize_rowset_schema) RETURN_IF_ERROR(rowset_schema_status);
+
     // step 2: build target metadata and file mappings.
 
     // `file_locations` is the mapping between source and target file locations,
@@ -407,6 +483,25 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         return Status::Corruption("Failed to get source schema");
     }
     const TabletSchemaPB& source_schema_pb = src_tablet_meta->schema();
+    std::unordered_map<uint32_t, uint32_t> column_unique_id_map;
+    std::unordered_set<uint32_t> dropped_column_uids;
+    if (normalize_rowset_schema) {
+        auto status = build_light_schema_change_uid_map(*src_tablet_meta, *target_tablet_meta, &column_unique_id_map,
+                                                        &dropped_column_uids);
+        if (!status.ok()) {
+            LOG(WARNING) << "Lake replication light schema validation failed, txn_id=" << txn_id
+                         << " src_tablet_id=" << src_tablet_id << " target_tablet_id=" << target_tablet_id
+                         << " src_visible_version=" << src_visible_version << " error=" << status;
+            return status.clone_and_prepend(fmt::format(
+                    "txn_id={} src_tablet_id={} target_tablet_id={} src_visible_version={} current_schema_id={}: ",
+                    txn_id, src_tablet_id, target_tablet_id, src_visible_version, source_schema_pb.id()));
+        }
+    } else {
+        ReplicationUtils::calc_column_unique_id_map(source_schema_pb.column(), target_tablet_meta->schema().column(),
+                                                    &column_unique_id_map);
+    }
+    RETURN_IF_ERROR(validate_source_snapshot_dcg_column_uids(*src_tablet_meta, column_unique_id_map, src_tablet_id,
+                                                             src_visible_version));
     std::unordered_set<std::string> bundled_segment_names;
     for (const auto& rowset : src_tablet_meta->rowsets()) {
         for (const auto& segment : rowset.segment_metas()) {
@@ -418,10 +513,19 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     }
     // Copy the rowsets, sstables etc. into tablet metadata on target cluster,
     // then replace file names and return `copied_target_tablet_meta` as the final target tablet metadata
-    ASSIGN_OR_RETURN(auto copied_target_tablet_meta,
-                     convert_and_build_new_tablet_meta(src_tablet_meta, target_tablet_meta, src_tablet_id,
-                                                       target_tablet_id, txn_id, src_data_dir, segment_name_to_size_map,
-                                                       file_locations, filename_map, source_encryption_metas));
+    ASSIGN_OR_RETURN(
+            auto copied_target_tablet_meta,
+            convert_and_build_new_tablet_meta(src_tablet_meta, target_tablet_meta, src_tablet_id, target_tablet_id,
+                                              txn_id, src_data_dir, segment_name_to_size_map, file_locations,
+                                              filename_map, source_encryption_metas, normalize_rowset_schema));
+    if (normalize_rowset_schema) {
+        normalize_replication_rowset_schemas(copied_target_tablet_meta.get());
+        txn_log->mutable_op_replication()->set_normalize_rowset_schema(true);
+        LOG(INFO) << "Lake replication normalized scalar add/drop snapshot, txn_id=" << txn_id
+                  << " src_tablet_id=" << src_tablet_id << " target_tablet_id=" << target_tablet_id
+                  << " rowsets=" << src_tablet_meta->rowsets_size()
+                  << " target_schema_id=" << target_tablet_meta->schema().id();
+    }
     SourceEncryptionInfoMap source_encryption_infos;
     source_encryption_infos.reserve(source_encryption_metas.size());
     for (const auto& [filename, encryption_meta] : source_encryption_metas) {
@@ -437,10 +541,6 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         // partition data path, so their per-tablet replication tasks may target the same object.
         shared_file_names = collect_shared_file_names(*src_tablet_meta);
     }
-    // calc column unique id to adapt for fast schema change
-    std::unordered_map<uint32_t, uint32_t> column_unique_id_map;
-    ReplicationUtils::calc_column_unique_id_map(source_schema_pb.column(), target_tablet_meta->schema().column(),
-                                                &column_unique_id_map);
 
     if (column_unique_id_map.size() > 0) {
         LOG(INFO) << "Lake replicate storage task, need rebuild column unique id, txn_id: " << txn_id
@@ -462,7 +562,8 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
 
     auto file_converters = lake::ReplicationTxnManager::build_file_converters(
             _tablet_manager, request, filename_map, column_unique_id_map, files_to_delete,
-            del_transcode_ctx.pkey_schema, del_transcode_ctx.source_encoding, del_transcode_ctx.target_encoding);
+            del_transcode_ctx.pkey_schema, del_transcode_ctx.source_encoding, del_transcode_ctx.target_encoding,
+            normalize_rowset_schema, &dropped_column_uids);
 
     // Track which segments have size changes
     std::unordered_map<std::string, size_t> segment_size_changes;
@@ -1001,7 +1102,7 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
         std::unordered_map<std::string, size_t>& segment_name_to_size_map,
         std::map<std::string, std::string>& file_locations,
         std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map,
-        SourceEncryptionMetaMap& source_encryption_metas) {
+        SourceEncryptionMetaMap& source_encryption_metas, bool rewrite_all_segments) {
     VLOG(3) << "Lake replicate storage task, building new tablet meta for tablet: " << target_tablet_id
             << ", src_tablet_id: " << src_tablet_id << ", txn_id: " << txn_id;
     // `existed_filename_uuids` represented files that already replicated to target storage in previous txns
@@ -1010,6 +1111,18 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
     ExistingFileMap existed_filename_uuids;
     ExistingBundleSliceInfoMap bundle_slice_infos;
     RETURN_IF_ERROR(build_existed_filename_uuids_map(target_tablet_meta, existed_filename_uuids, bundle_slice_infos));
+    if (rewrite_all_segments) {
+        // UUID equality does not prove that a segment was converted with this complete UID map.
+        // Non-segment files remain byte-identical and can still be reused.
+        for (auto it = existed_filename_uuids.begin(); it != existed_filename_uuids.end();) {
+            if (is_segment(it->second.filename)) {
+                bundle_slice_infos.erase(it->first);
+                it = existed_filename_uuids.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
 
     const bool preserve_source_shared = src_tablet_meta->has_range() && target_tablet_meta->has_range();
     struct SourceFileDeclaration {
@@ -1134,6 +1247,8 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                         new_seg_meta->set_encryption_meta(it->second.encryption_meta);
                         if (it->second.segment_size.has_value()) {
                             new_seg_meta->set_size(it->second.segment_size.value());
+                        } else {
+                            new_seg_meta->clear_size();
                         }
                     } else {
                         // should never happend

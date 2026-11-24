@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "How to use the StarRocks Spark connector to load data from Apache Spark (DataFrames or SQL) into StarRocks via Stream Load, supporting batch and structured..."
+products: [oss, enterprise, anywhere]
 ---
 
 # Load data using Spark connector (recommended)

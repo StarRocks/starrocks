@@ -94,8 +94,8 @@ public class MetaServiceDumpAuthTest extends StarRocksHttpTestCase {
         };
         new MockUp<BaseAction>() {
             @Mock
-            public void checkUserOwnsAdminRole(Invocation inv, UserIdentity currentUser) throws AccessDeniedException {
-                if (NON_ADMIN_USER.equals(currentUser.getUser())) {
+            public void checkAdminRole(Invocation inv, ConnectContext ctx) throws AccessDeniedException {
+                if (NON_ADMIN_USER.equals(ctx.getCurrentUserIdentity().getUser())) {
                     throw new AccessDeniedException();
                 }
                 inv.proceed();

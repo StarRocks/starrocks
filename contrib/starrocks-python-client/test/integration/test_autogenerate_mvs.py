@@ -170,7 +170,8 @@ class TestAlterMaterializedView(TestAutogenerateBase):
         mv_name = "test_alter_mv_mutable"
         with engine.connect() as conn:
             conn.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
-            conn.execute(text(f"CREATE MATERIALIZED VIEW {mv_name} REFRESH ASYNC AS SELECT val FROM t_autogen"))
+            refresh = conftest_sr.refresh_clause_for_server(conn, "REFRESH ASYNC")
+            conn.execute(text(f"CREATE MATERIALIZED VIEW {mv_name} {refresh} AS SELECT val FROM t_autogen"))
             try:
                 target_metadata = MetaData()
                 MaterializedView(
@@ -350,7 +351,7 @@ class TestAlterMaterializedView(TestAutogenerateBase):
             conn.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
             conn.execute(text(
                 f"CREATE MATERIALIZED VIEW {mv_name} "
-                "REFRESH ASYNC "
+                f"{conftest_sr.refresh_clause_for_server(conn, 'REFRESH ASYNC')} "
                 "DISTRIBUTED BY RANDOM BUCKETS 10 "
                 "PROPERTIES ('replication_num' = '1') "
                 "AS SELECT val FROM t_autogen"
@@ -403,7 +404,7 @@ class TestAlterMaterializedView(TestAutogenerateBase):
             conn.execute(text(
                 f"CREATE MATERIALIZED VIEW {mv_name} "
                 "DISTRIBUTED BY HASH(val) BUCKETS 3 "
-                "REFRESH ASYNC "
+                f"{conftest_sr.refresh_clause_for_server(conn, 'REFRESH ASYNC')} "
                 f"PROPERTIES ('replication_num' = '1', 'colocate_with' = '{group_name}') "
                 f"AS SELECT val FROM {base_table}"
             ))

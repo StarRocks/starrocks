@@ -1,11 +1,14 @@
 ---
 displayed_sidebar: docs
 description: "loads provides the results of load jobs."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # loads
 
 `loads` provides the results of load jobs. This view is supported from StarRocks v3.1 onwards.
+
+`loads` shows a load job to users who hold at least one privilege on each table that the job loads data into, or the OPERATE privilege. Unless you hold the SELECT privilege on each of those tables, the fields that can reveal the loaded data are hidden: `TRACKING_SQL`, `REJECTED_RECORD_PATH`, and `PROPERTIES` are NULL, `ERROR_MSG` keeps only the failure type of a Broker Load or INSERT job (for example, `type:ETL_QUALITY_UNSATISFIED`) and is NULL for other jobs, and `RUNTIME_DETAILS` omits the load IDs, the backends, and the transaction error message. The `root` user can see all load jobs in full. A load job whose target table has been dropped is shown in full only to the `root` user, and with these fields hidden to users with the OPERATE privilege.
 
 The following fields are provided in `loads`:
 
@@ -20,7 +23,7 @@ The following fields are provided in `loads`:
 | WAREHOUSE            | The warehouse to which the load job belongs.                 |
 | STATE                | The state of the load job. Valid values:<ul><li>`PENDING`/`BEGIN`: The load job is created.</li><li>`QUEUEING`/`BEFORE_LOAD`: The load job is in the queue waiting to be scheduled.</li><li>`LOADING`: The load job is running.</li><li>`PREPARING`: The transaction is being pre-committed.</li><li>`PREPARED`: The transaction has been pre-committed.</li><li>`COMMITED`: The transaction has been committed.</li><li>`FINISHED`: The load job succeeded.</li><li>`CANCELLED`: The load job failed.</li></ul> |
 | PROGRESS             | The progress of the ETL stage and LOADING stage of the load job. |
-| TYPE                 | The type of the load job. For Broker Load, the return value is `BROKER`. For INSERT, the return value is `INSERT`. For Stream Load, the return value is `STREAM`. For Routine Load Load, the return value is `ROUTINE`. |
+| TYPE                 | The type of the load job. For Broker Load, the return value is `BROKER`. For INSERT, the return value is `INSERT`. For Spark Load, the return value is `SPARK`. For Stream Load, the return value is `STREAM_LOAD`. For Routine Load, the return value is `ROUTINE_LOAD`. |
 | PRIORITY             | The priority of the load job. Valid values: `HIGHEST`, `HIGH`, `NORMAL`, `LOW`, and `LOWEST`. |
 | SCAN_ROWS            | The number of data rows that are scanned.                    |
 | SCAN_BYTES           | The number of bytes that are scanned.                        |

@@ -416,7 +416,9 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
 
     @Override
     public int hashCodeSelf() {
-        return Objects.hash(value, type.getPrimitiveType(), isNull);
+        // equalsSelf matches CHAR and VARCHAR through matchesType(), so both hash as VARCHAR
+        PrimitiveType hashType = type.isStringType() ? PrimitiveType.VARCHAR : type.getPrimitiveType();
+        return Objects.hash(value, hashType, isNull);
     }
 
     @Override
@@ -474,9 +476,9 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         } else if (t == PrimitiveType.LARGEINT) {
             return getLargeInt().compareTo(o.getLargeInt());
         } else if (t == PrimitiveType.FLOAT || t == PrimitiveType.TIME) {
-            return Double.compare(getDouble(), o.getDouble());
+            return compareDouble(getDouble(), o.getDouble());
         } else if (t == PrimitiveType.DOUBLE) {
-            return Double.compare(getDouble(), o.getDouble());
+            return compareDouble(getDouble(), o.getDouble());
         } else if (t == PrimitiveType.DATE || t == PrimitiveType.DATETIME) {
             return getDatetime().compareTo(o.getDatetime());
         } else if (t.isDecimalOfAnyVersion()) {
@@ -486,6 +488,20 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         }
 
         return -1;
+    }
+
+    // Compare two IEEE-754 values the way the BE does at runtime. Double.compare orders -0.0
+    // strictly below +0.0 and reports the two unequal, which makes the FE fold "-0.0 = 0.0" to
+    // false and "-0.0 < 0" to true -- the opposite of how the same value read from a column is
+    // evaluated (issue #80066). Treat any IEEE-equal pair (including -0.0 vs +0.0) as equal, and
+    // defer to Double.compare for everything else so NaN keeps a consistent total order. Like
+    // BigDecimal, this ordering is intentionally inconsistent with equals() for the -0.0/+0.0 pair.
+    private static int compareDouble(double left, double right) {
+        if (left == right) {
+            // true for -0.0 == +0.0 (and every other IEEE-equal pair); false when either is NaN.
+            return 0;
+        }
+        return Double.compare(left, right);
     }
 
     @Override

@@ -102,6 +102,34 @@ static TExpr create_or_pred_with_false_and_branch(SlotId slot_id) {
     return texpr;
 }
 
+// Appends `slot IN (NULL, NULL)`.
+static void append_int_in_all_null_pred(std::vector<TExprNode>* nodes, SlotId slot_id) {
+    nodes->emplace_back(ExprsTestHelper::create_in_pred_node<TYPE_INT>(3));
+    nodes->emplace_back(ExprsTestHelper::create_slot_expr_node_t<TYPE_INT>(0, slot_id, true));
+    nodes->emplace_back(ExprsTestHelper::create_null_literal<TYPE_INT>());
+    nodes->emplace_back(ExprsTestHelper::create_null_literal<TYPE_INT>());
+}
+
+// (slot IN (NULL, NULL) AND slot = 1) OR slot = 2
+static TExpr create_or_pred_with_in_all_null_and_branch(SlotId slot_id) {
+    TExpr texpr;
+    texpr.nodes.emplace_back(create_compound_pred_node(TExprOpcode::COMPOUND_OR));
+    texpr.nodes.emplace_back(create_compound_pred_node(TExprOpcode::COMPOUND_AND));
+    append_int_in_all_null_pred(&texpr.nodes, slot_id);
+    append_int_eq_pred(&texpr.nodes, slot_id, 1);
+    append_int_eq_pred(&texpr.nodes, slot_id, 2);
+    return texpr;
+}
+
+// slot IN (NULL, NULL) OR slot = 2
+static TExpr create_or_pred_with_in_all_null_branch(SlotId slot_id) {
+    TExpr texpr;
+    texpr.nodes.emplace_back(create_compound_pred_node(TExprOpcode::COMPOUND_OR));
+    append_int_in_all_null_pred(&texpr.nodes, slot_id);
+    append_int_eq_pred(&texpr.nodes, slot_id, 2);
+    return texpr;
+}
+
 template <LogicalType Type>
 StatusOr<RuntimeFilterProbeDescriptor*> ChunkPredicateBuilderTest::_gen_runtime_filter_desc(SlotId slot_id) {
     TRuntimeFilterDescription tRuntimeFilterDescription;
@@ -413,6 +441,77 @@ TEST_F(ChunkPredicateBuilderTest, normalize_or_with_false_and_branch) {
 
     ASSIGN_OR_ASSERT_FAIL(auto pred, builder.get_predicate_tree_root(_int_pred_parser, _predicate_free_pool));
     ASSERT_EQ(pred.debug_string(), "{\"and\":[]}");
+}
+
+// `c1 IN (NULL, NULL)` is never true, so the scan ends instead of reading every row.
+TEST_F(ChunkPredicateBuilderTest, normalized_in_all_null_is_eof) {
+    SlotId slot_id = 1;
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC, 1}, {"c2", TYPE_INT_DESC, 2}, {""}};
+    _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+
+    TExpr texpr;
+    append_int_in_all_null_pred(&texpr.nodes, slot_id);
+    _texprs.emplace_back(std::move(texpr));
+    ASSERT_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(&_pool, &_runtime_state, &_texprs, &_expr_ctxs));
+    ASSERT_EQ(_expr_ctxs.size(), 1);
+    _expr_containers.emplace_back(BoxedExprContext(_expr_ctxs[0]));
+
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, _expr_containers, true);
+    auto ret = builder.parse_conjuncts();
+    ASSERT_TRUE(ret.status().is_end_of_file()) << ret.status();
+}
+
+TEST_F(ChunkPredicateBuilderTest, normalized_in_all_null_date_is_eof) {
+    SlotId slot_id = 1;
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_DATE_DESC, 1}, {"c2", TYPE_DATE_DESC, 2}, {""}};
+    _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+
+    _texprs.emplace_back(ExprsTestHelper::create_in_pred_texpr<TYPE_DATE, std::string>(slot_id, {}, true));
+    ASSERT_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(&_pool, &_runtime_state, &_texprs, &_expr_ctxs));
+    ASSERT_EQ(_expr_ctxs.size(), 1);
+    _expr_containers.emplace_back(BoxedExprContext(_expr_ctxs[0]));
+
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, _expr_containers, true);
+    auto ret = builder.parse_conjuncts();
+    ASSERT_TRUE(ret.status().is_end_of_file()) << ret.status();
+}
+
+// Under OR the always-false branch must not end the scan: `(c1 IN (NULL, NULL) AND c1 = 1) OR c1 = 2`
+// keeps the rows where c1 = 2. The OR is left unnormalized and evaluated as an expression.
+TEST_F(ChunkPredicateBuilderTest, normalize_or_with_in_all_null_and_branch) {
+    SlotId slot_id = 1;
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC, 1}, {"c2", TYPE_INT_DESC, 2}, {""}};
+    _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+
+    _texprs.emplace_back(create_or_pred_with_in_all_null_and_branch(slot_id));
+    ASSERT_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(&_pool, &_runtime_state, &_texprs, &_expr_ctxs));
+    ASSERT_EQ(_expr_ctxs.size(), 1);
+    _expr_containers.emplace_back(BoxedExprContext(_expr_ctxs[0]));
+
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, _expr_containers, true);
+    ASSIGN_OR_ASSERT_FAIL(auto normalized, builder.parse_conjuncts());
+    ASSERT_TRUE(normalized);
+    ASSERT_FALSE(builder.is_pred_normalized(0));
+
+    ASSIGN_OR_ASSERT_FAIL(auto pred, builder.get_predicate_tree_root(_int_pred_parser, _predicate_free_pool));
+    ASSERT_EQ(pred.debug_string(), "{\"and\":[]}");
+}
+
+// `c1 IN (NULL, NULL) OR c1 = 2`: same, the scan must not end.
+TEST_F(ChunkPredicateBuilderTest, normalize_or_with_in_all_null_branch) {
+    SlotId slot_id = 1;
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC, 1}, {"c2", TYPE_INT_DESC, 2}, {""}};
+    _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+
+    _texprs.emplace_back(create_or_pred_with_in_all_null_branch(slot_id));
+    ASSERT_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(&_pool, &_runtime_state, &_texprs, &_expr_ctxs));
+    ASSERT_EQ(_expr_ctxs.size(), 1);
+    _expr_containers.emplace_back(BoxedExprContext(_expr_ctxs[0]));
+
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, _expr_containers, true);
+    ASSIGN_OR_ASSERT_FAIL(auto normalized, builder.parse_conjuncts());
+    ASSERT_TRUE(normalized);
+    ASSERT_FALSE(builder.is_pred_normalized(0));
 }
 
 TEST_F(ChunkPredicateBuilderTest, rt_has_no_null) {

@@ -1,11 +1,11 @@
 ---
 sidebar_position: 120
 description: "監査ログテーブル分析によるデータ駆動型リソースグループ設定で効率的なマルチテナント環境を実現します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 監査ログベースのリソースグループ設定
 
-import AuditLoaderNote from '../_assets/commonMarkdown/audit_loader_note.mdx'
 
 StarRocks では、**Resource Groups** がユーザーの識別やクエリタイプなどのクラシファイア（分類器）に基づいて CPU、メモリ、同時実行制限を割り当てることで、リソースの分離を効果的に行います。この機能は、マルチテナント環境での効率的なリソース利用を実現するために不可欠です。
 
@@ -19,7 +19,9 @@ StarRocks では、**Resource Groups** がユーザーの識別やクエリタ�
 
 このトピックでは、監査ログから観察されたワークロードパターンに基づいて適切なリソースグループパラメータを導き出すためのステップバイステップのチュートリアルを提供します。
 
-<AuditLoaderNote />
+:::note
+このチュートリアルは、AuditLoader プラグインを使用した分析に基づいており、クラスター内で直接 SQL ステートメントを使用して監査ログをクエリできます。プラグインのインストールに関する詳細な手順については、[AuditLoader](../administration/management/audit_loader.md) を参照してください。
+:::
 
 ## CPU リソースの割り当て
 
@@ -213,7 +215,7 @@ StarRocks はデフォルトでマテリアライズドビューリフレッシ�
 
     ```SQL
     CREATE MATERIALIZED VIEW mv_example
-    REFRESH ASYNC
+    REFRESH ON_CHANGE
     PROPERTIES (
         'resource_group' = 'rg_mv'
     )

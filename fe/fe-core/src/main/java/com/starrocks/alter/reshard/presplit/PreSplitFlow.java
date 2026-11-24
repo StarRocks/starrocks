@@ -173,7 +173,7 @@ final class PreSplitFlow {
         DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.forLoadKind(
                 target.database(), target.olapTable(), target.indexTargets(), prepared.estimatedBytes(), loadKind,
                 prepared.computeResource());
-        submitAndAwaitSinglePartition(target, pipeline, prepared.scanContext(), loadKind,
+        submitAndAwait(target, pipeline, prepared.scanContext(), loadKind,
                 activeComputeNodeCount, shouldAbort, prepared.sessionPreSplitEnabled());
     }
 
@@ -222,10 +222,11 @@ final class PreSplitFlow {
             if (target != null) {
                 runSinglePartitionFlow(target, prepared, loadKind, shouldAbort);
             }
-        } else if (Boolean.TRUE.equals(table.supportedAutomaticPartition())) {
-            // Manually list/range-partitioned targets are still skipped: the multi-partition flow
-            // pre-creates partitions from sampled values, which it may not do outside a user-defined
-            // partition set.
+        } else if (Boolean.TRUE.equals(table.supportedAutomaticPartition())
+                || PartitionSampleGrouper.isManualRangePartitioned(table)) {
+            // With a temporary scope the multi-partition flow only resolves sampled rows against the
+            // existing temporary partitions' ranges and never creates a partition, so it is safe for a
+            // manual range target too. List-partitioned targets are still skipped.
             runMultiPartitionFlow(database, table, prepared, loadKind, shouldAbort, context,
                     -1L, partitionScope);
         }
@@ -235,6 +236,13 @@ final class PreSplitFlow {
      * Derived-tier route for a static overwrite that refreshes an incremental materialized view: the
      * boundaries come from the hidden row-id key's own domain, so nothing is sampled and the flow needs
      * no {@link Prepared} bundle.
+     *
+     * <p>Submits ONE reshard job over the eligible temporary partitions the overwrite writes, up to
+     * {@code tablet_pre_split_max_partitions_per_load} of them, the first by name. Every partition takes the
+     * same share, so which ones are kept does not change how they are cut. The hook only lets a
+     * fingerprint view through with more than one. A partition that cannot be resolved or already holds
+     * rows is dropped alone and records its own reason. The coordinator's gate then runs its table-level
+     * checks on the first partition kept.
      */
     static void runStaticOverwriteMaterializedViewFlow(Database database, OlapTable table,
                                                        PreSplitPartitionScope partitionScope, Estimates estimates,
@@ -243,28 +251,66 @@ final class PreSplitFlow {
         if (!partitionScope.isSpecified() || !partitionScope.isTemporary()) {
             return;
         }
-        PreSplitTargets.EligibleTarget target = resolveSoleTemporaryTarget(database, table, partitionScope);
-        if (target == null) {
+        // By name rather than in the scope's order: the scope stores its names with Map.copyOf, whose iteration
+        // order changes from one JVM to the next, and this order decides which partitions the cap below keeps.
+        List<String> temporaryPartitionNames = partitionScope.catalogPartitionNames().stream().sorted().toList();
+        // The same per-load cap the sampled route applies. The job creates each partition's shards one after
+        // another on the single reshard daemon thread, and the refresh waits for it, so the partition count
+        // bounds the hook's latency.
+        int partitionCap = Config.tablet_pre_split_max_partitions_per_load;
+        PreSplitTargets.EligibleTarget gateTarget = null;
+        List<IndexPreSplitTarget> indexTargets = new ArrayList<>();
+        for (String temporaryPartitionName : temporaryPartitionNames) {
+            PreSplitTargets.EligibleTarget target =
+                    PreSplitTargets.findEligibleTemporaryTarget(database, table, temporaryPartitionName);
+            if (target == null) {
+                // It recorded its own reason; the other partitions are still carved.
+                continue;
+            }
+            // Re-check the shape against the RESOLVED targets, not just against the table the caller looked
+            // at. Derivability was established before this target was resolved under its own lock, so a
+            // rollup that became visible in between would appear here as a second index target -- and the
+            // derived source expresses its cuts in whatever each target's first sort-key column is. A numeric
+            // key on that rollup would take row-id boundaries and pass type and ordering validation, so the
+            // split would be submitted against a domain the arithmetic never described.
+            if (!MaterializedViewRowIdBoundaries.hasSoleRowIdIndexTarget(target.indexTargets())) {
+                // The visible-index set belongs to the table, not to one partition, so the statement is
+                // declined once rather than this partition dropped.
+                PreSplitMetrics.recordEligibilitySkip(SkipReason.MATERIALIZED_VIEW_TARGET);
+                return;
+            }
+            // Checked for every partition, not only the one the coordinator's gate runs on: a partition that
+            // already holds rows is dropped alone, and does not take a place under the cap below.
+            SkipReason notEmptyReason = PreSplitTargets.checkStillEmpty(target);
+            if (notEmptyReason != null) {
+                PreSplitMetrics.recordEligibilitySkip(notEmptyReason);
+                continue;
+            }
+            // Every kept partition added exactly one index target, so the size is the partitions kept so far.
+            if (partitionCap > 0 && indexTargets.size() >= partitionCap) {
+                PreSplitMetrics.recordPartitionCapped();
+                continue;
+            }
+            if (gateTarget == null) {
+                gateTarget = target;
+            }
+            indexTargets.addAll(target.indexTargets());
+        }
+        if (gateTarget == null) {
             return;
         }
-        // Re-check the shape against the RESOLVED targets, not just against the table the caller looked at.
-        // Derivability was established before this target was resolved under its own lock, so a rollup that
-        // became visible in between would appear here as a second index target -- and the derived source
-        // expresses its cuts in whatever each target's first sort-key column is. A numeric key on that
-        // rollup would take row-id boundaries and pass type and ordering validation, so the split would be
-        // submitted against a domain the arithmetic never described.
-        if (!MaterializedViewRowIdBoundaries.hasSoleRowIdIndexTarget(target.indexTargets())) {
-            PreSplitMetrics.recordEligibilitySkip(SkipReason.MATERIALIZED_VIEW_TARGET);
-            return;
-        }
-        PreSplitProfile.recordTargetPartitions(1L);
+        // One row-id index target per partition, so this counts the partitions in the job.
+        PreSplitProfile.recordTargetPartitions(indexTargets.size());
         int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(computeResource);
-        DerivedBoundarySource boundarySource =
-                MaterializedViewRowIdBoundaries.sourceFor(table, estimates, activeComputeNodeCount);
+        // Every partition the overwrite writes takes a share, including one dropped above as ineligible or over
+        // the cap: it still receives its rows, so leaving it out would size the others for rows they will never
+        // hold.
+        DerivedBoundarySource boundarySource = MaterializedViewRowIdBoundaries.sourceFor(
+                table, estimates, activeComputeNodeCount, temporaryPartitionNames.size());
         DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.forDerivedBoundaries(
-                target.database(), target.olapTable(), target.indexTargets(), estimates.totalBytes(),
-                LoadKind.MV_REFRESH, computeResource, boundarySource);
-        submitAndAwaitSinglePartition(target, pipeline, new MaterializedViewRowIdBoundaries.RowIdScanContext(),
+                database, table, indexTargets, estimates.totalBytes(), LoadKind.MV_REFRESH, computeResource,
+                boundarySource);
+        submitAndAwait(gateTarget, pipeline, new MaterializedViewRowIdBoundaries.RowIdScanContext(),
                 LoadKind.MV_REFRESH, activeComputeNodeCount, shouldAbort, null);
     }
 
@@ -272,11 +318,7 @@ final class PreSplitFlow {
      * Resolves the one temporary partition an overwrite writes into a single-partition target. Assumes
      * the caller has already established that {@code partitionScope} names temporary partitions.
      *
-     * <p>A scope naming any other number of them yields {@code null}. For the derived materialized-view
-     * route that limit is load-bearing: its cuts span the whole row-id space, but a partitioned target's
-     * row ids form a contiguous band per partition whenever the scan order correlates with the partition
-     * key, so full-span equal-width cuts would leave most tablets of most partitions empty and one of
-     * each overloaded. For a sampled target the reason is simply that carving several partitions at once
+     * <p>A scope naming any other number of them yields {@code null}: carving several partitions at once
      * is the multi-partition flow's job, not this one's.
      *
      * @return the resolved target, or {@code null} when the scope does not name exactly one partition or
@@ -292,26 +334,27 @@ final class PreSplitFlow {
     }
 
     /**
-     * Submits one resolved single-partition target and, if the reshard job was admitted, waits for it
-     * fail-safely. Shared by the sampled and derived routes, which differ only in the pipeline and the
-     * scan context they hand over.
+     * Submits one reshard job and, if it was admitted, waits for it fail-safely. Shared by the sampled and
+     * derived routes, which differ only in the pipeline and the scan context they hand over. The
+     * coordinator's gate runs on {@code gateTarget}'s partition, while the pipeline may carve more
+     * partitions than that one.
      */
-    private static void submitAndAwaitSinglePartition(
-            PreSplitTargets.EligibleTarget target, DefaultPreSplitPipeline pipeline, ScanContext scanContext,
+    private static void submitAndAwait(
+            PreSplitTargets.EligibleTarget gateTarget, DefaultPreSplitPipeline pipeline, ScanContext scanContext,
             LoadKind loadKind, int activeComputeNodeCount, BooleanSupplier shouldAbort,
             Boolean sessionPreSplitEnabled) {
         PreSplitOutcome outcome = TabletPreSplitCoordinator.submitAsynchronously(
-                target.database(), target.olapTable(), target.partitionId(), scanContext,
+                gateTarget.database(), gateTarget.olapTable(), gateTarget.partitionId(), scanContext,
                 loadKind, pipeline, activeComputeNodeCount, sessionPreSplitEnabled);
         LOG.info("Sample-Based Tablet Pre-Split ({}) outcome for table {}: {}",
-                loadKind, target.olapTable().getName(), outcome);
+                loadKind, gateTarget.olapTable().getName(), outcome);
         PreSplitProfile.recordOutcome(outcome);
         if (outcome instanceof PreSplitOutcome.Submitted submitted) {
             if (submitted.preparedJob().payload() instanceof TabletReshardJob reshardJob) {
                 PreSplitProfile.recordReshardJobId(reshardJob.getJobId());
             }
             TabletPreSplitCoordinator.awaitFinishedAllowingFallback(
-                    loadKind, target.olapTable(), pipeline, submitted.preparedJob(), shouldAbort);
+                    loadKind, gateTarget.olapTable(), pipeline, submitted.preparedJob(), shouldAbort);
         }
     }
 

@@ -117,15 +117,14 @@ static Status build_arrow_to_sr_convert_tree(const arrow::DataType& arrow_type, 
 
 StatusOr<ColumnPtr> AbstractArrowFuncCallStub::evaluate(const Columns& columns, size_t row_num) {
     // convert to columns to arrow record batch
-    RETURN_IF_DCHECK_EQ_FAILED(_func_ctx->get_num_args(), columns.size());
+    RETURN_IF_DCHECK_EQ_FAILED(_arg_types.size(), columns.size());
 
     // build input schema
     SchemaNameGenerator name_generator;
     arrow::SchemaBuilder schema_builder;
 
     size_t num_columns = columns.size();
-    const auto& arg_types = _func_ctx->get_arg_types();
-    DCHECK_EQ(num_columns, arg_types.size());
+    const auto& arg_types = _arg_types;
     for (size_t i = 0; i < num_columns; ++i) {
         std::shared_ptr<arrow::Field> field;
         RETURN_IF_ERROR(
@@ -139,8 +138,8 @@ StatusOr<ColumnPtr> AbstractArrowFuncCallStub::evaluate(const Columns& columns, 
 
     // convert column to arrow array
     std::shared_ptr<arrow::RecordBatch> record_batch;
-    RETURN_IF_ERROR(convert_columns_to_arrow_batch(row_num, columns, arrow::default_memory_pool(),
-                                                   _func_ctx->get_arg_types().data(), schema, &record_batch));
+    RETURN_IF_ERROR(convert_columns_to_arrow_batch(row_num, columns, arrow::default_memory_pool(), arg_types.data(),
+                                                   schema, &record_batch));
 
     ASSIGN_OR_RETURN(auto result_batch, do_evaluate(std::move(*record_batch)));
 
@@ -157,7 +156,7 @@ StatusOr<ColumnPtr> AbstractArrowFuncCallStub::evaluate(const Columns& columns, 
 StatusOr<ColumnPtr> AbstractArrowFuncCallStub::_convert_arrow_to_native(const arrowArray& result_ary,
                                                                         const arrowField& field_type) {
     size_t result_num_rows = result_ary.length();
-    const TypeDescriptor& return_type = _func_ctx->get_return_type();
+    const TypeDescriptor& return_type = _return_type;
 
     // Build a recursive converter tree so that ARRAY / MAP / STRUCT (and arbitrarily
     // nested combinations) dispatch into the correct child converters.
@@ -203,6 +202,62 @@ private:
 std::unique_ptr<UDFCallStub> create_error_call_stub(Status error_status) {
     DCHECK(!error_status.ok());
     return std::make_unique<ErrorArrowFuncCallStub>(std::move(error_status));
+}
+
+StatusOr<ColumnPtr> UDFCallStubPool::evaluate(const StubBuilder& build, const Columns& columns, size_t row_num) {
+    std::unique_ptr<UDFCallStub> stub;
+    {
+        std::lock_guard<std::mutex> guard(_lock);
+        if (!_idle.empty()) {
+            stub = std::move(_idle.back());
+            _idle.pop_back();
+        }
+    }
+    if (stub == nullptr) {
+        // Build outside the lock: building may start a worker process and connect to it.
+        stub = build();
+        DCHECK(stub != nullptr);
+        std::lock_guard<std::mutex> guard(_lock);
+        ++_num_built;
+    }
+
+    auto result = stub->evaluate(columns, row_num);
+    if (result.ok()) {
+        std::lock_guard<std::mutex> guard(_lock);
+        _idle.emplace_back(std::move(stub));
+    }
+    // A failed call may leave its stream with an unread reply, so the stub is dropped, not reused.
+    return result;
+}
+
+size_t UDFCallStubPool::num_built() const {
+    std::lock_guard<std::mutex> guard(_lock);
+    return _num_built;
+}
+
+StatusOr<ColumnPtr> DriverUDFCallStubPools::evaluate(int32_t driver_id, const StubBuilder& build,
+                                                     const Columns& columns, size_t row_num) {
+    UDFCallStubPool* pool = nullptr;
+    {
+        std::lock_guard<std::mutex> guard(_lock);
+        auto& slot = _pools[driver_id];
+        if (slot == nullptr) {
+            slot = std::make_unique<UDFCallStubPool>();
+        }
+        pool = slot.get();
+    }
+    return pool->evaluate([&]() { return build(driver_id); }, columns, row_num);
+}
+
+const UDFCallStubPool* DriverUDFCallStubPools::pool(int32_t driver_id) const {
+    std::lock_guard<std::mutex> guard(_lock);
+    auto it = _pools.find(driver_id);
+    return it == _pools.end() ? nullptr : it->second.get();
+}
+
+size_t UDFCallStubPool::num_idle() const {
+    std::lock_guard<std::mutex> guard(_lock);
+    return _idle.size();
 }
 
 } // namespace starrocks

@@ -294,3 +294,31 @@ ORDER BY id;
 6	3	4
 7	5	5
 -- !result
+-- NOT NULL DECIMAL order key with a nullable `key - offset` boundary column (RB-1283: the order column
+-- compared itself against the nullable boundary column as a plain DECIMAL column and crashed the BE).
+SELECT id,
+       SUM(v) OVER (ORDER BY CAST(id AS DECIMAL(10, 2)) RANGE BETWEEN 2 PRECEDING AND CURRENT ROW) AS w
+FROM test_range_offset_window
+ORDER BY id;
+-- result:
+1	10
+2	30
+3	31
+4	23
+5	6
+6	9
+7	12
+-- !result
+SELECT id,
+       SUM(v) OVER (ORDER BY CAST(id = 3 AS DECIMAL) RANGE 2 PRECEDING) AS w
+FROM test_range_offset_window
+ORDER BY id;
+-- result:
+1	44
+2	44
+3	45
+4	44
+5	44
+6	44
+7	44
+-- !result

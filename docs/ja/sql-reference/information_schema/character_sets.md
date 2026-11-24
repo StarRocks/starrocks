@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "character_setsは利用可能な文字セットを識別します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # character_sets

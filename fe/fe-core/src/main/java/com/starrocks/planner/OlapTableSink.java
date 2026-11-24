@@ -267,6 +267,13 @@ public class OlapTableSink extends DataSink {
         tSink.setAutomatic_bucket_size(automaticBucketSize);
         tSink.setEncryption_meta(GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta());
         tSink.setEnable_data_file_bundling(dstTable.isFileBundling());
+        // Shared-data writers decide the physical shape of JSON columns from the table's flat_json.*
+        // properties. Carry them on the sink: the CN otherwise reads them from its tablet metadata cache
+        // and falls back to be.conf on a miss, and under light_weight_tablet_creation nothing is cached
+        // before a tablet's first publish, so every first write would ignore the table's settings.
+        if (writesToCloudNativeTable() && dstTable.getFlatJsonConfig() != null) {
+            tSink.setFlat_json_config(dstTable.getFlatJsonConfig().toTFlatJsonConfig());
+        }
         tSink.setEnable_lake_per_partition_coordinator_txn_log(
                 Config.lake_enable_per_partition_coordinator_txn_log);
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
@@ -1091,6 +1098,28 @@ public class OlapTableSink extends DataSink {
         return filterTargetWriteIndexes(candidates, physicalPartition, targetWriteIndexId);
     }
 
+    // Returns a copy of the table's partition expr with its slot ref bound to the partition column's slot in
+    // tupleDescriptor. The partition expr is table metadata, shared with the table copies that planners use, and
+    // plans of the same table can be built at the same time (a stream load and an INSERT, for example). Binding
+    // the shared expr in place can put another plan's slot id into this plan, and the BE then fails with
+    // "slot_id N not found" when it evaluates the partition expr.
+    private static Expr bindPartitionExprToTuple(Expr partitionExpr, TupleDescriptor tupleDescriptor) {
+        Expr expr = partitionExpr.clone();
+        List<SlotRef> slotRefs = Lists.newArrayList();
+        expr.collect(SlotRef.class, slotRefs);
+        Preconditions.checkState(slotRefs.size() == 1);
+        // default slot is table column slot, when there are some expr on column
+        // the slot desc will change, so we need to reset the slot desc
+        for (SlotDescriptor slotDesc : tupleDescriptor.getSlots()) {
+            Column column = slotDesc.getColumn();
+            if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
+                slotRefs.get(0).setDesc(slotDesc);
+                break;
+            }
+        }
+        return expr;
+    }
+
     public static TOlapTablePartitionParam createPartition(long dbId, OlapTable table,
                                                            TupleDescriptor tupleDescriptor,
                                                            boolean enableAutomaticPartition,
@@ -1155,42 +1184,16 @@ public class OlapTableSink extends DataSink {
                     Preconditions.checkArgument(partitionExprs.size() == 1,
                             "Number of partition expr is not 1 for automatic partition table, expr num="
                                     + partitionExprs.size());
-                    Expr expr = partitionExprs.get(0);
-                    List<SlotRef> slotRefs = Lists.newArrayList();
-                    expr.collect(SlotRef.class, slotRefs);
-                    Preconditions.checkState(slotRefs.size() == 1);
-                    // default slot is table column slot, when there are some expr on column
-                    // the slot desc will change, so we need to reset the slot desc
-                    for (SlotDescriptor slotDesc : tupleDescriptor.getSlots()) {
-                        Column column = slotDesc.getColumn();
-                        if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
-                            slotRefs.get(0).setDesc(slotDesc);
-                            break;
-                        }
-                    }
-                    partitionParam.setPartition_exprs(ExprToThrift.treesToThrift(
-                            exprPartitionInfo.getPartitionExprs(table.getIdToColumn())));
+                    Expr expr = bindPartitionExprToTuple(partitionExprs.get(0), tupleDescriptor);
+                    partitionParam.setPartition_exprs(ExprToThrift.treesToThrift(Lists.newArrayList(expr)));
                 } else if (rangePartitionInfo instanceof ExpressionRangePartitionInfoV2) {
                     ExpressionRangePartitionInfoV2 expressionRangePartitionInfoV2 = (ExpressionRangePartitionInfoV2) rangePartitionInfo;
                     List<Expr> partitionExprs = expressionRangePartitionInfoV2.getPartitionExprs(table.getIdToColumn());
                     Preconditions.checkArgument(partitionExprs.size() == 1,
                             "Number of partition expr is not 1 for expression partition table, expr num="
                                     + partitionExprs.size());
-                    Expr expr = partitionExprs.get(0);
-                    List<SlotRef> slotRefs = Lists.newArrayList();
-                    expr.collect(SlotRef.class, slotRefs);
-                    Preconditions.checkState(slotRefs.size() == 1);
-                    // default slot is table column slot, when there are some expr on column
-                    // the slot desc will change, so we need to reset the slot desc
-                    for (SlotDescriptor slotDesc : tupleDescriptor.getSlots()) {
-                        Column column = slotDesc.getColumn();
-                        if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
-                            slotRefs.get(0).setDesc(slotDesc);
-                            break;
-                        }
-                    }
-                    partitionParam.setPartition_exprs(ExprToThrift.treesToThrift(
-                            expressionRangePartitionInfoV2.getPartitionExprs(table.getIdToColumn())));
+                    Expr expr = bindPartitionExprToTuple(partitionExprs.get(0), tupleDescriptor);
+                    partitionParam.setPartition_exprs(ExprToThrift.treesToThrift(Lists.newArrayList(expr)));
                 }
                 break;
             }

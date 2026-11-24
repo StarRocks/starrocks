@@ -136,4 +136,24 @@ public class IcebergEqDeleteRuntimeFilterPushDownTest {
                 List.<Expr>of(), List.of());
         Assertions.assertFalse(canPrune(semiJoin, partMatch, filterBuiltBy(aboveSemi)));
     }
+
+    // The scans of a table with equality deletes share one planning keyed by the requested statistics, which the
+    // equality-delete scan never asks for: the data scans must not ask for the runtime filter probe columns' either.
+    @Test
+    public void testNoProbeStatsForTableWithEqualityDeletes() {
+        IcebergTableMORParams tableMORParams = new IcebergTableMORParams(1, List.of(
+                IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, IcebergMORParams.DATA_FILE_WITH_EQ_DELETE,
+                IcebergMORParams.of(IcebergMORParams.ScanTaskType.EQ_DELETE, List.of(1))));
+        for (boolean withEqDeletes : List.of(false, true)) {
+            TupleDescriptor tuple = tuple();
+            slot(tuple, "k");
+            IcebergScanNode dataScan = withEqDeletes
+                    ? new IcebergScanNode(new PlanNodeId(nextId++), tuple, "IcebergScanNode", tableMORParams,
+                    IcebergMORParams.DATA_FILE_WITH_EQ_DELETE, null)
+                    : scan(tuple, IcebergMORParams.EMPTY);
+            dataScan.setRuntimeFilterProbeColumnNames(Set.of("k"));
+            Assertions.assertEquals(withEqDeletes ? Set.of() : Set.of("k"),
+                    dataScan.runtimeFilterProbeStatsCandidates(Set.of("k"), Set.of()));
+        }
+    }
 }

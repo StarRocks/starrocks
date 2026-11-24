@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "计算指定时间为一年中的第几周。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # weekofyear

@@ -109,6 +109,10 @@ starrocks_set_default_packages() {
         icu
         libxml2
         azure
+        prometheus_cpp
+        crc32c
+        nlohmann_json
+        google_cloud_cpp
         libdivide
         flamegraph
         tenann

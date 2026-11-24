@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 30
 description: "How to use asynchronous materialized views in StarRocks to accelerate queries against data lake tables (Iceberg, Hive, Hudi, Delta Lake) through transparent..."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Data lake query acceleration with materialized views
@@ -161,7 +162,7 @@ To enable the Hive metadata cache refresh feature, you can set the following FE 
 **Default**: 86400 (24 hours)<br/>
 **Description**: The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second.
 
-From v3.1.4, StarRocks supports detecting data changes for Iceberg Catalog at the partition level. Currently, only Iceberg V1 tables are supported.
+From v3.1.4, StarRocks supports detecting data changes for Iceberg Catalog at the partition level.
 
 ### Enable query rewrite for external catalog-based materialized views
 
@@ -236,7 +237,7 @@ Therefore, you can utilize the [View Delta Join rewrite](query_rewrite_with_mate
 CREATE MATERIALIZED VIEW lineorder_flat_mv
 DISTRIBUTED BY HASH(LO_ORDERDATE, LO_ORDERKEY) BUCKETS 48
 PARTITION BY LO_ORDERDATE
-REFRESH ASYNC EVERY(INTERVAL 1 DAY) 
+REFRESH SCHEDULE EVERY(INTERVAL 1 DAY) 
 PROPERTIES ( 
     -- Specify the unique constraints.
     "unique_constraints" = "
@@ -295,7 +296,7 @@ Materialized views can be used to accelerate aggregation queries, whether they a
   CREATE MATERIALIZED VIEW mv_2_1 
   DISTRIBUTED BY HASH(lo_orderdate)
   PARTITION BY LO_ORDERDATE
-  REFRESH ASYNC EVERY(INTERVAL 1 DAY) 
+  REFRESH SCHEDULE EVERY(INTERVAL 1 DAY) 
   AS 
   SELECT
   lo_orderdate, count(distinct lo_orderkey)
@@ -305,7 +306,7 @@ Materialized views can be used to accelerate aggregation queries, whether they a
   CREATE MATERIALIZED VIEW mv_2_2 
   DISTRIBUTED BY HASH(lo_orderdate)
   PARTITION BY LO_ORDERDATE
-  REFRESH ASYNC EVERY(INTERVAL 1 DAY) 
+  REFRESH SCHEDULE EVERY(INTERVAL 1 DAY) 
   AS 
   SELECT
   -- lo_orderkey must be the BIGINT type so that it can be used for query rewrite.
@@ -324,7 +325,7 @@ Materialized views can be used to accelerate aggregation queries, whether they a
   CREATE MATERIALIZED VIEW mv_2_3
   DISTRIBUTED BY HASH(lo_orderdate)
   PARTITION BY LO_ORDERDATE
-  REFRESH ASYNC EVERY(INTERVAL 1 DAY) 
+  REFRESH SCHEDULE EVERY(INTERVAL 1 DAY) 
   AS 
   SELECT
   lo_orderdate, lo_discount, lo_quantity, d_year, d_yearmonth, SUM(lo_extendedprice * lo_discount) AS REVENUE
@@ -338,7 +339,7 @@ Materialized views can be used to accelerate aggregation queries, whether they a
   CREATE MATERIALIZED VIEW mv_2_4
   DISTRIBUTED BY HASH(lo_orderdate)
   PARTITION BY LO_ORDERDATE
-  REFRESH ASYNC EVERY(INTERVAL 1 DAY) 
+  REFRESH SCHEDULE EVERY(INTERVAL 1 DAY) 
   PROPERTIES (
       "force_external_table_query_rewrite" = "TRUE"
   )
@@ -379,7 +380,7 @@ Q5 first performs an aggregation query on the `customer` table and then performs
 --mv_3_1
 CREATE MATERIALIZED VIEW mv_3_1
 DISTRIBUTED BY HASH(c_custkey)
-REFRESH ASYNC EVERY(INTERVAL 1 DAY) 
+REFRESH SCHEDULE EVERY(INTERVAL 1 DAY) 
 PROPERTIES (
     "force_external_table_query_rewrite" = "TRUE"
 )
@@ -390,7 +391,7 @@ SELECT distinct c_custkey, c_region from hive.ssb_1g_csv.customer;
 CREATE MATERIALIZED VIEW mv_3_2
 DISTRIBUTED BY HASH(lo_orderdate)
 PARTITION BY LO_ORDERDATE
-REFRESH ASYNC EVERY(INTERVAL 1 DAY) 
+REFRESH SCHEDULE EVERY(INTERVAL 1 DAY) 
 PROPERTIES (
     "force_external_table_query_rewrite" = "TRUE"
 )
@@ -410,7 +411,7 @@ Consider the following scenario: data updated within the past three days is dire
 CREATE MATERIALIZED VIEW mv_4_1 
 DISTRIBUTED BY HASH(lo_orderdate)
 PARTITION BY LO_ORDERDATE
-REFRESH ASYNC EVERY(INTERVAL 1 DAY) 
+REFRESH SCHEDULE EVERY(INTERVAL 1 DAY) 
 AS 
 SELECT lo_orderkey, lo_orderdate, lo_revenue
 FROM hive.ssb_1g_csv.lineorder

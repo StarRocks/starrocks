@@ -235,10 +235,21 @@ SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years where l_re
 SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years where l_shipdate >= '2024-11-13 00:00:00' order by l_orderkey;
 SELECT * FROM mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years order by l_orderkey;
 DROP MATERIALIZED VIEW test_years;
-drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_days;
-drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_months;
-drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years;
-drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t1;
+drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_days force;
+drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_months force;
+drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years force;
+drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t1 force;
 drop database mv_iceberg_${uuid0}.sql_test_db_${uuid0} force;
 
 drop database db_${uuid0} force;
+
+CLEANUP {
+drop database if exists default_catalog.db_${uuid0} force;
+drop table if exists mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_days force;
+drop table if exists mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_months force;
+drop table if exists mv_iceberg_${uuid0}.sql_test_db_${uuid0}.lineitem_years force;
+drop table if exists mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t1 force;
+drop database if exists mv_iceberg_${uuid0}.sql_test_db_${uuid0};
+set catalog default_catalog;
+drop catalog if exists mv_iceberg_${uuid0};
+} END CLEANUP

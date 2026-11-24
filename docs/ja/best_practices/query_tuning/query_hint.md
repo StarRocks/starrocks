@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "クエリオプティマイザの実行方法を明示的に指示するための SET_VAR、SET_USER_VARIABLE、Join ヒント。"
 sidebar_position: 70
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # クエリヒント
@@ -42,7 +43,7 @@ CREATE MATERIALIZED VIEW mv
 PARTITION BY dt 
 DISTRIBUTED BY HASH(`key`) 
 BUCKETS 10 
-REFRESH ASYNC 
+REFRESH ON_CHANGE 
 AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
 ```
 

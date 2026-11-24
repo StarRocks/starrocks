@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW META views metadata of CBO statistics, including basic statistics and histograms."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW META

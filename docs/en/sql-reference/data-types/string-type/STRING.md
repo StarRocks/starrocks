@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "STRING"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # STRING

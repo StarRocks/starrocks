@@ -1,0 +1,175 @@
+-- name: test_range_colocate_orderby @cloud
+-- ALTER TABLE ... ORDER BY and ALTER MATERIALIZED VIEW ... ORDER BY on shared-data range tables and
+-- materialized views that belong to a range colocate group. A new sort key that starts with the
+-- group's colocate columns is rewritten online into tablets aligned with every ColocateRange of the
+-- group: the data is unchanged, joins with the other members are still planned colocated and return
+-- what a non-colocated join returns, and the group stays stable. A new sort key that moves, reorders
+-- or drops a colocate column is rejected. A colocate_with that names no columns is written out with
+-- its columns once the rewrite makes the sort key longer than them.
+set enable_range_distribution = true;
+-- A load-time pre-split would add tablet boundaries that this case does not control.
+set enable_tablet_pre_split = false;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- t1 is sorted by (k1, k2) and colocated on k1. Each INSERT loads a k1 range of its own
+-- ([0, 9], [10, 19], [20, 29], 1000 rows each), so the rowsets of the single tablet do not overlap
+-- on k1.
+create table t1 (
+    k1 int not null,
+    k2 int not null,
+    k3 int not null,
+    v int not null
+)
+duplicate key(k1, k2, k3)
+order by(k1, k2)
+properties('replication_num' = '1', 'colocate_with' = 'grp_main_${uuid0}:k1');
+
+insert into t1 select x % 10, x, 3001 - x, x from table(generate_series(1, 1000)) as g(x);
+insert into t1 select 10 + x % 10, x, 3001 - x, x from table(generate_series(1001, 2000)) as g(x);
+insert into t1 select 20 + x % 10, x, 3001 - x, x from table(generate_series(2001, 3000)) as g(x);
+
+-- A three-way split by row count cuts where one load ends and the next begins. Those cuts are
+-- changes of k1, so each becomes a ColocateRange boundary and the group gets three ColocateRanges.
+function: set_first_tablet_id("t1")
+alter table t1 split tablet (${tablet_id}) properties ('tablet_reshard_target_size' = '-3');
+function: wait_reshard_job_finish("t1", "SPLIT_TABLET", 1, 120)
+shell: s=false; for i in $(seq 1 50); do s=$(${mysql_cmd} -Ne "show proc '/colocation_group'" 2>/dev/null | grep "grp_main_${uuid0}" | awk '{print $NF}'); [ "$s" = "true" ] && break; sleep 2; done; echo "stable=$s"
+select buckets from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 't1';
+
+-- t2 joins the group after the split, so it gets one tablet per ColocateRange: its tablet count is
+-- the number of ColocateRanges of the group.
+create table t2 (
+    k1 int not null,
+    k2 int not null,
+    k3 int not null,
+    w int not null
+)
+duplicate key(k1, k2, k3)
+order by(k1, k2)
+properties('replication_num' = '1', 'colocate_with' = 'grp_main_${uuid0}:k1');
+
+insert into t2 select k1, k2, k3, v * 10 from t1;
+select buckets from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 't2';
+select count(*), sum(v) from t1;
+select count(*), sum(w) from t2;
+function: assert_explain_contains("select t1.k1, t1.v, t2.w from t1 join t2 on t1.k1 = t2.k1", "INNER JOIN (COLOCATE)")
+
+-- Accepted: the new sort key (k1, k3, k2) keeps the colocate column k1 first.
+alter table t1 order by (k1, k3, k2);
+function: wait_table_schema_change_finish("db_${uuid0}", "t1", "FINISHED")
+select sort_key from information_schema.tables_config where table_schema = 'db_${uuid0}' and table_name = 't1';
+-- The rewritten t1 has at least one tablet per ColocateRange, and the group is stable after the
+-- rewrite. Stability is polled because the colocate checker updates it in the background.
+select buckets >= 3 from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 't1';
+shell: s=false; for i in $(seq 1 50); do s=$(${mysql_cmd} -Ne "show proc '/colocation_group'" 2>/dev/null | grep "grp_main_${uuid0}" | awk '{print $NF}'); [ "$s" = "true" ] && break; sleep 2; done; echo "stable=$s"
+select count(*), sum(v) from t1;
+select count(*), sum(w) from t2;
+
+-- The join on the colocate column is still planned colocated, and a colocated scan fails unless every
+-- tablet of both tables lies inside one ColocateRange. It returns the same rows as a join that is not
+-- colocated.
+function: assert_explain_contains("select t1.k1, t1.v, t2.w from t1 join t2 on t1.k1 = t2.k1", "INNER JOIN (COLOCATE)")
+select count(*), sum(t1.v), sum(t2.w) from t1 join t2 on t1.k1 = t2.k1;
+select t1.k1, t1.k2, t1.k3, t2.w from t1 join t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2 where t1.k2 % 300 = 0 order by t1.k2;
+set disable_colocate_join = true;
+select count(*), sum(t1.v), sum(t2.w) from t1 join t2 on t1.k1 = t2.k1;
+select t1.k1, t1.k2, t1.k3, t2.w from t1 join t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2 where t1.k2 % 300 = 0 order by t1.k2;
+set disable_colocate_join = false;
+
+-- A load after the rewrite lands in the new tablets and is found by the new sort key.
+insert into t1 values (15, 3001, 0, 3001);
+select count(*), sum(v) from t1;
+select * from t1 where k1 = 15 and k3 = 0;
+
+-- Rejected: the new sort key does not start with k1.
+alter table t1 order by (k3, k1, k2);
+-- Rejected: the new sort key leaves k1 out.
+alter table t1 order by (k2, k3);
+-- Rejected: dropping k1 leaves a sort key without it.
+alter table t1 drop column k1;
+-- No rejected ALTER registered a job.
+function: assert_schema_change_job_count("db_${uuid0}", "t1", 1)
+
+-- Rejected: in a group colocated on (k1, k2) the new sort key must start with k1, k2 in that order.
+create table t4 (
+    k1 int not null,
+    k2 int not null,
+    k3 int not null,
+    v int not null
+)
+duplicate key(k1, k2, k3)
+order by(k1, k2, k3)
+properties('replication_num' = '1', 'colocate_with' = 'grp_two_${uuid0}:k1,k2');
+
+insert into t4 values (1, 1, 1, 1), (2, 2, 2, 2);
+alter table t4 order by (k2, k1, k3);
+function: assert_schema_change_job_count("db_${uuid0}", "t4", 0)
+select * from t4 order by k1;
+
+-- colocate_with = 'grp_impl_...' names no columns, so it stands for the whole sort key (k1). A rewrite
+-- that lengthens the sort key to (k1, k2) writes the property out as 'grp_impl_...:k1', which still
+-- names the one column the group is colocated on: CREATE TABLE LIKE then makes a table that joins the
+-- group.
+create table t3 (
+    k1 int not null,
+    k2 int not null,
+    v int not null
+)
+duplicate key(k1, k2)
+order by(k1)
+properties('replication_num' = '1', 'colocate_with' = 'grp_impl_${uuid0}');
+
+insert into t3 values (1, 10, 100), (2, 20, 200), (3, 30, 300);
+show create table t3;
+alter table t3 order by (k1, k2);
+function: wait_table_schema_change_finish("db_${uuid0}", "t3", "FINISHED")
+show create table t3;
+select sort_key from information_schema.tables_config where table_schema = 'db_${uuid0}' and table_name = 't3';
+select * from t3 order by k1;
+create table t3_like like t3;
+show create table t3_like;
+
+-- A range materialized view in the main group. It is created after the split, so it gets one tablet
+-- per ColocateRange.
+create table src (
+    k1 int not null,
+    k2 int not null,
+    k3 int not null,
+    v int not null
+)
+duplicate key(k1, k2, k3)
+order by(k1, k2)
+properties('replication_num' = '1');
+
+insert into src select k1, k2, k3, v from t1;
+
+create materialized view mv1
+order by (k1, k2)
+refresh deferred manual
+properties('replication_num' = '1', 'colocate_with' = 'grp_main_${uuid0}:k1')
+as select k1, k2, k3, v from src;
+refresh materialized view mv1 with sync mode;
+select buckets from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 'mv1';
+
+-- Accepted: the new sort key (k1, k3) keeps the colocate column k1 first.
+alter materialized view mv1 order by (k1, k3);
+function: wait_table_schema_change_finish("db_${uuid0}", "mv1", "FINISHED")
+select buckets >= 3 from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 'mv1';
+select count(*), sum(v) from mv1;
+function: assert_explain_contains("select mv1.k1, mv1.v, t2.w from mv1 join t2 on mv1.k1 = t2.k1", "INNER JOIN (COLOCATE)")
+
+-- A refresh after the rewrite writes into the new tablets.
+insert into src values (25, 3002, 0, 3002);
+refresh materialized view mv1 with sync mode;
+select count(*), sum(v) from mv1;
+select * from mv1 where k1 = 25 and k3 = 0;
+
+-- Rejected: the new sort key does not start with k1. No second job is registered.
+alter materialized view mv1 order by (k3, k1);
+function: assert_schema_change_job_count("db_${uuid0}", "mv1", 1)
+-- The group is stable after the materialized view rewrite.
+shell: s=false; for i in $(seq 1 50); do s=$(${mysql_cmd} -Ne "show proc '/colocation_group'" 2>/dev/null | grep "grp_main_${uuid0}" | awk '{print $NF}'); [ "$s" = "true" ] && break; sleep 2; done; echo "stable=$s"
+
+drop database db_${uuid0} force;

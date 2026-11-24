@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "根据指定时间粒度周期，将给定时间转化为其所在周期的起始或结束时刻。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # time_slice

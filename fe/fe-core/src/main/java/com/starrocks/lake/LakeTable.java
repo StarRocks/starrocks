@@ -20,7 +20,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
-import com.staros.proto.ShardInfo;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
@@ -45,11 +44,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Metadata for StarRocks lake table
@@ -230,34 +227,6 @@ public class LakeTable extends OlapTable {
         if (state != OlapTableState.NORMAL) {
             throw InvalidOlapTableStateException.of(state, getName());
         }
-    }
-
-    public boolean checkLakeRollupAllowFileBundling() {
-        return getPartitions().stream()
-            .flatMap(partition -> partition.getSubPartitions().stream())
-            .allMatch(physicalPartition -> {
-                long physicalPartitionId = physicalPartition.getId();
-                List<Long> shardIds = physicalPartition.getAllMaterializedIndices(MaterializedIndex.IndexExtState.ALL).stream()
-                        .flatMap(index -> index.getTablets().stream())
-                        .map(tablet -> ((LakeTablet) tablet).getShardId())
-                        .collect(Collectors.toList());
-            
-                if (shardIds.isEmpty()) {
-                    return true;
-                }
-                List<ShardInfo> shardInfos = new ArrayList<>();
-                try {
-                    shardInfos = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                            .getShardInfo(shardIds, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
-                } catch (Exception e) {
-                    LOG.warn("checkLakeRollupAllowFileBundling got exception: {}", e.getMessage());
-                    return false;
-                }
-                return shardInfos.stream()
-                    .allMatch(shardInfo -> LakeTableHelper.extractIdFromPath(shardInfo.getFilePath().getFullPath())
-                        .map(id -> id == physicalPartitionId)
-                        .orElse(false));
-            });
     }
 
     public void setFastSchemaEvolutionV2(boolean enabled) {

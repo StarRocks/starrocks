@@ -114,7 +114,8 @@ public class PruneShuffleDistributionNodeRule implements TreeRewriteRule {
                 childOperator = childOptExpression.getOp();
             }
 
-            return childOperator instanceof PhysicalOlapScanOperator scan && !scan.isParallelRangeScan();
+            return childOperator instanceof PhysicalOlapScanOperator scan && !scan.isParallelRangeScan()
+                    && !scan.isGroupedRangeScan();
         }
 
     }

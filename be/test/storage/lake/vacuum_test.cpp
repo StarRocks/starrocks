@@ -44,7 +44,13 @@
 #include "test_util.h"
 
 #if defined(ADDRESS_SANITIZER)
+// clang's compiler-rt ships this header; gcc's libsanitizer exports the symbol but not the
+// header, so declare it ourselves there.
+#if __has_include(<sanitizer/allocator_interface.h>)
 #include <sanitizer/allocator_interface.h>
+#else
+extern "C" size_t __sanitizer_get_current_allocated_bytes(void);
+#endif
 #elif STARROCKS_ENABLE_JEMALLOC_MEM_HOOK
 #include "jemalloc/jemalloc.h"
 #endif
@@ -222,8 +228,9 @@ TEST_P(LakeVacuumTest, combined_txn_log_shares_cache_and_delete_evicts_it) {
     }
     ASSERT_OK(_tablet_mgr->put_combined_txn_log(combined));
     for (const auto& log : combined.txn_logs()) {
-        _tablet_mgr->metacache()->cache_txn_log(_tablet_mgr->txn_log_location(log.tablet_id(), log.txn_id()),
-                                                std::make_shared<TxnLogPB>(log));
+        _tablet_mgr->metacache()->cache_txn_log(
+                MetacacheKey::txn_log(_tablet_mgr->txn_log_location(log.tablet_id(), log.txn_id())),
+                std::make_shared<TxnLogPB>(log));
     }
     auto path = _tablet_mgr->combined_txn_log_location(500, 100);
     auto other_path = _tablet_mgr->combined_txn_log_location(501, 100);
@@ -234,11 +241,11 @@ TEST_P(LakeVacuumTest, combined_txn_log_shares_cache_and_delete_evicts_it) {
     auto* cache = _tablet_mgr->metacache();
 
     ASSERT_OK(_tablet_mgr->get_combined_txn_log(path, false));
-    ASSERT_EQ(nullptr, cache->lookup_combined_txn_log(key));
+    ASSERT_EQ(nullptr, cache->lookup_combined_txn_log(MetacacheKey::TEST_from_string(key)));
     ASSIGN_OR_ABORT(auto first, _tablet_mgr->get_combined_txn_log(path));
-    ASSERT_EQ(first, cache->lookup_combined_txn_log(key));
-    EXPECT_EQ(nullptr, cache->lookup_combined_txn_log(path));
-    EXPECT_EQ(nullptr, cache->lookup_combined_txn_log(other_path));
+    ASSERT_EQ(first, cache->lookup_combined_txn_log(MetacacheKey::TEST_from_string(key)));
+    EXPECT_EQ(nullptr, cache->lookup_combined_txn_log(MetacacheKey::TEST_from_string(path)));
+    EXPECT_EQ(nullptr, cache->lookup_combined_txn_log(MetacacheKey::TEST_from_string(other_path)));
 
     // A storage read would now fail. Both aliases must still return the same cached object.
     SyncPoint::GetInstance()->SetCallBack("ProtobufFileWithHeader::load::corruption", [](void* arg) {
@@ -261,10 +268,10 @@ TEST_P(LakeVacuumTest, combined_txn_log_shares_cache_and_delete_evicts_it) {
     delete_txn_log(_tablet_mgr.get(), request, &response);
     StorageEngine::instance()->wait_storage_cleanup_tasks();
     EXPECT_FALSE(file_exist(combined_txn_log_filename(100)));
-    EXPECT_EQ(nullptr, cache->lookup_combined_txn_log(key));
-    EXPECT_EQ(nullptr, cache->lookup_combined_txn_log(path));
-    EXPECT_EQ(nullptr, cache->lookup_combined_txn_log(other_path));
-    EXPECT_EQ(nullptr, cache->lookup_txn_log(_tablet_mgr->txn_log_location(501, 100)));
+    EXPECT_EQ(nullptr, cache->lookup_combined_txn_log(MetacacheKey::TEST_from_string(key)));
+    EXPECT_EQ(nullptr, cache->lookup_combined_txn_log(MetacacheKey::TEST_from_string(path)));
+    EXPECT_EQ(nullptr, cache->lookup_combined_txn_log(MetacacheKey::TEST_from_string(other_path)));
+    EXPECT_EQ(nullptr, cache->lookup_txn_log(MetacacheKey::txn_log(_tablet_mgr->txn_log_location(501, 100))));
 }
 
 TEST_P(LakeVacuumTest, vacuum_evicts_non_anchor_metadata) {
@@ -277,8 +284,8 @@ TEST_P(LakeVacuumTest, vacuum_evicts_non_anchor_metadata) {
         use_starlet_style_locations({500, 501});
         put_empty_metadata({500, 501}, 1, 3);
         for (auto tablet_id : {500, 501}) {
-            ASSERT_NE(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
-                                       _tablet_mgr->tablet_metadata_location(tablet_id, 1)));
+            ASSERT_NE(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(MetacacheKey::tablet_metadata(
+                                       _tablet_mgr->tablet_metadata_location(tablet_id, 1))));
         }
         VacuumRequest request;
         VacuumResponse response;
@@ -302,12 +309,12 @@ TEST_P(LakeVacuumTest, vacuum_evicts_non_anchor_metadata) {
         ASSERT_EQ(0, response.status().status_code()) << response.status().DebugString();
         for (auto tablet_id : {500, 501}) {
             EXPECT_FALSE(file_exist(tablet_metadata_filename(tablet_id, 1)));
-            EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
-                                       _tablet_mgr->tablet_metadata_location(tablet_id, 1)));
+            EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(MetacacheKey::tablet_metadata(
+                                       _tablet_mgr->tablet_metadata_location(tablet_id, 1))));
             for (auto retained_version : {2, 3}) {
                 EXPECT_TRUE(file_exist(tablet_metadata_filename(tablet_id, retained_version)));
-                EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
-                                           _tablet_mgr->tablet_metadata_location(tablet_id, retained_version)));
+                EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(MetacacheKey::tablet_metadata(
+                                           _tablet_mgr->tablet_metadata_location(tablet_id, retained_version))));
             }
         }
     }
@@ -330,11 +337,11 @@ TEST_P(LakeVacuumTest, vacuum_full_evicts_non_anchor_metadata) {
     for (auto tablet_id : {500, 501}) {
         EXPECT_FALSE(file_exist(tablet_metadata_filename(tablet_id, 1)));
         EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
-                                   _tablet_mgr->tablet_metadata_location(tablet_id, 1)));
+                                   MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(tablet_id, 1))));
         for (auto retained_version : {2, 3}) {
             EXPECT_TRUE(file_exist(tablet_metadata_filename(tablet_id, retained_version)));
-            EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
-                                       _tablet_mgr->tablet_metadata_location(tablet_id, retained_version)));
+            EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(MetacacheKey::tablet_metadata(
+                                       _tablet_mgr->tablet_metadata_location(tablet_id, retained_version))));
         }
     }
 }
@@ -370,12 +377,12 @@ TEST_P(LakeVacuumTest, vacuum_evicts_bundled_metadata) {
         ASSERT_EQ(0, response.status().status_code()) << response.status().DebugString();
         EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 2)));
         for (auto tablet_id : {500, 501}) {
-            EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
-                                       _tablet_mgr->tablet_metadata_location(tablet_id, 2)));
+            EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(MetacacheKey::tablet_metadata(
+                                       _tablet_mgr->tablet_metadata_location(tablet_id, 2))));
             for (auto version : {3, 4}) {
                 EXPECT_TRUE(file_exist(tablet_metadata_filename(0, version)));
-                EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
-                                           _tablet_mgr->tablet_metadata_location(tablet_id, version)));
+                EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(MetacacheKey::tablet_metadata(
+                                           _tablet_mgr->tablet_metadata_location(tablet_id, version))));
             }
         }
     }
@@ -398,11 +405,11 @@ TEST_P(LakeVacuumTest, vacuum_full_evicts_bundled_metadata) {
     EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 2)));
     for (auto tablet_id : {500, 501}) {
         EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
-                                   _tablet_mgr->tablet_metadata_location(tablet_id, 2)));
+                                   MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(tablet_id, 2))));
         for (auto version : {3, 4}) {
             EXPECT_TRUE(file_exist(tablet_metadata_filename(0, version)));
-            EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
-                                       _tablet_mgr->tablet_metadata_location(tablet_id, version)));
+            EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(MetacacheKey::tablet_metadata(
+                                       _tablet_mgr->tablet_metadata_location(tablet_id, version))));
         }
     }
 }
@@ -420,8 +427,8 @@ TEST_P(LakeVacuumTest, delete_txn_log_evicts_both_request_formats) {
                 log->set_tablet_id(tablet_id);
                 log->set_txn_id(txn_id);
                 ASSERT_OK(_tablet_mgr->put_txn_log(log));
-                ASSERT_NE(nullptr,
-                          _tablet_mgr->metacache()->lookup_txn_log(_tablet_mgr->txn_log_location(tablet_id, txn_id)));
+                ASSERT_NE(nullptr, _tablet_mgr->metacache()->lookup_txn_log(
+                                           MetacacheKey::txn_log(_tablet_mgr->txn_log_location(tablet_id, txn_id))));
             }
         }
         if (use_txn_infos) {
@@ -433,9 +440,11 @@ TEST_P(LakeVacuumTest, delete_txn_log_evicts_both_request_formats) {
         StorageEngine::instance()->wait_storage_cleanup_tasks();
         for (auto tablet_id : {500, 501}) {
             EXPECT_FALSE(file_exist(txn_log_filename(tablet_id, 100)));
-            EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_txn_log(_tablet_mgr->txn_log_location(tablet_id, 100)));
+            EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_txn_log(
+                                       MetacacheKey::txn_log(_tablet_mgr->txn_log_location(tablet_id, 100))));
             EXPECT_TRUE(file_exist(txn_log_filename(tablet_id, 101)));
-            EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_txn_log(_tablet_mgr->txn_log_location(tablet_id, 101)));
+            EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_txn_log(
+                                       MetacacheKey::txn_log(_tablet_mgr->txn_log_location(tablet_id, 101))));
         }
     }
 }
@@ -458,8 +467,9 @@ TEST_P(LakeVacuumTest, delete_tablets_evicts_metadata_and_txn_logs) {
     // Combined writers cache individual tablet logs without creating individual log files.
     for (auto& log : *combined.mutable_txn_logs()) {
         log.set_txn_id(101);
-        _tablet_mgr->metacache()->cache_txn_log(_tablet_mgr->txn_log_location(log.tablet_id(), 101),
-                                                std::make_shared<TxnLogPB>(log));
+        _tablet_mgr->metacache()->cache_txn_log(
+                MetacacheKey::txn_log(_tablet_mgr->txn_log_location(log.tablet_id(), 101)),
+                std::make_shared<TxnLogPB>(log));
     }
     ASSERT_OK(_tablet_mgr->put_combined_txn_log(combined));
     auto combined_path = _tablet_mgr->combined_txn_log_location(500, 100);
@@ -473,18 +483,20 @@ TEST_P(LakeVacuumTest, delete_tablets_evicts_metadata_and_txn_logs) {
     ASSERT_EQ(0, response.status().status_code()) << response.status().DebugString();
     // The combined log and tablet 501 must survive a partial drop.
     EXPECT_TRUE(file_exist(combined_txn_log_filename(100)));
-    EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_combined_txn_log(combined_key));
+    EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_combined_txn_log(MetacacheKey::TEST_from_string(combined_key)));
     EXPECT_NE(nullptr, _tablet_mgr->get_latest_cached_tablet_metadata(501));
-    EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_txn_log(_tablet_mgr->txn_log_location(500, 101)));
-    EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_txn_log(_tablet_mgr->txn_log_location(501, 101)));
+    EXPECT_EQ(nullptr,
+              _tablet_mgr->metacache()->lookup_txn_log(MetacacheKey::txn_log(_tablet_mgr->txn_log_location(500, 101))));
+    EXPECT_NE(nullptr,
+              _tablet_mgr->metacache()->lookup_txn_log(MetacacheKey::txn_log(_tablet_mgr->txn_log_location(501, 101))));
     EXPECT_EQ(nullptr, _tablet_mgr->get_latest_cached_tablet_metadata(500));
     for (auto version : {1, 2}) {
         EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
-                                   _tablet_mgr->tablet_metadata_location(500, version)));
+                                   MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(500, version))));
     }
     for (const auto& path : {_tablet_mgr->txn_log_location(500, 100), _tablet_mgr->txn_slog_location(500, 100),
                              _tablet_mgr->txn_vlog_location(500, 2)}) {
-        EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_txn_log(path));
+        EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_txn_log(MetacacheKey::txn_log(path)));
         EXPECT_TRUE(FileSystem::Default()->path_exists(path).is_not_found());
     }
 
@@ -493,17 +505,18 @@ TEST_P(LakeVacuumTest, delete_tablets_evicts_metadata_and_txn_logs) {
     delete_tablets(_tablet_mgr.get(), request, &response);
     ASSERT_EQ(0, response.status().status_code()) << response.status().DebugString();
     EXPECT_FALSE(file_exist(combined_txn_log_filename(100)));
-    EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_combined_txn_log(combined_key));
+    EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_combined_txn_log(MetacacheKey::TEST_from_string(combined_key)));
     EXPECT_EQ(nullptr, _tablet_mgr->get_latest_cached_tablet_metadata(501));
-    EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_txn_log(_tablet_mgr->txn_log_location(501, 101)));
+    EXPECT_EQ(nullptr,
+              _tablet_mgr->metacache()->lookup_txn_log(MetacacheKey::txn_log(_tablet_mgr->txn_log_location(501, 101))));
     for (auto version : {1, 2}) {
         EXPECT_FALSE(file_exist(tablet_metadata_filename(501, version)));
         EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
-                                   _tablet_mgr->tablet_metadata_location(501, version)));
+                                   MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(501, version))));
     }
     for (const auto& path : {_tablet_mgr->txn_log_location(501, 100), _tablet_mgr->txn_slog_location(501, 100),
                              _tablet_mgr->txn_vlog_location(501, 2)}) {
-        EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_txn_log(path));
+        EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_txn_log(MetacacheKey::txn_log(path)));
         EXPECT_TRUE(FileSystem::Default()->path_exists(path).is_not_found());
     }
 }
@@ -526,9 +539,9 @@ TEST_P(LakeVacuumTest, delete_tablets_evicts_bundled_metadata) {
     for (auto version : {2, 3}) {
         EXPECT_TRUE(file_exist(tablet_metadata_filename(0, version)));
         EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
-                                   _tablet_mgr->tablet_metadata_location(500, version)));
+                                   MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(500, version))));
         EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
-                                   _tablet_mgr->tablet_metadata_location(501, version)));
+                                   MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(501, version))));
     }
     EXPECT_EQ(nullptr, _tablet_mgr->get_latest_cached_tablet_metadata(500));
     EXPECT_NE(nullptr, _tablet_mgr->get_latest_cached_tablet_metadata(501));
@@ -540,7 +553,7 @@ TEST_P(LakeVacuumTest, delete_tablets_evicts_bundled_metadata) {
     for (auto version : {2, 3}) {
         EXPECT_FALSE(file_exist(tablet_metadata_filename(0, version)));
         EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
-                                   _tablet_mgr->tablet_metadata_location(501, version)));
+                                   MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(501, version))));
     }
     EXPECT_EQ(nullptr, _tablet_mgr->get_latest_cached_tablet_metadata(501));
 }
@@ -574,8 +587,8 @@ TEST_P(LakeVacuumTest, delete_tablets_evicts_bundled_metadata_after_partial_fail
     for (auto tablet_id : {500, 501}) {
         EXPECT_EQ(nullptr, _tablet_mgr->get_latest_cached_tablet_metadata(tablet_id));
         for (auto version : {2, 3}) {
-            EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
-                                       _tablet_mgr->tablet_metadata_location(tablet_id, version)));
+            EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(MetacacheKey::tablet_metadata(
+                                       _tablet_mgr->tablet_metadata_location(tablet_id, version))));
         }
     }
 }
@@ -2510,7 +2523,8 @@ TEST_P(LakeVacuumTest, test_delete_tablets_reads_cached_metadata_of_tablet_absen
             ]
         }
         )DEL");
-    _tablet_mgr->metacache()->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(701, 4), cached);
+    _tablet_mgr->metacache()->cache_tablet_metadata(
+            MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(701, 4)), cached);
 
     DeleteTabletRequest request;
     request.add_tablet_ids(701);
@@ -2565,7 +2579,8 @@ TEST_P(LakeVacuumTest, test_delete_tablets_unknown_version_keeps_shared_files) {
             ]
         }
         )DEL");
-    _tablet_mgr->metacache()->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 3), cached_v3);
+    _tablet_mgr->metacache()->cache_tablet_metadata(
+            MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 3)), cached_v3);
 
     DeleteTabletRequest request;
     request.add_tablet_ids(600);
@@ -6226,12 +6241,18 @@ TEST_P(LakeVacuumTest, test_vacuum_bundle_metadata) {
     tablet_metas_v3[601] = *t601_v3;
     ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v3));
     auto* metacache = _tablet_mgr->metacache();
-    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 1), t600_v1);
-    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 1), t601_v1);
-    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 2), t600_v2);
-    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 2), t601_v2);
-    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 3), t600_v3);
-    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 3), t601_v3);
+    metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 1)),
+                                     t600_v1);
+    metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 1)),
+                                     t601_v1);
+    metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 2)),
+                                     t600_v2);
+    metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 2)),
+                                     t601_v2);
+    metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 3)),
+                                     t600_v3);
+    metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 3)),
+                                     t601_v3);
 
     int64_t grace_timestamp = 1687331159;
 
@@ -6517,12 +6538,18 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
     tablet_metas_v3[601] = *t601_v3;
     ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v3));
     auto* metacache = _tablet_mgr->metacache();
-    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 1), t600_v1);
-    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 1), t601_v1);
-    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 2), t600_v2);
-    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 2), t601_v2);
-    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 3), t600_v3);
-    metacache->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 3), t601_v3);
+    metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 1)),
+                                     t600_v1);
+    metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 1)),
+                                     t601_v1);
+    metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 2)),
+                                     t600_v2);
+    metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 2)),
+                                     t601_v2);
+    metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(600, 3)),
+                                     t600_v3);
+    metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(601, 3)),
+                                     t601_v3);
 
     int64_t grace_timestamp = 1687331159;
 
@@ -7477,6 +7504,111 @@ TEST_P(LakeVacuumTest, test_delete_tablets_deletes_txnlog_data_when_fe_says_not_
 
     EXPECT_FALSE(file_exist(owned));
     EXPECT_FALSE(file_exist(txn_log_filename(900, 7001)));
+}
+
+TEST_P(LakeVacuumTest, test_delete_tablets_statement_vlog_group) {
+    const std::vector<std::string> files = {"00000000011659e4_99dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat",
+                                            "00000000011759e4_aadc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"};
+    for (bool is_range : {false, true}) {
+        TxnLogVector logs;
+        for (const auto& file : files) {
+            create_data_file(file);
+            auto log = std::make_shared<TxnLog>();
+            log->set_tablet_id(900);
+            log->set_txn_id(7002);
+            log->mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename(file);
+            logs.emplace_back(std::move(log));
+        }
+        ASSERT_OK(_tablet_mgr->put_txn_vlog_group(logs, 10));
+        ASSERT_TRUE(file_exist(txn_vlog_group_filename(900, 10)));
+
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(900);
+        request.set_is_range_distribution(is_range);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(0, response.status().status_code()) << response.status().DebugString();
+        EXPECT_FALSE(file_exist(txn_vlog_group_filename(900, 10)));
+        for (const auto& file : files) {
+            EXPECT_EQ(is_range, file_exist(file));
+        }
+    }
+}
+
+// A retry that straddled a writer-flag change can leave a damaged version log next to a valid one in the other
+// format. Whichever of the two is damaged, the drop deletes it without reading it, walks the valid one, and
+// succeeds. With both damaged nothing names the data files, so the drop fails and deletes nothing.
+TEST_P(LakeVacuumTest, test_delete_tablets_damaged_vlog_next_to_valid_counterpart) {
+    // Damaged files fail as written, without dropping cached blocks and reading them again.
+    ConfigResetGuard<bool> clear_cache_guard(&config::lake_clear_corrupted_cache_meta, false);
+    const int64_t tablet_id = 901;
+    const int64_t version = 10;
+    const auto legacy = txn_vlog_filename(tablet_id, version);
+    const auto group = txn_vlog_group_filename(tablet_id, version);
+    const std::vector<std::string> files = {"00000000011859e4_badc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat",
+                                            "00000000011959e4_cadc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"};
+    // Writes the two statements' version log in both formats, then overwrites the |damaged| files.
+    auto put_version_logs = [&](const std::vector<std::string>& damaged) {
+        TxnLogVector statements;
+        auto merged = std::make_shared<TxnLog>();
+        merged->set_tablet_id(tablet_id);
+        merged->set_txn_id(7003);
+        for (const auto& file : files) {
+            // A range-distributed drop keeps the data files of the round before.
+            if (!file_exist(file)) {
+                create_data_file(file);
+            }
+            auto log = std::make_shared<TxnLog>();
+            log->set_tablet_id(tablet_id);
+            log->set_txn_id(7003);
+            log->mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename(file);
+            statements.emplace_back(std::move(log));
+            merged->mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename(file);
+        }
+        ASSERT_OK(_tablet_mgr->put_txn_vlog_group(statements, version));
+        ASSERT_OK(_tablet_mgr->put_txn_vlog(merged, version));
+        ASSERT_TRUE(file_exist(group));
+        ASSERT_TRUE(file_exist(legacy));
+        for (const auto& name : damaged) {
+            WritableFileOptions opts{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+            ASSIGN_OR_ABORT(auto writer, FileSystem::Default()->new_writable_file(
+                                                 opts, join_path(join_path(kTestDir, kTxnLogDirectoryName), name)));
+            ASSERT_OK(writer->append("damaged"));
+            ASSERT_OK(writer->close());
+        }
+    };
+    auto drop = [&](bool is_range) {
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(tablet_id);
+        request.set_is_range_distribution(is_range);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        EXPECT_TRUE(response.has_status());
+        return response.status().status_code();
+    };
+
+    for (bool is_range : {false, true}) {
+        for (const auto& damaged : {group, legacy}) {
+            SCOPED_TRACE(damaged + (is_range ? " range" : " non-range"));
+            ASSERT_NO_FATAL_FAILURE(put_version_logs({damaged}));
+            ASSERT_EQ(0, drop(is_range));
+            EXPECT_FALSE(file_exist(group));
+            EXPECT_FALSE(file_exist(legacy));
+            // A range-distributed tablet keeps its data files: the tablets of a reshard may still read them.
+            for (const auto& file : files) {
+                EXPECT_EQ(is_range, file_exist(file)) << file;
+            }
+        }
+    }
+
+    ASSERT_NO_FATAL_FAILURE(put_version_logs({group, legacy}));
+    EXPECT_NE(0, drop(false));
+    EXPECT_TRUE(file_exist(group));
+    EXPECT_TRUE(file_exist(legacy));
+    for (const auto& file : files) {
+        EXPECT_TRUE(file_exist(file)) << file;
+    }
 }
 
 // An older FE does not send the field at all. BE then falls back to what it did before: the answer comes

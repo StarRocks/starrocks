@@ -19,12 +19,13 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/statusor.h"
 
 namespace starrocks {
-void base64_encode(const std::string& in, std::string* out);
+void base64_encode(std::string_view in, std::string* out);
 
 // Utility method to decode base64 encoded strings.  Also not extremely
 // performant.

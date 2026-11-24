@@ -15,6 +15,7 @@
 #include "connector/lake/lake_connector.h"
 
 #include <atomic>
+#include <charconv>
 #include <set>
 #include <vector>
 
@@ -33,10 +34,12 @@
 #include "compute_env/global_dict/parser.h"
 #include "compute_env/query/fragment_runtime_state.h"
 #include "compute_env/query/partition_scan_range_pruner.h"
+#include "compute_env/query/query_remote_read.h"
 #include "compute_env/query/query_runtime_state.h"
 #include "compute_env/query/query_scan_metrics.h"
 #include "compute_env/runtime_range_pruner.hpp"
 #include "connector/lake/lake_global_late_materialization_context.h"
+#include "exec_primitive/pipeline/scan/dynamic_morsel_queue_builder.h"
 #include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/column_access_path_resolver.h"
@@ -57,6 +60,8 @@
 #include "storage/lake/tablet_reader.h"
 #include "storage/predicate_parser.h"
 #include "storage/query/olap_dynamic_morsel_queue_builder.h"
+#include "storage/query/olap_fixed_morsel_queue_builder.h"
+#include "storage/query/range_group_task.h"
 #include "storage/query/split_morsel_queue_builder.h"
 #include "storage/query/split_scan_morsel.h"
 #include "storage/rowset/rowid_range_option.h"
@@ -164,7 +169,13 @@ void disable_prepared_runtime_filter_dependent_cache(const pipeline::ScanSplitCo
 } // namespace
 
 LakeDataSource::LakeDataSource(const LakeDataSourceProvider* provider, const TScanRange& scan_range)
-        : _provider(provider), _scan_range(scan_range.internal_scan_range) {}
+        : _provider(provider),
+          _scan_range(scan_range.internal_scan_range),
+          _wire_grouped_range_task(scan_range.__isset.grouped_range_task
+                                           ? std::make_optional(scan_range.grouped_range_task)
+                                           : std::nullopt) {
+    _scan_range_status = provider->validate_scan_range(scan_range);
+}
 
 LakeDataSource::~LakeDataSource() {
     _reader.reset();
@@ -176,6 +187,23 @@ std::string LakeDataSource::name() const {
 }
 
 Status LakeDataSource::open(RuntimeState* state) {
+    RETURN_IF_ERROR(_scan_range_status);
+    if (_provider->is_grouped_scan()) {
+        RETURN_IF(!state->enable_pipeline_engine(),
+                  Status::InvalidArgument("grouped scan requires pipeline execution"));
+        RETURN_IF(
+                _morsel != nullptr && (_morsel->from_version() != 0 || _morsel->get_split_context() != _split_context),
+                Status::InvalidArgument("grouped scan does not support incremental history or mixed split contexts"));
+        if (_split_context != nullptr) {
+            const auto* child = dynamic_cast<const pipeline::LakeSplitContext*>(_split_context);
+            RETURN_IF(!_provider->could_split() || !_provider->could_split_physically() || child == nullptr ||
+                              child->rowid_range == nullptr || child->short_key_range != nullptr ||
+                              child->prepared_tablet_read_state != nullptr ||
+                              child->prepared_segment_read_state != nullptr ||
+                              child->rowid_range_source != pipeline::LakeSplitContext::RowidRangeSource::REGULAR,
+                      Status::InvalidArgument("grouped scan requires an enabled ordinary physical rowid child"));
+        }
+    }
     _runtime_state = state;
     if (_needs_reopen) {
         _needs_reopen = false;
@@ -249,6 +277,10 @@ Status LakeDataSource::open(RuntimeState* state) {
         refresh_reusable_reader_key();
         remember_runtime_filter_snapshots(std::move(runtime_filter_snapshots));
     }
+    if (_params.grouped_range_task != nullptr && _split_context == nullptr && !_range_clip_task_counted) {
+        COUNTER_UPDATE(ADD_COUNTER(_runtime_profile, "RangeClipTasks", TUnit::UNIT), 1);
+        _range_clip_task_counted = true;
+    }
     return Status::OK();
 }
 
@@ -271,11 +303,13 @@ void LakeDataSource::close(RuntimeState* state) {
 }
 
 bool LakeDataSource::has_reusable_state() const {
-    return _reader != nullptr && _reusable_reader_key.prepared_tablet_read_state != nullptr;
+    return !_provider->is_grouped_scan() && _reader != nullptr &&
+           _reusable_reader_key.prepared_tablet_read_state != nullptr;
 }
 
 bool LakeDataSource::can_reuse_with(pipeline::ScanMorsel& morsel) const {
-    if (_reusable_reader_key.prepared_tablet_read_state == nullptr) {
+    if (_provider->is_grouped_scan() || morsel.get_scan_range()->__isset.grouped_range_task ||
+        _reusable_reader_key.prepared_tablet_read_state == nullptr) {
         return false;
     }
 
@@ -301,6 +335,8 @@ void LakeDataSource::release_for_reuse(RuntimeState* state) {
     if (_reader == nullptr) {
         return;
     }
+    // The reused segment iterators stay open across scans; report what this scan read through them.
+    _reader->flush_reusable_iterator_io_stats();
     update_counter(state);
     _reader->reset_stats();
     _num_rows_read = 0;
@@ -495,6 +531,8 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
             !config::disable_storage_page_cache && _scan_range.fill_data_cache && !_scan_range.skip_page_cache;
     _params.lake_io_opts.fill_data_cache = _scan_range.fill_data_cache;
     _params.lake_io_opts.skip_disk_cache = _scan_range.skip_disk_cache;
+    // Set on the files themselves: some are opened on other threads (parallel segment loads).
+    _params.lake_io_opts.remote_read = query_remote_read_context(_runtime_state);
 
     if (thrift_lake_scan_node.__isset.sorted_by_keys_per_tablet) {
         _params.sorted_by_keys_per_tablet = thrift_lake_scan_node.sorted_by_keys_per_tablet;
@@ -638,6 +676,12 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state, bool use_
     std::vector<uint32_t> reader_columns;
 
     RETURN_IF_ERROR(get_tablet(_scan_range));
+    if (_wire_grouped_range_task.has_value()) {
+        // Validate the captured source schema before GLM/access-path/virtual-column augmentation.
+        ASSIGN_OR_RETURN(auto task, decode_range_group_task(*_wire_grouped_range_task));
+        RETURN_IF_ERROR(validate_range_group_schema(*task, *_tablet_schema));
+        _params.grouped_range_task = std::move(task);
+    }
 
     bool enable_glm = thrift_lake_scan_node.__isset.enable_global_late_materialization &&
                       thrift_lake_scan_node.enable_global_late_materialization;
@@ -762,6 +806,9 @@ Status LakeDataSource::reopen_reader(RuntimeState* /*state*/) {
 
 void LakeDataSource::apply_child_split_context(const pipeline::LakeSplitContext& split_context,
                                                bool use_prepared_state) {
+    // This shares immutable segment objects, not predicates or prepared row-range caches. It remains
+    // valid when late runtime filters rebuild a CLASSIC reader's query-specific iterators.
+    _params.classic_tablet_read_state = split_context.classic_tablet_read_state;
     if (is_pre_refinement_coarse_split(split_context)) {
         ++_lake_prerefinement_coarse_splits;
     } else if (is_initial_coarse_split(split_context)) {
@@ -1483,6 +1530,21 @@ void LakeDataSource::init_counter(RuntimeState* state) {
             ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareIOCountRemote", TUnit::UNIT, tablet_prepare_name);
     _lake_tablet_prepare_bytes_read_remote_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareBytesReadRemote", TUnit::BYTES, tablet_prepare_name);
+    _lake_tablet_prepare_cached_segments_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareCachedSegments", TUnit::UNIT, tablet_prepare_name);
+    // lake_scan_warm_index: the index pages a query scan started warming once it opened the tablet's segments.
+    _lake_tablet_prepare_warm_index_segments_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareIndexWarmSegments", TUnit::UNIT, tablet_prepare_name);
+    _lake_tablet_prepare_warm_index_ranges_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareIndexWarmRanges", TUnit::UNIT, tablet_prepare_name);
+    _lake_tablet_prepare_warm_index_blocks_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareIndexWarmBlocks", TUnit::UNIT, tablet_prepare_name);
+    _lake_tablet_prepare_warm_index_skipped_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareIndexWarmSkipped", TUnit::UNIT, tablet_prepare_name);
+    _lake_tablet_prepare_warm_index_pruned_segments_counter = ADD_CHILD_COUNTER(
+            _runtime_profile, "TabletPrepareIndexWarmPrunedSegments", TUnit::UNIT, tablet_prepare_name);
+    _lake_tablet_prepare_inline_rowsets_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareInlineRowsets", TUnit::UNIT, tablet_prepare_name);
     _lake_seed_segment_init_timer = ADD_CHILD_TIMER(_runtime_profile, "SeedSegmentInitTime", "SeedPrepareTime");
 
     const std::string seed_vector_index_name = "SeedVectorIndex";
@@ -1558,6 +1620,23 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _prefetch_hit_counter = ADD_CHILD_COUNTER(_runtime_profile, "PrefetchHitCount", TUnit::UNIT, io_statistics_name);
     _prefetch_wait_finish_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchWaitFinishTime", io_statistics_name);
     _prefetch_pending_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchPendingTime", io_statistics_name);
+    _remote_io_queue_wait_timer = ADD_CHILD_TIMER(_runtime_profile, "RemoteIOQueueWaitTime", io_statistics_name);
+    _remote_io_fill_wait_timer = ADD_CHILD_TIMER(_runtime_profile, "RemoteIOFillWaitTime", io_statistics_name);
+    _remote_io_fill_join_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "RemoteIOFillJoinCount", TUnit::UNIT, io_statistics_name);
+    _segment_first_chunk_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "SegmentFirstChunks", TUnit::UNIT, io_statistics_name);
+    _segment_first_chunk_timer = ADD_CHILD_TIMER(_runtime_profile, "SegmentFirstChunkTime", io_statistics_name);
+    _segment_read_ahead_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "SegmentReadAheadStarted", TUnit::UNIT, io_statistics_name);
+    _remote_prefetch_block_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "RemotePrefetchBlocks", TUnit::UNIT, io_statistics_name);
+    _remote_prefetch_rejected_block_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "RemotePrefetchRejectedBlocks", TUnit::UNIT, io_statistics_name);
+    _remote_prefetch_range_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "RemotePrefetchRanges", TUnit::UNIT, io_statistics_name);
+    _remote_prefetch_late_read_ahead_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "RemotePrefetchLateReadAhead", TUnit::UNIT, io_statistics_name);
 }
 
 void LakeDataSource::update_realtime_counter(Chunk* chunk) {
@@ -1667,6 +1746,16 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_lake_tablet_prepare_io_remote_timer, reader_stats.lake_prepared_tablet_io_remote_ns);
     COUNTER_UPDATE(_lake_tablet_prepare_io_count_remote_counter, reader_stats.lake_prepared_tablet_io_count_remote);
     COUNTER_UPDATE(_lake_tablet_prepare_bytes_read_remote_counter, reader_stats.lake_prepared_tablet_bytes_read_remote);
+    COUNTER_UPDATE(_lake_tablet_prepare_cached_segments_counter, reader_stats.lake_prepared_tablet_cached_segments);
+    COUNTER_UPDATE(_lake_tablet_prepare_warm_index_segments_counter,
+                   reader_stats.lake_prepared_tablet_warm_index_segments);
+    COUNTER_UPDATE(_lake_tablet_prepare_warm_index_ranges_counter, reader_stats.lake_prepared_tablet_warm_index_ranges);
+    COUNTER_UPDATE(_lake_tablet_prepare_warm_index_blocks_counter, reader_stats.lake_prepared_tablet_warm_index_blocks);
+    COUNTER_UPDATE(_lake_tablet_prepare_warm_index_skipped_counter,
+                   reader_stats.lake_prepared_tablet_warm_index_skipped);
+    COUNTER_UPDATE(_lake_tablet_prepare_warm_index_pruned_segments_counter,
+                   reader_stats.lake_prepared_tablet_warm_index_pruned_segments);
+    COUNTER_UPDATE(_lake_tablet_prepare_inline_rowsets_counter, reader_stats.lake_prepared_tablet_inline_rowsets);
     COUNTER_UPDATE(_lake_seed_io_timer, reader_stats.lake_prepared_seed_io_ns);
     COUNTER_UPDATE(_lake_seed_io_count_counter, reader_stats.lake_prepared_seed_io_count);
     COUNTER_UPDATE(_lake_seed_io_remote_timer, reader_stats.lake_prepared_seed_io_remote_ns);
@@ -1774,6 +1863,16 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_prefetch_hit_counter, reader_stats.prefetch_hit_count);
     COUNTER_UPDATE(_prefetch_wait_finish_timer, reader_stats.prefetch_wait_finish_ns);
     COUNTER_UPDATE(_prefetch_pending_timer, reader_stats.prefetch_pending_ns);
+    COUNTER_UPDATE(_remote_io_queue_wait_timer, reader_stats.remote_io_queue_wait_ns);
+    COUNTER_UPDATE(_remote_io_fill_wait_timer, reader_stats.remote_io_fill_wait_ns);
+    COUNTER_UPDATE(_remote_io_fill_join_counter, reader_stats.remote_io_fill_joins);
+    COUNTER_UPDATE(_segment_first_chunk_counter, reader_stats.segment_first_chunks);
+    COUNTER_UPDATE(_segment_first_chunk_timer, reader_stats.segment_first_chunk_ns);
+    COUNTER_UPDATE(_segment_read_ahead_counter, reader_stats.segment_read_ahead_started);
+    COUNTER_UPDATE(_remote_prefetch_block_counter, reader_stats.remote_prefetch_blocks);
+    COUNTER_UPDATE(_remote_prefetch_rejected_block_counter, reader_stats.remote_prefetch_rejected_blocks);
+    COUNTER_UPDATE(_remote_prefetch_range_counter, reader_stats.remote_prefetch_ranges);
+    COUNTER_UPDATE(_remote_prefetch_late_read_ahead_counter, reader_stats.remote_prefetch_late_read_ahead);
 
     // update cache related info for CACHE SELECT
     if (_runtime_state->query_options().__isset.query_type &&
@@ -1906,7 +2005,10 @@ void LakeDataSource::update_counter(RuntimeState* state) {
 // ================================
 
 LakeDataSourceProvider::LakeDataSourceProvider(const TPlanNode& plan_node)
-        : _plan_node_id(plan_node.node_id), _t_lake_scan_node(plan_node.lake_scan_node) {}
+        : _plan_node_id(plan_node.node_id),
+          _t_lake_scan_node(plan_node.lake_scan_node),
+          _is_grouped_scan(plan_node.node_type == TPlanNodeType::LAKE_GROUPED_SCAN_NODE),
+          _has_lake_scan_node(plan_node.__isset.lake_scan_node) {}
 
 // _partition_conjunct_ctxs share this provider's ObjectPool and self-close in their destructor.
 LakeDataSourceProvider::~LakeDataSourceProvider() = default;
@@ -1916,6 +2018,9 @@ DataSourcePtr LakeDataSourceProvider::create_data_source(const TScanRange& scan_
 }
 
 Status LakeDataSourceProvider::init(ObjectPool* pool, RuntimeState* state) {
+    RETURN_IF_ERROR(validate_grouped_scan());
+    RETURN_IF(_is_grouped_scan && !state->enable_pipeline_engine(),
+              Status::InvalidArgument("grouped scan requires pipeline execution"));
     if (_tablet_manager == nullptr) {
         _tablet_manager = lake_tablet_manager();
     }
@@ -1961,6 +2066,31 @@ StatusOr<pipeline::MorselQueueBuilderPtr> LakeDataSourceProvider::convert_scan_r
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges, size_t scan_parallelism) {
+    RETURN_IF_ERROR(validate_grouped_scan());
+    for (const auto& range : scan_ranges) {
+        if (_is_grouped_scan && range.__isset.has_more && range.has_more) {
+            return Status::InvalidArgument("grouped scan requires complete fixed task queues");
+        }
+        if (range.__isset.empty && range.empty) continue;
+        RETURN_IF_ERROR(validate_scan_range(range.scan_range));
+    }
+    if (_is_grouped_scan) {
+        // Logical group DOP and root counts do not describe the available I/O slots. Keep
+        // one node-wide physical policy, including when this driver's queue is empty padding.
+        _could_split = enable_tablet_internal_parallel;
+        _could_split_physically = enable_tablet_internal_parallel;
+        if (enable_tablet_internal_parallel) {
+            ASSIGN_OR_RETURN(splitted_scan_rows, _compute_splitted_scan_rows());
+        }
+        pipeline::Morsels morsels;
+        bool has_more = false;
+        pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &has_more);
+        if (_could_split) {
+            // Children stay on their owning driver; retained active sources guard local EOS.
+            return pipeline::make_dynamic_morsel_queue_builder(std::move(morsels), false, 1);
+        }
+        return pipeline::make_olap_fixed_morsel_queue_builder(std::move(morsels));
+    }
     // Dynamic partition pruning. The partition conjunct contexts were prepared and opened once
     // in LakeDataSourceProvider::init and are closed automatically when the owning ObjectPool
     // tears them down (ExprContext::~ExprContext invokes close()).
@@ -2004,6 +2134,49 @@ StatusOr<pipeline::MorselQueueBuilderPtr> LakeDataSourceProvider::convert_scan_r
     return builder;
 }
 
+Status LakeDataSourceProvider::validate_grouped_scan() const {
+    if (!_is_grouped_scan) return Status::OK();
+    if (!_has_lake_scan_node) {
+        return Status::InvalidArgument("grouped scan requires a lake scan node payload");
+    }
+    if ((_t_lake_scan_node.__isset.use_prepared_physical_split_scan &&
+         _t_lake_scan_node.use_prepared_physical_split_scan) ||
+        (_t_lake_scan_node.__isset.sorted_by_keys_per_tablet && _t_lake_scan_node.sorted_by_keys_per_tablet) ||
+        (_t_lake_scan_node.__isset.output_chunk_by_bucket && _t_lake_scan_node.output_chunk_by_bucket) ||
+        (_t_lake_scan_node.__isset.enable_global_late_materialization &&
+         _t_lake_scan_node.enable_global_late_materialization)) {
+        return Status::InvalidArgument(
+                "grouped scan does not support prepared physical split, sorted/bucket output or global late "
+                "materialization");
+    }
+    return Status::OK();
+}
+
+Status LakeDataSourceProvider::validate_scan_range(const TScanRange& range) const {
+    RETURN_IF_ERROR(validate_grouped_scan());
+    if (!_is_grouped_scan) {
+        return range.__isset.grouped_range_task
+                       ? Status::InvalidArgument("grouped range task requires LAKE_GROUPED_SCAN_NODE")
+                       : Status::OK();
+    }
+    if (!range.__isset.internal_scan_range || !range.__isset.grouped_range_task) {
+        return Status::InvalidArgument("grouped scan requires an internal range and grouped task envelope");
+    }
+    ASSIGN_OR_RETURN(auto task, decode_range_group_task(range.grouped_range_task));
+    const auto& internal = range.internal_scan_range;
+    if (!internal.__isset.bucket_sequence || internal.bucket_sequence != task->group_id) {
+        return Status::InvalidArgument("grouped scan bucket sequence must match its task group ID");
+    }
+    int64_t version = 0;
+    auto [end, error] =
+            std::from_chars(internal.version.data(), internal.version.data() + internal.version.size(), version);
+    if (internal.tablet_id <= 0 || error != std::errc{} || end != internal.version.data() + internal.version.size() ||
+        version <= 0) {
+        return Status::InvalidArgument("grouped scan requires a physical tablet and captured positive source version");
+    }
+    return Status::OK();
+}
+
 StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
         const std::vector<TScanRangeParams>& scan_ranges, int32_t pipeline_dop, size_t num_total_scan_ranges,
         TTabletInternalParallelMode::type tablet_internal_parallel_mode, int64_t* scan_parallelism,
@@ -2033,20 +2206,7 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
         max_tablet_rows = std::max(max_tablet_rows, static_cast<int64_t>(tablet_num_rows));
     }
 
-    // splitted_scan_rows is restricted in the range [min_splitted_scan_rows, effective max]. Under the
-    // prepared physical split scan a child morsel reuses the seed's prepared range (cheap), so cap the
-    // upper bound lower to cut big tablets into finer morsels that fill more otherwise-idle drivers.
-    // std::min keeps it never coarser than the shared default (an over-large config just degrades to the
-    // default); the min_splitted_scan_rows clamp below still guarantees >= one pipeline chunk per morsel.
-    int64_t max_splitted_scan_rows = config::tablet_internal_parallel_max_splitted_scan_rows;
-    if (_enable_lake_prepared_physical_split_scan) {
-        max_splitted_scan_rows = std::min(max_splitted_scan_rows, config::lake_prepared_split_max_splitted_scan_rows);
-    }
-    const size_t scan_row_bytes = estimated_scan_row_bytes();
-    RETURN_IF(scan_row_bytes == 0, Status::InternalError("estimated scan row bytes is not initialized"));
-    *splitted_scan_rows = config::tablet_internal_parallel_max_splitted_scan_bytes / scan_row_bytes;
-    *splitted_scan_rows = std::max(config::tablet_internal_parallel_min_splitted_scan_rows,
-                                   std::min(*splitted_scan_rows, max_splitted_scan_rows));
+    ASSIGN_OR_RETURN(*splitted_scan_rows, _compute_splitted_scan_rows());
 
     // Skew detection (only meaningful under prepared-physical-split, see the gate above). A tablet is a
     // straggler worth splitting when it is BOTH (a) big enough that TabletReader::open will actually split
@@ -2088,6 +2248,24 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
     }
 
     return could;
+}
+
+StatusOr<int64_t> LakeDataSourceProvider::_compute_splitted_scan_rows() const {
+    // splitted_scan_rows is restricted in the range [min_splitted_scan_rows, effective max]. Under the
+    // prepared physical split scan a child morsel reuses the seed's prepared range (cheap), so cap the
+    // upper bound lower to cut big tablets into finer morsels that fill more otherwise-idle drivers.
+    // std::min keeps it never coarser than the shared default (an over-large config just degrades to the
+    // default); the min_splitted_scan_rows clamp below still guarantees >= one pipeline chunk per morsel.
+    int64_t max_splitted_scan_rows = config::tablet_internal_parallel_max_splitted_scan_rows;
+    if (_enable_lake_prepared_physical_split_scan) {
+        max_splitted_scan_rows = std::min(max_splitted_scan_rows, config::lake_prepared_split_max_splitted_scan_rows);
+    }
+    const size_t scan_row_bytes = estimated_scan_row_bytes();
+    RETURN_IF(scan_row_bytes == 0, Status::InternalError("estimated scan row bytes is not initialized"));
+    int64_t split_rows = config::tablet_internal_parallel_max_splitted_scan_bytes / scan_row_bytes;
+    split_rows = std::max(config::tablet_internal_parallel_min_splitted_scan_rows,
+                          std::min(split_rows, max_splitted_scan_rows));
+    return split_rows;
 }
 
 StatusOr<bool> LakeDataSourceProvider::_could_split_tablet_physically(

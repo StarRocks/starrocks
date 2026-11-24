@@ -83,6 +83,7 @@ public class ColocateCheckerTest {
 
     private OlapTable table;
     private ColocateTableIndex.GroupId groupId;
+    private List<ColocateRange> initialColocateRanges;
     private static final AtomicInteger NEXT_TABLE_SEQ = new AtomicInteger();
 
     @BeforeAll
@@ -109,11 +110,18 @@ public class ColocateCheckerTest {
         table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(db.getFullName(), tableName);
         groupId = GlobalStateMgr.getCurrentState().getColocateTableIndex().getGroup(table.getId());
+        initialColocateRanges = GlobalStateMgr.getCurrentState().getColocateTableIndex().getColocateRanges(groupId.grpId);
     }
 
     @AfterEach
     public void tearDown() {
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        // Some tests leave the group misaligned on purpose (a synthetic bound the table is never split at). Its single
+        // initial range covers any layout of the table, so restoring it keeps the stable-group sweep of a later test's
+        // checker from finding this group misaligned and aligning it.
+        if (groupId != null) {
+            colocateTableIndex.getColocateRangeMgr().setColocateRanges(groupId.grpId, initialColocateRanges);
+        }
         if (groupId != null && colocateTableIndex.isGroupUnstable(groupId)) {
             colocateTableIndex.markGroupStable(groupId, /* needEditLog */ false);
         }

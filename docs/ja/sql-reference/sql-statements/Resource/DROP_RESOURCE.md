@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP RESOURCE removes an existing resource from StarRocks."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP RESOURCE

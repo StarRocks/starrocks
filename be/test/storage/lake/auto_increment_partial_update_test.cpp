@@ -496,10 +496,10 @@ TEST_F(LakeAutoIncrementPartialUpdateTest, test_partial_segment_stays_out_of_met
     ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
 
     // The base segment read is the one that benefits from the cache, and it is in there.
-    EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_segment(base_segment_key));
+    EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_segment(MetacacheKey::TEST_from_string(base_segment_key)));
     // The transaction's own partial segment is not.
     for (const auto& key : partial_segment_keys) {
-        EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(key)) << key;
+        EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(MetacacheKey::TEST_from_string(key))) << key;
     }
 
     // Half the keys are new, so the tablet ends up with 1.5 chunks worth of rows.

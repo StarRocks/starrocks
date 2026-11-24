@@ -32,6 +32,7 @@ namespace starrocks {
 class Conditions;
 class KVStore;
 struct OlapReaderStatistics;
+struct RangeGroupTask;
 class RuntimeProfile;
 class RowCursor;
 class RuntimeState;
@@ -51,6 +52,9 @@ class RowsetReadOptions {
     using PredicateList = std::vector<const ColumnPredicate*>;
 
 public:
+    // Immutable query ownership clip, independent of the query range union.
+    std::shared_ptr<const RangeGroupTask> grouped_range_task;
+
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;
 
@@ -90,6 +94,10 @@ public:
     uint32_t dynamic_rss_id_base = 0;
 
     bool asc_hint = true;
+
+    // Whether a lake rowset whose segments do not overlap returns their iterators as one union iterator, or one
+    // iterator per segment for a caller that reads them through its own union (see lake::TabletReader).
+    bool union_segments = true;
 
     bool prune_column_after_index_filter = false;
     bool enable_gin_filter = false;

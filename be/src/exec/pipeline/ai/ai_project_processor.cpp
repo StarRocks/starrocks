@@ -446,10 +446,10 @@ Status AIProjectProcessor::_prepare_and_submit(RuntimeState* state, int32_t driv
             AIProjectTaskRequest request{.task_id = submission.task_id,
                                          .model = row.model,
                                          .prompt = row.prompt,
-                                         .options = output.input.options.get(),
+                                         .options = output.input.options,
                                          .provider_id = output.provider_id,
                                          .capability = output.capability,
-                                         .media = row.media ? &*row.media : nullptr};
+                                         .media = row.media};
             AITaskCallback callback;
             auto build_callback = [&] {
                 // Lane is the process-scoped async completion state. It keeps
@@ -470,7 +470,7 @@ Status AIProjectProcessor::_prepare_and_submit(RuntimeState* state, int32_t driv
                                               &clear_callback);
             });
 
-            auto handle_or = _submitter->submit(request, std::move(callback));
+            auto handle_or = _submitter->submit(std::move(request), std::move(callback));
             if (!handle_or.ok()) {
                 _complete_submit_failure(lane, _config.on_error == "ignore", submission.task_id,
                                          submission.output_index, submission.row_index, handle_or.status());

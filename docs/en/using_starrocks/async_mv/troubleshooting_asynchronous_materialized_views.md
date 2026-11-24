@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 30
 description: "Troubleshooting guide for asynchronous materialized views in StarRocks: how to diagnose and fix refresh failures, query rewrite issues, and data consistency..."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Troubleshooting asynchronous materialized views
@@ -55,7 +56,7 @@ last_refresh_error_message           |
 rows                                 | 0
 text                                 | CREATE MATERIALIZED VIEW `mv_pred_2` (`lo_quantity`, `lo_revenue`, `sum`)
 DISTRIBUTED BY HASH(`lo_quantity`, `lo_revenue`) BUCKETS 2
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PROPERTIES (
 "replication_num" = "3",
 "storage_medium" = "HDD"
@@ -172,7 +173,7 @@ MySQL > SHOW CREATE TABLE mv_agg\G
 Materialized View        | mv_agg
 Create Materialized View | CREATE MATERIALIZED VIEW `mv_agg` (`c_custkey`)
 DISTRIBUTED BY RANDOM
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PROPERTIES (
 "replication_num" = "3",
 "replicated_storage" = "true",
@@ -240,7 +241,7 @@ If you failed to create an asynchronous materialized view, that is, the CREATE M
 
   ```SQL
   CREATE MATERIALIZED VIEW <mv_name> 
-  REFRESH ASYNC -- The refresh strategy of the asynchronous materialized view.
+  REFRESH <refresh_strategy> -- The refresh strategy of the asynchronous materialized view.
   DISTRIBUTED BY HASH(<column>) -- The data distribution strategy of the asynchronous materialized view.
   AS <query>
   ```
@@ -275,7 +276,7 @@ If the materialized view fails to refresh, that is, the state of the refresh tas
   ```SQL
   -- Define the properties when creating the materialized view.
   CREATE MATERIALIZED VIEW mv1 
-  REFRESH ASYNC
+  REFRESH ON_CHANGE
   PROPERTIES ( 'session.enable_spill'='true' )
   AS <query>;
 
@@ -402,7 +403,7 @@ If your materialized view fails to rewrite relevant queries, you can look into t
 Example 1: The materialized view `mv1` uses nested aggregation. Thus, it cannot be used to rewrite queries.
 
 ```SQL
-CREATE MATERIALIZED VIEW mv1 REFRESH ASYNC AS
+CREATE MATERIALIZED VIEW mv1 REFRESH ON_CHANGE AS
 select count(distinct cnt) 
 from (
     select c_city, count(*) cnt 
@@ -414,7 +415,7 @@ from (
 Example 2: The materialized view `mv2` uses join plus aggregation. Thus, it cannot be used to rewrite queries. To solve this problem, you can create a materialized view with aggregation, and then a nested materialized view with join based on the previous one.
 
 ```SQL
-CREATE MATERIALIZED VIEW mv2 REFRESH ASYNC AS
+CREATE MATERIALIZED VIEW mv2 REFRESH ON_CHANGE AS
 select *
 from (
     select lo_orderkey, lo_custkey, p_partkey, p_name
@@ -432,14 +433,14 @@ on lo.lo_custkey = cust.c_custkey;
 Example 3: The materialized view `mv3` cannot rewrite queries in the pattern of `SELECT c_city, sum(tax) FROM tbl WHERE dt='2023-01-01' AND c_city = 'xxx'` because the column that the predicate referenced is not in the SELECT expression.
 
 ```SQL
-CREATE MATERIALIZED VIEW mv3 REFRESH ASYNC AS
+CREATE MATERIALIZED VIEW mv3 REFRESH ON_CHANGE AS
 SELECT c_city, sum(tax) FROM tbl GROUP BY c_city;
 ```
 
 To solve this problem, you can create the materialized view as follows:
 
 ```SQL
-CREATE MATERIALIZED VIEW mv3 REFRESH ASYNC AS
+CREATE MATERIALIZED VIEW mv3 REFRESH ON_CHANGE AS
 SELECT dt, c_city, sum(tax) FROM tbl GROUP BY dt, c_city;
 ```
 
@@ -448,16 +449,12 @@ SELECT dt, c_city, sum(tax) FROM tbl GROUP BY dt, c_city;
 #### Which resource group controls the resources for asynchronous materialized views? How can I adjust the configuration of it?
 
 If the `resource_group` property is not specified when creating an asynchronous materialized view, the system assigns it to the default resource group `default_mv_wg`. Its default configuration is:
-- `cpu_core_limit`: 1
+- `cpu_weight_percent`: 1
 - `mem_limit`: 80%
 - `concurrency_limit`: 0
 - `spill_mem_limit_threshold`: 80%
 
-You can adjust its CPU limit, memory limit, concurrency limit, and spill threshold through the following BE configuration items:
-- `default_mv_resource_group_cpu_limit`
-- `default_mv_resource_group_memory_limit`
-- `default_mv_resource_group_concurrency_limit`
-- `default_mv_resource_group_spill_mem_limit_threshold`
+`default_mv_wg` is stored and persisted in the FE. You can adjust its CPU limit, memory limit, concurrency limit, and spill threshold with [ALTER RESOURCE GROUP](../../sql-reference/sql-statements/cluster-management/resource_group/ALTER_RESOURCE_GROUP.md), for example, `ALTER RESOURCE GROUP default_mv_wg WITH ('mem_limit' = '60%')`. The BE configuration items `default_mv_resource_group_cpu_limit`, `default_mv_resource_group_memory_limit`, `default_mv_resource_group_concurrency_limit`, and `default_mv_resource_group_spill_mem_limit_threshold` are deprecated and no longer affect `default_mv_wg`.
 
 You can also assign a dedicated resource group to a materialized view by specifying the `resource_group` property.
 

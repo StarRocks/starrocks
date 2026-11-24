@@ -14,8 +14,10 @@
 
 package com.starrocks.alter.reshard;
 
+import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RecycleMaterializedIndexInfo;
@@ -157,8 +159,6 @@ public abstract class TabletReshardJob implements Writable {
     private transient LeaderLease admissionLease;
     // Published only after the installed replacement layout's CLEANING record is durable.
     private transient volatile boolean layoutReady;
-    // A failed CLEANING log must be retried without installing indexes or cleaning again.
-    private transient TabletReshardJob pendingCleaningLog;
 
     public boolean isLayoutReady() {
         return layoutReady && (jobState == JobState.CLEANING || jobState == JobState.FINISHED);
@@ -175,7 +175,6 @@ public abstract class TabletReshardJob implements Writable {
     void initializeAfterRecovery() {
         admissionReady = true;
         layoutReady = jobState == JobState.CLEANING || jobState == JobState.FINISHED;
-        pendingCleaningLog = null;
     }
 
     public LeaderLease getAdmissionLease() {
@@ -264,27 +263,65 @@ public abstract class TabletReshardJob implements Writable {
             publishFinalState(jobState);
             return;
         }
+        if (jobState == JobState.CLEANING) {
+            // A job with no layout to install; split and merge install theirs through journalCleaningThenInstall.
+            journalCleaningThenInstall(newCleaningRecord(), () -> {
+            });
+            return;
+        }
         long currentTimeMs = System.currentTimeMillis();
         this.jobState = jobState;
 
         this.stateStartedTimeMs = currentTimeMs;
 
-        if (jobState == JobState.CLEANING) {
-            pendingCleaningLog = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(this), getClass());
-            retryPendingCleaningLog();
-        } else {
-            GlobalStateMgr.getCurrentState().getEditLog().logUpdateTabletReshardJob(this);
-        }
+        GlobalStateMgr.getCurrentState().getEditLog().logUpdateTabletReshardJob(this);
 
         LOG.info("Tablet reshard job set job state. {}", this);
     }
 
-    private void retryPendingCleaningLog() {
-        if (pendingCleaningLog != null) {
-            GlobalStateMgr.getCurrentState().getEditLog().logUpdateTabletReshardJob(pendingCleaningLog);
+    /**
+     * Moves the job to CLEANING, the state in which its new layout -- the replacement indexes, and the commit version
+     * they make visible -- is in place. The CLEANING record is journaled first; only once it is durable does the
+     * record's applier install the layout and change the state. The caller holds the table WRITE lock across the call
+     * and has checked that the layout can be installed.
+     *
+     * <p>The order matters because a load committed at the version right above the job's finishes, and journals its
+     * VISIBLE record, as soon as it sees the job's version visible, and replaying that record needs the job's version
+     * to be visible already. A load checks the version under the table READ lock and journals VISIBLE under the WRITE
+     * lock, so with the caller holding the WRITE lock, no load can do either before the CLEANING record is in the
+     * journal and the layout is installed.
+     *
+     * <p>If the record cannot be journaled, which short of a programming error happens only while this FE is giving up
+     * leadership (a failed commit on a serving leader exits the process), nothing has changed: the job is still
+     * RUNNING on the old layout, and whichever leader runs it next repeats the RUNNING step. The caller changes the
+     * job only from installNewLayout, which runs once the record is durable.
+     * The install cannot fail once the record is durable, because the caller checked it under the same lock: an
+     * install stopping halfway would leave this FE's catalog different from the one every replay of the record builds,
+     * and nothing would ever reconcile them.
+     *
+     * @param record the job's CLEANING record, from {@link #newCleaningRecord}
+     */
+    protected void journalCleaningThenInstall(TabletReshardJob record, Runnable installNewLayout) {
+        record.stateStartedTimeMs = System.currentTimeMillis();
+        GlobalStateMgr.getCurrentState().getEditLog().logUpdateTabletReshardJob(record, wal -> {
+            // Set before the install, which stamps the visible version with it, as the replay of the record does.
+            stateStartedTimeMs = record.stateStartedTimeMs;
+            installNewLayout.run();
+            jobState = JobState.CLEANING;
             layoutReady = true;
-            pendingCleaningLog = null;
-        }
+        });
+        LOG.info("Tablet reshard job set job state. {}", this);
+    }
+
+    /**
+     * A copy of the job as its CLEANING record, for {@link #journalCleaningThenInstall}. The copy carries every new
+     * tablet, so the caller takes it before the table lock it journals under, and adds under that lock only what is
+     * decided there.
+     */
+    protected TabletReshardJob newCleaningRecord() {
+        TabletReshardJob record = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(this), getClass());
+        record.jobState = JobState.CLEANING;
+        return record;
     }
 
     private void publishFinalState(JobState desiredState) {
@@ -303,6 +340,9 @@ public abstract class TabletReshardJob implements Writable {
                         if (isDone()) {
                             return;
                         }
+                        if (desiredState == JobState.FINISHED && table != null) {
+                            applyFinishedLocked(table);
+                        }
                         finishedTimeMs = snapshot.finishedTimeMs;
                         stateStartedTimeMs = snapshot.stateStartedTimeMs;
                         jobState = desiredState;
@@ -312,6 +352,14 @@ public abstract class TabletReshardJob implements Writable {
                     }));
         }
         LOG.info("Tablet reshard job set job state. {}", this);
+    }
+
+    /**
+     * Applies, on the leader, what the FINISHED record changes in the catalog beyond the job itself. Runs under the
+     * table WRITE lock once the record is durable, so nothing it changes can be seen before the record that makes
+     * every replaying FE change it too.
+     */
+    protected void applyFinishedLocked(OlapTable table) {
     }
 
     private void recordTerminalMetrics(JobState state) {
@@ -370,7 +418,6 @@ public abstract class TabletReshardJob implements Writable {
 
     public void run() {
         try {
-            retryPendingCleaningLog();
             JobState prevState = null;
             do {
                 prevState = jobState;
@@ -530,6 +577,32 @@ public abstract class TabletReshardJob implements Writable {
     }
 
     /**
+     * Checks, under the caller's table WRITE lock, what installing the replacement indexes requires, so that a layout
+     * that cannot be installed is found before anything of it is journaled or changed: every partition still there is
+     * at the version right below the job's, and every replacement index can be added to its partition.
+     */
+    protected static void checkNewIndexesInstallable(OlapTable olapTable,
+            Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) {
+        for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
+            PhysicalPartition physicalPartition = olapTable
+                    .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
+            if (physicalPartition == null) {
+                continue;
+            }
+            long commitVersion = reshardingPhysicalPartition.getCommitVersion();
+            Preconditions.checkState(commitVersion == physicalPartition.getVisibleVersion() + 1,
+                    "partition: " + physicalPartition.getId() + ", commit version: " + commitVersion
+                            + ", visible version: " + physicalPartition.getVisibleVersion());
+            for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
+                    .getReshardingIndexes().values()) {
+                MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
+                physicalPartition.checkMaterializedIndexAddable(newIndex,
+                        newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
+            }
+        }
+    }
+
+    /**
      * Shared reshard-cleanup step for split and merge: for every superseded (old) materialized index,
      * schedule its removal in the {@code CatalogRecycleBin} at index granularity, so an in-flight query
      * planned against it can keep reading until the retention (partition_recycle_retention_period_secs)
@@ -547,8 +620,8 @@ public abstract class TabletReshardJob implements Writable {
      * never a partition-directory delete, which for a split would destroy the live child tablets that
      * share the parent's object-storage directory.
      *
-     * <p>Runs on both the leader (runCleaningJob) and the replay path (replayFinishedJob); it is
-     * deterministic (the index keeps its own id, no id allocation) and
+     * <p>Runs on both the leader (a merge from runCleaningJob, a split from applyFinishedLocked) and the replay
+     * path (replayFinishedJob); it is deterministic (the index keeps its own id, no id allocation) and
      * {@code recycleMaterializedIndex} is idempotent, so a re-run is safe. The caller holds the table
      * WRITE lock and passes the locked table.
      */

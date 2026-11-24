@@ -142,6 +142,28 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, Mem
         }
     }
 
+    // Whether the partition is one of the temporary partitions a running static (not dynamic) overwrite job on the
+    // table created for its own write.
+    public boolean isTmpPartitionOfRunningStaticJob(long tableId, long partitionId) {
+        lock.readLock().lock();
+        try {
+            List<Long> jobIds = tableToOverwriteJobs.get(tableId);
+            if (jobIds == null) {
+                return false;
+            }
+            for (Long jobId : jobIds) {
+                InsertOverwriteJob job = overwriteJobMap.get(jobId);
+                if (job != null && !job.isDynamicOverwrite() && job.getTmpPartitionIds() != null
+                        && job.getTmpPartitionIds().contains(partitionId)) {
+                    return true;
+                }
+            }
+            return false;
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
     public void replayCreateInsertOverwrite(CreateInsertOverwriteJobLog jobInfo) {
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(jobInfo.getJobId(),
                 jobInfo.getDbId(), jobInfo.getTableId(), jobInfo.getTargetPartitionIds(), jobInfo.isDynamicOverwrite());

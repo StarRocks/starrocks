@@ -52,6 +52,12 @@ public:
     KafkaConsumerPipe(size_t max_buffered_bytes = 1024 * 1024, size_t min_chunk_size = 64 * 1024)
             : StreamLoadPipe(max_buffered_bytes, min_chunk_size) {}
 
+    // For a pipe read by a pipeline scan operator, which must not block on Kafka: with non_blocking_read, reading
+    // an empty pipe returns TimedOut after waiting at most non_blocking_wait_us, so that the operator yields.
+    KafkaConsumerPipe(bool non_blocking_read, int32_t non_blocking_wait_us, size_t max_buffered_bytes,
+                      size_t min_chunk_size)
+            : StreamLoadPipe(non_blocking_read, non_blocking_wait_us, max_buffered_bytes, min_chunk_size) {}
+
     ~KafkaConsumerPipe() override = default;
 
     // CSV path: one buffer may hold many rows separated by row_delimiter. No source metadata is

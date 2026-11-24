@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将列值累积到 Apache DataSketches Theta 草图中，以 VARBINARY 格式返回序列化的紧凑草图。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_theta_accumulate

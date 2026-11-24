@@ -14,6 +14,7 @@
 
 #include "exprs/math_functions.h"
 
+#include <fmt/format.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
@@ -1891,6 +1892,41 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
         columns_const.emplace_back(std::move(col2));
         auto result = MathFunctions::iceberg_truncate_int<TYPE_INT>(ctx.get(), columns_const);
         ASSERT_EQ(result.status().message(), "Truncate to integer failed, because the result is overflow.");
+    }
+}
+
+// Iceberg year/month ordinals are floor(units since epoch), i.e. calendar fields only.
+TEST_F(VecMathFunctionsTest, icebergYearMonthTransformBeforeEpoch) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    struct Case {
+        int y, m, d;
+        int64_t year, month;
+    };
+    const std::vector<Case> cases = {
+            {1, 1, 1, -1969, -23628},   {999, 1, 1, -971, -11652}, {999, 12, 31, -971, -11641},
+            {1000, 1, 1, -970, -11640}, {1969, 1, 1, -1, -12},     {1969, 6, 15, -1, -7},
+            {1969, 11, 15, -1, -2},     {1969, 12, 15, -1, -1},    {1969, 12, 31, -1, -1},
+            {1970, 1, 1, 0, 0},         {1970, 6, 15, 0, 5},       {2026, 12, 31, 56, 683},
+    };
+    for (const auto& c : cases) {
+        SCOPED_TRACE(fmt::format("{:04d}-{:02d}-{:02d}", c.y, c.m, c.d));
+        auto date_col = DateColumn::create();
+        date_col->append(DateValue::create(c.y, c.m, c.d));
+        Columns dates{std::move(date_col)};
+        auto ts_col = TimestampColumn::create();
+        ts_col->append(TimestampValue::create(c.y, c.m, c.d, 23, 59, 59, 999999));
+        Columns timestamps{std::move(ts_col)};
+
+        auto value = [](const StatusOr<ColumnPtr>& r) {
+            return ColumnHelper::as_column<Int64Column>(r.value())->get_data()[0];
+        };
+        EXPECT_EQ(c.year, value(TimeFunctions::iceberg_years_since_epoch_date(ctx.get(), dates)));
+        EXPECT_EQ(c.month, value(TimeFunctions::iceberg_months_since_epoch_date(ctx.get(), dates)));
+        EXPECT_EQ(c.year, value(TimeFunctions::iceberg_years_since_epoch_datetime(ctx.get(), timestamps)));
+        EXPECT_EQ(c.month, value(TimeFunctions::iceberg_months_since_epoch_datetime(ctx.get(), timestamps)));
+        EXPECT_EQ(c.year, value(TimeFunctions::iceberg_timestamptz_years_since_epoch_datetime(ctx.get(), timestamps)));
+        EXPECT_EQ(c.month,
+                  value(TimeFunctions::iceberg_timestamptz_months_since_epoch_datetime(ctx.get(), timestamps)));
     }
 }
 

@@ -14,7 +14,6 @@
 
 package com.starrocks.transaction;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.primitives.Ints;
 import com.starrocks.catalog.Database;
@@ -29,6 +28,7 @@ import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.load.EtlJobType;
@@ -83,6 +83,7 @@ import static com.starrocks.common.ErrorCode.ERR_TXN_NOT_EXIST;
 
 public class TransactionStmtExecutor {
     private static final Logger LOG = LogManager.getLogger(TransactionStmtExecutor.class);
+    private static final String USER_ROLLBACK_REASON = "rollback transaction by user";
 
     public static void beginStmt(ConnectContext context, BeginStmt stmt) {
         beginStmt(context, stmt, TransactionState.LoadJobSourceType.INSERT_STREAMING);
@@ -361,17 +362,9 @@ public class TransactionStmtExecutor {
                 txnStatus = TransactionStatus.COMMITTED;
             }
 
-            List<ExplicitTxnState.ExplicitTxnStateItem> explicitTxnStateItems
-                    = explicitTxnState.getTransactionStateItems();
-            List<Long> callbackIds = transactionState.getCallbackId();
-
-            for (int i = 0; i < explicitTxnStateItems.size(); i++) {
-                ExplicitTxnState.ExplicitTxnStateItem item = explicitTxnStateItems.get(i);
-
+            for (ExplicitTxnState.ExplicitTxnStateItem item : explicitTxnState.getTransactionStateItems()) {
                 DmlStmt dmlStmt = item.getDmlStmt();
                 if (dmlStmt instanceof InsertStmt) {
-                    Preconditions.checkArgument(explicitTxnStateItems.size() == callbackIds.size());
-
                     TableRef tableRef = dmlStmt.getTableRef();
                     Table targetTable = GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .getTable(database.getFullName(), tableRef.getTableName());
@@ -383,9 +376,11 @@ public class TransactionStmtExecutor {
 
                     GlobalStateMgr.getCurrentState().getOperationListenerBus()
                             .onDMLStmtJobTransactionFinish(transactionState, database, targetTable, DmlType.fromStmt(dmlStmt));
+                }
 
+                if (item.getInsertLoadJobId() != -1) {
                     context.getGlobalStateMgr().getLoadMgr().recordFinishedOrCancelledLoadJob(
-                            callbackIds.get(i),
+                            item.getInsertLoadJobId(),
                             EtlJobType.INSERT,
                             "",
                             "");
@@ -429,7 +424,7 @@ public class TransactionStmtExecutor {
             // PREPARE until the transaction timeout and keeps its tables against schema changes.
             String abortError = null;
             try {
-                abortError = abortRegisteredTransaction(transactionState, "rollback transaction by user");
+                abortError = abortRegisteredTransaction(transactionState, USER_ROLLBACK_REASON);
             } finally {
                 // Same contract as the branch below: the explicit state is gone whatever the abort
                 // did, a failure is reported to the user, and the transaction timeout checker bounds
@@ -462,26 +457,25 @@ public class TransactionStmtExecutor {
 
             List<ExplicitTxnState.ExplicitTxnStateItem> explicitTxnStateItems
                     = explicitTxnState.getTransactionStateItems();
-            List<Long> callbackIds = transactionState.getCallbackId();
-
-            for (int i = 0; i < explicitTxnStateItems.size(); i++) {
-                ExplicitTxnState.ExplicitTxnStateItem item = explicitTxnStateItems.get(i);
-                DmlStmt dmlStmt = item.getDmlStmt();
+            for (ExplicitTxnState.ExplicitTxnStateItem item : explicitTxnStateItems) {
                 commitInfos.addAll(item.getTabletCommitInfos());
                 failInfos.addAll(item.getTabletFailInfos());
-                if (dmlStmt instanceof InsertStmt) {
-                    Preconditions.checkArgument(explicitTxnStateItems.size() == callbackIds.size());
-                    loadMgr.recordFinishedOrCancelledLoadJob(callbackIds.get(i), EtlJobType.INSERT, "", "");
-                }
             }
 
             transactionMgr.abortTransaction(
                     databaseId,
                     transactionId,
-                    "rollback transaction by user",
+                    USER_ROLLBACK_REASON,
                     commitInfos,
                     failInfos,
                     null);
+
+            for (ExplicitTxnState.ExplicitTxnStateItem item : explicitTxnStateItems) {
+                if (item.getInsertLoadJobId() != -1) {
+                    loadMgr.recordFinishedOrCancelledLoadJob(
+                            item.getInsertLoadJobId(), EtlJobType.INSERT, USER_ROLLBACK_REASON, "");
+                }
+            }
 
             context.getState().setOk(0, 0,
                     buildMessage(transactionState.getLabel(), TransactionStatus.ABORTED, transactionId, -1));
@@ -622,8 +616,8 @@ public class TransactionStmtExecutor {
                     if (Config.log_plan_cancelled_by_crash_be && context.getQueryDetail() == null) {
                         LOG.warn("Query cancelled by crash of backends [QueryId={}] [SQL={}] [Plan={}]",
                                 DebugUtil.printId(context.getExecutionId()),
-                                originStmt == null ? "" : originStmt.originStmt,
-                                execPlan.getExplainString(TExplainLevel.COSTS));
+                                LogUtil.desensitizeSql(originStmt == null ? "" : originStmt.originStmt, dmlStmt),
+                                execPlan.getExplainStringForLog(TExplainLevel.COSTS));
                     }
 
                     coord.cancel(ErrorCode.ERR_QUERY_CANCELLED_BY_CRASH.formatErrorMsg());
@@ -682,6 +676,7 @@ public class TransactionStmtExecutor {
             item.addFilteredRows(filteredRows);
             item.addLoadedBytes(loadedBytes);
             item.setLoadId(context.getExecutionId());
+            item.setInsertLoadJobId(jobId);
             return item;
         } catch (StarRocksException | RpcException | InterruptedException e) {
             if (jobId != -1) {

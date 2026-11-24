@@ -3,6 +3,7 @@ sidebar_position: 10
 displayed_sidebar: docs
 description: "FE configuration parameters for logging, server settings, and metadata management."
 sidebar_label: "日志、服务器和元数据"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE 配置 - 日志、服务器和元数据
@@ -327,7 +328,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否启用 profile 日志。启用此功能后，FE 会将每个查询的 profile 日志（由 `ProfileManager` 生成的序列化 `queryDetail` JSON）写入 profile 日志接收器。此日志记录仅在 `enable_collect_query_detail_info` 也启用时执行；当 `enable_profile_log_compress` 启用时，JSON 可能会在日志记录前进行 gzip 压缩。Profile 日志文件由 `profile_log_dir`、`profile_log_roll_num`、`profile_log_roll_interval` 管理，并根据 `profile_log_delete_age` 进行轮转/删除（支持 `7d`、`10h`、`60m`、`120s` 等格式）。禁用此功能会停止写入 profile 日志（减少磁盘 I/O、压缩 CPU 和存储使用）。
+- 描述: 是否启用 profile 日志。启用此功能后，FE 会将每个查询的 profile 日志（由 `ProfileManager` 生成的序列化 `queryDetail` JSON）写入 profile 日志接收器。此日志记录仅在 `enable_collect_query_detail_info` 也启用时执行。Profile 日志文件由 `profile_log_dir`、`profile_log_roll_num`、`profile_log_roll_interval` 管理，并根据 `profile_log_delete_age` 进行轮转/删除（支持 `7d`、`10h`、`60m`、`120s` 等格式）。禁用此功能会停止写入 profile 日志（减少磁盘 I/O、压缩 CPU 和存储使用）。
 - 引入版本: v3.2.5
 
 ### `enable_qe_slow_log`
@@ -616,7 +617,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：毫秒
 - 是否动态：是
 - 描述：写入 `fe.profile.log` 的查询最小延迟（毫秒）。仅当查询执行时间大于或等于该值时才记录 profile。设为 0 表示记录所有 profile（无阈值）。设为正数可仅记录较慢的查询以降低日志量。
-- 引入版本：-
+- 引入版本：v4.2.0
 
 ### `profile_log_roll_file_index`
 
@@ -651,7 +652,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: MB
 - 是否可变: No
-- 描述: 设置触发 FE profile 日志文件基于大小轮转的大小阈值（以兆字节为单位）。此值由 Log4j RollingFile SizeBasedTriggeringPolicy 用于 `ProfileFile` appender；当 profile 日志超过 `profile_log_roll_size_mb` 时，它将被轮转。当达到 `profile_log_roll_interval` 时，也可以按时间进行轮转——任一条件都会触发轮转。结合 `profile_log_roll_num` 和 `profile_log_delete_age`，此项控制保留多少历史 profile 文件以及何时删除旧文件。轮转文件的压缩由 `enable_profile_log_compress` 控制。
+- 描述: 设置触发 FE profile 日志文件基于大小轮转的大小阈值（以兆字节为单位）。此值由 Log4j RollingFile SizeBasedTriggeringPolicy 用于 `ProfileFile` appender；当 profile 日志超过 `profile_log_roll_size_mb` 时，它将被轮转。当达到 `profile_log_roll_interval` 时，也可以按时间进行轮转——任一条件都会触发轮转。结合 `profile_log_roll_num` 和 `profile_log_delete_age`，此项控制保留多少历史 profile 文件以及何时删除旧文件。
 - 引入版本: v3.2.5
 
 ### `qe_slow_log_ms`
@@ -787,7 +788,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: String
 - 单位: -
 - 是否可变: No
-- 描述: 系统日志条目分类的严重性级别。有效值：`INFO`、`WARN`、`ERROR` 和 `FATAL`。
+- 描述: 系统日志条目分类的严重性级别。有效值：`DEBUG`、`INFO`、`WARN`、`ERROR` 和 `FATAL`。
 - 引入版本: -
 
 ### `sys_log_roll_file_index`
@@ -834,7 +835,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: String[]
 - 单位: -
 - 是否可变: No
-- 描述: StarRocks 为其生成系统日志的模块。如果此参数设置为 `org.apache.starrocks.catalog`，则 StarRocks 仅为 catalog 模块生成系统日志。模块名称用逗号 (,) 和空格分隔。
+- 描述: 除 `sys_log_level` 指定级别的日志外，StarRocks 还为其生成 DEBUG 级别系统日志的模块。如果此参数设置为 `com.starrocks.catalog`，则 StarRocks 还会为 catalog 模块生成 DEBUG 级别的系统日志。模块名称用逗号 (,) 和空格分隔。
 - 引入版本: -
 
 ### `sys_log_warn_modules`
@@ -1009,7 +1010,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: No
-- 引入版本: v4.2.0
+- 引入版本: v4.1.3
 - 描述: 是否对大部分外部 FE HTTP 接口启用 Basic Auth。凭证通过 `AuthenticationHandler.authenticate()` 校验，因此 LDAP / security integration 在 HTTP 路径上的工作方式与 MySQL 协议一致。以下接口始终豁免:
   - 公开探针 / 可观测性: `/api/bootstrap`、`/api/oauth2`。
   - 由 handler 自行通过 IP 白名单或 token 鉴权的对等 FE / 控制面端点: `/image`、`/check`、`/journal_id`、`/info`、`/role`、`/static`、`/api/get_small_file`。
@@ -1028,6 +1029,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 非 MySQL 通道（HTTP、Arrow Flight、直连 BE 的 Stream Load）上 Bearer token 认证的总开关。设为 `false` 后，这些通道收到 `Authorization: Bearer ...` 一律返回 HTTP 401，回退到"只有 MySQL 协议支持 token 认证"的行为；Basic 认证与既有的 Arrow Flight UUID session token 不受影响。MySQL 协议的认证任何情况下都不受此开关控制。
 - 引入版本: v4.2
+
+### `authentication_chain_accept_jwt_as_password`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否允许安全集成用户把 JWT 当作 MySQL 登录的口令提交（`mysql_clear_password` 插件）。设为 `true` 后，这样的口令形状像一个 JWT 时，StarRocks 先把它当 token 交给 `authentication_chain` 中的 JWT 和 OAuth 2.0 安全集成验证，没有任何一个接受时才把它当口令交给 LDAP 安全集成。这样没有 `authentication_openid_connect_client` 插件的 MySQL 客户端也能通过与 LDAP 安全集成同在 `authentication_chain` 中的 JWT 安全集成登录。设为 `false` 时，这样的口令直接交给 LDAP 安全集成。该配置项只作用于 MySQL 协议：HTTP 和 Arrow Flight 以 `Bearer` 携带 token，它们的 `Basic` 口令不会被当作 token。一个碰巧长得像 token 的口令会在走口令路径之前多经历一次被拒绝的 token 校验；认证指标只按这次登录的最终结果计数。
+- 引入版本: -
 
 ### `http_web_page_display_hardware`
 
@@ -1593,7 +1603,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 在为日志条目创建日志文件之前可以写入的元数据日志条目的最大数量。此参数用于控制日志文件的大小。新的日志文件写入 BDBJE 数据库。
+- 描述: 在为日志条目创建日志文件之前可以写入的元数据日志条目的最大数量。此参数用于控制日志文件的大小。新的日志文件写入 BDBJE 数据库。此参数同时决定生成元数据镜像（Checkpoint）的频率，因为 Checkpoint 只覆盖已经滚动完成的日志文件中的日志条目。
 - 引入版本: -
 
 ### `edit_log_type`
@@ -1621,6 +1631,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: Yes
 - 描述: FE 全局异步调度线程池中的线程数，用于处理来自 Connector 写入路径的 “refresh other FE” 后台任务。这些线程仅负责调度后台刷新任务，不会直接向其他 FE 发送刷新 RPC。修改后可在运行中的 FE 上动态生效，无需重启。
+- 引入版本: -
+
+### `iceberg_commit_invalidate_other_fe_timeout_ms`
+
+- 默认值: 3000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: Iceberg 表提交（INSERT、INSERT OVERWRITE、DELETE、UPDATE、MERGE 或 compaction）返回前，等待其他 FE 删除该表缓存的最长时间，使语句返回后在任意 FE 上查询都能看到这次提交。在该时间内没有响应的 FE 由后台刷新更新。滚动升级期间，旧版本的 FE 会改为刷新该表，因此一次提交最多可能等待这么久。设置为 0 或更小的值表示不等待。
 - 引入版本: -
 
 ### `refresh_other_fe_rpc_executor_thread_num`
@@ -1855,7 +1874,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: 毫秒
 - 是否可变: Yes
 - 描述: Follower 和 Observer FE 重新判断自身元数据是否仍足够新、能否继续提供读服务的时间间隔，判断标准见 `meta_delay_toleration_second`。取值会被限制在 [10, 5000] 范围内。该检查运行在独立线程上，而不是元数据回放线程上，因此当某条日志回放耗时很久时（例如回放操作正在等待数据库锁），节点仍能及时停止用陈旧的元数据提供服务。
-- 引入版本: v4.2
+- 引入版本: v4.1.6, v4.2
 
 ### `metadata_replay_stuck_warn_threshold_second`
 
@@ -1864,7 +1883,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: 秒
 - 是否可变: Yes
 - 描述: 单条元数据日志的回放耗时超过该值时，会在 **fe.log** 中记录一条回放卡住的日志，并附带回放线程的堆栈，便于定位阻塞元数据回放的原因。设置为 `0` 表示关闭该日志。
-- 引入版本: v4.2
+- 引入版本: v4.1.6, v4.2
 
 ### `meta_dir`
 

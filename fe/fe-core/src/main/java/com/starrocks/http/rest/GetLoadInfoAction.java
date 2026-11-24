@@ -43,6 +43,9 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.load.Load;
+import com.starrocks.load.LoadJobRedaction;
+import com.starrocks.load.LoadJobVisibility;
+import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
 import io.netty.handler.codec.http.HttpMethod;
@@ -75,14 +78,20 @@ public class GetLoadInfoAction extends RestBaseAction {
             return;
         }
 
-        if (info.tblNames.isEmpty()) {
-            Authorizer.checkActionInDb(ConnectContext.get(), info.dbName, PrivilegeType.INSERT);
-        } else {
-            for (String tblName : info.tblNames) {
-                Authorizer.checkTableAction(ConnectContext.get(), info.dbName, tblName, PrivilegeType.INSERT);
+        Authorizer.checkActionInDb(ConnectContext.get(), info.dbName, PrivilegeType.INSERT);
+        LoadJob loadJob = globalStateMgr.getLoadMgr().getLoadJobInfo(info);
+        // The result carries the job's error-log URL and fail message, so it goes in full only to a user who may
+        // read the rows the job loads. With the rule off the database-level check above is the only one, as before
+        // it: the per-table check that preceded it ran while the job's tables were still unknown.
+        if (LoadJobVisibility.isEnabled()) {
+            LoadJobVisibility.Access access = LoadJobVisibility.accessOf(ConnectContext.get(), loadJob);
+            if (access == LoadJobVisibility.Access.NONE) {
+                throw new AccessDeniedException();
+            }
+            if (access != LoadJobVisibility.Access.FULL) {
+                LoadJobRedaction.redact(info, loadJob.getFailMsg());
             }
         }
-        globalStateMgr.getLoadMgr().getLoadJobInfo(info);
 
         sendResult(request, response, new Result(info));
     }

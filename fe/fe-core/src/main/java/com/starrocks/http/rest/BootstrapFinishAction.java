@@ -104,6 +104,7 @@ public class BootstrapFinishAction extends RestBaseAction {
                     result.setHeapUsedPercent(JvmStats.getJvmHeapUsedPercent());
                     result.setCpuCores(MachineInfo.getInstance().getCpuCores());
                     result.setMacAddress(MachineInfo.getInstance().getMacAddress());
+                    result.setRebuildsLakeIndexPayload(true);
                 }
             }
         } else {
@@ -133,6 +134,10 @@ public class BootstrapFinishAction extends RestBaseAction {
         private int cpuCores;
         @SerializedName("macAddress")
         private String macAddress;
+        // Whether this FE rebuilds the BE payload of the lake index fast-path jobs it takes over. An FE that predates
+        // the rebuild does not send the key, which reads back as false.
+        @SerializedName("rebuildsLakeIndexPayload")
+        private boolean rebuildsLakeIndexPayload;
 
         public BootstrapResult() {
             super();
@@ -204,6 +209,14 @@ public class BootstrapFinishAction extends RestBaseAction {
 
         public void setMacAddress(String macAddress) {
             this.macAddress = macAddress;
+        }
+
+        public boolean rebuildsLakeIndexPayload() {
+            return rebuildsLakeIndexPayload;
+        }
+
+        public void setRebuildsLakeIndexPayload(boolean rebuildsLakeIndexPayload) {
+            this.rebuildsLakeIndexPayload = rebuildsLakeIndexPayload;
         }
 
         @Override

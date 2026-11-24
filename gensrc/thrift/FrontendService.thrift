@@ -50,6 +50,7 @@ include "AgentService.thrift"
 include "ResourceUsage.thrift"
 include "MVMaintenance.thrift"
 include "DataCache.thrift"
+include "CloudConfiguration.thrift"
 
 // These are supporting structs for JniFrontend.java, which serves as the glue
 // between our C++ execution environment and the Java frontend.
@@ -640,6 +641,8 @@ struct TGetLoadsParams {
     // declares it understands TGetLoadsResult.next_job_id_offset; FE returns the whole
     // result set unpaged when it is absent, so an old BE keeps its previous behavior.
     21: optional i64 start_job_id_offset
+    // The querying user. FE returns only the load jobs this user may see, and none when it is unset.
+    22: optional Types.TUserIdentity current_user_ident
 }
 
 struct TTrackingLoadInfo {
@@ -795,6 +798,18 @@ enum FrontendServiceVersion {
   V1
 }
 
+// The consumption of the Kafka scan ranges (PlanNodes.TKafkaScanRange) of one fragment instance
+struct TKafkaScanRangeReport {
+  // partition -> the offset of the last consumed message; a partition with nothing consumed reports its begin offset - 1
+  1: optional map<i32, i64> partition_cmt_offset
+  2: optional map<i32, i64> partition_cmt_offset_timestamp
+  3: optional i64 received_bytes
+  4: optional i64 received_rows
+  // whether every scan range ended with all its partitions at their end; false when one stopped at its consume time
+  // or size limit with data left, and the next round then starts at once
+  5: optional bool reached_end
+}
+
 // The results of an INSERT query, sent to the coordinator as part of
 // TReportExecStatusParams
 struct TReportExecStatusParams {
@@ -867,6 +882,11 @@ struct TReportExecStatusParams {
   28: optional RuntimeProfile.TRuntimeProfileTree load_channel_profile;
 
   29: optional DataCache.TLoadDataCacheMetrics load_datacache_metrics
+
+  // Enterprise-only fields start at 300, reserve some fields for upstream StarRocks so a sync
+  // never collides on ordinals.
+  // what the Kafka scan ranges of this instance consumed, set in the final report
+  300: optional TKafkaScanRangeReport kafka_scan_range_report
 }
 
 struct TBatchReportExecStatusParams {
@@ -1343,6 +1363,8 @@ struct TRefreshTableRequest {
   2: optional string table_name
   3: optional list<string> partitions
   4: optional string catalog_name
+  // Only drop the cached table on the receiving FE, without loading it again
+  5: optional bool invalidate_only
 }
 
 struct TRefreshTableResponse {
@@ -2511,7 +2533,7 @@ struct TCloudTabletMeta {
     3: optional bool enable_persistent_index;
     4: optional AgentService.TPersistentIndexType persistent_index_type;
     5: optional AgentService.TCompactionStrategy compaction_strategy;
-    6: optional AgentService.TFlatJsonConfig flat_json_config;
+    6: optional Descriptors.TFlatJsonConfig flat_json_config;
     7: optional map<i64, Types.TTabletRange> tablet_ranges;
     8: optional i64 gtid;
     9: optional Types.TCompressionType compression_type;
@@ -2541,6 +2563,36 @@ struct TFeMetricsResult {
     1: optional Status.TStatus status
     // JSON payload identical to the FE `/metrics?type=json` output, parsed by the BE scanner.
     2: optional string json_metrics
+}
+
+// Asked by a backend whose scan node carries a TCloudConfiguration with refresh_after_ms set, once that time
+// has passed. refresh_token is the one that configuration carried; the coordinator answers with the scan node's
+// current configuration, renewing it first if it is due.
+struct TRefreshScanCredentialsRequest {
+    1: optional Types.TUniqueId query_id;
+    2: optional i32 plan_node_id;
+    3: optional string refresh_token;
+}
+
+struct TRefreshScanCredentialsResponse {
+    1: optional Status.TStatus status;
+    2: optional CloudConfiguration.TCloudConfiguration cloud_configuration;
+}
+
+// Columns of one external table whose statistics a query found missing or expired.
+struct TTriggerExternalAnalyzeTable {
+    1: optional string table_uuid;
+    2: optional list<string> columns;
+}
+
+// Sent by a follower to the leader: query-triggered external table analyze runs only on the leader, because
+// it writes the edit log. Best effort; a dropped request is raised again by the next query.
+struct TTriggerExternalAnalyzeRequest {
+    1: optional list<TTriggerExternalAnalyzeTable> tables;
+}
+
+struct TTriggerExternalAnalyzeResponse {
+    1: optional Status.TStatus status;
 }
 
 service FrontendService {
@@ -2707,4 +2759,8 @@ service FrontendService {
     // when `enable_http_auth` is on. Returns OK status when the user/password pair is
     // valid for the given host, or an error status otherwise.
     TFeResult checkAuth(1: optional TAuthenticateParams request)
+
+    TRefreshScanCredentialsResponse refreshScanCredentials(1: optional TRefreshScanCredentialsRequest request)
+
+    TTriggerExternalAnalyzeResponse triggerExternalAnalyze(1: optional TTriggerExternalAnalyzeRequest request)
 }
