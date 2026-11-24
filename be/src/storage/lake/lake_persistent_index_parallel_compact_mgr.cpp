@@ -224,6 +224,17 @@ Status LakePersistentIndexParallelCompactTask::do_run() {
     auto merger = std::make_unique<KeyValueMerger>(merging_iter->key().to_string(), merging_iter->max_rss_rowid(),
                                                    _merge_base_level, _tablet_mgr, _metadata->id(),
                                                    true /* generate multi outputs*/);
+    if (config::lake_enable_pk_index_sst_dict_encoding) {
+        // The output keeps the values of the inputs' dictionaries, so they need not be rediscovered from a sample.
+        std::vector<std::shared_ptr<const sstable::KeyDict>> key_dict_seeds;
+        for (const auto& sst : sstables) {
+            if (auto key_dict = sst->key_dict(); key_dict != nullptr) {
+                key_dict_seeds.push_back(std::move(key_dict));
+            }
+        }
+        merger->set_key_dict_options(pk_index_key_dict_options(
+                pk_index_key_layout(TabletSchema::create(_metadata->schema())), std::move(key_dict_seeds)));
+    }
     while (merging_iter->Valid()) {
         const Slice cur_key = merging_iter->key();
         if (!_seek_range.stop_key.empty() && options.comparator->Compare(cur_key, Slice(_seek_range.stop_key)) >= 0) {

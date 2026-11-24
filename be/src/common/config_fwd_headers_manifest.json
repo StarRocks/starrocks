@@ -859,6 +859,8 @@
         "lake_pk_index_sst_min_compaction_versions",
         "lake_pk_index_sst_max_compaction_versions",
         "lake_pk_index_sst_verify_checksum",
+        "lake_enable_pk_index_sst_dict_encoding",
+        "lake_pk_index_sst_dict_max_cardinality",
         "lake_pk_index_block_cache_limit_percent",
         "cloud_native_pk_index_rebuild_files_threshold",
         "primary_key_compaction_replace_batch_rows",

@@ -62,18 +62,26 @@ public:
     const BlockHandle& index_handle() const { return index_handle_; }
     void set_index_handle(const BlockHandle& h) { index_handle_ = h; }
 
+    // Whether the table's keys are dictionary encoded (see key_dict.h). Such a table has its own magic
+    // number, so a reader that does not know the encoding rejects the file instead of misreading its keys.
+    bool has_key_dict() const { return has_key_dict_; }
+    void set_has_key_dict(bool v) { has_key_dict_ = v; }
+
     void EncodeTo(std::string* dst) const;
     Status DecodeFrom(Slice* input);
 
 private:
     BlockHandle metaindex_handle_;
     BlockHandle index_handle_;
+    bool has_key_dict_ = false;
 };
 
 // kTableMagicNumber was picked by running
 //    echo http://code.google.com/p/leveldb/ | sha1sum
 // and taking the leading 64 bits.
 static const uint64_t kTableMagicNumber = 0xdb4775248b80fb57ull;
+// Magic number of a table whose keys are dictionary encoded and that carries the dictionary in a meta block.
+static const uint64_t kKeyDictTableMagicNumber = 0x5f2a6d4c9e13b8a1ull;
 
 // 1-byte type + 32-bit crc
 static const size_t kBlockTrailerSize = 5;

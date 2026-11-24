@@ -255,6 +255,7 @@ set(STORAGE_FILES
     sstable/comparator.cpp
     sstable/filter_block.cpp
     sstable/format.cpp
+    sstable/key_dict.cpp
     sstable/table_builder.cpp
     sstable/table.cpp
     sstable/two_level_iterator.cpp

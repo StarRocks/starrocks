@@ -200,6 +200,16 @@ CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "100");
 // ever becomes a concern on a hot read path.
 CONF_mBool(lake_pk_index_sst_verify_checksum, "true");
 
+// When true, new shared-data primary key index sstables store the low-cardinality columns of a composite
+// primary key, such as `type` in PRIMARY KEY(id, type), as dictionary codes instead of repeating the column
+// in every key. Each sstable carries its own dictionary. Versions without this support cannot read such
+// sstables, so keep it off while the cluster may still be downgraded to one of them.
+CONF_mBool(lake_enable_pk_index_sst_dict_encoding, "false");
+
+// A primary key column with more distinct values than this in an index sstable is not dictionary encoded
+// there. At most 32767; up to 127 values take a 1-byte code, more take 2 bytes.
+CONF_mInt32(lake_pk_index_sst_dict_max_cardinality, "256");
+
 // Capacity of the shared-data primary key index sstable block cache, as a percentage of the update mem limit.
 CONF_mInt32(lake_pk_index_block_cache_limit_percent, "10");
 

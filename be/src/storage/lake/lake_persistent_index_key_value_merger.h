@@ -20,6 +20,7 @@
 #include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
 #include "storage/sstable/filter_policy.h"
+#include "storage/sstable/key_dict.h"
 #include "storage/sstable/table_builder.h"
 
 namespace starrocks {
@@ -70,6 +71,11 @@ public:
 
     Status create_table_builder();
 
+    // Dictionary encode the keys of the output sstables (see sstable/key_dict.h). Set before the first merge().
+    void set_key_dict_options(std::shared_ptr<const sstable::KeyDictOptions> options) {
+        _key_dict_options = std::move(options);
+    }
+
 private:
     Status flush();
 
@@ -89,6 +95,7 @@ private:
     // data volume larger than pk_index_target_file_size.
     bool _enable_multiple_output_files = false;
     std::vector<TableBuilderWrapper> _output_builders;
+    std::shared_ptr<const sstable::KeyDictOptions> _key_dict_options;
     // Scratch buffers reused across merge()/flush() to avoid per-key protobuf
     // allocator churn. Cleared between calls so internal capacity is retained.
     IndexValuesWithVerPB _merge_pb_scratch;

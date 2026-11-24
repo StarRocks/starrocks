@@ -29,6 +29,7 @@
 #include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
 #include "storage/sstable/filter_policy.h"
+#include "storage/sstable/key_dict.h"
 #include "storage/sstable/table_builder.h"
 
 namespace starrocks {
@@ -463,6 +464,9 @@ private:
     // Fixed encoded key size, or 0 for variable-length keys. Set from the PK schema in
     // load_from_lake_tablet(), which is also where it was set while this derived from PersistentIndex.
     size_t _key_size{0};
+    // Layout of the encoded keys, handed to every memtable so that its sstable can dictionary encode them.
+    // Set from the PK schema in load_from_lake_tablet(); null until then.
+    std::shared_ptr<const sstable::KeyLayout> _key_layout;
     // The version stamped on memtable entries; see set_publish_version().
     int64_t _publish_version{0};
     // What refresh_cache_memory_metrics() last added to the lake_pk_index_cache_* gauges.

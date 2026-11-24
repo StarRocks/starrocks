@@ -2009,6 +2009,14 @@ CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "100");
 // Mutable so the verification can be switched off quickly if the crc32c overhead
 // ever becomes a concern on a hot read path.
 CONF_mBool(lake_pk_index_sst_verify_checksum, "true");
+// When true, new shared-data primary key index sstables store the low-cardinality columns of a composite
+// primary key, such as `type` in PRIMARY KEY(id, type), as dictionary codes instead of repeating the column
+// in every key. Each sstable carries its own dictionary. Versions without this support cannot read such
+// sstables, so keep it off while the cluster may still be downgraded to one of them.
+CONF_mBool(lake_enable_pk_index_sst_dict_encoding, "false");
+// A primary key column with more distinct values than this in an index sstable is not dictionary encoded
+// there. At most 32767; up to 127 values take a 1-byte code, more take 2 bytes.
+CONF_mInt32(lake_pk_index_sst_dict_max_cardinality, "256");
 CONF_mBool(enable_strict_delvec_crc_check, "true");
 // When true, a shared-data del file (.del) read back during publish or primary-key index rebuild is
 // verified against the CRC32C recorded in its metadata, and a mismatch fails the operation with

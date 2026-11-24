@@ -4,6 +4,8 @@
 #pragma once
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "common/status.h"
 
@@ -17,6 +19,7 @@ class Footer;
 struct Options;
 struct ReadOptions;
 class Iterator;
+class KeyDict;
 
 // A Table is a sorted map from strings to strings.  Tables are
 // immutable and persistent.  A Table may be safely accessed from
@@ -57,9 +60,15 @@ public:
                     std::vector<std::string>* values);
 
     // Resident bytes of the index block and of the filter block; memory_usage() is their sum.
+    // The index block memory includes the key dictionary, if any.
     size_t index_block_memory_usage() const;
     size_t filter_memory_usage() const;
     size_t memory_usage() const;
+
+    // Dictionary the table's keys are stored with (see key_dict.h), or null. Every interface of the table
+    // takes and returns the keys as they were added; the dictionary only matters to whoever builds a table
+    // from this one's keys and wants to reuse its values.
+    const std::shared_ptr<const KeyDict>& key_dict() const;
 
     // Sample keys from the table for parallel compaction task splitting.
     // Loading the index block, one key is sampled for every sample_interval_bytes worth of data.
@@ -79,8 +88,10 @@ private:
 
     explicit Table(Rep* rep) : rep_(rep) {}
 
-    void ReadMeta(const Footer& footer);
+    Status ReadMeta(const Footer& footer);
     void ReadFilter(const Slice& filter_handle_value);
+    Status ReadKeyDict(const Slice& key_dict_handle_value);
+    Status DecodeKey(const Slice& stored, std::string* key) const;
 
     Rep* const rep_;
 };

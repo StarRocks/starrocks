@@ -268,7 +268,8 @@ Status HorizontalPkTabletWriter::build_del_tombstone_sstable(const Column& delet
     // shared_version (see the tombstone projection in PersistentIndexSstable::multi_get).
     uint64_t sst_filesize = 0;
     RETURN_IF_ERROR(PersistentIndexSstable::build_tombstone_sstable(sst_keys, deletes.size(), /*version=*/0,
-                                                                    sst_wf.get(), &sst_filesize, range));
+                                                                    sst_wf.get(), &sst_filesize, range,
+                                                                    pk_index_key_layout(pkey_schema)));
     RETURN_IF_ERROR(sst_wf->close());
     *info = FileInfo{std::move(sst_name), sst_filesize, std::move(sst_encryption_meta)};
     return Status::OK();

@@ -44,6 +44,11 @@ public:
     // Add key,value to the table being constructed.
     // REQUIRES: key is after any previously added key according to comparator.
     // REQUIRES: Finish(), Abandon() have not been called
+    //
+    // With options.key_dict_options set, the key is stored dictionary encoded (see key_dict.h). Unless the
+    // options carry a dictionary, the entries are held in memory until key_dict_options->sample_entries of them
+    // have been added, or until Finish(), and the dictionary is chosen from them; FileSize() stays 0 meanwhile.
+    // NumEntries() and KeyRange() always count and report the keys as they were given.
     Status Add(const Slice& key, const Slice& value);
 
     // Advanced operation: flush any buffered key/value pairs to file.
@@ -80,6 +85,8 @@ public:
 
 private:
     bool ok() const { return status().ok(); }
+    Status AddStored(const Slice& key, const Slice& value);
+    Status ChooseKeyDict(bool complete);
     void WriteBlock(BlockBuilder* block, BlockHandle* handle);
     void WriteRawBlock(const Slice& data, CompressionType, BlockHandle* handle);
 

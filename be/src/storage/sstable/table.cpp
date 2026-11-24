@@ -23,6 +23,7 @@
 #include "storage/sstable/filter_block.h"
 #include "storage/sstable/filter_policy.h"
 #include "storage/sstable/format.h"
+#include "storage/sstable/key_dict.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/two_level_iterator.h"
 
@@ -46,6 +47,9 @@ struct Table::Rep {
 
     BlockHandle metaindex_handle; // Handle to metaindex_block: saved from footer
     Block* index_block = nullptr;
+    // Set when the keys are stored dictionary encoded; the table then encodes the keys it is given and
+    // decodes the keys it returns.
+    std::shared_ptr<const KeyDict> key_dict;
 };
 
 Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size, std::unique_ptr<Table>& table) {
@@ -86,7 +90,10 @@ Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size
         rep->filter_data = nullptr;
         rep->filter = nullptr;
         table.reset(new Table(rep));
-        table->ReadMeta(footer);
+        s = table->ReadMeta(footer);
+        if (!s.ok()) {
+            table.reset();
+        }
     }
 
     return s;
@@ -108,7 +115,8 @@ Status Table::sample_keys(std::vector<std::string>* keys, size_t sample_interval
     bool contain_short_successor_key = false;
     while (iiter->Valid()) {
         if (index % interval_step == 0) {
-            keys->emplace_back(iiter->key().to_string());
+            keys->emplace_back();
+            RETURN_IF_ERROR(DecodeKey(iiter->key(), &keys->back()));
             contain_short_successor_key = true;
         } else {
             contain_short_successor_key = false;
@@ -132,16 +140,32 @@ Status Table::sample_keys_in_range(std::vector<std::string>* keys, const Slice& 
         return Status::OK();
     }
     const Comparator* comparator = rep_->options.comparator;
+    // The index keys are stored keys, so compare them with the stored form of the bounds. The encoding of a
+    // bound is the smallest stored key not less than it, which keeps both comparisons below exact.
+    std::string stored_seek_key;
+    std::string stored_stop_key;
+    Slice seek = seek_key;
+    Slice stop = stop_key;
+    if (rep_->key_dict != nullptr) {
+        if (!seek_key.empty()) {
+            rep_->key_dict->encode(seek_key, &stored_seek_key);
+            seek = Slice(stored_seek_key);
+        }
+        if (!stop_key.empty()) {
+            rep_->key_dict->encode(stop_key, &stored_stop_key);
+            stop = Slice(stored_stop_key);
+        }
+    }
     auto new_index_iter = [&]() {
         std::unique_ptr<Iterator> iter(rep_->index_block->NewIterator(comparator));
         if (seek_key.empty()) {
             iter->SeekToFirst();
         } else {
-            iter->Seek(seek_key);
+            iter->Seek(seek);
         }
         return iter;
     };
-    auto before_stop = [&](const Slice& key) { return stop_key.empty() || comparator->Compare(key, stop_key) < 0; };
+    auto before_stop = [&](const Slice& key) { return stop_key.empty() || comparator->Compare(key, stop) < 0; };
 
     // Count the in-range index entries first. The index block is already resident, so the extra walk
     // costs no IO and lets the second pass space the samples evenly over the caller's range instead
@@ -164,15 +188,16 @@ Status Table::sample_keys_in_range(std::vector<std::string>* keys, const Slice& 
     auto iter = new_index_iter();
     for (size_t index = 0; iter->Valid() && before_stop(iter->key()); iter->Next(), ++index) {
         if (index % step == 0) {
-            keys->emplace_back(iter->key().to_string());
+            keys->emplace_back();
+            RETURN_IF_ERROR(DecodeKey(iter->key(), &keys->back()));
         }
     }
     return iter->status();
 }
 
-void Table::ReadMeta(const Footer& footer) {
-    if (rep_->options.filter_policy == nullptr) {
-        return; // Do not need any metadata
+Status Table::ReadMeta(const Footer& footer) {
+    if (rep_->options.filter_policy == nullptr && !footer.has_key_dict()) {
+        return Status::OK(); // Do not need any metadata
     }
 
     // TODO(sanjay): Skip this if footer.metaindex_handle() size indicates
@@ -180,25 +205,65 @@ void Table::ReadMeta(const Footer& footer) {
     ReadOptions opt;
     ReadIOStat iostat;
     opt.stat = &iostat;
-    if (rep_->options.paranoid_checks) {
+    if (rep_->options.paranoid_checks || footer.has_key_dict()) {
         opt.verify_checksums = true;
     }
     BlockContents contents;
-    if (!ReadBlock(rep_->file, opt, footer.metaindex_handle(), &contents).ok()) {
-        // Do not propagate errors since meta info is not needed for operation
-        return;
+    if (auto st = ReadBlock(rep_->file, opt, footer.metaindex_handle(), &contents); !st.ok()) {
+        // The filter is only an optimization, so its absence is not an error; the keys cannot be read
+        // without their dictionary.
+        return footer.has_key_dict() ? st : Status::OK();
     }
-    Block* meta = new Block(contents);
+    std::unique_ptr<Block> meta(new Block(contents));
+    std::unique_ptr<Iterator> iter(meta->NewIterator(BytewiseComparator()));
+    if (rep_->options.filter_policy != nullptr) {
+        std::string key = "filter.";
+        key.append(rep_->options.filter_policy->Name());
+        iter->Seek(key);
+        if (iter->Valid() && iter->key() == Slice(key)) {
+            ReadFilter(iter->value());
+        }
+    }
+    if (!footer.has_key_dict()) {
+        return Status::OK();
+    }
+    const Slice key_dict_name(kKeyDictMetaBlockName);
+    iter->Seek(key_dict_name);
+    if (!iter->Valid() || iter->key() != key_dict_name) {
+        return iter->status().ok() ? Status::Corruption("sstable has no key dictionary block") : iter->status();
+    }
+    return ReadKeyDict(iter->value());
+}
 
-    Iterator* iter = meta->NewIterator(BytewiseComparator());
-    std::string key = "filter.";
-    key.append(rep_->options.filter_policy->Name());
-    iter->Seek(key);
-    if (iter->Valid() && iter->key() == Slice(key)) {
-        ReadFilter(iter->value());
+Status Table::ReadKeyDict(const Slice& key_dict_handle_value) {
+    Slice v = key_dict_handle_value;
+    BlockHandle handle;
+    RETURN_IF_ERROR(handle.DecodeFrom(&v));
+    ReadOptions opt;
+    opt.verify_checksums = true;
+    BlockContents block;
+    RETURN_IF_ERROR(ReadBlock(rep_->file, opt, handle, &block));
+    auto key_dict = KeyDict::deserialize(block.data);
+    if (block.heap_allocated) {
+        delete[] block.data.get_data();
     }
-    delete iter;
-    delete meta;
+    if (!key_dict.ok()) {
+        return key_dict.status();
+    }
+    rep_->key_dict = std::move(key_dict).value();
+    return Status::OK();
+}
+
+Status Table::DecodeKey(const Slice& stored, std::string* key) const {
+    if (rep_->key_dict == nullptr) {
+        key->assign(stored.get_data(), stored.get_size());
+        return Status::OK();
+    }
+    return rep_->key_dict->decode(stored, key);
+}
+
+const std::shared_ptr<const KeyDict>& Table::key_dict() const {
+    return rep_->key_dict;
 }
 
 void Table::ReadFilter(const Slice& filter_handle_value) {
@@ -311,8 +376,12 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options, const Slice&
 }
 
 Iterator* Table::NewIterator(const ReadOptions& options) const {
-    return NewTwoLevelIterator(rep_->index_block->NewIterator(rep_->options.comparator), &Table::BlockReader,
-                               const_cast<Table*>(this), options);
+    Iterator* iter = NewTwoLevelIterator(rep_->index_block->NewIterator(rep_->options.comparator), &Table::BlockReader,
+                                         const_cast<Table*>(this), options);
+    if (rep_->key_dict != nullptr) {
+        iter = NewKeyDictIterator(iter, rep_->key_dict);
+    }
+    return iter;
 }
 
 template <class ForwardIt>
@@ -350,8 +419,16 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
     int64_t multiget_t3_ns = 0;
     size_t i = 0;
     bool founded = false;
+    // With a key dictionary, look up the stored form of each key: the index, the filter and the blocks all
+    // hold stored keys.
+    const KeyDict* key_dict = rep_->key_dict.get();
+    std::string stored_key;
     for (auto it = begin; it != end; ++it, ++i) {
-        auto& k = keys[*it];
+        Slice k = keys[*it];
+        if (key_dict != nullptr) {
+            key_dict->encode(k, &stored_key);
+            k = Slice(stored_key);
+        }
         const bool timed = i == next_timed;
         int64_t clock_read_ns = 0;
         int64_t t0 = 0;
@@ -411,7 +488,8 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
 }
 
 size_t Table::index_block_memory_usage() const {
-    return (rep_->index_block != nullptr) ? rep_->index_block->size() : 0;
+    return ((rep_->index_block != nullptr) ? rep_->index_block->size() : 0) +
+           ((rep_->key_dict != nullptr) ? rep_->key_dict->memory_usage() : 0);
 }
 
 size_t Table::filter_memory_usage() const {

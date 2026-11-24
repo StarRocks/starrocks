@@ -205,7 +205,9 @@ size_t PersistentIndexMemtable::memory_usage() const {
 }
 
 Status PersistentIndexMemtable::flush(WritableFile* wf, uint64_t* filesize, PersistentIndexSstableRangePB* range_pb) {
-    return PersistentIndexSstable::build_sstable(_map, wf, filesize, range_pb);
+    static const sstable::KeyLayout kNoKeyLayout;
+    return PersistentIndexSstable::build_sstable(_map, wf, filesize, range_pb,
+                                                 _key_layout != nullptr ? *_key_layout : kNoKeyLayout);
 }
 
 Status PersistentIndexMemtable::flush() {

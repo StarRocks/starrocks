@@ -998,6 +998,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群下，读取云原生主键索引 sstable（点查与 Compaction 归并）时是否校验数据块 Checksum。开启后，损坏的字节（通常来自损坏的本地缓存副本）会确定性地报 Corruption 错误并触发损坏缓存清理，而不是被错误解析或静默返回错误的索引值。注意：自动清理损坏缓存还需同时开启 `lake_clear_corrupted_cache_data`。
 - 引入版本：v4.1
 
+### lake_enable_pk_index_sst_dict_encoding
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，云原生主键索引 sstable 是否对复合主键中的低基数列做字典编码。例如 `PRIMARY KEY(id, type)` 中 `type` 只有少数几个取值，开启后 sstable 用 1 或 2 字节的编码代替每个 key 中重复出现的 `type` 值，从而减少 sstable 在存储和索引块缓存中占用的空间。该配置只影响开启之后写入的 sstable，每个 sstable 自带字典。不支持该功能的版本无法读取这类 sstable，因此集群仍有可能降级到这类版本时，请勿开启。
+- 引入版本：-
+
+### lake_pk_index_sst_dict_max_cardinality
+
+- 默认值：256
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：主键列在某个云原生主键索引 sstable 中的不同取值数不超过该值时，才会在该 sstable 中做字典编码。最大值为 32767。不同取值数不超过 127 的列用 1 字节编码，超过的用 2 字节。仅在 `lake_enable_pk_index_sst_dict_encoding` 为 `true` 时生效。
+- 引入版本：-
+
 ### lake_clear_corrupted_cache_meta
 
 - 默认值：true

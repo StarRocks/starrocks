@@ -18,6 +18,7 @@ namespace sstable {
 
 class Comparator;
 class FilterPolicy;
+struct KeyDictOptions;
 // DB contents are stored in a set of blocks, each of which holds a
 // sequence of key,value pairs.  Each block may be compressed before
 // being stored in a file.  The following enum describes which
@@ -97,6 +98,10 @@ struct Options {
     // Many applications will benefit from passing the result of
     // NewBloomFilterPolicy() here.
     const FilterPolicy* filter_policy = nullptr;
+
+    // If non-null, a TableBuilder dictionary encodes the keys of composite primary keys as described there.
+    // Readers find the dictionary in the table itself and ignore this field.
+    std::shared_ptr<const KeyDictOptions> key_dict_options;
 };
 
 struct ReadIOStat {
