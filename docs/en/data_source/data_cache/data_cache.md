@@ -312,20 +312,6 @@ You can configure Data Cache using the following system variables and parameters
 
 ### BE configurations
 
-<<<<<<< HEAD
-- [datacache_enable](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_enable)
-- [datacache_mem_size](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_mem_size)
-- [datacache_disk_size](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_size)
-- [datacache_auto_adjust_enable](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_auto_adjust_enable)
-- [datacache_disk_high_level](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_high_level)
-- [datacache_disk_safe_level](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_safe_level)
-- [datacache_disk_low_level](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_low_level)
-- [datacache_disk_adjust_interval_seconds](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_adjust_interval_seconds)
-- [datacache_disk_idle_seconds_for_expansion](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_idle_seconds_for_expansion)
-- [datacache_min_disk_quota_for_adjustment](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_min_disk_quota_for_adjustment)
-- [datacache_eviction_policy](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_eviction_policy)
-- [datacache_inline_item_count_limit](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_inline_item_count_limit)
-=======
 - [datacache_enable](../../administration/configuration/BE_parameters/shared_lake_other.md#datacache_enable)
 - [datacache_mem_size](../../administration/configuration/BE_parameters/shared_lake_other.md#datacache_mem_size)
 - [datacache_disk_size](../../administration/configuration/BE_parameters/shared_lake_other.md#datacache_disk_size)
@@ -341,4 +327,3 @@ You can configure Data Cache using the following system variables and parameters
 - [datacache_lru_shard_evict_fallback_enable](../../administration/configuration/BE_parameters/shared_lake_other.md#datacache_lru_shard_evict_fallback_enable)
 - [datacache_lru_shard_refill_low_watermark_percent](../../administration/configuration/BE_parameters/shared_lake_other.md#datacache_lru_shard_refill_low_watermark_percent)
 - [datacache_lru_shard_refill_high_watermark_percent](../../administration/configuration/BE_parameters/shared_lake_other.md#datacache_lru_shard_refill_high_watermark_percent)
->>>>>>> 0f7b287 ([BugFix] Support datacache lru shard refill configs (#84193))

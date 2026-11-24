@@ -45,13 +45,9 @@ public:
 
     Status update_inline_cache_count_limit(int32_t limit) override;
 
-<<<<<<< HEAD
-=======
     Status update_lru_shard_refill(bool fallback_enable, uint32_t low_watermark_percent,
                                    uint32_t high_watermark_percent) override;
 
-#ifdef WITH_STARCACHE
->>>>>>> 0f7b287 ([BugFix] Support datacache lru shard refill configs (#84193))
     const StarCacheMetrics starcache_metrics(int level) const;
 
     const DataCacheDiskMetrics cache_metrics() const override;

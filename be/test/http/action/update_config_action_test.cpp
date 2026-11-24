@@ -63,21 +63,13 @@ TEST_F(UpdateConfigActionTest, update_datacache_config) {
     ASSERT_ERROR(action.update_config("datacache_disk_size", "-200"));
     ASSERT_OK(action.update_config("datacache_disk_size", "100000000"));
     // update inline cache limit
-<<<<<<< HEAD
     ASSERT_OK(action.update_config("datacache_inline_item_count_limit", "260344"));
-=======
-    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("datacache_inline_item_count_limit", "260344"));
     // update lru shard refill
-    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("datacache_lru_shard_evict_fallback_enable", "false"));
-    ASSERT_OK(
-            ConfigUpdateRegistry::instance()->update_config("datacache_lru_shard_refill_low_watermark_percent", "30"));
-    ASSERT_OK(
-            ConfigUpdateRegistry::instance()->update_config("datacache_lru_shard_refill_high_watermark_percent", "60"));
-    ASSERT_ERROR(
-            ConfigUpdateRegistry::instance()->update_config("datacache_lru_shard_refill_low_watermark_percent", "80"));
-    ASSERT_ERROR(ConfigUpdateRegistry::instance()->update_config("datacache_lru_shard_refill_high_watermark_percent",
-                                                                 "101"));
->>>>>>> 0f7b287 ([BugFix] Support datacache lru shard refill configs (#84193))
+    ASSERT_OK(action.update_config("datacache_lru_shard_evict_fallback_enable", "false"));
+    ASSERT_OK(action.update_config("datacache_lru_shard_refill_low_watermark_percent", "30"));
+    ASSERT_OK(action.update_config("datacache_lru_shard_refill_high_watermark_percent", "60"));
+    ASSERT_ERROR(action.update_config("datacache_lru_shard_refill_low_watermark_percent", "80"));
+    ASSERT_ERROR(action.update_config("datacache_lru_shard_refill_high_watermark_percent", "101"));
 
     std::vector<DirSpace> spaces;
     cache->disk_spaces(&spaces);
