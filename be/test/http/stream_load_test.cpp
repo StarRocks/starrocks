@@ -41,7 +41,9 @@
 #include <rapidjson/document.h>
 
 #include <cstring>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "base/concurrency/concurrent_limiter.h"
 #include "base/metrics.h"
@@ -800,6 +802,85 @@ TEST_F(StreamLoadActionTest, enable_batch_write_wrong_argument) {
     doc.Parse(k_response_str.c_str());
     ASSERT_STREQ("Fail", doc["Status"].GetString());
     ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Invalid parameter enable_merge_commit"));
+}
+
+// Merge commit loads the requests of a merge window as one file, so it cannot skip the header rows of each request:
+// a CSV request that asks for it is refused instead of having its header rows loaded as data. The value is checked as
+// for the classic Stream Load. on_header returning -1 makes the HTTP server reply at once, without receiving the body
+// or calling handle, so the request never reaches a merge window.
+TEST_F(StreamLoadActionTest, merge_commit_rejects_skip_header) {
+    struct Case {
+        std::string format; // empty: no format header, which is CSV
+        std::string skip_header;
+        std::string message;
+    };
+    const std::string not_supported = "skip_header is not supported by merge commit";
+    const std::vector<Case> cases = {{"", "1", not_supported},
+                                     {"csv", "1", not_supported},
+                                     {"CSV", "2", not_supported},
+                                     {"gzip", "1", not_supported},
+                                     {"bzip2", "1", not_supported},
+                                     {"lz4", "1", not_supported},
+                                     {"deflate", "1", not_supported},
+                                     {"zstd", "1", not_supported},
+                                     {"csv", "-1", "skip_header must be equal or greater than 0"},
+                                     {"csv", "abc", "Invalid parameter skip_header"}};
+    for (const auto& c : cases) {
+        // So that each case reads its own reply.
+        k_response_str.clear();
+        StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
+                                _batch_write_mgr.get());
+
+        HttpRequest request(_evhttp_req);
+        request._params.emplace(HTTP_DB_KEY, "db");
+        request._params.emplace(HTTP_TABLE_KEY, "tbl");
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        request._headers.emplace(HTTP_ENABLE_MERGE_COMMIT, "true");
+        request._headers.emplace(HTTP_MERGE_COMMIT_INTERVAL_MS, "1000");
+        request._headers.emplace(HTTP_MERGE_COMMIT_PARALLEL, "1");
+        if (!c.format.empty()) {
+            request._headers.emplace(HTTP_FORMAT_KEY, c.format);
+        }
+        request._headers.emplace(HTTP_SKIP_HEADER, c.skip_header);
+        request.set_handler(&action);
+
+        ASSERT_EQ(-1, action.on_header(&request)) << "format '" << c.format << "', skip_header " << c.skip_header;
+
+        // The reply on_header sent.
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("Fail", doc["Status"].GetString()) << c.format;
+        ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), c.message.c_str()))
+                << "format '" << c.format << "', skip_header " << c.skip_header << ": " << doc["Message"].GetString();
+    }
+}
+
+// skip_header: 0 skips nothing, and skip_header means nothing outside CSV on any load path: neither is refused.
+TEST_F(StreamLoadActionTest, merge_commit_accepts_skip_header_that_skips_nothing) {
+    for (const auto& [format, skip_header] :
+         std::vector<std::pair<std::string, std::string>>{{"csv", "0"}, {"json", "1"}}) {
+        StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
+                                _batch_write_mgr.get());
+
+        HttpRequest request(_evhttp_req);
+        request._params.emplace(HTTP_DB_KEY, "db");
+        request._params.emplace(HTTP_TABLE_KEY, "tbl");
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        request._headers.emplace(HTTP_ENABLE_MERGE_COMMIT, "true");
+        request._headers.emplace(HTTP_MERGE_COMMIT_INTERVAL_MS, "1000");
+        request._headers.emplace(HTTP_MERGE_COMMIT_PARALLEL, "1");
+        request._headers.emplace(HTTP_FORMAT_KEY, format);
+        request._headers.emplace(HTTP_SKIP_HEADER, skip_header);
+        request.set_handler(&action);
+
+        ASSERT_EQ(0, action.on_header(&request)) << format << ", skip_header " << skip_header;
+        auto* ctx = static_cast<StreamLoadContext*>(request._handler_ctx);
+        ASSERT_NE(nullptr, ctx);
+        ASSERT_TRUE(ctx->status.ok()) << ctx->status;
+        ASSERT_TRUE(ctx->enable_batch_write);
+    }
 }
 
 TEST_F(StreamLoadActionTest, merge_commit_response) {

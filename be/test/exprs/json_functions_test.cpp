@@ -19,6 +19,7 @@
 #include <gtest/gtest.h>
 #include <velocypack/vpack.h>
 
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -921,6 +922,86 @@ INSTANTIATE_TEST_SUITE_P(FlatJsonExistsTest, FlatJsonExistsTestFixture,
                                             std::make_tuple(R"("k1")",std::vector<std::string>({"k1"}), "$.k1", false)
                         ));
 // clang-format on
+
+// json_query over a flat column must return the JSON value the path holds, whatever its sub-column type, with
+// both the lazy (hyper) and the cast extraction: a VARCHAR sub-column holds JSON strings, so a JSON-looking
+// string stays a string instead of being parsed; BIGINT, LARGEINT (above INT64_MAX) and DOUBLE keep their exact
+// numbers; a row without the path reads NULL.
+TEST_F(JsonFunctionsTest, flat_json_query_string_subcolumn_stays_string) {
+    const std::string text = R"({"a":true,"b":"p01"})";
+    const uint64_t big = static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) + 5;
+    auto json_col = JsonColumn::create();
+    {
+        vpack::Builder doc;
+        doc.openObject();
+        doc.add("k1", vpack::Value(text));
+        doc.add("k2", vpack::Value(1));
+        doc.add("k3", vpack::Value(big));
+        doc.add("k4", vpack::Value(0.25));
+        doc.close();
+        JsonValue json(doc.slice());
+        json_col->append(&json);
+    }
+    {
+        vpack::Builder doc;
+        doc.openObject();
+        doc.add("k2", vpack::Value(-2));
+        doc.add("k3", vpack::Value(big));
+        doc.add("k4", vpack::Value(0.5));
+        doc.close();
+        JsonValue json(doc.slice());
+        json_col->append(&json);
+    }
+
+    std::vector<std::string> flat_paths{"k1", "k2", "k3", "k4"};
+    std::vector<LogicalType> flat_types{TYPE_VARCHAR, TYPE_BIGINT, TYPE_LARGEINT, TYPE_DOUBLE};
+
+    for (bool lazy : {true, false}) {
+        SCOPED_TRACE(lazy ? "lazy_dynamic_flat_json" : "cast_extraction");
+        config::enable_lazy_dynamic_flat_json = lazy;
+        DeferOp reset([] { config::enable_lazy_dynamic_flat_json = true; });
+
+        JsonFlattener jf(flat_paths, flat_types, false);
+        jf.flatten(json_col.get());
+        auto flat_json = JsonColumn::create();
+        flat_json->set_flat_columns(flat_paths, flat_types, jf.mutable_result());
+
+        auto query = [&](const std::string& path) -> ColumnPtr {
+            std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+            auto path_column = BinaryColumn::create();
+            path_column->append(path);
+            Columns columns{flat_json, ConstColumn::create(std::move(path_column), 2)};
+            ctx->set_constant_columns(columns);
+            CHECK_OK(JsonFunctions::native_json_path_prepare(ctx.get(),
+                                                             FunctionContext::FunctionStateScope::FRAGMENT_LOCAL));
+            auto result = JsonFunctions::json_query(ctx.get(), columns);
+            CHECK_OK(JsonFunctions::native_json_path_close(ctx.get(),
+                                                           FunctionContext::FunctionStateScope::FRAGMENT_LOCAL));
+            CHECK_OK(result.status());
+            return std::move(result).value();
+        };
+        auto slice_at = [](const ColumnPtr& column, size_t row) { return column->get(row).get_json()->to_vslice(); };
+
+        auto k1 = query("$.k1");
+        ASSERT_FALSE(k1->is_null(0));
+        ASSERT_TRUE(slice_at(k1, 0).isString()) << k1->get(0).get_json()->to_string_uncheck();
+        ASSERT_EQ(text, slice_at(k1, 0).copyString());
+        ASSERT_TRUE(k1->is_null(1));
+
+        auto k2 = query("$.k2");
+        ASSERT_EQ(1, slice_at(k2, 0).getInt());
+        ASSERT_EQ(-2, slice_at(k2, 1).getInt());
+
+        auto k3 = query("$.k3");
+        ASSERT_TRUE(slice_at(k3, 0).isUInt()) << k3->get(0).get_json()->to_string_uncheck();
+        ASSERT_EQ(big, slice_at(k3, 0).getUInt());
+
+        auto k4 = query("$.k4");
+        ASSERT_TRUE(slice_at(k4, 0).isDouble());
+        ASSERT_EQ(0.25, slice_at(k4, 0).getDouble());
+        ASSERT_EQ(0.5, slice_at(k4, 1).getDouble());
+    }
+}
 
 TEST_F(JsonFunctionsTest, flat_json_invalid_path_test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());

@@ -14,8 +14,21 @@
 
 package com.starrocks.connector.paimon;
 
+import com.google.common.base.Preconditions;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.PaimonTable;
+import com.starrocks.common.util.DebugUtil;
+import com.starrocks.connector.ColumnTypeConverter;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.thrift.TIcebergSchema;
 import com.starrocks.thrift.TIcebergSchemaField;
+import org.apache.paimon.CoreOptions;
 import org.apache.paimon.format.parquet.ParquetSchemaConverter;
 import org.apache.paimon.table.SpecialFields;
 import org.apache.paimon.types.ArrayType;
@@ -26,7 +39,10 @@ import org.apache.paimon.types.MapType;
 import org.apache.paimon.types.RowType;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class PaimonUtils {
 
@@ -84,4 +100,75 @@ public class PaimonUtils {
         }
         return tPaimonSchemaField;
     }
+    public static void validateWriteTarget(InsertStmt statement, PaimonTable table) {
+        try {
+            PaimonWriteCapabilities.validateWrite(table.getNativeTable());
+        } catch (StarRocksConnectorException e) {
+            throw new SemanticException(e.getMessage());
+        }
+        if (statement.usePartialUpdate()) {
+            throw new SemanticException("Paimon writes do not support partial-update mode");
+        }
+        List<org.apache.paimon.types.DataField> nativeFields = table.getNativeTable().rowType().getFields();
+        List<Column> schema = table.getFullSchema();
+        if (schema.size() != nativeFields.size()) {
+            throw new SemanticException("Paimon target schema changed during planning; refresh the table and retry");
+        }
+        for (int i = 0; i < schema.size(); ++i) {
+            if (!schema.get(i).getName().equals(nativeFields.get(i).name())
+                    || !schema.get(i).getType().equals(ColumnTypeConverter.fromPaimonType(nativeFields.get(i).type()))) {
+                throw new SemanticException("Paimon target schema changed during planning; refresh the table and retry");
+            }
+        }
+    }
+
+    public static boolean isWriteColumnNullable(PaimonTable table, String columnName) {
+        return table.getNativeTable().rowType().getFields().stream()
+                .filter(field -> field.name().equals(columnName))
+                .findFirst().orElseThrow(() -> new SemanticException("Paimon target column changed during planning"))
+                .type().isNullable();
+    }
+
+    public static Map<String, String> getStaticPartitionValues(InsertStmt insertStmt, PaimonTable table) {
+        if (!insertStmt.isStaticKeyPartitionInsert()) {
+            return Collections.emptyMap();
+        }
+        Map<String, String> partition = new LinkedHashMap<>();
+        List<String> names = insertStmt.getTargetPartitionNames().getPartitionColNames();
+        List<Expr> values = insertStmt.getTargetPartitionNames().getPartitionColValues();
+        String nullPartition = table.getNativeTable().options().getOrDefault(
+                CoreOptions.PARTITION_DEFAULT_NAME.key(), CoreOptions.PARTITION_DEFAULT_NAME.defaultValue());
+        for (String column : table.getPartitionColumnNames()) {
+            int index = -1;
+            for (int i = 0; i < names.size(); ++i) {
+                if (column.equalsIgnoreCase(names.get(i))) {
+                    index = i;
+                    break;
+                }
+            }
+            Preconditions.checkState(index >= 0, "Paimon static partition target mismatch");
+            LiteralExpr value = (LiteralExpr) values.get(index);
+            String partitionValue;
+            if (value.isConstantNull()) {
+                partitionValue = nullPartition;
+            } else if (value instanceof BoolLiteral boolLiteral) {
+                partitionValue = Boolean.toString(boolLiteral.getValue());
+            } else {
+                partitionValue = value.getStringValue();
+            }
+            partition.put(column, partitionValue);
+        }
+        return partition;
+    }
+
+    public static String getWriteOperationId(ConnectContext session) {
+        if (session.getQueryId() != null) {
+            return session.getQueryId().toString().replace('-', '_');
+        }
+        if (session.getExecutionId() != null) {
+            return DebugUtil.printId(session.getExecutionId()).replace('-', '_');
+        }
+        throw new SemanticException("Paimon writes require a query execution identity");
+    }
+
 }

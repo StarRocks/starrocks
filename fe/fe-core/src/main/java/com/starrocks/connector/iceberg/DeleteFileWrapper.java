@@ -53,12 +53,17 @@ public class DeleteFileWrapper implements DeleteFile {
 
         DeleteFileWrapper that = (DeleteFileWrapper) o;
 
-        return deleteFile.path().toString().equals(that.deleteFile.path().toString());
+        // pos() is the entry's row in its manifest: a manifest can list the same delete file twice (committed twice
+        // and then merged into one manifest), and Iceberg indexes it once per entry. Keeping both entries keeps the
+        // cached set in step with the manifest's live entry count, which the read side checks.
+        return deleteFile.path().toString().equals(that.deleteFile.path().toString())
+                && Objects.equals(deleteFile.pos(), that.deleteFile.pos());
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(deleteFile.path());
+        // path() is a CharSequence; hash its string form so it stays consistent with equals().
+        return Objects.hash(deleteFile.path().toString(), deleteFile.pos());
     }
 
     @Override

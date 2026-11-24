@@ -62,6 +62,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.GlobalDictNotMatchException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.lake.LakeMetaVersionNotFoundException;
 import com.starrocks.metric.MetricRepo;
@@ -69,6 +70,7 @@ import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
+import com.starrocks.planner.PaimonTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.RangeColocateUnalignedException;
@@ -631,6 +633,10 @@ public class DefaultCoordinator extends Coordinator {
         try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Pending")) {
             QueryQueueManager.getInstance().maybeWait(connectContext, this);
         }
+        if (connectContext != null && connectContext.isMetadataContext()) {
+            // Planning and queueing consume both the metadata task's budget and its parent's budget.
+            setTimeoutSecond(SimpleExecutor.checkInternalQueryState(connectContext));
+        }
 
         if (isShortCircuit) {
             execShortCircuit();
@@ -649,6 +655,10 @@ public class DefaultCoordinator extends Coordinator {
         }
 
         try {
+            if (connectContext != null && connectContext.isMetadataContext()) {
+                // Fragment preparation may also exhaust the deadline before anything has been dispatched.
+                setTimeoutSecond(SimpleExecutor.checkInternalQueryState(connectContext));
+            }
             try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Deploy")) {
                 deliverExecFragments(option);
             }
@@ -690,9 +700,21 @@ public class DefaultCoordinator extends Coordinator {
 
     private void prepareProfile() {
         this.queryProfile.initFragmentProfiles(executionDAG.getFragmentsInCreatedOrder().size());
-
         ExecutionFragment rootExecFragment = executionDAG.getRootFragment();
-        boolean isLoadType = !(rootExecFragment.getPlanFragment().getSink() instanceof ResultSink);
+        PlanFragment rootPlanFragment = rootExecFragment.getPlanFragment();
+        if (rootPlanFragment.getSink() instanceof PaimonTableSink sink) {
+            if (!jobSpec.isEnablePipeline() || rootPlanFragment.isUseRuntimeAdaptiveDop()) {
+                throw new StarRocksConnectorException("Paimon publication requires fixed-DOP pipeline producers");
+            }
+            Map<TUniqueId, Integer> sinkInstanceDops = new HashMap<>();
+            for (FragmentInstance instance : rootExecFragment.getInstances()) {
+                // This is the same fixed DOP sent as pipeline_sink_dop by TFragmentInstanceFactory.
+                sinkInstanceDops.put(instance.getInstanceId(), instance.getTableSinkDop());
+            }
+            queryProfile.initPaimonSink(sink.getPaimonSinkExtra(), sinkInstanceDops);
+        }
+
+        boolean isLoadType = !(rootPlanFragment.getSink() instanceof ResultSink);
         if (isLoadType) {
             // for non-pipeline engine, enable_profile is renamed from is_report_success,
             // which is not only for report profile but also for report success.
@@ -1503,6 +1525,7 @@ public class DefaultCoordinator extends Coordinator {
             throw new RuntimeException(String.format("updateFinishInstance called after fragment is finished:%s, query_id:%s",
                     instanceId, DebugUtil.printId(params.getQuery_id())));
         }
+        boolean paimonReportFailed = false;
         try {
             List<Runnable> loadUpdates = queryProfile.buildLoadInformationUpdates(execState, params);
             if (!loadUpdates.isEmpty()) {
@@ -1517,10 +1540,24 @@ public class DefaultCoordinator extends Coordinator {
             }
         } catch (Throwable e) {
             LOG.warn("update load information failed {}", instanceId, e);
+            if (queryProfile.hasPaimonSink()) {
+                // A failed aggregation is not a completed prepare. Preserve the report for abort but
+                // fail publication before counting down the final instance; do not silently publish a subset.
+                queryProfile.recordPaimonReportFailure();
+                paimonReportFailed = true;
+            }
         }
 
-        // NOTE: it's critical for query execution, and must be put after the profile update
-        queryProfile.finishInstance(params.getFragment_instance_id());
+        try {
+            if (paimonReportFailed) {
+                updateStatus(new Status(TStatusCode.INTERNAL_ERROR,
+                        "Cannot aggregate the final Paimon producer report"), params.getFragment_instance_id());
+            }
+        } finally {
+            // NOTE: it's critical for query execution, and must be put after the profile/status update.
+            // Even cancellation/diagnostic failure must not strand this terminal report's instance.
+            queryProfile.finishInstance(params.getFragment_instance_id());
+        }
     }
 
     @Override

@@ -130,6 +130,9 @@
         "datacache_persistence_enable",
         "datacache_inline_item_count_limit",
         "datacache_eviction_policy",
+        "datacache_lru_shard_evict_fallback_enable",
+        "datacache_lru_shard_refill_low_watermark_percent",
+        "datacache_lru_shard_refill_high_watermark_percent",
         "block_cache_enable",
         "external_table_clear_corrupted_cache_data"
       ]
@@ -414,6 +417,7 @@
         "report_python_worker_error",
         "python_worker_reuse",
         "python_worker_expire_time_sec",
+        "python_worker_max_per_driver",
         "python_udf_rpc_timeout_ms"
       ]
     },
@@ -721,6 +725,7 @@
         "starlet_star_cache_mem_size_bytes",
         "starlet_star_cache_mem_size_percent",
         "starlet_star_cache_skip_fresh_block_checksum_verification",
+        "starlet_star_cache_write_overwrite",
         "starlet_starmgr_client_compression_type",
         "starlet_use_star_cache",
         "datacache_enable",
@@ -939,7 +944,10 @@
         "lake_replication_parallel_copy_min_file_count",
         "lake_replication_enable_light_schema_change",
         "enable_lake_segment_metadata_filter",
+        "lake_scan_warm_index",
         "enable_lake_prepared_split_pre_refinement",
+        "lake_scan_parallel_segment_open",
+        "lake_scan_read_ahead_segments",
         "lake_flush_thread_num_per_store",
         "lake_tablet_rows_splitted_ratio",
         "lake_tablet_ignore_invalid_delete_predicate",

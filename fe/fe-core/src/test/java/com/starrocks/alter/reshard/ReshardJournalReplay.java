@@ -230,6 +230,67 @@ final class ReshardJournalReplay {
     }
 
     /**
+     * An ORDER BY != PK split that left a partition's children nothing of the parent's finishes without an UNSHARE, so
+     * no UNSHARE transaction unpins the partition on a replaying FE. Its FINISHED record has to: until then the
+     * follower keeps serving queries from the parent, and after it, from the children.
+     *
+     * <p>Runs the job (not yet admitted, on the given physical partition, the only one it reshards) to FINISHED, then
+     * replays its records onto a follower's copy of the table taken at RUNNING, checking the follower after each one.
+     */
+    static void checkFinishedRecordReleasesQueryPin(Database db, OlapTable table, PhysicalPartition partition,
+                                                    TabletReshardJob job) throws Exception {
+        // Replaying puts the job's records into TabletReshardJobMgr, whose daemon would run them as the leader's.
+        new MockUp<TabletReshardJobMgr>() {
+            @Mock
+            protected void runAfterLeaseValid() {
+            }
+        };
+        long partitionId = partition.getId();
+        long baseMetaId = table.getBaseIndexMetaId();
+        long oldIndexId = partition.getLatestBaseIndex().getId();
+        job.init();
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, job.getJobState());
+        long newIndexId = job.getReshardingPhysicalPartitions().get(partitionId).getReshardingIndexes()
+                .get(oldIndexId).getMaterializedIndex().getId();
+
+        OlapTable followerTable = copyTable(table);
+        ReshardJournalReplay recorder = new ReshardJournalReplay(() -> {
+        });
+        for (int i = 0; i < 10 && !job.isDone(); i++) {
+            job.run();
+        }
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, job.getJobState());
+
+        List<JournalEntity> records = recorder.recordsOf(job.getJobId(), -1L);
+        TabletReshardJobMgr tabletReshardJobMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        try {
+            withFollowerTable(db, followerTable, () -> {
+                PhysicalPartition followerPartition = followerTable.getPhysicalPartition(partitionId);
+                List<TabletReshardJob.JobState> replayed = new ArrayList<>();
+                for (JournalEntity record : records) {
+                    replay(record);
+                    replayed.add(((TabletReshardJob) record.data()).getJobState());
+                    if (isJobRecord(record, TabletReshardJob.JobState.CLEANING)) {
+                        Assertions.assertTrue(followerPartition.isQueryableIndexPinned(baseMetaId));
+                        Assertions.assertEquals(oldIndexId, followerPartition.getQueryableIndex(baseMetaId).getId());
+                    } else if (isJobRecord(record, TabletReshardJob.JobState.FINISHED)) {
+                        Assertions.assertFalse(followerPartition.isUnsharing());
+                        Assertions.assertEquals(newIndexId, followerPartition.getQueryableIndex(baseMetaId).getId());
+                    }
+                }
+                Assertions.assertEquals(List.of(TabletReshardJob.JobState.CLEANING, TabletReshardJob.JobState.FINISHED),
+                        replayed);
+            });
+        } finally {
+            // The replay registered the job's records in the shared manager; the leader's job never was.
+            if (tabletReshardJobMgr.getTabletReshardJob(job.getJobId()) != null) {
+                tabletReshardJobMgr.replayRemoveTabletReshardJob(job.getJobId());
+            }
+        }
+    }
+
+    /**
      * Counts the CLEANING records of reshard jobs journaled from now on. With closeJournalFirst, the leader's journal is
      * closed, as giving up leadership closes it, just before the first one is written, so that write fails; the caller
      * reopens the journal.

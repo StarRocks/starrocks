@@ -12,21 +12,21 @@ products: [oss]
 
 ### 新機能
 
-- [percentile_disc](https://docs.starrocks.io/docs/sql-reference/sql-functions/aggregate-functions/percentile_disc/) 関数を追加しました。 [#36352](https://github.com/StarRocks/starrocks/pull/36352)
+- [percentile_disc](../sql-reference/sql-functions/aggregate-functions/percentile_disc.md) 関数を追加しました。 [#36352](https://github.com/StarRocks/starrocks/pull/36352)
 - `max_tablet_rowset_num` という新しいメトリックを追加し、許可される最大の rowset 数を設定できるようにしました。このメトリックは、可能な Compaction の問題を検出し、「バージョンが多すぎる」というエラーの発生を減少させます。 [#36539](https://github.com/StarRocks/starrocks/pull/36539)
 
 ### 改善点
 
-- セッション変数 [sql_mode](https://docs.starrocks.io/docs/sql-reference/System_variable/#sql_mode) に新しい値オプション `GROUP_CONCAT_LEGACY` を追加し、v2.5 より前のバージョンでの [group_concat](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/group_concat/) 関数の実装ロジックとの互換性を提供します。 [#36150](https://github.com/StarRocks/starrocks/pull/36150)
+- セッション変数 [sql_mode](../sql-reference/System_variable.md#sql_mode) に新しい値オプション `GROUP_CONCAT_LEGACY` を追加し、v2.5 より前のバージョンでの [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) 関数の実装ロジックとの互換性を提供します。 [#36150](https://github.com/StarRocks/starrocks/pull/36150)
 - JDK を使用する場合、デフォルトの GC アルゴリズムは G1 です。 [#37386](https://github.com/StarRocks/starrocks/pull/37386)
 - `information_schema` データベースの `be_tablets` ビューに新しいフィールド `INDEX_DISK` を追加し、永続性インデックスのディスク使用量（バイト単位）を記録します。 [#35615](https://github.com/StarRocks/starrocks/pull/35615)
 - MySQL 外部テーブルおよび JDBC カタログ内の外部テーブルに対するクエリで、WHERE 句にキーワードを含めることができます。 [#35917](https://github.com/StarRocks/starrocks/pull/35917)
 - 自動パーティション化されたテーブルの指定されたパーティションへの更新をサポートします。指定されたパーティションが存在しない場合、エラーが返されます。 [#34777](https://github.com/StarRocks/starrocks/pull/34777)
-- [SHOW DATA](https://docs.starrocks.io/docs/sql-reference/sql-statements/Database/SHOW_DATA/) ステートメントで返される主キーテーブルのサイズには、**.cols** ファイル（部分列の更新および生成列に関連するファイル）および永続性インデックスファイルのサイズが含まれます。 [#34898](https://github.com/StarRocks/starrocks/pull/34898)
+- [SHOW DATA](../sql-reference/sql-statements/Database/SHOW_DATA.md) ステートメントで返される主キーテーブルのサイズには、**.cols** ファイル（部分列の更新および生成列に関連するファイル）および永続性インデックスファイルのサイズが含まれます。 [#34898](https://github.com/StarRocks/starrocks/pull/34898)
 - 主キーテーブルのすべての rowset に対して Compaction が実行されるときに、永続性インデックスの更新パフォーマンスを最適化し、ディスク読み取り I/O を削減しました。 [#36819](https://github.com/StarRocks/starrocks/pull/36819)
 - WHERE 句内の LIKE 演算子の右側の文字列に `%` または `_` が含まれていない場合、LIKE 演算子は `=` 演算子に変換されます。 [#37515](https://github.com/StarRocks/starrocks/pull/37515)
 - 主キーテーブルの Compaction スコアを計算するためのロジックを最適化し、他の3つのテーブルタイプとより一貫した範囲で主キーテーブルの Compaction スコアを整合させました。 [#36534](https://github.com/StarRocks/starrocks/pull/36534)
-- [SHOW ROUTINE LOAD](https://docs.starrocks.io/docs/sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD_TASK/) ステートメントで返される結果には、各パーティションからの消費メッセージのタイムスタンプが含まれるようになりました。 [#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- [SHOW ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD_TASK.md) ステートメントで返される結果には、各パーティションからの消費メッセージのタイムスタンプが含まれるようになりました。 [#36222](https://github.com/StarRocks/starrocks/pull/36222)
 - ビットマップ関連の操作のパフォーマンスを最適化しました。以下を含みます:
   - ネストされたループジョインを最適化しました。 [#340804](https://github.com/StarRocks/starrocks/pull/34804) [#35003](https://github.com/StarRocks/starrocks/pull/35003)
   - `bitmap_xor` 関数を最適化しました。 [#34069](https://github.com/StarRocks/starrocks/pull/34069)
@@ -80,7 +80,7 @@ products: [oss]
 - Stream Load ジョブが **PREPARED** 状態のときにスキーマ変更が実行されると、ジョブによってロードされるソースデータの一部が失われます。 [#34381](https://github.com/StarRocks/starrocks/pull/34381)
 - HDFS ストレージパスの末尾に2つ以上のスラッシュ（`/`）を含めると、HDFS からのデータのバックアップと復元が失敗します。 [#34601](https://github.com/StarRocks/starrocks/pull/34601)
 - ALTER TABLE ステートメントを使用して追加された `partition_live_number` プロパティが効果を発揮しません。 [#34842](https://github.com/StarRocks/starrocks/pull/34842)
-- [array_distinct](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_distinct/) 関数が時折 BEs をクラッシュさせることがあります。 [#36377](https://github.com/StarRocks/starrocks/pull/36377)
+- [array_distinct](../sql-reference/sql-functions/array-functions/array_distinct.md) 関数が時折 BEs をクラッシュさせることがあります。 [#36377](https://github.com/StarRocks/starrocks/pull/36377)
 - マテリアライズドビューをリフレッシュするとデッドロックが発生する可能性があります。 [#35736](https://github.com/StarRocks/starrocks/pull/35736)
 - グローバルランタイムフィルタが特定のシナリオで BEs をクラッシュさせる可能性があります。 [#35776](https://github.com/StarRocks/starrocks/pull/35776)
 - 一部のケースで、`bitmap_to_string` がデータ型のオーバーフローにより誤った結果を返すことがあります。 [#37405](https://github.com/StarRocks/starrocks/pull/37405)
@@ -145,16 +145,16 @@ products: [oss]
 
 ### 動作変更
 
-- [group_concat](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/group_concat/) 関数を使用する場合、セパレータを宣言するために SEPARATOR キーワードを使用する必要があります。
+- [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) 関数を使用する場合、セパレータを宣言するために SEPARATOR キーワードを使用する必要があります。
 
 ### 新機能
 
-- 集計関数 [group_concat](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/group_concat/) が DISTINCT キーワードと ORDER BY 句をサポートするようになりました。 [#28778](https://github.com/StarRocks/starrocks/pull/28778)
-- パーティション内のデータを時間の経過とともに自動的にクールダウンできるようになりました。（この機能は [リストパーティション化](https://docs.starrocks.io/docs/table_design/data_distribution/list_partitioning/) ではサポートされていません。） [#29335](https://github.com/StarRocks/starrocks/pull/29335) [#29393](https://github.com/StarRocks/starrocks/pull/29393)
+- 集計関数 [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) が DISTINCT キーワードと ORDER BY 句をサポートするようになりました。 [#28778](https://github.com/StarRocks/starrocks/pull/28778)
+- パーティション内のデータを時間の経過とともに自動的にクールダウンできるようになりました。（この機能は [リストパーティション化](../table_design/data_distribution/list_partitioning.md) ではサポートされていません。） [#29335](https://github.com/StarRocks/starrocks/pull/29335) [#29393](https://github.com/StarRocks/starrocks/pull/29393)
 
 ### 改善点
 
-- すべての複合述語および WHERE 句内のすべての式に対して暗黙の変換をサポートします。暗黙の変換を有効または無効にするには、[セッション変数](https://docs.starrocks.io/docs/sql-reference/System_variable/) `enable_strict_type` を使用します。このセッション変数のデフォルト値は `false` です。 [#21870](https://github.com/StarRocks/starrocks/pull/21870)
+- すべての複合述語および WHERE 句内のすべての式に対して暗黙の変換をサポートします。暗黙の変換を有効または無効にするには、[セッション変数](../sql-reference/System_variable.md) `enable_strict_type` を使用します。このセッション変数のデフォルト値は `false` です。 [#21870](https://github.com/StarRocks/starrocks/pull/21870)
 - 文字列を整数に変換する際の FE と BE のロジックを統一しました。 [#29969](https://github.com/StarRocks/starrocks/pull/29969)
 
 ### バグ修正
@@ -162,9 +162,9 @@ products: [oss]
 - `enable_orc_late_materialization` が `true` に設定されている場合、Hive カタログを使用して ORC ファイル内の STRUCT 型データをクエリすると予期しない結果が返されます。 [#27971](https://github.com/StarRocks/starrocks/pull/27971)
 - Hive カタログを通じてデータをクエリする際、WHERE 句にパーティション列と OR 演算子が指定されている場合、クエリ結果が正しくありません。 [#28876](https://github.com/StarRocks/starrocks/pull/28876)
 - クラウドネイティブテーブルに対して RESTful API アクション `show_data` で返される値が正しくありません。 [#29473](https://github.com/StarRocks/starrocks/pull/29473)
-- [共有データクラスタ](https://docs.starrocks.io/docs/deployment/deploy_shared_data_manually/) が Azure Blob Storage にデータを保存し、テーブルが作成されると、クラスタがバージョン 3.0 にロールバックされた後、FE が起動に失敗します。 [#29433](https://github.com/StarRocks/starrocks/pull/29433)
+- [共有データクラスタ](../deployment/deploy_shared_data_manually.md) が Azure Blob Storage にデータを保存し、テーブルが作成されると、クラスタがバージョン 3.0 にロールバックされた後、FE が起動に失敗します。 [#29433](https://github.com/StarRocks/starrocks/pull/29433)
 - Iceberg カタログ内のテーブルをクエリする際、ユーザーにそのテーブルへの権限が付与されていても、ユーザーに権限がありません。 [#29173](https://github.com/StarRocks/starrocks/pull/29173)
-- [SHOW FULL COLUMNS](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/SHOW_FULL_COLUMNS/) ステートメントで返される [BITMAP](https://docs.starrocks.io/docs/sql-reference/data-types/other-data-types/BITMAP/) または [HLL](https://docs.starrocks.io/docs/sql-reference/data-types/other-data-types/HLL/) データ型の列の `Default` フィールド値が正しくありません。 [#29510](https://github.com/StarRocks/starrocks/pull/29510)
+- [SHOW FULL COLUMNS](../sql-reference/sql-statements/table_bucket_part_index/SHOW_FULL_COLUMNS.md) ステートメントで返される [BITMAP](../sql-reference/data-types/other-data-types/BITMAP.md) または [HLL](../sql-reference/data-types/other-data-types/HLL.md) データ型の列の `Default` フィールド値が正しくありません。 [#29510](https://github.com/StarRocks/starrocks/pull/29510)
 - `ADMIN SET FRONTEND CONFIG` コマンドを使用して FE 動的パラメータ `max_broker_load_job_concurrency` を変更しても効果がありません。
 - マテリアライズドビューがリフレッシュされている間にそのリフレッシュ戦略が変更されると、FE が起動に失敗することがあります。 [#29964](https://github.com/StarRocks/starrocks/pull/29964) [#29720](https://github.com/StarRocks/starrocks/pull/29720)
 - `select count(distinct(int+double)) from table_name` を実行すると、エラー `unknown error` が返されます。 [#29691](https://github.com/StarRocks/starrocks/pull/29691)
@@ -176,14 +176,14 @@ products: [oss]
 
 ### 新機能
 
-- 集計関数 [COVAR_SAMP](https://docs.starrocks.io/docs/sql-reference/sql-functions/aggregate-functions/covar_samp/)、[COVAR_POP](https://docs.starrocks.io/docs/sql-reference/sql-functions/aggregate-functions/covar_pop/)、および [CORR](https://docs.starrocks.io/docs/sql-reference/sql-functions/aggregate-functions/corr/) をサポートします。
-- 次の [ウィンドウ関数](https://docs.starrocks.io/docs/sql-reference/sql-functions/Window_function/) をサポートします: COVAR_SAMP、COVAR_POP、CORR、VARIANCE、VAR_SAMP、STD、および STDDEV_SAMP。
+- 集計関数 [COVAR_SAMP](../sql-reference/sql-functions/aggregate-functions/covar_samp.md)、[COVAR_POP](../sql-reference/sql-functions/aggregate-functions/covar_pop.md)、および [CORR](../sql-reference/sql-functions/aggregate-functions/corr.md) をサポートします。
+- 次の [ウィンドウ関数](../sql-reference/sql-functions/Window_function.md) をサポートします: COVAR_SAMP、COVAR_POP、CORR、VARIANCE、VAR_SAMP、STD、および STDDEV_SAMP。
 
 ### 改善点
 
 - エラーメッセージ `xxx too many versions xxx` により多くのプロンプトを追加しました。 [#28397](https://github.com/StarRocks/starrocks/pull/28397)
 - 動的パーティション化でパーティション単位を年にすることをさらにサポートします。 [#28386](https://github.com/StarRocks/starrocks/pull/28386)
-- テーブル作成時に式に基づくパーティション化が使用され、[INSERT OVERWRITE を使用して特定のパーティションのデータを上書きする](https://docs.starrocks.io/docs/table_design/data_distribution/expression_partitioning/#load-data-into-partitions) 場合、パーティションフィールドは大文字小文字を区別しません。 [#28309](https://github.com/StarRocks/starrocks/pull/28309)
+- テーブル作成時に式に基づくパーティション化が使用され、[INSERT OVERWRITE を使用して特定のパーティションのデータを上書きする](../table_design/data_distribution/expression_partitioning.md#load-data-into-partitions) 場合、パーティションフィールドは大文字小文字を区別しません。 [#28309](https://github.com/StarRocks/starrocks/pull/28309)
 
 ### バグ修正
 
@@ -216,7 +216,7 @@ products: [oss]
 
 - 非同期マテリアライズドビューの手動リフレッシュを最適化しました。REFRESH MATERIALIZED VIEW WITH SYNC MODE 構文を使用して、マテリアライズドビューのリフレッシュタスクを同期的に呼び出すことをサポートします。 [#25910](https://github.com/StarRocks/starrocks/pull/25910)
 - クエリされたフィールドがマテリアライズドビューの出力列に含まれていないが、マテリアライズドビューの述語に含まれている場合でも、クエリを再書き込みしてマテリアライズドビューの利点を得ることができます。 [#23028](https://github.com/StarRocks/starrocks/issues/23028)
-- [SQL 方言 (`sql_dialect`) が `trino` に設定されている場合](https://docs.starrocks.io/docs/sql-reference/System_variable/)、テーブルエイリアスは大文字小文字を区別しません。 [#26094](https://github.com/StarRocks/starrocks/pull/26094) [#25282](https://github.com/StarRocks/starrocks/pull/25282)
+- [SQL 方言 (`sql_dialect`) が `trino` に設定されている場合](../sql-reference/System_variable.md)、テーブルエイリアスは大文字小文字を区別しません。 [#26094](https://github.com/StarRocks/starrocks/pull/26094) [#25282](https://github.com/StarRocks/starrocks/pull/25282)
 - テーブル `Information_schema.tables_config` に新しいフィールド `table_id` を追加しました。`Information_schema` データベースのテーブル `tables_config` とテーブル `be_tablets` を列 `table_id` で結合して、タブレットが属するデータベースとテーブルの名前をクエリできます。 [#24061](https://github.com/StarRocks/starrocks/pull/24061)
 
 ### バグ修正
@@ -238,7 +238,7 @@ products: [oss]
 ### 改善点
 
 - StarRocks 外部テーブルのメタデータ同期がデータロード中に行われるように変更されました。 [#24739](https://github.com/StarRocks/starrocks/pull/24739)
-- 自動的に作成されたパーティションを持つテーブルに対して INSERT OVERWRITE を実行する際にパーティションを指定できます。詳細については、[自動パーティション化](https://docs.starrocks.io/docs/table_design/data_distribution/expression_partitioning/) を参照してください。 [#25005](https://github.com/StarRocks/starrocks/pull/25005)
+- 自動的に作成されたパーティションを持つテーブルに対して INSERT OVERWRITE を実行する際にパーティションを指定できます。詳細については、[自動パーティション化](../table_design/data_distribution/expression_partitioning.md) を参照してください。 [#25005](https://github.com/StarRocks/starrocks/pull/25005)
 - 非パーティション化テーブルにパーティションを追加する際に報告されるエラーメッセージを最適化しました。 [#25266](https://github.com/StarRocks/starrocks/pull/25266)
 
 ### バグ修正
@@ -281,14 +281,14 @@ products: [oss]
 
 ### 新機能
 
-- [プレビュー] 大規模なオペレーターの中間計算結果をディスクにスピルして、大規模なオペレーターのメモリ消費を削減することをサポートします。詳細については、[ディスクへのスピル](https://docs.starrocks.io/docs/administration/management/resource_management/spill_to_disk/) を参照してください。
-- [Routine Load](https://docs.starrocks.io/docs/loading/kafka/RoutineLoad/#load-avro-format-data) が Avro データのロードをサポートします。
-- [Microsoft Azure Storage](https://docs.starrocks.io/docs/integrations/csp_auth/authenticate_to_azure_storage/)（Azure Blob Storage および Azure Data Lake Storage を含む）をサポートします。
+- [プレビュー] 大規模なオペレーターの中間計算結果をディスクにスピルして、大規模なオペレーターのメモリ消費を削減することをサポートします。詳細については、[ディスクへのスピル](../administration/management/resource_management/spill_to_disk.md) を参照してください。
+- [Routine Load](../loading/kafka/RoutineLoad.md#load-avro-format-data) が Avro データのロードをサポートします。
+- [Microsoft Azure Storage](../integrations/csp_auth/authenticate_to_azure_storage.md)（Azure Blob Storage および Azure Data Lake Storage を含む）をサポートします。
 
 ### 改善点
 
 - 共有データクラスタが StarRocks 外部テーブルを使用して別の StarRocks クラスタとデータを同期することをサポートします。
-- 最近のロードエラーを記録するために [Information Schema](https://docs.starrocks.io/docs/sql-reference/information_schema/load_tracking_logs/) に `load_tracking_logs` を追加しました。
+- 最近のロードエラーを記録するために [Information Schema](../sql-reference/information_schema/load_tracking_logs.md) に `load_tracking_logs` を追加しました。
 - CREATE TABLE ステートメント内の特殊文字を無視します。 [#23885](https://github.com/StarRocks/starrocks/pull/23885)
 
 ### バグ修正
@@ -312,76 +312,76 @@ products: [oss]
 
 #### システムアーキテクチャ
 
-- **ストレージとコンピュートの分離。** StarRocks は、S3 互換のオブジェクトストレージへのデータ永続化をサポートし、リソースの分離を強化し、ストレージコストを削減し、コンピュートリソースをよりスケーラブルにします。ローカルディスクはクエリパフォーマンスを向上させるためのホットデータキャッシュとして使用されます。新しい共有データアーキテクチャのクエリパフォーマンスは、ローカルディスクキャッシュがヒットした場合、クラシックアーキテクチャ（共有なし）と同等です。詳細については、[共有データ StarRocks のデプロイと使用](https://docs.starrocks.io/docs/deployment/deploy_shared_data_manually/) を参照してください。
+- **ストレージとコンピュートの分離。** StarRocks は、S3 互換のオブジェクトストレージへのデータ永続化をサポートし、リソースの分離を強化し、ストレージコストを削減し、コンピュートリソースをよりスケーラブルにします。ローカルディスクはクエリパフォーマンスを向上させるためのホットデータキャッシュとして使用されます。新しい共有データアーキテクチャのクエリパフォーマンスは、ローカルディスクキャッシュがヒットした場合、クラシックアーキテクチャ（共有なし）と同等です。詳細については、[共有データ StarRocks のデプロイと使用](../deployment/deploy_shared_data_manually.md) を参照してください。
 
 #### ストレージエンジンとデータ取り込み
 
-- [AUTO_INCREMENT](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/auto_increment/) 属性がサポートされ、グローバルに一意の ID を提供し、データ管理を簡素化します。
+- [AUTO_INCREMENT](../sql-reference/sql-statements/table_bucket_part_index/auto_increment.md) 属性がサポートされ、グローバルに一意の ID を提供し、データ管理を簡素化します。
 - 自動パーティション化とパーティション化式がサポートされ、パーティション作成がより使いやすく柔軟になります。
-- 主キーテーブルが、CTE の使用や複数のテーブルへの参照を含む、より完全な [UPDATE](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/UPDATE/) および [DELETE](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/DELETE/#primary-key-tables) 構文をサポートします。
-- Broker Load および INSERT INTO ジョブのロードプロファイルを追加しました。ロードプロファイルをクエリすることで、ロードジョブの詳細を表示できます。使用方法は [クエリプロファイルの分析](https://docs.starrocks.io/docs/best_practices/query_tuning/query_profile_overview/) と同じです。
+- 主キーテーブルが、CTE の使用や複数のテーブルへの参照を含む、より完全な [UPDATE](../sql-reference/sql-statements/table_bucket_part_index/UPDATE.md) および [DELETE](../sql-reference/sql-statements/table_bucket_part_index/DELETE.md#primary-key-tables) 構文をサポートします。
+- Broker Load および INSERT INTO ジョブのロードプロファイルを追加しました。ロードプロファイルをクエリすることで、ロードジョブの詳細を表示できます。使用方法は [クエリプロファイルの分析](../best_practices/query_tuning/query_profile_overview.md) と同じです。
 
 #### データレイク分析
 
-- [プレビュー] Presto/Trino 互換の方言をサポートします。Presto/Trino の SQL は自動的に StarRocks の SQL パターンに書き換えられます。詳細については、[システム変数](https://docs.starrocks.io/docs/sql-reference/System_variable/) `sql_dialect` を参照してください。
-- [プレビュー] [JDBC カタログ](https://docs.starrocks.io/docs/data_source/catalog/jdbc_catalog/) をサポートします。
-- 現在のセッションでカタログ間を手動で切り替えるために [SET CATALOG](https://docs.starrocks.io/docs/sql-reference/sql-statements/Catalog/SET_CATALOG/) を使用することをサポートします。
+- [プレビュー] Presto/Trino 互換の方言をサポートします。Presto/Trino の SQL は自動的に StarRocks の SQL パターンに書き換えられます。詳細については、[システム変数](../sql-reference/System_variable.md) `sql_dialect` を参照してください。
+- [プレビュー] [JDBC カタログ](../data_source/catalog/jdbc_catalog.md) をサポートします。
+- 現在のセッションでカタログ間を手動で切り替えるために [SET CATALOG](../sql-reference/sql-statements/Catalog/SET_CATALOG.md) を使用することをサポートします。
 
 #### 特権とセキュリティ
 
-- 完全な RBAC 機能を備えた新しい特権システムを提供し、ロールの継承とデフォルトロールをサポートします。詳細については、[特権の概要](https://docs.starrocks.io/docs/administration/user_privs/authorization/user_privs/) を参照してください。
-- より多くの特権管理オブジェクトとより細かい特権を提供します。詳細については、[StarRocks がサポートする特権](https://docs.starrocks.io/docs/administration/user_privs/authorization/privilege_item/) を参照してください。
+- 完全な RBAC 機能を備えた新しい特権システムを提供し、ロールの継承とデフォルトロールをサポートします。詳細については、[特権の概要](../administration/user_privs/authorization/user_privs.md) を参照してください。
+- より多くの特権管理オブジェクトとより細かい特権を提供します。詳細については、[StarRocks がサポートする特権](../administration/user_privs/authorization/privilege_item.md) を参照してください。
 
 #### クエリエンジン
 
-- 結合されたテーブルに対するより多くのクエリが [クエリキャッシュ](https://docs.starrocks.io/docs/using_starrocks/caching/query_cache/) の利点を享受できるようになりました。たとえば、クエリキャッシュは現在、Broadcast Join および Bucket Shuffle Join をサポートしています。
-- [グローバル UDF](https://docs.starrocks.io/docs/sql-reference/sql-functions/JAVA_UDF/) をサポートします。
+- 結合されたテーブルに対するより多くのクエリが [クエリキャッシュ](../using_starrocks/caching/query_cache.md) の利点を享受できるようになりました。たとえば、クエリキャッシュは現在、Broadcast Join および Bucket Shuffle Join をサポートしています。
+- [グローバル UDF](../sql-reference/sql-functions/JAVA_UDF.md) をサポートします。
 - 動的適応並行性: StarRocks はクエリの並行性のために `pipeline_dop` パラメータを自動的に調整できます。
 
 #### SQL リファレンス
 
-- 次の特権関連の SQL ステートメントを追加しました: [SET DEFAULT ROLE](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE/)、[SET ROLE](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/SET_ROLE/)、[SHOW ROLES](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/SHOW_ROLES/)、および [SHOW USERS](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/SHOW_USERS/)。
-- 次の半構造化データ分析関数を追加しました: [map_apply](https://docs.starrocks.io/docs/sql-reference/sql-functions/map-functions/map_apply/)、[map_from_arrays](https://docs.starrocks.io/docs/sql-reference/sql-functions/map-functions/map_from_arrays/)。
-- [array_agg](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_agg/) が ORDER BY をサポートします。
-- ウィンドウ関数 [lead](https://docs.starrocks.io/docs/sql-reference/sql-functions/Window_function#lead) および [lag](https://docs.starrocks.io/docs/sql-reference/sql-functions/Window_function#lag) が IGNORE NULLS をサポートします。
-- 文字列関数 [replace](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/replace/)、[hex_decode_binary](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/hex_decode_binary/)、および [hex_decode_string()](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/hex_decode_string/) を追加しました。
-- 暗号化関数 [base64_decode_binary](https://docs.starrocks.io/docs/sql-reference/sql-functions/crytographic-functions/base64_decode_binary/) および [base64_decode_string](https://docs.starrocks.io/docs/sql-reference/sql-functions/crytographic-functions/base64_decode_string/) を追加しました。
-- 数学関数 [sinh](https://docs.starrocks.io/docs/sql-reference/sql-functions/math-functions/sinh/)、[cosh](https://docs.starrocks.io/docs/sql-reference/sql-functions/math-functions/cosh/)、および [tanh](https://docs.starrocks.io/docs/sql-reference/sql-functions/math-functions/tanh/) を追加しました。
-- ユーティリティ関数 [current_role](https://docs.starrocks.io/docs/sql-reference/sql-functions/utility-functions/current_role/) を追加しました。
+- 次の特権関連の SQL ステートメントを追加しました: [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md)、[SET ROLE](../sql-reference/sql-statements/account-management/SET_ROLE.md)、[SHOW ROLES](../sql-reference/sql-statements/account-management/SHOW_ROLES.md)、および [SHOW USERS](../sql-reference/sql-statements/account-management/SHOW_USERS.md)。
+- 次の半構造化データ分析関数を追加しました: [map_apply](../sql-reference/sql-functions/map-functions/map_apply.md)、[map_from_arrays](../sql-reference/sql-functions/map-functions/map_from_arrays.md)。
+- [array_agg](../sql-reference/sql-functions/array-functions/array_agg.md) が ORDER BY をサポートします。
+- ウィンドウ関数 [lead](../sql-reference/sql-functions/Window_function.md#lead) および [lag](../sql-reference/sql-functions/Window_function.md#lag) が IGNORE NULLS をサポートします。
+- 文字列関数 [replace](../sql-reference/sql-functions/string-functions/replace.md)、[hex_decode_binary](../sql-reference/sql-functions/string-functions/hex_decode_binary.md)、および [hex_decode_string()](../sql-reference/sql-functions/string-functions/hex_decode_string.md) を追加しました。
+- 暗号化関数 [base64_decode_binary](../sql-reference/sql-functions/crytographic-functions/base64_decode_binary.md) および [base64_decode_string](../sql-reference/sql-functions/crytographic-functions/base64_decode_string.md) を追加しました。
+- 数学関数 [sinh](../sql-reference/sql-functions/math-functions/sinh.md)、[cosh](../sql-reference/sql-functions/math-functions/cosh.md)、および [tanh](../sql-reference/sql-functions/math-functions/tanh.md) を追加しました。
+- ユーティリティ関数 [current_role](../sql-reference/sql-functions/utility-functions/current_role.md) を追加しました。
 
 ### 改善点
 
 #### デプロイメント
 
-- バージョン 3.0 用の Docker イメージと関連する [Docker デプロイメントドキュメント](https://docs.starrocks.io/docs/quick_start/shared-nothing/) を更新しました。 [#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021)
+- バージョン 3.0 用の Docker イメージと関連する [Docker デプロイメントドキュメント](../quick_start/shared-nothing.md) を更新しました。 [#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021)
 
 #### ストレージエンジンとデータ取り込み
 
-- データ取り込みのために、SKIP_HEADER、TRIM_SPACE、ENCLOSE、および ESCAPE を含むより多くの CSV パラメータをサポートします。[STREAM LOAD](https://docs.starrocks.io/docs/sql-reference/sql-statements/loading_unloading/STREAM_LOAD/)、[BROKER LOAD](https://docs.starrocks.io/docs/sql-reference/sql-statements/loading_unloading/BROKER_LOAD/)、および [ROUTINE LOAD](https://docs.starrocks.io/docs/sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD/) を参照してください。
-- 主キーとソートキーが [主キーテーブル](https://docs.starrocks.io/docs/table_design/table_types/primary_key_table/) で分離され、テーブル作成時に `ORDER BY` でソートキーを個別に指定できます。
+- データ取り込みのために、SKIP_HEADER、TRIM_SPACE、ENCLOSE、および ESCAPE を含むより多くの CSV パラメータをサポートします。[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)、[BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)、および [ROUTINE LOAD](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) を参照してください。
+- 主キーとソートキーが [主キーテーブル](../table_design/table_types/primary_key_table.md) で分離され、テーブル作成時に `ORDER BY` でソートキーを個別に指定できます。
 - 大量の取り込み、部分更新、および永続的な主キーインデックスなどのシナリオでの主キーテーブルへのデータ取り込みのメモリ使用量を最適化しました。
-- 非同期 INSERT タスクの作成をサポートします。詳細については、[INSERT](https://docs.starrocks.io/docs/loading/InsertInto#load-data-asynchronously-using-insert) および [SUBMIT TASK](https://docs.starrocks.io/docs/sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK/) を参照してください。 [#20609](https://github.com/StarRocks/starrocks/issues/20609)
+- 非同期 INSERT タスクの作成をサポートします。詳細については、[INSERT](../loading/InsertInto.md#load-data-asynchronously-using-insert) および [SUBMIT TASK](../sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md) を参照してください。 [#20609](https://github.com/StarRocks/starrocks/issues/20609)
 
 #### マテリアライズドビュー
 
-- [マテリアライズドビュー](https://docs.starrocks.io/docs/using_starrocks/async_mv/Materialized_view/) の書き換え機能を最適化しました。以下を含みます:
+- [マテリアライズドビュー](../using_starrocks/async_mv/Materialized_view.md) の書き換え機能を最適化しました。以下を含みます:
   - View Delta Join、Outer Join、Cross Join の書き換えをサポートします。
   - パーティションを持つ Union の SQL 書き換えを最適化しました。
 - マテリアライズドビューの構築機能を改善しました。CTE、select *、および Union をサポートします。
-- [SHOW MATERIALIZED VIEWS](https://docs.starrocks.io/docs/sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW/) で返される情報を最適化しました。
+- [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW.md) で返される情報を最適化しました。
 - マテリアライズドビューの構築中にパーティション追加の効率を向上させるために、MV パーティションをバッチで追加することをサポートします。 [#21167](https://github.com/StarRocks/starrocks/pull/21167)
 
 #### クエリエンジン
 
 - すべてのオペレーターがパイプラインエンジンでサポートされています。非パイプラインコードは後のバージョンで削除されます。
-- [大規模クエリの位置付け](https://docs.starrocks.io/docs/administration/management/monitor_manage_big_queries/) を改善し、大規模クエリログを追加しました。[SHOW PROCESSLIST](https://docs.starrocks.io/docs/sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROCESSLIST/) で CPU とメモリ情報を表示できます。
+- [大規模クエリの位置付け](../administration/management/monitor_manage_big_queries.md) を改善し、大規模クエリログを追加しました。[SHOW PROCESSLIST](../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROCESSLIST.md) で CPU とメモリ情報を表示できます。
 - 外部結合の再順序を最適化しました。
 - SQL パース段階でのエラーメッセージを最適化し、より正確なエラーポジショニングと明確なエラーメッセージを提供します。
 
 #### データレイク分析
 
 - メタデータ統計収集を最適化しました。
-- [SHOW CREATE TABLE](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/SHOW_CREATE_TABLE/) を使用して、Apache Hive™、Apache Iceberg、Apache Hudi、または Delta Lake に格納されている外部カタログによって管理されるテーブルの作成ステートメントを表示することをサポートします。
+- [SHOW CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/SHOW_CREATE_TABLE.md) を使用して、Apache Hive™、Apache Iceberg、Apache Hudi、または Delta Lake に格納されている外部カタログによって管理されるテーブルの作成ステートメントを表示することをサポートします。
 
 ### バグ修正
 
@@ -393,14 +393,14 @@ products: [oss]
 - パーティションプルーニングが MV の書き換えを失敗させます。 [#14641](https://github.com/StarRocks/starrocks/issues/14641)
 - CREATE MATERIALIZED VIEW ステートメントに `count(distinct)` が含まれており、`count(distinct)` が DISTRIBUTED BY 列に適用される場合、MV の書き換えが失敗します。 [#16558](https://github.com/StarRocks/starrocks/issues/16558)
 - VARCHAR 列がマテリアライズドビューのパーティション列として使用されている場合、FEs が起動に失敗します。 [#19366](https://github.com/StarRocks/starrocks/issues/19366)
-- ウィンドウ関数 [LEAD](https://docs.starrocks.io/docs/sql-reference/sql-functions/Window_function#lead) および [LAG](https://docs.starrocks.io/docs/sql-reference/sql-functions/Window_function#lag) が IGNORE NULLS を正しく処理しません。 [#21001](https://github.com/StarRocks/starrocks/pull/21001)
+- ウィンドウ関数 [LEAD](../sql-reference/sql-functions/Window_function.md#lead) および [LAG](../sql-reference/sql-functions/Window_function.md#lag) が IGNORE NULLS を正しく処理しません。 [#21001](https://github.com/StarRocks/starrocks/pull/21001)
 - 一時パーティションの追加が自動パーティション作成と競合します。 [#21222](https://github.com/StarRocks/starrocks/issues/21222)
 
 ### 動作変更
 
-- 新しいロールベースのアクセス制御 (RBAC) システムは、以前の特権とロールをサポートします。ただし、[GRANT](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/GRANT/) や [REVOKE](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/REVOKE/) などの関連ステートメントの構文が変更されました。
-- SHOW MATERIALIZED VIEW を [SHOW MATERIALIZED VIEWS](https://docs.starrocks.io/docs/sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW/) に名前を変更しました。
-- 次の [予約キーワード](https://docs.starrocks.io/docs/sql-reference/sql-statements/keywords/) を追加しました: AUTO_INCREMENT、CURRENT_ROLE、DEFERRED、ENCLOSE、ESCAPE、IMMEDIATE、PRIVILEGES、SKIP_HEADER、TRIM_SPACE、VARBINARY。
+- 新しいロールベースのアクセス制御 (RBAC) システムは、以前の特権とロールをサポートします。ただし、[GRANT](../sql-reference/sql-statements/account-management/GRANT.md) や [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md) などの関連ステートメントの構文が変更されました。
+- SHOW MATERIALIZED VIEW を [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/materialized_view/SHOW_MATERIALIZED_VIEW.md) に名前を変更しました。
+- 次の [予約キーワード](../sql-reference/sql-statements/keywords.md) を追加しました: AUTO_INCREMENT、CURRENT_ROLE、DEFERRED、ENCLOSE、ESCAPE、IMMEDIATE、PRIVILEGES、SKIP_HEADER、TRIM_SPACE、VARBINARY。
 
 ### アップグレードノート
 
@@ -422,6 +422,6 @@ StarRocks は v3.0 で BDB ライブラリをアップグレードします。�
 
 新しい RBAC 特権システムは、v3.0 にアップグレードした後にデフォルトで使用されます。v2.5 にのみダウングレードできます。
 
-ダウングレード後、[ALTER SYSTEM CREATE IMAGE](https://docs.starrocks.io/docs/sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM/) を実行して新しいイメージを作成し、新しいイメージがすべてのフォロワー FE に同期されるのを待ちます。このコマンドを実行しないと、一部のダウングレード操作が失敗する可能性があります。このコマンドは 2.5.3 以降でサポートされています。
+ダウングレード後、[ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) を実行して新しいイメージを作成し、新しいイメージがすべてのフォロワー FE に同期されるのを待ちます。このコマンドを実行しないと、一部のダウングレード操作が失敗する可能性があります。このコマンドは 2.5.3 以降でサポートされています。
 
-v2.5 と v3.0 の特権システムの違いについては、[StarRocks がサポートする特権](https://docs.starrocks.io/docs/administration/user_privs/authorization/privilege_item/) の「アップグレードノート」を参照してください。
+v2.5 と v3.0 の特権システムの違いについては、[StarRocks がサポートする特権](../administration/user_privs/authorization/privilege_item.md) の「アップグレードノート」を参照してください。

@@ -43,6 +43,8 @@ FILE to_file(STRUCT struct_expr)
 - 不校验 URI 格式、MIME 类型、校验和，以及引用的字节范围。
 - `inline` 保存原始字节。空字符串和零长度二进制值仍算非 NULL，并会被保留。
 
+如果 `content_type` 缺失或为空，`ai_complete` 或 `ai_embed` 在使用该 FILE 时会尝试推断媒体类型。参见 [FILE 输入支持范围](../ai-functions/ai_functions.mdx#file-input)。
+
 ## 示例
 
 ### 示例 1：构造文件引用

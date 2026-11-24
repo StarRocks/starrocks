@@ -886,6 +886,14 @@ CONF_Int32(load_segment_thread_pool_queue_size, "10240");
 // When enabled, segments whose sort key range does not intersect with query predicates will be skipped.
 CONF_mBool(enable_lake_segment_metadata_filter, "true");
 
+// Once a query scan of a lake tablet has opened its segments, split or not, start filling the local cache with the
+// index pages its reads need next -- the short key index of every segment, the zone map and bloom filter roots of the
+// predicate columns and the ordinal index roots of the read columns -- asynchronously, without waiting for them. The
+// reads then join those fills instead of fetching one page after another. Takes effect only for queries and only
+// while the remote I/O scheduler is enabled and initialized (remote_io_scheduler_enable); otherwise, and when a file
+// cannot be warmed, the scan reads its index pages as before. Independent of lake_scan_parallel_segment_open.
+CONF_mBool(lake_scan_warm_index, "true");
+
 // When a prepared-split scan's main morsel queue is momentarily empty (its seed page-pruning is still
 // running), it issues an extra PRE_REFINEMENT_COARSE morsel over an un-pruned segment range to keep
 // otherwise-idle drivers busy until the refined ranges land. Set to false to disable that pre-refinement
@@ -893,6 +901,19 @@ CONF_mBool(enable_lake_segment_metadata_filter, "true");
 // range is always a superset that the refined ranges subtract from) -- it only trades early parallelism
 // for less redundant coarse scanning. Only affects the enable_lake_prepared_physical_split_scan path.
 CONF_mBool(enable_lake_prepared_split_pre_refinement, "true");
+
+// While the remote I/O scheduler is enabled (remote_io_scheduler_enable), a lake query scan opens the segments of all
+// rowsets of a tablet at once on the load segment thread pool, one task per segment, instead of one rowset after
+// another, and builds the rowsets' iterators in parallel. Has no effect while the scheduler is off. Loads, compaction
+// and the other readers keep following enable_load_segment_parallel.
+CONF_mBool(lake_scan_parallel_segment_open, "true");
+
+// When a query scan reads a tablet's segments one after another (a tablet not split across scan tasks), the next
+// segments start fetching the first blocks they will read while the current one is still read, once it has asked for
+// all of its own: up to this many segments ahead. A next segment starts only while they all hold fewer than
+// remote_prefetch_window_blocks blocks not read yet, so the segment started last can take that to about twice the
+// window. 0 starts each segment's read-ahead only when its turn comes.
+CONF_mInt32(lake_scan_read_ahead_segments, "16");
 
 // Fragment thread pool
 CONF_Int32(fragment_pool_thread_num_min, "64");
@@ -1640,6 +1661,12 @@ CONF_Bool(starlet_star_cache_async_init, "true");
 // is set to, because nothing in this process witnessed their write. Read once when StarCache
 // initializes.
 CONF_Bool(starlet_star_cache_skip_fresh_block_checksum_verification, "true");
+// Whether a StarCache write replaces an object that is already cached under the same key. Off, the
+// existing object is kept and the write is reported as success, which suits the read-through fill
+// path where the bytes being written are the ones already cached. Turn it on to let a re-read
+// refresh a block that is suspected to be stale or damaged. StarCache reads it on every write, so a
+// change takes effect on the next write without re-initializing the cache.
+CONF_mBool(starlet_star_cache_write_overwrite, "false");
 CONF_mInt32(starlet_star_cache_mem_size_percent, "0");
 CONF_mInt64(starlet_star_cache_mem_size_bytes, "134217728");
 CONF_Int32(starlet_star_cache_disk_size_percent, "80");
@@ -1828,14 +1855,17 @@ CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 CONF_mBool(experimental_lake_ignore_pk_consistency_check, "false");
 // Persist the in-transaction upsert/delete order (op_offset) for shared-data PK del files.
-// DISABLED by default for downgrade safety: when on, a correctly-interleaved load can persist a
-// del file that references a key still live in the same rowset (the re-upsert wins). A pre-fix BE
-// (rollback, or a not-yet-upgraded node / cross-version OpReplication target) treats deletes as
-// "after all segments" and would erase that key on index rebuild while the delvec keeps it live,
-// turning a benign "missing row" into a duplicate primary key. Leaving op_offset unset keeps the
-// whole apply/persist/rebuild chain on the legacy "delete after all segments" path. Enabled by
-// default; set it to false before rolling back to (or running a mixed cluster with) a pre-fix BE so
-// the legacy path is used and no incompatible on-disk state is written.
+// When off, deletes apply after all segments of the load, so a key the load deletes and then
+// upserts again is deleted if the delete and the upsert are flushed separately. A table with a
+// separate sort key keeps the order either way (pk_preserve_txn_delete_order_enabled).
+// Downgrade safety: when on, a correctly-interleaved load can persist a del file that references a
+// key still live in the same rowset (the re-upsert wins). A pre-fix BE (rollback, or a
+// not-yet-upgraded node / cross-version OpReplication target) treats deletes as "after all
+// segments" and would erase that key on index rebuild while the delvec keeps it live, turning a
+// benign "missing row" into a duplicate primary key. Leaving op_offset unset keeps the whole
+// apply/persist/rebuild chain on the legacy "delete after all segments" path. Enabled by default;
+// set it to false before rolling back to (or running a mixed cluster with) a pre-fix BE so the
+// legacy path is used and no incompatible on-disk state is written.
 CONF_mBool(lake_enable_pk_preserve_txn_delete_order, "true");
 // Whether a Primary Key publish reads the base segments it needs through the segment metacache
 // (TabletManager::load_segment) instead of a static Segment::open. This covers every base-segment
@@ -1996,14 +2026,17 @@ CONF_mInt32(lake_pk_index_block_cache_limit_percent, "10");
 // the checksummed format, because during a rolling upgrade or a downgrade an older BE/CN uses the
 // legacy reader and cannot parse files written in the new format.
 CONF_mBool(lake_enable_protobuf_file_checksum, "true");
-// Write multi-statement version logs as ordered groups instead of the legacy merged TxnLogPB.
-// Disabled by default for a reader-first rollout; the legacy write path and its limitations remain
-// until enabled. Readers accept both formats regardless of this flag. Enable only after every CN
-// that can publish, replay or clean up these logs has the group reader. Before either enabling or
-// disabling, pause affected schema-change/multi-statement publishers and drain in-flight requests;
-// switching concurrently with publish is not supported. Disabling does not make existing groups
+// Write multi-statement version logs as ordered groups instead of the legacy merged TxnLogPB, so that
+// replay applies each statement with its own schema, segments, rewrite metadata and delete positions.
+// Readers accept both formats regardless of this flag. A CN without the group reader cannot read
+// groups, and its retry can write an incomplete legacy log that replay prefers: while such a CN can
+// still publish, replay or clean up these logs (a rolling upgrade from a pre-reader version), set this
+// to false on the upgraded CNs and enable it only after every CN has the reader. Before either
+// enabling or disabling, pause affected schema-change/multi-statement publishers and drain in-flight
+// requests; switching concurrently with publish is not supported. Disabling restores the legacy
+// merged writer and its DELETE-then-INSERT limitation, and does not make existing groups
 // downgrade-readable: drain and verify them before rolling back to a pre-reader CN.
-CONF_mBool(lake_enable_txn_vlog_group, "false");
+CONF_mBool(lake_enable_txn_vlog_group, "true");
 // clear *.meta cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_meta, "true");
 // clear *.data cache for lake table, so that a read which finds the local copy of a data file corrupted
@@ -2193,6 +2226,16 @@ CONF_Bool(datacache_unified_instance_enable, "true");
 // * lru: the typical `Least Recently Used` eviction policy.
 // * slru: segment lru eviction policies, which can better reduce cache pollution problem.
 CONF_String(datacache_eviction_policy, "slru");
+// Whether an lru shard of datacache can evict entries from the other shards when it is being refilled
+// or cannot supply the whole charge by itself. Setting it to `false` restores the old behavior that a
+// shard only ever evicts its own entries, and the refill watermarks below are ignored.
+CONF_mBool(datacache_lru_shard_evict_fallback_enable, "true");
+// An lru shard of datacache is refilled from the largest shards instead of evicting its own entries
+// once its usage drops below `datacache_lru_shard_refill_low_watermark_percent` of its capacity, until
+// it reaches `datacache_lru_shard_refill_high_watermark_percent`. They should satisfy
+// `low <= high <= 100`, and setting both to `0` disables the refill.
+CONF_mInt32(datacache_lru_shard_refill_low_watermark_percent, "50");
+CONF_mInt32(datacache_lru_shard_refill_high_watermark_percent, "70");
 
 // The BlockCache stores the raw data blocks of external tables and shared-data internal tables.
 // It shares the same limit (datacache_disk_size, datacache_mem_size) with the PageCache.
@@ -2560,6 +2603,10 @@ CONF_Strings(python_envs, "");
 CONF_Bool(report_python_worker_error, "true");
 CONF_Bool(python_worker_reuse, "true");
 CONF_Int32(python_worker_expire_time_sec, "300");
+// The most local Python worker processes one pipeline driver uses. A driver's call stubs (one per
+// concurrent UDF call, e.g. per scan IO task) are spread over these workers, and since each worker
+// runs Python under its own GIL, this bounds how many Python UDF calls of a driver run in parallel.
+CONF_mInt32(python_worker_max_per_driver, "3");
 // Timeout (ms) for the Arrow Flight call to a Python UDF worker (local or external service_url).
 // Applied as the gRPC deadline on the DoExchange stream, so a dead/unreachable/hung worker fails
 // the query instead of hanging forever. Note it bounds the whole stream's lifetime, so set it above
@@ -2700,7 +2747,7 @@ CONF_mInt32(thrift_max_recursion_depth, "64");
 CONF_mBool(enable_lake_compaction_use_partial_segments, "false");
 // If turned on, parallel compaction will split by sort key range instead of segment index.
 // This produces non-overlapping output rowsets, improving subsequent query performance.
-CONF_mBool(enable_lake_compaction_range_split, "false");
+CONF_mBool(enable_lake_compaction_range_split, "true");
 // chunk size used by lake compaction
 CONF_mInt32(lake_compaction_chunk_size, "4096");
 // Hold the input segments of a compaction task on its Rowset objects for the whole task, so the

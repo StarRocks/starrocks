@@ -84,6 +84,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群中，Compaction 任务是否在其 Rowset 实例上持有输入 Segment 对象直至任务结束，使 Vertical Compaction 的各列组趟直接复用这些对象，而不再依赖元数据缓存重新加载。关闭持有时，一旦元数据缓存装不下全部输入 Segment（`lake_segment_metadata_cache_limit_percent` 较小，或节点上 Tablet 较多），每一趟都会重新加载并解析全部输入 Segment；该开销为 CPU 密集且与列数成正比，可能使宽表 Compaction 慢一个数量级，或因反复超出内存限制而失败。持有期间，任务不再把输入 Segment 和 Delete Vector 填入共享元数据缓存，因为输入数据在 Compaction 完成后即被删除，缓存它们只会挤掉其他 Tablet 的条目。内存代价为每个运行中任务持有一套输入 Segment 元数据，计入该 Compaction 任务的内存跟踪并随任务释放。设为 `false` 可恢复旧行为，即 Compaction 通过共享元数据缓存复用 Segment 并向其填充输入。
 - 引入版本：v4.2
 
+### enable_lake_compaction_range_split
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，并行 Compaction 是否按排序键范围切分输入。设为 `true` 时，并行 Compaction 的每个子任务读取全部输入 Rowset 中落在一个排序键范围内的数据，各子任务共同写出一个 Segment 互不重叠的 Rowset。仅当所有输入 Segment 都记录了排序键上下界时，才按范围切分。否则，或者设为 `false` 时，并行 Compaction 按整个 Rowset 分组，或按 Segment 序号切分大 Rowset，各子任务的输出可能相互重叠。每个 Tablet 的最大子任务数由表属性 `lake_compaction_max_parallel` 设置。
+- 引入版本：v4.2
+
 ### lake_compaction_stream_buffer_size_bytes
 
 - 默认值：1048576
@@ -135,7 +144,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群下，是否在单个导入事务内保留主键表 UPSERT 与 DELETE 的先后顺序。当同一个导入事务中同一个 key 先 `DELETE` 后再 `UPSERT` 时，开启该配置后以最后写入的 `UPSERT` 为准（与存算一体集群行为一致）。默认开启。出于降级安全考虑，在回滚到（或与其混部）不支持该修复的 BE 版本之前，请先将其设为 `false`：开启后，导入可能会持久化新版本格式的元数据，若 BE 回滚到不支持该修复的版本会被错误解析，可能产生主键重复。关闭时，DELETE 回退到旧有行为（在事务内所有 UPSERT 之后生效）。
+- 描述：存算分离集群下，是否在单个导入事务内保留主键表 UPSERT 与 DELETE 的先后顺序。当同一个导入事务中同一个 key 先 `DELETE` 后再 `UPSERT` 时，开启该配置后以最后写入的 `UPSERT` 为准（与存算一体集群行为一致）。默认开启。出于降级安全考虑，在回滚到（或与其混部）不支持该修复的 BE 版本之前，请先将其设为 `false`：开启后，导入可能会持久化新版本格式的元数据，若 BE 回滚到不支持该修复的版本会被错误解析，可能产生主键重复。关闭时，DELETE 回退到旧有行为（在事务内所有 UPSERT 之后生效）：如果一次导入先 DELETE 某个 key 再重新 UPSERT，且两者被分别 flush（例如数据量较大的导入），该 key 最终会被删除，这次 UPSERT 丢失。排序键（`ORDER BY`）与主键不同的主键表始终保留该顺序，不受此配置影响。
 - 引入版本：v4.1.4
 
 ### lake_enable_protobuf_file_checksum
@@ -169,17 +178,17 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### lake_enable_txn_vlog_group
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群的 Schema Change Publish 是否将多语句事务按语句顺序保存为日志组，写入独立的 `{tablet}_{version}.group.vlog` 文件。旧格式单日志使用 `{tablet}_{version}.vlog` 文件。无论该配置项如何设置，本版本的读取端始终支持旧单日志格式和新语句组格式。默认 `false` 保留旧的合并日志写入路径，也保留先 DELETE 后 INSERT 时，部分更新元数据不匹配导致 Shadow Publish 失败的已知问题。只有开启后，该问题的修复才生效。开启后不会转换旧写入路径已经写入的版本事务日志。
+- 描述：存算分离集群的 Schema Change Publish 是否将多语句事务按语句顺序保存为日志组，写入独立的 `{tablet}_{version}.group.vlog` 文件。旧格式单日志使用 `{tablet}_{version}.vlog` 文件。无论该配置项如何设置，本版本的读取端始终支持旧单日志格式和新语句组格式。默认 `true` 时，每条语句保留各自的 Schema、Segment、重写元数据和删除位置，同一事务中先 DELETE 后 INSERT 不会再因部分更新元数据不匹配导致 Shadow Publish 失败。设置为 `false` 会恢复旧的合并日志写入路径，也会恢复这个已知问题。修改该配置项不会转换已经写入的版本事务日志。
 
-  请先部署读取支持，再启用新格式写入。统一开启前，必须确认所有可能执行 Publish、回放或清理的 CN 都支持语句组格式，包括后台工作节点和替换节点使用的镜像。仍有旧 CN 时开启语句组写入，可能静默丢失已提交事务中的语句：新写入端删除部分源日志后，旧 CN 重试时可能仅用剩余源日志写出不完整的旧格式日志，而回放会优先读取该旧格式日志。
+  不支持语句组读取的版本的 CN 无法读取语句组。从没有该配置项或该配置项默认为 `false` 的更早版本升级时，请在启动每个升级后的 CN 之前，在 `cn.conf` 中设置 `lake_enable_txn_vlog_group = false`，并保持为 `false`，直到所有可能执行 Publish、回放或清理的 CN 都已升级，包括后台工作节点和替换节点使用的镜像，然后按下文步骤开启。如果更早的版本不支持读取语句组，必须执行这一步：仍有旧 CN 时开启语句组写入，可能静默丢失已提交事务中的语句。新写入端删除部分源日志后，旧 CN 重试时可能仅用剩余源日志写出不完整的旧格式日志，而回放会优先读取该旧格式日志。
 
   无论开启还是关闭，切换前都应暂停相关 Schema Change 和多语句 Publish 工作，排空在途请求，在全部相关 CN 上一致更新配置后再恢复工作。该配置项不协商读取能力，也不提供集群范围的原子切换。
 
-  重新设置为 `false` 只会停止后续语句组写入，不会转换、排空或删除已存在的语句组日志。降级到不支持语句组读取的版本前，必须列举所有相关存储根目录的 `txnlog` 目录，确认不存在任何 `*.group.vlog` 文件，包括与有效旧格式日志并存但未被使用的语句组文件，因为旧版本的 Tablet 清理也会扫描这些文件，且无法解码。ALTER 达到 `FINISHED`、事务达到 `VISIBLE` 或常规 Vacuum 完成，都不能证明这些文件已不存在。开启 File Bundling 时，成功回放后仍会保留这些日志，常规 Vacuum 也不会回收版本事务日志。如果仍有此类文件，应继续使用支持语句组读取的版本，直到完成安全清理。仅关闭该配置项并不代表可以安全降级。
+  设置为 `false` 只会停止后续语句组写入，不会转换、排空或删除已存在的语句组日志。降级到不支持语句组读取的版本前，必须列举所有相关存储根目录的 `txnlog` 目录，确认不存在任何 `*.group.vlog` 文件，包括与有效旧格式日志并存但未被使用的语句组文件，因为旧版本的 Tablet 清理也会扫描这些文件，且无法解码。ALTER 达到 `FINISHED`、事务达到 `VISIBLE` 或常规 Vacuum 完成，都不能证明这些文件已不存在。开启 File Bundling 时，成功回放后仍会保留这些日志，常规 Vacuum 也不会回收版本事务日志。如果仍有此类文件，应继续使用支持语句组读取的版本，直到完成安全清理。仅关闭该配置项并不代表可以安全降级。
 - 引入版本：-
 
 ### lake_pk_compaction_max_input_rowsets
@@ -332,6 +341,32 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：Bytes
 - 是否动态：是
 - 描述：存算分离集群下，主键表轻量 Compaction 发布阶段，`RowsMapperIterator` 流水化读取 `.lcrm` 文件时使用的 sub-chunk 粒度。每个输出 segment 被切分为 `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 个 sub-chunk，独立流水化。值越小，少而大的输出 segment 能获得越高的并发度，但代价是更多的范围读取和消费时一次额外的 memcpy。默认 4 MiB，与 starcache 磁盘层 block 大小对齐。
+
+### lake_scan_parallel_segment_open
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，查询扫描是否一次性打开 Tablet 所有 Rowset 的 Segment（在 Segment 加载线程池中每个 Segment 一个任务），而不是逐个 Rowset 依次打开，并并行构建各 Rowset 的迭代器。仅对查询扫描生效，且仅当 `remote_io_scheduler_enable` 为 `true` 时生效。导入、Compaction 及其他读取仍由 `enable_load_segment_parallel` 控制。Footer 已在 Segment 元数据缓存中打开的 Segment 直接复用，不再提交任务。Query Profile 中，这类 Segment 计入 `TabletPrepareCachedSegments`，Footer 读取计入其他 `TabletPrepare*` 指标。
+- 引入版本：-
+
+### lake_scan_warm_index
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，查询扫描（无论是否切分）打开 Tablet 的 Segment 后，是否异步预热随后要读取的索引页，包括每个 Segment 的短键索引、谓词列的 zone map 和 bloom filter 根页，以及读取列的 ordinal index 根页。扫描不等待预热完成；预热失败时照常读取。被 Segment 元数据过滤（`enable_lake_segment_metadata_filter`）排除的 Segment 不预热。该项只对查询生效，且仅在启用远程 I/O 调度器（`remote_io_scheduler_enable`）时有效，与 `lake_scan_parallel_segment_open` 相互独立。预热情况记录在 Query Profile 的 `TabletPrepareIndexWarmSegments`、`TabletPrepareIndexWarmRanges`、`TabletPrepareIndexWarmBlocks`、`TabletPrepareIndexWarmSkipped` 和 `TabletPrepareIndexWarmPrunedSegments` 中。
+
+### lake_scan_read_ahead_segments
+
+- 默认值：16
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：远端 IO 调度器启用时，如果 lake 查询扫描逐个读取一个 Tablet 的 Segment（即该 Tablet 没有切分给多个扫描任务），那么当前 Segment 的块全部发出读取后，扫描会一边读当前 Segment，一边提前读取后面几个 Segment 开头的块。提前预读的 Segment 最多为该值。只有当这些 Segment 已发出读取但还没读的块合计少于 `remote_prefetch_window_blocks` 个缓存块时，才会开始预读下一个 Segment，因此最后开始的那个 Segment 可能让合计达到窗口的两倍左右。设为 `0` 表示关闭，每个 Segment 轮到时才开始预读。切分扫描、导入和 Compaction 不受影响。查询 profile 中的 SegmentReadAheadStarted 记录提前开始预读的 Segment 数。
+- 引入版本：-
 
 ### lake_segment_metadata_cache_limit_percent
 
@@ -682,6 +717,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群中，对于由当前 CN 进程写入且此后未被淘汰的 Data Cache 磁盘 Block，后续请求首次访问时是否跳过整块 Checksum 校验读取。该校验会从磁盘重新读取整个 Block，以校验进程刚刚写入且仍在内存中跟踪的数据，因此每个新写入 Block 的首次访问都会多一次磁盘读取。将该项设置为 `false` 可在首次访问时校验每个 Block，仅当怀疑缓存磁盘存在静态数据损坏时才值得付出该开销。无论该项如何设置，从进程上一次运行继承下来的 Block 始终会被校验，因为当前进程并未见证其写入过程。该项仅在 Data Cache 初始化时读取一次。
 - 引入版本：v4.2.0
 
+### starlet_star_cache_write_overwrite
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，Data Cache 写入时是否覆盖同一 Key 下已缓存的对象。设为 `false` 时保留已有对象并将本次写入视为成功，适用于读穿透填充路径，此时写入的字节与已缓存的内容相同。设为 `true` 可让重新读取刷新疑似过期或损坏的 Block。Data Cache 在每次写入时都会读取该项，因此修改后在下一次写入即生效，无需重新初始化缓存。
+- 引入版本：-
+
 ### starlet_starmgr_client_compression_type
 
 - 默认值：none
@@ -782,6 +826,33 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：否
 - 描述：Data Cache 内联对象数量上限。当缓存的 Block 对象特别小时，Data Cache 会选择使用内联方式将 Block 数据和元数据一起缓存在内存中。
 - 引入版本：v3.4.0
+
+### datacache_lru_shard_evict_fallback_enable
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：Data Cache 的 LRU 分片在被回填或自身无法腾出足够空间时，是否允许淘汰其他分片中的缓存项。设置为 `false` 时恢复分片只淘汰自身缓存项的行为，并忽略 `datacache_lru_shard_refill_low_watermark_percent` 和 `datacache_lru_shard_refill_high_watermark_percent`。
+- 引入版本：-
+
+### datacache_lru_shard_refill_low_watermark_percent
+
+- 默认值：50
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Data Cache 的 LRU 分片的使用量低于其容量的该百分比后，不再淘汰自身的缓存项，而是从最大的分片回填，直到达到 `datacache_lru_shard_refill_high_watermark_percent`。该值不能超过 `datacache_lru_shard_refill_high_watermark_percent`。两个参数都设置为 `0` 时关闭回填。
+- 引入版本：-
+
+### datacache_lru_shard_refill_high_watermark_percent
+
+- 默认值：70
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Data Cache 的 LRU 分片停止回填时的容量百分比。取值范围：`datacache_lru_shard_refill_low_watermark_percent` 到 `100`。两个参数都设置为 `0` 时关闭回填。
+- 引入版本：-
 
 ### datacache_mem_size
 

@@ -48,6 +48,9 @@
 #include "exec/exec_env.h"
 #include "fs/fs_util.h"
 #include "fs/remote_read_context.h"
+#ifdef USE_STAROS
+#include "fslib/star_cache_configuration.h"
+#endif
 #include "gen_cpp/Types_types.h"
 #include "platform/platform_env.h"
 #include "platform/store_path.h"
@@ -126,6 +129,16 @@ TEST_F(ConfigUpdateHooksTest, update_datacache_config) {
     ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("datacache_disk_size", "100000000"));
     // update inline cache limit
     ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("datacache_inline_item_count_limit", "260344"));
+    // update lru shard refill
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("datacache_lru_shard_evict_fallback_enable", "false"));
+    ASSERT_OK(
+            ConfigUpdateRegistry::instance()->update_config("datacache_lru_shard_refill_low_watermark_percent", "30"));
+    ASSERT_OK(
+            ConfigUpdateRegistry::instance()->update_config("datacache_lru_shard_refill_high_watermark_percent", "60"));
+    ASSERT_ERROR(
+            ConfigUpdateRegistry::instance()->update_config("datacache_lru_shard_refill_low_watermark_percent", "80"));
+    ASSERT_ERROR(ConfigUpdateRegistry::instance()->update_config("datacache_lru_shard_refill_high_watermark_percent",
+                                                                 "101"));
 
     std::vector<DirSpace> spaces;
     cache->disk_spaces(&spaces);
@@ -757,6 +770,25 @@ TEST_F(ConfigUpdateHooksTest, update_skip_contended_cache_writes_with_small_reta
         EXPECT_EQ(bytes, fslib::FLAGS_remote_read_retain_prefetched_bytes);
         EXPECT_TRUE(config::remote_read_skip_contended_cache_writes);
         EXPECT_TRUE(fslib::FLAGS_remote_read_skip_contended_cache_writes);
+    }
+}
+
+TEST_F(ConfigUpdateHooksTest, update_starlet_star_cache_write_overwrite) {
+    const bool saved = config::starlet_star_cache_write_overwrite;
+    gflags::FlagSaver flag_saver;
+    DeferOp restore_config([saved] {
+        auto st = config::set_config("starlet_star_cache_write_overwrite", saved ? "true" : "false");
+        EXPECT_TRUE(st.ok()) << st;
+    });
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    // Start from the opposite flag value each time, so both directions are really forwarded.
+    for (bool value : {true, false}) {
+        staros::starlet::fslib::FLAGS_star_cache_write_overwrite = !value;
+        auto st = registry->update_config("starlet_star_cache_write_overwrite", value ? "true" : "false");
+        ASSERT_TRUE(st.ok()) << st;
+        EXPECT_EQ(value, config::starlet_star_cache_write_overwrite);
+        EXPECT_EQ(value, staros::starlet::fslib::FLAGS_star_cache_write_overwrite);
     }
 }
 

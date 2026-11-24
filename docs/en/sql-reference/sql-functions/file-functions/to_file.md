@@ -43,6 +43,8 @@ Returns a FILE value. If `struct_expr` is NULL, returns NULL.
 - URI syntax, MIME types, checksums, and the referenced byte range are not validated.
 - `inline` contains raw bytes. Empty strings and empty binary values count as non-NULL and are preserved.
 
+When `ai_complete` or `ai_embed` consumes a FILE with a missing or empty `content_type`, the AI function attempts to infer it. See [FILE input support](../ai-functions/ai_functions.mdx#file-input).
+
 ## Examples
 
 ### Example 1: Construct a file reference

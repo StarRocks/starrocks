@@ -39,7 +39,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -78,8 +77,7 @@ public class ShowProcAction extends RestBaseAction {
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
         // check authority
-        UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
-        checkUserOwnsAdminRole(currentUser);
+        checkAdminRole(ConnectContext.get());
 
         String path = request.getSingleParameter("path");
         String forward = request.getSingleParameter("forward");

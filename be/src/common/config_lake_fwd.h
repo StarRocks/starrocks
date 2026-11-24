@@ -43,6 +43,14 @@ CONF_mBool(lake_replication_enable_light_schema_change, "false");
 // When enabled, segments whose sort key range does not intersect with query predicates will be skipped.
 CONF_mBool(enable_lake_segment_metadata_filter, "true");
 
+// Once a query scan of a lake tablet has opened its segments, split or not, start filling the local cache with the
+// index pages its reads need next -- the short key index of every segment, the zone map and bloom filter roots of the
+// predicate columns and the ordinal index roots of the read columns -- asynchronously, without waiting for them. The
+// reads then join those fills instead of fetching one page after another. Takes effect only for queries and only
+// while the remote I/O scheduler is enabled and initialized (remote_io_scheduler_enable); otherwise, and when a file
+// cannot be warmed, the scan reads its index pages as before. Independent of lake_scan_parallel_segment_open.
+CONF_mBool(lake_scan_warm_index, "true");
+
 // When a prepared-split scan's main morsel queue is momentarily empty (its seed page-pruning is still
 // running), it issues an extra PRE_REFINEMENT_COARSE morsel over an un-pruned segment range to keep
 // otherwise-idle drivers busy until the refined ranges land. Set to false to disable that pre-refinement
@@ -50,6 +58,19 @@ CONF_mBool(enable_lake_segment_metadata_filter, "true");
 // range is always a superset that the refined ranges subtract from) -- it only trades early parallelism
 // for less redundant coarse scanning. Only affects the enable_lake_prepared_physical_split_scan path.
 CONF_mBool(enable_lake_prepared_split_pre_refinement, "true");
+
+// While the remote I/O scheduler is enabled (remote_io_scheduler_enable), a lake query scan opens the segments of all
+// rowsets of a tablet at once on the load segment thread pool, one task per segment, instead of one rowset after
+// another, and builds the rowsets' iterators in parallel. Has no effect while the scheduler is off. Loads, compaction
+// and the other readers keep following enable_load_segment_parallel.
+CONF_mBool(lake_scan_parallel_segment_open, "true");
+
+// When a query scan reads a tablet's segments one after another (a tablet not split across scan tasks), the next
+// segments start fetching the first blocks they will read while the current one is still read, once it has asked for
+// all of its own: up to this many segments ahead. A next segment starts only while they all hold fewer than
+// remote_prefetch_window_blocks blocks not read yet, so the segment started last can take that to about twice the
+// window. 0 starts each segment's read-ahead only when its turn comes.
+CONF_mInt32(lake_scan_read_ahead_segments, "16");
 
 // Whether to use accurate row count for lake primary key tablets by reading delete vectors from object storage.
 // When enabled, each rowset's delete vector is fetched from remote storage to deduct deleted rows, which may
@@ -179,14 +200,17 @@ CONF_mBool(lake_enable_del_file_crc_check, "true");
 // legacy reader and cannot parse files written in the new format.
 CONF_mBool(lake_enable_protobuf_file_checksum, "true");
 
-// Write multi-statement version logs as ordered groups instead of the legacy merged TxnLogPB.
-// Disabled by default for a reader-first rollout; the legacy write path and its limitations remain
-// until enabled. Readers accept both formats regardless of this flag. Enable only after every CN
-// that can publish, replay or clean up these logs has the group reader. Before either enabling or
-// disabling, pause affected schema-change/multi-statement publishers and drain in-flight requests;
-// switching concurrently with publish is not supported. Disabling does not make existing groups
+// Write multi-statement version logs as ordered groups instead of the legacy merged TxnLogPB, so that
+// replay applies each statement with its own schema, segments, rewrite metadata and delete positions.
+// Readers accept both formats regardless of this flag. A CN without the group reader cannot read
+// groups, and its retry can write an incomplete legacy log that replay prefers: while such a CN can
+// still publish, replay or clean up these logs (a rolling upgrade from a pre-reader version), set this
+// to false on the upgraded CNs and enable it only after every CN has the reader. Before either
+// enabling or disabling, pause affected schema-change/multi-statement publishers and drain in-flight
+// requests; switching concurrently with publish is not supported. Disabling restores the legacy
+// merged writer and its DELETE-then-INSERT limitation, and does not make existing groups
 // downgrade-readable: drain and verify them before rolling back to a pre-reader CN.
-CONF_mBool(lake_enable_txn_vlog_group, "false");
+CONF_mBool(lake_enable_txn_vlog_group, "true");
 
 // clear *.meta cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_meta, "true");

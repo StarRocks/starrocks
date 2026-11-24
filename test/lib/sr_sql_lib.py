@@ -788,11 +788,17 @@ class StarrocksSQLApiLib(object):
         res = self.execute_sql(sql)
         tools.assert_true(res["status"], "create hadoop iceberg catalog failed: %s" % res.get("msg"))
 
-    def create_paimon_ddl_catalog(self, catalog_name, warehouse_id):
-        """Create an isolated filesystem catalog; catalogs in one case share the warehouse."""
+    def create_paimon_ddl_catalog(self, catalog_name, warehouse_id, catalog_type="filesystem"):
+        """Create an isolated Paimon catalog; catalogs in one case share the warehouse."""
         # CLEANUP runs outside the normal statement UUID substitution.
         self.paimon_ddl_warehouse_id = warehouse_id
-        properties = {"type": "paimon", "paimon.catalog.type": "filesystem"}
+        properties = {"type": "paimon", "paimon.catalog.type": catalog_type}
+        if catalog_type == "hive":
+            metastore_uris = getattr(self, "hive_metastore_uris", "")
+            if not metastore_uris:
+                raise SkipTest("Paimon HMS tests require hive_metastore_uris")
+            properties["hive.metastore.uris"] = metastore_uris
+            properties["paimon.option.lock.enabled"] = "true"
         local_root = getattr(self, "paimon_ddl_local_warehouse_root", "")
         if local_root:
             warehouse = os.path.join(local_root, warehouse_id)
@@ -802,7 +808,7 @@ class StarrocksSQLApiLib(object):
             if not all(getattr(self, key, "") for key in ("oss_bucket", "oss_ak", "oss_sk", "oss_endpoint")):
                 raise SkipTest("Paimon DDL requires OSS settings or paimon_ddl_local_warehouse_root")
             warehouse_root = getattr(self, "paimon_ddl_warehouse_root", "") or (
-                "oss://%s/tmp/paimon_catalog_ddl" % self.oss_bucket)
+                "oss://%s/ci_catalog_test_data/paimon/tmp" % self.oss_bucket)
             properties.update({
                 "paimon.catalog.warehouse": "%s/%s" % (warehouse_root.rstrip("/"), warehouse_id),
                 "aws.s3.access_key": self.oss_ak,

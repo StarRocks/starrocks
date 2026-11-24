@@ -873,3 +873,277 @@ shell: rm -f /tmp/rej_files_${uuid0}.csv; ossutil64 rm -rf oss://${oss_bucket}/t
 drop database db_${uuid0};
 -- result:
 -- !result
+-- name: test_rejected_records_merge_commit @sequential
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (id int not null, val int not null)
+    duplicate key(id) distributed by hash(id) buckets 1
+    properties("replication_num" = "1");
+-- result:
+-- !result
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+-- result:
+0
+0
+-- !result
+shell: printf '1,10\n2,\n3,30' | curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "enable_merge_commit:true" -H "merge_commit_async:false" -H "merge_commit_interval_ms:1000" -H "merge_commit_parallel:1" -H "max_filter_ratio:0.5" -H "log_rejected_record_num:-1" -H "column_separator:," --data-binary @- ${url}/api/db_${uuid0}/t/_stream_load | jq -r '.Status'
+-- result:
+0
+Success
+-- !result
+select * from t order by id;
+-- result:
+1	10
+3	30
+-- !result
+shell: for i in $(seq 1 60); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+-- result:
+0
+0
+-- !result
+select load_type, count(*)
+from _statistics_.rejected_records
+where target_database='db_${uuid0}' and target_table='t'
+group by load_type;
+-- result:
+STREAM_LOAD	1
+-- !result
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=false" >/dev/null; done; echo "0"
+-- result:
+0
+0
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_rejected_records_transaction_stream_load @sequential
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (id int not null, val int not null)
+    duplicate key(id) distributed by hash(id) buckets 1
+    properties("replication_num" = "1");
+-- result:
+-- !result
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+-- result:
+0
+0
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:rej_txn_${uuid0}" -H "db:db_${uuid0}" -H "table:t" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+shell: printf '1,10\n2,\n3,30' | curl -s --location-trusted -u root: -H "label:rej_txn_${uuid0}" -H "db:db_${uuid0}" -H "table:t" -H "max_filter_ratio:0.5" -H "log_rejected_record_num:-1" -H "column_separator:," --data-binary @- -XPUT ${url}/api/transaction/load | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:rej_txn_${uuid0}" -H "db:db_${uuid0}" -XPOST ${url}/api/transaction/prepare | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:rej_txn_${uuid0}" -H "db:db_${uuid0}" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+sync;
+-- result:
+-- !result
+select * from t order by id;
+-- result:
+1	10
+3	30
+-- !result
+shell: for i in $(seq 1 60); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+-- result:
+0
+0
+-- !result
+select load_type, count(*)
+from _statistics_.rejected_records
+where target_database='db_${uuid0}' and target_table='t'
+group by load_type;
+-- result:
+STREAM_LOAD	1
+-- !result
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=false" >/dev/null; done; echo "0"
+-- result:
+0
+0
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_rejected_records_transaction_stream_load_channel @sequential
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (id int not null, val int not null)
+    duplicate key(id) distributed by hash(id) buckets 1
+    properties("replication_num" = "1");
+-- result:
+-- !result
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+-- result:
+0
+0
+-- !result
+shell: curl -s --location-trusted -u root: -H "channel_num:1" -H "channel_id:0" -H "label:rej_txn_ch_${uuid0}" -H "db:db_${uuid0}" -H "table:t" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+shell: printf '1,10\n2,\n3,30' | curl -s --location-trusted -u root: -H "channel_num:1" -H "channel_id:0" -H "label:rej_txn_ch_${uuid0}" -H "db:db_${uuid0}" -H "table:t" -H "max_filter_ratio:0.5" -H "log_rejected_record_num:-1" -H "column_separator:," --data-binary @- -XPUT ${url}/api/transaction/load | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+shell: curl -s --location-trusted -u root: -H "channel_num:1" -H "channel_id:0" -H "label:rej_txn_ch_${uuid0}" -H "db:db_${uuid0}" -H "table:t" -XPOST ${url}/api/transaction/prepare | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:rej_txn_ch_${uuid0}" -H "db:db_${uuid0}" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+sync;
+-- result:
+-- !result
+select * from t order by id;
+-- result:
+1	10
+3	30
+-- !result
+shell: for i in $(seq 1 60); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+-- result:
+0
+0
+-- !result
+select load_type, count(*)
+from _statistics_.rejected_records
+where target_database='db_${uuid0}' and target_table='t'
+group by load_type;
+-- result:
+STREAM_LOAD	1
+-- !result
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=false" >/dev/null; done; echo "0"
+-- result:
+0
+0
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_rejected_records_multi_statement_transaction @sequential
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t1 (id int not null, val int not null)
+    primary key(id) distributed by hash(id) buckets 1
+    properties("replication_num" = "1");
+-- result:
+-- !result
+create table t2 (id int not null, val int not null)
+    primary key(id) distributed by hash(id) buckets 1
+    properties("replication_num" = "1");
+-- result:
+-- !result
+create table t3 (id int not null, val int not null)
+    primary key(id) distributed by hash(id) buckets 1
+    properties("replication_num" = "1");
+-- result:
+-- !result
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+-- result:
+0
+0
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:rej_multi_${uuid0}" -H "db:db_${uuid0}" -H "transaction_type:multi" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+shell: printf '1,10\n2,\n3,30' | curl -s --location-trusted -u root: -H "label:rej_multi_${uuid0}" -H "db:db_${uuid0}" -H "table:t1" -H "transaction_type:multi" -H "max_filter_ratio:0.5" -H "log_rejected_record_num:-1" -H "column_separator:," --data-binary @- -XPUT ${url}/api/transaction/load | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+shell: printf '1,10\n2,\n3,30' | curl -s --location-trusted -u root: -H "label:rej_multi_${uuid0}" -H "db:db_${uuid0}" -H "table:t2" -H "transaction_type:multi" -H "max_filter_ratio:0.5" -H "column_separator:," --data-binary @- -XPUT ${url}/api/transaction/load | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+shell: printf '1,10\n2,\n3,30' | curl -s --location-trusted -u root: -H "label:rej_multi_${uuid0}" -H "db:db_${uuid0}" -H "table:t3" -H "transaction_type:multi" -H "max_filter_ratio:0.5" -H "log_rejected_record_num:0" -H "column_separator:," --data-binary @- -XPUT ${url}/api/transaction/load | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+[UC]shell: txn=curl -s --location-trusted -u root: -H "label:rej_multi_${uuid0}" -H "db:db_${uuid0}" -H "transaction_type:multi" -XPOST ${url}/api/transaction/commit | jq -r '.TxnId'
+-- result:
+0
+58
+-- !result
+sync;
+-- result:
+-- !result
+select * from t1 order by id;
+-- result:
+1	10
+3	30
+-- !result
+select * from t2 order by id;
+-- result:
+1	10
+3	30
+-- !result
+select * from t3 order by id;
+-- result:
+1	10
+3	30
+-- !result
+shell: for i in $(seq 1 60); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; [ "$i" -lt 66 ] && sleep $((66 - i)); echo 0
+-- result:
+0
+0
+-- !result
+select target_table, load_type, load_label = 'rej_multi_${uuid0}', txn_id = ${txn[1]}, count(*)
+from _statistics_.rejected_records
+where target_database='db_${uuid0}' and target_table in ('t1', 't3')
+group by target_table, load_type, load_label, txn_id
+order by target_table;
+-- result:
+t1	STREAM_LOAD	1	1	1
+-- !result
+select count(*) = if(@@global.log_rejected_record_num = 0, 0, 1)
+from _statistics_.rejected_records
+where target_database='db_${uuid0}' and target_table='t2';
+-- result:
+1
+-- !result
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=false" >/dev/null; done; echo "0"
+-- result:
+0
+0
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

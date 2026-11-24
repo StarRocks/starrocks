@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.plan;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 public class PivotTest extends PlanTestBase {
@@ -26,5 +27,18 @@ public class PivotTest extends PlanTestBase {
         assertContains(plan, "  2:AGGREGATE (update finalize)\n"
                 + "  |  output: sum(11: case), sum(12: case)\n"
                 + "  |  group by: 2: t1b, 3: t1c, 4: t1d");
+    }
+
+    @Test
+    public void testSubqueryInMeasurePlannedOnce() throws Exception {
+        // RB-1380: every pivot value gets agg(CASE WHEN ... THEN <measure argument> END). A subquery in the argument
+        // must be planned once, not once per pivot value.
+        String sql = "select * from (select v1, v2, v3 from t0) t pivot (" +
+                "sum((v2 not in (select v4 from t1)) = (v3 not in (select v5 from t1))) " +
+                "for v1 in (1, 2, 3, 4))";
+        String plan = getFragmentPlan(sql);
+        Assertions.assertEquals(2, plan.split("TABLE: t1", -1).length - 1, plan);
+        Assertions.assertEquals(1, plan.split("TABLE: t0", -1).length - 1, plan);
+        assertContains(plan, "output: sum(");
     }
 }

@@ -33,8 +33,8 @@ public class MvTaskRunContext extends TaskRunContext {
     public static class MVRefreshRuntimeState {
         private final Map<Long, BaseTableSnapshotInfo> snapshotBaseTables = Maps.newHashMap();
 
-        // Pinned TvrVersionRange per base table, keyed by Table.getTableIdentifier() (stable across
-        // connector getTable() calls, unlike tableId for external tables).
+        // Pinned TvrVersionRange per base table, keyed by Table.getUUID() (cross-database unique and
+        // stable across connector getTable() calls, unlike tableId for external tables).
         private final Map<String, TvrVersionRange> pinnedTvrMap = Maps.newHashMap();
 
         public Map<Long, BaseTableSnapshotInfo> getSnapshotBaseTables() {
@@ -48,6 +48,10 @@ public class MvTaskRunContext extends TaskRunContext {
 
         public Map<String, TvrVersionRange> getPinnedTvrMap() {
             return pinnedTvrMap;
+        }
+
+        public TvrVersionRange getPinnedRange(Table baseTable) {
+            return pinnedTvrMap.get(baseTable.getUUID());
         }
 
         public void reset() {

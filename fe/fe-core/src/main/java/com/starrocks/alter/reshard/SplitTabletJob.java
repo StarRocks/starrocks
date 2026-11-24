@@ -473,10 +473,10 @@ public class SplitTabletJob extends TabletReshardJob {
     /*
      * 1. Abort in-flight lake compactions on the partitions where a tablet was really split, then wait for the
      *    remaining previous transactions finished
-     * 2. Remove old versions of materialized index
-     * 3. Unregister resharding tablets
-     * 4. Release the new shards' creation-time placement pin
-     * 5. Durably publish FINISHED and update aggregate table state and metrics
+     * 2. Unregister resharding tablets
+     * 3. Release the new shards' creation-time placement pin
+     * 4. Durably publish FINISHED, then recycle the old versions of materialized index and release any query pin
+     *    left on them (applyFinishedLocked), and update aggregate table state and metrics
      */
     @Override
     protected void runCleaningJob() {
@@ -499,14 +499,20 @@ public class SplitTabletJob extends TabletReshardJob {
         }
 
         // ORDER BY != PK children inherit complete shared rowsets. Keep queries on the parent layout
-        // until one partition-wide, non-partial UNSHARE transaction has rewritten every sibling.
+        // until one partition-wide, non-partial UNSHARE transaction has rewritten every sibling. An empty
+        // INSERT OVERWRITE temporary partition to which nothing has committed since the split inherited
+        // nothing, and nothing can still be cross-published into its children: a publish only exists for a
+        // committed transaction, and the resharding tablets are unregistered below under the same table
+        // lock, which keeps every commit out. It needs no UNSHARE; applyFinishedLocked releases its pin.
         CompactionMgr compactionMgr = GlobalStateMgr.getCurrentState().getCompactionMgr();
-        boolean waitingForUnshare = false;
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
             OlapTable olapTable = lockedTable.get();
-            for (Long physicalPartitionId : reshardingPhysicalPartitions.keySet()) {
+            boolean waitingForUnshare = false;
+            for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
+                long physicalPartitionId = reshardingPhysicalPartition.getPhysicalPartitionId();
                 PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
-                if (physicalPartition == null || !physicalPartition.isUnsharing()) {
+                if (physicalPartition == null || !physicalPartition.isUnsharing()
+                        || inheritsNothingFromParent(olapTable, reshardingPhysicalPartition, physicalPartition)) {
                     continue;
                 }
                 waitingForUnshare = true;
@@ -515,23 +521,76 @@ public class SplitTabletJob extends TabletReshardJob {
                     compactionMgr.triggerUnshareCompaction(identifier);
                 }
             }
+            if (waitingForUnshare) {
+                return;
+            }
+
+            // 2. Unregister resharding tablets
+            unregisterReshardingTablets();
         }
-        if (waitingForUnshare) {
-            return;
-        }
 
-        // 2. Remove old versions of materialized index
-        removeOldMaterializedIndexes();
-
-        // 3. Unregister resharding tablets
-        unregisterReshardingTablets();
-
-        // 4. Release the child shards' creation-time placement pin so the balancer can spread them
+        // 3. Release the child shards' creation-time placement pin so the balancer can spread them
         //    now, instead of when the parent shards are finally reclaimed tens of minutes later.
         clearPlacementPreference(reshardingPhysicalPartitions);
 
-        // 5. Durably publish FINISHED
+        // 4. Durably publish FINISHED
         setJobState(JobState.FINISHED);
+    }
+
+    // Whether the split left this partition's children nothing of the parent's: the split read version 1, so the
+    // parent had no file to share, and no transaction has committed to the partition since, so no load can have
+    // brought one in either. Committed, not visible: a writer that resolved the old layout but took its transaction
+    // id after the end transaction id (a bypass write, which registers the index of the tablets it wrote, or a
+    // replication job, which caches its indexes) is not waited on above, and its publish may already be on its way
+    // to the children while the version is unchanged.
+    //
+    // Only a temporary partition that a running static INSERT OVERWRITE (a materialized view refresh included) created
+    // for its own write and has not swapped in yet: no other writer targets one. Elsewhere, including a temporary
+    // partition a user added, such a writer could still commit after the unregister below: its publish would reach
+    // the parent only, and since the parent and child indexes share a meta id, the file bundle of that version would
+    // carry no metadata for the children.
+    private boolean inheritsNothingFromParent(OlapTable olapTable,
+                                              ReshardingPhysicalPartition reshardingPhysicalPartition,
+                                              PhysicalPartition physicalPartition) {
+        long partitionId = physicalPartition.getParentId();
+        long commitVersion = reshardingPhysicalPartition.getCommitVersion();
+        return olapTable.isTempPartition(partitionId)
+                && GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr()
+                        .isTmpPartitionOfRunningStaticJob(tableId, partitionId)
+                && commitVersion == PhysicalPartition.PARTITION_INIT_VERSION + 1
+                && physicalPartition.getNextVersion() == commitVersion + 1;
+    }
+
+    // Also what replayFinishedJob applies. Not done before the FINISHED record is durable: an old index recycled
+    // earlier could be erased, and a partition still pinned to it unpinned, ahead of the record, and a publish in
+    // between would then skip the parent pages that a replaying FE still serves queries from.
+    @Override
+    protected void applyFinishedLocked(OlapTable olapTable) {
+        recycleOldMaterializedIndexes(dbId, olapTable, reshardingPhysicalPartitions);
+        releaseQueryPins(olapTable);
+    }
+
+    // A partition still pinned here is one CLEANING found needing no UNSHARE; a partition that needed one was
+    // unpinned when its UNSHARE became visible.
+    private void releaseQueryPins(OlapTable olapTable) {
+        List<Long> releasedPartitionIds = new ArrayList<>();
+        for (Long physicalPartitionId : reshardingPhysicalPartitions.keySet()) {
+            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
+            if (physicalPartition == null || !physicalPartition.isUnsharing()) {
+                continue;
+            }
+            // As for the cutover an UNSHARE makes: a plan that recorded the version before and resolves the layout
+            // after must fail validation.
+            olapTable.lastSchemaUpdateTime.set(System.nanoTime());
+            physicalPartition.finishUnshare();
+            releasedPartitionIds.add(physicalPartitionId);
+        }
+        if (!releasedPartitionIds.isEmpty()) {
+            // Not "this": on the leader the job is not FINISHED yet while its FINISHED record is applied.
+            LOG.info("Released the query pin of physical partitions {} when the split finished; their split children "
+                    + "inherited nothing from the parent, so no UNSHARE compaction was needed. job_id: {}, table_id: {}",
+                    releasedPartitionIds, jobId, tableId);
+        }
     }
 
     // The physical partitions of this job where a tablet was really split. An index has one resharding tablet per
@@ -627,7 +686,9 @@ public class SplitTabletJob extends TabletReshardJob {
     // Correspond to runCleaningJob()
     @Override
     protected void replayFinishedJob() {
-        removeOldMaterializedIndexes();
+        try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
+            applyFinishedLocked(lockedTable.get());
+        }
         unregisterReshardingTablets();
         setTableState(OlapTable.OlapTableState.TABLET_RESHARD, OlapTable.OlapTableState.NORMAL);
         LOG.info("Split tablet job replayed finished job. {}", this);
@@ -1145,12 +1206,6 @@ public class SplitTabletJob extends TabletReshardJob {
                     physicalPartition.checkQueryableIndexPinnable(metaId, reshardingIndex.getMaterializedIndexId());
                 }
             }
-        }
-    }
-
-    private void removeOldMaterializedIndexes() {
-        try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
-            recycleOldMaterializedIndexes(dbId, lockedTable.get(), reshardingPhysicalPartitions);
         }
     }
 

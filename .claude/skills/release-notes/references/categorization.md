@@ -21,6 +21,24 @@ StarRocks PR titles start with a bracketed type prefix (enforced by
 If a PR has no recognizable prefix, fall back to its labels and `body_excerpt` to decide,
 and flag it for reviewer confirmation (see below).
 
+## Security (cross-cutting)
+
+Like Behavior Changes, `Security` overrides the table above. It holds:
+
+- upgrades of third-party dependencies (libraries, the JDK, base images, bundled tools), the
+  usual reason for which is a reported vulnerability;
+- fixes of a vulnerability in StarRocks itself: injection, cross-site scripting, an
+  access-control bypass, a credential or secret that is exposed.
+
+Write the CVE IDs first, in brackets, when the PR names them, and the component's new
+version: "[CVE-2026-59902] Bumped Netty to 4.1.137.Final." Without a CVE ID: "Bumped
+ZooKeeper to 3.9.6." StarRocks' own components (StarOS, StarMgr, Starlet, StarCache) are not
+third-party: file their upgrades by what they change, usually under Bug fixes.
+
+Use `### Security` only where the file's most recent patch section has it (see `format.md`);
+elsewhere these entries go under `### Bug fixes`. Never move an existing `### Security`
+entry to another subsection.
+
 ## Behavior Changes (cross-cutting)
 
 `Behavior Changes` is **not** a title prefix — it is a cross-cutting category that overrides

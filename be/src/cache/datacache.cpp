@@ -357,6 +357,9 @@ StatusOr<DiskCacheOptions> DataCache::_init_disk_cache_options() {
     cache_options.enable_datacache_persistence = config::datacache_persistence_enable;
     cache_options.inline_item_count_limit = config::datacache_inline_item_count_limit;
     cache_options.eviction_policy = config::datacache_eviction_policy;
+    cache_options.lru_shard_evict_fallback_enable = config::datacache_lru_shard_evict_fallback_enable;
+    cache_options.lru_shard_refill_low_watermark_percent = config::datacache_lru_shard_refill_low_watermark_percent;
+    cache_options.lru_shard_refill_high_watermark_percent = config::datacache_lru_shard_refill_high_watermark_percent;
 
     return cache_options;
 }

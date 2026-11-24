@@ -56,6 +56,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorSinkShuffleMode;
 import com.starrocks.connector.ConnectorSinkSortScope;
 import com.starrocks.connector.PlanMode;
+import com.starrocks.connector.paimon.PaimonGlobalIndexMode;
 import com.starrocks.datacache.DataCachePopulateMode;
 import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.persist.gson.GsonUtils;
@@ -607,6 +608,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
     public static final String CBO_PUSH_DOWN_AGGREGATE_MODE = "cbo_push_down_aggregate_mode";
     public static final String CBO_PUSH_DOWN_COUNT_AGGREGATE = "cbo_push_down_count_aggregate";
+    public static final String CBO_PUSH_DOWN_AGGREGATE_CHECK_REDUCTION = "cbo_push_down_aggregate_check_reduction";
     public static final String CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN = "cbo_push_down_aggregate_on_broadcast_join";
     public static final String CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN_ROW_COUNT_LIMIT =
             "cbo_push_down_aggregate_on_broadcast_join_row_count_limit";
@@ -859,6 +861,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_FILE_PAGECACHE = "enable_file_pagecache";
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
     public static final String PAIMON_FORCE_JNI_READER = "paimon_force_jni_reader";
+    public static final String PAIMON_GLOBAL_INDEX_MODE = "paimon_global_index_mode";
     public static final String PAIMON_READER_MODE = "paimon_reader_mode";
     public static final String AVRO_USE_JNI_READER = "avro_use_jni_reader";
     public static final String ENABLE_DYNAMIC_PRUNE_SCAN_RANGE = "enable_dynamic_prune_scan_range";
@@ -2341,6 +2344,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_PUSH_DOWN_COUNT_AGGREGATE, flag = VariableMgr.INVISIBLE)
     private boolean cboPushDownCountAggregate = true;
 
+    // Refuse aggregation push downs that cannot reduce rows. Off restores the previous push down gate.
+    @VarAttr(name = CBO_PUSH_DOWN_AGGREGATE_CHECK_REDUCTION, flag = VariableMgr.INVISIBLE)
+    private boolean cboPushDownAggregateCheckReduction = true;
+
     @VarAttr(name = CBO_ENABLE_INTERSECT_ADD_DISTINCT)
     private boolean cboEnableIntersectAddDistinct = true;
 
@@ -3108,6 +3115,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PAIMON_FORCE_JNI_READER)
     private boolean paimonForceJNIReader = false;
+
+    @VariableMgr.VarAttr(name = PAIMON_GLOBAL_INDEX_MODE)
+    private String paimonGlobalIndexMode = PaimonGlobalIndexMode.LOCAL.modeName();
 
     @VariableMgr.VarAttr(name = PAIMON_READER_MODE)
     private String paimonReaderMode = PaimonReaderMode.AUTO.name();
@@ -4068,6 +4078,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return hudiMORForceJNIReader;
     }
 
+    public PaimonGlobalIndexMode getPaimonGlobalIndexMode() {
+        return PaimonGlobalIndexMode.fromName(paimonGlobalIndexMode);
+    }
+
+    public void setPaimonGlobalIndexMode(String mode) {
+        paimonGlobalIndexMode = PaimonGlobalIndexMode.fromName(mode).modeName();
+    }
+
     public boolean getPaimonForceJNIReader() {
         return paimonForceJNIReader;
     }
@@ -4426,7 +4444,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return queryMemLimit;
     }
 
-    void copyQueryResourcePolicyFrom(SessionVariable caller) {
+    public void copyQueryResourcePolicyFrom(SessionVariable caller) {
         queryMemLimit = caller.queryMemLimit;
         maxExecMemByte = caller.maxExecMemByte;
         resourceGroup = caller.resourceGroup;
@@ -4688,6 +4706,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getExchangeInstanceParallel() {
         return exchangeInstanceParallel;
+    }
+
+    public void setChunkSize(int chunkSize) {
+        this.chunkSize = chunkSize;
     }
 
     public int getChunkSize() {
@@ -5724,6 +5746,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboPushDownCountAggregate = cboPushDownCountAggregate;
     }
 
+    public boolean isCboPushDownAggregateCheckReduction() {
+        return cboPushDownAggregateCheckReduction;
+    }
+
+    public void setCboPushDownAggregateCheckReduction(boolean cboPushDownAggregateCheckReduction) {
+        this.cboPushDownAggregateCheckReduction = cboPushDownAggregateCheckReduction;
+    }
+
     public String getCboPushDownAggregate() {
         return cboPushDownAggregate;
     }
@@ -5830,6 +5860,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getloadTransmissionCompressionType() {
         return loadTransmissionCompressionType;
+    }
+
+    public void setLoadTransmissionCompressionType(String loadTransmissionCompressionType) {
+        this.loadTransmissionCompressionType = loadTransmissionCompressionType;
     }
 
     public boolean isInterpolatePassthrough() {

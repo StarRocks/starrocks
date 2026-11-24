@@ -67,7 +67,10 @@ public class MVTimelinessMgr implements MemoryTrackable {
 
     public MvUpdateInfo getMVTimelinessInfo(MaterializedView mv,
                                             MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
-        if (!isEnableMVTimelinessGlobalCache(mv)) {
+        // The cache holds what FORCE_MV tolerates for queries and outlives base table changes: a strict check
+        // neither reads it nor fills it.
+        if (!isEnableMVTimelinessGlobalCache(mv)
+                || (queryRewriteParams != null && !queryRewriteParams.toleratesStaleMv())) {
             return MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, queryRewriteParams);
         }
         CompletableFuture<MvUpdateInfo> mine = new CompletableFuture<>();

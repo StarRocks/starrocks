@@ -278,6 +278,33 @@ TEST_F(IcebergChunkSinkTest, test_factory_requires_runtime_state) {
     EXPECT_THAT(std::string(result.status().message()), testing::HasSubstr("requires runtime_state"));
 }
 
+// Path values must match Iceberg's human strings: floor month split and zero-padded years.
+TEST_F(IcebergChunkSinkTest, test_time_transform_partition_value_before_epoch) {
+    struct Case {
+        std::string transform;
+        int64_t ordinal;
+        std::string expected;
+    };
+    const std::vector<Case> cases = {
+            {"year", -971, "0999"},        {"year", -1, "1969"},           {"year", 0, "1970"},
+            {"month", -11641, "0999-12"},  {"month", -12, "1969-01"},      {"month", -7, "1969-06"},
+            {"month", -2, "1969-11"},      {"month", -1, "1969-12"},       {"month", 0, "1970-01"},
+            {"month", 677, "2026-06"},     {"day", -719162, "0001-01-01"}, {"day", -354286, "0999-12-31"},
+            {"day", -1, "1969-12-31"},     {"day", 20619, "2026-06-15"},   {"hour", -8502841, "0999-12-31-23"},
+            {"hour", -1, "1969-12-31-23"}, {"hour", 1, "1970-01-01-01"},
+    };
+    for (const auto& c : cases) {
+        SCOPED_TRACE(c.transform + " " + std::to_string(c.ordinal));
+        auto column = ColumnHelper::create_column(TYPE_BIGINT_DESC, false);
+        column->append_datum(Datum(c.ordinal));
+        int8_t is_null = true;
+        ASSIGN_OR_ABORT(auto value,
+                        IcebergUtils::iceberg_column_value(TYPE_BIGINT_DESC, column, 0, c.transform, is_null));
+        EXPECT_EQ(c.expected, value);
+        EXPECT_FALSE(is_null);
+    }
+}
+
 TEST_F(IcebergChunkSinkTest, test_utils) {
     int128_t val = 123;
     std::string str128 = integer_to_string(val);

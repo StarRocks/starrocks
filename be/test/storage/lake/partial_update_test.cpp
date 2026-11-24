@@ -6098,6 +6098,170 @@ TEST_F(LakeColumnUpsertModeTest, test_del_files_handling_in_column_upsert_mode) 
     }
 }
 
+// A column-mode partial update adds deletes to delete vectors at the publish's base version in two places:
+// _handle_delete_files, for the old segments its delete ops hit, and _handle_column_upsert_mode, for a
+// segment it synthesizes whose rows a later segment of the same load supersedes. Both take that version from
+// the metadata the publish already read rather than reading it back from storage once per segment (RB-792),
+// so with a metacache that keeps nothing, such a publish reads its base version exactly as often as one that
+// deletes nothing.
+TEST_F(LakeColumnUpsertModeTest, test_deletes_reuse_base_metadata) {
+    const auto tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+    // kOldLoads full-row loads of kChunkSize keys each, one segment per load: keys [0, kOldLoads * kChunkSize).
+    constexpr int kOldLoads = 4;
+    for (int i = 0; i < kOldLoads; i++) {
+        auto chunk = generate_data(kChunkSize, i, false, 3);
+        std::vector<uint32_t> indexes(kChunkSize);
+        std::iota(indexes.begin(), indexes.end(), 0);
+        const auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // The column-upsert loads below write c0, c1 and __op; the rows they insert keep c2's default (10).
+    std::vector<SlotDescriptor> op_slots;
+    op_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    op_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
+    op_slots.emplace_back(3, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT});
+    std::vector<SlotDescriptor*> op_slot_pointers;
+    for (auto& slot : op_slots) {
+        op_slot_pointers.emplace_back(&slot);
+    }
+    struct Batch {
+        std::vector<int> keys;
+        std::vector<int> values; // c1
+        std::vector<uint8_t> ops;
+        void add(int key, int value, uint8_t op) {
+            keys.push_back(key);
+            values.push_back(value);
+            ops.push_back(op);
+        }
+    };
+    // Writes one COLUMN_UPSERT_MODE load with one update segment per batch and returns its txn id.
+    auto column_upsert = [&](const std::vector<Batch>& batches) {
+        const auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&op_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
+                                                   .build());
+        CHECK_OK(delta_writer->open());
+        for (const auto& batch : batches) {
+            auto c0 = Int32Column::create();
+            auto c1 = Int32Column::create();
+            auto cop = Int8Column::create();
+            c0->append_numbers(batch.keys.data(), batch.keys.size() * sizeof(int));
+            c1->append_numbers(batch.values.data(), batch.values.size() * sizeof(int));
+            cop->append_numbers(batch.ops.data(), batch.ops.size() * sizeof(uint8_t));
+            Chunk::SlotHashMap slot_map;
+            slot_map[0] = 0;
+            slot_map[1] = 1;
+            slot_map[3] = 2; // op column
+            Chunk chunk({std::move(c0), std::move(c1), std::move(cop)}, slot_map);
+            std::vector<uint32_t> indexes(batch.keys.size());
+            std::iota(indexes.begin(), indexes.end(), 0);
+            CHECK_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+            // Close the memtable so each batch becomes its own update segment.
+            CHECK_OK(delta_writer->flush());
+        }
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        return txn_id;
+    };
+
+    // A metacache that keeps nothing once it is released, like a shard the base metadata outgrew: every
+    // read of the base version goes to storage.
+    const size_t metacache_capacity = _tablet_mgr->metacache()->tablet_metadata_capacity();
+    _tablet_mgr->metacache()->update_tablet_metadata_capacity(1);
+    DeferOp restore_metacache([&]() { _tablet_mgr->metacache()->update_tablet_metadata_capacity(metacache_capacity); });
+    ASSERT_EQ(1, _tablet_mgr->metacache()->tablet_metadata_capacity());
+    _tablet_mgr->metacache()->prune();
+
+    // While one publish runs, count its reads of the version it publishes on. The callback fires for the
+    // whole process, so this relies on nothing else reading this tablet's metadata meanwhile, which holds
+    // here: the test runs nothing in the background.
+    std::atomic<const std::string*> counted_file = nullptr;
+    std::atomic<int> base_metadata_reads = 0;
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::load_tablet_metadata:path", [&](void* arg) {
+        const std::string* file = counted_file.load();
+        if (file != nullptr && std::string_view(*static_cast<std::string*>(arg)).ends_with(*file)) {
+            ++base_metadata_reads;
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_callbacks([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::load_tablet_metadata:path");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    auto publish_counting = [&](int64_t txn_id) {
+        const std::string base_file = tablet_metadata_filename(tablet_id, version);
+        base_metadata_reads = 0;
+        counted_file = &base_file;
+        auto metadata_or = publish_single_version(tablet_id, version + 1, txn_id);
+        counted_file = nullptr;
+        version++;
+        return metadata_or;
+    };
+
+    constexpr int kNewKeys = kChunkSize / 2;
+    // New keys only: the publish deletes nothing and reads its base version for itself.
+    Batch insert;
+    for (int i = 0; i < kNewKeys; i++) {
+        insert.add(200 + i, (200 + i) * 11, TOpType::UPSERT);
+    }
+    ASSERT_OK(publish_counting(column_upsert({insert})).status());
+    const int own_reads = base_metadata_reads.load();
+    ASSERT_GE(own_reads, 1) << "the publish should have read its base version from storage";
+
+    // The first segment deletes the first key of every old load and inserts keys [100, 100 + kNewKeys); the
+    // second inserts those keys again and supersedes the first segment's rows of them.
+    Batch first;
+    Batch second;
+    for (int i = 0; i < kOldLoads; i++) {
+        first.add(i * kChunkSize, 0, TOpType::DELETE);
+    }
+    for (int i = 0; i < kNewKeys; i++) {
+        first.add(100 + i, (100 + i) * 5, TOpType::UPSERT);
+        second.add(100 + i, (100 + i) * 7, TOpType::UPSERT);
+    }
+    const auto txn_id = column_upsert({first, second});
+    {
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        ASSERT_EQ(2, txn_log->op_write().rowset().segment_metas_size());
+        ASSERT_GT(txn_log->op_write().dels_meta_size(), 0);
+    }
+    ASSIGN_OR_ABORT(auto published, publish_counting(txn_id));
+    // Nothing beyond the publish's own reads. Before RB-792 it read the base version once more for each of
+    // the kOldLoads old segments and for the superseded synthesized segment.
+    EXPECT_EQ(own_reads, base_metadata_reads.load());
+    // Every old load lost one row.
+    ASSERT_GE(published->delvec_meta().delvecs_size(), kOldLoads);
+
+    // The old keys but the deleted ones, and each new key once with the value its last writer gave it.
+    EXPECT_EQ(kOldLoads * (kChunkSize - 1) + 2 * kNewKeys, check(version, [](int c0, int c1, int c2) {
+                  if (c0 >= 200) return c1 == c0 * 11 && c2 == 10;
+                  if (c0 >= 100) return c1 == c0 * 7 && c2 == 10;
+                  return c0 % kChunkSize != 0 && c1 == c0 * 3 && c2 == c0 * 4;
+              }));
+}
+
 // A column-mode partial update publishes its del files through PrimaryKeyManager::_handle_delete_files,
 // which always erases via the memtable path and never reads op_write.del_ssts(). The import-time
 // tombstone-sstable build is byte-threshold-driven and would otherwise fire here too, producing a

@@ -18,12 +18,12 @@ as select event_day, sum(pv) as sum_pv from ss group by event_day;
 -- result:
 -- !result
 create materialized view mv_onchange distributed by hash(event_day)
-refresh deferred async
+refresh deferred on_change
 as select event_day, sum(pv) as sum_pv from ss group by event_day;
 -- result:
 -- !result
 create materialized view mv_sched distributed by hash(event_day)
-refresh deferred async start('2024-01-01 00:00:00') every(interval 1 hour)
+refresh deferred schedule start('2024-01-01 00:00:00') every(interval 1 hour)
 as select event_day, sum(pv) as sum_pv from ss group by event_day;
 -- result:
 -- !result

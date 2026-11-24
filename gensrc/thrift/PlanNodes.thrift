@@ -341,6 +341,27 @@ struct TBrokerScanRangeParams {
     35: optional list<TRoutineLoadMetaColumn> stream_source_meta_columns
 }
 
+// The Kafka partitions that one instance of a routine load round consumes in the coordinated execution mode. The BE
+// consumes them from their begin offsets into the stream load pipe identified by TBrokerRangeDesc.load_id, and
+// reports the offsets it consumed in TReportExecStatusParams.kafka_scan_range_report.
+struct TKafkaScanRange {
+    1: optional i64 job_id
+    2: optional string brokers
+    3: optional string topic
+    // partition -> the first offset to consume
+    4: optional map<i32, i64> partition_begin_offset
+    5: optional map<string, string> properties
+    // The consumption stops at whichever comes first: this duration, this many bytes, or every partition at its end
+    // for idle_end_ms. Until then it consumes every partition, including one that has caught up.
+    6: optional i64 max_consume_ms
+    7: optional i64 max_consume_bytes
+    8: optional bool need_source_metadata
+    9: optional bool need_message_key
+    10: optional bool need_message_headers
+    // how long every partition must have been at its end, with no new message, for the consumption to stop
+    11: optional i64 idle_end_ms
+}
+
 // Broker scan range
 struct TBrokerScanRange {
     1: required list<TBrokerRangeDesc> ranges
@@ -352,6 +373,10 @@ struct TBrokerScanRange {
     5: optional bool enable_batch_write
     6: optional i32 batch_write_interval_ms
     7: optional map<string, string> batch_write_parameters;
+    // Enterprise-only fields start at 300, reserve some fields for upstream StarRocks so a sync
+    // never collides on ordinals.
+    // available when this is a routine load round in the coordinated execution mode
+    300: optional TKafkaScanRange kafka_scan_range
 }
 
 // Es scan range
@@ -411,6 +436,32 @@ struct TPaimonDeletionFile {
     1: optional string path
     2: optional i64 offset
     3: optional i64 length
+}
+
+// Exact snapshot-bound index artifact selected by FE. row_range_from is the
+// original index segment's offset, which may differ from the task's lower bound.
+struct TPaimonGlobalIndexFile {
+    1: optional i32 field_id
+    2: optional string field_type
+    3: optional string path
+    4: optional i64 file_size
+    5: optional i64 row_range_from
+    6: optional i64 row_range_to
+    7: optional binary metadata
+}
+
+// Versioned request for one Paimon Global Index shard. Keep this typed instead
+// of adding loosely related fields directly to THdfsScanRange so FE/BE skew is
+// detected before an index reader is opened.
+struct TPaimonGlobalIndexScanRange {
+    1: optional i32 protocol_version
+    2: optional i32 shard_id
+    3: optional i64 range_from
+    4: optional i64 range_to
+    5: optional string query_json
+    6: optional string table_path
+    7: optional i64 snapshot_id
+    8: optional list<TPaimonGlobalIndexFile> index_files
 }
 
 // refer to https://github.com/delta-io/delta/blob/master/PROTOCOL.md#deletion-vector-descriptor-schema
@@ -563,6 +614,9 @@ struct THdfsScanRange {
     // Parquet encryption info for encrypted Iceberg files. 44 and 45 are taken above, so this
     // uses 46. Never reuse an ordinal: it corrupts the wire format between mixed-version FE/BE.
     46: optional TParquetEncryptionInfo parquet_encryption_info
+
+    // Paimon Global Index shard evaluation request.
+    47: optional TPaimonGlobalIndexScanRange paimon_global_index_scan_range
 }
 
 struct TBinlogScanRange {

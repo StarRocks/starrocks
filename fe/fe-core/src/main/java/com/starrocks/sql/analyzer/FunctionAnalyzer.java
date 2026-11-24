@@ -68,6 +68,7 @@ import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FileType;
 import com.starrocks.type.FloatType;
+import com.starrocks.type.GeoType;
 import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
@@ -1197,8 +1198,7 @@ public class FunctionAnalyzer {
                 node.getParams().exprs().set(1, target);
                 node.setChild(1, target);
                 fn = fn.copy();
-                fn.setRetType(ScalarType.createGeoType(PrimitiveType.GEOMETRY,
-                        GeoTypeDescriptor.geometry("EPSG:" + targetSrid)));
+                fn.setRetType(GeoType.createGeometryType("EPSG:" + targetSrid));
             }
         } else if ("st_geogfromtext".equalsIgnoreCase(fnName) || "st_geogfromwkb".equalsIgnoreCase(fnName) ||
                 FunctionSet.H3_TOBOUNDARY.equalsIgnoreCase(fnName)) {
@@ -1206,10 +1206,7 @@ public class FunctionAnalyzer {
             fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (fn != null) {
                 fn = fn.copy();
-                fn.setRetType(ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
-                        new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
-                                GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
-                                GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326)));
+                fn.setRetType(GeoType.createGeographyType("OGC:CRS84"));
             }
         } else if (FunctionSet.ST_CENTROID.equalsIgnoreCase(fnName) && argumentTypes.length == 1 &&
                 (argumentTypes[0].getPrimitiveType() == PrimitiveType.GEOGRAPHY ||
@@ -1232,7 +1229,7 @@ public class FunctionAnalyzer {
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (fn != null) {
                 fn = fn.copy();
-                fn.setRetType(ScalarType.createGeoType(PrimitiveType.GEOMETRY, GeoTypeDescriptor.geometry(crs)));
+                fn.setRetType(GeoType.createGeometryType(crs));
             }
         } else if (FunctionSet.CONCAT.equals(fnName) && node.getChildren().stream().anyMatch(child ->
                 child.getType().isArrayType())) {
@@ -1623,7 +1620,10 @@ public class FunctionAnalyzer {
         if (fnName.equals(FunctionSet.COUNT) && isDistinct) {
             // Compatible with the logic of the original search function "count distinct"
             // TODO: fix how we equal count distinct.
-            fn = ExprUtils.getBuiltinFunction(FunctionSet.COUNT, new Type[] { argumentTypes[0] },
+            // count(VARIANT) is only for plain counting: there is no distinct aggregate over VARIANT, so count
+            // distinct keeps casting a VARIANT argument to VARCHAR as it did before the VARIANT overload existed.
+            Type distinctArgType = argumentTypes[0].isVariantType() ? VarcharType.VARCHAR : argumentTypes[0];
+            fn = ExprUtils.getBuiltinFunction(FunctionSet.COUNT, new Type[] { distinctArgType },
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         } else if (fnName.equals(FunctionSet.EXCHANGE_BYTES) || fnName.equals(FunctionSet.EXCHANGE_SPEED)) {
             fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);

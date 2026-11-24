@@ -268,7 +268,7 @@ CONF_mBool(enable_lake_compaction_use_partial_segments, "false");
 
 // If turned on, parallel compaction will split by sort key range instead of segment index.
 // This produces non-overlapping output rowsets, improving subsequent query performance.
-CONF_mBool(enable_lake_compaction_range_split, "false");
+CONF_mBool(enable_lake_compaction_range_split, "true");
 
 // chunk size used by lake compaction
 CONF_mInt32(lake_compaction_chunk_size, "4096");

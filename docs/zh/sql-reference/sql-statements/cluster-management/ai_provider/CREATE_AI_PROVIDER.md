@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "将 chat、embedding 或 rerank 类型的外部 AI 服务注册为集群中的 AI Provider。"
+description: "将 chat 或 embedding 类型的外部服务注册为集群中的 AI Provider。"
 products: [oss, enterprise, cloud, anywhere]
 ---
 
@@ -9,14 +9,8 @@ products: [oss, enterprise, cloud, anywhere]
 在集群中注册一个外部 AI 服务 provider。统一的 AI provider 注册表持有不同**类型（type）**的 provider，
 并按**类型各自保留一个默认值**：
 
-- `embedding`——OpenAI 兼容的 `/v1/embeddings` 端点，供 semantic-context 模块在 `CONTEXT UPSERT`
-  写入和 `query_text` 检索时计算 embedding，也供 [ai_embed](../../../sql-functions/ai-functions/ai_text_functions.md#ai_embed) 使用。
-- `rerank`——Cohere 兼容的 `/rerank` 端点（Cohere / Jina / Voyage / OpenRouter / 本地 TEI），供
-  `/api/context/search` 可选的 cross-encoder 第二阶段重排使用。
-- `chat`——chat / completion 端点（OpenAI Chat Completions 或 Anthropic Messages）。
-
-每个 provider 还通过 `protocol` 属性声明其端点使用的**协议**。省略时按类型取默认值：`embedding` 和 `chat`
-为 `openai`，`rerank` 为 `cohere`。
+- `embedding`——为 [ai_embed](../../../sql-functions/ai-functions/ai_embed.md) 提供向量端点。semantic-context 模块在 `CONTEXT UPSERT` 写入和 `query_text` 检索时使用 OpenAI 兼容的 `/v1/embeddings` 端点。
+- `chat`——为 [ai_complete](../../../sql-functions/ai-functions/ai_complete.md) 等函数提供聊天生成端点。
 
 provider 对象（含 `api_key` 属性）持久化在 FE 元数据 journal 与 image 中，重启和升级后凭证仍保留。
 这些设置没有 `fe.conf` 开关。
@@ -25,7 +19,7 @@ provider 对象（含 `api_key` 属性）持久化在 FE 元数据 journal 与 i
 >
 > 任何能读取 FE meta image / BDB journal 目录的人都能看到 `api_key`；请用文件系统权限保护这些文件。
 
-创建 `protocol = "openai"` 的 Provider。无论是否配置 API key，端点均支持 HTTP 和 HTTPS。非空 key 生成 `Authorization: Bearer ...` 请求头。URL 格式、控制字符、DNS 和地址校验仍然生效。请使用可信端点和允许向外传输的数据。
+SQL AI 函数使用的 `openai` 和 `dashscope` Provider 均支持 HTTP 和 HTTPS，API key 可选。非空 key 生成 `Authorization: Bearer ...` 请求头。URL 格式、控制字符、DNS 和地址校验仍然生效。请使用可信端点和允许向外传输的数据。
 
 使用 `SET <provider_name> AS DEFAULT AI PROVIDER` 设置默认值。若对应默认 Provider 未设置，隐式调用在 FE 报错，`EXPLAIN` 也会报错。每个执行计划固定所选 Provider 的配置快照；ALTER 和默认值切换影响重新规划的查询，预处理语句每次 `EXECUTE` 都根据当前元数据重新规划。
 
@@ -37,15 +31,13 @@ provider 对象（含 `api_key` 属性）持久化在 FE 元数据 journal 与 i
 
 ```SQL
 CREATE AI PROVIDER [IF NOT EXISTS] <provider_name>
-TYPE { embedding | rerank | chat }
+TYPE { embedding | chat }
 [ COMMENT '<comment>' ]
 PROPERTIES (
     "endpoint"   = "<url>",
     "model"      = "<model_name>"
-    [, "protocol" = "{ openai | anthropic | cohere | dashscope }" ]
+    [, "protocol" = "{ openai | dashscope }" ]
     [, "dimensions" = "<int>" ]      -- 仅 embedding
-    [, "max_documents" = "<int>" ]   -- 仅 rerank（可选）
-    [, "deadline_ms" = "<int>" ]     -- 仅 rerank（可选）
     [, "timeout_ms" = "<int>" ]
     [, "api_key" = "<key>" ]
 )
@@ -56,7 +48,7 @@ PROPERTIES (
 | 参数            | 说明                                                                                                |
 | --------------- | --------------------------------------------------------------------------------------------------- |
 | `provider_name` | provider 名称。用于 `SET ... AS DEFAULT AI PROVIDER`，并显示在 `SHOW AI PROVIDERS` 中。              |
-| `TYPE`          | `embedding`、`rerank` 或 `chat`。决定允许哪些属性，以及该 provider 可成为哪个类型的默认值。          |
+| `TYPE`          | `embedding` 或 `chat`。决定允许哪些属性，以及该 provider 可成为哪个类型的默认值。          |
 | `COMMENT`       | 可选注释。                                                                                          |
 | `PROPERTIES`    | `"key" = "value"` 形式的配置。允许的 key 取决于 `TYPE`（见下）。其它 key 会被拒绝。                  |
 
@@ -65,13 +57,26 @@ PROPERTIES (
 | 属性            | 适用类型       | 必填 | 说明                                                                                 |
 | --------------- | -------------- | ---- | ------------------------------------------------------------------------------------ |
 | `endpoint`      | 全部           | 是   | HTTP(S) 端点 URL，必须以 `http://` 或 `https://` 开头。                               |
-| `model`         | 全部           | 是   | 请求体 `model` 字段的模型名（如 `text-embedding-3-small`、`cohere/rerank-4-fast`）。 |
-| `protocol`      | 全部           | 否   | 端点使用的协议：`openai`、`anthropic`、`cohere` 或 `dashscope`。默认值：`embedding` 和 `chat` 为 `openai`，`rerank` 为 `cohere`。|
+| `model`         | 全部           | 是   | 请求体 `model` 字段的模型名（如 `text-embedding-3-small`）。 |
+| `protocol`      | 全部           | 否   | SQL AI 函数支持 OpenAI 兼容协议（`openai`）和阿里云百炼原生协议（`dashscope`）。`chat` 和 `embedding` 默认使用 `openai`。 |
 | `dimensions`    | embedding      | 否   | embedding 向量维度（正整数）。必须与 provider 输出及向量索引维度一致。                |
-| `max_documents` | rerank         | 否   | 每次 rerank 请求发送的最大文档数（正整数；默认 1000）。                               |
-| `deadline_ms`   | rerank         | 否   | 整个 rerank 调用（含所有重试）的总时间预算（毫秒，正整数；默认 10000）。用于限制慢/不可达的 rerank 服务最多拖慢搜索多久,超过后降级为融合排序。超时不重试,仅连接失败或 HTTP 5xx 才重试。 |
-| `timeout_ms`    | 全部           | 否   | 单次请求 HTTP 超时（毫秒，正整数）。对 rerank 而言,实际会被剩余的 `deadline_ms` 预算进一步限制。 |
+| `timeout_ms`    | 全部           | 否   | 单次 HTTP 请求的超时时间，单位为毫秒，取值为正整数。 |
 | `api_key`       | 全部           | 否   | `Authorization` 头的 Bearer token。本地免鉴权 provider 可省略。                       |
+
+### SQL AI 函数的端点
+
+百炼提供两种接口。对 `/compatible-mode/v1/...` 兼容端点使用 `openai`，对原生端点使用 `dashscope`。
+
+使用 `dashscope` 时，将 `endpoint` 设为对应操作的完整原生接口 URL，路径须与 Provider 的 `TYPE` 匹配。在 SQL 调用中覆盖 `model` 后，请求仍发送到配置的端点。
+
+| Provider 类型 | 用途 | 原生端点路径 |
+| --- | --- | --- |
+| `chat` | 文本生成 | `/api/v1/services/aigc/text-generation/generation` |
+| `chat` | 多模态生成 | `/api/v1/services/aigc/multimodal-generation/generation` |
+| `embedding` | 文本向量 | `/api/v1/services/embeddings/text-embedding/text-embedding` |
+| `embedding` | 多模态向量 | `/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding` |
+
+各端点可接受的输入见[媒体支持表](../../../sql-functions/ai-functions/ai_functions.mdx#file-input)。多模态向量模型的格式限制见[百炼多模态向量 API](https://help.aliyun.com/zh/model-studio/multimodal-embedding-api-reference)。
 
 ## 示例
 
@@ -88,28 +93,15 @@ PROPERTIES (
 SET openai AS DEFAULT AI PROVIDER;   -- 成为默认 embedding provider
 ```
 
-注册一个 rerank provider 并设为 `rerank` 类型的默认（与 embedding 默认相互独立）：
+下面的示例使用百炼原生多模态生成端点创建一个 `chat` Provider。
 
 ```sql
-CREATE AI PROVIDER cohere_rerank TYPE rerank
+CREATE AI PROVIDER dashscope_chat TYPE chat
 PROPERTIES (
-    "endpoint"   = "https://openrouter.ai/api/v1/rerank",
-    "model"      = "cohere/rerank-4-fast",
-    "timeout_ms" = "15000",
-    "api_key"    = "sk-or-..."
-);
-SET cohere_rerank AS DEFAULT AI PROVIDER;   -- 成为默认 rerank provider
-```
-
-注册一个使用 Anthropic Messages 协议的 chat provider：
-
-```sql
-CREATE AI PROVIDER claude TYPE chat
-PROPERTIES (
-    "protocol" = "anthropic",
-    "endpoint" = "https://api.anthropic.com/v1/messages",
-    "model"    = "claude-sonnet-4-5",
-    "api_key"  = "sk-ant-..."
+    "protocol" = "dashscope",
+    "endpoint" = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
+    "model"    = "qwen3-vl-plus",
+    "api_key"  = "YOUR_DASHSCOPE_API_KEY"
 );
 ```
 

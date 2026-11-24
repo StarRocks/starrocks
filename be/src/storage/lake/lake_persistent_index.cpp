@@ -386,6 +386,8 @@ Status LakePersistentIndex::flush_memtable(bool force) {
         // 3. flush current memtable
         bool flush_async = false;
         if (_inactive_memtables.size() + 1 < config::pk_index_memtable_max_count) {
+            // The flush thread runs without the context of the work flushing; carry it over.
+            _memtable->set_flush_remote_read(ScopedRemoteReadContext::current_or_load());
             if (RuntimeEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->submit(_memtable).ok()) {
                 flush_async = true;
             }
@@ -1117,6 +1119,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         // segment never needs it; after a tablet merge, which orders the rowsets of a version by uid, a rowset
         // with a larger id may have been replayed first.
         if ((_memtable->max_rss_rowid() >> 32) > too_old) {
+            TRACE_COUNTER_INCREMENT("soak_pk_merge_delete_lookup_cnt", 1);
             // Never join here: load_one and these lookups share the PK execution pool.
             return parallel_get(&get_runner, out->keys.size(), out->keys.data(), too_old, &out->filter_words);
         }
@@ -1408,11 +1411,13 @@ void merge_rebuild_io_stats(const OlapReaderStatistics& from, OlapReaderStatisti
 // if the rowset does not need rebuild. get_each_segment_iterator_with_delvec internally parallelises
 // across segments via its own threadpool -- DO NOT call this from a worker on that pool. When
 // `use_per_segment_stats` is set, each segment iterator gets its own stats (stored in the returned
-// seg_stats) for race-free concurrent scanning; otherwise all segments share `stats`.
+// seg_stats) for race-free concurrent scanning; otherwise all segments share `stats`. `delvec_metadata` is
+// the tablet metadata at `base_version` that the delete vectors are read from (see load_from_lake_tablet).
 StatusOr<std::optional<OneRowsetScan>> build_one_rowset_scan(const RowsetPtr& rowset, int64_t base_version,
                                                              const MetaFileBuilder* builder, const Schema& pkey_schema,
                                                              uint32_t rebuild_rss_id, uint64_t rebuild_rss_rowid_point,
-                                                             OlapReaderStatistics* stats, bool use_per_segment_stats) {
+                                                             OlapReaderStatistics* stats, bool use_per_segment_stats,
+                                                             const TabletMetadataPtr& delvec_metadata) {
     TRACE_COUNTER_INCREMENT("total_segment_cnt", rowset->num_segments());
     TRACE_COUNTER_INCREMENT("total_num_rows", rowset->num_rows());
     if (!LakePersistentIndex::needs_rowset_rebuild(rowset->metadata(), rebuild_rss_id)) {
@@ -1461,7 +1466,8 @@ StatusOr<std::optional<OneRowsetScan>> build_one_rowset_scan(const RowsetPtr& ro
         // Stays serial; internally parallelises across segments via its own segment threadpool.
         TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_get_segment_iterator_with_delvec_us");
         res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, stats, &rowid_ranges,
-                                                            use_per_segment_stats ? &seg_stats_ptrs : nullptr);
+                                                            use_per_segment_stats ? &seg_stats_ptrs : nullptr,
+                                                            delvec_metadata);
     }
     RETURN_IF_ERROR(res.status());
     out.iters = std::move(res).value();
@@ -1504,16 +1510,17 @@ StatusOr<std::optional<OneRowsetScan>> build_one_rowset_scan(const RowsetPtr& ro
 StatusOr<RebuildScanPlan> build_rebuild_scan_units(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
                                                    int64_t base_version, const MetaFileBuilder* builder,
                                                    const Schema& pkey_schema, uint32_t rebuild_rss_id,
-                                                   uint64_t rebuild_rss_rowid_point, OlapReaderStatistics* stats) {
+                                                   uint64_t rebuild_rss_rowid_point, OlapReaderStatistics* stats,
+                                                   const TabletMetadataPtr& delvec_metadata) {
     RebuildScanPlan plan;
     auto rowsets = Rowset::get_rowsets(tablet_mgr, metadata);
     plan.rowset_iters.reserve(rowsets.size());
     plan.rowset_seg_stats.reserve(rowsets.size());
     plan.rebuild_rowsets.reserve(rowsets.size());
     for (auto& rowset : rowsets) {
-        ASSIGN_OR_RETURN(auto one,
-                         build_one_rowset_scan(rowset, base_version, builder, pkey_schema, rebuild_rss_id,
-                                               rebuild_rss_rowid_point, stats, /*use_per_segment_stats=*/true));
+        ASSIGN_OR_RETURN(auto one, build_one_rowset_scan(rowset, base_version, builder, pkey_schema, rebuild_rss_id,
+                                                         rebuild_rss_rowid_point, stats,
+                                                         /*use_per_segment_stats=*/true, delvec_metadata));
         if (!one.has_value()) {
             continue;
         }
@@ -1624,7 +1631,8 @@ Status scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanConte
 } // namespace
 
 Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
-                                                  int64_t base_version, const MetaFileBuilder* builder) {
+                                                  int64_t base_version, const MetaFileBuilder* builder,
+                                                  const TabletMetadataPtr& base_metadata) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_load_from_lake_tablet_us");
     // 1. create and set key column schema
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
@@ -1683,13 +1691,33 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     // at a time on the caller thread (no thread pool) -- the segment-scan analog of load_dels reading
     // one del file at a time.
     const bool use_parallel = should_parallel_rebuild_prefetch(rebuild_unit_count);
+    // The tablet metadata at base_version, which every rebuilt segment reads its delete vector from, resolved
+    // once for the whole rebuild: the base version the caller passed (publish, whose |metadata| is the one it is
+    // building, already stamped with the new version), else |metadata| when it already is that version (the PK
+    // memtable flush), else one read, made only when a segment is to be rebuilt. Every rowset's iterators take
+    // this one object. The delvec loader used to read the base version back from storage for every rebuilt
+    // segment, and on a tablet with tens of thousands of segments whose metadata outgrew its metacache shard,
+    // each of those reads cost seconds. Like publish's own read of the base version, the read here leaves the
+    // metacache alone: that version is superseded once the publish lands.
+    TabletMetadataPtr delvec_metadata;
+    if (base_metadata != nullptr && base_metadata->id() == metadata->id() && base_metadata->version() == base_version) {
+        delvec_metadata = base_metadata;
+    } else if (metadata->version() == base_version) {
+        delvec_metadata = metadata;
+    } else if (rebuild_unit_count > 0) {
+        TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_get_base_metadata_us");
+        ASSIGN_OR_RETURN(delvec_metadata, tablet_mgr->get_tablet_metadata(
+                                                  metadata->id(), base_version,
+                                                  CacheOptions{.fill_meta_cache = false, .fill_data_cache = false}));
+    }
 
     if (use_parallel) {
         TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::load_from_lake_tablet:parallel", nullptr);
         // Phase A: build all rebuild rowsets' iterators + flat scan units (each segment with its own
         // stats), since the parallel scan needs them all alive concurrently.
-        ASSIGN_OR_RETURN(auto plan, build_rebuild_scan_units(tablet_mgr, metadata, base_version, builder, pkey_schema,
-                                                             rebuild_rss_id, rebuild_rss_rowid_point, &stats));
+        ASSIGN_OR_RETURN(auto plan,
+                         build_rebuild_scan_units(tablet_mgr, metadata, base_version, builder, pkey_schema,
+                                                  rebuild_rss_id, rebuild_rss_rowid_point, &stats, delvec_metadata));
         auto& scan_units = plan.scan_units;
         auto& rebuild_rowsets = plan.rebuild_rowsets;
         std::vector<RebuildScanUnitResult> unit_results(scan_units.size());
@@ -1751,9 +1779,9 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         // away (at most one chunk held), and applies a rowset's del files after its segments.
         auto rowsets = Rowset::get_rowsets(tablet_mgr, metadata);
         for (auto& rowset : rowsets) {
-            ASSIGN_OR_RETURN(auto one,
-                             build_one_rowset_scan(rowset, base_version, builder, pkey_schema, rebuild_rss_id,
-                                                   rebuild_rss_rowid_point, &stats, /*use_per_segment_stats=*/false));
+            ASSIGN_OR_RETURN(auto one, build_one_rowset_scan(rowset, base_version, builder, pkey_schema, rebuild_rss_id,
+                                                             rebuild_rss_rowid_point, &stats,
+                                                             /*use_per_segment_stats=*/false, delvec_metadata));
             if (!one.has_value()) {
                 continue;
             }
@@ -2228,7 +2256,8 @@ Status LakePersistentIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rss
 // ---- Lifecycle as a tablet's cached primary-key index -------------------------------------------
 
 Status LakePersistentIndex::lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
-                                      int64_t base_version, const MetaFileBuilder* builder) {
+                                      int64_t base_version, const MetaFileBuilder* builder,
+                                      const TabletMetadataPtr& base_metadata) {
     TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_load_latency_us");
     std::lock_guard<std::mutex> lg(_load_lock);
     if (_loaded) {
@@ -2242,7 +2271,7 @@ Status LakePersistentIndex::lake_load(TabletManager* tablet_mgr, const TabletMet
     _tablet_mgr = tablet_mgr;
     _tablet_id = metadata->id();
     const int64_t load_start_us = MonotonicMicros();
-    _status = _do_lake_load(metadata, base_version, builder);
+    _status = _do_lake_load(metadata, base_version, builder, base_metadata);
     StorageMetrics::instance()->lake_pk_index_load_total.increment(1);
     StorageMetrics::instance()->lake_pk_index_load_duration_us.increment(MonotonicMicros() - load_start_us);
     TEST_SYNC_POINT_CALLBACK("lake_index_load.1", &_status);
@@ -2261,7 +2290,7 @@ Status LakePersistentIndex::lake_load(TabletManager* tablet_mgr, const TabletMet
 }
 
 Status LakePersistentIndex::_do_lake_load(const TabletMetadataPtr& metadata, int64_t base_version,
-                                          const MetaFileBuilder* builder) {
+                                          const MetaFileBuilder* builder, const TabletMetadataPtr& base_metadata) {
     // init() appends to _sstable_filesets rather than assigning, so it has to start clean. That used
     // to be guaranteed by construction -- a load built a brand new index -- and is now the
     // responsibility of _reset_index_state(). Assert it rather than trust it: a reload that inherited
@@ -2269,7 +2298,7 @@ Status LakePersistentIndex::_do_lake_load(const TabletMetadataPtr& metadata, int
     DCHECK(_memtable == nullptr) << "lake_load on a non-reset index, tablet:" << _tablet_id;
     DCHECK(_sstable_filesets.empty()) << "lake_load on a non-reset index, tablet:" << _tablet_id;
     RETURN_IF_ERROR(init(metadata));
-    return load_from_lake_tablet(_tablet_mgr, metadata, base_version, builder);
+    return load_from_lake_tablet(_tablet_mgr, metadata, base_version, builder, base_metadata);
 }
 
 bool LakePersistentIndex::is_load(int64_t base_version) {

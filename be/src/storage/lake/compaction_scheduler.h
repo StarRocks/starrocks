@@ -161,6 +161,9 @@ class CompactionScheduler {
         void return_token();
 
         int16_t concurrency() const;
+        // The number of tokens acquire() could hand out right now. A snapshot: another holder can take or
+        // return a token as soon as this has returned.
+        int32_t free_tokens() const;
 
         void adapt_to_task_queue_size(int16_t new_val);
 
@@ -337,6 +340,12 @@ inline void CompactionScheduler::Limiter::return_token() {
 inline int16_t CompactionScheduler::Limiter::concurrency() const {
     std::lock_guard l(_mtx);
     return _total - _reserved;
+}
+
+inline int32_t CompactionScheduler::Limiter::free_tokens() const {
+    std::lock_guard l(_mtx);
+    // _free is negative while the tasks in flight exceed a concurrency that was just lowered.
+    return static_cast<int32_t>(std::max<int64_t>(0, _free));
 }
 
 inline void CompactionScheduler::Limiter::adapt_to_task_queue_size(int16_t new_val) {

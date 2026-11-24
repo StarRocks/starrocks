@@ -38,11 +38,10 @@ class UnnestGeoTest : public testing::TestWithParam<LogicalType> {
 protected:
     void SetUp() override {
         const bool geography = GetParam() == TYPE_GEOGRAPHY;
-        _type = TypeDescriptor::create_geo_type(
-                GetParam(), {geography ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY,
-                             geography ? GEO_COORDINATE_SYSTEM_SPHERICAL : GEO_COORDINATE_SYSTEM_CARTESIAN,
-                             geography ? GEO_EDGE_ALGORITHM_VINCENTY : GEO_EDGE_ALGORITHM_PLANAR,
-                             geography ? "OGC:CRS84" : "EPSG:3857", geography ? 4326 : 3857});
+        _type = TypeDescriptor::create_geo_type(GetParam(),
+                                                {geography ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY,
+                                                 geography ? GEO_EDGE_ALGORITHM_VINCENTY : GEO_EDGE_ALGORITHM_PLANAR,
+                                                 geography ? "OGC:CRS84" : "EPSG:3857", geography ? 4326 : 3857});
         _function = get_table_function("unnest", {TYPE_ARRAY}, {GetParam()});
         ASSERT_NE(nullptr, _function);
         EXPECT_EQ(get_table_function("unnest", {TYPE_ARRAY}, {TYPE_INT}), _function);

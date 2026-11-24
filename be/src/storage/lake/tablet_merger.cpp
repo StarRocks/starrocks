@@ -45,6 +45,7 @@
 namespace starrocks::lake {
 
 DEFINE_FAIL_POINT(skip_lake_pk_index_merge_source_flush);
+DEFINE_FAIL_POINT(soak_pk_merge_force_index_rebuild);
 DEFINE_FAIL_POINT(tablet_merge_after_write_delvec);
 
 namespace {
@@ -1544,6 +1545,13 @@ Status merge_sstables(TabletManager* tablet_manager, MergePlan* plan) {
         drop_source_sstables(plan->sources, target);
         return Status::OK();
     }
+    FAIL_POINT_TRIGGER_EXECUTE(soak_pk_merge_force_index_rebuild, {
+        LOG(INFO) << describe_index_rebuild(target->id(), plan->sources.front()->id(),
+                                            SstFallback{"", "forced by soak_pk_merge_force_index_rebuild"},
+                                            /*flushed=*/false);
+        drop_source_sstables(plan->sources, target);
+        return Status::OK();
+    });
     std::vector<TabletMetadataPtr> flushed = plan->sources;
     for (auto& source : flushed) {
         bool skip_source_flush = false;
