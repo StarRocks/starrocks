@@ -793,6 +793,10 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
     const int64_t tracker_before_spill = _primary_key_mgr->mem_tracker()->consumption();
     run_update(5);
     const int baseline_records = records_written.load();
+    // The rows fit the buffer, so they are flushed once, after the last update file: one record per
+    // source segment holding its rows of every update file, not one per segment and update file.
+    EXPECT_EQ(1, flushes.load());
+    EXPECT_EQ(kSourceSegments, baseline_records);
     const int64_t baseline_max_record_len = max_record_len;
     EXPECT_EQ(kSourceSegments, upt_reads.load());
     EXPECT_EQ(kSourceSegments, upt_closes.load());
