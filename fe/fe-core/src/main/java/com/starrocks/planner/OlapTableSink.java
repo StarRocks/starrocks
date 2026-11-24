@@ -651,6 +651,28 @@ public class OlapTableSink extends DataSink {
         return false;
     }
 
+    // Returns a copy of the table's partition expr with its slot ref bound to the partition column's slot in
+    // tupleDescriptor. The partition expr is table metadata, shared with the table copies that planners use, and
+    // plans of the same table can be built at the same time (a stream load and an INSERT, for example). Binding
+    // the shared expr in place can put another plan's slot id into this plan, and the BE then fails with
+    // "slot_id N not found" when it evaluates the partition expr.
+    private static Expr bindPartitionExprToTuple(Expr partitionExpr, TupleDescriptor tupleDescriptor) {
+        Expr expr = partitionExpr.clone();
+        List<SlotRef> slotRefs = Lists.newArrayList();
+        expr.collect(SlotRef.class, slotRefs);
+        Preconditions.checkState(slotRefs.size() == 1);
+        // default slot is table column slot, when there are some expr on column
+        // the slot desc will change, so we need to reset the slot desc
+        for (SlotDescriptor slotDesc : tupleDescriptor.getSlots()) {
+            Column column = slotDesc.getColumn();
+            if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
+                slotRefs.get(0).setDesc(slotDesc);
+                break;
+            }
+        }
+        return expr;
+    }
+
     public static TOlapTablePartitionParam createPartition(long dbId, OlapTable table,
                                                            TupleDescriptor tupleDescriptor,
                                                            boolean enableAutomaticPartition,
@@ -704,42 +726,16 @@ public class OlapTableSink extends DataSink {
                     Preconditions.checkArgument(partitionExprs.size() == 1,
                             "Number of partition expr is not 1 for automatic partition table, expr num="
                                     + partitionExprs.size());
-                    Expr expr = partitionExprs.get(0);
-                    List<SlotRef> slotRefs = Lists.newArrayList();
-                    expr.collect(SlotRef.class, slotRefs);
-                    Preconditions.checkState(slotRefs.size() == 1);
-                    // default slot is table column slot, when there are some expr on column
-                    // the slot desc will change, so we need to reset the slot desc
-                    for (SlotDescriptor slotDesc : tupleDescriptor.getSlots()) {
-                        Column column = slotDesc.getColumn();
-                        if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
-                            slotRefs.get(0).setDesc(slotDesc);
-                            break;
-                        }
-                    }
-                    partitionParam.setPartition_exprs(Expr.treesToThrift(exprPartitionInfo
-                            .getPartitionExprs(table.getIdToColumn())));
+                    Expr expr = bindPartitionExprToTuple(partitionExprs.get(0), tupleDescriptor);
+                    partitionParam.setPartition_exprs(Expr.treesToThrift(Lists.newArrayList(expr)));
                 } else if (rangePartitionInfo instanceof ExpressionRangePartitionInfoV2) {
                     ExpressionRangePartitionInfoV2 expressionRangePartitionInfoV2 = (ExpressionRangePartitionInfoV2) rangePartitionInfo;
                     List<Expr> partitionExprs = expressionRangePartitionInfoV2.getPartitionExprs(table.getIdToColumn());
                     Preconditions.checkArgument(partitionExprs.size() == 1,
                             "Number of partition expr is not 1 for expression partition table, expr num="
                                     + partitionExprs.size());
-                    Expr expr = partitionExprs.get(0);
-                    List<SlotRef> slotRefs = Lists.newArrayList();
-                    expr.collect(SlotRef.class, slotRefs);
-                    Preconditions.checkState(slotRefs.size() == 1);
-                    // default slot is table column slot, when there are some expr on column
-                    // the slot desc will change, so we need to reset the slot desc
-                    for (SlotDescriptor slotDesc : tupleDescriptor.getSlots()) {
-                        Column column = slotDesc.getColumn();
-                        if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
-                            slotRefs.get(0).setDesc(slotDesc);
-                            break;
-                        }
-                    }
-                    partitionParam.setPartition_exprs(Expr
-                            .treesToThrift(expressionRangePartitionInfoV2.getPartitionExprs(table.getIdToColumn())));
+                    Expr expr = bindPartitionExprToTuple(partitionExprs.get(0), tupleDescriptor);
+                    partitionParam.setPartition_exprs(Expr.treesToThrift(Lists.newArrayList(expr)));
                 }
                 break;
             }
