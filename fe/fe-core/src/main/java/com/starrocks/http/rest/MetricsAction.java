@@ -175,9 +175,13 @@ public class MetricsAction extends RestBaseAction {
         boolean isCollectTableMetrics = isCollectTableOrMVMetrics(withTableMetrics);
         boolean isCollectMVMetrics = isCollectTableOrMVMetrics(withMaterializedViewsMetrics);
         boolean isCollectUserConnMetrics = isCollectTableOrMVMetrics(withUserConnections);
+        boolean isCollectExtraMetrics = isCollectTableMetrics || isCollectMVMetrics || isCollectUserConnMetrics;
 
         // check request authorization
-        if (isCollectTableMetrics || isCollectMVMetrics || isCollectUserConnMetrics) {
+        if (isCollectExtraMetrics && !Config.enable_metrics_auth_check) {
+            LOG.warn("enable_metrics_auth_check is false, serving extra table/materialized-view/user-connection "
+                    + "metrics without authentication");
+        } else if (isCollectExtraMetrics) {
             UserIdentity currentUser = null;
             try {
                 // Basic or Bearer, same as every other FE HTTP endpoint. With enable_http_auth the
