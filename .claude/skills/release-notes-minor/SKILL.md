@@ -67,9 +67,19 @@ unprefixed). That is the candidate pool, not the number of entries: the 4.1.0 no
    users never ran. Expect a short list. Keep only what a user of the previous minor could hit: crashes, wrong results, data loss, security-relevant,
    hangs. Skip the long tail.
 4. **Security.** Every `security.tsv` line, plus any bug fix that mentions CVE, SSRF, injection.
-5. **Behavior changes.** Fetch labels for the shortlisted PRs only (`gh pr view N --json
-   labels,body`), batched and paced to stay within the API quota. A PR labeled
-   `behavior_changed` must not be dropped.
+5. **Behavior changes: query the label for the whole new set, independently of the shortlist.**
+   A changed default or removed option is often an `[Enhancement]` or `[BugFix]` that the title
+   shortlist drops. Fetch every merged PR with the label since the fork date and intersect with
+   `new.tsv` (all tiers, including the ones excluded as Refactor/Tool/Doc/UT):
+
+   ```bash
+   gh pr list --repo StarRocks/starrocks --label behavior_changed --state merged \
+       --search "merged:>=<fork date>" --limit 1000 --json number --jq '.[].number' | sort -u > /tmp/bc.txt
+   cut -f1 /tmp/notes-4.2/new.tsv | sort -u | comm -12 - /tmp/bc.txt
+   ```
+
+   Every PR in the result goes into the notes (Behavior Changes, or Bug fixes with a reviewer
+   note if it only corrects wrong results). Then read `body` of those PRs only.
 6. **`noprefix.tsv`**: look at each; they are few.
 
 Verify against the code before writing anything that says "new", "default", or "removed":
