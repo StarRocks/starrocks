@@ -38,6 +38,8 @@ import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.persist.proto.FunctionPB;
+import com.starrocks.persist.proto.ScalarFunctionPB;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.thrift.TFunction;
@@ -110,6 +112,36 @@ public class ScalarFunction extends Function {
         isolationType = other.isolationType;
         content = other.content;
         serviceUrl = other.serviceUrl;
+    }
+
+    @Override
+    protected void fillProtoVariant(FunctionPB.Builder builder) {
+        ScalarFunctionPB.Builder scalar = ScalarFunctionPB.newBuilder().setIsolated(isolationType);
+        if (symbolName != null) {
+            scalar.setSymbolName(symbolName);
+        }
+        if (prepareFnSymbol != null) {
+            scalar.setPrepareFnSymbol(prepareFnSymbol);
+        }
+        if (closeFnSymbol != null) {
+            scalar.setCloseFnSymbol(closeFnSymbol);
+        }
+        if (content != null) {
+            scalar.setContent(content);
+        }
+        if (serviceUrl != null) {
+            scalar.setServiceUrl(serviceUrl);
+        }
+        builder.setKind(FunctionPB.Kind.SCALAR).setScalar(scalar);
+    }
+
+    void fillFromVariantProto(ScalarFunctionPB pb) {
+        symbolName = pb.hasSymbolName() ? pb.getSymbolName() : null;
+        prepareFnSymbol = pb.hasPrepareFnSymbol() ? pb.getPrepareFnSymbol() : null;
+        closeFnSymbol = pb.hasCloseFnSymbol() ? pb.getCloseFnSymbol() : null;
+        isolationType = pb.getIsolated();
+        content = pb.hasContent() ? pb.getContent() : null;
+        serviceUrl = pb.hasServiceUrl() ? pb.getServiceUrl() : null;
     }
 
     public static ScalarFunction createVectorizedBuiltin(long fid,

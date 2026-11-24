@@ -942,6 +942,11 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long checkpoint_timeout_seconds = 24 * 3600;
 
+    // Stop writing and distributing v2 images after the cluster no longer needs rollback.
+    // Requires restart with the same configuration on all FEs. The leader sends its decision to the worker.
+    @ConfField
+    public static boolean disable_image_v2_write = false;
+
     /**
      * True to only do checkpoint on leader node.
      * False to do checkpoint on the node with low memory usage.

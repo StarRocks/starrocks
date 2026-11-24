@@ -20,6 +20,8 @@ package com.starrocks.load;
 import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.ExportFailMsgPB;
 
 public class ExportFailMsg implements Writable {
     public enum CancelType {
@@ -88,5 +90,22 @@ public class ExportFailMsg implements Writable {
         ExportFailMsg failMsg = (ExportFailMsg) obj;
 
         return cancelType.equals(failMsg.cancelType) && msg.equals(failMsg.msg);
+    }
+
+    public ExportFailMsgPB toProto() {
+        ExportFailMsgPB.Builder builder = ExportFailMsgPB.newBuilder();
+        if (cancelType != null) {
+            builder.setCancelType(ProtoEnums.toProto(cancelType, ExportFailMsgPB.CancelType.class));
+        }
+        if (msg != null) {
+            builder.setMsg(msg);
+        }
+        return builder.build();
+    }
+
+    public static ExportFailMsg fromProto(ExportFailMsgPB pb) {
+        CancelType cancelType = pb.getCancelType() == ExportFailMsgPB.CancelType.UNSPECIFIED ? null
+                : ProtoEnums.fromProto(pb.getCancelType(), CancelType.class);
+        return new ExportFailMsg(cancelType, pb.hasMsg() ? pb.getMsg() : null);
     }
 }

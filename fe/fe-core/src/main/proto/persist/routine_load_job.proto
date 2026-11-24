@@ -1,0 +1,119 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/common.proto";
+import "persist/table.proto";
+import "persist/warehouse.proto";
+import "persist/routine_load_progress.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "RoutineLoadJobProto";
+
+// One entry per job. The discriminator and variant must agree.
+message RoutineLoadMgrPB {}
+
+message RoutineLoadJobPB {
+  enum Kind {
+    UNSPECIFIED = 0;
+    KAFKA_ROUTINE_LOAD_JOB = 1;
+    PULSAR_ROUTINE_LOAD_JOB = 2;
+  }
+  optional Kind kind = 1;
+  RoutineLoadJobCorePB core = 2;
+  oneof instance {
+    KafkaRoutineLoadJobPB kafka = 11;
+    PulsarRoutineLoadJobPB pulsar = 12;
+  }
+}
+
+message RoutineLoadJobCorePB {
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    NEED_SCHEDULE = 1;
+    RUNNING = 2;
+    PAUSED = 3;
+    STOPPED = 4;
+    CANCELLED = 5;
+  }
+  enum SourceType {
+    SOURCE_TYPE_UNSPECIFIED = 0;
+    KAFKA = 1;
+    PULSAR = 2;
+  }
+  optional int64 id = 1;
+  optional string name = 2;
+  optional int64 db_id = 3;
+  optional int64 table_id = 4;
+  optional int32 desire_task_concurrent_num = 5;
+  optional State state = 6;
+  optional SourceType data_source_type = 7;
+  optional double max_filter_ratio = 8;
+  optional int64 max_error_num = 9;
+  StringMapPB job_properties = 10;
+  StringMapPB session_variables = 11;
+  optional int64 task_sched_interval_s = 12;
+  optional int64 max_batch_rows = 13;
+  optional int64 max_batch_size_bytes = 14;
+  RoutineLoadProgressPB progress = 15;
+  RoutineLoadProgressPB timestamp_progress = 16;
+  optional int64 create_timestamp = 17;
+  optional int64 pause_timestamp = 18;
+  optional int64 end_timestamp = 19;
+  optional int64 current_error_rows = 20;
+  optional int64 current_total_rows = 21;
+  optional int64 error_rows = 22;
+  optional int64 total_rows = 23;
+  optional int64 unselected_rows = 24;
+  optional int64 received_bytes = 25;
+  optional int64 total_task_excution_time_ms = 26;
+  optional int64 committed_task_num = 27;
+  optional int64 aborted_task_num = 28;
+  optional int64 task_consume_second = 29;
+  optional int64 task_timeout_second = 30;
+  OriginStatementInfoPB orig_stmt = 31;
+  optional int64 warehouse_id = 32;
+  ComputeResourcePB compute_resource = 33;
+}
+
+message KafkaRoutineLoadJobPB {
+  optional string broker_list = 1;
+  optional string topic = 2;
+  Int32ListPB custom_kafka_partitions = 3;
+  Int32ListPB current_kafka_partitions = 4;
+  StringMapPB custom_properties = 5;
+  optional string confluent_schema_registry_url = 6;
+  KafkaPartitionOffsetsPB custome_kafka_partition_offsets = 7;
+}
+
+// The CREATE-time partition/offset pairs are a list, not a map.
+message KafkaPartitionOffsetsPB {
+  message Entry {
+    optional int32 partition = 1;
+    optional int64 offset = 2;
+  }
+  repeated Entry values = 1;
+}
+
+message PulsarRoutineLoadJobPB {
+  optional string service_url = 1;
+  optional string topic = 2;
+  optional string subscription = 3;
+  StringListPB custom_pulsar_partitions = 4;
+  StringMapPB custom_properties = 5;
+}

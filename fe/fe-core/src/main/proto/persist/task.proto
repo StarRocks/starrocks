@@ -1,0 +1,187 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/common.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "TaskProto";
+
+// com.starrocks.scheduler.Task and what it owns. Task has a subclass (OptimizeTask), so its fields
+// are a core message: TaskManager writes plain tasks, AlterJobMgr writes optimize tasks inside its
+// jobs. See common.proto for the conventions.
+
+// com.starrocks.scheduler.Constants.TaskRunState. Shared by OptimizeTaskPB and the task run status
+// of TaskManager, hence package-level with prefixed values.
+enum TaskRunStatePB {
+  TASK_RUN_STATE_UNSPECIFIED = 0;
+  TASK_RUN_STATE_PENDING = 1;
+  TASK_RUN_STATE_RUNNING = 2;
+  TASK_RUN_STATE_FAILED = 3;
+  TASK_RUN_STATE_SUCCESS = 4;
+  TASK_RUN_STATE_MERGED = 5;
+  TASK_RUN_STATE_SKIPPED = 6;
+}
+
+// The fields declared by com.starrocks.scheduler.Task itself. The three enums share the message
+// scope and TaskState and TaskSource both have UNKNOWN, so every value is prefixed.
+message TaskCorePB {
+  // com.starrocks.scheduler.Constants.TaskType.
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    TYPE_MANUAL = 1;
+    TYPE_PERIODICAL = 2;
+    TYPE_EVENT_TRIGGERED = 3;
+  }
+  // com.starrocks.scheduler.Constants.TaskState.
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    STATE_UNKNOWN = 1;
+    STATE_ACTIVE = 2;
+    STATE_PAUSE = 3;
+  }
+  // com.starrocks.scheduler.Constants.TaskSource.
+  enum Source {
+    SOURCE_UNSPECIFIED = 0;
+    SOURCE_UNKNOWN = 1;
+    SOURCE_CTAS = 2;
+    SOURCE_MV = 3;
+    SOURCE_INSERT = 4;
+    SOURCE_PIPE = 5;
+    SOURCE_DATACACHE_SELECT = 6;
+  }
+  int64 id = 1;
+  optional string name = 2;
+  optional Type type = 3;
+  optional State state = 4;
+  TaskSchedulePB schedule = 5;
+  int64 create_time = 6;
+  optional string catalog_name = 7;
+  optional string db_name = 8;
+  optional string definition = 9;
+  optional string post_run = 10;
+  StringMapPB properties = 11;
+  int64 expire_time = 12;
+  optional Source source = 13;
+  // Deprecated in Java in favour of create_user_identity, still persisted.
+  optional string create_user = 14;
+  UserIdentityPB create_user_identity = 15;
+  int64 last_schedule_time = 16;
+  int64 next_schedule_time = 17;
+}
+
+// com.starrocks.scheduler.persist.TaskSchedule.
+message TaskSchedulePB {
+  // java.util.concurrent.TimeUnit.
+  enum TimeUnit {
+    UNSPECIFIED = 0;
+    NANOSECONDS = 1;
+    MICROSECONDS = 2;
+    MILLISECONDS = 3;
+    SECONDS = 4;
+    MINUTES = 5;
+    HOURS = 6;
+    DAYS = 7;
+  }
+  int64 start_time = 1;
+  int64 period = 2;
+  optional TimeUnit time_unit = 3;
+}
+
+// com.starrocks.alter.OptimizeTask: the task an optimize job submits per partition.
+message OptimizeTaskPB {
+  TaskCorePB task = 1;
+  optional string partition_name = 2;
+  optional string temp_partition_name = 3;
+  optional TaskRunStatePB optimize_task_state = 4;
+  int64 last_version = 5;
+  StringListPB partition_names = 6;
+  StringListPB temp_partition_names = 7;
+}
+
+// TaskManager writes these statuses in their own section after the tasks.
+message TaskRunStatusPB {
+  optional string start_task_run_id = 1;
+  optional string task_run_id = 2;
+  optional string query_id = 3;
+  int64 task_id = 4;
+  optional string task_name = 5;
+  int64 create_time = 6;
+  optional string catalog_name = 7;
+  optional string db_name = 8;
+  optional string definition = 9;
+  optional string post_run = 10;
+  optional string user = 11;
+  UserIdentityPB user_identity = 12;
+  optional string submit_user = 13;
+  int64 expire_time = 14;
+  int32 priority = 15;
+  bool merge_redundant = 16;
+  optional TaskCorePB.Source source = 17;
+  int32 error_code = 18;
+  optional string error_message = 19;
+  int64 finish_time = 20;
+  int64 process_start_time = 21;
+  optional TaskRunStatePB state = 22;
+  int32 progress = 23;
+  MVTaskRunExtraMessagePB mv_task_run_extra_message = 24;
+  optional string data_cache_select_extra_message = 25;
+  StringMapPB properties = 26;
+}
+
+message ExecuteOptionPB {
+  int32 priority = 1;
+  StringMapPB task_run_properties = 2;
+  bool is_merge_redundant = 3;
+  bool is_manual = 4;
+  bool is_sync = 5;
+  bool is_replay = 6;
+}
+
+message MVTaskRunExtraMessagePB {
+  bool force_refresh = 1;
+  optional string partition_start = 2;
+  optional string partition_end = 3;
+  StringListPB mv_partitions_to_refresh = 4;
+  MVPartitionMapPB ref_base_partitions_to_refresh_map = 5;
+  MVPartitionMapPB base_partitions_to_refresh_map = 6;
+  optional string next_partition_start = 7;
+  optional string next_partition_end = 8;
+  optional string next_partition_values = 9;
+  int64 process_start_time = 10;
+  ExecuteOptionPB execute_option = 11;
+  StringMapPB plan_builder_message = 12;
+  optional int32 adaptive_partition_refresh_number = 13;
+  optional string refresh_mode = 14;
+  MVSnapshotMapPB pinned_snapshot_id_map = 15;
+  MVSourceRangeMapPB imv_source_version_range = 16;
+  MVSourceRangeMapPB imv_source_timestamp_range = 17;
+}
+
+// Wrappers retain absent versus empty nested collections.
+message MVPartitionMapPB {
+  map<string, StringListPB> values = 1;
+}
+
+message MVSnapshotMapPB {
+  map<string, int64> values = 1;
+}
+
+message MVSourceRangeMapPB {
+  map<string, StringMapPB> values = 1;
+}

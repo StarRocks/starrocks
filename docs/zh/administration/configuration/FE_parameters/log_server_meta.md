@@ -1552,6 +1552,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 当 `true` 时，CheckpointController 将仅选择 Leader FE 作为 checkpoint worker；当 `false` 时，控制器可能会选择任何前端，并优先选择堆使用率较低的节点。当为 `false` 时，worker 按最近的失败时间和 `heapUsedPercent` 排序（Leader 被视为具有无限使用率以避免选择它）。对于需要集群快照元数据的操作，控制器无论此标志如何都已强制选择 Leader。启用 `true` 会将 checkpoint 工作集中在 Leader 上（更简单，但增加了 Leader 的 CPU/内存和网络负载）；保持 `false` 会将 checkpoint 负载分配到负载较低的 FE。此设置影响 worker 选择以及与 `checkpoint_timeout_seconds` 等超时和 `thrift_rpc_timeout_ms` 等 RPC 设置的交互。
 - 引入版本: v3.4.0, v3.5.0
 
+### `disable_image_v2_write`
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：默认情况下，每轮 FE checkpoint 在相同 journal ID 下写入并分发 v2 和 v3 image。集群稳定且不再需要回退后，可设为 `true`，停止 v2 的序列化、磁盘写入和分发。此配置需要重启生效，所有 FE 的配置文件应保持一致。是否写 v2 由 Leader 决定并随 checkpoint 请求传给 worker，worker 按请求执行。配置作用于后续 checkpoint。加载始终选择最新 journal ID，同 ID 优先 v3。升级时先升级 Follower 和 Observer，再升级 Leader。停止写入 v2 后，如需恢复 v2 回退入口，先改回 `false` 并重启 FE，完成一轮新的 checkpoint 及分发后再回退；旧 v2 image 可能因 journal 清理而无法恢复。该配置不影响 StarMgr image。
+- 引入版本：-
+
 ### `checkpoint_timeout_seconds`
 
 - 默认值: 24 * 3600

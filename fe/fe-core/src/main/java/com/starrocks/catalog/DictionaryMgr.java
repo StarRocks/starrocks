@@ -37,11 +37,18 @@ import com.starrocks.persist.UpdateDictionaryLog;
 import com.starrocks.persist.UpdateDictionaryMgrLog;
 import com.starrocks.persist.WALApplier;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.DictionaryMgrPB;
+import com.starrocks.persist.proto.DictionaryNamePB;
+import com.starrocks.persist.proto.DictionaryPB;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.DictionaryCacheSink;
@@ -819,5 +826,41 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             // finish 
             finish();
         }
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.DICTIONARY_MGR)) {
+            writer.writeManager(DictionaryMgrPB.newBuilder().setNextTxnId(nextTxnId)
+                    .setNextDictionaryId(nextDictionaryId).build());
+            for (Dictionary dictionary : dictionariesMapById.values()) {
+                writer.writeEntry(dictionary.toProto());
+            }
+        }
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.DICTIONARY_NAME)) {
+            for (Map.Entry<String, Long> entry : dictionariesIdMapByName.entrySet()) {
+                writer.writeEntry(DictionaryNamePB.newBuilder().setName(entry.getKey())
+                        .setDictionaryId(entry.getValue()).build());
+            }
+        }
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(
+                Pair.create(SectionId.DICTIONARY_MGR, reader -> {
+                    DictionaryMgrPB pb = reader.readManager(DictionaryMgrPB.parser());
+                    nextTxnId = pb.getNextTxnId();
+                    nextDictionaryId = pb.getNextDictionaryId();
+                    dictionariesMapById = new HashMap<>();
+                    reader.readEntries(DictionaryPB.parser(), entry -> {
+                        Dictionary dictionary = Dictionary.fromProto(entry);
+                        dictionariesMapById.put(dictionary.getDictionaryId(), dictionary);
+                    });
+                }),
+                Pair.create(SectionId.DICTIONARY_NAME, reader -> {
+                    dictionariesIdMapByName = new HashMap<>();
+                    reader.readEntries(DictionaryNamePB.parser(), pb ->
+                            dictionariesIdMapByName.put(pb.getName(), pb.getDictionaryId()));
+                    gsonPostProcess();
+                }));
     }
 }

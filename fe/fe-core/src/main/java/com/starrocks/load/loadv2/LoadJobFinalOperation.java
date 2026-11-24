@@ -21,6 +21,9 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.load.FailMsg;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.LoadJobFinalOperationPB;
+import com.starrocks.persist.proto.TxnCommitAttachmentPB;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 
@@ -103,5 +106,54 @@ public class LoadJobFinalOperation extends TxnCommitAttachment implements Writab
                 ", jobState=" + jobState +
                 ", failMsg=" + failMsg +
                 '}';
+    }
+
+    @Override
+    protected void fillProtoVariant(TxnCommitAttachmentPB.Builder parent) {
+        LoadJobFinalOperationPB.Builder builder = LoadJobFinalOperationPB.newBuilder();
+        builder.setId(id);
+        if (loadingStatus != null) {
+            builder.setLoadingStatus(loadingStatus.toProto());
+        }
+        builder.setProgress(progress);
+        builder.setLoadStartTimestamp(loadStartTimestamp);
+        builder.setFinishTimestamp(finishTimestamp);
+        if (jobState != null) {
+            builder.setJobState(ProtoEnums.toProto(jobState, LoadJobFinalOperationPB.JobState.class));
+        }
+        if (failMsg != null) {
+            builder.setFailMsg(failMsg.toProto());
+        }
+        parent.setKind(TxnCommitAttachmentPB.Kind.LOAD_JOB_FINAL_OPERATION).setLoadJobFinalOperation(builder);
+    }
+
+    @Override
+    protected void fillFromVariantProto(TxnCommitAttachmentPB parent) {
+        LoadJobFinalOperationPB pb = parent.getLoadJobFinalOperation();
+        if (pb.hasId()) {
+            id = pb.getId();
+        }
+        if (pb.hasLoadingStatus()) {
+            loadingStatus = EtlStatus.fromProto(pb.getLoadingStatus());
+        }
+        if (pb.hasProgress()) {
+            progress = pb.getProgress();
+        }
+        if (pb.hasLoadStartTimestamp()) {
+            loadStartTimestamp = pb.getLoadStartTimestamp();
+        }
+        if (pb.hasFinishTimestamp()) {
+            finishTimestamp = pb.getFinishTimestamp();
+        }
+        if (pb.hasJobState()) {
+            jobState = ProtoEnums.fromProto(pb.getJobState(), JobState.class);
+        } else {
+            jobState = null;
+        }
+        if (pb.hasFailMsg()) {
+            failMsg = FailMsg.fromProto(pb.getFailMsg());
+        } else {
+            failMsg = null;
+        }
     }
 }

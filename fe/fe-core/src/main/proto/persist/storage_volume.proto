@@ -1,0 +1,71 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/common.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "StorageVolumeProto";
+
+// The manager and its collections are persisted together in a single section.
+message StorageVolumeMgrPB {
+  enum Kind {
+    UNSPECIFIED = 0;
+    SHARED_DATA = 1;
+    SHARED_NOTHING = 2;
+  }
+  Kind kind = 1;
+  reserved 2 to 4;
+  oneof instance {
+    SharedDataStorageVolumeMgrPB shared_data = 11;
+    SharedNothingStorageVolumeMgrPB shared_nothing = 10;
+  }
+}
+
+message SharedDataStorageVolumeMgrPB {
+  optional string default_storage_volume_id = 1;
+  map<string, Int64ListPB> storage_volume_to_dbs = 2;
+  map<string, Int64ListPB> storage_volume_to_tables = 3;
+}
+
+message SharedNothingStorageVolumeMgrPB {
+  SharedDataStorageVolumeMgrPB shared_data = 2;
+  map<string, StorageVolumePB> id_to_storage_volume = 1;
+}
+
+// Locally persisted volumes in shared-nothing mode; shared-data volumes reside in StarMgr.
+message StorageVolumePB {
+  enum Type {
+    UNSPECIFIED = 0;
+    UNKNOWN = 1;
+    S3 = 2;
+    HDFS = 3;
+    AZBLOB = 4;
+    ADLS2 = 5;
+    GS = 6;
+  }
+  optional string id = 1;
+  optional string name = 2;
+  optional Type type = 3;
+  StringListPB locations = 4;
+  StringMapPB params = 5;
+  optional string comment = 6;
+  bool enabled = 7;
+  int64 virtual_tablet_id = 8;
+  int64 virtual_tablet_group_id = 9;
+}

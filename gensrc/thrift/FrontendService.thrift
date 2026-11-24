@@ -2293,6 +2293,7 @@ struct TStartCheckpointRequest {
     1: optional i64 epoch;
     2: optional i64 journal_id;
     3: optional bool is_global_state_mgr;
+    4: optional bool write_v2;
 }
 
 struct TStartCheckpointResponse {

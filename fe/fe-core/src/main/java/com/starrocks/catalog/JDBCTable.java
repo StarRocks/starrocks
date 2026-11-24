@@ -20,6 +20,8 @@ import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.DdlException;
+import com.starrocks.persist.proto.JDBCTablePB;
+import com.starrocks.persist.proto.TablePB;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TJDBCTable;
@@ -69,6 +71,28 @@ public class JDBCTable extends Table {
 
     public JDBCTable() {
         super(TableType.JDBC);
+    }
+
+    @Override
+    protected void fillProtoVariant(TablePB.Builder builder) {
+        JDBCTablePB.Builder jdbc = JDBCTablePB.newBuilder().setQueryTable(queryTable);
+        if (jdbcTable != null) {
+            jdbc.setJdbcTable(jdbcTable);
+        }
+        if (resourceName != null) {
+            jdbc.setResourceName(resourceName);
+        }
+        builder.setJdbc(jdbc);
+    }
+
+    void fillFromVariantProto(JDBCTablePB pb) {
+        if (pb.hasJdbcTable()) {
+            jdbcTable = pb.getJdbcTable();
+        }
+        if (pb.hasResourceName()) {
+            resourceName = pb.getResourceName();
+        }
+        queryTable = pb.getQueryTable();
     }
 
     public JDBCTable(long id, String name, List<Column> schema, Map<String, String> properties) throws DdlException {

@@ -16,10 +16,13 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Range;
 import com.google.gson.annotations.SerializedName;
+import com.google.protobuf.ByteString;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
+import com.starrocks.persist.proto.RecyclePartitionInfoPB;
+import com.starrocks.persist.proto.RecycleRangePartitionInfoPB;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -71,5 +74,22 @@ public class RecycleRangePartitionInfo extends RecyclePartitionInfoV2 implements
     @Override
     public void gsonPostProcess() throws IOException {
         range = deserializeRange(serializedRange);
+    }
+
+    @Override
+    protected RecyclePartitionInfoPB.Kind protoKind() {
+        return RecyclePartitionInfoPB.Kind.RECYCLE_RANGE_PARTITION_INFO;
+    }
+
+    @Override
+    protected void fillProtoVariant(RecyclePartitionInfoPB.Builder builder) throws IOException {
+        builder.setRange(RecycleRangePartitionInfoPB.newBuilder().setRange(ByteString.copyFrom(serializeRange(range))));
+    }
+
+    @Override
+    protected void fillFromVariantProto(RecyclePartitionInfoPB pb) throws IOException {
+        if (pb.hasRange()) {
+            range = deserializeRange(pb.getRange().getRange().toByteArray());
+        }
     }
 }

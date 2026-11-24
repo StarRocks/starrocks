@@ -27,6 +27,7 @@ import com.starrocks.catalog.Resource;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.DbsProcDir;
 import com.starrocks.common.proc.ExternalDbsProcDir;
@@ -43,11 +44,16 @@ import com.starrocks.credential.CredentialUtil;
 import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.CatalogPB;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -535,5 +541,29 @@ public class CatalogMgr {
         });
 
         loadResourceMappingCatalog();
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.CATALOG_MGR)) {
+            for (Map.Entry<String, Catalog> entry : catalogs.entrySet()) {
+                if (!isResourceMappingCatalog(entry.getKey())) {
+                    writer.writeEntry(entry.getValue().toProto());
+                }
+            }
+        }
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(Pair.create(SectionId.CATALOG_MGR, reader -> {
+            reader.readEntries(CatalogPB.parser(), pb -> {
+                Catalog catalog = Catalog.fromProto(pb);
+                try {
+                    replayCreateCatalog(catalog);
+                } catch (Exception e) {
+                    LOG.error("Failed to load catalog {}, ignore the error, continue load", catalog.getName(), e);
+                }
+            });
+            loadResourceMappingCatalog();
+        }));
     }
 }

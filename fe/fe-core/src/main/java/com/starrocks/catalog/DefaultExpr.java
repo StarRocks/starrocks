@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
+import com.starrocks.persist.proto.DefaultExprPB;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.expression.ArrayExpr;
 import com.starrocks.sql.ast.expression.CastExpr;
@@ -120,6 +121,37 @@ public class DefaultExpr implements GsonPreProcessable, GsonPostProcessable {
                 hasArguments = true;
             }
         }
+    }
+
+    /** Re-parses the persisted SQL into the expression object. Shared by the GSON hook and {@link #fromProto}. */
+    private void restoreExprObject() {
+        if (serializedExpr != null && !serializedExpr.isEmpty()) {
+            try {
+                exprObject = SqlParser.parseSqlToExpr(serializedExpr, SqlModeHelper.MODE_DEFAULT);
+            } catch (Exception e) {
+                LOG.warn("Failed to restore expr object from SQL: {}", serializedExpr, e);
+            }
+        }
+    }
+
+    public DefaultExprPB toProto() {
+        DefaultExprPB.Builder builder = DefaultExprPB.newBuilder().setHasArguments(hasArguments);
+        if (expr != null) {
+            builder.setExpr(expr);
+        }
+        // Same rule as gsonPreProcess: the live expression object wins over the SQL it was loaded from.
+        String sql = exprObject != null ? ExprToSql.toSql(exprObject) : serializedExpr;
+        if (sql != null) {
+            builder.setSerializedExpr(sql);
+        }
+        return builder.build();
+    }
+
+    public static DefaultExpr fromProto(DefaultExprPB pb) {
+        DefaultExpr defaultExpr = new DefaultExpr(pb.hasExpr() ? pb.getExpr() : null, pb.getHasArguments());
+        defaultExpr.serializedExpr = pb.hasSerializedExpr() ? pb.getSerializedExpr() : null;
+        defaultExpr.restoreExprObject();
+        return defaultExpr;
     }
 
     public static boolean isValidDefaultFunction(String expr) {

@@ -14,10 +14,21 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.image.ProtoDateTimes;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoLists;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.AnalyzeScheduleStatusPB;
+import com.starrocks.persist.proto.AnalyzeScheduleTypePB;
+import com.starrocks.persist.proto.AnalyzeStatusCorePB;
+import com.starrocks.persist.proto.AnalyzeStatusPB;
+import com.starrocks.persist.proto.AnalyzeTypePB;
+import com.starrocks.persist.proto.ExternalAnalyzeStatusPB;
 import com.starrocks.qe.ShowResultSet;
 
 import java.time.LocalDateTime;
@@ -229,4 +240,103 @@ public class ExternalAnalyzeStatus implements AnalyzeStatus, Writable {
         return new ShowResultSet(META_DATA, rows);
     }
 
+
+    @Override
+    public AnalyzeStatusPB toProto() {
+        AnalyzeStatusCorePB.Builder core = AnalyzeStatusCorePB.newBuilder();
+        core.setId(id);
+        if (columns != null) {
+            core.setColumns(ProtoLists.stringList(columns));
+        }
+        if (type != null) {
+            core.setType(ProtoEnums.toProto(type, AnalyzeTypePB.class, "ANALYZE_"));
+        }
+        if (scheduleType != null) {
+            core.setScheduleType(ProtoEnums.toProto(scheduleType, AnalyzeScheduleTypePB.class, "SCHEDULE_"));
+        }
+        if (properties != null) {
+            core.setProperties(ProtoMaps.toStringMapProto(properties));
+        }
+        if (status != null) {
+            core.setStatus(ProtoEnums.toProto(status, AnalyzeScheduleStatusPB.class, "STATUS_"));
+        }
+        if (startTime != null) {
+            core.setStartTime(ProtoDateTimes.toEpochSecond(startTime));
+        }
+        if (endTime != null) {
+            core.setEndTime(ProtoDateTimes.toEpochSecond(endTime));
+        }
+        if (reason != null) {
+            core.setReason(reason);
+        }
+        core.setProgress(progress);
+        ExternalAnalyzeStatusPB.Builder identity = ExternalAnalyzeStatusPB.newBuilder();
+        if (catalogName != null) {
+            identity.setCatalogName(catalogName);
+        }
+        if (dbName != null) {
+            identity.setDbName(dbName);
+        }
+        if (tableName != null) {
+            identity.setTableName(tableName);
+        }
+        if (tableUUID != null) {
+            identity.setTableUuid(tableUUID);
+        }
+        return AnalyzeStatusPB.newBuilder().setKind(AnalyzeStatusPB.Kind.EXTERNAL)
+                .setCore(core).setExternal(identity).build();
+    }
+
+    private ExternalAnalyzeStatus(AnalyzeStatusPB pb) {
+        Preconditions.checkArgument(pb.getKind() == AnalyzeStatusPB.Kind.EXTERNAL && pb.hasCore()
+                && pb.hasExternal(), "missing or mismatched ExternalAnalyzeStatus payload");
+        AnalyzeStatusCorePB core = pb.getCore();
+        if (core.hasId()) {
+            id = core.getId();
+        }
+        if (core.hasColumns()) {
+            columns = ProtoLists.toStrings(core.getColumns());
+        }
+        if (core.hasType()) {
+            type = ProtoEnums.fromProto(core.getType(), StatsConstants.AnalyzeType.class, "ANALYZE_");
+        }
+        if (core.hasScheduleType()) {
+            scheduleType = ProtoEnums.fromProto(core.getScheduleType(), StatsConstants.ScheduleType.class, "SCHEDULE_");
+        }
+        if (core.hasProperties()) {
+            properties = ProtoMaps.fromStringMapProto(core.getProperties());
+        }
+        if (core.hasStatus()) {
+            status = ProtoEnums.fromProto(core.getStatus(), StatsConstants.ScheduleStatus.class, "STATUS_");
+        }
+        if (core.hasStartTime()) {
+            startTime = ProtoDateTimes.fromEpochSecond(core.getStartTime());
+        }
+        if (core.hasEndTime()) {
+            endTime = ProtoDateTimes.fromEpochSecond(core.getEndTime());
+        }
+        if (core.hasReason()) {
+            reason = core.getReason();
+        }
+        if (core.hasProgress()) {
+            progress = core.getProgress();
+        }
+        ExternalAnalyzeStatusPB identity = pb.getExternal();
+        if (identity.hasCatalogName()) {
+            catalogName = identity.getCatalogName();
+        }
+        if (identity.hasDbName()) {
+            dbName = identity.getDbName();
+        }
+        if (identity.hasTableName()) {
+            tableName = identity.getTableName();
+        }
+        if (identity.hasTableUuid()) {
+            tableUUID = identity.getTableUuid();
+        }
+    }
+
+    public static ExternalAnalyzeStatus fromProto(AnalyzeStatusPB pb) {
+        return new ExternalAnalyzeStatus(pb);
+    }
 }

@@ -19,6 +19,9 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.lake.snapshot.ClusterSnapshotInfo;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.leader.MetaHelper;
+import com.starrocks.persist.ImageFiles;
+import com.starrocks.persist.ImageFormatVersion;
+import com.starrocks.persist.ImageLoader;
 import com.starrocks.persist.MetaCleaner;
 import com.starrocks.persist.Storage;
 import com.starrocks.rpc.ThriftConnectionPool;
@@ -33,6 +36,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 public abstract class CheckpointWorker extends FrontendDaemon {
@@ -45,6 +49,7 @@ public abstract class CheckpointWorker extends FrontendDaemon {
     protected GlobalStateMgr servingGlobalState;
     // every time we begin creating image, it will be reset
     protected ClusterSnapshotInfo clusterSnapshotInfo;
+    protected boolean writeV2 = true;
 
     public CheckpointWorker(String name, Journal journal) {
         super(name, 10 * 1000L);
@@ -57,6 +62,11 @@ public abstract class CheckpointWorker extends FrontendDaemon {
 
     public void setNextCheckpoint(long epoch, long journalId,
                                   boolean needClusterSnapshotInfo) throws CheckpointException {
+        setNextCheckpoint(epoch, journalId, needClusterSnapshotInfo, true);
+    }
+
+    public void setNextCheckpoint(long epoch, long journalId, boolean needClusterSnapshotInfo,
+                                  boolean writeV2) throws CheckpointException {
         if (servingGlobalState == null) {
             throw new CheckpointException("worker not initialize");
         }
@@ -69,9 +79,9 @@ public abstract class CheckpointWorker extends FrontendDaemon {
                     journalId, journal.getMaxJournalId()));
         }
 
-        nextPoint.set(new NextPoint(epoch, journalId, needClusterSnapshotInfo));
-        LOG.info("set next point to epoch:{}, journalId:{}, need cluster snapshot info:{} ",
-                 epoch, journalId, needClusterSnapshotInfo);
+        nextPoint.set(new NextPoint(epoch, journalId, needClusterSnapshotInfo, writeV2));
+        LOG.info("set next checkpoint epoch:{}, journalId:{}, snapshot:{}, writeV2:{}",
+                epoch, journalId, needClusterSnapshotInfo, writeV2);
     }
 
     @Override
@@ -91,11 +101,12 @@ public abstract class CheckpointWorker extends FrontendDaemon {
     }
 
     private void createImage(NextPoint np) {
-        if (!preCheckParamValid(np.epoch, np.journalId)) {
+        this.writeV2 = np.writeV2;
+        this.clusterSnapshotInfo = null;
+        if (!preCheckParamValid(np.epoch, np.journalId, np.needClusterSnapshotInfo)) {
             return;
         }
 
-        this.clusterSnapshotInfo = null;
         try {
             doCheckpoint(np.epoch, np.journalId, np.needClusterSnapshotInfo && isBelongToGlobalStateMgr()); // only used for globalstate
         } catch (Exception e) {
@@ -110,28 +121,41 @@ public abstract class CheckpointWorker extends FrontendDaemon {
     }
 
     protected boolean preCheckParamValid(long epoch, long journalId) {
-        if (journalId < getImageJournalId()) {
+        return preCheckParamValid(epoch, journalId, false);
+    }
+
+    private boolean preCheckParamValid(long epoch, long journalId, boolean needSnapshotInfo) {
+        if (epoch != servingGlobalState.getEpoch()) {
+            finishCheckpoint(epoch, journalId, false, "epoch outdated");
+            return false;
+        }
+        long currentId = getImageJournalId();
+        if (journalId < currentId) {
             finishCheckpoint(epoch, journalId, false, "journalId is too small");
             return false;
         }
-        if (journalId == getImageJournalId()) {
+        // Only FE checkpoints may need the same ID again to complete the image files or collect snapshot information.
+        // StarMgr retains its existing same-ID acknowledgement behavior.
+        boolean needsFeCheckpoint = isBelongToGlobalStateMgr()
+                && (needSnapshotInfo || !ImageFiles.isComplete(GlobalStateMgr.getImageDirPath(), journalId, writeV2));
+        if (journalId == currentId && !needsFeCheckpoint) {
             finishCheckpoint(epoch, journalId, true, "success");
-            return false;
-        }
-        if (epoch != servingGlobalState.getEpoch()) {
-            finishCheckpoint(epoch, journalId, false, "epoch outdated");
             return false;
         }
         return true;
     }
 
     private void cleanOldImages() {
-        String dirToClean = MetaHelper.getImageFileDir(isBelongToGlobalStateMgr());
-        MetaCleaner cleaner = new MetaCleaner(dirToClean);
-        try {
-            cleaner.clean();
-        } catch (IOException e) {
-            LOG.error("Delete old image file from dir {} fail.", dirToClean, e);
+        List<ImageFormatVersion> formats = isBelongToGlobalStateMgr()
+                ? ImageFiles.formats(writeV2) : List.of(ImageFormatVersion.v1);
+        for (ImageFormatVersion format : formats) {
+            String directory = isBelongToGlobalStateMgr()
+                    ? MetaHelper.getImageFileDir("", format) : MetaHelper.getImageFileDir(false);
+            try {
+                new MetaCleaner(directory).clean();
+            } catch (IOException e) {
+                LOG.error("Delete old image file from dir {} failed", directory, e);
+            }
         }
     }
 
@@ -183,8 +207,9 @@ public abstract class CheckpointWorker extends FrontendDaemon {
 
     private long getImageJournalId() {
         try {
-            Storage storage = new Storage(MetaHelper.getImageFileDir(isBelongToGlobalStateMgr()));
-            return storage.getImageJournalId();
+            return isBelongToGlobalStateMgr()
+                    ? new ImageLoader(GlobalStateMgr.getImageDirPath()).getImageJournalId()
+                    : new Storage(MetaHelper.getImageFileDir(false)).getImageJournalId();
         } catch (IOException e) {
             LOG.warn("get image journal id failed", e);
             return 0;
@@ -195,11 +220,14 @@ public abstract class CheckpointWorker extends FrontendDaemon {
         private final long epoch;
         private final long journalId;
         private final boolean needClusterSnapshotInfo;
+        private final boolean writeV2;
 
-        public NextPoint(long epoch, long journalId, boolean needClusterSnapshotInfo) {
+        public NextPoint(long epoch, long journalId, boolean needClusterSnapshotInfo,
+                         boolean writeV2) {
             this.epoch = epoch;
             this.journalId = journalId;
             this.needClusterSnapshotInfo = needClusterSnapshotInfo;
+            this.writeV2 = writeV2;
         }
     }
 }

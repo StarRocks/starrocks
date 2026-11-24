@@ -20,6 +20,9 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.DictionaryPB;
+import com.starrocks.persist.proto.StringListPB;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -449,4 +452,96 @@ public class Dictionary implements Writable {
     }
 
 
+
+    public DictionaryPB toProto() {
+        DictionaryPB.Builder builder = DictionaryPB.newBuilder();
+        builder.setDictionaryId(dictionaryId);
+        if (dictionaryName != null) {
+            builder.setDictionaryName(dictionaryName);
+        }
+        if (catalogName != null) {
+            builder.setCatalogName(catalogName);
+        }
+        if (dbName != null) {
+            builder.setDbName(dbName);
+        }
+        if (queryableObject != null) {
+            builder.setQueryableObject(queryableObject);
+        }
+        if (dictionaryKeys != null) {
+            builder.setDictionaryKeys(StringListPB.newBuilder().addAllValues(dictionaryKeys));
+        }
+        if (dictionaryValues != null) {
+            builder.setDictionaryValues(StringListPB.newBuilder().addAllValues(dictionaryValues));
+        }
+        if (nextSchedulableTime != null) {
+            builder.setNextSchedulableTime(nextSchedulableTime.get());
+        }
+        builder.setLastSuccessRefreshTime(lastSuccessRefreshTime);
+        builder.setLastSuccessFinishedTime(lastSuccessFinishedTime);
+        if (state != null) {
+            builder.setState(ProtoEnums.toProto(state, DictionaryPB.State.class));
+        }
+        if (stateBeforeRefresh != null) {
+            builder.setStateBeforeRefresh(ProtoEnums.toProto(stateBeforeRefresh, DictionaryPB.State.class));
+        }
+        if (runtimeErrMsg != null) {
+            builder.setRuntimeErrMsg(runtimeErrMsg);
+        }
+        builder.setLastSuccessVersion(lastSuccessVersion);
+        builder.setMemoryLimit(memoryLimit);
+        builder.setRefreshInterval(refreshInterval);
+        builder.setReadLatest(readLatest);
+        builder.setIgnoreFailedRefresh(ignoreFailedRefresh);
+        return builder.build();
+    }
+
+    public static Dictionary fromProto(DictionaryPB pb) {
+        Dictionary result = new Dictionary();
+        result.dictionaryId = pb.getDictionaryId();
+        if (pb.hasDictionaryName()) {
+            result.dictionaryName = pb.getDictionaryName();
+        }
+        if (pb.hasCatalogName()) {
+            result.catalogName = pb.getCatalogName();
+        }
+        if (pb.hasDbName()) {
+            result.dbName = pb.getDbName();
+        }
+        if (pb.hasQueryableObject()) {
+            result.queryableObject = pb.getQueryableObject();
+        }
+        if (pb.hasDictionaryKeys()) {
+            result.dictionaryKeys = new ArrayList<>(pb.getDictionaryKeys().getValuesList());
+        }
+        if (pb.hasDictionaryValues()) {
+            result.dictionaryValues = new ArrayList<>(pb.getDictionaryValues().getValuesList());
+        }
+        if (pb.hasNextSchedulableTime()) {
+            result.nextSchedulableTime.set(pb.getNextSchedulableTime());
+        }
+        result.lastSuccessRefreshTime = pb.getLastSuccessRefreshTime();
+        result.lastSuccessFinishedTime = pb.getLastSuccessFinishedTime();
+        if (pb.hasState()) {
+            result.state = pb.getState() == DictionaryPB.State.UNRECOGNIZED
+                    || pb.getState() == DictionaryPB.State.UNSPECIFIED ? null
+                    : ProtoEnums.fromProto(pb.getState(), DictionaryState.class);
+        }
+        if (pb.hasStateBeforeRefresh()) {
+            result.stateBeforeRefresh = pb.getStateBeforeRefresh() == DictionaryPB.State.UNRECOGNIZED
+                    || pb.getStateBeforeRefresh() == DictionaryPB.State.UNSPECIFIED ? null
+                    : ProtoEnums.fromProto(pb.getStateBeforeRefresh(), DictionaryState.class);
+        }
+        if (pb.hasRuntimeErrMsg()) {
+            result.runtimeErrMsg = pb.getRuntimeErrMsg();
+        }
+        result.lastSuccessVersion = pb.getLastSuccessVersion();
+        if (pb.hasMemoryLimit()) {
+            result.memoryLimit = pb.getMemoryLimit();
+        }
+        result.refreshInterval = pb.getRefreshInterval();
+        result.readLatest = pb.getReadLatest();
+        result.ignoreFailedRefresh = pb.getIgnoreFailedRefresh();
+        return result;
+    }
 }

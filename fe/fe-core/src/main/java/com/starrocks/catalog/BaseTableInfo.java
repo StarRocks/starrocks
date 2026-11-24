@@ -19,6 +19,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.BaseTableInfoPB;
 import com.starrocks.server.CatalogMgr;
 import org.apache.commons.lang3.StringUtils;
 
@@ -68,6 +69,33 @@ public class BaseTableInfo {
         this.dbName = dbName;
         this.tableName = tableName;
         this.tableIdentifier = tableIdentifier;
+    }
+
+    public BaseTableInfoPB toProto() {
+        BaseTableInfoPB.Builder builder = BaseTableInfoPB.newBuilder().setDbId(dbId).setTableId(tableId);
+        if (catalogName != null) {
+            builder.setCatalogName(catalogName);
+        }
+        if (dbName != null) {
+            builder.setDbName(dbName);
+        }
+        if (tableIdentifier != null) {
+            builder.setTableIdentifier(tableIdentifier);
+        }
+        if (tableName != null) {
+            builder.setTableName(tableName);
+        }
+        return builder.build();
+    }
+
+    public static BaseTableInfo fromProto(BaseTableInfoPB pb) {
+        // catalogName is final, so it goes through the constructor that takes it verbatim; the ids follow.
+        BaseTableInfo info = new BaseTableInfo(pb.hasCatalogName() ? pb.getCatalogName() : null,
+                pb.hasDbName() ? pb.getDbName() : null, pb.hasTableName() ? pb.getTableName() : null,
+                pb.hasTableIdentifier() ? pb.getTableIdentifier() : null);
+        info.dbId = pb.getDbId();
+        info.tableId = pb.getTableId();
+        return info;
     }
 
     public String getTableInfoStr() {

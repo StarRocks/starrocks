@@ -44,6 +44,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageInfo;
+import com.starrocks.persist.proto.AbstractJobPB;
+import com.starrocks.persist.proto.LakeRestoreJobPB;
 import com.starrocks.proto.RestoreInfo;
 import com.starrocks.proto.RestoreSnapshotsRequest;
 import com.starrocks.proto.RestoreSnapshotsResponse;
@@ -310,5 +312,16 @@ public class LakeRestoreJob extends RestoreJob {
             return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
         }
         return Status.OK;
+    }
+
+    @Override
+    protected void fillProtoVariant(AbstractJobPB.Builder builder) {
+        builder.setKind(AbstractJobPB.Kind.LAKE_RESTORE_JOB)
+                .setLakeRestoreJob(LakeRestoreJobPB.newBuilder().setCore(toRestoreJobCoreProto()));
+    }
+
+    @Override
+    protected void fillFromVariantProto(AbstractJobPB pb) {
+        fillFromRestoreJobCoreProto(pb.getLakeRestoreJob().getCore());
     }
 }

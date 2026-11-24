@@ -22,6 +22,7 @@ import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.persist.proto.TablePrivilegeObjectPB;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -318,5 +319,34 @@ public class TablePEntryObject implements PEntryObject {
     @Override
     public String toString() {
         return toStringImpl("TABLES");
+    }
+
+    public TablePrivilegeObjectPB toProto() {
+        TablePrivilegeObjectPB.Builder builder = TablePrivilegeObjectPB.newBuilder();
+        builder.setCatalogId(catalogId);
+        if (databaseUUID != null) {
+            builder.setDatabaseUuid(databaseUUID);
+        }
+        if (tableUUID != null) {
+            builder.setTableUuid(tableUUID);
+        }
+        return builder.build();
+    }
+
+    // A protobuf constructor leaves the existing GSON construction path unchanged.
+    protected TablePEntryObject(TablePrivilegeObjectPB pb) {
+        if (pb.hasCatalogId()) {
+            catalogId = pb.getCatalogId();
+        }
+        if (pb.hasDatabaseUuid()) {
+            databaseUUID = pb.getDatabaseUuid();
+        }
+        if (pb.hasTableUuid()) {
+            tableUUID = pb.getTableUuid();
+        }
+    }
+
+    public static TablePEntryObject fromProto(TablePrivilegeObjectPB pb) {
+        return new TablePEntryObject(pb);
     }
 }

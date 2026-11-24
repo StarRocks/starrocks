@@ -99,6 +99,15 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.ColocatePersistInfo;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.AbstractJobPB;
+import com.starrocks.persist.proto.BackupColocateListPB;
+import com.starrocks.persist.proto.BackupTableListPB;
+import com.starrocks.persist.proto.RestoreJobCorePB;
+import com.starrocks.persist.proto.RestoreJobPB;
+import com.starrocks.persist.proto.RestoreSnapshotsPB;
+import com.starrocks.persist.proto.RestoredPartitionsPB;
+import com.starrocks.persist.proto.RestoredVersionsPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -126,6 +135,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -2422,5 +2432,157 @@ public class RestoreJob extends AbstractJob {
         sb.append(", backup ts: ").append(backupTimestamp);
         sb.append(", state: ").append(state.name());
         return sb.toString();
+    }
+
+    protected RestoreJobCorePB toRestoreJobCoreProto() {
+        RestoreJobCorePB.Builder builder = RestoreJobCorePB.newBuilder();
+        if (backupTimestamp != null) {
+            builder.setBackupTimestamp(backupTimestamp);
+        }
+        if (jobInfo != null) {
+            builder.setJobInfo(jobInfo.toProto());
+        }
+        builder.setAllowLoad(allowLoad);
+        if (state != null) {
+            builder.setState(ProtoEnums.toProto(state, RestoreJobCorePB.RestoreJobState.class));
+        }
+        if (backupMeta != null) {
+            builder.setBackupMeta(backupMeta.toProto());
+        }
+        if (fileMapping != null) {
+            builder.setFileMapping(fileMapping.toProto());
+        }
+        builder.setMetaPreparedTime(metaPreparedTime);
+        builder.setSnapshotFinishedTime(snapshotFinishedTime);
+        builder.setDownloadFinishedTime(downloadFinishedTime);
+        builder.setRestoreReplicationNum(restoreReplicationNum);
+        if (restoredPartitions != null) {
+            builder.setRestoredPartitions(RestoredPartitionsPB.newBuilder().addAllValues(restoredPartitions.stream()
+                    .map(pair -> RestoredPartitionsPB.Entry.newBuilder().setTableName(pair.first)
+                        .setPartition(pair.second.toProto()).build()).collect(Collectors.toList())).build());
+        }
+        if (restoredTbls != null) {
+            builder.setRestoredTbls(BackupTableListPB.newBuilder().addAllValues(restoredTbls.stream()
+                    .map(BackupCatalogProtos::toProto).collect(Collectors.toList())).build());
+        }
+        if (restoredVersionInfo != null) {
+            builder.setRestoredVersionInfo(restoredVersionsToProto());
+        }
+        if (snapshotInfos != null) {
+            builder.setSnapshotInfos(restoreSnapshotsToProto());
+        }
+        if (colocatePersistInfos != null) {
+            builder.setColocatePersistInfos(BackupColocateListPB.newBuilder().addAllValues(colocatePersistInfos.stream()
+                    .map(ColocatePersistInfo::toProto).collect(Collectors.toList())).build());
+        }
+        return builder.build();
+    }
+
+    protected void fillFromRestoreJobCoreProto(RestoreJobCorePB pb) {
+        if (pb.hasBackupTimestamp()) {
+            backupTimestamp = pb.getBackupTimestamp();
+        } else {
+            backupTimestamp = null;
+        }
+        if (pb.hasJobInfo()) {
+            jobInfo = BackupJobInfo.fromProto(pb.getJobInfo());
+        } else {
+            jobInfo = null;
+        }
+        if (pb.hasAllowLoad()) {
+            allowLoad = pb.getAllowLoad();
+        }
+        if (pb.hasState()) {
+            state = ProtoEnums.fromProto(pb.getState(), RestoreJobState.class);
+        } else {
+            state = null;
+        }
+        if (pb.hasBackupMeta()) {
+            backupMeta = BackupMeta.fromProto(pb.getBackupMeta());
+        } else {
+            backupMeta = null;
+        }
+        if (pb.hasFileMapping()) {
+            fileMapping = RestoreFileMapping.fromProto(pb.getFileMapping());
+        }
+        if (pb.hasMetaPreparedTime()) {
+            metaPreparedTime = pb.getMetaPreparedTime();
+        }
+        if (pb.hasSnapshotFinishedTime()) {
+            snapshotFinishedTime = pb.getSnapshotFinishedTime();
+        }
+        if (pb.hasDownloadFinishedTime()) {
+            downloadFinishedTime = pb.getDownloadFinishedTime();
+        }
+        if (pb.hasRestoreReplicationNum()) {
+            restoreReplicationNum = pb.getRestoreReplicationNum();
+        }
+        if (pb.hasRestoredPartitions()) {
+            restoredPartitions = pb.getRestoredPartitions().getValuesList().stream()
+                    .map(entry -> Pair.create(entry.getTableName(), Partition.fromProto(entry.getPartition())))
+                    .collect(Collectors.toList());
+        } else {
+            restoredPartitions = null;
+        }
+        if (pb.hasRestoredTbls()) {
+            restoredTbls = pb.getRestoredTbls().getValuesList().stream()
+                    .map(BackupCatalogProtos::fromProto).collect(Collectors.toList());
+        } else {
+            restoredTbls = null;
+        }
+        if (pb.hasRestoredVersionInfo()) {
+            restoredVersionInfo = restoredVersionsFromProto(pb.getRestoredVersionInfo());
+        } else {
+            restoredVersionInfo = null;
+        }
+        if (pb.hasSnapshotInfos()) {
+            snapshotInfos = restoreSnapshotsFromProto(pb.getSnapshotInfos());
+        } else {
+            snapshotInfos = null;
+        }
+        if (pb.hasColocatePersistInfos()) {
+            colocatePersistInfos = pb.getColocatePersistInfos().getValuesList().stream()
+                    .map(ColocatePersistInfo::fromProto).collect(Collectors.toCollection(ArrayList::new));
+        } else {
+            colocatePersistInfos = null;
+        }
+    }
+
+    private RestoredVersionsPB restoredVersionsToProto() {
+        RestoredVersionsPB.Builder builder = RestoredVersionsPB.newBuilder();
+        restoredVersionInfo.cellSet().forEach(cell -> builder.addCells(RestoredVersionsPB.Cell.newBuilder()
+                .setTableId(cell.getRowKey()).setPartitionId(cell.getColumnKey()).setVersion(cell.getValue())));
+        return builder.build();
+    }
+
+    private static com.google.common.collect.Table<Long, Long, Long> restoredVersionsFromProto(RestoredVersionsPB pb) {
+        com.google.common.collect.Table<Long, Long, Long> table = HashBasedTable.create();
+        pb.getCellsList().forEach(cell -> table.put(cell.getTableId(), cell.getPartitionId(), cell.getVersion()));
+        return table;
+    }
+
+    private RestoreSnapshotsPB restoreSnapshotsToProto() {
+        RestoreSnapshotsPB.Builder builder = RestoreSnapshotsPB.newBuilder();
+        snapshotInfos.cellSet().forEach(cell -> builder.addCells(RestoreSnapshotsPB.Cell.newBuilder()
+                .setTabletId(cell.getRowKey()).setBackendId(cell.getColumnKey()).setSnapshot(cell.getValue().toProto())));
+        return builder.build();
+    }
+
+    private static com.google.common.collect.Table<Long, Long, SnapshotInfo> restoreSnapshotsFromProto(RestoreSnapshotsPB pb) {
+        com.google.common.collect.Table<Long, Long, SnapshotInfo> table = HashBasedTable.create();
+        pb.getCellsList().forEach(cell -> table.put(cell.getTabletId(), cell.getBackendId(),
+                SnapshotInfo.fromProto(cell.getSnapshot())));
+        return table;
+    }
+
+    @Override
+    protected void fillProtoVariant(AbstractJobPB.Builder builder) {
+        builder.setKind(AbstractJobPB.Kind.RESTORE_JOB)
+                .setRestoreJob(RestoreJobPB.newBuilder().setCore(toRestoreJobCoreProto()));
+    }
+
+    @Override
+    protected void fillFromVariantProto(AbstractJobPB pb) {
+        fillFromRestoreJobCoreProto(pb.getRestoreJob().getCore());
     }
 }

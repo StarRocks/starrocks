@@ -16,6 +16,8 @@ package com.starrocks.transaction;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.load.loadv2.IVMRefreshCommitInfo;
+import com.starrocks.persist.proto.InsertTxnCommitAttachmentPB;
+import com.starrocks.persist.proto.TxnCommitAttachmentPB;
 
 public class InsertTxnCommitAttachment extends TxnCommitAttachment {
     @SerializedName("loadedRows")
@@ -103,5 +105,43 @@ public class InsertTxnCommitAttachment extends TxnCommitAttachment {
 
     public boolean getRequireEmptyPartitions() {
         return requireEmptyPartitions;
+    }
+
+    @Override
+    protected void fillFromVariantProto(TxnCommitAttachmentPB parent) {
+        InsertTxnCommitAttachmentPB pb = parent.getInsert();
+        if (pb.hasLoadedRows()) {
+            loadedRows = pb.getLoadedRows();
+        }
+        if (pb.hasIsVersionOverwrite()) {
+            isVersionOverwrite = pb.getIsVersionOverwrite();
+        }
+        if (pb.hasPartitionVersion()) {
+            partitionVersion = pb.getPartitionVersion();
+        }
+        if (pb.hasShadowRewriteWatershedTxnId()) {
+            shadowRewriteWatershedTxnId = pb.getShadowRewriteWatershedTxnId();
+        }
+        if (pb.hasShadowRewriteAlterVersion()) {
+            shadowRewriteAlterVersion = pb.getShadowRewriteAlterVersion();
+        }
+        ivmRefreshCommitInfo = pb.hasIvmRefreshCommitInfo()
+                ? IVMRefreshCommitInfo.fromProto(pb.getIvmRefreshCommitInfo()) : null;
+        requireEmptyPartitions = pb.getRequireEmptyPartitions();
+    }
+
+    @Override
+    protected void fillProtoVariant(TxnCommitAttachmentPB.Builder parent) {
+        InsertTxnCommitAttachmentPB.Builder builder = InsertTxnCommitAttachmentPB.newBuilder();
+        builder.setLoadedRows(loadedRows);
+        builder.setIsVersionOverwrite(isVersionOverwrite);
+        builder.setPartitionVersion(partitionVersion);
+        builder.setShadowRewriteWatershedTxnId(shadowRewriteWatershedTxnId);
+        builder.setShadowRewriteAlterVersion(shadowRewriteAlterVersion);
+        builder.setRequireEmptyPartitions(requireEmptyPartitions);
+        if (ivmRefreshCommitInfo != null) {
+            builder.setIvmRefreshCommitInfo(ivmRefreshCommitInfo.toProto());
+        }
+        parent.setKind(TxnCommitAttachmentPB.Kind.INSERT).setInsert(builder);
     }
 }

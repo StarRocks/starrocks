@@ -15,6 +15,11 @@
 package com.starrocks.statistic;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.image.ProtoDateTimes;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoLists;
+import com.starrocks.persist.proto.AnalyzeTypePB;
+import com.starrocks.persist.proto.ColumnStatsMetaPB;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -181,5 +186,48 @@ public class ColumnStatsMeta {
     @Override
     public int hashCode() {
         return Objects.hash(columnName, type);
+    }
+
+    public ColumnStatsMetaPB toProto() {
+        ColumnStatsMetaPB.Builder builder = ColumnStatsMetaPB.newBuilder();
+        if (columnName != null) {
+            builder.setColumnName(columnName);
+        }
+        if (type != null) {
+            builder.setType(ProtoEnums.toProto(type, AnalyzeTypePB.class, "ANALYZE_"));
+        }
+        if (updateTime != null) {
+            builder.setUpdateTime(ProtoDateTimes.toEpochSecond(updateTime));
+        }
+        if (sampledPartitionsHashValue != null) {
+            builder.setSampledPartitionsHashValue(ProtoLists.int64List(sampledPartitionsHashValue));
+        }
+        builder.setAllPartitionSize(allPartitionSize);
+        builder.setRequestedPartitionCount(requestedPartitionCount);
+        return builder.build();
+    }
+
+    // A protobuf constructor leaves the existing GSON construction path unchanged.
+    private ColumnStatsMeta(ColumnStatsMetaPB pb) {
+        requestedPartitionCount = pb.getRequestedPartitionCount();
+        if (pb.hasColumnName()) {
+            columnName = pb.getColumnName();
+        }
+        if (pb.hasType()) {
+            type = ProtoEnums.fromProto(pb.getType(), StatsConstants.AnalyzeType.class, "ANALYZE_");
+        }
+        if (pb.hasUpdateTime()) {
+            updateTime = ProtoDateTimes.fromEpochSecond(pb.getUpdateTime());
+        }
+        if (pb.hasSampledPartitionsHashValue()) {
+            sampledPartitionsHashValue = new HashSet<>(ProtoLists.toLongs(pb.getSampledPartitionsHashValue()));
+        }
+        if (pb.hasAllPartitionSize()) {
+            allPartitionSize = pb.getAllPartitionSize();
+        }
+    }
+
+    public static ColumnStatsMeta fromProto(ColumnStatsMetaPB pb) {
+        return new ColumnStatsMeta(pb);
     }
 }

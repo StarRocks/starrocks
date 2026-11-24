@@ -20,6 +20,8 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletRange;
+import com.starrocks.persist.proto.LakeTabletPB;
+import com.starrocks.persist.proto.TabletPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -111,6 +113,23 @@ public class LakeTablet extends Tablet {
 
     public LakeTablet(long id, TabletRange range) {
         super(id, range);
+    }
+
+    @Override
+    protected void fillProtoVariant(TabletPB.Builder builder) {
+        builder.setKind(TabletPB.Kind.LAKE).setLake(LakeTabletPB.newBuilder()
+                .setDataSize(dataSize)
+                .setRowCount(rowCount)
+                .setDataSizeUpdateTime(dataSizeUpdateTime)
+                .setVectorIndexBuiltVersion(vectorIndexBuiltVersion));
+    }
+
+    // Public because Tablet.fromProto, in another package, dispatches to it.
+    public void fillFromVariantProto(LakeTabletPB pb) {
+        dataSize = pb.getDataSize();
+        rowCount = pb.getRowCount();
+        dataSizeUpdateTime = pb.getDataSizeUpdateTime();
+        vectorIndexBuiltVersion = pb.getVectorIndexBuiltVersion();
     }
 
     public long getShardId() {

@@ -46,6 +46,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.util.LogBuilder;
@@ -60,11 +61,19 @@ import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.image.ImageFormatException;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionReader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.LoadJobPB;
+import com.starrocks.persist.proto.LoadMgrPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
@@ -875,6 +884,14 @@ public class LoadMgr implements MemoryTrackable {
         });
     }
 
+    private void loadJob(LoadJob loadJob, long now) {
+        if (isJobExpired(loadJob, now)) {
+            LOG.info("discard expired job: {}", loadJob);
+            return;
+        }
+        putLoadJob(loadJob);
+    }
+
     public Map<Long, WarehouseLoadStatusInfo> getWarehouseLoadInfo() {
         readLock();
         try {
@@ -934,5 +951,30 @@ public class LoadMgr implements MemoryTrackable {
             readUnlock();
         }
         return result;
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.LOAD_MGR)) {
+            writer.writeManager(LoadMgrPB.getDefaultInstance());
+            for (LoadJob job : idToLoadJob.values()) {
+                if (needSave(job)) {
+                    writer.writeEntry(job.toProto());
+                }
+            }
+        }
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(Pair.create(SectionId.LOAD_MGR, this::loadSection));
+    }
+
+    private void loadSection(SectionReader reader) throws IOException {
+        reader.readManager(LoadMgrPB.parser());
+        long now = System.currentTimeMillis();
+        try {
+            reader.readEntries(LoadJobPB.parser(), pb -> loadJob(LoadJob.fromProto(pb), now));
+        } catch (IllegalArgumentException | IllegalStateException | NullPointerException e) {
+            throw new ImageFormatException("invalid LOAD_MGR entry", e);
+        }
     }
 }

@@ -17,6 +17,8 @@ package com.starrocks.statistic;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.persist.image.ProtoKinds;
+import com.starrocks.persist.proto.AnalyzeStatusPB;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.type.TypeFactory;
@@ -87,4 +89,18 @@ public interface AnalyzeStatus {
     void setProgress(long progress);
 
     ShowResultSet toShowResult();
+
+    AnalyzeStatusPB toProto();
+
+    static AnalyzeStatus fromProto(AnalyzeStatusPB pb) {
+        ProtoKinds.checkKnown(pb.getKind(), pb.getKindValue());
+        switch (pb.getKind()) {
+            case NATIVE:
+                return NativeAnalyzeStatus.fromProto(pb);
+            case EXTERNAL:
+                return ExternalAnalyzeStatus.fromProto(pb);
+            default:
+                throw new IllegalArgumentException("missing AnalyzeStatus kind");
+        }
+    }
 }

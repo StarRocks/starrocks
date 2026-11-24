@@ -19,6 +19,8 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.FunctionPB;
+import com.starrocks.persist.proto.SqlFunctionPB;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.type.Type;
@@ -32,6 +34,23 @@ public class SqlFunction extends Function {
     public SqlFunction(FunctionName name, Type[] argTypes, Type retType, String[] argNames, String sql) {
         super(name, argTypes, argNames, retType, false);
         this.sql = sql;
+    }
+
+    @Override
+    protected void fillProtoVariant(FunctionPB.Builder builder) {
+        SqlFunctionPB.Builder sqlFunction = SqlFunctionPB.newBuilder();
+        if (sql != null) {
+            sqlFunction.setSql(sql);
+        }
+        builder.setKind(FunctionPB.Kind.SQL).setSql(sqlFunction);
+    }
+
+    /**
+     * {@code sql} is final, so the instance has to come from the constructor; the caller fills the base-class
+     * fields afterwards.
+     */
+    static SqlFunction fromVariantProto(SqlFunctionPB pb) {
+        return new SqlFunction(null, null, null, null, pb.hasSql() ? pb.getSql() : null);
     }
 
     public void setAnalyzeExpr(Expr analyzeExpr) {

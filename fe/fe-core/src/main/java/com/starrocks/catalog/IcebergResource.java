@@ -23,6 +23,9 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.persist.AlterResourceInfo;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.IcebergResourcePB;
+import com.starrocks.persist.proto.ResourcePB;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -188,5 +191,32 @@ public class IcebergResource extends Resource {
         if (info.getCatalogImpl() != null) {
             this.catalogImpl = info.getCatalogImpl();
         }
+    }
+
+    @Override
+    protected void fillProtoVariant(ResourcePB.Builder builder) {
+        IcebergResourcePB.Builder variant = IcebergResourcePB.newBuilder();
+        if (catalogType != null) {
+            variant.setCatalogType(catalogType);
+        }
+        if (metastoreURIs != null) {
+            variant.setMetastoreUris(metastoreURIs);
+        }
+        if (catalogImpl != null) {
+            variant.setCatalogImpl(catalogImpl);
+        }
+        if (properties != null) {
+            variant.setProperties(ProtoMaps.toStringMapProto(properties));
+        }
+        builder.setKind(ResourcePB.Kind.ICEBERG_RESOURCE).setIcebergResource(variant);
+    }
+
+    @Override
+    protected void fillFromVariantProto(ResourcePB pb) {
+        IcebergResourcePB variant = pb.getIcebergResource();
+        catalogType = variant.hasCatalogType() ? variant.getCatalogType() : null;
+        metastoreURIs = variant.hasMetastoreUris() ? variant.getMetastoreUris() : null;
+        catalogImpl = variant.hasCatalogImpl() ? variant.getCatalogImpl() : null;
+        properties = variant.hasProperties() ? ProtoMaps.fromStringMapProto(variant.getProperties()) : null;
     }
 }

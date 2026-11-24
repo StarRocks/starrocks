@@ -43,7 +43,9 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.leader.MetaHelper;
+import com.starrocks.persist.ImageFiles;
 import com.starrocks.persist.ImageFormatVersion;
+import com.starrocks.persist.ImageLoader;
 import com.starrocks.persist.MetaCleaner;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
@@ -69,6 +71,13 @@ public class MetaService {
     private static final Logger LOG = LogManager.getLogger(MetaService.class);
 
     public static final int DOWNLOAD_TIMEOUT_SECOND = 10;
+
+    private static void checkImageFormat(String subDir, ImageFormatVersion format) {
+        if (!Strings.isNullOrEmpty(subDir)
+                && (!StarMgrServer.IMAGE_SUBDIR.equals(subDir) || format != ImageFormatVersion.v1)) {
+            throw new IllegalArgumentException("unsupported image directory/format: " + subDir + "/" + format);
+        }
+    }
 
     public static class ImageAction extends MetaBaseAction {
         private static final String VERSION = "version";
@@ -100,8 +109,15 @@ public class MetaService {
 
             ImageFormatVersion imageFormatVersion = ImageFormatVersion.v1;
             String imageFormatStr = request.getSingleParameter(IMAGE_FORMAT_VERSION);
-            if (!Strings.isNullOrEmpty(imageFormatStr)) {
-                imageFormatVersion = ImageFormatVersion.valueOf(imageFormatStr);
+            try {
+                if (!Strings.isNullOrEmpty(imageFormatStr)) {
+                    imageFormatVersion = ImageFormatVersion.valueOf(imageFormatStr);
+                }
+                checkImageFormat(subDirStr, imageFormatVersion);
+            } catch (IllegalArgumentException e) {
+                response.appendContent(e.getMessage());
+                writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
+                return;
             }
 
             File realDir = new File(MetaHelper.getImageFileDir(subDirStr, imageFormatVersion));
@@ -153,8 +169,8 @@ public class MetaService {
             try {
                 StorageInfo storageInfo;
                 if (Strings.isNullOrEmpty(subDirStr)) {
-                    Storage storage = new Storage(MetaHelper.getImageFileDir(true));
-                    storageInfo = new StorageInfo(storage.getImageJournalId(), ImageFormatVersion.v2);
+                    ImageLoader loader = new ImageLoader(GlobalStateMgr.getImageDirPath());
+                    storageInfo = new StorageInfo(loader.getImageJournalId(), loader.getImageFormatVersion());
                 } else {
                     Storage storage = new Storage(MetaHelper.getImageFileDir(false));
                     storageInfo = new StorageInfo(storage.getImageJournalId(), ImageFormatVersion.v1);
@@ -262,8 +278,19 @@ public class MetaService {
 
             String formatStr = request.getSingleParameter(IMAGE_FORMAT_VERSION);
             ImageFormatVersion imageFormatVersion = ImageFormatVersion.v1;
-            if (!Strings.isNullOrEmpty(formatStr)) {
-                imageFormatVersion = ImageFormatVersion.valueOf(formatStr);
+            try {
+                if (!Strings.isNullOrEmpty(formatStr)) {
+                    imageFormatVersion = ImageFormatVersion.valueOf(formatStr);
+                }
+                checkImageFormat(subDirStr, imageFormatVersion);
+            } catch (IllegalArgumentException e) {
+                response.appendContent(e.getMessage());
+                writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
+                return;
+            }
+            if (version < 0) {
+                writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
+                return;
             }
 
             String url = "http://" + NetUtils.getHostPortInAccessibleFormat(machine, Integer.parseInt(portStr)) + 
@@ -275,10 +302,11 @@ public class MetaService {
             String realDir = MetaHelper.getImageFileDir(subDirStr, imageFormatVersion);
             File dir = new File(realDir);
             try {
-                if (Files.exists(Path.of(realDir + "/" + filename))) {
+                if (ImageFiles.isValid(Path.of(realDir, filename), imageFormatVersion, version)) {
                     LOG.info("image file : {} version: {} already exists, ignore", filename, imageFormatVersion);
                 } else {
-                    MetaHelper.downloadImageFile(url, DOWNLOAD_TIMEOUT_SECOND * 1000, versionStr, dir);
+                    MetaHelper.downloadImageFile(url, DOWNLOAD_TIMEOUT_SECOND * 1000, versionStr, dir,
+                            imageFormatVersion, null);
                 }
                 writeResponse(request, response);
             } catch (FileNotFoundException e) {
@@ -293,7 +321,8 @@ public class MetaService {
 
             String forGlobalState = request.getSingleParameter(FOR_GLOBAL_STATE);
             if (Strings.isNullOrEmpty(forGlobalState) || "true".equals(forGlobalState)) {
-                GlobalStateMgr.getCurrentState().setImageJournalId(version);
+                GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+                state.setImageJournalId(Math.max(state.getImageJournalId(), version));
             }
 
             // Delete old image files
@@ -445,7 +474,9 @@ public class MetaService {
             // TODO: Still need to lock ClusterInfoService to prevent add or drop Backends
             String dumpFilePath = GlobalStateMgr.getCurrentState().dumpImage();
             if (dumpFilePath == null) {
-                response.appendContent("dump failed. " + dumpFilePath);
+                response.appendContent("dump failed");
+                writeResponse(request, response, HttpResponseStatus.INTERNAL_SERVER_ERROR);
+                return;
             }
 
             response.appendContent("dump finished. " + dumpFilePath);

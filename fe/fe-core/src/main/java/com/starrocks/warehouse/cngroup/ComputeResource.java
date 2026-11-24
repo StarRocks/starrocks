@@ -14,6 +14,9 @@
 
 package com.starrocks.warehouse.cngroup;
 
+import com.starrocks.persist.image.ProtoKinds;
+import com.starrocks.persist.proto.ComputeResourcePB;
+
 /**
  * ComputeResource is a resource acquired from warehouse, t can be a warehouse or a cngroup resource of warehouse which is to
  * represent the resource that can be used for compute.
@@ -31,4 +34,19 @@ public interface ComputeResource {
      * @return: the id of the worker group
      */
     long getWorkerGroupId();
+
+    /** Image v3 form. Only the registered implementations can be persisted. */
+    default ComputeResourcePB toProto() {
+        throw new IllegalStateException("compute resource " + getClass().getName() + " cannot be persisted");
+    }
+
+    static ComputeResource fromProto(ComputeResourcePB pb) {
+        ProtoKinds.checkKnown(pb.getKind(), pb.getKindValue());
+        switch (pb.getKind()) {
+            case WAREHOUSE:
+                return WarehouseComputeResource.fromProto(pb.getWarehouse());
+            default:
+                throw new IllegalArgumentException("unknown compute resource kind " + pb.getKind());
+        }
+    }
 }

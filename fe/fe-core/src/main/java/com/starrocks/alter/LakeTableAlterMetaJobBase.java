@@ -39,6 +39,8 @@ import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.mv.MVRepairHandler.PartitionRepairInfo;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.LakeTableAlterMetaJobCorePB;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.proto.VectorIndexBuildInfoPB;
@@ -916,5 +918,22 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
 
         GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(db, table, partitionRepairInfos);
+    }
+
+    /** Image v3 form of the fields of this layer, embedded by every subclass. */
+    protected LakeTableAlterMetaJobCorePB toLakeTableAlterMetaJobCoreProto() {
+        return LakeTableAlterMetaJobCorePB.newBuilder()
+                .setWatershedTxnId(watershedTxnId)
+                .setWatershedGtid(commitGtid)
+                .addAllPartitionIndexes(AlterJobProtos.toPartitionIndexProtos(physicalPartitionIndexMap))
+                .putAllCommitVersionMap(ProtoMaps.withoutNullValues(commitVersionMap))
+                .build();
+    }
+
+    protected void fillFromLakeTableAlterMetaJobCoreProto(LakeTableAlterMetaJobCorePB pb) {
+        watershedTxnId = pb.getWatershedTxnId();
+        commitGtid = pb.getWatershedGtid();
+        physicalPartitionIndexMap = AlterJobProtos.partitionIndexesFromProto(pb.getPartitionIndexesList());
+        commitVersionMap = new HashMap<>(pb.getCommitVersionMapMap());
     }
 }

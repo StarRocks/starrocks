@@ -48,6 +48,13 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CredentialMask;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoKinds;
+import com.starrocks.persist.proto.CloudConfigurationPB;
+import com.starrocks.persist.proto.FunctionCorePB;
+import com.starrocks.persist.proto.FunctionPB;
+import com.starrocks.persist.proto.HdfsURIPB;
+import com.starrocks.persist.proto.StringListPB;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.sql.ast.expression.Expr;
@@ -59,6 +66,7 @@ import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.type.AggStateDesc;
 import com.starrocks.type.InvalidType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeProtoConverter;
 import com.starrocks.type.TypeSerializer;
 import org.apache.commons.lang.ArrayUtils;
 
@@ -256,6 +264,111 @@ public class Function implements Writable {
         aggStateDesc = other.aggStateDesc;
         inputType = other.inputType;
         cloudConfiguration = other.cloudConfiguration;
+    }
+
+    /**
+     * Image v3 form: the base-class fields go into the core message, the concrete class fills its variant.
+     */
+    public FunctionPB toProto() {
+        FunctionPB.Builder builder = FunctionPB.newBuilder().setCore(toCoreProto());
+        fillProtoVariant(builder);
+        return builder.build();
+    }
+
+    /** Sets the kind and the variant message of the concrete class. Only the persistable subclasses override it. */
+    protected void fillProtoVariant(FunctionPB.Builder builder) {
+        throw new IllegalStateException("function class " + getClass().getName() + " cannot be persisted");
+    }
+
+    public static Function fromProto(FunctionPB pb) {
+        ProtoKinds.checkKnown(pb.getKind(), pb.getKindValue());
+        Function function;
+        switch (pb.getKind()) {
+            case SCALAR: {
+                ScalarFunction scalarFunction = new ScalarFunction();
+                scalarFunction.fillFromVariantProto(pb.getScalar());
+                function = scalarFunction;
+                break;
+            }
+            case AGGREGATE: {
+                AggregateFunction aggregateFunction = new AggregateFunction();
+                aggregateFunction.fillFromVariantProto(pb.getAggregate());
+                function = aggregateFunction;
+                break;
+            }
+            case TABLE: {
+                TableFunction tableFunction = new TableFunction();
+                tableFunction.fillFromVariantProto(pb.getTable());
+                function = tableFunction;
+                break;
+            }
+            case SQL:
+                function = SqlFunction.fromVariantProto(pb.getSql());
+                break;
+            default:
+                throw new IllegalArgumentException("unknown function kind " + pb.getKind());
+        }
+        function.fillFromCoreProto(pb.getCore());
+        return function;
+    }
+
+    private FunctionCorePB toCoreProto() {
+        FunctionCorePB.Builder builder = FunctionCorePB.newBuilder()
+                .setFid(functionId)
+                .setHasVarArgs(hasVarArgs)
+                .setUserVisible(userVisible);
+        if (name != null) {
+            builder.setName(name.toProto());
+        }
+        if (retType != null) {
+            builder.setRetType(TypeProtoConverter.toProto(retType));
+        }
+        if (argTypes != null) {
+            for (Type argType : argTypes) {
+                builder.addArgTypes(TypeProtoConverter.toProto(argType));
+            }
+        }
+        if (argNames != null) {
+            builder.setArgNames(StringListPB.newBuilder().addAllValues(Arrays.asList(argNames)));
+        }
+        if (binaryType != null) {
+            builder.setBinaryType(ProtoEnums.toProto(binaryType, FunctionCorePB.BinaryType.class));
+        }
+        if (location != null) {
+            builder.setLocation(HdfsURIPB.newBuilder().setLocation(location.getLocation()));
+        }
+        if (checksum != null) {
+            builder.setChecksum(checksum);
+        }
+        if (aggStateDesc != null) {
+            builder.setAggStateDesc(TypeProtoConverter.toProto(aggStateDesc));
+        }
+        if (cloudConfiguration != null) {
+            builder.setCloudConfiguration(CloudConfigurationPB.getDefaultInstance());
+        }
+        if (inputType != null) {
+            builder.setInputType(inputType);
+        }
+        return builder.build();
+    }
+
+    private void fillFromCoreProto(FunctionCorePB pb) {
+        functionId = pb.getFid();
+        name = pb.hasName() ? FunctionName.fromProto(pb.getName()) : null;
+        retType = pb.hasRetType() ? TypeProtoConverter.fromProto(pb.getRetType()) : null;
+        argTypes = new Type[pb.getArgTypesCount()];
+        for (int i = 0; i < argTypes.length; i++) {
+            argTypes[i] = TypeProtoConverter.fromProto(pb.getArgTypes(i));
+        }
+        argNames = pb.hasArgNames() ? pb.getArgNames().getValuesList().toArray(new String[0]) : null;
+        hasVarArgs = pb.getHasVarArgs();
+        userVisible = pb.getUserVisible();
+        binaryType = pb.hasBinaryType() ? ProtoEnums.fromProto(pb.getBinaryType(), TFunctionBinaryType.class) : null;
+        location = pb.hasLocation() ? new HdfsURI(pb.getLocation().getLocation()) : null;
+        checksum = pb.hasChecksum() ? pb.getChecksum() : null;
+        aggStateDesc = pb.hasAggStateDesc() ? TypeProtoConverter.fromProto(pb.getAggStateDesc()) : null;
+        cloudConfiguration = pb.hasCloudConfiguration() ? new CloudConfiguration() : null;
+        inputType = pb.hasInputType() ? pb.getInputType() : null;
     }
 
     public void setInputType(String inputType) {

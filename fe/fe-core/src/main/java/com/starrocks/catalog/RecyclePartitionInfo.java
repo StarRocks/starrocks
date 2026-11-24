@@ -20,10 +20,18 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.JsonWriter;
 import com.starrocks.lake.DataCacheInfo;
+import com.starrocks.lake.RecycleLakeListPartitionInfo;
+import com.starrocks.lake.RecycleLakeRangePartitionInfo;
+import com.starrocks.lake.RecycleLakeUnPartitionInfo;
 import com.starrocks.lake.StorageInfo;
+import com.starrocks.persist.image.ProtoKinds;
+import com.starrocks.persist.proto.RecyclePartitionInfoCorePB;
+import com.starrocks.persist.proto.RecyclePartitionInfoPB;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.io.IOException;
 
 public abstract class RecyclePartitionInfo extends JsonWriter {
     private static final Logger LOG = LogManager.getLogger(RecyclePartitionInfo.class);
@@ -203,5 +211,89 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
             LOG.info("Synced recovered partition {} DataCacheInfo with table's current datacache.enable={}",
                     partitionId, tableDataCacheEnable);
         }
+    }
+
+    /**
+     * Image v3 form: the fields of this class and of RecyclePartitionInfoV2 go into the core message, the kind names
+     * the concrete class, and a class with fields of its own fills its variant.
+     */
+    public RecyclePartitionInfoPB toProto() throws IOException {
+        RecyclePartitionInfoCorePB.Builder core = RecyclePartitionInfoCorePB.newBuilder()
+                .setDbId(dbId)
+                .setTableId(tableId)
+                .setReplicationNum(replicationNum)
+                .setRecoverable(recoverable)
+                .setRetentionPeriod(retentionPeriod)
+                .setFromTableDeletion(fromTableDeletion);
+        if (partition != null) {
+            core.setPartition(partition.toProto());
+        }
+        if (dataProperty != null) {
+            core.setDataProperty(dataProperty.toProto());
+        }
+        if (getDataCacheInfo() != null) {
+            core.setDataCacheInfo(getDataCacheInfo().toProto());
+        }
+        RecyclePartitionInfoPB.Builder builder = RecyclePartitionInfoPB.newBuilder().setKind(protoKind()).setCore(core);
+        fillProtoVariant(builder);
+        return builder.build();
+    }
+
+    /** The kind naming the concrete class. Every persistable subclass overrides it. */
+    protected RecyclePartitionInfoPB.Kind protoKind() {
+        throw new IllegalStateException("recycle partition info class " + getClass().getName() + " cannot be persisted");
+    }
+
+    /** Adds the variant message of the concrete class; only a class with fields of its own overrides it. */
+    protected void fillProtoVariant(RecyclePartitionInfoPB.Builder builder) throws IOException {
+    }
+
+    /** Reads the variant message of the concrete class, after the core has been applied. */
+    protected void fillFromVariantProto(RecyclePartitionInfoPB pb) throws IOException {
+    }
+
+    public static RecyclePartitionInfo fromProto(RecyclePartitionInfoPB pb) throws IOException {
+        ProtoKinds.checkKnown(pb.getKind(), pb.getKindValue());
+        RecyclePartitionInfoCorePB core = pb.getCore();
+        long dbId = core.getDbId();
+        long tableId = core.getTableId();
+        Partition partition = core.hasPartition() ? Partition.fromProto(core.getPartition()) : null;
+        DataProperty dataProperty = core.hasDataProperty() ? DataProperty.fromProto(core.getDataProperty()) : null;
+        short replicationNum = (short) core.getReplicationNum();
+        DataCacheInfo dataCacheInfo = core.hasDataCacheInfo() ? DataCacheInfo.fromProto(core.getDataCacheInfo()) : null;
+        RecyclePartitionInfo info;
+        switch (pb.getKind()) {
+            case RECYCLE_RANGE_PARTITION_INFO:
+                // The range is the variant, read below.
+                info = new RecycleRangePartitionInfo(dbId, tableId, partition, null, dataProperty, replicationNum,
+                        dataCacheInfo);
+                break;
+            case RECYCLE_LAKE_RANGE_PARTITION_INFO:
+                info = new RecycleLakeRangePartitionInfo(dbId, tableId, partition, null, dataProperty, replicationNum,
+                        dataCacheInfo);
+                break;
+            case RECYCLE_LIST_PARTITION_INFO:
+                info = new RecycleListPartitionInfo(dbId, tableId, partition, dataProperty, replicationNum, dataCacheInfo);
+                break;
+            case RECYCLE_LAKE_LIST_PARTITION_INFO:
+                info = new RecycleLakeListPartitionInfo(dbId, tableId, partition, dataProperty, replicationNum,
+                        dataCacheInfo);
+                break;
+            case RECYCLE_UN_PARTITION_INFO:
+                info = new RecycleUnPartitionInfo(dbId, tableId, partition, dataProperty, replicationNum, dataCacheInfo);
+                break;
+            case RECYCLE_LAKE_UN_PARTITION_INFO:
+                info = new RecycleLakeUnPartitionInfo(dbId, tableId, partition, dataProperty, replicationNum,
+                        dataCacheInfo);
+                break;
+            default:
+                throw new IllegalArgumentException("unknown recycle partition info kind " + pb.getKind());
+        }
+        // The constructors preset recoverable (false for the list and unpartitioned classes); the persisted flags win.
+        info.recoverable = core.getRecoverable();
+        info.retentionPeriod = core.getRetentionPeriod();
+        info.fromTableDeletion = core.getFromTableDeletion();
+        info.fillFromVariantProto(pb);
+        return info;
     }
 }

@@ -29,9 +29,6 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.fs.hdfs.HdfsFsManager;
-import com.starrocks.journal.CheckpointException;
-import com.starrocks.journal.CheckpointWorker;
-import com.starrocks.journal.GlobalStateCheckpointWorker;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
@@ -58,6 +55,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+import org.mockito.Mockito;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
@@ -90,6 +89,11 @@ public class ClusterSnapshotTest {
     public static void beforeClass() throws Exception {
         AlterTest.beforeClass();
         AnalyzeTestUtil.init();
+        // These tests use synthetic journals and drive their own checkpoint controllers.
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        state.getCheckpointController().stopBestEffort();
+        state.getCheckpointWorker().setStop();
+        state.getRoutineLoadTaskScheduler().stopBestEffort();
     }
 
     @BeforeEach
@@ -798,80 +802,43 @@ public class ClusterSnapshotTest {
     }
 
     @Test
-    public void testGetClusterSnapshotInfoFromCheckpoint() throws Exception {
-        final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
-        final CheckpointController feController = new CheckpointController("fe", new BDBJEJournal(null, ""), "");
-        final CheckpointController starMgrController = new CheckpointController("starMgr", new BDBJEJournal(null, ""),
-                "");
-        final ClusterSnapshotInfo info = new ClusterSnapshotInfo(new HashMap<>());
-        ClusterSnapshotJob job = localClusterSnapshotMgr.createAutomatedSnapshotJob();
-        Assertions.assertTrue(!job.needClusterSnapshotInfo());
-        Assertions.assertTrue(job.isAutomated());
-        job.setClusterSnapshotInfo(null);
-
-        CheckpointWorker worker = GlobalStateMgr.getCurrentState().getCheckpointWorker();
-        Deencapsulation.setField(worker, "servingGlobalState", GlobalStateMgr.getCurrentState());
-        worker.setNextCheckpoint(GlobalStateMgr.getCurrentState().getEpoch(), 0L, true);
-
-        {
-            new MockUp<ClusterSnapshotJob>() {
-                @Mock
+    @Timeout(10)
+    public void testSnapshotRetriesSameJournalIdForMissingImageOrSnapshotInfo() throws Exception {
+        for (boolean needInfo : List.of(false, true)) {
+            ClusterSnapshotInfo info = new ClusterSnapshotInfo(new HashMap<>());
+            java.util.concurrent.atomic.AtomicReference<ClusterSnapshotInfo> restoredInfo =
+                    new java.util.concurrent.atomic.AtomicReference<>();
+            ClusterSnapshotJob job = new ClusterSnapshotJob(42, "same_journal", storageVolumeName, 1) {
+                @Override
                 public boolean needClusterSnapshotInfo() {
-                    return true;
+                    return needInfo;
+                }
+
+                @Override
+                public void setClusterSnapshotInfo(ClusterSnapshotInfo value) {
+                    restoredInfo.set(value);
                 }
             };
-
-            new MockUp<CheckpointController>() {
-                @Mock
-                public long getImageJournalId() {
-                    return -10L;
-                }
-            };
-
-            new MockUp<CheckpointWorker>() {
-                @Mock
-                public void setNextCheckpoint(long epoch, long journalId,
-                        boolean needClusterSnapshotInfo) throws CheckpointException {
-                    Deencapsulation.setField(feController, "workerNodeName", "workerNodeName");
-                    feController.finishCheckpoint(-1L, "workerNodeName", new ClusterSnapshotInfo(new HashMap<>()));
-                }
-            };
-
-            new MockUp<GlobalStateCheckpointWorker>() {
-                @Mock
-                void doCheckpoint(long epoch, long journalId, boolean needClusterSnapshotInfo) throws Exception {
-                    Deencapsulation.setField(info, "dbInfos", new HashMap<>());
-                }
-            };
-
-            ClusterSnapshotJobScheduler scheduler = new ClusterSnapshotJobScheduler(feController,
-                    starMgrController);
-            Assertions.assertTrue(feController != null);
-            try {
-                job.run(scheduler);
-            } catch (Exception ignore) {
-            }
-
-            Assertions.assertTrue(feController.getClusterSnapshotInfo() != null);
+            job.setState(ClusterSnapshotJobState.SNAPSHOTING);
+            job.setJournalIds(10, 20);
+            CheckpointController fe = Mockito.mock(CheckpointController.class);
+            CheckpointController starMgr = Mockito.mock(CheckpointController.class);
+            SnapshotJobContext context = Mockito.mock(SnapshotJobContext.class);
+            Mockito.when(context.getFeController()).thenReturn(fe);
+            Mockito.when(context.getStarMgrController()).thenReturn(starMgr);
+            Mockito.when(fe.getImageJournalId()).thenReturn(10L);
+            // Either the pair is incomplete, or the existing pair still needs snapshot information.
+            Mockito.when(fe.isImageComplete(10)).thenReturn(needInfo);
+            Mockito.when(fe.runCheckpointControllerWithIds(10, 10, needInfo)).thenReturn(Pair.create(true, ""));
+            Mockito.when(fe.getClusterSnapshotInfo()).thenReturn(needInfo ? info : null);
+            Mockito.when(starMgr.getImageJournalId()).thenReturn(20L);
+            job.runSnapshottingJob(context);
+            Mockito.verify(fe).runCheckpointControllerWithIds(10, 10, needInfo);
+            Mockito.verify(starMgr, Mockito.never()).runCheckpointControllerWithIds(
+                    Mockito.anyLong(), Mockito.anyLong(), Mockito.anyBoolean());
+            Assertions.assertEquals(ClusterSnapshotJobState.UPLOADING, job.getState());
+            Assertions.assertSame(needInfo ? info : null, restoredInfo.get());
         }
-
-        new MockUp<BDBJEJournal>() {
-            @Mock
-            public long getMaxJournalId() {
-                return 0L;
-            }
-        };
-        new MockUp<CheckpointWorker>() {
-            @Mock
-            protected boolean preCheckParamValid(long epoch, long journalId) {
-                return true;
-            }
-        };
-        try {
-            Deencapsulation.invoke(worker, "runAfterCatalogReady");
-        } catch (Exception ignore) {
-        }
-        Assertions.assertTrue(info.isEmpty());
     }
 
     @Test
@@ -1019,6 +986,11 @@ public class ClusterSnapshotTest {
             public long getImageJournalId() {
                 return 10L;
             }
+
+            @Override
+            public boolean isImageComplete(long journalId) {
+                return true;
+            }
         };
         CheckpointController starMgrController = new CheckpointController("starMgr", null, "") {
             @Override
@@ -1066,6 +1038,11 @@ public class ClusterSnapshotTest {
             @Override
             public long getImageJournalId() {
                 return 10L;
+            }
+
+            @Override
+            public boolean isImageComplete(long journalId) {
+                return true;
             }
         };
         CheckpointController starMgrController = new CheckpointController("starMgr", null, "") {

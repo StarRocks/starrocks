@@ -17,7 +17,11 @@ package com.starrocks.load.loadv2;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.persist.proto.BaseTableInfoTvrVersionRangePB;
+import com.starrocks.persist.proto.IVMCommittedTvrMapPB;
+import com.starrocks.persist.proto.IVMRefreshCommitInfoPB;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -41,5 +45,36 @@ public class IVMRefreshCommitInfo {
 
     public Map<BaseTableInfo, TvrVersionRange> getCommittedTvrMap() {
         return committedTvrMap;
+    }
+
+    public static IVMRefreshCommitInfo fromProto(IVMRefreshCommitInfoPB pb) {
+        Map<BaseTableInfo, TvrVersionRange> map = null;
+        if (pb.hasCommittedTvrMap()) {
+            map = new HashMap<>();
+            for (BaseTableInfoTvrVersionRangePB entry : pb.getCommittedTvrMap().getValuesList()) {
+                map.put(entry.hasBaseTable() ? BaseTableInfo.fromProto(entry.getBaseTable()) : null,
+                        entry.hasRange() ? TvrVersionRange.fromProto(entry.getRange()) : null);
+            }
+        }
+        return new IVMRefreshCommitInfo(map);
+    }
+
+    public IVMRefreshCommitInfoPB toProto() {
+        IVMRefreshCommitInfoPB.Builder builder = IVMRefreshCommitInfoPB.newBuilder();
+        if (committedTvrMap != null) {
+            IVMCommittedTvrMapPB.Builder map = IVMCommittedTvrMapPB.newBuilder();
+            for (Map.Entry<BaseTableInfo, TvrVersionRange> entry : committedTvrMap.entrySet()) {
+                BaseTableInfoTvrVersionRangePB.Builder value = BaseTableInfoTvrVersionRangePB.newBuilder();
+                if (entry.getKey() != null) {
+                    value.setBaseTable(entry.getKey().toProto());
+                }
+                if (entry.getValue() != null) {
+                    value.setRange(entry.getValue().toProto());
+                }
+                map.addValues(value);
+            }
+            builder.setCommittedTvrMap(map);
+        }
+        return builder.build();
     }
 }

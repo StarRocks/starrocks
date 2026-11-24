@@ -15,6 +15,8 @@
 package com.starrocks.authorization;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.image.ProtoLists;
+import com.starrocks.persist.proto.RolePrivilegeHeaderPB;
 
 import java.util.HashSet;
 import java.util.List;
@@ -161,5 +163,46 @@ public class RolePrivilegeCollectionV2 extends PrivilegeCollectionV2 {
         ret.comment = this.comment;
         ret.typeToPrivilegeEntryList = cloneTypeToPrivilegeEntryList();
         return ret;
+    }
+
+    public RolePrivilegeHeaderPB toHeaderProto() {
+        RolePrivilegeHeaderPB.Builder builder = RolePrivilegeHeaderPB.newBuilder();
+        if (name != null) {
+            builder.setName(name);
+        }
+        builder.setMask(mask);
+        if (parentRoleIds != null) {
+            builder.setParentRoleIds(ProtoLists.int64List(parentRoleIds));
+        }
+        if (subRoleIds != null) {
+            builder.setSubRoleIds(ProtoLists.int64List(subRoleIds));
+        }
+        if (comment != null) {
+            builder.setComment(comment);
+        }
+        return builder.build();
+    }
+
+    private RolePrivilegeCollectionV2(RolePrivilegeHeaderPB pb) {
+        this();
+        if (pb.hasName()) {
+            name = pb.getName();
+        }
+        if (pb.hasMask()) {
+            mask = pb.getMask();
+        }
+        if (pb.hasParentRoleIds()) {
+            parentRoleIds = new HashSet<>(ProtoLists.toLongs(pb.getParentRoleIds()));
+        }
+        if (pb.hasSubRoleIds()) {
+            subRoleIds = new HashSet<>(ProtoLists.toLongs(pb.getSubRoleIds()));
+        }
+        if (pb.hasComment()) {
+            comment = pb.getComment();
+        }
+    }
+
+    public static RolePrivilegeCollectionV2 fromHeaderProto(RolePrivilegeHeaderPB pb) {
+        return new RolePrivilegeCollectionV2(pb);
     }
 }

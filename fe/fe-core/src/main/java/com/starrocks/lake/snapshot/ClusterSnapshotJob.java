@@ -21,6 +21,8 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.persist.ClusterSnapshotLog;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.ClusterSnapshotJobPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TClusterSnapshotJobsItem;
 import org.apache.logging.log4j.LogManager;
@@ -234,7 +236,8 @@ public class ClusterSnapshotJob implements Writable {
         long starMgrCheckpointJournalId = getStarMgrJournalId();
 
         long feImageJournalId = feController.getImageJournalId();
-        if (feImageJournalId < feCheckpointJournalId) {
+        if (feImageJournalId <= feCheckpointJournalId && (feImageJournalId < feCheckpointJournalId
+                || !feController.isImageComplete(feCheckpointJournalId) || needClusterSnapshotInfo())) {
             Pair<Boolean, String> createFEImageRet = feController.runCheckpointControllerWithIds(feImageJournalId,
                     feCheckpointJournalId, needClusterSnapshotInfo());
             if (!createFEImageRet.first) {
@@ -327,4 +330,30 @@ public class ClusterSnapshotJob implements Writable {
         });
     }
 
+
+    public ClusterSnapshotJobPB toProto() {
+        ClusterSnapshotJobPB.Builder builder = ClusterSnapshotJobPB.newBuilder();
+        if (snapshot != null) {
+            builder.setSnapshot(snapshot.toProto());
+        }
+        if (state != null) {
+            builder.setState(ProtoEnums.toProto(state, ClusterSnapshotJobPB.ClusterSnapshotJobState.class));
+        }
+        if (errMsg != null) {
+            builder.setErrMsg(errMsg);
+        }
+        if (detailInfo != null) {
+            builder.setDetailInfo(detailInfo);
+        }
+        return builder.build();
+    }
+
+    public static ClusterSnapshotJob fromProto(ClusterSnapshotJobPB pb) {
+        ClusterSnapshotJob value = new ClusterSnapshotJob();
+        value.snapshot = pb.hasSnapshot() ? ClusterSnapshot.fromProto(pb.getSnapshot()) : null;
+        value.state = pb.hasState() ? ProtoEnums.fromProto(pb.getState(), ClusterSnapshotJobState.class) : null;
+        value.errMsg = pb.hasErrMsg() ? pb.getErrMsg() : null;
+        value.detailInfo = pb.hasDetailInfo() ? pb.getDetailInfo() : null;
+        return value;
+    }
 }

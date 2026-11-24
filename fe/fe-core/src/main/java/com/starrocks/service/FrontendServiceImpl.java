@@ -3837,7 +3837,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         TStartCheckpointResponse response = new TStartCheckpointResponse();
         try {
-            worker.setNextCheckpoint(request.getEpoch(), request.getJournal_id(), false);
+            worker.setNextCheckpoint(request.getEpoch(), request.getJournal_id(), false,
+                    !request.isSetWrite_v2() || request.isWrite_v2());
             response.setStatus(new TStatus(OK));
             return response;
         } catch (CheckpointException e) {

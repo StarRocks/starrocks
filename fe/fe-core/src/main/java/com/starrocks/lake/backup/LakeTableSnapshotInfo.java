@@ -17,6 +17,7 @@ package com.starrocks.lake.backup;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.backup.SnapshotInfo;
+import com.starrocks.persist.proto.SnapshotInfoPB;
 
 import java.util.Objects;
 
@@ -55,5 +56,11 @@ public class LakeTableSnapshotInfo extends SnapshotInfo {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), version);
+    }
+
+    @Override
+    protected void fillProtoVariant(SnapshotInfoPB.Builder builder) {
+        builder.setKind(SnapshotInfoPB.Kind.LAKE_TABLE_SNAPSHOT_INFO)
+                .setLakeTableSnapshotInfo(SnapshotInfoPB.LakeSnapshotPB.newBuilder().setVersion(version));
     }
 }

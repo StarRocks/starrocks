@@ -1,0 +1,124 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "TypeProto";
+
+// The type system of com.starrocks.type. See common.proto for the conventions.
+
+// com.starrocks.type.Type. Only the classes registered with GSON can be persisted. Subclasses of
+// ScalarType such as IntegerType or DecimalType persist the same four scalar fields; GSON writes
+// them without a class label and reads them back as a plain ScalarType, and so does this format.
+message TypePB {
+  enum Kind {
+    UNSPECIFIED = 0;
+    SCALAR = 1;
+    ARRAY = 2;
+    MAP = 3;
+    STRUCT = 4;
+    PSEUDO = 5;
+    ANY_ELEMENT = 6;
+    ANY_ARRAY = 7;
+  }
+  Kind kind = 1;
+
+  oneof instance {
+    ScalarTypePB scalar = 11;
+    ArrayTypePB array = 12;
+    MapTypePB map = 13;
+    StructTypePB struct = 14;
+  }
+  // PSEUDO, ANY_ELEMENT and ANY_ARRAY carry no data.
+}
+
+message ScalarTypePB {
+  // com.starrocks.type.PrimitiveType.
+  enum PrimitiveType {
+    UNSPECIFIED = 0;
+    INVALID_TYPE = 1;
+    NULL_TYPE = 2;
+    BOOLEAN = 3;
+    TINYINT = 4;
+    SMALLINT = 5;
+    INT = 6;
+    BIGINT = 7;
+    LARGEINT = 8;
+    FLOAT = 9;
+    DOUBLE = 10;
+    DATE = 11;
+    DATETIME = 12;
+    CHAR = 13;
+    VARCHAR = 14;
+    DECIMALV2 = 15;
+    HLL = 16;
+    TIME = 17;
+    BITMAP = 18;
+    PERCENTILE = 19;
+    DECIMAL32 = 20;
+    DECIMAL64 = 21;
+    DECIMAL128 = 22;
+    DECIMAL256 = 23;
+    JSON = 24;
+    VARIANT = 25;
+    FUNCTION = 26;
+    BINARY = 27;
+    VARBINARY = 28;
+    UNKNOWN_TYPE = 29;
+    FILE = 30;
+    GEOGRAPHY = 31;
+    GEOMETRY = 32;
+  }
+  PrimitiveType type = 1;
+  int32 len = 2;
+  int32 precision = 3;
+  int32 scale = 4;
+}
+
+message ArrayTypePB {
+  TypePB item_type = 1;
+}
+
+message MapTypePB {
+  TypePB key_type = 1;
+  TypePB value_type = 2;
+}
+
+message StructTypePB {
+  repeated StructFieldPB fields = 1;
+  bool named = 2;
+}
+
+message StructFieldPB {
+  string name = 1;
+  TypePB type = 2;
+  optional string comment = 3;
+  int32 field_id = 4;
+  optional string field_physical_name = 5;
+}
+
+message AggStateDescPB {
+  string function_name = 1;
+  repeated TypePB arg_types = 2;
+  TypePB return_type = 3;
+  bool result_nullable = 4;
+}
+
+message TypeListPB {
+  repeated TypePB values = 1;
+}

@@ -16,6 +16,8 @@ package com.starrocks.common.tvr;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.image.ProtoKinds;
+import com.starrocks.persist.proto.TvrVersionRangePB;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -71,6 +73,32 @@ public abstract class TvrVersionRange {
     }
 
     public abstract TvrVersionRange copy(TvrVersion from, TvrVersion to);
+
+    public TvrVersionRangePB toProto() {
+        TvrVersionRangePB.Kind kind;
+        if (this instanceof TvrTableSnapshot) {
+            kind = TvrVersionRangePB.Kind.SNAPSHOT;
+        } else if (this instanceof TvrTableDelta) {
+            kind = TvrVersionRangePB.Kind.DELTA;
+        } else {
+            throw new IllegalStateException("version range class " + getClass().getName() + " cannot be persisted");
+        }
+        return TvrVersionRangePB.newBuilder().setKind(kind).setFrom(from.toProto()).setTo(to.toProto()).build();
+    }
+
+    public static TvrVersionRange fromProto(TvrVersionRangePB pb) {
+        ProtoKinds.checkKnown(pb.getKind(), pb.getKindValue());
+        TvrVersion to = TvrVersion.fromProto(pb.getTo());
+        switch (pb.getKind()) {
+            case SNAPSHOT:
+                // A snapshot always starts at MIN; the constructor owns that.
+                return new TvrTableSnapshot(to);
+            case DELTA:
+                return new TvrTableDelta(TvrVersion.fromProto(pb.getFrom()), to);
+            default:
+                throw new IllegalArgumentException("unknown version range kind " + pb.getKind());
+        }
+    }
 
     @Override
     public int hashCode() {

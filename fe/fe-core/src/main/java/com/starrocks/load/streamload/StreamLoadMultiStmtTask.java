@@ -25,6 +25,10 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionResult;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.StreamLoadMultiStmtTaskPB;
+import com.starrocks.persist.proto.StreamLoadTaskMapPB;
+import com.starrocks.persist.proto.StreamLoadTaskPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -1160,5 +1164,113 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
 
     public Collection<StreamLoadTask> getTasks() {
         return taskMaps.values();
+    }
+
+    public StreamLoadMultiStmtTaskPB toProto() {
+        StreamLoadMultiStmtTaskPB.Builder builder = StreamLoadMultiStmtTaskPB.newBuilder();
+        builder.setId(id);
+        builder.setLoadIdHi(loadId.getHi());
+        builder.setLoadIdLo(loadId.getLo());
+        if (label != null) {
+            builder.setLabel(label);
+        }
+        builder.setDbId(dbId);
+        if (dbName != null) {
+            builder.setDbName(dbName);
+        }
+        builder.setTxnId(txnId);
+        builder.setCreateTimeMs(createTimeMs);
+        if (state != null) {
+            builder.setState(ProtoEnums.toProto(state, StreamLoadMultiStmtTaskPB.State.class, "STATE_"));
+        }
+        builder.setWarehouseId(warehouseId);
+        if (computeResource != null) {
+            builder.setComputeResource(computeResource.toProto());
+        }
+        if (type != null) {
+            builder.setType(ProtoEnums.toProto(type, StreamLoadMultiStmtTaskPB.Type.class, "TYPE_"));
+        }
+        builder.setTimeoutMs(timeoutMs);
+        if (user != null) {
+            builder.setUser(user);
+        }
+        if (clientIp != null) {
+            builder.setClientIp(clientIp);
+        }
+        builder.setEndTimeMs(endTimeMs);
+        builder.setAbortRetryCount(abortRetryCount);
+        builder.setNextAbortRetryTimeMs(nextAbortRetryTimeMs);
+        if (abortReason != null) {
+            builder.setAbortReason(abortReason);
+        }
+        if (taskMaps != null) {
+            StreamLoadTaskMapPB.Builder tasks = StreamLoadTaskMapPB.newBuilder();
+            taskMaps.forEach((name, task) -> tasks.putValues(name, task.toProto()));
+            builder.setTaskMaps(tasks);
+        }
+        return builder.build();
+    }
+
+    public static StreamLoadMultiStmtTask fromProto(StreamLoadMultiStmtTaskPB pb) {
+        return new StreamLoadMultiStmtTask(pb);
+    }
+
+    private StreamLoadMultiStmtTask(StreamLoadMultiStmtTaskPB pb) {
+        // Match v2 recovery: no session is restored for rollback, and no runtime error is persisted.
+        context = null;
+        errorMsg = null;
+        // Gson bypasses field initializers; retain its defaults for absent persisted fields.
+        computeResource = null;
+        type = null;
+        taskMaps = null;
+        user = null;
+        clientIp = null;
+        endTimeMs = 0;
+        abortReason = null;
+        this.id = pb.getId();
+        this.loadIdHi = pb.getLoadIdHi();
+        this.loadIdLo = pb.getLoadIdLo();
+        if (pb.hasLabel()) {
+            this.label = pb.getLabel();
+        }
+        this.dbId = pb.getDbId();
+        if (pb.hasDbName()) {
+            this.dbName = pb.getDbName();
+        }
+        this.txnId = pb.getTxnId();
+        this.createTimeMs = pb.getCreateTimeMs();
+        if (pb.hasState()) {
+            this.state = ProtoEnums.fromProto(pb.getState(), State.class, "STATE_");
+        }
+        this.warehouseId = pb.getWarehouseId();
+        if (pb.hasComputeResource()) {
+            this.computeResource = ComputeResource.fromProto(pb.getComputeResource());
+        }
+        if (pb.hasType()) {
+            this.type = ProtoEnums.fromProto(pb.getType(), StreamLoadTask.Type.class, "TYPE_");
+        }
+        this.timeoutMs = pb.getTimeoutMs();
+        if (pb.hasUser()) {
+            this.user = pb.getUser();
+        }
+        if (pb.hasClientIp()) {
+            this.clientIp = pb.getClientIp();
+        }
+        if (pb.hasEndTimeMs()) {
+            this.endTimeMs = pb.getEndTimeMs();
+        }
+        this.abortRetryCount = pb.getAbortRetryCount();
+        this.nextAbortRetryTimeMs = pb.getNextAbortRetryTimeMs();
+        if (pb.hasAbortReason()) {
+            this.abortReason = pb.getAbortReason();
+        }
+        if (pb.hasTaskMaps()) {
+            this.taskMaps = new ConcurrentHashMap<>();
+            for (Map.Entry<String, StreamLoadTaskPB> entry : pb.getTaskMaps().getValuesMap().entrySet()) {
+                this.taskMaps.put(entry.getKey(), StreamLoadTask.fromProto(entry.getValue()));
+            }
+        }
+        this.loadId = new TUniqueId(loadIdHi, loadIdLo);
+        init();
     }
 }

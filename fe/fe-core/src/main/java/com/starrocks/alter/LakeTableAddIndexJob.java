@@ -16,17 +16,25 @@ package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.google.protobuf.ByteString;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
+import com.starrocks.persist.image.ProtoLists;
+import com.starrocks.persist.image.ThriftBytes;
+import com.starrocks.persist.proto.AlterJobPB;
+import com.starrocks.persist.proto.IndexPB;
+import com.starrocks.persist.proto.Int64ListPB;
+import com.starrocks.persist.proto.LakeTableAddIndexJobPB;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -34,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 /**
  * Lake-only fast-path Job for {@code ALTER TABLE ... ADD INDEX ... USING
@@ -398,5 +407,46 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
 
     public List<String> getAddBfColumns() {
         return addBfColumns;
+    }
+
+    @Override
+    protected void fillFromVariantProto(AlterJobPB pb) {
+        LakeTableAddIndexJobPB variant = pb.getLakeTableAddIndexJob();
+        fillFromLakeTableIndexFastPathJobCoreProto(variant.getIndexFastPath());
+        newIndexes = new ArrayList<>(variant.getNewIndexesCount());
+        for (IndexPB index : variant.getNewIndexesList()) {
+            newIndexes.add(Index.fromProto(index));
+        }
+        indexesToAdd = new ArrayList<>(variant.getIndexesToAddCount());
+        for (ByteString bytes : variant.getIndexesToAddList()) {
+            indexesToAdd.add(ThriftBytes.fromBytes(bytes, new TOlapTableIndex()));
+        }
+        addBfColumns = new ArrayList<>(variant.getAddBfColumnsList());
+        indexMetaIdToNewSchema = new HashMap<>();
+        for (Map.Entry<Long, Int64ListPB> entry : variant.getIndexMetaIdToNewSchemaMap().entrySet()) {
+            indexMetaIdToNewSchema.put(entry.getKey(),
+                    entry.getValue().getValuesList().stream().mapToLong(Long::longValue).toArray());
+        }
+    }
+
+    @Override
+    protected void fillProtoVariant(AlterJobPB.Builder builder) {
+        LakeTableAddIndexJobPB.Builder variant = LakeTableAddIndexJobPB.newBuilder()
+                .setIndexFastPath(toLakeTableIndexFastPathJobCoreProto())
+                .addAllAddBfColumns(addBfColumns);
+        for (Index index : newIndexes) {
+            variant.addNewIndexes(index.toProto());
+        }
+        // The Thrift payload travels as it is; the proto does not restate TOlapTableIndex.
+        for (TOlapTableIndex index : indexesToAdd) {
+            variant.addIndexesToAdd(ThriftBytes.toBytes(index));
+        }
+        for (Map.Entry<Long, long[]> entry : indexMetaIdToNewSchema.entrySet()) {
+            if (entry.getValue() != null) {
+                variant.putIndexMetaIdToNewSchema(entry.getKey(),
+                        ProtoLists.int64List(Arrays.stream(entry.getValue()).boxed().collect(Collectors.toList())));
+            }
+        }
+        builder.setKind(AlterJobPB.Kind.LAKE_TABLE_ADD_INDEX_JOB).setLakeTableAddIndexJob(variant);
     }
 }

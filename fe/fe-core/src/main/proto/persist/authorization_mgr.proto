@@ -1,0 +1,175 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/common.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "AuthorizationMgrProto";
+
+message ActionSetPB {
+  fixed64 bit_set = 1;
+}
+message PrivilegeEntryPB {
+  ActionSetPB action_set = 1;
+  // Absent is the valid SYSTEM null object. Unknown kinds must never become null.
+  PrivilegeObjectPB object = 2;
+  bool with_grant_option = 3;
+}
+
+message DbPrivilegeObjectPB {
+  optional int64 catalog_id = 1;
+  optional string uuid = 2;
+}
+
+message TablePrivilegeObjectPB {
+  optional int64 catalog_id = 1;
+  optional string database_uuid = 2;
+  optional string table_uuid = 3;
+}
+
+message UserPrivilegeObjectPB {
+  UserIdentityPB user_identity = 1;
+}
+
+message ResourcePrivilegeObjectPB {
+  optional string name = 1;
+}
+
+message GlobalFunctionPrivilegeObjectPB {
+  optional string function_sig = 1;
+}
+
+message FunctionPrivilegeObjectPB {
+  optional int64 database_id = 1;
+  optional int64 function_id = 2;
+}
+
+message CatalogPrivilegeObjectPB {
+  optional int64 id = 1;
+}
+
+message ResourceGroupPrivilegeObjectPB {
+  optional int64 id = 1;
+}
+
+message StorageVolumePrivilegeObjectPB {
+  optional string id = 1;
+}
+
+message WarehousePrivilegeObjectPB {
+  optional int64 id = 1;
+}
+
+message PipePrivilegeObjectPB {
+  optional int64 id = 1;
+  optional string db_uuid = 2;
+}
+
+message PrivilegeObjectPB {
+  enum Kind {
+    UNSPECIFIED = 0;
+    DATABASE = 1;
+    TABLE = 2;
+    USER = 3;
+    RESOURCE = 4;
+    VIEW = 5;
+    MATERIALIZED_VIEW = 6;
+    GLOBAL_FUNCTION = 7;
+    FUNCTION = 8;
+    CATALOG = 9;
+    RESOURCE_GROUP = 10;
+    STORAGE_VOLUME = 11;
+    WAREHOUSE = 12;
+    PIPE = 13;
+    POLICY_COMPATIBLE = 14;
+    AI_PROVIDER = 17;
+    AI_FUNCTION = 18;
+  }
+  Kind kind = 1;
+  oneof instance {
+    DbPrivilegeObjectPB database = 11;
+    TablePrivilegeObjectPB table = 12;
+    UserPrivilegeObjectPB user = 13;
+    ResourcePrivilegeObjectPB resource = 14;
+    GlobalFunctionPrivilegeObjectPB global_function = 17;
+    FunctionPrivilegeObjectPB function = 18;
+    CatalogPrivilegeObjectPB catalog = 19;
+    ResourceGroupPrivilegeObjectPB resource_group = 20;
+    StorageVolumePrivilegeObjectPB storage_volume = 21;
+    WarehousePrivilegeObjectPB warehouse = 22;
+    PipePrivilegeObjectPB pipe = 23;
+    AIProviderPrivilegeObjectPB ai_provider = 26;
+    AIFunctionPrivilegeObjectPB ai_function = 27;
+  }
+}
+
+// Metadata only; each direct privilege is a separate image entry.
+message UserPrivilegeHeaderPB {
+  Int64ListPB role_ids = 1;
+  Int64ListPB default_role_ids = 2;
+}
+
+// Metadata only; each direct privilege is a separate image entry.
+message RolePrivilegeHeaderPB {
+  optional string name = 1;
+  optional int64 mask = 2;
+  Int64ListPB parent_role_ids = 3;
+  Int64ListPB sub_role_ids = 4;
+  optional string comment = 5;
+}
+
+message AuthorizationMgrPB {
+  optional int32 plugin_id = 1;
+  optional int32 plugin_version = 2;
+}
+message AuthorizationRoleNameIdEntryPB {
+  optional string name = 1;
+  optional int64 role_id = 2;
+}
+
+message AuthorizationGroupRolesEntryPB {
+  optional string group = 1;
+  Int64ListPB role_ids = 2;
+}
+
+message AuthorizationUserHeaderEntryPB {
+  UserIdentityPB user = 1;
+  UserPrivilegeHeaderPB header = 2;
+}
+
+message AuthorizationUserPrivilegeEntryPB {
+  UserIdentityPB user = 1;
+  // Use the persisted ObjectType id; preserve unknown ids and all ActionSet bits.
+  optional int32 object_type = 2;
+  PrivilegeEntryPB privilege = 3;
+}
+
+message AuthorizationRoleHeaderEntryPB {
+  optional int64 role_id = 1;
+  RolePrivilegeHeaderPB header = 2;
+}
+
+message AuthorizationRolePrivilegeEntryPB {
+  optional int64 role_id = 1;
+  optional int32 object_type = 2;
+  PrivilegeEntryPB privilege = 3;
+}
+
+message AIProviderPrivilegeObjectPB { optional string id = 1; }
+message AIFunctionPrivilegeObjectPB { optional string name = 1; }

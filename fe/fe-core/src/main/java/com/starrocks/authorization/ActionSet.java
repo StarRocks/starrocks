@@ -16,6 +16,7 @@
 package com.starrocks.authorization;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.ActionSetPB;
 
 import java.util.Collection;
 
@@ -62,5 +63,13 @@ public class ActionSet {
 
     public boolean isEmpty() {
         return bitSet == 0;
+    }
+
+    public ActionSetPB toProto() {
+        return ActionSetPB.newBuilder().setBitSet(bitSet).build();
+    }
+
+    public static ActionSet fromProto(ActionSetPB pb) {
+        return new ActionSet(pb.getBitSet());
     }
 }

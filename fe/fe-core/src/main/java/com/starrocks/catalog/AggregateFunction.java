@@ -39,12 +39,15 @@ import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.persist.proto.AggregateFunctionPB;
+import com.starrocks.persist.proto.FunctionPB;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.thrift.TAggregateFunction;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeProtoConverter;
 import com.starrocks.type.TypeSerializer;
 import org.apache.logging.log4j.util.Strings;
 
@@ -134,6 +137,33 @@ public class AggregateFunction extends Function {
 
     // only used for serialization
     protected AggregateFunction() {
+    }
+
+    @Override
+    protected void fillProtoVariant(FunctionPB.Builder builder) {
+        AggregateFunctionPB.Builder aggregate = AggregateFunctionPB.newBuilder()
+                .setIgnoresDistinct(ignoresDistinct)
+                .setIsAnalyticFn(isAnalyticFn)
+                .setIsAggregateFn(isAggregateFn)
+                .setReturnsNonNullOnEmpty(returnsNonNullOnEmpty)
+                .setIsolated(isolationType);
+        if (intermediateType != null) {
+            aggregate.setIntermediateType(TypeProtoConverter.toProto(intermediateType));
+        }
+        if (symbolName != null) {
+            aggregate.setSymbolName(symbolName);
+        }
+        builder.setKind(FunctionPB.Kind.AGGREGATE).setAggregate(aggregate);
+    }
+
+    void fillFromVariantProto(AggregateFunctionPB pb) {
+        intermediateType = pb.hasIntermediateType() ? TypeProtoConverter.fromProto(pb.getIntermediateType()) : null;
+        symbolName = pb.hasSymbolName() ? pb.getSymbolName() : null;
+        ignoresDistinct = pb.getIgnoresDistinct();
+        isAnalyticFn = pb.getIsAnalyticFn();
+        isAggregateFn = pb.getIsAggregateFn();
+        returnsNonNullOnEmpty = pb.getReturnsNonNullOnEmpty();
+        isolationType = pb.getIsolated();
     }
 
     public AggregateFunction(FunctionName fnName, List<Type> argTypes,

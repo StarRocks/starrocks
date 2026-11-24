@@ -16,6 +16,7 @@
 package com.starrocks.statistic;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
@@ -23,6 +24,16 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.image.ProtoDateTimes;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoLists;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.AnalyzeScheduleStatusPB;
+import com.starrocks.persist.proto.AnalyzeScheduleTypePB;
+import com.starrocks.persist.proto.AnalyzeStatusCorePB;
+import com.starrocks.persist.proto.AnalyzeStatusPB;
+import com.starrocks.persist.proto.AnalyzeTypePB;
+import com.starrocks.persist.proto.NativeAnalyzeStatusPB;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -272,4 +283,87 @@ public class NativeAnalyzeStatus implements AnalyzeStatus, Writable {
         return new ShowResultSet(META_DATA, rows);
     }
 
+
+    @Override
+    public AnalyzeStatusPB toProto() {
+        AnalyzeStatusCorePB.Builder core = AnalyzeStatusCorePB.newBuilder();
+        core.setId(id);
+        if (columns != null) {
+            core.setColumns(ProtoLists.stringList(columns));
+        }
+        if (type != null) {
+            core.setType(ProtoEnums.toProto(type, AnalyzeTypePB.class, "ANALYZE_"));
+        }
+        if (scheduleType != null) {
+            core.setScheduleType(ProtoEnums.toProto(scheduleType, AnalyzeScheduleTypePB.class, "SCHEDULE_"));
+        }
+        if (properties != null) {
+            core.setProperties(ProtoMaps.toStringMapProto(properties));
+        }
+        if (status != null) {
+            core.setStatus(ProtoEnums.toProto(status, AnalyzeScheduleStatusPB.class, "STATUS_"));
+        }
+        if (startTime != null) {
+            core.setStartTime(ProtoDateTimes.toEpochSecond(startTime));
+        }
+        if (endTime != null) {
+            core.setEndTime(ProtoDateTimes.toEpochSecond(endTime));
+        }
+        if (reason != null) {
+            core.setReason(reason);
+        }
+        core.setProgress(progress);
+        NativeAnalyzeStatusPB.Builder identity = NativeAnalyzeStatusPB.newBuilder();
+        identity.setDbId(dbId);
+        identity.setTableId(tableId);
+        return AnalyzeStatusPB.newBuilder().setKind(AnalyzeStatusPB.Kind.NATIVE)
+                .setCore(core).setNative(identity).build();
+    }
+
+    private NativeAnalyzeStatus(AnalyzeStatusPB pb) {
+        Preconditions.checkArgument(pb.getKind() == AnalyzeStatusPB.Kind.NATIVE && pb.hasCore()
+                && pb.hasNative(), "missing or mismatched NativeAnalyzeStatus payload");
+        AnalyzeStatusCorePB core = pb.getCore();
+        if (core.hasId()) {
+            id = core.getId();
+        }
+        if (core.hasColumns()) {
+            columns = ProtoLists.toStrings(core.getColumns());
+        }
+        if (core.hasType()) {
+            type = ProtoEnums.fromProto(core.getType(), StatsConstants.AnalyzeType.class, "ANALYZE_");
+        }
+        if (core.hasScheduleType()) {
+            scheduleType = ProtoEnums.fromProto(core.getScheduleType(), StatsConstants.ScheduleType.class, "SCHEDULE_");
+        }
+        if (core.hasProperties()) {
+            properties = ProtoMaps.fromStringMapProto(core.getProperties());
+        }
+        if (core.hasStatus()) {
+            status = ProtoEnums.fromProto(core.getStatus(), StatsConstants.ScheduleStatus.class, "STATUS_");
+        }
+        if (core.hasStartTime()) {
+            startTime = ProtoDateTimes.fromEpochSecond(core.getStartTime());
+        }
+        if (core.hasEndTime()) {
+            endTime = ProtoDateTimes.fromEpochSecond(core.getEndTime());
+        }
+        if (core.hasReason()) {
+            reason = core.getReason();
+        }
+        if (core.hasProgress()) {
+            progress = core.getProgress();
+        }
+        NativeAnalyzeStatusPB identity = pb.getNative();
+        if (identity.hasDbId()) {
+            dbId = identity.getDbId();
+        }
+        if (identity.hasTableId()) {
+            tableId = identity.getTableId();
+        }
+    }
+
+    public static NativeAnalyzeStatus fromProto(AnalyzeStatusPB pb) {
+        return new NativeAnalyzeStatus(pb);
+    }
 }

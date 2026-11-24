@@ -38,6 +38,11 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.StorageVolumePB;
+import com.starrocks.persist.proto.StringListPB;
+import com.starrocks.persist.proto.StringMapPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.lang3.StringUtils;
@@ -518,6 +523,48 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     @Override
     public void gsonPostProcess() throws IOException {
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(params);
+    }
+
+    public StorageVolumePB toProto() {
+        StorageVolumePB.Builder builder = StorageVolumePB.newBuilder().setEnabled(enabled)
+                .setVirtualTabletId(vTabletId).setVirtualTabletGroupId(vTabletGroupId);
+        if (id != null) {
+            builder.setId(id);
+        }
+        if (name != null) {
+            builder.setName(name);
+        }
+        if (svt != null) {
+            builder.setType(ProtoEnums.toProto(svt, StorageVolumePB.Type.class));
+        }
+        if (locations != null) {
+            builder.setLocations(StringListPB.newBuilder().addAllValues(locations));
+        }
+        if (params != null) {
+            builder.setParams(StringMapPB.newBuilder().putAllValues(ProtoMaps.withoutNullValues(params)));
+        }
+        if (comment != null) {
+            builder.setComment(comment);
+        }
+        return builder.build();
+    }
+
+    public static StorageVolume fromProto(StorageVolumePB pb) {
+        return new StorageVolume(pb);
+    }
+
+    private StorageVolume(StorageVolumePB pb) {
+        id = pb.hasId() ? pb.getId() : null;
+        name = pb.hasName() ? pb.getName() : null;
+        svt = pb.hasType() ? ProtoEnums.fromProto(pb.getType(), StorageVolumeType.class) : null;
+        locations = pb.hasLocations() ? new ArrayList<>(pb.getLocations().getValuesList()) : null;
+        params = pb.hasParams() ? new HashMap<>(pb.getParams().getValuesMap()) : null;
+        comment = pb.hasComment() ? pb.getComment() : null;
+        enabled = pb.getEnabled();
+        vTabletId = pb.getVirtualTabletId();
+        vTabletGroupId = pb.getVirtualTabletGroupId();
+        // Match gsonPostProcess: loading rebuilds credentials without creation-time validation.
         cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(params);
     }
 }

@@ -17,6 +17,11 @@ package com.starrocks.alter.reshard;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.TabletRange;
+import com.starrocks.catalog.TabletRangeProtoConverter;
+import com.starrocks.persist.proto.Int64ListPB;
+import com.starrocks.persist.proto.ReshardingTabletPB;
+import com.starrocks.persist.proto.ReshardingTabletRangeListPB;
+import com.starrocks.persist.proto.SplittingTabletPB;
 import com.starrocks.proto.ReshardingTabletInfoPB;
 import com.starrocks.proto.SplittingTabletInfoPB;
 
@@ -159,5 +164,31 @@ public class SplittingTablet implements ReshardingTablet {
 
     public boolean isIdenticalTablet() {
         return newTabletIds.size() == 1;
+    }
+
+    private SplittingTablet(SplittingTabletPB pb) {
+        oldTabletId = pb.getOldTabletId();
+        newTabletIds = pb.hasNewTabletIds() ? new ArrayList<>(pb.getNewTabletIds().getValuesList()) : null;
+        newTabletRanges = pb.hasNewTabletRanges() ? pb.getNewTabletRanges().getValuesList().stream()
+                .map(TabletRangeProtoConverter::fromProto).collect(Collectors.toCollection(ArrayList::new)) : null;
+    }
+
+    @Override
+    public ReshardingTabletPB toImageProto() {
+        // Persist the actual class, including a SplittingTablet that fell back to one new tablet.
+        SplittingTabletPB.Builder builder = SplittingTabletPB.newBuilder().setOldTabletId(oldTabletId);
+        if (newTabletIds != null) {
+            builder.setNewTabletIds(Int64ListPB.newBuilder().addAllValues(newTabletIds));
+        }
+        if (newTabletRanges != null) {
+            ReshardingTabletRangeListPB.Builder ranges = ReshardingTabletRangeListPB.newBuilder();
+            newTabletRanges.forEach(range -> ranges.addValues(TabletRangeProtoConverter.toProto(range)));
+            builder.setNewTabletRanges(ranges);
+        }
+        return ReshardingTabletPB.newBuilder().setKind(ReshardingTabletPB.Kind.SPLITTING).setSplitting(builder).build();
+    }
+
+    public static SplittingTablet fromImageProto(SplittingTabletPB pb) {
+        return new SplittingTablet(pb);
     }
 }

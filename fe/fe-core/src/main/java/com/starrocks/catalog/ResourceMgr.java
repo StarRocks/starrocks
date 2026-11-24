@@ -39,6 +39,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -46,11 +47,18 @@ import com.starrocks.common.proc.ProcResult;
 import com.starrocks.persist.AlterResourceInfo;
 import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionReader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.ResourceMgrPB;
+import com.starrocks.persist.proto.ResourcePB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -372,5 +380,27 @@ public class ResourceMgr implements Writable {
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         ResourceMgr data = reader.readJson(ResourceMgr.class);
         this.nameToResource = data.nameToResource;
+    }
+
+    /** Image v3: one section, the manager message (it carries nothing yet) and then one entry per resource. */
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.RESOURCE_MGR)) {
+            writer.writeManager(ResourceMgrPB.getDefaultInstance());
+            for (Resource resource : nameToResource.values()) {
+                writer.writeEntry(resource.toProto());
+            }
+        }
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(Pair.<SectionId, SectionLoader>create(SectionId.RESOURCE_MGR, this::loadSection));
+    }
+
+    private void loadSection(SectionReader reader) throws IOException {
+        reader.readManager(ResourceMgrPB.parser());
+        reader.readEntries(ResourcePB.parser(), pb -> {
+            Resource resource = Resource.fromProto(pb);
+            nameToResource.put(resource.getName(), resource);
+        });
     }
 }

@@ -20,6 +20,9 @@ import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Pair;
+import com.starrocks.persist.proto.PulsarBacklogsPB;
+import com.starrocks.persist.proto.PulsarProgressPB;
+import com.starrocks.persist.proto.RoutineLoadProgressPB;
 import com.starrocks.thrift.TPulsarRLTaskProgress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -27,6 +30,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * this is description of pulsar routine load progress
@@ -132,8 +136,22 @@ public class PulsarProgress extends RoutineLoadProgress {
         }
     }
 
+    @Override
+    protected void fillProtoVariant(RoutineLoadProgressPB.Builder parent) {
+        PulsarProgressPB.Builder builder = PulsarProgressPB.newBuilder();
+        if (partitionToBacklogNum != null) {
+            builder.setPartitionToBacklogNum(PulsarBacklogsPB.newBuilder().putAllValues(partitionToBacklogNum).build());
+        }
+        parent.setKind(RoutineLoadProgressPB.Kind.PULSAR_PROGRESS).setPulsarProgress(builder);
+    }
 
-
-
-
+    @Override
+    protected void fillFromVariantProto(RoutineLoadProgressPB parent) {
+        PulsarProgressPB pb = parent.getPulsarProgress();
+        if (pb.hasPartitionToBacklogNum()) {
+            partitionToBacklogNum = new ConcurrentHashMap<>(pb.getPartitionToBacklogNum().getValuesMap());
+        } else {
+            partitionToBacklogNum = null;
+        }
+    }
 }

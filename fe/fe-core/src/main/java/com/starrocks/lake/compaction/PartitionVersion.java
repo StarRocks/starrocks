@@ -16,6 +16,7 @@
 package com.starrocks.lake.compaction;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.PartitionVersionPB;
 
 import java.util.Objects;
 
@@ -53,5 +54,16 @@ public class PartitionVersion {
     @Override
     public int hashCode() {
         return Objects.hash(version, createTime);
+    }
+
+    public PartitionVersionPB toProto() {
+        return PartitionVersionPB.newBuilder()
+                .setVersion(version)
+                .setCreateTime(createTime)
+                .build();
+    }
+
+    public static PartitionVersion fromProto(PartitionVersionPB pb) {
+        return new PartitionVersion(pb.getVersion(), pb.getCreateTime());
     }
 }

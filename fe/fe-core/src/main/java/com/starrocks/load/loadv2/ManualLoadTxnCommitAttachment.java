@@ -16,6 +16,8 @@
 package com.starrocks.load.loadv2;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.ManualLoadTxnCommitAttachmentPB;
+import com.starrocks.persist.proto.TxnCommitAttachmentPB;
 import com.starrocks.thrift.TManualLoadTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
@@ -91,6 +93,30 @@ public class ManualLoadTxnCommitAttachment extends TxnCommitAttachment {
         return receiveDataTime;
     }
 
+    @Override
+    protected void fillProtoVariant(TxnCommitAttachmentPB.Builder parent) {
+        ManualLoadTxnCommitAttachmentPB.Builder builder = ManualLoadTxnCommitAttachmentPB.newBuilder();
+        builder.setLoadedRows(loadedRows);
+        builder.setFilteredRows(filteredRows);
+        if (errorLogUrl != null) {
+            builder.setErrorLogUrl(errorLogUrl);
+        }
+        parent.setKind(TxnCommitAttachmentPB.Kind.MANUAL_LOAD).setManualLoad(builder);
+    }
 
-
+    @Override
+    protected void fillFromVariantProto(TxnCommitAttachmentPB parent) {
+        ManualLoadTxnCommitAttachmentPB pb = parent.getManualLoad();
+        if (pb.hasLoadedRows()) {
+            loadedRows = pb.getLoadedRows();
+        }
+        if (pb.hasFilteredRows()) {
+            filteredRows = pb.getFilteredRows();
+        }
+        if (pb.hasErrorLogUrl()) {
+            errorLogUrl = pb.getErrorLogUrl();
+        } else {
+            errorLogUrl = null;
+        }
+    }
 }

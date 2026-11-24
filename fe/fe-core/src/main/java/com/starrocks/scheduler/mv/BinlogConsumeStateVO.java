@@ -19,6 +19,9 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.proto.BinlogConsumeStatePB;
+import com.starrocks.persist.proto.BinlogOffsetMapPB;
+import com.starrocks.persist.proto.BinlogOffsetPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TBinlogScanRange;
@@ -198,5 +201,25 @@ public class BinlogConsumeStateVO implements Writable {
                     "lsn=" + lsn +
                     '}';
         }
+    }
+
+    public BinlogConsumeStatePB toProto() {
+        BinlogConsumeStatePB.Builder builder = BinlogConsumeStatePB.newBuilder();
+        if (binlogMap != null) {
+            BinlogOffsetMapPB.Builder offsets = BinlogOffsetMapPB.newBuilder();
+            binlogMap.forEach((id, offset) -> offsets.putValues(id.getTabletId(), BinlogOffsetPB.newBuilder()
+                    .setVersion(offset.getVersion()).setLsn(offset.getLsn()).build()));
+            builder.setOffsets(offsets);
+        }
+        return builder.build();
+    }
+
+    public static BinlogConsumeStateVO fromProto(BinlogConsumeStatePB pb) {
+        BinlogConsumeStateVO result = new BinlogConsumeStateVO();
+        if (pb.hasOffsets()) {
+            pb.getOffsets().getValuesMap().forEach((tabletId, offset) -> result.binlogMap.put(
+                    new BinlogIdVO(tabletId), new BinlogLSNVO(offset.getVersion(), offset.getLsn())));
+        }
+        return result;
     }
 }

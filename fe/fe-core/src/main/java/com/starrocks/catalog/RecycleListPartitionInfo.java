@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.starrocks.common.DdlException;
 import com.starrocks.lake.DataCacheInfo;
+import com.starrocks.persist.proto.RecyclePartitionInfoPB;
 
 public class RecycleListPartitionInfo extends RecyclePartitionInfoV2 {
     public RecycleListPartitionInfo(long dbId, long tableId, Partition partition, DataProperty dataProperty,
@@ -31,5 +32,10 @@ public class RecycleListPartitionInfo extends RecyclePartitionInfoV2 {
 
     @Override
     public void recover(OlapTable table) {
+    }
+
+    @Override
+    protected RecyclePartitionInfoPB.Kind protoKind() {
+        return RecyclePartitionInfoPB.Kind.RECYCLE_LIST_PARTITION_INFO;
     }
 }

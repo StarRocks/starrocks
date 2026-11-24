@@ -36,6 +36,11 @@ import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.persist.AlterPipeLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.image.ProtoDateTimes;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.PipeLoadStatusPB;
+import com.starrocks.persist.proto.PipePB;
+import com.starrocks.persist.proto.StringMapPB;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.SubmitResult;
@@ -877,6 +882,25 @@ public class Pipe implements GsonPostProcessable {
             lastLoadedTime = null;
         }
 
+        public PipeLoadStatusPB toProto() {
+            PipeLoadStatusPB.Builder builder = PipeLoadStatusPB.newBuilder()
+                    .setLoadedFiles(loadedFiles).setLoadedBytes(loadedBytes).setLoadingFiles(loadingFiles);
+            if (lastLoadedTime != null) {
+                builder.setLastLoadedTime(ProtoDateTimes.toEpochSecond(lastLoadedTime));
+            }
+            return builder.build();
+        }
+
+        public static LoadStatus fromProto(PipeLoadStatusPB pb) throws IOException {
+            LoadStatus status = new LoadStatus();
+            status.loadedFiles = pb.getLoadedFiles();
+            status.loadedBytes = pb.getLoadedBytes();
+            status.loadingFiles = pb.getLoadingFiles();
+            status.lastLoadedTime = pb.hasLastLoadedTime() ? ProtoDateTimes.fromEpochSecond(pb.getLastLoadedTime()) : null;
+            status.gsonPostProcess();
+            return status;
+        }
+
         public LoadStatus cloneForUpdate() {
             LoadStatus status = new LoadStatus();
             status.loadedFiles = this.loadedFiles;
@@ -923,4 +947,64 @@ public class Pipe implements GsonPostProcessable {
         KAFKA,
     }
 
+    private Pipe(PipePB pb) throws IOException {
+        name = pb.hasName() ? pb.getName() : null;
+        id = pb.hasId() ? PipeId.fromProto(pb.getId()) : null;
+        type = pb.hasType() ? ProtoEnums.fromProto(pb.getType(), Type.class) : null;
+        state = pb.hasState() ? ProtoEnums.fromProto(pb.getState(), State.class) : null;
+        originSql = pb.hasOriginSql() ? pb.getOriginSql() : null;
+        pipeSource = pb.hasPipeSource() ? FilePipeSource.fromProto(pb.getPipeSource()) : null;
+        targetTable = pb.hasTargetTable() ? TableName.fromProto(pb.getTargetTable()) : null;
+        properties = pb.hasProperties() ? new HashMap<>(pb.getProperties().getValuesMap()) : null;
+        createdTime = pb.getCreatedTime();
+        loadStatus = pb.hasLoadStatus() ? LoadStatus.fromProto(pb.getLoadStatus()) : null;
+        taskExecutionVariables = pb.hasTaskExecutionVariables()
+                ? new HashMap<>(pb.getTaskExecutionVariables().getValuesMap()) : null;
+        // Gson allocates Pipe without invoking a constructor; properties rebuild the polling interval.
+        pollIntervalSecond = 0;
+        gsonPostProcess();
+    }
+
+    public PipePB toProto() {
+        PipePB.Builder builder = PipePB.newBuilder().setCreatedTime(createdTime);
+        if (name != null) {
+            builder.setName(name);
+        }
+        if (id != null) {
+            builder.setId(id.toProto());
+        }
+        if (type != null) {
+            builder.setType(ProtoEnums.toProto(type, PipePB.Type.class));
+        }
+        if (state != null) {
+            builder.setState(ProtoEnums.toProto(state, PipePB.State.class));
+        }
+        if (originSql != null) {
+            builder.setOriginSql(originSql);
+        }
+        if (pipeSource != null) {
+            builder.setPipeSource(pipeSource.toProto());
+        }
+        if (targetTable != null) {
+            builder.setTargetTable(targetTable.toProto());
+        }
+        if (properties != null) {
+            builder.setProperties(StringMapPB.newBuilder().putAllValues(properties));
+        }
+        if (loadStatus != null) {
+            builder.setLoadStatus(loadStatus.toProto());
+        }
+        if (taskExecutionVariables != null) {
+            builder.setTaskExecutionVariables(StringMapPB.newBuilder().putAllValues(taskExecutionVariables));
+        }
+        return builder.build();
+    }
+
+    public static Pipe fromProto(PipePB pb) {
+        try {
+            return new Pipe(pb);
+        } catch (IOException e) {
+            throw new IllegalArgumentException("invalid Pipe metadata", e);
+        }
+    }
 }

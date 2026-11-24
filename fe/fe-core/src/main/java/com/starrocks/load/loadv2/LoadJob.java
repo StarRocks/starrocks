@@ -35,6 +35,7 @@
 package com.starrocks.load.loadv2;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -67,6 +68,10 @@ import com.starrocks.load.LoadConstants;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.image.ProtoKinds;
+import com.starrocks.persist.proto.JSONOptionsPB;
+import com.starrocks.persist.proto.LoadJobCorePB;
+import com.starrocks.persist.proto.LoadJobPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.scheduler.Coordinator;
@@ -1410,5 +1415,221 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
 
         @SerializedName("env")
         public String envelope;
+
+        private JSONOptionsPB toProto() {
+            JSONOptionsPB.Builder builder = JSONOptionsPB.newBuilder();
+            builder.setStripOuterArray(stripOuterArray);
+            if (jsonPaths != null) {
+                builder.setJsonPaths(jsonPaths);
+            }
+            if (jsonRoot != null) {
+                builder.setJsonRoot(jsonRoot);
+            }
+            if (envelope != null) {
+                builder.setEnvelope(envelope);
+            }
+            return builder.build();
+        }
+
+        private void fillFromProto(JSONOptionsPB pb) {
+            if (pb.hasStripOuterArray()) {
+                stripOuterArray = pb.getStripOuterArray();
+            }
+            if (pb.hasJsonPaths()) {
+                jsonPaths = pb.getJsonPaths();
+            }
+            if (pb.hasJsonRoot()) {
+                jsonRoot = pb.getJsonRoot();
+            }
+            if (pb.hasEnvelope()) {
+                envelope = pb.getEnvelope();
+            }
+        }
+
+        private static JSONOptions fromProto(JSONOptionsPB pb) {
+            JSONOptions value = new JSONOptions();
+            value.fillFromProto(pb);
+            return value;
+        }
+
+    }
+
+    protected LoadJobCorePB toJobCoreProto() {
+        LoadJobCorePB.Builder builder = LoadJobCorePB.newBuilder();
+        builder.setId(id);
+        builder.setDbId(dbId);
+        if (label != null) {
+            builder.setLabel(label);
+        }
+        if (state != null) {
+            builder.setState(LoadJobCorePB.State.valueOf(state.name()));
+        }
+        if (jobType != null) {
+            builder.setJobType(LoadJobCorePB.JobType.valueOf(jobType.name()));
+        }
+        builder.setTimeoutSecond(timeoutSecond);
+        builder.setLoadMemLimit(loadMemLimit);
+        builder.setMaxFilterRatio(maxFilterRatio);
+        builder.setStrictMode(strictMode);
+        if (timezone != null) {
+            builder.setTimezone(timezone);
+        }
+        builder.setPartialUpdate(partialUpdate);
+        if (partialUpdateMode != null) {
+            builder.setPartialUpdateMode(partialUpdateMode);
+        }
+        builder.setPriority(priority);
+        builder.setLogRejectedRecordNum(logRejectedRecordNum);
+        builder.setCreateTimestamp(createTimestamp);
+        builder.setLoadStartTimestamp(loadStartTimestamp);
+        builder.setLoadCommittedTimestamp(loadCommittedTimestamp);
+        builder.setFinishTimestamp(finishTimestamp);
+        builder.setTransactionId(transactionId);
+        if (failMsg != null) {
+            builder.setFailMsg(failMsg.toProto());
+        }
+        if (loadingStatus != null) {
+            builder.setLoadingStatus(loadingStatus.toProto());
+        }
+        builder.setProgress(progress);
+        builder.setWarehouseId(warehouseId);
+        if (computeResource != null) {
+            builder.setComputeResource(computeResource.toProto());
+        }
+        if (mergeCondition != null) {
+            builder.setMergeCondition(mergeCondition);
+        }
+        if (jsonOptions != null) {
+            builder.setJsonOptions(jsonOptions.toProto());
+        }
+        if (user != null) {
+            builder.setUser(user);
+        }
+        return builder.build();
+    }
+
+    protected void fillJobCoreFromProto(LoadJobCorePB pb) {
+        if (pb.hasId()) {
+            id = pb.getId();
+        }
+        if (pb.hasDbId()) {
+            dbId = pb.getDbId();
+        }
+        if (pb.hasLabel()) {
+            label = pb.getLabel();
+        }
+        if (pb.hasState()) {
+            state = JobState.valueOf(pb.getState().name());
+        }
+        if (pb.hasJobType()) {
+            jobType = EtlJobType.valueOf(pb.getJobType().name());
+        }
+        if (pb.hasTimeoutSecond()) {
+            timeoutSecond = pb.getTimeoutSecond();
+        }
+        if (pb.hasLoadMemLimit()) {
+            loadMemLimit = pb.getLoadMemLimit();
+        }
+        if (pb.hasMaxFilterRatio()) {
+            maxFilterRatio = pb.getMaxFilterRatio();
+        }
+        if (pb.hasStrictMode()) {
+            strictMode = pb.getStrictMode();
+        }
+        if (pb.hasTimezone()) {
+            timezone = pb.getTimezone();
+        }
+        if (pb.hasPartialUpdate()) {
+            partialUpdate = pb.getPartialUpdate();
+        }
+        if (pb.hasPartialUpdateMode()) {
+            partialUpdateMode = pb.getPartialUpdateMode();
+        }
+        if (pb.hasPriority()) {
+            priority = pb.getPriority();
+        }
+        if (pb.hasLogRejectedRecordNum()) {
+            logRejectedRecordNum = pb.getLogRejectedRecordNum();
+        }
+        if (pb.hasCreateTimestamp()) {
+            createTimestamp = pb.getCreateTimestamp();
+        }
+        if (pb.hasLoadStartTimestamp()) {
+            loadStartTimestamp = pb.getLoadStartTimestamp();
+        }
+        if (pb.hasLoadCommittedTimestamp()) {
+            loadCommittedTimestamp = pb.getLoadCommittedTimestamp();
+        }
+        if (pb.hasFinishTimestamp()) {
+            finishTimestamp = pb.getFinishTimestamp();
+        }
+        if (pb.hasTransactionId()) {
+            transactionId = pb.getTransactionId();
+        }
+        if (pb.hasFailMsg()) {
+            failMsg = FailMsg.fromProto(pb.getFailMsg());
+        }
+        if (pb.hasLoadingStatus()) {
+            loadingStatus = EtlStatus.fromProto(pb.getLoadingStatus());
+        }
+        if (pb.hasProgress()) {
+            progress = pb.getProgress();
+        }
+        if (pb.hasWarehouseId()) {
+            warehouseId = pb.getWarehouseId();
+        }
+        if (pb.hasComputeResource()) {
+            computeResource = ComputeResource.fromProto(pb.getComputeResource());
+        }
+        if (pb.hasMergeCondition()) {
+            mergeCondition = pb.getMergeCondition();
+        }
+        if (pb.hasJsonOptions()) {
+            jsonOptions = JSONOptions.fromProto(pb.getJsonOptions());
+        }
+        if (pb.hasUser()) {
+            user = pb.getUser();
+        }
+    }
+
+    public LoadJobPB toProto() {
+        LoadJobPB.Builder builder = LoadJobPB.newBuilder().setCore(toJobCoreProto());
+        fillProtoVariant(builder);
+        return builder.build();
+    }
+
+    protected void fillProtoVariant(LoadJobPB.Builder builder) {
+        throw new IllegalStateException("cannot persist " + getClass().getName());
+    }
+
+    protected void fillFromVariantProto(LoadJobPB pb) {
+        throw new IllegalStateException("cannot persist " + getClass().getName());
+    }
+
+    public static LoadJob fromProto(LoadJobPB pb) {
+        ProtoKinds.checkKnown(pb.getKind(), pb.getKindValue());
+        Preconditions.checkArgument(pb.hasCore(), "missing load job core");
+        LoadJob job;
+        switch (pb.getKind()) {
+            case BROKER_LOAD_JOB:
+                Preconditions.checkArgument(pb.hasBroker() && pb.getBroker().hasBulk(), "missing broker load variant");
+                job = new BrokerLoadJob();
+                break;
+            case SPARK_LOAD_JOB:
+                Preconditions.checkArgument(pb.hasSpark() && pb.getSpark().hasBulk(), "missing spark load variant");
+                job = new SparkLoadJob();
+                break;
+            case INSERT_LOAD_JOB:
+                Preconditions.checkArgument(pb.hasInsert(), "missing insert load variant");
+                job = new InsertLoadJob();
+                break;
+            default:
+                throw new IllegalArgumentException("unknown load job kind " + pb.getKind());
+        }
+        EtlJobType expectedType = job.jobType;
+        job.fillJobCoreFromProto(pb.getCore());
+        Preconditions.checkArgument(job.jobType == expectedType, "load job type mismatch");
+        job.fillFromVariantProto(pb);
+        return job;
     }
 }

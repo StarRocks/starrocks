@@ -23,6 +23,9 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.persist.AlterResourceInfo;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.HiveResourcePB;
+import com.starrocks.persist.proto.ResourcePB;
 import org.apache.commons.lang.StringUtils;
 
 import java.util.Map;
@@ -135,5 +138,24 @@ public class HiveResource extends Resource {
         sb.append(metastoreURIs);
         sb.append("\");");
         return sb.toString();
+    }
+
+    @Override
+    protected void fillProtoVariant(ResourcePB.Builder builder) {
+        HiveResourcePB.Builder variant = HiveResourcePB.newBuilder();
+        if (metastoreURIs != null) {
+            variant.setMetastoreUris(metastoreURIs);
+        }
+        if (properties != null) {
+            variant.setProperties(ProtoMaps.toStringMapProto(properties));
+        }
+        builder.setKind(ResourcePB.Kind.HIVE_RESOURCE).setHiveResource(variant);
+    }
+
+    @Override
+    protected void fillFromVariantProto(ResourcePB pb) {
+        HiveResourcePB variant = pb.getHiveResource();
+        metastoreURIs = variant.hasMetastoreUris() ? variant.getMetastoreUris() : null;
+        properties = variant.hasProperties() ? ProtoMaps.fromStringMapProto(variant.getProperties()) : null;
     }
 }

@@ -15,6 +15,7 @@
 package com.starrocks.authorization;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.PrivilegeEntryPB;
 import org.jetbrains.annotations.NotNull;
 
 public class PrivilegeEntry implements Comparable<PrivilegeEntry> {
@@ -64,5 +65,21 @@ public class PrivilegeEntry implements Comparable<PrivilegeEntry> {
             return 1;
         }
         return this.object.compareTo(o.object);
+    }
+
+    public PrivilegeEntryPB toProto() {
+        PrivilegeEntryPB.Builder builder = PrivilegeEntryPB.newBuilder().setWithGrantOption(withGrantOption);
+        if (actionSet != null) {
+            builder.setActionSet(actionSet.toProto());
+        }
+        if (object != null) {
+            builder.setObject(PrivilegeObjectProtoConverter.toProto(object));
+        }
+        return builder.build();
+    }
+
+    public static PrivilegeEntry fromProto(PrivilegeEntryPB pb) {
+        return new PrivilegeEntry(pb.hasActionSet() ? ActionSet.fromProto(pb.getActionSet()) : null,
+                pb.hasObject() ? PrivilegeObjectProtoConverter.fromProto(pb.getObject()) : null, pb.getWithGrantOption());
     }
 }

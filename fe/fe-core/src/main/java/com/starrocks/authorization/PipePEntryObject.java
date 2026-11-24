@@ -21,6 +21,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.Pair;
 import com.starrocks.load.pipe.Pipe;
 import com.starrocks.load.pipe.PipeManager;
+import com.starrocks.persist.proto.PipePrivilegeObjectPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.common.MetaNotFoundException;
@@ -242,5 +243,28 @@ public class PipePEntryObject implements PEntryObject {
         }
 
         return sb.toString();
+    }
+
+    public PipePrivilegeObjectPB toProto() {
+        PipePrivilegeObjectPB.Builder builder = PipePrivilegeObjectPB.newBuilder();
+        builder.setId(id);
+        if (dbUUID != null) {
+            builder.setDbUuid(dbUUID);
+        }
+        return builder.build();
+    }
+
+    // A protobuf constructor leaves the existing GSON construction path unchanged.
+    private PipePEntryObject(PipePrivilegeObjectPB pb) {
+        if (pb.hasId()) {
+            id = pb.getId();
+        }
+        if (pb.hasDbUuid()) {
+            dbUUID = pb.getDbUuid();
+        }
+    }
+
+    public static PipePEntryObject fromProto(PipePrivilegeObjectPB pb) {
+        return new PipePEntryObject(pb);
     }
 }

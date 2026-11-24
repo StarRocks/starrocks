@@ -44,6 +44,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
+import com.starrocks.persist.proto.TableNamePB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -253,5 +254,25 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
     @Override
     public int hashCode() {
         return Objects.hash(catalog, tbl, db);
+    }
+
+    /** Image v3 form: the table and the plain database name; the catalog is not persisted, as in v2. */
+    public TableNamePB toProto() {
+        TableNamePB.Builder builder = TableNamePB.newBuilder();
+        if (tbl != null) {
+            builder.setTbl(tbl);
+        }
+        if (db != null) {
+            builder.setDb(db);
+        }
+        return builder.build();
+    }
+
+    public static TableName fromProto(TableNamePB pb) {
+        // The same constructor GSON uses; the fields are set as read, without the normalization of the setters.
+        TableName name = new TableName();
+        name.tbl = pb.hasTbl() ? pb.getTbl() : null;
+        name.db = pb.hasDb() ? pb.getDb() : null;
+        return name;
     }
 }

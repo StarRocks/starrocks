@@ -14,6 +14,7 @@
 package com.starrocks.authorization;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.WarehousePrivilegeObjectPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.common.MetaNotFoundException;
@@ -123,5 +124,22 @@ public class WarehousePEntryObject implements PEntryObject {
             }
             return warehouse.getName();
         }
+    }
+
+    public WarehousePrivilegeObjectPB toProto() {
+        WarehousePrivilegeObjectPB.Builder builder = WarehousePrivilegeObjectPB.newBuilder();
+        builder.setId(id);
+        return builder.build();
+    }
+
+    // A protobuf constructor leaves the existing GSON construction path unchanged.
+    private WarehousePEntryObject(WarehousePrivilegeObjectPB pb) {
+        if (pb.hasId()) {
+            id = pb.getId();
+        }
+    }
+
+    public static WarehousePEntryObject fromProto(WarehousePrivilegeObjectPB pb) {
+        return new WarehousePEntryObject(pb);
     }
 }

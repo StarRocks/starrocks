@@ -1,0 +1,142 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/common.proto";
+import "persist/load_status.proto";
+import "persist/routine_load_progress.proto";
+import "persist/transaction_types.proto";
+import "persist/table.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "TxnCommitAttachmentProto";
+
+message TxnCommitAttachmentCorePB {
+  optional LoadJobSourceTypePB source_type = 1;
+}
+
+message TxnCommitAttachmentPB {
+  enum Kind {
+    UNSPECIFIED = 0;
+    INSERT = 1;
+    LOAD_JOB_FINAL_OPERATION = 2;
+    MANUAL_LOAD = 3;
+    MINI_LOAD = 4;
+    ROUTINE_LOAD = 5;
+    STREAM_LOAD = 6;
+    REPLICATION = 7;
+    COMPACTION = 8;
+  }
+  Kind kind = 1;
+  TxnCommitAttachmentCorePB core = 2;
+
+  oneof instance {
+    InsertTxnCommitAttachmentPB insert = 11;
+    LoadJobFinalOperationPB load_job_final_operation = 12;
+    ManualLoadTxnCommitAttachmentPB manual_load = 13;
+    MiniLoadTxnCommitAttachmentPB mini_load = 14;
+    RLTaskTxnCommitAttachmentPB routine_load = 15;
+    StreamLoadTxnCommitAttachmentPB stream_load = 16;
+    ReplicationTxnCommitAttachmentPB replication = 17;
+    CompactionTxnCommitAttachmentPB compaction = 18;
+  }
+}
+
+message InsertTxnCommitAttachmentPB {
+  optional int64 loaded_rows = 1;
+  optional bool is_version_overwrite = 2;
+  optional int64 partition_version = 3;
+  optional int64 shadow_rewrite_watershed_txn_id = 4;
+  optional int64 shadow_rewrite_alter_version = 5;
+  IVMRefreshCommitInfoPB ivm_refresh_commit_info = 6;
+  optional bool require_empty_partitions = 7;
+}
+
+message IVMRefreshCommitInfoPB {
+  IVMCommittedTvrMapPB committed_tvr_map = 1;
+}
+
+message IVMCommittedTvrMapPB {
+  repeated BaseTableInfoTvrVersionRangePB values = 1;
+}
+
+message LoadJobFinalOperationPB {
+  enum JobState {
+    UNSPECIFIED = 0;
+    UNKNOWN = 1;
+    PENDING = 2;
+    ETL = 3;
+    LOADING = 4;
+    COMMITTED = 5;
+    FINISHED = 6;
+    CANCELLED = 7;
+    QUEUEING = 8;
+  }
+  optional int64 id = 1;
+  EtlStatusPB loading_status = 2;
+  optional int32 progress = 3;
+  optional int64 load_start_timestamp = 4;
+  optional int64 finish_timestamp = 5;
+  optional JobState job_state = 6;
+  FailMsgPB fail_msg = 7;
+}
+
+message ManualLoadTxnCommitAttachmentPB {
+  optional int64 loaded_rows = 1;
+  optional int64 filtered_rows = 2;
+  optional string error_log_url = 3;
+}
+
+message MiniLoadTxnCommitAttachmentPB {
+  optional int64 loaded_rows = 1;
+  optional int64 filtered_rows = 2;
+  optional string error_log_url = 3;
+}
+
+message RLTaskTxnCommitAttachmentPB {
+  optional int64 filtered_rows = 1;
+  optional int64 loaded_rows = 2;
+  optional int64 unselected_rows = 3;
+  optional int64 received_bytes = 4;
+  optional int64 task_execution_time_ms = 5;
+  RoutineLoadProgressPB progress = 6;
+  RoutineLoadProgressPB timestamp_progress = 7;
+}
+
+message StreamLoadTxnCommitAttachmentPB {
+  optional string tracking_url = 1;
+  optional int64 before_load_time_ms = 2;
+  optional int64 start_loading_time_ms = 3;
+  optional int64 start_preparing_time_ms = 4;
+  optional int64 finish_preparing_time_ms = 5;
+  optional int64 end_time_ms = 6;
+  optional int64 num_rows_normal = 7;
+  optional int64 num_rows_abnormal = 8;
+  optional int64 num_rows_unselected = 9;
+  optional int64 num_load_bytes_total = 10;
+}
+
+message ReplicationTxnCommitAttachmentPB {
+  Int64MapPB partition_versions = 1;
+  Int64MapPB partition_version_epochs = 2;
+}
+
+message CompactionTxnCommitAttachmentPB {
+  optional bool force_commit = 1;
+  optional bool unshare = 2;
+}

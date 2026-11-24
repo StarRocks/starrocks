@@ -42,6 +42,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.SysDb;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -53,6 +54,9 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.persist.DropInfo;
+import com.starrocks.persist.gson.SubtypeNotFoundException;
+import com.starrocks.persist.proto.DatabasePB;
+import com.starrocks.persist.proto.FunctionPB;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatsConstants;
@@ -144,6 +148,58 @@ public class Database extends MetaObject implements Writable {
         this.dataQuotaBytes = FeConstants.DEFAULT_DB_DATA_QUOTA_BYTES;
         this.replicaQuotaSize = FeConstants.DEFAULT_DB_REPLICA_QUOTA_SIZE;
         this.location = location;
+    }
+
+    /** Image v3 form: the database without its tables, which are entries of the TABLE section. */
+    public DatabasePB toProto() {
+        DatabasePB.Builder builder = DatabasePB.newBuilder()
+                .setMeta(toMetaObjectProto())
+                .setId(id)
+                .setDataQuotaBytes(dataQuotaBytes)
+                .setReplicaQuotaSize(replicaQuotaSize);
+        if (fullQualifiedName != null) {
+            builder.setFullQualifiedName(fullQualifiedName);
+        }
+        // Keyed by function name in memory; each function carries its name.
+        for (List<Function> functions : name2Function.values()) {
+            for (Function function : functions) {
+                builder.addFunctions(function.toProto());
+            }
+        }
+        return builder.build();
+    }
+
+    public static Database fromProto(DatabasePB pb) {
+        // The same constructor GSON uses.
+        Database database = new Database();
+        if (pb.hasMeta()) {
+            database.fillFromMetaObjectProto(pb.getMeta());
+        }
+        database.id = pb.getId();
+        if (pb.hasFullQualifiedName()) {
+            database.fullQualifiedName = pb.getFullQualifiedName();
+        }
+        database.name2Function = Maps.newConcurrentMap();
+        for (FunctionPB functionPb : pb.getFunctionsList()) {
+            Function function;
+            try {
+                function = Function.fromProto(functionPb);
+            } catch (SubtypeNotFoundException e) {
+                if (!Config.metadata_ignore_unknown_subtype) {
+                    throw e;
+                }
+                // Match v2's per-function filtering; propagating to the entry reader would skip the whole database.
+                LOG.warn("ignore function {} in database {} ({}): unknown subtype {}",
+                        functionPb.getCore().getName().getFn(), database.fullQualifiedName,
+                        database.id, e.getSubtype(), e);
+                continue;
+            }
+            database.name2Function.computeIfAbsent(function.getFunctionName().getFunction(), name -> new ArrayList<>())
+                    .add(function);
+        }
+        database.dataQuotaBytes = pb.getDataQuotaBytes();
+        database.replicaQuotaSize = pb.getReplicaQuotaSize();
+        return database;
     }
 
     public long getId() {

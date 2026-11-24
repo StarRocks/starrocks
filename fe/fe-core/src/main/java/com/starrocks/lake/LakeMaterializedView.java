@@ -37,6 +37,8 @@ import com.starrocks.catalog.RecyclePartitionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.persist.proto.LakeMaterializedViewPB;
+import com.starrocks.persist.proto.TablePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.statistic.StatsConstants;
@@ -206,6 +208,19 @@ public class LakeMaterializedView extends MaterializedView {
         // And the max unique id will be reset while rebuilding full schema.
         LakeTableHelper.restoreColumnUniqueIdIfNeeded(this);
         super.gsonPostProcess();
+    }
+
+    @Override
+    protected void fillProtoVariant(TablePB.Builder builder) throws IOException {
+        builder.setLakeMaterializedView(LakeMaterializedViewPB.newBuilder()
+                .setOlap(toOlapCoreProto())
+                .setMaterializedView(toMaterializedViewCoreProto()));
+    }
+
+    // Public because Table.fromProto, in another package, dispatches to it.
+    public void fillFromVariantProto(LakeMaterializedViewPB pb) throws IOException {
+        fillFromOlapCoreProto(pb.getOlap());
+        fillFromMaterializedViewCoreProto(pb.getMaterializedView());
     }
 
     // used in colocate table index, return an empty list for LakeMaterializedView

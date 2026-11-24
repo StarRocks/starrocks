@@ -45,6 +45,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
@@ -57,11 +58,19 @@ import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.RoutineLoadOperation;
+import com.starrocks.persist.image.ImageFormatException;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionReader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.RoutineLoadJobPB;
+import com.starrocks.persist.proto.RoutineLoadMgrPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -800,6 +809,14 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         });
     }
 
+    private void loadJob(RoutineLoadJob routineLoadJob) {
+        if (routineLoadJob.needRemove()) {
+            LOG.info("discard expired job [{}]", routineLoadJob.getId());
+            return;
+        }
+        putJob(routineLoadJob);
+    }
+
     public Map<Long, WarehouseLoadStatusInfo> getWarehouseLoadInfo() {
         readLock();
         try {
@@ -832,5 +849,27 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
             readUnlock();
         }
         return result;
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.ROUTINE_LOAD_MGR)) {
+            writer.writeManager(RoutineLoadMgrPB.getDefaultInstance());
+            for (RoutineLoadJob job : idToRoutineLoadJob.values()) {
+                writer.writeEntry(job.toProto());
+            }
+        }
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(Pair.create(SectionId.ROUTINE_LOAD_MGR, this::loadSection));
+    }
+
+    private void loadSection(SectionReader reader) throws IOException {
+        reader.readManager(RoutineLoadMgrPB.parser());
+        try {
+            reader.readEntries(RoutineLoadJobPB.parser(), pb -> loadJob(RoutineLoadJob.fromProto(pb)));
+        } catch (IllegalArgumentException | IllegalStateException | NullPointerException e) {
+            throw new ImageFormatException("invalid ROUTINE_LOAD_MGR entry", e);
+        }
     }
 }

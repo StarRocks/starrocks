@@ -20,17 +20,24 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
 import com.starrocks.persist.ClusterSnapshotLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.ClusterSnapshotJobPB;
+import com.starrocks.persist.proto.ClusterSnapshotMgrPB;
 import com.starrocks.proto.RetainSnapshotPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -625,5 +632,33 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
 
     @Override
     public void gsonPostProcess() throws IOException {
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(Pair.create(SectionId.CLUSTER_SNAPSHOT_MGR, reader -> {
+            ClusterSnapshotMgrPB pb = reader.readManager(ClusterSnapshotMgrPB.parser());
+            storageVolumeName = pb.hasStorageVolumeName() ? pb.getStorageVolumeName() : null;
+            automatedSnapshotIntervalSeconds = pb.getAutomatedSnapshotIntervalSeconds();
+            NavigableMap<Long, ClusterSnapshotJob> jobs = new ConcurrentSkipListMap<>();
+            reader.readEntries(ClusterSnapshotJobPB.parser(), entry -> {
+                ClusterSnapshotJob job = ClusterSnapshotJob.fromProto(entry);
+                jobs.put(job.getId(), job);
+            });
+            automatedSnapshotJobs = jobs;
+        }));
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.CLUSTER_SNAPSHOT_MGR)) {
+            ClusterSnapshotMgrPB.Builder builder = ClusterSnapshotMgrPB.newBuilder()
+                    .setAutomatedSnapshotIntervalSeconds(automatedSnapshotIntervalSeconds);
+            if (storageVolumeName != null) {
+                builder.setStorageVolumeName(storageVolumeName);
+            }
+            writer.writeManager(builder.build());
+            for (ClusterSnapshotJob job : automatedSnapshotJobs.values()) {
+                writer.writeEntry(job.toProto());
+            }
+        }
     }
 }

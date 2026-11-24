@@ -134,7 +134,7 @@ public class Storage {
             for (File child : children) {
                 String name = child.getName();
                 try {
-                    if (!name.equals(IMAGE_NEW) && name.startsWith(IMAGE) && name.contains(".")) {
+                    if (child.isFile() && name.matches("image\\.[0-9]+")) {
                         imageJournalId =
                                 Math.max(Long.parseLong(name.substring(name.lastIndexOf('.') + 1)), imageJournalId);
                     }

@@ -54,6 +54,8 @@ import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.TablePropertyPB;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -1550,6 +1552,46 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return tableQueryTimeout;
     }
 
+    public TablePropertyPB toProto() {
+        TablePropertyPB.Builder builder = TablePropertyPB.newBuilder()
+                .setLightWeightTabletCreation(lightWeightTabletCreation)
+                .setCompressionLevel(compressionLevel)
+                .setHasDelete(hasDelete)
+                .setHasForbiddenGlobalDict(hasForbiddenGlobalDict)
+                .setLakeCompactionMaxParallel(lakeCompactionMaxParallel)
+                .setEnableStatisticCollectOnFirstLoad(enableStatisticCollectOnFirstLoad)
+                .setEnableStatisticCollectOnFirstLoadSet(enableStatisticCollectOnFirstLoadSet)
+                .setTableQueryTimeout(tableQueryTimeout);
+        if (properties != null) {
+            builder.putAllProperties(ProtoMaps.withoutNullValues(properties));
+        }
+        if (noDictColumns != null) {
+            builder.addAllNoDictColumns(noDictColumns);
+        }
+        if (storageInfo != null) {
+            builder.setStorageInfo(storageInfo.toProto());
+        }
+        return builder.build();
+    }
+
+    public static TableProperty fromProto(TablePropertyPB pb) throws IOException {
+        TableProperty property = new TableProperty(Maps.newLinkedHashMap(pb.getPropertiesMap()));
+        property.lightWeightTabletCreation = pb.getLightWeightTabletCreation();
+        property.compressionLevel = pb.getCompressionLevel();
+        property.hasDelete = pb.getHasDelete();
+        property.hasForbiddenGlobalDict = pb.getHasForbiddenGlobalDict();
+        property.noDictColumns = new HashSet<>(pb.getNoDictColumnsList());
+        if (pb.hasStorageInfo()) {
+            property.storageInfo = StorageInfo.fromProto(pb.getStorageInfo());
+        }
+        property.lakeCompactionMaxParallel = pb.getLakeCompactionMaxParallel();
+        property.enableStatisticCollectOnFirstLoad = pb.getEnableStatisticCollectOnFirstLoad();
+        property.enableStatisticCollectOnFirstLoadSet = pb.getEnableStatisticCollectOnFirstLoadSet();
+        property.tableQueryTimeout = pb.getTableQueryTimeout();
+        property.rebuildFromProperties();
+        return property;
+    }
+
     @Override
     public void gsonPostProcess() throws IOException {
         try {
@@ -1559,6 +1601,53 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
         buildReplicationNum();
         buildInMemory();
+        buildStorageVolume();
+        buildStorageCoolDownTTL();
+        buildEnablePersistentIndex();
+        buildPersistentIndexType();
+        buildPrimaryIndexCacheExpireSec();
+        buildCompressionType();
+        buildWriteQuorum();
+        buildPartitionLiveNumber();
+        buildPartitionRetentionCondition();
+        buildTimeDriftConstraint();
+        buildReplicatedStorage();
+        buildBucketSize();
+        buildEnableLoadProfile();
+        buildBinlogConfig();
+        buildFlatJsonConfig();
+        buildBinlogAvailableVersion();
+        buildDataCachePartitionDuration();
+        buildUseFastSchemaEvolution();
+        buildCloudNativeFastSchemaEvolutionV2();
+        buildStorageType();
+        buildMvProperties();
+        buildLocation();
+        buildBaseCompactionForbiddenTimeRanges();
+        buildFileBundling();
+        buildMutableBucketNum();
+        buildCompactionStrategy();
+        buildLoadInitialOpenPartitionNumber();
+        // Rebuilt from the raw map rather than serialized: an older FE that checkpoints after a rollback keeps
+        // the map entry but drops unknown fields, which would silently re-enable collection on roll-forward.
+        buildEnableStatisticAutoCollect();
+        // Rebuilt from the raw map rather than serialized: an older FE that checkpoints after a rollback keeps the
+        // map entry but drops unknown fields, so a serialized value would be lost on roll-forward while the map
+        // still lists the property. Rebuilding also drops the empty value an older FE stores when it replays a clear.
+        buildTabletReshardTargetSize();
+        // NOTE: new properties should not be built here, just add SerializedName to the field.
+    }
+
+    /**
+     * Derives the typed properties from the property map. Shared by the GSON hook and {@link #fromProto}.
+     */
+    private void rebuildFromProperties() {
+        try {
+            buildDynamicProperty();
+        } catch (Exception ex) {
+            LOG.warn("build dynamic property failed", ex);
+        }
+        buildReplicationNum();
         buildStorageVolume();
         buildStorageCoolDownTTL();
         buildEnablePersistentIndex();
