@@ -22,7 +22,10 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -39,6 +42,11 @@ public class TableFunctionRelation extends Relation {
      * and will be converted to childExpressions in Analyzer
      */
     private final FunctionParams functionParams;
+    /**
+     * Trino UNNEST semantics: an array whose elements are ROWs produces one relation column per immediate ROW
+     * field instead of one ROW-valued column. Set by the Trino parser; native UNNEST keeps the ROW column.
+     */
+    private boolean expandRowFields = false;
     private TableFunction tableFunction;
     private List<Expr> childExpressions;
     private JDBCTable queryTable;
@@ -54,6 +62,36 @@ public class TableFunctionRelation extends Relation {
         super(pos);
         this.functionName = new FunctionName(functionName);
         this.functionParams = functionParams;
+    }
+
+    public boolean isExpandRowFields() {
+        return expandRowFields;
+    }
+
+    public void setExpandRowFields(boolean expandRowFields) {
+        this.expandRowFields = expandRowFields;
+    }
+
+    /**
+     * Whether the table function's return column of this type is exposed as its immediate ROW fields.
+     */
+    public boolean expandsToRowFields(Type returnType) {
+        return expandRowFields && returnType.isStructType();
+    }
+
+    /**
+     * The types of the relation's visible columns, derived from the analyzed table function's return types.
+     */
+    public List<Type> getOutputTypes() {
+        List<Type> types = new ArrayList<>();
+        for (Type type : tableFunction.getTableFnReturnTypes()) {
+            if (expandsToRowFields(type)) {
+                ((StructType) type).getFields().forEach(field -> types.add(field.getType()));
+            } else {
+                types.add(type);
+            }
+        }
+        return types;
     }
 
     public FunctionName getFunctionName() {
