@@ -689,6 +689,115 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_multiple_filesets
     ASSERT_EQ(output_sstables[3].range().end_key(), sst4.range().end_key());
 }
 
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_key_dict) {
+    // PRIMARY KEY(c0 BIGINT, c1 VARCHAR): the key is c0 big-endian with the sign bit flipped, then c1.
+    auto* schema = _tablet_metadata->mutable_schema();
+    schema->clear_column();
+    schema->set_num_short_key_columns(2);
+    auto add_column = [&](const std::string& name, const std::string& type, bool is_key) {
+        auto* column = schema->add_column();
+        column->set_unique_id(next_id());
+        column->set_name(name);
+        column->set_type(type);
+        column->set_is_key(is_key);
+        column->set_is_nullable(false);
+        if (type == "VARCHAR") column->set_length(64);
+    };
+    add_column("c0", "BIGINT", true);
+    add_column("c1", "VARCHAR", true);
+    add_column("c2", "INT", false);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    auto make_key = [](int64_t id, const std::string& type) {
+        uint64_t u = static_cast<uint64_t>(id) ^ (1ULL << 63);
+        std::string key;
+        for (int i = 7; i >= 0; --i) key.push_back(static_cast<char>((u >> (i * 8)) & 0xff));
+        return key + type;
+    };
+    const std::vector<std::string> types = {"order_created", "order_paid", "order_shipped", "order_cancelled"};
+    const sstable::KeyLayout layout = {{8}, {0}};
+
+    // Three inputs whose keys interleave: two with dictionaries that each know half of the types, one without.
+    std::vector<std::string> all_keys;
+    std::vector<PersistentIndexSstablePB> inputs(3);
+    for (int part = 0; part < 3; ++part) {
+        auto options_ptr = std::make_shared<sstable::KeyDictOptions>();
+        if (part < 2) {
+            std::vector<std::string> values = {types[part * 2], types[part * 2 + 1]};
+            std::sort(values.begin(), values.end());
+            ASSIGN_OR_ABORT(options_ptr->dict, sstable::KeyDict::create(layout, {{1, values}}));
+            options_ptr->layout = layout;
+        }
+        sstable::Options options;
+        if (part < 2) options.key_dict_options = options_ptr;
+        const std::string filename = fmt::format("test_key_dict_{}.sst", part);
+        ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(_tablet_mgr->sst_location(_tablet_metadata->id(), filename)));
+        sstable::TableBuilder builder(options, wf.get());
+        for (int64_t id = part; id < 600; id += 3) {
+            const std::string key = make_key(id, types[id % 4]);
+            all_keys.push_back(key);
+            IndexValuesWithVerPB val_pb;
+            auto* v = val_pb.add_values();
+            v->set_version(1);
+            v->set_rssid(0);
+            v->set_rowid(static_cast<uint32_t>(id));
+            ASSERT_OK(builder.Add(Slice(key), Slice(val_pb.SerializeAsString())));
+        }
+        ASSERT_OK(builder.Finish());
+        ASSERT_OK(wf->close());
+        inputs[part].set_filename(filename);
+        inputs[part].set_filesize(builder.FileSize());
+        inputs[part].mutable_range()->set_start_key(builder.KeyRange().first.to_string());
+        inputs[part].mutable_range()->set_end_key(builder.KeyRange().second.to_string());
+        inputs[part].mutable_fileset_id()->CopyFrom(UniqueId::gen_uid().to_proto());
+    }
+    std::sort(all_keys.begin(), all_keys.end());
+    ASSIGN_OR_ABORT(auto input0, open_sstable(inputs[0]));
+    ASSERT_NE(nullptr, input0->key_dict());
+
+    auto compact = [&](bool enable, std::vector<PersistentIndexSstablePB>* outputs) {
+        const bool old = config::lake_enable_pk_index_sst_dict_encoding;
+        config::lake_enable_pk_index_sst_dict_encoding = enable;
+        DeferOp restore([&] { config::lake_enable_pk_index_sst_dict_encoding = old; });
+        auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+        ASSERT_OK(mgr->init());
+        std::vector<std::vector<PersistentIndexSstablePB>> candidates = {{inputs[0]}, {inputs[1]}, {inputs[2]}};
+        ASSERT_OK(mgr->compact(candidates, _tablet_metadata, true, outputs));
+        ASSERT_FALSE(outputs->empty());
+    };
+
+    for (bool enable : {true, false}) {
+        std::vector<PersistentIndexSstablePB> outputs;
+        ASSERT_NO_FATAL_FAILURE(compact(enable, &outputs));
+        ASSERT_EQ(all_keys.front(), outputs.front().range().start_key());
+        ASSERT_EQ(all_keys.back(), outputs.back().range().end_key());
+        std::vector<std::string> keys;
+        for (const auto& output : outputs) {
+            ASSIGN_OR_ABORT(auto sst, open_sstable(output));
+            if (enable) {
+                // The output keeps every value the inputs' dictionaries had, so all four types get codes.
+                ASSERT_NE(nullptr, sst->key_dict());
+                ASSERT_EQ(1, sst->key_dict()->columns().size());
+                ASSERT_EQ(types.size(), sst->key_dict()->columns()[0].values.size());
+            } else {
+                ASSERT_EQ(nullptr, sst->key_dict());
+            }
+            sstable::ReadOptions read_options;
+            std::unique_ptr<sstable::Iterator> iter(sst->new_iterator(read_options));
+            for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+                keys.push_back(iter->key().to_string());
+                IndexValuesWithVerPB val_pb;
+                ASSERT_TRUE(val_pb.ParseFromArray(iter->value().data, iter->value().size));
+                const std::string& key = keys.back();
+                uint64_t u = 0;
+                for (int i = 0; i < 8; ++i) u = (u << 8) | static_cast<uint8_t>(key[i]);
+                ASSERT_EQ(static_cast<uint32_t>(u ^ (1ULL << 63)), val_pb.values(0).rowid());
+            }
+            ASSERT_OK(iter->status());
+        }
+        ASSERT_EQ(all_keys, keys) << "enable=" << enable;
+    }
+}
+
 TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_merge_base_level) {
     auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
     ASSERT_OK(mgr->init());
