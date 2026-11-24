@@ -20,6 +20,8 @@ Similar to loading data into StarRocks native tables, if you have the [INSERT pr
 
 For Parquet data files, StarRocks honors the Iceberg table properties `write.parquet.page-size-bytes`, `write.parquet.dict-size-bytes`, and `write.parquet.row-group-size-bytes`. Each value must be a positive integer no greater than 2,147,483,647 bytes; an invalid value rejects the write. If a property is absent, StarRocks uses its writer default: 1 MiB for data pages and dictionary pages, and 128 MiB for row groups. These properties do not configure position-delete files.
 
+For Parquet data files, set the Iceberg table property `write.parquet.compression-level` to an integer to control the selected codec's compression level. Accepted ranges are -131072 to 22 for ZSTD, -1 to 9 for GZIP, and 0 to 11 for Brotli. Other codecs do not support an explicit level. An invalid value rejects the write. If this property is absent, the Parquet writer uses its codec default. The level does not apply to position-delete files.
+
 ### Syntax
 
 ```SQL

@@ -112,6 +112,7 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline) {
     iceberg_table_sink.__set_parquet_page_size_bytes(65536);
     iceberg_table_sink.__set_parquet_dict_size_bytes(131072);
     iceberg_table_sink.__set_parquet_row_group_size_bytes(1048576);
+    iceberg_table_sink.__set_parquet_compression_level(9);
     data_sink.iceberg_table_sink = iceberg_table_sink;
 
     std::vector<starrocks::TExpr> exprs = {};
@@ -128,6 +129,7 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline) {
     EXPECT_EQ(sink_ctx->options.at("write.parquet.page-size-bytes"), "65536");
     EXPECT_EQ(sink_ctx->options.at("write.parquet.dict-size-bytes"), "131072");
     EXPECT_EQ(sink_ctx->options.at("write.parquet.row-group-size-bytes"), "1048576");
+    EXPECT_EQ(sink_ctx->options.at("write.parquet.compression-level"), "9");
     EXPECT_EQ(sink_ctx->sort_ordering->sort_key_idxes.size(), 1);
     EXPECT_EQ(sink_ctx->sort_ordering->sort_descs.descs.size(), 1);
 }
@@ -838,6 +840,7 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update) {
     iceberg_table_sink.__set_parquet_page_size_bytes(65536);
     iceberg_table_sink.__set_parquet_dict_size_bytes(131072);
     iceberg_table_sink.__set_parquet_row_group_size_bytes(1048576);
+    iceberg_table_sink.__set_parquet_compression_level(9);
     data_sink.__set_iceberg_table_sink(iceberg_table_sink);
 
     std::vector<TExpr> exprs = {make_slot_ref_expr(0), make_slot_ref_expr(1), make_slot_ref_expr(2)};
@@ -869,6 +872,7 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update) {
     EXPECT_EQ(row_delta_ctx->data_sink_ctx->options.at("write.parquet.page-size-bytes"), "65536");
     EXPECT_EQ(row_delta_ctx->data_sink_ctx->options.at("write.parquet.dict-size-bytes"), "131072");
     EXPECT_EQ(row_delta_ctx->data_sink_ctx->options.at("write.parquet.row-group-size-bytes"), "1048576");
+    EXPECT_EQ(row_delta_ctx->data_sink_ctx->options.at("write.parquet.compression-level"), "9");
 }
 
 // UpdatePlanner derives row-delta data slot nullability from the feeding output expression,

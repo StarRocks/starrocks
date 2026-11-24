@@ -45,6 +45,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION;
+import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION_LEVEL;
 import static org.apache.iceberg.TableProperties.PARQUET_DICT_SIZE_BYTES;
 import static org.apache.iceberg.TableProperties.PARQUET_PAGE_SIZE_BYTES;
 import static org.apache.iceberg.TableProperties.PARQUET_ROW_GROUP_SIZE_BYTES;
@@ -62,6 +63,7 @@ public class IcebergTableSinkTest {
         nativeProps.put(PARQUET_PAGE_SIZE_BYTES, "65536");
         nativeProps.put(PARQUET_DICT_SIZE_BYTES, "131072");
         nativeProps.put(PARQUET_ROW_GROUP_SIZE_BYTES, "1048576");
+        nativeProps.put(PARQUET_COMPRESSION_LEVEL, "9");
 
         CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
 
@@ -122,6 +124,7 @@ public class IcebergTableSinkTest {
         Assertions.assertEquals(65536, t.getIceberg_table_sink().getParquet_page_size_bytes());
         Assertions.assertEquals(131072, t.getIceberg_table_sink().getParquet_dict_size_bytes());
         Assertions.assertEquals(1048576, t.getIceberg_table_sink().getParquet_row_group_size_bytes());
+        Assertions.assertEquals(9, t.getIceberg_table_sink().getParquet_compression_level());
     }
 
     @Test
@@ -188,6 +191,7 @@ public class IcebergTableSinkTest {
         Assertions.assertFalse(t.getIceberg_table_sink().isSetParquet_page_size_bytes());
         Assertions.assertFalse(t.getIceberg_table_sink().isSetParquet_dict_size_bytes());
         Assertions.assertFalse(t.getIceberg_table_sink().isSetParquet_row_group_size_bytes());
+        Assertions.assertFalse(t.getIceberg_table_sink().isSetParquet_compression_level());
     }
 
     /**
@@ -368,5 +372,21 @@ public class IcebergTableSinkTest {
         Assertions.assertThrows(IllegalArgumentException.class, () ->
                 com.starrocks.connector.iceberg.IcebergUtil.getPositiveIntProperty(
                         invalidDictSizeProperties, PARQUET_DICT_SIZE_BYTES));
+    }
+
+    @Test
+    public void testCompressionLevelValidation() {
+        Assertions.assertEquals(5,
+                com.starrocks.connector.iceberg.IcebergUtil.getParquetCompressionLevel(
+                        Map.of(PARQUET_COMPRESSION_LEVEL, "5"), "gzip"));
+        Assertions.assertThrows(IllegalArgumentException.class, () ->
+                com.starrocks.connector.iceberg.IcebergUtil.getParquetCompressionLevel(
+                        Map.of(PARQUET_COMPRESSION_LEVEL, "not-a-level"), "zstd"));
+        Assertions.assertThrows(IllegalArgumentException.class, () ->
+                com.starrocks.connector.iceberg.IcebergUtil.getParquetCompressionLevel(
+                        Map.of(PARQUET_COMPRESSION_LEVEL, "23"), "zstd"));
+        Assertions.assertThrows(IllegalArgumentException.class, () ->
+                com.starrocks.connector.iceberg.IcebergUtil.getParquetCompressionLevel(
+                        Map.of(PARQUET_COMPRESSION_LEVEL, "5"), "snappy"));
     }
 }

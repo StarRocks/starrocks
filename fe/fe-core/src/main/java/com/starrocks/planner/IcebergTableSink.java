@@ -47,6 +47,7 @@ public class IcebergTableSink extends DataSink {
     private final String tableLocation;
     private final String dataLocation;
     private final String compressionType;
+    private final Integer parquetCompressionLevel;
     private final long targetMaxFileSize;
     private final Integer parquetPageSizeBytes;
     private final Integer parquetDictSizeBytes;
@@ -74,6 +75,7 @@ public class IcebergTableSink extends DataSink {
                 .toLowerCase();
         this.compressionType = nativeTable.properties().getOrDefault(PARQUET_COMPRESSION,
                 sessionVariable.getConnectorSinkCompressionCodec());
+        this.parquetCompressionLevel = IcebergUtil.getParquetCompressionLevel(nativeTable.properties(), compressionType);
         this.targetMaxFileSize = IcebergUtil.resolveTargetMaxFileSize(nativeTable, sessionVariable);
         this.parquetPageSizeBytes = IcebergUtil.getPositiveIntProperty(nativeTable.properties(), PARQUET_PAGE_SIZE_BYTES);
         this.parquetDictSizeBytes = IcebergUtil.getPositiveIntProperty(nativeTable.properties(), PARQUET_DICT_SIZE_BYTES);
@@ -121,6 +123,9 @@ public class IcebergTableSink extends DataSink {
         TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);
         Preconditions.checkState(compression != null, "compression type not supported");
         tIcebergTableSink.setCompression_type(compression);
+        if (parquetCompressionLevel != null) {
+            tIcebergTableSink.setParquet_compression_level(parquetCompressionLevel);
+        }
         tIcebergTableSink.setTarget_max_file_size(targetMaxFileSize);
         if (parquetPageSizeBytes != null) {
             tIcebergTableSink.setParquet_page_size_bytes(parquetPageSizeBytes);

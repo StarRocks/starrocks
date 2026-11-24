@@ -23,6 +23,8 @@ products: [oss, enterprise, cloud, anywhere]
 
 对于 Parquet 数据文件，StarRocks 支持 Iceberg 表属性 `write.parquet.page-size-bytes`、`write.parquet.dict-size-bytes` 和 `write.parquet.row-group-size-bytes`。每个值必须是大于 0 且不超过 2,147,483,647 字节的整数；无效值会导致写入失败。未设置属性时，StarRocks 使用写入器默认值：数据页和字典页均为 1 MiB，行组为 128 MiB。这些属性不用于配置位置删除文件。
 
+对于 Parquet 数据文件，可以通过 Iceberg 表属性 `write.parquet.compression-level` 设置整数压缩级别。ZSTD 支持 -131072 至 22，GZIP 支持 -1 至 9，Brotli 支持 0 至 11。其他压缩算法不支持显式设置级别。无效值会导致写入失败。未设置该属性时，Parquet 写入器使用所选压缩算法的默认级别。此级别不适用于位置删除文件。
+
 ### 语法
 
 ```SQL
