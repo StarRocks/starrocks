@@ -368,6 +368,15 @@ This topic introduces the following types of BE configurations:
 - Description: The percentage of disk capacity that Data Cache can use at most in a shared-data cluster. Only takes effect when `datacache_unified_instance_enable` is `false`.
 - Introduced in: v3.1
 
+### starlet_star_cache_write_overwrite
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: In a shared-data cluster, whether a Data Cache write replaces an object that is already cached under the same key. When this item is `false`, the existing object is kept and the write is reported as successful, which suits the read-through fill path, where the bytes being written are the ones already cached. Set this item to `true` to let a re-read refresh a block that is suspected to be stale or damaged. Data Cache reads this item on every write, so a change takes effect on the next write without re-initializing the cache.
+- Introduced in: -
+
 ### starlet_use_star_cache
 
 - Default: false in v3.1 and true from v3.2.3

@@ -365,6 +365,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群中，Data Cache 最多可使用的磁盘容量百分比。仅在 `datacache_unified_instance_enable` 为 `false` 时生效。
 - 引入版本：v3.1
 
+### starlet_star_cache_write_overwrite
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，Data Cache 写入时是否覆盖同一 Key 下已缓存的对象。设为 `false` 时保留已有对象并将本次写入视为成功，适用于读穿透填充路径，此时写入的字节与已缓存的内容相同。设为 `true` 可让重新读取刷新疑似过期或损坏的 Block。Data Cache 在每次写入时都会读取该项，因此修改后在下一次写入即生效，无需重新初始化缓存。
+- 引入版本：-
+
 ### starlet_use_star_cache
 
 - 默认值：false（v3.1）true（v3.2.3 起）

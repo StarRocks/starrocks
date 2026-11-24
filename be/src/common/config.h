@@ -1366,6 +1366,12 @@ CONF_mInt32(starlet_cache_evict_throughput_mb, "200");
 CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "1048576");
 CONF_mBool(starlet_use_star_cache, "true");
 CONF_Bool(starlet_star_cache_async_init, "true");
+// Whether a StarCache write replaces an object that is already cached under the same key. Off, the
+// existing object is kept and the write is reported as success, which suits the read-through fill
+// path where the bytes being written are the ones already cached. Turn it on to let a re-read
+// refresh a block that is suspected to be stale or damaged. StarCache reads it on every write, so a
+// change takes effect on the next write without re-initializing the cache.
+CONF_mBool(starlet_star_cache_write_overwrite, "false");
 CONF_mInt32(starlet_star_cache_mem_size_percent, "0");
 CONF_mInt64(starlet_star_cache_mem_size_bytes, "134217728");
 CONF_Int32(starlet_star_cache_disk_size_percent, "80");
