@@ -232,6 +232,74 @@ public class CreateSyncMaterializedViewTest {
     }
 
     /**
+     * A rollup's name is unique only in its table. When two tables of the database have one of the name a
+     * [_SYNC_MV_] read gives, which of them it would read is not determined, so the read is rejected. With one left,
+     * it reads that one.
+     */
+    @Test
+    public void testSelectFromRollupNameSharedByTwoTables() throws Exception {
+        String rollup = "r_shared_by_two_tables";
+        for (String table : List.of("t_rollup_shared_a", "t_rollup_shared_b")) {
+            starRocksAssert.withTable("CREATE TABLE test." + table + " (k1 INT, k2 INT, v1 INT) DUPLICATE KEY(k1, k2) "
+                    + "DISTRIBUTED BY HASH(k1) BUCKETS 1 ROLLUP (" + rollup + " (k2, k1)) "
+                    + "PROPERTIES ('replication_num' = '1')");
+        }
+        String sql = "select * from " + rollup + " [_SYNC_MV_]";
+        try {
+            Exception e = Assertions.assertThrows(Exception.class,
+                    () -> UtFrameUtils.getPlanAndFragment(connectContext, sql));
+            Assertions.assertTrue(e.getMessage().contains("Duplicate rollup name '" + rollup + "': more than one "
+                    + "table has a rollup of that name"), e.getMessage());
+
+            starRocksAssert.dropTable("t_rollup_shared_b");
+            String explain = UtFrameUtils.getPlanAndFragment(connectContext, sql).second
+                    .getExplainString(StatementBase.ExplainLevel.NORMAL);
+            Assertions.assertTrue(explain.contains("TABLE: t_rollup_shared_a"), explain);
+            Assertions.assertTrue(explain.contains("rollup: " + rollup), explain);
+        } finally {
+            starRocksAssert.dropTable("if exists test.t_rollup_shared_a");
+            starRocksAssert.dropTable("if exists test.t_rollup_shared_b");
+        }
+    }
+
+    /**
+     * A temporary table is visible only in the session that created it, rollups included. Another session's
+     * temporary table with a rollup of the name a [_SYNC_MV_] read gives neither makes the read ambiguous nor is
+     * read. In its own session it is a table like any other, so there the read is ambiguous.
+     */
+    @Test
+    public void testSelectFromRollupNameSharedWithAnotherSessionsTemporaryTable() throws Exception {
+        String rollup = "r_shared_with_a_temporary_table";
+        starRocksAssert.withTable("CREATE TABLE test.t_rollup_temporary (k1 INT, k2 INT, v1 INT) "
+                + "DUPLICATE KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 1 ROLLUP (" + rollup + " (k2, k1)) "
+                + "PROPERTIES ('replication_num' = '1')");
+        ConnectContext otherSession = UtFrameUtils.createDefaultCtx();
+        StarRocksAssert otherSessionAssert = new StarRocksAssert(otherSession).useDatabase("test");
+        String sql = "select k2, k1 from " + rollup + " [_SYNC_MV_]";
+        try {
+            otherSessionAssert.withTemporaryTable("create temporary table t_temporary_with_shared_rollup "
+                    + "(k1 int, k2 int, v1 int) engine=olap duplicate key(k1, k2) distributed by hash(k1) buckets 1 "
+                    + "rollup (" + rollup + " (k2, k1)) properties('replication_num' = '1')");
+
+            connectContext.setThreadLocalInfo();
+            String explain = UtFrameUtils.getPlanAndFragment(connectContext, sql).second
+                    .getExplainString(StatementBase.ExplainLevel.NORMAL);
+            Assertions.assertTrue(explain.contains("TABLE: t_rollup_temporary"), explain);
+            Assertions.assertTrue(explain.contains("rollup: " + rollup), explain);
+
+            otherSession.setThreadLocalInfo();
+            Exception e = Assertions.assertThrows(Exception.class,
+                    () -> UtFrameUtils.getPlanAndFragment(otherSession, sql));
+            Assertions.assertTrue(e.getMessage().contains("Duplicate rollup name '" + rollup + "'"), e.getMessage());
+        } finally {
+            otherSession.setThreadLocalInfo();
+            otherSessionAssert.dropTemporaryTable("t_temporary_with_shared_rollup", true);
+            connectContext.setThreadLocalInfo();
+            starRocksAssert.dropTable("if exists test.t_rollup_temporary");
+        }
+    }
+
+    /**
      * A temporary table is visible only in the session that created it, rollups included: another session cannot
      * read its rollup through [_SYNC_MV_], while its own session can. Not through the test harness's CREATE VIEW
      * round trip ({@code FeConstants.unitTestView}): a view cannot read a temporary table.
