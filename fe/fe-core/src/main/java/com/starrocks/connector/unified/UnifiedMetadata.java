@@ -40,7 +40,9 @@ import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetadata;
+import com.starrocks.connector.metadata.MetadataTableName;
 import com.starrocks.connector.metadata.MetadataTableType;
+import com.starrocks.connector.paimon.PaimonUtils;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -53,6 +55,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TSinkCommitInfo;
+import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 
 import java.util.List;
 import java.util.Map;
@@ -118,6 +122,38 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
             return KUDU;
         }
         return HIVE;
+    }
+
+    /** Resolve a virtual table before falling back to an ordinary lookup of the full HMS name. */
+    public ConnectorMetadata resolveTableForRead(String dbName, String fullName, ConnectorMetadata tableMetadata) {
+        if (fullName.indexOf('$') < 1) {
+            return this;
+        }
+        MetadataTableName metadataName = MetadataTableName.isMetadataTable(fullName) ? MetadataTableName.from(fullName) : null;
+        if (metadataName != null && metadataName.getTableType() == MetadataTableType.PAIMON_GLOBAL_INDEX) {
+            // Only the internal metadata factory may authorize and construct this relation.
+            if (tableMetadata == null) {
+                throw new StarRocksConnectorException("No metadata table factory for %s.%s", dbName, fullName);
+            }
+            return tableMetadata;
+        }
+        String paimonBase = PaimonUtils.systemTableBaseName(dbName, fullName);
+        if (paimonBase == null && metadataName == null) {
+            return this;
+        }
+        Table.TableType owner;
+        try {
+            owner = getTableType(dbName, paimonBase != null ? paimonBase : metadataName.getTableName());
+        } catch (StarRocksConnectorException e) {
+            if (ExceptionUtils.indexOfType(e, NoSuchObjectException.class) >= 0) {
+                return this;
+            }
+            throw e;
+        }
+        if (owner == PAIMON && paimonBase != null) {
+            return metadataOfType(PAIMON);
+        }
+        return owner == ICEBERG && metadataName != null && tableMetadata != null ? tableMetadata : this;
     }
 
     private Table.TableType getTableType(Table table) {

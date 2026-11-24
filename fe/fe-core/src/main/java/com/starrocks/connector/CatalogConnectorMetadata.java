@@ -35,6 +35,7 @@ import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.metadata.TableMetaMetadata;
+import com.starrocks.connector.unified.UnifiedMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -91,14 +92,21 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
         this.tableMetadata = tableMetadata;
     }
 
-    private ConnectorMetadata metadataOfTable(String tableName) {
-        // Paimon system table shares the same pattern, ignore it here
-        if (TableMetaMetadata.isMetadataTable(tableName)
+    private ConnectorMetadata metadataOfTable(String dbName, String tableName) {
+        ConnectorMetadata database = metadataOfDb(dbName);
+        if (database == informationSchema) {
+            return database;
+        }
+        if (database instanceof UnifiedMetadata unified) {
+            return unified.resolveTableForRead(dbName, tableName, tableMetadata);
+        }
+        // Dedicated Paimon catalogs resolve native system tables through the Paimon connector.
+        if (tableMetadata != null && TableMetaMetadata.isMetadataTable(tableName)
                 && (getTableType() != Table.TableType.PAIMON
                 || tableName.endsWith(com.starrocks.connector.paimon.PaimonGlobalIndexMetadataTable.SUFFIX))) {
             return tableMetadata;
         }
-        return null;
+        return database;
     }
 
     private ConnectorMetadata metadataOfTable(Table table) {
@@ -138,32 +146,25 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     @Override
     public List<String> listPartitionNames(String databaseName, String tableName,
                                            ConnectorMetadataRequestContext requestContext) {
-        return normal.listPartitionNames(databaseName, tableName, requestContext);
+        ConnectorMetadata metadata = normal instanceof UnifiedMetadata ? metadataOfTable(databaseName, tableName) : normal;
+        return metadata.listPartitionNames(databaseName, tableName, requestContext);
     }
 
     @Override
     public List<String> listPartitionNamesByValue(String databaseName, String tableName,
                                                   List<Optional<String>> partitionValues) {
-        return normal.listPartitionNamesByValue(databaseName, tableName, partitionValues);
+        ConnectorMetadata metadata = normal instanceof UnifiedMetadata ? metadataOfTable(databaseName, tableName) : normal;
+        return metadata.listPartitionNamesByValue(databaseName, tableName, partitionValues);
     }
 
     @Override
     public Table getTable(ConnectContext context, String dbName, String tblName) {
-        ConnectorMetadata metadata = metadataOfTable(tblName);
-        if (metadata == null) {
-            metadata = metadataOfDb(dbName);
-        }
-
-        return metadata.getTable(context, dbName, tblName);
+        return metadataOfTable(dbName, tblName).getTable(context, dbName, tblName);
     }
 
     @Override
     public String getTableComment(ConnectContext context, String dbName, String tblName) {
-        ConnectorMetadata metadata = metadataOfTable(tblName);
-        if (metadata == null) {
-            metadata = metadataOfDb(dbName);
-        }
-        return metadata.getTableComment(context, dbName, tblName);
+        return metadataOfTable(dbName, tblName).getTableComment(context, dbName, tblName);
     }
 
     @Override
@@ -228,6 +229,13 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     @Override
     public boolean tableExists(ConnectContext context, String dbName, String tblName) {
         ConnectorMetadata metadata = metadataOfDb(dbName);
+        if (metadata instanceof UnifiedMetadata) {
+            metadata = metadataOfTable(dbName, tblName);
+            if (metadata == tableMetadata) {
+                // A synthetic metadata table has no entry under its full name in the metastore.
+                return metadata.getTable(context, dbName, tblName) != null;
+            }
+        }
         return metadata.tableExists(context, dbName, tblName);
     }
 
