@@ -29,7 +29,7 @@ DEFINE_FAIL_POINT(except_hash_set_force_by_rows);
 
 template <typename HashSet>
 Status ExceptHashSet<HashSet>::BufferState::init(RuntimeState* state) {
-    buffer = mem_pool.allocate(max_one_row_size * state->chunk_size());
+    buffer = mem_pool.allocate(max_one_row_size * state->chunk_size() + SLICE_MEMEQUAL_OVERFLOW_PADDING);
     RETURN_IF_UNLIKELY_NULL(buffer, Status::MemoryAllocFailed("alloc mem of except hash set failed"));
     slice_sizes.reserve(state->chunk_size());
     return Status::OK();

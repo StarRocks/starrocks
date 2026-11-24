@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <memory>
 #include <string>
 #include <vector>
@@ -50,16 +51,24 @@ TEST(FragmentDictStateTest, InitQueryAndLoadGlobalDicts) {
     ASSERT_OK(
             fragment_dict_state.init_query_global_dict(&state, {make_global_dict(3, 11, {0, 1}, {"", "query-value"})}));
     ASSERT_OK(fragment_dict_state.init_load_global_dict(&state, {make_global_dict(5, 17, {0, 2}, {"", "load-value"})}));
+    EXPECT_GE(state.instance_mem_pool()->total_allocated_bytes(),
+              11 + SLICE_MEMEQUAL_OVERFLOW_PADDING + 10 + SLICE_MEMEQUAL_OVERFLOW_PADDING);
 
     const auto& query_dicts = fragment_dict_state.query_global_dicts();
     ASSERT_EQ(1, query_dicts.size());
     ASSERT_NE(query_dicts.find(3), query_dicts.end());
-    EXPECT_EQ("query-value", query_dicts.find(3)->second.second.find(1)->second.to_string());
+    Slice query_slice = query_dicts.find(3)->second.second.find(1)->second;
+    EXPECT_EQ("query-value", query_slice.to_string());
+    std::memset(const_cast<char*>(query_slice.data) + query_slice.size, 0x5A, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+    EXPECT_EQ(1, query_dicts.find(3)->second.first.find(query_slice)->second);
 
     const auto& load_dicts = fragment_dict_state.load_global_dicts();
     ASSERT_EQ(1, load_dicts.size());
     ASSERT_NE(load_dicts.find(5), load_dicts.end());
-    EXPECT_EQ("load-value", load_dicts.find(5)->second.second.find(2)->second.to_string());
+    Slice load_slice = load_dicts.find(5)->second.second.find(2)->second;
+    EXPECT_EQ("load-value", load_slice.to_string());
+    std::memset(const_cast<char*>(load_slice.data) + load_slice.size, 0x5A, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+    EXPECT_EQ(2, load_dicts.find(5)->second.first.find(load_slice)->second);
 
     const auto& versions = fragment_dict_state.load_dict_versions();
     ASSERT_NE(versions.find(5), versions.end());

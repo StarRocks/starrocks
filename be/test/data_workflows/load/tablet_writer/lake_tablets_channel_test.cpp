@@ -2046,4 +2046,16 @@ TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest, test_late_arriving_sender_
     EXPECT_EQ(per_partition_before + 1, m->lake_txn_log_collect_per_partition_total.value());
     EXPECT_EQ(orphan_before, m->lake_txn_log_collect_orphan_partition_total.value());
 }
+
+TEST_F(LakeTabletsChannelTest, test_open_with_global_dict_words) {
+    auto open_request = _open_request;
+    open_request.set_num_senders(1);
+    auto* slot = open_request.mutable_schema()->mutable_slot_descs(1);
+    slot->add_global_dict_words("dict_word_alpha");
+    slot->add_global_dict_words("dict_word_beta_16");
+    slot->set_global_dict_version(3);
+    slot->set_global_dict_content_identity(42);
+
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
+}
 } // namespace starrocks
