@@ -187,14 +187,6 @@ private:
 
     std::mutex _mutex;
     std::unordered_map<int32_t, std::vector<std::shared_ptr<PyWorker>>> _processes;
-<<<<<<< HEAD
-=======
-    // Per driver, the number of workers being started by _acquire_worker. They count against
-    // python_worker_max_per_driver, so concurrent acquires do not start more than the limit.
-    std::unordered_map<int32_t, size_t> _num_starting;
-    // Notified when a worker start finishes, successfully or not.
-    std::condition_variable _worker_started;
->>>>>>> 19710e6 ([Enhancement] Spread Python UDF stubs across a driver's worker processes (#82776))
 };
 
 // TODO: support config PYTHONPATH

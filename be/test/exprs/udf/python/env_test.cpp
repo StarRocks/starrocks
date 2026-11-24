@@ -338,8 +338,6 @@ TEST_F(PyWorkerManagerEnvTest, worker_in_use_is_not_expired) {
     ASSERT_EQ(0, pooled());
 }
 
-<<<<<<< HEAD
-=======
 // A driver's stubs are spread over up to python_worker_max_per_driver workers, each going to the
 // worker with the fewest stubs, so that concurrent calls of one driver run in different processes.
 TEST_F(PyWorkerManagerEnvTest, stubs_go_to_the_least_used_worker) {
@@ -354,7 +352,6 @@ TEST_F(PyWorkerManagerEnvTest, stubs_go_to_the_least_used_worker) {
         held.clear();
         std::lock_guard guard(manager._mutex);
         manager._processes.erase(driver_id);
-        manager._num_starting.erase(driver_id);
     });
     auto acquire = [&]() -> std::shared_ptr<PyWorker> {
         std::string url;
@@ -400,60 +397,6 @@ TEST_F(PyWorkerManagerEnvTest, stubs_go_to_the_least_used_worker) {
     ASSERT_EQ(now_pooled.end(), std::find(now_pooled.begin(), now_pooled.end(), workers[0]));
 }
 
-// Concurrent calls of one driver, such as its scan IO tasks building stubs at the same time, must
-// not each start a worker: workers being started count against python_worker_max_per_driver.
-TEST_F(PyWorkerManagerEnvTest, concurrent_acquires_respect_the_worker_limit) {
-    ASSERT_NO_FATAL_FAILURE(create_fake_python_env());
-    auto saved_max_per_driver = config::python_worker_max_per_driver;
-    config::python_worker_max_per_driver = 3;
-    auto& manager = PyWorkerManager::getInstance();
-    constexpr int32_t driver_id = 0x7fff0003;
-    std::vector<std::shared_ptr<PyWorker>> held(16);
-    DeferOp cleanup([&]() {
-        config::python_worker_max_per_driver = saved_max_per_driver;
-        held.clear();
-        std::vector<std::shared_ptr<PyWorker>> workers;
-        {
-            std::lock_guard guard(manager._mutex);
-            workers = std::move(manager._processes[driver_id]);
-            manager._processes.erase(driver_id);
-        }
-        for (auto& worker : workers) {
-            worker->terminate_and_wait();
-        }
-    });
-
-    std::vector<std::thread> threads;
-    for (size_t i = 0; i < held.size(); ++i) {
-        threads.emplace_back([&, i]() {
-            std::string url;
-            auto worker = manager._acquire_worker(driver_id, /*reusable=*/1, &url);
-            EXPECT_OK(worker.status());
-            if (worker.ok()) {
-                held[i] = worker.value();
-            }
-        });
-    }
-    for (auto& thread : threads) {
-        thread.join();
-    }
-
-    std::lock_guard guard(manager._mutex);
-    const auto& workers = manager._processes[driver_id];
-    ASSERT_EQ(3, workers.size());
-    ASSERT_EQ(0, manager._num_starting.count(driver_id));
-    int total_clients = 0;
-    for (const auto& worker : workers) {
-        total_clients += worker->num_clients();
-    }
-    ASSERT_EQ(static_cast<int>(held.size()), total_clients);
-    for (const auto& worker : held) {
-        ASSERT_NE(nullptr, worker);
-        ASSERT_NE(workers.end(), std::find(workers.begin(), workers.end(), worker));
-    }
-}
-
->>>>>>> 19710e6 ([Enhancement] Spread Python UDF stubs across a driver's worker processes (#82776))
 // The Flight descriptor must carry the zip checksum (so an external worker can verify a package it
 // downloads itself), but must NOT carry service_url (that is BE-side routing only).
 TEST_F(PyWorkerManagerEnvTest, descriptor_serializes_checksum_not_service_url) {
