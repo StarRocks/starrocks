@@ -25,6 +25,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <csignal>
 #include <memory>
 #include <mutex>
@@ -280,26 +281,38 @@ StatusOr<std::shared_ptr<PyWorker>> PyWorkerManager::_acquire_worker(int32_t dri
     std::shared_ptr<PyWorker> worker;
     std::vector<std::shared_ptr<PyWorker>> dead_workers;
     {
-        std::lock_guard guard(_mutex);
-        auto& workers = _processes[driver_id];
-        auto dead_begin = std::partition(workers.begin(), workers.end(),
-                                         [](const std::shared_ptr<PyWorker>& w) { return !w->is_dead(); });
-        dead_workers.insert(dead_workers.end(), std::make_move_iterator(dead_begin),
-                            std::make_move_iterator(workers.end()));
-        workers.erase(dead_begin, workers.end());
-
-        // Prefer the worker with the fewest connected stubs. Start another one instead while
-        // every worker is in use and the driver is below its limit.
+        std::unique_lock lock(_mutex);
         const auto limit = static_cast<size_t>(std::max(1, config::python_worker_max_per_driver));
-        auto least_used = std::min_element(workers.begin(), workers.end(), [](const auto& a, const auto& b) {
-            return a->num_clients() < b->num_clients();
-        });
-        if (least_used != workers.end() && ((*least_used)->num_clients() == 0 || workers.size() >= limit)) {
-            // Take the worker while holding the lock, so that cleanup_expired_worker cannot
-            // expire it before the caller connects.
-            worker = *least_used;
-            worker->touch();
-            worker->add_client();
+        while (true) {
+            auto& workers = _processes[driver_id];
+            auto dead_begin = std::partition(workers.begin(), workers.end(),
+                                             [](const std::shared_ptr<PyWorker>& w) { return !w->is_dead(); });
+            dead_workers.insert(dead_workers.end(), std::make_move_iterator(dead_begin),
+                                std::make_move_iterator(workers.end()));
+            workers.erase(dead_begin, workers.end());
+
+            // Prefer the worker with the fewest connected stubs. Start another one instead while
+            // every worker is in use and the driver is below its limit.
+            auto least_used = std::min_element(workers.begin(), workers.end(), [](const auto& a, const auto& b) {
+                return a->num_clients() < b->num_clients();
+            });
+            auto starting = _num_starting.find(driver_id);
+            size_t num_starting = starting == _num_starting.end() ? 0 : starting->second;
+            bool below_limit = workers.size() + num_starting < limit;
+            if (least_used != workers.end() && ((*least_used)->num_clients() == 0 || !below_limit)) {
+                // Take the worker while holding the lock, so that cleanup_expired_worker cannot
+                // expire it before the caller connects.
+                worker = *least_used;
+                worker->touch();
+                worker->add_client();
+                break;
+            }
+            if (below_limit) {
+                ++_num_starting[driver_id];
+                break;
+            }
+            // Every allowed worker is still starting: wait for one instead of exceeding the limit.
+            _worker_started.wait(lock);
         }
     }
     for (auto& dead : dead_workers) {
@@ -311,17 +324,23 @@ StatusOr<std::shared_ptr<PyWorker>> PyWorkerManager::_acquire_worker(int32_t dri
     }
 
     std::unique_ptr<LocalPyWorker> uniq_worker;
-    RETURN_IF_ERROR(_fork_py_worker(&uniq_worker));
-    *url = uniq_worker->url();
-    worker = std::move(uniq_worker);
-    worker->touch();
-    worker->add_client();
-
+    Status st = _fork_py_worker(&uniq_worker);
     {
-        // add to pool
         std::lock_guard guard(_mutex);
-        _processes[driver_id].push_back(worker);
+        if (--_num_starting[driver_id] == 0) {
+            _num_starting.erase(driver_id);
+        }
+        if (st.ok()) {
+            worker = std::move(uniq_worker);
+            worker->touch();
+            worker->add_client();
+            _processes[driver_id].push_back(worker);
+        }
     }
+    _worker_started.notify_all();
+    RETURN_IF_ERROR(st);
+
+    *url = worker->url();
     return worker;
 }
 
