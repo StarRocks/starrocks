@@ -3376,6 +3376,19 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+    public void testScalarAggregateRollupWithEqualPredicate() throws Exception {
+        String mv = "select deptno, max(salary) as m, count(*) as c from emps group by deptno";
+        // deptno = 5 fixes the only MV grouping key, but without GROUP BY the query still returns one row when no
+        // MV row matches, which needs an aggregation on top of the MV (count(*) becomes coalesce(sum(c), 0)).
+        testRewriteOK(mv, "select max(salary), count(*) from emps where deptno = 5")
+                .contains("AGGREGATE")
+                .contains("coalesce");
+        // with GROUP BY, each query group is exactly one MV row
+        testRewriteOK(mv, "select deptno, max(salary), count(*) from emps where deptno = 5 group by deptno")
+                .notContain("AGGREGATE");
+    }
+
+    @Test
     public void testJoinDeriveRewrite() {
         // left outer join
         {

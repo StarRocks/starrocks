@@ -1,0 +1,20 @@
+-- name: test_mv_rewrite_scalar_agg_equal_predicate
+-- description: Regression for StarRocks/starrocks#84272. When the query's equality predicates fix every
+--              grouping key of the MV, the rewrite mapped MV rows one to one instead of rolling them up.
+--              That is fine with a GROUP BY, but an aggregate without GROUP BY returns one row even when
+--              nothing matches, so the rewritten query returned no row instead of NULL / 0.
+CREATE DATABASE test_mv_scalar_agg_eq_${uuid0};
+USE test_mv_scalar_agg_eq_${uuid0};
+CREATE TABLE u (k INT NOT NULL, v DOUBLE NOT NULL)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+INSERT INTO u VALUES (1, 1.5), (2, 2.5);
+CREATE MATERIALIZED VIEW mv_u REFRESH MANUAL PROPERTIES ("replication_num" = "1")
+AS SELECT k, MAX(v) AS m, COUNT(*) AS c FROM u GROUP BY k;
+REFRESH MATERIALIZED VIEW mv_u WITH SYNC MODE;
+function: check_hit_materialized_view("SELECT MAX(v), COUNT(*) FROM u WHERE k = 5", "mv_u")
+SELECT MAX(v), COUNT(*) FROM u WHERE k = 5;
+SELECT COUNT(*) FROM u WHERE k = 5;
+SELECT MAX(v), COUNT(*) FROM u WHERE k = 1;
+SELECT k, MAX(v), COUNT(*) FROM u WHERE k = 5 GROUP BY k;
+SELECT k, MAX(v), COUNT(*) FROM u WHERE k = 1 GROUP BY k;
+DROP DATABASE test_mv_scalar_agg_eq_${uuid0} FORCE;

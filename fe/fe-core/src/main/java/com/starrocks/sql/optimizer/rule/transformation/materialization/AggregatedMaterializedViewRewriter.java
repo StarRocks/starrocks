@@ -537,6 +537,11 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
                                            ScalarOperator queryRangePredicate) {
         // after equivalence class rewrite, there may be same group keys, so here just get the distinct grouping keys
         List<ScalarOperator> distinctMvKeys = mvGroupingKeys.stream().distinct().collect(Collectors.toList());
+        // A query without GROUP BY returns one row even when no MV row matches its predicates, and only an
+        // aggregation on top of the MV produces it, so equality predicates cannot stand in for the MV's keys here.
+        if (queryGroupingKeys.isEmpty() && !distinctMvKeys.isEmpty()) {
+            return true;
+        }
         BitSet matchedGroupByKeySet = new BitSet(distinctMvKeys.size());
         for (ScalarOperator queryGroupByKey : queryGroupingKeys) {
             boolean isMatched = false;

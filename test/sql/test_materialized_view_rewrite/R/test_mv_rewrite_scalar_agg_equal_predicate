@@ -1,0 +1,45 @@
+-- name: test_mv_rewrite_scalar_agg_equal_predicate
+CREATE DATABASE test_mv_scalar_agg_eq_${uuid0};
+-- result:
+-- !result
+USE test_mv_scalar_agg_eq_${uuid0};
+-- result:
+-- !result
+CREATE TABLE u (k INT NOT NULL, v DOUBLE NOT NULL)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO u VALUES (1, 1.5), (2, 2.5);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_u REFRESH MANUAL PROPERTIES ("replication_num" = "1")
+AS SELECT k, MAX(v) AS m, COUNT(*) AS c FROM u GROUP BY k;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_u WITH SYNC MODE;
+function: check_hit_materialized_view("SELECT MAX(v), COUNT(*) FROM u WHERE k = 5", "mv_u")
+-- result:
+None
+-- !result
+SELECT MAX(v), COUNT(*) FROM u WHERE k = 5;
+-- result:
+None	0
+-- !result
+SELECT COUNT(*) FROM u WHERE k = 5;
+-- result:
+0
+-- !result
+SELECT MAX(v), COUNT(*) FROM u WHERE k = 1;
+-- result:
+1.5	1
+-- !result
+SELECT k, MAX(v), COUNT(*) FROM u WHERE k = 5 GROUP BY k;
+-- result:
+-- !result
+SELECT k, MAX(v), COUNT(*) FROM u WHERE k = 1 GROUP BY k;
+-- result:
+1	1.5	1
+-- !result
+DROP DATABASE test_mv_scalar_agg_eq_${uuid0} FORCE;
+-- result:
+-- !result
