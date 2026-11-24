@@ -226,7 +226,38 @@ public class LeaderOpExecutorTest {
                 ctx.getState().getErrorMessage());
     }
 
+    /**
+     * A forward the leader answers is reported with the leader's result, not as an unknown outcome.
+     */
+    @Test
+    public void testForwardTheLeaderAnswersReportsTheLeadersResult() throws Exception {
+        FrontendService.Client client = new FrontendService.Client(null) {
+            @Override
+            public TMasterOpResult forward(TMasterOpRequest params) {
+                TMasterOpResult result = new TMasterOpResult();
+                result.setMaxJournalId(0);
+                result.setState(QueryState.MysqlStateType.OK.name());
+                return result;
+            }
+        };
+        ThriftConnectionPool<FrontendService.Client> pool =
+                new MockGenericPool<FrontendService.Client>("leader-op-answering-pool") {
+                    @Override
+                    public FrontendService.Client borrowObject(TNetworkAddress address, int timeoutMs) {
+                        return client;
+                    }
+                };
+        ConnectContext ctx = executeForwarded(9020, pool);
+        Assertions.assertFalse(ctx.getState().isError(), ctx.getState().getErrorMessage());
+        Assertions.assertEquals(QueryState.MysqlStateType.OK, ctx.getState().getStateType());
+    }
+
     private static ConnectContext executeForwarded(int leaderPort) throws Exception {
+        return executeForwarded(leaderPort, realFrontendPool());
+    }
+
+    private static ConnectContext executeForwarded(int leaderPort, ThriftConnectionPool<FrontendService.Client> pool)
+            throws Exception {
         new MockUp<StmtExecutor>() {
             @Mock
             public boolean isForwardToLeader() {
@@ -240,7 +271,7 @@ public class LeaderOpExecutorTest {
             }
         };
         ThriftConnectionPool<FrontendService.Client> savedPool = ThriftConnectionPool.frontendPool;
-        ThriftConnectionPool.frontendPool = realFrontendPool();
+        ThriftConnectionPool.frontendPool = pool;
         try {
             ConnectContext ctx = UtFrameUtils.createDefaultCtx();
             ctx.setQueryId(UUIDUtil.genUUID());
