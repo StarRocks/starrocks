@@ -662,7 +662,7 @@ PROPERTIES (
 "storage_volume" = "builtin_storage_volume"
 );
 -- !result
-ALTER TABLE pk_alter_parallel SET ("lake_compaction_max_parallel" = "5");
+ALTER TABLE pk_alter_parallel SET ("lake_compaction_max_parallel" = "4");
 -- result:
 -- !result
 SHOW CREATE TABLE pk_alter_parallel;
@@ -683,7 +683,7 @@ PROPERTIES (
 "enable_async_write_back" = "false",
 "enable_persistent_index" = "true",
 "file_bundling" = "true",
-"lake_compaction_max_parallel" = "5",
+"lake_compaction_max_parallel" = "4",
 "persistent_index_type" = "CLOUD_NATIVE",
 "replication_num" = "1",
 "storage_volume" = "builtin_storage_volume"
@@ -716,7 +716,7 @@ PROPERTIES (
 "storage_volume" = "builtin_storage_volume"
 );
 -- !result
-ALTER TABLE pk_alter_parallel SET ("lake_compaction_max_parallel" = "3");
+ALTER TABLE pk_alter_parallel SET ("lake_compaction_max_parallel" = "5");
 -- result:
 -- !result
 SHOW CREATE TABLE pk_alter_parallel;

@@ -84,6 +84,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群中，Compaction 任务是否在其 Rowset 实例上持有输入 Segment 对象直至任务结束，使 Vertical Compaction 的各列组趟直接复用这些对象，而不再依赖元数据缓存重新加载。关闭持有时，一旦元数据缓存装不下全部输入 Segment（`lake_segment_metadata_cache_limit_percent` 较小，或节点上 Tablet 较多），每一趟都会重新加载并解析全部输入 Segment；该开销为 CPU 密集且与列数成正比，可能使宽表 Compaction 慢一个数量级，或因反复超出内存限制而失败。持有期间，任务不再把输入 Segment 和 Delete Vector 填入共享元数据缓存，因为输入数据在 Compaction 完成后即被删除，缓存它们只会挤掉其他 Tablet 的条目。内存代价为每个运行中任务持有一套输入 Segment 元数据，计入该 Compaction 任务的内存跟踪并随任务释放。设为 `false` 可恢复旧行为，即 Compaction 通过共享元数据缓存复用 Segment 并向其填充输入。
 - 引入版本：v4.2
 
+### enable_lake_compaction_range_split
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，并行 Compaction 是否按排序键范围切分输入。设为 `true` 时，并行 Compaction 的每个子任务读取全部输入 Rowset 中落在一个排序键范围内的数据，各子任务共同写出一个 Segment 互不重叠的 Rowset。仅当所有输入 Segment 都记录了排序键上下界时，才按范围切分。否则，或者设为 `false` 时，并行 Compaction 按整个 Rowset 分组，或按 Segment 序号切分大 Rowset，各子任务的输出可能相互重叠。每个 Tablet 的最大子任务数由表属性 `lake_compaction_max_parallel` 设置。
+- 引入版本：v4.2
+
 ### lake_compaction_stream_buffer_size_bytes
 
 - 默认值：1048576

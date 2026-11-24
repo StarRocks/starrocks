@@ -18,9 +18,14 @@ use test_pk_large_rowset_split_${uuid0};
 104857600
 -- !result
 [UC]orig_enable_load_spill=SELECT VALUE from information_schema.be_configs where name='enable_load_spill' limit 1;
+<<<<<<< HEAD
 -- result:
 true
 -- !result
+=======
+[UC]orig_enable_range_split=SELECT VALUE from information_schema.be_configs where name='enable_lake_compaction_range_split' limit 1;
+[UC]function: orig_max_tasks=execute_sql("ADMIN SHOW FRONTEND CONFIG LIKE 'lake_compaction_max_tasks'", True)["result"][0][2]
+>>>>>>> 510964a ([Enhancement] Enable range-split parallel compaction by default at up to 5 subtasks per tablet, and balance its ranges (#84218))
 ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "0");
 -- result:
 -- !result
@@ -84,6 +89,9 @@ UPDATE information_schema.be_configs SET VALUE = '2097152' WHERE name = 'lake_co
 UPDATE information_schema.be_configs SET VALUE = '3145728' WHERE name = 'lake_compaction_max_bytes_per_subtask';
 -- result:
 -- !result
+UPDATE information_schema.be_configs SET VALUE = 'false' WHERE name = 'enable_lake_compaction_range_split';
+-- result:
+-- !result
 SELECT sleep(2);
 -- result:
 1
@@ -142,6 +150,7 @@ SELECT k1, k2, LENGTH(v1), v2 FROM pk_large_split WHERE k1 IN (1, 10000, 20000, 
 UPDATE information_schema.be_configs SET VALUE = '${orig_max_rowset_size}' WHERE name = 'lake_compaction_max_rowset_size';
 -- result:
 -- !result
+<<<<<<< HEAD
 UPDATE information_schema.be_configs SET VALUE = '${orig_max_bytes_per_subtask}' WHERE name = 'lake_compaction_max_bytes_per_subtask';
 -- result:
 -- !result
@@ -154,3 +163,13 @@ UPDATE information_schema.be_configs SET VALUE = '${orig_enable_load_spill}' WHE
 DROP DATABASE test_pk_large_rowset_split_${uuid0} FORCE;
 -- result:
 -- !result
+=======
+CLEANUP {
+  UPDATE information_schema.be_configs SET VALUE = '${orig_max_rowset_size}' WHERE name = 'lake_compaction_max_rowset_size';
+  UPDATE information_schema.be_configs SET VALUE = '${orig_max_bytes_per_subtask}' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+  UPDATE information_schema.be_configs SET VALUE = '${orig_write_buffer_size}' WHERE name = 'write_buffer_size';
+  UPDATE information_schema.be_configs SET VALUE = '${orig_enable_load_spill}' WHERE name = 'enable_load_spill';
+  UPDATE information_schema.be_configs SET VALUE = '${orig_enable_range_split}' WHERE name = 'enable_lake_compaction_range_split';
+  ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "${orig_max_tasks}");
+} END CLEANUP
+>>>>>>> 510964a ([Enhancement] Enable range-split parallel compaction by default at up to 5 subtasks per tablet, and balance its ranges (#84218))
