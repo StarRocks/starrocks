@@ -28,6 +28,99 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
+=======
+namespace {
+
+class FakeMemCacheEngine final : public LocalMemCacheEngine {
+public:
+    bool is_initialized() const override { return initialized; }
+
+    Status insert(const std::string& key, void* value, size_t size, MemCacheDeleter deleter, MemCacheHandlePtr* handle,
+                  const MemCacheWriteOptions& options) override {
+        return Status::OK();
+    }
+
+    Status lookup(const std::string& key, MemCacheHandlePtr* handle, MemCacheReadOptions* options) override {
+        return Status::NotFound("not found");
+    }
+
+    void release(MemCacheHandlePtr handle) override {}
+    const void* value(MemCacheHandlePtr handle) override { return nullptr; }
+    bool exist(const std::string& key) const override { return false; }
+    Status remove(const std::string& key) override { return Status::OK(); }
+    Status adjust_mem_quota(int64_t delta, size_t min_capacity) override { return Status::OK(); }
+    Status update_mem_quota(size_t quota_bytes) override { return Status::OK(); }
+    const DataCacheMemMetrics cache_metrics() const override { return metrics; }
+    Status shutdown() override { return Status::OK(); }
+    bool has_mem_cache() const override { return true; }
+    bool available() const override { return initialized; }
+    bool mem_cache_available() const override { return initialized; }
+    size_t mem_quota() const override { return metrics.mem_quota_bytes; }
+    size_t mem_usage() const override { return metrics.mem_used_bytes; }
+    size_t lookup_count() const override { return 0; }
+    size_t hit_count() const override { return 0; }
+    size_t insert_count() const override { return 0; }
+    size_t insert_evict_count() const override { return 0; }
+    size_t release_evict_count() const override { return 0; }
+    Status prune() override { return Status::OK(); }
+
+    bool initialized = true;
+    DataCacheMemMetrics metrics;
+};
+
+class FakeDiskCacheEngine final : public LocalDiskCacheEngine {
+public:
+    bool is_initialized() const override { return initialized; }
+    Status write(const std::string& key, const IOBuffer& buffer, DiskCacheWriteOptions* options) override {
+        return Status::OK();
+    }
+    Status read(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
+                DiskCacheReadOptions* options) override {
+        return Status::OK();
+    }
+    bool exist(const std::string& key) const override { return false; }
+    Status remove(const std::string& key) override { return Status::OK(); }
+    Status update_disk_spaces(const std::vector<DirSpace>& spaces) override { return Status::OK(); }
+    Status update_inline_cache_count_limit(int32_t limit) override { return Status::OK(); }
+    Status update_lru_shard_refill(bool fallback_enable, uint32_t low_watermark_percent,
+                                   uint32_t high_watermark_percent) override {
+        return Status::OK();
+    }
+    const DataCacheDiskMetrics cache_metrics() const override { return metrics; }
+    void record_read_remote(size_t size, int64_t latency_us) override {}
+    void record_read_cache(size_t size, int64_t latency_us) override {}
+    Status shutdown() override { return Status::OK(); }
+    bool has_disk_cache() const override { return true; }
+    bool available() const override { return initialized; }
+    void disk_spaces(std::vector<DirSpace>* spaces) const override { spaces->clear(); }
+    size_t lookup_count() const override { return lookup_count_val; }
+    size_t hit_count() const override { return hit_count_val; }
+    Status prune() override { return Status::OK(); }
+
+    bool initialized = true;
+    DataCacheDiskMetrics metrics;
+    size_t lookup_count_val = 0;
+    size_t hit_count_val = 0;
+};
+
+ProcessMetricsRegistry* backend_process_metrics_registry_for_test() {
+    static auto* registry = new ProcessMetricsRegistry("starrocks_be");
+    return registry;
+}
+
+MetricRegistry* backend_metrics_registry_for_test() {
+    return backend_process_metrics_registry_for_test()->root_registry();
+}
+
+void init_backend_metrics_for_test() {
+    static std::once_flag once;
+    std::call_once(once, [] { DataCacheMetrics::instance()->install(backend_metrics_registry_for_test()); });
+}
+
+} // namespace
+
+>>>>>>> 0f7b287 ([BugFix] Support datacache lru shard refill configs (#84193))
 class DataCacheMetricsTest : public ::testing::Test {
 public:
     DataCacheMetricsTest() = default;
