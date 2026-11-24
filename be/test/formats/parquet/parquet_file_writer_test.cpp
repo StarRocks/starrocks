@@ -910,6 +910,8 @@ TEST_F(ParquetFileWriterTest, TestFactoryParquetWriterSizes) {
     auto factory = ParquetFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, options, _make_type_names(type_descs),
                                             column_evaluators, std::nullopt, nullptr, _runtime_state);
     ASSERT_OK(factory.init());
+    // SetUp() already created _file_path, and the factory only creates new files.
+    ASSERT_OK(_fs.delete_file(_file_path));
     auto maybe_writer = factory.create(_file_path);
     ASSERT_OK(maybe_writer.status());
     auto writer = std::move(maybe_writer.value().writer);
@@ -919,8 +921,6 @@ TEST_F(ParquetFileWriterTest, TestFactoryParquetWriterSizes) {
     ASSERT_OK(writer->write(chunk.get()));
     ASSERT_OK(writer->write(chunk.get()));
     ASSERT_OK(writer->close().io_status);
-    ASSERT_OK(maybe_writer.value().stream->close());
-    ASSERT_OK(maybe_writer.value().stream->io_status().get());
     ASSIGN_OR_ASSERT_FAIL(auto file, _fs.new_random_access_file(_file_path));
     auto file_size = _fs.get_file_size(_file_path).value();
     auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
