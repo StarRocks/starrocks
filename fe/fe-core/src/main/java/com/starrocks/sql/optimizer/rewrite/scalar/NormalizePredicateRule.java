@@ -316,11 +316,19 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
         if (predicate.getChild(0).getType().isMapType()) {
             Function fn = ExprUtils.getBuiltinFunction(FunctionSet.MAP_SIZE,
                     new Type[] {predicate.getChild(0).getType()}, Function.CompareMode.IS_SUPERTYPE_OF);
+            // no signature matches a literal whose keys or elements are all NULL (e.g. map{} is
+            // MAP<NULL_TYPE, NULL_TYPE>), keep the original predicate then
+            if (fn == null) {
+                return visit(predicate, context);
+            }
             CallOperator call = new CallOperator(fn.functionName(), fn.getReturnType(), predicate.getChildren(), fn);
             return new IsNullPredicateOperator(predicate.isNotNull(), call);
         } else if (predicate.getChild(0).getType().isArrayType()) {
             Function fn = ExprUtils.getBuiltinFunction(FunctionSet.ARRAY_LENGTH,
                     new Type[] {predicate.getChild(0).getType()}, Function.CompareMode.IS_SUPERTYPE_OF);
+            if (fn == null) {
+                return visit(predicate, context);
+            }
             CallOperator call = new CallOperator(fn.functionName(), fn.getReturnType(), predicate.getChildren(), fn);
             return new IsNullPredicateOperator(predicate.isNotNull(), call);
         }
