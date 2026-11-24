@@ -171,6 +171,24 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             }
             return cache->update_inline_cache_count_limit(config::datacache_inline_item_count_limit);
         });
+        // The three lru shard refill configs share one callback: starcache takes them as a tuple.
+        auto update_lru_shard_refill = [&]() -> Status {
+            LocalDiskCacheEngine* cache = DataCache::GetInstance()->local_disk_cache();
+            if (cache == nullptr || !cache->is_initialized()) {
+                return Status::InternalError("Local cache is not initialized");
+            }
+            int32_t low = config::datacache_lru_shard_refill_low_watermark_percent;
+            int32_t high = config::datacache_lru_shard_refill_high_watermark_percent;
+            if (low < 0 || low > high || high > 100) {
+                return Status::InvalidArgument(strings::Substitute(
+                        "invalid lru shard refill watermarks: low=$0, high=$1, expect 0 <= low <= high <= 100", low,
+                        high));
+            }
+            return cache->update_lru_shard_refill(config::datacache_lru_shard_evict_fallback_enable, low, high);
+        };
+        _config_callback.emplace("datacache_lru_shard_evict_fallback_enable", update_lru_shard_refill);
+        _config_callback.emplace("datacache_lru_shard_refill_low_watermark_percent", update_lru_shard_refill);
+        _config_callback.emplace("datacache_lru_shard_refill_high_watermark_percent", update_lru_shard_refill);
 #endif
         _config_callback.emplace("max_compaction_concurrency", [&]() -> Status {
             if (!config::enable_event_based_compaction_framework) {

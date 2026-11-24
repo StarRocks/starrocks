@@ -457,6 +457,33 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：Data Cache 内联对象数量上限。当缓存的 Block 对象特别小时，Data Cache 会选择使用内联方式将 Block 数据和元数据一起缓存在内存中。
 - 引入版本：v3.4.0
 
+### datacache_lru_shard_evict_fallback_enable
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：Data Cache 的 LRU 分片在被回填或自身无法腾出足够空间时，是否允许淘汰其他分片中的缓存项。设置为 `false` 时恢复分片只淘汰自身缓存项的行为，并忽略 `datacache_lru_shard_refill_low_watermark_percent` 和 `datacache_lru_shard_refill_high_watermark_percent`。
+- 引入版本：-
+
+### datacache_lru_shard_refill_low_watermark_percent
+
+- 默认值：50
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Data Cache 的 LRU 分片的使用量低于其容量的该百分比后，不再淘汰自身的缓存项，而是从最大的分片回填，直到达到 `datacache_lru_shard_refill_high_watermark_percent`。该值不能超过 `datacache_lru_shard_refill_high_watermark_percent`。两个参数都设置为 `0` 时关闭回填。
+- 引入版本：-
+
+### datacache_lru_shard_refill_high_watermark_percent
+
+- 默认值：70
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Data Cache 的 LRU 分片停止回填时的容量百分比。取值范围：`datacache_lru_shard_refill_low_watermark_percent` 到 `100`。两个参数都设置为 `0` 时关闭回填。
+- 引入版本：-
+
 ### datacache_mem_size
 
 - 默认值：0

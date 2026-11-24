@@ -54,6 +54,9 @@ public:
 
     Status update_inline_cache_count_limit(int32_t limit) override;
 
+    Status update_lru_shard_refill(bool fallback_enable, uint32_t low_watermark_percent,
+                                   uint32_t high_watermark_percent) override;
+
 #ifdef WITH_STARCACHE
     const StarCacheMetrics starcache_metrics(int level) const;
 #endif

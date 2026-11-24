@@ -1744,6 +1744,16 @@ CONF_Bool(datacache_unified_instance_enable, "true");
 // * lru: the typical `Least Recently Used` eviction policy.
 // * slru: segment lru eviction policies, which can better reduce cache pollution problem.
 CONF_String(datacache_eviction_policy, "slru");
+// Whether an lru shard of datacache can evict entries from the other shards when it is being refilled
+// or cannot supply the whole charge by itself. Setting it to `false` restores the old behavior that a
+// shard only ever evicts its own entries, and the refill watermarks below are ignored.
+CONF_mBool(datacache_lru_shard_evict_fallback_enable, "true");
+// An lru shard of datacache is refilled from the largest shards instead of evicting its own entries
+// once its usage drops below `datacache_lru_shard_refill_low_watermark_percent` of its capacity, until
+// it reaches `datacache_lru_shard_refill_high_watermark_percent`. They should satisfy
+// `low <= high <= 100`, and setting both to `0` disables the refill.
+CONF_mInt32(datacache_lru_shard_refill_low_watermark_percent, "50");
+CONF_mInt32(datacache_lru_shard_refill_high_watermark_percent, "70");
 
 // The BlockCache stores the raw data blocks of external tables and shared-data internal tables.
 // It shares the same limit (datacache_disk_size, datacache_mem_size) with the PageCache.
