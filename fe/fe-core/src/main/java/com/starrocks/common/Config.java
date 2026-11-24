@@ -4239,7 +4239,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Default max parallel compaction subtasks per tablet when not specified in " +
             "table properties. 0 means disable parallel compaction.")
-    public static int lake_compaction_max_parallel_default = 3;
+    public static int lake_compaction_max_parallel_default = 5;
 
     @ConfField(mutable = true)
     public static int lake_compaction_history_size = 20;

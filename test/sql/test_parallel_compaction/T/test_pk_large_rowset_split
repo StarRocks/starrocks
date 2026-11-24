@@ -9,6 +9,7 @@ use test_pk_large_rowset_split_${uuid0};
 [UC]orig_max_bytes_per_subtask=SELECT VALUE from information_schema.be_configs where name='lake_compaction_max_bytes_per_subtask' limit 1;
 [UC]orig_write_buffer_size=SELECT VALUE from information_schema.be_configs where name='write_buffer_size' limit 1;
 [UC]orig_enable_load_spill=SELECT VALUE from information_schema.be_configs where name='enable_load_spill' limit 1;
+[UC]orig_enable_range_split=SELECT VALUE from information_schema.be_configs where name='enable_lake_compaction_range_split' limit 1;
 [UC]function: orig_max_tasks=execute_sql("ADMIN SHOW FRONTEND CONFIG LIKE 'lake_compaction_max_tasks'", True)["result"][0][2]
 
 -- Pause scheduling before loading. Unlike lake_compaction_disable_ids, this is
@@ -55,6 +56,8 @@ SELECT COUNT(*) FROM pk_large_split;
 -- lake_compaction_max_bytes_per_subtask = 3MB so data_size > 3MB (passes _is_large_rowset_for_split)
 UPDATE information_schema.be_configs SET VALUE = '2097152' WHERE name = 'lake_compaction_max_rowset_size';
 UPDATE information_schema.be_configs SET VALUE = '3145728' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+-- Range split, on by default, takes precedence over the large rowset split this case covers.
+UPDATE information_schema.be_configs SET VALUE = 'false' WHERE name = 'enable_lake_compaction_range_split';
 
 SELECT sleep(2);
 
@@ -89,5 +92,6 @@ CLEANUP {
   UPDATE information_schema.be_configs SET VALUE = '${orig_max_bytes_per_subtask}' WHERE name = 'lake_compaction_max_bytes_per_subtask';
   UPDATE information_schema.be_configs SET VALUE = '${orig_write_buffer_size}' WHERE name = 'write_buffer_size';
   UPDATE information_schema.be_configs SET VALUE = '${orig_enable_load_spill}' WHERE name = 'enable_load_spill';
+  UPDATE information_schema.be_configs SET VALUE = '${orig_enable_range_split}' WHERE name = 'enable_lake_compaction_range_split';
   ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "${orig_max_tasks}");
 } END CLEANUP
