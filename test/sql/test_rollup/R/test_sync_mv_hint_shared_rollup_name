@@ -1,0 +1,42 @@
+-- name: test_sync_mv_hint_shared_rollup_name
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_a (k1 INT, k2 INT, v1 INT) DUPLICATE KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 1 ROLLUP (r_shared (k2, k1)) PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE t_b (k1 INT, k2 INT, v1 INT) DUPLICATE KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 1 ROLLUP (r_shared (k2, k1)) PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t_a VALUES (1, 10, 100), (2, 20, 200);
+-- result:
+-- !result
+INSERT INTO t_b VALUES (3, 30, 300);
+-- result:
+-- !result
+function: assert_query_error_contains("SELECT k2, k1 FROM r_shared [_SYNC_MV_] ORDER BY k2", "Duplicate rollup name 'r_shared': more than one table has a rollup of that name")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT count(*) FROM t_a WHERE k2 IN (SELECT k2 FROM r_shared [_SYNC_MV_])", "Duplicate rollup name 'r_shared'")
+-- result:
+None
+-- !result
+ALTER TABLE t_b RENAME ROLLUP r_shared r_b;
+-- result:
+-- !result
+SELECT k2, k1 FROM r_shared [_SYNC_MV_] ORDER BY k2;
+-- result:
+10	1
+20	2
+-- !result
+SELECT k2, k1 FROM r_b [_SYNC_MV_] ORDER BY k2;
+-- result:
+30	3
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result
