@@ -18,6 +18,7 @@ import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+import com.starrocks.persist.proto.FunctionPrivilegeObjectPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaNotFoundException;
 
@@ -179,5 +180,28 @@ public class FunctionPEntryObject implements PEntryObject {
                 return sb.toString();
             }
         }
+    }
+
+    public FunctionPrivilegeObjectPB toProto() {
+        FunctionPrivilegeObjectPB.Builder builder = FunctionPrivilegeObjectPB.newBuilder();
+        builder.setDatabaseId(databaseId);
+        if (functionId != null) {
+            builder.setFunctionId(functionId);
+        }
+        return builder.build();
+    }
+
+    // A protobuf constructor leaves the existing GSON construction path unchanged.
+    private FunctionPEntryObject(FunctionPrivilegeObjectPB pb) {
+        if (pb.hasDatabaseId()) {
+            databaseId = pb.getDatabaseId();
+        }
+        if (pb.hasFunctionId()) {
+            functionId = pb.getFunctionId();
+        }
+    }
+
+    public static FunctionPEntryObject fromProto(FunctionPrivilegeObjectPB pb) {
+        return new FunctionPEntryObject(pb);
     }
 }

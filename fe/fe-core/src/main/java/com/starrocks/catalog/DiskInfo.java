@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.proto.DiskInfoPB;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -191,6 +192,52 @@ public class DiskInfo implements Writable {
     }
 
 
+    // ---- image v3 -------------------------------------------------------------------------------
 
+    public DiskInfoPB toProto() {
+        DiskInfoPB.Builder builder = DiskInfoPB.newBuilder().setState(toProto(state));
+        if (rootPath != null) {
+            builder.setRootPath(rootPath);
+        }
+        return builder.build();
+    }
 
+    public static DiskInfo fromProto(DiskInfoPB pb) {
+        // same constructor GSON uses, so the non-persisted fields start out identically
+        DiskInfo disk = new DiskInfo();
+        disk.rootPath = pb.getRootPath();
+        disk.state = fromProto(pb.getState());
+        return disk;
+    }
+
+    private static DiskInfoPB.State toProto(DiskState state) {
+        if (state == null) {
+            return DiskInfoPB.State.UNSPECIFIED;
+        }
+        switch (state) {
+            case ONLINE:
+                return DiskInfoPB.State.ONLINE;
+            case OFFLINE:
+                return DiskInfoPB.State.OFFLINE;
+            case DISABLED:
+                return DiskInfoPB.State.DISABLED;
+            default:
+                throw new IllegalArgumentException("unmapped disk state " + state);
+        }
+    }
+
+    private static DiskState fromProto(DiskInfoPB.State state) {
+        switch (state) {
+            case UNSPECIFIED:
+                return null;
+            case ONLINE:
+                return DiskState.ONLINE;
+            case OFFLINE:
+                return DiskState.OFFLINE;
+            case DISABLED:
+                return DiskState.DISABLED;
+            default:
+                throw new IllegalArgumentException("unknown disk state " + state.getNumber());
+        }
+    }
 }

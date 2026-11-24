@@ -17,6 +17,7 @@ package com.starrocks.authorization;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.util.SqlUtils;
 import com.starrocks.context.ai.AIProvider;
+import com.starrocks.persist.proto.AIProviderPrivilegeObjectPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaNotFoundException;
 
@@ -108,5 +109,17 @@ public class AIProviderPEntryObject implements PEntryObject {
             throw new MetaNotFoundException("cannot find AI provider: " + id);
         }
         return "'" + SqlUtils.escapeSqlString(provider.getName()) + "'";
+    }
+
+    public static AIProviderPEntryObject fromProto(AIProviderPrivilegeObjectPB pb) {
+        return new AIProviderPEntryObject(pb.hasId() ? pb.getId() : null);
+    }
+
+    public AIProviderPrivilegeObjectPB toProto() {
+        AIProviderPrivilegeObjectPB.Builder builder = AIProviderPrivilegeObjectPB.newBuilder();
+        if (id != null) {
+            builder.setId(id);
+        }
+        return builder.build();
     }
 }

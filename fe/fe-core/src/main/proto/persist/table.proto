@@ -1,0 +1,650 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/column.proto";
+import "persist/common.proto";
+import "persist/type.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "TableProto";
+
+// The Table hierarchy and everything a table owns besides its partitions: partition and
+// distribution info, table property, indexes and index metas. The partition subtree lives in
+// partition.proto and is written as its own image section. See common.proto for the conventions.
+
+// com.starrocks.catalog.MetaObject, the base of Database, Table, Partition, PhysicalPartition,
+// MaterializedIndex and Tablet.
+message MetaObjectPB {
+  int64 signature = 1;
+  int64 last_check_time = 2;
+}
+
+// com.starrocks.sql.ast.KeysType. Shared by OlapTableCorePB and MaterializedIndexMetaPB, hence a
+// package-level enum with prefixed values.
+enum KeysTypePB {
+  KEYS_TYPE_UNSPECIFIED = 0;
+  KEYS_TYPE_PRIMARY_KEYS = 1;
+  KEYS_TYPE_DUP_KEYS = 2;
+  KEYS_TYPE_UNIQUE_KEYS = 3;
+  KEYS_TYPE_AGG_KEYS = 4;
+}
+
+// com.starrocks.thrift.TStorageType.
+enum StorageTypePB {
+  STORAGE_TYPE_UNSPECIFIED = 0;
+  STORAGE_TYPE_COLUMN = 1;
+  STORAGE_TYPE_COLUMN_WITH_ROW = 2;
+  STORAGE_TYPE_ROW = 3;
+}
+
+// com.starrocks.thrift.TPrimaryKeyEncodingType. The Thrift names already carry the
+// PK_ENCODING_TYPE_ prefix, so they are used as they are.
+enum PrimaryKeyEncodingTypePB {
+  PK_ENCODING_TYPE_UNSPECIFIED = 0;
+  PK_ENCODING_TYPE_NONE = 1;
+  PK_ENCODING_TYPE_V1 = 2;
+  PK_ENCODING_TYPE_V2 = 3;
+}
+
+// com.starrocks.catalog.Table. Only the 13 classes registered with GSON can be persisted; the
+// writer rejects any other class. The persisted `type` field (TableType) only restates the
+// concrete class, so it is not written and is rebuilt from the kind on load.
+message TablePB {
+  // Values mirror the names of com.starrocks.catalog.Table.TableType.
+  enum Kind {
+    UNSPECIFIED = 0;
+    MYSQL = 1;
+    OLAP = 2;
+    OLAP_EXTERNAL = 3;
+    VIEW = 4;
+    ELASTICSEARCH = 5;
+    HIVE = 6;
+    ICEBERG = 7;
+    HUDI = 8;
+    JDBC = 9;
+    MATERIALIZED_VIEW = 10;
+    CLOUD_NATIVE = 11;
+    FILE = 12;
+    CLOUD_NATIVE_MATERIALIZED_VIEW = 13;
+  }
+  Kind kind = 1;
+  TableCorePB core = 2;
+
+  oneof instance {
+    OlapTablePB olap = 11;
+    LakeTablePB lake = 12;
+    MaterializedViewPB materialized_view = 13;
+    LakeMaterializedViewPB lake_materialized_view = 14;
+    ExternalOlapTablePB external_olap = 15;
+    ViewPB view = 16;
+    EsTablePB es = 17;
+    MysqlTablePB mysql = 18;
+    HiveTablePB hive = 19;
+    HudiTablePB hudi = 20;
+    IcebergTablePB iceberg = 21;
+    JDBCTablePB jdbc = 22;
+    FileTablePB file = 23;
+  }
+}
+
+// The fields declared by the Table base class.
+message TableCorePB {
+  MetaObjectPB meta = 1;
+  int64 id = 2;
+  optional string name = 3;
+  int64 create_time = 4;
+  // Empty for the OlapTable family: their full schema is rebuilt from the index metas on load,
+  // exactly as the GSON load does.
+  repeated ColumnPB full_schema = 5;
+  optional string comment = 6;
+  repeated MvIdPB related_materialized_views = 7;
+}
+
+message MvIdPB {
+  int64 db_id = 1;
+  int64 id = 2;
+}
+
+message OlapTablePB {
+  OlapTableCorePB olap = 1;
+}
+
+message LakeTablePB {
+  OlapTableCorePB olap = 1;
+}
+
+message MaterializedViewPB {
+  OlapTableCorePB olap = 1;
+  MaterializedViewCorePB materialized_view = 2;
+}
+
+message LakeMaterializedViewPB {
+  OlapTableCorePB olap = 1;
+  MaterializedViewCorePB materialized_view = 2;
+}
+
+message ExternalOlapTablePB {
+  OlapTableCorePB olap = 1;
+  ExternalTableInfoPB external_table_info = 2;
+}
+
+// com.starrocks.catalog.ExternalOlapTable.ExternalTableInfo: the remote cluster and table.
+message ExternalTableInfoPB {
+  optional string host = 1;
+  int32 port = 2;
+  optional string user = 3;
+  optional string password = 4;
+  optional string db_name = 5;
+  optional string table_name = 6;
+  int64 db_id = 7;
+  int64 table_id = 8;
+  // The TableType of the remote table; its value set is that of TablePB.Kind.
+  optional TablePB.Kind table_type = 9;
+}
+
+// The fields declared by OlapTable, shared by OLAP, CLOUD_NATIVE, OLAP_EXTERNAL and both
+// materialized-view kinds. The partitions (idToPartition, tempPartitions) are NOT here: they are
+// the entries of the PARTITION section and get attached to the table on load.
+message OlapTableCorePB {
+  // com.starrocks.catalog.OlapTable.OlapTableState.
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    NORMAL = 1;
+    ROLLUP = 2;
+    SCHEMA_CHANGE = 3;
+    BACKUP = 4;
+    RESTORE = 5;
+    RESTORE_WITH_LOAD = 6;
+    WAITING_STABLE = 7;
+    UPDATING_META = 8;
+    OPTIMIZE = 9;
+    TABLET_RESHARD = 10;
+  }
+  optional State state = 1;
+  // Keyed by index_meta_id in memory.
+  repeated MaterializedIndexMetaPB index_metas = 2;
+  // The index name is only stored here.
+  map<string, int64> index_name_to_meta_id = 3;
+  optional KeysTypePB keys_type = 4;
+  PartitionInfoPB partition_info = 5;
+  DistributionInfoPB default_distribution_info = 6;
+  StringListPB bf_columns = 7;
+  double bf_fpp = 8;
+  optional string colocate_group = 9;
+  TableIndexesPB indexes = 10;
+  int64 base_index_meta_id = 11;
+  TablePropertyPB table_property = 12;
+  int32 max_col_unique_id = 13;
+  int64 max_index_id = 14;
+  optional PrimaryKeyEncodingTypePB primary_key_encoding_type = 15;
+  optional string session_id = 16;
+  // Per-column compression settings. Wrappers preserve null versus empty.
+  StringListPB zstd_compression_columns = 20001;
+  ZstdCompressionPageSizesPB zstd_compression_page_sizes = 20002;
+}
+
+// The fields declared by MaterializedView, shared by MATERIALIZED_VIEW and
+// CLOUD_NATIVE_MATERIALIZED_VIEW.
+message MaterializedViewCorePB {
+  // com.starrocks.catalog.MaterializedView.RefreshMode.
+  enum RefreshMode {
+    UNSPECIFIED = 0;
+    AUTO = 1;
+    PCT = 2;
+    INCREMENTAL = 3;
+  }
+  int64 db_id = 1;
+  MvRefreshSchemePB refresh_scheme = 2;
+  Int64ListPB base_table_ids = 3;
+  BaseTableInfoListPB base_table_infos = 4;
+  bool active = 5;
+  optional string inactive_reason = 6;
+  optional string view_define_sql = 7;
+  optional string simple_define_sql = 8;
+  optional string original_view_define_sql = 9;
+  optional string ivm_define_sql = 10;
+  // SQL form of the partition expressions on the ref base table, re-parsed on load.
+  repeated string partition_ref_table_exprs = 11;
+  int32 max_mv_rewrite_staleness = 12;
+  // Ordered: it is a LinkedHashMap in memory.
+  repeated PartitionExprMappingPB partition_expr_maps = 13;
+  repeated int32 query_output_indices = 14;
+  int64 warehouse_id = 15;
+  optional RefreshMode current_refresh_mode = 16;
+  int32 encode_row_id_version = 17;
+}
+
+// One entry of MaterializedView.partitionExprMaps: partition expression -> its slot, both as SQL.
+message PartitionExprMappingPB {
+  string expr_sql = 1;
+  string slot_sql = 2;
+}
+
+message MvRefreshSchemePB {
+  // com.starrocks.catalog.MaterializedView.RefreshMoment.
+  enum Moment {
+    MOMENT_UNSPECIFIED = 0;
+    IMMEDIATE = 1;
+    DEFERRED = 2;
+  }
+  // com.starrocks.catalog.MaterializedViewRefreshType.
+  enum RefreshType {
+    REFRESH_TYPE_UNSPECIFIED = 0;
+    SYNC = 1;
+    ASYNC = 2;
+    MANUAL = 3;
+    INCREMENTAL = 4;
+  }
+  optional Moment moment = 1;
+  optional RefreshType type = 2;
+  AsyncRefreshContextPB async_refresh_context = 3;
+  int64 last_refresh_time = 4;
+  int64 last_freshness_confirmed_at = 5;
+}
+
+message AsyncRefreshContextPB {
+  repeated BaseTableVisibleVersionsPB base_table_visible_version_map = 1;
+  repeated BaseTableInfoVisibleVersionsPB base_table_info_visible_version_map = 2;
+  repeated MvPartitionRefBaseTablePartitionsPB mv_partition_name_ref_base_table_partition_map = 3;
+  repeated BaseTableInfoTvrVersionRangePB base_table_info_tvr_version_range_map = 4;
+  repeated BaseTableInfoTvrVersionRangePB temp_base_table_info_tvr_version_range_map = 5;
+  optional string temp_tvr_owner_start_task_run_id = 6;
+  bool define_start_time = 7;
+  int64 start_time = 8;
+  int64 step = 9;
+  optional string time_unit = 10;
+}
+
+message BaseTableVisibleVersionsPB {
+  int64 base_table_id = 1;
+  repeated PartitionVisibleVersionPB partitions = 2;
+}
+
+message BaseTableInfoVisibleVersionsPB {
+  BaseTableInfoPB base_table = 1;
+  repeated PartitionVisibleVersionPB partitions = 2;
+}
+
+message PartitionVisibleVersionPB {
+  string partition_name = 1;
+  BasePartitionInfoPB info = 2;
+}
+
+message MvPartitionRefBaseTablePartitionsPB {
+  string mv_partition_name = 1;
+  repeated string base_table_partition_names = 2;
+}
+
+message BaseTableInfoTvrVersionRangePB {
+  BaseTableInfoPB base_table = 1;
+  TvrVersionRangePB range = 2;
+}
+
+// com.starrocks.catalog.MaterializedView.BasePartitionInfo.
+message BasePartitionInfoPB {
+  int64 id = 1;
+  int64 version = 2;
+  int64 last_refresh_time = 3;
+  int64 ext_last_file_modified_time = 4;
+  int32 file_number = 5;
+}
+
+message BaseTableInfoPB {
+  optional string catalog_name = 1;
+  int64 db_id = 2;
+  int64 table_id = 3;
+  optional string db_name = 4;
+  optional string table_identifier = 5;
+  optional string table_name = 6;
+}
+
+message BaseTableInfoListPB {
+  repeated BaseTableInfoPB values = 1;
+}
+
+// com.starrocks.common.tvr.TvrVersionRange.
+message TvrVersionRangePB {
+  enum Kind {
+    UNSPECIFIED = 0;
+    SNAPSHOT = 1;
+    DELTA = 2;
+  }
+  Kind kind = 1;
+  TvrVersionPB from = 2;
+  TvrVersionPB to = 3;
+}
+
+message TvrVersionPB {
+  int64 version = 1;
+}
+
+// com.starrocks.catalog.PartitionInfo.
+message PartitionInfoPB {
+  // Prefixed because the values share the scope with PartitionType below.
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_SINGLE = 1;
+    KIND_RANGE = 2;
+    KIND_LIST = 3;
+    KIND_EXPRESSION_RANGE = 4;
+    KIND_EXPRESSION_RANGE_V2 = 5;
+  }
+  // com.starrocks.catalog.PartitionType, the persisted `type` field.
+  enum PartitionType {
+    PARTITION_TYPE_UNSPECIFIED = 0;
+    UNPARTITIONED = 1;
+    RANGE = 2;
+    LIST = 3;
+    EXPR_RANGE = 4;
+    EXPR_RANGE_V2 = 5;
+  }
+  Kind kind = 1;
+  optional PartitionType type = 2;
+  map<int64, DataPropertyPB> id_to_data_property = 3;
+  // Java Short.
+  map<int64, int32> id_to_replication_num = 4;
+  bool is_multi_column_partition = 5;
+  map<int64, DataCacheInfoPB> id_to_storage_cache_info = 6;
+
+  oneof instance {
+    RangePartitionInfoPB range = 11;
+    ListPartitionInfoPB list = 12;
+    ExpressionRangePartitionInfoPB expression_range = 13;
+    ExpressionRangePartitionInfoV2PB expression_range_v2 = 14;
+  }
+}
+
+// The fields declared by RangePartitionInfo, shared with its two expression subclasses.
+message RangePartitionInfoCorePB {
+  // Deprecated in Java ("partitionColumns"), but still read by the copy paths, so it is carried.
+  repeated ColumnPB partition_columns = 1;
+  repeated string partition_column_ids = 2;
+  // Partition id -> range, encoded with RangeUtils.writeRange.
+  map<int64, bytes> id_to_range = 3;
+  map<int64, bytes> id_to_temp_range = 4;
+}
+
+message RangePartitionInfoPB {
+  RangePartitionInfoCorePB range = 1;
+}
+
+message ExpressionRangePartitionInfoPB {
+  RangePartitionInfoCorePB range = 1;
+  // SQL form with column ids in the slots.
+  repeated string partition_exprs = 2;
+}
+
+message ExpressionRangePartitionInfoV2PB {
+  RangePartitionInfoCorePB range = 1;
+  // SQL form with column ids in the slots.
+  repeated string partition_exprs = 2;
+  optional bool automatic_partition = 3;
+  TypeListPB source_partition_types = 4;
+}
+
+message ListPartitionInfoPB {
+  // Deprecated in Java ("partitionColumns"), but still read by the copy paths, so it is carried.
+  repeated ColumnPB partition_columns = 1;
+  repeated string partition_column_ids = 2;
+  map<int64, MultiValuesPB> id_to_multi_values = 3;
+  map<int64, StringListPB> id_to_values = 4;
+  map<int64, bool> id_to_temp = 5;
+  optional bool automatic_partition = 6;
+}
+
+// One partition's values of a multi-column LIST partition: one row per value tuple.
+message MultiValuesPB {
+  repeated StringListPB rows = 1;
+}
+
+message DataPropertyPB {
+  // com.starrocks.thrift.TStorageMedium.
+  enum StorageMedium {
+    UNSPECIFIED = 0;
+    HDD = 1;
+    SSD = 2;
+  }
+  optional StorageMedium storage_medium = 1;
+  int64 cooldown_time_ms = 2;
+}
+
+// com.starrocks.lake.DataCacheInfo: a serialized StarOS FileCacheInfo.
+message DataCacheInfoPB {
+  optional bytes cache_info = 1;
+}
+
+// com.starrocks.lake.StorageInfo: serialized StarOS FilePathInfo / FileCacheInfo.
+message StorageInfoPB {
+  optional bytes store_info = 1;
+  optional bytes cache_info = 2;
+}
+
+// com.starrocks.catalog.DistributionInfo. The persisted `type` / `typeStr` fields are implied by
+// the kind and rebuilt by the constructors.
+message DistributionInfoPB {
+  enum Kind {
+    UNSPECIFIED = 0;
+    HASH = 1;
+    RANDOM = 2;
+    RANGE = 3;
+  }
+  Kind kind = 1;
+
+  oneof instance {
+    HashDistributionInfoPB hash = 11;
+    RandomDistributionInfoPB random = 12;
+  }
+}
+
+message HashDistributionInfoPB {
+  repeated string distribution_column_ids = 1;
+  // Deprecated in Java ("distributionColumns"), but still read by the copy paths, so it is carried.
+  repeated ColumnPB distribution_columns = 2;
+  int32 bucket_num = 3;
+}
+
+message RandomDistributionInfoPB {
+  int32 bucket_num = 1;
+}
+
+message TableIndexesPB {
+  repeated IndexPB indexes = 1;
+  map<string, string> properties = 2;
+}
+
+message IndexPB {
+  // com.starrocks.sql.ast.IndexDef.IndexType.
+  enum IndexType {
+    UNSPECIFIED = 0;
+    BITMAP = 1;
+    GIN = 2;
+    NGRAMBF = 3;
+    VECTOR = 4;
+  }
+  int64 index_id = 1;
+  optional string index_name = 2;
+  repeated string columns = 3;
+  optional IndexType index_type = 4;
+  optional string comment = 5;
+  StringMapPB properties = 6;
+}
+
+// A Java list of indexes that can be null.
+message IndexListPB {
+  repeated IndexPB indexes = 1;
+}
+
+message TablePropertyPB {
+  map<string, string> properties = 1;
+  bool light_weight_tablet_creation = 2;
+  int32 compression_level = 3;
+  bool has_delete = 4;
+  bool has_forbidden_global_dict = 5;
+  repeated string no_dict_columns = 6;
+  StorageInfoPB storage_info = 7;
+  int32 lake_compaction_max_parallel = 8;
+  bool enable_statistic_collect_on_first_load = 9;
+  bool enable_statistic_collect_on_first_load_set = 10;
+  int32 table_query_timeout = 11;
+}
+
+// com.starrocks.catalog.FlatJsonConfig.
+message FlatJsonConfigPB {
+  bool flat_json_enable = 1;
+  double flat_json_null_factor = 2;
+  double flat_json_sparsity_factor = 3;
+  int32 flat_json_column_max = 4;
+  int64 config_version = 5;
+}
+
+message MaterializedIndexMetaPB {
+  int64 index_meta_id = 1;
+  repeated ColumnPB schema = 2;
+  Int32ListPB sort_key_idxes = 3;
+  Int32ListPB sort_key_unique_ids = 4;
+  int32 schema_version = 5;
+  int32 schema_hash = 6;
+  int64 schema_id = 7;
+  // Java short.
+  int32 short_key_column_count = 8;
+  optional StorageTypePB storage_type = 9;
+  optional KeysTypePB keys_type = 10;
+  OriginStatementInfoPB define_stmt = 11;
+  int64 db_id = 12;
+  optional string view_define_sql = 13;
+  bool is_colocate_mv_index = 14;
+  SyncMaterializedViewDefinitionPB sync_mv_definition = 20001;
+  int64 sync_mv_required_txn_id = 20002;
+}
+
+message OriginStatementInfoPB {
+  optional string origin_stmt = 1;
+  int32 idx = 2;
+}
+
+message ViewPB {
+  optional string original_view_def = 1;
+  optional string inline_view_def = 2;
+  int64 sql_mode = 3;
+  bool security = 4;
+}
+
+message EsTablePB {
+  // Every other ES setting is derived from it on load.
+  map<string, string> table_context = 1;
+  PartitionInfoPB partition_info = 2;
+}
+
+message MysqlTablePB {
+  optional string odbc_catalog_resource_name = 1;
+  optional string host = 2;
+  optional string port = 3;
+  optional string user_name = 4;
+  optional string passwd = 5;
+  optional string mysql_database_name = 6;
+  optional string mysql_table_name = 7;
+}
+
+message HiveTablePB {
+  optional string hive_db_name = 1;
+  optional string hive_table_name = 2;
+  optional string resource_name = 3;
+  optional string table_location = 4;
+  repeated string part_column_names = 5;
+  repeated string data_column_names = 6;
+  map<string, string> hive_properties = 7;
+  map<string, string> serde_properties = 8;
+  optional string avro_schema_json = 9;
+}
+
+message HudiTablePB {
+  optional string hive_db_name = 1;
+  optional string hive_table_name = 2;
+  optional string resource_name = 3;
+  repeated string part_column_names = 4;
+  repeated string data_column_names = 5;
+  map<string, string> hudi_properties = 6;
+}
+
+message IcebergTablePB {
+  optional string catalog_db_name = 1;
+  optional string catalog_table_name = 2;
+  optional string resource_name = 3;
+  map<string, string> iceberg_properties = 4;
+}
+
+message JDBCTablePB {
+  optional string jdbc_table = 1;
+  optional string resource_name = 2;
+  bool query_table = 3;
+}
+
+message FileTablePB {
+  map<string, string> file_properties = 1;
+}
+
+// Synchronous MV executable definition, independent of its original DDL.
+message SyncMaterializedViewDefinitionPB {
+  map<string, string> column_expr_sql = 1;
+  repeated string source_column_names = 2;
+  optional string where_clause_sql = 3;
+}
+
+message ZstdCompressionPageSizesPB {
+  map<string, int32> values = 1;
+}
+
+message SchemaInfoPB {
+  // com.starrocks.thrift.TCompressionType.
+  enum CompressionType {
+    UNSPECIFIED = 0;
+    UNKNOWN_COMPRESSION = 1;
+    DEFAULT_COMPRESSION = 2;
+    NO_COMPRESSION = 3;
+    SNAPPY = 4;
+    LZ4 = 5;
+    LZ4_FRAME = 6;
+    ZLIB = 7;
+    ZSTD = 8;
+    GZIP = 9;
+    DEFLATE = 10;
+    BZIP2 = 11;
+    LZO = 12;
+    BROTLI = 13;
+    AUTO = 14;
+  }
+  int64 id = 1;
+  // Java short.
+  int32 short_key_column_count = 2;
+  optional KeysTypePB keys_type = 3;
+  optional StorageTypePB storage_type = 4;
+  int32 version = 5;
+  int32 schema_hash = 6;
+  ColumnListPB columns = 7;
+  Int32ListPB sort_key_indexes = 8;
+  Int32ListPB sort_key_unique_ids = 9;
+  IndexListPB indexes = 10;
+  StringListPB bloom_filter_column_names = 11;
+  double bloom_filter_fpp = 12;
+  optional CompressionType compression_type = 13;
+  int32 compression_level = 14;
+  optional PrimaryKeyEncodingTypePB primary_key_encoding_type = 15;
+  StringListPB zstd_compression_columns = 16;
+  ZstdCompressionPageSizesPB zstd_compression_page_sizes = 17;
+}

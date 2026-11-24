@@ -38,8 +38,15 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
+import com.starrocks.lake.backup.LakeBackupJob;
+import com.starrocks.lake.backup.LakeRestoreJob;
+import com.starrocks.persist.image.ProtoKinds;
+import com.starrocks.persist.proto.AbstractJobCorePB;
+import com.starrocks.persist.proto.AbstractJobPB;
+import com.starrocks.persist.proto.BackupTaskErrorsPB;
 import com.starrocks.server.GlobalStateMgr;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /*
@@ -197,5 +204,122 @@ public abstract class AbstractJob implements Writable {
         sb.append(", status: ").append(status);
         sb.append(", timeout: ").append(timeoutMs);
         return sb.toString();
+    }
+
+    protected AbstractJobCorePB toAbstractJobCoreProto() {
+        AbstractJobCorePB.Builder builder = AbstractJobCorePB.newBuilder();
+        builder.setRepoId(repoId);
+        builder.setJobId(jobId);
+        if (label != null) {
+            builder.setLabel(label);
+        }
+        builder.setDbId(dbId);
+        if (dbName != null) {
+            builder.setDbName(dbName);
+        }
+        if (status != null) {
+            builder.setStatus(status.toProto());
+        }
+        builder.setCreateTime(createTime);
+        builder.setFinishedTime(finishedTime);
+        builder.setTimeoutMs(timeoutMs);
+        if (taskErrMsg != null) {
+            builder.setTaskErrMsg(BackupTaskErrorsPB.newBuilder().putAllValues(taskErrMsg).build());
+        }
+        return builder.build();
+    }
+
+    protected void fillFromAbstractJobCoreProto(AbstractJobCorePB pb) {
+        if (pb.hasRepoId()) {
+            repoId = pb.getRepoId();
+        }
+        if (pb.hasJobId()) {
+            jobId = pb.getJobId();
+        }
+        if (pb.hasLabel()) {
+            label = pb.getLabel();
+        } else {
+            label = null;
+        }
+        if (pb.hasDbId()) {
+            dbId = pb.getDbId();
+        }
+        if (pb.hasDbName()) {
+            dbName = pb.getDbName();
+        } else {
+            dbName = null;
+        }
+        if (pb.hasStatus()) {
+            status = Status.fromProto(pb.getStatus());
+        }
+        if (pb.hasCreateTime()) {
+            createTime = pb.getCreateTime();
+        }
+        if (pb.hasFinishedTime()) {
+            finishedTime = pb.getFinishedTime();
+        }
+        if (pb.hasTimeoutMs()) {
+            timeoutMs = pb.getTimeoutMs();
+        }
+        if (pb.hasTaskErrMsg()) {
+            taskErrMsg = new HashMap<>(pb.getTaskErrMsg().getValuesMap());
+        } else {
+            taskErrMsg = null;
+        }
+    }
+
+    public AbstractJobPB toProto() {
+        AbstractJobPB.Builder builder = AbstractJobPB.newBuilder();
+        builder.setCore(toAbstractJobCoreProto());
+        fillProtoVariant(builder);
+        return builder.build();
+    }
+
+    protected void fillProtoVariant(AbstractJobPB.Builder builder) {
+        throw new IllegalStateException("cannot persist " + getClass().getName());
+    }
+
+    protected void fillFromVariantProto(AbstractJobPB pb) {
+        throw new IllegalStateException("cannot load " + getClass().getName());
+    }
+
+    public static AbstractJob fromProto(AbstractJobPB pb) {
+        ProtoKinds.checkKnown(pb.getKind(), pb.getKindValue());
+        AbstractJob value;
+        switch (pb.getKind()) {
+            case BACKUP_JOB:
+                if (!pb.hasBackupJob()) {
+                    throw new IllegalArgumentException("missing backupJob variant");
+                }
+                value = new BackupJob();
+                value.type = JobType.BACKUP;
+                break;
+            case RESTORE_JOB:
+                if (!pb.hasRestoreJob()) {
+                    throw new IllegalArgumentException("missing restoreJob variant");
+                }
+                value = new RestoreJob();
+                value.type = JobType.RESTORE;
+                break;
+            case LAKE_BACKUP_JOB:
+                if (!pb.hasLakeBackupJob()) {
+                    throw new IllegalArgumentException("missing lakeBackupJob variant");
+                }
+                value = new LakeBackupJob();
+                value.type = JobType.LAKE_BACKUP;
+                break;
+            case LAKE_RESTORE_JOB:
+                if (!pb.hasLakeRestoreJob()) {
+                    throw new IllegalArgumentException("missing lakeRestoreJob variant");
+                }
+                value = new LakeRestoreJob();
+                value.type = JobType.LAKE_RESTORE;
+                break;
+            default:
+                throw new IllegalArgumentException("unknown AbstractJob kind " + pb.getKind());
+        }
+        value.fillFromAbstractJobCoreProto(pb.getCore());
+        value.fillFromVariantProto(pb);
+        return value;
     }
 }

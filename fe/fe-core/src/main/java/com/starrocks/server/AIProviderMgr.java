@@ -21,6 +21,7 @@ import com.staros.util.LockCloseable;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.context.ai.AIProvider;
 import com.starrocks.context.ai.AIProviderType;
@@ -28,11 +29,20 @@ import com.starrocks.persist.DropAIProviderLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.SetDefaultAIProviderLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.AIProviderDefaultPB;
+import com.starrocks.persist.proto.AIProviderEntryPB;
+import com.starrocks.persist.proto.AIProviderMgrPB;
+import com.starrocks.persist.proto.AIProviderPB;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -283,6 +293,47 @@ public class AIProviderMgr implements Writable, GsonPostProcessable {
         if (!Strings.isNullOrEmpty(defaultProviderId)
                 && !defaultByType.containsKey(AIProviderType.EMBEDDING)) {
             defaultByType.put(AIProviderType.EMBEDDING, defaultProviderId);
+        }
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(Pair.create(SectionId.AI_PROVIDER_MGR, reader -> {
+            AIProviderMgrPB manager = reader.readManager(AIProviderMgrPB.parser());
+            defaultProviderId = manager.hasDefaultProviderId() ? manager.getDefaultProviderId() : null;
+            defaultByType = new EnumMap<>(AIProviderType.class);
+            for (AIProviderDefaultPB entry : manager.getDefaultsList()) {
+                defaultByType.put(ProtoEnums.fromProto(entry.getType(), AIProviderType.class), entry.getProviderId());
+            }
+            idToProvider = new HashMap<>();
+            reader.readEntries(AIProviderEntryPB.parser(), pb -> {
+                AIProvider provider = AIProvider.fromProto(pb.getProvider());
+                idToProvider.put(pb.getId(), provider);
+            });
+            gsonPostProcess();
+        }));
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.AI_PROVIDER_MGR)) {
+            AIProviderMgrPB.Builder manager = AIProviderMgrPB.newBuilder();
+            if (defaultProviderId != null) {
+                manager.setDefaultProviderId(defaultProviderId);
+            }
+            if (defaultByType != null) {
+                defaultByType.forEach((type, id) -> {
+                    if (id != null) {
+                        manager.addDefaults(AIProviderDefaultPB.newBuilder()
+                                .setType(ProtoEnums.toProto(type, AIProviderPB.Type.class)).setProviderId(id));
+                    }
+                });
+            }
+            writer.writeManager(manager.build());
+            if (idToProvider != null) {
+                for (Map.Entry<String, AIProvider> entry : idToProvider.entrySet()) {
+                    writer.writeEntry(AIProviderEntryPB.newBuilder().setId(entry.getKey())
+                            .setProvider(entry.getValue().toProto()).build());
+                }
+            }
         }
     }
 }

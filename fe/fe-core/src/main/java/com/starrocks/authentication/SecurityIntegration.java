@@ -15,6 +15,9 @@
 package com.starrocks.authentication;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.image.ProtoKinds;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.SecurityIntegrationPB;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.Arrays;
@@ -113,5 +116,41 @@ public abstract class SecurityIntegration {
                 .map(String::trim)
                 .filter(item -> !item.isEmpty())
                 .collect(Collectors.toUnmodifiableList());
+    }
+
+    public SecurityIntegrationPB toProto() {
+        SecurityIntegrationPB.Builder builder = SecurityIntegrationPB.newBuilder();
+        if (getClass() == JWTSecurityIntegration.class) {
+            builder.setKind(SecurityIntegrationPB.Kind.JWT);
+        } else if (getClass() == SimpleLDAPSecurityIntegration.class) {
+            builder.setKind(SecurityIntegrationPB.Kind.LDAP);
+        } else if (getClass() == OAuth2SecurityIntegration.class) {
+            builder.setKind(SecurityIntegrationPB.Kind.OAUTH2);
+        } else {
+            throw new IllegalArgumentException("unsupported SecurityIntegration class " + getClass().getName());
+        }
+        if (name != null) {
+            builder.setName(name);
+        }
+        if (propertyMap != null) {
+            builder.setProperties(ProtoMaps.toStringMapProto(propertyMap));
+        }
+        return builder.build();
+    }
+
+    public static SecurityIntegration fromProto(SecurityIntegrationPB pb) {
+        ProtoKinds.checkKnown(pb.getKind(), pb.getKindValue());
+        String name = pb.hasName() ? pb.getName() : null;
+        Map<String, String> properties = pb.hasProperties() ? ProtoMaps.fromStringMapProto(pb.getProperties()) : null;
+        switch (pb.getKind()) {
+            case JWT:
+                return new JWTSecurityIntegration(name, properties);
+            case LDAP:
+                return new SimpleLDAPSecurityIntegration(name, properties);
+            case OAUTH2:
+                return new OAuth2SecurityIntegration(name, properties);
+            default:
+                throw new IllegalArgumentException("missing SecurityIntegration kind");
+        }
     }
 }

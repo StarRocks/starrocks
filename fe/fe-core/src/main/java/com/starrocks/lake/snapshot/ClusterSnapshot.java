@@ -15,6 +15,8 @@
 package com.starrocks.lake.snapshot;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.ClusterSnapshotPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.storagevolume.StorageVolume;
@@ -138,5 +140,37 @@ public class ClusterSnapshot {
             item.setStorage_path("");
         }
         return item;
+    }
+
+    public ClusterSnapshotPB toProto() {
+        ClusterSnapshotPB.Builder builder = ClusterSnapshotPB.newBuilder();
+        builder.setId(id);
+        if (snapshotName != null) {
+            builder.setSnapshotName(snapshotName);
+        }
+        if (type != null) {
+            builder.setType(ProtoEnums.toProto(type, ClusterSnapshotPB.ClusterSnapshotType.class));
+        }
+        if (storageVolumeName != null) {
+            builder.setStorageVolumeName(storageVolumeName);
+        }
+        builder.setCreatedTimeMs(createdTimeMs);
+        builder.setFinishedTimeMs(finishedTimeMs);
+        builder.setFeJournalId(feJournalId);
+        builder.setStarMgrJournalId(starMgrJournalId);
+        return builder.build();
+    }
+
+    public static ClusterSnapshot fromProto(ClusterSnapshotPB pb) {
+        ClusterSnapshot value = new ClusterSnapshot();
+        value.id = pb.getId();
+        value.snapshotName = pb.hasSnapshotName() ? pb.getSnapshotName() : null;
+        value.type = pb.hasType() ? ProtoEnums.fromProto(pb.getType(), ClusterSnapshotType.class) : null;
+        value.storageVolumeName = pb.hasStorageVolumeName() ? pb.getStorageVolumeName() : null;
+        value.createdTimeMs = pb.getCreatedTimeMs();
+        value.finishedTimeMs = pb.getFinishedTimeMs();
+        value.feJournalId = pb.getFeJournalId();
+        value.starMgrJournalId = pb.getStarMgrJournalId();
+        return value;
     }
 }

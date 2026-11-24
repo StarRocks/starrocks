@@ -22,6 +22,9 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.persist.AlterResourceInfo;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.HudiResourcePB;
+import com.starrocks.persist.proto.ResourcePB;
 import org.apache.commons.lang.StringUtils;
 
 import java.util.Map;
@@ -117,5 +120,24 @@ public class HudiResource extends Resource {
         if (info.getMetastoreURIs() != null) {
             this.metastoreURIs = info.getMetastoreURIs();
         }
+    }
+
+    @Override
+    protected void fillProtoVariant(ResourcePB.Builder builder) {
+        HudiResourcePB.Builder variant = HudiResourcePB.newBuilder();
+        if (metastoreURIs != null) {
+            variant.setMetastoreUris(metastoreURIs);
+        }
+        if (properties != null) {
+            variant.setProperties(ProtoMaps.toStringMapProto(properties));
+        }
+        builder.setKind(ResourcePB.Kind.HUDI_RESOURCE).setHudiResource(variant);
+    }
+
+    @Override
+    protected void fillFromVariantProto(ResourcePB pb) {
+        HudiResourcePB variant = pb.getHudiResource();
+        metastoreURIs = variant.hasMetastoreUris() ? variant.getMetastoreUris() : null;
+        properties = variant.hasProperties() ? ProtoMaps.fromStringMapProto(variant.getProperties()) : null;
     }
 }

@@ -24,6 +24,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
@@ -33,11 +34,20 @@ import com.starrocks.persist.SetDefaultStorageVolumeLog;
 import com.starrocks.persist.TableStorageInfos;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.image.ImageFormatException;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.ProtoKinds;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.Int64ListPB;
+import com.starrocks.persist.proto.SharedDataStorageVolumeMgrPB;
+import com.starrocks.persist.proto.StorageVolumeMgrPB;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
@@ -620,4 +630,60 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
             throws MetaNotFoundException;
 
     public abstract boolean hasStorageVolumeBindAsVirtualGroup(long shardGroupId);
+
+    protected StorageVolumeMgrPB.Kind imageV3Kind() {
+        return StorageVolumeMgrPB.Kind.SHARED_DATA;
+    }
+
+    protected StorageVolumeMgrPB toProto() {
+        return StorageVolumeMgrPB.newBuilder().setKind(imageV3Kind()).setSharedData(toSharedDataProto()).build();
+    }
+
+    protected SharedDataStorageVolumeMgrPB toSharedDataProto() {
+        SharedDataStorageVolumeMgrPB.Builder builder = SharedDataStorageVolumeMgrPB.newBuilder();
+        if (defaultStorageVolumeId != null) {
+            builder.setDefaultStorageVolumeId(defaultStorageVolumeId);
+        }
+        storageVolumeToDbs.forEach((id, dbs) -> builder.putStorageVolumeToDbs(id,
+                Int64ListPB.newBuilder().addAllValues(dbs).build()));
+        storageVolumeToTables.forEach((id, tables) -> builder.putStorageVolumeToTables(id,
+                Int64ListPB.newBuilder().addAllValues(tables).build()));
+        return builder.build();
+    }
+
+    protected void loadFromProto(StorageVolumeMgrPB pb) throws IOException {
+        ProtoKinds.checkKnown(pb.getKind(), pb.getKindValue());
+        if (pb.getKind() != imageV3Kind()) {
+            throw new ImageFormatException("storage volume manager kind " + pb.getKind()
+                    + " does not match " + imageV3Kind());
+        }
+        SharedDataStorageVolumeMgrPB sharedData = pb.getKind() == StorageVolumeMgrPB.Kind.SHARED_NOTHING
+                ? pb.getSharedNothing().getSharedData() : pb.getSharedData();
+        defaultStorageVolumeId = sharedData.hasDefaultStorageVolumeId() ? sharedData.getDefaultStorageVolumeId() : "";
+        storageVolumeToDbs = new HashMap<>();
+        sharedData.getStorageVolumeToDbsMap().forEach((id, dbs) ->
+                storageVolumeToDbs.put(id, new HashSet<>(dbs.getValuesList())));
+        storageVolumeToTables = new HashMap<>();
+        sharedData.getStorageVolumeToTablesMap().forEach((id, tables) ->
+                storageVolumeToTables.put(id, new HashSet<>(tables.getValuesList())));
+        dbToStorageVolume = new HashMap<>();
+        tableToStorageVolume = new HashMap<>();
+        gsonPostProcess();
+        if (imageV3Kind() == StorageVolumeMgrPB.Kind.SHARED_NOTHING) {
+            // The v2 shared-nothing loader retains only the persisted binding maps.
+            dbToStorageVolume.clear();
+            tableToStorageVolume.clear();
+        }
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.STORAGE_VOLUME_MGR)) {
+            writer.writeManager(toProto());
+        }
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(Pair.create(SectionId.STORAGE_VOLUME_MGR,
+                reader -> loadFromProto(reader.readManager(StorageVolumeMgrPB.parser()))));
+    }
 }

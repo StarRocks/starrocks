@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.type.BooleanType;
+import com.starrocks.type.Type;
 
 import java.util.Objects;
 
@@ -29,6 +30,12 @@ public class BoolVariant extends Variant {
 
     public BoolVariant(boolean value) {
         super(BooleanType.BOOLEAN);
+        this.value = value;
+    }
+
+    // For the image load, which carries the persisted type instead of the BOOLEAN constant.
+    BoolVariant(Type type, boolean value) {
+        super(type);
         this.value = value;
     }
 

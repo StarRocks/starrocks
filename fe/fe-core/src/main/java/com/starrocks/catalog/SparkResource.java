@@ -45,6 +45,9 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.load.loadv2.SparkRepository;
 import com.starrocks.load.loadv2.SparkYarnConfigFiles;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.ResourcePB;
+import com.starrocks.persist.proto.SparkResourcePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ResourceDesc;
@@ -386,5 +389,33 @@ public class SparkResource extends Resource {
         for (Map.Entry<String, String> entry : brokerProperties.entrySet()) {
             result.addRow(Lists.newArrayList(name, lowerCaseType, entry.getKey(), entry.getValue()));
         }
+    }
+
+    @Override
+    protected void fillProtoVariant(ResourcePB.Builder builder) {
+        SparkResourcePB.Builder variant = SparkResourcePB.newBuilder().setHasBroker(hasBroker);
+        if (sparkConfigs != null) {
+            variant.setSparkConfigs(ProtoMaps.toStringMapProto(sparkConfigs));
+        }
+        if (workingDir != null) {
+            variant.setWorkingDir(workingDir);
+        }
+        if (broker != null) {
+            variant.setBroker(broker);
+        }
+        if (brokerProperties != null) {
+            variant.setBrokerProperties(ProtoMaps.toStringMapProto(brokerProperties));
+        }
+        builder.setKind(ResourcePB.Kind.SPARK_RESOURCE).setSparkResource(variant);
+    }
+
+    @Override
+    protected void fillFromVariantProto(ResourcePB pb) {
+        SparkResourcePB variant = pb.getSparkResource();
+        sparkConfigs = variant.hasSparkConfigs() ? ProtoMaps.fromStringMapProto(variant.getSparkConfigs()) : null;
+        workingDir = variant.hasWorkingDir() ? variant.getWorkingDir() : null;
+        broker = variant.hasBroker() ? variant.getBroker() : null;
+        brokerProperties = variant.hasBrokerProperties() ? ProtoMaps.fromStringMapProto(variant.getBrokerProperties()) : null;
+        hasBroker = variant.getHasBroker();
     }
 }

@@ -18,6 +18,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.persist.proto.FlatJsonConfigPB;
 import com.starrocks.thrift.TFlatJsonConfig;
 
 import java.util.HashMap;
@@ -162,5 +163,26 @@ public class FlatJsonConfig implements Writable {
                 "flat_json_sparsity_factor : %f,\n" +
                 "flat_json_column_max : %d }", flatJsonEnable, flatJsonNullFactor, flatJsonSparsityFactor,
                 flatJsonColumnMax);
+    }
+
+    /** Image v3 form. */
+    public FlatJsonConfigPB toProto() {
+        return FlatJsonConfigPB.newBuilder()
+                .setFlatJsonEnable(flatJsonEnable)
+                .setFlatJsonNullFactor(flatJsonNullFactor)
+                .setFlatJsonSparsityFactor(flatJsonSparsityFactor)
+                .setFlatJsonColumnMax(flatJsonColumnMax)
+                .setConfigVersion(configVersion)
+                .build();
+    }
+
+    public static FlatJsonConfig fromProto(FlatJsonConfigPB pb) {
+        FlatJsonConfig config = new FlatJsonConfig();
+        config.flatJsonEnable = pb.getFlatJsonEnable();
+        config.flatJsonNullFactor = pb.getFlatJsonNullFactor();
+        config.flatJsonSparsityFactor = pb.getFlatJsonSparsityFactor();
+        config.flatJsonColumnMax = pb.getFlatJsonColumnMax();
+        config.configVersion = pb.getConfigVersion();
+        return config;
     }
 }

@@ -44,12 +44,16 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.KafkaUtil;
+import com.starrocks.persist.proto.KafkaOffsetsPB;
+import com.starrocks.persist.proto.KafkaProgressPB;
+import com.starrocks.persist.proto.RoutineLoadProgressPB;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * this is description of kafka routine load progress
@@ -203,9 +207,22 @@ public class KafkaProgress extends RoutineLoadProgress {
                 .forEach(entity -> this.partitionIdToOffset.put(entity.getKey(), entity.getValue() + 1));
     }
 
+    @Override
+    protected void fillProtoVariant(RoutineLoadProgressPB.Builder parent) {
+        KafkaProgressPB.Builder builder = KafkaProgressPB.newBuilder();
+        if (partitionIdToOffset != null) {
+            builder.setPartitionIdToOffset(KafkaOffsetsPB.newBuilder().putAllValues(partitionIdToOffset).build());
+        }
+        parent.setKind(RoutineLoadProgressPB.Kind.KAFKA_PROGRESS).setKafkaProgress(builder);
+    }
 
-
-
-
-
+    @Override
+    protected void fillFromVariantProto(RoutineLoadProgressPB parent) {
+        KafkaProgressPB pb = parent.getKafkaProgress();
+        if (pb.hasPartitionIdToOffset()) {
+            partitionIdToOffset = new ConcurrentHashMap<>(pb.getPartitionIdToOffset().getValuesMap());
+        } else {
+            partitionIdToOffset = null;
+        }
+    }
 }

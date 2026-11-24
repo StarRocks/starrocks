@@ -69,6 +69,16 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.TableRefPersist;
+import com.starrocks.persist.gson.SubtypeNotFoundException;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.AbstractJobPB;
+import com.starrocks.persist.proto.BackupCatalogListPB;
+import com.starrocks.persist.proto.BackupFunctionListPB;
+import com.starrocks.persist.proto.BackupJobCorePB;
+import com.starrocks.persist.proto.BackupJobPB;
+import com.starrocks.persist.proto.BackupSnapshotsPB;
+import com.starrocks.persist.proto.BackupTableRefListPB;
+import com.starrocks.persist.proto.FunctionPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -95,6 +105,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -973,5 +984,123 @@ public class BackupJob extends AbstractJob {
 
     public BackupJob copyForPersist() {
         return new BackupJob(this);
+    }
+
+    protected BackupJobCorePB toBackupJobCoreProto() {
+        BackupJobCorePB.Builder builder = BackupJobCorePB.newBuilder();
+        if (tableRefs != null) {
+            builder.setTableRefs(BackupTableRefListPB.newBuilder().addAllValues(tableRefs.stream()
+                    .map(TableRefPersist::toProto).collect(Collectors.toList())).build());
+        }
+        if (state != null) {
+            builder.setState(ProtoEnums.toProto(state, BackupJobCorePB.BackupJobState.class));
+        }
+        builder.setSnapshotFinishedTime(snapshotFinishedTime);
+        builder.setSnapshotUploadFinishedTime(snapshotUploadFinishedTime);
+        if (snapshotInfos != null) {
+            builder.setSnapshotInfos(BackupSnapshotsPB.newBuilder().addAllValues(snapshotInfos.values().stream()
+                    .map(SnapshotInfo::toProto).collect(Collectors.toList())).build());
+        }
+        if (backupMeta != null) {
+            builder.setBackupMeta(backupMeta.toProto());
+        }
+        if (localMetaInfoFilePath != null) {
+            builder.setLocalMetaInfoFilePath(localMetaInfoFilePath);
+        }
+        if (localJobInfoFilePath != null) {
+            builder.setLocalJobInfoFilePath(localJobInfoFilePath);
+        }
+        if (backupFunctions != null) {
+            builder.setBackupFunctions(BackupFunctionListPB.newBuilder().addAllValues(backupFunctions.stream()
+                    .map(Function::toProto).collect(Collectors.toList())).build());
+        }
+        if (backupCatalogs != null) {
+            builder.setBackupCatalogs(BackupCatalogListPB.newBuilder().addAllValues(backupCatalogs.stream()
+                    .map(Catalog::toProto).collect(Collectors.toList())).build());
+        }
+        if (ttl != null) {
+            builder.setTtl(ttl);
+        }
+        return builder.build();
+    }
+
+    protected void fillFromBackupJobCoreProto(BackupJobCorePB pb) {
+        if (pb.hasTableRefs()) {
+            tableRefs = pb.getTableRefs().getValuesList().stream()
+                    .map(TableRefPersist::fromProto).collect(Collectors.toCollection(ArrayList::new));
+        } else {
+            tableRefs = null;
+        }
+        if (pb.hasState()) {
+            state = ProtoEnums.fromProto(pb.getState(), BackupJobState.class);
+        } else {
+            state = null;
+        }
+        if (pb.hasSnapshotFinishedTime()) {
+            snapshotFinishedTime = pb.getSnapshotFinishedTime();
+        }
+        if (pb.hasSnapshotUploadFinishedTime()) {
+            snapshotUploadFinishedTime = pb.getSnapshotUploadFinishedTime();
+        }
+        if (pb.hasSnapshotInfos()) {
+            snapshotInfos = pb.getSnapshotInfos().getValuesList().stream().map(SnapshotInfo::fromProto)
+                    .collect(Collectors.toConcurrentMap(SnapshotInfo::getTabletId, info -> info));
+        } else {
+            snapshotInfos = null;
+        }
+        if (pb.hasBackupMeta()) {
+            backupMeta = BackupMeta.fromProto(pb.getBackupMeta());
+        } else {
+            backupMeta = null;
+        }
+        if (pb.hasLocalMetaInfoFilePath()) {
+            localMetaInfoFilePath = pb.getLocalMetaInfoFilePath();
+        } else {
+            localMetaInfoFilePath = null;
+        }
+        if (pb.hasLocalJobInfoFilePath()) {
+            localJobInfoFilePath = pb.getLocalJobInfoFilePath();
+        } else {
+            localJobInfoFilePath = null;
+        }
+        if (pb.hasBackupFunctions()) {
+            backupFunctions = new ArrayList<>();
+            for (FunctionPB functionPb : pb.getBackupFunctions().getValuesList()) {
+                try {
+                    backupFunctions.add(Function.fromProto(functionPb));
+                } catch (SubtypeNotFoundException e) {
+                    if (!Config.metadata_ignore_unknown_subtype) {
+                        throw e;
+                    }
+                    // Match V2's per-function filtering without dropping this job.
+                    LOG.warn("ignore function {} in backup job {} ({}): unknown subtype {}",
+                            functionPb.getCore().getName().getFn(), label, jobId, e.getSubtype(), e);
+                }
+            }
+        } else {
+            backupFunctions = null;
+        }
+        if (pb.hasBackupCatalogs()) {
+            backupCatalogs = pb.getBackupCatalogs().getValuesList().stream()
+                    .map(Catalog::fromProto).collect(Collectors.toCollection(ArrayList::new));
+        } else {
+            backupCatalogs = null;
+        }
+        if (pb.hasTtl()) {
+            ttl = pb.getTtl();
+        } else {
+            ttl = null;
+        }
+    }
+
+    @Override
+    protected void fillProtoVariant(AbstractJobPB.Builder builder) {
+        builder.setKind(AbstractJobPB.Kind.BACKUP_JOB)
+                .setBackupJob(BackupJobPB.newBuilder().setCore(toBackupJobCoreProto()));
+    }
+
+    @Override
+    protected void fillFromVariantProto(AbstractJobPB pb) {
+        fillFromBackupJobCoreProto(pb.getBackupJob().getCore());
     }
 }

@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.reshard.presplit.Estimates;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.estimate.Estimator;
@@ -26,11 +27,18 @@ import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.InsertOverwriteJobPB;
+import com.starrocks.persist.proto.InsertOverwriteTableJobsPB;
+import com.starrocks.persist.proto.Int64ListPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -285,5 +293,42 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, Mem
     @Override
     public long estimateSize() {
         return Estimator.estimate(overwriteJobMap, 10);
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.INSERT_OVERWRITE_JOB)) {
+            for (InsertOverwriteJob job : overwriteJobMap.values()) {
+                writer.writeEntry(job.toProto());
+            }
+        }
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.INSERT_OVERWRITE_TABLE_JOBS)) {
+            for (Map.Entry<Long, List<Long>> entry : tableToOverwriteJobs.entrySet()) {
+                if (entry.getValue() == null) {
+                    // Gson omits null map values in the v2 image.
+                    continue;
+                }
+                writer.writeEntry(InsertOverwriteTableJobsPB.newBuilder().setTableId(entry.getKey())
+                        .setJobIds(Int64ListPB.newBuilder().addAllValues(entry.getValue())).build());
+            }
+        }
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(
+                Pair.create(SectionId.INSERT_OVERWRITE_JOB, reader -> {
+                    overwriteJobMap = Maps.newConcurrentMap();
+                    reader.readEntries(InsertOverwriteJobPB.parser(), pb -> {
+                        InsertOverwriteJob job = InsertOverwriteJob.fromProto(pb);
+                        overwriteJobMap.put(job.getJobId(), job);
+                    });
+                }),
+                Pair.create(SectionId.INSERT_OVERWRITE_TABLE_JOBS, reader -> {
+                    tableToOverwriteJobs = Maps.newHashMap();
+                    reader.readEntries(InsertOverwriteTableJobsPB.parser(), pb ->
+                            tableToOverwriteJobs.put(pb.getTableId(), pb.hasJobIds()
+                                    ? Lists.newArrayList(pb.getJobIds().getValuesList()) : null));
+                    runningJobs = Lists.newArrayList();
+                    gsonPostProcess();
+                }));
     }
 }

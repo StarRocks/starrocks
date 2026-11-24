@@ -14,8 +14,10 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Range;
+import com.starrocks.persist.proto.ColocateRangePB;
 
 import java.util.Objects;
 
@@ -78,5 +80,15 @@ public class ColocateRange implements Comparable<Range<Tuple>> {
     @Override
     public String toString() {
         return range.toString() + " -> shardGroup=" + shardGroupId;
+    }
+
+    public ColocateRangePB toProto() {
+        return ColocateRangePB.newBuilder().setRange(TabletRangeProtoConverter.toProto(new TabletRange(range)))
+                .setShardGroupId(shardGroupId).build();
+    }
+
+    public static ColocateRange fromProto(ColocateRangePB pb) {
+        Preconditions.checkArgument(pb.hasRange() && pb.hasShardGroupId(), "incomplete colocate range");
+        return new ColocateRange(TabletRangeProtoConverter.fromProto(pb.getRange()).getRange(), pb.getShardGroupId());
     }
 }

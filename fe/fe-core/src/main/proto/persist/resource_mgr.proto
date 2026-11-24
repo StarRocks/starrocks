@@ -1,0 +1,99 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/common.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "ResourceMgrProto";
+
+// ResourceMgr is one section, RESOURCE_MGR: the manager message, then one ResourcePB per resource.
+// v2 writes the manager as a single JSON object holding the name-to-resource map; the name is a
+// field of the resource, so the map becomes the entries. See common.proto for the conventions.
+
+// The manager message of the RESOURCE_MGR section. ResourceMgr keeps no state besides the resources.
+message ResourceMgrPB {
+}
+
+// com.starrocks.catalog.Resource. The kind names the concrete class; Resource.type only restates
+// it and is rebuilt from the kind on load.
+message ResourcePB {
+  enum Kind {
+    UNSPECIFIED = 0;
+    SPARK_RESOURCE = 1;
+    HIVE_RESOURCE = 2;
+    ICEBERG_RESOURCE = 3;
+    HUDI_RESOURCE = 4;
+    ODBC_CATALOG_RESOURCE = 5;
+    JDBC_RESOURCE = 6;
+  }
+  Kind kind = 1;
+  ResourceCorePB core = 2;
+
+  oneof instance {
+    SparkResourcePB spark_resource = 11;
+    HiveResourcePB hive_resource = 12;
+    IcebergResourcePB iceberg_resource = 13;
+    HudiResourcePB hudi_resource = 14;
+    OdbcCatalogResourcePB odbc_catalog_resource = 15;
+    JDBCResourcePB jdbc_resource = 16;
+  }
+}
+
+message ResourceCorePB {
+  optional string name = 1;
+}
+
+// com.starrocks.catalog.SparkResource
+message SparkResourcePB {
+  StringMapPB spark_configs = 1;
+  optional string working_dir = 2;
+  optional string broker = 3;
+  StringMapPB broker_properties = 4;
+  bool has_broker = 5;
+}
+
+// com.starrocks.catalog.HiveResource
+message HiveResourcePB {
+  optional string metastore_uris = 1;
+  StringMapPB properties = 2;
+}
+
+// com.starrocks.catalog.IcebergResource
+message IcebergResourcePB {
+  optional string catalog_type = 1;
+  optional string metastore_uris = 2;
+  optional string catalog_impl = 3;
+  StringMapPB properties = 4;
+}
+
+// com.starrocks.catalog.HudiResource
+message HudiResourcePB {
+  optional string metastore_uris = 1;
+  StringMapPB properties = 2;
+}
+
+// com.starrocks.catalog.OdbcCatalogResource
+message OdbcCatalogResourcePB {
+  StringMapPB configs = 1;
+}
+
+// com.starrocks.catalog.JDBCResource
+message JDBCResourcePB {
+  StringMapPB configs = 1;
+}

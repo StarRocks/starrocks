@@ -37,6 +37,8 @@ package com.starrocks.catalog;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 import com.starrocks.memory.estimate.ShallowMemory;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.ReplicaPB;
 import com.starrocks.sql.ast.ReplicaStatus;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -202,6 +204,39 @@ public class Replica implements Writable {
     private long checksum = -1L;
 
     public Replica() {
+    }
+
+    public ReplicaPB toProto() {
+        ReplicaPB.Builder builder = ReplicaPB.newBuilder()
+                .setId(id)
+                .setBackendId(backendId)
+                .setVersion(version)
+                .setMinReadableVersion(minReadableVersion)
+                .setDataSize(dataSize)
+                .setRowCount(rowCount)
+                .setLastFailedVersion(lastFailedVersion)
+                .setLastSuccessVersion(lastSuccessVersion);
+        if (state != null) {
+            builder.setState(ProtoEnums.toProto(state, ReplicaPB.State.class));
+        }
+        return builder.build();
+    }
+
+    public static Replica fromProto(ReplicaPB pb) {
+        // The same constructor GSON uses.
+        Replica replica = new Replica();
+        replica.id = pb.getId();
+        replica.backendId = pb.getBackendId();
+        replica.version = pb.getVersion();
+        replica.minReadableVersion = pb.getMinReadableVersion();
+        replica.dataSize = pb.getDataSize();
+        replica.rowCount = pb.getRowCount();
+        if (pb.hasState()) {
+            replica.state = ProtoEnums.fromProto(pb.getState(), ReplicaState.class);
+        }
+        replica.lastFailedVersion = pb.getLastFailedVersion();
+        replica.lastSuccessVersion = pb.getLastSuccessVersion();
+        return replica;
     }
 
     // for rollup

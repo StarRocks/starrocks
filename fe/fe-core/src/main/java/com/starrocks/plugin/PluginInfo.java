@@ -39,6 +39,8 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DigitalVersion;
+import com.starrocks.persist.proto.PluginInfoPB;
+import com.starrocks.persist.proto.StringMapPB;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,6 +49,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
@@ -258,4 +261,67 @@ public class PluginInfo implements Writable {
         return Objects.hash(name);
     }
 
+    public PluginInfoPB toProto() {
+        PluginInfoPB.Builder builder = PluginInfoPB.newBuilder();
+        if (name != null) {
+            builder.setName(name);
+        }
+        if (type != null) {
+            builder.setType(PluginInfoPB.Type.valueOf(type.name()));
+        }
+        if (description != null) {
+            builder.setDescription(description);
+        }
+        if (version != null) {
+            builder.setVersion(version.toProto());
+        }
+        if (javaVersion != null) {
+            builder.setJavaVersion(javaVersion.toProto());
+        }
+        if (className != null) {
+            builder.setClassName(className);
+        }
+        if (soName != null) {
+            builder.setSoName(soName);
+        }
+        if (source != null) {
+            builder.setSource(source);
+        }
+        if (properties != null) {
+            builder.setProperties(StringMapPB.newBuilder().putAllValues(properties));
+        }
+        return builder.build();
+    }
+
+    public static PluginInfo fromProto(PluginInfoPB pb) {
+        PluginInfo result = new PluginInfo();
+        if (pb.hasName()) {
+            result.name = pb.getName();
+        }
+        if (pb.hasType()) {
+            result.type = PluginType.valueOf(pb.getType().name());
+        }
+        if (pb.hasDescription()) {
+            result.description = pb.getDescription();
+        }
+        if (pb.hasVersion()) {
+            result.version = DigitalVersion.fromProto(pb.getVersion());
+        }
+        if (pb.hasJavaVersion()) {
+            result.javaVersion = DigitalVersion.fromProto(pb.getJavaVersion());
+        }
+        if (pb.hasClassName()) {
+            result.className = pb.getClassName();
+        }
+        if (pb.hasSoName()) {
+            result.soName = pb.getSoName();
+        }
+        if (pb.hasSource()) {
+            result.source = pb.getSource();
+        }
+        if (pb.hasProperties()) {
+            result.properties = new HashMap<>(pb.getProperties().getValuesMap());
+        }
+        return result;
+    }
 }

@@ -1,0 +1,60 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/function.proto";
+import "persist/partition.proto";
+import "persist/table.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "LocalMetastoreProto";
+
+// LocalMetastore is written as three flat sections instead of the v2 nesting of databases > tables
+// > partitions (design doc 3.4):
+//   LOCAL_METASTORE_DB        manager message LocalMetastorePB, then one DatabasePB per database
+//   LOCAL_METASTORE_TABLE     one TableEntryPB per table, tagged with its database id
+//   LOCAL_METASTORE_PARTITION one PartitionEntryPB per partition, tagged with its table id
+// The reader loads them in that order and attaches each entry to its parent by id.
+
+// The manager message of the DB section: what v2 wrote as AutoIncrementInfo.
+message LocalMetastorePB {
+  map<int64, int64> table_id_to_increment_id = 1;
+}
+
+// com.starrocks.catalog.Database without its tables.
+message DatabasePB {
+  MetaObjectPB meta = 1;
+  int64 id = 2;
+  optional string full_qualified_name = 3;
+  // The user-defined functions, keyed by function name in memory.
+  repeated FunctionPB functions = 4;
+  int64 data_quota_bytes = 5;
+  int64 replica_quota_size = 6;
+}
+
+message TableEntryPB {
+  int64 db_id = 1;
+  TablePB table = 2;
+}
+
+message PartitionEntryPB {
+  int64 table_id = 1;
+  // A temporary partition of the table (OlapTable.tempPartitions) rather than a formal one.
+  bool temp = 2;
+  PartitionPB partition = 3;
+}

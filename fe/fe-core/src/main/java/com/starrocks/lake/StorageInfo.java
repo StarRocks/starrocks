@@ -16,10 +16,12 @@
 package com.starrocks.lake;
 
 import com.google.gson.annotations.SerializedName;
+import com.google.protobuf.ByteString;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
+import com.starrocks.persist.proto.StorageInfoPB;
 
 import java.io.IOException;
 
@@ -85,5 +87,29 @@ public class StorageInfo implements GsonPreProcessable, GsonPostProcessable {
         if (cacheInfoBytes != null) {
             cacheInfo = FileCacheInfo.parseFrom(cacheInfoBytes);
         }
+    }
+
+    public StorageInfoPB toProto() {
+        StorageInfoPB.Builder builder = StorageInfoPB.newBuilder();
+        // Same rule as gsonPreProcess: the live messages win over the bytes they were loaded from.
+        byte[] storeBytes = storeInfo != null ? storeInfo.toByteArray() : storeInfoBytes;
+        if (storeBytes != null) {
+            builder.setStoreInfo(ByteString.copyFrom(storeBytes));
+        }
+        byte[] cacheBytes = cacheInfo != null ? cacheInfo.toByteArray() : cacheInfoBytes;
+        if (cacheBytes != null) {
+            builder.setCacheInfo(ByteString.copyFrom(cacheBytes));
+        }
+        return builder.build();
+    }
+
+    public static StorageInfo fromProto(StorageInfoPB pb) throws IOException {
+        byte[] storeBytes = pb.hasStoreInfo() ? pb.getStoreInfo().toByteArray() : null;
+        byte[] cacheBytes = pb.hasCacheInfo() ? pb.getCacheInfo().toByteArray() : null;
+        StorageInfo info = new StorageInfo(storeBytes != null ? FilePathInfo.parseFrom(storeBytes) : null,
+                cacheBytes != null ? FileCacheInfo.parseFrom(cacheBytes) : null);
+        info.storeInfoBytes = storeBytes;
+        info.cacheInfoBytes = cacheBytes;
+        return info;
     }
 }

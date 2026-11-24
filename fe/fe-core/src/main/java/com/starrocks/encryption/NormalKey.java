@@ -13,6 +13,10 @@
 // limitations under the License.
 package com.starrocks.encryption;
 
+import com.google.protobuf.ByteString;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.ImageEncryptionKeyPB;
+import com.starrocks.persist.proto.NormalEncryptionKeyPB;
 import com.starrocks.proto.EncryptionAlgorithmPB;
 import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.proto.EncryptionKeyTypePB;
@@ -196,5 +200,49 @@ public class NormalKey extends EncryptionKey {
     @Override
     public String toString() {
         return String.format("NormalKey(id:%d createTime:%d)", id, createTime);
+    }
+
+    @Override
+    public ImageEncryptionKeyPB toProto(KeyMgr mgr) {
+        EncryptionKeyPB key = new EncryptionKeyPB();
+        toPB(key, mgr);
+        ImageEncryptionKeyPB.Builder builder = ImageEncryptionKeyPB.newBuilder().setKind(ImageEncryptionKeyPB.Kind.NORMAL);
+        if (key.id != null) {
+            builder.setId(key.id);
+        }
+        if (key.parentId != null) {
+            builder.setParentId(key.parentId);
+        }
+        if (key.createTime != null) {
+            builder.setCreateTime(key.createTime);
+        }
+        NormalEncryptionKeyPB.Builder normal = NormalEncryptionKeyPB.newBuilder();
+        if (key.algorithm != null) {
+            normal.setAlgorithm(ProtoEnums.toProto(key.algorithm, NormalEncryptionKeyPB.Algorithm.class));
+        }
+        if (key.plainKey != null) {
+            normal.setPlainKey(ByteString.copyFrom(key.plainKey));
+        }
+        if (key.encryptedKey != null) {
+            normal.setEncryptedKey(ByteString.copyFrom(key.encryptedKey));
+        }
+        return builder.setNormal(normal).build();
+    }
+
+    public static NormalKey fromProto(ImageEncryptionKeyPB pb, KeyMgr mgr) {
+        EncryptionKeyPB key = new EncryptionKeyPB();
+        key.type = EncryptionKeyTypePB.NORMAL_KEY;
+        key.id = pb.hasId() ? pb.getId() : null;
+        key.parentId = pb.hasParentId() ? pb.getParentId() : null;
+        key.createTime = pb.hasCreateTime() ? pb.getCreateTime() : null;
+        NormalEncryptionKeyPB normal = pb.getNormal();
+        if (normal.hasAlgorithm()) {
+            key.algorithm = ProtoEnums.fromProto(normal.getAlgorithm(), EncryptionAlgorithmPB.class);
+        }
+        key.plainKey = normal.hasPlainKey() ? normal.getPlainKey().toByteArray() : null;
+        key.encryptedKey = normal.hasEncryptedKey() ? normal.getEncryptedKey().toByteArray() : null;
+        NormalKey result = new NormalKey();
+        result.fromPB(key, mgr);
+        return result;
     }
 }

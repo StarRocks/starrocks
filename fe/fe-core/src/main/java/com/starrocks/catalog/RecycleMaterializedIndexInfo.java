@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.persist.proto.RecycleMaterializedIndexInfoPB;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -111,5 +112,18 @@ public class RecycleMaterializedIndexInfo {
         }
         LOG.info("Detached recycled materialized index {} from partition {} (table {}); {} tablets unregistered",
                 indexId, physicalPartitionId, tableId, removed.getTablets().size());
+    }
+
+    public RecycleMaterializedIndexInfoPB toProto() {
+        return RecycleMaterializedIndexInfoPB.newBuilder()
+                .setDbId(dbId)
+                .setTableId(tableId)
+                .setPhysicalPartitionId(physicalPartitionId)
+                .setIndexId(indexId)
+                .build();
+    }
+
+    public static RecycleMaterializedIndexInfo fromProto(RecycleMaterializedIndexInfoPB pb) {
+        return new RecycleMaterializedIndexInfo(pb.getDbId(), pb.getTableId(), pb.getPhysicalPartitionId(), pb.getIndexId());
     }
 }

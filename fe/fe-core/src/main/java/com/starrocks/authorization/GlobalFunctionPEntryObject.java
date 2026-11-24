@@ -17,6 +17,7 @@ package com.starrocks.authorization;
 import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Function;
+import com.starrocks.persist.proto.GlobalFunctionPrivilegeObjectPB;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
@@ -131,5 +132,24 @@ public class GlobalFunctionPEntryObject implements PEntryObject {
         } else {
             return getFunctionSig();
         }
+    }
+
+    public GlobalFunctionPrivilegeObjectPB toProto() {
+        GlobalFunctionPrivilegeObjectPB.Builder builder = GlobalFunctionPrivilegeObjectPB.newBuilder();
+        if (functionSig != null) {
+            builder.setFunctionSig(functionSig);
+        }
+        return builder.build();
+    }
+
+    // A protobuf constructor leaves the existing GSON construction path unchanged.
+    private GlobalFunctionPEntryObject(GlobalFunctionPrivilegeObjectPB pb) {
+        if (pb.hasFunctionSig()) {
+            functionSig = pb.getFunctionSig();
+        }
+    }
+
+    public static GlobalFunctionPEntryObject fromProto(GlobalFunctionPrivilegeObjectPB pb) {
+        return new GlobalFunctionPEntryObject(pb);
     }
 }

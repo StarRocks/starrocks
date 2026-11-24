@@ -15,6 +15,7 @@
 package com.starrocks.load.pipe;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.proto.PipeIdPB;
 
 import java.util.Objects;
 
@@ -68,5 +69,13 @@ public class PipeId {
                 "dbId=" + dbId +
                 ", id=" + id +
                 '}';
+    }
+
+    public PipeIdPB toProto() {
+        return PipeIdPB.newBuilder().setDbId(dbId).setId(id).build();
+    }
+
+    public static PipeId fromProto(PipeIdPB pb) {
+        return new PipeId(pb.getDbId(), pb.getId());
     }
 }

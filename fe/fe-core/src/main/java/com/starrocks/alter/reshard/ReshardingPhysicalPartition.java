@@ -17,9 +17,13 @@ package com.starrocks.alter.reshard;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.TabletRange;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.proto.ReshardingMaterializedIndexMapPB;
+import com.starrocks.persist.proto.ReshardingPhysicalPartitionMapPB;
+import com.starrocks.persist.proto.ReshardingPhysicalPartitionPB;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Future;
 
@@ -190,5 +194,41 @@ public class ReshardingPhysicalPartition {
             parallelTablets += reshardingMaterializedIndex.getParallelTablets();
         }
         return parallelTablets;
+    }
+
+    public ReshardingPhysicalPartitionPB toProto() {
+        ReshardingPhysicalPartitionPB.Builder builder = ReshardingPhysicalPartitionPB.newBuilder()
+                .setPhysicalPartitionId(physicalPartitionId).setCommitVersion(commitVersion);
+        if (reshardingIndexes != null) {
+            ReshardingMaterializedIndexMapPB.Builder indexes = ReshardingMaterializedIndexMapPB.newBuilder();
+            reshardingIndexes.forEach((key, index) -> indexes.putValues(key, index.toProto()));
+            builder.setReshardingIndexes(indexes);
+        }
+        return builder.build();
+    }
+
+    public static ReshardingPhysicalPartition fromProto(ReshardingPhysicalPartitionPB pb) {
+        Map<Long, ReshardingMaterializedIndex> indexes = null;
+        if (pb.hasReshardingIndexes()) {
+            indexes = new HashMap<>();
+            for (var entry : pb.getReshardingIndexes().getValuesMap().entrySet()) {
+                indexes.put(entry.getKey(), ReshardingMaterializedIndex.fromProto(entry.getValue()));
+            }
+        }
+        ReshardingPhysicalPartition partition = new ReshardingPhysicalPartition(pb.getPhysicalPartitionId(), indexes);
+        partition.commitVersion = pb.getCommitVersion();
+        return partition;
+    }
+
+    static ReshardingPhysicalPartitionMapPB toProtoMap(Map<Long, ReshardingPhysicalPartition> partitions) {
+        ReshardingPhysicalPartitionMapPB.Builder builder = ReshardingPhysicalPartitionMapPB.newBuilder();
+        partitions.forEach((key, partition) -> builder.putValues(key, partition.toProto()));
+        return builder.build();
+    }
+
+    static Map<Long, ReshardingPhysicalPartition> fromProtoMap(ReshardingPhysicalPartitionMapPB pb) {
+        Map<Long, ReshardingPhysicalPartition> partitions = new HashMap<>();
+        pb.getValuesMap().forEach((key, partition) -> partitions.put(key, fromProto(partition)));
+        return partitions;
     }
 }

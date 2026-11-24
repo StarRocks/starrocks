@@ -1,0 +1,72 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/type.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "ColumnProto";
+
+// com.starrocks.catalog.Column and its default expression. See common.proto for the conventions.
+
+message ColumnPB {
+  // com.starrocks.sql.ast.AggregateType.
+  enum AggregateType {
+    UNSPECIFIED = 0;
+    SUM = 1;
+    MIN = 2;
+    MAX = 3;
+    REPLACE = 4;
+    REPLACE_IF_NOT_NULL = 5;
+    HLL_UNION = 6;
+    NONE = 7;
+    BITMAP_UNION = 8;
+    PERCENTILE_UNION = 9;
+    AGG_STATE_UNION = 10;
+  }
+  string name = 1;
+  optional string column_id = 2;
+  int32 unique_id = 3;
+  TypePB type = 4;
+  optional AggregateType aggregation_type = 5;
+  AggStateDescPB agg_state_desc = 6;
+  bool is_aggregation_type_implicit = 7;
+  bool is_key = 8;
+  bool is_allow_null = 9;
+  bool is_auto_increment = 10;
+  optional string default_value = 11;
+  DefaultExprPB default_expr = 12;
+  optional string comment = 13;
+  optional string physical_name = 14;
+  // SQL form of the generated-column expression, with column ids instead of names in the slots.
+  optional string generated_column_expr = 15;
+  bool is_hidden = 16;
+  int64 created_time = 17;
+}
+
+message DefaultExprPB {
+  optional string expr = 1;
+  bool has_arguments = 2;
+  // SQL form of a complex default expression, re-parsed on load.
+  optional string serialized_expr = 3;
+}
+
+// A Java list of columns that is a map value or can be null.
+message ColumnListPB {
+  repeated ColumnPB columns = 1;
+}

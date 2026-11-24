@@ -57,6 +57,22 @@ import com.starrocks.persist.ExpressionSerializedObject;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.AsyncRefreshContextPB;
+import com.starrocks.persist.proto.BasePartitionInfoPB;
+import com.starrocks.persist.proto.BaseTableInfoListPB;
+import com.starrocks.persist.proto.BaseTableInfoPB;
+import com.starrocks.persist.proto.BaseTableInfoTvrVersionRangePB;
+import com.starrocks.persist.proto.BaseTableInfoVisibleVersionsPB;
+import com.starrocks.persist.proto.BaseTableVisibleVersionsPB;
+import com.starrocks.persist.proto.Int64ListPB;
+import com.starrocks.persist.proto.MaterializedViewCorePB;
+import com.starrocks.persist.proto.MaterializedViewPB;
+import com.starrocks.persist.proto.MvPartitionRefBaseTablePartitionsPB;
+import com.starrocks.persist.proto.MvRefreshSchemePB;
+import com.starrocks.persist.proto.PartitionExprMappingPB;
+import com.starrocks.persist.proto.PartitionVisibleVersionPB;
+import com.starrocks.persist.proto.TablePB;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
@@ -324,6 +340,23 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     ", fileNumber=" + fileNumber +
                     '}';
         }
+
+        public static BasePartitionInfo fromProto(BasePartitionInfoPB pb) {
+            BasePartitionInfo info = new BasePartitionInfo(pb.getId(), pb.getVersion(), pb.getLastRefreshTime());
+            info.extLastFileModifiedTime = pb.getExtLastFileModifiedTime();
+            info.fileNumber = pb.getFileNumber();
+            return info;
+        }
+
+        public BasePartitionInfoPB toProto() {
+            return BasePartitionInfoPB.newBuilder()
+                    .setId(id)
+                    .setVersion(version)
+                    .setLastRefreshTime(lastRefreshTime)
+                    .setExtLastFileModifiedTime(extLastFileModifiedTime)
+                    .setFileNumber(fileNumber)
+                    .build();
+        }
     }
 
     public static class AsyncRefreshContext {
@@ -524,6 +557,110 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             arc.timeUnit = this.timeUnit;
             return arc;
         }
+
+        private static Map<String, BasePartitionInfo> partitionVersionsFromProto(List<PartitionVisibleVersionPB> versions) {
+            // Insertion-ordered, as GSON delivers it.
+            Map<String, BasePartitionInfo> result = Maps.newLinkedHashMap();
+            for (PartitionVisibleVersionPB partition : versions) {
+                result.put(partition.getPartitionName(),
+                        partition.hasInfo() ? BasePartitionInfo.fromProto(partition.getInfo()) : null);
+            }
+            return result;
+        }
+
+        private static List<PartitionVisibleVersionPB> partitionVersionsToProto(Map<String, BasePartitionInfo> versions) {
+            List<PartitionVisibleVersionPB> result = new ArrayList<>(versions.size());
+            for (Map.Entry<String, BasePartitionInfo> entry : versions.entrySet()) {
+                PartitionVisibleVersionPB.Builder partition = PartitionVisibleVersionPB.newBuilder()
+                        .setPartitionName(entry.getKey());
+                if (entry.getValue() != null) {
+                    partition.setInfo(entry.getValue().toProto());
+                }
+                result.add(partition.build());
+            }
+            return result;
+        }
+
+        public static AsyncRefreshContext fromProto(AsyncRefreshContextPB pb) {
+            // The same constructor GSON uses; the maps it creates are filled in place.
+            AsyncRefreshContext context = new AsyncRefreshContext();
+            for (BaseTableVisibleVersionsPB versions : pb.getBaseTableVisibleVersionMapList()) {
+                context.baseTableVisibleVersionMap.put(versions.getBaseTableId(),
+                        partitionVersionsFromProto(versions.getPartitionsList()));
+            }
+            for (BaseTableInfoVisibleVersionsPB versions : pb.getBaseTableInfoVisibleVersionMapList()) {
+                context.baseTableInfoVisibleVersionMap.put(BaseTableInfo.fromProto(versions.getBaseTable()),
+                        partitionVersionsFromProto(versions.getPartitionsList()));
+            }
+            for (MvPartitionRefBaseTablePartitionsPB partitions : pb.getMvPartitionNameRefBaseTablePartitionMapList()) {
+                context.mvPartitionNameRefBaseTablePartitionMap.put(partitions.getMvPartitionName(),
+                        Sets.newLinkedHashSet(partitions.getBaseTablePartitionNamesList()));
+            }
+            for (BaseTableInfoTvrVersionRangePB range : pb.getBaseTableInfoTvrVersionRangeMapList()) {
+                context.baseTableInfoTvrDeltaMap.put(BaseTableInfo.fromProto(range.getBaseTable()),
+                        TvrVersionRange.fromProto(range.getRange()));
+            }
+            for (BaseTableInfoTvrVersionRangePB range : pb.getTempBaseTableInfoTvrVersionRangeMapList()) {
+                context.tempBaseTableInfoTvrDeltaMap.put(BaseTableInfo.fromProto(range.getBaseTable()),
+                        TvrVersionRange.fromProto(range.getRange()));
+            }
+            if (pb.hasTempTvrOwnerStartTaskRunId()) {
+                context.tempTvrOwnerStartTaskRunId = pb.getTempTvrOwnerStartTaskRunId();
+            }
+            context.defineStartTime = pb.getDefineStartTime();
+            context.startTime = pb.getStartTime();
+            context.step = pb.getStep();
+            if (pb.hasTimeUnit()) {
+                context.timeUnit = pb.getTimeUnit();
+            }
+            return context;
+        }
+
+        public AsyncRefreshContextPB toProto() {
+            AsyncRefreshContextPB.Builder builder = AsyncRefreshContextPB.newBuilder()
+                    .setDefineStartTime(defineStartTime)
+                    .setStartTime(startTime)
+                    .setStep(step);
+            for (Map.Entry<Long, Map<String, BasePartitionInfo>> entry : baseTableVisibleVersionMap.entrySet()) {
+                BaseTableVisibleVersionsPB.Builder versions = BaseTableVisibleVersionsPB.newBuilder()
+                        .setBaseTableId(entry.getKey());
+                for (PartitionVisibleVersionPB partition : partitionVersionsToProto(entry.getValue())) {
+                    versions.addPartitions(partition);
+                }
+                builder.addBaseTableVisibleVersionMap(versions);
+            }
+            for (Map.Entry<BaseTableInfo, Map<String, BasePartitionInfo>> entry :
+                    baseTableInfoVisibleVersionMap.entrySet()) {
+                BaseTableInfoVisibleVersionsPB.Builder versions = BaseTableInfoVisibleVersionsPB.newBuilder()
+                        .setBaseTable(entry.getKey().toProto());
+                for (PartitionVisibleVersionPB partition : partitionVersionsToProto(entry.getValue())) {
+                    versions.addPartitions(partition);
+                }
+                builder.addBaseTableInfoVisibleVersionMap(versions);
+            }
+            for (Map.Entry<String, Set<String>> entry : mvPartitionNameRefBaseTablePartitionMap.entrySet()) {
+                builder.addMvPartitionNameRefBaseTablePartitionMap(MvPartitionRefBaseTablePartitionsPB.newBuilder()
+                        .setMvPartitionName(entry.getKey())
+                        .addAllBaseTablePartitionNames(entry.getValue()));
+            }
+            for (Map.Entry<BaseTableInfo, TvrVersionRange> entry : baseTableInfoTvrDeltaMap.entrySet()) {
+                builder.addBaseTableInfoTvrVersionRangeMap(BaseTableInfoTvrVersionRangePB.newBuilder()
+                        .setBaseTable(entry.getKey().toProto())
+                        .setRange(entry.getValue().toProto()));
+            }
+            for (Map.Entry<BaseTableInfo, TvrVersionRange> entry : tempBaseTableInfoTvrDeltaMap.entrySet()) {
+                builder.addTempBaseTableInfoTvrVersionRangeMap(BaseTableInfoTvrVersionRangePB.newBuilder()
+                        .setBaseTable(entry.getKey().toProto())
+                        .setRange(entry.getValue().toProto()));
+            }
+            if (tempTvrOwnerStartTaskRunId != null) {
+                builder.setTempTvrOwnerStartTaskRunId(tempTvrOwnerStartTaskRunId);
+            }
+            if (timeUnit != null) {
+                builder.setTimeUnit(timeUnit);
+            }
+            return builder.build();
+        }
     }
 
     public static class MvRefreshScheme {
@@ -639,6 +776,39 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     ", lastRefreshTime=" + lastRefreshTime +
                     ", lastFreshnessConfirmedAt=" + lastFreshnessConfirmedAt +
                     '}';
+        }
+
+        public static MvRefreshScheme fromProto(MvRefreshSchemePB pb) {
+            // The same constructor GSON uses.
+            MvRefreshScheme scheme = new MvRefreshScheme();
+            if (pb.hasMoment()) {
+                scheme.moment = ProtoEnums.fromProto(pb.getMoment(), RefreshMoment.class);
+            }
+            if (pb.hasType()) {
+                scheme.type = ProtoEnums.fromProto(pb.getType(), MaterializedViewRefreshType.class);
+            }
+            if (pb.hasAsyncRefreshContext()) {
+                scheme.asyncRefreshContext = AsyncRefreshContext.fromProto(pb.getAsyncRefreshContext());
+            }
+            scheme.lastRefreshTime = pb.getLastRefreshTime();
+            scheme.lastFreshnessConfirmedAt = pb.getLastFreshnessConfirmedAt();
+            return scheme;
+        }
+
+        public MvRefreshSchemePB toProto() {
+            MvRefreshSchemePB.Builder builder = MvRefreshSchemePB.newBuilder()
+                    .setLastRefreshTime(lastRefreshTime)
+                    .setLastFreshnessConfirmedAt(lastFreshnessConfirmedAt);
+            if (moment != null) {
+                builder.setMoment(ProtoEnums.toProto(moment, MvRefreshSchemePB.Moment.class));
+            }
+            if (type != null) {
+                builder.setType(ProtoEnums.toProto(type, MvRefreshSchemePB.RefreshType.class));
+            }
+            if (asyncRefreshContext != null) {
+                builder.setAsyncRefreshContext(asyncRefreshContext.toProto());
+            }
+            return builder.build();
         }
     }
 
@@ -3585,4 +3755,187 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
         return !tableProperty.getMvQueryRewriteSwitch().isEnable();
     }
+
+    protected void fillFromMaterializedViewCoreProto(MaterializedViewCorePB pb) {
+        dbId = pb.getDbId();
+        if (pb.hasRefreshScheme()) {
+            refreshScheme = MvRefreshScheme.fromProto(pb.getRefreshScheme());
+        }
+        if (pb.hasBaseTableIds()) {
+            baseTableIds = Sets.newLinkedHashSet(pb.getBaseTableIds().getValuesList());
+        }
+        if (pb.hasBaseTableInfos()) {
+            baseTableInfos = Lists.newArrayList();
+            for (BaseTableInfoPB baseTableInfo : pb.getBaseTableInfos().getValuesList()) {
+                baseTableInfos.add(BaseTableInfo.fromProto(baseTableInfo));
+            }
+        }
+        active = pb.getActive();
+        if (pb.hasInactiveReason()) {
+            inactiveReason = pb.getInactiveReason();
+        }
+        if (pb.hasViewDefineSql()) {
+            viewDefineSql = pb.getViewDefineSql();
+        }
+        if (pb.hasSimpleDefineSql()) {
+            simpleDefineSql = pb.getSimpleDefineSql();
+        }
+        if (pb.hasOriginalViewDefineSql()) {
+            originalViewDefineSql = pb.getOriginalViewDefineSql();
+        }
+        if (pb.hasIvmDefineSql()) {
+            ivmDefineSql = pb.getIvmDefineSql();
+        }
+        // The serialized forms are kept as GSON keeps them; rebuildTransientState re-parses them.
+        serializedPartitionRefTableExprs = new ArrayList<>();
+        for (String expressionSql : pb.getPartitionRefTableExprsList()) {
+            serializedPartitionRefTableExprs.add(new ExpressionSerializedObject(expressionSql));
+        }
+        maxMVRewriteStaleness = pb.getMaxMvRewriteStaleness();
+        serializedPartitionExprMaps = Maps.newLinkedHashMap();
+        for (PartitionExprMappingPB mapping : pb.getPartitionExprMapsList()) {
+            serializedPartitionExprMaps.put(new ExpressionSerializedObject(mapping.getExprSql()),
+                    new ExpressionSerializedObject(mapping.getSlotSql()));
+        }
+        queryOutputIndices = Lists.newArrayList(pb.getQueryOutputIndicesList());
+        warehouseId = pb.getWarehouseId();
+        if (pb.hasCurrentRefreshMode()) {
+            currentRefreshMode = ProtoEnums.fromProto(pb.getCurrentRefreshMode(), RefreshMode.class);
+        }
+        encodeRowIdVersion = pb.getEncodeRowIdVersion();
+    }
+
+    /** The fields declared by this class, shared with LakeMaterializedView. */
+    protected MaterializedViewCorePB toMaterializedViewCoreProto() {
+        MaterializedViewCorePB.Builder builder = MaterializedViewCorePB.newBuilder()
+                .setDbId(dbId)
+                .setActive(active)
+                .setMaxMvRewriteStaleness(maxMVRewriteStaleness)
+                .setWarehouseId(warehouseId)
+                .setEncodeRowIdVersion(encodeRowIdVersion);
+        if (refreshScheme != null) {
+            builder.setRefreshScheme(refreshScheme.toProto());
+        }
+        if (baseTableIds != null) {
+            builder.setBaseTableIds(Int64ListPB.newBuilder().addAllValues(baseTableIds));
+        }
+        if (baseTableInfos != null) {
+            BaseTableInfoListPB.Builder infos = BaseTableInfoListPB.newBuilder();
+            for (BaseTableInfo baseTableInfo : baseTableInfos) {
+                infos.addValues(baseTableInfo.toProto());
+            }
+            builder.setBaseTableInfos(infos);
+        }
+        if (inactiveReason != null) {
+            builder.setInactiveReason(inactiveReason);
+        }
+        if (viewDefineSql != null) {
+            builder.setViewDefineSql(viewDefineSql);
+        }
+        if (simpleDefineSql != null) {
+            builder.setSimpleDefineSql(simpleDefineSql);
+        }
+        if (originalViewDefineSql != null) {
+            builder.setOriginalViewDefineSql(originalViewDefineSql);
+        }
+        if (ivmDefineSql != null) {
+            builder.setIvmDefineSql(ivmDefineSql);
+        }
+        // Same conversion as gsonPreProcess.
+        if (partitionRefTableExprs != null) {
+            for (Expr partitionExpr : partitionRefTableExprs) {
+                if (partitionExpr != null) {
+                    builder.addPartitionRefTableExprs(ExprToSql.toSql(partitionExpr));
+                }
+            }
+        }
+        if (partitionExprMaps != null) {
+            for (Map.Entry<Expr, SlotRef> entry : partitionExprMaps.entrySet()) {
+                if (entry.getKey() != null && entry.getValue() != null) {
+                    builder.addPartitionExprMaps(PartitionExprMappingPB.newBuilder()
+                            .setExprSql(ExprToSql.toSql(entry.getKey()))
+                            .setSlotSql(ExprToSql.toSql(entry.getValue())));
+                }
+            }
+        }
+        if (queryOutputIndices != null) {
+            builder.addAllQueryOutputIndices(queryOutputIndices);
+        }
+        if (currentRefreshMode != null) {
+            builder.setCurrentRefreshMode(ProtoEnums.toProto(currentRefreshMode, MaterializedViewCorePB.RefreshMode.class));
+        }
+        return builder.build();
+    }
+
+    void fillFromVariantProto(MaterializedViewPB pb) throws IOException {
+        fillFromOlapCoreProto(pb.getOlap());
+        fillFromMaterializedViewCoreProto(pb.getMaterializedView());
+    }
+
+    @Override
+    protected void fillProtoVariant(TablePB.Builder builder) throws IOException {
+        builder.setMaterializedView(MaterializedViewPB.newBuilder()
+                .setOlap(toOlapCoreProto())
+                .setMaterializedView(toMaterializedViewCoreProto()));
+    }
+
+    @Override
+    protected void rebuildTransientState() {
+        super.rebuildTransientState();
+        // Match V2 recovery: the property overrides a stale copy of the dedicated field.
+        if (tableProperty != null) {
+            String staleness = tableProperty.getProperties().get(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND);
+            if (staleness != null) {
+                maxMVRewriteStaleness = Integer.parseInt(staleness);
+            }
+        }
+        rebuildPartitionExprs();
+    }
+
+    /**
+     * Re-parses the partition expressions from their persisted SQL form. Shared by the GSON hook and the image v3
+     * load.
+     */
+    private void rebuildPartitionExprs() {
+        List<Column> partitionCols = getPartitionColumns();
+        if (CollectionUtils.isEmpty(partitionCols)) {
+            return;
+        }
+
+        // for single ref base table, recover from serializedPartitionRefTableExprs
+        partitionExprMaps = Maps.newLinkedHashMap();
+        // for multi ref base tables, recover from serializedPartitionExprMaps
+        if (serializedPartitionExprMaps != null) {
+            for (Map.Entry<ExpressionSerializedObject, ExpressionSerializedObject> entry :
+                    serializedPartitionExprMaps.entrySet()) {
+                if (entry.getKey() != null && entry.getValue() != null) {
+                    Expr partitionExpr = parsePartitionExpr(entry.getKey().getExpressionSql());
+                    if (partitionExpr == null) {
+                        LOG.warn("parse partition expr failed, sql: {}", entry.getKey().getExpressionSql());
+                        continue;
+                    }
+                    SlotRef partitionSlotRef = getMvPartitionSlotRef(partitionExpr);
+                    partitionExprMaps.put(partitionExpr, partitionSlotRef);
+                }
+            }
+        }
+
+        if (serializedPartitionRefTableExprs != null) {
+            partitionRefTableExprs = new ArrayList<>();
+            for (ExpressionSerializedObject expressionSql : serializedPartitionRefTableExprs) {
+                Expr partitionExpr = parsePartitionExpr(expressionSql.getExpressionSql());
+                if (partitionExpr == null) {
+                    LOG.warn("parse partition expr failed, sql: {}", expressionSql.getExpressionSql());
+                    continue;
+                }
+                partitionRefTableExprs.add(partitionExpr);
+                // Older payloads can carry only the reference expressions, as in the V2 compatibility path.
+                if (partitionExprMaps.isEmpty()) {
+                    partitionExprMaps.put(partitionExpr, getMvPartitionSlotRef(partitionExpr));
+                }
+            }
+        }
+    }
+
+
 }

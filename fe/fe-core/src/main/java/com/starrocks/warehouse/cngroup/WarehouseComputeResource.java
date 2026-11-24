@@ -16,6 +16,8 @@ package com.starrocks.warehouse.cngroup;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.persist.proto.ComputeResourcePB;
+import com.starrocks.persist.proto.WarehouseComputeResourcePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -92,5 +94,17 @@ public final class WarehouseComputeResource implements ComputeResource {
         }
         WarehouseComputeResource other = (WarehouseComputeResource) obj;
         return warehouseId == other.warehouseId;
+    }
+
+    @Override
+    public ComputeResourcePB toProto() {
+        return ComputeResourcePB.newBuilder()
+                .setKind(ComputeResourcePB.Kind.WAREHOUSE)
+                .setWarehouse(WarehouseComputeResourcePB.newBuilder().setWarehouseId(warehouseId))
+                .build();
+    }
+
+    public static WarehouseComputeResource fromProto(WarehouseComputeResourcePB pb) {
+        return new WarehouseComputeResource(pb.getWarehouseId());
     }
 }

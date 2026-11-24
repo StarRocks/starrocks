@@ -49,6 +49,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.UpdateBackendInfo;
 import com.starrocks.persist.UpdateDiskInfo;
+import com.starrocks.persist.proto.BackendPB;
+import com.starrocks.persist.proto.DiskInfoPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
@@ -563,5 +565,31 @@ public class Backend extends ComputeNode {
             return obj.toString();
         }
     }
-}
 
+
+    // ---- image v3 -------------------------------------------------------------------------------
+
+    public BackendPB toBackendProto() {
+        BackendPB.Builder builder = BackendPB.newBuilder().setCore(toCoreProto());
+        for (DiskInfo disk : disksRef.values()) {
+            builder.addDisks(disk.toProto());
+        }
+        if (location != null) {
+            builder.putAllLocation(location);
+        }
+        return builder.build();
+    }
+
+    public static Backend fromProto(BackendPB pb) {
+        Backend backend = new Backend();
+        backend.fillFromCoreProto(pb.getCore());
+        ConcurrentHashMap<String, DiskInfo> disks = new ConcurrentHashMap<>();
+        for (DiskInfoPB diskPb : pb.getDisksList()) {
+            DiskInfo disk = DiskInfo.fromProto(diskPb);
+            disks.put(disk.getRootPath(), disk);
+        }
+        backend.disksRef = disks;
+        backend.location = new HashMap<>(pb.getLocationMap());
+        return backend;
+    }
+}

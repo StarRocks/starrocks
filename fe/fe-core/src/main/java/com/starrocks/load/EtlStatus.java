@@ -47,18 +47,28 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.loadv2.dpp.DppResult;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.EtlStatusPB;
+import com.starrocks.persist.proto.Int64ListPB;
+import com.starrocks.persist.proto.LoadBackendIdsPB;
+import com.starrocks.persist.proto.LoadCounterTablePB;
+import com.starrocks.persist.proto.LoadStatisticPB;
+import com.starrocks.persist.proto.StringMapPB;
 import com.starrocks.thrift.TEtlState;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.collections.map.HashedMap;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 public class EtlStatus implements Writable {
     public static final String DEFAULT_TRACKING_URL = "";
@@ -567,6 +577,166 @@ public class EtlStatus implements Writable {
             return loadStatistic;
         }
 
+        public LoadStatisticPB toProto() {
+            LoadStatisticPB.Builder builder = LoadStatisticPB.newBuilder();
+            if (counterTbl != null) {
+                builder.setCounterTbl(counterTableToProto(counterTbl));
+            }
+            if (sourceScanBytesCounterTbl != null) {
+                builder.setSourceScanBytesCounterTbl(counterTableToProto(sourceScanBytesCounterTbl));
+            }
+            if (sinkBytesCounterTbl != null) {
+                builder.setSinkBytesCounterTbl(counterTableToProto(sinkBytesCounterTbl));
+            }
+            if (sourceRowsCounterTbl != null) {
+                builder.setSourceRowsCounterTbl(counterTableToProto(sourceRowsCounterTbl));
+            }
+            if (sourceBytesCounterTbl != null) {
+                builder.setSourceBytesCounterTbl(counterTableToProto(sourceBytesCounterTbl));
+            }
+            if (filteredRowsCounterTbl != null) {
+                builder.setFilteredRowsCounterTbl(counterTableToProto(filteredRowsCounterTbl));
+            }
+            if (unselectedRowsCounterTbl != null) {
+                builder.setUnselectedRowsCounterTbl(counterTableToProto(unselectedRowsCounterTbl));
+            }
+            if (unfinishedBackendIds != null) {
+                builder.setUnfinishedBackendIds(LoadBackendIdsPB.newBuilder()
+                        .putAllValues(unfinishedBackendIds.entrySet().stream()
+                        .collect(Collectors.toMap(Map.Entry::getKey, e ->
+                            Int64ListPB.newBuilder().addAllValues(e.getValue()).build()))).build());
+            }
+            if (allBackendIds != null) {
+                builder.setAllBackendIds(LoadBackendIdsPB.newBuilder().putAllValues(allBackendIds.entrySet().stream()
+                        .collect(Collectors.toMap(Map.Entry::getKey, e ->
+                            Int64ListPB.newBuilder().addAllValues(e.getValue()).build()))).build());
+            }
+            builder.setFileNum(fileNum);
+            builder.setTotalFileSizeB(totalFileSizeB);
+            builder.setNumScanRange(numScanRange);
+            builder.setLoadFinish(loadFinish);
+            return builder.build();
+        }
+
+        public static LoadStatistic fromProto(LoadStatisticPB pb) {
+            LoadStatistic value = new LoadStatistic();
+            if (pb.hasCounterTbl()) {
+                value.counterTbl = counterTableFromProto(pb.getCounterTbl());
+            } else {
+                value.counterTbl = null;
+            }
+            if (pb.hasSourceScanBytesCounterTbl()) {
+                value.sourceScanBytesCounterTbl = counterTableFromProto(pb.getSourceScanBytesCounterTbl());
+            } else {
+                value.sourceScanBytesCounterTbl = null;
+            }
+            if (pb.hasSinkBytesCounterTbl()) {
+                value.sinkBytesCounterTbl = counterTableFromProto(pb.getSinkBytesCounterTbl());
+            } else {
+                value.sinkBytesCounterTbl = null;
+            }
+            if (pb.hasSourceRowsCounterTbl()) {
+                value.sourceRowsCounterTbl = counterTableFromProto(pb.getSourceRowsCounterTbl());
+            } else {
+                value.sourceRowsCounterTbl = null;
+            }
+            if (pb.hasSourceBytesCounterTbl()) {
+                value.sourceBytesCounterTbl = counterTableFromProto(pb.getSourceBytesCounterTbl());
+            } else {
+                value.sourceBytesCounterTbl = null;
+            }
+            if (pb.hasFilteredRowsCounterTbl()) {
+                value.filteredRowsCounterTbl = counterTableFromProto(pb.getFilteredRowsCounterTbl());
+            } else {
+                value.filteredRowsCounterTbl = null;
+            }
+            if (pb.hasUnselectedRowsCounterTbl()) {
+                value.unselectedRowsCounterTbl = counterTableFromProto(pb.getUnselectedRowsCounterTbl());
+            } else {
+                value.unselectedRowsCounterTbl = null;
+            }
+            if (pb.hasUnfinishedBackendIds()) {
+                value.unfinishedBackendIds = pb.getUnfinishedBackendIds().getValuesMap().entrySet().stream()
+                        .collect(Collectors.toMap(Map.Entry::getKey, e -> new ArrayList<>(e.getValue().getValuesList())));
+            } else {
+                value.unfinishedBackendIds = null;
+            }
+            if (pb.hasAllBackendIds()) {
+                value.allBackendIds = pb.getAllBackendIds().getValuesMap().entrySet().stream()
+                        .collect(Collectors.toMap(Map.Entry::getKey, e -> new ArrayList<>(e.getValue().getValuesList())));
+            } else {
+                value.allBackendIds = null;
+            }
+            if (pb.hasFileNum()) {
+                value.fileNum = pb.getFileNum();
+            }
+            if (pb.hasTotalFileSizeB()) {
+                value.totalFileSizeB = pb.getTotalFileSizeB();
+            }
+            if (pb.hasNumScanRange()) {
+                value.numScanRange = pb.getNumScanRange();
+            }
+            if (pb.hasLoadFinish()) {
+                value.loadFinish = pb.getLoadFinish();
+            }
+            return value;
+        }
+
+        private static LoadCounterTablePB counterTableToProto(Table<String, String, Long> table) {
+            LoadCounterTablePB.Builder builder = LoadCounterTablePB.newBuilder();
+            table.cellSet().forEach(cell -> builder.addCells(LoadCounterTablePB.Cell.newBuilder()
+                    .setRow(cell.getRowKey()).setColumn(cell.getColumnKey()).setValue(cell.getValue())));
+            return builder.build();
+        }
+
+        private static Table<String, String, Long> counterTableFromProto(LoadCounterTablePB pb) {
+            Table<String, String, Long> table = HashBasedTable.create();
+            pb.getCellsList().forEach(cell -> table.put(cell.getRow(), cell.getColumn(), cell.getValue()));
+            return table;
+        }
     }
 
+    public EtlStatusPB toProto() {
+        EtlStatusPB.Builder builder = EtlStatusPB.newBuilder();
+        if (state != null) {
+            builder.setState(ProtoEnums.toProto(state, EtlStatusPB.State.class));
+        }
+        if (trackingUrl != null) {
+            builder.setTrackingUrl(trackingUrl);
+        }
+        if (stats != null) {
+            builder.setStats(StringMapPB.newBuilder().putAllValues(stats).build());
+        }
+        if (loadStatistic != null) {
+            builder.setLoadStatistic(loadStatistic.toProto());
+        }
+        if (counters != null) {
+            builder.setCounters(StringMapPB.newBuilder().putAllValues(counters).build());
+        }
+        return builder.build();
+    }
+
+    public static EtlStatus fromProto(EtlStatusPB pb) {
+        EtlStatus value = new EtlStatus();
+        if (pb.hasState()) {
+            value.state = ProtoEnums.fromProto(pb.getState(), TEtlState.class);
+        }
+        if (pb.hasTrackingUrl()) {
+            value.trackingUrl = pb.getTrackingUrl();
+        }
+        if (pb.hasStats()) {
+            value.stats = new HashMap<>(pb.getStats().getValuesMap());
+        } else {
+            value.stats = null;
+        }
+        if (pb.hasLoadStatistic()) {
+            value.loadStatistic = LoadStatistic.fromProto(pb.getLoadStatistic());
+        }
+        if (pb.hasCounters()) {
+            value.counters = new HashMap<>(pb.getCounters().getValuesMap());
+        } else {
+            value.counters = null;
+        }
+        return value;
+    }
 }

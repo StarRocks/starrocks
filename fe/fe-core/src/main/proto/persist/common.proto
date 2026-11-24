@@ -1,0 +1,75 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "CommonProto";
+
+// Helpers shared by the persist protos, and the conventions they all follow:
+// - a Java field that can be null is an `optional` field, so null survives the round trip; a
+//   message-typed field has presence on its own;
+// - a Java map whose key is a field of the value becomes a repeated field of the value;
+// - a polymorphic Java hierarchy is a `kind` discriminator, the fields shared by the whole
+//   hierarchy, then a `oneof instance` containing subtype payloads from field number 11 on. Subtypes
+//   without fields of their own use only `kind`; no empty instance is needed. A Java class layer that
+//   has subclasses becomes a `XxxCorePB` embedded by every variant below it. A
+//   Java enum field that only restates the concrete class (Table.type, DistributionInfo.type) is
+//   not written and is rebuilt from the kind on load; a business enum stays only when it carries
+//   more than the class (PartitionInfo.type);
+// - enums that mirror a Java or Thrift enum are mapped by constant name, never by number, so the
+//   numbers only have to be stable within their file; value 0 is the proto3 placeholder and maps
+//   to nothing. An enum owned by one message is nested in it; a message that owns more than one
+//   enum prefixes their placeholders with the enum name; an enum shared by several messages is
+//   package-level with prefixed values.
+
+// Wrappers for Java lists that can be null: a message field keeps the null / empty distinction
+// that a bare repeated field would lose.
+message StringListPB {
+  repeated string values = 1;
+}
+
+message Int32ListPB {
+  repeated int32 values = 1;
+}
+
+message Int64ListPB {
+  repeated int64 values = 1;
+}
+
+message StringMapPB {
+  map<string, string> values = 1;
+}
+
+// A Java map from long to long that is a map value or can be null.
+message Int64MapPB {
+  map<int64, int64> values = 1;
+}
+
+// com.starrocks.catalog.UserIdentity, shared by tasks, authentication and authorization.
+message UserIdentityPB {
+  optional string user = 1;
+  optional string host = 2;
+  bool is_domain = 3;
+}
+
+// com.starrocks.catalog.TableName as persisted: the table and the plain database name (v2 wrote the
+// database name with the historical default_cluster prefix). The catalog is not persisted, as in v2.
+message TableNamePB {
+  optional string tbl = 1;
+  optional string db = 2;
+}

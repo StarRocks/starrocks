@@ -16,9 +16,11 @@
 package com.starrocks.lake;
 
 import com.google.gson.annotations.SerializedName;
+import com.google.protobuf.ByteString;
 import com.staros.proto.FileCacheInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
+import com.starrocks.persist.proto.DataCacheInfoPB;
 
 import java.io.IOException;
 
@@ -61,5 +63,22 @@ public class DataCacheInfo implements GsonPreProcessable, GsonPostProcessable {
         if (cacheInfoBytes != null) {
             cacheInfo = FileCacheInfo.parseFrom(cacheInfoBytes);
         }
+    }
+
+    public DataCacheInfoPB toProto() {
+        DataCacheInfoPB.Builder builder = DataCacheInfoPB.newBuilder();
+        // Same rule as gsonPreProcess: the live message wins over the bytes it was loaded from.
+        byte[] bytes = cacheInfo != null ? cacheInfo.toByteArray() : cacheInfoBytes;
+        if (bytes != null) {
+            builder.setCacheInfo(ByteString.copyFrom(bytes));
+        }
+        return builder.build();
+    }
+
+    public static DataCacheInfo fromProto(DataCacheInfoPB pb) throws IOException {
+        byte[] bytes = pb.hasCacheInfo() ? pb.getCacheInfo().toByteArray() : null;
+        DataCacheInfo info = new DataCacheInfo(bytes != null ? FileCacheInfo.parseFrom(bytes) : null);
+        info.cacheInfoBytes = bytes;
+        return info;
     }
 }

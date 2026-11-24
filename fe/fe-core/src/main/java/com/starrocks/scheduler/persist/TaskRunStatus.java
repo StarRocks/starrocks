@@ -18,6 +18,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
@@ -25,6 +26,12 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.StringMapPB;
+import com.starrocks.persist.proto.TaskCorePB;
+import com.starrocks.persist.proto.TaskRunStatePB;
+import com.starrocks.persist.proto.TaskRunStatusPB;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.server.WarehouseManager;
@@ -43,6 +50,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -552,5 +560,140 @@ public class TaskRunStatus implements Writable, GsonPostProcessable {
             }
         }
         return res;
+    }
+
+    public TaskRunStatusPB toProto() {
+        TaskRunStatusPB.Builder builder = TaskRunStatusPB.newBuilder();
+        if (startTaskRunId != null) {
+            builder.setStartTaskRunId(startTaskRunId);
+        }
+        if (taskRunId != null) {
+            builder.setTaskRunId(taskRunId);
+        }
+        if (queryId != null) {
+            builder.setQueryId(queryId);
+        }
+        builder.setTaskId(taskId);
+        if (taskName != null) {
+            builder.setTaskName(taskName);
+        }
+        builder.setCreateTime(createTime);
+        if (catalogName != null) {
+            builder.setCatalogName(catalogName);
+        }
+        if (dbName != null) {
+            builder.setDbName(dbName);
+        }
+        if (definition != null) {
+            builder.setDefinition(definition);
+        }
+        if (postRun != null) {
+            builder.setPostRun(postRun);
+        }
+        if (user != null) {
+            builder.setUser(user);
+        }
+        if (userIdentity != null) {
+            builder.setUserIdentity(UserIdentityUtils.toProto(userIdentity));
+        }
+        if (submitUser != null) {
+            builder.setSubmitUser(submitUser);
+        }
+        builder.setExpireTime(expireTime);
+        builder.setPriority(priority);
+        builder.setMergeRedundant(mergeRedundant);
+        if (source != null) {
+            builder.setSource(ProtoEnums.toProto(source, TaskCorePB.Source.class, "SOURCE_"));
+        }
+        builder.setErrorCode(errorCode);
+        if (errorMessage != null) {
+            builder.setErrorMessage(errorMessage);
+        }
+        builder.setFinishTime(finishTime);
+        builder.setProcessStartTime(processStartTime);
+        if (state != null) {
+            builder.setState(ProtoEnums.toProto(state, TaskRunStatePB.class, "TASK_RUN_STATE_"));
+        }
+        builder.setProgress(progress);
+        if (mvTaskRunExtraMessage != null) {
+            builder.setMvTaskRunExtraMessage(mvTaskRunExtraMessage.toProto());
+        }
+        if (dataCacheSelectExtraMessage != null) {
+            builder.setDataCacheSelectExtraMessage(dataCacheSelectExtraMessage);
+        }
+        if (properties != null) {
+            builder.setProperties(StringMapPB.newBuilder().putAllValues(ProtoMaps.withoutNullValues(properties)));
+        }
+        return builder.build();
+    }
+
+    public static TaskRunStatus fromProto(TaskRunStatusPB pb) {
+        TaskRunStatus result = new TaskRunStatus();
+        if (pb.hasStartTaskRunId()) {
+            result.startTaskRunId = pb.getStartTaskRunId();
+        }
+        if (pb.hasTaskRunId()) {
+            result.taskRunId = pb.getTaskRunId();
+        }
+        if (pb.hasQueryId()) {
+            result.queryId = pb.getQueryId();
+        }
+        result.taskId = pb.getTaskId();
+        if (pb.hasTaskName()) {
+            result.taskName = pb.getTaskName();
+        }
+        result.createTime = pb.getCreateTime();
+        if (pb.hasCatalogName()) {
+            result.catalogName = pb.getCatalogName();
+        }
+        if (pb.hasDbName()) {
+            result.dbName = pb.getDbName();
+        }
+        if (pb.hasDefinition()) {
+            result.definition = pb.getDefinition();
+        }
+        if (pb.hasPostRun()) {
+            result.postRun = pb.getPostRun();
+        }
+        if (pb.hasUser()) {
+            result.user = pb.getUser();
+        }
+        if (pb.hasUserIdentity()) {
+            result.userIdentity = UserIdentityUtils.fromProto(pb.getUserIdentity());
+        }
+        if (pb.hasSubmitUser()) {
+            result.submitUser = pb.getSubmitUser();
+        }
+        result.expireTime = pb.getExpireTime();
+        result.priority = pb.getPriority();
+        result.mergeRedundant = pb.getMergeRedundant();
+        if (pb.hasSource()) {
+            result.source = pb.getSource() == TaskCorePB.Source.UNRECOGNIZED
+                    || pb.getSource().getNumber() == 0 ? null :
+                    ProtoEnums.fromProto(pb.getSource(), Constants.TaskSource.class, "SOURCE_");
+        }
+        result.errorCode = pb.getErrorCode();
+        if (pb.hasErrorMessage()) {
+            result.errorMessage = pb.getErrorMessage();
+        }
+        result.finishTime = pb.getFinishTime();
+        result.processStartTime = pb.getProcessStartTime();
+        if (pb.hasState()) {
+            result.state = pb.getState() == TaskRunStatePB.UNRECOGNIZED
+                    || pb.getState().getNumber() == 0 ? null :
+                    ProtoEnums.fromProto(pb.getState(), Constants.TaskRunState.class, "TASK_RUN_STATE_");
+        }
+        result.progress = pb.getProgress();
+        if (pb.hasMvTaskRunExtraMessage()) {
+            result.mvTaskRunExtraMessage = MVTaskRunExtraMessage.fromProto(pb.getMvTaskRunExtraMessage());
+        }
+        if (pb.hasDataCacheSelectExtraMessage()) {
+            result.dataCacheSelectExtraMessage = pb.getDataCacheSelectExtraMessage();
+        }
+        if (pb.hasProperties()) {
+            result.properties = new HashMap<>(pb.getProperties().getValuesMap());
+        }
+        result.dbName = ClusterNamespace.getNameFromFullName(result.dbName);
+        return result;
     }
 }

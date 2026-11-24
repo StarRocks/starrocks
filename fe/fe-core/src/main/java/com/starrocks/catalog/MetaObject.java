@@ -36,6 +36,7 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.proto.MetaObjectPB;
 
 import java.io.DataInput;
 import java.io.IOException;
@@ -50,6 +51,16 @@ public class MetaObject implements Writable {
     public MetaObject() {
         signature = -1L;
         lastCheckTime = -1L;
+    }
+
+    // Named after the message: the subclasses have their own toProto() with their own return types.
+    protected MetaObjectPB toMetaObjectProto() {
+        return MetaObjectPB.newBuilder().setSignature(signature).setLastCheckTime(lastCheckTime).build();
+    }
+
+    protected void fillFromMetaObjectProto(MetaObjectPB pb) {
+        signature = pb.getSignature();
+        lastCheckTime = pb.getLastCheckTime();
     }
 
     // implement this in derived class

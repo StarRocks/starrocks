@@ -21,6 +21,13 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.MVPartitionMapPB;
+import com.starrocks.persist.proto.MVSnapshotMapPB;
+import com.starrocks.persist.proto.MVSourceRangeMapPB;
+import com.starrocks.persist.proto.MVTaskRunExtraMessagePB;
+import com.starrocks.persist.proto.StringListPB;
+import com.starrocks.persist.proto.StringMapPB;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -250,5 +257,134 @@ public class MVTaskRunExtraMessage implements Writable {
     @Override
     public String toString() {
         return GsonUtils.GSON.toJson(this);
+    }
+
+    public MVTaskRunExtraMessagePB toProto() {
+        MVTaskRunExtraMessagePB.Builder builder = MVTaskRunExtraMessagePB.newBuilder()
+                .setForceRefresh(forceRefresh)
+                .setProcessStartTime(processStartTime)
+                .setAdaptivePartitionRefreshNumber(adaptivePartitionRefreshNumber);
+        if (partitionStart != null) {
+            builder.setPartitionStart(partitionStart);
+        }
+        if (partitionEnd != null) {
+            builder.setPartitionEnd(partitionEnd);
+        }
+        if (mvPartitionsToRefresh != null) {
+            builder.setMvPartitionsToRefresh(StringListPB.newBuilder().addAllValues(mvPartitionsToRefresh));
+        }
+        if (refBasePartitionsToRefreshMap != null) {
+            builder.setRefBasePartitionsToRefreshMap(partitionsToProto(refBasePartitionsToRefreshMap));
+        }
+        if (basePartitionsToRefreshMap != null) {
+            builder.setBasePartitionsToRefreshMap(partitionsToProto(basePartitionsToRefreshMap));
+        }
+        if (nextPartitionStart != null) {
+            builder.setNextPartitionStart(nextPartitionStart);
+        }
+        if (nextPartitionEnd != null) {
+            builder.setNextPartitionEnd(nextPartitionEnd);
+        }
+        if (nextPartitionValues != null) {
+            builder.setNextPartitionValues(nextPartitionValues);
+        }
+        if (executeOption != null) {
+            builder.setExecuteOption(executeOption.toProto());
+        }
+        if (planBuilderMessage != null) {
+            builder.setPlanBuilderMessage(StringMapPB.newBuilder().putAllValues(ProtoMaps.withoutNullValues(planBuilderMessage)));
+        }
+        if (refreshMode != null) {
+            builder.setRefreshMode(refreshMode);
+        }
+        if (pinnedSnapshotIdMap != null) {
+            builder.setPinnedSnapshotIdMap(MVSnapshotMapPB.newBuilder()
+                    .putAllValues(ProtoMaps.withoutNullValues(pinnedSnapshotIdMap)));
+        }
+        if (imvSourceVersionRange != null) {
+            builder.setImvSourceVersionRange(rangesToProto(imvSourceVersionRange));
+        }
+        if (imvSourceTimestampRange != null) {
+            builder.setImvSourceTimestampRange(rangesToProto(imvSourceTimestampRange));
+        }
+        return builder.build();
+    }
+
+    public static MVTaskRunExtraMessage fromProto(MVTaskRunExtraMessagePB pb) {
+        MVTaskRunExtraMessage result = new MVTaskRunExtraMessage();
+        result.forceRefresh = pb.getForceRefresh();
+        result.processStartTime = pb.getProcessStartTime();
+        if (pb.hasPartitionStart()) {
+            result.partitionStart = pb.getPartitionStart();
+        }
+        if (pb.hasPartitionEnd()) {
+            result.partitionEnd = pb.getPartitionEnd();
+        }
+        if (pb.hasMvPartitionsToRefresh()) {
+            result.mvPartitionsToRefresh = Sets.newHashSet(pb.getMvPartitionsToRefresh().getValuesList());
+        }
+        if (pb.hasRefBasePartitionsToRefreshMap()) {
+            result.refBasePartitionsToRefreshMap = partitionsFromProto(pb.getRefBasePartitionsToRefreshMap());
+        }
+        if (pb.hasBasePartitionsToRefreshMap()) {
+            result.basePartitionsToRefreshMap = partitionsFromProto(pb.getBasePartitionsToRefreshMap());
+        }
+        if (pb.hasNextPartitionStart()) {
+            result.nextPartitionStart = pb.getNextPartitionStart();
+        }
+        if (pb.hasNextPartitionEnd()) {
+            result.nextPartitionEnd = pb.getNextPartitionEnd();
+        }
+        if (pb.hasNextPartitionValues()) {
+            result.nextPartitionValues = pb.getNextPartitionValues();
+        }
+        if (pb.hasExecuteOption()) {
+            result.executeOption = ExecuteOption.fromProto(pb.getExecuteOption());
+        }
+        if (pb.hasPlanBuilderMessage()) {
+            result.planBuilderMessage = Maps.newHashMap(pb.getPlanBuilderMessage().getValuesMap());
+        }
+        if (pb.hasAdaptivePartitionRefreshNumber()) {
+            result.adaptivePartitionRefreshNumber = pb.getAdaptivePartitionRefreshNumber();
+        }
+        if (pb.hasRefreshMode()) {
+            result.refreshMode = pb.getRefreshMode();
+        }
+        if (pb.hasPinnedSnapshotIdMap()) {
+            result.pinnedSnapshotIdMap = Maps.newHashMap(pb.getPinnedSnapshotIdMap().getValuesMap());
+        }
+        if (pb.hasImvSourceVersionRange()) {
+            result.imvSourceVersionRange = rangesFromProto(pb.getImvSourceVersionRange());
+        }
+        if (pb.hasImvSourceTimestampRange()) {
+            result.imvSourceTimestampRange = rangesFromProto(pb.getImvSourceTimestampRange());
+        }
+        return result;
+    }
+
+    private static MVPartitionMapPB partitionsToProto(Map<String, Set<String>> partitions) {
+        MVPartitionMapPB.Builder builder = MVPartitionMapPB.newBuilder();
+        ProtoMaps.withoutNullValues(partitions).forEach((table, names) ->
+                builder.putValues(table, StringListPB.newBuilder().addAllValues(names).build()));
+        return builder.build();
+    }
+
+    private static Map<String, Set<String>> partitionsFromProto(MVPartitionMapPB pb) {
+        Map<String, Set<String>> result = Maps.newHashMap();
+        pb.getValuesMap().forEach((table, names) -> result.put(table, Sets.newHashSet(names.getValuesList())));
+        return result;
+    }
+
+    private static MVSourceRangeMapPB rangesToProto(Map<String, Map<String, String>> ranges) {
+        MVSourceRangeMapPB.Builder builder = MVSourceRangeMapPB.newBuilder();
+        ProtoMaps.withoutNullValues(ranges).forEach((table, range) -> builder.putValues(table,
+                StringMapPB.newBuilder().putAllValues(ProtoMaps.withoutNullValues(range)).build()));
+        return builder.build();
+    }
+
+    private static Map<String, Map<String, String>> rangesFromProto(MVSourceRangeMapPB pb) {
+        Map<String, Map<String, String>> result = Maps.newHashMap();
+        pb.getValuesMap().forEach((table, range) -> result.put(table, Maps.newHashMap(range.getValuesMap())));
+        return result;
     }
 }

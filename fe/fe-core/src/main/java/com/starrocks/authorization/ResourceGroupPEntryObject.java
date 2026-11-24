@@ -17,6 +17,7 @@ package com.starrocks.authorization;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.ResourceGroup;
+import com.starrocks.persist.proto.ResourceGroupPrivilegeObjectPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaNotFoundException;
 
@@ -123,5 +124,22 @@ public class ResourceGroupPEntryObject implements PEntryObject {
             }
             return resourceGroup.getName();
         }
+    }
+
+    public ResourceGroupPrivilegeObjectPB toProto() {
+        ResourceGroupPrivilegeObjectPB.Builder builder = ResourceGroupPrivilegeObjectPB.newBuilder();
+        builder.setId(id);
+        return builder.build();
+    }
+
+    // A protobuf constructor leaves the existing GSON construction path unchanged.
+    private ResourceGroupPEntryObject(ResourceGroupPrivilegeObjectPB pb) {
+        if (pb.hasId()) {
+            id = pb.getId();
+        }
+    }
+
+    public static ResourceGroupPEntryObject fromProto(ResourceGroupPrivilegeObjectPB pb) {
+        return new ResourceGroupPEntryObject(pb);
     }
 }

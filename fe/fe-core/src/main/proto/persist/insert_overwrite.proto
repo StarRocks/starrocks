@@ -1,0 +1,48 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/common.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "InsertOverwriteProto";
+
+message InsertOverwriteJobPB {
+  enum State {
+    UNSPECIFIED = 0;
+    OVERWRITE_PENDING = 1;
+    OVERWRITE_RUNNING = 2;
+    OVERWRITE_SUCCESS = 3;
+    OVERWRITE_FAILED = 4;
+  }
+  int64 job_id = 1;
+  optional State job_state = 2;
+  Int64ListPB source_partition_ids = 3;
+  Int64ListPB tmp_partition_ids = 4;
+  int64 target_db_id = 5;
+  int64 target_table_id = 6;
+  int64 warehouse_id = 7;
+  StringListPB source_partition_names = 8;
+  bool dynamic_overwrite = 9;
+  optional int64 txn_id = 10;
+}
+
+message InsertOverwriteTableJobsPB {
+  int64 table_id = 1;
+  Int64ListPB job_ids = 2;
+}

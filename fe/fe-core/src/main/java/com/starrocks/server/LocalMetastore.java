@@ -178,11 +178,20 @@ import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionReader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.DatabasePB;
+import com.starrocks.persist.proto.LocalMetastorePB;
+import com.starrocks.persist.proto.PartitionEntryPB;
+import com.starrocks.persist.proto.TableEntryPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
@@ -280,6 +289,7 @@ import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -6339,6 +6349,155 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     /**
+     * Image v3: three flat sections instead of the nested v2 block. The DB section carries the manager message
+     * (the auto-increment map) and one entry per database without its tables, the TABLE section one entry per
+     * table without its partitions, the PARTITION section one entry per partition (temporary ones included) with
+     * the whole physical-partition subtree. The reader attaches each entry to its parent by id.
+     */
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        // Don't write system db meta
+        List<Database> databases = idToDb.entrySet().stream()
+                .filter(entry -> entry.getKey() > NEXT_ID_INIT_VALUE)
+                .map(Map.Entry::getValue)
+                .collect(Collectors.toList());
+        // One snapshot of each database's tables serves both the TABLE and the PARTITION pass, so every partition
+        // entry has its table entry.
+        Map<Long, List<Table>> tablesByDb = new HashMap<>();
+        for (Database database : databases) {
+            tablesByDb.put(database.getId(), database.getTables());
+        }
+
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.LOCAL_METASTORE_DB)) {
+            writer.writeManager(LocalMetastorePB.newBuilder().putAllTableIdToIncrementId(tableIdToIncrementId).build());
+            for (Database database : databases) {
+                writer.writeEntry(database.toProto());
+            }
+        }
+
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.LOCAL_METASTORE_TABLE)) {
+            for (Database database : databases) {
+                for (Table table : tablesByDb.get(database.getId())) {
+                    writer.writeEntry(TableEntryPB.newBuilder()
+                            .setDbId(database.getId())
+                            .setTable(table.toProto())
+                            .build());
+                }
+            }
+        }
+
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.LOCAL_METASTORE_PARTITION)) {
+            for (Database database : databases) {
+                for (Table table : tablesByDb.get(database.getId())) {
+                    if (!(table instanceof OlapTable)) {
+                        continue;
+                    }
+                    OlapTable olapTable = (OlapTable) table;
+                    for (Partition partition : olapTable.getPartitions()) {
+                        writer.writeEntry(PartitionEntryPB.newBuilder()
+                                .setTableId(olapTable.getId())
+                                .setPartition(partition.toProto())
+                                .build());
+                    }
+                    for (Partition partition : olapTable.getTempPartitions()) {
+                        writer.writeEntry(PartitionEntryPB.newBuilder()
+                                .setTableId(olapTable.getId())
+                                .setTemp(true)
+                                .setPartition(partition.toProto())
+                                .build());
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * The image v3 sections of this manager, in the order the reader must load them: databases, then tables
+     * (attached to their database), then partitions (attached to their table). The PARTITION loader ends with the
+     * post-load steps shared with the v2 load.
+     */
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        Map<Long, OlapTable> olapTables = Maps.newHashMap();
+        return List.of(
+                Pair.<SectionId, SectionLoader>create(SectionId.LOCAL_METASTORE_DB, this::loadDbSection),
+                Pair.<SectionId, SectionLoader>create(SectionId.LOCAL_METASTORE_TABLE,
+                        reader -> loadTableSection(reader, olapTables)),
+                Pair.<SectionId, SectionLoader>create(SectionId.LOCAL_METASTORE_PARTITION,
+                        reader -> loadPartitionSection(reader, olapTables)));
+    }
+
+    private void loadDbSection(SectionReader reader) throws IOException {
+        LocalMetastorePB pb = reader.readManager(LocalMetastorePB.parser());
+        tableIdToIncrementId.putAll(pb.getTableIdToIncrementIdMap());
+        reader.readEntries(DatabasePB.parser(), pbEntry -> registerDatabase(Database.fromProto(pbEntry)));
+    }
+
+    private void loadTableSection(SectionReader reader, Map<Long, OlapTable> olapTables) throws IOException {
+        reader.readEntries(TableEntryPB.parser(), pbEntry -> {
+            LoadedTable loaded = loadedTableFromProto(pbEntry);
+            Database db = idToDb.get(loaded.dbId);
+            if (db == null) {
+                throw new IllegalStateException("table " + loaded.table.getId() + " refers to unknown database "
+                        + loaded.dbId);
+            }
+            db.registerTableUnlocked(loaded.table);
+            if (loaded.table instanceof OlapTable) {
+                olapTables.put(loaded.table.getId(), (OlapTable) loaded.table);
+            }
+        });
+    }
+
+    private void loadPartitionSection(SectionReader reader, Map<Long, OlapTable> olapTables) throws IOException {
+        reader.readEntries(PartitionEntryPB.parser(), pbEntry -> {
+            LoadedPartition loaded = loadedPartitionFromProto(pbEntry);
+            OlapTable table = olapTables.get(loaded.tableId);
+            if (table == null) {
+                throw new IllegalStateException("partition " + loaded.partition.getId()
+                        + " refers to unknown table " + loaded.tableId);
+            }
+            if (loaded.temp) {
+                table.addTempPartition(loaded.partition);
+            } else {
+                table.addPartitionForImageLoad(loaded.partition);
+            }
+        });
+        finishLoad();
+    }
+
+    private static LoadedTable loadedTableFromProto(TableEntryPB entry) {
+        try {
+            return new LoadedTable(entry.getDbId(), Table.fromProto(entry.getTable()));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    private static LoadedPartition loadedPartitionFromProto(PartitionEntryPB entry) {
+        return new LoadedPartition(entry.getTableId(), entry.getTemp(), Partition.fromProto(entry.getPartition()));
+    }
+
+    private static final class LoadedTable {
+        private final long dbId;
+        private final Table table;
+
+        private LoadedTable(long dbId, Table table) {
+            this.dbId = dbId;
+            this.table = table;
+        }
+    }
+
+    private static final class LoadedPartition {
+        private final long tableId;
+        private final boolean temp;
+        private final Partition partition;
+
+        private LoadedPartition(long tableId, boolean temp, Partition partition) {
+            this.tableId = tableId;
+            this.temp = temp;
+            this.partition = partition;
+        }
+    }
+
+    /**
      * When loading the LocalMetastore, the DB/Catalog that the materialized view depends
      * on may not have been loaded yet, so you cannot reload the materialized view.
      * The reload operation of a materialized view should be called by {@link GlobalStateMgr#postLoadImage()}.
@@ -6360,6 +6519,18 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             tableIdToIncrementId.put(tableId, id);
         }
 
+        recreateTabletInvertIndex();
+        GlobalStateMgr.getCurrentState().getEsRepository().loadTableFromCatalog();
+    }
+
+    private void registerDatabase(Database db) {
+        idToDb.put(db.getId(), db);
+        fullNameToDb.put(db.getFullName(), db);
+        stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
+    }
+
+    /** The post-load steps shared by both image formats. */
+    private void finishLoad() {
         recreateTabletInvertIndex();
         GlobalStateMgr.getCurrentState().getEsRepository().loadTableFromCatalog();
     }

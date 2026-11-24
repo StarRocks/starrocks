@@ -16,12 +16,21 @@ package com.starrocks.statistic;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.image.ProtoDateTimes;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoLists;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.AnalyzeTypePB;
+import com.starrocks.persist.proto.MultiColumnStatsMetaPB;
+import com.starrocks.persist.proto.StatisticsTypeListPB;
 import com.starrocks.sql.ast.StatisticsType;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class MultiColumnStatsMeta implements Writable {
     @SerializedName("dbId")
@@ -83,5 +92,59 @@ public class MultiColumnStatsMeta implements Writable {
 
     public Map<String, String> getProperties() {
         return properties;
+    }
+
+    public MultiColumnStatsMetaPB toProto() {
+        MultiColumnStatsMetaPB.Builder builder = MultiColumnStatsMetaPB.newBuilder();
+        builder.setDbId(dbId);
+        builder.setTableId(tableId);
+        if (columnIds != null) {
+            builder.setColumnIds(ProtoLists.int32List(columnIds));
+        }
+        if (analyzeType != null) {
+            builder.setAnalyzeType(ProtoEnums.toProto(analyzeType, AnalyzeTypePB.class, "ANALYZE_"));
+        }
+        if (statisticsTypes != null) {
+            builder.setStatisticsTypes(StatisticsTypeListPB.newBuilder().addAllValues(statisticsTypes.stream()
+                    .map(value -> ProtoEnums.toProto(value, StatisticsTypeListPB.Type.class))
+                    .collect(Collectors.toList())).build());
+        }
+        if (updateTime != null) {
+            builder.setUpdateTime(ProtoDateTimes.toEpochSecond(updateTime));
+        }
+        if (properties != null) {
+            builder.setProperties(ProtoMaps.toStringMapProto(properties));
+        }
+        return builder.build();
+    }
+
+    // A protobuf constructor leaves the existing GSON construction path unchanged.
+    private MultiColumnStatsMeta(MultiColumnStatsMetaPB pb) {
+        if (pb.hasDbId()) {
+            dbId = pb.getDbId();
+        }
+        if (pb.hasTableId()) {
+            tableId = pb.getTableId();
+        }
+        if (pb.hasColumnIds()) {
+            columnIds = new HashSet<>(ProtoLists.toIntegers(pb.getColumnIds()));
+        }
+        if (pb.hasAnalyzeType()) {
+            analyzeType = ProtoEnums.fromProto(pb.getAnalyzeType(), StatsConstants.AnalyzeType.class, "ANALYZE_");
+        }
+        if (pb.hasStatisticsTypes()) {
+            statisticsTypes = pb.getStatisticsTypes().getValuesList().stream()
+                    .map(value -> ProtoEnums.fromProto(value, StatisticsType.class)).collect(Collectors.toList());
+        }
+        if (pb.hasUpdateTime()) {
+            updateTime = ProtoDateTimes.fromEpochSecond(pb.getUpdateTime());
+        }
+        if (pb.hasProperties()) {
+            properties = ProtoMaps.fromStringMapProto(pb.getProperties());
+        }
+    }
+
+    public static MultiColumnStatsMeta fromProto(MultiColumnStatsMetaPB pb) {
+        return new MultiColumnStatsMeta(pb);
     }
 }

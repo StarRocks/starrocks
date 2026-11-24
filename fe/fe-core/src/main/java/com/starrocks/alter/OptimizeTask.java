@@ -15,6 +15,10 @@
 package com.starrocks.alter;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoLists;
+import com.starrocks.persist.proto.OptimizeTaskPB;
+import com.starrocks.persist.proto.TaskRunStatePB;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 
@@ -100,5 +104,53 @@ public class OptimizeTask extends Task {
                 ", tempPartitionName='" + tempPartitionName + '\'' +
                 ", optimizeTaskState=" + optimizeTaskState +
                 ", lastVersion=" + lastVersion;
+    }
+
+    /** Image v3 form. */
+    public OptimizeTaskPB toProto() {
+        OptimizeTaskPB.Builder builder = OptimizeTaskPB.newBuilder()
+                .setTask(toTaskCoreProto())
+                .setLastVersion(lastVersion);
+        if (partitionName != null) {
+            builder.setPartitionName(partitionName);
+        }
+        if (tempPartitionName != null) {
+            builder.setTempPartitionName(tempPartitionName);
+        }
+        if (optimizeTaskState != null) {
+            builder.setOptimizeTaskState(ProtoEnums.toProto(optimizeTaskState, TaskRunStatePB.class, "TASK_RUN_STATE_"));
+        }
+        if (partitionNames != null) {
+            builder.setPartitionNames(ProtoLists.stringList(partitionNames));
+        }
+        if (tempPartitionNames != null) {
+            builder.setTempPartitionNames(ProtoLists.stringList(tempPartitionNames));
+        }
+        return builder.build();
+    }
+
+    public static OptimizeTask fromProto(OptimizeTaskPB pb) {
+        // The only constructor; GSON allocates the object without one, so the field initialisers running here is
+        // the one difference, and they set the defaults a fresh task has.
+        OptimizeTask task = new OptimizeTask(pb.getTask().hasName() ? pb.getTask().getName() : null);
+        task.fillFromTaskCoreProto(pb.getTask());
+        if (pb.hasPartitionName()) {
+            task.partitionName = pb.getPartitionName();
+        }
+        if (pb.hasTempPartitionName()) {
+            task.tempPartitionName = pb.getTempPartitionName();
+        }
+        if (pb.hasOptimizeTaskState()) {
+            task.optimizeTaskState = ProtoEnums.fromProto(pb.getOptimizeTaskState(), Constants.TaskRunState.class,
+                    "TASK_RUN_STATE_");
+        }
+        task.lastVersion = pb.getLastVersion();
+        if (pb.hasPartitionNames()) {
+            task.partitionNames = ProtoLists.toStrings(pb.getPartitionNames());
+        }
+        if (pb.hasTempPartitionNames()) {
+            task.tempPartitionNames = ProtoLists.toStrings(pb.getTempPartitionNames());
+        }
+        return task;
     }
 }

@@ -40,6 +40,12 @@ import com.starrocks.common.io.JsonWriter;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoKinds;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.DataCacheInfoPB;
+import com.starrocks.persist.proto.DataPropertyPB;
+import com.starrocks.persist.proto.PartitionInfoPB;
 import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
@@ -89,6 +95,92 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
         this.idToDataProperty = new HashMap<>();
         this.idToReplicationNum = new HashMap<>();
         this.idToStorageCacheInfo = new HashMap<>();
+    }
+
+    /**
+     * Image v3 form: the fields of this base class, then the variant of the concrete class.
+     */
+    public PartitionInfoPB toProto() throws IOException {
+        PartitionInfoPB.Builder builder = PartitionInfoPB.newBuilder()
+                .setIsMultiColumnPartition(isMultiColumnPartition);
+        if (type != null) {
+            builder.setType(ProtoEnums.toProto(type, PartitionInfoPB.PartitionType.class));
+        }
+        // Like GSON, an entry with a null value is not persisted (shared-nothing tables keep a null
+        // DataCacheInfo per partition).
+        for (Map.Entry<Long, DataProperty> entry : ProtoMaps.withoutNullValues(idToDataProperty).entrySet()) {
+            builder.putIdToDataProperty(entry.getKey(), entry.getValue().toProto());
+        }
+        for (Map.Entry<Long, Short> entry : ProtoMaps.withoutNullValues(idToReplicationNum).entrySet()) {
+            builder.putIdToReplicationNum(entry.getKey(), entry.getValue());
+        }
+        for (Map.Entry<Long, DataCacheInfo> entry : ProtoMaps.withoutNullValues(idToStorageCacheInfo).entrySet()) {
+            builder.putIdToStorageCacheInfo(entry.getKey(), entry.getValue().toProto());
+        }
+        fillProtoVariant(builder);
+        return builder.build();
+    }
+
+    /** Sets the kind and the variant message of the concrete class. Only the persistable subclasses override it. */
+    protected void fillProtoVariant(PartitionInfoPB.Builder builder) throws IOException {
+        throw new IllegalStateException("partition info class " + getClass().getName() + " cannot be persisted");
+    }
+
+    public static PartitionInfo fromProto(PartitionInfoPB pb) throws IOException {
+        ProtoKinds.checkKnown(pb.getKind(), pb.getKindValue());
+        PartitionInfo info;
+        switch (pb.getKind()) {
+            case KIND_SINGLE:
+                info = new SinglePartitionInfo();
+                break;
+            case KIND_RANGE: {
+                RangePartitionInfo range = new RangePartitionInfo();
+                range.fillFromVariantProto(pb.getRange());
+                info = range;
+                break;
+            }
+            case KIND_LIST: {
+                ListPartitionInfo list = new ListPartitionInfo();
+                list.fillFromVariantProto(pb.getList());
+                info = list;
+                break;
+            }
+            case KIND_EXPRESSION_RANGE: {
+                ExpressionRangePartitionInfo expression = new ExpressionRangePartitionInfo();
+                expression.fillFromVariantProto(pb.getExpressionRange());
+                info = expression;
+                break;
+            }
+            case KIND_EXPRESSION_RANGE_V2: {
+                ExpressionRangePartitionInfoV2 expression = new ExpressionRangePartitionInfoV2();
+                expression.fillFromVariantProto(pb.getExpressionRangeV2());
+                info = expression;
+                break;
+            }
+            default:
+                throw new IllegalArgumentException("unknown partition info kind " + pb.getKind());
+        }
+        info.fillFromCoreProto(pb);
+        return info;
+    }
+
+    private void fillFromCoreProto(PartitionInfoPB pb) throws IOException {
+        if (pb.hasType()) {
+            type = ProtoEnums.fromProto(pb.getType(), PartitionType.class);
+        }
+        idToDataProperty = new HashMap<>();
+        for (Map.Entry<Long, DataPropertyPB> entry : pb.getIdToDataPropertyMap().entrySet()) {
+            idToDataProperty.put(entry.getKey(), DataProperty.fromProto(entry.getValue()));
+        }
+        idToReplicationNum = new HashMap<>();
+        for (Map.Entry<Long, Integer> entry : pb.getIdToReplicationNumMap().entrySet()) {
+            idToReplicationNum.put(entry.getKey(), entry.getValue().shortValue());
+        }
+        isMultiColumnPartition = pb.getIsMultiColumnPartition();
+        idToStorageCacheInfo = new HashMap<>();
+        for (Map.Entry<Long, DataCacheInfoPB> entry : pb.getIdToStorageCacheInfoMap().entrySet()) {
+            idToStorageCacheInfo.put(entry.getKey(), DataCacheInfo.fromProto(entry.getValue()));
+        }
     }
 
     public PartitionType getType() {

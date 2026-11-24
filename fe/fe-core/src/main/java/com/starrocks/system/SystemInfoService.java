@@ -74,6 +74,9 @@ import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.UpdateBackendInfo;
 import com.starrocks.persist.UpdateHistoricalNodeLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.proto.BackendPB;
+import com.starrocks.persist.proto.ComputeNodePB;
+import com.starrocks.persist.proto.SystemInfoServicePB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
@@ -1542,6 +1545,11 @@ public class SystemInfoService implements GsonPostProcessable {
                 .sum();
     }
 
+    /**
+     * @deprecated only reached when a v2 (GSON) image is loaded: this object is never deserialized
+     *             from the edit log. Remove together with the v2 image format; the v3 path calls
+     *             {@link #rebuildDerivedState()} directly.
+     */
     @Override
     public void gsonPostProcess() throws IOException {
         Map<Long, AtomicLong> idToReportVersion = new HashMap<>();
@@ -1565,5 +1573,56 @@ public class SystemInfoService implements GsonPostProcessable {
             }
         }
     }
-}
 
+    /** Rebuilds the runtime state derived from the persisted node maps; runs after either image format is loaded. */
+    private void rebuildDerivedState() {
+        Map<Long, AtomicLong> idToReportVersion = new HashMap<>();
+        for (long beId : idToBackendRef.keySet()) {
+            idToReportVersion.put(beId, new AtomicLong(0));
+        }
+        idToReportVersionRef = ImmutableMap.copyOf(idToReportVersion);
+
+        // BackendCoreStat is a global state, checkpoint should not modify it.
+        if (!GlobalStateMgr.isCheckpointThread()) {
+            // update BackendCoreStat
+            for (ComputeNode node : idToBackendRef.values()) {
+                BackendResourceStat.getInstance().setNumCoresOfBe(node.getWarehouseId(), node.getId(), node.getCpuCores());
+                BackendResourceStat.getInstance()
+                        .setMemLimitBytesOfBe(node.getWarehouseId(), node.getId(), node.getMemLimitBytes());
+            }
+            for (ComputeNode node : idToComputeNodeRef.values()) {
+                BackendResourceStat.getInstance().setNumCoresOfBe(node.getWarehouseId(), node.getId(), node.getCpuCores());
+                BackendResourceStat.getInstance()
+                        .setMemLimitBytesOfBe(node.getWarehouseId(), node.getId(), node.getMemLimitBytes());
+            }
+        }
+    }
+
+
+    // ---- image v3 -------------------------------------------------------------------------------
+
+    public SystemInfoServicePB toProto() {
+        SystemInfoServicePB.Builder builder = SystemInfoServicePB.newBuilder();
+        for (Backend backend : idToBackendRef.values()) {
+            builder.addBackends(backend.toBackendProto());
+        }
+        for (ComputeNode node : idToComputeNodeRef.values()) {
+            builder.addComputeNodes(node.toComputeNodeProto());
+        }
+        return builder.build();
+    }
+
+    public static SystemInfoService fromProto(SystemInfoServicePB pb) {
+        SystemInfoService systemInfo = new SystemInfoService();
+        for (BackendPB backendPb : pb.getBackendsList()) {
+            Backend backend = Backend.fromProto(backendPb);
+            systemInfo.idToBackendRef.put(backend.getId(), backend);
+        }
+        for (ComputeNodePB nodePb : pb.getComputeNodesList()) {
+            ComputeNode node = ComputeNode.fromProto(nodePb);
+            systemInfo.idToComputeNodeRef.put(node.getId(), node);
+        }
+        systemInfo.rebuildDerivedState();
+        return systemInfo;
+    }
+}

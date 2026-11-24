@@ -40,10 +40,14 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.ColocateRange;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.proto.BackendBucketsPB;
+import com.starrocks.persist.proto.ColocatePersistInfoPB;
+import com.starrocks.persist.proto.ColocateRangeListPB;
+import com.starrocks.persist.proto.Int64ListPB;
 
 import java.util.ArrayList;
 import java.util.List;
-
+import java.util.stream.Collectors;
 
 /**
  * PersistInfo for ColocateTableIndex
@@ -153,5 +157,43 @@ public class ColocatePersistInfo implements Writable {
             sb.append(" colocateRanges: ").append(colocateRanges);
         }
         return sb.toString();
+    }
+
+    public ColocatePersistInfoPB toProto() {
+        ColocatePersistInfoPB.Builder builder = ColocatePersistInfoPB.newBuilder();
+        if (groupId != null) {
+            builder.setGroupId(groupId.toProto());
+        }
+        builder.setTableId(tableId);
+        if (backendsPerBucketSeq != null) {
+            builder.setBackendsPerBucketSeq(BackendBucketsPB.newBuilder().addAllValues(backendsPerBucketSeq.stream()
+                    .map(ids -> Int64ListPB.newBuilder().addAllValues(ids).build()).collect(Collectors.toList())).build());
+        }
+        if (colocateRanges != null) {
+            builder.setColocateRanges(ColocateRangeListPB.newBuilder().addAllValues(colocateRanges.stream()
+                    .map(ColocateRange::toProto).collect(Collectors.toList())));
+        }
+        return builder.build();
+    }
+
+    public static ColocatePersistInfo fromProto(ColocatePersistInfoPB pb) {
+        ColocatePersistInfo value = new ColocatePersistInfo();
+        if (pb.hasGroupId()) {
+            value.groupId = GroupId.fromProto(pb.getGroupId());
+        } else {
+            value.groupId = null;
+        }
+        if (pb.hasTableId()) {
+            value.tableId = pb.getTableId();
+        }
+        if (pb.hasBackendsPerBucketSeq()) {
+            value.backendsPerBucketSeq = pb.getBackendsPerBucketSeq().getValuesList().stream()
+                    .map(ids -> new ArrayList<Long>(ids.getValuesList())).collect(Collectors.toList());
+        } else {
+            value.backendsPerBucketSeq = null;
+        }
+        value.colocateRanges = pb.hasColocateRanges() ? pb.getColocateRanges().getValuesList().stream()
+                .map(ColocateRange::fromProto).collect(Collectors.toList()) : null;
+        return value;
     }
 }

@@ -47,6 +47,7 @@ import com.google.gson.annotations.SerializedName;
 import com.staros.proto.PlacementPolicy;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.Range;
 import com.starrocks.common.ThrowingSupplier;
 import com.starrocks.common.io.Writable;
@@ -61,11 +62,26 @@ import com.starrocks.persist.ColocateRangePersistInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.TablePropertyInfo;
+import com.starrocks.persist.image.ImageFormatException;
+import com.starrocks.persist.image.ImageWriterV3;
+import com.starrocks.persist.image.SectionId;
+import com.starrocks.persist.image.SectionLoader;
+import com.starrocks.persist.image.SectionReader;
+import com.starrocks.persist.image.SectionWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.persist.proto.BackendBucketsPB;
+import com.starrocks.persist.proto.ColocateGroupBucketsEntryPB;
+import com.starrocks.persist.proto.ColocateGroupNameEntryPB;
+import com.starrocks.persist.proto.ColocateGroupSchemaEntryPB;
+import com.starrocks.persist.proto.ColocateGroupTablesEntryPB;
+import com.starrocks.persist.proto.ColocateTableGroupEntryPB;
+import com.starrocks.persist.proto.ColocateTableIndexPB;
+import com.starrocks.persist.proto.GroupIdPB;
+import com.starrocks.persist.proto.Int64ListPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.common.MetaUtils;
@@ -128,6 +144,32 @@ public class ColocateTableIndex implements Writable {
         @Override
         public String toString() {
             return dbId + "." + grpId;
+        }
+
+        public GroupIdPB toProto() {
+            GroupIdPB.Builder builder = GroupIdPB.newBuilder();
+            if (dbId != null) {
+                builder.setDbId(dbId);
+            }
+            if (grpId != null) {
+                builder.setGrpId(grpId);
+            }
+            return builder.build();
+        }
+
+        public static GroupId fromProto(GroupIdPB pb) {
+            GroupId value = new GroupId(0, 0);
+            if (pb.hasDbId()) {
+                value.dbId = pb.getDbId();
+            } else {
+                value.dbId = null;
+            }
+            if (pb.hasGrpId()) {
+                value.grpId = pb.getGrpId();
+            } else {
+                value.grpId = null;
+            }
+            return value;
         }
     }
 
@@ -1166,6 +1208,20 @@ public class ColocateTableIndex implements Writable {
         LOG.info("finished replay colocateTableIndex from image");
     }
 
+    private void installLoadedIndex(ColocateTableIndex data) {
+        this.groupName2Id = data.groupName2Id;
+        this.group2Tables = data.group2Tables;
+        this.table2Group = data.table2Group;
+        this.group2Schema = data.group2Schema;
+        this.group2BackendsPerBucketSeq = data.group2BackendsPerBucketSeq;
+        this.unstableGroups = data.unstableGroups;
+        this.colocateRangeMgr = data.colocateRangeMgr != null ? data.colocateRangeMgr : new ColocateRangeMgr();
+
+        cleanupInvalidDbOrTable(GlobalStateMgr.getCurrentState());
+        constructMetaGroups(GlobalStateMgr.getCurrentState());
+        LOG.info("finished replay colocateTableIndex from image");
+    }
+
     private List<GroupId> getOtherGroupsWithSameOrigNameUnlocked(String origName, long dbId) {
         List<GroupId> groupIds = new ArrayList<>();
         for (Map.Entry<String, GroupId> entry : groupName2Id.entrySet()) {
@@ -1466,5 +1522,96 @@ public class ColocateTableIndex implements Writable {
                 metaGroups.add(entry.getValue());
             }
         }
+    }
+
+    public void save(ImageWriterV3 imageWriter) throws IOException {
+        try (SectionWriter writer = imageWriter.beginSection(SectionId.COLOCATE_TABLE_INDEX)) {
+            ColocateTableIndexPB.Builder pb = ColocateTableIndexPB.newBuilder();
+            for (Map.Entry<String, GroupId> entry : groupName2Id.entrySet()) {
+                pb.addGroupNames(ColocateGroupNameEntryPB.newBuilder().setName(entry.getKey())
+                        .setGroupId(entry.getValue().toProto()));
+            }
+            for (GroupId groupId : group2Tables.keySet()) {
+                pb.addGroupTables(ColocateGroupTablesEntryPB.newBuilder().setGroupId(groupId.toProto())
+                        .addAllTableIds(group2Tables.get(groupId)));
+            }
+            for (Map.Entry<Long, GroupId> entry : table2Group.entrySet()) {
+                pb.addTableGroups(ColocateTableGroupEntryPB.newBuilder().setTableId(entry.getKey())
+                        .setGroupId(entry.getValue().toProto()));
+            }
+            for (Map.Entry<GroupId, ColocateGroupSchema> entry : group2Schema.entrySet()) {
+                pb.addGroupSchemas(ColocateGroupSchemaEntryPB.newBuilder().setGroupId(entry.getKey().toProto())
+                        .setSchema(entry.getValue().toProto()));
+            }
+            for (Map.Entry<GroupId, List<List<Long>>> entry : group2BackendsPerBucketSeq.entrySet()) {
+                BackendBucketsPB.Builder buckets = BackendBucketsPB.newBuilder();
+                for (List<Long> bucket : entry.getValue()) {
+                    buckets.addValues(Int64ListPB.newBuilder().addAllValues(bucket));
+                }
+                pb.addGroupBuckets(ColocateGroupBucketsEntryPB.newBuilder().setGroupId(entry.getKey().toProto())
+                        .setBuckets(buckets));
+            }
+            for (GroupId groupId : unstableGroups) {
+                pb.addUnstableGroups(groupId.toProto());
+            }
+            if (colocateRangeMgr != null) {
+                pb.addAllGroupRanges(colocateRangeMgr.toProto());
+            }
+            writer.writeManager(pb.build());
+        }
+    }
+
+    public List<Pair<SectionId, SectionLoader>> getImageV3Loaders() {
+        return List.of(Pair.create(SectionId.COLOCATE_TABLE_INDEX, this::loadSection));
+    }
+
+    private void loadSection(SectionReader reader) throws IOException {
+        ColocateTableIndexPB pb = reader.readManager(ColocateTableIndexPB.parser());
+        ColocateTableIndex data = new ColocateTableIndex();
+        try {
+            pb.getGroupNamesList().forEach(data::loadGroupName);
+            pb.getGroupTablesList().forEach(data::loadGroupTables);
+            pb.getTableGroupsList().forEach(data::loadTableGroup);
+            pb.getGroupSchemasList().forEach(data::loadGroupSchema);
+            pb.getGroupBucketsList().forEach(data::loadGroupBuckets);
+            pb.getUnstableGroupsList().forEach(group -> data.unstableGroups.add(readGroupId(group)));
+            pb.getGroupRangesList().forEach(data.colocateRangeMgr::loadGroupRanges);
+        } catch (IllegalArgumentException | IllegalStateException | NullPointerException e) {
+            throw new ImageFormatException("invalid " + reader.id().getName() + " manager", e);
+        }
+        installLoadedIndex(data);
+    }
+
+    private static GroupId readGroupId(GroupIdPB pb) {
+        Preconditions.checkArgument(pb.hasDbId() && pb.hasGrpId(), "incomplete colocate group id");
+        return GroupId.fromProto(pb);
+    }
+
+    private void loadGroupName(ColocateGroupNameEntryPB entry) {
+        Preconditions.checkArgument(entry.hasName(), "missing colocate group name");
+        groupName2Id.put(entry.getName(), readGroupId(entry.getGroupId()));
+    }
+
+    private void loadGroupTables(ColocateGroupTablesEntryPB entry) {
+        group2Tables.putAll(readGroupId(entry.getGroupId()), entry.getTableIdsList());
+    }
+
+    private void loadTableGroup(ColocateTableGroupEntryPB entry) {
+        Preconditions.checkArgument(entry.hasTableId(), "missing colocate table id");
+        table2Group.put(entry.getTableId(), readGroupId(entry.getGroupId()));
+    }
+
+    private void loadGroupSchema(ColocateGroupSchemaEntryPB entry) {
+        Preconditions.checkArgument(entry.hasSchema(), "missing colocate schema");
+        group2Schema.put(readGroupId(entry.getGroupId()), ColocateGroupSchema.fromProto(entry.getSchema()));
+    }
+
+    private void loadGroupBuckets(ColocateGroupBucketsEntryPB entry) {
+        Preconditions.checkArgument(entry.hasBuckets(), "missing colocate buckets");
+        List<List<Long>> values = new ArrayList<>();
+        for (Int64ListPB bucket : entry.getBuckets().getValuesList()) {
+            values.add(new ArrayList<>(bucket.getValuesList()));
+        }
+        group2BackendsPerBucketSeq.put(readGroupId(entry.getGroupId()), values);
     }
 }

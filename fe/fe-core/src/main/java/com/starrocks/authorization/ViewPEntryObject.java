@@ -16,6 +16,7 @@ package com.starrocks.authorization;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.persist.proto.TablePrivilegeObjectPB;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
@@ -69,5 +70,13 @@ public class ViewPEntryObject extends TablePEntryObject {
     @Override
     public ViewPEntryObject clone() {
         return new ViewPEntryObject(this.databaseUUID, this.tableUUID);
+    }
+
+    private ViewPEntryObject(TablePrivilegeObjectPB pb) {
+        super(pb);
+    }
+
+    public static ViewPEntryObject fromProto(TablePrivilegeObjectPB pb) {
+        return new ViewPEntryObject(pb);
     }
 }

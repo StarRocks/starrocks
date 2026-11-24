@@ -25,6 +25,8 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.UserPropertyPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.CatalogMgr;
@@ -340,5 +342,43 @@ public class UserProperty {
         String catalog;
 
         Map<String, String> sessionVariables = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+    }
+
+    public UserProperty() {
+    }
+
+    public UserPropertyPB toProto() {
+        UserPropertyPB.Builder builder = UserPropertyPB.newBuilder();
+        builder.setMaxConn(maxConn);
+        if (database != null) {
+            builder.setDatabase(database);
+        }
+        if (catalog != null) {
+            builder.setCatalog(catalog);
+        }
+        if (sessionVariables != null) {
+            builder.setSessionVariables(ProtoMaps.toStringMapProto(sessionVariables));
+        }
+        return builder.build();
+    }
+
+    // A protobuf constructor leaves the existing GSON construction path unchanged.
+    private UserProperty(UserPropertyPB pb) {
+        if (pb.hasMaxConn()) {
+            maxConn = pb.getMaxConn();
+        }
+        if (pb.hasDatabase()) {
+            database = pb.getDatabase();
+        }
+        if (pb.hasCatalog()) {
+            catalog = pb.getCatalog();
+        }
+        if (pb.hasSessionVariables()) {
+            sessionVariables = ProtoMaps.fromStringMapProto(pb.getSessionVariables());
+        }
+    }
+
+    public static UserProperty fromProto(UserPropertyPB pb) {
+        return new UserProperty(pb);
     }
 }

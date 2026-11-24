@@ -39,6 +39,9 @@ import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.proto.ColumnPB;
+import com.starrocks.persist.proto.DistributionInfoPB;
+import com.starrocks.persist.proto.HashDistributionInfoPB;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
@@ -160,6 +163,34 @@ public class HashDistributionInfo extends DistributionInfo implements GsonPostPr
         if (distributionColumnIds == null || distributionColumnIds.size() <= 0) {
             distributionColumnIds = deprecatedColumns.stream().map(Column::getColumnId).collect(Collectors.toList());
         }
+    }
+
+    @Override
+    protected void fillProtoVariant(DistributionInfoPB.Builder builder) {
+        HashDistributionInfoPB.Builder hash = HashDistributionInfoPB.newBuilder().setBucketNum(bucketNum);
+        if (distributionColumnIds != null) {
+            for (ColumnId columnId : distributionColumnIds) {
+                hash.addDistributionColumnIds(columnId.getId());
+            }
+        }
+        if (deprecatedColumns != null) {
+            for (Column column : deprecatedColumns) {
+                hash.addDistributionColumns(column.toProto());
+            }
+        }
+        builder.setKind(DistributionInfoPB.Kind.HASH).setHash(hash);
+    }
+
+    void fillFromVariantProto(HashDistributionInfoPB pb) {
+        distributionColumnIds = new ArrayList<>();
+        for (String columnId : pb.getDistributionColumnIdsList()) {
+            distributionColumnIds.add(ColumnId.create(columnId));
+        }
+        deprecatedColumns = new ArrayList<>();
+        for (ColumnPB column : pb.getDistributionColumnsList()) {
+            deprecatedColumns.add(Column.fromProto(column));
+        }
+        bucketNum = pb.getBucketNum();
     }
 
     @Override

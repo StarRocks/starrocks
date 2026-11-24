@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.proto.FunctionNamePB;
 import com.starrocks.thrift.TFunctionName;
 
 import java.util.Objects;
@@ -43,6 +44,25 @@ public class FunctionName implements Writable {
     public FunctionName(String fn) {
         db = null;
         this.fn = fn.toLowerCase();
+    }
+
+    public FunctionNamePB toProto() {
+        FunctionNamePB.Builder builder = FunctionNamePB.newBuilder();
+        if (db != null) {
+            builder.setDb(db);
+        }
+        if (fn != null) {
+            builder.setFn(fn);
+        }
+        return builder.build();
+    }
+
+    public static FunctionName fromProto(FunctionNamePB pb) {
+        // The same constructor GSON uses; the public ones lower-case the name.
+        FunctionName name = new FunctionName();
+        name.db = pb.hasDb() ? pb.getDb() : null;
+        name.fn = pb.hasFn() ? pb.getFn() : null;
+        return name;
     }
 
     public static FunctionName createFnName(String fn) {

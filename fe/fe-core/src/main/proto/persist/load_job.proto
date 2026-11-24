@@ -1,0 +1,163 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+import "persist/common.proto";
+import "persist/table.proto";
+import "persist/warehouse.proto";
+import "persist/load_status.proto";
+import "persist/export_mgr.proto";
+import "persist/resource_mgr.proto";
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "LoadJobProto";
+
+message LoadMgrPB {}
+
+message LoadJobPB {
+  enum Kind {
+    UNSPECIFIED = 0;
+    BROKER_LOAD_JOB = 1;
+    SPARK_LOAD_JOB = 2;
+    INSERT_LOAD_JOB = 3;
+  }
+  optional Kind kind = 1;
+  LoadJobCorePB core = 2;
+  oneof instance {
+    BrokerLoadJobPB broker = 11;
+    SparkLoadJobPB spark = 12;
+    InsertLoadJobPB insert = 13;
+  }
+}
+
+message LoadJobCorePB {
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    UNKNOWN = 1;
+    PENDING = 2;
+    ETL = 3;
+    LOADING = 4;
+    COMMITTED = 5;
+    FINISHED = 6;
+    CANCELLED = 7;
+    QUEUEING = 8;
+  }
+  enum JobType {
+    JOB_TYPE_UNSPECIFIED = 0;
+    BROKER = 1;
+    SPARK = 2;
+    INSERT = 3;
+  }
+  optional int64 id = 1;
+  optional int64 db_id = 2;
+  optional string label = 3;
+  optional State state = 4;
+  optional JobType job_type = 5;
+  optional int64 timeout_second = 6;
+  optional int64 load_mem_limit = 7;
+  optional double max_filter_ratio = 8;
+  optional bool strict_mode = 9;
+  optional string timezone = 10;
+  optional bool partial_update = 11;
+  optional string partial_update_mode = 12;
+  optional int32 priority = 13;
+  optional int64 log_rejected_record_num = 14;
+  optional int64 create_timestamp = 15;
+  optional int64 load_start_timestamp = 16;
+  optional int64 load_committed_timestamp = 17;
+  optional int64 finish_timestamp = 18;
+  optional int64 transaction_id = 19;
+  FailMsgPB fail_msg = 20;
+  EtlStatusPB loading_status = 21;
+  optional int32 progress = 22;
+  optional int64 warehouse_id = 23;
+  ComputeResourcePB compute_resource = 24;
+  optional string merge_condition = 25;
+  JSONOptionsPB json_options = 26;
+  optional string user = 27;
+}
+
+message BulkLoadJobCorePB {
+  BrokerPropertiesPersistInfoPB broker_persist_info = 1;
+  OriginStatementInfoPB origin_stmt = 2;
+  StringMapPB session_variables = 3;
+  repeated int64 table_ids = 4;
+}
+
+message BrokerLoadJobPB {
+  BulkLoadJobCorePB bulk = 1;
+}
+
+message SparkLoadJobPB {
+  ResourcePB spark_resource = 1;
+  optional int64 etl_start_timestamp = 2;
+  optional string app_id = 3;
+  optional string etl_output_path = 4;
+  SparkLoadAppHandlePB spark_load_app_handle = 5;
+  BulkLoadJobCorePB bulk = 6;
+  SparkLoadFilesPB tablet_meta_to_file_info = 7;
+}
+
+message SparkLoadFilesPB {
+  message FileInfo {
+    optional string path = 1;
+    optional int64 size = 2;
+  }
+  map<string, FileInfo> values = 1;
+}
+
+message InsertLoadJobPB {
+  optional int64 table_id = 1;
+}
+
+message JSONOptionsPB {
+  optional bool strip_outer_array = 1;
+  optional string json_paths = 2;
+  optional string json_root = 3;
+  optional string envelope = 4;
+}
+
+message SparkLoadAppHandlePB {
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    UNKNOWN = 1;
+    CONNECTED = 2;
+    SUBMITTED = 3;
+    RUNNING = 4;
+    FINISHED = 5;
+    FAILED = 6;
+    KILLED = 7;
+    LOST = 8;
+  }
+  enum FinalStatus {
+    FINAL_STATUS_UNSPECIFIED = 0;
+    FINAL_STATUS_UNDEFINED = 1;
+    FINAL_STATUS_SUCCEEDED = 2;
+    FINAL_STATUS_FAILED = 3;
+    FINAL_STATUS_KILLED = 4;
+    FINAL_STATUS_ENDED = 5;
+  }
+  optional string app_id = 1;
+  optional State state = 2;
+  optional string queue = 3;
+  optional int64 start_time = 4;
+  optional FinalStatus final_status = 5;
+  optional string tracking_url = 6;
+  optional string user = 7;
+  optional string log_path = 8;
+}

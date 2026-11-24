@@ -16,17 +16,23 @@ package com.starrocks.scheduler;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.image.ProtoMaps;
+import com.starrocks.persist.proto.StringMapPB;
+import com.starrocks.persist.proto.TaskCorePB;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -306,5 +312,103 @@ public class Task implements Writable, GsonPostProcessable {
         }
         // Images and edit logs written by older versions carry the default_cluster prefix.
         dbName = ClusterNamespace.getNameFromFullName(dbName);
+    }
+
+    public static Task fromTaskCoreProto(TaskCorePB pb) {
+        Task task = new Task();
+        task.fillFromTaskCoreProto(pb);
+        task.dbName = ClusterNamespace.getNameFromFullName(task.dbName);
+        return task;
+    }
+
+    public void fillFromTaskCoreProto(TaskCorePB pb) {
+        id = pb.getId();
+        if (pb.hasName()) {
+            name = pb.getName();
+        }
+        if (pb.hasType()) {
+            type = ProtoEnums.fromProto(pb.getType(), Constants.TaskType.class, "TYPE_");
+        }
+        if (pb.hasState()) {
+            state = ProtoEnums.fromProto(pb.getState(), Constants.TaskState.class, "STATE_");
+        }
+        if (pb.hasSchedule()) {
+            schedule = TaskSchedule.fromProto(pb.getSchedule());
+        }
+        createTime = pb.getCreateTime();
+        if (pb.hasCatalogName()) {
+            catalogName = pb.getCatalogName();
+        }
+        if (pb.hasDbName()) {
+            dbName = pb.getDbName();
+        }
+        if (pb.hasDefinition()) {
+            definition = pb.getDefinition();
+        }
+        if (pb.hasPostRun()) {
+            postRun = pb.getPostRun();
+        }
+        if (pb.hasProperties()) {
+            properties = new HashMap<>(pb.getProperties().getValuesMap());
+        }
+        expireTime = pb.getExpireTime();
+        if (pb.hasSource()) {
+            source = ProtoEnums.fromProto(pb.getSource(), Constants.TaskSource.class, "SOURCE_");
+        }
+        if (pb.hasCreateUser()) {
+            createUser = pb.getCreateUser();
+        }
+        if (pb.hasCreateUserIdentity()) {
+            userIdentity = UserIdentityUtils.fromProto(pb.getCreateUserIdentity());
+        }
+        lastScheduleTime = pb.getLastScheduleTime();
+        nextScheduleTime = pb.getNextScheduleTime();
+    }
+
+    /** Image v3 form of the Task fields. A subclass embeds it in its own message. */
+    public TaskCorePB toTaskCoreProto() {
+        TaskCorePB.Builder builder = TaskCorePB.newBuilder()
+                .setId(id)
+                .setCreateTime(createTime)
+                .setExpireTime(expireTime)
+                .setLastScheduleTime(lastScheduleTime)
+                .setNextScheduleTime(nextScheduleTime);
+        if (name != null) {
+            builder.setName(name);
+        }
+        if (type != null) {
+            builder.setType(ProtoEnums.toProto(type, TaskCorePB.Type.class, "TYPE_"));
+        }
+        if (state != null) {
+            builder.setState(ProtoEnums.toProto(state, TaskCorePB.State.class, "STATE_"));
+        }
+        if (schedule != null) {
+            builder.setSchedule(schedule.toProto());
+        }
+        if (catalogName != null) {
+            builder.setCatalogName(catalogName);
+        }
+        if (dbName != null) {
+            builder.setDbName(dbName);
+        }
+        if (definition != null) {
+            builder.setDefinition(definition);
+        }
+        if (postRun != null) {
+            builder.setPostRun(postRun);
+        }
+        if (properties != null) {
+            builder.setProperties(StringMapPB.newBuilder().putAllValues(ProtoMaps.withoutNullValues(properties)));
+        }
+        if (source != null) {
+            builder.setSource(ProtoEnums.toProto(source, TaskCorePB.Source.class, "SOURCE_"));
+        }
+        if (createUser != null) {
+            builder.setCreateUser(createUser);
+        }
+        if (userIdentity != null) {
+            builder.setCreateUserIdentity(UserIdentityUtils.toProto(userIdentity));
+        }
+        return builder.build();
     }
 }

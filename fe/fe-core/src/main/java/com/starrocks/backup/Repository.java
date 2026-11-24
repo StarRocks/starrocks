@@ -47,6 +47,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.proto.RepositoryPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.Backend;
@@ -826,6 +827,12 @@ public class Repository implements Writable, GsonPostProcessable {
         }
     }
 
+    private void finishLoad() {
+        if (!GlobalStateMgr.isCheckpointThread()) {
+            genPrefixRepo();
+        }
+    }
+
     private void genPrefixRepo() {
         // check __palo_repository_ first, if success, prefixRepo = __palo_repository_
         String listPath = Joiner.on(PATH_DELIMITER).join(location, joinPrefix("__palo_repository_", name));
@@ -843,5 +850,52 @@ public class Repository implements Writable, GsonPostProcessable {
         } else {
             prefixRepo = "__starrocks_repository_";
         }
+    }
+
+    public RepositoryPB toProto() {
+        RepositoryPB.Builder builder = RepositoryPB.newBuilder();
+        builder.setId(id);
+        if (name != null) {
+            builder.setName(name);
+        }
+        builder.setCreateTime(createTime);
+        builder.setIsReadOnly(isReadOnly);
+        if (location != null) {
+            builder.setLocation(location);
+        }
+        if (storage != null) {
+            builder.setStorage(storage.toProto());
+        }
+        return builder.build();
+    }
+
+    public static Repository fromProto(RepositoryPB pb) {
+        Repository value = new Repository();
+        if (pb.hasId()) {
+            value.id = pb.getId();
+        }
+        if (pb.hasName()) {
+            value.name = pb.getName();
+        } else {
+            value.name = null;
+        }
+        if (pb.hasCreateTime()) {
+            value.createTime = pb.getCreateTime();
+        }
+        if (pb.hasIsReadOnly()) {
+            value.isReadOnly = pb.getIsReadOnly();
+        }
+        if (pb.hasLocation()) {
+            value.location = pb.getLocation();
+        } else {
+            value.location = null;
+        }
+        if (pb.hasStorage()) {
+            value.storage = BlobStorage.fromProto(pb.getStorage());
+        } else {
+            value.storage = null;
+        }
+        value.finishLoad();
+        return value;
     }
 }

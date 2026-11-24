@@ -16,7 +16,11 @@ package com.starrocks.alter.reshard;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.persist.proto.ReshardingMaterializedIndexPB;
+import com.starrocks.persist.proto.ReshardingTabletListPB;
+import com.starrocks.persist.proto.ReshardingTabletPB;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /*
@@ -58,5 +62,31 @@ public class ReshardingMaterializedIndex {
             parallelTablets += reshardingTablet.getParallelTablets();
         }
         return parallelTablets;
+    }
+
+    public ReshardingMaterializedIndexPB toProto() {
+        ReshardingMaterializedIndexPB.Builder builder = ReshardingMaterializedIndexPB.newBuilder()
+                .setMaterializedIndexId(materializedIndexId);
+        if (materializedIndex != null) {
+            builder.setMaterializedIndex(materializedIndex.toProto());
+        }
+        if (reshardingTablets != null) {
+            ReshardingTabletListPB.Builder tablets = ReshardingTabletListPB.newBuilder();
+            reshardingTablets.forEach(tablet -> tablets.addValues(tablet.toImageProto()));
+            builder.setReshardingTablets(tablets);
+        }
+        return builder.build();
+    }
+
+    public static ReshardingMaterializedIndex fromProto(ReshardingMaterializedIndexPB pb) {
+        List<ReshardingTablet> tablets = null;
+        if (pb.hasReshardingTablets()) {
+            tablets = new ArrayList<>();
+            for (ReshardingTabletPB tablet : pb.getReshardingTablets().getValuesList()) {
+                tablets.add(ReshardingTablet.fromImageProto(tablet));
+            }
+        }
+        return new ReshardingMaterializedIndex(pb.getMaterializedIndexId(),
+                pb.hasMaterializedIndex() ? MaterializedIndex.fromProto(pb.getMaterializedIndex()) : null, tablets);
     }
 }

@@ -39,6 +39,9 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.image.ProtoEnums;
+import com.starrocks.persist.proto.PartitionPB;
+import com.starrocks.persist.proto.PhysicalPartitionPB;
 import com.starrocks.transaction.TransactionType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -369,4 +372,54 @@ public class Partition extends MetaObject implements GsonPostProcessable {
     private volatile long versionEpoch;
     @SerializedName(value = "versionTxnType")
     private volatile TransactionType versionTxnType;
+
+    public static Partition fromProto(PartitionPB pb) {
+        // The same constructor GSON uses.
+        Partition partition = new Partition();
+        if (pb.hasMeta()) {
+            partition.fillFromMetaObjectProto(pb.getMeta());
+        }
+        partition.id = pb.getId();
+        if (pb.hasName()) {
+            partition.name = pb.getName();
+        }
+        if (pb.hasState()) {
+            partition.state = ProtoEnums.fromProto(pb.getState(), PartitionState.class);
+        }
+        partition.defaultPhysicalPartitionId = pb.getDefaultPhysicalPartitionId();
+        partition.idToSubPartition = Maps.newHashMap();
+        for (PhysicalPartitionPB subPartition : pb.getSubPartitionsList()) {
+            PhysicalPartition physicalPartition = PhysicalPartition.fromProto(subPartition);
+            partition.idToSubPartition.put(physicalPartition.getId(), physicalPartition);
+        }
+        if (pb.hasDistributionInfo()) {
+            partition.distributionInfo = DistributionInfo.fromProto(pb.getDistributionInfo());
+        }
+        return partition;
+    }
+
+    /**
+     * Image v3 form: one entry of the PARTITION section, with the whole physical-partition subtree. The legacy
+     * physical-partition members this class still declares are only written at construction time and never read,
+     * so they are not persisted.
+     */
+    public PartitionPB toProto() {
+        PartitionPB.Builder builder = PartitionPB.newBuilder()
+                .setMeta(toMetaObjectProto())
+                .setId(id)
+                .setDefaultPhysicalPartitionId(defaultPhysicalPartitionId);
+        if (name != null) {
+            builder.setName(name);
+        }
+        if (state != null) {
+            builder.setState(ProtoEnums.toProto(state, PartitionPB.State.class));
+        }
+        for (PhysicalPartition subPartition : idToSubPartition.values()) {
+            builder.addSubPartitions(subPartition.toProto());
+        }
+        if (distributionInfo != null) {
+            builder.setDistributionInfo(distributionInfo.toProto());
+        }
+        return builder.build();
+    }
 }
