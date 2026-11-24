@@ -482,7 +482,7 @@ PROPERTIES (
 SHOW CREATE TABLE pk_alter_parallel;
 
 -- Alter property to higher parallelism
-ALTER TABLE pk_alter_parallel SET ("lake_compaction_max_parallel" = "5");
+ALTER TABLE pk_alter_parallel SET ("lake_compaction_max_parallel" = "4");
 
 -- Verify property change
 SHOW CREATE TABLE pk_alter_parallel;
@@ -493,8 +493,8 @@ ALTER TABLE pk_alter_parallel SET ("lake_compaction_max_parallel" = "0");
 -- Verify property change
 SHOW CREATE TABLE pk_alter_parallel;
 
--- Alter property back to enable
-ALTER TABLE pk_alter_parallel SET ("lake_compaction_max_parallel" = "3");
+-- Alter property back to the default (lake_compaction_max_parallel_default), which SHOW CREATE TABLE omits
+ALTER TABLE pk_alter_parallel SET ("lake_compaction_max_parallel" = "5");
 
 -- Verify property change
 SHOW CREATE TABLE pk_alter_parallel;
