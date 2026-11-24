@@ -2219,6 +2219,16 @@ CONF_Bool(datacache_unified_instance_enable, "true");
 // * lru: the typical `Least Recently Used` eviction policy.
 // * slru: segment lru eviction policies, which can better reduce cache pollution problem.
 CONF_String(datacache_eviction_policy, "slru");
+// Whether an lru shard of datacache can evict entries from the other shards when it is being refilled
+// or cannot supply the whole charge by itself. Setting it to `false` restores the old behavior that a
+// shard only ever evicts its own entries, and the refill watermarks below are ignored.
+CONF_mBool(datacache_lru_shard_evict_fallback_enable, "true");
+// An lru shard of datacache is refilled from the largest shards instead of evicting its own entries
+// once its usage drops below `datacache_lru_shard_refill_low_watermark_percent` of its capacity, until
+// it reaches `datacache_lru_shard_refill_high_watermark_percent`. They should satisfy
+// `low <= high <= 100`, and setting both to `0` disables the refill.
+CONF_mInt32(datacache_lru_shard_refill_low_watermark_percent, "50");
+CONF_mInt32(datacache_lru_shard_refill_high_watermark_percent, "70");
 
 // The BlockCache stores the raw data blocks of external tables and shared-data internal tables.
 // It shares the same limit (datacache_disk_size, datacache_mem_size) with the PageCache.
@@ -2579,6 +2589,10 @@ CONF_Strings(python_envs, "");
 CONF_Bool(report_python_worker_error, "true");
 CONF_Bool(python_worker_reuse, "true");
 CONF_Int32(python_worker_expire_time_sec, "300");
+// The most local Python worker processes one pipeline driver uses. A driver's call stubs (one per
+// concurrent UDF call, e.g. per scan IO task) are spread over these workers, and since each worker
+// runs Python under its own GIL, this bounds how many Python UDF calls of a driver run in parallel.
+CONF_mInt32(python_worker_max_per_driver, "3");
 // Timeout (ms) for the Arrow Flight call to a Python UDF worker (local or external service_url).
 // Applied as the gRPC deadline on the DoExchange stream, so a dead/unreachable/hung worker fails
 // the query instead of hanging forever. Note it bounds the whole stream's lifetime, so set it above
@@ -2719,7 +2733,7 @@ CONF_mInt32(thrift_max_recursion_depth, "64");
 CONF_mBool(enable_lake_compaction_use_partial_segments, "false");
 // If turned on, parallel compaction will split by sort key range instead of segment index.
 // This produces non-overlapping output rowsets, improving subsequent query performance.
-CONF_mBool(enable_lake_compaction_range_split, "false");
+CONF_mBool(enable_lake_compaction_range_split, "true");
 // chunk size used by lake compaction
 CONF_mInt32(lake_compaction_chunk_size, "4096");
 // Hold the input segments of a compaction task on its Rowset objects for the whole task, so the

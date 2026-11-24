@@ -6902,6 +6902,12 @@ TEST_F(LakeTabletReshardTest, test_compact_runs_a_parallel_manual_compaction_whe
     ASSERT_GE(tablet->rowsets_size(), 7);
     ASSERT_FALSE(lake::tablet_reshard_helper::has_shared_files(*tablet));
 
+    // The rowsets carry sort key bounds, so range split, on by default, would take precedence over the ordinary planner
+    // this case is sized for.
+    const bool old_range_split = config::enable_lake_compaction_range_split;
+    config::enable_lake_compaction_range_split = false;
+    DeferOp restore_range_split([&] { config::enable_lake_compaction_range_split = old_range_split; });
+
     // The ordinary planner groups whole small rowsets up to this size: two groups that cover every rowset.
     int64_t total_bytes = 0;
     int64_t largest = 0;

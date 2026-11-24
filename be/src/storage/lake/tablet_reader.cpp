@@ -485,7 +485,12 @@ static void warm_prepared_indexes(PreparedTabletReadState* state, const TabletSc
                                   const std::atomic<bool>* is_cancelled, OlapReaderStatistics* stats) {
     LakeIOOptions lake_io_opts = query_io_opts;
     lake_io_opts.remote_read = ScopedRemoteReadContext::or_current(query_io_opts.remote_read);
+#ifdef USE_STAROS
     const int64_t block_size = std::max<int64_t>(1, config::starlet_star_cache_block_size_bytes);
+#else
+    // starlet_star_cache_block_size_bytes exists only in StarOS builds; use its default.
+    const int64_t block_size = 1 << 20;
+#endif
     for (size_t rowset_idx = 0; rowset_idx < state->rowset_segments.size(); ++rowset_idx) {
         const auto& segments = state->rowset_segments[rowset_idx];
         const RowsetMetadataPB* rowset_meta = nullptr;
@@ -1900,6 +1905,11 @@ Status TabletReader::init_delete_predicates(const TabletReaderParams& params, De
 }
 
 bool TabletReader::union_reads_ahead(const TabletReaderParams& params) const {
+#ifndef USE_STAROS
+    // The segment readers read ahead only in StarOS builds (see SegmentIterator::_should_read_ahead()).
+    (void)params;
+    return false;
+#else
     // A query scan that walks all the segments of the tablet one after another, in ascending order, through the
     // union below starts the read-ahead of the next segments while it reads the current one; a split scan reads its
     // segments from several scan tasks at once already. Only the key types that always take the union branch
@@ -1918,6 +1928,7 @@ bool TabletReader::union_reads_ahead(const TabletReaderParams& params) const {
            _is_asc_hint && params.rowid_range_option == nullptr && params.short_key_ranges_option == nullptr &&
            remote_io_scheduler_enabled() && config::lake_scan_read_ahead_segments > 0 &&
            config::remote_prefetch_window_blocks > 0;
+#endif // USE_STAROS
 }
 
 Status TabletReader::init_collector(const TabletReaderParams& params) {
@@ -1988,12 +1999,17 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
         // SegmentIterator  ...    SegmentIterator
         //
         // With _union_reads_ahead, each child is one segment (see union_reads_ahead()).
+#ifdef USE_STAROS
         if (_union_reads_ahead) {
             _collect_iter = new_union_iterator(std::move(seg_iters), config::lake_scan_read_ahead_segments,
                                                config::remote_prefetch_window_blocks);
         } else {
             _collect_iter = new_union_iterator(std::move(seg_iters));
         }
+#else
+        // union_reads_ahead() is always false here.
+        _collect_iter = new_union_iterator(std::move(seg_iters));
+#endif
     } else if ((keys_type == AGG_KEYS || keys_type == UNIQUE_KEYS) && !skip_aggr) {
         //                 Timer
         //                   |

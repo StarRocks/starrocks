@@ -130,6 +130,9 @@
         "datacache_persistence_enable",
         "datacache_inline_item_count_limit",
         "datacache_eviction_policy",
+        "datacache_lru_shard_evict_fallback_enable",
+        "datacache_lru_shard_refill_low_watermark_percent",
+        "datacache_lru_shard_refill_high_watermark_percent",
         "block_cache_enable",
         "external_table_clear_corrupted_cache_data"
       ]
@@ -413,6 +416,7 @@
         "report_python_worker_error",
         "python_worker_reuse",
         "python_worker_expire_time_sec",
+        "python_worker_max_per_driver",
         "python_udf_rpc_timeout_ms"
       ]
     },

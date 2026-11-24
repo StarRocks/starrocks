@@ -87,6 +87,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタで、コンパクションタスクが入力 Segment オブジェクトを自身の Rowset インスタンス上でタスク終了まで保持するかどうか。保持により、垂直コンパクションのカラムグループごとのパスはメタデータキャッシュ経由で再ロードする代わりにそれらを再利用します。保持しない場合、メタデータキャッシュが全入力 Segment を保持できないとき（`lake_segment_metadata_cache_limit_percent` が小さい、またはノード上のタブレットが多い場合）、各パスが全入力 Segment を再ロード・再パースします。このコストは CPU バウンドでカラム数に比例し、ワイドテーブルのコンパクションを一桁遅くしたり、メモリ制限超過の再試行を繰り返して失敗させたりすることがあります。保持中、タスクは入力 Segment と delete vector を共有メタデータキャッシュに書き込みません。入力はコンパクション完了直後に削除されるため、キャッシュしても他のタブレットのエントリを追い出すだけだからです。メモリコストは実行中タスクごとに入力 Segment メタデータ一式で、コンパクションタスクのメモリトラッカーに計上され、タスクとともに解放されます。`false` に設定すると、共有メタデータキャッシュ経由で Segment を再利用し、そのキャッシュに入力を書き込む以前の動作に戻ります。
 - 導入バージョン: v4.2
 
+### enable_lake_compaction_range_split
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタで、並列コンパクションが入力をソートキーの範囲で分割するかどうか。`true` に設定すると、並列コンパクションの各サブタスクは、すべての入力 Rowset のうち 1 つのソートキー範囲に含まれるデータを読み取り、サブタスク全体で Segment が互いに重ならない 1 つの Rowset を書き出します。範囲分割は、すべての入力 Segment がソートキーの上下限を記録している場合にのみ適用されます。それ以外の場合、または `false` に設定した場合、並列コンパクションは Rowset 単位でグループ化するか、大きな Rowset を Segment のインデックスで分割し、サブタスクの出力は互いに重なることがあります。タブレットあたりのサブタスクの最大数は、テーブルプロパティ `lake_compaction_max_parallel` で設定します。
+- 導入バージョン: v4.2
+
 ### lake_compaction_stream_buffer_size_bytes
 
 - デフォルト: 1048576
@@ -811,6 +820,33 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: いいえ
 - 説明: Data Cache のインラインキャッシュアイテムの最大数。特に小さいキャッシュブロックの場合、Data Cache はそれらを `inline` モードで保存し、ブロックデータとメタデータをメモリに一緒にキャッシュします。
 - 導入バージョン: v3.4.0
+
+### datacache_lru_shard_evict_fallback_enable
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: Data Cache の LRU シャードが補充中、または自身で十分な空きを確保できない場合に、他のシャードのエントリを削除できるかどうか。`false` に設定すると、シャードが自身のエントリのみを削除する動作に戻り、`datacache_lru_shard_refill_low_watermark_percent` と `datacache_lru_shard_refill_high_watermark_percent` は無視されます。
+- 導入バージョン: -
+
+### datacache_lru_shard_refill_low_watermark_percent
+
+- デフォルト: 50
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: Data Cache の LRU シャードの使用量が容量のこの割合を下回ると、自身のエントリを削除する代わりに最大のシャードから補充され、`datacache_lru_shard_refill_high_watermark_percent` に達するまで続きます。この値は `datacache_lru_shard_refill_high_watermark_percent` を超えてはいけません。両方のパラメータを `0` に設定すると補充は無効になります。
+- 導入バージョン: -
+
+### datacache_lru_shard_refill_high_watermark_percent
+
+- デフォルト: 70
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: Data Cache の LRU シャードの補充を停止する容量の割合。有効な値: `datacache_lru_shard_refill_low_watermark_percent` から `100`。両方のパラメータを `0` に設定すると補充は無効になります。
+- 導入バージョン: -
 
 ### datacache_mem_size
 

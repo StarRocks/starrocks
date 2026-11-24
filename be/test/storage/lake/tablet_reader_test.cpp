@@ -1522,6 +1522,8 @@ TEST_F(LakeDuplicateTabletReaderTest, test_parallel_read_error_waits_all_futures
     EXPECT_EQ(1, reader->stats().phy_segments_count);
 }
 
+// The segment readers read ahead only in StarOS builds (see SegmentIterator::_should_read_ahead()).
+#ifdef USE_STAROS
 // A local file system whose files accept cache warm-ups, as starlet's do, so that segment readers build real read-ahead
 // windows on local segment files. A warm-up only returns a handle; the reads go to the local file as before.
 class WarmableFileSystem final : public FileSystem {
@@ -1892,6 +1894,7 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_ahead_across_segments_of_a_rowse
         }
     }
 }
+#endif // USE_STAROS
 
 // Regression: TabletReaderParams::has_predicate_above_iterator must reach SegmentReadOptions
 // through the lake reader path (TabletReader::get_segment_iterators builds RowsetReadOptions,
@@ -4785,7 +4788,11 @@ void LakeTabletReaderSpit::check_warm_ranges_of_bundled_segment(bool encrypted) 
     }
     write_two_rowsets_with_three_segments();
     constexpr int64_t kBundleOffset = 777;
+#ifdef USE_STAROS
     constexpr int64_t kBlockSize = 256;
+#else
+    constexpr int64_t kBlockSize = 1 << 20; // the fixed block size the warm uses outside StarOS builds
+#endif
     // Keep only rowset 2 and rewrite its single segment as if it sat at kBundleOffset of a bundle file.
     _tablet_metadata->mutable_rowsets()->DeleteSubrange(0, 1);
     auto* segment_meta = _tablet_metadata->mutable_rowsets(0)->mutable_segment_metas(0);
@@ -4811,7 +4818,9 @@ void LakeTabletReaderSpit::check_warm_ranges_of_bundled_segment(bool encrypted) 
     segment_meta->set_size(segment_size);
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
+#ifdef USE_STAROS
     ConfigResetGuard<int32_t> block_guard(&config::starlet_star_cache_block_size_bytes, kBlockSize);
+#endif
     ConfigResetGuard<bool> warm_guard(&config::lake_scan_warm_index, true);
     ConfigResetGuard<bool> open_guard(&config::lake_scan_parallel_segment_open, false);
     const bool old_scheduler = g_remote_io_scheduler_enabled.exchange(true);

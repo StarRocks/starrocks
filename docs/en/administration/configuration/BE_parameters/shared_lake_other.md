@@ -87,6 +87,15 @@ This topic introduces the following types of BE configurations:
 - Description: Whether a compaction task in a shared-data cluster holds its input Segment objects on its own Rowset instances for the whole task, so that the per-column-group passes of vertical compaction reuse them instead of reloading them through the metadata cache. Without holding, whenever the metadata cache cannot hold all input segments (a small `lake_segment_metadata_cache_limit_percent`, or a node crowded with many tablets), every pass reloads and re-parses every input segment; that cost is CPU-bound and proportional to the column count, and can slow a wide-table compaction by an order of magnitude or make it fail with repeated memory-limit retries. While holding, the task does not fill the shared metadata cache with its input segments or delete vectors, because the inputs are deleted right after compaction and caching them only evicts other tablets' entries. The memory cost is one set of input segment metadata per running task, accounted on the compaction task's memory tracker and released with the task. Set this item to `false` to restore the previous behavior, in which compaction reuses segments through the shared metadata cache and fills that cache with its inputs.
 - Introduced in: v4.2
 
+### enable_lake_compaction_range_split
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether parallel compaction in a shared-data cluster splits its input by sort key range. When this item is set to `true`, each subtask of a parallel compaction reads the data of all input rowsets within one sort key range, and the subtasks together write one rowset whose segments do not overlap. Range split applies only when every input segment records its sort key bounds. Otherwise, or when this item is set to `false`, parallel compaction groups whole rowsets or splits a large rowset by segment index, and the outputs of the subtasks may overlap. The maximum number of subtasks per tablet is set by the table property `lake_compaction_max_parallel`.
+- Introduced in: v4.2
+
 ### lake_compaction_stream_buffer_size_bytes
 
 - Default: 1048576
@@ -820,6 +829,33 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Is mutable: Yes
 - Description: The maximum number of inline cache items in Data Cache. For some particularly small cache blocks, Data Cache stores them in `inline` mode, which caches the block data and metadata together in memory.
 - Introduced in: v3.4.0
+
+### datacache_lru_shard_evict_fallback_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether an LRU shard of Data Cache can evict entries from the other shards when it is being refilled or cannot supply the whole charge by itself. `false` restores the behavior that a shard only evicts its own entries, and `datacache_lru_shard_refill_low_watermark_percent` and `datacache_lru_shard_refill_high_watermark_percent` are ignored.
+- Introduced in: -
+
+### datacache_lru_shard_refill_low_watermark_percent
+
+- Default: 50
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: An LRU shard of Data Cache is refilled from the largest shards instead of evicting its own entries once its usage drops below this percentage of its capacity, until it reaches `datacache_lru_shard_refill_high_watermark_percent`. The value must not exceed `datacache_lru_shard_refill_high_watermark_percent`. Setting both parameters to `0` disables the refill.
+- Introduced in: -
+
+### datacache_lru_shard_refill_high_watermark_percent
+
+- Default: 70
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The percentage of the shard capacity at which the refill of an LRU shard of Data Cache stops. Valid values: `datacache_lru_shard_refill_low_watermark_percent` to `100`. Setting both parameters to `0` disables the refill.
+- Introduced in: -
 
 ### datacache_mem_size
 
