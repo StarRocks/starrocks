@@ -584,6 +584,7 @@
         "enable_orc_libdeflate_decompression",
         "orc_writer_version",
         "remote_prefetch_window_blocks",
+        "remote_prefetch_window_min_blocks",
         "remote_prefetch_late_read_ahead_ratio",
         "starlet_star_cache_block_size_bytes"
       ]

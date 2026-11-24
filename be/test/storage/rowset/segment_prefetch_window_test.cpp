@@ -58,19 +58,25 @@ public:
         if (!supported) {
             return Status::NotSupported("warm_cache_async");
         }
-        auto handle = std::make_shared<Handle>();
+        auto handle = std::make_shared<Handle>(&pending);
         warms.push_back(Warm{offset, length, urgent, handle});
         return handle;
     }
 
     bool supported = true;
+    // Whether every warm-up asked for so far is still being fetched.
+    bool pending = false;
     std::vector<Warm> warms;
 
 private:
     class Handle final : public io::CacheWarmHandle {
     public:
+        explicit Handle(const bool* pending) : _pending(pending) {}
         size_t submitted_blocks() const override { return 0; }
-        size_t pending_blocks() const override { return 0; }
+        size_t pending_blocks() const override { return *_pending ? 1 : 0; }
+
+    private:
+        const bool* _pending;
     };
 };
 
@@ -151,10 +157,19 @@ protected:
 
     std::unique_ptr<SegmentPrefetchWindow> make_window(const SparseRange<>* range, rowid_t start_row,
                                                        size_t ahead_blocks, double late_ratio = 2.0,
-                                                       int64_t object_offset = 0, size_t block_size = kBlockSize) {
+                                                       int64_t object_offset = 0, size_t block_size = kBlockSize,
+                                                       size_t min_blocks = 0) {
         return std::make_unique<SegmentPrefetchWindow>(
                 std::vector<SegmentPrefetchWindow::Column>{{_reader, &_stream, object_offset}}, range, start_row,
-                ahead_blocks, late_ratio, block_size, &_stats);
+                ahead_blocks, late_ratio, block_size, &_stats, min_blocks);
+    }
+
+    // Cache blocks of pages [0, n).
+    size_t blocks_of_first_pages(size_t n) const {
+        const int64_t begin = _pages[0].pointer.offset;
+        const int64_t end = static_cast<int64_t>(_pages[n - 1].pointer.offset) + _pages[n - 1].pointer.size;
+        return static_cast<size_t>((end - 1) / static_cast<int64_t>(kBlockSize) -
+                                   begin / static_cast<int64_t>(kBlockSize) + 1);
     }
 
     std::shared_ptr<MemoryFileSystem> _fs;
@@ -197,6 +212,66 @@ TEST_F(SegmentPrefetchWindowTest, advance_bounds_read_ahead) {
     const size_t asked = _stream.warms.size();
     window->advance(0);
     EXPECT_EQ(asked, _stream.warms.size());
+}
+
+// A window with a smaller starting size holds that many blocks, and stays there while the reader never reaches a page
+// that is still being fetched.
+TEST_F(SegmentPrefetchWindowTest, window_starts_small_and_stays_while_reader_never_waits) {
+    SparseRange<> range(0, kRows);
+    const size_t min_blocks = blocks_of_first_pages(2);
+    auto window = make_window(&range, 0, 8 * min_blocks, 2.0, 0, kBlockSize, min_blocks);
+    window->advance(0);
+    EXPECT_EQ(min_blocks, window->ahead_blocks());
+
+    _stream.pending = false;
+    for (size_t p = 1; p < 6; ++p) {
+        window->advance(_pages[p].first);
+        EXPECT_LE(window->ahead_blocks(), min_blocks) << p;
+    }
+    EXPECT_EQ(0, _stats.remote_prefetch_window_grows);
+}
+
+// The window doubles, at most once per page, when the reader reaches a page still being fetched, up to its maximum.
+// The first page of a cold reader is always being fetched and does not count.
+TEST_F(SegmentPrefetchWindowTest, window_grows_when_reader_reaches_pending_page) {
+    SparseRange<> range(0, kRows);
+    const size_t min_blocks = blocks_of_first_pages(2);
+    const size_t max_blocks = 4 * min_blocks;
+    auto window = make_window(&range, 0, max_blocks, 2.0, 0, kBlockSize, min_blocks);
+    _stream.pending = true;
+
+    window->advance(0);
+    window->advance(0);
+    EXPECT_EQ(0, _stats.remote_prefetch_window_grows);
+    EXPECT_EQ(min_blocks, window->ahead_blocks());
+
+    // Past the first page, the reader reaches the second one, still being fetched: the window doubles and tops up.
+    window->advance(_pages[1].first);
+    EXPECT_EQ(1, _stats.remote_prefetch_window_grows);
+    EXPECT_GT(window->ahead_blocks(), min_blocks);
+    EXPECT_LE(window->ahead_blocks(), 2 * min_blocks);
+
+    // Again within the same page: no second growth.
+    window->advance(_pages[1].first + 1);
+    EXPECT_EQ(1, _stats.remote_prefetch_window_grows);
+
+    // Page after page, it grows to its maximum and no further.
+    for (size_t p = 2; p < _pages.size() && p < 12; ++p) {
+        window->advance(_pages[p].first);
+        EXPECT_LE(window->ahead_blocks(), max_blocks) << p;
+    }
+    EXPECT_EQ(2, _stats.remote_prefetch_window_grows);
+}
+
+// Without a smaller starting size (or one not below the maximum), the window is at its maximum from the start.
+TEST_F(SegmentPrefetchWindowTest, window_without_min_starts_at_max) {
+    SparseRange<> range(0, kRows);
+    auto window = make_window(&range, 0, 4, 2.0, 0, kBlockSize, 8);
+    window->advance(0);
+    EXPECT_EQ(4u, window->ahead_blocks());
+    _stream.pending = true;
+    window->advance(_pages[1].first);
+    EXPECT_EQ(0, _stats.remote_prefetch_window_grows);
 }
 
 // Once the reader is past a page, its warm-up is withdrawn and the window moves on.

@@ -507,7 +507,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：查询的 Segment Reader 最多提前请求多少个 Data Cache 缓存块，包括排队中、读取中以及已读取但尚未消费的缓存块。该参数限制 Reader 超前的距离，缓存块何时读取由调度器决定。导入、Compaction 等后台读取不预读。设为 `0` 关闭预读。修改后对之后打开的 Segment Reader 生效。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 描述：查询的 Segment Reader 最多提前请求多少个 Data Cache 缓存块，包括排队中、读取中以及已读取但尚未消费的缓存块。该参数限制 Reader 超前的距离，缓存块何时读取由调度器决定。导入、Compaction 等后台读取不预读。设为 `0` 关闭预读。Reader 的预读窗口从较小的值起步，最多增长到该值（参见 `remote_prefetch_window_min_blocks`）。修改后对之后打开的 Segment Reader 生效。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_prefetch_window_min_blocks
+
+- 默认值：16
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：查询的 Segment Reader 预读窗口的初始大小，单位为 Data Cache 缓存块。Reader 每次读到仍在拉取中的页，窗口就翻倍，最多增长到 `remote_prefetch_window_blocks`。从不需要等待缓存块的 Reader（例如受 CPU 限制的 Reader）保持较小的窗口，不会远远超前于实际读取的位置。设为 `0`，或不小于 `remote_prefetch_window_blocks` 的值时，窗口从一开始就是 `remote_prefetch_window_blocks`。Query Profile 中的 RemotePrefetchWindowGrows 记录窗口增长的次数。修改后对之后打开的 Segment Reader 生效。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
 - 引入版本：-
 
 ### remote_read_adaptive_limit

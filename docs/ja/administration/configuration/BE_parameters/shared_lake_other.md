@@ -501,7 +501,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: クエリの Segment Reader が、消費中の位置より先に要求する Data Cache ブロックの最大数。キュー中、取得中、取得済みで未読のブロックを含みます。Reader がどこまで先行するかを制限するもので、ブロックをいつ取得するかはスケジューラが決めます。ロード、Compaction などのバックグラウンド読み取りは先読みしません。`0` で先読みを無効にします。変更は以降に開かれる Segment Reader に反映されます。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 説明: クエリの Segment Reader が、消費中の位置より先に要求する Data Cache ブロックの最大数。キュー中、取得中、取得済みで未読のブロックを含みます。Reader がどこまで先行するかを制限するもので、ブロックをいつ取得するかはスケジューラが決めます。ロード、Compaction などのバックグラウンド読み取りは先読みしません。`0` で先読みを無効にします。Reader の先読みウィンドウは小さい値から始まり、この値まで拡大します（`remote_prefetch_window_min_blocks` を参照）。変更は以降に開かれる Segment Reader に反映されます。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_prefetch_window_min_blocks
+
+- デフォルト: 16
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: クエリの Segment Reader の先読みウィンドウの初期サイズ（Data Cache ブロック数）。Reader がまだ取得中のページに到達するたびにウィンドウは 2 倍になり、`remote_prefetch_window_blocks` まで拡大します。ブロックを待つことのない Reader（CPU がボトルネックの Reader など）は小さいウィンドウのままで、読み取り位置よりはるか先まで取得することはありません。`0`、または `remote_prefetch_window_blocks` 以上の値を指定すると、ウィンドウは最初から `remote_prefetch_window_blocks` になります。Query Profile の RemotePrefetchWindowGrows にウィンドウの拡大回数が表示されます。変更は以降に開かれる Segment Reader に反映されます。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
 - 導入バージョン: -
 
 ### remote_read_adaptive_limit

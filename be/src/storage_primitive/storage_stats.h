@@ -208,6 +208,9 @@ struct OlapReaderStatistics {
     int64_t remote_prefetch_ranges = 0;
     // Segment readers that started to read their late-materialized columns ahead.
     int64_t remote_prefetch_late_read_ahead = 0;
+    // Times a read-ahead window grew because its reader reached a page still being fetched
+    // (remote_prefetch_window_min_blocks).
+    int64_t remote_prefetch_window_grows = 0;
     // The first chunk of each segment reader, from its first get_next after it was opened or reused: how many, and
     // their wall time, so that starting readers cold shows apart from the steady read.
     int64_t segment_first_chunks = 0;
@@ -421,6 +424,7 @@ struct OlapReaderStatistics {
         remote_prefetch_rejected_blocks += other.remote_prefetch_rejected_blocks;
         remote_prefetch_ranges += other.remote_prefetch_ranges;
         remote_prefetch_late_read_ahead += other.remote_prefetch_late_read_ahead;
+        remote_prefetch_window_grows += other.remote_prefetch_window_grows;
         segment_first_chunks += other.segment_first_chunks;
         segment_first_chunk_ns += other.segment_first_chunk_ns;
         segment_read_ahead_started += other.segment_read_ahead_started;

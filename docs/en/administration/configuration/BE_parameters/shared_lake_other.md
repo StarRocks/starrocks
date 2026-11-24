@@ -510,7 +510,16 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of Data Cache blocks that a query's segment reader requests ahead of what it is consuming, including blocks that are queued, being fetched, or fetched but not read yet. It limits how far a reader runs ahead of itself; when the blocks are fetched is decided by the scheduler. Loads, compaction, and other background reads do not read ahead. `0` disables the read-ahead. A change applies to segment readers opened afterwards. Takes effect only when `remote_io_scheduler_enable` is `true`.
+- Description: The maximum number of Data Cache blocks that a query's segment reader requests ahead of what it is consuming, including blocks that are queued, being fetched, or fetched but not read yet. It limits how far a reader runs ahead of itself; when the blocks are fetched is decided by the scheduler. Loads, compaction, and other background reads do not read ahead. `0` disables the read-ahead. A reader's window starts smaller and grows up to this value (see `remote_prefetch_window_min_blocks`). A change applies to segment readers opened afterwards. Takes effect only when `remote_io_scheduler_enable` is `true`.
+- Introduced in: -
+
+### remote_prefetch_window_min_blocks
+
+- Default: 16
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of Data Cache blocks that the read-ahead window of a query's segment reader starts with. Each time the reader reaches a page whose blocks are still being fetched, the window doubles, up to `remote_prefetch_window_blocks`. A reader that never waits for its blocks, for example one that is limited by CPU, keeps the small window and does not fetch far ahead of what it reads. `0`, or a value that is not smaller than `remote_prefetch_window_blocks`, makes the window `remote_prefetch_window_blocks` from the start. The query profile reports RemotePrefetchWindowGrows. A change applies to segment readers opened afterwards. Takes effect only when `remote_io_scheduler_enable` is `true`.
 - Introduced in: -
 
 ### remote_read_adaptive_limit

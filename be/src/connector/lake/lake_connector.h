@@ -367,6 +367,7 @@ private:
     RuntimeProfile::Counter* _remote_prefetch_rejected_block_counter = nullptr;
     RuntimeProfile::Counter* _remote_prefetch_range_counter = nullptr;
     RuntimeProfile::Counter* _remote_prefetch_late_read_ahead_counter = nullptr;
+    RuntimeProfile::Counter* _remote_prefetch_window_grows_counter = nullptr;
 
     RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
 };
