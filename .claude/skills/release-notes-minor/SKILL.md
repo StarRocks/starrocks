@@ -21,8 +21,8 @@ Security / rewrite rules; they apply here unchanged.
 - `$ARGUMENTS` = `X.Y.0`. If absent, ask. If the patch is not `.0`, stop and point to `release-notes`.
 - **minor** = `X.Y`; **branch** = `branch-X.Y`; **file** = `docs/en/release_notes/release-X.Y.md`
   (does not exist yet: create it).
-- **prev minor** = the line before (4.2 -> 4.1). **Baseline** = the newest tag of the
-  previous minor that is on its branch, e.g. `4.1.8`, plus the fork point (see Step 1).
+- **prev minor** = the line before (4.2 -> 4.1). **Baseline** = the fork points of both
+  branches and the previous minor's branch tip (see Step 1).
 - Ask the user, never guess: the official release date, and whether `X.Y.0` is already tagged.
   If the tag does not exist, draft against the tip of `branch-X.Y` and say so in the PR.
 
@@ -36,20 +36,20 @@ clone is enough, and makes no GitHub API calls):
 ```bash
 git clone --bare --filter=tree:0 https://github.com/StarRocks/starrocks.git sr.git   # once
 git -C sr.git fetch --filter=tree:0 origin '+refs/heads/branch-4.1:refs/heads/branch-4.1' \
-    '+refs/heads/branch-4.2:refs/heads/branch-4.2' '+refs/tags/4.1.8:refs/tags/4.1.8'
-REPO_DIR=sr.git bash .claude/skills/release-notes-minor/scripts/collect-minor-prs.sh \
-    branch-4.1 branch-4.2 4.1.8 /tmp/notes-4.2
+    '+refs/heads/branch-4.2:refs/heads/branch-4.2' '+refs/heads/branch-4.0:refs/heads/branch-4.0' \
+    '+refs/heads/branch-3.5:refs/heads/branch-3.5'
+REPO_DIR=sr.git OLDER_BRANCHES='branch-4.0 branch-3.5' bash .claude/skills/release-notes-minor/scripts/collect-minor-prs.sh \
+    branch-4.1 branch-4.2 branch-4.1 /tmp/notes-4.2
 ```
 
 It computes: main commits between the two fork points, plus commits only on the new branch
-since its fork, minus PRs already backported into the previous minor up to its last patch tag.
+since its fork, minus PRs already on the previous minor's branch tip (not just its last tag: fixes queued for its next patch are not new either) and on the older supported branches.
 Each commit is resolved to its original `main` PR (leftmost `backport #N`, else the trailing
 `(#N)`). Output: `summary.txt` and tiers `feature.tsv`, `enhancement.tsv`, `bugfix.tsv`,
 `security.tsv`, `noprefix.tsv` (`number<TAB>sha<TAB>subject`). `[Refactor]`, `[Tool]`, `[Doc]`,
-`[UT]` are only counted. If `X.Y.0` is tagged, pass `NEW_REF=X.Y.0`. Ask the user for the
-previous minor's last patch tag if it is not obvious.
+`[UT]` are only counted. If `X.Y.0` is tagged, pass `NEW_REF=X.Y.0`. Which older branches to list in `OLDER_BRANCHES` is the user's call (the supported lines).
 
-On 4.2 this gave about 2500 new PRs (77 feature, 642 enhancement, 552 bugfix, 6 security, 7
+On 4.2 this gave about 2260 new PRs (77 feature, 632 enhancement, 379 bugfix, 6 security, 7
 unprefixed). That is the candidate pool, not the number of entries: the 4.1.0 notes have about
 110 bullets for about 170 PRs. Do not read PRs one by one.
 
@@ -62,7 +62,9 @@ unprefixed). That is the candidate pool, not the number of entries: the 4.1.0 no
 2. **Enhancements.** Pick user-visible ones: new syntax, functions, config items, variables,
    system tables, new connector or format support, large performance wins. Skip internal
    tuning. Group by area.
-3. **Bug fixes.** Only notable ones: crashes, wrong results, data loss, security-relevant,
+3. **Bug fixes.** Enhancements and fixes are normally backported, so most of them were already
+   removed in Step 1; what is left are mostly fixes to code that only exists in the new minor, which
+   users never ran. Expect a short list. Keep only what a user of the previous minor could hit: crashes, wrong results, data loss, security-relevant,
    hangs. Skip the long tail.
 4. **Security.** Every `security.tsv` line, plus any bug fix that mentions CVE, SSRF, injection.
 5. **Behavior changes.** Fetch labels for the shortlisted PRs only (`gh pr view N --json
@@ -76,7 +78,7 @@ Verify against the code before writing anything that says "new", "default", or "
   the only number resolution used.
 - **A default value comes from the final file at the tag** (`git show <ref>:path`), not a diff.
 - **The code beats the commit subject.**
-- **"Is this new?"** Compare existence at the previous minor's last tag and the new ref: config
+- **"Is this new?"** Compare existence at the previous minor's branch tip and the new ref: config
   items, session variables, functions, grammar, metrics, `information_schema` columns.
 - **Confirm a path exists before concluding a feature is absent.**
 - Anything already in `release-<prev>.md` is not new.
