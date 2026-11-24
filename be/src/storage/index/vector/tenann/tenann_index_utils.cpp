@@ -147,10 +147,17 @@ StatusOr<tenann::IndexMeta> get_vector_meta(const std::shared_ptr<TabletIndex>& 
 
     // support dynamic setting of query parameters
     for (const auto& entry : query_params) {
-        if (entry.first == starrocks::index::vector::RANGE_SEARCH_CONFIDENCE) {
-            meta.search_params()[entry.first] = std::stof(entry.second.c_str());
+        // tenann only reads the canonical "efSearch" key. Session ann_params may
+        // carry the documented spelling "efsearch", or any other case that FE
+        // already accepts. Normalize so the value overwrites the default instead
+        // of becoming a second key that nothing reads (issue 83465).
+        const std::string& key = boost::algorithm::iequals(entry.first, starrocks::index::vector::EF_SEARCH)
+                                         ? starrocks::index::vector::EF_SEARCH
+                                         : entry.first;
+        if (key == starrocks::index::vector::RANGE_SEARCH_CONFIDENCE) {
+            meta.search_params()[key] = std::stof(entry.second.c_str());
         } else {
-            meta.search_params()[entry.first] = std::atoi(entry.second.c_str());
+            meta.search_params()[key] = std::atoi(entry.second.c_str());
         }
     }
 
