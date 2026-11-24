@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.MockedMetadataMgr;
@@ -33,6 +34,7 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPartitionType;
 import mockit.Invocation;
@@ -195,11 +197,11 @@ public class DeletePlanTest extends PlanTestBase {
             }
         });
         try {
-            String plan = getDeleteExecPlanString("delete from iceberg0.unpartitioned_db.t0_v2 where id > 0");
+            String plan = getDeleteExecPlanString("delete from iceberg0.unpartitioned_db.t0 where id > 0");
             assertTrue(plan.contains("ICEBERG METADATA DELETE"), plan);
 
             // The subquery match is an apply below the filter, so the filter alone is not the delete condition
-            plan = getDeleteExecPlanString("delete from iceberg0.unpartitioned_db.t0_v2 "
+            plan = getDeleteExecPlanString("delete from iceberg0.unpartitioned_db.t0 "
                     + "where id in (select id from iceberg0.partitioned_db.t1) and id > 0");
             assertFalse(plan.contains("ICEBERG METADATA DELETE"), plan);
             assertTrue(plan.contains("ICEBERG DELETE SINK"), plan);
