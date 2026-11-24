@@ -6,7 +6,11 @@
 # and includes everything already shipped in the previous minor's patches). Instead:
 #   candidates = main commits between the two fork points
 #              + commits that landed only on the new branch after its fork (backports)
-#   minus      = PRs already backported into the previous minor up to its last patch tag.
+#   minus      = PRs already backported to the previous minor (up to <prev_ref>, normally its
+#                branch tip, so fixes queued for its next patch are not counted as new) and to
+#                any OLDER_BRANCHES (e.g. branch-4.0 branch-3.5).
+# Enhancements and bug fixes are normally backported, so what is left of them is mostly work on
+# features that only exist in the new minor; treat the bugfix tier as a short list, not a log.
 # Every commit is resolved to its ORIGINAL main PR number: the leftmost "backport #N" in the
 # subject, else the trailing "(#N)".
 #
@@ -15,9 +19,10 @@
 # separately for the shortlisted PRs).
 #
 # Usage:
-#   collect-minor-prs.sh <prev_branch> <new_branch> <prev_last_tag> <out_dir>
-#   e.g. collect-minor-prs.sh branch-4.1 branch-4.2 4.1.8 /tmp/notes-4.2
-# Env: REPO_DIR (default: current dir), MAIN (default: main), NEW_REF (default: <new_branch>; set
+#   collect-minor-prs.sh <prev_branch> <new_branch> <prev_ref> <out_dir>
+#   e.g. OLDER_BRANCHES='branch-4.0 branch-3.5' collect-minor-prs.sh branch-4.1 branch-4.2 branch-4.1 /tmp/notes-4.2
+#   <prev_ref> is the previous minor's branch (or its newest tag, if the branch holds unreleased work to ignore).
+# Env: REPO_DIR (default: current dir), MAIN (default: main), OLDER_BRANCHES (space-separated), NEW_REF (default: <new_branch>; set
 #      to the X.Y.0 tag once it exists).
 #
 # Output (in out_dir): summary.txt plus one TSV per tier: number<TAB>sha<TAB>subject
@@ -26,9 +31,10 @@
 
 set -euo pipefail
 
-PREV_BRANCH="${1:?usage: collect-minor-prs.sh <prev_branch> <new_branch> <prev_last_tag> <out_dir>}"
+PREV_BRANCH="${1:?usage: collect-minor-prs.sh <prev_branch> <new_branch> <prev_ref> <out_dir>}"
 NEW_BRANCH="${2:?}"
-PREV_LAST_TAG="${3:?}"
+PREV_REF="${3:?}"
+OLDER_BRANCHES="${OLDER_BRANCHES:-}"
 OUT="${4:?}"
 MAIN="${MAIN:-main}"
 NEW_REF="${NEW_REF:-$NEW_BRANCH}"
@@ -48,7 +54,10 @@ resolve() {
   }'
 }
 
-git log --format='%H%x09%s' "$F_PREV..$PREV_LAST_TAG" | resolve | cut -f1 | sort -u > "$OUT/.shipped_in_prev"
+{
+  git log --format='%H%x09%s' "$F_PREV..$PREV_REF"
+  for b in $OLDER_BRANCHES; do git log --format='%H%x09%s' "$F_PREV..$b"; done
+} | resolve | cut -f1 | sort -u > "$OUT/.shipped_in_prev"
 {
   git log --format='%H%x09%s' "$F_PREV..$F_NEW"               # main between the two fork points
   git log --format='%H%x09%s' "$F_NEW..$NEW_REF"               # only on the new branch since its fork
@@ -74,7 +83,7 @@ awk -F'\t' -v out="$OUT" '
   echo "prev fork point : ${F_PREV:0:10} ($PREV_BRANCH)"
   echo "new fork point  : ${F_NEW:0:10} ($NEW_BRANCH), new ref: $NEW_REF"
   echo "all PRs in range            : $(wc -l < "$OUT/.all" | tr -d ' ')"
-  echo "already shipped in $PREV_LAST_TAG : $(( $(wc -l < "$OUT/.all") - $(wc -l < "$OUT/.new") ))"
+  echo "already in $PREV_REF/older  : $(( $(wc -l < "$OUT/.all") - $(wc -l < "$OUT/.new") ))"
   echo "new in this minor           : $(wc -l < "$OUT/.new" | tr -d ' ')"
   cat "$OUT/.counts"
 } | tee "$OUT/summary.txt"
