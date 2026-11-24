@@ -108,7 +108,7 @@ public class LimitPruneTabletsRule extends TransformationRule {
                 if (totalRow >= limit) {
                     break;
                 }
-                long version = physicalPartition.getVisibleVersion();
+                long version = olapTable.getVisibleVersionForQuery(physicalPartition);
                 MaterializedIndex index = physicalPartition.getQueryableIndex(olapScanOperator.getSelectedIndexMetaId());
 
                 for (Tablet tablet : index.getTablets()) {
@@ -137,6 +137,9 @@ public class LimitPruneTabletsRule extends TransformationRule {
             return Collections.emptyList();
         }
 
+        // The row counts are the live ones, which on shared-data move at publish: they can count rows of a load
+        // newer than the versions the table copy recorded, so the plan has to read versions at least as new.
+        olapTable.markPlanningVersionsForRecheck();
         LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
         return Lists.newArrayList(OptExpression.create(
                 builder.withOperator(olapScanOperator).setSelectedTabletId(result).build(),

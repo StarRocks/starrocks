@@ -297,6 +297,8 @@ public class PlanFragmentBuilder {
                                               List<String> colNames,
                                               TResultSinkType resultSinkType,
                                               boolean hasOutputFragment, boolean isShortCircuit) {
+        // Before any scan reads the versions its table copy recorded.
+        PlanningVersionRecheck.recheck(plan);
         UKFKConstraintsCollector.collectColumnConstraints(plan);
         ExecPlan execPlan = new ExecPlan(connectContext, colNames, plan, outputColumns, isShortCircuit);
         boolean planned = false;
