@@ -36,7 +36,7 @@ jobs:
     runs-on: [self-hosted, normal]
     timeout-minutes: 300
     container:
-      image: starrocks/dev-env-ubuntu:main-latest
+      image: starrocks/dev-env-ubuntu:latest
     outputs:
       sha: ${{ steps.rev.outputs.sha }}
     steps:
