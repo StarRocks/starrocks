@@ -109,6 +109,10 @@ public:
     Status update_inline_cache_count_limit(int32_t limit) override {
         return _engine->update_inline_cache_count_limit(limit);
     }
+    Status update_lru_shard_refill(bool fallback_enable, uint32_t low_watermark_percent,
+                                   uint32_t high_watermark_percent) override {
+        return _engine->update_lru_shard_refill(fallback_enable, low_watermark_percent, high_watermark_percent);
+    }
     const DataCacheDiskMetrics cache_metrics() const override { return _engine->cache_metrics(); }
     void record_read_remote(size_t size, int64_t latency_us) override { _engine->record_read_remote(size, latency_us); }
     void record_read_cache(size_t size, int64_t latency_us) override { _engine->record_read_cache(size, latency_us); }
