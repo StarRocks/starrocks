@@ -2488,7 +2488,7 @@ public class MvRewriteTest extends MVTestBase {
         OlapTable table = (OlapTable) starRocksAssert.getTable("test", "t_rb1226");
         for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
             long version = partition.getVisibleVersion();
-            for (Tablet tablet : partition.getLatestBaseIndex().getTablets()) {
+            for (Tablet tablet : partition.getBaseIndex().getTablets()) {
                 for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                     replica.updateRowCount(version, 100, 10);
                 }
