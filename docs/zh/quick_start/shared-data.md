@@ -42,7 +42,7 @@ import AIStorLicense from '../_assets/commonMarkdown/aistor_license.mdx'
 
 - [Docker](https://docs.docker.com/engine/install/)
 - 分配给 Docker 的 4 GB RAM
-- 分配给 Docker 的 10 GB 可用磁盘空间
+- 分配给 Docker 的 20 GB 可用磁盘空间
 
 ### SQL 客户端
 

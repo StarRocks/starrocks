@@ -42,7 +42,7 @@ import AIStorLicense from '../_assets/commonMarkdown/aistor_license.mdx'
 
 - [Docker](https://docs.docker.com/engine/install/)
 - Docker に割り当てられた 4 GB の RAM
-- Docker に割り当てられた 10 GB の空きディスクスペース
+- Docker に割り当てられた 20 GB の空きディスクスペース
 
 ### SQL クライアント
 

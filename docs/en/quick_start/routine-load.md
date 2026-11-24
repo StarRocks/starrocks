@@ -43,7 +43,7 @@ There is a lot of information in this document, and it is presented with step-by
 
 - [Docker](https://docs.docker.com/engine/install/)
 - 4 GB RAM assigned to Docker
-- 10 GB free disk space assigned to Docker
+- 20 GB free disk space assigned to Docker
 
 ### SQL client
 

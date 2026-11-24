@@ -42,7 +42,7 @@ Routine load 是一种使用 Apache Kafka 或在本实验中使用 Redpanda，�
 
 - [Docker](https://docs.docker.com/engine/install/)
 - 为 Docker 分配 4 GB RAM
-- 为 Docker 分配 10 GB 可用磁盘空间
+- 为 Docker 分配 20 GB 可用磁盘空间
 
 ### SQL 客户端
 
