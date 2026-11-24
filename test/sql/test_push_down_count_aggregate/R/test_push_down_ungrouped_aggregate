@@ -1,0 +1,37 @@
+-- name: test_push_down_ungrouped_aggregate
+DROP TABLE IF EXISTS pdu_t_${uuid0};
+-- result:
+-- !result
+CREATE TABLE pdu_t_${uuid0} (k INT, v SMALLINT NOT NULL)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO pdu_t_${uuid0} VALUES (1, 0), (2, 5);
+-- result:
+-- !result
+set cbo_push_down_aggregate_mode = 1;
+-- result:
+-- !result
+SELECT a.k FROM pdu_t_${uuid0} a, pdu_t_${uuid0} b WHERE b.v < 0 GROUP BY a.k HAVING max(b.v) IS NULL;
+-- result:
+-- !result
+SELECT a.k, max(b.v) FROM pdu_t_${uuid0} a, pdu_t_${uuid0} b WHERE b.v < 0 GROUP BY a.k;
+-- result:
+-- !result
+SELECT 1 FROM pdu_t_${uuid0} a, pdu_t_${uuid0} b WHERE b.v < 0 GROUP BY 'a' HAVING max(b.v) IS NULL;
+-- result:
+-- !result
+SELECT a.k, max(b.v) FROM pdu_t_${uuid0} a, pdu_t_${uuid0} b GROUP BY a.k ORDER BY a.k;
+-- result:
+1	5
+2	5
+-- !result
+set cbo_push_down_aggregate_mode = 0;
+-- result:
+-- !result
+SELECT a.k FROM pdu_t_${uuid0} a, pdu_t_${uuid0} b WHERE b.v < 0 GROUP BY a.k HAVING max(b.v) IS NULL;
+-- result:
+-- !result
+DROP TABLE pdu_t_${uuid0};
+-- result:
+-- !result

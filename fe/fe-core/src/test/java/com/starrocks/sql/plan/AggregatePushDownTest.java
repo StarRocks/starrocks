@@ -75,13 +75,32 @@ public class AggregatePushDownTest extends PlanTestBase {
     }
 
     @Test
+    public void testAggregateNotPushedUngrouped() throws Exception {
+        // Not only count(): max/min/sum pushed without a real grouping key are scalar aggregates too, whose NULL
+        // phantom row for an empty side the keyless join pairs with every row of the other side, so groups show
+        // up for an empty join (StarRocks/starrocks#84129).
+        for (String sql : new String[] {
+                "select t0.v1, max(t1.v4) from t0, t1 where t1.v5 < 0 group by t0.v1",
+                "select t0.v1 from t0, t1 group by t0.v1 having max(t1.v4) is null",
+                "select 'a', sum(t1.v4) from t0, t1 group by 'a'",
+                "select k, max(v) from (select 1 as k, v1 as v from t0 union all select 1, v4 from t1) u group by k"}) {
+            String plan = getFragmentPlan(sql);
+            Assertions.assertEquals(1, StringUtils.countMatches(plan, ":AGGREGATE "), plan);
+            assertNotContains(plan, "group by: \n");
+        }
+        // sanity: an aggregate of the side that owns the group-by key is still pushed below the cross join
+        String plan = getFragmentPlan("select t0.v1, max(t0.v2) from t0, t1 group by t0.v1");
+        Assertions.assertEquals(2, StringUtils.countMatches(plan, ":AGGREGATE "), plan);
+    }
+
+    @Test
     public void testCountNotPushedBelowKeylessJoin() throws Exception {
         // A count() pushed down with an empty group-by set degenerates into a scalar aggregate
         // that always emits exactly one row, even when its side has zero input rows. Re-joining
         // that phantom row through a keyless join (CROSS JOIN, or an INNER JOIN whose condition
         // contributes no columns) would corrupt the join's cardinality instead of correctly
         // producing no rows/groups, so both the collector and the rewriter must refuse to push count()
-        // in that shape (PushDownAggregateUtils#isUngroupedCountPush).
+        // in that shape (PushDownAggregateUtils#isUngroupedPush).
         String crossJoinPlan = getFragmentPlan("select t1.v4, count(*) from t0, t1 group by t1.v4");
         Assertions.assertEquals(1, StringUtils.countMatches(crossJoinPlan, ":AGGREGATE "));
         assertNotContains(crossJoinPlan, "group by: \n");

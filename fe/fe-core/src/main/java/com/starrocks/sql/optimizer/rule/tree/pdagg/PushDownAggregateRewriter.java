@@ -440,8 +440,8 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         // Re-check the same guard the collector applies, against the group-by set this pass actually
         // built. The collector may derive a partial group-by from an expression spanning both join sides
         // (`group by t0.v1 + t1.v4` -> `t0.v1 + NULL`) while the loop above drops that entry outright, so
-        // a push the collector accepted as grouped can still be ungrouped here. See isUngroupedCountPush.
-        if (PushDownAggregateUtils.isUngroupedCountPush(childContext)) {
+        // a push the collector accepted as grouped can still be ungrouped here. See isUngroupedPush.
+        if (PushDownAggregateUtils.isUngroupedPush(childContext)) {
             return process(joinOpt.inputAt(child), AggregatePushDownContext.EMPTY);
         }
 
@@ -465,8 +465,8 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         }
 
         // Mirror of the collector's last-line-of-defence check: this is where the partial aggregate is
-        // actually built, so refuse here too if the count would end up ungrouped. See isUngroupedCountPush.
-        if (PushDownAggregateUtils.isUngroupedCountPush(context)) {
+        // actually built, so refuse here too if the aggregate would end up ungrouped. See isUngroupedPush.
+        if (PushDownAggregateUtils.isUngroupedPush(context)) {
             return visit(optExpression, context);
         }
 

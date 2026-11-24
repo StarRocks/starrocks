@@ -1,0 +1,16 @@
+-- name: test_push_down_ungrouped_aggregate
+-- description: Regression for StarRocks/starrocks#84129. An aggregate pushed below a keyless join without any
+--              grouping key is a scalar aggregate: it emits one NULL row for an empty side, which the join
+--              pairs with every row of the other side, so groups appeared for an empty join.
+DROP TABLE IF EXISTS pdu_t_${uuid0};
+CREATE TABLE pdu_t_${uuid0} (k INT, v SMALLINT NOT NULL)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+INSERT INTO pdu_t_${uuid0} VALUES (1, 0), (2, 5);
+set cbo_push_down_aggregate_mode = 1;
+SELECT a.k FROM pdu_t_${uuid0} a, pdu_t_${uuid0} b WHERE b.v < 0 GROUP BY a.k HAVING max(b.v) IS NULL;
+SELECT a.k, max(b.v) FROM pdu_t_${uuid0} a, pdu_t_${uuid0} b WHERE b.v < 0 GROUP BY a.k;
+SELECT 1 FROM pdu_t_${uuid0} a, pdu_t_${uuid0} b WHERE b.v < 0 GROUP BY 'a' HAVING max(b.v) IS NULL;
+SELECT a.k, max(b.v) FROM pdu_t_${uuid0} a, pdu_t_${uuid0} b GROUP BY a.k ORDER BY a.k;
+set cbo_push_down_aggregate_mode = 0;
+SELECT a.k FROM pdu_t_${uuid0} a, pdu_t_${uuid0} b WHERE b.v < 0 GROUP BY a.k HAVING max(b.v) IS NULL;
+DROP TABLE pdu_t_${uuid0};
