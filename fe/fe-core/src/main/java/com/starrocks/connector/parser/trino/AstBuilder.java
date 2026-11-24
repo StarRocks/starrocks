@@ -34,6 +34,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QualifiedName;
@@ -418,7 +419,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 collect(Collectors.toList());
         boolean isDistinct = node.getSelect().isDistinct();
         SelectList selectList = new SelectList(selectListItems, isDistinct);
-        Relation from = (Relation) processOptional(node.getFrom(), context);
+        Relation from = normalizeStandaloneUnnest((Relation) processOptional(node.getFrom(), context));
 
         // from == null means a statement without from or from dual, add a single row of null values here
         if (from == null) {
@@ -503,43 +504,23 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitUnnest(Unnest node, ParseTreeContext context) {
         List<Expr> arguments = visit(node.getExpressions(), context, Expr.class);
-        List<Expr> expressions = new ArrayList<>();
-
-        for (Expr arg : arguments) {
-            if (arg instanceof ArrayExpr) {
-                if (!arg.getChildren().isEmpty()) {
-                    // need to covert array[row(1,2), row(3,4))] to array[1,3], array[2,4], so SR could unnest it
-                    Expr firstArrayElement = arg.getChildren().get(0);
-                    if (firstArrayElement instanceof FunctionCallExpr && ((FunctionCallExpr) firstArrayElement).getFunctionName().
-                            equalsIgnoreCase("row")) {
-                        List<List<Expr>> items = new ArrayList<>();
-                        for (Expr row : arg.getChildren()) {
-                            int rowIndex = 0;
-                            for (Expr literal : row.getChildren()) {
-                                if (items.size() <= rowIndex) {
-                                    items.add(new ArrayList<>());
-                                    items.get(rowIndex).add(literal);
-                                } else {
-                                    items.get(rowIndex).add(literal);
-                                }
-                                ++rowIndex;
-                            }
-                        }
-
-                        for (List<Expr> item : items) {
-                            Expr arrayExpr = new ArrayExpr(null, item);
-                            expressions.add(arrayExpr);
-                        }
-                        continue;
-                    }
-                }
-            }
-            expressions.add(arg);
-        }
-
-        FunctionCallExpr functionCallExpr = new FunctionCallExpr("unnest", expressions);
-        TableFunctionRelation tableFunctionRelation = new TableFunctionRelation(functionCallExpr);
+        // Keep each array argument intact. Which ROW fields become columns depends on the analyzed element types,
+        // so the analyzer derives the visible columns and the planner extracts the fields after UNNEST.
+        TableFunctionRelation tableFunctionRelation = new TableFunctionRelation(new FunctionCallExpr("unnest", arguments));
+        tableFunctionRelation.setExpandRowFields(true);
         return tableFunctionRelation;
+    }
+
+    // Trino accepts UNNEST anywhere a relation can appear, but StarRocks only accepts a bare table function on
+    // the right side of a lateral join. A standalone UNNEST, or one on the left side of a join, has no left input
+    // to correlate with, so normalize it the same way as TABLE(unnest(...)): a lateral join with a one-row
+    // relation that exposes only the UNNEST columns. An UNNEST on the right side of a join stays attached to its
+    // left input and can still reference that input's columns.
+    private static Relation normalizeStandaloneUnnest(Relation relation) {
+        if (relation instanceof TableFunctionRelation) {
+            return new NormalizedTableFunctionRelation((TableFunctionRelation) relation);
+        }
+        return relation;
     }
 
     @Override
@@ -677,7 +658,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitJoin(Join node, ParseTreeContext context) {
-        Relation left = (Relation) visit(node.getLeft(), context);
+        Relation left = normalizeStandaloneUnnest((Relation) visit(node.getLeft(), context));
         Relation right = (Relation) visit(node.getRight(), context);
         JoinOperator joinType = JOIN_TYPE_MAP.get(node.getType());
         if (joinType == null) {
