@@ -115,4 +115,33 @@ TEST_F(PercentileFunctionsTest, percentileNullTest) {
     ASSERT_TRUE(result->is_null(0));
 }
 
+// A quantile outside [0, 1] and an empty percentile have no answer: NULL, not NaN.
+TEST_F(PercentileFunctionsTest, percentileApproxRawWithoutAnswerIsNull) {
+    PercentileValue empty;
+    PercentileValue five;
+    five.add(5);
+    auto percentiles = PercentileColumn::create();
+    percentiles->append(&five);
+    percentiles->append(&five);
+    percentiles->append(&five);
+    percentiles->append(&empty);
+    auto quantiles = DoubleColumn::create();
+    quantiles->append(0.5);
+    quantiles->append(-1);
+    quantiles->append(1.5);
+    quantiles->append(0.5);
+    Columns columns;
+    columns.emplace_back(std::move(percentiles));
+    columns.emplace_back(std::move(quantiles));
+
+    ColumnPtr column = PercentileFunctions::percentile_approx_raw(ctx, columns).value();
+    ASSERT_TRUE(column->is_nullable());
+    auto result = ColumnHelper::as_column<NullableColumn>(column);
+    ASSERT_FALSE(result->is_null(0));
+    ASSERT_EQ(5, result->data_column()->get(0).get_double());
+    ASSERT_TRUE(result->is_null(1));
+    ASSERT_TRUE(result->is_null(2));
+    ASSERT_TRUE(result->is_null(3));
+}
+
 } // namespace starrocks

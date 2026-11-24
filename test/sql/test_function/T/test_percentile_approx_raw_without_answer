@@ -1,0 +1,20 @@
+-- name: test_percentile_approx_raw_without_answer
+-- description: PERCENTILE_APPROX_RAW returned NaN for a quantile outside [0, 1] and for an empty percentile
+--              (StarRocks/starrocks#84296), and a predicate over NaN was false both ways (p and NOT p). There
+--              is no answer, so it returns NULL.
+
+SELECT PERCENTILE_APPROX_RAW(percentile_hash(5), 0.5), PERCENTILE_APPROX_RAW(percentile_hash(5), -1),
+       PERCENTILE_APPROX_RAW(percentile_hash(5), 1.5), PERCENTILE_APPROX_RAW(PERCENTILE_EMPTY(), 0.5);
+
+CREATE TABLE tq (k INT, v DOUBLE, q DOUBLE) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO tq VALUES (1, 5, 0.5), (2, 5, -1), (3, 5, 2), (4, 5, 1), (5, NULL, 0.5);
+
+SELECT k, PERCENTILE_APPROX_RAW(percentile_hash(v), q) FROM tq ORDER BY k;
+-- every row is in exactly one of WHERE p, WHERE NOT p and WHERE p IS NULL
+SELECT (SELECT count(*) FROM tq WHERE v > PERCENTILE_APPROX_RAW(percentile_hash(5), -1))
+     + (SELECT count(*) FROM tq WHERE NOT (v > PERCENTILE_APPROX_RAW(percentile_hash(5), -1)))
+     + (SELECT count(*) FROM tq WHERE (v > PERCENTILE_APPROX_RAW(percentile_hash(5), -1)) IS NULL);
+SELECT (SELECT count(*) FROM tq WHERE k > PERCENTILE_APPROX_RAW(PERCENTILE_EMPTY(), 0.5))
+     + (SELECT count(*) FROM tq WHERE NOT (k > PERCENTILE_APPROX_RAW(PERCENTILE_EMPTY(), 0.5)))
+     + (SELECT count(*) FROM tq WHERE (k > PERCENTILE_APPROX_RAW(PERCENTILE_EMPTY(), 0.5)) IS NULL);
