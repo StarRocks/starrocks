@@ -97,6 +97,33 @@ import com.starrocks.sql.ast.ValueList;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
+<<<<<<< HEAD
+=======
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.BitmapType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.CharType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.FunctionType;
+import com.starrocks.type.HLLType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.JsonType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.NullType;
+import com.starrocks.type.PercentileType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.UnknownType;
+import com.starrocks.type.VarbinaryType;
+import com.starrocks.type.VarcharType;
+import com.starrocks.type.VariantType;
+>>>>>>> a1ed106 ([BugFix] Support MAP(K, V) type in Trino dialect casts (#82810))
 import io.trino.sql.tree.AliasedRelation;
 import io.trino.sql.tree.AllColumns;
 import io.trino.sql.tree.ArithmeticBinaryExpression;
@@ -1455,6 +1482,17 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         } else if (typeName.equals("array")) {
             TypeParameter typeParam = (TypeParameter) dataType.getArguments().get(0);
             return new ArrayType(getType(typeParam.getValue()));
+        } else if (typeName.equals("map")) {
+            if (dataType.getArguments().size() != 2
+                    || !(dataType.getArguments().get(0) instanceof TypeParameter)
+                    || !(dataType.getArguments().get(1) instanceof TypeParameter)) {
+                // unsupportedException skips SqlParser's StarRocks-dialect fallback, which can't parse map(...) either
+                throw unsupportedException(String.format("Trino parser on StarRocks does not support the type %s now",
+                        dataType));
+            }
+            TypeParameter keyParam = (TypeParameter) dataType.getArguments().get(0);
+            TypeParameter valueParam = (TypeParameter) dataType.getArguments().get(1);
+            return new MapType(getType(keyParam.getValue()), getType(valueParam.getValue()));
         } else {
             // this contains datetime/date/numeric type
             return ScalarType.createType(typeName);
