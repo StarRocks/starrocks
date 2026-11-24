@@ -952,7 +952,7 @@ TEST_F(ParquetFileWriterTest, TestFactoryCompressionLevel) {
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnTestHelper::build_column<Slice>({"hello", "hello", "world"}), 0);
+    chunk->append_column(ColumnTestHelper::build_nullable_column<Slice>({"hello", "hello", "world"}), 0);
     ASSERT_OK(writer->write(chunk.get()));
     ASSERT_OK(writer->close().io_status);
     auto read_chunk = _read_chunk(type_descs);
