@@ -26,6 +26,9 @@ If you choose AWS S3 as storage, you can use HMS or AWS Glue as metastore. If yo
 
 - The file format of Delta Lake that StarRocks supports is Parquet. Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
 
+- An unpartitioned asynchronous materialized view over a Delta Lake table records the source Delta table version during refresh. In `checked` query rewrite consistency mode, the materialized view is eligible for rewrite only while the loaded source snapshot matches the recorded version. This applies to both partitioned and unpartitioned source tables.
+- A refresh skips the data-write stage when the source Delta versions are unchanged. Use `REFRESH MATERIALIZED VIEW ... FORCE` to force a refresh. Existing materialized views require one refresh to record the source versions. Partitioned materialized views with Delta Lake base tables remain ineligible for rewrite in `checked` mode.
+
 ## Integration preparations
 
 Before you create a Delta Lake catalog, make sure your StarRocks cluster can integrate with the storage system and metastore of your Delta Lake cluster.

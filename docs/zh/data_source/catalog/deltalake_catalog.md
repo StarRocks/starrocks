@@ -26,6 +26,9 @@ Delta Lake catalog 是一种 external catalog，允许您在不导入的情况�
 
 - StarRocks 支持的 Delta Lake 文件格式是 Parquet。Parquet 文件支持以下压缩格式：SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION。
 
+- 基于 Delta Lake 表的非分区异步物化视图会在刷新时记录源表的 Delta 版本。在 `checked` 查询改写一致性模式下，仅当加载的源表快照版本与记录的版本一致时，物化视图才可用于查询改写。该行为适用于分区和非分区源表。
+- 当源表的 Delta 版本未发生变化时，刷新会跳过数据写入阶段。使用 `REFRESH MATERIALIZED VIEW ... FORCE` 可强制刷新。已有物化视图需要刷新一次以记录源表版本。基于 Delta Lake 表的分区物化视图在 `checked` 模式下仍无法用于查询改写。
+
 ## 集成准备
 
 在创建 Delta Lake catalog 之前，请确保您的 StarRocks 集群可以与 Delta Lake 集群的存储系统和元存储集成。

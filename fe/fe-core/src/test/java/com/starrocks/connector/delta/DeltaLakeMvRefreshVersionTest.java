@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.delta;
 
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.metastore.MetastoreTable;
@@ -26,6 +27,7 @@ import com.starrocks.sql.plan.PlanTestBase;
 import io.delta.kernel.internal.SnapshotImpl;
 import org.apache.hadoop.conf.Configuration;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -155,6 +157,20 @@ public class DeltaLakeMvRefreshVersionTest extends MVTestBase {
 
             refreshMaterializedView("test", mvName);
             PlanTestBase.assertContains(getFragmentPlan(query), mvName);
+
+            MaterializedView mv = getMv("test", mvName);
+            long refreshedPartitionId = mv.getPartition(mvName).getId();
+            long refreshedVersion = mv.getPartition(mvName).getDefaultPhysicalPartition().getVisibleVersion();
+            refreshMaterializedView("test", mvName);
+            Assertions.assertEquals(refreshedPartitionId, mv.getPartition(mvName).getId());
+            Assertions.assertEquals(refreshedVersion,
+                    mv.getPartition(mvName).getDefaultPhysicalPartition().getVisibleVersion());
+            PlanTestBase.assertContains(getFragmentPlan(query), mvName);
+
+            cluster.runSql("test", "REFRESH MATERIALIZED VIEW " + mvName + " FORCE WITH SYNC MODE");
+            // A full overwrite can replace the partition and reset its visible version.
+            Assertions.assertTrue(mv.getPartition(mvName).getId() != refreshedPartitionId
+                    || mv.getPartition(mvName).getDefaultPhysicalPartition().getVisibleVersion() > refreshedVersion);
 
             writeCommit(table, LAST_VERSIONS.get(table) + 1, "");
             String plan = getFragmentPlan(query);
