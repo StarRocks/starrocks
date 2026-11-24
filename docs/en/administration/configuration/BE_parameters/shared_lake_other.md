@@ -711,6 +711,15 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Description: In a shared-data cluster, whether a Data Cache disk block that this CN process wrote and has not evicted since skips the first full-block checksum read when a later request touches it. That verification re-reads the whole block from disk to check data that the process has just written and still tracks in memory, which costs one extra disk read on the first access to every freshly cached block. Set this item to `false` to verify every block on first access, which is only worth its cost where the cache disk is suspected of corrupting data at rest. Blocks inherited from a previous run of the process are always verified regardless of this item, because nothing in the current process witnessed their write. This item is read once when Data Cache initializes.
 - Introduced in: v4.2.0
 
+### starlet_star_cache_write_overwrite
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: In a shared-data cluster, whether a Data Cache write replaces an object that is already cached under the same key. When this item is `false`, the existing object is kept and the write is reported as successful, which suits the read-through fill path, where the bytes being written are the ones already cached. Set this item to `true` to let a re-read refresh a block that is suspected to be stale or damaged. Data Cache reads this item on every write, so a change takes effect on the next write without re-initializing the cache.
+- Introduced in: -
+
 ### starlet_starmgr_client_compression_type
 
 - Default: none
