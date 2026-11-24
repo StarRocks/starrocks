@@ -112,6 +112,8 @@ public class ExecuteSqlAction extends RestBaseAction {
         response.setContentType("application/x-ndjson; charset=utf-8");
 
         HttpConnectContext context = request.getConnectContext();
+        // The context outlives a request, but this flag describes only the current response.
+        context.setSendDate(false);
 
         String catalogName = request.getSingleParameter(CATALOG_KEY);
         String databaseName = request.getSingleParameter(DB_KEY);
@@ -165,6 +167,7 @@ public class ExecuteSqlAction extends RestBaseAction {
             LOG.warn("fail to process url: {}", WebUtils.sanitizeHttpReqUriForLog(request.getRequest().uri()), e);
             RestBaseResult failResult = new RestBaseResult(e.getMessage());
             response.getContent().append(failResult.toJson());
+            response.updateHeader(BaseResponse.HEADER_QUERY_ID, context.getQueryId().toString());
             writeResponse(request, response, HttpResponseStatus.valueOf(e.getCode().code()));
         }
     }

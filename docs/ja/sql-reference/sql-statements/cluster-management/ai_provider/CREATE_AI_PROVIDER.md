@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "chat、embedding、rerank タイプの外部 AI サービスを、クラスターの AI Provider として登録します。"
+description: "chat または embedding タイプの外部サービスをクラスターの AI Provider として登録します。"
 products: [oss, enterprise, cloud, anywhere]
 ---
 
@@ -9,14 +9,8 @@ products: [oss, enterprise, cloud, anywhere]
 外部 AI サービスプロバイダーをクラスターに登録します。単一の統合された AI プロバイダーレジストリが、
 異なる**タイプ**のプロバイダーを保持し、**タイプごとに**1 つのデフォルトを保持します。
 
-- `embedding` — OpenAI 互換の `/v1/embeddings` エンドポイント。セマンティックコンテキストモジュールが
-  `CONTEXT UPSERT` のコンテンツや `query_text` 検索を埋め込む際と、[ai_embed](../../../sql-functions/ai-functions/ai_text_functions.md#ai_embed) で使用されます。
-- `rerank` — Cohere 互換の `/rerank` エンドポイント (Cohere / Jina / Voyage / OpenRouter / ローカル TEI)。
-  `/api/context/search` のオプションであるクロスエンコーダーによる第 2 フェーズで使用されます。
-- `chat` — chat / completion エンドポイント (OpenAI Chat Completions または Anthropic Messages)。
-
-各プロバイダーは `protocol` プロパティでエンドポイントが話す**プロトコル**も宣言します。省略した場合はタイプ
-が暗黙に持つプロトコルがデフォルトになります: `embedding` と `chat` は `openai`、`rerank` は `cohere` です。
+- `embedding` — [ai_embed](../../../sql-functions/ai-functions/ai_embed.md) に埋め込みエンドポイントを提供します。セマンティックコンテキストモジュールでは `CONTEXT UPSERT` による書き込みと `query_text` による検索に OpenAI 互換の `/v1/embeddings` エンドポイントを使用します。
+- `chat` — [ai_complete](../../../sql-functions/ai-functions/ai_complete.md) などの関数にチャット生成エンドポイントを提供します。
 
 プロバイダーオブジェクトは `api_key` プロパティを含めて FE のメタデータジャーナルとイメージに永続化されるため、
 クラスターの再起動やアップグレード後も認証情報は保持されます。これらの設定に対応する `fe.conf` の項目はありません。
@@ -26,7 +20,7 @@ products: [oss, enterprise, cloud, anywhere]
 > FE のメタイメージ / BDB ジャーナルディレクトリへの読み取りアクセス権を持つ人は誰でもプロバイダーの `api_key`
 > の値を読むことができます。これらのファイルはファイルシステムの権限で保護してください。
 
-`protocol = "openai"` の Provider を作成します。API key の有無にかかわらず HTTP と HTTPS をサポートします。空でない key は `Authorization: Bearer ...` ヘッダーになります。URL 形式、制御文字、DNS、アドレスの検証は引き続き適用されます。信頼できるエンドポイントと送信が許可されたデータを使用してください。
+SQL の AI 関数で使用する `openai` および `dashscope` Provider は、API キーの有無にかかわらず HTTP と HTTPS をサポートします。空でない key は `Authorization: Bearer ...` ヘッダーになります。URL 形式、制御文字、DNS、アドレスの検証は引き続き適用されます。信頼できるエンドポイントと送信が許可されたデータを使用してください。
 
 `SET <provider_name> AS DEFAULT AI PROVIDER` でデフォルトを設定します。該当するデフォルトが未設定の場合、暗黙 Provider の呼び出しは `EXPLAIN` を含め FE でエラーになります。各実行プランは選択した Provider の設定を固定します。ALTER とデフォルト変更は新たに計画するクエリに反映され、プリペアド文の各 `EXECUTE` も現在のメタデータで再計画します。
 
@@ -38,15 +32,13 @@ products: [oss, enterprise, cloud, anywhere]
 
 ```SQL
 CREATE AI PROVIDER [IF NOT EXISTS] <provider_name>
-TYPE { embedding | rerank | chat }
+TYPE { embedding | chat }
 [ COMMENT '<comment>' ]
 PROPERTIES (
     "endpoint"   = "<url>",
     "model"      = "<model_name>"
-    [, "protocol" = "{ openai | anthropic | cohere | dashscope }" ]
+    [, "protocol" = "{ openai | dashscope }" ]
     [, "dimensions" = "<int>" ]      -- embedding only
-    [, "max_documents" = "<int>" ]   -- rerank only (optional)
-    [, "deadline_ms" = "<int>" ]     -- rerank only (optional)
     [, "timeout_ms" = "<int>" ]
     [, "api_key" = "<key>" ]
 )
@@ -57,7 +49,7 @@ PROPERTIES (
 | パラメータ      | 説明                                                                                                 |
 | --------------- | ---------------------------------------------------------------------------------------------------- |
 | `provider_name` | プロバイダーの名前。`SET ... AS DEFAULT AI PROVIDER` で使用され、`SHOW AI PROVIDERS` に表示されます。 |
-| `TYPE`          | `embedding`、`rerank`、または `chat`。許可されるプロパティと、このプロバイダーがどのタイプのデフォルトになれるかを決定します。 |
+| `TYPE`          | `embedding` または `chat`。許可されるプロパティと、このプロバイダーがどのタイプのデフォルトになれるかを決定します。 |
 | `COMMENT`       | オプションのコメント文字列。                                                                         |
 | `PROPERTIES`    | `"key" = "value"` 形式の設定。許可されるキーは `TYPE` によって異なります (以下を参照)。それ以外のキーは拒否されます。 |
 
@@ -66,13 +58,26 @@ PROPERTIES (
 | プロパティ      | タイプ         | 必須     | 説明                                                                                                 |
 | --------------- | -------------- | -------- | ---------------------------------------------------------------------------------------------------- |
 | `endpoint`      | すべて         | はい     | HTTP(S) エンドポイントの URL。`http://` または `https://` で始まる必要があります。                    |
-| `model`         | すべて         | はい     | リクエストの `model` フィールドに渡されるモデル名 (例: `text-embedding-3-small`、`cohere/rerank-4-fast`)。 |
-| `protocol`      | すべて         | いいえ   | エンドポイントのプロトコル: `openai`、`anthropic`、`cohere`、または `dashscope`。デフォルト: `embedding` と `chat` は `openai`、`rerank` は `cohere`。 |
+| `model`         | すべて         | はい     | リクエストの `model` フィールドに渡されるモデル名 (例: `text-embedding-3-small`)。 |
+| `protocol`      | すべて         | いいえ   | SQL の AI 関数は、OpenAI 互換プロトコル (`openai`) と Alibaba Cloud Model Studio のネイティブプロトコル (`dashscope`) に対応しています。`chat` と `embedding` のデフォルトは `openai` です。 |
 | `dimensions`    | embedding      | いいえ   | 埋め込みベクトルの次元数 (正の整数)。プロバイダーの出力およびベクトルインデックスの次元と一致する必要があります。 |
-| `max_documents` | rerank         | いいえ   | 1 回の rerank リクエストで送信するドキュメントの最大数 (正の整数、デフォルト 1000)。                  |
-| `deadline_ms`   | rerank         | いいえ   | すべてのリトライを含む rerank 呼び出し全体の実時間の上限 (ミリ秒、正の整数、デフォルト 10000)。応答の遅い、または到達不能なリランカーが検索をどれだけ長く停止させられるかを制限し、超過した場合はフュージョン順にフォールバックします。タイムアウトはリトライされません。リトライされるのは接続失敗または HTTP 5xx のみです。 |
-| `timeout_ms`    | すべて         | いいえ   | リクエストごとの HTTP タイムアウト (ミリ秒、正の整数)。rerank の場合、実質的に残りの `deadline_ms` によって上限が決まります。 |
+| `timeout_ms`    | すべて         | いいえ   | HTTP リクエストごとのタイムアウト（ミリ秒単位の正の整数）。 |
 | `api_key`       | すべて         | いいえ   | `Authorization` ヘッダーに使用する Bearer トークン。認証が不要なローカルプロバイダーの場合は省略します。 |
+
+### SQL の AI 関数で使用するエンドポイント
+
+Alibaba Cloud Model Studio（Bailian）の `/compatible-mode/v1/...` エンドポイントには `openai` を、ネイティブエンドポイントには `dashscope` を指定します。
+
+`dashscope` の場合は、使用する操作のネイティブ API の完全な URL を `endpoint` に指定します。パスと Provider の `TYPE` は一致する必要があります。SQL 呼び出しで `model` を上書きしても、リクエストは設定済みのエンドポイントに送られます。
+
+| Provider タイプ | 用途 | ネイティブエンドポイントのパス |
+| --- | --- | --- |
+| `chat` | テキスト生成 | `/api/v1/services/aigc/text-generation/generation` |
+| `chat` | マルチモーダル生成 | `/api/v1/services/aigc/multimodal-generation/generation` |
+| `embedding` | テキスト埋め込み | `/api/v1/services/embeddings/text-embedding/text-embedding` |
+| `embedding` | マルチモーダル埋め込み | `/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding` |
+
+各エンドポイントが受け付ける入力は [FILE 入力の対応表](../../../sql-functions/ai-functions/ai_functions.mdx#file-input)を参照してください。モデルが対応する形式は [Model Studio のマルチモーダル埋め込み API](https://www.alibabacloud.com/help/en/model-studio/multimodal-embedding-api-reference) を参照してください。
 
 ## 例
 
@@ -89,28 +94,15 @@ PROPERTIES (
 SET openai AS DEFAULT AI PROVIDER;   -- becomes the default embedding provider
 ```
 
-rerank プロバイダーを登録し、`rerank` タイプのデフォルトに設定します (embedding のデフォルトとは独立しています)。
+次の例では、Model Studio のネイティブなマルチモーダル生成エンドポイントを使う `chat` Provider を登録します。
 
 ```sql
-CREATE AI PROVIDER cohere_rerank TYPE rerank
+CREATE AI PROVIDER dashscope_chat TYPE chat
 PROPERTIES (
-    "endpoint"   = "https://openrouter.ai/api/v1/rerank",
-    "model"      = "cohere/rerank-4-fast",
-    "timeout_ms" = "15000",
-    "api_key"    = "sk-or-..."
-);
-SET cohere_rerank AS DEFAULT AI PROVIDER;   -- becomes the default rerank provider
-```
-
-Anthropic Messages プロトコルを使用する chat プロバイダーを登録します。
-
-```sql
-CREATE AI PROVIDER claude TYPE chat
-PROPERTIES (
-    "protocol" = "anthropic",
-    "endpoint" = "https://api.anthropic.com/v1/messages",
-    "model"    = "claude-sonnet-4-5",
-    "api_key"  = "sk-ant-..."
+    "protocol" = "dashscope",
+    "endpoint" = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
+    "model"    = "qwen3-vl-plus",
+    "api_key"  = "YOUR_DASHSCOPE_API_KEY"
 );
 ```
 

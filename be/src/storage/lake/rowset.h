@@ -37,6 +37,9 @@
 
 namespace starrocks {
 class DisjunctivePredicates;
+namespace io {
+class CacheWarmHandle;
+}
 class RowsetReadOptions;
 class SegmentReadOptions;
 } // namespace starrocks
@@ -125,6 +128,12 @@ struct PreparedTabletReadState {
     std::vector<RowsetPtr> rowsets;
     std::vector<std::vector<SegmentPtr>> rowset_segments;
     std::vector<std::vector<PreparedSegmentReadStatePtr>> rowset_prepared_states;
+    // lake_scan_warm_index: the cache fills started for the index pages of these segments. A segment's index pages
+    // are read when the scan reaches that segment, which for the last segments of a long scan is near its end, and
+    // dropping a handle withdraws its fills that no reader has joined yet. So the handles are held as long as this
+    // state: until the last split that shares it, or the close of a non-split reader. A finished fill holds no data
+    // (the warm files are not retainable), so holding its handle costs only the handle.
+    std::vector<std::shared_ptr<io::CacheWarmHandle>> index_warm_handles;
 
     void disable_runtime_filter_dependent_cache() {
         for (const auto& prepared_states : rowset_prepared_states) {
@@ -227,10 +236,14 @@ public:
     // as its OlapReaderStatistics, so callers that later scan different segments concurrently do not
     // race on one shared stats object; else all segments share |stats|. Size must equal the segment
     // count if provided.
+    // |delvec_metadata|: if non-null, this tablet's metadata at |version|, which the delete vectors are
+    // read from. A caller that builds iterators over many rowsets resolves it once and passes it to each,
+    // so that no segment reads |version|'s metadata back from storage on its own.
     StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_with_delvec(
             const Schema& schema, int64_t version, const MetaFileBuilder* builder, OlapReaderStatistics* stats,
             const std::vector<SparseRangePtr>* rowid_range_per_segment = nullptr,
-            const std::vector<OlapReaderStatistics*>* per_segment_stats = nullptr);
+            const std::vector<OlapReaderStatistics*>* per_segment_stats = nullptr,
+            const TabletMetadataPtr& delvec_metadata = nullptr);
 
     [[nodiscard]] bool is_overlapped() const override { return metadata().overlapped(); }
 

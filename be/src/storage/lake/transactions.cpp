@@ -176,6 +176,10 @@ StatusOr<std::vector<TxnLogVector>> load_txn_log(TabletManager* tablet_mgr, std:
             // A statement writes txn logs only for the tablets it loads, so a load id without a log is expected.
             // A tablet without any log is not: FE commits a partition only after all of its tablets finished
             // loading. Report it like a missing single txn log rather than let the caller apply no statement.
+            // A tablet that lost only some of its logs cannot be reported: it looks like one that some statements
+            // did not load. The callers therefore keep the logs complete while a publish may read them again:
+            // publish_version() leaves them to vacuum, and publish_log_version() deletes them only after it wrote
+            // the version log, which its retry looks up first.
             if (txn_logs.empty()) {
                 return Status::NotFound(fmt::format("no txn log of tablet {} for any of the {} load ids of txn {}",
                                                     tablet_id, txn_info.load_ids_size(), txn_info.txn_id()));
@@ -618,8 +622,12 @@ static StatusOr<TabletMetadataPtr> do_publish_version(TabletManager* tablet_mgr,
             // init log_applier
             DCHECK_EQ(base_version, base_metadata->version());
             new_metadata = std::make_shared<TabletMetadataPB>(*base_metadata);
+            // base_metadata goes along so that a primary key publish takes the base version's delete vectors
+            // from it -- for the old segments it deletes rows from and for an index it rebuilds -- rather than
+            // reading that version back from storage.
             log_applier = new_txn_log_applier(Tablet(tablet_mgr, tablet_info.get_tablet_id_in_metadata()), new_metadata,
-                                              new_version, txns[i].rebuild_pindex(), skip_write_tablet_metadata);
+                                              new_version, txns[i].rebuild_pindex(), skip_write_tablet_metadata,
+                                              base_metadata);
 
             if (new_metadata->compaction_inputs_size() > 0) {
                 new_metadata->mutable_compaction_inputs()->Clear();
@@ -685,15 +693,17 @@ static StatusOr<TabletMetadataPtr> do_publish_version(TabletManager* tablet_mgr,
                     auto tablet_log_path =
                             tablet_mgr->txn_log_location(tablet_id_in_txn_log, txns[i].txn_id(), load_id);
                     if (tablet_info.can_delete_txn_log()) {
-                        // Delete the logs only when this transaction is published alone, as for a single txn log
-                        // below, and leave them to vacuum otherwise. A batch writes the metadata of its last
-                        // version only, and FE retries a batch it did not see succeed with the batch it builds
-                        // then -- other transactions, other versions, maybe on another node. That retry applies
-                        // this transaction again and cannot without its logs: the partition would never publish
-                        // again. With skip_write_tablet_metadata the new metadata may not be written yet.
-                        if (txns.size() == 1 && !skip_write_tablet_metadata) {
-                            files_to_delete.emplace_back(tablet_log_path);
-                        }
+                        // Never delete the statement logs here, not even when this transaction is published
+                        // alone and its metadata is written: vacuum deletes them by txn id once the transaction
+                        // is visible. Unlike a single txn log, which is there or not, the statements' logs are
+                        // several files, and load_txn_log() cannot tell one that is gone from a statement that
+                        // did not load the tablet. Deleting them here could leave only some: the delete is
+                        // asynchronous and not atomic, and a PUT that object storage applies late brings a log
+                        // back. A publish that FE sends again and that does not find the version already
+                        // written -- on another node, or as a batch that ends at a later version -- would then
+                        // apply those statements alone and write a version without the rows of the others. A
+                        // batch needs the logs for its retry as well: it writes the metadata of its last
+                        // version only.
                         tablet_mgr->metacache()->erase(MetacacheKey::txn_log(tablet_log_path));
                     }
                 }
@@ -858,8 +868,10 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
             auto txn_id = txn_infos[i].txn_id();
             auto log_version = log_versions[i];
             auto expected_count = txn_infos[i].load_ids_size();
-            // Stage every per-load_id source .log for async deletion, mirroring what
-            // publish_version does for the non-shadow path on the same txn shape.
+            // Stage every per-load_id source .log for async deletion. publish_version() leaves the statement
+            // logs of a normal tablet to vacuum, because a retry there cannot tell that some were deleted. Here
+            // it can: the version log is written before any source is deleted, and a retry that finds fewer
+            // sources than load ids looks that log up before it uses them.
             auto stage_source_logs = [&]() {
                 for (const auto& load_id : txn_infos[i].load_ids()) {
                     auto source_path = tablet_mgr->txn_log_location(tablet_id, txn_id, load_id);

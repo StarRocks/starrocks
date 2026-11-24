@@ -248,6 +248,34 @@ const FlatJsonHashMap<LogicalType, JsonFlatMergeFunc> JSON_MERGE_FUNC {
 };
 // clang-format on
 
+MutableColumnPtr flat_column_to_json(const ColumnPtr& src, LogicalType src_type) {
+    const auto merge_func = JSON_MERGE_FUNC.at(src_type);
+    // The merge functions take a nullable source and add a keyed value to an open object. Keep the unfolded
+    // column an lvalue: the rvalue overload of wrap_if_necessary() mutates, which clones the whole source.
+    ColumnPtr unfolded = ColumnHelper::unfold_const_column(TypeDescriptor(src_type), src->size(), src);
+    ColumnPtr col = NullableColumn::wrap_if_necessary(unfolded);
+    auto json = JsonColumn::create();
+    auto nulls = NullColumn::create();
+    json->reserve(col->size());
+    nulls->reserve(col->size());
+    constexpr const char* kKey = "v";
+    vpack::Builder builder;
+    for (size_t row = 0; row < col->size(); row++) {
+        if (col->is_null(row)) {
+            json->append_default();
+            nulls->append(1);
+            continue;
+        }
+        builder.clear();
+        builder.openObject();
+        merge_func(&builder, kKey, col.get(), row);
+        builder.close();
+        json->append(JsonValue(builder.slice().get(kKey)));
+        nulls->append(0);
+    }
+    return NullableColumn::create(std::move(json), std::move(nulls));
+}
+
 uint8_t get_compatibility_type(vpack::ValueType type1, uint8_t type2) {
     auto iter = JSON_TYPE_BITS.find(type1);
     return iter != JSON_TYPE_BITS.end() ? type2 & iter->second : JSON_BASE_TYPE_BITS;

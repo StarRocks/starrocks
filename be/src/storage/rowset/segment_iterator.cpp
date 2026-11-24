@@ -151,6 +151,13 @@ public:
     // Adds what the column files have read since the last flush to the stats; close() flushes the rest.
     void flush_io_stats();
 
+    // Prepares the read (as the first get_next would) and asks for the first blocks of the read-ahead window.
+    Status start_read_ahead(bool* started) override;
+    size_t read_ahead_blocks() const override {
+        return _prefetch_window != nullptr ? _prefetch_window->ahead_blocks() : 0;
+    }
+    bool read_ahead_done() const override { return _prefetch_window == nullptr || _prefetch_window->exhausted(); }
+
     // Public entry point used by the segment_seek_range_to_rowid_range() /
     // segment_seek_ranges_to_rowid_ranges() free functions. The caller
     // must ensure the segment's short-key index has already been loaded; this
@@ -647,6 +654,9 @@ private:
     int _reserve_chunk_size = 0;
 
     bool _inited = false;
+    // Set when start_read_ahead() failed to initialize the reader, which may have left it partly initialized: _init()
+    // returns it instead of initializing again.
+    Status _read_ahead_init_status;
     // Until the first get_next after the iterator was opened or reused returns.
     bool _first_chunk_pending = true;
     bool _one_time_setup_done = false;
@@ -1013,6 +1023,7 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
 }
 
 Status SegmentIterator::_init() {
+    RETURN_IF_ERROR(_read_ahead_init_status);
     auto st = _init_internal();
     if (st.is_not_found()) {
         // NOTE: this may cause the metric increasing twice the call path is from segment::open.
@@ -1054,6 +1065,7 @@ Status SegmentIterator::reset_for_reuse(const SegmentReadOptions& options) {
     _reserve_chunk_size =
             static_cast<int32_t>(std::min(static_cast<uint32_t>(options.chunk_size), _segment->num_rows()));
     _inited = false;
+    _read_ahead_init_status = Status::OK();
     return Status::OK();
 }
 
@@ -1180,7 +1192,47 @@ Status SegmentIterator::_init_scan_range_and_context() {
     return Status::OK();
 }
 
+Status SegmentIterator::start_read_ahead(bool* started) {
+    if (!_inited) {
+        Status st = _init();
+        if (!st.ok()) {
+            // The read returns this status when the reader's turn comes. An end of file (e.g. every row deleted) only
+            // means there is nothing to read, so the readers after it may still start.
+            _read_ahead_init_status = st;
+            *started = st.is_end_of_file();
+            return st.is_end_of_file() ? Status::OK() : st;
+        }
+        _inited = true;
+    }
+    // Apply the runtime filters that arrived while the readers before it were read, as the first read does, so that a
+    // segment they exclude fetches nothing. A failure is returned when the reader's turn comes (see _init()).
+    if (Status st = _try_to_update_ranges_by_runtime_filter(); !st.ok()) {
+        _read_ahead_init_status = st;
+        _inited = false;
+        return st;
+    }
+    // A reader with nothing left to read has nothing to fetch either; one without a window does not read ahead.
+    if (!_range_iter.has_more()) {
+        *started = true;
+        return Status::OK();
+    }
+    *started = _prefetch_window != nullptr && !_prefetch_window->disabled();
+    if (*started) {
+        _prefetch_window->advance(_range_iter.begin());
+        // The first warm-up finds out whether the file can warm at all; one that cannot disables the window.
+        *started = !_prefetch_window->disabled();
+    }
+    if (*started) {
+        _opts.stats->segment_read_ahead_started++;
+    }
+    return Status::OK();
+}
+
 bool SegmentIterator::_should_read_ahead() const {
+#ifndef USE_STAROS
+    // Read-ahead goes through the shared-data remote I/O scheduler, which exists only in StarOS builds.
+    return false;
+#else
     // Only a lake query read that fills the cache, in ascending row order, reads ahead. Loads, background work such as
     // compaction, and reads nobody attributed read what they need as they go.
     const auto& remote_read = _opts.lake_io_opts.remote_read;
@@ -1189,10 +1241,12 @@ bool SegmentIterator::_should_read_ahead() const {
            _segment->lake_tablet_manager() != nullptr && _opts.lake_io_opts.fill_data_cache &&
            !_opts.lake_io_opts.skip_disk_cache && !_opts.lake_io_opts.cache_file_only && !_scan_range.empty() &&
            (_opts.asc_hint || config::desc_hint_split_range <= 0);
+#endif // USE_STAROS
 }
 
 void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
     _reset_prefetch_window();
+#ifdef USE_STAROS
     if (!_should_read_ahead()) {
         return;
     }
@@ -1246,6 +1300,9 @@ void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
     _prefetch_window = std::make_unique<SegmentPrefetchWindow>(
             std::move(columns), &_scan_range, start_row, config::remote_prefetch_window_blocks,
             config::remote_prefetch_late_read_ahead_ratio, config::starlet_star_cache_block_size_bytes, _opts.stats);
+#else
+    (void)start_row;
+#endif // USE_STAROS
 }
 
 Status SegmentIterator::_init_reused_scan() {
@@ -2158,8 +2215,11 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
         // delta column group files read instead keep the default.
         opts.remote_read_retainable = true;
         ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file_with_bundling(opts, _segment->file_info()));
-        if (config::io_coalesce_lake_read_enable && !_segment->is_default_column(col) &&
-            _segment->lake_tablet_manager() != nullptr) {
+        // The scheduler turns the coalesced read off for good, but a rejected dynamic update of the config is
+        // visible for a moment before it is rolled back: check the scheduler too, so that no scan builds a
+        // coalescing stream, which cannot warm the cache, while the scheduler runs.
+        if (config::io_coalesce_lake_read_enable && !remote_io_scheduler_enabled() &&
+            !_segment->is_default_column(col) && _segment->lake_tablet_manager() != nullptr) {
             ASSIGN_OR_RETURN(auto file_size, rfile->get_size());
             auto shared_buffered_input_stream =
                     std::make_unique<SharedBufferedInputStream>(rfile->stream(), _segment->file_name(), file_size);
@@ -2799,7 +2859,7 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
             _opts.delete_predicates[i].predicates_of_column(cid, &preds);
         }
         DCHECK(!preds.empty());
-        _del_predicates.insert({cid, ColumnOrPredicate(get_type_info(preds[0]->type_info()), cid, preds)});
+        _del_predicates.insert({cid, ColumnOrPredicate(preds[0]->type_info_ptr(), cid, preds)});
     }
 
     // -------------------------------------------------------------
@@ -5235,6 +5295,7 @@ void SegmentIterator::close() {
     }
     _one_time_setup_done = false;
     _inited = false;
+    _read_ahead_init_status = Status::OK();
 }
 
 // put the field that has predicated on it ahead of those without one, for handle late

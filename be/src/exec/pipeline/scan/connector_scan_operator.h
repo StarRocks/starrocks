@@ -159,6 +159,9 @@ public:
     bool can_reuse_with(Morsel& morsel) const override;
     Status reuse(RuntimeState* state, MorselPtr&& morsel) override;
     void release_for_reuse(RuntimeState* state) override;
+    bool is_waiting_for_input() const override {
+        return _input_waiting != nullptr && _input_waiting->load(std::memory_order_acquire);
+    }
 
 protected:
     virtual bool _reach_eof() const { return _limit != -1 && _chunk_rows_read >= _limit; }
@@ -174,6 +177,7 @@ private:
     bool _should_publish_generated_split_tasks_after_open() const;
     void _reset_reuse_state(RuntimeState* state, MorselPtr&& morsel);
     void _update_catalog_metrics();
+    void _wait_for_input();
 
     ConnectorScanOperatorIOTasksMemLimiter* _get_io_tasks_mem_limiter() const;
 
@@ -201,6 +205,10 @@ private:
     int64_t _request_mem_tracker_bytes = 0;
     int64_t _mem_alloc_failed_count = 0;
     bool _enable_adaptive_io_tasks = true;
+    // Set while the source waits for its input (connector::DataSource::wait_for_input), and cleared by the callback
+    // that wakes the operator, which owns a reference since it may run after the source is gone. Only a data source
+    // that can wait for its input has one.
+    std::shared_ptr<std::atomic<bool>> _input_waiting;
 };
 
 } // namespace pipeline

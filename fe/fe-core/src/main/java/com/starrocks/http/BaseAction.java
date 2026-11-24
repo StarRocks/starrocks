@@ -368,22 +368,6 @@ public abstract class BaseAction implements IAction {
         }
     }
 
-    // We check whether user owns db_admin and user_admin role in new RBAC privilege framework for
-    // operation which checks `PrivPredicate.ADMIN` in global table in old Auth framework.
-    protected void checkUserOwnsAdminRole(UserIdentity currentUser) throws AccessDeniedException {
-        try {
-            Set<Long> userOwnedRoles = AuthorizationMgr.getOwnedRolesByUser(currentUser);
-            if (!(currentUser.equals(UserIdentity.ROOT) ||
-                    userOwnedRoles.contains(PrivilegeBuiltinConstants.ROOT_ROLE_ID) ||
-                    (userOwnedRoles.contains(PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID) &&
-                            userOwnedRoles.contains(PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID)))) {
-                throw new AccessDeniedException();
-            }
-        } catch (PrivilegeException e) {
-            throw new AccessDeniedException();
-        }
-    }
-
     /**
      * Parse the {@code Authorization} header into a protocol-neutral {@link AuthCredentials},
      * supporting both Basic (plaintext password) and Bearer (token). Returns {@code null} when the
@@ -471,22 +455,36 @@ public abstract class BaseAction implements IAction {
     }
 
     /**
-     * The admin check of {@link #checkUserOwnsAdminRole} on the roles the context actually carries.
-     * A user from a security integration owns no roles of its own: everything it has arrives through
-     * its groups and sits on the context authentication wrote to, so that is what is looked at
-     * first; the user-owned lookup is the fallback for users the role table knows directly.
+     * The roles the user of {@code ctx} holds, granted to it or to one of its groups (for an
+     * ephemeral user, the roles of its session), together with their predecessors, the roles they
+     * inherit from. Whether a role is activated does not matter: a request to these endpoints
+     * cannot run SET ROLE, and a role granted to the user has always counted.
      */
+    protected static Set<Long> getHeldRoleIdsWithPredecessors(ConnectContext ctx) throws PrivilegeException {
+        AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        return authorizationMgr.getApplicableRoleIdsWithPredecessors(
+                ctx.getCurrentUserIdentity(), ctx.getGroups(), ctx.getCurrentRoleIds());
+    }
+
+    // We check whether user owns db_admin and user_admin role in new RBAC privilege framework for
+    // operation which checks `PrivPredicate.ADMIN` in global table in old Auth framework. The roles
+    // are those of getHeldRoleIdsWithPredecessors.
     protected void checkAdminRole(ConnectContext ctx) throws AccessDeniedException {
         UserIdentity currentUser = ctx.getCurrentUserIdentity();
-        Set<Long> roleIds = ctx.getCurrentRoleIds();
-        if (currentUser != null && roleIds != null
-                && (currentUser.equals(UserIdentity.ROOT)
-                || roleIds.contains(PrivilegeBuiltinConstants.ROOT_ROLE_ID)
-                || (roleIds.contains(PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID)
-                && roleIds.contains(PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID)))) {
-            return;
+        if (currentUser == null) {
+            throw new AccessDeniedException();
         }
-        checkUserOwnsAdminRole(currentUser);
+        try {
+            Set<Long> heldRoles = getHeldRoleIdsWithPredecessors(ctx);
+            if (!(currentUser.equals(UserIdentity.ROOT) ||
+                    heldRoles.contains(PrivilegeBuiltinConstants.ROOT_ROLE_ID) ||
+                    (heldRoles.contains(PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID) &&
+                            heldRoles.contains(PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID)))) {
+                throw new AccessDeniedException();
+            }
+        } catch (PrivilegeException e) {
+            throw new AccessDeniedException();
+        }
     }
 
     protected int checkIntParam(String strParam) {

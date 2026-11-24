@@ -827,20 +827,23 @@ public class InsertPreSplitHookTableTest {
     @Test
     public void testSourceRowAccessPolicyShortCircuits() throws Exception {
         try (SourceFixture fixture = sourceFixture()) {
-            fixture.authorizer.when(() -> Authorizer.getRowAccessPolicy(any(), any()))
+            fixture.authorizer.when(() -> Authorizer.getRowAccessPolicyWithoutAudit(any(), any()))
                     .thenReturn(mock(Expr.class));
 
             fixture.assertNoSubmit();
+            // Only inspected here: the audited lookup is left to the statement's own analysis.
+            fixture.assertPolicyLookupsUnaudited();
         }
     }
 
     @Test
     public void testSourceColumnMaskingPolicyShortCircuits() throws Exception {
         try (SourceFixture fixture = sourceFixture()) {
-            fixture.authorizer.when(() -> Authorizer.getColumnMaskingPolicy(any(), any(), any()))
+            fixture.authorizer.when(() -> Authorizer.getColumnMaskingPolicyWithoutAudit(any(), any(), any()))
                     .thenReturn(Map.of("k", mock(Expr.class)));
 
             fixture.assertNoSubmit();
+            fixture.assertPolicyLookupsUnaudited();
         }
     }
 
@@ -1105,7 +1108,7 @@ public class InsertPreSplitHookTableTest {
         // the connector statistics are read.
         try (SourceFixture fixture = sourceFixture()) {
             fixture.withExternalSource(connectorStatistics(1_000_000d, 8d, Statistics.StatsSource.TABLE_METADATA));
-            fixture.authorizer.when(() -> Authorizer.getRowAccessPolicy(any(), any()))
+            fixture.authorizer.when(() -> Authorizer.getRowAccessPolicyWithoutAudit(any(), any()))
                     .thenReturn(mock(Expr.class));
 
             Assertions.assertNull(fixture.prepare());
@@ -1755,8 +1758,9 @@ public class InsertPreSplitHookTableTest {
             metaUtils.when(() -> MetaUtils.getSessionAwareTable(any(), eq(sourceDb), any())).thenReturn(sourceTable);
 
             // Default: source is authorized with no row / column policy attached.
-            authorizer.when(() -> Authorizer.getRowAccessPolicy(any(), any())).thenReturn(null);
-            authorizer.when(() -> Authorizer.getColumnMaskingPolicy(any(), any(), any())).thenReturn(Map.of());
+            authorizer.when(() -> Authorizer.getRowAccessPolicyWithoutAudit(any(), any())).thenReturn(null);
+            authorizer.when(() -> Authorizer.getColumnMaskingPolicyWithoutAudit(any(), any(), any()))
+                    .thenReturn(Map.of());
         }
 
         /** Restricts the fixture's source relation to the named (formal) partitions. */
@@ -1839,6 +1843,17 @@ public class InsertPreSplitHookTableTest {
                     any(), any(), anyLong(), any(), any(), any(), anyInt(), any()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
                     any(), any(), anyList(), anyInt(), any(), any(), any()), never());
+        }
+
+        /**
+         * The policy gate only asks whether the source carries a policy, so it takes the unaudited lookups:
+         * the audited ones belong to the statement's own analysis, and taking them here as well would record
+         * every Ranger policy hit twice.
+         */
+        private void assertPolicyLookupsUnaudited() {
+            authorizer.verify(() -> Authorizer.getRowAccessPolicyWithoutAudit(any(), any()));
+            authorizer.verify(() -> Authorizer.getRowAccessPolicy(any(), any()), never());
+            authorizer.verify(() -> Authorizer.getColumnMaskingPolicy(any(), any(), any()), never());
         }
 
         /**

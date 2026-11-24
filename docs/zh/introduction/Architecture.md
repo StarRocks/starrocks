@@ -25,7 +25,7 @@ StarRocks 支持存算一体架构 (每个 BE 节点将其数据存储在本地�
 
 作为典型的大规模并行处理 (MPP) 数据库，StarRocks 支持存算一体架构。在存算一体架构中，BE 负责数据存储和计算。将数据存储在 BE 中使得数据可以在当前节点中计算，避免了数据传输和复制，从而提供极快的查询和分析性能。该架构支持多副本数据存储，增强了集群处理高并发查询的能力并确保数据可靠性，非常适合追求最佳查询性能的场景。
 
-![shared-data-arch](../_assets/shared-nothing.png)
+![shared-nothing-arch](../_assets/shared-nothing.png)
 
 #### 节点
 

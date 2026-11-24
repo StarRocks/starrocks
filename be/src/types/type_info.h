@@ -74,7 +74,6 @@ const TypeInfo* get_scalar_type_info(LogicalType t);
 TypeInfoPtr get_type_info(LogicalType field_type);
 TypeInfoPtr get_type_info(const TypeDescriptor& type_desc);
 TypeInfoPtr get_type_info(LogicalType field_type, int precision, int scale);
-TypeInfoPtr get_type_info(const TypeInfo* type_info);
 
 TypeInfoPtr get_array_type_info(const TypeInfoPtr& item_type);
 const TypeInfoPtr& get_item_type_info(const TypeInfo* type_info);

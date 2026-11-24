@@ -19,6 +19,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 
 set(RUNTIME_SRCS
     byte_buffer.cpp
+    paimon_cpp_library.cpp
     message_body_sink.cpp
     current_thread.cpp
     chunk_accumulator.cpp
@@ -26,6 +27,7 @@ set(RUNTIME_SRCS
     descriptors.cpp
     descriptors_ext.cpp
     runtime_state.cpp
+    kafka_scan_range_report.cpp
     mem_tracker.cpp
     mem_pool.cpp
     runtime_filter.cpp

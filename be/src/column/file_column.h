@@ -23,6 +23,7 @@
 #include "column/column.h"
 #include "column/vectorized_fwd.h"
 #include "types/datum.h"
+#include "types/file_value.h"
 
 namespace starrocks {
 
@@ -37,15 +38,8 @@ class FileColumn final : public CowFactory<ColumnFactory<Column, FileColumn>, Fi
 public:
     using ValueType = void;
 
-    enum FileField : size_t {
-        URI = 0,
-        OFFSET = 1,
-        SIZE = 2,
-        CONTENT_TYPE = 3,
-        CHECKSUM = 4,
-        INLINE = 5,
-        NUM_FIELDS = 6
-    };
+    using FileField = file_field::Index;
+    using enum FileField;
     static constexpr std::array<const char*, NUM_FIELDS> kFieldNames = {"uri",          "offset",   "size",
                                                                         "content_type", "checksum", "inline"};
 

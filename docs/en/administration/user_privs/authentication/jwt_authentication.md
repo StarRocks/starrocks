@@ -17,7 +17,7 @@ This topic describes how to manually create and authenticate users using JWT in 
 
 ## Prerequisites
 
-If you want to connect to StarRocks from a MySQL client, the MySQL client version must be 9.2 or later.
+If you want to connect to StarRocks from a MySQL client, the MySQL client version must be 9.1 or later. From 9.1, the `authentication_openid_connect_client` plugin ships with all MySQL client distributions, community distributions included.
 
 ## Create a user with JWT
 

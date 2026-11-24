@@ -49,7 +49,7 @@ public class MergeLimitDirectRule extends TransformationRule {
             .add(OperatorType.LOGICAL_ES_SCAN)
             .add(OperatorType.LOGICAL_JDBC_SCAN)
             .add(OperatorType.LOGICAL_BENCHMARK_SCAN)
-            .add(OperatorType.LOGICAL_ICEBERG_METADATA_SCAN)
+            .add(OperatorType.LOGICAL_METADATA_SCAN)
             .add(OperatorType.LOGICAL_AGGR)
             .add(OperatorType.LOGICAL_WINDOW)
             .add(OperatorType.LOGICAL_INTERSECT)

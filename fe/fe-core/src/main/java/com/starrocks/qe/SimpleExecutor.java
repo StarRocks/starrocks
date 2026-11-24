@@ -192,7 +192,7 @@ public class SimpleExecutor {
         }
     }
 
-    private static ConnectContext createCallerQueryContext(ConnectContext caller, int timeout) {
+    public static ConnectContext createCallerQueryContext(ConnectContext caller, int timeout) {
         ConnectContext context = ConnectContext.build();
         // Setting the warehouse installs its session defaults before applying query policy.
         context.setCurrentWarehouse(caller.getCurrentWarehouseName());
@@ -247,8 +247,8 @@ public class SimpleExecutor {
     }
 
     /**
-     * Remaining time budget (in seconds) derived from the outer (triggering) user query's
-     * {@code query_timeout}: {@code query_timeout - elapsed}. Serving-path internal queries should be
+     * Remaining time budget (in seconds) derived from the outer (triggering) statement's effective
+     * execution timeout, excluding query-queue waiting time. Serving-path internal queries should be
      * bounded by this so a single one cannot outlive the outer query. When there is no outer user query
      * (background jobs), falls back to {@code statistic_collect_query_timeout} to keep the old behavior.
      * The returned value may be {@code <= 0}, meaning the outer query has already exhausted its budget.
@@ -261,10 +261,34 @@ public class SimpleExecutor {
         return remainingQueryTimeoutS(outer);
     }
 
-    private static int remainingQueryTimeoutS(ConnectContext context) {
-        long elapsedSeconds = context.getStartTime() > 0
-                ? Math.max(0, (System.currentTimeMillis() - context.getStartTime()) / 1000) : 0;
-        return (int) Math.max(Integer.MIN_VALUE, context.getSessionVariable().getQueryTimeoutS() - elapsedSeconds);
+    /** Remaining budget of an explicit context and its parents, independent of the thread-local binding. */
+    public static int remainingQueryTimeoutS(ConnectContext context) {
+        long now = System.currentTimeMillis();
+        long remaining = Integer.MAX_VALUE;
+        for (ConnectContext current = context; current != null; current = current.getParent()) {
+            long elapsedSeconds = current.getStartTime() > 0
+                    ? Math.max(0, (now - current.getStartTime()) / 1000) : 0;
+            long executionTimeout = current.getExecTimeoutWithoutPendingTime();
+            // Match ConnectContext's timeout accounting. While queued, pendingTimeSecond is the queue
+            // timeout allowance; after admission, it is the actual wait. Cap the remaining execution
+            // budget so that the allowance cannot become extra BE execution time. Scheduling rechecks
+            // this budget after maybeWait() records the actual wait.
+            long remainingWithPendingTime = executionTimeout + current.getPendingTimeSecond() - elapsedSeconds;
+            remaining = Math.min(remaining, Math.min(executionTimeout, remainingWithPendingTime));
+        }
+        return (int) Math.max(Integer.MIN_VALUE, remaining);
+    }
+
+    /** Check before starting more internal work; keep total session timeouts unchanged. */
+    public static int checkInternalQueryState(ConnectContext context) {
+        if (context.isStatementCancelled()) {
+            throw new SemanticException("Internal query was cancelled");
+        }
+        int remaining = remainingQueryTimeoutS(context);
+        if (remaining <= 0) {
+            throw new SemanticException("Internal query timed out");
+        }
+        return remaining;
     }
 
     public List<TResultBatch> executeDQL(String sql, ConnectContext context) {

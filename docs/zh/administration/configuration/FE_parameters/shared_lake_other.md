@@ -534,7 +534,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `lake_compaction_max_parallel_default`
 
-- 默认值: 3
+- 默认值: 5
 - 类型: Int
 - 单位: -
 - 是否可变: Yes

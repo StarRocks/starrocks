@@ -825,6 +825,24 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     _data_source->set_read_limit(_limit);
     _data_source->set_runtime_profile(runtime_profile);
     _data_source->update_has_any_predicate();
+    if (_data_source->can_wait_for_input()) {
+        _input_waiting = std::make_shared<std::atomic<bool>>(false);
+    }
+}
+
+// The input is empty for now and something else fills it, such as the pipe of a Kafka scan range: instead of the
+// operator running IO tasks that keep finding it empty, the source waits until it becomes readable, which wakes the
+// operator.
+void ConnectorChunkSource::_wait_for_input() {
+    if (_input_waiting == nullptr) {
+        return;
+    }
+    // set first, since the callback may run before wait_for_input() returns
+    _input_waiting->store(true, std::memory_order_release);
+    if (!_data_source->wait_for_input(_scan_op->input_ready_callback(_input_waiting))) {
+        // readable already, so the next IO task reads it at once
+        _input_waiting->store(false, std::memory_order_release);
+    }
 }
 
 ConnectorChunkSource::~ConnectorChunkSource() {
@@ -1126,6 +1144,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
                     if (_status.is_time_out()) {
                         Status t = _status;
                         _status = Status::OK();
+                        _wait_for_input();
                         return t;
                     } else {
                         return _status;

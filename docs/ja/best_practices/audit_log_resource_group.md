@@ -215,7 +215,7 @@ StarRocks はデフォルトでマテリアライズドビューリフレッシ�
 
     ```SQL
     CREATE MATERIALIZED VIEW mv_example
-    REFRESH ASYNC
+    REFRESH ON_CHANGE
     PROPERTIES (
         'resource_group' = 'rg_mv'
     )

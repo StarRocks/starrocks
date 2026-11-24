@@ -67,11 +67,11 @@ void close_context_noexcept(ExprContext* context, RuntimeState* state) noexcept 
 
 AIProjectProjectionSpec::AIProjectProjectionSpec(RuntimeState* state, std::vector<AIProjectOutputSpec> outputs,
                                                  std::vector<AIProjectCommonSpec> common_outputs,
-                                                 AIProjectModelConfigs model_configs)
+                                                 AIProviderConfigs provider_configs)
         : _state(state),
           _outputs(std::move(outputs)),
           _common_outputs(std::move(common_outputs)),
-          _model_configs(std::move(model_configs)) {}
+          _provider_configs(std::move(provider_configs)) {}
 
 AIProjectProjectionSpec::~AIProjectProjectionSpec() {
     close();
@@ -81,7 +81,7 @@ AIProjectProjectionSpec::AIProjectProjectionSpec(AIProjectProjectionSpec&& other
         : _state(other._state),
           _outputs(std::move(other._outputs)),
           _common_outputs(std::move(other._common_outputs)),
-          _model_configs(std::move(other._model_configs)),
+          _provider_configs(std::move(other._provider_configs)),
           _closed(other._closed) {
     other._state = nullptr;
     other._outputs.clear();
@@ -97,7 +97,7 @@ AIProjectProjectionSpec& AIProjectProjectionSpec::operator=(AIProjectProjectionS
     _state = other._state;
     _outputs = std::move(other._outputs);
     _common_outputs = std::move(other._common_outputs);
-    _model_configs = std::move(other._model_configs);
+    _provider_configs = std::move(other._provider_configs);
     _closed = other._closed;
     other._state = nullptr;
     other._outputs.clear();
@@ -167,7 +167,7 @@ StatusOr<AIProjectOperatorFactories> AIProjectFactory::create(PipelineBuilderCon
         ASSIGN_OR_RETURN(auto input_buffer, AIChunkBuffer::create(static_cast<int64_t>(buffer_capacity),
                                                                   static_cast<int64_t>(buffer_memory_limit)));
         ASSIGN_OR_RETURN(auto submitter,
-                         AIProjectDispatcherSubmitter::create(state, projection_spec.model_configs(), config));
+                         AIProjectDispatcherSubmitter::create(state, projection_spec.provider_configs(), config));
         ASSIGN_OR_RETURN(auto projection, AIProjectExpressionProjection::create(std::move(projection_spec),
                                                                                 config.max_input_file_bytes));
         ASSIGN_OR_RETURN(auto processor, AIProjectProcessor::create(std::move(input_buffer), std::move(projection),

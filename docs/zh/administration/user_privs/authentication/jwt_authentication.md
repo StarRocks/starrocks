@@ -17,7 +17,7 @@ JSON Web Token（JWT）是一项开放标准（RFC 7519），它定义了一种�
 
 ## 前提条件
 
-如果您想从 MySQL 客户端连接到 StarRocks，MySQL 客户端版本必须是 9.2 或更高版本。
+如果您想从 MySQL 客户端连接到 StarRocks，MySQL 客户端版本必须是 9.1 或更高版本。从 9.1 起，所有发行版（包括社区版）的 MySQL 客户端都自带 `authentication_openid_connect_client` 插件。
 
 ## 使用 JWT 认证创建用户
 

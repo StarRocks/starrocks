@@ -36,6 +36,7 @@ import com.starrocks.common.TimeoutWatcher;
 import com.starrocks.common.Version;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.ProfileKeyDictionary;
@@ -385,7 +386,10 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
                 if (localTxnId != -1) {
                     // remove callback before abortTransaction(), so that the afterAborted() callback will not be called again
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(taskId);
-                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(dbId, localTxnId, abortReason);
+                    // Pass the tablets the load has written. A shared-data abort without them tells the compute nodes
+                    // to skip the cleanup, and the segments of this transaction are left on the object storage.
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(dbId, localTxnId, abortReason,
+                            Coordinator.getCommitInfos(coordinator), Coordinator.getFailInfos(coordinator), null);
                 }
             } catch (Exception ie) {
                 LOG.warn("Failed to abort transaction. db={}, table={}, label={}, txnId={}, reason={}",
@@ -463,6 +467,13 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
         context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         context.setQualifiedUser(UserIdentity.ROOT.getUser());
         context.setCurrentComputeResource(streamLoadInfo.getComputeResource());
+        // The compute nodes record rejected rows only when the plan's query options carry log_rejected_record_num,
+        // and the coordinator builds those options from this session (SessionVariable#toThrift), not from the request.
+        // A request that sets it, 0 included, wins; one that does not keeps the session's value, which a new session
+        // takes from the global one.
+        if (streamLoadInfo.isLogRejectedRecordNumSet()) {
+            context.getSessionVariable().setLogRejectedRecordNum(streamLoadInfo.getLogRejectedRecordNum());
+        }
 
         if (table.enableLoadProfile()) {
             long sampleIntervalMs = Config.load_profile_collect_interval_second * 1000;
@@ -476,6 +487,13 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
             // do not enable runtime profile report currently
             context.getSessionVariable().setRuntimeProfileReportInterval(-1);
         }
+        // The coordinator takes the transmission compression of the plan from this session (SessionVariable#toThrift),
+        // not from the request. A request that does not set it, or names a compression the load cannot send its data
+        // with, keeps the session's value, which a new session takes from the global one.
+        loadKvParams.getTransmissionCompressionType()
+                .filter(CompressionUtils::isSupportedLoadTransmissionCompression)
+                .ifPresent(compressionType ->
+                        context.getSessionVariable().setLoadTransmissionCompressionType(compressionType));
         return context;
     }
 

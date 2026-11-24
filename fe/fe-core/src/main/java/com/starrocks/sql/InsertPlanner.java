@@ -30,6 +30,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
@@ -42,7 +43,10 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergRowLineageUtils;
+import com.starrocks.connector.paimon.PaimonSinkExtra;
+import com.starrocks.connector.paimon.PaimonUtils;
 import com.starrocks.load.Load;
 import com.starrocks.planner.BlackHoleTableSink;
 import com.starrocks.planner.DataSink;
@@ -51,6 +55,7 @@ import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.MysqlTableSink;
 import com.starrocks.planner.OlapTableSink;
+import com.starrocks.planner.PaimonTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TableFunctionTableSink;
@@ -116,6 +121,8 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.sql.plan.PlanningVersionRecheck;
+import com.starrocks.thrift.TPaimonOverwriteMode;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.type.IntegerType;
@@ -425,7 +432,9 @@ public class InsertPlanner {
             plannerMetaLocker.unlock();
             ExecPlan plan;
             Throwable planFailure = null;
-            try {
+            // A re-read of the planning versions takes table locks too, within the bound of the re-acquire below.
+            try (PlanningVersionRecheck.LockWaitBound ignored =
+                    PlanningVersionRecheck.boundLockWaits(plannerMetaLocker.getAcquireTimeoutMs())) {
                 plan = doPlan(insertStmt, session);
             } catch (Throwable t) {
                 planFailure = t;
@@ -455,6 +464,9 @@ public class InsertPlanner {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
         Table targetTable = insertStmt.getTargetTable();
+        if (targetTable instanceof PaimonTable paimonTable) {
+            PaimonUtils.validateWriteTarget(insertStmt, paimonTable);
+        }
 
         // Decided per planning attempt and recorded on this attempt's ExecPlan, never on the statement:
         // planWithRetry re-analyzes and re-plans the same InsertStmt, and a decision left over from an
@@ -508,8 +520,10 @@ public class InsertPlanner {
         //3. Fill in the default value and NULL
         OptExprBuilder optExprBuilder = fillDefaultValue(logicalPlan, columnRefFactory, insertStmt, outputColumns);
 
-        //4. Fill key partition columns constant value for data lake format table (hive/iceberg/hudi/delta_lake)
-        if (insertStmt.isSpecifyKeyPartition()) {
+        //4. Fill key partition columns constant value for data lake format tables.
+        if (targetTable.isPaimonTable() && insertStmt.isStaticKeyPartitionInsert()) {
+            optExprBuilder = fillPaimonStaticPartitionColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder);
+        } else if (insertStmt.isSpecifyKeyPartition()) {
             optExprBuilder = fillKeyPartitionsColumn(columnRefFactory, insertStmt, outputColumns, optExprBuilder);
         }
 
@@ -532,7 +546,11 @@ public class InsertPlanner {
         SessionVariable currentVariable = (SessionVariable) session.getSessionVariable().clone();
         session.setSessionVariable(currentVariable);
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
-        boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(targetTable);
+        boolean canUsePipeline = isEnablePipeline
+                && DataSink.canTableSinkUsePipeline(targetTable);
+        if (targetTable.isPaimonTable() && !canUsePipeline) {
+            throw new SemanticException("Paimon writes require the pipeline engine");
+        }
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
         boolean enableMVRewrite = currentVariable.isEnableMaterializedViewRewriteForInsert() &&
                 currentVariable.isEnableMaterializedViewRewrite();
@@ -578,6 +596,9 @@ public class InsertPlanner {
                 slotDescriptor.setColumn(column);
                 boolean nullable = column.isAllowNull() || (shadowRewriteSubsetWrite
                         && !shadowRewriteTargetIndexColumns.contains(column.getName().toLowerCase(Locale.ROOT)));
+                if (targetTable instanceof PaimonTable paimonTable) {
+                    nullable = PaimonUtils.isWriteColumnNullable(paimonTable, column.getName());
+                }
                 slotDescriptor.setIsNullable(nullable);
                 if (column.getType().isVarchar() &&
                         IDictManager.getInstance().hasGlobalDict(tableId, column.getColumnId())) {
@@ -690,6 +711,17 @@ public class InsertPlanner {
             } else if (targetTable instanceof HiveTable) {
                 dataSink = new HiveTableSink((HiveTable) targetTable, tupleDesc,
                         isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable());
+            } else if (targetTable instanceof PaimonTable paimonTable) {
+                try {
+                    TPaimonOverwriteMode overwriteMode = paimonOverwriteMode(insertStmt, paimonTable,
+                            session.getSessionVariable());
+                    PaimonSinkExtra extra = PaimonSinkExtra.from(paimonTable, overwriteMode,
+                            PaimonUtils.getStaticPartitionValues(insertStmt, paimonTable),
+                            PaimonUtils.getWriteOperationId(session), session.getSessionVariable().getTimeZone());
+                    dataSink = new PaimonTableSink(paimonTable, tupleDesc, extra);
+                } catch (StarRocksConnectorException e) {
+                    throw new SemanticException(e.getMessage());
+                }
             } else if (targetTable instanceof TableFunctionTable) {
                 dataSink = new TableFunctionTableSink((TableFunctionTable) targetTable);
             } else if (targetTable.isBlackHoleTable()) {
@@ -707,9 +739,10 @@ public class InsertPlanner {
                 }
             }
 
+            ConnectorSinkShuffleSpec.forTable(targetTable).ifPresent(spec -> spec.applyToExecPlan(execPlan, dataSink));
             PlanFragment sinkFragment = execPlan.getFragments().get(0);
             if (canUsePipeline && (targetTable instanceof OlapTable || targetTable.isIcebergTable() ||
-                    targetTable.isHiveTable() || targetTable.isTableFunctionTable())) {
+                    targetTable.isHiveTable() || targetTable.isPaimonTable() || targetTable.isTableFunctionTable())) {
                 if (shuffleServiceEnable) {
                     // For shuffle insert into, we only support tablet sink dop = 1
                     // because for tablet sink dop > 1, local passthourgh exchange will influence the order of sending,
@@ -733,6 +766,8 @@ public class InsertPlanner {
                     sinkFragment.setHasHiveTableSink();
                 } else if (targetTable.isIcebergTable()) {
                     sinkFragment.setHasIcebergTableSink();
+                } else if (targetTable.isPaimonTable()) {
+                    sinkFragment.setHasPaimonTableSink();
                 } else if (targetTable.isTableFunctionTable()) {
                     sinkFragment.setHasTableFunctionTableSink();
                 }
@@ -776,6 +811,7 @@ public class InsertPlanner {
         try (Timer ignore2 = Tracers.watchScope("Optimizer")) {
             OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
             optimizerContext.setSourceTablesCount(sourceTablesCount);
+            optimizerContext.setMaterializedViewRefresh(targetTable.isMaterializedView() && insertStmt.isSystem());
             if (session.getSessionVariable().isEnableIVMRefresh()) {
                 // Position i of outputColumns writes targetTable fullSchema[i]; IvmRewriter relies on
                 // this pairing to bind aggregates to MV state columns (bindMvColumnsForAggregate).
@@ -1330,6 +1366,48 @@ public class InsertPlanner {
         return DistributionProperty.createProperty(spec);
     }
 
+    private OptExprBuilder fillPaimonStaticPartitionColumns(ColumnRefFactory columnRefFactory, InsertStmt insertStmt,
+                                                            List<ColumnRefOperator> outputColumns, OptExprBuilder root) {
+        Map<ColumnRefOperator, ScalarOperator> projection = new HashMap<>(
+                ((LogicalProjectOperator) root.getRoot().getOp()).getColumnRefMap());
+        Map<String, LiteralExpr> partitionValues = new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        List<String> names = insertStmt.getTargetPartitionNames().getPartitionColNames();
+        List<Expr> values = insertStmt.getTargetPartitionNames().getPartitionColValues();
+        for (int i = 0; i < names.size(); ++i) {
+            partitionValues.put(names.get(i), (LiteralExpr) values.get(i));
+        }
+        List<ColumnRefOperator> dataColumns = new ArrayList<>(outputColumns);
+        outputColumns.clear();
+        int dataColumnIndex = 0;
+        for (Column column : outputBaseSchema) {
+            LiteralExpr partitionValue = partitionValues.get(column.getName());
+            if (partitionValue == null) {
+                outputColumns.add(dataColumns.get(dataColumnIndex++));
+            } else {
+                ScalarOperator value = partitionValue.isConstantNull()
+                        ? ConstantOperator.createNull(column.getType())
+                        : SqlToScalarOperatorTranslator.translate(partitionValue);
+                ColumnRefOperator output = columnRefFactory.create(column.getName(), value.getType(), value.isNullable());
+                outputColumns.add(output);
+                projection.put(output, value);
+            }
+        }
+        Preconditions.checkState(dataColumnIndex == dataColumns.size(), "Paimon static partition output mismatch");
+        return root.withNewRoot(new LogicalProjectOperator(projection));
+    }
+
+    private static TPaimonOverwriteMode paimonOverwriteMode(InsertStmt insertStmt, PaimonTable table,
+                                                          SessionVariable sessionVariable) {
+        if (!insertStmt.isOverwrite()) {
+            return TPaimonOverwriteMode.APPEND;
+        }
+        if (insertStmt.isStaticKeyPartitionInsert()) {
+            return TPaimonOverwriteMode.STATIC;
+        }
+        return !table.isUnPartitioned() && sessionVariable.isDynamicOverwrite()
+                ? TPaimonOverwriteMode.DYNAMIC : TPaimonOverwriteMode.FULL;
+    }
+
     private OptExprBuilder fillKeyPartitionsColumn(ColumnRefFactory columnRefFactory,
                                                    InsertStmt insertStatement, List<ColumnRefOperator> outputColumns,
                                                    OptExprBuilder root) {
@@ -1381,6 +1459,10 @@ public class InsertPlanner {
     private boolean needToSkip(InsertStmt stmt, int columnIdx) {
         Table targetTable = stmt.getTargetTable();
         boolean skip = false;
+        if (targetTable.isPaimonTable() && stmt.isStaticKeyPartitionInsert()) {
+            return targetTable.getPartitionColumnNames().stream()
+                    .anyMatch(name -> name.equalsIgnoreCase(outputBaseSchema.get(columnIdx).getName()));
+        }
         if (stmt.isSpecifyKeyPartition()) {
             if (targetTable.isIcebergTable()) {
                 return ((IcebergTable) targetTable).partitionColumnIndexes().contains(columnIdx);

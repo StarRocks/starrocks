@@ -119,6 +119,7 @@ jobs:
       centos7: ${{ steps.distro.outputs.centos7 }}
       rocky9: ${{ steps.distro.outputs.rocky9 }}
     steps:
+      # Keep aligned with THIRDPARTY_PATHSPECS in build-support/check_thirdparty_merge_base.py.
       - uses: dorny/paths-filter@v3
         id: linux-thirdparty-filter
         with:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Generates the evo_*, evo_noshred_* and prune_* VARIANT parquet files in this directory with Spark 4.1 and
+# Generates the evo_*, evo_noshred_*, prune_rowgroups and prune_int16 VARIANT parquet files in this directory with Spark 4.1 and
 # iceberg-spark-runtime-4.1_2.13:1.12.0 on a local Hadoop catalog (rows described in gen_variant_evolution.sql).
 # Usage: SPARK_HOME=<spark-4.1.x-bin-hadoop3> WAREHOUSE=<empty scratch dir> ./gen_variant_evolution.sh
 set -euo pipefail
@@ -31,9 +31,10 @@ label() {
     esac
 }
 
-for t in evo evo_noshred prune; do
+for t in evo evo_noshred prune prune_int16; do
     spark_sql -e "SELECT readable_metrics.id.lower_bound, file_path FROM iceberg_fs.variant_spark_gen.$t.files" |
         grep -E '^[0-9]+' | while read -r lb path; do
-        cp "${path#file:}" "$HERE/${t}_$(label "$lb").parquet"
+        if [ "$t" = prune_int16 ]; then name=prune_int16; else name="${t}_$(label "$lb")"; fi
+        cp "${path#file:}" "$HERE/$name.parquet"
     done
 done

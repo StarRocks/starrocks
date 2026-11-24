@@ -287,7 +287,7 @@ public class QueryTransformer {
         return new OptExprBuilder(projectOperator, Lists.newArrayList(subOpt), outputTranslations);
     }
 
-    private OptExprBuilder project(OptExprBuilder subOpt, Iterable<Expr> expressions) {
+    OptExprBuilder project(OptExprBuilder subOpt, Iterable<Expr> expressions) {
         return project(subOpt, expressions, -1);
     }
 

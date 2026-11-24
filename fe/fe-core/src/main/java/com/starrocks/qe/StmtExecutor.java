@@ -97,6 +97,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergMetadata;
+import com.starrocks.connector.paimon.PaimonSinkExtra;
 import com.starrocks.failpoint.FailPointExecutor;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.HttpResultSender;
@@ -130,6 +131,7 @@ import com.starrocks.planner.IcebergRowDeltaSink;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.PaimonTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
@@ -394,6 +396,7 @@ public class StmtExecutor {
 
     // Catalog types involved in this query (e.g., "default", "hive", "iceberg")
     private Set<String> catalogTypesInvolved = Collections.emptySet();
+    private PaimonSinkExtra paimonOperation;
 
     private final CompletableFuture<ArrowFlightSqlResultDescriptor> deploymentFinished;
 
@@ -669,6 +672,8 @@ public class StmtExecutor {
      * 3. ANALYZE: use fe_conf.statistic_collect_query_timeout
      */
     public int getExecTimeout() {
+        // Metadata workers may inspect a parent executor while their own context is thread-bound.
+        // Resolve the timeout against this statement's context, not the worker's session.
         if (parsedStmt instanceof CreateTableAsSelectStmt ctas) {
             Map<String, String> properties = ctas.getInsertStmt().getProperties();
             if (properties.containsKey(LoadStmt.TIMEOUT_PROPERTY)) {
@@ -678,7 +683,7 @@ public class StmtExecutor {
                     // ignore
                 }
             }
-            return ConnectContext.get().getSessionVariable().getInsertTimeoutS();
+            return context.getSessionVariable().getInsertTimeoutS();
         } else if (parsedStmt instanceof DmlStmt) {
             Map<String, String> properties = ((DmlStmt) parsedStmt).getProperties();
             if (properties.containsKey(LoadStmt.TIMEOUT_PROPERTY)) {
@@ -688,13 +693,13 @@ public class StmtExecutor {
                     // ignore
                 }
             }
-            return ConnectContext.get().getSessionVariable().getInsertTimeoutS();
+            return context.getSessionVariable().getInsertTimeoutS();
         } else if (parsedStmt instanceof AnalyzeStmt) {
             return (int) Config.statistic_collect_query_timeout;
         } else {
             // For SELECT queries:
             // session query_timeout is authoritative if explicitly overridden
-            ConnectContext ctx = ConnectContext.get();
+            ConnectContext ctx = context;
             int sessionQueryTimeout = ctx.getSessionVariable().getQueryTimeoutS();
             boolean sessionTimeoutOverridden = ctx.isSessionQueryTimeoutOverridden();
             if (parsedStmt instanceof QueryStatement) {
@@ -3680,9 +3685,16 @@ public class StmtExecutor {
             Preconditions.checkState(targetTable instanceof OlapTable,
                     "explain analyze only supports insert into olap native table");
         }
+        if (targetTable.isPaimonTable()) {
+            if (execPlan.getFragments().isEmpty()
+                    || !(execPlan.getFragments().get(0).getSink() instanceof PaimonTableSink sink)) {
+                throw new StarRocksConnectorException("Paimon write is missing its native sink context");
+            }
+            paimonOperation = sink.getPaimonSinkExtra();
+        }
 
         if (dmlType == DmlType.INSERT_OVERWRITE && !((InsertStmt) parsedStmt).hasOverwriteJob() &&
-                !(targetTable.isIcebergTable() || targetTable.isHiveTable())) {
+                !(targetTable.isIcebergTable() || targetTable.isHiveTable() || targetTable.isPaimonTable())) {
             handleInsertOverwrite(execPlan, (InsertStmt) parsedStmt);
             return;
         }
@@ -3766,8 +3778,8 @@ public class StmtExecutor {
 
             context.setStatisticsJob(AnalyzerUtils.isStatisticsJob(context, parsedStmt));
             InsertLoadJob loadJob = null;
-            if (!(targetTable.isIcebergTable() || targetTable.isHiveTable() || targetTable.isTableFunctionTable() ||
-                    targetTable.isBlackHoleTable())) {
+            if (!(targetTable.isIcebergTable() || targetTable.isHiveTable() || targetTable.isPaimonTable() ||
+                    targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable())) {
                 InsertLoadTxnCallback insertLoadTxnCallback =
                         InsertLoadTxnCallbackFactory.of(context, database.getId(), targetTable);
                 // insert, update and delete job
@@ -3881,6 +3893,13 @@ public class StmtExecutor {
                             TransactionCommitFailedException.FILTER_DATA_ERR + ", tracking sql = " + trackingSql,
                             coord == null ? Collections.emptyList() : coord.getCommitInfos(),
                             coord == null ? Collections.emptyList() : coord.getFailInfos());
+                } else if (targetTable.isPaimonTable()) {
+                    try {
+                        abortPaimonSink(catalogName, dbName, tableName);
+                    } catch (Exception abortException) {
+                        // Retain the quality failure as the user-visible error if cleanup cannot be proven safe.
+                        LOG.warn("Cannot abort filtered Paimon operation", abortException);
+                    }
                 } else if (targetTable instanceof SystemTable || targetTable.isHiveTable() ||
                         targetTable.isIcebergTable() ||
                         targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
@@ -3894,11 +3913,13 @@ public class StmtExecutor {
                         TransactionCommitFailedException.FILTER_DATA_ERR + ", txn_id = " + transactionId +
                                 ", tracking sql = " + trackingSql);
                 insertError = true;
+
                 return;
             }
             // An Iceberg rewrite writes no row when every row of its files is deleted; it still has to commit
             // to drop those files.
-            if (loadedRows == 0 && filteredRows == 0 && !(stmt instanceof IcebergRewriteStmt)
+            if (loadedRows == 0 && filteredRows == 0 && !targetTable.isPaimonTable()
+                    && !(stmt instanceof IcebergRewriteStmt)
                     && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
                     || stmt instanceof UpdateStmt || stmt instanceof MergeIntoStmt)) {
                 // when the target table is not ExternalOlapTable or OlapTable
@@ -3975,6 +3996,20 @@ public class StmtExecutor {
                 }
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_ICEBERG_SINK_LABEL";
+            } else if (targetTable.isPaimonTable()) {
+                if (isCancelled() || context.isStatementCancelled()) {
+                    throw new StarRocksConnectorException("Paimon operation was cancelled before publication");
+                }
+                paimonOperation.setLoadedRows(loadedRows);
+                // Validate even empty writes; the connector confirms an empty append as a no-op.
+                context.getGlobalStateMgr().getMetadataMgr().finishSink(catalogName, dbName, tableName,
+                        coord.getSinkCommitInfos(), null, paimonOperation, context);
+                if (paimonOperation.getPublicationState() != PaimonSinkExtra.PublicationState.COMMITTED) {
+                    throw new StarRocksConnectorException("Paimon publication was not confirmed");
+                }
+                txnStatus = TransactionStatus.VISIBLE;
+                label = paimonOperation.getOperationId();
+                MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
             } else if (targetTable.isHiveTable()) {
                 List<TSinkCommitInfo> commitInfos = coord.getSinkCommitInfos();
                 HiveTableSink hiveTableSink = (HiveTableSink) execPlan.getFragments().get(0).getSink();
@@ -4105,9 +4140,12 @@ public class StmtExecutor {
                             errMsg,
                             coord == null ? Collections.emptyList() : coord.getCommitInfos(),
                             coord == null ? Collections.emptyList() : coord.getFailInfos());
+                } else if (targetTable.isPaimonTable()) {
+                    abortPaimonSink(catalogName, dbName, tableName);
                 } else if (targetTable.isExternalTableWithFileSystem()) {
                     GlobalStateMgr.getCurrentState().getMetadataMgr().abortSink(
-                            catalogName, dbName, tableName, coord.getSinkCommitInfos());
+                            catalogName, dbName, tableName,
+                            coord == null ? Collections.emptyList() : coord.getSinkCommitInfos());
                     recordExternalSinkFailure(targetTable, dmlType, t);
                 } else if (targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
                     // INSERT INTO FILES(...) (table function) and black hole tables begin no FE txn
@@ -4213,6 +4251,15 @@ public class StmtExecutor {
         }
         // filterRows may be overflow when to convert it into int, use `saturatedCast` to avoid overflow
         context.getState().setOk(loadedRows, Ints.saturatedCast(filteredRows), sb.toString());
+    }
+
+    private void abortPaimonSink(String catalogName, String dbName, String tableName) {
+        // Publication may already be durable. Never abort files on an unknown outcome, even when the
+        // client saw cancellation/failure. The contextual connector repeats this guard under its lock.
+        if (paimonOperation != null && paimonOperation.canAbort()) {
+            context.getGlobalStateMgr().getMetadataMgr().abortSink(catalogName, dbName, tableName,
+                    coord == null ? Collections.emptyList() : coord.getSinkCommitInfos(), paimonOperation, context);
+        }
     }
 
     private boolean shouldStopPublishWaitAfterCommit() {
@@ -4366,8 +4413,14 @@ public class StmtExecutor {
     }
 
     public void executeStmtWithResultQueue(ConnectContext context, ExecPlan plan, Queue<TResultBatch> sqlResult) {
+        executeStmtWithResultConsumer(context, plan, sqlResult::add);
+    }
+
+    public void executeStmtWithResultConsumer(ConnectContext context, ExecPlan plan,
+                                              java.util.function.Consumer<TResultBatch> consumer) {
         coord = null;
         try {
+            SimpleExecutor.checkInternalQueryState(context);
             UUID uuid = context.getQueryId();
             context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
             coord = getCoordinatorFactory().createQueryScheduler(
@@ -4378,6 +4431,7 @@ public class StmtExecutor {
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(),
                     new QeProcessorImpl.QueryInfo(context, getRedactedOriginStmtInString(), coord));
 
+            coord.setTimeoutSecond(SimpleExecutor.checkInternalQueryState(context));
             coord.exec();
             RowBatch batch;
             do {
@@ -4388,7 +4442,7 @@ public class StmtExecutor {
                 }
 
                 if (batch.getBatch() != null) {
-                    sqlResult.add(batch.getBatch());
+                    consumer.accept(batch.getBatch());
                 }
             } while (!batch.isEos());
             context.getState().setEof();
@@ -4399,12 +4453,16 @@ public class StmtExecutor {
                 context.getState().setError(e.getMessage());
             }
             if (coord != null) {
+                coord.cancel("Metadata collection failed: " + e.getMessage());
                 coord.getExecStatus().setInternalErrorStatus(e.getMessage());
             }
         } finally {
             try {
-                if (context.isProfileEnabled()) {
-                    tryProcessProfileAsync(plan, 0);
+                if (coord != null) {
+                    coord.onReleaseSlots();
+                }
+                boolean asyncProfile = context.isProfileEnabled() && tryProcessProfileAsync(plan, 0);
+                if (asyncProfile) {
                     QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
                             context.getSessionVariable().getProfileTimeout() * 1000L);
                 } else {

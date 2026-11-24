@@ -18,6 +18,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
@@ -25,11 +26,12 @@ import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.connector.paimon.PaimonTableSchemaConverter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.QueryState;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
@@ -38,9 +40,9 @@ import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.parser.SqlParser;
 import mockit.Expectations;
+import mockit.Verifications;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.CatalogContext;
 import org.apache.paimon.catalog.CatalogFactory;
@@ -235,10 +237,11 @@ public class PaimonCreateTableAnalyzerTest {
                     catalog.getTable(Identifier.create("ddl_sql", "append_demo")).rowType().getFieldNames());
             Assertions.assertThrows(DdlException.class, () -> executeDdl("drop database paimon_ddl.ddl_sql force"));
             InsertStmt insert = (InsertStmt) SqlParser.parse(
-                    "insert into paimon_ddl.ddl_sql.append_demo values (1, 'blocked', '2026-11-02')", 0L).get(0);
-            UnsupportedException error = Assertions.assertThrows(UnsupportedException.class,
-                    () -> StatementPlanner.plan(insert, context));
-            Assertions.assertTrue(error.getMessage().contains("Only support insert"), error.getMessage());
+                    "insert into paimon_ddl.ddl_sql.append_demo values (1, 'insertable', '2026-11-02')", 0L).get(0);
+            InsertAnalyzer.analyze(insert, context);
+            Assertions.assertTrue(insert.getTargetTable().isPaimonTable());
+            Assertions.assertEquals(List.of("id", "payload", "dt"),
+                    insert.getTargetTable().getBaseSchema().stream().map(column -> column.getName()).toList());
             Assertions.assertEquals(DmlStmt.INVALID_TXN_ID, insert.getTxnId());
             executeDdl("drop table if exists paimon_ddl.ddl_sql.append_demo");
             executeDdl("drop table if exists paimon_ddl.ddl_sql.append_demo");
@@ -290,19 +293,87 @@ public class PaimonCreateTableAnalyzerTest {
     }
 
     @Test
-    public void testPaimonCtasIsRejectedBeforeCreatingATable() {
-        for (String engine : List.of("", "engine=paimon")) {
-            CreateTableAsSelectStmt ctas = (CreateTableAsSelectStmt) SqlParser.parse(
-                    "create table paimon_ddl.db.t " + engine + " as select 1 as id", 0L).get(0);
-            SemanticException error = Assertions.assertThrows(SemanticException.class,
-                    () -> CTASAnalyzer.analyze(ctas, context));
-            Assertions.assertTrue(error.getMessage().contains("Paimon CREATE TABLE AS SELECT is not supported"));
-            Assertions.assertTrue(ctas.getCreateTableStmt().getColumnDefs().isEmpty());
+    public void testUnifiedPaimonCtasFailsBeforeCreateTable() throws Exception {
+        String catalog = "paimon_unified";
+        CatalogMgr catalogs = GlobalStateMgr.getCurrentState().getCatalogMgr();
+        MetadataMgr metadata = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        new Expectations(catalogs, metadata) {
+            {
+                catalogs.catalogExists(catalog);
+                result = true;
+                minTimes = 0;
+                catalogs.getCatalogType(catalog);
+                result = ConnectorType.UNIFIED.getName();
+                minTimes = 0;
+                metadata.getDb(context, catalog, "db");
+                result = new Database(100003, "db");
+                minTimes = 0;
+                metadata.tableExists(context, catalog, "db", "t");
+                result = false;
+                minTimes = 0;
+                metadata.createTable(context, (CreateTableStmt) any);
+                result = false;
+                minTimes = 0;
+            }
+        };
+
+        context.setQueryId(UUIDUtil.genUUID());
+        try {
+            new StmtExecutor(context, SqlParser.parseSingleStatement(
+                    "CREATE TABLE paimon_unified.db.t ENGINE=paimon AS SELECT 1 AS id", 0)).execute();
+
+            new Verifications() {
+                {
+                    metadata.createTable(context, (CreateTableStmt) any);
+                    times = 0;
+                }
+            };
+            Assertions.assertEquals(QueryState.MysqlStateType.ERR, context.getState().getStateType());
+            Assertions.assertEquals(QueryState.ErrType.ANALYSIS_ERR, context.getState().getErrType());
+            String error = context.getState().getErrorMessage();
+            Assertions.assertTrue(error.contains(
+                    "Paimon CTAS is not supported in Unified Catalog. Use a Paimon catalog instead."), error);
+        } finally {
+            context.getState().reset();
         }
     }
 
     @Test
-    public void testLikeAndInsertRemainUnsupported() {
+    public void testCtasPreservesNullablePartitionAndPaimonDefaults() {
+        for (String engine : List.of("", "engine=paimon")) {
+            CreateTableAsSelectStmt ctas = (CreateTableAsSelectStmt) SqlParser.parse(
+                    "create table paimon_ddl.db.t " + engine + " partition by (dt)"
+                            + " as select 1 as id, cast(null as date) as dt", 0L).get(0);
+            CTASAnalyzer.analyze(ctas, context);
+            CreateTableStmt stmt = ctas.getCreateTableStmt();
+            Assertions.assertEquals("paimon", stmt.getEngineName());
+            Assertions.assertTrue(stmt.getProperties() == null || stmt.getProperties().isEmpty());
+            Assertions.assertNull(stmt.getDistributionDesc());
+            Schema schema = PaimonTableSchemaConverter.toSchema(stmt);
+            Assertions.assertEquals(List.of("dt"), schema.partitionKeys());
+            Assertions.assertFalse(schema.fields().get(0).type().isNullable());
+            Assertions.assertTrue(schema.fields().get(1).type().isNullable());
+        }
+    }
+
+    @Test
+    public void testCtasInfersNullabilityForBothPrimaryKeyDeclarations() {
+        for (String keys : List.of("primary key (ID) properties ('bucket'='2')",
+                "properties ('primary-key'='ID', 'bucket'='2')")) {
+            CreateTableAsSelectStmt ctas = (CreateTableAsSelectStmt) SqlParser.parse(
+                    "create table paimon_ddl.db.t " + keys
+                            + " as select cast(null as varchar(9)) as payload, cast(null as int) as id", 0L).get(0);
+            CTASAnalyzer.analyze(ctas, context);
+            Schema schema = PaimonTableSchemaConverter.toSchema(ctas.getCreateTableStmt());
+            Assertions.assertEquals(List.of("id"), schema.primaryKeys());
+            Assertions.assertTrue(schema.fields().get(0).type().isNullable());
+            Assertions.assertFalse(schema.fields().get(1).type().isNullable());
+            Assertions.assertFalse(schema.options().containsKey("replication_num"));
+        }
+    }
+
+    @Test
+    public void testLikeRemainsUnsupported() {
         MetadataMgr metadata = GlobalStateMgr.getCurrentState().getMetadataMgr();
         new Expectations(metadata) {
             {
@@ -317,13 +388,6 @@ public class PaimonCreateTableAnalyzerTest {
             SemanticException error = Assertions.assertThrows(SemanticException.class,
                     () -> CreateTableLikeAnalyzer.analyze(like, context));
             Assertions.assertTrue(error.getMessage().contains("CREATE_TABLE_LIKE"), error.getMessage());
-        }
-        for (String mode : List.of("into", "overwrite")) {
-            InsertStmt insert = (InsertStmt) SqlParser.parse(
-                    "insert " + mode + " paimon_ddl.db.source values (1)", 0L).get(0);
-            UnsupportedException error = Assertions.assertThrows(UnsupportedException.class,
-                    () -> InsertAnalyzer.analyze(insert, context));
-            Assertions.assertTrue(error.getMessage().contains("Only support insert"), error.getMessage());
         }
     }
 

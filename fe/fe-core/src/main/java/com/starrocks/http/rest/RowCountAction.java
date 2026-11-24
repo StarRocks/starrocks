@@ -46,7 +46,6 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -77,8 +76,7 @@ public class RowCountAction extends RestBaseAction {
 
     @Override
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
-        UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
-        checkUserOwnsAdminRole(currentUser);
+        checkAdminRole(ConnectContext.get());
 
         String dbName = request.getSingleParameter(DB_KEY);
         if (Strings.isNullOrEmpty(dbName)) {

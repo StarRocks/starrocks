@@ -189,16 +189,19 @@ TEST(GeoColumnTest, InspectionAndDescriptorAfterMutations) {
     EXPECT_EQ(GEO_LOGICAL_TYPE_GEOMETRY, column->descriptor().type.logical_type);
 }
 
-TEST(GeoColumnTest, SelfAppendAndIndependentClone) {
+TEST(GeoColumnTest, AppendFromCloneAndIndependentClone) {
     auto column = GeoColumn::create(descriptor());
     column->append_wkb(Slice(point()));
     column->append_wkb(column->get_wkb(0));
-    column->append(*column);
+    // Appending a column to itself is not supported; go through an independent clone.
+    auto source = column->clone();
+    column->append(*source);
     EXPECT_EQ(4, column->size());
+    source = column->clone();
     const uint32_t indexes[] = {3, 0};
-    column->append_selective(*column, indexes, 0, 2);
+    column->append_selective(*source, indexes, 0, 2);
     EXPECT_EQ(6, column->size());
-    column->append_value_multiple_times(*column, 0, 2);
+    column->append_value_multiple_times(*source, 0, 2);
     auto slice = column->get_wkb(0);
     column->append_value_multiple_times(&slice, 2);
     EXPECT_EQ(10, column->size());
@@ -216,6 +219,18 @@ TEST(GeoColumnDeathTest, CopyRejectsDescriptorChangesWithoutSqlCoercion) {
     other->append_wkb(Slice(point()));
     EXPECT_DEATH(column->append(*other), "descriptor mismatch");
     EXPECT_EQ(0, column->size());
+}
+
+TEST(GeoColumnDeathTest, RejectsSelfAppend) {
+    testing::FLAGS_gtest_death_test_style = "threadsafe";
+    auto column = GeoColumn::create(descriptor());
+    column->append_wkb(Slice(point()));
+    const uint32_t indexes[] = {0};
+    EXPECT_DEATH(column->append(*column), "self append");
+    EXPECT_DEATH(column->append_selective(*column, indexes, 0, 1), "self append");
+    EXPECT_DEATH(column->append_value_multiple_times(*column, 0, 1), "self append");
+    EXPECT_DEATH(column->update_rows(*column, indexes), "self append");
+    EXPECT_EQ(1, column->size());
 }
 #endif
 
@@ -267,7 +282,7 @@ TEST(GeoColumnTest, CopiesCheckSemanticType) {
     EXPECT_EQ(2, raw->size());
 }
 
-TEST(GeoColumnTest, ZeroCountCopiesCheckTypeOnly) {
+TEST(GeoColumnTest, ZeroCountCopiesAreNoOps) {
     for (auto kind : {GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_LOGICAL_TYPE_GEOMETRY}) {
         auto desc = descriptor(kind);
         const auto primitive = kind == GEO_LOGICAL_TYPE_GEOGRAPHY ? TYPE_GEOGRAPHY : TYPE_GEOMETRY;
@@ -316,10 +331,8 @@ TEST(GeoColumnTest, ZeroCountCopiesCheckTypeOnly) {
                     else
                         incompatible.type = {};
                     auto target = GeoColumn::create(incompatible);
-#ifndef NDEBUG
-                    testing::FLAGS_gtest_death_test_style = "threadsafe";
-                    EXPECT_DEATH(copy(*target, *source), "descriptor mismatch") << mismatch;
-#endif
+                    // A zero-count copy returns before looking at the source at all.
+                    copy(*target, *source);
                     EXPECT_EQ(incompatible, target->descriptor());
                     EXPECT_EQ(0, target->size());
                 }

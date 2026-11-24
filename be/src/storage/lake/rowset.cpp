@@ -596,8 +596,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
 
     // Check if segment metadata filter can be used.
     // Apply metadata filter BEFORE loading segments to avoid loading unnecessary segment footers.
-    bool use_metadata_filter = config::enable_lake_segment_metadata_filter && metadata().segment_metas_size() > 0 &&
-                               !options.pred_tree_for_zone_map.empty() && options.tablet_schema != nullptr;
+    bool use_metadata_filter =
+            SegmentMetadataFilter::filter_tree(options) != nullptr && metadata().segment_metas_size() > 0;
 
     std::unordered_set<int> skip_segment_idxs;
     if (use_metadata_filter) {
@@ -736,7 +736,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
             }
         }
     }
-    if (segment_iterators.size() > 1 && !is_overlapped()) {
+    if (segment_iterators.size() > 1 && !is_overlapped() && options.union_segments) {
         // union non-overlapped segment iterators
         auto iter = new_union_iterator(std::move(segment_iterators));
         return std::vector<ChunkIteratorPtr>{iter};
@@ -877,7 +877,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_delvec(
         const Schema& schema, int64_t version, const MetaFileBuilder* builder, OlapReaderStatistics* stats,
         const std::vector<SparseRangePtr>* rowid_range_per_segment,
-        const std::vector<OlapReaderStatistics*>* per_segment_stats) {
+        const std::vector<OlapReaderStatistics*>* per_segment_stats, const TabletMetadataPtr& delvec_metadata) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_iterator_with_delvec_us");
     std::vector<LoadedSegment> segments;
     {
@@ -897,12 +897,17 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     seg_options.lake_io_opts.fs = seg_options.fs;
     seg_options.lake_io_opts.location_provider = _tablet_mgr->location_provider();
     seg_options.is_primary_keys = true;
-    // The caller already supplied the complete tablet metadata used to build this rowset. Reuse it
-    // for delvec lookup instead of reading the same version back from object storage. This is
-    // required by aggregate publish: query-parent synthesis flushes child PK indexes before the
-    // new-version bundle has been persisted, so that version exists only in the RPC response here.
-    seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet_mgr, builder, true /*fill cache*/,
-                                                                   seg_options.lake_io_opts, _tablet_metadata);
+    // Hand the delvec loader the metadata to read the delete vectors from, so that it does not read |version|
+    // back from object storage for every segment: the caller's |delvec_metadata|, else the complete tablet
+    // metadata this rowset was built from. Aggregate publish needs the latter: query-parent synthesis flushes
+    // child PK indexes before the new-version bundle has been persisted, so that version exists only in the
+    // RPC response here. The loader reads |version| back only when the metadata it holds is not this tablet at
+    // |version|.
+    DCHECK(delvec_metadata == nullptr ||
+           (delvec_metadata->id() == tablet_id() && delvec_metadata->version() == version));
+    seg_options.delvec_loader =
+            std::make_shared<LakeDelvecLoader>(_tablet_mgr, builder, true /*fill cache*/, seg_options.lake_io_opts,
+                                               delvec_metadata != nullptr ? delvec_metadata : _tablet_metadata);
     seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
     seg_options.idg_loader = std::make_shared<LakeIndexDeltaGroupLoader>(_tablet_metadata);
     seg_options.version = version;
@@ -1170,17 +1175,17 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
     for (auto& ls : loaded) {
         segments.emplace_back(std::move(ls.segment));
     }
-    if (!effective_opts.hold_segments) {
+    if (!can_hold_segments()) {
         return segments;
     }
-    // read() feeds the held set through the prepared-segments path, which derives each segment's
-    // metadata position from its index in the vector. load_segments() appends in metadata order
-    // except when a parallel-load submit falls back to a serial load mid-loop
-    // (enable_load_segment_parallel): that segment lands ahead of the futures still pending.
-    // can_hold_segments() has already ruled out the partial-compaction and segment-range modes, so
-    // the loaded positions here are exactly [0, size) and reordering by segment_meta_pos restores
-    // the invariant. Anything else is unexpected: hold nothing, so read() keeps loading per read
-    // rather than indexing a set whose positions it cannot trust.
+    // The prepared-segments path of read() -- a held set, or the segments a tablet reader opened
+    // up front -- derives each segment's metadata position from its index in the vector.
+    // load_segments() appends in metadata order except when a parallel-load submit falls back to a
+    // serial load mid-loop (enable_load_segment_parallel): that segment lands ahead of the futures
+    // still pending. can_hold_segments() has ruled out the partial-compaction and segment-range
+    // modes, so the loaded positions here are exactly [0, size) and reordering by segment_meta_pos
+    // restores the invariant. Anything else is unexpected: hold nothing, so read() keeps loading per
+    // read rather than indexing a set whose positions it cannot trust.
     std::vector<SegmentPtr> ordered(segments.size());
     for (size_t i = 0; i < loaded.size(); i++) {
         const int32_t pos = loaded[i].segment_meta_pos;
@@ -1190,6 +1195,9 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
             return segments;
         }
         ordered[pos] = segments[i];
+    }
+    if (!effective_opts.hold_segments) {
+        return ordered;
     }
     std::lock_guard<std::mutex> l(_held_segments_mutex);
     // Loading runs outside the lock. A fallback during IO must also prevent publication, while
@@ -1269,6 +1277,7 @@ static void add_segment_open_stats(const OlapReaderStatistics& from, OlapReaderS
     to->io_count_remote += from.io_count_remote;
     to->io_ns_read_local_disk += from.io_ns_read_local_disk;
     to->io_ns_remote += from.io_ns_remote;
+    to->add_remote_io_waits(from);
 }
 
 Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size) {
@@ -1431,10 +1440,15 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
             });
 
             auto packaged_func = [task]() { (*task)(); };
-            if (auto st = RuntimeEnv::GetInstance()->load_segment_thread_pool()->submit_func(std::move(packaged_func));
-                !st.ok()) {
+            Status submit_st;
+            TEST_SYNC_POINT_CALLBACK("Rowset::load_segments::submit", &submit_st);
+            if (submit_st.ok()) {
+                submit_st =
+                        RuntimeEnv::GetInstance()->load_segment_thread_pool()->submit_func(std::move(packaged_func));
+            }
+            if (!submit_st.ok()) {
                 // try load segment serially
-                LOG(WARNING) << "sumbit_func failed: " << st.code_as_string()
+                LOG(WARNING) << "sumbit_func failed: " << submit_st.code_as_string()
                              << ", try to load segment serially, seg_id: " << segment_id;
                 auto segment_or =
                         _tablet_mgr->load_segment(segment_info, segment_id, &footer_size_hint, lake_io_opts,

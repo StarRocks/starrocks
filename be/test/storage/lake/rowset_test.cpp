@@ -30,6 +30,7 @@
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
+#include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
@@ -1483,6 +1484,56 @@ TEST_F(LakeRowsetTest, test_tablet_range_pruning_only_for_shared_segments) {
     ASSERT_EQ(count_rows_from_iters(iters2), 3 * 2);
 }
 
+// union_segments = false: a non-overlapped rowset returns one iterator per segment, in segment order, instead of a
+// union of them, so that the caller's union reads the next segments ahead within the rowset too. The rows are the same.
+TEST_F(LakeRowsetTest, test_non_overlapped_rowset_without_segment_union) {
+    ASSERT_NO_FATAL_FAILURE(
+            add_rowset_with_segment_keys({{1, 2, 3}, {10, 11}, {20, 21, 22, 23}}, {false, false, false}));
+    const int rowset_index = _tablet_metadata->rowsets_size() - 1;
+    _tablet_metadata->mutable_rowsets(rowset_index)->set_overlapped(false);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    auto read_keys = [&](bool union_segments, size_t* num_iters) {
+        auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, rowset_index,
+                                                     0 /* compaction_segment_limit */);
+        RowsetReadOptions rs_opts;
+        OlapReaderStatistics stats;
+        rs_opts.stats = &stats;
+        rs_opts.tablet_schema = std::make_shared<const TabletSchema>(_tablet_metadata->schema());
+        rs_opts.union_segments = union_segments;
+        auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+        std::vector<int32_t> keys;
+        auto iters_or = rowset->read(input_schema, rs_opts);
+        CHECK(iters_or.ok()) << iters_or.status();
+        *num_iters = iters_or.value().size();
+        for (const auto& it : iters_or.value()) {
+            CHECK(it->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+            CHECK(it->init_output_schema(std::unordered_set<uint32_t>()).ok());
+            auto chunk = ChunkFactory::new_chunk(it->schema(), 1024);
+            while (true) {
+                chunk->reset();
+                auto st = it->get_next(chunk.get());
+                if (st.is_end_of_file()) {
+                    break;
+                }
+                CHECK(st.ok()) << st.to_string();
+                for (size_t i = 0; i < chunk->num_rows(); ++i) {
+                    keys.push_back(chunk->get(i)[0].get_int32());
+                }
+            }
+            it->close();
+        }
+        return keys;
+    };
+    const std::vector<int32_t> expected{1, 2, 3, 10, 11, 20, 21, 22, 23};
+    size_t unioned = 0;
+    size_t separate = 0;
+    EXPECT_EQ(expected, read_keys(true, &unioned));
+    EXPECT_EQ(expected, read_keys(false, &separate));
+    EXPECT_EQ(1, unioned);
+    EXPECT_EQ(3, separate);
+}
+
 TEST_F(LakeRowsetTest, test_tablet_range_pruning_inclusive_exclusive) {
     create_rowsets_for_testing();
     auto* rs_meta = _tablet_metadata->mutable_rowsets(0);
@@ -2817,6 +2868,38 @@ TEST_F(LakeRowsetTest, test_segments_stops_after_cancel) {
     cancelled.store(false);
     ASSIGN_OR_ABORT(auto segments, rowset->segments(lake_io_opts, nullptr, &cancelled));
     ASSERT_EQ(3, segments.size());
+}
+
+// segments() returns a rowset's segments in metadata order, also when the parallel load runs a refused submit at once,
+// ahead of the earlier segments still queued: a caller indexes them by metadata position.
+TEST_F(LakeRowsetTest, test_segments_keep_metadata_order_after_refused_submit) {
+    create_rowsets_for_testing();
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, true);
+    _tablet_mgr->metacache()->prune();
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    int submits = 0;
+    SyncPoint::GetInstance()->SetCallBack("Rowset::load_segments::submit", [&](void* arg) {
+        if (++submits == 2) {
+            *static_cast<Status*>(arg) = Status::ServiceUnavailable("injected submit refusal");
+        }
+    });
+
+    // Rowset captures _parallel_load in its constructor.
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0);
+    LakeIOOptions lake_io_opts{.fill_data_cache = false, .fill_metadata_cache = false};
+    ASSIGN_OR_ABORT(auto segments, rowset->segments(lake_io_opts));
+    ASSERT_EQ(3, submits);
+    const auto& rs_meta = _tablet_metadata->rowsets(0);
+    ASSERT_EQ(rs_meta.segment_metas_size(), segments.size());
+    for (int i = 0; i < rs_meta.segment_metas_size(); i++) {
+        ASSERT_NE(nullptr, segments[i]);
+        EXPECT_EQ(_tablet_mgr->segment_location(_tablet_metadata->id(), rs_meta.segment_metas(i).filename()),
+                  segments[i]->file_name());
+    }
 }
 
 // A query that is not cancelled reads exactly what it read before.

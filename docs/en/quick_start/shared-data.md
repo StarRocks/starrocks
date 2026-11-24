@@ -42,7 +42,7 @@ There is a lot of information in this document, and it is presented with the ste
 
 - [Docker](https://docs.docker.com/engine/install/)
 - 4 GB RAM assigned to Docker
-- 10 GB free disk space assigned to Docker
+- 20 GB free disk space assigned to Docker
 
 ### SQL client
 
@@ -167,7 +167,7 @@ This quick start uses MinIO for shared storage.
 
 To use MinIO for Object Storage with StarRocks, StarRocks needs a MinIO access key. The access key was generated during the startup of the Docker services. To help you better understand the way that StarRocks connects to MinIO you should verify that the key exists.
 
-Browse to [http://localhost:9001/access-keys](http://localhost:9001/access-keys) The username and password are specified in the Docker compose file, and are `miniouser` and `miniopassword`. You should see that there is one access key. The Key is `AAAAAAAAAAAAAAAAAAAA`, you cannot see the secret in the MinIO Console, but it is in the Docker compose file and is `BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB`:
+Browse to [http://localhost:9001/console/identity](http://localhost:9001/console/identity) The username and password are specified in the Docker compose file, and are `miniouser` and `miniopassword`. You should see that there is one access key. The Key is `AAAAAAAAAAAAAAAAAAAA`, you cannot see the secret in the MinIO Console, but it is in the Docker compose file and is `BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB`:
 
 ![View the MinIO access key](../_assets/quick-start/MinIO-view-key.png)
 
@@ -193,7 +193,7 @@ When you create a storage volume in StarRocks you will specify the `LOCATION` fo
     LOCATIONS = ("s3://my-starrocks-bucket/")
 ```
 
-Open [http://localhost:9001/buckets](http://localhost:9001/buckets) and add a bucket for the storage volume. Name the bucket `my-starrocks-bucket`. Accept the defaults for the three listed options.
+Open [http://localhost:9001/console/buckets](http://localhost:9001/console/buckets) and add a bucket for the storage volume. Name the bucket `my-starrocks-bucket`. Accept the defaults for the three listed options.
 
 ---
 
@@ -206,7 +206,7 @@ Open [http://localhost:9001/buckets](http://localhost:9001/buckets) and add a bu
 
 ## StarRocks configuration for shared-data
 
-At this point you have StarRocks running, and you have MinIO running. The MinIO access key is used to connect StarRocks and Minio.
+At this point you have StarRocks running, and you have MinIO running. The MinIO access key is used to connect StarRocks and MinIO.
 
 This is the part of the `FE` configuration that specifies that the StarRocks deployment will use shared data. This was added to the file `fe.conf` when Docker Compose created the deployment.
 
@@ -257,7 +257,7 @@ Empty set (0.04 sec)
 
 #### Create a shared-data storage volume
 
-Earlier you created a bucket in MinIO named `my-starrocks-volume`, and you verified that MinIO has an access key named `AAAAAAAAAAAAAAAAAAAA`. The following SQL will create a storage volume in the MionIO bucket using the access key and secret.
+Earlier you created a bucket in MinIO named `my-starrocks-volume`, and you verified that MinIO has an access key named `AAAAAAAAAAAAAAAAAAAA`. The following SQL will create a storage volume in the MinIO bucket using the access key and secret.
 
 ```sql
 CREATE STORAGE VOLUME s3_volume
@@ -289,7 +289,7 @@ SHOW STORAGE VOLUMES;
 1 row in set (0.02 sec)
 ```
 
-View the details of the storage volume and note that this is nott yet the default volume, and that it is configured to use your bucket:
+View the details of the storage volume and note that this is not yet the default volume, and that it is configured to use your bucket:
 
 ```
 DESC STORAGE VOLUME s3_volume\G
@@ -460,7 +460,7 @@ curl --location-trusted -u root             \
 
 ## Verify that data is stored in MinIO
 
-Open MinIO [http://localhost:9001/browser/my-starrocks-bucket](http://localhost:9001/browser/my-starrocks-bucket) and verify that you have entries below `my-starrocks-bucket/`
+Open MinIO [http://localhost:9001/console/browser/my-starrocks-bucket](http://localhost:9001/console/browser/my-starrocks-bucket) and verify that you have entries below `my-starrocks-bucket/`
 
 :::tip
 The folder names below `my-starrocks-bucket/` are generated when you load the data. You should see a single directory below `my-starrocks-bucket`, and then two more below that. In those directories you will find the data, metadata, or schema entries.
@@ -582,7 +582,7 @@ These three changes allow traffic between the host network and the CN:
 
 In this tutorial you:
 
-- Deployed StarRocks and Minio in Docker
+- Deployed StarRocks and MinIO in Docker
 - Created a MinIO access key
 - Configured a StarRocks Storage Volume that uses MinIO
 - Loaded crash data provided by New York City and weather data provided by NOAA

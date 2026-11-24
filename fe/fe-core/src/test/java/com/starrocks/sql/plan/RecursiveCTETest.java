@@ -243,6 +243,28 @@ public class RecursiveCTETest extends PlanTestBase {
     }
 
     @Test
+    public void testNestedRecursiveCteReferencedOnlyInSelectListSubqueryRejected() throws Exception {
+        // The outer recursive CTE q is referenced only from a SELECT-list subquery inside the nested
+        // recursive CTE x. Before AstTraverser visited the pre-analysis selectList, RecursiveCTEAstCheck
+        // never saw this reference; it must now be rejected as a multi-level recursive CTE.
+        String sql = "with recursive q as ("
+                + " select v1, v2, v3 from t0"
+                + " union all ("
+                + "   with recursive x as ("
+                + "     select v1, v2, v3 from t0"
+                + "     union all"
+                + "     select (select max(v1) from q), v2, v3 from x where v2 < 10"
+                + "   )"
+                + "   select v1, v2, v3 from x"
+                + " )"
+                + ") select v1 from q";
+        connectContext.getSessionVariable().setEnableRecursiveCTE(true);
+        SemanticException e = Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        Assertions.assertTrue(e.getMessage().contains("Doesn't support multi-level recursive CTE"),
+                e.getMessage());
+    }
+
+    @Test
     public void testRecursiveCteReferencedOnlyInInSubqueryRejected() throws Exception {
         // Same as above but the reference hides in an IN subquery instead of a scalar one.
         String sql = "with recursive q as ("

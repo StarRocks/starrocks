@@ -25,7 +25,7 @@ Paimon catalog 是一种 external catalog，可以让您在不进行数据导入
 
 ## 使用注意事项
 
-Paimon catalog 支持查询数据，以及创建和删除 Paimon 数据库与表。不支持通过 INSERT、UPDATE、DELETE 写入数据，也不支持 CREATE TABLE LIKE 和 CREATE TABLE AS SELECT。
+Paimon catalog 支持查询数据、创建和删除 Paimon 数据库与表，以及通过 INSERT INTO、INSERT OVERWRITE 和 CREATE TABLE AS SELECT 写入数据。不支持 UPDATE、DELETE 和 CREATE TABLE LIKE。
 
 ## Paimon to StarRocks data types
 
@@ -792,7 +792,21 @@ PROPERTIES (
 
 - 不支持 `DISTRIBUTED BY`、`ORDER BY`、`ROLLUP`、生成列、聚合列和 `AUTO_INCREMENT`。
 - 不支持非 NULL 的列默认值。
-- 不支持 `CREATE TABLE LIKE`、`CREATE TABLE AS SELECT`，也不支持通过 `INSERT`、`UPDATE`、`DELETE` 写入数据。
+- 不支持 `CREATE TABLE LIKE`，也不支持通过 `UPDATE`、`DELETE` 写入数据。
+
+### CREATE TABLE AS SELECT
+
+[CREATE TABLE AS SELECT](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 从查询推导目标列，创建 Paimon 表，再按 `INSERT INTO` 的规则写入查询结果。需要分区列、主键或表属性时，请在语句中声明。
+
+Paimon CTAS 的目标表必须位于 Paimon Catalog。若目标位于 Unified Catalog，StarRocks 会在建表前报错。
+
+```SQL
+CREATE TABLE paimon_catalog.write_db.orders_copy
+PROPERTIES ("bucket" = "-1", "file.format" = "parquet")
+AS SELECT id, amount FROM paimon_catalog.write_db.orders;
+```
+
+建表和发布快照分两步进行。如果建表成功后写入失败，StarRocks 会尝试删除目标表。使用 `IF NOT EXISTS` 时，已有的目标表保持原样。请在显式事务之外执行 Paimon CTAS。
 
 ### DROP TABLE
 
@@ -828,6 +842,41 @@ DROP DATABASE [IF EXISTS] <catalog_name>.<database_name> [FORCE];
 ```SQL
 DROP DATABASE IF EXISTS paimon_catalog_fs.ddl_demo;
 ```
+
+## 向 Paimon 写入数据
+
+可以使用 `INSERT INTO ... VALUES` 或 `INSERT INTO ... SELECT` 向 Paimon catalog 中的原生 file-store 表写入数据。Append-only 表支持 `bucket = -1` 或正数固定分桶。主键表要求正数固定分桶和 `deduplicate` 合并引擎。写入已有主键会执行整行 upsert，不是部分列更新。
+
+```sql
+CREATE DATABASE IF NOT EXISTS paimon_catalog_fs.ddl_demo;
+CREATE TABLE paimon_catalog_fs.ddl_demo.write_demo (
+    id INT NOT NULL,
+    p VARCHAR(32),
+    value VARCHAR(64)
+)
+PARTITION BY (p)
+PROPERTIES ('bucket' = '-1', 'file.format' = 'parquet');
+
+INSERT INTO paimon_catalog_fs.ddl_demo.write_demo VALUES (1, 'a', 'one');
+INSERT INTO paimon_catalog_fs.ddl_demo.write_demo PARTITION (p = 'b')
+SELECT 2, 'two';
+```
+
+支持显式列列表和 `BY NAME`。指定静态分区时，输入中不包含分区列，分区列在原生 schema 中的位置不受限制。省略的可空列填充 NULL，必填列必须提供值。对于配置了 Paimon 原生默认值的列，需要显式提供值，暂不支持省略该列或使用 `DEFAULT`。
+
+`INSERT OVERWRITE` 默认覆盖整张表。指定 `PARTITION` 时仅覆盖该分区。设置 `dynamic_overwrite = true` 且未指定分区时，仅覆盖输入数据涉及的分区。输入为空时，全表或静态分区覆盖会清空目标；动态分区覆盖不会修改数据。
+
+:::warning
+
+避免在 `PARTITION (...)` 中将表的 NULL 分区保留名用作字符串。Paimon 解析覆盖目标时，会将与 `partition.default-name`（默认为 `__DEFAULT_PARTITION__`）相同的分区值视为 NULL。例如，指定 `PARTITION (p = '__DEFAULT_PARTITION__')` 且输入为零行时，覆盖操作可能清空 NULL 分区。如需覆盖 NULL 分区，请使用 `PARTITION (p = NULL)`。
+
+:::
+
+写入要求使用 Parquet 数据文件，并且 FE/BE 版本一致、BE 安装原生 Paimon writer。写入使用 catalog 的存储凭据。`paimon_reader_mode` 只选择读取方式，不改变写入实现。暂不支持显式事务、部分列更新、主键表动态分桶、跨分区主键更新、data evolution、row tracking、全局索引和外部数据路径。
+
+分区列支持布尔、整数、字符串和日期类型。写入数据行时，StarRocks 会拒绝分区列中的空字符串、纯空白字符串，以及与默认分区保留名相同的字符串。原生 SDK 无法将这些值与 NULL 区分保存。每个 Sink Driver 默认最多管理 64 个活跃的分区/分桶 Writer，原生和 Arrow 分配的内存预算为 256 MiB；超过限制会在发布前使语句失败。可通过表属性 `starrocks.paimon.max-active-writers`（1–4096）和 `starrocks.paimon.max-writer-memory-bytes`（2 MiB–4 GiB，以字节指定）调整限制，同时仍受查询内存限制约束。
+
+FE 发布 Paimon 原生快照后，数据才对读取可见。空输入的 INSERT INTO 不改变数据。如果客户端收到 Paimon 提交结果未知的错误，应先核实本次操作，再决定是否重试：快照可能已经发布，重复追加可能产生重复行。Query Profile 中的 `PaimonOperationId` 和 `PaimonPublicationState` 可用于定位该操作。
 
 ## 查看 Paimon 表的 schema
 
@@ -876,6 +925,40 @@ DROP DATABASE IF EXISTS paimon_catalog_fs.ddl_demo;
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10;
    ```
+
+### 查看计划扫描的数据量
+
+`EXPLAIN VERBOSE` 和 `EXPLAIN COSTS` 会为每个 Paimon 扫描节点显示候选文件指标，普通 `EXPLAIN` 不显示该指标块：
+
+```text
+0:PaimonScanNode
+   ...
+   avgRowSize=2.0
+   Paimon Scan Metrics:
+     splits=2
+     data_files=3
+     data_file_bytes=12000000000
+     data_file_rows=9000000000
+   limit: 10
+   cardinality: 10
+```
+
+这些指标统计 Paimon 规划器完成分区裁剪、文件裁剪以及规划阶段的 LIMIT 裁剪后选中的 split。
+统计使用扫描规划中已加载的文件元数据，与 reader 的选择无关。将文件拆分为多个扫描范围不会重复计算文件数、字节数或行数。
+对于全局索引 split，指标统计底层候选文件，尚未应用索引限定的行范围。
+
+| 字段 | 含义 |
+| --- | --- |
+| `splits` | 拆分扫描范围前，Paimon 输入 split 的数量。 |
+| `data_files` | 选中 split 中的数据文件条目数。 |
+| `data_file_bytes` | 这些数据文件在存储中的大小总和，单位为字节。 |
+| `data_file_rows` | 文件元数据中的记录数总和，尚未进行剩余条件过滤、删除向量过滤或主键合并。 |
+
+空扫描的指标为零。如果任一 split 缺少数据文件元数据（例如某些系统表的 split），三个文件指标均为 `-1`，表示不可用，避免返回零或不完整的总量。扫描规划前不显示该指标块。
+
+`cardinality` 仍表示优化器估算的输出行数，可能受谓词和 `LIMIT` 影响而减少。`data_file_rows` 不会被该输出估算值截断。
+字节数统计整个候选数据文件，不包含删除文件或索引文件，也不考虑列投影、页裁剪、缓存命中或提前结束执行。
+它反映候选扫描数据量，不表示实际 I/O、输出大小或执行限制。因此，即使 `LIMIT` 很小，仍可能选中很大的文件。
 
 ## 从 Paimon 导入数据
 

@@ -47,7 +47,6 @@ import com.starrocks.sql.optimizer.rewrite.ExternalScanPredicates;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import io.delta.kernel.data.FilteredColumnarBatch;
 import io.delta.kernel.data.Row;
-import io.delta.kernel.engine.Engine;
 import io.delta.kernel.expressions.Predicate;
 import io.delta.kernel.internal.InternalScanFileUtils;
 import io.delta.kernel.internal.ScanBuilderImpl;
@@ -219,7 +218,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
             Table table, ScalarOperator operator, boolean enableCollectColumnStats) {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
         Metadata metadata = deltaLakeTable.getDeltaMetadata();
-        Engine engine = deltaLakeTable.getDeltaEngine();
+        DeltaLakeEngine engine = (DeltaLakeEngine) deltaLakeTable.getDeltaEngine();
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
 
         StructType schema = metadata.getSchema();
@@ -319,12 +318,12 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         };
 
         if (residual.residual.isEmpty()) {
-            return baseIterator;
+            return engine.withFileSystemAccess(baseIterator);
         }
         // Evaluate the cast-on-string-partition residual StarRocks-side: keep a file unless its partition value
         // provably cannot satisfy the residual (partitionMayMatch drops only on a definitive false), consistent
         // with the backend filter and never dropping a possibly-matching file.
-        return new CloseableIterator<>() {
+        return engine.withFileSystemAccess(new CloseableIterator<>() {
             Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> nextMatch = null;
             boolean finished = false;
 
@@ -368,7 +367,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                     LOG.error("Failed to close delta lake scan file iterator", e);
                 }
             }
-        };
+        });
     }
 
     // Partition columns of string type. Delta partitioning is always identity, so every string partition column is

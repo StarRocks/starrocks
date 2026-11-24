@@ -17,6 +17,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.paimon.PaimonUtils;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.PaimonScanNode;
@@ -47,6 +48,7 @@ public class PaimonTable extends Table {
     private String tableName;
     private org.apache.paimon.table.Table paimonNativeTable;
     private String uuid;
+    private String nativeIdentity;
     private List<String> partColumnNames;
     private List<String> paimonFieldNames;
     private Map<String, String> properties;
@@ -57,7 +59,12 @@ public class PaimonTable extends Table {
 
     public PaimonTable(String catalogName, String dbName, String tblName, List<Column> schema,
                        org.apache.paimon.table.Table paimonNativeTable) {
-        super(CONNECTOR_ID_GENERATOR.getNextId().asLong(), tblName, TableType.PAIMON, schema);
+        this(CONNECTOR_ID_GENERATOR.getNextId().asLong(), catalogName, dbName, tblName, schema, paimonNativeTable);
+    }
+
+    private PaimonTable(long id, String catalogName, String dbName, String tblName, List<Column> schema,
+                        org.apache.paimon.table.Table paimonNativeTable) {
+        super(id, tblName, TableType.PAIMON, schema);
         this.catalogName = catalogName;
         this.databaseName = dbName;
         this.tableName = tblName;
@@ -88,14 +95,51 @@ public class PaimonTable extends Table {
     }
 
     // For refresh table only
-    public void setPaimonNativeTable(org.apache.paimon.table.Table paimonNativeTable) {
+    public synchronized void setPaimonNativeTable(org.apache.paimon.table.Table paimonNativeTable) {
         this.paimonNativeTable = paimonNativeTable;
+        this.nativeIdentity = null;
+        this.uuid = null;
+    }
+
+    /** Capture a write target before taking the FE metadata lock. The SDK UUID lookup may do I/O. */
+    public synchronized PaimonTable copyForWrite() {
+        PaimonTable target =
+                new PaimonTable(getId(), catalogName, databaseName, tableName, getFullSchema(), paimonNativeTable);
+        target.setComment(getComment());
+        target.nativeIdentity = resolveNativeIdentity();
+        return target;
+    }
+
+    private String resolveNativeIdentity() {
+        if (nativeIdentity == null) {
+            String identity = paimonNativeTable.uuid();
+            if (Strings.isNullOrEmpty(identity)) {
+                throw new StarRocksConnectorException("Paimon table metadata has no native identity");
+            }
+            nativeIdentity = identity;
+        }
+        return nativeIdentity;
+    }
+
+    public String getNativeWriteIdentity() {
+        String identity = nativeIdentity;
+        if (identity == null) {
+            throw new StarRocksConnectorException("Paimon table metadata has no native identity");
+        }
+        return identity;
     }
 
     @Override
-    public String getUUID() {
+    public boolean supportInsert() {
+        // A cheap type gate only. Every write still passes PaimonWriteCapabilities in analysis and sink construction.
+        return paimonNativeTable instanceof FileStoreTable;
+    }
+
+    @Override
+    public synchronized String getUUID() {
         if (Strings.isNullOrEmpty(this.uuid)) {
-            this.uuid = String.join(".", catalogName, databaseName, tableName, paimonNativeTable.uuid().replace(".", "_"));
+            String identity = resolveNativeIdentity();
+            this.uuid = String.join(".", catalogName, databaseName, tableName, identity.replace(".", "_"));
         }
         return this.uuid;
     }

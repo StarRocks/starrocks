@@ -14,26 +14,35 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.sql.optimizer.statistics.MockDictManager;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class LowCardinalityTest extends PlanTestBase {
     @BeforeAll
@@ -304,6 +313,116 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  <dict id 9> : <string id 3>"));
         Assertions.assertTrue(
                 plan.contains("PREDICATES: DictDecode(9: S_ADDRESS, [<place-holder> LIKE '%Customer%Complaints%'])"));
+    }
+
+    @Test
+    public void testDictCollectedAfterThePlanningCopyIsNotUsed() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `t_dict_collected_later` (\n" +
+                "  `k1` int NULL,\n" +
+                "  `v` varchar(20) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
+                .getTable("t_dict_collected_later");
+        PhysicalPartition physical = table.getPhysicalPartitions().iterator().next();
+        long version = physical.getVisibleVersion();
+        long versionTime = physical.getVisibleVersionTime();
+        String sql = "select v from t_dict_collected_later group by v";
+        boolean useV2 = connectContext.getSessionVariable().isUseLowCardinalityOptimizeV2();
+        // The partition holds no data, and a scan reads such a partition only while this is set. Other tests of this
+        // class clear it, and V2 judges a dict by the partitions the scan reads.
+        boolean runningUnitTest = FeConstants.runningUnitTest;
+        FeConstants.runningUnitTest = true;
+        try {
+            for (boolean v2 : List.of(false, true)) {
+                connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(v2);
+                Assertions.assertTrue(getFragmentPlan(sql).contains("Decode"),
+                        "v2=" + v2 + ": a dict collected before the copy is used");
+            }
+
+            // The scan reads the versions the plan's table copy recorded. A dict collected from a newer state may lack
+            // a value they hold, one updated or deleted since and compacted away, which BE would encode as 0. While
+            // nothing the scan reads moved since the copy, a later dict read it as recorded.
+            ColumnDict collectedLater = new ColumnDict(ImmutableMap.of(
+                    ByteBuffer.wrap("a".getBytes(StandardCharsets.UTF_8)), 1), Long.MAX_VALUE, Long.MAX_VALUE);
+            AtomicBoolean loadAfterCopy = new AtomicBoolean();
+            new MockUp<MockDictManager>() {
+                @Mock
+                public Optional<ColumnDict> getGlobalDict(long tableId, ColumnId columnName) {
+                    if (loadAfterCopy.get()) {
+                        physical.updateVisibleVersion(physical.getVisibleVersion() + 1);
+                    }
+                    return Optional.of(collectedLater);
+                }
+            };
+            for (boolean v2 : List.of(false, true)) {
+                connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(v2);
+                Assertions.assertTrue(getFragmentPlan(sql).contains("Decode"),
+                        "v2=" + v2 + ": a later dict while nothing read moved is used");
+            }
+            loadAfterCopy.set(true);
+            for (boolean v2 : List.of(false, true)) {
+                connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(v2);
+                String plan = getFragmentPlan(sql);
+                Assertions.assertTrue(plan.contains("partitions=1/1"), "v2=" + v2 + ": " + plan);
+                Assertions.assertFalse(plan.contains("Decode"), "v2=" + v2 + ": " + plan);
+                // Back to the version the replica holds: the next plan builds its scan ranges at the one it copies.
+                physical.updateVisibleVersion(version, versionTime);
+            }
+        } finally {
+            physical.updateVisibleVersion(version, versionTime);
+            FeConstants.runningUnitTest = runningUnitTest;
+            connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(useV2);
+        }
+    }
+
+    @Test
+    public void testV1ChecksADictAgainstEveryPartitionTheCopyRecorded() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `t_dict_two_partitions` (\n" +
+                "  `k1` int NULL,\n" +
+                "  `v` varchar(20) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "PARTITION BY RANGE(`k1`) (\n" +
+                "  PARTITION p1 VALUES LESS THAN (\"10\"),\n" +
+                "  PARTITION p2 VALUES LESS THAN (\"20\")\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
+                .getTable("t_dict_two_partitions");
+        String sql = "select v from t_dict_two_partitions partition(p1) group by v";
+        boolean useV2 = connectContext.getSessionVariable().isUseLowCardinalityOptimizeV2();
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
+        try {
+            Assertions.assertTrue(getFragmentPlan(sql).contains("Decode"), "a dict collected before the copy is used");
+
+            // V1 gives every scan of a table the dict it accepted last, so it checks one against all the partitions the
+            // copy recorded, not only those this scan reads. A load committed earlier becomes visible in p2 once the
+            // copy was taken, and the dict carries the copy's newest version time.
+            long copiedTime = table.getPhysicalPartitions().stream()
+                    .mapToLong(PhysicalPartition::getVisibleVersionTime).max().orElseThrow();
+            PhysicalPartition p2 = table.getPartition("p2").getDefaultPhysicalPartition();
+            ColumnDict sameTime = new ColumnDict(ImmutableMap.of(
+                    ByteBuffer.wrap("a".getBytes(StandardCharsets.UTF_8)), 1), copiedTime, Long.MAX_VALUE);
+            AtomicBoolean published = new AtomicBoolean();
+            new MockUp<MockDictManager>() {
+                @Mock
+                public Optional<ColumnDict> getGlobalDict(long tableId, ColumnId columnName) {
+                    if (published.compareAndSet(false, true)) {
+                        p2.updateVisibleVersion(p2.getVisibleVersion() + 1, copiedTime - 1);
+                    }
+                    return Optional.of(sameTime);
+                }
+            };
+            String plan = getFragmentPlan(sql);
+            Assertions.assertTrue(published.get());
+            Assertions.assertFalse(plan.contains("Decode"), plan);
+        } finally {
+            connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(useV2);
+        }
     }
 
     @Test

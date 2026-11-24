@@ -1,0 +1,64 @@
+-- name: test_array_unique_agg_combine_null_rows
+DROP DATABASE IF EXISTS test_array_unique_agg_combine_null_rows_${uuid0};
+-- result:
+-- !result
+CREATE DATABASE test_array_unique_agg_combine_null_rows_${uuid0};
+-- result:
+-- !result
+USE test_array_unique_agg_combine_null_rows_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (
+    k INT,
+    g INT,
+    arr ARRAY<INT>,
+    v INT
+) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t1 VALUES
+    (1, 1, [1, 2], 1),
+    (2, 1, NULL, NULL),
+    (3, 2, NULL, NULL),
+    (4, 3, [3, NULL], 3),
+    (5, 3, [3], 3);
+-- result:
+-- !result
+SET pipeline_dop = 1;
+-- result:
+-- !result
+SET streaming_preaggregation_mode = 'force_preaggregation';
+-- result:
+-- !result
+SET new_planner_agg_stage = 1;
+-- result:
+-- !result
+SELECT g,
+       array_sort(array_unique_agg(arr)),
+       array_sort(array_unique_agg_state_merge(array_unique_agg_combine(arr))),
+       array_sort(array_agg_distinct(v)),
+       array_sort(array_agg_distinct_state_merge(array_agg_distinct_combine(v)))
+FROM t1 GROUP BY g ORDER BY g;
+-- result:
+1	[null,1,2]	[null,1,2]	[null,1]	[null,1]
+2	[null]	[null]	[null]	[null]
+3	[null,3]	[null,3]	[3]	[3]
+-- !result
+SET new_planner_agg_stage = 2;
+-- result:
+-- !result
+SELECT g,
+       array_sort(array_unique_agg(arr)),
+       array_sort(array_unique_agg_state_merge(array_unique_agg_combine(arr))),
+       array_sort(array_agg_distinct(v)),
+       array_sort(array_agg_distinct_state_merge(array_agg_distinct_combine(v)))
+FROM t1 GROUP BY g ORDER BY g;
+-- result:
+1	[null,1,2]	[null,1,2]	[null,1]	[null,1]
+2	[null]	[null]	[null]	[null]
+3	[null,3]	[null,3]	[3]	[3]
+-- !result
+DROP DATABASE test_array_unique_agg_combine_null_rows_${uuid0};
+-- result:
+-- !result

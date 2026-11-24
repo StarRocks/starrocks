@@ -291,6 +291,11 @@ public class PlannerMetaLocker implements AutoCloseable {
         this.acquireTimeoutMs = acquireTimeoutMs;
     }
 
+    /** The bound {@link #setAcquireTimeoutMs} set, or negative for none. */
+    public long getAcquireTimeoutMs() {
+        return acquireTimeoutMs;
+    }
+
     /**
      * {@link #lock()}, unless {@link #setAcquireTimeoutMs} bounded the wait: then {@link #tryLock} with that bound,
      * throwing {@link AcquireTimeoutException} when it runs out. Nothing is held after the throw.
@@ -700,14 +705,15 @@ public class PlannerMetaLocker implements AutoCloseable {
         private void visitPolicyBodies(TableName name, Table table) {
             List<Expr> bodies = new ArrayList<>();
             try {
-                Expr rowAccess = Authorizer.getRowAccessPolicy(session, name);
+                // The analyzer's own lookup is the one that counts (and, under Ranger, the one audited).
+                Expr rowAccess = Authorizer.getRowAccessPolicyWithoutAudit(session, name);
                 if (rowAccess != null) {
                     bodies.add(rowAccess);
                 }
                 // The columns SecurityPolicyRewriteRule#buildView masks.
                 List<Column> columns = table.getBaseSchema().stream()
                         .filter(c -> !c.getType().isUnknown()).filter(Column::isVisible).toList();
-                Map<String, Expr> masking = Authorizer.getColumnMaskingPolicy(session, name, columns);
+                Map<String, Expr> masking = Authorizer.getColumnMaskingPolicyWithoutAudit(session, name, columns);
                 if (masking != null) {
                     bodies.addAll(masking.values());
                 }

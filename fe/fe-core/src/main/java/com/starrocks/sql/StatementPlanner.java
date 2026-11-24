@@ -89,6 +89,7 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.sql.plan.PlanningVersionRecheck;
 import com.starrocks.sql.plan.RangeScanExecutionValidator;
 import com.starrocks.sql.spm.SPMPlanner;
 import com.starrocks.thrift.TAuthenticateParams;
@@ -321,6 +322,8 @@ public class StatementPlanner {
                         session.getSessionVariable().isEnableInsertSelectExternalAutoRefresh()) {
                     new QueryAnalyzer(session).analyzeExternalTablesOnly(statement,
                             session.getSessionVariable().isEnableInsertSelectExternalAutoRefresh());
+                } else {
+                    new QueryAnalyzer(session).preResolvePaimonInsertTarget(insertStmt);
                 }
             }
 
@@ -609,7 +612,9 @@ public class StatementPlanner {
                 // that the authorization check runs off the lock too -- and the actual release on a retry.
                 plannerMetaLocker.unlock();
                 ExecPlan plan;
-                try {
+                // A re-read of the planning versions takes table locks too, within the bound of the re-acquire below.
+                try (PlanningVersionRecheck.LockWaitBound ignored =
+                        PlanningVersionRecheck.boundLockWaits(plannerMetaLocker.getAcquireTimeoutMs())) {
                     plan = planner.get();
                 } finally {
                     try (Timer ignore = Tracers.watchScope("Lock")) {

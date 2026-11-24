@@ -42,7 +42,7 @@ Routine load 是一种使用 Apache Kafka 或在本实验中使用 Redpanda，�
 
 - [Docker](https://docs.docker.com/engine/install/)
 - 为 Docker 分配 4 GB RAM
-- 为 Docker 分配 10 GB 可用磁盘空间
+- 为 Docker 分配 20 GB 可用磁盘空间
 
 ### SQL 客户端
 
@@ -152,7 +152,7 @@ container routineload-minio_mc-1 exited (0)
 
 ### 打开 MinIO Web UI
 
-浏览到 http://localhost:9001/access-keys 用户名和密码在 Docker compose 文件中指定，分别是 `miniouser` 和 `miniopassword`。您应该看到有一个访问密钥。密钥是 `AAAAAAAAAAAAAAAAAAAA`，您无法在 MinIO 控制台中看到密钥，但它在 Docker compose 文件中，是 `BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB`：
+浏览到 http://localhost:9001/console/identity 用户名和密码在 Docker compose 文件中指定，分别是 `miniouser` 和 `miniopassword`。您应该看到有一个访问密钥。密钥是 `AAAAAAAAAAAAAAAAAAAA`，您无法在 MinIO 控制台中看到密钥，但它在 Docker compose 文件中，是 `BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB`：
 
 ![查看 MinIO 访问密钥](../_assets/quick-start/MinIO-view-key.png)
 
@@ -166,7 +166,7 @@ container routineload-minio_mc-1 exited (0)
     LOCATIONS = ("s3://my-starrocks-bucket/")
 ```
 
-打开 [http://localhost:9001/buckets](http://localhost:9001/buckets) 并为存储卷添加一个 bucket。将 bucket 命名为 `my-starrocks-bucket`。接受列出的三个选项的默认值。
+打开 [http://localhost:9001/console/buckets](http://localhost:9001/console/buckets) 并为存储卷添加一个 bucket。将 bucket 命名为 `my-starrocks-bucket`。接受列出的三个选项的默认值。
 
 ---
 
@@ -228,7 +228,7 @@ Empty set (0.04 sec)
 
 #### 创建一个 shared-data 存储卷
 
-早些时候，您在 MinIO 中创建了一个名为 `my-starrocks-volume` 的 bucket，并验证了 MinIO 有一个名为 `AAAAAAAAAAAAAAAAAAAA` 的访问密钥。以下 SQL 将使用访问密钥和密钥在 MionIO bucket 中创建一个存储卷。
+早些时候，您在 MinIO 中创建了一个名为 `my-starrocks-volume` 的 bucket，并验证了 MinIO 有一个名为 `AAAAAAAAAAAAAAAAAAAA` 的访问密钥。以下 SQL 将使用访问密钥和密钥在 MinIO bucket 中创建一个存储卷。
 
 ```sql
 CREATE STORAGE VOLUME s3_volume
@@ -498,7 +498,7 @@ LatestSourcePosition: {"0":"5"}
 
 ## 验证数据是否存储在 MinIO 中
 
-打开 MinIO [http://localhost:9001/browser/](http://localhost:9001/browser/) 并验证 `my-starrocks-bucket` 下是否存储了对象。
+打开 MinIO [http://localhost:9001/console/browser/](http://localhost:9001/console/browser/) 并验证 `my-starrocks-bucket` 下是否存储了对象。
 
 ---
 
@@ -741,7 +741,7 @@ Kafka 的代理连接信息。格式为 `<kafka_broker_name_or_ip>:<broker_ port
 
 在本教程中，您：
 
-- 在 Docker 中部署了 StarRocks、Reedpanda 和 Minio
+- 在 Docker 中部署了 StarRocks、Redpanda 和 Minio
 - 创建了一个 Routine Load 作业以从 Kafka 主题消费数据
 - 学习了如何配置使用 MinIO 的 StarRocks 存储卷
 

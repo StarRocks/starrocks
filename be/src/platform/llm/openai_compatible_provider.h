@@ -20,14 +20,16 @@ namespace starrocks {
 
 class OpenAICompatibleProvider final : public AIProvider {
 public:
-    explicit OpenAICompatibleProvider(bool supports_video = false) : _supports_video(supports_video) {}
+    explicit OpenAICompatibleProvider(std::optional<int32_t> default_embedding_dimensions = std::nullopt)
+            : _default_embedding_dimensions(default_embedding_dimensions) {}
+    static StatusOr<std::unique_ptr<AIProvider>> create(const AIProviderConfig& config);
 
     StatusOr<AIProviderHttpRequest> build_request(const AIChatRequest& request) const override;
     AIProviderParseResult parse_response(std::string_view body,
                                          AICapability capability = AICapability::CHAT) const override;
 
 private:
-    bool _supports_video;
+    const std::optional<int32_t> _default_embedding_dimensions;
 };
 
 } // namespace starrocks
