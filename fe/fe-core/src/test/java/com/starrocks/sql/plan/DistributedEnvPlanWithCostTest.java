@@ -1705,4 +1705,16 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 + "  |  \n"
                 + "  2:ANALYTIC");
     }
+
+    @Test
+    public void testIntersectAddDistinctWithDuplicateOutputColumn() throws Exception {
+        // RB-1172: a child that outputs the same column twice must be deduplicated by grouping on it once; grouping
+        // on it twice put one slot twice into the aggregation output and the BE crashed in convert_hash_set_to_chunk.
+        String sql = "select l_returnflag, l_returnflag from lineitem " +
+                "intersect select o_orderstatus, o_orderstatus from orders";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "INTERSECT");
+        assertContains(plan, "group by: 9: L_RETURNFLAG\n");
+        assertNotContains(plan, "group by: 9: L_RETURNFLAG, 9: L_RETURNFLAG");
+    }
 }
