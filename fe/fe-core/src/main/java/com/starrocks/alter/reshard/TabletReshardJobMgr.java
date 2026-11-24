@@ -759,6 +759,7 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
             }
 
             job.registerReshardingTabletsOnRestart();
+            job.addTabletsToInvertedIndexOnRestart();
         }
     }
 

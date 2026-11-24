@@ -1216,7 +1216,8 @@ public class SplitTabletJob extends TabletReshardJob {
         }
     }
 
-    private void addTabletsToInvertedIndex() {
+    @Override
+    protected void addTabletsToInvertedIndex() {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
             for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
