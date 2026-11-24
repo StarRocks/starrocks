@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.IcebergTable;
@@ -30,6 +31,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -56,6 +58,7 @@ import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -73,6 +76,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -80,6 +84,7 @@ import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
@@ -110,6 +115,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -787,6 +793,60 @@ public class StatisticsCalculatorTest {
     }
 
     @Test
+    public void testLogicalDeltaLakeScanIgnoresGroupStatisticsWithoutScanColumns() {
+        // ReorderJoinRule can rebuild a scan and copy it into a new memo group together with the scan's
+        // post-projection statistics. Those are keyed by projection outputs, so a predicate on a scanned
+        // column must not be estimated against them: the scan has to load its table statistics instead.
+        Column column = new Column("c1", IntegerType.INT);
+        DeltaLakeTable deltaLakeTable = new DeltaLakeTable(1, "delta0", "db1", "table1",
+                Lists.newArrayList(column), Lists.newArrayList(), null, null,
+                new MetastoreTable("db1", "table1", "s3://bucket/path/to/table", 0));
+
+        ColumnRefOperator scanRef = new ColumnRefOperator(1, IntegerType.INT, "c1", true);
+        ColumnRefOperator projectedRef = new ColumnRefOperator(2, IntegerType.BIGINT, "cast", true);
+        Map<ColumnRefOperator, Column> refToColumn = Maps.newHashMap();
+        Map<Column, ColumnRefOperator> columnToRef = Maps.newHashMap();
+        refToColumn.put(scanRef, column);
+        columnToRef.put(column, scanRef);
+
+        ScalarOperator predicate = new IsNullPredicateOperator(true, scanRef);
+        LogicalDeltaLakeScanOperator deltaLakeScanOperator = new LogicalDeltaLakeScanOperator(deltaLakeTable,
+                refToColumn, columnToRef, -1, predicate);
+
+        Group group = new Group(0);
+        group.setStatistics(Statistics.builder()
+                .setOutputRowCount(10)
+                .addColumnStatistic(projectedRef, ColumnStatistic.unknown())
+                .build());
+        GroupExpression groupExpression = new GroupExpression(deltaLakeScanOperator, Lists.newArrayList());
+        groupExpression.setGroup(group);
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+        AtomicBoolean tableStatisticsLoaded = new AtomicBoolean(false);
+
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Statistics getTableStatistics(OptimizerContext session, String catalogName, Table table,
+                                                 Map<ColumnRefOperator, Column> columns,
+                                                 List<PartitionKey> partitionKeys, ScalarOperator predicate,
+                                                 long limit, TvrVersionRange version) {
+                tableStatisticsLoaded.set(true);
+                return Statistics.builder()
+                        .setOutputRowCount(100)
+                        .addColumnStatistic(scanRef, new ColumnStatistic(0, 100, 0.5, 4, 100))
+                        .build();
+            }
+        };
+
+        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
+                columnRefFactory, optimizerContext);
+        Assertions.assertDoesNotThrow(statisticsCalculator::estimatorStats);
+
+        Assertions.assertTrue(tableStatisticsLoaded.get());
+        Assertions.assertTrue(expressionContext.getStatistics().getColumnStatistics().containsKey(scanRef));
+        Assertions.assertEquals(50, expressionContext.getStatistics().getOutputRowCount(), 0.001);
+    }
+
+    @Test
     public void testLogicalOlapTableEmptyPartition() {
         ColumnRefOperator idDate = columnRefFactory.create("id_date", DateType.DATE, true);
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
@@ -1396,6 +1456,78 @@ public class StatisticsCalculatorTest {
 
         // THEN
         Assertions.assertTrue(innerValStatAfterJoin.getNullsFraction() < outerNullFraction);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = OuterJoin.class)
+    public void testOuterJoinKeepsPreservedSideStats(OuterJoin outerJoin) {
+        // GIVEN
+        JoinOperator joinType = JoinOperator.RIGHT_OUTER_JOIN;
+        if (outerJoin == OuterJoin.LEFT_OUTER_JOIN) {
+            joinType = JoinOperator.LEFT_OUTER_JOIN;
+        }
+
+        final var leftKey = columnRefFactory.create("left_key", FloatType.DOUBLE, true);
+        final var leftVal = columnRefFactory.create("left_val", IntegerType.INT, true);
+        final var rightKey = columnRefFactory.create("right_key", FloatType.DOUBLE, true);
+        columnRefFactory.updateColumnToRelationIds(leftKey.getId(), 0);
+        columnRefFactory.updateColumnToRelationIds(leftVal.getId(), 0);
+        columnRefFactory.updateColumnToRelationIds(rightKey.getId(), 1);
+
+        final var leftHistogram = new Histogram(
+                Lists.newArrayList(new Bucket(0, 200, 200L, 1L)), Maps.newHashMap());
+        final var leftGroup = new Group(0);
+        leftGroup.setStatistics(Statistics.builder().setOutputRowCount(200)
+                .addColumnStatistic(leftKey, new ColumnStatistic(0, 200, 0, 8, 200, leftHistogram,
+                        ColumnStatistic.StatisticType.ESTIMATE))
+                .addColumnStatistic(leftVal, new ColumnStatistic(0, 200, 0, 8, 150))
+                .build());
+        leftGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(leftKey, leftVal))));
+
+        final var rightHistogram = new Histogram(
+                Lists.newArrayList(new Bucket(0, 100, 200L, 1L)), Maps.newHashMap());
+        final var rightGroup = new Group(1);
+        rightGroup.setStatistics(Statistics.builder().setOutputRowCount(200)
+                .addColumnStatistic(rightKey, new ColumnStatistic(0, 100, 0, 8, 100, rightHistogram,
+                        ColumnStatistic.StatisticType.ESTIMATE))
+                .build());
+        rightGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(rightKey))));
+
+        final var joinPred = new BinaryPredicateOperator(BinaryType.EQ, leftKey, rightKey);
+        final var groupExpr = new GroupExpression(new LogicalJoinOperator(joinType, joinPred),
+                Lists.newArrayList(leftGroup, rightGroup));
+        groupExpr.setGroup(new Group(2));
+        final var exprCtx = new ExpressionContext(groupExpr);
+        final var calc = new StatisticsCalculator(exprCtx, columnRefFactory, optimizerContext);
+
+        // WHEN
+        calc.estimatorStats();
+        final var joinStats = exprCtx.getStatistics();
+
+        // THEN
+        Assertions.assertEquals(200, joinStats.getOutputRowCount(), 0.0001);
+        final var leftKeyStat = joinStats.getColumnStatistic(leftKey);
+        final var rightKeyStat = joinStats.getColumnStatistic(rightKey);
+        if (outerJoin == OuterJoin.LEFT_OUTER_JOIN) {
+            Assertions.assertEquals(200, leftKeyStat.getDistinctValuesCount(), 0.0001);
+            Assertions.assertEquals(0, leftKeyStat.getMinValue(), 0.0001);
+            Assertions.assertEquals(200, leftKeyStat.getMaxValue(), 0.0001);
+            // The preserved NDV is larger than the joined NDV so the joined histogram cannot be used
+            Assertions.assertNull(leftKeyStat.getHistogram());
+            Assertions.assertEquals(150, joinStats.getColumnStatistic(leftVal).getDistinctValuesCount(), 0.0001);
+        } else {
+            Assertions.assertEquals(100, rightKeyStat.getDistinctValuesCount(), 0.0001);
+            Assertions.assertEquals(0, rightKeyStat.getMinValue(), 0.0001);
+            Assertions.assertEquals(100, rightKeyStat.getMaxValue(), 0.0001);
+            // The preserved NDV (100) equals the joined NDV, so the joined histogram is kept.
+            final var buckets = rightKeyStat.getHistogram().getBuckets();
+            Assertions.assertEquals(1, buckets.size());
+            Assertions.assertEquals(0, buckets.get(0).getLower(), 0.0001);
+            Assertions.assertEquals(100, buckets.get(0).getUpper(), 0.0001);
+            Assertions.assertEquals(200L, buckets.get(0).getCount());
+            Assertions.assertEquals(1L, buckets.get(0).getUpperRepeats());
+            Assertions.assertEquals(101L, buckets.get(0).getDistinctCount().orElseThrow());
+        }
     }
 
     @Test
