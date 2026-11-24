@@ -44,6 +44,8 @@ import mockit.Mocked;
 import mockit.Verifications;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -132,6 +134,114 @@ public class SimpleExecutorTest {
         assertTrue(SimpleExecutor.outerRemainingQueryTimeoutS() <= 0);
 
         ConnectContext.remove();
+    }
+
+    @Test
+    public void testRemainingTimeoutExcludesCompletedQueueWait() {
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.getSessionVariable().setQueryTimeoutS(60);
+        context.setStartTime(Instant.now().minusSeconds(125));
+        context.setPendingTimeSecond(120);
+
+        int remaining = SimpleExecutor.checkInternalQueryState(context);
+        assertTrue(remaining > 50 && remaining <= 55, "remaining=" + remaining);
+
+        context.setStartTime(Instant.now().minusSeconds(181));
+        context.setPendingTimeSecond(120);
+        assertThrows(SemanticException.class, () -> SimpleExecutor.checkInternalQueryState(context));
+    }
+
+    @Test
+    public void testRemainingTimeoutAccountsForEachContextsOwnQueueWait() {
+        ConnectContext parent = UtFrameUtils.createDefaultCtx();
+        parent.getSessionVariable().setQueryTimeoutS(60);
+        parent.setStartTime(Instant.now().minusSeconds(125));
+        parent.setPendingTimeSecond(120);
+        ConnectContext child = UtFrameUtils.createDefaultCtx();
+        child.setParentConnectContext(parent);
+        child.getSessionVariable().setQueryTimeoutS(60);
+        child.setStartTime(Instant.now().minusSeconds(140));
+        child.setPendingTimeSecond(90);
+
+        // The child has 10 seconds left; the parent has 55.
+        int remaining = SimpleExecutor.checkInternalQueryState(child);
+        assertTrue(remaining > 5 && remaining <= 10, "remaining=" + remaining);
+
+        // The parent's execution deadline must still bound the child after excluding its own queue wait.
+        parent.setStartTime(Instant.now().minusSeconds(170));
+        parent.setPendingTimeSecond(115);
+        remaining = SimpleExecutor.checkInternalQueryState(child);
+        assertTrue(remaining > 0 && remaining <= 5, "remaining=" + remaining);
+        parent.setPendingTimeSecond(100);
+        assertThrows(SemanticException.class, () -> SimpleExecutor.checkInternalQueryState(child));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "'SELECT 1', 300",
+            "'INSERT INTO dst SELECT * FROM iceberg.db.src', 3600",
+            "'INSERT INTO dst PROPERTIES (\"timeout\"=\"180\") SELECT * FROM iceberg.db.src', 180",
+            "'CREATE TABLE dst AS SELECT * FROM iceberg.db.src', 3600"
+    })
+    public void testRemainingTimeoutUsesEachStatementsOwnContext(String sql, int executionTimeout) {
+        ConnectContext parent = UtFrameUtils.createDefaultCtx();
+        parent.getSessionVariable().setQueryTimeoutS(300);
+        parent.getSessionVariable().setInsertTimeoutS(3600);
+        parent.setExecutor(new StmtExecutor(parent,
+                SqlParser.parseOneWithStarRocksDialect(sql, parent.getSessionVariable())));
+        parent.setStartTime(Instant.now().minusSeconds(185));
+        parent.setPendingTimeSecond(120);
+        ConnectContext child = UtFrameUtils.createDefaultCtx();
+        child.setParentConnectContext(parent);
+        child.getSessionVariable().setQueryTimeoutS(10000);
+        child.getSessionVariable().setInsertTimeoutS(1);
+        child.setExecutor(new StmtExecutor(child,
+                SqlParser.parseOneWithStarRocksDialect("SELECT 1", child.getSessionVariable())));
+        child.setStartTime();
+
+        try (var scope = child.bindScope()) {
+            // The worker has the child's session bound, but each executor must use its own session.
+            assertEquals(executionTimeout, parent.getExecTimeoutWithoutPendingTime());
+            int remaining = SimpleExecutor.checkInternalQueryState(child);
+            assertTrue(remaining > executionTimeout - 70 && remaining <= executionTimeout - 65,
+                    "remaining=" + remaining);
+            assertSame(child, ConnectContext.get());
+
+            // An explicit context must also work on a thread with no session bound.
+            ConnectContext.remove();
+            assertEquals(executionTimeout, parent.getExecTimeoutWithoutPendingTime());
+            assertTrue(SimpleExecutor.checkInternalQueryState(child) > executionTimeout - 70);
+            assertNull(ConnectContext.get());
+
+            // The effective parent deadline still stops the child after subtracting its queue wait.
+            parent.setStartTime(Instant.now().minusSeconds(executionTimeout + 121L));
+            parent.setPendingTimeSecond(120);
+            SemanticException error = assertThrows(SemanticException.class,
+                    () -> SimpleExecutor.checkInternalQueryState(child));
+            assertTrue(error.getMessage().contains("Internal query timed out"));
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testPendingAllowanceDoesNotIncreaseExecutionBudget() {
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.getSessionVariable().setQueryTimeoutS(60);
+        context.setStartTime(Instant.now().minusSeconds(125));
+        context.setPending(true);
+        context.setPendingTimeSecond(300);
+        assertEquals(60, SimpleExecutor.checkInternalQueryState(context));
+        context.setPendingTimeSecond(Integer.MAX_VALUE);
+        assertEquals(60, SimpleExecutor.checkInternalQueryState(context));
+
+        // On admission the queue manager replaces the allowance with the actual wait.
+        context.setPendingTimeSecond(120);
+        context.setPending(false);
+        int remaining = SimpleExecutor.checkInternalQueryState(context);
+        assertTrue(remaining > 50 && remaining <= 55, "remaining=" + remaining);
+        assertEquals(60, context.getSessionVariable().getQueryTimeoutS());
+        assertEquals(120, context.getPendingTimeSecond());
     }
 
     /**

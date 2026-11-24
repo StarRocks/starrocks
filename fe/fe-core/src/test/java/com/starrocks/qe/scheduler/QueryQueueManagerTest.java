@@ -23,6 +23,8 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.planner.RangeColocateUnalignedException;
 import com.starrocks.qe.ConnectContext;
@@ -31,12 +33,15 @@ import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.SimpleExecutor;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.slot.SlotManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.ast.ShowRunningQueriesStmt;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
@@ -47,11 +52,13 @@ import com.starrocks.thrift.TReleaseSlotResponse;
 import com.starrocks.thrift.TRequireSlotRequest;
 import com.starrocks.thrift.TRequireSlotResponse;
 import com.starrocks.thrift.TResourceGroupUsage;
+import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.thrift.TApplicationException;
@@ -63,6 +70,9 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -70,9 +80,12 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -80,6 +93,8 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
 
 public class QueryQueueManagerTest extends SchedulerTestBase {
 
@@ -160,6 +175,297 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         GlobalVariable.setQueryQueuePendingTimeoutSecond(prevQueuePendingTimeoutSecond);
         connectContext.getSessionVariable().setQueryTimeoutS(prevQueueTimeoutSecond);
         GlobalVariable.setQueryQueueMaxQueuedQueries(prevQueueMaxQueuedQueries);
+    }
+
+
+    private ConnectContext newMetadataCaller() {
+        ConnectContext caller = UtFrameUtils.createDefaultCtx();
+        caller.setDatabase(DB_NAME);
+        caller.setStartTime();
+        caller.setExecutor(spy(new StmtExecutor(caller,
+                SqlParser.parseOneWithStarRocksDialect("select 1", caller.getSessionVariable()))));
+        return caller;
+    }
+
+    private DefaultCoordinator metadataScheduler(ConnectContext caller) throws Exception {
+        MetadataCollectJob job = new MetadataCollectJob("default_catalog", DB_NAME, "lineitem", TResultSinkType.CUSTOMIZED) {
+            @Override
+            protected String buildCollectMetadataSQL() {
+                return "select count(1) from lineitem";
+            }
+        };
+        job.init(caller);
+        ConnectContext child = job.getContext();
+        try (var ignored = child.bindScope()) {
+            DefaultCoordinator coord = UtFrameUtils.getScheduler(child, job.getSql());
+            coord.setQueryId(UUIDUtil.genTUniqueId());
+            return coord;
+        }
+    }
+
+    private CompletableFuture<Void> queueMetadata(DefaultCoordinator coord) {
+        return CompletableFuture.runAsync(() -> {
+            try {
+                manager.maybeWait(coord.getConnectContext(), coord);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    private void awaitQueued(DefaultCoordinator coord) {
+        Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() ->
+                GlobalStateMgr.getCurrentState().getSlotManager().getSlots().stream().anyMatch(slot ->
+                        slot.getSlotId().equals(coord.getQueryId()) && slot.getState() == LogicalSlot.State.REQUIRING));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testMetadataBeforeParentAdmissionWaitsForCapacity(boolean groupLimit) throws Exception {
+        GlobalVariable.setEnableQueryQueueSelect(true);
+        GlobalVariable.setQueryQueueConcurrencyLimit(groupLimit ? 0 : 1);
+        if (groupLimit) {
+            mockResourceGroup(new TWorkGroup().setId(100).setName("metadata_group").setConcurrency_limit(1));
+        }
+        DefaultCoordinator blocker = getSchedulerWithQueryId("select count(1) from lineitem");
+        manager.maybeWait(connectContext, blocker);
+        DefaultCoordinator child = metadataScheduler(newMetadataCaller());
+        CompletableFuture<Void> waiting = queueMetadata(child);
+        try {
+            awaitQueued(child);
+            Assertions.assertFalse(waiting.isDone());
+            Assertions.assertTrue(child.getJobSpec().isEnableGroupLevelQueue());
+            Assertions.assertTrue(child.getJobSpec().isNeedQueued());
+            Assertions.assertEquals(LogicalSlot.State.REQUIRING, child.getSlot().getState());
+            blocker.onReleaseSlots();
+            waiting.get(5, TimeUnit.SECONDS);
+            Assertions.assertEquals(LogicalSlot.State.ALLOCATED, child.getSlot().getState());
+        } finally {
+            blocker.onReleaseSlots();
+            child.onReleaseSlots();
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testMetadataQueueWaitUsesQueueDeadline(boolean queueTimesOut) throws Exception {
+        GlobalVariable.setEnableQueryQueueSelect(true);
+        GlobalVariable.setQueryQueueConcurrencyLimit(1);
+        GlobalVariable.setQueryQueuePendingTimeoutSecond(queueTimesOut ? 3 : 30);
+        DefaultCoordinator blocker = getSchedulerWithQueryId("select count(1) from lineitem");
+        manager.maybeWait(connectContext, blocker);
+        ConnectContext caller = newMetadataCaller();
+        caller.getSessionVariable().setMetadataCollectQueryTimeoutS(2);
+        DefaultCoordinator child = metadataScheduler(caller);
+        long timeoutsBefore = MetricRepo.COUNTER_QUERY_QUEUE_TIMEOUT.getValue();
+        CompletableFuture<Void> waiting = queueMetadata(child);
+        try {
+            awaitQueued(child);
+            if (queueTimesOut) {
+                assertThatThrownBy(() -> waiting.get(5, TimeUnit.SECONDS))
+                        .hasMessageContaining("query_queue_pending_timeout_second");
+                Assertions.assertEquals(LogicalSlot.State.CANCELLED, child.getSlot().getState());
+                Assertions.assertEquals(timeoutsBefore + 1, MetricRepo.COUNTER_QUERY_QUEUE_TIMEOUT.getValue().longValue());
+            } else {
+                // The execution budget is only two seconds, but the queue permits a longer wait.
+                Assertions.assertThrows(TimeoutException.class, () -> waiting.get(2200, TimeUnit.MILLISECONDS));
+                blocker.onReleaseSlots();
+                waiting.get(5, TimeUnit.SECONDS);
+                Assertions.assertEquals(LogicalSlot.State.ALLOCATED, child.getSlot().getState());
+                Assertions.assertTrue(child.getConnectContext().getPendingTimeSecond() >= 2);
+                int remaining = SimpleExecutor.checkInternalQueryState(child.getConnectContext());
+                Assertions.assertTrue(remaining > 0 && remaining <= 2, "remaining=" + remaining);
+                Assertions.assertEquals(timeoutsBefore, MetricRepo.COUNTER_QUERY_QUEUE_TIMEOUT.getValue().longValue());
+            }
+            Assertions.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
+        } finally {
+            child.onReleaseSlots();
+            blocker.onReleaseSlots();
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"false, false", "false, true", "true, false", "true, true"})
+    public void testMetadataSharesAdmittedParentUntilBothFinish(boolean parentFinishesFirst,
+                                                               boolean groupLimit) throws Exception {
+        GlobalVariable.setEnableQueryQueueSelect(true);
+        GlobalVariable.setQueryQueueConcurrencyLimit(groupLimit ? 0 : 1);
+        if (groupLimit) {
+            mockResourceGroup(new TWorkGroup().setId(100).setName("metadata_group").setConcurrency_limit(1));
+        }
+        ConnectContext caller = newMetadataCaller();
+        DefaultCoordinator parent = UtFrameUtils.getScheduler(caller, "select count(1) from lineitem");
+        when(caller.getExecutor().getCoordinator()).thenReturn(parent);
+        manager.maybeWait(caller, parent);
+        DefaultCoordinator child = metadataScheduler(caller);
+        try {
+            queueMetadata(child).get(5, TimeUnit.SECONDS);
+            Assertions.assertNull(child.getSlot(), "A child must not own or cancel its parent's slot");
+            Assertions.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
+            if (parentFinishesFirst) {
+                parent.onReleaseSlots();
+                parent.onReleaseSlots();
+                Assertions.assertEquals(LogicalSlot.State.ALLOCATED, parent.getSlot().getState());
+                child.onReleaseSlots();
+            } else {
+                child.onReleaseSlots();
+                child.onReleaseSlots();
+                Assertions.assertEquals(LogicalSlot.State.ALLOCATED, parent.getSlot().getState());
+                parent.onReleaseSlots();
+            }
+            Assertions.assertEquals(LogicalSlot.State.RELEASED, parent.getSlot().getState());
+        } finally {
+            child.onReleaseSlots();
+            parent.onReleaseSlots();
+        }
+    }
+
+    @Test
+    public void testMetadataCanShareParentAdmittedWhileChildIsWaiting() throws Exception {
+        GlobalVariable.setEnableQueryQueueSelect(true);
+        GlobalVariable.setQueryQueueConcurrencyLimit(1);
+        DefaultCoordinator blocker = getSchedulerWithQueryId("select count(1) from lineitem");
+        manager.maybeWait(connectContext, blocker);
+        ConnectContext caller = newMetadataCaller();
+        DefaultCoordinator parent = UtFrameUtils.getScheduler(caller, "select count(1) from lineitem");
+        when(caller.getExecutor().getCoordinator()).thenReturn(parent);
+        DefaultCoordinator child = metadataScheduler(caller);
+        CompletableFuture<Void> parentWaiting = queueMetadata(parent);
+        try {
+            awaitQueued(parent);
+            CompletableFuture<Void> childWaiting = queueMetadata(child);
+            awaitQueued(child);
+            LogicalSlot childRequest = child.getSlot();
+            blocker.onReleaseSlots();
+            parentWaiting.get(5, TimeUnit.SECONDS);
+            childWaiting.get(5, TimeUnit.SECONDS);
+            Assertions.assertEquals(LogicalSlot.State.CANCELLED, childRequest.getState());
+            Assertions.assertNull(child.getSlot());
+            Assertions.assertEquals(LogicalSlot.State.ALLOCATED, parent.getSlot().getState());
+            Assertions.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
+        } finally {
+            blocker.onReleaseSlots();
+            child.onReleaseSlots();
+            parent.onReleaseSlots();
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"cancelled", "parent timeout", "child timeout"})
+    public void testMetadataQueueWaitStopsWithQueryAndReleasesRequest(String reason) throws Exception {
+        GlobalVariable.setEnableQueryQueueSelect(true);
+        GlobalVariable.setQueryQueueConcurrencyLimit(1);
+        DefaultCoordinator blocker = getSchedulerWithQueryId("select count(1) from lineitem");
+        manager.maybeWait(connectContext, blocker);
+        ConnectContext caller = newMetadataCaller();
+        caller.setExecutor(new StmtExecutor(caller,
+                SqlParser.parseOneWithStarRocksDialect("select 1", caller.getSessionVariable())));
+        DefaultCoordinator child = metadataScheduler(caller);
+        CompletableFuture<Void> waiting = queueMetadata(child);
+        try {
+            awaitQueued(child);
+            if (reason.equals("cancelled")) {
+                caller.getExecutor().cancel("Cancelled by test");
+            } else {
+                ConnectContext expired = reason.equals("parent timeout") ? caller : child.getConnectContext();
+                long pendingAllowance = expired.getPendingTimeSecond();
+                expired.setStartTime(Instant.now().minusSeconds(
+                        expired.getSessionVariable().getQueryTimeoutS() + pendingAllowance + 1));
+                expired.setPendingTimeSecond((int) pendingAllowance);
+            }
+            assertThatThrownBy(() -> waiting.get(5, TimeUnit.SECONDS))
+                    .hasMessageContaining(reason.equals("cancelled")
+                            ? "Internal query was cancelled" : "Internal query timed out");
+            Assertions.assertEquals(LogicalSlot.State.CANCELLED, child.getSlot().getState());
+            Assertions.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
+        } finally {
+            child.onReleaseSlots();
+            blocker.onReleaseSlots();
+        }
+    }
+
+    @Test
+    public void testMetadataReleaseDuringSlotAllocation() throws Exception {
+        GlobalVariable.setEnableQueryQueueSelect(true);
+        DefaultCoordinator child = metadataScheduler(newMetadataCaller());
+        CountDownLatch allocating = new CountDownLatch(1);
+        CountDownLatch finishAllocation = new CountDownLatch(1);
+        CountDownLatch releasing = new CountDownLatch(1);
+        new MockUp<LogicalSlot>() {
+            @Mock
+            public void onAllocate(Invocation invocation) throws InterruptedException {
+                if (invocation.getInvokedInstance() == child.getSlot()) {
+                    allocating.countDown();
+                    Assertions.assertTrue(finishAllocation.await(5, TimeUnit.SECONDS));
+                }
+                invocation.proceed();
+            }
+        };
+        CompletableFuture<Void> waiting = queueMetadata(child);
+        CompletableFuture<Void> release = null;
+        try {
+            Assertions.assertTrue(allocating.await(5, TimeUnit.SECONDS));
+            release = CompletableFuture.runAsync(() -> {
+                releasing.countDown();
+                child.onReleaseSlots();
+            });
+            Assertions.assertTrue(releasing.await(5, TimeUnit.SECONDS));
+            CompletableFuture<Void> inFlightRelease = release;
+            Assertions.assertThrows(TimeoutException.class, () -> inFlightRelease.get(100, TimeUnit.MILLISECONDS));
+            finishAllocation.countDown();
+            waiting.get(5, TimeUnit.SECONDS);
+            release.get(5, TimeUnit.SECONDS);
+            Assertions.assertEquals(LogicalSlot.State.RELEASED, child.getSlot().getState());
+        } finally {
+            finishAllocation.countDown();
+            if (release != null) {
+                release.get(5, TimeUnit.SECONDS);
+            }
+            child.onReleaseSlots();
+        }
+    }
+
+    @Test
+    public void testMetadataDoesNotBorrowAnotherResourceGroup() throws Exception {
+        GlobalVariable.setEnableQueryQueueSelect(true);
+        GlobalVariable.setQueryQueueConcurrencyLimit(2);
+        mockResourceGroup(new TWorkGroup().setId(100).setName("parent_group").setConcurrency_limit(1));
+        ConnectContext caller = newMetadataCaller();
+        DefaultCoordinator parent = UtFrameUtils.getScheduler(caller, "select count(1) from lineitem");
+        when(caller.getExecutor().getCoordinator()).thenReturn(parent);
+        manager.maybeWait(caller, parent);
+        mockResourceGroup(new TWorkGroup().setId(101).setName("child_group").setConcurrency_limit(1));
+        DefaultCoordinator child = metadataScheduler(caller);
+        try {
+            Assertions.assertFalse(child.borrowQueueSlot(parent));
+            queueMetadata(child).get(5, TimeUnit.SECONDS);
+            Assertions.assertNotNull(child.getSlot());
+            Assertions.assertEquals(101, child.getSlot().getGroupId());
+            Assertions.assertEquals(LogicalSlot.State.ALLOCATED, child.getSlot().getState());
+        } finally {
+            child.onReleaseSlots();
+            parent.onReleaseSlots();
+        }
+    }
+
+    @Test
+    public void testMetadataDoesNotBorrowAQueueExemption() throws Exception {
+        GlobalVariable.setEnableQueryQueueSelect(true);
+        ConnectContext caller = newMetadataCaller();
+        caller.setNeedQueued(false);
+        DefaultCoordinator parent = UtFrameUtils.getScheduler(caller, "select count(1) from lineitem");
+        when(caller.getExecutor().getCoordinator()).thenReturn(parent);
+        manager.maybeWait(caller, parent);
+        DefaultCoordinator child = metadataScheduler(caller);
+        try {
+            Assertions.assertFalse(child.borrowQueueSlot(parent));
+            manager.maybeWait(child.getConnectContext(), child);
+            Assertions.assertNotNull(child.getSlot());
+            Assertions.assertEquals(LogicalSlot.State.ALLOCATED, child.getSlot().getState());
+        } finally {
+            child.onReleaseSlots();
+            parent.onReleaseSlots();
+        }
     }
 
     @Test
