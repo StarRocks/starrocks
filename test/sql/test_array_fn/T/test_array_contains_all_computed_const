@@ -1,0 +1,12 @@
+-- name: test_array_contains_all_computed_const
+-- An argument computed to a constant, such as array_sort([2, 1]), is a constant column at runtime but was not
+-- a literal at prepare time. array_contains_all / array_contains_seq used to crash or return a wrong result.
+CREATE TABLE t_arr_${uuid0} (c0 DATETIME NOT NULL, c1 ARRAY<INT> NULL) UNIQUE KEY(c0)
+PARTITION BY date_trunc('year', c0) DISTRIBUTED BY HASH(c0) BUCKETS 2 PROPERTIES ("replication_num" = "1");
+INSERT INTO t_arr_${uuid0} VALUES ('2010-02-26 05:57:05', [1]), ('2011-03-17 05:58:36', [1, 2]), ('2016-05-29 06:26:14', [3, 1, 2]), ('2022-05-15 15:17:08', NULL);
+SELECT c0, ARRAY_CONTAINS_ALL(CASE WHEN c0 IS NOT NULL THEN [1, 2] END, ARRAY_SORT([2, 1])) FROM t_arr_${uuid0} ORDER BY c0;
+SELECT c0 FROM t_arr_${uuid0} WHERE ARRAY_CONTAINS_ALL(CASE WHEN c0 > '2015-01-01' THEN [1, 2, 3] END, ARRAY_SORT([3, 1, 2])) ORDER BY c0;
+SELECT c0, ARRAY_CONTAINS_ALL(ARRAY_SORT([3, 1, 2]), [1, 2]), ARRAY_CONTAINS_ALL(c1, ARRAY_DISTINCT([1, 1, 2])) FROM t_arr_${uuid0} ORDER BY c0;
+SELECT c0, ARRAY_CONTAINS_SEQ(CASE WHEN c0 IS NOT NULL THEN [1, 2, 3] END, ARRAY_SORT([2, 1])), ARRAY_CONTAINS_SEQ(c1, ARRAY_SORT([2, 1])) FROM t_arr_${uuid0} ORDER BY c0;
+SELECT c0, ARRAY_CONTAINS_ALL(ARRAY_SORT([2, 1]), c1) FROM t_arr_${uuid0} ORDER BY c0;
+DROP TABLE t_arr_${uuid0};
