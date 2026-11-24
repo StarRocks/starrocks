@@ -123,7 +123,8 @@ TEST(TimestampValueTest, add_out_of_range) {
     ASSERT_FALSE(base.add<TimeUnit::QUARTER>(47068804).is_valid());
     ASSERT_FALSE(base.add<TimeUnit::WEEK>(613566757).is_valid());
     ASSERT_FALSE(TimestampValue::create(9999, 12, 1, 12, 0, 0).add<TimeUnit::MONTH>(1).is_valid());
-    ASSERT_EQ("9999-12-31 12:00:00", TimestampValue::create(9999, 1, 31, 12, 0, 0).add<TimeUnit::MONTH>(11).to_string());
+    ASSERT_EQ("9999-12-31 12:00:00",
+              TimestampValue::create(9999, 1, 31, 12, 0, 0).add<TimeUnit::MONTH>(11).to_string());
 
     // seconds_sub(ts, INT_MIN) adds 2^31 seconds; negating the count in 32 bits used to subtract them instead.
     const int64_t minus_int_min = -int64_t(std::numeric_limits<int32_t>::min());

@@ -165,8 +165,9 @@ TEST_F(TimeFunctionsTest, addOutOfRangeReturnsNull) {
         if (result->is_null(0)) {
             return std::nullopt;
         }
-        const Column* data = result->is_nullable() ? ColumnHelper::as_raw_column<NullableColumn>(result)->data_column().get()
-                                                   : result.get();
+        const Column* data = result->is_nullable()
+                                     ? ColumnHelper::as_raw_column<NullableColumn>(result)->data_column().get()
+                                     : result.get();
         return ColumnHelper::cast_to_raw<TYPE_DATETIME>(data)->immutable_data()[0];
     };
     const TimestampValue base = TimestampValue::create(2020, 1, 1, 0, 0, 0);
