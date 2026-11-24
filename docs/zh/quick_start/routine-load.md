@@ -498,7 +498,7 @@ LatestSourcePosition: {"0":"5"}
 
 ## 验证数据是否存储在 MinIO 中
 
-打开 MinIO [http://localhost:9001/browser/](http://localhost:9001/browser/) 并验证 `my-starrocks-bucket` 下是否存储了对象。
+打开 MinIO [http://localhost:9001/console/browser/](http://localhost:9001/console/browser/) 并验证 `my-starrocks-bucket` 下是否存储了对象。
 
 ---
 
