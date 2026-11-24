@@ -150,6 +150,10 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
         heartbeat_result.backend_info.__set_version(get_short_version());
         heartbeat_result.backend_info.__set_num_hardware_cores(num_hardware_cores);
         heartbeat_result.backend_info.__set_mem_limit_bytes(RuntimeEnv::GetInstance()->process_mem_tracker()->limit());
+#ifndef __APPLE__
+        // Routine load is unsupported on macOS, where the Kafka proxy requests it relies on are rejected.
+        heartbeat_result.backend_info.__set_kafka_scan_range_supported(true);
+#endif
         // Lets FE send this node the lake ADD/DROP INDEX fast path. See TBackendInfo.
         heartbeat_result.backend_info.__set_support_lake_index_fast_path(true);
         if (reboot_time == 0) {

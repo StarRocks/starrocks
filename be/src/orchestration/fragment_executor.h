@@ -32,10 +32,17 @@ class RuntimeState;
 
 namespace orchestration {
 
+class RoutineLoadTaskExecutor;
+
 class FragmentExecutor {
 public:
     explicit FragmentExecutor(BatchWriteMgr* batch_write_mgr = nullptr);
     void set_batch_write_mgr(BatchWriteMgr* batch_write_mgr) { _batch_write_mgr = batch_write_mgr; }
+    // Set for the fragments that the FE deploys, unlike the fragment of a classic routine load task, which the task
+    // prepares itself. The fragments of routine load rounds in the coordinated mode consume Kafka scan ranges with it.
+    void set_routine_load_task_executor(RoutineLoadTaskExecutor* routine_load_task_executor) {
+        _routine_load_task_executor = routine_load_task_executor;
+    }
 
     Status prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request,
                    const TExecPlanFragmentParams& unique_request);
@@ -94,12 +101,15 @@ private:
     Status _prepare_global_dict(const pipeline::UnifiedExecPlanFragmentParams& request);
     Status _prepare_pipeline_driver(ExecEnv* exec_env, const pipeline::UnifiedExecPlanFragmentParams& request);
     Status _prepare_stream_load_pipe(ExecEnv* exec_env, const pipeline::UnifiedExecPlanFragmentParams& request);
+    void _prepare_routine_load_rows_count(const pipeline::UnifiedExecPlanFragmentParams& request);
+    Status _prepare_kafka_scan_ranges(const pipeline::UnifiedExecPlanFragmentParams& request);
 
     std::unordered_map<int32_t, pipeline::ExecutionGroupPtr> _colocate_exec_groups;
     bool _is_in_colocate_exec_group(PlanNodeId plan_node_id);
 
     int64_t _fragment_start_time = 0;
     BatchWriteMgr* _batch_write_mgr = nullptr;
+    RoutineLoadTaskExecutor* _routine_load_task_executor = nullptr;
     pipeline::QueryContextManager* _query_ctx_mgr = nullptr;
     pipeline::QueryContext* _query_ctx = nullptr;
     // Pin the QueryContext alive for at least as long as `_fragment_ctx`.

@@ -36,13 +36,18 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
+#include <condition_variable>
 #include <fstream>
 #include <memory>
+#include <mutex>
+#include <string>
 #include <thread>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
 #include "base/time/monotime.h"
+#include "base/utility/defer_op.h"
 
 namespace starrocks {
 
@@ -363,6 +368,148 @@ PARALLEL_TEST(StreamLoadPipeTest, non_blocking_cancel_with_ok_status) {
     size_t buf_len = 128;
     bool eof = false;
     ASSERT_TRUE(pipe.read((uint8_t*)read_buf, &buf_len, &eof).is_cancelled());
+}
+
+static ByteBufferPtr make_buffer(size_t size) {
+    auto buf = ByteBuffer::allocate_with_tracker(size).value();
+    for (size_t i = 0; i < size; ++i) {
+        char c = 'a' + i % 26;
+        buf->put_bytes(&c, sizeof(c));
+    }
+    buf->flip_to_read();
+    return buf;
+}
+
+// A reader that found the pipe empty is called back once when data arrives, and only once.
+PARALLEL_TEST(StreamLoadPipeTest, readable_callback_runs_once_on_append) {
+    StreamLoadPipe pipe(true, 0, 1000, 1000);
+    ASSERT_TRUE(pipe.read().status().is_time_out());
+    int calls = 0;
+    ASSERT_TRUE(pipe.notify_when_readable([&calls]() { ++calls; }));
+    ASSERT_EQ(0, calls);
+
+    ASSERT_OK(pipe.append(make_buffer(10)));
+    ASSERT_EQ(1, calls);
+    ASSERT_OK(pipe.read().status());
+    ASSERT_OK(pipe.append(make_buffer(10)));
+    ASSERT_EQ(1, calls);
+}
+
+// Data appended byte-wise becomes readable when a chunk is full, and that wakes the reader.
+PARALLEL_TEST(StreamLoadPipeTest, readable_callback_runs_when_a_chunk_is_appended) {
+    StreamLoadPipe pipe(true, 0, 1000, 16);
+    int calls = 0;
+    ASSERT_TRUE(pipe.notify_when_readable([&calls]() { ++calls; }));
+    std::string data(15, 'x');
+    ASSERT_OK(pipe.append(data.data(), data.size()));
+    ASSERT_EQ(0, calls);
+    ASSERT_TRUE(pipe.read().status().is_time_out());
+    ASSERT_OK(pipe.append(data.data(), data.size()));
+    ASSERT_EQ(1, calls);
+}
+
+// Nothing is registered for a pipe that is readable already: the reader reads again instead.
+PARALLEL_TEST(StreamLoadPipeTest, readable_callback_not_registered_when_readable) {
+    int calls = 0;
+    auto callback = [&calls]() { ++calls; };
+    {
+        StreamLoadPipe pipe(true, 0, 1000, 1000);
+        ASSERT_OK(pipe.append(make_buffer(10)));
+        ASSERT_FALSE(pipe.notify_when_readable(callback));
+    }
+    {
+        StreamLoadPipe pipe(true, 0, 1000, 1000);
+        ASSERT_OK(pipe.finish());
+        ASSERT_FALSE(pipe.notify_when_readable(callback));
+    }
+    {
+        StreamLoadPipe pipe(true, 0, 1000, 1000);
+        pipe.cancel(Status::Cancelled("test"));
+        ASSERT_FALSE(pipe.notify_when_readable(callback));
+    }
+    ASSERT_EQ(0, calls);
+}
+
+// The end of the pipe wakes the reader too, so that it reads the end, or the error.
+PARALLEL_TEST(StreamLoadPipeTest, readable_callback_runs_on_finish_and_cancel) {
+    {
+        StreamLoadPipe pipe(true, 0, 1000, 1000);
+        int calls = 0;
+        ASSERT_TRUE(pipe.notify_when_readable([&calls]() { ++calls; }));
+        ASSERT_OK(pipe.finish());
+        ASSERT_EQ(1, calls);
+        ASSERT_TRUE(pipe.read().status().is_end_of_file());
+    }
+    {
+        StreamLoadPipe pipe(true, 0, 1000, 1000);
+        int calls = 0;
+        ASSERT_TRUE(pipe.notify_when_readable([&calls]() { ++calls; }));
+        pipe.cancel(Status::Cancelled("test"));
+        ASSERT_EQ(1, calls);
+        ASSERT_TRUE(pipe.read().status().is_cancelled());
+    }
+}
+
+PARALLEL_TEST(StreamLoadPipeTest, cleared_readable_callback_does_not_run) {
+    StreamLoadPipe pipe(true, 0, 1000, 1000);
+    int calls = 0;
+    ASSERT_TRUE(pipe.notify_when_readable([&calls]() { ++calls; }));
+    pipe.clear_readable_callback();
+    ASSERT_OK(pipe.append(make_buffer(10)));
+    ASSERT_OK(pipe.finish());
+    ASSERT_EQ(0, calls);
+}
+
+// A reader that waits for each callback while a writer appends concurrently reads every buffer and the end: no
+// wake-up is lost between finding the pipe empty and registering. A lost one fails the wait instead of hanging.
+PARALLEL_TEST(StreamLoadPipeTest, readable_callback_loses_no_wakeup) {
+    constexpr int kBuffers = 2000;
+    StreamLoadPipe pipe(true, 0, 64, 64);
+    // declared before the writer, so that a callback the writer runs never outlives them
+    std::mutex lock;
+    std::condition_variable cond;
+    bool readable = false;
+    std::thread writer([&pipe]() {
+        for (int i = 0; i < kBuffers; ++i) {
+            ASSERT_OK(pipe.append(make_buffer(8)));
+            if (i % 100 == 0) {
+                std::this_thread::sleep_for(std::chrono::microseconds(200));
+            }
+        }
+        ASSERT_OK(pipe.finish());
+    });
+    // A failed assertion of the reader returns early: unblock the writer before joining it.
+    DeferOp join_writer([&]() {
+        pipe.cancel(Status::Cancelled("test ends"));
+        writer.join();
+    });
+
+    int buffers = 0;
+    while (true) {
+        auto res = pipe.read();
+        if (res.ok()) {
+            ++buffers;
+            continue;
+        }
+        if (res.status().is_end_of_file()) {
+            break;
+        }
+        ASSERT_TRUE(res.status().is_time_out()) << res.status();
+        {
+            std::lock_guard l(lock);
+            readable = false;
+        }
+        if (!pipe.notify_when_readable([&]() {
+                std::lock_guard l(lock);
+                readable = true;
+                cond.notify_one();
+            })) {
+            continue;
+        }
+        std::unique_lock l(lock);
+        ASSERT_TRUE(cond.wait_for(l, std::chrono::seconds(10), [&readable]() { return readable; }));
+    }
+    ASSERT_EQ(kBuffers, buffers);
 }
 
 } // namespace starrocks
