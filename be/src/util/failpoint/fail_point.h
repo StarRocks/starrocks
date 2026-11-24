@@ -16,6 +16,7 @@
 
 #ifdef FIU_ENABLE
 
+#include <chrono>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
@@ -97,44 +98,55 @@ public:
 };
 
 // This class ONLY used in failpoint testing
-// This primitive is useful in scenarios where the B thread must wait for at least one
-// A thread to reach a synchronization point, but subsequent A threads should not be blocked
-// once B has arrived or the first A has been released.
+// The first A thread to arrive waits until B arrives; later A threads are never blocked.
+// If B arrives before any A, it does not wait for A: it is remembered, and the first A then passes without waiting.
+// B must never wait for A, because the B side can run on the same thread before the A side (e.g. a global runtime
+// filter taken from the cache while the fragment instance is being prepared, before its drivers are prepared).
 class OneToAnyBarrier {
 public:
     OneToAnyBarrier() = default;
     ~OneToAnyBarrier() = default;
 
-    void arrive_A() {
-        bool first = false;
+    // Waits for B without a limit. Returns true unless the wait timed out.
+    bool arrive_A() { return arrive_A(std::chrono::nanoseconds::max()); }
+
+    // Waits for B at most `timeout`. Returns false if the wait timed out.
+    bool arrive_A(std::chrono::nanoseconds timeout) {
         {
             std::lock_guard<std::mutex> lock(m_);
-            if (!a_triggered_) {
+            if (a_triggered_ || b_arrived_) {
                 a_triggered_ = true;
-                first = true;
+                return true;
             }
+            a_triggered_ = true;
         }
-        cv_.notify_all();
-
-        if (first) {
+        if (timeout == std::chrono::nanoseconds::max()) {
             sem_B_.acquire();
+            return true;
         }
+        return sem_B_.try_acquire_for(timeout);
     }
 
     void arrive_B() {
+        bool release = false;
         {
-            std::unique_lock<std::mutex> lock(m_);
-            cv_.wait(lock, [&] { return a_triggered_; });
+            std::lock_guard<std::mutex> lock(m_);
+            if (b_arrived_) {
+                return;
+            }
+            b_arrived_ = true;
+            release = a_triggered_;
         }
-
-        sem_B_.release();
+        if (release) {
+            sem_B_.release();
+        }
     }
 
 private:
     std::mutex m_;
-    std::condition_variable cv_;
     std::counting_semaphore<1> sem_B_{0};
     bool a_triggered_{};
+    bool b_arrived_{};
 };
 
 bool init_failpoint_from_conf(const std::string& conf_file);
