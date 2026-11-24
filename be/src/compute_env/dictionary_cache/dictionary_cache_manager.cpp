@@ -79,9 +79,14 @@ Status DictionaryCacheManager::refresh(const PProcessDictionaryCacheRequest* req
     // OlapTableSchemaParam->indexes()[0]->column_param->columns: col1, col2, col3, col4 (with nullable attribute)
     // chunk schema: col1, col2, col3, col4 (with nullable attribute)
     // dictionary_schema: col2, col3, col1, col4 (without nullable attribute)
+    if (schema->indexes().empty() || schema->indexes()[0]->column_param == nullptr) {
+        return Status::InvalidArgument("Missing index columns in dictionary cache schema");
+    }
     SchemaPtr dictionary_schema =
-            StorageSchemaHelper::convert_schema((schema->indexes()[0])->column_param->columns, col_names);
-    DCHECK(dictionary_schema != nullptr);
+            StorageSchemaHelper::convert_schema(schema->indexes()[0]->column_param->columns, col_names);
+    if (dictionary_schema == nullptr) {
+        return Status::InvalidArgument("No matching columns in dictionary cache schema");
+    }
     std::vector<int> keys(dictionary_schema->fields().size(), 1);
     // remove the nullable attribute if necessary
     dictionary_schema = ChunkSchemaHelper::get_non_nullable_schema(dictionary_schema, &keys);

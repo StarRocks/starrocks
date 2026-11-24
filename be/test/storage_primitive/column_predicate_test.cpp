@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <optional>
+#include <stdexcept>
 #include <vector>
 
 #include "base/testutil/assert.h"
@@ -19,8 +21,43 @@
 #include "gtest/gtest.h"
 #include "runtime/runtime_filter.h"
 #include "storage_primitive/column_predicate_factory.h"
+#include "types/geo_type_info.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
+
+TEST(GeoStorageFieldTest, rejects_comparison_predicates_and_zone_maps) {
+    const TypeDescriptor inputs[] = {
+            TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, {GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL,
+                                                             "OGC:CRS84", std::nullopt}),
+            TypeDescriptor::create_geo_type(TYPE_GEOMETRY,
+                                            {GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857}),
+    };
+    for (const auto& input : inputs) {
+        SCOPED_TRACE(input.type);
+        auto result = get_geo_type_info(input);
+        ASSERT_TRUE(result.ok()) << result.status();
+        const auto& info = *result;
+        ASSERT_NE(nullptr, info);
+        EXPECT_EQ(nullptr, new_column_eq_predicate(info, 0, Slice("value")));
+        EXPECT_EQ(nullptr, new_column_lt_predicate(info, 0, Slice("value")));
+        EXPECT_FALSE(is_zone_map_key_type(info->type()));
+        Slice value("value");
+        Slice output;
+        EXPECT_TRUE(info->from_string(&output, "value").is_not_supported());
+        EXPECT_THROW(info->to_string(&value), std::runtime_error);
+        EXPECT_THROW(info->size(), std::runtime_error);
+        EXPECT_THROW(info->shallow_copy(&output, &value), std::runtime_error);
+        EXPECT_THROW(info->deep_copy(&output, &value, nullptr), std::runtime_error);
+        EXPECT_THROW(info->direct_copy(&output, &value), std::runtime_error);
+        EXPECT_THROW(info->set_to_max(&output), std::runtime_error);
+        EXPECT_THROW(info->set_to_min(&output), std::runtime_error);
+        EXPECT_THROW(info->cmp(Datum(value), Datum(value)), std::runtime_error);
+        EXPECT_EQ(0, info->cmp(Datum(), Datum()));
+        EXPECT_EQ(-1, info->cmp(Datum(), Datum(value)));
+        EXPECT_EQ(1, info->cmp(Datum(value), Datum()));
+    }
+}
 
 // to string of boolean values, e.g,
 //   [1,2,3] => "1,1,1"

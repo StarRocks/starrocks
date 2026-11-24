@@ -14,7 +14,13 @@
 
 #include "column/field.h"
 
+#include "types/geo_type_info.h"
+
 namespace starrocks {
+
+const GeoTypeDescriptor* Field::geo_descriptor() const {
+    return get_geo_type_descriptor(_type.get());
+}
 
 FieldPtr Field::convert_to_dict_field(const Field& field) {
     if (field.type()->type() == TYPE_VARCHAR) {
