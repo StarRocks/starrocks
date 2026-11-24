@@ -337,10 +337,6 @@ TypeInfoPtr get_type_info(LogicalType field_type, [[maybe_unused]] int precision
     }
 }
 
-TypeInfoPtr get_type_info(const TypeInfo* type_info) {
-    return get_type_info(type_info->type(), type_info->precision(), type_info->scale());
-}
-
 const TypeInfo* get_scalar_type_info(LogicalType type) {
     DCHECK(is_scalar_field_type(type));
     return ScalarTypeInfoResolver::instance()->get_scalar_type_info(type);
