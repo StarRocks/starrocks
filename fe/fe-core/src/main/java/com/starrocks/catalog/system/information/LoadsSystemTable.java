@@ -45,8 +45,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -202,12 +205,20 @@ public class LoadsSystemTable {
             }
             return;
         }
+        Set<AbstractStreamLoadTask> listed = Collections.newSetFromMap(new IdentityHashMap<>());
         List<AbstractStreamLoadTask> streamLoadTaskList = streamLoadMgr.getTaskByName(request.getLabel());
-        if (streamLoadTaskList == null) {
-            return;
+        if (streamLoadTaskList != null) {
+            for (AbstractStreamLoadTask streamLoadTask : streamLoadTaskList) {
+                listed.add(streamLoadTask);
+                addStreamLoadTask(candidates, streamLoadTask, filter, startJobIdOffset, statement -> true);
+            }
         }
-        for (AbstractStreamLoadTask streamLoadTask : streamLoadTaskList) {
-            addStreamLoadTask(candidates, streamLoadTask, filter, startJobIdOffset, statement -> true);
+        // Tasks that left the manager before LoadsHistorySyncer copied them stay listed until it has. One that left
+        // after the manager's tasks were read is in both lists.
+        for (AbstractStreamLoadTask streamLoadTask : streamLoadMgr.getTasksPendingLoadsHistory(request.getLabel())) {
+            if (listed.add(streamLoadTask)) {
+                addStreamLoadTask(candidates, streamLoadTask, filter, startJobIdOffset, statement -> true);
+            }
         }
     }
 
