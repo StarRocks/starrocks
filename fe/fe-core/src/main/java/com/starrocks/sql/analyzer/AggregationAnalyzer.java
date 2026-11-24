@@ -48,6 +48,7 @@ import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.MapExpr;
 import com.starrocks.sql.ast.expression.MatchExpr;
 import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -184,6 +185,11 @@ public class AggregationAnalyzer {
 
         @Override
         public Boolean visitArrayExpr(ArrayExpr node, Void context) {
+            return node.getChildren().stream().allMatch(this::visit);
+        }
+
+        @Override
+        public Boolean visitMapExpr(MapExpr node, Void context) {
             return node.getChildren().stream().allMatch(this::visit);
         }
 
