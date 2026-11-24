@@ -2320,6 +2320,10 @@ public class EditLog {
         logJsonObject(OperationType.OP_ALTER_MATERIALIZED_VIEW_BASE_TABLE_INFOS, log);
     }
 
+    public void logAlterMvBaseTableInfos(AlterMaterializedViewBaseTableInfosLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ALTER_MATERIALIZED_VIEW_BASE_TABLE_INFOS, log, walApplier);
+    }
+
     public void logMvRename(RenameMaterializedViewLog log, WALApplier walApplier) {
         logJsonObject(OperationType.OP_RENAME_MATERIALIZED_VIEW, log, walApplier);
     }

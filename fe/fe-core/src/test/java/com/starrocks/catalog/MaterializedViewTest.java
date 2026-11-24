@@ -18,6 +18,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.JsonObject;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.Config;
@@ -27,6 +28,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.MaterializedViewTestBase;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -393,6 +395,76 @@ public class MaterializedViewTest extends StarRocksTestBase {
         mv.replayAlterMaterializedViewBaseTableInfos(log);
 
         starRocksAssert.dropMaterializedView("mv_replay");
+    }
+
+    private MaterializedView createRefreshedMvOnRedefineT1(String mvName) throws Exception {
+        for (String table : Lists.newArrayList("redefine_t1", "redefine_t2")) {
+            starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS test." + table + " (k1 int, v1 int)\n" +
+                    "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                    "PROPERTIES('replication_num' = '1');");
+        }
+        starRocksAssert.withMaterializedView("create materialized view " + mvName + "\n" +
+                "distributed by hash(k1) buckets 1\n" +
+                "refresh deferred manual\n" +
+                "as select k1, v1 from redefine_t1;");
+        connectContext.executeSql("insert into test.redefine_t1 values(1, 1)");
+        connectContext.executeSql("refresh materialized view " + mvName + " with sync mode");
+        return (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", mvName);
+    }
+
+    private static AlterMaterializedViewBaseTableInfosLog journalRoundTrip(JsonObject json) {
+        return GsonUtils.GSON.fromJson(json, AlterMaterializedViewBaseTableInfosLog.class);
+    }
+
+    @Test
+    public void testReplayRedefinedBaseTableInfos() throws Exception {
+        MaterializedView mv = createRefreshedMvOnRedefineT1("mv_replay_redefined");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table t1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "redefine_t1");
+        Table t2 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "redefine_t2");
+        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> versionMap =
+                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+        Assertions.assertTrue(t1.getRelatedMaterializedViews().contains(mv.getMvId()));
+        Assertions.assertTrue(versionMap.containsKey(t1.getId()));
+
+        BaseTableInfo t2Info = new BaseTableInfo(db.getId(), db.getFullName(), t2.getName(), t2.getId());
+        AlterMaterializedViewBaseTableInfosLog log = journalRoundTrip(GsonUtils.GSON.toJsonTree(
+                AlterMaterializedViewBaseTableInfosLog.ofRedefinedBaseTables(db.getId(), mv.getId(),
+                        Lists.newArrayList(t2Info))).getAsJsonObject());
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().replayAlterMaterializedViewBaseTableInfos(log);
+
+        Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
+        Assertions.assertEquals(Lists.newArrayList(t2Info), mv.getBaseTableInfos());
+        Assertions.assertFalse(t1.getRelatedMaterializedViews().contains(mv.getMvId()));
+        Assertions.assertTrue(t2.getRelatedMaterializedViews().contains(mv.getMvId()));
+        Assertions.assertFalse(versionMap.containsKey(t1.getId()));
+
+        starRocksAssert.dropMaterializedView("mv_replay_redefined");
+    }
+
+    @Test
+    public void testReplayRedefinedBaseTableInfosOnOlderFe() throws Exception {
+        MaterializedView mv = createRefreshedMvOnRedefineT1("mv_replay_redefined_old_fe");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table t1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "redefine_t1");
+        Table t2 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "redefine_t2");
+
+        // An older FE does not know baseTablesRedefined, which is the same as replaying the entry without it.
+        BaseTableInfo t2Info = new BaseTableInfo(db.getId(), db.getFullName(), t2.getName(), t2.getId());
+        JsonObject json = GsonUtils.GSON.toJsonTree(AlterMaterializedViewBaseTableInfosLog.ofRedefinedBaseTables(
+                db.getId(), mv.getId(), Lists.newArrayList(t2Info))).getAsJsonObject();
+        json.remove("baseTablesRedefined");
+        AlterMaterializedViewBaseTableInfosLog log = journalRoundTrip(json);
+        Assertions.assertFalse(log.isBaseTablesRedefined());
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().replayAlterMaterializedViewBaseTableInfos(log);
+
+        Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
+        Assertions.assertEquals(Lists.newArrayList(t2Info), mv.getBaseTableInfos());
+        Assertions.assertTrue(t2.getRelatedMaterializedViews().contains(mv.getMvId()));
+        // Known gap of older FEs: the stale relation stays until the mv is reloaded from the next image.
+        Assertions.assertTrue(t1.getRelatedMaterializedViews().contains(mv.getMvId()));
+
+        starRocksAssert.dropMaterializedView("mv_replay_redefined_old_fe");
     }
 
     @Test
@@ -1540,6 +1612,28 @@ public class MaterializedViewTest extends StarRocksTestBase {
                     .getTable(db.getFullName(), "test_mv1"));
             Assertions.assertEquals(mv.getPartitionRefreshStrategy(), MaterializedView.PartitionRefreshStrategy.ADAPTIVE);
         });
+    }
+
+    /**
+     * Given an mv whose rebuild is pending, i.e. without a last refresh time, see
+     * MaterializedView#replaceBaseTableInfos, and a staleness budget larger than the time since the epoch.
+     * When rewrite checks the staleness, then the mv is not fresh, although the budget is not exceeded.
+     */
+    @Test
+    public void testIsStalenessSatisfiedWithoutLastRefreshTime() {
+        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        refreshScheme.setLastRefreshTime(0);
+        MaterializedView mv = new MaterializedView(1000, 100, "mv_staleness_test3", columns, KeysType.AGG_KEYS,
+                null, null, refreshScheme);
+        mv.setMaxMVRewriteStaleness(Integer.MAX_VALUE);
+
+        new MockUp<MaterializedView>() {
+            @Mock
+            public Optional<Long> maxBaseTableRefreshTimestamp() {
+                return Optional.of(1_000_000L);
+            }
+        };
+        Assertions.assertFalse(mv.isStalenessSatisfied());
     }
 
     @Test

@@ -162,6 +162,16 @@ public class MaterializedViewExceptions {
         return "base-view changed: " + tableName;
     }
 
+    /**
+     * Create the inactive reason when the defined query of a partitioned mv resolves to other base tables, e.g. because
+     * an external view was redefined, since its partition expressions stay bound to the old ones.
+     */
+    public static String inactiveReasonForPartitionedMvBaseTablesRedefined(String oldBaseTables, String newBaseTables) {
+        return String.format("base-tables redefined: reads [%s] instead of [%s], partition-expression rebinding " +
+                "is not supported, restore the view definition or recreate the materialized view",
+                newBaseTables, oldBaseTables);
+    }
+
     public static String inactiveReasonForBaseInfoMissed() {
         return "base-info missed";
     }

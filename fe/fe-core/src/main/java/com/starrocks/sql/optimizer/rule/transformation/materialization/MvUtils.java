@@ -1716,6 +1716,39 @@ public class MvUtils {
     }
 
     /**
+     * Lower-cased catalog.db.table name of a base table. Unlike the table id or identifier, it stays the same when
+     * a connector returns a new object for the same table, so it tells whether a defined query reads other tables.
+     */
+    public static String getBaseTableQualifiedName(BaseTableInfo baseTableInfo) {
+        return String.join(".", baseTableInfo.getCatalogName(), baseTableInfo.getDbName(),
+                baseTableInfo.getTableName()).toLowerCase();
+    }
+
+    /**
+     * Whether the base table is a view of an external catalog, which the catalog can redefine without StarRocks
+     * noticing, so the tables an mv on it reads can change.
+     */
+    public static boolean isConnectorView(BaseTableInfo baseTableInfo) {
+        if (baseTableInfo.isInternalCatalog()) {
+            return false;
+        }
+        try {
+            return getTableWithIdentifier(baseTableInfo).map(Table::isConnectorView).orElse(false);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Whether both lists name the same base tables, see {@link #getBaseTableQualifiedName(BaseTableInfo)}.
+     */
+    public static boolean isSameBaseTables(Collection<BaseTableInfo> left, Collection<BaseTableInfo> right) {
+        Set<String> leftNames = left.stream().map(MvUtils::getBaseTableQualifiedName).collect(Collectors.toSet());
+        Set<String> rightNames = right.stream().map(MvUtils::getBaseTableQualifiedName).collect(Collectors.toSet());
+        return leftNames.equals(rightNames);
+    }
+
+    /**
      * Convert partition range cells to predicates
      *
      * @param partitionColRefs partition column refs

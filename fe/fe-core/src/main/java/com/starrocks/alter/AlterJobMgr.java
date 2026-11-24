@@ -330,6 +330,7 @@ public class AlterJobMgr {
         if (!isReplay) {
             MaterializedViewAnalyzer.checkBaseTables(
                     tableNameTableMap, materializedView.getPartitionInfo().isUnPartitioned());
+            checkPartitionedMvBaseTablesNotRedefined(materializedView, tableNameTableMap, baseTableInfos);
         }
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task task = taskManager.getTask(materializedView);
@@ -339,6 +340,25 @@ public class AlterJobMgr {
         }
         return new AlterMaterializedViewStatusContext(AlterMaterializedViewStatusClause.ACTIVE, reason,
                 Lists.newArrayList(baseTableInfos), task);
+    }
+
+    /**
+     * The partition expressions of an mv stay bound to the base tables it was created on. Once a connector view
+     * redefined in its catalog makes the mv read others, it stays inactive until the view reads them again, see
+     * MVPCTRefreshProcessor#syncBaseTableInfosWithDefinedQuery. The connector view is among the tables the defined
+     * query just resolved, so telling one apart costs no connector round trip.
+     */
+    private static void checkPartitionedMvBaseTablesNotRedefined(MaterializedView materializedView,
+                                                                 Map<TableName, Table> tableNameTableMap,
+                                                                 Set<BaseTableInfo> baseTableInfos) {
+        if (materializedView.getPartitionInfo().isUnPartitioned()
+                || tableNameTableMap.values().stream().noneMatch(Table::isConnectorView)
+                || MvUtils.isSameBaseTables(materializedView.getBaseTableInfos(), baseTableInfos)) {
+            return;
+        }
+        throw new SemanticException(MaterializedViewExceptions.inactiveReasonForPartitionedMvBaseTablesRedefined(
+                MvUtils.formatBaseTableInfos(materializedView.getBaseTableInfos()),
+                MvUtils.formatBaseTableInfos(Lists.newArrayList(baseTableInfos))));
     }
 
     /**
