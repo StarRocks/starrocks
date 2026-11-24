@@ -340,6 +340,9 @@ public abstract class TabletReshardJob implements Writable {
                         if (isDone()) {
                             return;
                         }
+                        if (desiredState == JobState.FINISHED && table != null) {
+                            applyFinishedLocked(table);
+                        }
                         finishedTimeMs = snapshot.finishedTimeMs;
                         stateStartedTimeMs = snapshot.stateStartedTimeMs;
                         jobState = desiredState;
@@ -349,6 +352,14 @@ public abstract class TabletReshardJob implements Writable {
                     }));
         }
         LOG.info("Tablet reshard job set job state. {}", this);
+    }
+
+    /**
+     * Applies, on the leader, what the FINISHED record changes in the catalog beyond the job itself. Runs under the
+     * table WRITE lock once the record is durable, so nothing it changes can be seen before the record that makes
+     * every replaying FE change it too.
+     */
+    protected void applyFinishedLocked(OlapTable table) {
     }
 
     private void recordTerminalMetrics(JobState state) {
@@ -526,6 +537,18 @@ public abstract class TabletReshardJob implements Writable {
 
     protected abstract void registerReshardingTabletsOnRestart();
 
+    // Puts the job's new tablets into the tablet inverted index when the job reserves its version, or replays that record.
+    protected abstract void addTabletsToInvertedIndex();
+
+    // On image load only. Image load rebuilds the inverted index from the indexes installed on partitions, and the new index is
+    // installed only at CLEANING. Without this, an FE started from an image of a PREPARING or RUNNING job installs it at CLEANING
+    // with tablets that loads write into but commits cannot resolve. From CLEANING on, the rebuild covers the installed index.
+    void addTabletsToInvertedIndexOnRestart() {
+        if (jobState == JobState.PREPARING || jobState == JobState.RUNNING) {
+            addTabletsToInvertedIndex();
+        }
+    }
+
     public abstract TTabletReshardJobsItem getInfo();
 
     /** Validates the source layout and reserves the aggregate table state under the caller's WRITE lock. */
@@ -609,8 +632,8 @@ public abstract class TabletReshardJob implements Writable {
      * never a partition-directory delete, which for a split would destroy the live child tablets that
      * share the parent's object-storage directory.
      *
-     * <p>Runs on both the leader (runCleaningJob) and the replay path (replayFinishedJob); it is
-     * deterministic (the index keeps its own id, no id allocation) and
+     * <p>Runs on both the leader (a merge from runCleaningJob, a split from applyFinishedLocked) and the replay
+     * path (replayFinishedJob); it is deterministic (the index keeps its own id, no id allocation) and
      * {@code recycleMaterializedIndex} is idempotent, so a re-run is safe. The caller holds the table
      * WRITE lock and passes the locked table.
      */

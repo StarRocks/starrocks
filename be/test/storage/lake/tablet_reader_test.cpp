@@ -1522,6 +1522,8 @@ TEST_F(LakeDuplicateTabletReaderTest, test_parallel_read_error_waits_all_futures
     EXPECT_EQ(1, reader->stats().phy_segments_count);
 }
 
+// The segment readers read ahead only in StarOS builds (see SegmentIterator::_should_read_ahead()).
+#ifdef USE_STAROS
 // A local file system whose files accept cache warm-ups, as starlet's do, so that segment readers build real read-ahead
 // windows on local segment files. A warm-up only returns a handle; the reads go to the local file as before.
 class WarmableFileSystem final : public FileSystem {
@@ -1892,6 +1894,7 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_ahead_across_segments_of_a_rowse
         }
     }
 }
+#endif // USE_STAROS
 
 // Regression: TabletReaderParams::has_predicate_above_iterator must reach SegmentReadOptions
 // through the lake reader path (TabletReader::get_segment_iterators builds RowsetReadOptions,
@@ -4635,6 +4638,73 @@ TEST_F(LakeTabletReaderSpit, test_nosplit_index_warm_gates_and_lifetime) {
     run(true, true, READER_QUERY, true, false); // a refused warm falls back to ordinary reads
 }
 
+TEST_F(LakeTabletReaderSpit, test_index_warm_respects_scan_cache_policy) {
+    ASSERT_NO_FATAL_FAILURE(write_two_rowsets_with_three_segments());
+    TInternalScanRange internal;
+    internal.__set_tablet_id(_tablet_metadata->id());
+    internal.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan;
+    scan.__set_internal_scan_range(internal);
+
+    ConfigResetGuard<bool> warm_guard(&config::lake_scan_warm_index, true);
+    ConfigResetGuard<bool> open_guard(&config::lake_scan_parallel_segment_open, false);
+    ConfigResetGuard<bool> parallel_guard(&config::enable_load_segment_parallel, false);
+    const bool old_scheduler = g_remote_io_scheduler_enabled.exchange(true);
+    auto* sync = SyncPoint::GetInstance();
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+        g_remote_io_scheduler_enabled.store(old_scheduler);
+    });
+    int warm_calls = 0;
+    int eager_open_calls = 0;
+    sync->SetCallBack("TabletReader::warm_prepared_indexes::warm", [&](void*) { ++warm_calls; });
+    sync->SetCallBack("TabletReader::open_segment_task", [&](void*) { ++eager_open_calls; });
+
+    auto run = [&](const LakeIOOptions& policy, bool split, bool prepared) {
+        SCOPED_TRACE(::testing::Message() << "split=" << split << " prepared=" << prepared);
+        _tablet_mgr->metacache()->prune();
+        warm_calls = 0;
+        eager_open_calls = 0;
+        auto params = generate_tablet_reader_params(&scan);
+        params.reader_type = READER_QUERY;
+        params.lake_io_opts = policy;
+        params.enable_prepared_physical_split_scan = prepared;
+        params.range = TabletReaderParams::RangeStartOperation::GE;
+        params.end_range = TabletReaderParams::RangeEndOperation::LE;
+        params.start_key = {OlapTuple({"1"})};
+        params.end_key = {OlapTuple({"100"})};
+        TabletReader reader(_tablet_mgr.get(), _tablet_metadata, *_schema, split, split);
+        ASSERT_OK(reader.prepare());
+        ASSERT_OK(reader.open(params));
+        EXPECT_EQ(0, warm_calls);
+        EXPECT_EQ(0, reader.stats().lake_prepared_tablet_warm_index_ranges);
+        if (split) {
+            std::vector<pipeline::ScanSplitContextPtr> tasks;
+            reader.get_split_tasks(&tasks);
+            ASSERT_FALSE(tasks.empty());
+            if (!prepared) {
+                for (const auto& task : tasks) {
+                    const auto* ctx = down_cast<const pipeline::LakeSplitContext*>(task.get());
+                    EXPECT_EQ(nullptr, ctx->classic_tablet_read_state);
+                }
+            }
+        } else {
+            EXPECT_EQ(0, eager_open_calls);
+        }
+        reader.close();
+    };
+    for (const auto& [name, policy] : {std::pair{"no cache fill", LakeIOOptions{.fill_data_cache = false}},
+                                       std::pair{"skip disk cache", LakeIOOptions{.skip_disk_cache = true}},
+                                       std::pair{"cache file only", LakeIOOptions{.cache_file_only = true}}}) {
+        SCOPED_TRACE(name);
+        ASSERT_NO_FATAL_FAILURE(run(policy, /*split=*/false, /*prepared=*/false));
+        ASSERT_NO_FATAL_FAILURE(run(policy, /*split=*/true, /*prepared=*/false));
+        ASSERT_NO_FATAL_FAILURE(run(policy, /*split=*/true, /*prepared=*/true));
+    }
+}
+
 // Ordinal metadata for a one-page column may be loaded without reading that data page, so the warm path still
 // visits it; a loaded short key index is skipped. A bloom filter root is warmed even when its reader is loaded,
 // because the loaded reader holds only its ordinal index, not the filter pages.
@@ -4718,7 +4788,11 @@ void LakeTabletReaderSpit::check_warm_ranges_of_bundled_segment(bool encrypted) 
     }
     write_two_rowsets_with_three_segments();
     constexpr int64_t kBundleOffset = 777;
+#ifdef USE_STAROS
     constexpr int64_t kBlockSize = 256;
+#else
+    constexpr int64_t kBlockSize = 1 << 20; // the fixed block size the warm uses outside StarOS builds
+#endif
     // Keep only rowset 2 and rewrite its single segment as if it sat at kBundleOffset of a bundle file.
     _tablet_metadata->mutable_rowsets()->DeleteSubrange(0, 1);
     auto* segment_meta = _tablet_metadata->mutable_rowsets(0)->mutable_segment_metas(0);
@@ -4744,7 +4818,9 @@ void LakeTabletReaderSpit::check_warm_ranges_of_bundled_segment(bool encrypted) 
     segment_meta->set_size(segment_size);
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
+#ifdef USE_STAROS
     ConfigResetGuard<int32_t> block_guard(&config::starlet_star_cache_block_size_bytes, kBlockSize);
+#endif
     ConfigResetGuard<bool> warm_guard(&config::lake_scan_warm_index, true);
     ConfigResetGuard<bool> open_guard(&config::lake_scan_parallel_segment_open, false);
     const bool old_scheduler = g_remote_io_scheduler_enabled.exchange(true);

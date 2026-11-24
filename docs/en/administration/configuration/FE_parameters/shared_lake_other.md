@@ -533,7 +533,7 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 
 ### `lake_compaction_max_parallel_default`
 
-- Default: 3
+- Default: 5
 - Type: Int
 - Unit: -
 - Is mutable: Yes

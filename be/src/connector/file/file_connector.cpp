@@ -14,6 +14,8 @@
 
 #include "connector/file/file_connector.h"
 
+#include "compute_env/load/load_stream_mgr.h"
+#include "compute_env/load/stream_load_pipe.h"
 #include "connector/file/file_chunk_sink.h"
 #include "connector/file/file_scan_metrics.h"
 #include "connector/file/file_scan_utils.h"
@@ -27,6 +29,7 @@
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks::connector {
 
@@ -130,9 +133,32 @@ void FileDataSource::close(RuntimeState* state) {
         return;
     }
     _closed = true;
+    if (_input_pipe != nullptr) {
+        _input_pipe->clear_readable_callback();
+        _input_pipe.reset();
+    }
     if (_scanner != nullptr) {
         _scanner->close();
     }
+}
+
+bool FileDataSource::can_wait_for_input() const {
+    return _scan_range.__isset.kafka_scan_range && !_scan_range.ranges.empty() &&
+           _scan_range.ranges[0].file_type == TFileType::FILE_STREAM;
+}
+
+bool FileDataSource::wait_for_input(std::function<void()> on_readable) {
+    if (!can_wait_for_input() || _runtime_state == nullptr || _closed) {
+        return false;
+    }
+    if (_input_pipe == nullptr) {
+        _input_pipe = _runtime_state->query_execution_services()->runtime->load_stream_mgr->get(
+                _scan_range.ranges[0].load_id);
+        if (_input_pipe == nullptr) {
+            return false;
+        }
+    }
+    return _input_pipe->notify_when_readable(std::move(on_readable));
 }
 
 Status FileDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {

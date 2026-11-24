@@ -355,9 +355,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     // Maximum number of parallel compaction subtasks per tablet
     // 0 means disable parallel compaction, positive value enables it
-    // Default: 3
+    // Default: 5, the same as Config.lake_compaction_max_parallel_default
     @SerializedName(value = "lakeCompactionMaxParallel")
-    private int lakeCompactionMaxParallel = 3;
+    private int lakeCompactionMaxParallel = 5;
 
     @SerializedName(value = "enableStatisticCollectOnFirstLoad")
     private boolean enableStatisticCollectOnFirstLoad = true;

@@ -1096,6 +1096,21 @@ public class Config extends ConfigBase {
     public static boolean enable_rest_bearer_authentication = true;
 
     /**
+     * Lets a security-integration user present a JWT as the password of a MySQL login (the
+     * {@code mysql_clear_password} frame). When such a password has the shape of a JWT, the chain
+     * first offers it as a Bearer token to the JWT and OAuth 2.0 integrations; only if none
+     * accepts it is it tried as a password against the LDAP integrations. This is what lets a
+     * MySQL client without the OpenID Connect plugin log in through a JWT integration that shares
+     * {@code authentication_chain} with an LDAP one. MySQL only: HTTP and Arrow Flight carry a
+     * token in a Bearer header, so their Basic passwords are never read as tokens. Off by default:
+     * a password that happens to look like a token then costs one refused token verification
+     * before the password path, and the password path is the only one the login's outcome is
+     * counted under.
+     */
+    @ConfField(mutable = true)
+    public static boolean authentication_chain_accept_jwt_as_password = false;
+
+    /**
      * Fe https port
      * Currently, all FEs' https port must be the same.
      */
@@ -4224,7 +4239,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Default max parallel compaction subtasks per tablet when not specified in " +
             "table properties. 0 means disable parallel compaction.")
-    public static int lake_compaction_max_parallel_default = 3;
+    public static int lake_compaction_max_parallel_default = 5;
 
     @ConfField(mutable = true)
     public static int lake_compaction_history_size = 20;

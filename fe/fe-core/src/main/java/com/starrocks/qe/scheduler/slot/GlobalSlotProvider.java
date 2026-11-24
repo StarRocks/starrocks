@@ -78,21 +78,26 @@ public class GlobalSlotProvider implements SlotProvider {
     }
 
     public Status finishSlotRequirement(TUniqueId slotId, int pipelineDop, Status status) {
-        PendingSlotRequest slotRequest = pendingSlots.remove(slotId);
-        if (slotRequest == null) {
-            LOG.warn("[Slot] finishSlotRequirement receives a response with non-exist slotId [slotId={}] [status={}]",
-                    DebugUtil.printId(slotId), status);
-            return Status.internalError("the slotId does not exist");
+        PendingSlotRequest slotRequest = pendingSlots.get(slotId);
+        if (slotRequest != null) {
+            // Cancellation/release must not miss an allocation between removing the pending request and
+            // marking its slot allocated. A queued metadata child may switch to its parent's admission here.
+            synchronized (slotRequest.getSlot()) {
+                if (pendingSlots.remove(slotId, slotRequest)) {
+                    if (status.ok()) {
+                        slotRequest.onFinished(pipelineDop);
+                    } else {
+                        LOG.warn("[Slot] finishSlotRequirement receives a failed response [slot={}] [status={}]",
+                                slotRequest, status);
+                        slotRequest.onFailed(new StarRocksException(status.getErrorMsg()));
+                    }
+                    return new Status();
+                }
+            }
         }
-
-        if (status.ok()) {
-            slotRequest.onFinished(pipelineDop);
-        } else {
-            LOG.warn("[Slot] finishSlotRequirement receives a failed response [slot={}] [status={}]", slotRequest, status);
-            slotRequest.onFailed(new StarRocksException(status.getErrorMsg()));
-        }
-
-        return new Status();
+        LOG.warn("[Slot] finishSlotRequirement receives a response with non-exist slotId [slotId={}] [status={}]",
+                DebugUtil.printId(slotId), status);
+        return Status.internalError("the slotId does not exist");
     }
 
     @Override
@@ -101,22 +106,28 @@ public class GlobalSlotProvider implements SlotProvider {
             return;
         }
 
-        PendingSlotRequest slotRequest = pendingSlots.remove(slot.getSlotId());
-        if (slotRequest == null) {
-            return;
+        synchronized (slot) {
+            PendingSlotRequest slotRequest = pendingSlots.remove(slot.getSlotId());
+            if (slotRequest == null) {
+                return;
+            }
+            slotRequest.onCancel();
         }
-
-        slotRequest.onCancel();
         releaseSlotToSlotManager(slot);
     }
 
     @Override
     public void releaseSlot(LogicalSlot slot) {
-        if (slot == null || slot.getState() != LogicalSlot.State.ALLOCATED) {
+        if (slot == null) {
             return;
         }
 
-        slot.onRelease();
+        synchronized (slot) {
+            if (slot.getState() != LogicalSlot.State.ALLOCATED) {
+                return;
+            }
+            slot.onRelease();
+        }
         releaseSlotToSlotManager(slot);
     }
 

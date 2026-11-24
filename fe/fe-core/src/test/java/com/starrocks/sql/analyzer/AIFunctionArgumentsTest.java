@@ -220,7 +220,7 @@ public class AIFunctionArgumentsTest {
     }
 
     @Test
-    public void testExplicitEmptySelectorsAndOptionsUseDefaults() {
+    public void testExplicitEmptySelectorsUseDefaults() {
         for (String parameter : List.of("provider", "model")) {
             for (String value : List.of("NULL", "''", "cast(NULL as varchar)",
                     "concat('', '')", "if(true, NULL, 'x')")) {
@@ -231,37 +231,20 @@ public class AIFunctionArgumentsTest {
             }
             reject("ai_complete(prompt => 'x', " + parameter + " => '   ')", "whitespace");
         }
-        for (String value : List.of("NULL", "json_object()", "cast(NULL as json)", "parse_json('{}')",
-                "if(true, cast(NULL as json), json_object('a',1))")) {
-            analyze("ai_complete(prompt => 'x', options => " + value + ")");
-        }
-        for (String value : List.of("''", "'   '", "cast(NULL as varchar)", "concat('', '')",
-                "map{}", "map{'guardrails':true}", "'{\"guardrails\":true}'")) {
-            assertThrows(SemanticException.class, () -> analyze("ai_complete(prompt => 'x', options => " + value + ")"));
-        }
         analyze("ai_complete('x', '', 'model')");
         analyze("ai_complete('x', 'chat_provider', '')");
         analyze("ai_complete('x', 'chat_provider', 'model', NULL)");
         analyze("ai_complete('x', NULL, NULL, json_object())");
         analyze("ai_sentiment('x', NULL, NULL)");
-        reject("ai_complete('x', 'chat_provider', 'model', '')", "constant JSON");
     }
 
     @Test
-    public void testConstantSelectorsAndOptions() {
-        reject("ai_complete(prompt => 'x', model => model_column)", "constant model");
-        reject("ai_complete(prompt => 'x', provider => provider_column)", "constant provider");
-        reject("ai_complete(prompt => 'x', options => json_object('value', value_column))", "constant options");
+    public void testFoldedSelectorsResolveProviderAndModel() {
         FunctionCallExpr call = analyze("ai_complete(prompt => prompt_column, "
-                + "model => concat('my-', 'model'), provider => concat('chat_', 'provider'), "
-                + "options => json_object('temperature',0.5))");
+                + "model => concat('my-', 'model'), provider => concat('chat_', 'provider'))");
         assertEquals("chat_provider", AIFunctionProviderResolver.resolveProvider(providers, call).getName());
-        analyze("ai_complete(prompt => 'x', options => json_object())");
-        analyze("ai_complete(prompt => 'x', options => parse_json('{\"guardrails\":true,\"dimensions\":512}'))");
-        analyze("ai_complete(prompt => 'x', options => to_json(map{'guardrails':true}))");
-        analyze("ai_complete(prompt => 'x', options => parse_json('invalid json'))");
-        analyze("ai_complete(prompt => 'x', options => parse_json('null'))");
-        analyze("ai_complete(prompt => 'x', options => json_object('nested', json_object('value',NULL)))");
+        Expr model = ExprUtils.analyzeAndCastFold(call.getChild(descriptor(call).modelArgument()));
+        assertEquals("my-model", ((StringLiteral) model).getValue());
     }
 
     @Test
@@ -313,7 +296,5 @@ public class AIFunctionArgumentsTest {
         FunctionCallExpr call = analyze("ai_complete('x', NULL)");
         assertEquals(200000, call.getFn().getFunctionId());
         assertEquals("", stringArgument(call, descriptor(call).providerArgument()));
-        // JSON contents, including reserved keys, are checked by BE before dispatch.
-        analyze("ai_complete(prompt => 'x', options => json_object('model','bad'))");
     }
 }

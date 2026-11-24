@@ -27,10 +27,10 @@
 #include "base/testutil/assert.h"
 #include "common/config_exec_fwd.h"
 #include "exec/exec_factory.h"
-#include "exec/pipeline/ai/ai_provider_config_parser.h"
 #include "exec_primitive/exec_node.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "platform/llm/ai_provider.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
@@ -211,9 +211,10 @@ protected:
     TTupleId _tuple_id = 0;
 };
 
-TEST(AIProviderConfigParserTest, ParsesTypedPropertiesAndDefaults) {
+TEST(AIProviderConfigTest, ParsesTypedPropertiesAndDefaults) {
     auto provider = make_provider_chat_config();
-    auto chat = pipeline::AIProviderConfigParser::parse(provider.id, provider);
+    provider.params["dimensions"] = "ignored-for-chat";
+    auto chat = AIProviderConfig::parse(provider.id, provider);
     ASSERT_TRUE(chat.ok()) << chat.status();
     EXPECT_EQ(AICapability::CHAT, chat->capability);
     EXPECT_EQ(AIProviderProtocol::OPENAI, chat->protocol);
@@ -225,7 +226,7 @@ TEST(AIProviderConfigParserTest, ParsesTypedPropertiesAndDefaults) {
     provider.params["api_key"] = "test-secret";
     provider.params["timeout_ms"] = "+123";
     provider.params["dimensions"] = "256";
-    auto embedding = pipeline::AIProviderConfigParser::parse(provider.id, provider);
+    auto embedding = AIProviderConfig::parse(provider.id, provider);
     ASSERT_TRUE(embedding.ok()) << embedding.status();
     EXPECT_EQ(AICapability::EMBEDDING, embedding->capability);
     EXPECT_EQ("test-secret", embedding->api_key);
@@ -233,25 +234,106 @@ TEST(AIProviderConfigParserTest, ParsesTypedPropertiesAndDefaults) {
     EXPECT_EQ(256, embedding->dimensions.value());
     provider.params["timeout_ms"] = "";
     provider.params["dimensions"] = "";
-    auto empty = pipeline::AIProviderConfigParser::parse(provider.id, provider);
+    auto empty = AIProviderConfig::parse(provider.id, provider);
     ASSERT_TRUE(empty.ok());
     EXPECT_FALSE(empty->timeout_ms.has_value());
     EXPECT_FALSE(empty->dimensions.has_value());
 }
 
-TEST(AIProviderConfigParserTest, RejectsInvalidMetadataWithoutExposingProperties) {
+TEST(AIProviderConfigTest, ValidatesEndpointWithoutResolvingIt) {
     auto provider = make_provider_chat_config();
     provider.params["api_key"] = "test-secret";
-    EXPECT_FALSE(pipeline::AIProviderConfigParser::parse("different-id", provider).ok());
+    for (const char* endpoint : {"http://unit.test.invalid/v1/chat", "https://unit.test.invalid/v1/chat"}) {
+        provider.params["endpoint"] = endpoint;
+        auto parsed = AIProviderConfig::parse(provider.id, provider);
+        ASSERT_TRUE(parsed.ok()) << parsed.status();
+        EXPECT_EQ(endpoint, parsed->endpoint);
+    }
+    for (const char* endpoint : {"ftp://unit.test.invalid/chat", "https:///chat",
+                                 "https://user:url-secret@unit.test.invalid/chat", "https://unit.test.invalid/#part"}) {
+        provider.params["endpoint"] = endpoint;
+        auto parsed = AIProviderConfig::parse(provider.id, provider);
+        ASSERT_TRUE(parsed.status().is_invalid_argument()) << parsed.status();
+        const auto message = parsed.status().to_string();
+        EXPECT_EQ(std::string::npos, message.find(endpoint));
+        EXPECT_EQ(std::string::npos, message.find("url-secret"));
+        EXPECT_EQ(std::string::npos, message.find("test-secret"));
+    }
+}
+
+TEST(AIProviderConfigTest, RejectsInvalidModelAndCredentials) {
+    auto provider = make_provider_chat_config();
+    for (const char* model : {"", " ", "model\n"}) {
+        provider.params["model"] = model;
+        EXPECT_TRUE(AIProviderConfig::parse(provider.id, provider).status().is_invalid_argument());
+    }
+    provider.params["model"] = std::string(kModelSentinel);
+    for (char control : {'\n', '\r', '\0'}) {
+        provider.params["api_key"] = std::string("test-secret") + control + "key";
+        auto parsed = AIProviderConfig::parse(provider.id, provider);
+        ASSERT_TRUE(parsed.status().is_invalid_argument()) << parsed.status();
+        EXPECT_EQ(std::string::npos, parsed.status().to_string().find("test-secret"));
+    }
+}
+
+TEST(AIProviderConfigTest, RoutesDashScopeFromThriftByEndpointPathAndType) {
+    auto provider = make_provider_chat_config(TAIProviderProtocol::DASHSCOPE);
+    const struct {
+        const char* suffix;
+        TAIProviderType::type type;
+        const char* serialized_input;
+    } routes[] = {
+            {"/text-generation/generation", TAIProviderType::CHAT, R"("content":"hello")"},
+            {"/multimodal-generation/generation", TAIProviderType::CHAT, R"("content":[{"text":"hello"}])"},
+            {"/text-embedding/text-embedding", TAIProviderType::EMBEDDING, R"("texts":["hello"])"},
+            {"/multimodal-embedding/multimodal-embedding", TAIProviderType::EMBEDDING,
+             R"("contents":[{"text":"hello"}])"},
+    };
+    for (const auto& [suffix, type, serialized_input] : routes) {
+        const auto endpoint =
+                std::string("https://proxy.example/prefix") + suffix + "?route=/text-generation/generation";
+        SCOPED_TRACE(suffix);
+        provider.__set_type(type);
+        provider.params["endpoint"] = endpoint;
+        auto config = AIProviderConfig::parse(provider.id, provider);
+        ASSERT_TRUE(config.ok()) << config.status();
+        EXPECT_EQ(AIProviderProtocol::DASHSCOPE, config->protocol);
+        auto instance = create_ai_provider(*config);
+        ASSERT_TRUE(instance.ok()) << instance.status();
+        auto request = (*instance)->build_request({.endpoint = config->endpoint,
+                                                   .model = "overridden-row-model",
+                                                   .prompt = "hello",
+                                                   .capability = config->capability});
+        ASSERT_TRUE(request.ok()) << request.status();
+        EXPECT_EQ(endpoint, request->url);
+        EXPECT_NE(std::string::npos, request->body.find(serialized_input));
+
+        config->capability = type == TAIProviderType::CHAT ? AICapability::EMBEDDING : AICapability::CHAT;
+        EXPECT_TRUE(create_ai_provider(*config).status().is_invalid_argument());
+    }
+    provider.__set_type(TAIProviderType::CHAT);
+    for (const auto* endpoint : {"https://text-generation/generation", "https://proxy.example/v1/chat/completions",
+                                 "https://proxy.example?route=/text-generation/generation"}) {
+        provider.params["endpoint"] = endpoint;
+        auto config = AIProviderConfig::parse(provider.id, provider);
+        ASSERT_TRUE(config.ok()) << config.status();
+        EXPECT_TRUE(create_ai_provider(*config).status().is_invalid_argument());
+    }
+}
+
+TEST(AIProviderConfigTest, RejectsInvalidMetadataWithoutExposingProperties) {
+    auto provider = make_provider_chat_config();
+    provider.params["api_key"] = "test-secret";
+    EXPECT_FALSE(AIProviderConfig::parse("different-id", provider).ok());
     provider.__set_type(TAIProviderType::RERANK);
-    EXPECT_FALSE(pipeline::AIProviderConfigParser::parse(provider.id, provider).ok());
+    EXPECT_FALSE(AIProviderConfig::parse(provider.id, provider).ok());
     provider.__set_type(static_cast<TAIProviderType::type>(99));
-    EXPECT_FALSE(pipeline::AIProviderConfigParser::parse(provider.id, provider).ok());
+    EXPECT_FALSE(AIProviderConfig::parse(provider.id, provider).ok());
     provider.__set_type(TAIProviderType::EMBEDDING);
     for (const auto& key : {"timeout_ms", "dimensions"}) {
         for (const auto& value : {"0", "-1", "2147483648", "123junk", " 123", "+"}) {
             provider.params[key] = value;
-            auto result = pipeline::AIProviderConfigParser::parse(provider.id, provider);
+            auto result = AIProviderConfig::parse(provider.id, provider);
             ASSERT_FALSE(result.ok()) << key << ": " << value;
             EXPECT_EQ(std::string::npos, result.status().to_string().find("test-secret"));
         }
@@ -260,23 +342,23 @@ TEST(AIProviderConfigParserTest, RejectsInvalidMetadataWithoutExposingProperties
     for (const auto& key : {"endpoint", "model"}) {
         auto missing = provider;
         missing.params.erase(key);
-        EXPECT_FALSE(pipeline::AIProviderConfigParser::parse(provider.id, missing).ok());
+        EXPECT_FALSE(AIProviderConfig::parse(provider.id, missing).ok());
     }
-    for (auto protocol : {TAIProviderProtocol::ANTHROPIC, TAIProviderProtocol::COHERE, TAIProviderProtocol::DASHSCOPE,
-                          static_cast<TAIProviderProtocol::type>(99)}) {
+    for (auto protocol :
+         {TAIProviderProtocol::ANTHROPIC, TAIProviderProtocol::COHERE, static_cast<TAIProviderProtocol::type>(99)}) {
         provider.__set_protocol(protocol);
         provider.params["protocol"] = "openai";
-        auto result = pipeline::AIProviderConfigParser::parse(provider.id, provider);
+        auto result = AIProviderConfig::parse(provider.id, provider);
         EXPECT_TRUE(result.status().is_not_supported()) << result.status();
     }
     provider.__set_protocol(TAIProviderProtocol::OPENAI);
     provider.__isset.protocol = false;
-    EXPECT_FALSE(pipeline::AIProviderConfigParser::parse(provider.id, provider).ok());
+    EXPECT_FALSE(AIProviderConfig::parse(provider.id, provider).ok());
     provider.__set_protocol(TAIProviderProtocol::OPENAI);
     provider.params["protocol"] = "anthropic";
-    EXPECT_TRUE(pipeline::AIProviderConfigParser::parse(provider.id, provider).ok());
+    EXPECT_TRUE(AIProviderConfig::parse(provider.id, provider).ok());
     provider.__isset.type = false;
-    EXPECT_FALSE(pipeline::AIProviderConfigParser::parse(provider.id, provider).ok());
+    EXPECT_FALSE(AIProviderConfig::parse(provider.id, provider).ok());
 }
 
 TEST_F(AIProjectNodeTest, ExecFactoryDeserializesExactThriftContract) {

@@ -140,16 +140,13 @@ public class PresignedFunctionTest {
         context.setQualifiedUser(user.getUser());
     }
 
-    // Every overload, two storage volumes, a NULL expiration time, and presign calls nested in other functions,
-    // followed from analysis to the plan sent to the BE.
+    // Follow all four overloads and their storage volume bindings from analysis to the BE plan.
     @Test
     public void testEndToEnd() throws Exception {
         String sql = "select get_presigned_url('presign_vol', ta), "
                 + "get_presigned_url('presign_vol_other', ta, NULL), "
                 + "get_presigned_file('presign_vol_other', to_file(named_struct('uri', ta)), td), "
-                + "fl_get_uri(get_presigned_file('presign_vol', to_file(named_struct('uri', ta)))), "
-                + "ai_complete(prompt => 'describe', file => get_presigned_file('presign_vol_other', "
-                + "to_file(named_struct('uri', ta))), provider => '" + AI_PROVIDER + "') "
+                + "fl_get_uri(get_presigned_file('presign_vol', to_file(named_struct('uri', ta)))) "
                 + "from tall";
         QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
         List<Expr> outputs = ((SelectRelation) statement.getQueryRelation()).getOutputExpression();
@@ -159,8 +156,7 @@ public class PresignedFunctionTest {
                 {FunctionSet.GET_PRESIGNED_URL, 2, VarcharType.VARCHAR, "presign_ak_1"},
                 {FunctionSet.GET_PRESIGNED_URL, 3, VarcharType.VARCHAR, "presign_ak_2"},
                 {FunctionSet.GET_PRESIGNED_FILE, 3, FileType.FILE, "presign_ak_2"},
-                {FunctionSet.GET_PRESIGNED_FILE, 2, FileType.FILE, "presign_ak_1"},
-                {FunctionSet.GET_PRESIGNED_FILE, 2, FileType.FILE, "presign_ak_2"}};
+                {FunctionSet.GET_PRESIGNED_FILE, 2, FileType.FILE, "presign_ak_1"}};
         for (int i = 0; i < expected.length; ++i) {
             FunctionCallExpr call = calls.get(i);
             Assertions.assertNotNull(call, "output " + i);
@@ -183,8 +179,7 @@ public class PresignedFunctionTest {
         Assertions.assertNull(builtin.getCloudConfiguration());
         Assertions.assertEquals("presign_ak_1", accessKeyOf(calls.get(0).getFn().copy()));
 
-        // The calls are not folded away, and the configurations reach the BE with the plan, including the one of the
-        // call nested in the AI function. The disabled storage volume is not referenced.
+        // Both referenced storage volumes reach the BE plan.
         ConnectContext context = AnalyzeTestUtil.getConnectContext();
         String plan = UtFrameUtils.getFragmentPlan(context, sql);
         Assertions.assertTrue(plan.contains("get_presigned_url"), plan);
@@ -193,6 +188,16 @@ public class PresignedFunctionTest {
         Assertions.assertTrue(thrift.contains("presign_ak_1"), thrift);
         Assertions.assertTrue(thrift.contains("presign_ak_2"), thrift);
         Assertions.assertFalse(thrift.contains("presign_ak_3"), thrift);
+    }
+
+    @Test
+    public void testPresignedFileInAICompleteCarriesVolumeConfiguration() throws Exception {
+        String sql = "select ai_complete(prompt => 'describe', file => get_presigned_file('presign_vol_other', "
+                + "to_file(named_struct('uri', ta))), provider => '" + AI_PROVIDER + "') from tall";
+        String thrift = UtFrameUtils.getPlanThriftString(AnalyzeTestUtil.getConnectContext(), sql);
+        Assertions.assertTrue(thrift.contains("get_presigned_file"), thrift);
+        Assertions.assertTrue(thrift.contains("presign_ak_2"), thrift);
+        Assertions.assertFalse(thrift.contains("presign_ak_1"), thrift);
     }
 
     @Test

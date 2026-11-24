@@ -62,6 +62,7 @@
 namespace starrocks {
 
 class DescriptorTbl;
+class KafkaScanRangeReport;
 class ObjectPool;
 class Status;
 class Expr;
@@ -560,6 +561,19 @@ public:
         _sink_commit_infos.emplace_back(sink_commit_info);
     }
 
+    // Set when the fragment instance consumes Kafka scan ranges, before any of them starts; the final exec status
+    // report carries what they consumed.
+    void set_kafka_scan_range_report(std::shared_ptr<KafkaScanRangeReport> report) {
+        _kafka_scan_range_report = std::move(report);
+    }
+    const std::shared_ptr<KafkaScanRangeReport>& kafka_scan_range_report() const { return _kafka_scan_range_report; }
+
+    // The source that a routine load names for its rejected records, see LoadPathStateHelper. A fragment instance that
+    // consumes Kafka scan ranges sets it before any of them starts.
+    void set_routine_load_source_info(std::string source_info) {
+        _query_options.__set_routine_load_source_info(std::move(source_info));
+    }
+
     // get mem limit for load channel
     // if load mem limit is not set, or is zero, using query mem limit instead.
     int64_t get_load_mem_limit() const;
@@ -783,6 +797,8 @@ private:
 
     std::mutex _sink_commit_infos_lock;
     std::vector<TSinkCommitInfo> _sink_commit_infos;
+
+    std::shared_ptr<KafkaScanRangeReport> _kafka_scan_range_report;
 
     RuntimeFilterPort* _runtime_filter_port = nullptr;
     RuntimeFilterRegistry* _runtime_filter_registry = nullptr;

@@ -34,6 +34,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
@@ -88,6 +89,8 @@ public class PaimonInsertPlanTest extends PlanTestBase {
         register("boolean_partition", Schema.newBuilder().column("p", DataTypes.BOOLEAN())
                 .column("id", DataTypes.INT().notNull()).partitionKeys("p").option("bucket", "-1").build());
         register("unpartitioned", Schema.newBuilder().column("id", DataTypes.INT().notNull())
+                .column("value", DataTypes.STRING()).option("bucket", "-1").build());
+        register("ctas_target", Schema.newBuilder().column("id", DataTypes.BIGINT())
                 .column("value", DataTypes.STRING()).option("bucket", "-1").build());
         register("fixed", Schema.newBuilder().column("p", DataTypes.DATE().notNull()).column("id", DataTypes.INT().notNull())
                 .column("value", DataTypes.STRING()).partitionKeys("p").primaryKey("p", "id")
@@ -172,6 +175,19 @@ public class PaimonInsertPlanTest extends PlanTestBase {
         Assertions.assertEquals(4, select.plan().getTopFragment().getPipelineDop());
         Assertions.assertTrue(select.plan().getTopFragment().hasPaimonTableSink());
         Assertions.assertFalse(select.plan().getTopFragment().canUseRuntimeAdaptiveDop());
+    }
+
+    @Test
+    public void testCtasInsertResolvesPaimonIdentityAfterCreate() {
+        connectContext.setQueryId(com.starrocks.common.util.UUIDUtil.genUUID());
+        connectContext.setExecutionId(com.starrocks.common.util.UUIDUtil.toTUniqueId(connectContext.getQueryId()));
+        CreateTableAsSelectStmt ctas = (CreateTableAsSelectStmt) SqlParser.parse(
+                "create table " + target("ctas_target") + " as select v1 as id, cast(v2 as varchar) as value from t0",
+                connectContext.getSessionVariable()).get(0);
+        // StmtExecutor plans this INSERT after CREATE TABLE. The metadata fixture stands in for the created table.
+        ExecPlan plan = StatementPlanner.plan(ctas.getInsertStmt(), connectContext);
+        PaimonTableSink sink = Assertions.assertInstanceOf(PaimonTableSink.class, plan.getTopFragment().getSink());
+        Assertions.assertEquals(APPEND, sink.getPaimonSinkExtra().getOverwriteMode());
     }
 
     @Test

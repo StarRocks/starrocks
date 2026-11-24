@@ -89,6 +89,7 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.LongPredicate;
 import java.util.stream.Collectors;
 
 public class OlapTableTest {
@@ -403,6 +404,54 @@ public class OlapTableTest {
         Assertions.assertEquals(olapTable.hasDelete(), copied.hasDelete());
         Assertions.assertEquals(olapTable.hasForbiddenGlobalDict(), copied.hasForbiddenGlobalDict());
         Assertions.assertEquals(olapTable, copied);
+    }
+
+    @Test
+    public void testPlanningCopyRecordsTheVersionsItWasTakenAt() {
+        Database db = UnitTestUtil.createDb(1, 2, 3, 4, 5, 6, 7, KeysType.AGG_KEYS);
+        OlapTable live = (OlapTable) db.getTable(UnitTestUtil.TABLE_NAME);
+        PhysicalPartition physical = live.getPhysicalPartitions().iterator().next();
+        long copiedAt = physical.getVisibleVersion();
+        long copiedTime = physical.getVisibleVersionTime();
+
+        OlapTable copy = new OlapTable();
+        live.copyOnlyForQuery(copy);
+        live.markPlanningVersionsForRecheck();
+        copy.markPlanningVersionsForRecheck();
+        Assertions.assertFalse(live.isPlanningVersionsMarkedForRecheck(), "a published table records nothing");
+        Assertions.assertTrue(copy.isPlanningVersionsMarkedForRecheck());
+        List<Long> read = List.of(physical.getParentId());
+        LongPredicate createdBefore = copy.planningCopyOlderThan(read);
+        Assertions.assertFalse(createdBefore.test(copiedTime));
+        Assertions.assertFalse(copy.planningCopyOlderThan(read).test(copiedTime + 1),
+                "a later time while nothing read moved, as after dropping the newest partition");
+
+        // A load published after the copy, labelled with an earlier time, as a shared-nothing commit time can be.
+        physical.updateVisibleVersion(copiedAt + 1, copiedTime - 1);
+        Assertions.assertEquals(copiedAt + 1, live.getVisibleVersionForQuery(physical));
+        Assertions.assertEquals(copiedAt, copy.getVisibleVersionForQuery(physical));
+        Assertions.assertTrue(copy.isPlanningVisibleVersionMoved(physical));
+        Assertions.assertFalse(createdBefore.test(copiedTime), "the versions are read once, at the first test");
+        Assertions.assertTrue(copy.planningCopyOlderThan(read).test(copiedTime), "the newest time stayed, a version moved");
+        Assertions.assertTrue(copy.planningCopyOlderThan(null).test(copiedTime));
+        Assertions.assertFalse(copy.planningCopyOlderThan(List.of()).test(copiedTime), "a partition the scan does not read");
+        Assertions.assertTrue(copy.planningCopyOlderThan(read).test(copiedTime + 1));
+        Assertions.assertFalse(copy.planningCopyOlderThan(read).test(copiedTime - 1), "collected before the copy");
+        Assertions.assertFalse(live.planningCopyOlderThan(null).test(Long.MAX_VALUE));
+
+        OlapTable copyOfCopy = new OlapTable();
+        copy.copyOnlyForQuery(copyOfCopy);
+        Assertions.assertEquals(copiedAt, copyOfCopy.getVisibleVersionForQuery(physical));
+
+        copy.rereadPlanningVisibleVersion(physical);
+        Assertions.assertFalse(copy.isPlanningVisibleVersionMoved(physical));
+        Assertions.assertEquals(copiedAt + 1, copy.getVisibleVersionForQuery(physical));
+
+        // A cached prepared plan's copy drops its record and reads the live versions.
+        copy.forgetPlanningVisibleVersions();
+        physical.updateVisibleVersion(copiedAt + 2);
+        Assertions.assertEquals(copiedAt + 2, copy.getVisibleVersionForQuery(physical));
+        Assertions.assertFalse(copy.planningCopyOlderThan(null).test(Long.MAX_VALUE));
     }
 
     @Test

@@ -41,6 +41,7 @@ import com.starrocks.authentication.AuthCredentials;
 import com.starrocks.authentication.AuthFailureReason;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.AuthenticationProviderFactory;
 import com.starrocks.authentication.SecurityIntegration;
@@ -380,6 +381,40 @@ public class MysqlProto {
     public record NegotiateResult(MysqlAuthPacket authPacket, NegotiateState state) {
     }
 
+    /**
+     * Which integration on {@code authentication_chain} decides the client plugin of a connection
+     * whose user is not in the user table. The handshake happens before any credential is seen,
+     * so the only hint is the plugin the client declared in its handshake response: the first
+     * integration whose type maps to that plugin wins, which is what lets an LDAP integration and
+     * a JWT integration share one chain - a client declaring
+     * {@code authentication_openid_connect_client} is routed to the JWT one, a client declaring
+     * {@code mysql_clear_password} to the LDAP one. A client that declared nothing of ours
+     * ({@code mysql_native_password}, which no integration maps to) or a plugin no integration
+     * matches gets the first integration, exactly as before.
+     */
+    static SecurityIntegration pickSecurityIntegration(String clientPlugin) {
+        AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        SecurityIntegration first = null;
+        for (String authMechanism : Config.authentication_chain) {
+            if (authMechanism.equals(SecurityIntegration.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
+                continue;
+            }
+            SecurityIntegration securityIntegration = authenticationMgr.getSecurityIntegration(authMechanism);
+            if (securityIntegration == null) {
+                // Named on the chain but never created, or dropped since: the chain walk in
+                // AuthenticationHandler skips it the same way.
+                continue;
+            }
+            if (first == null) {
+                first = securityIntegration;
+            }
+            if (clientPlugin.equalsIgnoreCase(AuthPlugin.covertFromServerToClient(securityIntegration.getType()))) {
+                return securityIntegration;
+            }
+        }
+        return first;
+    }
+
     public static void switchAuthPlugin(MysqlAuthPacket mysqlAuthPacket, ConnectContext context)
             throws AuthenticationException, IOException {
         String user = mysqlAuthPacket.getUser();
@@ -400,17 +435,10 @@ public class MysqlProto {
             switchAuthPlugin = AuthPlugin.covertFromServerToClient(authInfo.getAuthPlugin());
             provider = AuthenticationProviderFactory.create(authInfo.getAuthPlugin(), authInfo.getAuthString());
         } else {
-            for (String authMechanism : Config.authentication_chain) {
-                if (authMechanism.equals(SecurityIntegration.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
-                    continue;
-                }
-
-                //Because we only support Security Integration of the same type, we use the first non-Native type here.
-                SecurityIntegration securityIntegration =
-                        GlobalStateMgr.getCurrentState().getAuthenticationMgr().getSecurityIntegration(authMechanism);
+            SecurityIntegration securityIntegration = pickSecurityIntegration(authPluginName);
+            if (securityIntegration != null) {
                 switchAuthPlugin = AuthPlugin.covertFromServerToClient(securityIntegration.getType());
                 provider = securityIntegration.getAuthenticationProvider();
-                break;
             }
         }
 

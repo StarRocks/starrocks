@@ -827,6 +827,9 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     }
 
     public void visualiseRollupIndex(OlapTable table) {
+        // Invalidate lock-free plans first: they read the versions their copies recorded and resolve the layout later,
+        // so a plan that finds the new index has to fail validation and be planned again.
+        table.lastSchemaUpdateTime.set(System.nanoTime());
         for (Partition partition : table.getPartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 Preconditions.checkState(commitVersionMap.containsKey(physicalPartition.getId()));
@@ -845,7 +848,6 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             }
         }
         table.rebuildFullSchema();
-        table.lastSchemaUpdateTime.set(System.nanoTime());
     }
 
     private void addTabletToInvertedIndex(OlapTable tbl) {

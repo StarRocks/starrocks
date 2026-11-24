@@ -121,6 +121,7 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.sql.plan.PlanningVersionRecheck;
 import com.starrocks.thrift.TPaimonOverwriteMode;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
@@ -431,7 +432,9 @@ public class InsertPlanner {
             plannerMetaLocker.unlock();
             ExecPlan plan;
             Throwable planFailure = null;
-            try {
+            // A re-read of the planning versions takes table locks too, within the bound of the re-acquire below.
+            try (PlanningVersionRecheck.LockWaitBound ignored =
+                    PlanningVersionRecheck.boundLockWaits(plannerMetaLocker.getAcquireTimeoutMs())) {
                 plan = doPlan(insertStmt, session);
             } catch (Throwable t) {
                 planFailure = t;

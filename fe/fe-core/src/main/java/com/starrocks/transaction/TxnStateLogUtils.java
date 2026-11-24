@@ -15,6 +15,7 @@
 package com.starrocks.transaction;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.starrocks.catalog.TabletInvertedIndex;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -26,6 +27,10 @@ import java.util.Map;
  * holding them disappeared while the transaction was running. This is allowed on purpose, dropping a
  * partition or a rollup during a load must not fail the load, but it also means the transaction reaches
  * VISIBLE and the load reports success with rows missing.
+ * <p>
+ * Tablets the FE cannot resolve at all are reported too. A rollup dropped during the load leaves such
+ * tablets behind, but so does an FE whose tablet inverted index lacks tablets that loads write into, so
+ * those lines are a candidate for lost rows rather than proof.
  * <p>
  * These log lines are the only trace such a loss leaves behind, so they share one marker to make them
  * greppable, and they carry the transaction identity needed to correlate them with a load.
@@ -45,6 +50,8 @@ public class TxnStateLogUtils {
 
     /**
      * Report tablets ignored at commit time because their physical partition no longer exists.
+     * <p>
+     * Table id {@link TabletInvertedIndex#NOT_EXIST_VALUE} holds the tablets the FE could not resolve to any table.
      *
      * @param ignoredTabletsByPartition physical partition id -> ignored tablet ids, empty means nothing to report
      */
@@ -78,6 +85,12 @@ public class TxnStateLogUtils {
                                              List<Long> tabletIds) {
         String reported = tabletIds.subList(0, Math.min(tabletIds.size(), MAX_REPORTED_TABLETS))
                 + (tabletIds.size() > MAX_REPORTED_TABLETS ? " ..." : "");
+        if (tableId == TabletInvertedIndex.NOT_EXIST_VALUE) {
+            return String.format("%s: txn %d (label %s, tables %s) committed after the FE skipped %d unresolved tablet"
+                            + " ids while committing it; this can mean missing rows, tablets: %s",
+                    ROWS_DROPPED_MARKER, txnState.getTransactionId(), txnState.getLabel(), txnState.getTableIdList(),
+                    tabletIds.size(), reported);
+        }
         return String.format("%s: txn %d (label %s) wrote %d tablets of table %d physical partition %d which no"
                         + " longer exists, those rows are dropped while the transaction still succeeds, tablets: %s",
                 ROWS_DROPPED_MARKER, txnState.getTransactionId(), txnState.getLabel(), tabletIds.size(),

@@ -798,6 +798,18 @@ enum FrontendServiceVersion {
   V1
 }
 
+// The consumption of the Kafka scan ranges (PlanNodes.TKafkaScanRange) of one fragment instance
+struct TKafkaScanRangeReport {
+  // partition -> the offset of the last consumed message; a partition with nothing consumed reports its begin offset - 1
+  1: optional map<i32, i64> partition_cmt_offset
+  2: optional map<i32, i64> partition_cmt_offset_timestamp
+  3: optional i64 received_bytes
+  4: optional i64 received_rows
+  // whether every scan range ended with all its partitions at their end; false when one stopped at its consume time
+  // or size limit with data left, and the next round then starts at once
+  5: optional bool reached_end
+}
+
 // The results of an INSERT query, sent to the coordinator as part of
 // TReportExecStatusParams
 struct TReportExecStatusParams {
@@ -870,6 +882,11 @@ struct TReportExecStatusParams {
   28: optional RuntimeProfile.TRuntimeProfileTree load_channel_profile;
 
   29: optional DataCache.TLoadDataCacheMetrics load_datacache_metrics
+
+  // Enterprise-only fields start at 300, reserve some fields for upstream StarRocks so a sync
+  // never collides on ordinals.
+  // what the Kafka scan ranges of this instance consumed, set in the final report
+  300: optional TKafkaScanRangeReport kafka_scan_range_report
 }
 
 struct TBatchReportExecStatusParams {

@@ -21,6 +21,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -30,6 +31,8 @@ import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 public class ReplayFromDumpForSharedDataTest extends ReplayFromDumpTestBase {
     @BeforeAll
@@ -69,5 +72,34 @@ public class ReplayFromDumpForSharedDataTest extends ReplayFromDumpTestBase {
         SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(dumpInfo, sessionVariable);
         Assertions.assertTrue(replayPair.second.contains("mv_name_1"), replayPair.second);
+    }
+
+    // TPC-H 100G lineitem joined with orders/supplier, captured on 1 FE + 3 BE with analyzed statistics. Pushing
+    // the count below the join made each query 2-3x slower: grouping lineitem by (l_orderkey, l_linenumber) keeps
+    // 583M of 600M rows, and grouping it by l_suppkey replaces a broadcast join of the 1M-row supplier.
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"high_ndv_join_key", "high_ndv_join_key_filter", "broadcastable_join",
+            "broadcastable_join_filter"})
+    public void testNoAggPushDownWithoutRowReduction(String name) throws Exception {
+        String dumpInfo = getDumpInfoFromFile("query_dump/agg_push_down_below_join/" + name);
+        SessionVariable sessionVariable = getDumpInfoFromJson(dumpInfo).getSessionVariable();
+        Assertions.assertEquals(0, sessionVariable.getCboPushDownAggregateMode());
+        String plan = getPlanFragmentWithAggPushdown(dumpInfo, sessionVariable, TExplainLevel.NORMAL).second;
+        // only the two phases of the aggregation above the join
+        Assertions.assertEquals(2, plan.split(":AGGREGATE \\(").length - 1, plan);
+        if (name.startsWith("broadcastable_join")) {
+            Assertions.assertTrue(plan.contains("INNER JOIN (BROADCAST)"), plan);
+        }
+    }
+
+    // TPC-DS 100G q38, captured on the same cluster. Each INTERSECT branch pushes `DISTINCT customer_sk, d_date`
+    // below the join with customer. The NDV product calls that unreduced, but the columns are correlated (one ticket,
+    // one customer, one day) and the push down reduces each branch about 12x, so all three must stay pushed.
+    @Test
+    public void testAggPushDownWithCorrelatedGroupBy() throws Exception {
+        String dumpInfo = getDumpInfoFromFile("query_dump/agg_push_down_below_join/tpcds_q38_100g");
+        SessionVariable sessionVariable = getDumpInfoFromJson(dumpInfo).getSessionVariable();
+        String plan = getPlanFragmentWithAggPushdown(dumpInfo, sessionVariable, TExplainLevel.NORMAL).second;
+        Assertions.assertEquals(14, plan.split(":AGGREGATE \\(").length - 1, plan);
     }
 }

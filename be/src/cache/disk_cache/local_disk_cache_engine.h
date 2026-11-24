@@ -42,6 +42,9 @@ struct DiskCacheOptions {
     double skip_read_factor = 0;
     uint32_t inline_item_count_limit = 0;
     std::string eviction_policy;
+    bool lru_shard_evict_fallback_enable = true;
+    uint32_t lru_shard_refill_low_watermark_percent = 50;
+    uint32_t lru_shard_refill_high_watermark_percent = 70;
 };
 
 struct DiskCacheWriteOptions {
@@ -112,6 +115,12 @@ public:
 
     // Update the datacache inline cache count limit
     virtual Status update_inline_cache_count_limit(int32_t limit) = 0;
+
+    // Update the lru shard refill settings of the eviction policy, see
+    // DiskCacheOptions::lru_shard_evict_fallback_enable and
+    // DiskCacheOptions::lru_shard_refill_{low,high}_watermark_percent.
+    virtual Status update_lru_shard_refill(bool fallback_enable, uint32_t low_watermark_percent,
+                                           uint32_t high_watermark_percent) = 0;
 
     virtual const DataCacheDiskMetrics cache_metrics() const = 0;
 

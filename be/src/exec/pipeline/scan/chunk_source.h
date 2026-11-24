@@ -78,6 +78,10 @@ public:
 
     virtual bool reach_limit() { return false; }
 
+    // Whether the source waits for its input to become readable, which wakes the scan operator: it has nothing to
+    // read until then, so the operator runs no IO task for it.
+    virtual bool is_waiting_for_input() const { return false; }
+
     virtual void update_chunk_exec_stats(RuntimeState* state) {}
     virtual bool has_reusable_state() const { return false; }
     virtual bool can_reuse_with(Morsel& morsel) const { return false; }

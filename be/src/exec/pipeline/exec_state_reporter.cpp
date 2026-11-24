@@ -40,6 +40,7 @@
 #include "gen_cpp/FrontendService.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
+#include "runtime/kafka_scan_range_report.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_env.h"
 
@@ -220,6 +221,13 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
             for (auto& info : runtime_state->sink_commit_infos()) {
                 params.sink_commit_infos.push_back(info);
             }
+        }
+        // A Kafka scan range merges what it consumed before its scanner can reach the end of its pipe, so the final
+        // report, built after every driver has finished, covers all the scan ranges of the instance.
+        const auto& kafka_scan_range_report = runtime_state->kafka_scan_range_report();
+        if (done && kafka_scan_range_report != nullptr) {
+            kafka_scan_range_report->to_thrift(&params.kafka_scan_range_report);
+            params.__isset.kafka_scan_range_report = true;
         }
     }
 

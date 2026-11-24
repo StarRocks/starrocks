@@ -670,8 +670,8 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         int schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getMetaId());
         String schemaHashStr = String.valueOf(schemaHash);
         ConnectContext ctx = ConnectContext.get();
-        long visibleVersion = chooseScanVersion(physicalPartition.getVisibleVersion(), physicalPartition.getId(),
-                ctx == null ? null : ctx.getScanVersionOverride());
+        long visibleVersion = chooseScanVersion(olapTable.getVisibleVersionForQuery(physicalPartition),
+                physicalPartition.getId(), ctx == null ? null : ctx.getScanVersionOverride());
         scanPartitionVersions.put(physicalPartition.getId(), visibleVersion);
         String visibleVersionStr = String.valueOf(visibleVersion);
         boolean fillDataCache = olapTable.isEnableFillDataCache(partition);
@@ -1331,6 +1331,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
             if (!groupedRangeScan) {
                 msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
+                partitionKeyAscHint.ifPresent(aBoolean -> msg.lake_scan_node.setPartition_order_hint(aBoolean));
             }
             msg.lake_scan_node.setSchema_key(getSchemaKey());
 
@@ -1482,7 +1483,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             if (olapTable.getPartitionInfo().getReplicationNum(partition.getParentId()) < backendSize) {
                 return false;
             }
-            long visibleVersion = partition.getVisibleVersion();
+            long visibleVersion = olapTable.getVisibleVersionForQuery(partition);
             MaterializedIndex materializedIndex = partition.getQueryableIndex(selectedIndexMetaId);
             for (Long id : entry.getValue()) {
                 LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(id);

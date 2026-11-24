@@ -16,6 +16,7 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.TabletInvertedIndex;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -65,6 +66,25 @@ public class TxnStateLogUtilsTest {
         Assertions.assertTrue(message.endsWith("..."), message);
         Assertions.assertTrue(message.contains("0, 1, 2"), message);
         Assertions.assertFalse(message.contains("24"), message);
+    }
+
+    @Test
+    public void testUnresolvedTabletsMessage() {
+        TransactionState txnState = txnState(1005L, "load_label_5");
+        Mockito.when(txnState.getTableIdList()).thenReturn(Lists.newArrayList(20L, 21L));
+        String message = TxnStateLogUtils.buildIgnoredTabletsMessage(txnState, TabletInvertedIndex.NOT_EXIST_VALUE,
+                TabletInvertedIndex.NOT_EXIST_VALUE, Lists.newArrayList(11L, 12L));
+
+        Assertions.assertTrue(message.startsWith(TxnStateLogUtils.ROWS_DROPPED_MARKER), message);
+        Assertions.assertTrue(message.contains("txn 1005"), message);
+        Assertions.assertTrue(message.contains("load_label_5"), message);
+        // An unresolved tablet names no table, so the line names the tables the transaction wrote instead.
+        Assertions.assertTrue(message.contains("tables [20, 21]"), message);
+        Assertions.assertTrue(message.contains("2 unresolved tablet ids"), message);
+        Assertions.assertTrue(message.contains("[11, 12]"), message);
+        Assertions.assertTrue(message.contains("can mean missing rows"), message);
+        Assertions.assertFalse(message.contains("table -1"), message);
+        Assertions.assertFalse(message.contains("physical partition -1"), message);
     }
 
     @Test

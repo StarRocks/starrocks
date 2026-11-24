@@ -12,7 +12,7 @@ Results can be filtered by name pattern or by provider type.
 ## Syntax
 
 ```SQL
-SHOW AI PROVIDERS [ LIKE '<pattern>' | TYPE { embedding | rerank | chat } ]
+SHOW AI PROVIDERS [ LIKE '<pattern>' | TYPE { embedding | chat } ]
 ```
 
 ## Parameters
@@ -20,9 +20,11 @@ SHOW AI PROVIDERS [ LIKE '<pattern>' | TYPE { embedding | rerank | chat } ]
 | Parameter        | Description                                                                 |
 | ---------------- | --------------------------------------------------------------------------- |
 | `LIKE '<pattern>'` | Only show providers whose name matches the SQL `LIKE` pattern.            |
-| `TYPE <type>`    | Only show providers of the given type (`embedding`, `rerank`, or `chat`).   |
+| `TYPE <type>`    | Only show providers of the given type (`embedding` or `chat`).   |
 
 ## Return columns
+
+The following columns apply to chat and embedding providers.
 
 | Column         | Description                                                          |
 | -------------- | -------------------------------------------------------------------- |
@@ -33,7 +35,6 @@ SHOW AI PROVIDERS [ LIKE '<pattern>' | TYPE { embedding | rerank | chat } ]
 | `Endpoint`     | Endpoint URL.                                                        |
 | `Model`        | Model name.                                                          |
 | `Dimensions`   | Embedding dimension (embedding providers).                           |
-| `MaxDocuments` | Max documents per rerank request (rerank providers).                 |
 | `TimeoutMs`    | Per-request HTTP timeout in milliseconds.                            |
 | `ApiKey`       | Masked API key.                                                      |
 | `Comment`      | Provider comment.                                                    |
@@ -43,7 +44,7 @@ SHOW AI PROVIDERS [ LIKE '<pattern>' | TYPE { embedding | rerank | chat } ]
 ```sql
 SHOW AI PROVIDERS;
 SHOW AI PROVIDERS LIKE 'open%';
-SHOW AI PROVIDERS TYPE rerank;
+SHOW AI PROVIDERS TYPE chat;
 ```
 
 ## See also
