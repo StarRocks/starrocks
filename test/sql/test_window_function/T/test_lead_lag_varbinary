@@ -1,0 +1,15 @@
+-- name: test_lead_lag_varbinary
+-- description: LAG / LEAD on a VARBINARY column failed with a NullPointerException, "No assignment from
+--              VARBINARY(32) to BITMAP" (StarRocks/starrocks#84288). There is no VARBINARY signature and LAG / LEAD
+--              never cast their first argument, so they report that no function matches. FIRST_VALUE / LAST_VALUE
+--              cast to VARCHAR and keep working.
+
+CREATE TABLE tb (k INT, b VARBINARY(32)) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO tb VALUES (1, x'61'), (2, x'62'), (3, NULL), (4, x'64');
+
+SELECT k, hex(LAG(b) OVER (ORDER BY k)) FROM tb ORDER BY k;
+SELECT k, hex(LEAD(b, 1, NULL) OVER (ORDER BY k)) FROM tb ORDER BY k;
+SELECT k, hex(LAG(b, 1, x'7a') OVER (ORDER BY k)) FROM tb ORDER BY k;
+SELECT k, LAG(timediff('2020-01-01 00:00:10', '2020-01-01 00:00:00')) OVER (ORDER BY k) FROM tb ORDER BY k;
+SELECT k, hex(FIRST_VALUE(b) OVER (ORDER BY k)), hex(LAST_VALUE(b) OVER (ORDER BY k)) FROM tb ORDER BY k;
