@@ -99,6 +99,13 @@ CONF_Bool(starlet_star_cache_async_init, "true");
 // initializes.
 CONF_Bool(starlet_star_cache_skip_fresh_block_checksum_verification, "true");
 
+// Whether a StarCache write replaces an object that is already cached under the same key. Off, the
+// existing object is kept and the write is reported as success, which suits the read-through fill
+// path where the bytes being written are the ones already cached. Turn it on to let a re-read
+// refresh a block that is suspected to be stale or damaged. StarCache reads it on every write, so a
+// change takes effect on the next write without re-initializing the cache.
+CONF_mBool(starlet_star_cache_write_overwrite, "false");
+
 CONF_mInt32(starlet_star_cache_mem_size_percent, "0");
 
 CONF_mInt64(starlet_star_cache_mem_size_bytes, "134217728");
