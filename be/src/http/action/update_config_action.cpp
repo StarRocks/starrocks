@@ -563,6 +563,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                               fslib_azure_storage_max_single_part_size);
         UPDATE_STARLET_CONFIG(starlet_fslib_azure_storage_min_upload_part_size,
                               fslib_azure_storage_min_upload_part_size);
+        UPDATE_STARLET_CONFIG(starlet_star_cache_write_overwrite, star_cache_write_overwrite);
 #undef UPDATE_STARLET_CONFIG
 
 #ifndef BUILD_FORMAT_LIB

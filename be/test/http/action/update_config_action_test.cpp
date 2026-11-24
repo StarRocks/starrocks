@@ -26,6 +26,9 @@
 #include "cache/disk_cache/test_cache_utils.h"
 #include "common/config.h"
 #include "fs/fs_util.h"
+#ifdef USE_STAROS
+#include "fslib/star_cache_configuration.h"
+#endif
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/update_manager.h"
@@ -424,6 +427,25 @@ TEST_F(UpdateConfigActionTest, update_starlet_upload_threshold_configs_reject_no
             EXPECT_EQ(mapping.valid_value, *mapping.config_value)
                     << mapping.be_config << " config not rolled back on rejected " << bad_value;
         }
+    }
+}
+
+TEST_F(UpdateConfigActionTest, update_starlet_star_cache_write_overwrite) {
+    const bool saved_config = config::starlet_star_cache_write_overwrite;
+    const bool saved_flag = staros::starlet::fslib::FLAGS_star_cache_write_overwrite;
+    DeferOp restore([&] {
+        config::starlet_star_cache_write_overwrite = saved_config;
+        staros::starlet::fslib::FLAGS_star_cache_write_overwrite = saved_flag;
+    });
+
+    UpdateConfigAction action(ExecEnv::GetInstance());
+    // Start from the opposite flag value each time, so both directions are really forwarded.
+    for (bool value : {true, false}) {
+        staros::starlet::fslib::FLAGS_star_cache_write_overwrite = !value;
+        Status st = action.update_config("starlet_star_cache_write_overwrite", value ? "true" : "false");
+        ASSERT_TRUE(st.ok()) << st;
+        EXPECT_EQ(value, config::starlet_star_cache_write_overwrite);
+        EXPECT_EQ(value, staros::starlet::fslib::FLAGS_star_cache_write_overwrite);
     }
 }
 

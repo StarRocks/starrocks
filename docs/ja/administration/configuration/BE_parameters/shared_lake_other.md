@@ -359,6 +359,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタで Data Cache が使用できるディスク容量の割合。`datacache_unified_instance_enable` が `false` の場合のみ有効です。
 - 導入バージョン: v3.1
 
+### starlet_star_cache_write_overwrite
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタで、Data Cache への書き込みが同じキーで既にキャッシュされているオブジェクトを置き換えるかどうか。この項目が `false` の場合、既存のオブジェクトを保持し、その書き込みは成功として報告されます。これは、書き込むバイト列が既にキャッシュされている内容と同じであるリードスルーのフィル経路に適しています。`true` に設定すると、古い、または破損している疑いのあるブロックを再読み取りで更新できます。Data Cache は書き込みのたびにこの項目を読み取るため、変更はキャッシュを再初期化することなく次の書き込みから有効になります。
+- 導入バージョン: -
+
 ### starlet_use_star_cache
 
 - デフォルト: v3.1 では false、v3.2.3 以降は true
