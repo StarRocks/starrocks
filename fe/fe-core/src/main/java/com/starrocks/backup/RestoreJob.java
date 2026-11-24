@@ -1211,6 +1211,9 @@ public class RestoreJob extends AbstractJob {
                             + " already exist in db: " + db.getOriginName());
                     return;
                 }
+                if (tbl instanceof OlapTable olapTable) {
+                    olapTable.analyzeRollupIndexMetasBestEffort();
+                }
             }
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
@@ -1547,6 +1550,9 @@ public class RestoreJob extends AbstractJob {
             // restored tables
             for (Table restoreTbl : restoredTbls) {
                 db.registerTableUnlocked(restoreTbl);
+                if (restoreTbl instanceof OlapTable olapTable) {
+                    olapTable.analyzeRollupIndexMetasBestEffort();
+                }
                 // modify tablet inverted index
                 for (Partition restorePart : restoreTbl.getPartitions()) {
                     modifyInvertedIndex((OlapTable) restoreTbl, restorePart);
