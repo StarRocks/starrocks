@@ -106,8 +106,8 @@ protected:
     }
 
 private:
-    TypeInfoPtr _item_type_info;
-    size_t _item_size;
+    const TypeInfoPtr _item_type_info;
+    const size_t _item_size;
 };
 
 TypeInfoPtr get_array_type_info(const TypeInfoPtr& item_type) {
