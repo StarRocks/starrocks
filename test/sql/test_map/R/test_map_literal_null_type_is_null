@@ -1,0 +1,33 @@
+-- name: test_map_literal_null_type_is_null
+CREATE TABLE t (k INT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t VALUES (1), (2);
+-- result:
+-- !result
+SELECT map{} IS NULL, map{} IS NOT NULL;
+-- result:
+0	1
+-- !result
+SELECT map{1:NULL} IS NULL, map{NULL:'a'} IS NULL;
+-- result:
+0	0
+-- !result
+SELECT COUNT(*) FROM t WHERE map{} IS NULL;
+-- result:
+0
+-- !result
+SELECT COUNT(*) FROM t WHERE map{} IS NOT NULL;
+-- result:
+2
+-- !result
+SELECT k, map{} IS NULL FROM t ORDER BY k;
+-- result:
+1	0
+2	0
+-- !result
+SELECT k, map{1:NULL} IS NOT NULL FROM t ORDER BY k;
+-- result:
+1	1
+2	1
+-- !result
