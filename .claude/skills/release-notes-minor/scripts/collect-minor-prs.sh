@@ -26,7 +26,7 @@
 #      to the X.Y.0 tag once it exists).
 #
 # Output (in out_dir): summary.txt plus one TSV per tier: number<TAB>sha<TAB>subject
-#   feature.tsv  enhancement.tsv  bugfix.tsv  security.tsv  noprefix.tsv
+#   new.tsv (every new PR, all tiers) feature.tsv  enhancement.tsv  bugfix.tsv  security.tsv  noprefix.tsv
 # Excluded as non-user-facing (counted in summary.txt only): [Refactor] [Tool] [Doc] [UT].
 
 set -euo pipefail
@@ -44,14 +44,27 @@ mkdir -p "$OUT"
 F_PREV="$(git merge-base "$MAIN" "$PREV_BRANCH")"
 F_NEW="$(git merge-base "$MAIN" "$NEW_BRANCH")"
 
-# stdin: "<sha>\t<subject>" -> "<pr>\t<sha>\t<subject>" with the original main PR number.
+# Every PR number that has a squash commit on main; a "backport #N" is only trusted as the
+# original PR if N is in this set (a multi-level chain can name an intermediate branch PR first).
+git log --format=%s "$MAIN" | grep -oE '\(#[0-9]+\)$' | tr -d '(#)' | sort -u > "$OUT/.main_prs"
+
+# stdin: "<sha>\t<subject>" -> "<pr>\t<sha>\t<subject>" with the original main PR number: the
+# first "backport #N" whose N is a main PR, else the first "backport #N", else the trailing "(#N)".
 resolve() {
-  awk -F'\t' '{
-    s=$2; n=""
-    if (match(tolower(s), /backport #[0-9]+/)) { n=substr(s, RSTART+10, RLENGTH-10) }
-    else if (match(s, /\(#[0-9]+\)$/))         { n=substr(s, RSTART+2, RLENGTH-3) }
-    if (n != "") print n "\t" $1 "\t" s
-  }'
+  awk -F'\t' -v ms="$OUT/.main_prs" '
+    BEGIN { while ((getline l < ms) > 0) onmain[l]=1 }
+    {
+      s=$2; n=""; first=""; r=tolower(s)
+      while (match(r, /backport #[0-9]+/)) {
+        k=substr(r, RSTART+10, RLENGTH-10)
+        if (first == "") first=k
+        if (n == "" && (k in onmain)) n=k
+        r=substr(r, RSTART+RLENGTH)
+      }
+      if (n == "") n=first
+      if (n == "" && match(s, /\(#[0-9]+\)$/)) n=substr(s, RSTART+2, RLENGTH-3)
+      if (n != "") print n "\t" $1 "\t" s
+    }'
 }
 
 {
@@ -63,7 +76,8 @@ resolve() {
   git log --format='%H%x09%s' "$F_NEW..$NEW_REF"               # only on the new branch since its fork
 } | resolve | sort -t$'\t' -k1,1 -u > "$OUT/.all"
 
-awk -F'\t' 'NR==FNR { shipped[$1]=1; next } !($1 in shipped)' "$OUT/.shipped_in_prev" "$OUT/.all" > "$OUT/.new"
+# FILENAME, not NR==FNR: an empty shipped file must not make the candidates look like its lines.
+awk -F'\t' -v sh="$OUT/.shipped_in_prev" 'BEGIN { while ((getline l < sh) > 0) shipped[l]=1 } !($1 in shipped)' "$OUT/.all" > "$OUT/new.tsv"
 
 : > "$OUT/feature.tsv"; : > "$OUT/enhancement.tsv"; : > "$OUT/bugfix.tsv"
 : > "$OUT/security.tsv"; : > "$OUT/noprefix.tsv"
@@ -77,13 +91,13 @@ awk -F'\t' -v out="$OUT" '
     else                       { print > (out "/noprefix.tsv");    o++ }
   }
   END { printf "feature=%d enhancement=%d bugfix=%d security=%d noprefix=%d | excluded refactor=%d tool=%d doc=%d ut=%d\n", f,e,b,sec,o,x["refactor"],x["tool"],x["doc"],x["ut"] > (out "/.counts") }
-' "$OUT/.new"
+' "$OUT/new.tsv"
 
 {
   echo "prev fork point : ${F_PREV:0:10} ($PREV_BRANCH)"
   echo "new fork point  : ${F_NEW:0:10} ($NEW_BRANCH), new ref: $NEW_REF"
   echo "all PRs in range            : $(wc -l < "$OUT/.all" | tr -d ' ')"
-  echo "already in $PREV_REF/older  : $(( $(wc -l < "$OUT/.all") - $(wc -l < "$OUT/.new") ))"
-  echo "new in this minor           : $(wc -l < "$OUT/.new" | tr -d ' ')"
+  echo "already in $PREV_REF/older  : $(( $(wc -l < "$OUT/.all") - $(wc -l < "$OUT/new.tsv") ))"
+  echo "new in this minor           : $(wc -l < "$OUT/new.tsv" | tr -d ' ')"
   cat "$OUT/.counts"
 } | tee "$OUT/summary.txt"
