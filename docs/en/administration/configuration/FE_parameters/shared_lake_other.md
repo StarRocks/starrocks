@@ -1272,6 +1272,15 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Description: Whether to export table-level metrics in FE. When disabled, FE will skip exporting table metrics (such as table scan/load counters and table size metrics), but still records the counters in memory.
 - Introduced in: -
 
+### `enable_metrics_auth_check`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the `/metrics` endpoint requires admin authentication before exporting the extra per-entity metrics, that is, the table, materialized view, and user connection metrics requested via `with_table_metrics`, `with_materialized_view_metrics`, and `with_user_connections`. When set to `TRUE`, these extra metrics are returned only to an authenticated user who owns an admin role. When set to `FALSE`, the authentication check is skipped so the metrics can be scraped without credentials, which is intended for development and testing environments.
+- Introduced in: -
+
 ### `enable_mv_post_image_reload_cache`
 
 - Default: true
