@@ -338,6 +338,65 @@ TEST_F(PyWorkerManagerEnvTest, worker_in_use_is_not_expired) {
     ASSERT_EQ(0, pooled());
 }
 
+// A driver's stubs are spread over up to python_worker_max_per_driver workers, each going to the
+// worker with the fewest stubs, so that concurrent calls of one driver run in different processes.
+TEST_F(PyWorkerManagerEnvTest, stubs_go_to_the_least_used_worker) {
+    create_fake_python_env();
+    auto saved_max_per_driver = config::python_worker_max_per_driver;
+    config::python_worker_max_per_driver = 3;
+    auto& manager = PyWorkerManager::getInstance();
+    constexpr int32_t driver_id = 0x7fff0002;
+    std::vector<std::shared_ptr<PyWorker>> held;
+    DeferOp restore([&]() {
+        config::python_worker_max_per_driver = saved_max_per_driver;
+        held.clear();
+        std::lock_guard guard(manager._mutex);
+        manager._processes.erase(driver_id);
+    });
+    auto acquire = [&]() -> std::shared_ptr<PyWorker> {
+        std::string url;
+        auto worker = manager._acquire_worker(driver_id, /*reusable=*/1, &url);
+        EXPECT_OK(worker.status());
+        return worker.ok() ? worker.value() : nullptr;
+    };
+    auto pooled = [&]() {
+        std::lock_guard guard(manager._mutex);
+        return manager._processes[driver_id];
+    };
+
+    // Each of the first three stubs gets a worker of its own.
+    for (int i = 0; i < 3; ++i) {
+        held.push_back(acquire());
+    }
+    auto workers = pooled();
+    ASSERT_EQ(3, workers.size());
+    for (const auto& worker : workers) {
+        ASSERT_EQ(1, worker->num_clients());
+    }
+    // At the limit, further stubs are spread evenly instead of starting more workers.
+    for (int i = 0; i < 3; ++i) {
+        held.push_back(acquire());
+    }
+    ASSERT_EQ(3, pooled().size());
+    for (const auto& worker : workers) {
+        ASSERT_EQ(2, worker->num_clients());
+    }
+
+    // A worker whose stubs are all gone is the next one used.
+    workers[1]->remove_client();
+    workers[1]->remove_client();
+    ASSERT_EQ(workers[1], acquire());
+
+    // A dead worker is dropped from the pool, and a new worker takes its place.
+    workers[0]->mark_dead();
+    auto replacement = acquire();
+    ASSERT_NE(workers[0], replacement);
+    ASSERT_EQ(1, replacement->num_clients());
+    auto now_pooled = pooled();
+    ASSERT_EQ(3, now_pooled.size());
+    ASSERT_EQ(now_pooled.end(), std::find(now_pooled.begin(), now_pooled.end(), workers[0]));
+}
+
 // The Flight descriptor must carry the zip checksum (so an external worker can verify a package it
 // downloads itself), but must NOT carry service_url (that is BE-side routing only).
 TEST_F(PyWorkerManagerEnvTest, descriptor_serializes_checksum_not_service_url) {

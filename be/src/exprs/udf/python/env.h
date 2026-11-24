@@ -185,7 +185,6 @@ private:
     Status _fork_py_worker(std::unique_ptr<LocalPyWorker>* child_process);
     StatusOr<std::shared_ptr<PyWorker>> _acquire_worker(int32_t driver_id, size_t reusable, std::string* url);
 
-    const size_t max_worker_per_driver = 2;
     std::mutex _mutex;
     std::unordered_map<int32_t, std::vector<std::shared_ptr<PyWorker>>> _processes;
 };
