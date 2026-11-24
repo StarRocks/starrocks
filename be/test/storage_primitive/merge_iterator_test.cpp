@@ -395,17 +395,18 @@ TEST_F(MergeIteratorTest, heap_merge_appends_long_strings_run_by_run) {
         return std::string(200, static_cast<char>('a' + key % 26)) + std::to_string(key);
     };
     std::vector<int32_t> all_keys;
+    // COL_VARCHAR keeps slices into these strings, so they must outlive the iterators.
+    std::vector<std::vector<std::string>> strings(kChildren);
     std::vector<ChunkIteratorPtr> subs;
     for (int c = 0; c < kChildren; c++) {
         std::vector<int32_t> keys;
-        std::vector<std::string> strings;
         for (int i = 0; i < (c == 0 ? kShortChildRows : kRowsPerChild); i++) {
             int key = c + i * kChildren;
             keys.push_back(key);
             all_keys.push_back(key);
-            strings.push_back(long_string(key));
+            strings[c].push_back(long_string(key));
         }
-        auto sub = std::make_shared<VectorChunkIterator>(schema, COL_INT(keys), COL_VARCHAR(strings));
+        auto sub = std::make_shared<VectorChunkIterator>(schema, COL_INT(keys), COL_VARCHAR(strings[c]));
         sub->chunk_size(16);
         subs.push_back(sub);
     }
