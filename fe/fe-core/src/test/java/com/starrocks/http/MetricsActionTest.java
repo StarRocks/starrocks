@@ -20,6 +20,7 @@ import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.Config;
 import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.qe.ConnectContext;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
@@ -346,5 +347,61 @@ public class MetricsActionTest {
         };
         Assertions.assertFalse(action.callParseRequestParams(badRequest).isCollectTableMetrics(),
                 "a refused token degrades to the base metrics, it does not fail the scrape");
+    }
+
+    @Test
+    public void testExtraMetricsAuthCheckDisabled() {
+        // Given a /metrics request for the extra table/MV/user-connection metrics with no auth header
+        // CASE WHEN enable_metrics_auth_check is false THEN collect all extra metrics without checking authorization
+
+        ActionController controller = new ActionController();
+        MockMetricsAction action = new MockMetricsAction(controller);
+        BaseRequest request = buildBaseRequest(
+                "/metrics?with_table_metrics=all&with_materialized_view_metrics=all&with_user_connections=all", false);
+        new Expectations(request) {
+            {
+                request.getAuthorizationHeader();
+                minTimes = 0;
+                maxTimes = 0;
+            }
+        };
+        boolean originalAuthCheck = Config.enable_metrics_auth_check;
+
+        Config.enable_metrics_auth_check = false;
+        MetricsAction.RequestParams params;
+        try {
+            params = action.callParseRequestParams(request);
+        } finally {
+            Config.enable_metrics_auth_check = originalAuthCheck;
+        }
+
+        Assertions.assertNotNull(params);
+        Assertions.assertTrue(params.isCollectTableMetrics());
+        Assertions.assertTrue(params.isCollectMVMetrics());
+        Assertions.assertTrue(params.isCollectUserConnMetrics());
+    }
+
+    @Test
+    public void testExtraMetricsAuthCheckEnabledByDefault() {
+        // Given a /metrics request for the extra table/MV/user-connection metrics with no auth header
+        // CASE WHEN enable_metrics_auth_check is true THEN enforce authorization and drop the extra metrics on failure
+
+        ActionController controller = new ActionController();
+        MockMetricsAction action = new MockMetricsAction(controller);
+        BaseRequest request = buildBaseRequest(
+                "/metrics?with_table_metrics=all&with_materialized_view_metrics=all&with_user_connections=all", false);
+        new Expectations(request) {
+            {
+                request.getAuthorizationHeader();
+                minTimes = 1;
+            }
+        };
+
+        MetricsAction.RequestParams params = action.callParseRequestParams(request);
+
+        Assertions.assertNotNull(params);
+        Assertions.assertFalse(params.isCollectTableMetrics());
+        Assertions.assertFalse(params.isCollectMVMetrics());
+        Assertions.assertFalse(params.isCollectUserConnMetrics());
     }
 }
