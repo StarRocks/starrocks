@@ -93,7 +93,11 @@ jobs:
           set -euo pipefail
           gh label create "$ISSUE_LABEL" --color B60205 \
             --description "Nightly BE build without --enable-shared-data" 2>/dev/null || true
-          open=$(gh issue list --label "$ISSUE_LABEL" --state open --json number --jq '.[0].number // empty')
+          # One tracking issue per branch, keyed by its exact title, so a manual
+          # run on another branch never closes or comments on main's issue.
+          TITLE="[CI] BE build fails without --enable-shared-data on $BRANCH"
+          open=$(gh issue list --label "$ISSUE_LABEL" --state open --json number,title \
+            | TITLE="$TITLE" jq -r '[.[] | select(.title == env.TITLE)][0].number // empty')
 
           if [[ "$RESULT" == "success" ]]; then
             [[ -n "$open" ]] && gh issue close "$open" \
@@ -122,6 +126,6 @@ jobs:
             gh issue comment "$open" --body-file body.md
           else
             gh issue create \
-              --title "[CI] BE build fails without --enable-shared-data on $BRANCH" \
+              --title "$TITLE" \
               --label "$ISSUE_LABEL" --assignee "$ASSIGNEES" --body-file body.md
           fi
