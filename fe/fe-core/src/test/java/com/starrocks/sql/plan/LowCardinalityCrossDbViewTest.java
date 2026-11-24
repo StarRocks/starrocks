@@ -56,8 +56,9 @@ public class LowCardinalityCrossDbViewTest extends PlanTestBase {
         OlapTable t1 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable("lc_view_base_db", "t1");
         seededColumn = new ColumnIdentifier(t1.getId(), t1.getColumn("c1").getColumnId());
+        // Collected before any plan copies the table, and valid at every version since.
         ColumnDict dict = new ColumnDict(
-                ImmutableMap.of(ByteBuffer.wrap("a".getBytes(StandardCharsets.UTF_8)), 1), Long.MAX_VALUE);
+                ImmutableMap.of(ByteBuffer.wrap("a".getBytes(StandardCharsets.UTF_8)), 1), 0L, Long.MAX_VALUE);
         dictCache().put(seededColumn, CompletableFuture.completedFuture(Optional.of(dict)));
     }
 
