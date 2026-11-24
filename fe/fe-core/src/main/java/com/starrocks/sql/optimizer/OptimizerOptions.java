@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -28,6 +29,11 @@ import java.util.Set;
 
 public class OptimizerOptions {
     private static final Logger LOG = LogManager.getLogger(OptimizerOptions.class);
+
+    // Only these rules fill a scan's selected partitions and tablets; a scan they skipped reads nothing, so
+    // cbo_disabled_rules must not turn them off (that would change results, not just the plan).
+    private static final Set<RuleType> REQUIRED_RULES =
+            ImmutableSet.of(RuleType.GP_PARTITION_PRUNE, RuleType.TF_PARTITION_PRUNE, RuleType.TF_DISTRIBUTION_PRUNE);
     
     public enum OptimizerStrategy {
         RULE_BASED,
@@ -129,7 +135,9 @@ public class OptimizerOptions {
             for (String ruleName : ruleNames) {
                 try {
                     RuleType ruleType = RuleType.valueOf(ruleName);
-                    if (ruleType.name().startsWith("TF_") || ruleType.name().startsWith("GP_")) {
+                    if (REQUIRED_RULES.contains(ruleType)) {
+                        LOG.debug("Ignoring {} in cbo_disabled_rules: the scan needs it to select data", ruleName);
+                    } else if (ruleType.name().startsWith("TF_") || ruleType.name().startsWith("GP_")) {
                         result.add(ruleType);
                     }
                 } catch (IllegalArgumentException e) {

@@ -1,0 +1,16 @@
+-- name: test_cbo_disabled_rules_scan_selection
+-- description: Regression for StarRocks/starrocks#84137. Only the partition and distribution prune rules fill a
+--              scan's selected partitions and tablets, so disabling them through cbo_disabled_rules made
+--              the scan read nothing. They are now ignored there.
+DROP TABLE IF EXISTS tp_${uuid0};
+CREATE TABLE tp_${uuid0} (k INT, d DATE NOT NULL, v INT) DUPLICATE KEY(k)
+PARTITION BY RANGE(d) (START ("2010-01-01") END ("2023-01-01") EVERY (INTERVAL 1 YEAR))
+DISTRIBUTED BY HASH(k) BUCKETS 3 PROPERTIES ("replication_num" = "1");
+INSERT INTO tp_${uuid0} VALUES (1, '2011-02-03', 3), (2, '2012-05-06', 4), (3, '2015-07-08', NULL),
+  (1, '2018-01-01', 7), (4, '2020-03-03', 3), (5, '2022-12-31', 9);
+SELECT /*+ SET_VAR(cbo_disabled_rules='TF_DISTRIBUTION_PRUNE') */ count(*) FROM tp_${uuid0};
+SELECT /*+ SET_VAR(cbo_disabled_rules='GP_PARTITION_PRUNE') */ count(*) FROM tp_${uuid0};
+SELECT /*+ SET_VAR(cbo_disabled_rules='TF_PARTITION_PRUNE') */ count(*) FROM tp_${uuid0};
+SELECT /*+ SET_VAR(cbo_disabled_rules='TF_DISTRIBUTION_PRUNE') */ k, v FROM tp_${uuid0} WHERE d >= '2018-01-01' ORDER BY k;
+SELECT /*+ SET_VAR(cbo_disabled_rules='TF_DISTRIBUTION_PRUNE,TF_JOIN_COMMUTATIVITY') */ count(*) FROM tp_${uuid0} WHERE k = 1;
+DROP TABLE tp_${uuid0};
