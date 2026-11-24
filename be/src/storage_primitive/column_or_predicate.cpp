@@ -60,11 +60,10 @@ Status ColumnOrPredicate::_evaluate(const Column* column, uint8_t* selection, ui
 
 Status ColumnOrPredicate::convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_ptr,
                                      ObjectPool* obj_pool) const {
-    ColumnOrPredicate* new_pred =
-            obj_pool->add(new ColumnOrPredicate(get_type_info(target_type_ptr.get()), _column_id));
+    ColumnOrPredicate* new_pred = obj_pool->add(new ColumnOrPredicate(target_type_ptr, _column_id));
     for (auto pred : _child) {
         const ColumnPredicate* new_child = nullptr;
-        RETURN_IF_ERROR(pred->convert_to(&new_child, get_type_info(target_type_ptr.get()), obj_pool));
+        RETURN_IF_ERROR(pred->convert_to(&new_child, target_type_ptr, obj_pool));
         new_pred->_child.emplace_back(new_child);
     }
     *output = new_pred;
