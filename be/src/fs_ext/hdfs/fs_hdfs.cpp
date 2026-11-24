@@ -35,6 +35,7 @@
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gutil/strings/substitute.h"
+#include "io/object_storage_metrics.h"
 #include "runtime/java/java_env.h"
 
 using namespace fmt::literals;
@@ -77,6 +78,12 @@ public:
     }
 
     hdfsFS getFS() { return _hdfs_client->hdfs_fs; }
+
+    // libhdfs has no error types: a timeout surfaces only in the Java exception text.
+    static void report_failed_attempt(bool will_retry) {
+        io::ObjectStorageRequestScope::on_attempt_failed(
+                io::ObjectStorageRequestScope::is_timeout_message(get_hdfs_err_msg()), will_retry);
+    }
     hdfsFile getFile() { return _file; }
     int64_t getTotalOpenFSTimeNs() const { return _total_open_fs_time_ns; }
     int64_t getTotalOpenFileTimeNs() const { return _total_open_file_time_ns; }
@@ -111,9 +118,12 @@ public:
     StatusOr<int64_t> pread(uint8_t* data, int64_t size, int retry = 0) {
         RETURN_IF_ERROR(ensureOpened());
         hdfsFS fs = getFS();
+        io::ObjectStorageRequestScope request_scope(io::object_storage_backend_of(_path),
+                                                    io::ObjectStorageClient::kLibhdfs, io::ObjectStorageOp::kGet);
         for (int i = 0; i < (retry + 1); i++) {
             tSize r = hdfsPread(fs, _file, _offset, data, static_cast<tSize>(size));
             if (r == -1) {
+                report_failed_attempt(i < retry);
                 (void)close();
                 RETURN_IF_ERROR(ensureOpened());
             } else {
@@ -121,6 +131,7 @@ public:
                 return r;
             }
         }
+        request_scope.set_failed();
         return Status::IOError(fmt::format("fail to hdfsPread {}: {}", _path, get_hdfs_err_msg()));
     }
 
@@ -132,12 +143,16 @@ public:
         int64_t now = 0;
         uint8_t* buf = data;
 
+        io::ObjectStorageRequestScope request_scope(io::object_storage_backend_of(_path),
+                                                    io::ObjectStorageClient::kLibhdfs, io::ObjectStorageOp::kGet);
         while (now < size) {
             tSize r = 0;
             for (int i = 0; i < (retry + 1); i++) {
                 r = hdfsRead(fs, _file, buf + now, size - now);
                 if (r != -1) break;
+                report_failed_attempt(i < retry);
                 if (i == retry) {
+                    request_scope.set_failed();
                     return Status::IOError(fmt::format("fail to hdfsRead {}: {}", _path, get_hdfs_err_msg()));
                 } else {
                     (void)close();
@@ -310,7 +325,10 @@ public:
     Status pre_allocate(uint64_t size) override { return Status::NotSupported("HDFS file pre_allocate not supported"); }
 
     Status flush(FlushMode mode) override {
+        io::ObjectStorageRequestScope request_scope(io::object_storage_backend_of(_path),
+                                                    io::ObjectStorageClient::kLibhdfs, io::ObjectStorageOp::kPut);
         int status = hdfsHFlush(_fs(), _file);
+        request_scope.set_failed(status != 0);
         return status == 0 ? Status::OK()
                            : Status::IOError(fmt::format("Fail to flush {}: {}", _path, get_hdfs_err_msg()));
     }
@@ -342,7 +360,10 @@ private:
 
 Status HDFSWritableFile::append(const Slice& data) {
     FAIL_POINT_TRIGGER_RETURN(output_stream_io_error, Status::IOError("injected output_stream_io_error"));
+    io::ObjectStorageRequestScope request_scope(io::object_storage_backend_of(_path), io::ObjectStorageClient::kLibhdfs,
+                                                io::ObjectStorageOp::kPut);
     tSize r = hdfsWrite(_fs(), _file, data.data, data.size);
+    request_scope.set_failed(r != data.size);
     if (r == -1) { // error
         auto error_msg = fmt::format("Fail to append {}: {}", _path, get_hdfs_err_msg());
         LOG(WARNING) << error_msg;
@@ -384,8 +405,12 @@ Status HDFSWritableFile::close() {
         // block for a long time on busy disks. Use sync() explicitly if the
         // data must be on disk before close().
         auto st = Status::OK();
+        // Closing a written file flushes its last packets and waits for the DataNode acks.
+        io::ObjectStorageRequestScope request_scope(io::object_storage_backend_of(_path),
+                                                    io::ObjectStorageClient::kLibhdfs, io::ObjectStorageOp::kPut);
         int r = hdfsCloseFile(_fs(), _file);
         TEST_SYNC_POINT_CALLBACK("HDFSWritableFile::close", &r);
+        request_scope.set_failed(r == -1);
         if (r == -1) {
             auto error_msg = fmt::format("Fail to close file {}: {}", _path, get_hdfs_err_msg());
             LOG(WARNING) << error_msg;

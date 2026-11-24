@@ -22,6 +22,7 @@
 
 #include "base/concurrency/stopwatch.hpp"
 #include "io/io_profiler.h"
+#include "io/object_storage_metrics.h"
 #include "io/s3_zero_copy_iostream.h"
 
 #ifdef USE_STAROS
@@ -68,7 +69,10 @@ StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
             return Aws::New<S3ZeroCopyIOStream>(AWS_ALLOCATE_TAG, reinterpret_cast<char*>(out), real_length);
         });
 
+        ObjectStorageRequestScope request_scope(ObjectStorageBackend::kS3, aws_sdk_http_client(),
+                                                ObjectStorageOp::kGet);
         Aws::S3::Model::GetObjectOutcome outcome = _s3client->GetObject(request);
+        request_scope.set_failed(!outcome.IsSuccess());
         if (outcome.IsSuccess()) {
             if (UNLIKELY(outcome.GetResult().GetContentLength() != real_length)) {
                 return Status::InternalError("The response length is different from request length for io stream!");
@@ -105,7 +109,10 @@ StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
             request.SetKey(_object);
             request.SetRange(std::move(range));
 
+            ObjectStorageRequestScope request_scope(ObjectStorageBackend::kS3, aws_sdk_http_client(),
+                                                    ObjectStorageOp::kGet);
             Aws::S3::Model::GetObjectOutcome outcome = _s3client->GetObject(request);
+            request_scope.set_failed(!outcome.IsSuccess());
             if (outcome.IsSuccess()) {
                 Aws::IOStream& body = outcome.GetResult().GetBody();
                 int64_t read_length = read_end_offset - read_start_offset;
@@ -159,7 +166,9 @@ StatusOr<std::string> S3InputStream::read_all() {
     Aws::S3::Model::GetObjectRequest request;
     request.SetBucket(_bucket);
     request.SetKey(_object);
+    ObjectStorageRequestScope request_scope(ObjectStorageBackend::kS3, aws_sdk_http_client(), ObjectStorageOp::kGet);
     Aws::S3::Model::GetObjectOutcome outcome = _s3client->GetObject(request);
+    request_scope.set_failed(!outcome.IsSuccess());
     if (outcome.IsSuccess()) {
         Aws::IOStream& body = outcome.GetResult().GetBody();
         IOProfiler::add_read(body.gcount(), watch.elapsed_time());

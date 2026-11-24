@@ -32,6 +32,7 @@
 #include "fs/fs_scheme.h"
 #include "fs/output_stream_adapter.h"
 #include "io/io_profiler.h"
+#include "io/object_storage_metrics.h"
 #include "io/output_stream.h"
 
 namespace starrocks {
@@ -87,6 +88,8 @@ StatusOr<int64_t> AzBlobInputStream::read(void* data, int64_t count) {
     options.Range = range;
 
     int64_t size = 0;
+    io::ObjectStorageRequestScope request_scope(io::ObjectStorageBackend::kAzblob, io::ObjectStorageClient::kAzureSdk,
+                                                io::ObjectStorageOp::kGet);
     try {
         auto response = _blob_client->DownloadTo(reinterpret_cast<uint8_t*>(data), count, options);
         if (!response.Value.ContentRange.Length.HasValue()) {
@@ -95,10 +98,12 @@ StatusOr<int64_t> AzBlobInputStream::read(void* data, int64_t count) {
         }
         size = response.Value.ContentRange.Length.Value();
     } catch (const Azure::Core::RequestFailedException& e) {
+        request_scope.set_failed();
         return azure_error_to_status(e.StatusCode,
                                      fmt::format("Download blob object {} error: {}", _uri.get_blob_uri(), e.what()),
                                      _uri.get_blob_uri());
     } catch (const std::exception& e) {
+        request_scope.set_failed();
         return Status::InternalError(fmt::format("Download blob object {} error: {}", _uri.get_blob_uri(), e.what()));
     }
 
@@ -216,13 +221,17 @@ Status AzBlobOutputStream::create_multipart_upload() {
 }
 
 Status AzBlobOutputStream::singlepart_upload() {
+    io::ObjectStorageRequestScope request_scope(io::ObjectStorageBackend::kAzblob, io::ObjectStorageClient::kAzureSdk,
+                                                io::ObjectStorageOp::kPut);
     try {
         _blob_client->UploadFrom(reinterpret_cast<const uint8_t*>(_buffer.data()), _buffer.size());
     } catch (const Azure::Core::RequestFailedException& e) {
+        request_scope.set_failed();
         return azure_error_to_status(e.StatusCode,
                                      fmt::format("Upload blob object {} error: {}", _uri.get_blob_uri(), e.what()),
                                      _uri.get_blob_uri());
     } catch (const std::exception& e) {
+        request_scope.set_failed();
         return Status::InternalError(fmt::format("Upload blob object {} error: {}", _uri.get_blob_uri(), e.what()));
     }
 
@@ -241,16 +250,20 @@ Status AzBlobOutputStream::multipart_upload() {
         return Status::OK();
     }
 
+    io::ObjectStorageRequestScope request_scope(io::ObjectStorageBackend::kAzblob, io::ObjectStorageClient::kAzureSdk,
+                                                io::ObjectStorageOp::kPut);
     try {
         std::string block_id = get_block_id(_block_ids.size());
         Azure::Core::IO::MemoryBodyStream body_stream(reinterpret_cast<const uint8_t*>(_buffer.data()), _buffer.size());
         _blob_client->StageBlock(block_id, body_stream);
         _block_ids.push_back(block_id);
     } catch (const Azure::Core::RequestFailedException& e) {
+        request_scope.set_failed();
         return azure_error_to_status(e.StatusCode,
                                      fmt::format("Stage blob object {} error: {}", _uri.get_blob_uri(), e.what()),
                                      _uri.get_blob_uri());
     } catch (const std::exception& e) {
+        request_scope.set_failed();
         return Status::InternalError(fmt::format("Stage blob object {} error: {}", _uri.get_blob_uri(), e.what()));
     }
 
@@ -258,14 +271,18 @@ Status AzBlobOutputStream::multipart_upload() {
 }
 
 Status AzBlobOutputStream::complete_multipart_upload() {
+    io::ObjectStorageRequestScope request_scope(io::ObjectStorageBackend::kAzblob, io::ObjectStorageClient::kAzureSdk,
+                                                io::ObjectStorageOp::kPut);
     try {
         _blob_client->CommitBlockList(_block_ids);
     } catch (const Azure::Core::RequestFailedException& e) {
+        request_scope.set_failed();
         return azure_error_to_status(
                 e.StatusCode,
                 fmt::format("Commit block list for blob object {} error: {}", _uri.get_blob_uri(), e.what()),
                 _uri.get_blob_uri());
     } catch (const std::exception& e) {
+        request_scope.set_failed();
         return Status::InternalError(
                 fmt::format("Commit block list for blob object {} error: {}", _uri.get_blob_uri(), e.what()));
     }
@@ -339,13 +356,48 @@ BlobContainerClientPtr AzBlobClientFactory::new_blob_container_client(
     return container_client;
 }
 
+// Runs once per attempt (a per-retry policy sits inside the SDK retry policy) and reports to the
+// request measured on this thread (io::ObjectStorageRequestScope), so the retries and timeouts the
+// SDK absorbs still show up in object_storage_request_{retry,timeout}_total.
+class ObservedAttemptPolicy final : public Azure::Core::Http::Policies::HttpPolicy {
+public:
+    std::unique_ptr<Azure::Core::Http::RawResponse> Send(Azure::Core::Http::Request& request,
+                                                         Azure::Core::Http::Policies::NextHttpPolicy next_policy,
+                                                         const Azure::Core::Context& context) const override {
+        io::ObjectStorageRequestScope::on_attempt_started();
+        try {
+            auto response = next_policy.Send(request, context);
+            if (response != nullptr && response->GetStatusCode() == Azure::Core::Http::HttpStatusCode::RequestTimeout) {
+                io::ObjectStorageRequestScope::on_attempt_failed(/*timed_out=*/true, /*will_retry=*/false);
+            }
+            return response;
+        } catch (const std::exception& e) {
+            io::ObjectStorageRequestScope::on_attempt_failed(
+                    io::ObjectStorageRequestScope::is_timeout_message(e.what()),
+                    /*will_retry=*/false);
+            throw;
+        }
+    }
+
+    std::unique_ptr<Azure::Core::Http::Policies::HttpPolicy> Clone() const override {
+        return std::make_unique<ObservedAttemptPolicy>(*this);
+    }
+};
+
+static Azure::Storage::Blobs::BlobClientOptions observed_client_options() {
+    Azure::Storage::Blobs::BlobClientOptions options;
+    options.PerRetryPolicies.emplace_back(std::make_unique<ObservedAttemptPolicy>());
+    return options;
+}
+
 BlobContainerClientPtr AzBlobClientFactory::create_blob_container_client(
         const AzureCloudCredential& azure_cloud_credential, const AzBlobURI& blob_uri) {
     // shared key
     if (!azure_cloud_credential.shared_key.empty()) {
         auto shared_key_credential = std::make_shared<Azure::Storage::StorageSharedKeyCredential>(
                 blob_uri.account(), azure_cloud_credential.shared_key);
-        return std::make_shared<BlobContainerClient>(blob_uri.get_container_uri(), shared_key_credential);
+        return std::make_shared<BlobContainerClient>(blob_uri.get_container_uri(), shared_key_credential,
+                                                     observed_client_options());
     }
 
     // sas token
@@ -355,7 +407,7 @@ BlobContainerClientPtr AzBlobClientFactory::create_blob_container_client(
             container_uri += '?';
         }
         container_uri += azure_cloud_credential.sas_token;
-        return std::make_shared<BlobContainerClient>(container_uri);
+        return std::make_shared<BlobContainerClient>(container_uri, observed_client_options());
     }
 
     // client secret service principal
@@ -364,19 +416,22 @@ BlobContainerClientPtr AzBlobClientFactory::create_blob_container_client(
         auto client_secret_credential = std::make_shared<Azure::Identity::ClientSecretCredential>(
                 azure_cloud_credential.tenant_id, azure_cloud_credential.client_id,
                 azure_cloud_credential.client_secret);
-        return std::make_shared<BlobContainerClient>(blob_uri.get_container_uri(), client_secret_credential);
+        return std::make_shared<BlobContainerClient>(blob_uri.get_container_uri(), client_secret_credential,
+                                                     observed_client_options());
     }
 
     // user assigned managed identity
     if (!azure_cloud_credential.client_id.empty()) {
         auto managed_identity_credential =
                 std::make_shared<Azure::Identity::ManagedIdentityCredential>(azure_cloud_credential.client_id);
-        return std::make_shared<BlobContainerClient>(blob_uri.get_container_uri(), managed_identity_credential);
+        return std::make_shared<BlobContainerClient>(blob_uri.get_container_uri(), managed_identity_credential,
+                                                     observed_client_options());
     }
 
     // default
     auto default_credential = std::make_shared<Azure::Identity::DefaultAzureCredential>();
-    return std::make_shared<BlobContainerClient>(blob_uri.get_container_uri(), default_credential);
+    return std::make_shared<BlobContainerClient>(blob_uri.get_container_uri(), default_credential,
+                                                 observed_client_options());
 }
 
 // ------ file system ------

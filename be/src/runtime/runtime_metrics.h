@@ -73,8 +73,8 @@ public:
     METRIC_DEFINE_UINT_GAUGE(routine_load_task_count, MetricUnit::NOUNIT);
     METRIC_DEFINE_UINT_GAUGE(stream_load_pipe_count, MetricUnit::NOUNIT);
     METRIC_DEFINE_UINT_GAUGE(tablet_writer_count, MetricUnit::NOUNIT);
-    METRIC_DEFINE_UINT_GAUGE(load_rpc_threadpool_size, MetricUnit::NOUNIT);
 
+    METRICS_DEFINE_THREAD_POOL(load_rpc);
     METRICS_DEFINE_THREAD_POOL(merge_commit);
     METRICS_DEFINE_THREAD_POOL(put_aggregate_metadata);
     METRICS_DEFINE_THREAD_POOL(lake_metadata_fetch);
