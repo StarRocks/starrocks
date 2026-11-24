@@ -405,6 +405,10 @@ bool HeapMergeIterator::gather_column(size_t column) const {
     size_t bytes = 0;
     size_t rows = 0;
     for (const auto& child_chunk : _chunk_pool) {
+        // An exhausted child is closed and its chunk released.
+        if (child_chunk == nullptr) {
+            continue;
+        }
         const Column* src = child_chunk->get_column_by_index(column).get();
         bytes += src->byte_size();
         rows += src->size();
