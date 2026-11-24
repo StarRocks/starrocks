@@ -15,6 +15,16 @@
 package com.starrocks.connector.parser.trino;
 
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
