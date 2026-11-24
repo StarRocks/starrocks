@@ -112,6 +112,8 @@ public class ExecuteSqlAction extends RestBaseAction {
         response.setContentType("application/x-ndjson; charset=utf-8");
 
         HttpConnectContext context = request.getConnectContext();
+        // The context outlives a request, but this flag describes only the current response.
+        context.setSendDate(false);
 
         String catalogName = request.getSingleParameter(CATALOG_KEY);
         String databaseName = request.getSingleParameter(DB_KEY);
