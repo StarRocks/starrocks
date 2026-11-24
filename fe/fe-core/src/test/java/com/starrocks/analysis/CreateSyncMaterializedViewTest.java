@@ -265,6 +265,40 @@ public class CreateSyncMaterializedViewTest {
         }
     }
 
+    /**
+     * [_SYNC_MV_] reads a rollup or a synchronous materialized view. The base index of a table, which is named after
+     * the table, is not one: a table name with the hint is an unknown materialized index.
+     */
+    @Test
+    public void testSelectFromBaseIndexWithSyncMVHint() {
+        Exception e = Assertions.assertThrows(Exception.class,
+                () -> UtFrameUtils.getPlanAndFragment(connectContext, "select * from tbl1 [_SYNC_MV_]"));
+        Assertions.assertTrue(e.getMessage().contains("Unknown table 'test.tbl1'"), e.getMessage());
+    }
+
+    /**
+     * A table named like another table's rollup: [_SYNC_MV_] reads the rollup, not the base index of the table.
+     */
+    @Test
+    public void testSelectFromRollupNamedLikeATable() throws Exception {
+        String name = "t_named_like_a_rollup";
+        try {
+            starRocksAssert.withTable("create table " + name + " (k1 int, k2 int, v1 int) engine=olap "
+                    + "duplicate key(k1, k2) distributed by hash(k1) buckets 1 properties('replication_num' = '1')");
+            starRocksAssert.withTable("create table t_with_a_rollup_named_like_a_table (k1 int, k2 int, v1 int) "
+                    + "engine=olap duplicate key(k1, k2) distributed by hash(k1) buckets 1 "
+                    + "rollup (" + name + " (k2, k1)) properties('replication_num' = '1')");
+
+            String explain = UtFrameUtils.getPlanAndFragment(connectContext, "select * from " + name + " [_SYNC_MV_]")
+                    .second.getExplainString(StatementBase.ExplainLevel.NORMAL);
+            Assertions.assertTrue(explain.contains("TABLE: t_with_a_rollup_named_like_a_table"), explain);
+            Assertions.assertTrue(explain.contains("rollup: " + name), explain);
+        } finally {
+            starRocksAssert.dropTable("if exists " + name);
+            starRocksAssert.dropTable("if exists t_with_a_rollup_named_like_a_table");
+        }
+    }
+
     // create sync mv that mv's name already existed in the db
     @Test
     public void testCreateSyncMV1() throws Exception {
