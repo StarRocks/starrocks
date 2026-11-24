@@ -2874,9 +2874,17 @@ public class QueryAnalyzer {
                 try (Timer ignored = Tracers.watchScope("AnalyzeSyncMV")) {
                     // [_SYNC_MV_] gives a materialized index name where a table name goes.
                     String indexName = tbName;
-                    Pair<Table, MaterializedIndexMeta> materializedIndex =
-                            GlobalStateMgr.getCurrentState().getLocalMetastore().getMaterializedViewIndex(dbName,
+                    List<Pair<Table, MaterializedIndexMeta>> materializedIndexes =
+                            GlobalStateMgr.getCurrentState().getLocalMetastore().getMaterializedViewIndexes(dbName,
                                     indexName, session.getSessionId());
+                    if (materializedIndexes.size() > 1) {
+                        // A rollup's name is unique only in its table. Which of them a read would get is up to the
+                        // order of a hash map, and can change as tables come and go: refuse to pick one.
+                        throw new SemanticException("Duplicate rollup name '%s': more than one table has a rollup "
+                                + "of that name", indexName);
+                    }
+                    Pair<Table, MaterializedIndexMeta> materializedIndex =
+                            materializedIndexes.isEmpty() ? null : materializedIndexes.get(0);
                     if (materializedIndex != null) {
                         Table mvTable = materializedIndex.first;
                         Preconditions.checkState(mvTable != null);
