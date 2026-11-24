@@ -816,7 +816,7 @@ jobs:
         with:
           workdir: "./fe"
           checkstyle_config: checkstyle.xml
-          reporter: "github-pr-check"
+          reporter: "github-pr-annotations"
           github_token: ${{ secrets.GITHUB_TOKEN }}
           fail_on_error: true
           level: error
