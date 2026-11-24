@@ -552,6 +552,8 @@ StarRocks v4.1 では、マテリアライズドビューのリフレッシュ�
 
 インクリメンタルリフレッシュは、ベーステーブルへの追記（append-only）操作のみをサポートします。`UPDATE`、`MERGE`、`OVERWRITE` などのサポートされていない操作が実行された場合、`refresh_mode` が `INCREMENTAL` に設定されているマテリアライズドビューのリフレッシュは失敗します。
 
+このような非追記（non-append-only）の変更（たとえば `OVERWRITE`、パーティションの削除、スナップショットの期限切れ、またはベーステーブルの置き換え）によってリフレッシュが失敗した場合、StarRocks はマテリアライズドビューを非アクティブに設定し、そのリフレッシュタスクを一時停止して、成功できないリフレッシュが実行され続けないようにします。このとき、マテリアライズドビューの `is_active` は `false` になり、[SHOW MATERIALIZED VIEWS](SHOW_MATERIALIZED_VIEW.md) および `information_schema.materialized_views` の `inactive_reason` は `incremental refresh broken by non-append-only base change: <mv_name>` になります。StarRocks はこのようなマテリアライズドビューを自動的にアクティブにはしません。リフレッシュを再開するには、マテリアライズドビューを削除して再作成してください。
+
 現在、インクリメンタルリフレッシュでサポートされている演算子は以下の通りです：
 
 | 演算子                         | インクリメンタルリフレッシュのサポート                                                                                            |
