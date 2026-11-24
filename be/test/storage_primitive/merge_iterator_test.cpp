@@ -378,6 +378,48 @@ TEST_F(MergeIteratorTest, heap_merge_gathers_nullable_and_string_columns) {
     ASSERT_EQ(kChildren * kRowsPerChild, expected);
 }
 
+// Short interleaved runs over a column of long strings: the int column takes the gathers, the string column (well over
+// 64 bytes a row) is appended run by run. Both stay in pick order.
+// NOLINTNEXTLINE
+TEST_F(MergeIteratorTest, heap_merge_appends_long_strings_run_by_run) {
+    auto k = std::make_shared<Field>(0, "k", get_type_info(TYPE_INT), false);
+    auto s = std::make_shared<Field>(1, "s", get_type_info(TYPE_VARCHAR), false);
+    k->set_is_key(true);
+    Schema schema(std::vector<FieldPtr>{k, s});
+
+    constexpr int kChildren = 3;
+    constexpr int kRowsPerChild = 40;
+    auto long_string = [](int key) {
+        return std::string(200, static_cast<char>('a' + key % 26)) + std::to_string(key);
+    };
+    std::vector<ChunkIteratorPtr> subs;
+    for (int c = 0; c < kChildren; c++) {
+        std::vector<int32_t> keys;
+        std::vector<std::string> strings;
+        for (int i = 0; i < kRowsPerChild; i++) {
+            int key = c + i * kChildren;
+            keys.push_back(key);
+            strings.push_back(long_string(key));
+        }
+        auto sub = std::make_shared<VectorChunkIterator>(schema, COL_INT(keys), COL_VARCHAR(strings));
+        sub->chunk_size(16);
+        subs.push_back(sub);
+    }
+    auto iter = new_heap_merge_iterator(subs);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+
+    int expected = 0;
+    ChunkPtr chunk = ChunkFactory::new_chunk(iter->schema(), 32);
+    while (iter->get_next(chunk.get()).ok()) {
+        for (size_t i = 0; i < chunk->num_rows(); i++, expected++) {
+            ASSERT_EQ(expected, chunk->get_column_by_index(0)->get(i).get_int32());
+            ASSERT_EQ(long_string(expected), chunk->get_column_by_index(1)->get(i).get_slice().to_string());
+        }
+        chunk->reset();
+    }
+    ASSERT_EQ(kChildren * kRowsPerChild, expected);
+}
+
 // Long runs (children covering separate key ranges in blocks) are appended run by run; the result is the same.
 // NOLINTNEXTLINE
 TEST_F(MergeIteratorTest, heap_merge_long_runs) {

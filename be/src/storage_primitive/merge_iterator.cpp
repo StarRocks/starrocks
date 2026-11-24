@@ -21,6 +21,7 @@
 
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
+#include "column/nullable_column.h"
 #include "column/sorting/sorting.h"
 #include "gutil/strings/substitute.h"
 
@@ -273,6 +274,8 @@ private:
     // Appends the runs picked so far to `chunk`, in pick order. Must run before a child's chunk is refilled, since
     // the runs point into it.
     void flush_runs(Chunk* chunk);
+    // Whether column `column` is cheap enough to copy twice for the two gathers of flush_runs().
+    bool gather_column(size_t column) const;
 
     ChunkHeap _heap;
     // Set up from the schema on the first fill, once the schema and merge_condition are final.
@@ -383,6 +386,31 @@ inline Status HeapMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
 // the rows of each child, grouped by child, then a permutation back to pick order. Runs this long or longer on average
 // are cheaper to append directly.
 static constexpr uint32_t kMinAvgRunToAppend = 8;
+// The gathers copy every value twice, so they only pay off for values that are cheap to copy: fixed-length values and
+// strings up to this many bytes per row on average. Object (HLL, bitmap, percentile), JSON, array, map and struct
+// values, and longer strings, are appended run by run.
+static constexpr size_t kMaxGatherBytesPerRow = 64;
+
+bool HeapMergeIterator::gather_column(size_t column) const {
+    const Column* col = _chunk_pool[_runs.front().child]->get_column_by_index(column).get();
+    if (col->is_nullable()) {
+        col = down_cast<const NullableColumn*>(col)->data_column().get();
+    }
+    if (col->is_numeric() || col->is_decimal() || col->is_date() || col->is_timestamp()) {
+        return true;
+    }
+    if (!col->is_binary()) {
+        return false;
+    }
+    size_t bytes = 0;
+    size_t rows = 0;
+    for (const auto& child_chunk : _chunk_pool) {
+        const Column* src = child_chunk->get_column_by_index(column).get();
+        bytes += src->byte_size();
+        rows += src->size();
+    }
+    return bytes <= kMaxGatherBytesPerRow * rows;
+}
 
 void HeapMergeIterator::flush_runs(Chunk* chunk) {
     if (_runs.empty()) {
@@ -424,6 +452,12 @@ void HeapMergeIterator::flush_runs(Chunk* chunk) {
     const size_t num_columns = chunk->num_columns();
     for (size_t c = 0; c < num_columns; ++c) {
         Column* dst = chunk->get_column_by_index(c)->as_mutable_raw_ptr();
+        if (!gather_column(c)) {
+            for (const Run& r : _runs) {
+                dst->append(*_chunk_pool[r.child]->get_column_by_index(c), r.offset, r.count);
+            }
+            continue;
+        }
         auto grouped = dst->clone_empty();
         grouped->reserve(total);
         for (size_t k = 0; k < num_children; ++k) {
