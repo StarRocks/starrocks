@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <map>
 #include <numeric>
 #include <optional>
@@ -27,25 +28,11 @@
 #include "column/json_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
-<<<<<<< HEAD
 #include "common/config.h"
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "fs/key_cache.h"
-=======
-#include "common/config_compaction_fwd.h"
-#include "common/config_ingest_fwd.h"
-#include "common/config_json_flat_fwd.h"
-#include "common/config_lake_fwd.h"
-#include "common/config_primary_key_fwd.h"
-#include "common/config_rowset_fwd.h"
-#include "common/config_storage_fwd.h"
-#include "common/logging.h"
-#include "fs/fs.h"
-#include "fs/fs_factory.h"
 #include "gutil/strings/substitute.h"
-#include "platform/key_cache.h"
->>>>>>> 28fc922 ([BugFix] Read a flat JSON column whole in lake compaction when a delta column group holds its values (#84216))
 #include "storage/chunk_helper.h"
 #include "storage/datum_variant.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
@@ -5897,8 +5884,6 @@ TEST_F(LakePcuSchemaDriftTest, WriteThenDropTargetColumn_ReturnsInternalError) {
             << "expected 'unique id' in message; got: " << st.message();
 }
 
-<<<<<<< HEAD
-=======
 // A primary key tablet with a JSON column, for a column-mode partial update followed by a compaction.
 class LakeColumnModeFlatJsonConfigTest : public TestBase {
 public:
@@ -5969,7 +5954,7 @@ public:
     }
 
     void TearDown() override {
-        StorageEngine::instance()->wait_storage_cleanup_tasks();
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
         remove_test_dir_or_die();
     }
 
@@ -6011,7 +5996,7 @@ public:
         const auto tablet_id = _tablet_metadata->id();
         auto metadata = _tablet_mgr->get_tablet_metadata(tablet_id, version).value();
         const auto j_uid = static_cast<size_t>(_tablet_schema->column(2).unique_id());
-        auto fs = FileSystemFactory::CreateSharedFromString(kTestDirectory).value();
+        auto fs = FileSystem::CreateSharedFromString(kTestDirectory).value();
         auto form_of = [&](const std::string& kind, const std::string& name) {
             auto path = _tablet_mgr->segment_location(tablet_id, name);
             auto segment = Segment::open(fs, FileInfo{path}, 0, _tablet_schema).value();
@@ -6057,8 +6042,6 @@ public:
         set_table_flat_json_enable(true);
         const auto tablet_id = _tablet_metadata->id();
         const auto json_uid = _tablet_schema->column(2).unique_id();
-        auto table_flat_json_config = std::make_shared<FlatJsonConfig>();
-        table_flat_json_config->update(_tablet_metadata->flat_json_config());
         int64_t version = 1;
 
         auto write = [&](const Chunk& chunk, uint32_t begin, uint32_t end, bool column_mode) {
@@ -6071,8 +6054,7 @@ public:
                     .set_txn_id(txn_id)
                     .set_partition_id(_partition_id)
                     .set_mem_tracker(_mem_tracker.get())
-                    .set_schema_id(_tablet_schema->id())
-                    .set_flat_json_config(table_flat_json_config);
+                    .set_schema_id(_tablet_schema->id());
             if (column_mode) {
                 builder.set_slot_descriptors(&_slot_pointers)
                         .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE);
@@ -6115,7 +6097,7 @@ public:
             auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
             ASSERT_OK(reader->prepare());
             ASSERT_OK(reader->open(TabletReaderParams()));
-            auto chunk = ChunkFactory::new_chunk(*_schema, 128);
+            auto chunk = ChunkHelper::new_chunk(*_schema, 128);
             std::vector<bool> seen(kChunkSize, false);
             while (true) {
                 auto st = reader->get_next(chunk.get());
@@ -6201,44 +6183,6 @@ TEST_F(LakeColumnModeFlatJsonConfigTest, compaction_streams_json_of_delta_column
     ASSERT_NO_FATAL_FAILURE(column_update_then_compaction([](int key) { return key < 43 && key % 2 == 0; }, true));
 }
 
-// A publish iterator narrowed to this tablet's slice of a shared post-split segment reports NO
-// ownership mask -- every row it emitted is this tablet's -- so an empty mask cannot be read as "the
-// iterator emitted the whole segment". Reading it that way sends the segment down the copy-and-append
-// rewrite, which copies all of the source's written-column rows while appending only the emitted rows'
-// resolved ones; the halves then disagree ("num rows written 0 is not equal to segment num rows 300")
-// and the publish fails identically on every retry.
-TEST(RowsetUpdateStateNarrowedEmitTest, an_emit_short_of_the_segment_owns_only_what_it_emitted) {
-    Filter mask;
-    // Narrowed: the iterator emitted 120 of the segment's 300 rows.
-    EXPECT_TRUE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/120, /*source_rows=*/300, &mask));
-    ASSERT_EQ(120u, mask.size()) << "the mask must span exactly the rows the iterator emitted";
-    EXPECT_EQ(120, std::count(mask.begin(), mask.end(), 1)) << "every emitted row is owned";
-}
-
-// The case that actually stalls production, and the reason this answers with a bool instead of through
-// the mask's emptiness: a shared segment none of whose rows fall in this tablet's range makes the
-// iterator emit NOTHING. "Own nothing" still means filter -- keep none of the source's rows and write
-// an empty segment -- which is a different instruction from "was not narrowed at all".
-TEST(RowsetUpdateStateNarrowedEmitTest, an_empty_narrowed_emit_still_owns_only_its_nothing) {
-    Filter mask;
-    EXPECT_TRUE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/0, /*source_rows=*/300, &mask));
-    EXPECT_TRUE(mask.empty()) << "owning no row is an empty mask, not the absence of one";
-}
-
-TEST(RowsetUpdateStateNarrowedEmitTest, a_whole_segment_emit_keeps_the_copy_and_append_rewrite) {
-    Filter mask;
-    // Not narrowed: the copy-and-append rewrite is correct as is, and must not be given a mask.
-    EXPECT_FALSE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/300, /*source_rows=*/300, &mask));
-    EXPECT_TRUE(mask.empty());
-    // An empty segment has nothing to narrow.
-    EXPECT_FALSE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/0, /*source_rows=*/0, &mask));
-    EXPECT_TRUE(mask.empty());
-    // An emit longer than its source is not a narrowing; leave it to the assertions downstream.
-    EXPECT_FALSE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/301, /*source_rows=*/300, &mask));
-    EXPECT_TRUE(mask.empty());
-}
-
->>>>>>> 28fc922 ([BugFix] Read a flat JSON column whole in lake compaction when a delta column group holds its values (#84216))
 // The statements of ONE multi-statement transaction that write the same tablet -- a SQL BEGIN ...
 // COMMIT, published with a TxnInfoPB that carries each statement's load_id -- are applied together:
 // TxnLogApplier folds every statement's op_write into one merged rowset (MetaFileBuilder::

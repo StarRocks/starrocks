@@ -26,15 +26,9 @@
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
-<<<<<<< HEAD
 #include "storage/conjunctive_predicates.h"
-#include "storage/empty_iterator.h"
-=======
 #include "storage/delta_column_group.h"
-#include "storage/flat_json_metrics.h"
-#include "storage/json_path_deriver.h"
-#include "storage/lake/meta_file.h"
->>>>>>> 28fc922 ([BugFix] Read a flat JSON column whole in lake compaction when a delta column group holds its values (#84216))
+#include "storage/empty_iterator.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/utils.h"
 #include "storage/lake/versioned_tablet.h"
