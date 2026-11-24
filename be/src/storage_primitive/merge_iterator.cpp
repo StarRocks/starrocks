@@ -425,6 +425,7 @@ void HeapMergeIterator::flush_runs(Chunk* chunk) {
     for (size_t c = 0; c < num_columns; ++c) {
         Column* dst = chunk->get_column_by_index(c)->as_mutable_raw_ptr();
         auto grouped = dst->clone_empty();
+        grouped->reserve(total);
         for (size_t k = 0; k < num_children; ++k) {
             if (start[k + 1] > start[k]) {
                 grouped->append_selective(*_chunk_pool[k]->get_column_by_index(c), _gather_rows.data(), start[k],
