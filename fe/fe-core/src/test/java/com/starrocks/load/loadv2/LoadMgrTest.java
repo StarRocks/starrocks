@@ -42,6 +42,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Injectable;
