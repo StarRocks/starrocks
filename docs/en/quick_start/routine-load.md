@@ -43,7 +43,7 @@ There is a lot of information in this document, and it is presented with step-by
 
 - [Docker](https://docs.docker.com/engine/install/)
 - 4 GB RAM assigned to Docker
-- 10 GB free disk space assigned to Docker
+- 20 GB free disk space assigned to Docker
 
 ### SQL client
 
@@ -153,7 +153,7 @@ In order to use MinIO for Object Storage with StarRocks, StarRocks needs a MinIO
 
 ### Open the MinIO web UI
 
-Browse to http://localhost:9001/access-keys The username and password are specified in the Docker compose file, and are `miniouser` and `miniopassword`. You should see that there is one access key. The Key is `AAAAAAAAAAAAAAAAAAAA`, you cannot see the secret in the MinIO Console, but it is in the Docker compose file and is `BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB`:
+Browse to http://localhost:9001/console/identity The username and password are specified in the Docker compose file, and are `miniouser` and `miniopassword`. You should see that there is one access key. The Key is `AAAAAAAAAAAAAAAAAAAA`, you cannot see the secret in the MinIO Console, but it is in the Docker compose file and is `BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB`:
 
 ![View the MinIO access key](../_assets/quick-start/MinIO-view-key.png)
 
@@ -167,7 +167,7 @@ When you create a storage volume in StarRocks you will specify the `LOCATION` fo
     LOCATIONS = ("s3://my-starrocks-bucket/")
 ```
 
-Open [http://localhost:9001/buckets](http://localhost:9001/buckets) and add a bucket for the storage volume. Name the bucket `my-starrocks-bucket`. Accept the defaults for the three listed options.
+Open [http://localhost:9001/console/buckets](http://localhost:9001/console/buckets) and add a bucket for the storage volume. Name the bucket `my-starrocks-bucket`. Accept the defaults for the three listed options.
 
 ---
 
