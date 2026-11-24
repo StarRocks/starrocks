@@ -3200,18 +3200,20 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     /**
-     * Get Table descriptor and materialized index for the materialized view index specific by `dbName`.`tblName`
+     * Get Table descriptor and materialized index for the materialized index named `dbName`.`indexName`
      *
-     * @param dbName  - the string represents the database name
-     * @param tblName - the string represents the table name
-     * @return a Table instance
+     * @param dbName    - the string represents the database name
+     * @param indexName - the string represents the materialized index name
+     * @param sessionId - the session reading it: the temporary tables of other sessions are left out
+     * @return the index with its table, or null
      */
-    public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String dbName, String tblName) {
+    public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String dbName, String indexName,
+                                                                       UUID sessionId) {
         Database database = getDb(dbName);
         if (database == null) {
             return null;
         }
-        return database.getMaterializedViewIndex(tblName);
+        return database.getMaterializedViewIndex(indexName, sessionId);
     }
 
     public Table getTableIncludeRecycleBin(Database db, long tableId) {
