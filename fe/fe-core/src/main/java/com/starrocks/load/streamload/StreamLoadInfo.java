@@ -317,6 +317,13 @@ public class StreamLoadInfo {
                 params.getFileType().orElse(TFileType.FILE_STREAM),
                 params.getFileFormatType().orElse(TFileFormatType.FORMAT_CSV_PLAIN), timeout);
         streamLoadInfo.setOptionalFromStreamLoad(params);
+        // A classic Stream Load gets exec_mem_limit from the compute node, which sets it on the plan the FE returns.
+        // The loads planned from these parameters, merge commit and the transaction stream loads of StreamLoadTask,
+        // have no such step, so the planner must take it from here.
+        Optional<Long> execMemLimit = params.getExecMemLimit();
+        if (execMemLimit.isPresent()) {
+            streamLoadInfo.execMemLimit = execMemLimit.get();
+        }
 
         // acquire compute resource from warehouse
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
