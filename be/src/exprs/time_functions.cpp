@@ -974,14 +974,21 @@ template <TimeUnit UNIT>
 TimestampValue timestamp_add(TimestampValue tsv, int count) {
     return tsv.add<UNIT>(count);
 }
+
+template <TimeUnit UNIT>
+TimestampValue timestamp_sub(TimestampValue tsv, int count) {
+    // Negate in 64 bits: -INT_MIN does not fit in an int.
+    return tsv.add<UNIT>(-static_cast<int64_t>(count));
+}
+
 #define DEFINE_TIME_ADD_FN(FN, UNIT)                                                                               \
     DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { return timestamp_add<UNIT>(timestamp, value); } \
                                                                                                                    \
     DEFINE_TIME_CALC_FN(FN, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);
 
-#define DEFINE_TIME_SUB_FN(FN, UNIT)                                                                                \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { return timestamp_add<UNIT>(timestamp, -value); } \
-                                                                                                                    \
+#define DEFINE_TIME_SUB_FN(FN, UNIT)                                                                               \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { return timestamp_sub<UNIT>(timestamp, value); } \
+                                                                                                                   \
     DEFINE_TIME_CALC_FN(FN, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);
 
 #define DEFINE_TIME_ADD_AND_SUB_FN(FN_PREFIX, UNIT) \

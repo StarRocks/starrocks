@@ -113,7 +113,7 @@ public:
     inline std::chrono::sys_days to_sys_days() const;
 
     template <TimeUnit UNIT>
-    inline DateValue add(int count) const;
+    inline DateValue add(int64_t count) const;
 
     inline operator TimestampValue() const;
 
@@ -156,7 +156,7 @@ inline std::chrono::sys_days DateValue::to_sys_days() const {
 }
 
 template <TimeUnit UNIT>
-DateValue DateValue::add(int count) const {
+DateValue DateValue::add(int64_t count) const {
     return DateValue{date::add<UNIT>(_julian, count)};
 }
 

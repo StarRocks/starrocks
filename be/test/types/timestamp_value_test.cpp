@@ -115,6 +115,21 @@ TEST(TimestampValueTest, calculate) {
     }
 }
 
+// An offset that leaves the date range must give an invalid timestamp (NULL in SQL), never a wrapped
+// value that happens to fall back inside the range.
+TEST(TimestampValueTest, add_out_of_range) {
+    const TimestampValue base = TimestampValue::create(2020, 1, 1, 0, 0, 0);
+    ASSERT_FALSE(base.add<TimeUnit::MONTH>(141206412).is_valid());
+    ASSERT_FALSE(base.add<TimeUnit::QUARTER>(47068804).is_valid());
+    ASSERT_FALSE(base.add<TimeUnit::WEEK>(613566757).is_valid());
+    ASSERT_FALSE(TimestampValue::create(9999, 12, 1, 12, 0, 0).add<TimeUnit::MONTH>(1).is_valid());
+    ASSERT_EQ("9999-12-31 12:00:00", TimestampValue::create(9999, 1, 31, 12, 0, 0).add<TimeUnit::MONTH>(11).to_string());
+
+    // seconds_sub(ts, INT_MIN) adds 2^31 seconds; negating the count in 32 bits used to subtract them instead.
+    const int64_t minus_int_min = -int64_t(std::numeric_limits<int32_t>::min());
+    ASSERT_EQ("2088-01-19 03:14:08", base.add<TimeUnit::SECOND>(minus_int_min).to_string());
+}
+
 TEST(TimestampValueTest, cast) {
     auto v = TimestampValue::create(2004, 2, 29, 23, 30, 30);
     DateValue date = (DateValue)v;
