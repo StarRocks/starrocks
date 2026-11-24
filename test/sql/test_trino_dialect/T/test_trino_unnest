@@ -3,3 +3,7 @@ set sql_dialect='trino';
 select x from unnest(array[1, 2, 3]) as t(x) order by x;
 select * from unnest(array[1, 2], array['a', 'b', 'c']) as t(x, y) order by y;
 select t.x, s.v from unnest(array[1, 2]) as t(x) join (select 2 as k, 'two' as v) s on t.x = s.k;
+select x from unnest(array[1, 2]) as u(x) join (select 2 as x) as s using (x);
+select x, y from unnest(array[1, 2], array['a', 'b']) as u(x, y) join (select 2 as x, 'b' as y) as s using (x, y);
+select x from unnest(array[1, 2]) as u(x) full join (select 2 as x union all select 3 as x) as s using (x) order by x;
+select u.x from unnest(array[1, 2]) as u(x) join (select 1 as k) as s on exists (select 1 from (values (1)) as r(y) where r.y = u.x);

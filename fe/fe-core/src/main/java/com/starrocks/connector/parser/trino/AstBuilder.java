@@ -504,6 +504,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitUnnest(Unnest node, ParseTreeContext context) {
+        if (node.isWithOrdinality()) {
+            throw unsupportedException("Trino Parser on StarRocks does not support UNNEST WITH ORDINALITY now");
+        }
         List<Expr> arguments = visit(node.getExpressions(), context, Expr.class);
         List<Expr> expressions = new ArrayList<>();
 
@@ -551,7 +554,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     // left input and can still reference that input's columns.
     private static Relation normalizeStandaloneUnnest(Relation relation) {
         if (relation instanceof TableFunctionRelation) {
-            return new NormalizedTableFunctionRelation((TableFunctionRelation) relation);
+            NormalizedTableFunctionRelation normalized =
+                    new NormalizedTableFunctionRelation((TableFunctionRelation) relation);
+            // Expose the UNNEST alias on the wrapper too, so a subquery in a JOIN ON clause can resolve it.
+            normalized.setAlias(relation.getResolveTableName());
+            return normalized;
         }
         return relation;
     }

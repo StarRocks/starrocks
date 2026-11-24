@@ -1241,7 +1241,25 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertOutputColumns(sql, List.of("v1", "x"));
         assertPlanContains(sql, "tableFunctionName: unnest", "[2: v2,3: v3]");
 
+        // A USING join on UNNEST joins and outputs the UNNEST columns, not the one-row relation's column.
+        sql = "select x from unnest(array[1, 2]) as u(x) join (select 2 as x) as s using (x)";
+        assertPlanContains(sql, "OUTPUT EXPRS:2: x", "predicates: 2: x = 2");
+        sql = "select x, y from unnest(array[1, 2], array['a', 'b']) as u(x, y) " +
+                "join (select 2 as x, 'b' as y) as s using (x, y)";
+        assertPlanContains(sql, "OUTPUT EXPRS:2: x | 3: y", "predicates: 2: x = 2, 3: y = 'b'");
+        sql = "select x from unnest(array[1, 2]) as u(x) full join (select 2 as x union all select 3 as x) as s using (x)";
+        assertPlanContains(sql, "equal join conjunct: 8: expr = 2: x", "coalesce(2: x, 8: expr)");
+
+        // A subquery in the JOIN ON clause can reference the UNNEST alias.
+        sql = "select u.x from unnest(array[1, 2]) as u(x) join (select 1 as k) as s " +
+                "on exists (select 1 from (values (1)) as r(y) where r.y = u.x)";
+        assertPlanContains(sql, "LEFT SEMI JOIN", "equal join conjunct: 2: x = 6: y");
+
         analyzeFail("select * from unnest(array[1, 2]) as t(x, y)", "has 1 columns available but 2 columns specified");
+        analyzeFail("select * from unnest(array[10, 20]) with ordinality",
+                "does not support UNNEST WITH ORDINALITY");
+        analyzeFail("select t0.v1, u.x, u.n from t0 cross join unnest(array[t0.v2]) with ordinality as u(x, n)",
+                "does not support UNNEST WITH ORDINALITY");
     }
 
     private static void assertOutputColumns(String sql, List<String> expected) {

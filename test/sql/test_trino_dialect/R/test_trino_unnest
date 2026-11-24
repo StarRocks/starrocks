@@ -18,3 +18,21 @@ select t.x, s.v from unnest(array[1, 2]) as t(x) join (select 2 as k, 'two' as v
 -- result:
 2	two
 -- !result
+select x from unnest(array[1, 2]) as u(x) join (select 2 as x) as s using (x);
+-- result:
+2
+-- !result
+select x, y from unnest(array[1, 2], array['a', 'b']) as u(x, y) join (select 2 as x, 'b' as y) as s using (x, y);
+-- result:
+2	b
+-- !result
+select x from unnest(array[1, 2]) as u(x) full join (select 2 as x union all select 3 as x) as s using (x) order by x;
+-- result:
+1
+2
+3
+-- !result
+select u.x from unnest(array[1, 2]) as u(x) join (select 1 as k) as s on exists (select 1 from (values (1)) as r(y) where r.y = u.x);
+-- result:
+1
+-- !result
