@@ -15,6 +15,7 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -33,9 +34,11 @@ import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.type.IntegerType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.iceberg.exceptions.CommitFailedException;
@@ -48,6 +51,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -63,6 +67,61 @@ public class LakeTableTxnStateListenerTest extends LakeTableTestHelper {
                 () -> listener.prePrepared(
                         newTransactionState(), buildPartialTabletCommitInfo(), Collections.emptyList()));
         Assertions.assertTrue(exception.getMessage().contains("has unfinished tablets"));
+    }
+
+    @Test
+    public void testUnresolvedTabletRecordedOnceForTheTransaction() throws TransactionException {
+        LakeTable table = buildLakeTable();
+        DatabaseTransactionMgr databaseTransactionMgr = addDatabaseTransactionMgr();
+        LakeTableTxnStateListener listener = new LakeTableTxnStateListener(databaseTransactionMgr, table);
+        long unresolvedTabletId = 7_000_001L;
+        List<TabletCommitInfo> finished = buildFullTabletCommitInfo();
+        finished.add(new TabletCommitInfo(unresolvedTabletId, 1));
+
+        TransactionState txnState = newTransactionState();
+        listener.prePrepared(txnState, finished, Collections.emptyList());
+        txnState.setTransactionStatus(TransactionStatus.COMMITTED);
+        listener.preWriteCommitLog(txnState);
+
+        // the tablets the FE knows still commit
+        Assertions.assertNotNull(txnState.getTableCommitInfo(tableId).getPartitionCommitInfo(physicalPartitionId));
+        // the unknown one is recorded under the table and partition keys of a tablet that has none
+        Map<Long, List<Long>> unresolved = Map.of((long) TabletInvertedIndex.NOT_EXIST_VALUE, List.of(unresolvedTabletId));
+        Assertions.assertEquals(Map.of((long) TabletInvertedIndex.NOT_EXIST_VALUE, unresolved), txnState.getIgnoredTablets());
+        Assertions.assertNull(txnState.getIgnoredTablets().get(tableId));
+    }
+
+    @Test
+    public void testUnresolvedTabletRecordedOnceAcrossTables() throws TransactionException {
+        LakeTable table = buildLakeTable();
+        long tableId2 = tableId + 100;
+        long partitionId2 = partitionId + 100;
+        long physicalPartitionId2 = physicalPartitionId + 100;
+        long indexId2 = indexId + 100;
+        long tabletId2 = tabletId[1] + 100;
+        MaterializedIndex index2 = new MaterializedIndex(indexId2);
+        TabletMeta tabletMeta2 = new TabletMeta(dbId, tableId2, physicalPartitionId2, 0, TStorageMedium.HDD, true);
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(tabletId2, tabletMeta2);
+        index2.addTablet(new LakeTablet(tabletId2), tabletMeta2);
+        LakeTable table2 = new LakeTable(tableId2, "t1", Lists.newArrayList(new Column("c0", IntegerType.BIGINT)),
+                KeysType.DUP_KEYS, null, null);
+        table2.addPartition(new Partition(partitionId2, physicalPartitionId2, "p0", index2, null));
+
+        DatabaseTransactionMgr databaseTransactionMgr = addDatabaseTransactionMgr();
+        long unresolvedTabletId = 7_000_002L;
+        List<TabletCommitInfo> finished = buildFullTabletCommitInfo();
+        finished.add(new TabletCommitInfo(tabletId2, 1));
+        finished.add(new TabletCommitInfo(unresolvedTabletId, 1));
+
+        TransactionState txnState = new TransactionState(dbId, Lists.newArrayList(tableId, tableId2), nextTxnId++,
+                "label", null, TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, null, 0, 60_000);
+        // both listeners see the same finished list, as DatabaseTransactionMgr hands it to each of them
+        new LakeTableTxnStateListener(databaseTransactionMgr, table).prePrepared(txnState, finished, Collections.emptyList());
+        new LakeTableTxnStateListener(databaseTransactionMgr, table2).prePrepared(txnState, finished, Collections.emptyList());
+
+        Assertions.assertEquals(Map.of((long) TabletInvertedIndex.NOT_EXIST_VALUE,
+                Map.of((long) TabletInvertedIndex.NOT_EXIST_VALUE, List.of(unresolvedTabletId))),
+                txnState.getIgnoredTablets());
     }
 
     @Test
