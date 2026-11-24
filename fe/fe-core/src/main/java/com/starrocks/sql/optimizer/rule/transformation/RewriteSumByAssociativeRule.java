@@ -239,8 +239,10 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                                 // sum(expr + 1) will translate to sum(add(cast(expr as INT), 1)),
                                 // but this cast is not needed in the sum function after rewriting,
                                 // we can remove it and get sum(expr) + count() * 1
-                                ScalarOperator newArg0 = rewriteCastForAggExpr(arguments.get(0));
-                                ScalarOperator newArg1 = rewriteCastForAggExpr(arguments.get(1));
+                                ScalarOperator newArg0 =
+                                        rewriteCastForAggExpr(arguments.get(0), aggFunction.getType());
+                                ScalarOperator newArg1 =
+                                        rewriteCastForAggExpr(arguments.get(1), aggFunction.getType());
                                 // @TODO what if cast cannot evaul on FE
 
                                 ScalarOperator agg0 = createNewAggFunction(
@@ -268,7 +270,7 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
             return op;
         }
 
-        private ScalarOperator rewriteCastForAggExpr(ScalarOperator expr) {
+        private ScalarOperator rewriteCastForAggExpr(ScalarOperator expr, Type aggReturnType) {
             if (expr instanceof CastOperator) {
                 CastOperator castOperator = (CastOperator) expr;
                 Type toType = castOperator.getType();
@@ -281,13 +283,26 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                     AggregateFunction possibleAggregateFunction = AggregateFunction.createBuiltin(
                             FunctionSet.SUM, Lists.newArrayList(fromType), toType, toType,
                             false, true, false);
-                    if (GlobalStateMgr.getCurrentState().getFunction(
-                            possibleAggregateFunction, Function.CompareMode.IS_IDENTICAL) != null) {
-                        return rewriteCastForAggExpr(fromOperator);
+                    Function sumFn = GlobalStateMgr.getCurrentState().getFunction(
+                            possibleAggregateFunction, Function.CompareMode.IS_IDENTICAL);
+                    if (sumFn != null && sumReturnsAggType(sumFn.getReturnType(), aggReturnType)) {
+                        return rewriteCastForAggExpr(fromOperator, aggReturnType);
                     }
                 }
             }
             return expr;
+        }
+
+        // The lookup above matches the argument type only, so it also finds sum(BOOLEAN) -> BIGINT for a cast to
+        // DOUBLE or DECIMAL, or sum(INT) -> BIGINT for a cast to LARGEINT. createNewAggFunction then builds
+        // sum(fromType) with the original aggregate's result type, a signature the BE does not implement.
+        // Only remove the cast when sum(fromType) already returns that type (any DECIMALV3 for a DECIMALV3 sum,
+        // whose precision and scale createNewAggFunction sets itself).
+        private static boolean sumReturnsAggType(Type sumReturnType, Type aggReturnType) {
+            if (aggReturnType.isDecimalV3()) {
+                return sumReturnType.isDecimalV3();
+            }
+            return sumReturnType.equals(aggReturnType);
         }
 
         private ColumnRefOperator createColumnRefForAggArgument(ScalarOperator arg) {
