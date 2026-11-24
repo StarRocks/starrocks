@@ -167,6 +167,61 @@ TEST(KeyDictTest, test_encode_is_a_lower_bound_for_any_target) {
     }
 }
 
+TEST(KeyDictTest, test_values_sharing_long_prefixes) {
+    // Values that agree on their first 8 bytes, are prefixes of one another or hold zero bytes, so that a lookup
+    // has to fall back from comparing the integer prefixes to comparing the bytes.
+    const std::vector<std::string> raw = {"abcdefgh",
+                                          "abcdefgh1",
+                                          "abcdefgh2",
+                                          "abcdefghij",
+                                          "ab",
+                                          std::string("ab\0", 3),
+                                          std::string("ab\0\0", 4),
+                                          "abcdefgg",
+                                          "abcdefgi",
+                                          "",
+                                          std::string("abcdefgh\0", 9)};
+    std::vector<std::string> values;
+    for (size_t i = 0; i < raw.size(); i += 2) {
+        values.push_back(enc_middle(raw[i]));
+    }
+    std::sort(values.begin(), values.end());
+    ASSIGN_OR_ABORT(auto dict, KeyDict::create(kLayout, {{1, values}}));
+    std::vector<std::string> keys;
+    for (int64_t id = -2; id < 2; ++id) {
+        for (const auto& value : raw) {
+            for (int32_t sub : {-1, 0, 1}) {
+                keys.push_back(make_key(id, value, sub));
+            }
+        }
+    }
+    std::sort(keys.begin(), keys.end());
+    std::vector<std::string> stored;
+    std::string decoded;
+    for (const auto& key : keys) {
+        stored.emplace_back();
+        dict->encode(Slice(key), &stored.back());
+        ASSERT_OK(dict->decode(Slice(stored.back()), &decoded));
+        ASSERT_EQ(key, decoded);
+        if (stored.size() > 1) ASSERT_LT(stored[stored.size() - 2], stored.back());
+    }
+    // Every cut of every key, so the lookup also meets partial values.
+    std::string target_stored;
+    for (const auto& key : keys) {
+        for (size_t len = 0; len <= key.size(); ++len) {
+            const std::string target = key.substr(0, len);
+            dict->encode(Slice(target), &target_stored);
+            auto it = std::lower_bound(stored.begin(), stored.end(), target_stored);
+            std::string actual = "<end>";
+            if (it != stored.end()) {
+                ASSERT_OK(dict->decode(Slice(*it), &decoded));
+                actual = decoded;
+            }
+            ASSERT_EQ(lower_bound_of(keys, target), actual) << len;
+        }
+    }
+}
+
 TEST(KeyDictTest, test_serialize) {
     auto dict = make_dict();
     std::string data;

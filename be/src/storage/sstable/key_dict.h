@@ -88,11 +88,16 @@ public:
 private:
     KeyDict() = default;
     Status _init();
+    // std::lower_bound of |segment| among the values of _columns[d].
+    size_t _lower_bound(size_t d, const Slice& segment, uint64_t prefix) const;
 
     KeyLayout _layout;
     std::vector<ColumnDict> _columns;
     // Position in _columns of each layout column's dictionary, or -1.
     std::vector<int32_t> _dict_of_column;
+    // The first 8 bytes of each value as a big-endian integer, zero padded: comparing them orders two values the
+    // way their bytes do unless they are equal, so a lookup mostly compares integers instead of calling memcmp.
+    std::vector<std::vector<uint64_t>> _value_prefixes;
     // Number of leading layout columns that have to be parsed: up to and including the last dictionary column.
     size_t _parsed_columns = 0;
     size_t _memory_usage = 0;

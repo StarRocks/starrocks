@@ -18,6 +18,7 @@
 #include <cstring>
 #include <string_view>
 
+#include "gutil/endian.h"
 #include "storage/sstable/coding.h"
 #include "storage/sstable/iterator.h"
 
@@ -68,6 +69,12 @@ void put_code(std::string* dst, uint32_t code, uint32_t width) {
     }
 }
 
+uint64_t prefix_of(const char* p, size_t n) {
+    uint64_t v = 0;
+    memcpy(&v, p, std::min<size_t>(n, sizeof(v)));
+    return BigEndian::FromHost64(v);
+}
+
 bool same_layout(const KeyLayout& a, const KeyLayout& b) {
     return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(), [](const auto& x, const auto& y) {
                return x.fixed_width == y.fixed_width;
@@ -89,6 +96,7 @@ Status KeyDict::_init() {
         return Status::InvalidArgument("key dictionary without any column");
     }
     _dict_of_column.assign(_layout.size(), -1);
+    _value_prefixes.resize(_columns.size());
     _memory_usage = sizeof(KeyDict) + _layout.size() * (sizeof(KeyColumnLayout) + sizeof(int32_t));
     for (size_t i = 0; i < _columns.size(); ++i) {
         const auto& column = _columns[i];
@@ -112,7 +120,9 @@ Status KeyDict::_init() {
                 return Status::Corruption("key dictionary values are not sorted");
             }
             _memory_usage += sizeof(std::string) + value.capacity();
+            _value_prefixes[i].push_back(prefix_of(value.data(), value.size()));
         }
+        _memory_usage += _value_prefixes[i].capacity() * sizeof(uint64_t);
         _dict_of_column[column.column] = static_cast<int32_t>(i);
         _parsed_columns = column.column + 1;
     }
@@ -177,6 +187,23 @@ StatusOr<std::shared_ptr<const KeyDict>> KeyDict::deserialize(const Slice& data)
     return create(std::move(layout), std::move(columns));
 }
 
+size_t KeyDict::_lower_bound(size_t d, const Slice& segment, uint64_t prefix) const {
+    const auto& values = _columns[d].values;
+    const auto& prefixes = _value_prefixes[d];
+    size_t lo = 0;
+    size_t hi = values.size();
+    while (lo < hi) {
+        const size_t mid = lo + (hi - lo) / 2;
+        const bool less = prefixes[mid] != prefix ? prefixes[mid] < prefix : Slice(values[mid]).compare(segment) < 0;
+        if (less) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo;
+}
+
 void KeyDict::encode(const Slice& key, std::string* dst) const {
     dst->clear();
     const char* p = key.data;
@@ -189,10 +216,10 @@ void KeyDict::encode(const Slice& key, std::string* dst) const {
             const auto& values = _columns[d].values;
             const uint32_t width = code_width(values.size());
             const Slice segment(p, len);
-            auto it = std::lower_bound(values.begin(), values.end(), segment,
-                                       [](const std::string& a, const Slice& b) { return Slice(a).compare(b) < 0; });
-            const auto index = static_cast<uint32_t>(it - values.begin());
-            if (complete && it != values.end() && Slice(*it) == segment) {
+            const uint64_t prefix = prefix_of(p, len);
+            const auto index = static_cast<uint32_t>(_lower_bound(d, segment, prefix));
+            if (complete && index < values.size() && _value_prefixes[d][index] == prefix &&
+                Slice(values[index]) == segment) {
                 put_code(dst, 2 * index + 1, width);
             } else {
                 // Not in the dictionary, or cut short: escape, then the raw bytes. All the values between
