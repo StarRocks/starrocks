@@ -93,7 +93,7 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
 public class QueryQueueManagerTest extends SchedulerTestBase {
@@ -182,7 +182,8 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         ConnectContext caller = UtFrameUtils.createDefaultCtx();
         caller.setDatabase(DB_NAME);
         caller.setStartTime();
-        caller.setExecutor(mock(StmtExecutor.class));
+        caller.setExecutor(spy(new StmtExecutor(caller,
+                SqlParser.parseOneWithStarRocksDialect("select 1", caller.getSessionVariable()))));
         return caller;
     }
 

@@ -672,6 +672,8 @@ public class StmtExecutor {
      * 3. ANALYZE: use fe_conf.statistic_collect_query_timeout
      */
     public int getExecTimeout() {
+        // Metadata workers may inspect a parent executor while their own context is thread-bound.
+        // Resolve the timeout against this statement's context, not the worker's session.
         if (parsedStmt instanceof CreateTableAsSelectStmt ctas) {
             Map<String, String> properties = ctas.getInsertStmt().getProperties();
             if (properties.containsKey(LoadStmt.TIMEOUT_PROPERTY)) {
@@ -681,7 +683,7 @@ public class StmtExecutor {
                     // ignore
                 }
             }
-            return ConnectContext.get().getSessionVariable().getInsertTimeoutS();
+            return context.getSessionVariable().getInsertTimeoutS();
         } else if (parsedStmt instanceof DmlStmt) {
             Map<String, String> properties = ((DmlStmt) parsedStmt).getProperties();
             if (properties.containsKey(LoadStmt.TIMEOUT_PROPERTY)) {
@@ -691,13 +693,13 @@ public class StmtExecutor {
                     // ignore
                 }
             }
-            return ConnectContext.get().getSessionVariable().getInsertTimeoutS();
+            return context.getSessionVariable().getInsertTimeoutS();
         } else if (parsedStmt instanceof AnalyzeStmt) {
             return (int) Config.statistic_collect_query_timeout;
         } else {
             // For SELECT queries:
             // session query_timeout is authoritative if explicitly overridden
-            ConnectContext ctx = ConnectContext.get();
+            ConnectContext ctx = context;
             int sessionQueryTimeout = ctx.getSessionVariable().getQueryTimeoutS();
             boolean sessionTimeoutOverridden = ctx.isSessionQueryTimeoutOverridden();
             if (parsedStmt instanceof QueryStatement) {

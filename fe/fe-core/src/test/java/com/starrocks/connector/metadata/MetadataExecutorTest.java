@@ -32,6 +32,7 @@ import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.expression.IntLiteral;
@@ -62,6 +63,7 @@ import java.util.function.Consumer;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class MetadataExecutorTest {
@@ -132,6 +134,44 @@ public class MetadataExecutorTest {
         assertSame(parent, job.getContext().getParent());
         int remaining = SimpleExecutor.checkInternalQueryState(job.getContext());
         assertTrue(remaining > 50 && remaining <= 55, "remaining=" + remaining);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testIcebergJobUsesInsertCallerTimeout(boolean queued) {
+        ConnectContext parent = newParent();
+        var variables = parent.getSessionVariable();
+        variables.setQueryTimeoutS(60);
+        variables.setInsertTimeoutS(3600);
+        variables.setMetadataCollectQueryTimeoutS(900);
+        parent.setExecutor(new StmtExecutor(parent, SqlParser.parseOneWithStarRocksDialect(
+                "INSERT INTO dst SELECT * FROM iceberg.db.src", variables)));
+        int pendingSeconds = queued ? 120 : 0;
+        parent.setStartTime(Instant.now().minusSeconds(pendingSeconds + 65));
+        parent.setPendingTimeSecond(pendingSeconds);
+        MetadataCollectJob job = new IcebergMetadataCollectJob("iceberg", "db", "table",
+                TResultSinkType.METADATA_ICEBERG, 1, "");
+
+        job.init(parent);
+
+        ConnectContext child = job.getContext();
+        assertSame(parent, child.getParent());
+        child.getSessionVariable().setInsertTimeoutS(1);
+        try (var scope = child.bindScope()) {
+            int remaining = SimpleExecutor.checkInternalQueryState(child);
+            assertTrue(remaining > 895 && remaining <= 900, "remaining=" + remaining);
+
+            parent.setStartTime(Instant.now().minusSeconds(pendingSeconds + 3590));
+            parent.setPendingTimeSecond(pendingSeconds);
+            remaining = SimpleExecutor.checkInternalQueryState(child);
+            assertTrue(remaining > 5 && remaining <= 10, "remaining=" + remaining);
+
+            parent.setStartTime(Instant.now().minusSeconds(pendingSeconds + 3601));
+            parent.setPendingTimeSecond(pendingSeconds);
+            assertThrows(SemanticException.class, () -> SimpleExecutor.checkInternalQueryState(child));
+        }
+        assertEquals(60, variables.getQueryTimeoutS());
+        assertEquals(3600, variables.getInsertTimeoutS());
     }
 
     @ParameterizedTest
@@ -263,13 +303,24 @@ public class MetadataExecutorTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"false, false", "false, true", "true, false", "true, true"})
-    public void testExecutionUsesSmallerRemainingBudget(boolean parentIsShorter, boolean queued,
+    @CsvSource({
+            "false, false, false", "false, true, false", "true, false, false", "true, true, false",
+            "false, false, true", "false, true, true", "true, false, true", "true, true, true"
+    })
+    public void testExecutionUsesSmallerRemainingBudget(boolean parentIsShorter, boolean queued, boolean insertCaller,
                                                        @Mocked DefaultCoordinator coordinator) throws Exception {
         ConnectContext parent = newParent();
-        parent.getSessionVariable().setQueryTimeoutS(parentIsShorter ? 30 : 300);
+        int parentTimeout = parentIsShorter ? 30 : 300;
+        int parentQueryTimeout = insertCaller ? 5 : parentTimeout;
+        parent.getSessionVariable().setQueryTimeoutS(parentQueryTimeout);
+        parent.getSessionVariable().setInsertTimeoutS(parentTimeout);
+        if (insertCaller) {
+            parent.setExecutor(new StmtExecutor(parent, SqlParser.parseOneWithStarRocksDialect(
+                    "INSERT INTO dst SELECT * FROM iceberg.db.src", parent.getSessionVariable())));
+        }
         parent.getSessionVariable().setEnableSPMRewrite(true);
         MetadataCollectJob job = newJob(parent);
+        job.getContext().getSessionVariable().setInsertTimeoutS(1);
         new MockUp<StatementPlanner>() {
             @Mock
             public ExecPlan plan(StatementBase statement, ConnectContext context, TResultSinkType sink) {
@@ -303,7 +354,8 @@ public class MetadataExecutorTest {
         assertEquals(QueryState.MysqlStateType.EOF, job.getContext().getState().getStateType());
         assertSame(parent, ConnectContext.get());
         assertEquals(60, job.getContext().getSessionVariable().getQueryTimeoutS());
-        assertEquals(parentIsShorter ? 30 : 300, parent.getSessionVariable().getQueryTimeoutS());
+        assertEquals(parentQueryTimeout, parent.getSessionVariable().getQueryTimeoutS());
+        assertEquals(parentTimeout, parent.getSessionVariable().getInsertTimeoutS());
         assertTrue(parent.getSessionVariable().isEnableSPMRewrite());
         assertEquals(List.of(job.getContext().getExecutor()), parent.getExecutor().getSubStmtExecutors());
         List<Integer> timeouts = new ArrayList<>();
