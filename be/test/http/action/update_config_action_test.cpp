@@ -26,6 +26,13 @@
 #include "cache/disk_cache/test_cache_utils.h"
 #include "common/config.h"
 #include "fs/fs_util.h"
+<<<<<<< HEAD
+=======
+#include "fs/remote_read_context.h"
+#ifdef USE_STAROS
+#include "fslib/star_cache_configuration.h"
+#endif
+>>>>>>> 72a6d9c ([Enhancement] Add BE config starlet_star_cache_write_overwrite for the StarCache write overwrite flag (#84194))
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/update_manager.h"
@@ -421,5 +428,167 @@ TEST_F(UpdateConfigActionTest, update_starlet_upload_threshold_configs_reject_no
     }
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(ConfigUpdateHooksTest, update_s3_multipart_equal_part_size) {
+    const bool saved = config::s3_multipart_equal_part_size;
+    gflags::FlagSaver flag_saver;
+    // Declared after the FlagSaver so it runs first: the config is restored through set_config, for
+    // the reason ScopedStarletUploadThresholdConfigs gives, and the gflag is restored after it.
+    DeferOp restore_config([saved] {
+        auto st = config::set_config("s3_multipart_equal_part_size", saved ? "true" : "false");
+        EXPECT_TRUE(st.ok()) << st;
+    });
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    // Start from the opposite flag value each time, so both directions are really forwarded.
+    for (bool value : {true, false}) {
+        FLAGS_fslib_s3_multipart_equal_part_size = !value;
+        auto st = registry->update_config("s3_multipart_equal_part_size", value ? "true" : "false");
+        ASSERT_TRUE(st.ok()) << st;
+        EXPECT_EQ(value, config::s3_multipart_equal_part_size);
+        EXPECT_EQ(value, FLAGS_fslib_s3_multipart_equal_part_size);
+    }
+}
+
+// While the remote I/O scheduler runs, the read-ahead strategies it replaces cannot be turned back on and the cache
+// it needs cannot be turned off: the update is rejected and rolled back. Without the scheduler they update as before.
+TEST_F(ConfigUpdateHooksTest, remote_io_scheduler_rejects_conflicting_updates) {
+    gflags::FlagSaver flag_saver;
+    DeferOp restore([] {
+        g_remote_io_scheduler_enabled.store(false);
+        EXPECT_OK(config::set_config("io_coalesce_lake_read_enable", "false"));
+        EXPECT_OK(config::set_config("starlet_fs_read_prefetch_enable", "false"));
+    });
+    auto* registry = ConfigUpdateRegistry::instance();
+
+    g_remote_io_scheduler_enabled.store(true);
+    EXPECT_TRUE(registry->update_config("io_coalesce_lake_read_enable", "true").is_not_supported());
+    EXPECT_FALSE(config::io_coalesce_lake_read_enable);
+    EXPECT_OK(registry->update_config("io_coalesce_lake_read_enable", "false"));
+
+    EXPECT_TRUE(registry->update_config("starlet_fs_read_prefetch_enable", "true").is_not_supported());
+    EXPECT_FALSE(config::starlet_fs_read_prefetch_enable);
+    // Turning it off is accepted, and the starlet flag stays off.
+    FLAGS_fs_enable_buffer_prefetch = true;
+    EXPECT_OK(registry->update_config("starlet_fs_read_prefetch_enable", "false"));
+    EXPECT_FALSE(FLAGS_fs_enable_buffer_prefetch);
+
+    const bool use_star_cache = config::starlet_use_star_cache;
+    EXPECT_TRUE(registry->update_config("starlet_use_star_cache", "false").is_not_supported());
+    EXPECT_EQ(use_star_cache, config::starlet_use_star_cache);
+
+    g_remote_io_scheduler_enabled.store(false);
+    EXPECT_OK(registry->update_config("io_coalesce_lake_read_enable", "true"));
+    EXPECT_TRUE(config::io_coalesce_lake_read_enable);
+    EXPECT_OK(registry->update_config("starlet_fs_read_prefetch_enable", "true"));
+    EXPECT_TRUE(config::starlet_fs_read_prefetch_enable);
+    EXPECT_TRUE(FLAGS_fs_enable_buffer_prefetch);
+}
+
+TEST_F(ConfigUpdateHooksTest, update_remote_read_skip_contended_cache_writes) {
+    namespace fslib = staros::starlet::fslib;
+    const bool saved = config::remote_read_skip_contended_cache_writes;
+    gflags::FlagSaver flag_saver;
+    // Declared after the FlagSaver so it runs first: the config is restored through set_config, for
+    // the reason ScopedStarletUploadThresholdConfigs gives, and the gflag is restored after it.
+    DeferOp restore_config([saved] {
+        auto st = config::set_config("remote_read_skip_contended_cache_writes", saved ? "true" : "false");
+        EXPECT_TRUE(st.ok()) << st;
+    });
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    // Start from the opposite flag value each time, so both directions are really forwarded.
+    for (bool value : {true, false}) {
+        fslib::FLAGS_remote_read_skip_contended_cache_writes = !value;
+        auto st = registry->update_config("remote_read_skip_contended_cache_writes", value ? "true" : "false");
+        ASSERT_TRUE(st.ok()) << st;
+        EXPECT_EQ(value, config::remote_read_skip_contended_cache_writes);
+        EXPECT_EQ(value, fslib::FLAGS_remote_read_skip_contended_cache_writes);
+    }
+
+    // A value that is not a boolean is refused; neither the config nor the flag moves.
+    EXPECT_FALSE(registry->update_config("remote_read_skip_contended_cache_writes", "maybe").ok());
+    EXPECT_FALSE(config::remote_read_skip_contended_cache_writes);
+    EXPECT_FALSE(fslib::FLAGS_remote_read_skip_contended_cache_writes);
+}
+
+// The skip and retain configs go through separate hooks. With a small retain budget, which a scan exhausts quickly,
+// toggling skip leaves the budget alone, and changing the budget (including a refused value that is rolled back)
+// leaves skip alone, in both the BE configs and the starlet flags.
+TEST_F(ConfigUpdateHooksTest, update_skip_contended_cache_writes_with_small_retain_budget) {
+    namespace fslib = staros::starlet::fslib;
+    const bool saved_skip = config::remote_read_skip_contended_cache_writes;
+    const int64_t saved_retain = config::remote_read_retain_prefetched_bytes;
+    gflags::FlagSaver flag_saver;
+    // Declared after the FlagSaver so it runs first: the configs are restored through set_config, for the reason
+    // ScopedStarletUploadThresholdConfigs gives, and the gflags are restored after it.
+    DeferOp restore_configs([saved_skip, saved_retain] {
+        auto st = config::set_config("remote_read_skip_contended_cache_writes", saved_skip ? "true" : "false");
+        EXPECT_TRUE(st.ok()) << st;
+        st = config::set_config("remote_read_retain_prefetched_bytes", std::to_string(saved_retain));
+        EXPECT_TRUE(st.ok()) << st;
+    });
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    constexpr int64_t kSmallBudget = 1L << 20;
+    auto st = registry->update_config("remote_read_retain_prefetched_bytes", std::to_string(kSmallBudget));
+    ASSERT_TRUE(st.ok()) << st;
+
+    // Start from the opposite flag value each time, so both directions are really forwarded.
+    for (bool value : {true, false, true}) {
+        fslib::FLAGS_remote_read_skip_contended_cache_writes = !value;
+        st = registry->update_config("remote_read_skip_contended_cache_writes", value ? "true" : "false");
+        ASSERT_TRUE(st.ok()) << st;
+        EXPECT_EQ(value, config::remote_read_skip_contended_cache_writes);
+        EXPECT_EQ(value, fslib::FLAGS_remote_read_skip_contended_cache_writes);
+        EXPECT_EQ(kSmallBudget, config::remote_read_retain_prefetched_bytes);
+        EXPECT_EQ(kSmallBudget, fslib::FLAGS_remote_read_retain_prefetched_bytes);
+    }
+
+    // A refused skip value moves neither skip nor the budget.
+    EXPECT_FALSE(registry->update_config("remote_read_skip_contended_cache_writes", "maybe").ok());
+    EXPECT_TRUE(config::remote_read_skip_contended_cache_writes);
+    EXPECT_TRUE(fslib::FLAGS_remote_read_skip_contended_cache_writes);
+    EXPECT_EQ(kSmallBudget, config::remote_read_retain_prefetched_bytes);
+    EXPECT_EQ(kSmallBudget, fslib::FLAGS_remote_read_retain_prefetched_bytes);
+
+    // With skip on, a refused budget is rolled back to the small one, and accepted budgets reach starlet; skip stays
+    // on throughout.
+    EXPECT_FALSE(registry->update_config("remote_read_retain_prefetched_bytes", "-1").ok());
+    EXPECT_EQ(kSmallBudget, config::remote_read_retain_prefetched_bytes);
+    EXPECT_EQ(kSmallBudget, fslib::FLAGS_remote_read_retain_prefetched_bytes);
+    EXPECT_TRUE(config::remote_read_skip_contended_cache_writes);
+    EXPECT_TRUE(fslib::FLAGS_remote_read_skip_contended_cache_writes);
+    for (int64_t bytes : {int64_t{0}, kSmallBudget * 2}) {
+        st = registry->update_config("remote_read_retain_prefetched_bytes", std::to_string(bytes));
+        ASSERT_TRUE(st.ok()) << st;
+        EXPECT_EQ(bytes, config::remote_read_retain_prefetched_bytes);
+        EXPECT_EQ(bytes, fslib::FLAGS_remote_read_retain_prefetched_bytes);
+        EXPECT_TRUE(config::remote_read_skip_contended_cache_writes);
+        EXPECT_TRUE(fslib::FLAGS_remote_read_skip_contended_cache_writes);
+    }
+}
+
+TEST_F(ConfigUpdateHooksTest, update_starlet_star_cache_write_overwrite) {
+    const bool saved = config::starlet_star_cache_write_overwrite;
+    gflags::FlagSaver flag_saver;
+    DeferOp restore_config([saved] {
+        auto st = config::set_config("starlet_star_cache_write_overwrite", saved ? "true" : "false");
+        EXPECT_TRUE(st.ok()) << st;
+    });
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    // Start from the opposite flag value each time, so both directions are really forwarded.
+    for (bool value : {true, false}) {
+        staros::starlet::fslib::FLAGS_star_cache_write_overwrite = !value;
+        auto st = registry->update_config("starlet_star_cache_write_overwrite", value ? "true" : "false");
+        ASSERT_TRUE(st.ok()) << st;
+        EXPECT_EQ(value, config::starlet_star_cache_write_overwrite);
+        EXPECT_EQ(value, staros::starlet::fslib::FLAGS_star_cache_write_overwrite);
+    }
+}
+
+>>>>>>> 72a6d9c ([Enhancement] Add BE config starlet_star_cache_write_overwrite for the StarCache write overwrite flag (#84194))
 #endif // USE_STAROS
 } // namespace starrocks

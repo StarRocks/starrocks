@@ -1364,6 +1364,24 @@ CONF_mInt32(starlet_cache_evict_throughput_mb, "200");
 CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "1048576");
 CONF_mBool(starlet_use_star_cache, "true");
 CONF_Bool(starlet_star_cache_async_init, "true");
+<<<<<<< HEAD
+=======
+// Whether a StarCache disk block that this process wrote and has not evicted since skips the first
+// full-block checksum read when a later request touches it. That verification re-reads the whole
+// block from disk to check data the process just wrote and still tracks in memory, which costs an
+// extra disk read on the first access to every freshly cached block. Set to false to verify every
+// block on first access, which is only worth its cost where the cache disk is suspected of
+// corrupting data at rest. Blocks inherited from a previous run are always verified, whatever this
+// is set to, because nothing in this process witnessed their write. Read once when StarCache
+// initializes.
+CONF_Bool(starlet_star_cache_skip_fresh_block_checksum_verification, "true");
+// Whether a StarCache write replaces an object that is already cached under the same key. Off, the
+// existing object is kept and the write is reported as success, which suits the read-through fill
+// path where the bytes being written are the ones already cached. Turn it on to let a re-read
+// refresh a block that is suspected to be stale or damaged. StarCache reads it on every write, so a
+// change takes effect on the next write without re-initializing the cache.
+CONF_mBool(starlet_star_cache_write_overwrite, "false");
+>>>>>>> 72a6d9c ([Enhancement] Add BE config starlet_star_cache_write_overwrite for the StarCache write overwrite flag (#84194))
 CONF_mInt32(starlet_star_cache_mem_size_percent, "0");
 CONF_mInt64(starlet_star_cache_mem_size_bytes, "134217728");
 CONF_Int32(starlet_star_cache_disk_size_percent, "80");
