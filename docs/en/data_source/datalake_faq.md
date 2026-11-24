@@ -109,3 +109,23 @@ To solve this, restart FE after adding the following configuration items to **fe
 proc_profile_mem_enable=false
 proc_profile_cpu_enable=false
 ```
+
+## Why does writing to Hive use so much space under /tmp/starrocks? What should I set for ViewFS?
+
+`/tmp/starrocks` is the default temporary directory for writes to Hive tables on HDFS or ViewFS. StarRocks writes files there first, then moves them to the table or partition directory at commit time. Large writes or several writes running at once can use a lot of space there. This `/tmp` is on HDFS or ViewFS, not on the local disk of an FE or BE.
+
+StarRocks tries to clean up the temporary directory when a write finishes. A process exit or cleanup failure can leave files behind. Before deleting a directory, check that the write using it has finished.
+
+With ViewFS, also check whether `/tmp` and the table directory are under the same mount point. Even paths starting with `viewfs://cluster/` can point to different HDFS namespaces. A commit can then fail because files cannot be renamed across those mounts.
+
+You can put the temporary directory inside the table directory by running this before the write:
+
+```SQL
+SET hive_temp_staging_dir = '.sr_staging';
+```
+
+For a table at `viewfs://cluster/warehouse/db/table`, temporary files go to `viewfs://cluster/warehouse/db/table/.sr_staging/<UUID>/`. This takes the load off the shared `/tmp/starrocks` directory and avoids a different ViewFS mount between that directory and the table. If a partition has a separate location, check that files can also be renamed there from the temporary directory. The write still needs the same temporary space; only the location changes. You can use another path, but StarRocks needs permission to create, rename, and delete files there.
+
+Before using `.sr_staging`, check your overwrite workload. For `INSERT OVERWRITE` on non-partitioned tables, use a release containing the [relative-staging fix](https://github.com/StarRocks/starrocks/pull/67615). That fix does not make concurrent writes safe. Do not run an overwrite alongside other writes to the same table, including writes from Hive or Spark: the other writes' temporary files can be moved or deleted with the table directory.
+
+This `SET` applies only to the current connection. Set it again if you retry on a new connection.
