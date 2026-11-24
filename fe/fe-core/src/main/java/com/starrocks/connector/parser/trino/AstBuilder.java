@@ -1080,7 +1080,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitIntervalLiteral(IntervalLiteral node, ParseTreeContext context) {
         // StarRocks intervals have a single unit, so translating DAY TO SECOND as DAY would change the value.
-        if (node.getEndField().isPresent()) {
+        // A same-unit qualifier such as DAY TO DAY is a plain DAY interval.
+        if (node.getEndField().isPresent() && node.getEndField().get() != node.getStartField()) {
             throw unsupportedException(String.format("Trino parser on StarRocks does not support the interval " +
                     "qualifier %s TO %s now", node.getStartField(), node.getEndField().get()));
         }

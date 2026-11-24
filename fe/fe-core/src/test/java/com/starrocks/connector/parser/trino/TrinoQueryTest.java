@@ -1007,9 +1007,19 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains("select timestamp '2022-01-01 00:00:00' + interval -'90' minute;",
                 "<slot 2> : '2021-12-31 22:30:00'");
 
+        // A same-unit qualifier is a single-unit interval and keeps the sign the same way.
+        assertPlanContains("select date '2022-01-03' + interval '1' day to day;", "<slot 2> : '2022-01-04'");
+        assertPlanContains("select date '2022-01-03' + interval -'1' day to day;", "<slot 2> : '2022-01-02'");
+        assertPlanContains("select date '2022-01-03' + interval -'-1' day to day;", "<slot 2> : '2022-01-04'");
+        assertPlanContains("select date '2022-01-03' + interval '1' year to year;", "<slot 2> : '2023-01-03'");
+        assertPlanContains("select date '2022-01-03' + interval -'1' year to year;", "<slot 2> : '2021-01-03'");
+        assertPlanContains("select date '2022-01-03' + interval -'-1' year to year;", "<slot 2> : '2023-01-03'");
+
         // A compound qualifier is rejected instead of losing its end field.
         analyzeFail("select date '2022-01-03' + interval '1 12' day to hour",
                 "does not support the interval qualifier DAY TO HOUR");
+        analyzeFail("select date '2022-01-03' + interval '1-2' year to month",
+                "does not support the interval qualifier YEAR TO MONTH");
     }
 
     @Test
