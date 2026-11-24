@@ -408,8 +408,10 @@ public class Database extends MetaObject implements Writable {
     }
 
     /**
-     * A visible materialized index named {@code indexName} -- the base index, which is named after its table, a
-     * rollup or a synchronous materialized view -- with its table.
+     * A visible rollup or synchronous materialized view named {@code indexName}, with its table.
+     *
+     * <p>The base index of a table, which is named after the table, is left out: {@code [_SYNC_MV_]} reads a
+     * materialized index that cannot be read by a table name, and a table is read by its name.
      *
      * <p>A temporary table is visible only in the session that created it, and {@link #idToTable} holds every
      * session's: the ones of other sessions than {@code sessionId} are left out, as a name lookup leaves them out.
@@ -423,6 +425,9 @@ public class Database extends MetaObject implements Writable {
                     continue;
                 }
                 for (MaterializedIndexMeta mvMeta : olapTable.getVisibleIndexMetas()) {
+                    if (mvMeta.getIndexMetaId() == olapTable.getBaseIndexMetaId()) {
+                        continue;
+                    }
                     String name = olapTable.getIndexNameByMetaId(mvMeta.getIndexMetaId());
                     if (name == null) {
                         continue;
