@@ -17,11 +17,14 @@ package com.starrocks.authorization;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
@@ -29,8 +32,16 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.Mockito;
+import org.mockito.stubbing.Answer;
 
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class DatabaseWildcardCleanupTest {
     private static ConnectContext ctx;
@@ -95,6 +106,83 @@ public class DatabaseWildcardCleanupTest {
         for (PrivilegeCollectionV2 collection : List.of(savedUser, savedRole)) {
             collection.removeInvalidObject();
             Assertions.assertTrue(collection.typeToPrivilegeEntryList.isEmpty());
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testKeepWildcardGrantsDuringRecovery(boolean replay) throws Exception {
+        String dbName = "recovering_db_" + replay;
+        String userName = "recovering_user_" + replay;
+        String roleName = "recovering_role_" + replay;
+        execute("CREATE DATABASE " + dbName);
+        execute("CREATE USER " + userName);
+        execute("CREATE ROLE " + roleName);
+        for (String objectType : List.of("TABLES", "VIEWS", "MATERIALIZED VIEWS")) {
+            for (String grantee : List.of(userName, "ROLE " + roleName)) {
+                execute("GRANT SELECT ON ALL " + objectType + " IN DATABASE " + dbName + " TO " + grantee
+                        + " WITH GRANT OPTION");
+            }
+        }
+
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        AuthorizationMgr manager = state.getAuthorizationMgr();
+        UserPrivilegeCollectionV2 userCollection = manager.getUserPrivilegeCollection(
+                UserIdentity.createAnalyzedUserIdentWithIp(userName, "%"));
+        RolePrivilegeCollectionV2 roleCollection = manager.getRolePrivilegeCollection(roleName);
+        LocalMetastore metastore = replay ? Mockito.spy(state.getLocalMetastore()) : state.getLocalMetastore();
+        Database db = metastore.getDb(dbName);
+        execute("DROP DATABASE " + dbName);
+
+        CountDownLatch registrationPaused = new CountDownLatch(1);
+        CountDownLatch resumeRegistration = new CountDownLatch(1);
+        CountDownLatch cleanupStarted = new CountDownLatch(1);
+        Answer<Object> pauseRegistration = invocation -> {
+            registrationPaused.countDown();
+            Assertions.assertTrue(resumeRegistration.await(10, TimeUnit.SECONDS));
+            return invocation.callRealMethod();
+        };
+        EditLog originalEditLog = state.getEditLog();
+        if (replay) {
+            Mockito.doAnswer(pauseRegistration).when(metastore).replayCreateDb(Mockito.any(Database.class));
+        } else {
+            EditLog editLog = Mockito.spy(originalEditLog);
+            Mockito.doAnswer(pauseRegistration).when(editLog).logRecoverDb(Mockito.any(RecoverInfo.class), Mockito.any());
+            state.setEditLog(editLog);
+        }
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> recovery = executor.submit(() -> {
+                if (replay) {
+                    metastore.replayRecoverDatabase(new RecoverInfo(db.getId(), -1L, -1L));
+                } else {
+                    metastore.recoverDatabase(new RecoverDbStmt(dbName));
+                }
+                return null;
+            });
+            Assertions.assertTrue(registrationPaused.await(10, TimeUnit.SECONDS));
+            Assertions.assertNull(metastore.getDbIncludeRecycleBin(db.getId()));
+            Future<?> cleanup = executor.submit(() -> {
+                cleanupStarted.countDown();
+                manager.removeInvalidObject();
+            });
+            Assertions.assertTrue(cleanupStarted.await(10, TimeUnit.SECONDS));
+            Assertions.assertThrows(TimeoutException.class, () -> cleanup.get(500, TimeUnit.MILLISECONDS));
+            resumeRegistration.countDown();
+            recovery.get(10, TimeUnit.SECONDS);
+            cleanup.get(10, TimeUnit.SECONDS);
+            Assertions.assertSame(db, metastore.getDb(db.getId()));
+            assertWildcardEntries(userCollection, true);
+            assertWildcardEntries(roleCollection, true);
+        } finally {
+            resumeRegistration.countDown();
+            executor.shutdown();
+            try {
+                Assertions.assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
+            } finally {
+                state.setEditLog(originalEditLog);
+            }
         }
     }
 

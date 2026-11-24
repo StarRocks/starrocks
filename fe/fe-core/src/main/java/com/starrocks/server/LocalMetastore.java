@@ -312,6 +312,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
     private final GlobalStateMgr stateMgr;
     private final CatalogRecycleBin recycleBin;
+    // Serialize privilege cleanup with database recovery and recovery replay.
+    private final Object databaseRecoveryLock = new Object();
     private ColocateTableIndex colocateTableIndex;
     /**
      * Concurrent colocate table creation process have dependency on each other
@@ -603,6 +605,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     public void recoverDatabase(RecoverDbStmt recoverStmt) throws DdlException {
+        synchronized (databaseRecoveryLock) {
+            recoverDatabaseInternal(recoverStmt);
+        }
+    }
+
+    private void recoverDatabaseInternal(RecoverDbStmt recoverStmt) throws DdlException {
         // check is new db with same name already exist
         if (getDb(recoverStmt.getDbName()) != null) {
             throw new DdlException("Database[" + recoverStmt.getDbName() + "] already exist.");
@@ -730,6 +738,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     public void replayRecoverDatabase(RecoverInfo info) {
+        synchronized (databaseRecoveryLock) {
+            replayRecoverDatabaseInternal(info);
+        }
+    }
+
+    private void replayRecoverDatabaseInternal(RecoverInfo info) {
         long dbId = info.getDbId();
         Database db = recycleBin.replayRecoverDatabase(dbId);
 
@@ -3144,6 +3158,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             db = recycleBin.getDatabase(dbId);
         }
         return db;
+    }
+
+    public boolean databaseExistsForPrivilegeCleanup(long dbId) {
+        synchronized (databaseRecoveryLock) {
+            return getDbIncludeRecycleBin(dbId) != null;
+        }
     }
 
     @Override

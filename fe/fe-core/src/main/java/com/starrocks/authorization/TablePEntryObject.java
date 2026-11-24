@@ -222,7 +222,7 @@ public class TablePEntryObject implements PEntryObject {
                 && !Objects.equals(databaseUUID, PrivilegeBuiltinConstants.ALL_DATABASES_UUID)
                 && Objects.equals(tableUUID, PrivilegeBuiltinConstants.ALL_TABLES_UUID)) {
             return GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getDbIncludeRecycleBin(Long.parseLong(databaseUUID)) != null;
+                    .databaseExistsForPrivilegeCleanup(Long.parseLong(databaseUUID));
         }
         return PEntryObject.super.validateForCleanup();
     }
