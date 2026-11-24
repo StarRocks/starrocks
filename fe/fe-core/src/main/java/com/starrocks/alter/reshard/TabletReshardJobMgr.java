@@ -468,6 +468,7 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
             }
 
             job.registerReshardingTabletsOnRestart();
+            job.addTabletsToInvertedIndexOnRestart();
         }
     }
 

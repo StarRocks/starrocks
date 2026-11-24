@@ -18,6 +18,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.TabletRange;
@@ -26,6 +27,7 @@ import com.starrocks.common.lock.LockTestUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
@@ -37,6 +39,11 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.TabletList;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.transaction.DatabaseTransactionMgr;
+import com.starrocks.transaction.LakeTableTxnStateListener;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.utframe.MockedBackend.MockLakeService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -47,6 +54,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -396,6 +404,302 @@ public class SplitTabletJobReplayTest {
 
         Assertions.assertThrows(TabletReshardException.class, job::runPreparingJob);
         Assertions.assertEquals(TabletReshardJob.JobState.ABORTING, job.getJobState());
+    }
+
+    /**
+     * The inverted index is not in the image: an FE that starts from one rebuilds it from the tablets
+     * installed on partitions, and a split job installs its new tablets only at CLEANING. When that FE
+     * then replays the CLEANING record, loads start writing into the new tablets, so a commit that
+     * cannot resolve them records no partition at all and the transaction turns VISIBLE without its
+     * rows.
+     */
+    @Test
+    public void testImageAtRunningThenReplayedCleaningCommitsIntoNewTablets() throws Exception {
+        TabletReshardJobMgr tabletReshardJobMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        OlapTable table = createTable("image_running_commit_table");
+        SplitTabletJob preparingRecord = replayThroughPreparing(table);
+        try {
+            SplitTabletJob runningRecord = copyInState(preparingRecord, TabletReshardJob.JobState.RUNNING);
+            forgetAsImageLoadedFe(runningRecord);
+
+            recoverFromImage(runningRecord);
+            SplittingTablet family = firstSplittingTablet(runningRecord);
+            long commitVersion = firstReshardingPartition(runningRecord).getCommitVersion();
+            Assertions.assertEquals(family.getNewTabletIds(), tabletReshardJobMgr
+                    .getReshardingTablet(family.getOldTabletId(), commitVersion).getNewTabletIds());
+
+            tabletReshardJobMgr.replayUpdateTabletReshardJob(
+                    copyInState(runningRecord, TabletReshardJob.JobState.CLEANING));
+
+            long physicalPartitionId = firstReshardingPartition(runningRecord).getPhysicalPartitionId();
+            long newIndexId = firstReshardingIndex(runningRecord).getMaterializedIndex().getId();
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+            Assertions.assertEquals(newIndexId, physicalPartition.getLatestBaseIndex().getId());
+
+            TransactionState txnState = commitEveryTabletOfLatestBaseIndex(table, physicalPartition);
+            Assertions.assertTrue(txnState.getTableCommitInfo(table.getId()).getIdToPartitionCommitInfo()
+                            .containsKey(physicalPartitionId),
+                    "a load into the new tablets must commit their partition, not an empty transaction");
+
+            for (long tabletId : newTabletIds(runningRecord)) {
+                assertResolvesTo(tabletId, physicalPartitionId, newIndexId);
+            }
+        } finally {
+            dropFromManager(preparingRecord);
+        }
+    }
+
+    /**
+     * The same image, but this FE is the leader and runs the job on: the identical fallback, the
+     * CLEANING install and FINISHED all happen here, so the kept child has to be in the inverted
+     * index before the job runs, and MaterializedIndex#removeTablet drops the discarded one.
+     */
+    @Test
+    public void testImageAtRunningThenLeaderFinishesJob() throws Exception {
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        OlapTable table = createTable("image_running_leader_table");
+        SplitTabletJob preparingRecord = replayThroughPreparing(table);
+        try {
+            SplitTabletJob runningRecord = copyInState(preparingRecord, TabletReshardJob.JobState.RUNNING);
+            long keptTabletId = firstSplittingTablet(runningRecord).getNewTabletIds().get(0);
+            long discardedTabletId = firstSplittingTablet(runningRecord).getNewTabletIds().get(1);
+            forgetAsImageLoadedFe(runningRecord);
+            installIdenticalFallbackLakeServiceMock();
+
+            SplitTabletJob recovered = recoverFromImage(runningRecord);
+            for (int i = 0; i < 10 && recovered.getJobState() != TabletReshardJob.JobState.FINISHED; i++) {
+                recovered.run();
+            }
+            Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, recovered.getJobState());
+
+            long physicalPartitionId = firstReshardingPartition(runningRecord).getPhysicalPartitionId();
+            long newIndexId = firstReshardingIndex(runningRecord).getMaterializedIndex().getId();
+            Assertions.assertEquals(newIndexId,
+                    table.getPhysicalPartition(physicalPartitionId).getLatestBaseIndex().getId());
+            assertResolvesTo(keptTabletId, physicalPartitionId, newIndexId);
+            Assertions.assertNull(invertedIndex.getTabletMeta(discardedTabletId));
+        } finally {
+            dropFromManager(preparingRecord);
+        }
+    }
+
+    /**
+     * An image at RUNNING carries the full family, because the leader takes the identical fallback in
+     * memory and journals it only with the CLEANING record. Recovery must therefore put both children
+     * back, and replaying that CLEANING record then prunes the discarded one, as it does on an FE that
+     * replayed PREPARING.
+     */
+    @Test
+    public void testImageAtRunningThenReplayedFallbackCleaningPrunesDiscardedTablet() throws Exception {
+        TabletReshardJobMgr tabletReshardJobMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        OlapTable table = createTable("image_running_fallback_table");
+        SplitTabletJob preparingRecord = replayThroughPreparing(table);
+        try {
+            long keptTabletId = firstSplittingTablet(preparingRecord).getNewTabletIds().get(0);
+            long discardedTabletId = firstSplittingTablet(preparingRecord).getNewTabletIds().get(1);
+            SplitTabletJob cleaningRecord = leaderFallbackCleaningRecord(preparingRecord, discardedTabletId);
+            SplitTabletJob runningRecord = copyInState(preparingRecord, TabletReshardJob.JobState.RUNNING);
+            forgetAsImageLoadedFe(runningRecord);
+
+            recoverFromImage(runningRecord);
+            Assertions.assertNotNull(invertedIndex.getTabletMeta(keptTabletId));
+            Assertions.assertNotNull(invertedIndex.getTabletMeta(discardedTabletId));
+
+            tabletReshardJobMgr.replayUpdateTabletReshardJob(journalCopy(cleaningRecord));
+
+            assertResolvesTo(keptTabletId, firstReshardingPartition(cleaningRecord).getPhysicalPartitionId(),
+                    firstReshardingIndex(cleaningRecord).getMaterializedIndex().getId());
+            Assertions.assertNull(invertedIndex.getTabletMeta(discardedTabletId));
+        } finally {
+            dropFromManager(preparingRecord);
+        }
+    }
+
+    /**
+     * Characterization: an image at CLEANING holds the new index already installed, minus the child
+     * the identical fallback dropped, so the rebuild from partitions alone gives the right inverted
+     * index. Recovering the job must not bring the dropped child back.
+     */
+    @Test
+    public void testImageAtCleaningKeepsOnlyTheInstalledChildren() throws Exception {
+        TabletReshardJobMgr tabletReshardJobMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        OlapTable table = createTable("image_cleaning_table");
+        SplitTabletJob preparingRecord = replayThroughPreparing(table);
+        try {
+            long keptTabletId = firstSplittingTablet(preparingRecord).getNewTabletIds().get(0);
+            long discardedTabletId = firstSplittingTablet(preparingRecord).getNewTabletIds().get(1);
+            SplitTabletJob cleaningRecord = leaderFallbackCleaningRecord(preparingRecord, discardedTabletId);
+            tabletReshardJobMgr.replayUpdateTabletReshardJob(journalCopy(cleaningRecord));
+            forgetAsImageLoadedFe(cleaningRecord);
+            // What image load does before the job manager block: rebuild from the installed indexes.
+            GlobalStateMgr.getCurrentState().getLocalMetastore().recreateTabletInvertIndex();
+
+            recoverFromImage(cleaningRecord);
+
+            assertResolvesTo(keptTabletId, firstReshardingPartition(cleaningRecord).getPhysicalPartitionId(),
+                    firstReshardingIndex(cleaningRecord).getMaterializedIndex().getId());
+            Assertions.assertNull(invertedIndex.getTabletMeta(discardedTabletId));
+        } finally {
+            dropFromManager(preparingRecord);
+        }
+    }
+
+    /**
+     * Image recovery adds the new tablets exactly in the states where an FE that replayed PREPARING
+     * holds them in its inverted index while the partition does not: PREPARING and RUNNING. PENDING
+     * has not reserved a version, CLEANING and FINISHED are covered by the rebuild from partitions
+     * (and must not bring back a child the fallback dropped), and ABORTING/ABORTED are giving them up.
+     */
+    @Test
+    public void testImageRecoveryAddsNewTabletsOnlyBeforeCleaning() throws Exception {
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        // Collected rather than asserted per state, so one run reports the whole matrix.
+        List<String> mismatches = new ArrayList<>();
+        for (TabletReshardJob.JobState state : TabletReshardJob.JobState.values()) {
+            SplitTabletJob preparingRecord =
+                    replayThroughPreparing(createTable("image_matrix_" + state.name().toLowerCase()));
+            try {
+                SplitTabletJob record = copyInState(preparingRecord, state);
+                forgetAsImageLoadedFe(record);
+
+                recoverFromImage(record);
+
+                List<Long> newTabletIds = newTabletIds(record);
+                long resolved = newTabletIds.stream().filter(id -> invertedIndex.getTabletMeta(id) != null).count();
+                boolean expectAdded = state == TabletReshardJob.JobState.PREPARING
+                        || state == TabletReshardJob.JobState.RUNNING;
+                if (resolved != (expectAdded ? newTabletIds.size() : 0)) {
+                    mismatches.add(state + ": " + resolved + " of " + newTabletIds.size() + " new tablets resolve");
+                }
+            } finally {
+                dropFromManager(preparingRecord);
+            }
+        }
+
+        Assertions.assertEquals(List.of(), mismatches);
+    }
+
+    /**
+     * Bring a split job to where every FE that replayed its PREPARING record stands: the commit version
+     * reserved, the new tablets in the inverted index and the family registered. That is the FE whose
+     * image the recovery tests load.
+     */
+    private SplitTabletJob replayThroughPreparing(OlapTable table) throws Exception {
+        TabletReshardJobMgr tabletReshardJobMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        SplitTabletJob origin = createSplitJob(table);
+        origin.createShardsOnStarOS();
+        tabletReshardJobMgr.replayUpdateTabletReshardJob(journalCopy(origin));
+
+        origin.setJobState(TabletReshardJob.JobState.PREPARING);
+        SplitTabletJob preparingRecord = (SplitTabletJob) journalCopy(origin);
+        tabletReshardJobMgr.replayUpdateTabletReshardJob(preparingRecord);
+        return preparingRecord;
+    }
+
+    /**
+     * The leader's CLEANING record after it took the identical fallback, built from its own copy of the
+     * job with the two mutations runRunningJob makes (see testLeaderIdenticalFallbackShrinksTheSplitFamily).
+     * removeTablet also drops the discarded id from this process's inverted index.
+     */
+    private static SplitTabletJob leaderFallbackCleaningRecord(SplitTabletJob preparingRecord, long discardedTabletId) {
+        SplitTabletJob leaderView = (SplitTabletJob) journalCopy(preparingRecord);
+        firstReshardingIndex(leaderView).getMaterializedIndex().removeTablet(discardedTabletId);
+        firstSplittingTablet(leaderView).fallbackToIdenticalTablet();
+        leaderView.jobState = TabletReshardJob.JobState.CLEANING;
+        return leaderView;
+    }
+
+    /**
+     * Turn this process into an FE that starts from an image written by an FE which replayed up to
+     * record. It shares this process's catalog, but its inverted index was rebuilt from partitions and
+     * its job manager comes only from the image block, so it knows neither the job, its registry entries
+     * nor its new tablets yet.
+     */
+    private static void forgetAsImageLoadedFe(SplitTabletJob record) {
+        TabletReshardJobMgr tabletReshardJobMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        dropFromManager(record);
+        for (ReshardingPhysicalPartition reshardingPhysicalPartition : record.getReshardingPhysicalPartitions().values()) {
+            for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition.getReshardingIndexes().values()) {
+                for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
+                    Assertions.assertNull(tabletReshardJobMgr.getReshardingTablet(
+                            reshardingTablet.getFirstOldTabletId(), reshardingPhysicalPartition.getCommitVersion()));
+                }
+            }
+        }
+        List<Long> newTabletIds = newTabletIds(record);
+        invertedIndex.deleteTablets(newTabletIds);
+        for (long tabletId : newTabletIds) {
+            Assertions.assertNull(invertedIndex.getTabletMeta(tabletId));
+        }
+    }
+
+    // Write record into a TabletReshardJobMgr image block and load it the way FE startup does:
+    // TabletReshardJobMgr.load -> readJson -> gsonPostProcess.
+    private static SplitTabletJob recoverFromImage(SplitTabletJob record) throws Exception {
+        TabletReshardJobMgr imageSide = new TabletReshardJobMgr();
+        imageSide.getTabletReshardJobs().put(record.getJobId(), journalCopy(record));
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        imageSide.save(image.getImageWriter());
+        SRMetaBlockReader reader = image.getMetaBlockReader();
+        TabletReshardJobMgr tabletReshardJobMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        tabletReshardJobMgr.load(reader);
+        reader.close();
+        return (SplitTabletJob) tabletReshardJobMgr.getTabletReshardJob(record.getJobId());
+    }
+
+    private static void dropFromManager(SplitTabletJob record) {
+        GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().getTabletReshardJobs().remove(record.getJobId());
+        record.unregisterReshardingTablets();
+    }
+
+    private static SplitTabletJob copyInState(SplitTabletJob record, TabletReshardJob.JobState state) {
+        SplitTabletJob copy = (SplitTabletJob) journalCopy(record);
+        copy.jobState = state;
+        return copy;
+    }
+
+    private static List<Long> newTabletIds(SplitTabletJob record) {
+        List<Long> tabletIds = new ArrayList<>();
+        for (ReshardingPhysicalPartition reshardingPhysicalPartition : record.getReshardingPhysicalPartitions().values()) {
+            for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition.getReshardingIndexes().values()) {
+                for (Tablet tablet : reshardingIndex.getMaterializedIndex().getTablets()) {
+                    tabletIds.add(tablet.getId());
+                }
+            }
+        }
+        return tabletIds;
+    }
+
+    private static void assertResolvesTo(long tabletId, long physicalPartitionId, long indexId) {
+        TabletMeta tabletMeta = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(tabletId);
+        Assertions.assertNotNull(tabletMeta, "tablet " + tabletId + " is not in the inverted index");
+        Assertions.assertEquals(physicalPartitionId, tabletMeta.getPhysicalPartitionId());
+        Assertions.assertEquals(indexId, tabletMeta.getIndexId());
+    }
+
+    // Commit a load that wrote every tablet of the partition's latest base index. The listener resolves
+    // the written tablets through the inverted index, as a shared-data commit does.
+    private static TransactionState commitEveryTabletOfLatestBaseIndex(OlapTable table, PhysicalPartition partition)
+            throws Exception {
+        DatabaseTransactionMgr dbTxnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getDatabaseTransactionMgr(db.getId());
+        long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
+                .getNextTransactionId();
+        TransactionState txnState = new TransactionState(db.getId(), List.of(table.getId()), txnId,
+                "image_recovery_load_" + txnId, null, TransactionState.LoadJobSourceType.BACKEND_STREAMING, null, 0,
+                60_000);
+        List<TabletCommitInfo> finishedTablets = new ArrayList<>();
+        for (Tablet tablet : partition.getLatestBaseIndex().getTablets()) {
+            finishedTablets.add(new TabletCommitInfo(tablet.getId(), 1));
+        }
+        LakeTableTxnStateListener listener = new LakeTableTxnStateListener(dbTxnMgr, table);
+        listener.prePrepared(txnState, finishedTablets, Collections.emptyList());
+        txnState.setTransactionStatus(TransactionStatus.COMMITTED);
+        listener.preWriteCommitLog(txnState);
+        return txnState;
     }
 
     private static AtomicInteger countJournalWrites() {
