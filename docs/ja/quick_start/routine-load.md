@@ -490,7 +490,7 @@ LatestSourcePosition: {"0":"5"}
 
 ## Verify that data is stored in MinIO
 
-MinIO を開き、[http://localhost:9001/browser/](http://localhost:9001/browser/) で `my-starrocks-bucket` の下にオブジェクトが保存されていることを確認します。
+MinIO を開き、[http://localhost:9001/console/browser/](http://localhost:9001/console/browser/) で `my-starrocks-bucket` の下にオブジェクトが保存されていることを確認します。
 
 ---
 

@@ -448,7 +448,7 @@ curl --location-trusted -u root             \
 
 ## MinIO にデータが保存されていることを確認する
 
-MinIO を開き、[http://localhost:9001/browser/my-starrocks-bucket](http://localhost:9001/browser/my-starrocks-bucket) にアクセスして、`my-starrocks-bucket/` 以下にエントリがあることを確認します。
+MinIO を開き、[http://localhost:9001/console/browser/my-starrocks-bucket](http://localhost:9001/console/browser/my-starrocks-bucket) にアクセスして、`my-starrocks-bucket/` 以下にエントリがあることを確認します。
 
 :::tip
 `my-starrocks-bucket/` 以下のフォルダ名はデータをロードした際に生成されます。`my-starrocks-bucket` の下に単一のディレクトリがあり、その下にさらに 2 つのディレクトリがあるはずです。それらのディレクトリにはデータ、メタデータ、またはスキーマエントリが含まれています。
