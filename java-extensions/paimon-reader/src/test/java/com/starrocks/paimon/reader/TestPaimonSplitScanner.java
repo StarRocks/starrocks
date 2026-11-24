@@ -19,10 +19,41 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.io.StreamCorruptedException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.HashMap;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 public class TestPaimonSplitScanner {
+
+    // An encoded table the BE cannot deserialize, e.g. one written by an FE that bundles an
+    // incompatible Paimon version, must surface its own error rather than an NPE on the null table.
+    @Test
+    public void testOpenReportsTableDecodeFailure() {
+        String notJavaSerialized = Base64.getUrlEncoder().withoutPadding()
+                .encodeToString("not a java serialized object".getBytes(StandardCharsets.UTF_8));
+        HashMap<String, String> params = new HashMap<>();
+        params.put("required_fields", "uuid");
+        params.put("native_table", notJavaSerialized);
+        params.put("split_info", notJavaSerialized);
+        params.put("predicate_info", notJavaSerialized);
+        params.put("time_zone", "UTC");
+
+        PaimonSplitScanner scanner = new PaimonSplitScanner(4096, params);
+        IOException e = assertThrows(IOException.class, scanner::open);
+
+        assertTrue(e.getMessage().startsWith("Failed to open the paimon reader for table <not decoded>"),
+                e.getMessage());
+        assertTrue(e.getMessage().contains(StreamCorruptedException.class.getName()), e.getMessage());
+        assertFalse(e.getMessage().contains(NullPointerException.class.getName()), e.getMessage());
+        assertInstanceOf(StreamCorruptedException.class, e.getCause().getCause());
+    }
 
     @Disabled("Unusable ut, because of lack native_table parameter")
     @Test
