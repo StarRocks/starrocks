@@ -358,6 +358,55 @@ public class LoadsSystemTableTest {
     }
 
     /**
+     * A stream load task that left the manager before the loads history sync copied it is listed too, and only
+     * once when it left while the manager's tasks were read, so the sync neither misses nor duplicates it.
+     */
+    @Test
+    public void testQuery_listsTasksPendingLoadsHistoryOnce(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked LoadMgr loadMgr,
+            @Mocked StreamLoadMgr streamLoadMgr,
+            @Mocked LoadJob loadJobBefore,
+            @Mocked LoadJob loadJobAfter,
+            @Mocked LoadJob loadJobUnfinished,
+            @Mocked AbstractStreamLoadTask streamTaskBefore,
+            @Mocked AbstractStreamLoadTask streamTaskAfter,
+            @Mocked AbstractStreamLoadTask pendingTask) {
+        long anchorMs = wireMocks(globalStateMgr, loadMgr, streamLoadMgr,
+                loadJobBefore, loadJobAfter, loadJobUnfinished,
+                streamTaskBefore, streamTaskAfter);
+        new Expectations() {
+            {
+                streamLoadMgr.getTasksPendingLoadsHistory(null);
+                minTimes = 0;
+                result = Lists.newArrayList(pendingTask, streamTaskAfter);
+
+                pendingTask.getDbId();
+                minTimes = 0;
+                result = -1L;
+                pendingTask.getLoadFinishTimeMs();
+                minTimes = 0;
+                result = anchorMs;
+                pendingTask.getLoadStartTimeMs();
+                minTimes = 0;
+                result = null;
+                pendingTask.getCreateTimeMs();
+                minTimes = 0;
+                result = null;
+                pendingTask.toThrift();
+                minTimes = 0;
+                result = Lists.newArrayList(loadInfoWithLabel("pendingTask"));
+            }
+        };
+
+        List<String> got = labels(LoadsSystemTable.query(new TGetLoadsParams()));
+
+        assertEquals(6, got.size());
+        assertTrue(got.contains("pendingTask"));
+        assertEquals(1, got.stream().filter("streamTaskAfter"::equals).count());
+    }
+
+    /**
      * Request carries the bound as UTC epoch ms (the new contract).
      * Only Before-jobs and the unfinished load job survive.
      */

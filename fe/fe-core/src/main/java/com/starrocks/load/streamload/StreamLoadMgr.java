@@ -15,6 +15,7 @@
 package com.starrocks.load.streamload;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
@@ -55,6 +56,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -80,6 +82,16 @@ public class StreamLoadMgr implements MemoryTrackable {
     // Only used for sync stream load
     // txnId -> StreamLoadTask (only StreamLoadTask can be sync)
     private Map<Long, StreamLoadTask> txnIdToSyncStreamLoadTasks;
+
+    // Tasks that left idToStreamLoadTask (evicted, expired or replaced by a task of the same label) while
+    // loads_history may still lack them. information_schema.loads keeps listing them until LoadsHistorySyncer has
+    // copied them, so leaving the manager does not drop them from loads_history. Guarded by the manager lock.
+    protected Deque<AbstractStreamLoadTask> tasksPendingLoadsHistory;
+    // Every listed task that finished before this time is in loads_history. Long.MAX_VALUE while this FE does not
+    // sync loads_history, so nothing is kept for it.
+    private volatile long loadsHistorySyncedBeforeMs = Long.MAX_VALUE;
+    private long droppedPendingLoadsHistoryTasks = 0;
+    private long lastDroppedPendingLoadsHistoryWarnMs = 0;
 
     private Map<Long, Map<String, AbstractStreamLoadTask>> dbToLabelToStreamLoadTask;
 
@@ -112,6 +124,11 @@ public class StreamLoadMgr implements MemoryTrackable {
         LOG.debug("begin to init stream load manager");
         idToStreamLoadTask = Maps.newConcurrentMap();
         txnIdToSyncStreamLoadTasks = Maps.newConcurrentMap();
+<<<<<<< HEAD
+=======
+        syncStreamLoadTaskQueue = new ConcurrentLinkedDeque<>();
+        tasksPendingLoadsHistory = new ArrayDeque<>();
+>>>>>>> afd478d ([BugFix] Keep stream load tasks listed until loads_history has copied them (#84217))
         dbToLabelToStreamLoadTask = Maps.newConcurrentMap();
         lock = new ReentrantReadWriteLock(true);
     }
@@ -345,6 +362,7 @@ public class StreamLoadMgr implements MemoryTrackable {
             }
         }
 
+<<<<<<< HEAD
         long dbId = task.getDBId();
         String label = task.getLabel();
         Map<String, AbstractStreamLoadTask> labelToStreamLoadTask = null;
@@ -356,6 +374,31 @@ public class StreamLoadMgr implements MemoryTrackable {
         }
         labelToStreamLoadTask.put(label, task);
         idToStreamLoadTask.put(label, task);
+=======
+            long dbId = task.getDBId();
+            Map<String, AbstractStreamLoadTask> labelToStreamLoadTask = null;
+            if (dbToLabelToStreamLoadTask.containsKey(dbId)) {
+                labelToStreamLoadTask = dbToLabelToStreamLoadTask.get(dbId);
+            } else {
+                labelToStreamLoadTask = Maps.newConcurrentMap();
+                dbToLabelToStreamLoadTask.put(dbId, labelToStreamLoadTask);
+            }
+            labelToStreamLoadTask.put(label, task);
+            AbstractStreamLoadTask previousTask = idToStreamLoadTask.put(label, task);
+            // A label has one map entry; its previous task must not remain retained by the eviction queue.
+            if (previousTask instanceof StreamLoadTask && (previousTask != task || !syncStreamLoad)) {
+                syncStreamLoadTaskQueue.remove(previousTask);
+            }
+            // A retry of a label replaces its task, which may still be running or not yet in loads_history.
+            if (previousTask != null && previousTask != task) {
+                unprotectedKeepForLoadsHistory(previousTask);
+            }
+            // Queue only once the map holds the task, after cleanup has made room for it.
+            // Re-registering the same sync task preserves its existing place rather than duplicating it.
+            if (syncStreamLoad && (previousTask != task || !syncStreamLoadTaskQueue.contains(task))) {
+                syncStreamLoadTaskQueue.add((StreamLoadTask) task);
+            }
+>>>>>>> afd478d ([BugFix] Keep stream load tasks listed until loads_history has copied them (#84217))
 
         // register txn state listener
         if (addTxnCallback) {
@@ -521,6 +564,7 @@ public class StreamLoadMgr implements MemoryTrackable {
                     if (streamLoadTask instanceof StreamLoadTask && ((StreamLoadTask) streamLoadTask).isSyncStreamLoad()) {
                         txnIdToSyncStreamLoadTasks.remove(streamLoadTask.getTxnId());
                     }
+                    unprotectedKeepForLoadsHistory(streamLoadTask);
                     LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, streamLoadTask.getId())
                             .add("label", streamLoadTask.getLabel())
                             .add("end_timestamp", streamLoadTask.endTimeMs())
@@ -542,6 +586,126 @@ public class StreamLoadMgr implements MemoryTrackable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    // Evicts at most num of the oldest finished sync tasks; the caller holds the manager write lock.
+    private void unprotectedEvictFinishedSyncStreamLoadTasks(int num) {
+        int evicted = 0;
+        Iterator<StreamLoadTask> iterator = syncStreamLoadTaskQueue.iterator();
+        while (iterator.hasNext() && evicted < num) {
+            StreamLoadTask streamLoadTask = iterator.next();
+            if (idToStreamLoadTask.get(streamLoadTask.getLabel()) != streamLoadTask) {
+                // removed by another cleanup
+                iterator.remove();
+            } else if (streamLoadTask.isFinalState()) {
+                unprotectedRemoveTaskFromDb(streamLoadTask);
+                idToStreamLoadTask.remove(streamLoadTask.getLabel());
+                txnIdToSyncStreamLoadTasks.remove(streamLoadTask.getTxnId());
+                iterator.remove();
+                evicted++;
+                unprotectedKeepForLoadsHistory(streamLoadTask);
+            }
+        }
+    }
+
+    // drops the queued sync tasks that another cleanup has removed; the caller holds the write lock
+    private void unprotectedPruneSyncStreamLoadTaskQueue() {
+        syncStreamLoadTaskQueue.removeIf(task -> idToStreamLoadTask.get(task.getLabel()) != task);
+    }
+
+    /**
+     * Called by LoadsHistorySyncer after each successful sync with the time before which every listed task that
+     * finished is in loads_history, and with Long.MAX_VALUE once this FE stops syncing loads_history. Drops the
+     * tasks kept for loads_history that it now has.
+     */
+    public void setLoadsHistorySyncedBeforeMs(long syncedBeforeMs) {
+        writeLock();
+        try {
+            loadsHistorySyncedBeforeMs = syncedBeforeMs;
+            Iterator<AbstractStreamLoadTask> iterator = tasksPendingLoadsHistory.iterator();
+            while (iterator.hasNext()) {
+                AbstractStreamLoadTask task = iterator.next();
+                if (!mayMissFromLoadsHistory(task)) {
+                    iterator.remove();
+                    unprotectedForgetSyncTxn(task);
+                }
+            }
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    // The tasks kept for loads_history, all of them or those of one label.
+    public List<AbstractStreamLoadTask> getTasksPendingLoadsHistory(String label) {
+        readLock();
+        try {
+            return tasksPendingLoadsHistory.stream()
+                    .filter(task -> label == null || label.equals(task.getLabel()))
+                    .collect(Collectors.toList());
+        } finally {
+            readUnlock();
+        }
+    }
+
+    // Whether loads_history may still lack the task: LoadsHistorySyncer copies a task after it finishes.
+    private boolean mayMissFromLoadsHistory(AbstractStreamLoadTask task) {
+        long syncedBeforeMs = loadsHistorySyncedBeforeMs;
+        if (syncedBeforeMs == Long.MAX_VALUE) {
+            return false;
+        }
+        if (!task.isFinalState()) {
+            return true;
+        }
+        // A task that ended without a finish time, such as a begin rejected for a used label, is never synced.
+        long finishMs = task.getFinishTimestampMs();
+        return finishMs > 0 && finishMs >= syncedBeforeMs;
+    }
+
+    // Keeps a task that left idToStreamLoadTask listed until loads_history has it; the caller holds the write lock.
+    private void unprotectedKeepForLoadsHistory(AbstractStreamLoadTask task) {
+        if (!mayMissFromLoadsHistory(task)) {
+            return;
+        }
+        tasksPendingLoadsHistory.add(task);
+        while (tasksPendingLoadsHistory.size() > Config.stream_load_task_keep_max_num) {
+            AbstractStreamLoadTask dropped = unprotectedPollOldestPendingLoadsHistoryTask();
+            unprotectedForgetSyncTxn(dropped);
+            droppedPendingLoadsHistoryTasks++;
+            long currentMs = System.currentTimeMillis();
+            if (currentMs - lastDroppedPendingLoadsHistoryWarnMs >= 60_000L) {
+                LOG.warn("loads_history misses {} stream load tasks, the last one with label {}: more than "
+                                + "stream_load_task_keep_max_num ({}) tasks left the stream load manager before "
+                                + "the loads history sync copied them",
+                        droppedPendingLoadsHistoryTasks, dropped.getLabel(), Config.stream_load_task_keep_max_num);
+                droppedPendingLoadsHistoryTasks = 0;
+                lastDroppedPendingLoadsHistoryWarnMs = currentMs;
+            }
+        }
+    }
+
+    // The oldest finished task kept for loads_history, else the oldest one. A replaced task that is still running is
+    // dropped last: only this list removes its txn id entry once it finishes. The caller holds the write lock.
+    private AbstractStreamLoadTask unprotectedPollOldestPendingLoadsHistoryTask() {
+        Iterator<AbstractStreamLoadTask> iterator = tasksPendingLoadsHistory.iterator();
+        while (iterator.hasNext()) {
+            AbstractStreamLoadTask task = iterator.next();
+            if (task.isFinalState()) {
+                iterator.remove();
+                return task;
+            }
+        }
+        return tasksPendingLoadsHistory.poll();
+    }
+
+    // Drops the txn id entry of a kept sync task once it is no longer kept. A running one keeps it: planning and
+    // committing its load look the task up by txn id. The caller holds the write lock.
+    private void unprotectedForgetSyncTxn(AbstractStreamLoadTask task) {
+        if (task.isFinalState() && task instanceof StreamLoadTask && ((StreamLoadTask) task).isSyncStreamLoad()) {
+            txnIdToSyncStreamLoadTasks.remove(task.getTxnId(), task);
+        }
+    }
+
+>>>>>>> afd478d ([BugFix] Keep stream load tasks listed until loads_history has copied them (#84217))
     // There maybe many streamLoadTasks in memory when enable_load_profile = true,
     // StreamLoadTask which type is SyncStreamLoad should be clean up firstly
     public void cleanSyncStreamLoadTasks() {
@@ -556,6 +720,7 @@ public class StreamLoadMgr implements MemoryTrackable {
                     unprotectedRemoveTaskFromDb(streamLoadTask);
                     iterator.remove();
                     txnIdToSyncStreamLoadTasks.remove(streamLoadTask.getTxnId());
+                    unprotectedKeepForLoadsHistory(streamLoadTask);
                     LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, streamLoadTask.getId())
                             .add("label", streamLoadTask.getLabel())
                             .add("end_timestamp", streamLoadTask.endTimeMs())
@@ -699,7 +864,8 @@ public class StreamLoadMgr implements MemoryTrackable {
     public AbstractStreamLoadTask getTaskById(long id) {
         readLock();
         try {
-            for (AbstractStreamLoadTask task : idToStreamLoadTask.values()) {
+            // information_schema.loads lists the tasks kept for loads_history, so they are found by id too.
+            for (AbstractStreamLoadTask task : Iterables.concat(idToStreamLoadTask.values(), tasksPendingLoadsHistory)) {
                 if (id == task.getId()) {
                     return task;
                 }
@@ -719,6 +885,34 @@ public class StreamLoadMgr implements MemoryTrackable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * The registered task {@link #getTaskById} finds {@code id} in: the task itself, or the multi-statement
+     * transaction one of whose statements has the id.
+     */
+    public AbstractStreamLoadTask getRegisteredTaskById(long id) {
+        readLock();
+        try {
+            for (AbstractStreamLoadTask task : Iterables.concat(idToStreamLoadTask.values(), tasksPendingLoadsHistory)) {
+                if (id == task.getId()) {
+                    return task;
+                }
+                if (task instanceof StreamLoadMultiStmtTask multiTask) {
+                    for (StreamLoadTask child : multiTask.getTasks()) {
+                        if (id == child.getId()) {
+                            return task;
+                        }
+                    }
+                }
+            }
+            return null;
+        } finally {
+            readUnlock();
+        }
+    }
+
+>>>>>>> afd478d ([BugFix] Keep stream load tasks listed until loads_history has copied them (#84217))
     // return all of stream load task named label in all of db
     // return all tasks if label is null
     public List<AbstractStreamLoadTask> getTaskByName(String label) {
@@ -816,9 +1010,11 @@ public class StreamLoadMgr implements MemoryTrackable {
         long latestTime = -1L;
         readLock();
         try {
-            for (AbstractStreamLoadTask task : idToStreamLoadTask.values()) {
-                if (task instanceof StreamLoadTask && ((StreamLoadTask) task).isFinal()) {
-                    latestTime = Math.max(latestTime, ((StreamLoadTask) task).getFinishTimestampMs());
+            // Every kind of task is listed in information_schema.loads, merge commit and multi-statement loads too,
+            // so each one that finishes has LoadsHistorySyncer sync again.
+            for (AbstractStreamLoadTask task : Iterables.concat(idToStreamLoadTask.values(), tasksPendingLoadsHistory)) {
+                if (task.isFinalState()) {
+                    latestTime = Math.max(latestTime, task.getFinishTimestampMs());
                 }
             }
         } finally {
