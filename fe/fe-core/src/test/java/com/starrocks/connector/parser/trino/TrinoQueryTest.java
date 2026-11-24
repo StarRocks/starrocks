@@ -14,10 +14,13 @@
 
 package com.starrocks.connector.parser.trino;
 
+import com.starrocks.sql.ast.QueryStatement;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 public class TrinoQueryTest extends TrinoTestBase {
     @BeforeAll
