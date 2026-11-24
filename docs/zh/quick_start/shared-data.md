@@ -457,7 +457,7 @@ curl --location-trusted -u root             \
 
 ## 验证数据是否存储在 MinIO 中
 
-打开 MinIO [http://localhost:9001/browser/my-starrocks-bucket](http://localhost:9001/browser/my-starrocks-bucket) 并验证您在 `my-starrocks-bucket/` 下是否有条目
+打开 MinIO [http://localhost:9001/console/browser/my-starrocks-bucket](http://localhost:9001/console/browser/my-starrocks-bucket) 并验证您在 `my-starrocks-bucket/` 下是否有条目
 
 :::tip
 `my-starrocks-bucket/` 下的文件夹名称是在加载数据时生成的。您应该在 `my-starrocks-bucket` 下看到一个目录，然后在其下看到两个目录。在这些目录中，您会找到数据、元数据或模式条目。
