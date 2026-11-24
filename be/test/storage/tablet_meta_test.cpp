@@ -336,4 +336,32 @@ TEST(TabletMetaTest, sum_rowset_data_disk_size_multiple_rowsets) {
     ASSERT_EQ(333u, tablet_meta->tablet_footprint());
 }
 
+TEST(TabletMetaTest, remove_delete_predicate_frees_removed_predicate) {
+    TabletMetaSharedPtr tablet_meta = TabletMeta::create();
+    for (int64_t version = 2; version <= 4; ++version) {
+        DeletePredicatePB delete_predicate;
+        delete_predicate.add_sub_predicates("k1=" + std::to_string(version));
+        InPredicatePB* in_predicate = delete_predicate.add_in_predicates();
+        in_predicate->set_column_name("k2");
+        in_predicate->add_values("v" + std::to_string(version));
+        tablet_meta->add_delete_predicate(delete_predicate, version);
+    }
+
+    tablet_meta->remove_delete_predicate_by_version(Version(3, 3));
+
+    const DelPredicateArray& delete_predicates = tablet_meta->delete_predicates();
+    ASSERT_EQ(2, delete_predicates.size());
+    ASSERT_EQ(2, delete_predicates.Get(0).version());
+    ASSERT_EQ("k1=2", delete_predicates.Get(0).sub_predicates(0));
+    ASSERT_EQ(4, delete_predicates.Get(1).version());
+    ASSERT_EQ("k1=4", delete_predicates.Get(1).sub_predicates(0));
+    ASSERT_EQ(0, delete_predicates.ClearedCount());
+
+    tablet_meta->remove_delete_predicate_by_version(Version(2, 2));
+    tablet_meta->remove_delete_predicate_by_version(Version(4, 4));
+
+    ASSERT_EQ(0, delete_predicates.size());
+    ASSERT_EQ(0, delete_predicates.ClearedCount());
+}
+
 } // namespace starrocks
