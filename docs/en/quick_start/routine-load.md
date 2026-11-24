@@ -492,7 +492,7 @@ LatestSourcePosition: {"0":"5"}
 
 ## Verify that data is stored in MinIO
 
-Open MinIO [http://localhost:9001/browser/](http://localhost:9001/browser/) and verify that there are objects stored under `my-starrocks-bucket`.
+Open MinIO [http://localhost:9001/console/browser/](http://localhost:9001/console/browser/) and verify that there are objects stored under `my-starrocks-bucket`.
 
 ---
 

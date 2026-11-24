@@ -451,7 +451,7 @@ curl --location-trusted -u root             \
 
 ## Verify that data is stored in MinIO
 
-Open MinIO [http://localhost:9001/browser/my-starrocks-bucket](http://localhost:9001/browser/my-starrocks-bucket) and verify that you have entries below `my-starrocks-bucket/`
+Open MinIO [http://localhost:9001/console/browser/my-starrocks-bucket](http://localhost:9001/console/browser/my-starrocks-bucket) and verify that you have entries below `my-starrocks-bucket/`
 
 :::tip
 The folder names below `my-starrocks-bucket/` are generated when you load the data. You should see a single directory below `my-starrocks-bucket`, and then two more below that. In those directories you will find the data, metadata, or schema entries.
