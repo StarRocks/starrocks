@@ -32,6 +32,7 @@ import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.MockGenericPool;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -48,6 +49,8 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class LeaderOpExecutorTest {
@@ -224,6 +227,58 @@ public class LeaderOpExecutorTest {
         Assertions.assertNotEquals(ErrorCode.ERR_FORWARD_RESULT_UNKNOWN, ctx.getState().getErrorCode());
         Assertions.assertTrue(ctx.getState().getErrorMessage().contains("Connection refused"),
                 ctx.getState().getErrorMessage());
+    }
+
+    /**
+     * An FE that receives a forward and forwards it again (its sender had a stale view of the leader) must
+     * hand the result-unknown error back to the sender when its own forward breaks. A null result would
+     * reach the sender only as "forward failed: unknown result", an ordinary error.
+     */
+    @Test
+    public void testNestedForwardThatBreaksReturnsResultUnknownToTheSender() throws Exception {
+        try (ResettingLeader leader = new ResettingLeader()) {
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public boolean getIsForwardToLeaderOrInit(boolean isInitIfNoPresent) {
+                    return true;
+                }
+            };
+            new MockUp<NodeMgr>() {
+                @Mock
+                public Pair<String, Integer> getLeaderIpAndRpcPort() {
+                    return Pair.create("127.0.0.1", leader.port());
+                }
+            };
+            ThriftConnectionPool<FrontendService.Client> savedPool = ThriftConnectionPool.frontendPool;
+            ThriftConnectionPool.frontendPool = realFrontendPool();
+            try {
+                TMasterOpRequest request = new TMasterOpRequest();
+                request.setCatalog("default_catalog");
+                request.setDb("d1");
+                request.setUser("root");
+                request.setSql("insert into d1.t1 select * from d1.t1");
+                request.setCurrent_user_ident(new TUserIdentity().setUsername("root").setHost("%"));
+                request.setQueryId(UUIDUtil.genTUniqueId());
+                request.setSession_id(UUID.randomUUID().toString());
+                request.setIsLastStmt(true);
+                request.setForward_times(1);
+
+                ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+                ctx.setThreadLocalInfo();
+                TMasterOpResult result = new ConnectProcessor(ctx).proxyExecute(request, null);
+
+                Assertions.assertNotNull(result);
+                Assertions.assertEquals(QueryState.MysqlStateType.ERR.toString(), result.getState());
+                byte[] packet = result.getPacket();
+                Assertions.assertEquals((byte) 0xff, packet[0]);
+                Assertions.assertEquals(ErrorCode.ERR_FORWARD_RESULT_UNKNOWN.getCode(),
+                        (packet[1] & 0xff) | (packet[2] & 0xff) << 8, result.getErrorMsg());
+                Assertions.assertEquals("#08007", new String(packet, 3, 6, StandardCharsets.US_ASCII));
+                Assertions.assertEquals(1, leader.requests());
+            } finally {
+                ThriftConnectionPool.frontendPool = savedPool;
+            }
+        }
     }
 
     /**
