@@ -75,15 +75,10 @@ import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
-<<<<<<< HEAD
 import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
-import com.starrocks.sql.ast.Property;
-=======
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
-import com.starrocks.sql.ast.OrderByElement;
-import com.starrocks.sql.ast.ParseNode;
->>>>>>> 4cca73b ([BugFix] Support standalone UNNEST in the Trino dialect (#83217))
+import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryPeriod;
 import com.starrocks.sql.ast.QueryRelation;
