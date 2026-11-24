@@ -318,6 +318,10 @@ struct TIcebergTableSink {
     12: optional TIcebergTableSinkExt ext
     // Parquet encryption info for encrypted Iceberg tables
     13: optional PlanNodes.TParquetEncryptionInfo parquet_encryption_info
+    // Explicit data-file Parquet writer sizes. Unset preserves BE defaults.
+    14: optional i32 parquet_page_size_bytes
+    15: optional i32 parquet_dict_size_bytes
+    16: optional i32 parquet_row_group_size_bytes
 }
 
 struct THiveTableSink {

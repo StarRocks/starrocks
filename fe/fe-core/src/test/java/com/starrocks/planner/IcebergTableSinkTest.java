@@ -45,6 +45,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION;
+import static org.apache.iceberg.TableProperties.PARQUET_DICT_SIZE_BYTES;
+import static org.apache.iceberg.TableProperties.PARQUET_PAGE_SIZE_BYTES;
+import static org.apache.iceberg.TableProperties.PARQUET_ROW_GROUP_SIZE_BYTES;
 
 public class IcebergTableSinkTest {
 
@@ -56,6 +59,9 @@ public class IcebergTableSinkTest {
         // nativeTable.properties contains parquet compression -> should use it
         Map<String, String> nativeProps = Maps.newHashMap();
         nativeProps.put(PARQUET_COMPRESSION, "zstd");
+        nativeProps.put(PARQUET_PAGE_SIZE_BYTES, "65536");
+        nativeProps.put(PARQUET_DICT_SIZE_BYTES, "131072");
+        nativeProps.put(PARQUET_ROW_GROUP_SIZE_BYTES, "1048576");
 
         CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
 
@@ -113,6 +119,9 @@ public class IcebergTableSinkTest {
         TDataSink t = sink.toThrift();
         // compression_type should map "zstd" -> TCompressionType.ZSTD
         Assertions.assertEquals(TCompressionType.ZSTD, t.getIceberg_table_sink().getCompression_type());
+        Assertions.assertEquals(65536, t.getIceberg_table_sink().getParquet_page_size_bytes());
+        Assertions.assertEquals(131072, t.getIceberg_table_sink().getParquet_dict_size_bytes());
+        Assertions.assertEquals(1048576, t.getIceberg_table_sink().getParquet_row_group_size_bytes());
     }
 
     @Test
@@ -176,6 +185,9 @@ public class IcebergTableSinkTest {
         TDataSink t = sink.toThrift();
         // fallback "gzip" -> TCompressionType.GZIP
         Assertions.assertEquals(TCompressionType.GZIP, t.getIceberg_table_sink().getCompression_type());
+        Assertions.assertFalse(t.getIceberg_table_sink().isSetParquet_page_size_bytes());
+        Assertions.assertFalse(t.getIceberg_table_sink().isSetParquet_dict_size_bytes());
+        Assertions.assertFalse(t.getIceberg_table_sink().isSetParquet_row_group_size_bytes());
     }
 
     /**
@@ -344,5 +356,17 @@ public class IcebergTableSinkTest {
 
         Assertions.assertFalse(sink.isSetParquet_encryption_info(),
                 "a table that does not declare encryption.key-id must never be signalled as encrypted");
+    }
+
+    @Test
+    public void testInvalidParquetWriterSizes() {
+        Map<String, String> invalidPageSizeProperties = Map.of(PARQUET_PAGE_SIZE_BYTES, "0");
+        Map<String, String> invalidDictSizeProperties = Map.of(PARQUET_DICT_SIZE_BYTES, "2147483648");
+        Assertions.assertThrows(IllegalArgumentException.class, () ->
+                com.starrocks.connector.iceberg.IcebergUtil.getPositiveIntProperty(
+                        invalidPageSizeProperties, PARQUET_PAGE_SIZE_BYTES));
+        Assertions.assertThrows(IllegalArgumentException.class, () ->
+                com.starrocks.connector.iceberg.IcebergUtil.getPositiveIntProperty(
+                        invalidDictSizeProperties, PARQUET_DICT_SIZE_BYTES));
     }
 }
