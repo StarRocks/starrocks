@@ -136,6 +136,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.starrocks.sql.analyzer.AnalyticAnalyzer.verifyAnalyticExpression;
 import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -1289,6 +1290,26 @@ public class ExpressionAnalyzer {
             // 4 or 5 params: no conversion needed, validation will be done in checkFunction
         }
 
+        // trino_sequence keeps Trino's sequence signatures: integer bounds with an optional integer step, DATE bounds
+        // with an optional interval step, and DATETIME bounds with an interval step, which the Trino dialect passes as
+        // a magnitude and a unit. Implicit casts would otherwise pick another overload and change the result, e.g.
+        // cast timestamps without a step to DATE.
+        private static void checkTrinoSequenceArguments(Type[] argumentTypes) {
+            boolean valid = false;
+            if (argumentTypes.length == 2 || argumentTypes.length == 3) {
+                valid = Arrays.stream(argumentTypes).allMatch(type -> type.isNull() || type.isIntegerType()) ||
+                        (argumentTypes.length == 2 &&
+                                Arrays.stream(argumentTypes).allMatch(type -> type.isNull() || type.isDate()));
+            } else if (argumentTypes.length == 4) {
+                valid = Stream.of(argumentTypes[0], argumentTypes[1])
+                        .allMatch(type -> type.isNull() || type.isDateType());
+            }
+            if (!valid) {
+                throw new SemanticException("Unexpected parameters (%s) for function sequence",
+                        Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.joining(", ")));
+            }
+        }
+
         private void checkFunction(String fnName, FunctionCallExpr node, Type[] argumentTypes) {
             switch (fnName) {
                 case FunctionSet.AES_ENCRYPT:
@@ -1395,6 +1416,9 @@ public class ExpressionAnalyzer {
                             }
                         }
                     }
+                    break;
+                case FunctionSet.TRINO_SEQUENCE:
+                    checkTrinoSequenceArguments(argumentTypes);
                     break;
                 case FunctionSet.ARRAY_GENERATE:
                     if (node.getChildren().size() < 1 || node.getChildren().size() > 4) {

@@ -473,6 +473,7 @@ public class FunctionSet {
 
     public static final String ARRAY_GENERATE = "array_generate";
     public static final String ARRAY_REPEAT = "array_repeat";
+    public static final String TRINO_SEQUENCE = "trino_sequence";
 
     public static final String ARRAY_TO_BITMAP = "array_to_bitmap";
     public static final String ARRAY_FLATTEN = "array_flatten";
