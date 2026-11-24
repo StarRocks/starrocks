@@ -42,8 +42,7 @@ public class InlineOneCTEConsumeRule extends TransformationRule {
         OptExpression result = input.inputAt(0);
         // The inlined child can itself be a consume of a CTE inlined in the same pass. The rewriter only visits the
         // children of the replacement, so unwrap it here; otherwise it survives after its anchor has been pruned.
-        while (result.getOp() instanceof LogicalCTEConsumeOperator consume && result.arity() > 0 &&
-                context.getCteContext().needInline(consume.getCteId())) {
+        while (result.getOp() instanceof LogicalCTEConsumeOperator && result.arity() > 0 && check(result, context)) {
             result = result.inputAt(0);
         }
         return List.of(result);
