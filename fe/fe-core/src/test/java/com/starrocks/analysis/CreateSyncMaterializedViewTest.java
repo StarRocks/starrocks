@@ -22,6 +22,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
@@ -228,6 +229,40 @@ public class CreateSyncMaterializedViewTest {
                 "     rollup: sync_mv1\n" +
                 "     tabletRatio=6/6"));
         starRocksAssert.dropMaterializedView("sync_mv1");
+    }
+
+    /**
+     * A temporary table is visible only in the session that created it, rollups included: another session cannot
+     * read its rollup through [_SYNC_MV_], while its own session can. Not through the test harness's CREATE VIEW
+     * round trip ({@code FeConstants.unitTestView}): a view cannot read a temporary table.
+     */
+    @Test
+    public void testSelectFromRollupOfAnotherSessionsTemporaryTable() throws Exception {
+        String rollup = "r_of_a_temporary_table";
+        ConnectContext otherSession = UtFrameUtils.createDefaultCtx();
+        StarRocksAssert otherSessionAssert = new StarRocksAssert(otherSession).useDatabase("test");
+        String sql = "select k2, k1 from " + rollup + " [_SYNC_MV_]";
+        boolean savedUnitTestView = FeConstants.unitTestView;
+        FeConstants.unitTestView = false;
+        try {
+            otherSessionAssert.withTemporaryTable("create temporary table t_temporary_with_rollup "
+                    + "(k1 int, k2 int, v1 int) engine=olap duplicate key(k1, k2) distributed by hash(k1) buckets 1 "
+                    + "rollup (" + rollup + " (k2, k1)) properties('replication_num' = '1')");
+
+            String explain = UtFrameUtils.getPlanAndFragment(otherSession, sql).second
+                    .getExplainString(StatementBase.ExplainLevel.NORMAL);
+            Assertions.assertTrue(explain.contains("rollup: " + rollup), explain);
+
+            connectContext.setThreadLocalInfo();
+            Exception e = Assertions.assertThrows(Exception.class,
+                    () -> UtFrameUtils.getPlanAndFragment(connectContext, sql));
+            Assertions.assertTrue(e.getMessage().contains("Unknown table 'test." + rollup + "'"), e.getMessage());
+        } finally {
+            otherSession.setThreadLocalInfo();
+            otherSessionAssert.dropTemporaryTable("t_temporary_with_rollup", true);
+            connectContext.setThreadLocalInfo();
+            FeConstants.unitTestView = savedUnitTestView;
+        }
     }
 
     // create sync mv that mv's name already existed in the db
