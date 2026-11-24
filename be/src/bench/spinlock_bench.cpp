@@ -110,7 +110,7 @@ void BM_SpinLock_AcquireLatency(benchmark::State& state) {
 
     std::vector<uint64_t> samples;
     samples.reserve(kMaxSamples);
-    uint64_t iter = 0;
+    uint64_t iter = static_cast<uint64_t>(state.thread_index());
     size_t overwrite_pos = 0;
 
     for (auto _ : state) {
