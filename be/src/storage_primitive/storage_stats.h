@@ -134,6 +134,10 @@ struct OlapReaderStatistics {
     // Rows a vector (ANN) query skipped from the row-level delete-predicate evaluation because their page's
     // zone map proved they match no delete predicate (see SegmentIterator::_apply_del_predicate).
     int64_t rows_del_predicate_zone_map_pruned = 0;
+    // Rows of chunks whose delete-predicate evaluation was skipped because every delete conjunct has a
+    // column whose pages read for the chunk all have a zone map that excludes it (see
+    // SegmentIterator::_delete_conjuncts_may_match).
+    int64_t rows_del_predicate_conjunct_skipped = 0;
 
     int64_t total_pages_num = 0;
     int64_t cached_pages_num = 0;
@@ -377,6 +381,7 @@ struct OlapReaderStatistics {
         rows_del_filtered_after_read += other.rows_del_filtered_after_read;
         del_filter_ns += other.del_filter_ns;
         rows_del_predicate_zone_map_pruned += other.rows_del_predicate_zone_map_pruned;
+        rows_del_predicate_conjunct_skipped += other.rows_del_predicate_conjunct_skipped;
         total_pages_num += other.total_pages_num;
         cached_pages_num += other.cached_pages_num;
         rows_bitmap_index_filtered += other.rows_bitmap_index_filtered;

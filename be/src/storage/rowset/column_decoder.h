@@ -30,6 +30,7 @@ public:
     ColumnDecoder() = default;
 
     void set_iterator(ColumnIterator* iter) { _iter = iter; }
+    ColumnIterator* iterator() const { return _iter; }
 
     Status decode_dict_codes(const Column& codes, Column* words) {
         DCHECK(_iter != nullptr);

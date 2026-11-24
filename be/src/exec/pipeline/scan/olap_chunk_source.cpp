@@ -960,9 +960,11 @@ void OlapChunkSource::_update_counter() {
         RuntimeProfile::Counter* c1 = ADD_CHILD_TIMER(_runtime_profile, "DeleteFilter", IO_TASK_EXEC_TIMER_NAME);
         RuntimeProfile::Counter* c2 = ADD_COUNTER(_runtime_profile, "DeleteFilterRows", TUnit::UNIT);
         RuntimeProfile::Counter* c3 = ADD_COUNTER(_runtime_profile, "DeleteZoneMapPrunedRows", TUnit::UNIT);
+        RuntimeProfile::Counter* c4 = ADD_COUNTER(_runtime_profile, "DeleteConjunctSkippedRows", TUnit::UNIT);
         COUNTER_UPDATE(c1, _reader->stats().del_filter_ns);
         COUNTER_UPDATE(c2, _reader->stats().rows_del_filtered);
         COUNTER_UPDATE(c3, _reader->stats().rows_del_predicate_zone_map_pruned);
+        COUNTER_UPDATE(c4, _reader->stats().rows_del_predicate_conjunct_skipped);
     }
 
     if (_reader->stats().flat_json_hits.size() > 0 || _reader->stats().merge_json_hits.size() > 0) {

@@ -17,10 +17,13 @@
 #include <fmt/core.h>
 
 #include <algorithm>
+#include <initializer_list>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
@@ -45,6 +48,7 @@
 #include "storage/olap_common.h"
 #include "storage/options.h"
 #include "storage/rowset/column_iterator.h"
+#include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
@@ -2902,6 +2906,452 @@ TEST_F(SegmentIteratorTest, GroupedRowidChildrenPreserveSparseQueryAndOwnershipI
     EXPECT_EQ((std::vector<int64_t>{24}), read_rows());
     opts.rowid_range_option = std::make_shared<SparseRange<>>();
     EXPECT_TRUE(read_rows().empty());
+}
+
+// Fixture for the per-chunk delete conjunct skip (config::enable_delete_predicate_conjunct_skip). The segment is
+// sorted by k1, its leading sort key. k2 cycles through 0..96 on every page, so an IN
+// list on it may match any page. v is NULL on every fifth row of the last k1 group only. id identifies the row: like
+// any column outside the delete and query predicates, it marks every chunk as possibly holding a deleted row for the
+// column-wise check. s is a string column written without a zone map. A data page holds 256 INT values.
+class SegmentIteratorDelConjunctSkipTest : public SegmentIteratorTest {
+public:
+    void SetUp() override {
+        SegmentIteratorTest::SetUp();
+        _saved_conjunct_skip = config::enable_delete_predicate_conjunct_skip;
+        _saved_page_zone_map = config::enable_index_page_level_zonemap_filter;
+        _saved_late_materialization_ratio = config::late_materialization_ratio;
+        config::enable_delete_predicate_conjunct_skip = true;
+        config::enable_index_page_level_zonemap_filter = true;
+        _tablet_schema = std::shared_ptr<TabletSchema>(test::TabletSchemaBuilder()
+                                                               .create(1, false, TYPE_INT, true)
+                                                               .create(2, false, TYPE_INT)
+                                                               .create(3, true, TYPE_INT)
+                                                               .create(4, false, TYPE_BIGINT)
+                                                               .create(5, false, TYPE_VARCHAR)
+                                                               .build());
+        _read_schema = ChunkHelper::convert_schema(_tablet_schema);
+    }
+
+    void TearDown() override {
+        config::enable_delete_predicate_conjunct_skip = _saved_conjunct_skip;
+        config::enable_index_page_level_zonemap_filter = _saved_page_zone_map;
+        config::late_materialization_ratio = _saved_late_materialization_ratio;
+        SegmentIteratorTest::TearDown();
+    }
+
+protected:
+    static constexpr ColumnId kK1 = 0;
+    static constexpr ColumnId kK2 = 1;
+    static constexpr ColumnId kV = 2;
+    static constexpr ColumnId kId = 3;
+    static constexpr ColumnId kS = 4;
+
+    struct Row {
+        int32_t k1;
+        int32_t k2;
+        std::optional<int32_t> v;
+        int64_t id;
+        std::string s;
+    };
+
+    struct ScanResult {
+        OlapReaderStatistics stats;
+        size_t num_rows = 0;
+        std::vector<int64_t> ids; // sorted; empty when the id column is not read
+    };
+
+    void write_segment(int32_t num_rows, int32_t rows_per_k1) {
+        const int32_t last_k1 = (num_rows - 1) / rows_per_k1;
+        _rows.clear();
+        for (int32_t i = 0; i < num_rows; ++i) {
+            Row row{i / rows_per_k1, i % 97, std::nullopt, i, "u" + std::to_string(i % 50)};
+            if (row.k1 != last_k1 || i % 5 != 0) {
+                row.v = i % 13;
+            }
+            _rows.push_back(std::move(row));
+        }
+        auto chunk = ChunkFactory::new_chunk(_read_schema, _rows.size());
+        for (const auto& row : _rows) {
+            chunk->get_column_by_index(kK1)->as_mutable_ptr()->append_datum(Datum(row.k1));
+            chunk->get_column_by_index(kK2)->as_mutable_ptr()->append_datum(Datum(row.k2));
+            chunk->get_column_by_index(kV)->as_mutable_ptr()->append_datum(row.v.has_value() ? Datum(*row.v) : Datum());
+            chunk->get_column_by_index(kId)->as_mutable_ptr()->append_datum(Datum(row.id));
+            chunk->get_column_by_index(kS)->as_mutable_ptr()->append_datum(Datum(Slice(row.s)));
+        }
+        const auto saved_page_size = config::data_page_size;
+        const auto saved_string_prefix_zonemap = config::enable_string_prefix_zonemap;
+        config::data_page_size = 1024;
+        config::enable_string_prefix_zonemap = false;
+        DeferOp restore([&]() {
+            config::data_page_size = saved_page_size;
+            config::enable_string_prefix_zonemap = saved_string_prefix_zonemap;
+        });
+        _segment = test::write_and_open_segment(_fs, kSegmentDir + "/del_conjunct_skip", _tablet_schema, *chunk, 1024);
+        ASSERT_EQ(static_cast<uint32_t>(num_rows), _segment->num_rows());
+    }
+
+    template <typename Deleted>
+    std::vector<int64_t> expected_ids(Deleted&& deleted) const {
+        std::vector<int64_t> ids;
+        for (const auto& row : _rows) {
+            if (!deleted(row)) {
+                ids.push_back(row.id);
+            }
+        }
+        return ids;
+    }
+
+    TypeInfoPtr type_of(ColumnId cid) const { return get_type_info(_read_schema.field(cid)->type()->type()); }
+
+    const ColumnPredicate* eq(ColumnId cid, const std::string& value) {
+        return _pool.add(new_column_eq_predicate(type_of(cid), cid, value));
+    }
+    const ColumnPredicate* ge(ColumnId cid, const std::string& value) {
+        return _pool.add(new_column_ge_predicate(type_of(cid), cid, value));
+    }
+    const ColumnPredicate* in(ColumnId cid, const std::vector<std::string>& values) {
+        return _pool.add(new_column_in_predicate(type_of(cid), cid, values));
+    }
+    const ColumnPredicate* is_null(ColumnId cid) {
+        return _pool.add(new_column_null_predicate(type_of(cid), cid, true));
+    }
+
+    static DisjunctivePredicates deletes(std::initializer_list<ConjunctivePredicates> conjuncts) {
+        DisjunctivePredicates result;
+        for (const auto& conjunct : conjuncts) {
+            result.add(conjunct);
+        }
+        return result;
+    }
+
+    static PredicateTree and_tree(std::initializer_list<const ColumnPredicate*> preds) {
+        PredicateAndNode root;
+        for (const auto* pred : preds) {
+            root.add_child(PredicateColumnNode{pred});
+        }
+        return PredicateTree::create(std::move(root));
+    }
+
+    static void drain(const ChunkIteratorPtr& iter, ScanResult* result) {
+        const Schema& schema = iter->schema();
+        std::optional<size_t> id_index;
+        for (size_t i = 0; i < schema.num_fields(); ++i) {
+            if (schema.field(i)->id() == kId) {
+                id_index = i;
+            }
+        }
+        auto chunk = ChunkFactory::new_chunk(schema, 4096);
+        while (true) {
+            chunk->reset();
+            auto st = iter->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            CHECK_OK(st);
+            result->num_rows += chunk->num_rows();
+            for (size_t i = 0; id_index.has_value() && i < chunk->num_rows(); ++i) {
+                result->ids.push_back(chunk->get(i)[*id_index].get_int64());
+            }
+        }
+        iter->close();
+        std::sort(result->ids.begin(), result->ids.end());
+    }
+
+    // Reads the whole segment with |opts|, through |schema| when given; the file system, the statistics and the chunk
+    // size are set here. Chunks of fewer rows than a page let the k1 values of different pages land in different
+    // chunks.
+    ScanResult scan(SegmentReadOptions opts, int chunk_size, const Schema* schema = nullptr) {
+        ScanResult result;
+        opts.fs = _fs;
+        opts.stats = &result.stats;
+        opts.chunk_size = chunk_size;
+        {
+            ASSIGN_OR_ABORT(auto iter, _segment->new_iterator(schema != nullptr ? *schema : _read_schema, opts));
+            drain(iter, &result);
+        }
+        return result;
+    }
+
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    Schema _read_schema;
+    std::vector<Row> _rows;
+    std::shared_ptr<Segment> _segment;
+    ObjectPool _pool;
+
+private:
+    bool _saved_conjunct_skip = true;
+    bool _saved_page_zone_map = true;
+    int32_t _saved_late_materialization_ratio = 0;
+};
+
+// DELETEs of the shape `k1 = X AND k2 IN (...)` on a table sorted by k1. On the pages of every other k1 value the k1
+// zone map rules all of them out, but the k2 IN lists may match any page (and so may the columns outside the deletes),
+// so the column-wise check keeps every chunk. The conjunct check skips the chunks of k1 = 0 and k1 = 3.
+TEST_F(SegmentIteratorDelConjunctSkipTest, SkipsChunksWhereNoConjunctCanMatch) {
+    write_segment(4096, 1024);
+    SegmentReadOptions opts;
+    opts.delete_predicates = deletes({
+            ConjunctivePredicates{eq(kK1, "1"), in(kK2, {"5", "7"})},
+            ConjunctivePredicates{eq(kK1, "2"), eq(kK2, "11")},
+            // No row has k1 = 9, so this delete matches no page.
+            ConjunctivePredicates{eq(kK1, "9"), in(kK2, {"1", "2", "3"})},
+    });
+    const auto expected = expected_ids(
+            [](const Row& r) { return (r.k1 == 1 && (r.k2 == 5 || r.k2 == 7)) || (r.k1 == 2 && r.k2 == 11); });
+    const int64_t num_deleted = 4096 - static_cast<int64_t>(expected.size());
+    ASSERT_GT(num_deleted, 0);
+
+    auto skip_on = scan(opts, 128);
+    ASSERT_GT(_segment->column(kK1)->num_data_pages(), 4) << "every k1 value must span pages of its own";
+    EXPECT_EQ(expected, skip_on.ids);
+    EXPECT_EQ(num_deleted, skip_on.stats.rows_del_filtered);
+    // A chunk holding k1 = 1 or k1 = 2 may hold a deleted row and is never skipped.
+    EXPECT_GT(skip_on.stats.rows_del_predicate_conjunct_skipped, 0);
+    EXPECT_LE(skip_on.stats.rows_del_predicate_conjunct_skipped, 2048);
+
+    config::enable_delete_predicate_conjunct_skip = false;
+    auto skip_off = scan(opts, 128);
+    EXPECT_EQ(expected, skip_off.ids);
+    EXPECT_EQ(num_deleted, skip_off.stats.rows_del_filtered);
+    EXPECT_EQ(0, skip_off.stats.rows_del_predicate_conjunct_skipped);
+
+    // Without the page-level zone-map pass there are no per-page delete states to rule a conjunct out with.
+    config::enable_delete_predicate_conjunct_skip = true;
+    config::enable_index_page_level_zonemap_filter = false;
+    auto no_page_zone_map = scan(opts, 128);
+    EXPECT_EQ(expected, no_page_zone_map.ids);
+    EXPECT_EQ(num_deleted, no_page_zone_map.stats.rows_del_filtered);
+    EXPECT_EQ(0, no_page_zone_map.stats.rows_del_predicate_conjunct_skipped);
+}
+
+// 300 rows per k1 value over 256-row pages: pages 1 to 3 hold two k1 values each, and 192-row chunks straddle pages,
+// so a chunk can mix a page no delete can match with one that holds deleted rows. Such a chunk must be evaluated.
+TEST_F(SegmentIteratorDelConjunctSkipTest, ChunkMixingMatchingAndNonMatchingPages) {
+    write_segment(1200, 300);
+    SegmentReadOptions opts;
+    opts.delete_predicates = deletes({
+            ConjunctivePredicates{eq(kK1, "1"), in(kK2, {"5", "7"})},
+            ConjunctivePredicates{eq(kK1, "3"), eq(kK2, "50")},
+    });
+    const auto expected = expected_ids(
+            [](const Row& r) { return (r.k1 == 1 && (r.k2 == 5 || r.k2 == 7)) || (r.k1 == 3 && r.k2 == 50); });
+    const int64_t num_deleted = 1200 - static_cast<int64_t>(expected.size());
+    ASSERT_GT(num_deleted, 0);
+
+    auto skip_on = scan(opts, 192);
+    EXPECT_EQ(expected, skip_on.ids);
+    EXPECT_EQ(num_deleted, skip_on.stats.rows_del_filtered);
+    // The first chunk reads only page 0, whose rows are all k1 = 0.
+    EXPECT_GT(skip_on.stats.rows_del_predicate_conjunct_skipped, 0);
+
+    config::enable_delete_predicate_conjunct_skip = false;
+    auto skip_off = scan(opts, 192);
+    EXPECT_EQ(expected, skip_off.ids);
+    EXPECT_EQ(num_deleted, skip_off.stats.rows_del_filtered);
+    EXPECT_EQ(0, skip_off.stats.rows_del_predicate_conjunct_skipped);
+}
+
+// IS NULL in a delete: the zone map of a page without NULLs rules `v IS NULL` out. v is NULL only where k1 = 3, so
+// the chunks of k1 = 0..2 are skipped, and those of k1 = 3 are evaluated.
+TEST_F(SegmentIteratorDelConjunctSkipTest, IsNullDeleteCondition) {
+    write_segment(4096, 1024);
+    SegmentReadOptions opts;
+    opts.delete_predicates = deletes({
+            ConjunctivePredicates{is_null(kV), in(kK2, {"3", "4"})},
+            ConjunctivePredicates{eq(kK1, "0"), is_null(kV)},
+    });
+    const auto expected =
+            expected_ids([](const Row& r) { return !r.v.has_value() && (r.k2 == 3 || r.k2 == 4 || r.k1 == 0); });
+    const int64_t num_deleted = 4096 - static_cast<int64_t>(expected.size());
+    ASSERT_GT(num_deleted, 0);
+
+    auto skip_on = scan(opts, 128);
+    EXPECT_EQ(expected, skip_on.ids);
+    EXPECT_EQ(num_deleted, skip_on.stats.rows_del_filtered);
+    EXPECT_GT(skip_on.stats.rows_del_predicate_conjunct_skipped, 0);
+    EXPECT_LE(skip_on.stats.rows_del_predicate_conjunct_skipped, 3072);
+
+    config::enable_delete_predicate_conjunct_skip = false;
+    auto skip_off = scan(opts, 128);
+    EXPECT_EQ(expected, skip_off.ids);
+    EXPECT_EQ(num_deleted, skip_off.stats.rows_del_filtered);
+    EXPECT_EQ(0, skip_off.stats.rows_del_predicate_conjunct_skipped);
+}
+
+// A column without a zone map may match on every page: it never rules a conjunct out, but another column of the same
+// conjunct still can. A conjunct only on such a column can never be ruled out, so no chunk is skipped at all.
+TEST_F(SegmentIteratorDelConjunctSkipTest, ConjunctOnColumnWithoutZoneMap) {
+    write_segment(4096, 1024);
+    ASSERT_TRUE(_segment->column(kK1)->has_zone_map());
+    ASSERT_FALSE(_segment->column(kS)->has_zone_map());
+
+    SegmentReadOptions opts;
+    opts.delete_predicates = deletes({ConjunctivePredicates{eq(kK1, "1"), eq(kS, "u7")}});
+    auto expected = expected_ids([](const Row& r) { return r.k1 == 1 && r.s == "u7"; });
+    auto skip_on = scan(opts, 128);
+    EXPECT_EQ(expected, skip_on.ids);
+    EXPECT_EQ(4096 - static_cast<int64_t>(expected.size()), skip_on.stats.rows_del_filtered);
+    EXPECT_GT(skip_on.stats.rows_del_predicate_conjunct_skipped, 0);
+
+    opts.delete_predicates = deletes({
+            ConjunctivePredicates{eq(kK1, "1"), eq(kS, "u7")},
+            ConjunctivePredicates{eq(kS, "u9")},
+    });
+    expected = expected_ids([](const Row& r) { return (r.k1 == 1 && r.s == "u7") || r.s == "u9"; });
+    for (bool conjunct_skip : {true, false}) {
+        config::enable_delete_predicate_conjunct_skip = conjunct_skip;
+        auto result = scan(opts, 128);
+        EXPECT_EQ(expected, result.ids);
+        EXPECT_EQ(4096 - static_cast<int64_t>(expected.size()), result.stats.rows_del_filtered);
+        EXPECT_EQ(0, result.stats.rows_del_predicate_conjunct_skipped);
+    }
+}
+
+// A delete column read as dictionary codes is decoded into a column that does not carry its delete state (it reads
+// DEL_NOT_SATISFIED), so it must count as "may match": trusting it would keep the deleted rows of k1 = 2 here.
+TEST_F(SegmentIteratorDelConjunctSkipTest, DictCodedDeleteColumnCountsAsMayMatch) {
+    config::late_materialization_ratio = 0; // a single context that reads every column up front
+    write_segment(4096, 1024);
+    SegmentReadOptions opts;
+    // A string predicate on s makes the iterator read s as dictionary codes.
+    opts.pred_tree = and_tree({ge(kS, "u")});
+    opts.delete_predicates = deletes({ConjunctivePredicates{eq(kK1, "2"), eq(kS, "u7")}});
+    const auto expected = expected_ids([](const Row& r) { return r.k1 == 2 && r.s == "u7"; });
+    const int64_t num_deleted = 4096 - static_cast<int64_t>(expected.size());
+    ASSERT_GT(num_deleted, 0);
+
+    for (bool conjunct_skip : {true, false}) {
+        config::enable_delete_predicate_conjunct_skip = conjunct_skip;
+        auto result = scan(opts, 128);
+        ASSERT_GT(result.stats.decode_dict_count, 0) << "s must be read as dictionary codes";
+        EXPECT_EQ(expected, result.ids);
+        EXPECT_EQ(num_deleted, result.stats.rows_del_filtered);
+        if (conjunct_skip) {
+            // k1 still rules the conjunct out on the pages of k1 != 2.
+            EXPECT_GT(result.stats.rows_del_predicate_conjunct_skipped, 0);
+            EXPECT_LE(result.stats.rows_del_predicate_conjunct_skipped, 3072);
+        } else {
+            EXPECT_EQ(0, result.stats.rows_del_predicate_conjunct_skipped);
+        }
+    }
+}
+
+// The delete column is read after the predicate columns: by rowid as a late-materialized column, or, with predicate
+// column late materialization, by rowid for the rows the first predicate column kept.
+TEST_F(SegmentIteratorDelConjunctSkipTest, LateMaterializedDeleteColumns) {
+    config::late_materialization_ratio = 1000; // always late materialization
+    write_segment(4096, 1024);
+    const auto delete_predicates = deletes({
+            ConjunctivePredicates{eq(kK1, "1"), in(kK2, {"5", "7"})},
+            ConjunctivePredicates{eq(kK1, "2"), eq(kK2, "11")},
+    });
+    const auto expected = expected_ids(
+            [](const Row& r) { return (r.k1 == 1 && (r.k2 == 5 || r.k2 == 7)) || (r.k1 == 2 && r.k2 == 11); });
+    const int64_t num_deleted = 4096 - static_cast<int64_t>(expected.size());
+
+    SegmentReadOptions k1_late;
+    k1_late.pred_tree = and_tree({ge(kK2, "0")}); // keeps every row
+    k1_late.delete_predicates = delete_predicates;
+
+    SegmentReadOptions predicate_columns_late;
+    predicate_columns_late.pred_tree = and_tree({ge(kK1, "0"), ge(kK2, "0")});
+    predicate_columns_late.enable_predicate_col_late_materialize = true;
+    predicate_columns_late.delete_predicates = delete_predicates;
+
+    for (const auto* opts : {&k1_late, &predicate_columns_late}) {
+        for (bool conjunct_skip : {true, false}) {
+            config::enable_delete_predicate_conjunct_skip = conjunct_skip;
+            auto result = scan(*opts, 128);
+            EXPECT_GT(result.stats.late_materialize_rows, 0);
+            EXPECT_EQ(expected, result.ids);
+            EXPECT_EQ(num_deleted, result.stats.rows_del_filtered);
+            if (conjunct_skip) {
+                EXPECT_GT(result.stats.rows_del_predicate_conjunct_skipped, 0);
+                EXPECT_LE(result.stats.rows_del_predicate_conjunct_skipped, 2048);
+            } else {
+                EXPECT_EQ(0, result.stats.rows_del_predicate_conjunct_skipped);
+            }
+        }
+    }
+}
+
+// A delete on a single column: the conjunct is ruled out exactly where its column is. When that column is the only
+// column read, the column-wise check already skips those chunks and the conjunct check adds nothing.
+TEST_F(SegmentIteratorDelConjunctSkipTest, SingleColumnDeletePredicate) {
+    write_segment(4096, 1024);
+    SegmentReadOptions opts;
+    opts.delete_predicates = deletes({ConjunctivePredicates{eq(kK1, "1")}});
+    const auto expected = expected_ids([](const Row& r) { return r.k1 == 1; });
+    ASSERT_EQ(3072u, expected.size());
+
+    for (bool conjunct_skip : {true, false}) {
+        config::enable_delete_predicate_conjunct_skip = conjunct_skip;
+        auto all_columns = scan(opts, 128);
+        EXPECT_EQ(expected, all_columns.ids);
+        EXPECT_EQ(1024, all_columns.stats.rows_del_filtered);
+        if (conjunct_skip) {
+            EXPECT_GT(all_columns.stats.rows_del_predicate_conjunct_skipped, 0);
+        } else {
+            EXPECT_EQ(0, all_columns.stats.rows_del_predicate_conjunct_skipped);
+        }
+
+        const Schema k1_only = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{kK1});
+        auto k1_alone = scan(opts, 128, &k1_only);
+        EXPECT_EQ(3072u, k1_alone.num_rows);
+        EXPECT_EQ(1024, k1_alone.stats.rows_del_filtered);
+        EXPECT_EQ(0, k1_alone.stats.rows_del_predicate_conjunct_skipped);
+    }
+}
+
+// A reused iterator regroups the delete conjuncts of each scan, and a scan without the page-level zone-map pass must
+// not rule conjuncts out with the per-page delete states an earlier scan left in the column iterators.
+TEST_F(SegmentIteratorDelConjunctSkipTest, ReusedIteratorTracksEachScansDeletes) {
+    write_segment(4096, 1024);
+    OlapReaderStatistics stats; // a reused iterator keeps reporting into the statistics of the scan that built it
+    ChunkIteratorPtr slot;
+    auto run = [&](const DisjunctivePredicates& delete_predicates, int64_t* skipped) {
+        SegmentReadOptions opts;
+        opts.fs = _fs;
+        opts.stats = &stats;
+        opts.chunk_size = 128;
+        opts.delete_predicates = delete_predicates;
+        const int64_t skipped_before = stats.rows_del_predicate_conjunct_skipped;
+        ScanResult result;
+        {
+            ASSIGN_OR_ABORT(auto iter, _segment->new_reusable_iterator(_read_schema, _read_schema, opts, &slot));
+            drain(iter, &result);
+        }
+        *skipped = stats.rows_del_predicate_conjunct_skipped - skipped_before;
+        return result.ids;
+    };
+
+    int64_t skipped = 0;
+    auto ids = run(deletes({ConjunctivePredicates{eq(kK1, "1"), in(kK2, {"5", "7"})}}), &skipped);
+    EXPECT_EQ(expected_ids([](const Row& r) { return r.k1 == 1 && (r.k2 == 5 || r.k2 == 7); }), ids);
+    EXPECT_GT(skipped, 0);
+    void* underlying = slot.get();
+
+    // k2 may match on every page, so nothing can be skipped.
+    ids = run(deletes({ConjunctivePredicates{in(kK2, {"5"})}}), &skipped);
+    ASSERT_EQ(underlying, slot.get()) << "the scans must reuse one iterator";
+    EXPECT_EQ(expected_ids([](const Row& r) { return r.k2 == 5; }), ids);
+    EXPECT_EQ(0, skipped);
+
+    const auto k1_is_2 = deletes({ConjunctivePredicates{eq(kK1, "2"), in(kK2, {"5"})}});
+    const auto k1_is_2_expected = expected_ids([](const Row& r) { return r.k1 == 2 && r.k2 == 5; });
+    // The k1 iterator still holds the page states of the first scan, where no k1 = 2 page could match.
+    config::enable_index_page_level_zonemap_filter = false;
+    ids = run(k1_is_2, &skipped);
+    ASSERT_EQ(underlying, slot.get());
+    EXPECT_EQ(k1_is_2_expected, ids);
+    EXPECT_EQ(0, skipped);
+
+    config::enable_index_page_level_zonemap_filter = true;
+    ids = run(k1_is_2, &skipped);
+    ASSERT_EQ(underlying, slot.get());
+    EXPECT_EQ(k1_is_2_expected, ids);
+    EXPECT_GT(skipped, 0);
+    slot->close();
 }
 
 } // namespace starrocks
