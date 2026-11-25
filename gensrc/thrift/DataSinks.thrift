@@ -322,6 +322,8 @@ struct TIcebergTableSink {
     14: optional i32 parquet_page_size_bytes
     15: optional i32 parquet_dict_size_bytes
     16: optional i32 parquet_row_group_size_bytes
+    // Explicit compression level for Parquet data files. Unset uses the codec default.
+    17: optional i32 parquet_compression_level
 }
 
 struct THiveTableSink {

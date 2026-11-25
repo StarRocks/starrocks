@@ -54,6 +54,7 @@ import java.time.zone.ZoneOffsetTransition;
 import java.time.zone.ZoneRules;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -79,6 +80,37 @@ public final class IcebergUtil {
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException(key + " must be a positive 32-bit byte count: " + value, e);
         }
+    }
+
+    /** Returns the configured data-file Parquet compression level, or null when absent. */
+    public static Integer getParquetCompressionLevel(Map<String, String> properties, String codec) {
+        String value = properties.get(TableProperties.PARQUET_COMPRESSION_LEVEL);
+        if (value == null) {
+            return null;
+        }
+        final int level;
+        try {
+            level = Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("write.parquet.compression-level must be an integer: " + value, e);
+        }
+        boolean supported;
+        switch (codec.toLowerCase(Locale.ROOT)) {
+            case "zstd":
+                supported = level >= -131072 && level <= 22;
+                break;
+            case "gzip":
+                supported = level >= -1 && level <= 9;
+                break;
+            case "brotli":
+                supported = level >= 0 && level <= 11;
+                break;
+            default:
+                throw new IllegalArgumentException("write.parquet.compression-level is unsupported for codec " + codec);
+        }
+        Preconditions.checkArgument(supported, "write.parquet.compression-level %s is invalid for codec %s",
+                value, codec);
+        return level;
     }
 
     public static String fileName(String path) {

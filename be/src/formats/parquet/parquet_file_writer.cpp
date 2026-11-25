@@ -381,6 +381,9 @@ Status ParquetFileWriter::init() {
             ->compression(compression)
             ->created_by(fmt::format("{} starrocks-{}", CREATED_BY_VERSION, get_short_version()))
             ->memory_pool(&_memory_pool);
+    if (_writer_options->compression_level.has_value()) {
+        builder.compression_level(*_writer_options->compression_level);
+    }
 
     // Apply column-level dictionary encoding configuration
     for (const auto& [col_name, enabled] : _writer_options->column_dictionary_enabled) {
@@ -458,6 +461,15 @@ Status ParquetFileWriterFactory::init() {
     RETURN_IF_ERROR(apply_size(ParquetWriterOptions::PAGE_SIZE_BYTES, &_parsed_options->page_size));
     RETURN_IF_ERROR(apply_size(ParquetWriterOptions::DICT_SIZE_BYTES, &_parsed_options->dictionary_pagesize));
     RETURN_IF_ERROR(apply_size(ParquetWriterOptions::ROW_GROUP_SIZE_BYTES, &_parsed_options->rowgroup_size));
+    if (auto it = _options.find(ParquetWriterOptions::COMPRESSION_LEVEL); it != _options.end()) {
+        int level = 0;
+        const auto& value = it->second;
+        auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), level);
+        if (error != std::errc{} || end != value.data() + value.size()) {
+            return Status::InvalidArgument(fmt::format("invalid parquet compression level: {}", value));
+        }
+        _parsed_options->compression_level = level;
+    }
     if (_options.contains(ParquetWriterOptions::USE_LEGACY_DECIMAL_ENCODING)) {
         _parsed_options->use_legacy_decimal_encoding =
                 boost::iequals(_options[ParquetWriterOptions::USE_LEGACY_DECIMAL_ENCODING], "true");
