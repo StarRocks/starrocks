@@ -87,13 +87,15 @@ CHOICES = [
 
 # A case stays at the default settings when its output shows them: plans, profiles, traces and the
 # variables themselves. Matched against every statement of the case, after its leading [UC] /
-# [ORDER] / [UNORDERED] / [REGEX] flags.
-_STATEMENT_FLAGS = re.compile(r"^\s*(\[[A-Z]+\]\s*)*")
+# [ORDER] / [UNORDERED] / [REGEX] flags and its `name=` variable assignment.
+_STATEMENT_PREFIX = re.compile(r"^\s*(\[[A-Z]+\]\s*)*([a-zA-Z0-9_-]+=)?\s*")
 _SETTINGS_DEPENDENT = re.compile(
     r"^(explain|trace)\b"
-    r"|^function:\s*(print_hit_materialized_views?|check_hit_materialized_view|assert_explain\w*"
-    r"|assert_query_(not_)?contains|get_col_stats_from_explain\w*|assert_trace\w*"
-    r"|assert_is_identical_explain_plan|assert_paimon\w*)\b"
+    # The function: checks that read a plan or a profile.
+    r"|^function:\s*(print_hit_materialized_views?|check_(no_)?hit_materialized_view|assert_explain\w*"
+    r"|assert_query_(not_)?contains\w*|get_col_stats_from_explain\w*|assert_trace\w*"
+    r"|assert_is_identical_explain_plan|assert_paimon\w*|wait_plan_contains|print_plan_partition_selected_num"
+    r"|get_query_stats_source|wait_compaction_finish)\b"
     r"|\banalyze\s+profile\b|\bget_query_profile\s*\(|\bshow\s+(variables|profilelist)\b|@@"
     r"|\b(session|global)_variables\b",
     re.IGNORECASE,
@@ -103,10 +105,11 @@ _SETTINGS_DEPENDENT = re.compile(
 # Variables a case keeps at the default, while the rest are still random, because the case waits for
 # something they turn off.
 _KEEP_DEFAULT = [
-    # wait_global_dict_ready waits for the low-cardinality dictionary, which is only collected with the
+    # These wait for or check the low-cardinality dictionary, which is only collected with the
     # optimization on; the dictionary of an ARRAY<STRING> column also needs its v2.
     (
-        re.compile(r"^function:\s*wait_global_dict_ready\b", re.IGNORECASE),
+        re.compile(r"^function:\s*(wait_global_dict_ready|try_collect_dict_N_times|assert_has_global_dict)\b",
+                   re.IGNORECASE),
         {"cbo_enable_low_cardinality_optimize", "low_cardinality_optimize_v2"},
     ),
 ]
@@ -129,7 +132,7 @@ def exempt_reason(sql_list, tags):
     if OPT_OUT_TAG in tags:
         return "@" + OPT_OUT_TAG
     for stmt in _statements(sql_list):
-        match = _SETTINGS_DEPENDENT.search(_STATEMENT_FLAGS.sub("", stmt, count=1))
+        match = _SETTINGS_DEPENDENT.search(_STATEMENT_PREFIX.sub("", stmt, count=1))
         if match:
             return "output depends on settings: " + match.group(0).strip()
     return None
@@ -139,7 +142,7 @@ def keep_default(sql_list):
     """The variables this case must leave at the default."""
     names = set()
     for stmt in _statements(sql_list):
-        stmt = _STATEMENT_FLAGS.sub("", stmt, count=1)
+        stmt = _STATEMENT_PREFIX.sub("", stmt, count=1)
         for pattern, variables in _KEEP_DEFAULT:
             if pattern.search(stmt):
                 names |= variables

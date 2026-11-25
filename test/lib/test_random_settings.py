@@ -65,8 +65,10 @@ class PickTest(unittest.TestCase):
             self.assertTrue(any(name in settings for settings in picks), name)
 
     def test_cases_waiting_for_the_global_dict_keep_low_cardinality_on(self):
-        sqls = ["select 1;", "function: wait_global_dict_ready('c1', 't1')"]
         kept = ("cbo_enable_low_cardinality_optimize", "low_cardinality_optimize_v2")
+        for check in ["wait_global_dict_ready('c1', 't1')", "assert_has_global_dict('c1', 't1')"]:
+            self.assertEqual(set(kept), rs.keep_default(["select 1;", "function: " + check]))
+        sqls = ["select 1;", "function: wait_global_dict_ready('c1', 't1')"]
         picks = [rs.pick(seed, "test_a", sqls) for seed in range(1, 200)]
         self.assertTrue(all(name not in p for p in picks for name in kept))
         # The rest of the settings are the ones the case would get without the wait.
@@ -84,7 +86,7 @@ class PickTest(unittest.TestCase):
 class ExemptTest(unittest.TestCase):
     def test_plain_queries_take_random_settings(self):
         sqls = ["CREATE TABLE t (k INT) DUPLICATE KEY(k);", "[ORDER]select * from t order by k;",
-                "select 'explain' as s, count(*) from t;"]
+                "select 'explain' as s, count(*) from t;", "result=select count(*) from t;"]
         self.assertIsNone(rs.exempt_reason(sqls, []))
 
     def test_opt_out_tag(self):
@@ -95,6 +97,10 @@ class ExemptTest(unittest.TestCase):
                      "function: print_hit_materialized_view('select 1', 'mv')",
                      "function: assert_explain_costs_contains('select 1', 'x')",
                      "function: assert_query_contains('select 1', 'x')",
+                     "function: assert_query_contains_times('trace times select 1', 'x', 1)",
+                     "function: check_no_hit_materialized_view('select 1', 'mv')",
+                     "function: wait_plan_contains('select 1', 'x')",
+                     "result=explain costs select 1;", "[UC]res=function: assert_explain_contains('select 1', 'x')",
                      "select @@pipeline_dop;", "show variables like 'chunk_size';",
                      "select * from information_schema.session_variables;", "analyze profile from '1';"]:
             self.assertIsNotNone(rs.exempt_reason([stmt], []), stmt)

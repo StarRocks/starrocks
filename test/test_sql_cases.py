@@ -162,9 +162,12 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
 
         settings = random_settings.pick(random_settings_seed, self.case_info.name, self.case_info.sql)
         for name, value in settings.items():
-            res = self.execute_sql(random_settings.set_statement(name, value))
+            stmt = random_settings.set_statement(name, value)
+            res = self.execute_sql(stmt)
             if res["status"]:
                 self.random_settings[name] = value
+                # function: execute_prepared_sql runs on a connection of its own.
+                self.mysql_prepared_stmt_lib.execute(stmt)
             else:
                 # A variable an older branch does not have: run without it rather than fail the case.
                 self_print(f"[RANDOM SETTINGS] skip {name}={value}: {res['msg']}", ColorEnum.YELLOW, logout=True)
