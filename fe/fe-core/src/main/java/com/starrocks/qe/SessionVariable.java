@@ -5272,7 +5272,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean isEnableRuntimeAdaptiveDop() {
-        return enablePipelineEngine && enableRuntimeAdaptiveDop;
+        // Runtime adaptive DOP is not used together with spill: a spill-process pipeline is its own adaptive
+        // group, instantiated and prepared before the spilling operators it serves, and the BE crashes when the
+        // two disagree on the lifetime of the shared aggregator (#84323).
+        return enablePipelineEngine && enableRuntimeAdaptiveDop && !enableSpill;
     }
 
     public long getAdaptiveDopMaxBlockRowsPerDriverSeq() {
