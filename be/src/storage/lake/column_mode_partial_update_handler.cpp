@@ -522,6 +522,8 @@ Status ColumnModePartialUpdateHandler::_spill_update_rows(
         ChunkUniquePtr chunk;
         UInt32Column::MutablePtr rowids;
         std::vector<SpillRun> runs;
+        // What this buffer is charged to the tracker for, so a flush can release it on its own.
+        int64_t bytes = 0;
     };
     std::map<uint32_t, Buffer> buffers;
     int64_t buffered_bytes = 0;
@@ -549,15 +551,31 @@ Status ColumnModePartialUpdateHandler::_spill_update_rows(
         return out;
     };
 
+    // A flush serializes every buffer into one payload and writes it as one block, so the block
+    // manager is asked once per flush, not once per source segment: acquiring a block, reserving its
+    // space and handing it back cost about the same whatever the block holds. A record is a byte
+    // range of the block of its flush.
+    struct PendingRecord {
+        uint32_t rssid;
+        uint32_t num_rows;
+        uint64_t seq;
+        int64_t offset;
+        int64_t length;
+        std::vector<SpillRun> runs;
+    };
     auto flush = [&]() -> Status {
-        // The serialized copy of a buffer is alive next to the buffer itself until it is written,
-        // and a flush concentrated on one segment makes it about one buffer limit.
+        // The payload grows while the buffers it is made from are dropped one by one, so the two
+        // together stay around one buffer limit. Only the written part is charged: the rest of the
+        // reservation has not been touched yet.
         std::string payload;
         int64_t payload_bytes = 0;
         DeferOp release_payload([&]() { _tracker->release(payload_bytes); });
-        std::function<Status(uint32_t, const Chunk&, const UInt32Column&, const std::vector<SpillRun>&)> write_record =
-                [&](uint32_t rssid, const Chunk& chunk, const UInt32Column& rowids,
-                    const std::vector<SpillRun>& runs) -> Status {
+        TRY_CATCH_BAD_ALLOC(payload.reserve(buffered_bytes));
+        int64_t payload_size = 0;
+        std::vector<PendingRecord> pending;
+        std::function<Status(uint32_t, const Chunk&, const UInt32Column&, const std::vector<SpillRun>&)>
+                serialize_record = [&](uint32_t rssid, const Chunk& chunk, const UInt32Column& rowids,
+                                       const std::vector<SpillRun>& runs) -> Status {
             int64_t max_size = 0;
             for (const auto& column : chunk.columns()) {
                 const int64_t n = serde::ColumnArraySerde::max_serialized_size(*column);
@@ -583,60 +601,35 @@ Status ColumnModePartialUpdateHandler::_spill_update_rows(
                     const int64_t part_bytes = static_cast<int64_t>(part->memory_usage() + part_rowids->memory_usage());
                     _tracker->consume(part_bytes);
                     DeferOp release_part([&]() { _tracker->release(part_bytes); });
-                    RETURN_IF_ERROR(write_record(rssid, *part, *part_rowids, slice_runs(runs, from, count)));
+                    RETURN_IF_ERROR(serialize_record(rssid, *part, *part_rowids, slice_runs(runs, from, count)));
                 }
                 return Status::OK();
             }
-            payload.resize(max_size);
-            const int64_t grown = static_cast<int64_t>(payload.capacity()) - payload_bytes;
+            TRY_CATCH_BAD_ALLOC(payload.resize(payload_size + max_size));
+            const int64_t grown = payload_size + max_size - payload_bytes;
             if (grown > 0) {
                 _tracker->consume(grown);
                 payload_bytes += grown;
             }
             TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_spill_update_rows:payload", &payload_bytes);
-            auto* cur = reinterpret_cast<uint8_t*>(payload.data());
+            char* begin = payload.data() + payload_size;
+            auto* cur = reinterpret_cast<uint8_t*>(begin);
             for (const auto& column : chunk.columns()) {
                 ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::serialize(*column, cur));
             }
             ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::serialize(rowids, cur));
-            int64_t length = cur - reinterpret_cast<uint8_t*>(payload.data());
-            std::pair<const char*, int64_t> plain{payload.data(), length};
+            int64_t length = cur - reinterpret_cast<uint8_t*>(begin);
+            std::pair<const char*, int64_t> plain{begin, length};
             TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_spill_update_rows:plain", &plain);
             const uint64_t seq = _spill.num_records++;
-            RETURN_IF_ERROR(crypt_spill_record(_spill.key, seq, true, payload.data(), length));
-            block_opts.block_size = length;
-            ASSIGN_OR_RETURN(auto block, _spill.block_mgr->acquire_block(block_opts));
-            auto write_st = block->append({Slice(payload.data(), length)});
-            if (write_st.ok()) {
-                write_st = block->flush();
-            }
-            // Hand the block back whichever way the write went: the manager keeps its container file
-            // for the next record and deletes it in the end.
-            auto release_st = _spill.block_mgr->release_block(block);
-            RETURN_IF_ERROR(write_st);
-            RETURN_IF_ERROR(release_st);
-            TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_spill_update_rows:block", &block);
-            // The record index lives until the column batch is done, one descriptor per segment and
-            // flush plus one run per update file in it, so its growth is charged as well (a map node
-            // per new segment, vector capacity, the runs).
-            auto [index_it, inserted] = _spill.records.try_emplace(rssid);
-            auto& index = index_it->second;
-            const size_t old_capacity = index.capacity();
-            index.push_back(SpillRecord{.num_rows = static_cast<uint32_t>(chunk.num_rows()),
-                                        .seq = seq,
-                                        .block = std::move(block),
-                                        .runs = runs});
-            const int64_t index_grown =
-                    (inserted ? static_cast<int64_t>(sizeof(decltype(_spill.records)::value_type) + 4 * sizeof(void*))
-                              : 0) +
-                    static_cast<int64_t>((index.capacity() - old_capacity) * sizeof(SpillRecord)) +
-                    static_cast<int64_t>(index.back().runs.capacity() * sizeof(SpillRun));
-            if (index_grown > 0) {
-                _tracker->consume(index_grown);
-                _spill.index_bytes += index_grown;
-            }
-            _spill.size += length;
-            TRACE_COUNTER_INCREMENT("pcu_spill_records", 1);
+            RETURN_IF_ERROR(crypt_spill_record(_spill.key, seq, true, begin, length));
+            pending.push_back(PendingRecord{.rssid = rssid,
+                                            .num_rows = static_cast<uint32_t>(chunk.num_rows()),
+                                            .seq = seq,
+                                            .offset = payload_size,
+                                            .length = length,
+                                            .runs = runs});
+            payload_size += length;
             TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_spill_update_rows:record", &length);
             return Status::OK();
         };
@@ -644,14 +637,61 @@ Status ColumnModePartialUpdateHandler::_spill_update_rows(
             if (buffer.chunk == nullptr || buffer.chunk->num_rows() == 0) {
                 continue;
             }
-            RETURN_IF_ERROR(write_record(rssid, *buffer.chunk, *buffer.rowids, buffer.runs));
+            RETURN_IF_ERROR(serialize_record(rssid, *buffer.chunk, *buffer.rowids, buffer.runs));
+            // Its rows are in the payload now. Drop the buffer rather than reset it: a reset chunk
+            // keeps its capacity, and with the buffers living for the whole partition pass that
+            // would pin about one buffer limit per segment that ever took a large share of a flush,
+            // while the tracker reports zero.
+            buffer.chunk.reset();
+            buffer.rowids.reset();
+            _tracker->release(buffer.bytes);
+            buffered_bytes -= buffer.bytes;
+            buffer.bytes = 0;
         }
-        // Drop the buffers rather than reset them: a reset chunk keeps its capacity, and with the
-        // buffers living for the whole partition pass that would pin about one buffer limit per
-        // segment that ever took a large share of a flush, while the tracker reports zero.
         buffers.clear();
         _tracker->release(buffered_bytes);
         buffered_bytes = 0;
+        if (!pending.empty()) {
+            block_opts.block_size = payload_size;
+            ASSIGN_OR_RETURN(auto block, _spill.block_mgr->acquire_block(block_opts));
+            auto write_st = block->append({Slice(payload.data(), payload_size)});
+            if (write_st.ok()) {
+                write_st = block->flush();
+            }
+            // Hand the block back whichever way the write went: the manager keeps its container file
+            // for the next flush and deletes it in the end.
+            auto release_st = _spill.block_mgr->release_block(block);
+            RETURN_IF_ERROR(write_st);
+            RETURN_IF_ERROR(release_st);
+            TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_spill_update_rows:block", &block);
+            // The record index lives until the column batch is done, one descriptor per segment and
+            // flush plus one run per update file in it, so its growth is charged as well (a map node
+            // per new segment, vector capacity, the runs).
+            for (auto& rec : pending) {
+                auto [index_it, inserted] = _spill.records.try_emplace(rec.rssid);
+                auto& index = index_it->second;
+                const size_t old_capacity = index.capacity();
+                index.push_back(SpillRecord{.num_rows = rec.num_rows,
+                                            .seq = rec.seq,
+                                            .block = block,
+                                            .offset = rec.offset,
+                                            .length = rec.length,
+                                            .runs = std::move(rec.runs)});
+                const int64_t index_grown =
+                        (inserted ? static_cast<int64_t>(sizeof(decltype(_spill.records)::value_type) +
+                                                         4 * sizeof(void*))
+                                  : 0) +
+                        static_cast<int64_t>((index.capacity() - old_capacity) * sizeof(SpillRecord)) +
+                        static_cast<int64_t>(index.back().runs.capacity() * sizeof(SpillRun));
+                if (index_grown > 0) {
+                    _tracker->consume(index_grown);
+                    _spill.index_bytes += index_grown;
+                }
+                TRACE_COUNTER_INCREMENT("pcu_spill_records", 1);
+            }
+            _spill.size += payload_size;
+            TRACE_COUNTER_INCREMENT("pcu_spill_blocks", 1);
+        }
         size_t live_buffers = buffers.size();
         TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_spill_update_rows:flushed", &live_buffers);
         return Status::OK();
@@ -782,6 +822,7 @@ Status ColumnModePartialUpdateHandler::_spill_update_rows(
                     }
                     buffer.runs.back().num_rows += static_cast<uint32_t>(indexes.size());
                     _tracker->consume(bytes);
+                    buffer.bytes += bytes;
                     buffered_bytes += bytes;
                 }
                 if (buffered_bytes > config::lake_pk_column_mode_spill_buffer_bytes) {
@@ -882,15 +923,16 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_from_spill(uint32_t 
                                                     _rowset_ptr->tablet_id(), _txn_id);
     };
     for (const auto& rec : records) {
-        const auto length = static_cast<int64_t>(rec.block->size());
+        const int64_t length = rec.length;
         payload.resize(length);
         if (const int64_t grown = static_cast<int64_t>(payload.capacity()) - payload_bytes; grown > 0) {
             _tracker->consume(grown);
             payload_bytes += grown;
         }
-        // Every record is its own block, read through its own stream: the segment tasks share
-        // no file position.
+        // The records of one flush share a block, and every read opens its own stream on it: the
+        // segment tasks share no file position.
         ASSIGN_OR_RETURN(auto readable, rec.block->get_readable());
+        RETURN_IF_ERROR(readable->skip(rec.offset));
         RETURN_IF_ERROR(readable->read_fully(payload.data(), length));
         RETURN_IF_ERROR(crypt_spill_record(_spill.key, rec.seq, false, payload.data(), length));
         auto rec_chunk = ChunkFactory::new_chunk(partial_schema, rec.num_rows);

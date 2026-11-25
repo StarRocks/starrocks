@@ -130,7 +130,10 @@ private:
         uint32_t num_rows;
         // Number of the record in its spill, which keys its encryption.
         uint64_t seq;
+        // The block of the flush that wrote the record, and where the record is in it.
         spill::BlockPtr block;
+        int64_t offset;
+        int64_t length;
         // The update files the rows came from, in update-file order: the rows of a record are
         // applied run by run, and a later update file overwrites an earlier one.
         std::vector<SpillRun> runs;

@@ -838,7 +838,7 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
         SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:plain",
                                               [&](void* arg) {
                                                   const auto& p = *static_cast<std::pair<const char*, int64_t>*>(arg);
-                                                  plain.assign(p.first, p.second);
+                                                  plain.append(p.first, p.second);
                                               });
         SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:block",
                                               [&](void* arg) {
@@ -848,8 +848,12 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
                                                   ASSIGN_OR_ABORT(auto readable, block->get_readable());
                                                   ASSERT_OK(readable->read_fully(raw.data(), raw.size()));
                                                   (raw == plain ? plain_blocks : encrypted_blocks)++;
+                                                  plain.clear();
                                               });
+        flushes = 0;
         run_update(8);
+        // The records of a flush are written as one block.
+        EXPECT_EQ(flushes.load(), plain_blocks.load());
         EXPECT_GT(plain_blocks.load(), 0);
         EXPECT_EQ(0, encrypted_blocks.load());
         {
