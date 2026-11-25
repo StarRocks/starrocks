@@ -1342,6 +1342,9 @@ public class PaimonMetadata implements ConnectorMetadata {
         Table table = tables.get(identifier);
         if (table != null) {
             refreshTable(dbName, table, null, true);
+        } else {
+            // This instance belongs to one query and need not hold the table, but the catalog this FE shares does
+            invalidateTableAfterDdl(identifier);
         }
         invalidateOthersFeTable(dbName, tableName);
     }

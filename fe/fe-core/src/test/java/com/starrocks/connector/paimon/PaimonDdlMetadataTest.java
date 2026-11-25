@@ -301,10 +301,26 @@ public class PaimonDdlMetadataTest {
     }
 
     @Test
+    public void testTruncateTableDropsTheExecutingFesCachedPartitions() throws Exception {
+        // The statement's own metadata instance belongs to one query and need not hold the table; the FE's shared
+        // catalog cached the partitions in an earlier query
+        createTarget();
+        seed(row(1, "one", 10), row(2, "two", 20));
+        try (Catalog feCatalog = newConnectorCatalog()) {
+            assertEquals(Set.of("p=one", "p=two"),
+                    new HashSet<>(newMetadata(feCatalog).listPartitionNames(DB, TABLE, null)));
+
+            newMetadata(feCatalog).truncateTable(new TruncateTableStmt(new TableRef(
+                    QualifiedName.of(List.of(CATALOG, DB, TABLE)), null, NodePosition.ZERO)), new ConnectContext());
+            assertTrue(newMetadata(feCatalog).listPartitionNames(DB, TABLE, null).isEmpty());
+        }
+    }
+
+    @Test
     public void testDropTableInvalidatesOtherFes() throws Exception {
         // Another FE's catalog has cached the table; nothing in the journal tells it about the drop
         createTarget();
-        try (Catalog otherFeCatalog = newOtherFeCatalog()) {
+        try (Catalog otherFeCatalog = newConnectorCatalog()) {
             assertNotNull(newMetadata(otherFeCatalog).getTable(null, DB, TABLE));
             List<Boolean> droppedWhenAsked = new ArrayList<>();
             List<String> invalidated = recordOtherFeInvalidations(otherFeCatalog, droppedWhenAsked);
@@ -325,7 +341,7 @@ public class PaimonDdlMetadataTest {
     public void testTruncateTableInvalidatesOtherFes() throws Exception {
         createTarget();
         seed(row(1, "one", 10), row(2, "two", 20));
-        try (Catalog otherFeCatalog = newOtherFeCatalog()) {
+        try (Catalog otherFeCatalog = newConnectorCatalog()) {
             assertEquals(Set.of("p=one", "p=two"),
                     new HashSet<>(newMetadata(otherFeCatalog).listPartitionNames(DB, TABLE, null)));
             List<Boolean> truncatedWhenAsked = new ArrayList<>();
@@ -343,7 +359,7 @@ public class PaimonDdlMetadataTest {
     @Test
     public void testInvalidateCachedTableDropsTheCatalogCachedTable() throws Exception {
         createTarget();
-        try (Catalog otherFeCatalog = newOtherFeCatalog()) {
+        try (Catalog otherFeCatalog = newConnectorCatalog()) {
             PaimonTable cached = (PaimonTable) newMetadata(otherFeCatalog).getTable(null, DB, TABLE);
             catalog.dropTable(TARGET, false);
             assertSame(cached.getNativeTable(),
@@ -382,8 +398,8 @@ public class PaimonDdlMetadataTest {
         return CATALOG + "." + DB + "." + TABLE + "@" + Config.paimon_commit_invalidate_other_fe_timeout_ms;
     }
 
-    // Configured as PaimonConnector configures a catalog, which also caches the partition list
-    private Catalog newOtherFeCatalog() {
+    // A catalog of an FE, configured as PaimonConnector configures one: it also caches the partition list
+    private Catalog newConnectorCatalog() {
         Options options = new Options();
         options.setString("warehouse", warehouse.toUri().toString());
         options.setString("cache-enabled", "true");
