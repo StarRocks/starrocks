@@ -321,7 +321,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
                     " KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num'='1')");
             OlapTable modelTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", name);
             Partition partition = modelTable.getPartition(name);
-            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(10000);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(10000);
             List<Long> partitionIds = List.of(partition.getId());
             PartitionSampler modelSampler = PartitionSampler.create(modelTable, partitionIds, Maps.newHashMap(), null);
             List<String> columns = List.of("k", "v_int", "v_time", "v_str");
