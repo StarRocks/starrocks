@@ -36,6 +36,7 @@ import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorPartitionTraits;
+import com.starrocks.connector.partitiontraits.DeltaLakePartitionTraits;
 import com.starrocks.connector.partitiontraits.PrefetchedPartitionInfos;
 import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.qe.ConnectContext;
@@ -583,14 +584,15 @@ public abstract class MVPCTRefreshPartitioner {
 
     /**
      * Whether non-partitioned materialized view needs to be refreshed or not, it needs refresh when:
-     * - its base table is not supported refresh by partition.
+     * - its base table supports neither partition refresh nor table-version tracking.
      * - its base table has updated.
      * - its base table has deleted partitions.
      */
     public boolean isNonPartitionedMVNeedToRefresh(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables) {
         for (BaseTableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
             Table snapshotTable = snapshotInfo.getBaseTable();
-            if (!isPartitionRefreshSupported(snapshotTable)) {
+            if (!isPartitionRefreshSupported(snapshotTable)
+                    && !DeltaLakePartitionTraits.isTableVersionTracked(snapshotTable)) {
                 return true;
             }
             TvrVersionRange pinnedRange = pinnedRangeFor(snapshotTable);
