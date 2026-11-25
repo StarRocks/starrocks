@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "base/concurrency/race_detect.h"
+#include "base/uid_util.h"
 #include "compute_env/query/fragment_runtime_state.h"
 #include "compute_env/spill/mem_tracker_guard.h"
 #include "compute_env/spill/spiller.hpp"
@@ -197,6 +198,9 @@ bool SpillableAggregateDistinctBlockingSourceOperator::has_output() const {
     if (_is_finished) {
         return false;
     }
+    if (_aggregator->spiller() == nullptr) {
+        return false;
+    }
     if (AggregateDistinctBlockingSourceOperator::has_output()) {
         return true;
     }
@@ -225,6 +229,14 @@ bool SpillableAggregateDistinctBlockingSourceOperator::is_finished() const {
     if (_is_finished) {
         return true;
     }
+    // Defensive, like SpillableAggregateBlockingSourceOperator: the spiller is set when the sink operator is
+    // created and only released in Aggregator::close(). If a polled driver still observes it released, there is
+    // nothing left to restore, so report finished instead of dereferencing a null shared_ptr.
+    if (_aggregator->spiller() == nullptr) {
+        LOG(WARNING) << "spillable distinct aggregate source sees a released spiller, treat it as finished. query_id="
+                     << print_id(get_factory()->runtime_state()->query_id());
+        return true;
+    }
     if (!_aggregator->spiller()->spilled()) {
         return AggregateDistinctBlockingSourceOperator::is_finished();
     }
@@ -244,6 +256,9 @@ Status SpillableAggregateDistinctBlockingSourceOperator::set_finished(RuntimeSta
 }
 
 StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::pull_chunk(RuntimeState* state) {
+    if (_aggregator->spiller() == nullptr) {
+        return Status::InternalError("spillable distinct aggregate source sees a released spiller");
+    }
     RETURN_IF_ERROR(_aggregator->spiller()->task_status());
     if (!_aggregator->spiller()->spilled()) {
         return AggregateDistinctBlockingSourceOperator::pull_chunk(state);
