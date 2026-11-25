@@ -17,6 +17,7 @@ package com.starrocks.sql;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.concurrent.lock.LockInvariantViolations;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -62,6 +63,9 @@ public class PlanningSnapshotViewLockTest extends ConnectorPlanTestBase {
     private static final String CONNECTOR_TABLE = "hive0.partitioned_db.lineitem_par";
     private static final String VIEW = "test.v_snapshot_lock";
     private static final String NESTED_VIEW = "test.v_snapshot_lock_outer";
+    // A [_SYNC_MV_] read names the index, not its base table, and the analyzer copies the base table itself.
+    private static final String SYNC_MV_BASE = "t_sync_mv_snapshot_lock";
+    private static final String SYNC_MV = "mv_sync_snapshot_lock";
 
     private final Set<String> copied = new CopyOnWriteArraySet<>();
     private final List<String> copiedWithoutLock = new CopyOnWriteArrayList<>();
@@ -70,6 +74,11 @@ public class PlanningSnapshotViewLockTest extends ConnectorPlanTestBase {
     public static void createViews() throws Exception {
         starRocksAssert.withView("CREATE VIEW " + VIEW + " AS SELECT v1, v2, v3 FROM test.t0");
         starRocksAssert.withView("CREATE VIEW " + NESTED_VIEW + " AS SELECT v1, v2, v3 FROM " + VIEW);
+        starRocksAssert.useDatabase("test");
+        starRocksAssert.withTable("CREATE TABLE " + SYNC_MV_BASE + " (k1 INT NOT NULL, k2 INT NOT NULL, v1 INT) "
+                + "DUPLICATE KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1')");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + SYNC_MV
+                + " AS SELECT k1, sum(v1) FROM " + SYNC_MV_BASE + " GROUP BY k1");
     }
 
     @BeforeEach
@@ -108,7 +117,7 @@ public class PlanningSnapshotViewLockTest extends ConnectorPlanTestBase {
 
     private void assertNothingLeftLocked(String sql) {
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
-        for (String name : List.of("t0", "t1", "tprimary", "v_snapshot_lock", "v_snapshot_lock_outer")) {
+        for (String name : List.of("t0", "t1", "tprimary", "v_snapshot_lock", "v_snapshot_lock_outer", SYNC_MV_BASE)) {
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", name);
             Assertions.assertFalse(lockManager.isOwnedByCurrentThread(table.getId(), LockType.READ),
                     name + " is still read-locked after planning: " + sql);
@@ -293,6 +302,180 @@ public class PlanningSnapshotViewLockTest extends ConnectorPlanTestBase {
             throw new RuntimeException(e);
         }
         Assertions.assertNull(failure.get(), String.valueOf(failure.get()));
+    }
+
+    /**
+     * Plan {@code sql}, which reads {@link #SYNC_MV} through [_SYNC_MV_], and assert the analyzer copied the view's base
+     * table under its READ lock. Not through the test harness's CREATE VIEW round trip
+     * ({@code UtFrameUtils#testView}): that analysis holds no planner lock, and copies the base table without it -- the
+     * known 2-g violation, see {@link #testCreateViewOverASyncMVReadIsAKnownViolation}.
+     */
+    private void assertSyncMVBaseTableCopiedUnderItsLock(String sql) throws Exception {
+        boolean savedUnitTestView = FeConstants.unitTestView;
+        FeConstants.unitTestView = false;
+        try {
+            copied.clear();
+            assertEveryCopyWasLockedOf(sql, SYNC_MV_BASE);
+        } finally {
+            FeConstants.unitTestView = savedUnitTestView;
+        }
+    }
+
+    /** The analyzer copies the base table behind a [_SYNC_MV_] read: the lock taken before analysis has to cover it. */
+    @Test
+    public void testSyncMVReadLocksItsBaseTable() throws Exception {
+        AtomicInteger reLocks = countReLocks();
+        assertSyncMVBaseTableCopiedUnderItsLock("SELECT count(*) FROM test." + SYNC_MV + " [_SYNC_MV_]");
+        Assertions.assertEquals(0, reLocks.get());
+    }
+
+    /**
+     * #81799: in a SELECT without FROM the tables are read only by the subqueries of the select list. The lock
+     * collection walks them before analysis (#82970), and has to resolve the [_SYNC_MV_] read to its base table: it
+     * used to resolve it to nothing, so the statement took the whole set again, whose names resolved again under the
+     * lock missed the base table too, and failed the statement with "dropped or replaced". Now the lock taken before
+     * analysis covers it.
+     */
+    @Test
+    public void testSyncMVReadInTheSelectListOfASelectWithoutFrom() throws Exception {
+        AtomicInteger reLocks = countReLocks();
+        String sql = "SELECT (SELECT count(*) FROM test." + SYNC_MV + " [_SYNC_MV_]) = (SELECT count(*) FROM test.t1)";
+        assertSyncMVBaseTableCopiedUnderItsLock(sql);
+        Assertions.assertEquals(0, reLocks.get());
+        assertNothingLeftLocked(sql);
+    }
+
+    /**
+     * When the whole set is taken again, the names are resolved again under the lock, and they have to cover every
+     * table the statement copies -- the base table of a [_SYNC_MV_] read included. Pretend the lock taken before
+     * analysis covered nothing, as in {@link #testATableAnalysisBroughtInIsLockedByTakingTheWholeSetAgain}.
+     */
+    @Test
+    public void testSyncMVReadIsCoveredWhenTheWholeSetIsTakenAgain() throws Exception {
+        new MockUp<PlannerMetaLocker>() {
+            @Mock
+            public PlannerMetaLocker forTablesNotLockedOf(Invocation invocation, ConnectContext session,
+                                                          StatementBase analyzedStatement) {
+                PlannerMetaLocker locker = invocation.getInvokedInstance();
+                return locker.forAllTablesOf(session, analyzedStatement);
+            }
+        };
+        AtomicInteger reLocks = countReLocks();
+        assertSyncMVBaseTableCopiedUnderItsLock("SELECT * FROM test.t1 WHERE v4 = "
+                + "(SELECT count(*) FROM test." + SYNC_MV + " [_SYNC_MV_])");
+        Assertions.assertEquals(1, reLocks.get());
+    }
+
+    /**
+     * CREATE VIEW analyzes its query without the planner lock, and the analyzer still copies the base table of a
+     * [_SYNC_MV_] read: 2-g, exempted until the analyzer stops copying. Here so that dropping the exemption before
+     * then fails a test rather than CREATE VIEW in error mode.
+     */
+    @Test
+    public void testCreateViewOverASyncMVReadIsAKnownViolation() throws Exception {
+        String savedMode = Config.lock_snapshot_copy_validation_mode;
+        Config.lock_snapshot_copy_validation_mode = "error";
+        try {
+            UtFrameUtils.parseStmtWithNewParser("CREATE VIEW test.v_sync_mv_snapshot_lock AS "
+                    + "SELECT count(*) AS c FROM test." + SYNC_MV + " [_SYNC_MV_]", connectContext);
+        } finally {
+            Config.lock_snapshot_copy_validation_mode = savedMode;
+        }
+        Assertions.assertTrue(copiedWithoutLock.contains(SYNC_MV_BASE), copiedWithoutLock.toString());
+    }
+
+    /**
+     * The index name of a [_SYNC_MV_] read is resolved before the lock is taken. Pretend the index was not there yet
+     * when the lock set was collected -- added to a table, or its base table dropped and recreated, in between -- and
+     * it is there once the lock is held: the analyzer would copy a base table the lock does not hold, before any later
+     * check could see it. So the statement fails right after the lock is taken, and holds nothing.
+     */
+    @Test
+    public void testSyncMVBaseTableChangedBeforeTheLockTookHoldFailsTheStatement() throws Exception {
+        LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
+        long t1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t1").getId();
+        new MockUp<OlapTable>() {
+            @Mock
+            public Long getIndexMetaIdByName(Invocation invocation, String indexName) {
+                // t1 is locked from the first acquisition on: before it, the index is not there yet.
+                if (SYNC_MV.equals(indexName) && !lockManager.isOwnedByCurrentThread(t1, LockType.READ)) {
+                    return null;
+                }
+                return invocation.proceed(indexName);
+            }
+        };
+        String sql = "SELECT * FROM test.t1 WHERE v4 = (SELECT count(*) FROM test." + SYNC_MV + " [_SYNC_MV_])";
+        Exception e = Assertions.assertThrows(Exception.class, () -> getExecPlan(sql));
+        Assertions.assertTrue(e.getMessage().contains("[_SYNC_MV_] was changed while the statement was being planned"),
+                e.getMessage());
+        Assertions.assertTrue(copied.isEmpty(), "copied before the statement failed: " + copied);
+        assertNothingLeftLocked(sql);
+    }
+
+    private static Table table(String name) {
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", name);
+    }
+
+    /**
+     * The lock set of a [_SYNC_MV_] read follows the analyzer's lookup: a table named like the rollup is read by its
+     * name, and its base index is not what the hint reads, so it is not locked. The table with the rollup is.
+     */
+    @Test
+    public void testSyncMVReadDoesNotLockATableNamedLikeTheRollup() throws Exception {
+        String name = "t_named_like_a_rollup_lock";
+        try {
+            starRocksAssert.withTable("CREATE TABLE test." + name + " (k1 INT, k2 INT, v1 INT) DUPLICATE KEY(k1, k2) "
+                    + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1')");
+            starRocksAssert.withTable("CREATE TABLE test.t_with_rollup_named_like_a_table_lock (k1 INT, k2 INT, "
+                    + "v1 INT) DUPLICATE KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 1 ROLLUP (" + name + " (k2, k1)) "
+                    + "PROPERTIES ('replication_num' = '1')");
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
+                    "SELECT * FROM test." + name + " [_SYNC_MV_]", connectContext);
+            PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt);
+            Assertions.assertTrue(locker.locksAll(List.of(table("t_with_rollup_named_like_a_table_lock"))));
+            Assertions.assertFalse(locker.locksAll(List.of(table(name))));
+        } finally {
+            starRocksAssert.dropTable("if exists test." + name);
+            starRocksAssert.dropTable("if exists test.t_with_rollup_named_like_a_table_lock");
+        }
+    }
+
+    /**
+     * The lock set of a [_SYNC_MV_] read leaves out the temporary tables of other sessions, as the analyzer's lookup
+     * does: their rollups are not visible to this session.
+     */
+    @Test
+    public void testSyncMVReadDoesNotLockAnotherSessionsTemporaryTable() throws Exception {
+        String rollup = "r_shared_with_a_temporary_table_lock";
+        starRocksAssert.withTable("CREATE TABLE test.t_rollup_temporary_lock (k1 INT, k2 INT, v1 INT) "
+                + "DUPLICATE KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 1 ROLLUP (" + rollup + " (k2, k1)) "
+                + "PROPERTIES ('replication_num' = '1')");
+        ConnectContext otherSession = UtFrameUtils.createDefaultCtx();
+        StarRocksAssert otherSessionAssert = new StarRocksAssert(otherSession).useDatabase("test");
+        try {
+            otherSessionAssert.withTemporaryTable("create temporary table t_temporary_with_rollup_lock "
+                    + "(k1 int, k2 int, v1 int) engine=olap duplicate key(k1, k2) distributed by hash(k1) buckets 1 "
+                    + "rollup (" + rollup + " (k2, k1)) properties('replication_num' = '1')");
+            Table temporary = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTables().stream()
+                    .filter(t -> t.getName().equals("t_temporary_with_rollup_lock")).findFirst().orElseThrow();
+
+            connectContext.setThreadLocalInfo();
+            String sql = "SELECT * FROM test." + rollup + " [_SYNC_MV_]";
+            PlannerMetaLocker locker = new PlannerMetaLocker(connectContext,
+                    UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext));
+            Assertions.assertTrue(locker.locksAll(List.of(table("t_rollup_temporary_lock"))));
+            Assertions.assertFalse(locker.locksAll(List.of(temporary)));
+
+            otherSession.setThreadLocalInfo();
+            PlannerMetaLocker ownerLocker = new PlannerMetaLocker(otherSession,
+                    UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, otherSession));
+            Assertions.assertTrue(ownerLocker.locksAll(List.of(temporary)));
+        } finally {
+            otherSession.setThreadLocalInfo();
+            otherSessionAssert.dropTemporaryTable("t_temporary_with_rollup_lock", true);
+            connectContext.setThreadLocalInfo();
+            starRocksAssert.dropTable("if exists test.t_rollup_temporary_lock");
+        }
     }
 
     /** A view does not take the whole set again: the lock taken before analysis already covers its base tables. */
