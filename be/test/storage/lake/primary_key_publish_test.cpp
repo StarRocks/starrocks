@@ -1371,6 +1371,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_batch_publish) {
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_batch_publish_1) {
+    // Every version records itself as the garbage link of the next one, so the link below tells which base
+    // the retried publish recorded.
+    ConfigResetGuard<int64_t> distance_guard(&config::lake_max_garbage_version_distance, 1);
     auto [chunk0, indexes0] = gen_data_and_index(kChunkSize, 0, false, true);
     auto [chunk1, indexes1] = gen_data_and_index(kChunkSize, 0, false, true);
     auto [chunk2, indexes2] = gen_data_and_index(kChunkSize, 0, false, true);
@@ -1444,6 +1447,73 @@ TEST_P(LakePrimaryKeyPublishTest, test_batch_publish_1) {
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(2).num_dels(), 0);
+    // The retry built on the version the first attempt produced (base_version + 2). That attempt wrote the
+    // version to object storage, so the garbage chain links it and the garbage it records stays reachable.
+    EXPECT_TRUE(FileSystem::Default()
+                        ->path_exists(_tablet_mgr->tablet_metadata_location(tablet_id, base_version + 2))
+                        .ok());
+    EXPECT_EQ(base_version + 2, new_tablet_metadata->prev_garbage_version());
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_bundled_publish_retry_links_fe_base) {
+    // Every version records itself as the garbage link of the next one, so the link below tells which base
+    // the retried publish recorded.
+    ConfigResetGuard<int64_t> distance_guard(&config::lake_max_garbage_version_distance, 1);
+    const int64_t base_version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    std::vector<TxnInfoPB> txns;
+    for (int i = 0; i < 2; i++) {
+        auto [chunk, indexes] = gen_data_and_index(kChunkSize, 0, false, true);
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+
+        TxnInfoPB txn;
+        txn.set_txn_id(txn_id);
+        txn.set_commit_time(time(nullptr));
+        txn.set_combined_txn_log(false);
+        txn.set_txn_type(TXN_NORMAL);
+        txn.set_force_publish(false);
+        txns.emplace_back(std::move(txn));
+    }
+    auto metadata_in_storage = [&](int64_t version) {
+        auto fs = FileSystem::Default();
+        return fs->path_exists(_tablet_mgr->tablet_metadata_location(tablet_id, version)).ok() ||
+               fs->path_exists(_tablet_mgr->bundle_tablet_metadata_location(tablet_id, version)).ok();
+    };
+
+    // First attempt, with file bundling: the tablet finishes the first txn and hands the metadata back instead
+    // of writing it. The caller never writes the bundle, as when another tablet of the partition failed, so
+    // version 2 exists in the metacache only while the primary index has already moved on to it.
+    ASSERT_OK(publish_version(_tablet_mgr.get(), tablet_id, base_version, base_version + 1,
+                              std::span<const TxnInfoPB>(txns.data(), 1), true)
+                      .status());
+    ASSERT_FALSE(metadata_in_storage(base_version + 1));
+    ASSERT_EQ(base_version + 1, _update_mgr->get_primary_index_data_version(tablet_id));
+
+    // FE retries with one more txn. The publish builds on version 2, but vacuum could never read that
+    // version, so the garbage chain links the version FE asked for.
+    ASSIGN_OR_ABORT(auto new_tablet_metadata,
+                    publish_version(_tablet_mgr.get(), tablet_id, base_version, base_version + 2, txns, true));
+    EXPECT_EQ(base_version + 2, new_tablet_metadata->version());
+    EXPECT_EQ(2, new_tablet_metadata->rowsets_size());
+    EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), kChunkSize);
+    EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), 0);
+    EXPECT_EQ(base_version + 2, _update_mgr->get_primary_index_data_version(tablet_id));
+    EXPECT_FALSE(metadata_in_storage(base_version + 1));
+    EXPECT_EQ(base_version, new_tablet_metadata->prev_garbage_version());
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_transform_batch_to_single) {

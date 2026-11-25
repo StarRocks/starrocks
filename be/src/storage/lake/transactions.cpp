@@ -231,7 +231,10 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
 
     int64_t ori_base_version = base_version;
     int64_t new_base_version = cal_new_base_version(tablet_id, tablet_mgr, base_version, new_version, txns);
-    if (new_base_version > base_version) {
+    // Whether the base is a version an earlier attempt of this publish produced, as opposed to the version FE
+    // asked for or the one a missing txn log leads to below.
+    const bool base_adjusted = new_base_version > base_version;
+    if (base_adjusted) {
         LOG(INFO) << "Base version has been adjusted. tablet_id=" << tablet_id << " base_version=" << base_version
                   << " new_base_version=" << new_base_version << " new_version=" << new_version << " txns=" << txns;
         base_version = new_base_version;
@@ -361,9 +364,22 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
 
             // force update prev_garbage_version at most config::lake_max_garbage_version_distance,
             // prevent prev_garbage_version from not being updated for a long time and affecting tablet meta vacuum
-            if (base_metadata->compaction_inputs_size() > 0 || base_metadata->orphan_files_size() > 0 ||
-                base_metadata->version() - base_metadata->prev_garbage_version() >=
-                        config::lake_max_garbage_version_distance) {
+            if (base_adjusted && skip_write_tablet_metadata) {
+                // The base is a version an earlier attempt of this publish produced, and with file bundling no
+                // attempt writes the tablet metadata itself: that version may exist in the metacache only (see
+                // cal_new_base_version()), and so may the version its own prev_garbage_version names, while
+                // vacuum stops walking the chain at the first version it cannot read and never reclaims
+                // anything below it. Link the version FE asked for instead: it is the visible version, hence
+                // durable. The garbage recorded in the skipped base metadata is not reclaimed through the
+                // chain; that is the accepted cost, and nothing is deleted that would not be deleted otherwise.
+                //
+                // Without file bundling the earlier attempt wrote that version to object storage before the
+                // primary index moved on to it, so the rule below links it like any other base and the garbage
+                // it records stays reachable.
+                new_metadata->set_prev_garbage_version(ori_base_version);
+            } else if (base_metadata->compaction_inputs_size() > 0 || base_metadata->orphan_files_size() > 0 ||
+                       base_metadata->version() - base_metadata->prev_garbage_version() >=
+                               config::lake_max_garbage_version_distance) {
                 new_metadata->set_prev_garbage_version(base_metadata->version());
             }
 
