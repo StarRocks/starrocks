@@ -150,12 +150,7 @@ StarOSWorker::StarOSWorker(TableMetricsManager* table_metrics_mgr)
         : _mtx(),
           _cache_mtx(),
           _shards(),
-<<<<<<< HEAD:be/src/service/staros_worker.cpp
-          _fs_cache(new_lru_cache(config::starlet_filesystem_instance_cache_capacity)),
-=======
-          _borrowed_cache(new_lru_cache(kBorrowedShardInfoCacheCapacity)),
           _fs_cache(new_lru_cache(fs_cache_capacity(config::starlet_filesystem_instance_cache_capacity))),
->>>>>>> 07a3e5b ([BugFix] Fix StarOS fs cache holding 64 filesystems, not 10000 (#84414)):be/src/compute_env/staros/staros_worker.cpp
           _table_metrics_mgr(table_metrics_mgr) {}
 
 StarOSWorker::~StarOSWorker() = default;
