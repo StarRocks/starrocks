@@ -30,12 +30,6 @@ During full-text searches, StarRocks can locate index entries containing the sea
 
 ### Create full-text inverted index
 
-Before creating a full-text inverted index, you need to enable FE configuration item `enable_experimental_gin`.
-
-```sql
-ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
-```
-
 :::note
 When creating a full-text inverted index for a table, you must disable the `replicated_storage` feature for the table.
 - For v4.0 and later, this feature is automatically disabled when you create the index.

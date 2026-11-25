@@ -649,39 +649,33 @@ public class LakeTableSchemaChangeJobTest {
     // index set (only written back at job finish) and the rewritten segments would silently lack the index.
     @Test
     public void testIndexChangeDisablesLightWeightTabletCreation() throws Exception {
-        boolean savedEnableGin = Config.enable_experimental_gin;
-        Config.enable_experimental_gin = true;
-        try {
-            LakeTable ginTable = createTable(connectContext,
-                        "CREATE TABLE t_gin(c0 INT, c1 VARCHAR(64)) duplicate key(c0) distributed by hash(c0) buckets "
-                                    + NUM_BUCKETS);
-            alterTable(connectContext, "ALTER TABLE t_gin SET ('light_weight_tablet_creation' = 'true')");
-            Assertions.assertTrue(ginTable.isLightWeightTabletCreation());
+        LakeTable ginTable = createTable(connectContext,
+                    "CREATE TABLE t_gin(c0 INT, c1 VARCHAR(64)) duplicate key(c0) distributed by hash(c0) buckets "
+                                + NUM_BUCKETS);
+        alterTable(connectContext, "ALTER TABLE t_gin SET ('light_weight_tablet_creation' = 'true')");
+        Assertions.assertTrue(ginTable.isLightWeightTabletCreation());
 
-            AtomicBoolean sendCalled = new AtomicBoolean(false);
-            new MockUp<LakeTableSchemaChangeJob>() {
-                @Mock
-                public void sendCreateReplicaTasks(AgentBatchTask batchTask) {
-                    sendCalled.set(true);
-                    AgentTaskQueue.addBatchTask(batchTask);
-                    AgentTaskExecutor.submit(batchTask);
-                }
-            };
+        AtomicBoolean sendCalled = new AtomicBoolean(false);
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendCreateReplicaTasks(AgentBatchTask batchTask) {
+                sendCalled.set(true);
+                AgentTaskQueue.addBatchTask(batchTask);
+                AgentTaskExecutor.submit(batchTask);
+            }
+        };
 
-            alterTable(connectContext,
-                        "ALTER TABLE t_gin ADD INDEX idx_c1 (c1) USING GIN ('parser' = 'english')");
-            LakeTableSchemaChangeJob schemaChangeJob = getAlterJob(ginTable);
-            drivePendingJob(schemaChangeJob);
-            Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
-            Assertions.assertTrue(sendCalled.get(),
-                        "an index change must fall back to normal tablet creation even when "
-                                    + "light_weight_tablet_creation is enabled");
+        alterTable(connectContext,
+                    "ALTER TABLE t_gin ADD INDEX idx_c1 (c1) USING GIN ('parser' = 'english')");
+        LakeTableSchemaChangeJob schemaChangeJob = getAlterJob(ginTable);
+        drivePendingJob(schemaChangeJob);
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Assertions.assertTrue(sendCalled.get(),
+                    "an index change must fall back to normal tablet creation even when "
+                                + "light_weight_tablet_creation is enabled");
 
-            schemaChangeJob.cancel("test");
-            Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
-        } finally {
-            Config.enable_experimental_gin = savedEnableGin;
-        }
+        schemaChangeJob.cancel("test");
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
 
     // And for a change to the per-column ZSTD set, which reaches the shadow tablets only through
