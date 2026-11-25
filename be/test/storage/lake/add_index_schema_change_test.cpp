@@ -15,9 +15,9 @@
 #include "storage/lake/add_index_schema_change.h"
 
 #include <gtest/gtest.h>
-#include <roaring/roaring.hh>
 
 #include <memory>
+#include <roaring/roaring.hh>
 #include <string>
 #include <vector>
 
@@ -512,13 +512,11 @@ protected:
         return chunk;
     }
 
-    // The rows the bitmap in the `.cols` footer maps `value` to for column
-    // `uid`, ascending; empty when the dictionary has no exact entry for it.
-    // `value` points at the column's in-memory type: int32_t, int64_t, or a
-    // Slice (padded to the declared width for CHAR, whose dictionary keeps the
-    // padding).
-    std::vector<uint32_t> cols_bitmap_rows(int64_t tablet_id, const std::string& filename,
-                                           const std::shared_ptr<Segment>& seg, int32_t uid, const void* value) {
+    // Calls `fn` with an iterator over the bitmap index in the `.cols` footer
+    // for column `uid`.
+    template <typename Fn>
+    void visit_cols_bitmap(int64_t tablet_id, const std::string& filename, const std::shared_ptr<Segment>& seg,
+                           int32_t uid, Fn&& fn) {
         const std::string path = _tablet_manager->segment_location(tablet_id, filename);
         ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(path));
         FileInfo info{.path = path};
@@ -534,16 +532,48 @@ protected:
         CHECK_OK(reader->new_bitmap_index_iterator(opts, &iter));
         CHECK(iter != nullptr);
         std::unique_ptr<BitmapIndexIterator> owned(iter);
-        bool exact = false;
-        CHECK_OK(owned->seek_dictionary(value, &exact));
-        if (!exact) {
-            return {};
-        }
-        roaring::Roaring rows;
-        CHECK_OK(owned->read_bitmap(owned->current_ordinal(), &rows));
-        std::vector<uint32_t> out(rows.cardinality());
-        rows.toUint32Array(out.data());
-        return out;
+        fn(owned.get());
+    }
+
+    static std::vector<uint32_t> bitmap_rows(const roaring::Roaring& bitmap) {
+        std::vector<uint32_t> rows(bitmap.cardinality());
+        bitmap.toUint32Array(rows.data());
+        return rows;
+    }
+
+    // The rows the bitmap in the `.cols` footer maps `value` to for column
+    // `uid`, ascending; empty when the dictionary has no exact entry for it.
+    // `value` points at the column's in-memory type: int32_t, int64_t, or a
+    // Slice (padded to the declared width for CHAR, whose dictionary keeps the
+    // padding).
+    std::vector<uint32_t> cols_bitmap_rows(int64_t tablet_id, const std::string& filename,
+                                           const std::shared_ptr<Segment>& seg, int32_t uid, const void* value) {
+        std::vector<uint32_t> rows;
+        visit_cols_bitmap(tablet_id, filename, seg, uid, [&](BitmapIndexIterator* iter) {
+            bool exact = false;
+            CHECK_OK(iter->seek_dictionary(value, &exact));
+            if (exact) {
+                roaring::Roaring bitmap;
+                CHECK_OK(iter->read_bitmap(iter->current_ordinal(), &bitmap));
+                rows = bitmap_rows(bitmap);
+            }
+        });
+        return rows;
+    }
+
+    // The rows that bitmap index marks NULL, which an `IS NULL` predicate
+    // reads, ascending; empty when it records no NULLs.
+    std::vector<uint32_t> cols_null_bitmap_rows(int64_t tablet_id, const std::string& filename,
+                                                const std::shared_ptr<Segment>& seg, int32_t uid) {
+        std::vector<uint32_t> rows;
+        visit_cols_bitmap(tablet_id, filename, seg, uid, [&](BitmapIndexIterator* iter) {
+            if (iter->has_null_bitmap()) {
+                roaring::Roaring bitmap;
+                CHECK_OK(iter->read_null_bitmap(&bitmap));
+                rows = bitmap_rows(bitmap);
+            }
+        });
+        return rows;
     }
 
     // Whether that bitmap has `value` as a dictionary entry at all.
@@ -2715,6 +2745,9 @@ TEST_F(AddIndexSchemaChangeTest, dcg_overlay_rewrites_nullable_column) {
     EXPECT_EQ(std::vector<uint32_t>{1},
               cols_bitmap_rows(tablet_id, op.dcg_entries(0).column_file(), seg, _c3_uid, &overlay_value));
     EXPECT_FALSE(cols_bitmap_has(tablet_id, op.dcg_entries(0).column_file(), seg, _c3_uid, &base_only_value));
+    // `IS NULL` reads the bitmap's NULL rows, not the column data.
+    EXPECT_EQ((std::vector<uint32_t>{0, 4}),
+              cols_null_bitmap_rows(tablet_id, op.dcg_entries(0).column_file(), seg, _c3_uid));
 }
 
 // CHAR is stored '\0'-padded and trimmed on read; the rewrite must re-pad

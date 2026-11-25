@@ -454,8 +454,9 @@ void MetaFileBuilder::apply_column_mode_partial_update(const TxnLogPB_OpWrite& o
 // in the segment's current DCG (`dcg_ver`, nullptr when it has none) is still
 // the file the rewrite copied them from. A column whose source the log does not
 // record cannot be shown to be current, so it is left out. The DCG's column
-// lists are walked once, however many columns the entry has; append_dcg keeps
-// every column in exactly one layer.
+// lists are walked at most once, however many columns the entry has, and the
+// walk stops as soon as every column is placed; append_dcg keeps every column
+// in exactly one layer, and the newest layer usually serves the column.
 static std::vector<ColumnUID> columns_served_by_source(const DeltaColumnGroupVerPB* dcg_ver,
                                                        const TxnLogPB_OpAddIndex_DcgEntry& entry) {
     std::vector<ColumnUID> uids;
@@ -468,11 +469,16 @@ static std::vector<ColumnUID> columns_served_by_source(const DeltaColumnGroupVer
     for (uint32_t uid : entry.col_unique_ids()) {
         layer_of.emplace(uid, -1);
     }
-    for (int i = 0; i < dcg_ver->unique_column_ids_size() && i < dcg_ver->column_files_size(); ++i) {
+    const int num_layers = std::min(dcg_ver->unique_column_ids_size(), dcg_ver->column_files_size());
+    size_t unplaced = layer_of.size();
+    for (int i = 0; i < num_layers && unplaced > 0; ++i) {
         for (uint32_t uid : dcg_ver->unique_column_ids(i).column_ids()) {
             auto it = layer_of.find(uid);
             if (it != layer_of.end() && it->second < 0) {
                 it->second = i;
+                if (--unplaced == 0) {
+                    break;
+                }
             }
         }
     }

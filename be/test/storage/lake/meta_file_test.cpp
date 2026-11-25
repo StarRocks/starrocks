@@ -4103,6 +4103,41 @@ TEST_F(MetaFileTest, test_apply_add_index_dcg_checks_each_column_against_its_sou
     EXPECT_EQ((std::map<std::string, int>{{"a.cols", 1}, {"b.cols", 1}}), orphan_count);
 }
 
+TEST_F(MetaFileTest, test_apply_add_index_dcg_column_served_by_newest_layer) {
+    // The entry's only column is served by the newest layer while an older
+    // layer holds other columns: the column is placed without walking the
+    // older layer, which keeps its columns.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20040);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20040);
+    metadata->set_version(9);
+    MetaFileBuilder builder(*tablet, metadata);
+    builder.append_dcg(4, {{"wide.cols", ""}}, {{100, 102, 103, 104}}, {111});
+    metadata->set_version(10);
+    builder.append_dcg(4, {{"narrow.cols", ""}}, {{101}}, {222});
+    metadata->set_version(11);
+
+    TxnLogPB_OpAddIndex op;
+    op.set_alter_version(10);
+    auto* de = op.add_dcg_entries();
+    de->set_segment_id(4);
+    de->set_column_file("rewritten.cols");
+    de->set_file_size(456);
+    de->add_col_unique_ids(101);
+    de->add_source_column_files("narrow.cols");
+    ASSERT_OK(builder.apply_add_index(op));
+
+    const auto& dcg = metadata->dcg_meta().dcgs().at(4);
+    ASSERT_EQ(2, dcg.column_files_size());
+    EXPECT_EQ("rewritten.cols", dcg.column_files(0));
+    ASSERT_EQ(1, dcg.unique_column_ids(0).column_ids_size());
+    EXPECT_EQ(101, dcg.unique_column_ids(0).column_ids(0));
+    EXPECT_EQ("wide.cols", dcg.column_files(1));
+    EXPECT_EQ(4, dcg.unique_column_ids(1).column_ids_size());
+    ASSERT_EQ(1, metadata->orphan_files_size());
+    EXPECT_EQ("narrow.cols", metadata->orphan_files(0).name());
+}
+
 TEST_F(MetaFileTest, test_append_dcg_carries_forward_shared_flag) {
     // append_dcg rebuilds the whole per-segment entry list, so a surviving
     // layer's shared bit has to be copied over; losing it would let a single
