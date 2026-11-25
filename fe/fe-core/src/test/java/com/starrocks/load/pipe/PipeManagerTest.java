@@ -1354,6 +1354,7 @@ public class PipeManagerTest {
         Assertions.assertThrows(TException.class, () -> impl.listPipes(params));
         TUserIdentity identity = new TUserIdentity();
         identity.setUsername("root");
+        identity.setHost("%");
         params.setUser_ident(identity);
 
         // normal
@@ -1380,11 +1381,12 @@ public class PipeManagerTest {
                 "create pipe list_p2 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
         pm.createPipe(createStmt);
+        long pipeId = getPipe("list_p2").getPipeId().getId();
 
         List<PipeFileRecord> records = Arrays.asList(
-                new PipeFileRecord(1, "file1", "version1", 1024),
-                new PipeFileRecord(1, "file2", "version1", 1024),
-                new PipeFileRecord(1, "file3", "version1", 1024)
+                new PipeFileRecord(pipeId, "file1", "version1", 1024),
+                new PipeFileRecord(pipeId, "file2", "version1", 1024),
+                new PipeFileRecord(pipeId + 100000, "orphan", "version1", 1024)
         );
         new Expectations(RepoAccessor.getInstance()) {
             {
@@ -1401,9 +1403,55 @@ public class PipeManagerTest {
         // normal
         TUserIdentity identity = new TUserIdentity();
         identity.setUsername("root");
+        identity.setHost("%");
         params.setUser_ident(identity);
         TListPipeFilesResult result = impl.listPipeFiles(params);
-        Assertions.assertFalse(result.pipe_files.isEmpty());
+        Assertions.assertEquals(2, result.getPipe_filesSize());
+    }
+
+    @Test
+    public void testListPipesAndFilesCheckPrivilege() throws Exception {
+        ExecuteEnv env = Mockito.mock(ExecuteEnv.class);
+        FrontendServiceImpl impl = new FrontendServiceImpl(env);
+        createPipe("create pipe list_priv as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
+        long pipeId = getPipe("list_priv").getPipeId().getId();
+        List<PipeFileRecord> records = Arrays.asList(
+                new PipeFileRecord(pipeId, "file1", "version1", 1024),
+                new PipeFileRecord(pipeId, "file2", "version1", 1024));
+        new Expectations(RepoAccessor.getInstance()) {
+            {
+                RepoAccessor.getInstance().listAllFiles();
+                result = records;
+                minTimes = 0;
+            }
+        };
+
+        String noPriv = "list_pipe_no_priv";
+        String granted = "list_pipe_granted";
+        starRocksAssert.ddl("create user " + noPriv);
+        starRocksAssert.ddl("grant create pipe on database " + PIPE_TEST_DB + " to " + noPriv);
+        starRocksAssert.ddl("grant insert on table " + PIPE_TEST_DB + ".tbl1 to " + noPriv);
+        starRocksAssert.ddl("create user " + granted);
+        starRocksAssert.ddl("grant usage on pipe " + PIPE_TEST_DB + ".list_priv to " + granted);
+        try {
+            for (String user : Arrays.asList(noPriv, granted, "root")) {
+                TUserIdentity identity = new TUserIdentity();
+                identity.setUsername(user);
+                identity.setHost("%");
+                TListPipesParams pipesParams = new TListPipesParams();
+                pipesParams.setUser_ident(identity);
+                TListPipeFilesParams filesParams = new TListPipeFilesParams();
+                filesParams.setUser_ident(identity);
+
+                int expectPipes = user.equals(noPriv) ? 0 : 1;
+                int expectFiles = user.equals(noPriv) ? 0 : 2;
+                Assertions.assertEquals(expectPipes, impl.listPipes(pipesParams).getPipesSize(), user);
+                Assertions.assertEquals(expectFiles, impl.listPipeFiles(filesParams).getPipe_filesSize(), user);
+            }
+        } finally {
+            starRocksAssert.ddl("drop user " + noPriv);
+            starRocksAssert.ddl("drop user " + granted);
+        }
     }
 
     @Test

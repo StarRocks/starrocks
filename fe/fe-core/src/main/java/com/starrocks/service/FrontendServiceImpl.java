@@ -187,6 +187,7 @@ import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.staros.StarMgrServer;
@@ -616,9 +617,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (!params.isSetUser_ident()) {
             throw new TException("missed user_identity");
         }
+<<<<<<< HEAD
         // TODO: check privilege
         UserIdentity userIdentity = UserIdentityUtils.fromThrift(params.getUser_ident());
 
+=======
+        ConnectContext context = new ConnectContext();
+        UserIdentityUtils.setAuthInfoFromThrift(context, params.getUser_ident());
+>>>>>>> e19003a ([BugFix] Check pipe privilege in information_schema.pipes and pipe_files (#84463))
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
         Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
         TListPipesResult result = new TListPipesResult();
@@ -626,6 +632,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             String databaseName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(pipe.getPipeId().getDbId())
                     .map(Database::getOriginName)
                     .orElse(null);
+            if (databaseName == null || !hasAnyActionOnPipe(context, databaseName, pipe.getName())) {
+                continue;
+            }
 
             TListPipesInfo row = new TListPipesInfo();
             row.setPipe_id(pipe.getPipeId().getId());
@@ -654,27 +663,39 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new TException("missed user_identity");
         }
         LOG.info("listPipeFiles params={}", params);
+<<<<<<< HEAD
         // TODO: check privilege
         UserIdentity userIdentity = UserIdentityUtils.fromThrift(params.getUser_ident());
+=======
+        ConnectContext context = new ConnectContext();
+        UserIdentityUtils.setAuthInfoFromThrift(context, params.getUser_ident());
+>>>>>>> e19003a ([BugFix] Check pipe privilege in information_schema.pipes and pipe_files (#84463))
         TListPipeFilesResult result = new TListPipeFilesResult();
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
         Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
         RepoAccessor repo = RepoAccessor.getInstance();
         List<PipeFileRecord> files = repo.listAllFiles();
+        // pipe id -> database name, empty if the caller holds no privilege on the pipe
+        Map<Long, Optional<String>> visiblePipes = new HashMap<>();
         for (PipeFileRecord record : files) {
-            TListPipeFilesInfo file = new TListPipeFilesInfo();
             Optional<Pipe> mayPipe = pm.mayGetPipe(record.pipeId);
             if (!mayPipe.isPresent()) {
                 LOG.warn("Pipe not found with id {}", record.pipeId);
+                continue;
+            }
+            Pipe pipe = mayPipe.get();
+            Optional<String> databaseName = visiblePipes.computeIfAbsent(record.pipeId, id ->
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(pipe.getDbAndName().first)
+                            .map(Database::getOriginName)
+                            .filter(db -> hasAnyActionOnPipe(context, db, pipe.getName())));
+            if (databaseName.isEmpty()) {
+                continue;
             }
 
+            TListPipeFilesInfo file = new TListPipeFilesInfo();
             file.setPipe_id(record.pipeId);
-            file.setDatabase_name(
-                    mayPipe.flatMap(p ->
-                                    GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(p.getDbAndName().first)
-                                            .map(Database::getOriginName))
-                            .orElse(""));
-            file.setPipe_name(mayPipe.map(Pipe::getName).orElse(""));
+            file.setDatabase_name(databaseName.get());
+            file.setPipe_name(pipe.getName());
 
             file.setFile_name(record.fileName);
             file.setFile_version(record.fileVersion);
@@ -695,6 +716,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         return result;
+    }
+
+    private static boolean hasAnyActionOnPipe(ConnectContext context, String dbName, String pipeName) {
+        try {
+            Authorizer.checkAnyActionOnPipe(context, new PipeName(dbName, pipeName));
+            return true;
+        } catch (AccessDeniedException e) {
+            return false;
+        }
     }
 
     @Override
