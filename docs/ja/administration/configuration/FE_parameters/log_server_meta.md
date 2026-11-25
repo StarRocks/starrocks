@@ -1631,7 +1631,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：ミリ秒
 - 変更可能：Yes
-- 説明：Iceberg テーブルへのコミット（INSERT、INSERT OVERWRITE、DELETE、UPDATE、MERGE、またはコンパクション）が、他の FE がそのテーブルのキャッシュを破棄するのを待つ最大時間です。これにより、ステートメントが返った後はどの FE でクエリしてもコミットが見えます。時間内に応答しない FE はバックグラウンド更新に任されます。ローリングアップグレード中は、以前のバージョンの FE がテーブルを更新するため、コミットが最大でこの時間待つことがあります。0 以下に設定すると待機しません。
+- 説明：Iceberg テーブルへのコミット（INSERT、INSERT OVERWRITE、DELETE、UPDATE、MERGE、またはコンパクション）、および Iceberg テーブルに対する TRUNCATE TABLE、ALTER TABLE、DROP TABLE が、他の FE がそのテーブルのキャッシュを破棄するのを待つ最大時間です。これにより、ステートメントが返った後はどの FE でクエリしても変更が見えます。時間内に応答しない FE はバックグラウンド更新に任されます。ローリングアップグレード中は、以前のバージョンの FE がテーブルを更新するため、ステートメントが最大でこの時間待つことがあります。0 以下に設定すると待機しません。
 - 導入時期：-
 
 ### `refresh_other_fe_rpc_executor_thread_num`
