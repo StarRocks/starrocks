@@ -241,9 +241,9 @@ public class HiveMetadata implements ConnectorMetadata {
         }
     }
 
-    // A Hive write logs no edit log entry, so the journal wait of a forwarded statement does nothing for it, and the
-    // refresh dispatched to the other FEs is not waited for: make them drop the pre-write table before the
-    // statement returns, so that a read on any FE sees the write. Never throws.
+    // A Hive write or DDL (DROP TABLE, ADD PARTITION) logs no edit log entry, so the journal wait of a forwarded
+    // statement does nothing for it, and the refresh dispatched to the other FEs, if any, is not waited for: make them
+    // drop the pre-change table before the statement returns, so that a read on any FE sees the change. Never throws.
     private void invalidateOthersFeTable(HiveTable table) {
         // The metastore names, which the other FEs' cache keys use
         TableName tableName = new TableName(catalogName, table.getCatalogDBName(), table.getCatalogTableName());
@@ -318,6 +318,8 @@ public class HiveMetadata implements ConnectorMetadata {
             }
 
             hmsOps.dropTable(dbName, tableName);
+            // Otherwise the other FEs keep serving the dropped table, and a table re-created under its name
+            invalidateOthersFeTable(hiveTable);
             StatisticUtils.dropStatisticsAfterDropTable(hiveTable);
         }
     }
@@ -723,6 +725,8 @@ public class HiveMetadata implements ConnectorMetadata {
         HivePartitionWithStats partitionWithStats =
                 new HivePartitionWithStats(partitionString, hivePartition, HivePartitionStats.empty());
         hmsOps.addPartitions(table.getCatalogDBName(), table.getCatalogTableName(), Lists.newArrayList(partitionWithStats));
+        // Otherwise the other FEs keep the cached partition list without the new partition
+        invalidateOthersFeTable(table);
     }
 
     public static boolean useMetadataCache() {

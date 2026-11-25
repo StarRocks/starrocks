@@ -423,6 +423,39 @@ public class HiveMetadataTest {
     }
 
     @Test
+    public void testDropTableInvalidatesOtherFes() throws DdlException {
+        // DROP TABLE writes no edit log: the other FEs would keep serving the dropped table, and a table re-created
+        // under its name
+        AtomicBoolean dropped = new AtomicBoolean(false);
+        new MockUp<HiveMetastoreOperations>() {
+            @Mock
+            public void dropTable(String dbName, String tableName) {
+                dropped.set(true);
+            }
+        };
+        List<TableName> invalidated = new ArrayList<>();
+        List<Boolean> droppedWhenInvalidated = new ArrayList<>();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public void invalidateOthersFeTable(TableName tableName, int timeoutMs) {
+                invalidated.add(tableName);
+                droppedWhenInvalidated.add(dropped.get());
+            }
+        };
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "hive_table")),
+                null, NodePosition.ZERO);
+
+        // refused without FORCE: nothing dropped, nothing to tell
+        Assertions.assertThrows(DdlException.class,
+                () -> hiveMetadata.dropTable(connectContext, new DropTableStmt(false, tableRef, false)));
+        Assertions.assertEquals(List.of(), invalidated);
+
+        hiveMetadata.dropTable(connectContext, new DropTableStmt(false, tableRef, true));
+        Assertions.assertEquals(List.of(new TableName("hive_catalog", "hive_db", "hive_table")), invalidated);
+        Assertions.assertEquals(List.of(true), droppedWhenInvalidated);
+    }
+
+    @Test
     public void testFinishSink() {
         assertThrows(StarRocksConnectorException.class, () -> {
             String stagingDir = "hdfs://127.0.0.1:10000/tmp/starrocks/queryid";
@@ -1523,6 +1556,43 @@ public class HiveMetadataTest {
 
         // Clean up
         ConnectContext.remove();
+    }
+
+    @Test
+    public void testAddPartitionInvalidatesOtherFes() throws Exception {
+        // ADD PARTITION writes no edit log: the other FEs would keep the partition list without the new partition
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setQueryId(UUIDUtil.genUUID());
+        ctx.setThreadLocalInfo();
+        AtomicBoolean added = new AtomicBoolean(false);
+        new MockUp<HiveMetastoreOperations>() {
+            @Mock
+            public void addPartitions(String dbName, String tableName, List<HivePartitionWithStats> partitions) {
+                added.set(true);
+            }
+        };
+        List<TableName> invalidated = new ArrayList<>();
+        List<Boolean> addedWhenInvalidated = new ArrayList<>();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public void invalidateOthersFeTable(TableName tableName, int timeoutMs) {
+                invalidated.add(tableName);
+                addedWhenInvalidated.add(added.get());
+            }
+        };
+        SingleItemListPartitionDesc partitionDesc =
+                new SingleItemListPartitionDesc(false, "p1", Lists.newArrayList("1"), new HashMap<>());
+        AlterTableStmt stmt = new AlterTableStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("hive_catalog", "db1", "table1")), null, NodePosition.ZERO),
+                Lists.newArrayList(new AddPartitionClause(partitionDesc, null, new HashMap<>(), false)));
+        try {
+            hiveMetadata.alterTable(ctx, stmt);
+        } finally {
+            ConnectContext.remove();
+        }
+
+        Assertions.assertEquals(List.of(new TableName("hive_catalog", "db1", "table1")), invalidated);
+        Assertions.assertEquals(List.of(true), addedWhenInvalidated);
     }
 
     @Test
