@@ -26,15 +26,9 @@ import com.starrocks.catalog.combinator.AggStateUtils;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
-<<<<<<< HEAD
-import com.starrocks.sql.analyzer.SemanticException;
-=======
-import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstTraverser;
-import com.starrocks.sql.ast.CTERelation;
->>>>>>> f046e5937c1... [BugFix][RB-1755] Keep the query's names for unaliased columns of an incremental MV (#70424)
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.GroupByClause;
 import com.starrocks.sql.ast.JoinOperator;
