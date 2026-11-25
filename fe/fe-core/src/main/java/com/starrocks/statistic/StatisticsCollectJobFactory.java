@@ -577,11 +577,13 @@ public class StatisticsCollectJobFactory {
             List<ColumnUsage> predicateColumns = PredicateColumnsMgr.getInstance().queryPredicateColumns(tableName);
             if (CollectionUtils.isNotEmpty(predicateColumns) && predicateColumns.size() <= numColumns) {
                 OlapTable olap = (OlapTable) table;
+                Set<String> collectibleColumns = Set.copyOf(StatisticUtils.getCollectibleColumns(table));
                 predicateColNames = predicateColumns.stream()
                         .flatMap(x -> x.getOlapColumnName(olap).stream())
+                        .filter(collectibleColumns::contains)
                         .distinct()
                         .toList();
-                existsPredicateColumns = true;
+                existsPredicateColumns = !predicateColNames.isEmpty();
                 if (numColumns > Config.statistic_auto_collect_predicate_columns_threshold) {
                     enablePredicateColumnStrategy = true;
                 }
@@ -591,10 +593,14 @@ public class StatisticsCollectJobFactory {
 
         if (basicStatsMeta != null) {
             if (table.isUnPartitioned() && CollectionUtils.isNotEmpty(predicateColNames)) {
+                Set<String> collectibleColumns = Set.copyOf(StatisticUtils.getCollectibleColumns(table));
                 List<String> fullCols = basicStatsMeta.getAnalyzedColumns().values().stream()
                         .filter(x -> x.getType() == StatsConstants.AnalyzeType.FULL)
                         .map(ColumnStatsMeta::getColumnName)
-                        .filter(col -> table.getColumn(col) != null)
+                        .map(table::getColumn)
+                        .filter(col -> col != null)
+                        .map(Column::getName)
+                        .filter(collectibleColumns::contains)
                         .toList();
                 Set<String> fullColSet = Set.copyOf(fullCols);
                 boolean missingPredicateColumns = predicateColNames.stream().anyMatch(c -> !fullColSet.contains(c));

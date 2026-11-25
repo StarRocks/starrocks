@@ -15,6 +15,8 @@
 package com.starrocks.statistic.columns;
 
 import com.google.common.base.Splitter;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
@@ -30,6 +32,7 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.ColumnStatsMeta;
 import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.StatisticsCollectJob;
 import com.starrocks.statistic.StatisticsCollectJobFactory;
@@ -46,6 +49,7 @@ import org.mockito.Mockito;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 class ColumnUsageTest extends PlanTestBase {
@@ -245,6 +249,114 @@ class ColumnUsageTest extends PlanTestBase {
             Assertions.assertEquals(List.of("v1"), job0.getColumnNames());
             Config.statistic_auto_collect_small_table_size = defaultSmallTableSize;
             Config.statistic_auto_collect_max_predicate_column_size_on_sample_strategy = defaultPredicateColumnSize;
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"SAMPLE, true, SAMPLE", "SAMPLE, false, SAMPLE", "FULL, true, FULL", "FULL, false, SAMPLE"})
+    public void testAutoAnalyzePredicateColumnsExcludeGeneratedPartitionColumn(
+            StatsConstants.AnalyzeType analyzeType, boolean includeVisiblePredicate,
+            StatsConstants.AnalyzeType expectedType) throws Exception {
+        String tableName = "t_predicate_generated_partition";
+        starRocksAssert.withTable("CREATE TABLE " + tableName + " (c1 DATETIME NOT NULL, c2 BIGINT) " +
+                "DUPLICATE KEY(c1) PARTITION BY c2, date_trunc('month', c1) " +
+                "DISTRIBUTED BY HASH(c2) BUCKETS 1 PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE " + tableName +
+                " ADD PARTITION p1 VALUES IN (('1', '2024-01-01'))");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(connectContext.getDatabase());
+        OlapTable table = (OlapTable) starRocksAssert.getTable(db.getFullName(), tableName);
+        table.maySetDatabaseId(db.getId());
+        table.getPartition("p1").getDefaultPhysicalPartition().updateVisibleVersion(2);
+        setTableStatistics(table, 1000);
+
+        Column generated = table.getBaseSchema().stream()
+                .filter(c -> c.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX))
+                .findFirst().orElseThrow();
+        PredicateColumnsMgr predicateColumnsMgr = PredicateColumnsMgr.getInstance();
+        predicateColumnsMgr.recordColumnUsageForTest(table, generated, ColumnUsage.UseCase.PREDICATE);
+        if (includeVisiblePredicate) {
+            predicateColumnsMgr.recordColumnUsageForTest(table, table.getColumn("c2"), ColumnUsage.UseCase.PREDICATE);
+        }
+        Assertions.assertTrue(predicateColumnsMgr.queryPredicateColumns(new TableName(db.getFullName(), tableName))
+                .stream().anyMatch(usage -> usage.getOlapColumnName(table).orElse("").equals(generated.getName())));
+
+        AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+        BasicStatsMeta statsMeta = Mockito.mock(BasicStatsMeta.class);
+        Mockito.when(statsMeta.getTableId()).thenReturn(table.getId());
+        Mockito.when(statsMeta.getUpdateTime()).thenReturn(LocalDateTime.now().minusDays(1));
+        Mockito.when(statsMeta.isUpdatedAfterLoad(Mockito.any())).thenReturn(false);
+        Mockito.when(statsMeta.getHealthy()).thenReturn(0.1);
+        analyzeMgr.addBasicStatsMeta(statsMeta);
+
+        int originalThreshold = Config.statistic_auto_collect_predicate_columns_threshold;
+        long originalSmallTableSize = Config.statistic_auto_collect_small_table_size;
+        boolean originalFullPredicate = Config.statistic_auto_collect_use_full_predicate_column_for_sample;
+        try {
+            Config.statistic_auto_collect_predicate_columns_threshold = 1;
+            Config.statistic_auto_collect_small_table_size =
+                    analyzeType == StatsConstants.AnalyzeType.FULL ? -1 : Long.MAX_VALUE;
+            Config.statistic_auto_collect_use_full_predicate_column_for_sample =
+                    analyzeType == StatsConstants.AnalyzeType.FULL;
+            NativeAnalyzeJob analyzeJob = new NativeAnalyzeJob(db.getId(), table.getId(), null, null, analyzeType,
+                    StatsConstants.ScheduleType.SCHEDULE, Map.of(), StatsConstants.ScheduleStatus.PENDING,
+                    LocalDateTime.MIN);
+            List<StatisticsCollectJob> collectJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(analyzeJob);
+            Assertions.assertEquals(1, collectJobs.size());
+            StatisticsCollectJob collectJob = collectJobs.get(0);
+            Assertions.assertEquals(expectedType, collectJob.getAnalyzeType());
+            Assertions.assertEquals(includeVisiblePredicate ? List.of("c2") : List.of("c1", "c2"),
+                    collectJob.getColumnNames());
+        } finally {
+            Config.statistic_auto_collect_predicate_columns_threshold = originalThreshold;
+            Config.statistic_auto_collect_small_table_size = originalSmallTableSize;
+            Config.statistic_auto_collect_use_full_predicate_column_for_sample = originalFullPredicate;
+            analyzeMgr.getBasicStatsMetaMap().remove(table.getId());
+            predicateColumnsMgr.reset();
+            starRocksAssert.dropTable(tableName);
+        }
+    }
+
+    @Test
+    public void testAutoAnalyzePredicateColumnsExcludeUncollectibleHistory() throws Exception {
+        String tableName = "t_predicate_aggregate_history";
+        starRocksAssert.withTable("CREATE TABLE " + tableName + " (c1 BIGINT, c2 BIGINT, c3 BIGINT SUM) " +
+                "AGGREGATE KEY(c1, c2) DISTRIBUTED BY HASH(c1) BUCKETS 1 PROPERTIES('replication_num'='1')");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(connectContext.getDatabase());
+        OlapTable table = (OlapTable) starRocksAssert.getTable(db.getFullName(), tableName);
+        table.maySetDatabaseId(db.getId());
+        table.getPartition(tableName).getDefaultPhysicalPartition().updateVisibleVersion(2);
+        setTableStatistics(table, 1000);
+        PredicateColumnsMgr predicateColumnsMgr = PredicateColumnsMgr.getInstance();
+        predicateColumnsMgr.recordColumnUsageForTest(table, table.getColumn("c2"), ColumnUsage.UseCase.PREDICATE);
+        predicateColumnsMgr.recordColumnUsageForTest(table, table.getColumn("c3"), ColumnUsage.UseCase.PREDICATE);
+
+        AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+        BasicStatsMeta statsMeta = Mockito.mock(BasicStatsMeta.class);
+        Mockito.when(statsMeta.getTableId()).thenReturn(table.getId());
+        Mockito.when(statsMeta.getUpdateTime()).thenReturn(LocalDateTime.now());
+        Mockito.when(statsMeta.isUpdatedAfterLoad(Mockito.any())).thenReturn(true);
+        Mockito.when(statsMeta.getAnalyzedColumns()).thenReturn(Map.of(
+                "C1", new ColumnStatsMeta("C1", StatsConstants.AnalyzeType.FULL, LocalDateTime.now()),
+                "c3", new ColumnStatsMeta("c3", StatsConstants.AnalyzeType.FULL, LocalDateTime.now()),
+                "dropped", new ColumnStatsMeta("dropped", StatsConstants.AnalyzeType.FULL, LocalDateTime.now())));
+        analyzeMgr.addBasicStatsMeta(statsMeta);
+
+        int originalThreshold = Config.statistic_auto_collect_predicate_columns_threshold;
+        try {
+            // Keep the previously collected FULL columns when adding a new predicate column.
+            Config.statistic_auto_collect_predicate_columns_threshold = table.getColumns().size();
+            NativeAnalyzeJob analyzeJob = new NativeAnalyzeJob(db.getId(), table.getId(), null, null,
+                    StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE, Map.of(),
+                    StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
+            List<StatisticsCollectJob> collectJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(analyzeJob);
+            Assertions.assertEquals(1, collectJobs.size());
+            Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, collectJobs.get(0).getAnalyzeType());
+            Assertions.assertEquals(List.of("c2", "c1"), collectJobs.get(0).getColumnNames());
+        } finally {
+            Config.statistic_auto_collect_predicate_columns_threshold = originalThreshold;
+            analyzeMgr.getBasicStatsMetaMap().remove(table.getId());
+            predicateColumnsMgr.reset();
+            starRocksAssert.dropTable(tableName);
         }
     }
 

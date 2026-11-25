@@ -24,6 +24,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -80,6 +81,8 @@ import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -255,6 +258,106 @@ public class AnalyzeStmtTest {
 
         analyzeFail("analyze sample table hive0.tpch.customer predicate columns",
                 "No predicate columns found for external table 'customer'");
+    }
+
+    @ParameterizedTest
+    @CsvSource({"false, true", "false, false", "true, true", "true, false"})
+    public void testAnalyzePredicateColumnsExcludeUncollectibleColumns(boolean histogram, boolean includeVisible)
+            throws Exception {
+        String tableName = "tb_predicate_generated";
+        starRocksAssert.withTable("CREATE TABLE db." + tableName +
+                " (c1 DATETIME NOT NULL, c2 BIGINT, hidden BIGINT, ordinary BIGINT AS c2 + 1) " +
+                "DUPLICATE KEY(c1) PARTITION BY c2, date_trunc('month', c1) " +
+                "DISTRIBUTED BY HASH(c2) BUCKETS 1 PROPERTIES('replication_num'='1')");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db");
+        OlapTable table = (OlapTable) starRocksAssert.getTable("db", tableName);
+        table.maySetDatabaseId(db.getId());
+        Column generatedPartition = table.getBaseSchema().stream()
+                .filter(c -> c.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX))
+                .findFirst().orElseThrow();
+        Column hidden = table.getColumn("hidden");
+        hidden.setIsHidden(true);
+        PredicateColumnsMgr mgr = PredicateColumnsMgr.getInstance();
+        mgr.reset();
+        try {
+            mgr.recordColumnUsageForTest(table, generatedPartition, ColumnUsage.UseCase.PREDICATE);
+            mgr.recordColumnUsageForTest(table, hidden, ColumnUsage.UseCase.PREDICATE);
+            if (includeVisible) {
+                mgr.recordColumnUsageForTest(table, table.getColumn("ordinary"), ColumnUsage.UseCase.PREDICATE);
+            }
+            Assertions.assertEquals(includeVisible ? 3 : 2,
+                    mgr.queryPredicateColumns(new TableName("db", tableName)).size());
+            String clause = histogram ? " update histogram on predicate columns" : " predicate columns";
+            AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess("analyze table db." + tableName + clause);
+            Assertions.assertEquals(includeVisible ? List.of("ordinary") : List.of(), stmt.getColumnNames());
+        } finally {
+            mgr.reset();
+            starRocksAssert.dropTable("db." + tableName);
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"AGGREGATE, SUM, false", "PRIMARY, , true"})
+    public void testAnalyzePredicateColumnsRespectKeyModel(String keyModel, String aggregation, boolean includeValue)
+            throws Exception {
+        String tableName = "tb_predicate_value";
+        starRocksAssert.withTable("CREATE TABLE db." + tableName + " (k BIGINT NOT NULL, v BIGINT " +
+                (aggregation == null ? "" : aggregation) + ") " + keyModel + " KEY(k) " +
+                "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num'='1')");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db");
+        OlapTable table = (OlapTable) starRocksAssert.getTable("db", tableName);
+        table.maySetDatabaseId(db.getId());
+        PredicateColumnsMgr mgr = PredicateColumnsMgr.getInstance();
+        mgr.reset();
+        try {
+            mgr.recordColumnUsageForTest(table, table.getColumn("v"), ColumnUsage.UseCase.PREDICATE);
+            for (String clause : List.of(" predicate columns", " update histogram on predicate columns")) {
+                AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess("analyze table db." + tableName + clause);
+                Assertions.assertEquals(includeValue ? List.of("v") : List.of(), stmt.getColumnNames());
+            }
+            AnalyzeStmt explicit = (AnalyzeStmt) analyzeSuccess("analyze table db." + tableName + " (v)");
+            Assertions.assertEquals(List.of("v"), explicit.getColumnNames());
+            AnalyzeStmt explicitHistogram = (AnalyzeStmt) analyzeSuccess(
+                    "analyze table db." + tableName + " update histogram on v");
+            Assertions.assertEquals(List.of("v"), explicitHistogram.getColumnNames());
+        } finally {
+            mgr.reset();
+            starRocksAssert.dropTable("db." + tableName);
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"false, true", "false, false", "true, true", "true, false"})
+    public void testAnalyzeExternalPredicateColumnsExcludeHiddenColumns(boolean histogram, boolean includeVisible) {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(getConnectContext(), "hive0", "tpch", "customer");
+        Column hidden = table.getColumn("c_name");
+        boolean wasHidden = hidden.isHidden();
+        hidden.setIsHidden(true);
+        new MockUp<PredicateColumnsMgr>() {
+            @Mock
+            public List<ExternalColumnUsage> queryExternalPredicateColumns(Table analyzedTable) {
+                List<ExternalColumnUsage> usages = new ArrayList<>();
+                for (String column : includeVisible ? List.of("c_name", "c_phone") : List.of("c_name")) {
+                    usages.add(new ExternalColumnUsage("table-hash", analyzedTable.getCatalogName(),
+                            analyzedTable.getCatalogDBName(), analyzedTable.getCatalogTableName(), column,
+                            ColumnUsage.UseCase.PREDICATE));
+                }
+                return usages;
+            }
+        };
+        try {
+            String clause = histogram ? " update histogram on predicate columns" : " predicate columns";
+            String sql = "analyze table hive0.tpch.customer" + clause;
+            if (includeVisible) {
+                AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess(sql);
+                Assertions.assertEquals(List.of("c_phone"), stmt.getColumnNames());
+            } else {
+                analyzeFail(sql, "No predicate columns found for external table 'customer'");
+            }
+        } finally {
+            hidden.setIsHidden(wasHidden);
+        }
     }
 
     @Test

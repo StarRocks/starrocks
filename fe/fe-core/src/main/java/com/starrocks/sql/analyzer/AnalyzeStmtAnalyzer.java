@@ -215,6 +215,7 @@ public class AnalyzeStmtAnalyzer {
                     throw new SemanticException("Only analyzable table can support ANALYZE PREDICATE COLUMNS");
                 }
 
+                Set<String> collectibleColumns = Set.copyOf(StatisticUtils.getCollectibleColumns(analyzeTable));
                 List<String> targetColumns = Lists.newArrayList();
 
                 if (analyzeTable.isNativeTableOrMaterializedView()) {
@@ -224,7 +225,7 @@ public class AnalyzeStmtAnalyzer {
                             PredicateColumnsMgr.getInstance().queryPredicateColumns(tableNameForPredicate);
                     for (ColumnUsage col : ListUtils.emptyIfNull(predicateColumns)) {
                         Column realColumn = analyzeTable.getColumnByUniqueId(col.getColumnFullId().getColumnUniqueId());
-                        if (realColumn != null) {
+                        if (realColumn != null && collectibleColumns.contains(realColumn.getName())) {
                             targetColumns.add(realColumn.getName());
                         }
                     }
@@ -232,7 +233,7 @@ public class AnalyzeStmtAnalyzer {
                     for (ExternalColumnUsage col : ListUtils.emptyIfNull(
                             PredicateColumnsMgr.getInstance().queryExternalPredicateColumns(analyzeTable))) {
                         Column realColumn = analyzeTable.getColumn(col.getColumnName());
-                        if (realColumn != null) {
+                        if (realColumn != null && collectibleColumns.contains(realColumn.getName())) {
                             targetColumns.add(realColumn.getName());
                         }
                     }
