@@ -113,6 +113,17 @@ public final class IcebergUtil {
         return level;
     }
 
+    /** Returns an explicit Iceberg Parquet data-page version, or null when absent. */
+    public static String getParquetDataPageVersion(Map<String, String> properties) {
+        String value = properties.get("write.parquet.page-version");
+        if (value == null) {
+            return null;
+        }
+        Preconditions.checkArgument("v1".equalsIgnoreCase(value) || "v2".equalsIgnoreCase(value),
+                "write.parquet.page-version must be v1 or v2: %s", value);
+        return value.toLowerCase(Locale.ROOT);
+    }
+
     public static String fileName(String path) {
         return path.substring(path.lastIndexOf('/') + 1);
     }

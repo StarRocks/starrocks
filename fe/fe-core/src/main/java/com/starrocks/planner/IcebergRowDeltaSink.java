@@ -85,6 +85,7 @@ public class IcebergRowDeltaSink extends DataSink {
     private final String dataLocation;
     private final String dataCompressionType;
     private final Integer parquetCompressionLevel;
+    private final String parquetDataPageVersion;
     private final String deleteCompressionType;
     private final long targetMaxFileSize;
     private final Integer parquetPageSizeBytes;
@@ -125,6 +126,7 @@ public class IcebergRowDeltaSink extends DataSink {
         String dataCodec = nativeTable.properties().getOrDefault(PARQUET_COMPRESSION, sessionCodec);
         this.dataCompressionType = dataCodec;
         this.parquetCompressionLevel = IcebergUtil.getParquetCompressionLevel(nativeTable.properties(), dataCodec);
+        this.parquetDataPageVersion = IcebergUtil.getParquetDataPageVersion(nativeTable.properties());
         this.deleteCompressionType = nativeTable.properties().getOrDefault(DELETE_PARQUET_COMPRESSION, dataCodec);
         this.targetMaxFileSize = IcebergUtil.resolveTargetMaxFileSize(nativeTable, sessionVariable);
         this.parquetPageSizeBytes = IcebergUtil.getPositiveIntProperty(nativeTable.properties(), PARQUET_PAGE_SIZE_BYTES);
@@ -213,6 +215,9 @@ public class IcebergRowDeltaSink extends DataSink {
         tIcebergTableSink.setCompression_type(dataCompression);
         if (parquetCompressionLevel != null) {
             tIcebergTableSink.setParquet_compression_level(parquetCompressionLevel);
+        }
+        if (parquetDataPageVersion != null) {
+            tIcebergTableSink.setParquet_data_page_version(parquetDataPageVersion);
         }
         tIcebergTableSink.setDelete_compression_type(deleteCompression);
         tIcebergTableSink.setTarget_max_file_size(targetMaxFileSize);

@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.qe.SessionVariable;
@@ -64,6 +65,7 @@ public class IcebergTableSinkTest {
         nativeProps.put(PARQUET_DICT_SIZE_BYTES, "131072");
         nativeProps.put(PARQUET_ROW_GROUP_SIZE_BYTES, "1048576");
         nativeProps.put(PARQUET_COMPRESSION_LEVEL, "9");
+        nativeProps.put("write.parquet.page-version", "v2");
 
         CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
 
@@ -125,6 +127,7 @@ public class IcebergTableSinkTest {
         Assertions.assertEquals(131072, t.getIceberg_table_sink().getParquet_dict_size_bytes());
         Assertions.assertEquals(1048576, t.getIceberg_table_sink().getParquet_row_group_size_bytes());
         Assertions.assertEquals(9, t.getIceberg_table_sink().getParquet_compression_level());
+        Assertions.assertEquals("v2", t.getIceberg_table_sink().getParquet_data_page_version());
     }
 
     @Test
@@ -192,6 +195,18 @@ public class IcebergTableSinkTest {
         Assertions.assertFalse(t.getIceberg_table_sink().isSetParquet_dict_size_bytes());
         Assertions.assertFalse(t.getIceberg_table_sink().isSetParquet_row_group_size_bytes());
         Assertions.assertFalse(t.getIceberg_table_sink().isSetParquet_compression_level());
+        Assertions.assertFalse(t.getIceberg_table_sink().isSetParquet_data_page_version());
+    }
+
+    @Test
+    public void testParquetDataPageVersionValidation() {
+        Assertions.assertEquals("v2", IcebergUtil.getParquetDataPageVersion(
+                Map.of("write.parquet.page-version", "V2")));
+        Assertions.assertEquals("v1", IcebergUtil.getParquetDataPageVersion(
+                Map.of("write.parquet.page-version", "v1")));
+        Assertions.assertNull(IcebergUtil.getParquetDataPageVersion(Map.of()));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> IcebergUtil.getParquetDataPageVersion(
+                Map.of("write.parquet.page-version", "2.6")));
     }
 
     /**
