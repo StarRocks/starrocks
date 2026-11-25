@@ -117,10 +117,23 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
      * invalidated.
      */
     public void invalidateTableForRead(Table table) {
-        String dbName = table.getCatalogDBName();
-        String tblName = table.getCatalogTableName();
+        invalidateTableAndFiles(table.getCatalogDBName(), table.getCatalogTableName(), table.getTableLocation());
+    }
+
+    /**
+     * As {@link #invalidateTableForRead}, by name and without loading the table: the table location comes from the
+     * cached table, and when the table entry is gone (it can expire before its partitions) the file lists are still
+     * found through the cached partitions. Run when the FE that wrote to the table asks the others to stop serving
+     * the pre-write copy.
+     */
+    public void invalidateCachedTable(String dbName, String tblName) {
+        Table table = metastore instanceof CachingHiveMetastore cachingMetastore ?
+                cachingMetastore.getTableIfPresent(dbName, tblName) : null;
+        invalidateTableAndFiles(dbName, tblName, table == null ? null : table.getTableLocation());
+    }
+
+    private void invalidateTableAndFiles(String dbName, String tblName, String tableLocation) {
         if (remoteFileIO.isPresent()) {
-            String tableLocation = table.getTableLocation();
             Set<RemotePathKey> keys = new HashSet<>();
             if (!Strings.isNullOrEmpty(tableLocation)) {
                 keys.addAll(remoteFileIO.get().getPresentPathKeyInCache(tableLocation, isRecursive));

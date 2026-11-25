@@ -3570,6 +3570,14 @@ public class Config extends ConfigBase {
     public static int iceberg_commit_invalidate_other_fe_timeout_ms = 3000;
 
     /**
+     * Max time an INSERT, INSERT OVERWRITE or TRUNCATE on a Hive table waits for the other FEs to drop their
+     * cached copy of the table, so that a query on any FE sees the change once the statement returns.
+     * 0 or less disables the wait.
+     */
+    @ConfField(mutable = true)
+    public static int hive_commit_invalidate_other_fe_timeout_ms = 3000;
+
+    /**
      * Background refresh external table metadata interval in milliseconds.
      */
     @ConfField(mutable = true)
