@@ -716,6 +716,15 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
                                               EXPECT_GT(bytes, 0);
                                               EXPECT_GE(_primary_key_mgr->mem_tracker()->consumption(), bytes);
                                           });
+    // The row-id arrays an apply sorts the rows with are charged while they are alive.
+    std::atomic<int> charged_rowids{0};
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:rowids",
+                                          [&](void* arg) {
+                                              charged_rowids++;
+                                              const int64_t bytes = *static_cast<int64_t*>(arg);
+                                              EXPECT_GT(bytes, 0);
+                                              EXPECT_GE(_primary_key_mgr->mem_tracker()->consumption(), bytes);
+                                          });
     // The chunk an update file is decoded into is charged while it is alive, rows left out included.
     std::atomic<int> charged_chunks{0};
     SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:chunk", [&](void* arg) {
@@ -756,10 +765,13 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
         SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:routed");
         SyncPoint::GetInstance()->ClearCallBack(
                 "ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:charged");
+        SyncPoint::GetInstance()->ClearCallBack(
+                "ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:rowids");
         SyncPoint::GetInstance()->DisableProcessing();
     });
 
-    auto run_update = [&](int update_ratio) {
+    // With `disjoint`, every update file holds the rows of one source segment only.
+    auto run_update = [&](int update_ratio, bool disjoint = false) {
         // One column-mode update that rewrites c1 of every row, flushed as one update file per write.
         ConfigResetGuard<int64_t> write_buffer_guard(&config::write_buffer_size, 1);
         upt_reads = 0;
@@ -778,7 +790,8 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         for (int slice = 0; slice < kSourceSegments; slice++) {
-            auto chunk = strided_update(slice, update_ratio);
+            auto chunk = disjoint ? generate_data(kChunkSize, slice, true, update_ratio)
+                                  : strided_update(slice, update_ratio);
             ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
         }
         ASSERT_OK(delta_writer->finish_with_txnlog());
@@ -789,17 +802,23 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
                   }));
     };
 
+    // The default threshold is far above the four source segments of this test.
+    ConfigResetGuard<int32_t> threshold_guard(&config::lake_pk_column_mode_spill_min_source_segments, 2);
     // Spill on: each update file is read exactly once, whatever the number of source segments.
     const int64_t tracker_before_spill = _primary_key_mgr->mem_tracker()->consumption();
     run_update(5);
     const int baseline_records = records_written.load();
+    // The rows fit the buffer, so they are flushed once, after the last update file: one record per
+    // source segment holding its rows of every update file, not one per segment and update file.
+    EXPECT_EQ(1, flushes.load());
+    EXPECT_EQ(kSourceSegments, baseline_records);
     const int64_t baseline_max_record_len = max_record_len;
     EXPECT_EQ(kSourceSegments, upt_reads.load());
     EXPECT_EQ(kSourceSegments, upt_closes.load());
     EXPECT_EQ(0, live_iters);
-    EXPECT_GT(flushes.load(), 0);
     EXPECT_EQ(kSourceSegments, charged_routes.load());
     EXPECT_GT(charged_reads.load(), 0);
+    EXPECT_EQ(kSourceSegments * kSourceSegments, charged_rowids.load());
     EXPECT_GT(charged_payloads.load(), 0);
     EXPECT_GT(charged_chunks.load(), 0);
     // Every update file has rows of every source segment, and a source segment is one streamed range.
@@ -818,6 +837,20 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
         EXPECT_GT(charged_reads.load(), kSourceSegments * kSourceSegments);
         EXPECT_EQ(kSourceSegments * kSourceSegments, applies.load());
     }
+    // Buffer limits in between, with each update file read in two chunks: a flush in the middle of
+    // an update file leaves that file's rows of a segment in the last run of one record and the
+    // first run of the next, and a record holds runs of several update files. Each update file is
+    // still applied once per source range, in order.
+    for (const int64_t limit : {120, 200, 280, 360, 440}) {
+        ConfigResetGuard<int64_t> buffer_guard(&config::lake_pk_column_mode_spill_buffer_bytes, limit);
+        ConfigResetGuard<int32_t> chunk_size_guard(&config::pk_vector_chunk_size, kChunkSize / 2);
+        flushes = 0;
+        applies = 0;
+        run_update(static_cast<int>(20 + limit / 40));
+        EXPECT_EQ(kSourceSegments, upt_reads.load());
+        EXPECT_GT(flushes.load(), 1) << "limit " << limit;
+        EXPECT_EQ(kSourceSegments * kSourceSegments, applies.load()) << "limit " << limit;
+    }
     // A record lands on disk as it was serialized, unless transparent data encryption is on: then
     // the bytes on disk differ from the serialized record, and the update still applies.
     {
@@ -828,7 +861,7 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
         SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:plain",
                                               [&](void* arg) {
                                                   const auto& p = *static_cast<std::pair<const char*, int64_t>*>(arg);
-                                                  plain.assign(p.first, p.second);
+                                                  plain.append(p.first, p.second);
                                               });
         SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:block",
                                               [&](void* arg) {
@@ -838,8 +871,12 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
                                                   ASSIGN_OR_ABORT(auto readable, block->get_readable());
                                                   ASSERT_OK(readable->read_fully(raw.data(), raw.size()));
                                                   (raw == plain ? plain_blocks : encrypted_blocks)++;
+                                                  plain.clear();
                                               });
+        flushes = 0;
         run_update(8);
+        // The records of a flush are written as one block.
+        EXPECT_EQ(flushes.load(), plain_blocks.load());
         EXPECT_GT(plain_blocks.load(), 0);
         EXPECT_EQ(0, encrypted_blocks.load());
         {
@@ -919,6 +956,18 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
         ConfigResetGuard<int32_t> min_guard(&config::lake_pk_column_mode_spill_min_source_segments, kSourceSegments);
         run_update(14);
         EXPECT_EQ(kSourceSegments, upt_reads.load());
+    }
+    // Update files that each fall into one source segment are read once by the re-read path as
+    // well, so a threshold of 2 does not spill them however many source segments there are. A
+    // threshold of 1 does.
+    {
+        run_update(15, true);
+        EXPECT_EQ(0, upt_reads.load());
+        ConfigResetGuard<int32_t> min_guard(&config::lake_pk_column_mode_spill_min_source_segments, 1);
+        applies = 0;
+        run_update(16, true);
+        EXPECT_EQ(kSourceSegments, upt_reads.load());
+        EXPECT_EQ(kSourceSegments, applies.load());
     }
     // Spill off: the previous per-segment re-read path, same result.
     {
@@ -4724,7 +4773,9 @@ TEST_F(LakeColumnUpsertModeTest, upsert_with_new_rows_adds_new_segments) {
     auto prev_rowsets = md_before->rowsets_size();
 
     auto chunk_insert = generate_data(kChunkSize, 100, true, 7);
-    // No existing key matches, so the publish has nothing to spill and opens no spill file.
+    // No existing key matches, so the publish has nothing to spill and opens no spill file, even
+    // when told to always spill.
+    ConfigResetGuard<int32_t> threshold_guard(&config::lake_pk_column_mode_spill_min_source_segments, 1);
     std::atomic<int> spill_opens{0};
     SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:opened",
                                           [&](void*) { spill_opens++; });

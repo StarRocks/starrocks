@@ -1100,11 +1100,11 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：部分更新（partial update）每个工作线程的内存上限，用于限制单个 worker 在处理 partial update 时的内存占用。
 ### lake_pk_column_mode_spill_min_source_segments
 
-- 默认值：2
+- 默认值：32
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离主键表做列模式部分更新时，更新涉及的源 segment 数达到该值，才会先把更新行按源 segment 分区写入 `spill_local_storage_dir` 下的本地 spill 文件再应用。这些目录空间不足时，不走 spill 直接应用。走 spill 时每个更新文件在每个列批次只从对象存储读取一次，每个源 segment 只从本地盘读取属于自己的行。源 segment 数低于该值，或该值小于等于 0 时，每个源 segment 会重复读取它涉及的所有更新文件，在 segment 很多的 tablet 上会很慢。分区过程占用的内存由 `lake_pk_column_mode_spill_buffer_bytes` 限制。
+- 描述：存算分离主键表做列模式部分更新时，每个更新文件平均涉及的源 segment 数达到该值，才会先把更新行按源 segment 分区写入 `spill_local_storage_dir` 下的本地 spill 文件再应用。这些目录空间不足时，不走 spill 直接应用。走 spill 时每个更新文件在每个列批次只从对象存储读取一次，每个源 segment 只从本地盘读取属于自己的行。低于该值，或该值小于等于 0 时，每个源 segment 会重复读取它涉及的所有更新文件，在一个更新文件的行分散到很多 segment 时会很慢。低于默认值时，spill 的开销大于它省下的对象存储读取。每个更新文件只落在一个源 segment 上时，默认不走 spill，因为此时不走 spill 也只读取一次。该值统计的是源 segment 数，不是一个 segment 被分成的段数：较大的源 segment 会按 `partial_update_memory_limit_per_worker` 的限制分成多段应用，每一段都会重新读取更新文件。将该值调小（设为 1 时总是走 spill）可以让这种情况也走 spill。分区过程占用的内存由 `lake_pk_column_mode_spill_buffer_bytes` 限制。
 - 引入版本：-
 
 ### lake_pk_column_mode_spill_buffer_bytes

@@ -532,9 +532,15 @@ CONF_mInt64(partial_update_memory_limit_per_worker, "2147483648"); // 2GB
 CONF_mInt32(pk_vector_chunk_size, "4096");
 // Column-mode partial update: partition the update rows by source segment into the local spill
 // directories (spill_local_storage_dir) once per column batch, so every update file is read from object storage once instead of once per
-// source segment. Applies when the update touches at least this many source segments: below that the
-// per-segment re-read costs the same remote reads and no local IO. <= 0 always uses the re-read.
-CONF_mInt32(lake_pk_column_mode_spill_min_source_segments, "2");
+// source segment. Applies when the update files feed at least this many source segments each on
+// average, which is how often the per-segment re-read would read every update file. Below the
+// default the serialize, local write and local read of the spill cost more than the remote reads it
+// saves (measured on a shared-data cluster: slower up to 16, even at 20 to 24, faster from 32 on).
+// The count is of source segments, not of the ranges a segment is applied in: a segment too large
+// for one range (see partial_update_memory_limit_per_worker) re-reads every update file once per
+// range, and a lower value, down to 1 for always, spills that as well. <= 0 always uses the
+// re-read.
+CONF_mInt32(lake_pk_column_mode_spill_min_source_segments, "32");
 // Memory the partition pass may buffer before flushing to the spill file.
 CONF_mInt64(lake_pk_column_mode_spill_buffer_bytes, "67108864"); // 64MB
 

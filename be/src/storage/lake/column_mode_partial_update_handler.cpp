@@ -23,6 +23,8 @@
 #include <limits>
 #include <mutex>
 #include <numeric>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "base/crypto/aes_util.h"
 #include "base/debug/trace.h"
@@ -339,6 +341,27 @@ static Status read_chunk_from_update_file(const ChunkIteratorPtr& iter, const Ch
     return Status::OK();
 }
 
+// Condition update: keep the pairs whose old condition value is not greater than the new one, so
+// ties go to the new row like in the upsert path. The two vectors are parallel and stay so.
+static void filter_by_condition(const Column& source_cond, const Column& upt_cond,
+                                std::vector<uint32_t>* sorted_source_rowids, std::vector<uint32_t>* upt_rowids) {
+    const size_t original_size = sorted_source_rowids->size();
+    size_t kept = 0;
+    for (size_t i = 0; i < original_size; ++i) {
+        const uint32_t src_rowid = (*sorted_source_rowids)[i];
+        const uint32_t upt_rowid = (*upt_rowids)[i];
+        if (source_cond.compare_at(src_rowid, upt_rowid, upt_cond, -1) <= 0) {
+            (*sorted_source_rowids)[kept] = src_rowid;
+            (*upt_rowids)[kept] = upt_rowid;
+            ++kept;
+        }
+    }
+    sorted_source_rowids->resize(kept);
+    upt_rowids->resize(kept);
+    TRACE_COUNTER_INCREMENT("pcu_condition_kept_cnt", kept);
+    TRACE_COUNTER_INCREMENT("pcu_condition_dropped_cnt", original_size - kept);
+}
+
 // read from upt files and update rows in source chunk.
 // When condition_idx_in_partial_schema >= 0, pairs where the old condition value is
 // strictly greater than the new one are dropped before applying the update, so the
@@ -390,29 +413,10 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidTo
         split_rowid_pairs(each.second, &sorted_source_rowids, &unsorted_upt_rowids, &container);
         DCHECK(sorted_source_rowids.size() == unsorted_upt_rowids.size());
 
-        // When condition update is enabled, compare the condition column value in
-        // source chunk vs upt chunk and keep winners (old <= new); equal values let
-        // the new row win, matching the upsert path.
         if (condition_idx_in_partial_schema >= 0) {
-            const auto& source_cond = container.chunk_ptr->get_column_by_index(condition_idx_in_partial_schema);
-            const auto& upt_cond = upt_chunk->get_column_by_index(condition_idx_in_partial_schema);
-            const size_t original_size = sorted_source_rowids.size();
-            std::vector<uint32_t> filtered_source_rowids;
-            std::vector<uint32_t> filtered_upt_rowids;
-            filtered_source_rowids.reserve(original_size);
-            filtered_upt_rowids.reserve(original_size);
-            for (size_t i = 0; i < original_size; ++i) {
-                const uint32_t src_rowid = sorted_source_rowids[i];
-                const uint32_t upt_rowid = unsorted_upt_rowids[i];
-                if (source_cond->compare_at(src_rowid, upt_rowid, *upt_cond, -1) <= 0) {
-                    filtered_source_rowids.push_back(src_rowid);
-                    filtered_upt_rowids.push_back(upt_rowid);
-                }
-            }
-            sorted_source_rowids.swap(filtered_source_rowids);
-            unsorted_upt_rowids.swap(filtered_upt_rowids);
-            TRACE_COUNTER_INCREMENT("pcu_condition_kept_cnt", sorted_source_rowids.size());
-            TRACE_COUNTER_INCREMENT("pcu_condition_dropped_cnt", original_size - sorted_source_rowids.size());
+            filter_by_condition(*container.chunk_ptr->get_column_by_index(condition_idx_in_partial_schema),
+                                *upt_chunk->get_column_by_index(condition_idx_in_partial_schema), &sorted_source_rowids,
+                                &unsorted_upt_rowids);
         }
         if (sorted_source_rowids.empty()) {
             continue;
@@ -513,10 +517,15 @@ Status ColumnModePartialUpdateHandler::_spill_update_rows(
     }
     TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_spill_update_rows:opened", &block_opts);
 
-    // One buffer per source segment: this batch's columns plus the source rowid of each row.
+    // One buffer per source segment: this batch's columns plus the source rowid of each row. The
+    // rows arrive one update file after another, so `runs` says which update file each stretch of
+    // rows came from without storing an id per row.
     struct Buffer {
         ChunkUniquePtr chunk;
         UInt32Column::MutablePtr rowids;
+        std::vector<SpillRun> runs;
+        // What this buffer is charged to the tracker for, so a flush can release it on its own.
+        int64_t bytes = 0;
     };
     std::map<uint32_t, Buffer> buffers;
     int64_t buffered_bytes = 0;
@@ -529,14 +538,51 @@ Status ColumnModePartialUpdateHandler::_spill_update_rows(
     int64_t max_record_bytes = std::numeric_limits<int32_t>::max();
     TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_spill_update_rows:max_record_bytes", &max_record_bytes);
 
-    auto flush = [&](uint32_t upt_id) -> Status {
-        // The serialized copy of a buffer is alive next to the buffer itself until it is written,
-        // and a flush concentrated on one segment makes it about one buffer limit.
+    // The runs of rows [from, from + count) of a buffer whose rows are described by `runs`.
+    auto slice_runs = [](const std::vector<SpillRun>& runs, size_t from, size_t count) {
+        std::vector<SpillRun> out;
+        size_t pos = 0;
+        for (const auto& run : runs) {
+            const size_t begin = std::max(pos, from);
+            const size_t end = std::min(pos + run.num_rows, from + count);
+            if (begin < end) {
+                out.push_back(SpillRun{.upt_id = run.upt_id, .num_rows = static_cast<uint32_t>(end - begin)});
+            }
+            pos += run.num_rows;
+        }
+        return out;
+    };
+
+    // A flush serializes every buffer into one payload and writes it as one block, so the block
+    // manager is asked once per flush, not once per source segment: acquiring a block, reserving its
+    // space and handing it back cost about the same whatever the block holds. A record is a byte
+    // range of the block of its flush.
+    struct PendingRecord {
+        uint32_t rssid;
+        uint32_t num_rows;
+        uint64_t seq;
+        int64_t offset;
+        int64_t length;
+        std::vector<SpillRun> runs;
+    };
+    auto flush = [&]() -> Status {
+        // The payload grows while the buffers it is made from are dropped one by one, so the two
+        // together stay around one buffer limit. Only the written part of the reservation is
+        // charged: the rest has not been touched yet. The reservation adds room for the length
+        // headers the serde writes per column and record. A payload that still outgrows it (object
+        // columns serialize to a size unrelated to their memory usage) is charged at its new
+        // capacity.
         std::string payload;
         int64_t payload_bytes = 0;
         DeferOp release_payload([&]() { _tracker->release(payload_bytes); });
-        std::function<Status(uint32_t, const Chunk&, const UInt32Column&)> write_record =
-                [&](uint32_t rssid, const Chunk& chunk, const UInt32Column& rowids) -> Status {
+        const size_t payload_reserved =
+                static_cast<size_t>(buffered_bytes) + buffers.size() * (partial_schema.num_fields() + 1) * 16;
+        TRY_CATCH_BAD_ALLOC(payload.reserve(payload_reserved));
+        int64_t payload_size = 0;
+        std::vector<PendingRecord> pending;
+        std::function<Status(uint32_t, const Chunk&, const UInt32Column&, const std::vector<SpillRun>&)>
+                serialize_record = [&](uint32_t rssid, const Chunk& chunk, const UInt32Column& rowids,
+                                       const std::vector<SpillRun>& runs) -> Status {
             int64_t max_size = 0;
             for (const auto& column : chunk.columns()) {
                 const int64_t n = serde::ColumnArraySerde::max_serialized_size(*column);
@@ -562,58 +608,37 @@ Status ColumnModePartialUpdateHandler::_spill_update_rows(
                     const int64_t part_bytes = static_cast<int64_t>(part->memory_usage() + part_rowids->memory_usage());
                     _tracker->consume(part_bytes);
                     DeferOp release_part([&]() { _tracker->release(part_bytes); });
-                    RETURN_IF_ERROR(write_record(rssid, *part, *part_rowids));
+                    RETURN_IF_ERROR(serialize_record(rssid, *part, *part_rowids, slice_runs(runs, from, count)));
                 }
                 return Status::OK();
             }
-            payload.resize(max_size);
-            const int64_t grown = static_cast<int64_t>(payload.capacity()) - payload_bytes;
+            TRY_CATCH_BAD_ALLOC(payload.resize(payload_size + max_size));
+            const int64_t in_use = payload.capacity() > payload_reserved ? static_cast<int64_t>(payload.capacity())
+                                                                         : payload_size + max_size;
+            const int64_t grown = in_use - payload_bytes;
             if (grown > 0) {
                 _tracker->consume(grown);
                 payload_bytes += grown;
             }
             TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_spill_update_rows:payload", &payload_bytes);
-            auto* cur = reinterpret_cast<uint8_t*>(payload.data());
+            char* begin = payload.data() + payload_size;
+            auto* cur = reinterpret_cast<uint8_t*>(begin);
             for (const auto& column : chunk.columns()) {
                 ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::serialize(*column, cur));
             }
             ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::serialize(rowids, cur));
-            int64_t length = cur - reinterpret_cast<uint8_t*>(payload.data());
-            std::pair<const char*, int64_t> plain{payload.data(), length};
+            int64_t length = cur - reinterpret_cast<uint8_t*>(begin);
+            std::pair<const char*, int64_t> plain{begin, length};
             TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_spill_update_rows:plain", &plain);
             const uint64_t seq = _spill.num_records++;
-            RETURN_IF_ERROR(crypt_spill_record(_spill.key, seq, true, payload.data(), length));
-            block_opts.block_size = length;
-            ASSIGN_OR_RETURN(auto block, _spill.block_mgr->acquire_block(block_opts));
-            auto write_st = block->append({Slice(payload.data(), length)});
-            if (write_st.ok()) {
-                write_st = block->flush();
-            }
-            // Hand the block back whichever way the write went: the manager keeps its container file
-            // for the next record and deletes it in the end.
-            auto release_st = _spill.block_mgr->release_block(block);
-            RETURN_IF_ERROR(write_st);
-            RETURN_IF_ERROR(release_st);
-            TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_spill_update_rows:block", &block);
-            // The record index lives until the column batch is done, one descriptor per segment and
-            // flush, so its growth is charged as well (a map node per new segment, vector capacity).
-            auto [index_it, inserted] = _spill.records.try_emplace(rssid);
-            auto& index = index_it->second;
-            const size_t old_capacity = index.capacity();
-            index.push_back(SpillRecord{.upt_id = upt_id,
-                                        .num_rows = static_cast<uint32_t>(chunk.num_rows()),
-                                        .seq = seq,
-                                        .block = std::move(block)});
-            const int64_t index_grown =
-                    (inserted ? static_cast<int64_t>(sizeof(decltype(_spill.records)::value_type) + 4 * sizeof(void*))
-                              : 0) +
-                    static_cast<int64_t>((index.capacity() - old_capacity) * sizeof(SpillRecord));
-            if (index_grown > 0) {
-                _tracker->consume(index_grown);
-                _spill.index_bytes += index_grown;
-            }
-            _spill.size += length;
-            TRACE_COUNTER_INCREMENT("pcu_spill_records", 1);
+            RETURN_IF_ERROR(crypt_spill_record(_spill.key, seq, true, begin, length));
+            pending.push_back(PendingRecord{.rssid = rssid,
+                                            .num_rows = static_cast<uint32_t>(chunk.num_rows()),
+                                            .seq = seq,
+                                            .offset = payload_size,
+                                            .length = length,
+                                            .runs = runs});
+            payload_size += length;
             TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_spill_update_rows:record", &length);
             return Status::OK();
         };
@@ -621,14 +646,61 @@ Status ColumnModePartialUpdateHandler::_spill_update_rows(
             if (buffer.chunk == nullptr || buffer.chunk->num_rows() == 0) {
                 continue;
             }
-            RETURN_IF_ERROR(write_record(rssid, *buffer.chunk, *buffer.rowids));
+            RETURN_IF_ERROR(serialize_record(rssid, *buffer.chunk, *buffer.rowids, buffer.runs));
+            // Its rows are in the payload now. Drop the buffer rather than reset it: a reset chunk
+            // keeps its capacity, and with the buffers living for the whole partition pass that
+            // would pin about one buffer limit per segment that ever took a large share of a flush,
+            // while the tracker reports zero.
+            buffer.chunk.reset();
+            buffer.rowids.reset();
+            _tracker->release(buffer.bytes);
+            buffered_bytes -= buffer.bytes;
+            buffer.bytes = 0;
         }
-        // Drop the buffers rather than reset them: a reset chunk keeps its capacity, and with the
-        // buffers living for the whole partition pass that would pin about one buffer limit per
-        // segment that ever took a large share of a flush, while the tracker reports zero.
         buffers.clear();
         _tracker->release(buffered_bytes);
         buffered_bytes = 0;
+        if (!pending.empty()) {
+            block_opts.block_size = payload_size;
+            ASSIGN_OR_RETURN(auto block, _spill.block_mgr->acquire_block(block_opts));
+            auto write_st = block->append({Slice(payload.data(), payload_size)});
+            if (write_st.ok()) {
+                write_st = block->flush();
+            }
+            // Hand the block back whichever way the write went: the manager keeps its container file
+            // for the next flush and deletes it in the end.
+            auto release_st = _spill.block_mgr->release_block(block);
+            RETURN_IF_ERROR(write_st);
+            RETURN_IF_ERROR(release_st);
+            TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_spill_update_rows:block", &block);
+            // The record index lives until the column batch is done, one descriptor per segment and
+            // flush plus one run per update file in it, so its growth is charged as well (a map node
+            // per new segment, vector capacity, the runs).
+            for (auto& rec : pending) {
+                auto [index_it, inserted] = _spill.records.try_emplace(rec.rssid);
+                auto& index = index_it->second;
+                const size_t old_capacity = index.capacity();
+                index.push_back(SpillRecord{.num_rows = rec.num_rows,
+                                            .seq = rec.seq,
+                                            .block = block,
+                                            .offset = rec.offset,
+                                            .length = rec.length,
+                                            .runs = std::move(rec.runs)});
+                const int64_t index_grown =
+                        (inserted ? static_cast<int64_t>(sizeof(decltype(_spill.records)::value_type) +
+                                                         4 * sizeof(void*))
+                                  : 0) +
+                        static_cast<int64_t>((index.capacity() - old_capacity) * sizeof(SpillRecord)) +
+                        static_cast<int64_t>(index.back().runs.capacity() * sizeof(SpillRun));
+                if (index_grown > 0) {
+                    _tracker->consume(index_grown);
+                    _spill.index_bytes += index_grown;
+                }
+                TRACE_COUNTER_INCREMENT("pcu_spill_records", 1);
+            }
+            _spill.size += payload_size;
+            TRACE_COUNTER_INCREMENT("pcu_spill_blocks", 1);
+        }
         size_t live_buffers = buffers.size();
         TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_spill_update_rows:flushed", &live_buffers);
         return Status::OK();
@@ -750,14 +822,25 @@ Status ColumnModePartialUpdateHandler::_spill_update_rows(
                     // of object columns (JSON, BITMAP, HLL), quadratic over a flush interval.
                     const size_t from = buffer.chunk->num_rows();
                     TRY_CATCH_BAD_ALLOC(buffer.chunk->append_selective(*chunk, indexes.data(), 0, indexes.size()));
+                    // A buffer collects a segment's rows of several update files until the next
+                    // flush, and the buffer limit is a mutable config with no upper bound.
+                    RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(*buffer.chunk,
+                                                                         "column mode partial update spill buffer",
+                                                                         _rowset_ptr->tablet_id(), _txn_id));
                     buffer.rowids->append_numbers(src_rowids.data(), src_rowids.size() * sizeof(uint32_t));
-                    const int64_t bytes = static_cast<int64_t>(buffer.chunk->bytes_usage(from, indexes.size())) +
-                                          static_cast<int64_t>(src_rowids.size() * sizeof(uint32_t));
+                    int64_t bytes = static_cast<int64_t>(buffer.chunk->bytes_usage(from, indexes.size())) +
+                                    static_cast<int64_t>(src_rowids.size() * sizeof(uint32_t));
+                    if (buffer.runs.empty() || buffer.runs.back().upt_id != upt_id) {
+                        buffer.runs.push_back(SpillRun{.upt_id = upt_id, .num_rows = 0});
+                        bytes += static_cast<int64_t>(sizeof(SpillRun));
+                    }
+                    buffer.runs.back().num_rows += static_cast<uint32_t>(indexes.size());
                     _tracker->consume(bytes);
+                    buffer.bytes += bytes;
                     buffered_bytes += bytes;
                 }
                 if (buffered_bytes > config::lake_pk_column_mode_spill_buffer_bytes) {
-                    RETURN_IF_ERROR(flush(upt_id));
+                    RETURN_IF_ERROR(flush());
                 }
             }
             base = end;
@@ -768,9 +851,11 @@ Status ColumnModePartialUpdateHandler::_spill_update_rows(
                     "them, tablet {} txn {}",
                     upt_id, base, entries.size() - pos, _rowset_ptr->tablet_id(), _txn_id));
         }
-        // Flush at the update-file boundary so every record holds rows of one update file.
-        RETURN_IF_ERROR(flush(upt_id));
     }
+    // The buffers are flushed only when they are over the limit and here, not at every update-file
+    // boundary: a write costs about the same whatever its size, and a flush per update file writes
+    // (source segments x update files) records where this writes one per source segment and flush.
+    RETURN_IF_ERROR(flush());
     _spill.ready = true;
     TRACE_COUNTER_INCREMENT("pcu_spill_bytes", _spill.size);
     return Status::OK();
@@ -791,112 +876,56 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_from_spill(uint32_t 
     int64_t payload_bytes = 0;
     DeferOp release_payload([&]() { _tracker->release(payload_bytes); });
     std::vector<uint32_t> selected; // rows of one record that fall into this source range
+    int64_t selected_bytes = 0;     // capacity of `selected` charged so far
+    DeferOp release_selected([&]() { _tracker->release(selected_bytes); });
     const auto& records = it->second;
-    size_t next = 0;
-    while (next < records.size()) {
-        // Collect this range's rows of one update file from all its records before applying them.
-        // A flush in the middle of an update file splits a segment's rows over several records,
-        // and update_rows() rebuilds a variable-length column whenever a value changes its length,
-        // so applying record by record would rebuild the source column once per record instead of
-        // once per update file. Records of different update files stay apart: a later file must
-        // overwrite an earlier one.
-        uint32_t upt_id = records[next].upt_id;
-        auto upt_chunk = ChunkFactory::new_chunk(partial_schema, 0);
-        std::vector<uint32_t> source_rowids; // row i of upt_chunk updates this row of the container
-        int64_t upt_bytes = 0;
-        DeferOp release_upt([&]() { _tracker->release(upt_bytes); });
-        for (; next < records.size() && records[next].upt_id == upt_id; next++) {
-            const auto& rec = records[next];
-            const auto length = static_cast<int64_t>(rec.block->size());
-            payload.resize(length);
-            if (const int64_t grown = static_cast<int64_t>(payload.capacity()) - payload_bytes; grown > 0) {
-                _tracker->consume(grown);
-                payload_bytes += grown;
-            }
-            // Every record is its own block, read through its own stream: the segment tasks share
-            // no file position.
-            ASSIGN_OR_RETURN(auto readable, rec.block->get_readable());
-            RETURN_IF_ERROR(readable->read_fully(payload.data(), length));
-            RETURN_IF_ERROR(crypt_spill_record(_spill.key, rec.seq, false, payload.data(), length));
-            auto rec_chunk = ChunkFactory::new_chunk(partial_schema, rec.num_rows);
-            auto rowids = UInt32Column::create();
-            const auto* cur = reinterpret_cast<const uint8_t*>(payload.data());
-            const auto* end = cur + length;
-            for (auto& column : rec_chunk->columns()) {
-                ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::deserialize(cur, end, column->as_mutable_raw_ptr()));
-            }
-            ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::deserialize(cur, end, rowids.get()));
-            RETURN_ERROR_IF_FALSE(rec_chunk->num_rows() == rec.num_rows && rowids->size() == rec.num_rows,
-                                  "column-mode partial update spill record is corrupted");
-            // Charge the record's decoded copies (chunk, rowids) for as long as they live, as the
-            // whole-file path charges its update chunk: segment tasks run concurrently and a skewed
-            // flush can make one record most of a buffer limit. The payload is charged above.
-            int64_t rec_bytes =
-                    static_cast<int64_t>(rec_chunk->memory_usage()) + static_cast<int64_t>(rowids->memory_usage());
-            _tracker->consume(rec_bytes);
-            DeferOp release_rec([&]() { _tracker->release(rec_bytes); });
-            TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:charged",
-                                     &rec_bytes);
-
-            // Keep only the rows of this streamed source range.
-            selected.clear();
-            const auto& src = rowids->get_data();
-            for (uint32_t i = 0; i < rec.num_rows; i++) {
-                if (src[i] >= container.start_rowid && src[i] < container.end_rowid) {
-                    selected.push_back(i);
-                    source_rowids.push_back(src[i] - container.start_rowid);
-                }
-            }
-            if (selected.empty()) {
-                continue;
-            }
-            const size_t from = upt_chunk->num_rows();
-            TRY_CATCH_BAD_ALLOC(upt_chunk->append_selective(*rec_chunk, selected.data(), 0, selected.size()));
-            RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(*upt_chunk, "column mode partial update spill rows",
-                                                                 _rowset_ptr->tablet_id(), _txn_id));
-            const int64_t bytes = static_cast<int64_t>(upt_chunk->bytes_usage(from, selected.size())) +
-                                  static_cast<int64_t>(selected.size() * sizeof(uint32_t));
-            _tracker->consume(bytes);
-            upt_bytes += bytes;
-        }
+    // The rows of the update file being collected. A record holds this segment's rows of several
+    // update files, one run per file, and a flush in the middle of an update file leaves that
+    // file's rows in the last run of one record and the first run of the next. update_rows()
+    // rebuilds a variable-length column whenever a value changes its length, so the rows of one
+    // update file are applied with a single call, whichever runs they came from. Different update
+    // files stay apart: a later file must overwrite an earlier one.
+    ChunkUniquePtr upt_chunk;
+    std::vector<uint32_t> source_rowids; // row i of upt_chunk updates this row of the container
+    int64_t upt_bytes = 0;
+    DeferOp release_upt([&]() { _tracker->release(upt_bytes); });
+    uint32_t pending_upt_id = 0;
+    auto apply_pending = [&]() -> Status {
+        DeferOp reset_pending([&]() {
+            upt_chunk.reset();
+            source_rowids.clear();
+            _tracker->release(upt_bytes);
+            upt_bytes = 0;
+        });
         if (source_rowids.empty()) {
-            continue;
+            return Status::OK();
         }
-
+        // The two row-id arrays below hold 8 bytes per collected row for the whole apply. With a
+        // narrow update column that is as much as the rows themselves, so charge them too.
+        int64_t rowid_bytes = static_cast<int64_t>(source_rowids.size() * 2 * sizeof(uint32_t));
+        _tracker->consume(rowid_bytes);
+        DeferOp release_rowids([&]() { _tracker->release(rowid_bytes); });
+        TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:rowids",
+                                 &rowid_bytes);
         // Order by source rowid like the whole-file path does.
-        std::vector<uint32_t> unsorted_upt_rowids(source_rowids.size());
+        std::vector<uint32_t> unsorted_upt_rowids;
+        std::vector<uint32_t> sorted_source_rowids;
+        TRY_CATCH_BAD_ALLOC(unsorted_upt_rowids.resize(source_rowids.size()));
+        TRY_CATCH_BAD_ALLOC(sorted_source_rowids.reserve(source_rowids.size()));
         std::iota(unsorted_upt_rowids.begin(), unsorted_upt_rowids.end(), 0);
         std::stable_sort(unsorted_upt_rowids.begin(), unsorted_upt_rowids.end(),
                          [&](uint32_t a, uint32_t b) { return source_rowids[a] < source_rowids[b]; });
-        std::vector<uint32_t> sorted_source_rowids;
-        sorted_source_rowids.reserve(source_rowids.size());
         for (const uint32_t upt_rowid : unsorted_upt_rowids) {
             sorted_source_rowids.push_back(source_rowids[upt_rowid]);
         }
 
         if (condition_idx_in_partial_schema >= 0) {
-            const auto& source_cond = container.chunk_ptr->get_column_by_index(condition_idx_in_partial_schema);
-            const auto& upt_cond = upt_chunk->get_column_by_index(condition_idx_in_partial_schema);
-            const size_t original_size = sorted_source_rowids.size();
-            std::vector<uint32_t> filtered_source_rowids;
-            std::vector<uint32_t> filtered_upt_rowids;
-            filtered_source_rowids.reserve(original_size);
-            filtered_upt_rowids.reserve(original_size);
-            for (size_t i = 0; i < original_size; ++i) {
-                const uint32_t src_rowid = sorted_source_rowids[i];
-                const uint32_t upt_rowid = unsorted_upt_rowids[i];
-                if (source_cond->compare_at(src_rowid, upt_rowid, *upt_cond, -1) <= 0) {
-                    filtered_source_rowids.push_back(src_rowid);
-                    filtered_upt_rowids.push_back(upt_rowid);
-                }
-            }
-            sorted_source_rowids.swap(filtered_source_rowids);
-            unsorted_upt_rowids.swap(filtered_upt_rowids);
-            TRACE_COUNTER_INCREMENT("pcu_condition_kept_cnt", sorted_source_rowids.size());
-            TRACE_COUNTER_INCREMENT("pcu_condition_dropped_cnt", original_size - sorted_source_rowids.size());
+            filter_by_condition(*container.chunk_ptr->get_column_by_index(condition_idx_in_partial_schema),
+                                *upt_chunk->get_column_by_index(condition_idx_in_partial_schema), &sorted_source_rowids,
+                                &unsorted_upt_rowids);
         }
         if (sorted_source_rowids.empty()) {
-            continue;
+            return Status::OK();
         }
         auto tmp_chunk = ChunkFactory::new_chunk(partial_schema, unsorted_upt_rowids.size());
         TRY_CATCH_BAD_ALLOC(
@@ -910,13 +939,87 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_from_spill(uint32_t 
         _tracker->release(upt_bytes);
         upt_bytes = 0;
         TRACE_COUNTER_INCREMENT("pcu_spill_apply_cnt", 1);
-        TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:apply", &upt_id);
+        TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:apply",
+                                 &pending_upt_id);
         RETURN_IF_EXCEPTION(container.chunk_ptr->update_rows(*tmp_chunk, sorted_source_rowids.data()));
-        RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(*container.chunk_ptr,
-                                                             "column mode partial update merged source chunk",
-                                                             _rowset_ptr->tablet_id(), _txn_id));
+        return ChunkHelper::reject_if_over_capacity(*container.chunk_ptr,
+                                                    "column mode partial update merged source chunk",
+                                                    _rowset_ptr->tablet_id(), _txn_id);
+    };
+    for (const auto& rec : records) {
+        const int64_t length = rec.length;
+        payload.resize(length);
+        if (const int64_t grown = static_cast<int64_t>(payload.capacity()) - payload_bytes; grown > 0) {
+            _tracker->consume(grown);
+            payload_bytes += grown;
+        }
+        // The records of one flush share a block, and every read opens its own stream on it: the
+        // segment tasks share no file position.
+        ASSIGN_OR_RETURN(auto readable, rec.block->get_readable());
+        RETURN_IF_ERROR(readable->skip(rec.offset));
+        RETURN_IF_ERROR(readable->read_fully(payload.data(), length));
+        RETURN_IF_ERROR(crypt_spill_record(_spill.key, rec.seq, false, payload.data(), length));
+        auto rec_chunk = ChunkFactory::new_chunk(partial_schema, rec.num_rows);
+        auto rowids = UInt32Column::create();
+        const auto* cur = reinterpret_cast<const uint8_t*>(payload.data());
+        const auto* end = cur + length;
+        for (auto& column : rec_chunk->columns()) {
+            ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::deserialize(cur, end, column->as_mutable_raw_ptr()));
+        }
+        ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::deserialize(cur, end, rowids.get()));
+        RETURN_ERROR_IF_FALSE(rec_chunk->num_rows() == rec.num_rows && rowids->size() == rec.num_rows,
+                              "column-mode partial update spill record is corrupted");
+        // Charge the record's decoded copies (chunk, rowids) for as long as they live, as the
+        // whole-file path charges its update chunk: segment tasks run concurrently and a record can
+        // be most of a buffer limit. The payload is charged above.
+        int64_t rec_bytes =
+                static_cast<int64_t>(rec_chunk->memory_usage()) + static_cast<int64_t>(rowids->memory_usage());
+        _tracker->consume(rec_bytes);
+        DeferOp release_rec([&]() { _tracker->release(rec_bytes); });
+        TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:charged", &rec_bytes);
+
+        const auto& src = rowids->get_data();
+        uint32_t row = 0;
+        for (const auto& run : rec.runs) {
+            RETURN_ERROR_IF_FALSE(run.num_rows <= rec.num_rows - row,
+                                  "column-mode partial update spill record runs are corrupted");
+            if (run.upt_id != pending_upt_id) {
+                RETURN_IF_ERROR(apply_pending());
+                pending_upt_id = run.upt_id;
+            }
+            // Keep only the rows of this streamed source range.
+            selected.clear();
+            for (uint32_t i = row; i < row + run.num_rows; i++) {
+                if (src[i] >= container.start_rowid && src[i] < container.end_rowid) {
+                    selected.push_back(i);
+                    source_rowids.push_back(src[i] - container.start_rowid);
+                }
+            }
+            row += run.num_rows;
+            // `selected` is reused across runs and records, so its capacity lives until the end.
+            if (const int64_t grown = static_cast<int64_t>(selected.capacity() * sizeof(uint32_t)) - selected_bytes;
+                grown > 0) {
+                _tracker->consume(grown);
+                selected_bytes += grown;
+            }
+            if (selected.empty()) {
+                continue;
+            }
+            if (upt_chunk == nullptr) {
+                upt_chunk = ChunkFactory::new_chunk(partial_schema, 0);
+            }
+            const size_t from = upt_chunk->num_rows();
+            TRY_CATCH_BAD_ALLOC(upt_chunk->append_selective(*rec_chunk, selected.data(), 0, selected.size()));
+            RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(*upt_chunk, "column mode partial update spill rows",
+                                                                 _rowset_ptr->tablet_id(), _txn_id));
+            const int64_t bytes = static_cast<int64_t>(upt_chunk->bytes_usage(from, selected.size())) +
+                                  static_cast<int64_t>(selected.size() * sizeof(uint32_t));
+            _tracker->consume(bytes);
+            upt_bytes += bytes;
+        }
+        RETURN_ERROR_IF_FALSE(row == rec.num_rows, "column-mode partial update spill record runs are corrupted");
     }
-    return Status::OK();
+    return apply_pending();
 }
 
 template <typename T>
@@ -1046,6 +1149,26 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
     // Parallel to dcg_column_file_with_encryption_metas: byte size of each `.cols` file,
     // captured from finalize() so readers can avoid a stat/HeadObject when opening the segment.
     std::map<uint32_t, std::vector<int64_t>> dcg_column_file_sizes;
+    // How often the re-read path reads an update file: once for every source segment the file has
+    // rows of. Averaged over the update files, weighted by their matched rows so that a large file
+    // spread over many source segments is not hidden by small files that each fall into one. The
+    // map does not change below, so this is computed once for all column batches.
+    double upt_reads_weighted = 0; // sum over update files of (source segments fed) * (matched rows)
+    double upt_rows_matched = 0;
+    {
+        std::unordered_map<uint32_t, std::pair<uint64_t, uint64_t>> per_upt; // upt_id -> (segments, rows)
+        for (const auto& [rssid, upt_map] : rss_upt_id_to_rowid_pairs) {
+            for (const auto& [upt_id, pairs] : upt_map) {
+                auto& [segments, rows] = per_upt[upt_id];
+                segments++;
+                rows += pairs.size();
+            }
+        }
+        for (const auto& [upt_id, stat] : per_upt) {
+            upt_reads_weighted += static_cast<double>(stat.first) * static_cast<double>(stat.second);
+            upt_rows_matched += static_cast<double>(stat.second);
+        }
+    }
     // 3. read from raw segment file and update file, and generate `.col` files
     // The inner segment loop is parallelized: each (column_batch, rssid) combination is independent
     // since they read different source segments and write to different .col files (UUID-based names).
@@ -1068,14 +1191,22 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
 
         // Read each update file once and hand every source segment its own rows (see
         // _spill_update_rows). Declared before the runner so the spill outlives every task.
-        // The spill pays off only when an update file would otherwise be read more than once, which
-        // takes more than one source segment: with a single one the re-read path already reads each
-        // update file once, and the spill would add a serialize, local write, local read and
-        // deserialize pass for nothing. This also covers a load that matched no existing key (an
-        // insert-only COLUMN_UPSERT_MODE load), which has no segment task to feed.
+        // The spill pays off only when an update file would otherwise be read more than once. The
+        // re-read path reads an update file once per source range of every source segment the file
+        // has rows of (see _read_from_source_segment_and_update), so the check is on the update
+        // files rather than on the source segments of the whole update: update files that each
+        // fall into a different source segment are read once either way, and there the spill would
+        // add a serialize, local write, local read and deserialize pass for nothing. The update is
+        // spilled when its update files feed at least the configured number of source segments on
+        // average (computed above). The default is where the saved remote reads start to outweigh
+        // the cost of the spill. The count is of segments, not ranges: a segment too large for one
+        // range reads each update file once per range on the re-read path, and only a lower
+        // threshold, down to 1 for always, spills that case. A load that matched no existing key
+        // (an insert-only COLUMN_UPSERT_MODE load) has no segment task to feed and never spills.
         const int32_t spill_min_source_segments = config::lake_pk_column_mode_spill_min_source_segments;
-        bool spill_update_rows = spill_min_source_segments > 0 &&
-                                 rss_upt_id_to_rowid_pairs.size() >= static_cast<size_t>(spill_min_source_segments);
+        bool spill_update_rows =
+                spill_min_source_segments > 0 && upt_rows_matched > 0 &&
+                upt_reads_weighted >= upt_rows_matched * static_cast<double>(spill_min_source_segments);
         if (spill_update_rows) {
             auto st = _spill_update_rows(rss_upt_id_to_rowid_pairs, partial_schema);
             // A local problem (disk full, spill directory not usable, a column the spill cannot

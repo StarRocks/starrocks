@@ -1105,11 +1105,11 @@ This topic introduces the following types of BE configurations:
 
 ### lake_pk_column_mode_spill_min_source_segments
 
-- Default: 2
+- Default: 32
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The minimum number of source segments a column-mode partial update on a shared-data Primary Key table must touch before the update rows are partitioned by source segment into local spill files under `spill_local_storage_dir` and then applied. If these directories have no room, the update is applied without spilling. When the update is spilled, each update file is read from object storage once per column batch and every source segment reads only its own rows from local disk. Below this number, or when the value is 0 or negative, every source segment re-reads every update file it touches, which is slow on tablets with many segments. Memory used by the partition pass is bounded by `lake_pk_column_mode_spill_buffer_bytes`.
+- Description: The minimum number of source segments that the update files of a column-mode partial update on a shared-data Primary Key table must each have rows of, on average, before the update rows are partitioned by source segment into local spill files under `spill_local_storage_dir` and then applied. If these directories have no room, the update is applied without spilling. When the update is spilled, each update file is read from object storage once per column batch and every source segment reads only its own rows from local disk. Below this number, or when the value is 0 or negative, every source segment re-reads every update file it has rows in, which is slow when the rows of an update file are spread over many segments. Below the default, spilling costs more than the reads from object storage it saves. Update files that each fall into a single source segment are never spilled by default, because the re-read already reads them once. The number counts source segments, not the ranges a segment is applied in: a large source segment is applied in several ranges bounded by `partial_update_memory_limit_per_worker`, and each range re-reads the update files. Set this item to a smaller value, down to 1 to always spill, to cover that case as well. Memory used by the partition pass is bounded by `lake_pk_column_mode_spill_buffer_bytes`.
 - Introduced in: -
 
 ### lake_pk_column_mode_spill_buffer_bytes

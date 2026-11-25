@@ -80,9 +80,11 @@ private:
     // Apply the spilled rows of source segment `rssid` that fall into `container`. Same semantics as
     // _update_source_chunk_by_upt: update files in order, rows of one file sorted by source rowid,
     // the condition column compared inline when condition update is on. The rows of one update file
-    // are collected from all its records and applied with a single update_rows() call. A task holds one
-    // record next to the rows collected so far, then those rows next to their sorted copy, and only the
-    // copy while update_rows() runs. The rows are at most one update file's columns of this batch, which
+    // are collected from all the records they were written to and applied with a single update_rows()
+    // call. A task holds one record, which carries the segment's rows of every update file read between
+    // two flushes and so at most lake_pk_column_mode_spill_buffer_bytes of them, next to the rows
+    // collected for one update file and, while they are applied, their sorted copy. The collected rows
+    // are at most one update file's columns of this batch, which
     // the per-segment re-read path holds too, and _read_from_source_segment_and_update sizes `container`
     // with this update memory in its budget. All of it is charged to the update memory tracker.
     Status _update_source_chunk_from_spill(uint32_t rssid, const Schema& partial_schema, StreamChunkContainer container,
@@ -119,19 +121,30 @@ private:
     CrossPublishRowSelectorPtr _row_selector;
     int64_t _upt_memory_usage_per_row = 0;
 
-    struct SpillRecord {
+    // A stretch of consecutive rows of a record that came from one update file.
+    struct SpillRun {
         uint32_t upt_id;
+        uint32_t num_rows;
+    };
+    struct SpillRecord {
         uint32_t num_rows;
         // Number of the record in its spill, which keys its encryption.
         uint64_t seq;
+        // The block of the flush that wrote the record, and where the record is in it.
         spill::BlockPtr block;
+        int64_t offset;
+        int64_t length;
+        // The update files the rows came from, in update-file order: the rows of a record are
+        // applied run by run, and a later update file overwrites an earlier one.
+        std::vector<SpillRun> runs;
     };
     struct UptSpill {
         // Declared before `records`: the blocks must go before the manager that owns their files.
         std::unique_ptr<spill::BlockManager> block_mgr;
         int64_t size = 0;
         uint64_t num_records = 0;
-        // Source segment -> its records, in apply order (update-file order, then write order).
+        // Source segment -> its records, in write order. Update files are read in order, so the runs
+        // of a segment's records taken one after another are in update-file order.
         std::map<uint32_t, std::vector<SpillRecord>> records;
         // What `records` is charged to the update memory tracker for.
         int64_t index_bytes = 0;
