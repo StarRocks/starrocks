@@ -1,0 +1,128 @@
+-- name: test_minmax_null_result_recollect
+DROP DATABASE IF EXISTS test_minmax_null_result;
+-- result:
+-- !result
+CREATE DATABASE test_minmax_null_result;
+-- result:
+-- !result
+USE test_minmax_null_result;
+-- result:
+-- !result
+CREATE TABLE t (
+  k INT NOT NULL,
+  v INT NULL
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+SELECT inspect_minmax('test_minmax_null_result.t', 'v');
+-- result:
+None
+-- !result
+INSERT INTO t VALUES (1, NULL);
+-- result:
+-- !result
+SELECT inspect_minmax('test_minmax_null_result.t', 'v');
+-- result:
+None
+-- !result
+SELECT inspect_minmax('test_minmax_null_result.t', 'v');
+-- result:
+None
+-- !result
+INSERT INTO t VALUES (2, 10), (3, 20);
+-- result:
+-- !result
+SELECT inspect_minmax('test_minmax_null_result.t', 'v');
+-- result:
+None
+-- !result
+SELECT inspect_minmax('test_minmax_null_result.t', 'v');
+-- result:
+ColumnMinMax[minValue=10, maxValue=20]
+-- !result
+DROP DATABASE test_minmax_null_result;
+-- result:
+-- !result
+-- name: test_minmax_collect_max_tablets @sequential
+DROP DATABASE IF EXISTS test_minmax_max_tablets;
+-- result:
+-- !result
+CREATE DATABASE test_minmax_max_tablets;
+-- result:
+-- !result
+USE test_minmax_max_tablets;
+-- result:
+-- !result
+CREATE TABLE t (
+  k INT NOT NULL,
+  v INT NOT NULL
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t VALUES (1, 10), (2, 20);
+-- result:
+-- !result
+admin set frontend config ("min_max_stats_collect_max_tablets" = "1");
+-- result:
+-- !result
+SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+-- result:
+None
+-- !result
+SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+-- result:
+None
+-- !result
+admin set frontend config ("min_max_stats_collect_max_tablets" = "2");
+-- result:
+-- !result
+SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+-- result:
+ColumnMinMax[minValue=10, maxValue=20]
+-- !result
+SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+-- result:
+ColumnMinMax[minValue=10, maxValue=20]
+-- !result
+admin set frontend config ("min_max_stats_collect_max_tablets" = "1");
+-- result:
+-- !result
+SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+-- result:
+ColumnMinMax[minValue=10, maxValue=20]
+-- !result
+INSERT INTO t VALUES (3, 30);
+-- result:
+-- !result
+SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+-- result:
+None
+-- !result
+SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+-- result:
+None
+-- !result
+admin set frontend config ("min_max_stats_collect_max_tablets" = "0");
+-- result:
+-- !result
+SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+-- result:
+ColumnMinMax[minValue=10, maxValue=30]
+-- !result
+SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+-- result:
+ColumnMinMax[minValue=10, maxValue=30]
+-- !result
+admin set frontend config ("min_max_stats_collect_max_tablets" = "100000");
+-- result:
+-- !result
+DROP DATABASE test_minmax_max_tablets;
+-- result:
+-- !result
+CLEANUP {
+    admin set frontend config ("min_max_stats_collect_max_tablets" = "100000");
+} END CLEANUP

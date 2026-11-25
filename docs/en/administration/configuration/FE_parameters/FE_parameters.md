@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks FE configuration reference: complete list of FE parameters configurable in fe.conf or via ADMIN SET FRONTEND CONFIG."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import FEConfigMethod from '../../../_assets/commonMarkdown/FE_config_method.mdx'
@@ -46,6 +47,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <StaticFEConfigNote />
 
 ## Parameter groups
+
+For table-level shared-data Compaction admission, see
+[`lake_compaction_admission_mode` and `lake_compaction_allow_table_ids`](./shared_lake_other.md#lake_compaction_admission_mode).
+The default `NORMAL` mode preserves existing scheduling; explicitly select `ALLOWLIST` to restrict eligible tables.
 
 The parameters are grouped in these categories:
 

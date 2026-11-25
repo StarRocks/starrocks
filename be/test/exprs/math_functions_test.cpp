@@ -14,6 +14,7 @@
 
 #include "exprs/math_functions.h"
 
+#include <fmt/format.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
@@ -28,6 +29,7 @@
 #include "exprs/time_functions.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 
 #define PI acos(-1)
 
@@ -998,10 +1000,7 @@ TEST_F(VecMathFunctionsTest, InfNanTest) {
     {
         Columns columns;
 
-        auto tc1 = DoubleColumn::create();
-        tc1->append(710.0);
-        tc1->append(2.47498282E8);
-        tc1->append(2.47498282E3);
+        auto tc1 = ColumnTestHelper::build_column<double>({710.0, 2.47498282E8, 2.47498282E3});
         columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -1313,9 +1312,7 @@ TEST_F(VecMathFunctionsTest, AbsDecimalNullableAllNullPreservesScale) {
 
     ColumnPtr result = MathFunctions::abs_decimal128(ctx.get(), columns).value();
     ASSERT_TRUE(result->is_nullable());
-    ASSERT_EQ(2, result->size());
-    ASSERT_TRUE(result->is_null(0));
-    ASSERT_TRUE(result->is_null(1));
+    ASSERT_EQ("[NULL, NULL]", result->debug_string());
 
     auto result_data =
             ColumnHelper::cast_to<TYPE_DECIMAL128>(FunctionHelper::get_data_column_of_nullable(result)).get();
@@ -1361,16 +1358,10 @@ TEST_F(VecMathFunctionsTest, CotTest) {
 TEST_F(VecMathFunctionsTest, Atan2Test) {
     {
         Columns columns;
-        auto tc1 = DoubleColumn::create();
-        tc1->append(0.1);
-        tc1->append(0.2);
-        tc1->append(0.3);
+        auto tc1 = ColumnTestHelper::build_column<double>({0.1, 0.2, 0.3});
         columns.emplace_back(std::move(tc1));
 
-        auto tc2 = DoubleColumn::create();
-        tc2->append(0.1);
-        tc2->append(0.2);
-        tc2->append(0.3);
+        auto tc2 = ColumnTestHelper::build_column<double>({0.1, 0.2, 0.3});
         columns.emplace_back(std::move(tc2));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -1535,10 +1526,7 @@ TEST_F(VecMathFunctionsTest, OutputNanTest) {
         tc1->append(0.3);
         binary_columns.emplace_back(std::move(tc1));
 
-        auto tc2 = DoubleColumn::create();
-        tc2->append(0.8);
-        tc2->append(0.2);
-        tc2->append(0.3);
+        auto tc2 = ColumnTestHelper::build_column<double>({0.8, 0.2, 0.3});
         binary_columns.emplace_back(std::move(tc2));
 
         std::vector<bool> null_expect = {true, false, false};
@@ -1557,10 +1545,8 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
 
     {
         Columns columns;
-        auto col1 = Int32Column::create();
-        auto col2 = Int32Column::create();
-        col1->append(123);
-        col2->append(33);
+        auto col1 = ColumnTestHelper::build_column<int32_t>({123});
+        auto col2 = ColumnTestHelper::build_column<int32_t>({33});
         columns.emplace_back(std::move(col1));
         columns.emplace_back(std::move(col2));
 
@@ -1572,9 +1558,8 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
     }
     {
         Columns columns;
-        auto col1 = Int32Column::create();
+        auto col1 = ColumnTestHelper::build_column<int32_t>({123});
         auto col2 = Int32Column::create();
-        col1->append(123);
         auto col3 = NullableColumn::create(std::move(col1), NullColumn::create(col1->size(), DATUM_NOT_NULL));
         col3->append_nulls(1);
         col2->append(33);
@@ -1589,10 +1574,8 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
     }
     {
         Columns columns_const;
-        auto col1 = Int32Column::create();
-        auto col2 = Int32Column::create();
-        col1->append(123);
-        col2->append(15);
+        auto col1 = ColumnTestHelper::build_column<int32_t>({123});
+        auto col2 = ColumnTestHelper::build_column<int32_t>({15});
         auto const_col1 = ConstColumn::create(std::move(col1), 1);
         columns_const.emplace_back(std::move(const_col1));
         columns_const.emplace_back(std::move(col2));
@@ -1658,10 +1641,8 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
     }
     {
         Columns columns;
-        auto col1 = BinaryColumn::create();
-        auto col2 = Int32Column::create();
-        col1->append("我是");
-        col2->append(1);
+        auto col1 = ColumnTestHelper::build_column<Slice>({"我是"});
+        auto col2 = ColumnTestHelper::build_column<int32_t>({1});
         columns.emplace_back(std::move(col1));
         columns.emplace_back(std::move(col2));
 
@@ -1675,10 +1656,8 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
 
     {
         Columns columns;
-        auto col1 = Int32Column::create();
-        auto col2 = Int32Column::create();
-        col1->append(123);
-        col2->append(10);
+        auto col1 = ColumnTestHelper::build_column<int32_t>({123});
+        auto col2 = ColumnTestHelper::build_column<int32_t>({10});
         columns.emplace_back(std::move(col1));
         columns.emplace_back(std::move(col2));
 
@@ -1913,6 +1892,41 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
         columns_const.emplace_back(std::move(col2));
         auto result = MathFunctions::iceberg_truncate_int<TYPE_INT>(ctx.get(), columns_const);
         ASSERT_EQ(result.status().message(), "Truncate to integer failed, because the result is overflow.");
+    }
+}
+
+// Iceberg year/month ordinals are floor(units since epoch), i.e. calendar fields only.
+TEST_F(VecMathFunctionsTest, icebergYearMonthTransformBeforeEpoch) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    struct Case {
+        int y, m, d;
+        int64_t year, month;
+    };
+    const std::vector<Case> cases = {
+            {1, 1, 1, -1969, -23628},   {999, 1, 1, -971, -11652}, {999, 12, 31, -971, -11641},
+            {1000, 1, 1, -970, -11640}, {1969, 1, 1, -1, -12},     {1969, 6, 15, -1, -7},
+            {1969, 11, 15, -1, -2},     {1969, 12, 15, -1, -1},    {1969, 12, 31, -1, -1},
+            {1970, 1, 1, 0, 0},         {1970, 6, 15, 0, 5},       {2026, 12, 31, 56, 683},
+    };
+    for (const auto& c : cases) {
+        SCOPED_TRACE(fmt::format("{:04d}-{:02d}-{:02d}", c.y, c.m, c.d));
+        auto date_col = DateColumn::create();
+        date_col->append(DateValue::create(c.y, c.m, c.d));
+        Columns dates{std::move(date_col)};
+        auto ts_col = TimestampColumn::create();
+        ts_col->append(TimestampValue::create(c.y, c.m, c.d, 23, 59, 59, 999999));
+        Columns timestamps{std::move(ts_col)};
+
+        auto value = [](const StatusOr<ColumnPtr>& r) {
+            return ColumnHelper::as_column<Int64Column>(r.value())->get_data()[0];
+        };
+        EXPECT_EQ(c.year, value(TimeFunctions::iceberg_years_since_epoch_date(ctx.get(), dates)));
+        EXPECT_EQ(c.month, value(TimeFunctions::iceberg_months_since_epoch_date(ctx.get(), dates)));
+        EXPECT_EQ(c.year, value(TimeFunctions::iceberg_years_since_epoch_datetime(ctx.get(), timestamps)));
+        EXPECT_EQ(c.month, value(TimeFunctions::iceberg_months_since_epoch_datetime(ctx.get(), timestamps)));
+        EXPECT_EQ(c.year, value(TimeFunctions::iceberg_timestamptz_years_since_epoch_datetime(ctx.get(), timestamps)));
+        EXPECT_EQ(c.month,
+                  value(TimeFunctions::iceberg_timestamptz_months_since_epoch_datetime(ctx.get(), timestamps)));
     }
 }
 

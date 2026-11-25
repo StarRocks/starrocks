@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 70
 description: "Query hints are directives or comments that explicitly suggest the query optimizer on how to execute a query."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Query Hint
@@ -42,7 +43,7 @@ CREATE MATERIALIZED VIEW mv
 PARTITION BY dt 
 DISTRIBUTED BY HASH(`key`) 
 BUCKETS 10 
-REFRESH ASYNC 
+REFRESH ON_CHANGE 
 AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
 ```
 

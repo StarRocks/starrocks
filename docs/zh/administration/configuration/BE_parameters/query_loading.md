@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "BE configuration parameters for query execution and data loading."
 sidebar_label: "查询引擎和导入导出"
 keywords: ['Canshu']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -173,6 +174,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：-
 - 是否动态：是
 - 描述：根据 L2 驻留情况控制聚合哈希表的软件预取。仅当桶数组溢出 L2 时才会启用预取，即当 `bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio` 时，其中 L2 大小在运行时检测（若检测失败则回退为 1 MiB）。在此阈值以下，哈希表驻留于 L2 中，此时预取会导致净损耗。在每个核心运行多个驱动程序且竞争激烈的部署环境中，应降低该比率——此时每个哈希表实际占用的 L2 空间小于名义上的每核心大小；将其提高至 1.0 以上会延迟预取，直到哈希表远超 L2 容量。另请参阅 `agg_hash_map_prefetch_dist`。
+- 引入版本：-
+
+### arrow_io_thread_pool_size
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Apache Arrow 进程级 I/O 线程池的线程数，Arrow 的异步 I/O 任务都在这个线程池中执行。设为 `0` 时沿用 Arrow 启动时自行确定的大小：环境变量 `ARROW_IO_THREADS` 为正整数时取该值，否则为 8。设为大于 `0` 的值时，该值优先于 `ARROW_IO_THREADS`。取值范围为 [0, 32768]。修改后立即生效，无需重启：调大时立即为排队中的任务启动新线程；调小时，多出的线程在完成手头的任务后退出。改回 `0` 即恢复为 Arrow 启动时确定的大小。如果配置文件中的值超出取值范围，BE 会打印告警日志，并保留 Arrow 自行确定的大小。
 - 引入版本：-
 
 ### clear_udf_cache_when_start
@@ -405,6 +415,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：发起 Hedged Read 请求前需要等待多少毫秒。例如，假设该参数设置为 `30`，那么如果一个 Read 任务未能在 30 毫秒内返回结果，则 HDFS 客户端会立即发起一个 Hedged Read，从目标数据块的副本上读取数据。该参数对应 HDFS 集群配置文件 **hdfs-site.xml** 中的 `dfs.client.hedged.read.threshold.millis` 参数。
 - 引入版本：v3.0
 
+### iceberg_metadata_table_cache_capacity
+
+- 默认值：128
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Iceberg 元数据表（例如 `t$files`、`t$partitions`）的 JNI 扫描器在单个 BE 或 CN 节点上保留的空闲的已反序列化 Iceberg 表的最大数量。同一个查询的所有扫描任务共享一份反序列化后的表，而不是每个任务各自反序列化一份，因此 JVM 堆内存占用与并发扫描任务数无关。60 秒未被使用的表会被释放。取值小于或等于 `0` 时，之后开始的扫描不再共享。
+- 引入版本：-
+
 ### io_coalesce_adaptive_lazy_active
 
 - 默认值：true
@@ -458,6 +477,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：控制 Flat JSON 时，同名列的占比阈值，当同名列占比低于该值时不进行提取，默认为 0.9。该参数仅在 `enable_json_flat` 为 `true` 时生效。
 - 引入版本：v3.3.0
+
+### json_max_parse_nesting_depth
+
+- 默认值：1024
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：解析 JSON（例如 `parse_json`、`CAST AS JSON` 以及 JSON 列导入）时允许的最大对象/数组嵌套深度。解析器每层嵌套递归一次，若不加限制，超深文档会耗尽线程栈并导致 BE 崩溃。嵌套深度超过该值的输入会返回数据质量错误。正值表示生效的上限；设置为 `0` 或负数时保留内置默认值（1024），而非关闭该检查。
+- 引入版本：v4.2.0
 
 ### lake_tablet_ignore_invalid_delete_predicate
 
@@ -790,6 +818,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：Minutes
 - 是否动态：是
 - 描述：Scan Context 的清理间隔。
+- 引入版本：-
+
+### scan_credential_refresh_rpc_timeout_ms
+
+- 默认值：10000
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：当为扫描下发的凭证（Iceberg REST Catalog 的 vended credentials）即将过期时，扫描向其 Coordinator FE 请求续期凭证的 RPC 超时时间。该 RPC 不重试：失败或超时后，扫描继续使用当前凭证，并在一分钟后再次请求。取值小于或等于 `0` 时，之后开始的扫描不再续期，始终使用下发时的凭证。
 - 引入版本：-
 
 ### scanner_row_num
@@ -1573,6 +1610,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：否
 - 描述：BE 在请求未提供显式超时时使用的 Pulsar 相关 routine load 操作的默认超时（秒）。具体地，`PInternalServiceImplBase::get_pulsar_info` 将该值乘以 1000，形成以毫秒为单位的超时值，传递给用于获取 Pulsar 分区元数据和 backlog 的 routine load 任务执行器方法。增大该值可在 Pulsar 响应较慢时减少超时失败，但会延长故障检测时间；减小该值可在 broker 响应慢时更快失败。与用于 Kafka 的 `routine_load_kafka_timeout_second` 类似。
 - 引入版本：v3.2.0
+
+### routine_load_kafka_consumer_pool_size
+
+- 默认值：64
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：BE 为 routine load 保留的空闲 consumer 的最大数量，作业的下一个任务或下一轮可以复用它们的连接，而不必新建。Kafka 和 Pulsar 的 consumer 共用这个池子和这个上限。池满时关闭空闲最久的 consumer；空闲超过 10 分钟的 consumer 也会被关闭。默认值可容纳每个 BE 16 个 routine load 任务（`max_routine_load_task_num_per_be`）、每个任务最多 3 个 consumer（`max_consumer_num_per_group`）。
+- 引入版本：-
+
+### routine_load_kafka_fetch_queue_backoff_ms
+
+- 默认值：10
+- 类型：Int
+- 单位：毫秒
+- 是否动态：是
+- 描述：Routine Load 的 Kafka consumer 本地消息队列超过 librdkafka 的队列阈值（`queued.min.messages` 或 `queued.max.messages.kbytes`）后，等待多久再拉取该分区。该值作为 `fetch.queue.backoff.ms` 传给 librdkafka，librdkafka 自身的默认值为 1000 ms。队列被消费完时 librdkafka 不会提前拉取，因此等待时间较长时，消费较快的 consumer 会空等剩余的时间，降低 Routine Load 的吞吐。Routine Load 作业的 `property.fetch.queue.backoff.ms` 属性优先于该配置项。设为负数时使用 librdkafka 的默认值，大于 300000 时按 300000 处理。不要设为 `0`：设为 `0` 时，队列超过阈值期间 librdkafka 的 broker 线程会忙等轮询，占用 CPU。修改后，Routine Load 任务会改用按新值创建的 consumer。
+- 引入版本：-
 
 ### routine_load_kafka_timeout_second
 

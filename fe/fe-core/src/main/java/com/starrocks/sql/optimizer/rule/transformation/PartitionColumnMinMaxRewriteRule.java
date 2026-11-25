@@ -182,6 +182,8 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
                 result = optimizeWithTopN(input, aggregationOperator, scanOperator, table, minMax);
             }
             if (result != null) {
+                // Decided by which partitions hold data, read live: the plan has to read versions at least as new.
+                table.markPlanningVersionsForRecheck();
                 return Lists.newArrayList(result);
             }
         } catch (NotImplementedException ignore) {

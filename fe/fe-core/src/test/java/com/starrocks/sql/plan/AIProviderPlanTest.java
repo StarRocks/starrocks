@@ -239,7 +239,7 @@ public class AIProviderPlanTest extends PlanTestBase {
     }
 
     @Test
-    public void testPlanSnapshotSurvivesSqlProtocolAlterWhileNewPlanningFails() throws Exception {
+    public void testProtocolAlterPreservesSnapshotAndRefreshesRebuiltPlans() throws Exception {
         String name = "protocol_alter_plan_chat";
         Map<String, String> originalProperties = properties("original-model");
         manager().createProvider(name, AIProviderType.CHAT, originalProperties, "");
@@ -251,10 +251,9 @@ public class AIProviderPlanTest extends PlanTestBase {
                     "ALTER AI PROVIDER " + name + " SET ('protocol' = 'anthropic')", connectContext), connectContext);
 
             assertSnapshot(template, originalProperties);
-            Assertions.assertThrows(SemanticException.class, () -> rebuild(template));
-            SemanticException error = Assertions.assertThrows(SemanticException.class, () -> getExecPlan(sql));
-            Assertions.assertEquals("AI functions only support an OPENAI provider protocol now, not ANTHROPIC",
-                    error.getDetailMsg());
+            assertSnapshot(rebuild(template), originalProperties, TAIProviderProtocol.ANTHROPIC);
+            assertSnapshot(getExecPlan(sql), originalProperties, TAIProviderProtocol.ANTHROPIC);
+            assertSnapshot(template, originalProperties);
         } finally {
             manager().dropProvider(name, true);
         }
@@ -445,6 +444,10 @@ public class AIProviderPlanTest extends PlanTestBase {
     }
 
     private static void assertSnapshot(ExecPlan plan, Map<String, String> properties) {
+        assertSnapshot(plan, properties, TAIProviderProtocol.OPENAI);
+    }
+
+    private static void assertSnapshot(ExecPlan plan, Map<String, String> properties, TAIProviderProtocol protocol) {
         List<TAIProjectNode> nodes = aiNodes(plan);
         Assertions.assertEquals(2, nodes.size());
         for (TAIProjectNode node : nodes) {
@@ -452,6 +455,7 @@ public class AIProviderPlanTest extends PlanTestBase {
             String key = node.getAi_provider_mapping().keySet().iterator().next();
             TAIProvider config = node.getAi_provider_mapping().get(key);
             Assertions.assertEquals(config.getId(), key);
+            Assertions.assertEquals(protocol, config.getProtocol());
             Assertions.assertEquals(properties.get("model"), config.getParams().get("model"));
             Assertions.assertEquals(properties.get("endpoint"), config.getParams().get("endpoint"));
             Assertions.assertEquals(properties.get("api_key"), config.getParams().get("api_key"));

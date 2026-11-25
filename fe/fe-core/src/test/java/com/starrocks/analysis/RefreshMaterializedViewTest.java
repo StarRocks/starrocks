@@ -139,7 +139,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                 + "\"excluded_refresh_tables\" = \"t2\"\n"
                 + ")\n"
                 + "DISTRIBUTED BY RANDOM\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS \n" +
                 "select k1 from (SELECT * FROM t1 UNION ALL SELECT * FROM t2) t group by k1\n", () -> {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
@@ -179,7 +179,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         withRefreshedMV("CREATE MATERIALIZED VIEW mv1 \n" +
                 "PARTITION BY date_trunc('day', k1)\n"
                 + "DISTRIBUTED BY RANDOM\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS \n" +
                 "select k1 from (SELECT * FROM t1 UNION ALL SELECT * FROM t2) t group by k1\n", () -> {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
@@ -227,7 +227,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         withRefreshedMV("CREATE MATERIALIZED VIEW test2.mv1 \n" +
                 "PARTITION BY date_trunc('day', k1)\n"
                 + "DISTRIBUTED BY RANDOM\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS \n" +
                 "select k1 from (SELECT * FROM test.t1 UNION ALL SELECT * FROM test.t2) t group by k1\n", () -> {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test2");
@@ -342,10 +342,46 @@ public class RefreshMaterializedViewTest extends MVTestBase {
     }
 
     @Test
-    public void testIncrementalRefreshModeRejectsForceRefresh() throws Exception {
-        // Create a MV with PCT mode (no Iceberg required), then flip the persisted refresh_mode
-        // to "incremental" so the FORCE-rejection branch in the analyzer fires. This isolates the
-        // analyzer check from the IVM eligibility constraints of the CREATE path.
+    public void testAutoRefreshModeRejectsPartitionRefreshButAllowsForce() throws Exception {
+        // AUTO may fall back to PCT at refresh time but is still an incrementally maintained
+        // view, so it keeps INCREMENTAL's restrictions on how a refresh can be asked for.
+        starRocksAssert.withMaterializedView("create materialized view test.mv_auto_refresh_forms\n" +
+                "PARTITION BY k1\n" +
+                "distributed by hash(k2) buckets 3\n" +
+                "refresh manual\n" +
+                "properties (\"refresh_mode\" = \"pct\")\n" +
+                "as select k1, k2, v1 from test.tbl_with_mv;");
+        try {
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().getTable("test", "mv_auto_refresh_forms");
+            mv.getTableProperty().setMvRefreshMode("auto");
+            mv.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, "auto");
+
+            Exception partitionRefresh = Assertions.assertThrows(Exception.class,
+                    () -> UtFrameUtils.parseStmtWithNewParser("REFRESH MATERIALIZED VIEW test.mv_auto_refresh_forms "
+                            + "PARTITION START('2022-02-03') END ('2022-02-25');", connectContext));
+            Assertions.assertTrue(partitionRefresh.getMessage().contains(
+                            "Partition refresh is not supported for materialized views with refresh_mode=AUTO."),
+                    "expected partition refresh rejection, got: " + partitionRefresh.getMessage());
+
+            Exception partitionForce = Assertions.assertThrows(Exception.class,
+                    () -> UtFrameUtils.parseStmtWithNewParser("REFRESH MATERIALIZED VIEW test.mv_auto_refresh_forms "
+                            + "PARTITION START('2022-02-03') END ('2022-02-25') FORCE;", connectContext));
+            Assertions.assertTrue(partitionForce.getMessage().contains(
+                            "Partition refresh is not supported for materialized views with refresh_mode=AUTO."),
+                    "expected partition refresh rejection, got: " + partitionForce.getMessage());
+
+            UtFrameUtils.parseStmtWithNewParser("REFRESH MATERIALIZED VIEW test.mv_auto_refresh_forms FORCE;",
+                    connectContext);
+        } finally {
+            starRocksAssert.dropMaterializedView("test.mv_auto_refresh_forms");
+        }
+    }
+
+    @Test
+    public void testIncrementalRefreshModeAllowsForceRefresh() throws Exception {
+        // Created as PCT and flipped to "incremental", which keeps the CREATE path's IVM eligibility
+        // checks out of an analyzer test.
         starRocksAssert.withMaterializedView("create materialized view test.mv_incremental_force_refresh\n" +
                 "distributed by hash(k2) buckets 3\n" +
                 "refresh manual\n" +
@@ -359,12 +395,8 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             mv.getTableProperty().setMvRefreshMode("incremental");
             mv.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, "incremental");
 
-            String sql = "REFRESH MATERIALIZED VIEW test.mv_incremental_force_refresh FORCE;";
-            Exception e = Assertions.assertThrows(Exception.class,
-                    () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
-            Assertions.assertTrue(e.getMessage().contains(
-                    "FORCE refresh is not supported for materialized views with refresh_mode=INCREMENTAL."),
-                    "expected FORCE rejection error, got: " + e.getMessage());
+            UtFrameUtils.parseStmtWithNewParser("REFRESH MATERIALIZED VIEW test.mv_incremental_force_refresh FORCE;",
+                    connectContext);
         } finally {
             starRocksAssert.dropMaterializedView("test.mv_incremental_force_refresh");
         }
@@ -381,7 +413,6 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                 "as select k1, k2, v1 from test.tbl_with_mv;");
         try {
             String sql = "REFRESH MATERIALIZED VIEW test.mv_pct_force_refresh FORCE;";
-            // Should parse without error: FORCE is only blocked on INCREMENTAL/AUTO MVs.
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } finally {
             starRocksAssert.dropMaterializedView("test.mv_pct_force_refresh");
@@ -946,7 +977,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                 "    'replication_num' = '1'\n" +
                 ");");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test.mv_ttl_mv1\n" +
-                " REFRESH ASYNC " +
+                " REFRESH ON_CHANGE " +
                 " PARTITION BY k1\n" +
                 " PROPERTIES('partition_ttl'='2 month')" +
                 " AS SELECT k1, v1 FROM test.tbl1");
@@ -1050,7 +1081,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         starRocksAssert.withRefreshedMaterializedView("CREATE MATERIALIZED VIEW mv_union_1 \n" +
                 "PARTITION BY date_trunc('day', observation_date)\n" +
                 "DISTRIBUTED BY HASH(leg_id)\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS \n" +
                 "SELECT * FROM mv_union_t1 t1\n" +
                 "UNION ALL\n" +
@@ -1084,7 +1115,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
 
         starRocksAssert.withRefreshedMaterializedView("CREATE MATERIALIZED VIEW mv_union_1 \n" +
                 "PARTITION BY p_time\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS \n" +
                 "select date_trunc(\"day\", a.datekey) as p_time FROM mv_union_t1 a group by p_time \n" +
                 "UNION ALL\n" +
@@ -1152,7 +1183,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1 \n" +
                     "PARTITION BY date_trunc('day', observation_date)\n" +
                     "DISTRIBUTED BY HASH(leg_id)\n" +
-                    "REFRESH ASYNC\n" +
+                    "REFRESH ON_CHANGE\n" +
                     "AS \n" +
                     "SELECT * FROM mv_union_t1 t1\n" +
                     "UNION ALL\n" +
@@ -1164,7 +1195,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv2 \n" +
                     "PARTITION BY date_trunc('day', observation_date)\n" +
                     "DISTRIBUTED BY HASH(leg_id)\n" +
-                    "REFRESH ASYNC\n" +
+                    "REFRESH ON_CHANGE\n" +
                     "AS \n" +
                     "SELECT * FROM mv_union_t1 t1\n" +
                     "UNION ALL\n" +
@@ -1176,7 +1207,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             // create succeed, but refresh fail
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv2 \n" +
                     "PARTITION BY date_trunc('day', observation_date)\n" +
-                    "REFRESH ASYNC\n" +
+                    "REFRESH ON_CHANGE\n" +
                     "AS \n" +
                     "SELECT * FROM mv_union_t1 t1\n" +
                     "UNION ALL\n" +
@@ -1227,7 +1258,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1 \n" +
                 "PARTITION BY date_trunc('day', k1)\n" +
                 "DISTRIBUTED BY RANDOM\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS \n" +
                 "SELECT * FROM t1\n" +
                 "UNION ALL\n" +
@@ -1272,7 +1303,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             withRefreshedMV("CREATE MATERIALIZED VIEW mv1 \n" +
                     "PARTITION BY date_trunc('day', k1)\n" +
                     "DISTRIBUTED BY RANDOM\n" +
-                    "REFRESH ASYNC\n" +
+                    "REFRESH ON_CHANGE\n" +
                     "AS \n" +
                     "SELECT * FROM t1\n" +
                     "UNION ALL\n" +
@@ -1324,7 +1355,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             withRefreshedMV("CREATE MATERIALIZED VIEW mv1 \n" +
                     "PARTITION BY date_trunc('day', k1)\n" +
                     "DISTRIBUTED BY RANDOM\n" +
-                    "REFRESH ASYNC\n" +
+                    "REFRESH ON_CHANGE\n" +
                     "AS \n" +
                     "SELECT * FROM t1\n" +
                     "UNION ALL\n" +
@@ -1376,7 +1407,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             withRefreshedMV("CREATE MATERIALIZED VIEW mv1 \n" +
                     "PARTITION BY date_trunc('day', k1)\n" +
                     "DISTRIBUTED BY RANDOM\n" +
-                    "REFRESH ASYNC\n" +
+                    "REFRESH ON_CHANGE\n" +
                     "AS \n" +
                     "select k1 from (SELECT * FROM t1 UNION ALL SELECT * FROM t2) t group by k1\n", () -> {
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
@@ -1455,7 +1486,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                 .useDatabase("mv_db")
                 .withMaterializedView("CREATE MATERIALIZED VIEW test_mv\n"
                         + "DISTRIBUTED BY HASH(`k1`)\n"
-                        + "REFRESH DEFERRED ASYNC\n"
+                        + "REFRESH DEFERRED ON_CHANGE\n"
                         + "AS SELECT k1 from trunc_db.trunc_db_t1;");
 
         executeInsertSql(connectContext, "insert into trunc_db.trunc_db_t1 values(2, 10)");
@@ -1496,7 +1527,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                 .useDatabase("drop_mv_db")
                 .withMaterializedView("CREATE MATERIALIZED VIEW test_mv\n"
                         + "DISTRIBUTED BY HASH(`k2`)\n"
-                        + "REFRESH DEFERRED ASYNC\n"
+                        + "REFRESH DEFERRED ON_CHANGE\n"
                         + "AS select k1, k2, v1  from drop_db.tbl_with_mv;");
 
         executeInsertSql(connectContext, "insert into drop_db.tbl_with_mv partition(p2) values(\"2022-02-20\", 2, 10)");

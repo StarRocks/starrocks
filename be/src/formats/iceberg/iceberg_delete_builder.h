@@ -57,21 +57,28 @@ public:
 
     // Invokes cb once per row. `path` is used for error reporting only; `length` is the file
     // size in bytes. `stats` may be null when the caller does not collect scanner stats.
+    // `encryption_info` carries the delete file's OWN Parquet Modular Encryption key material,
+    // or nullptr for a plaintext file. It cannot be inherited from the data file: each file in an
+    // encrypted Iceberg table has its own per-file key. Non-owning; must outlive the call. Every
+    // reader below takes it, so no path can open an encrypted delete file without its key.
     static Status read_rows(RandomAccessFile* file, const std::string& path, int64_t length,
                             const std::string& format, // "parquet" | "orc"
                             int32_t chunk_size, const std::string& timezone, const FormatScannerOptions& options,
-                            FormatScannerStats* stats, const RowCallback& cb);
+                            FormatScannerStats* stats, const TParquetEncryptionInfo* encryption_info,
+                            const RowCallback& cb);
     static Status read_rows(RandomAccessFile* file, const std::string& path, int64_t length,
                             const std::string& format, // "parquet" | "orc"
                             int32_t chunk_size, const std::string& timezone, const FormatScannerOptions& options,
-                            FormatScannerStats* stats, const RangeCallback& cb);
+                            FormatScannerStats* stats, const TParquetEncryptionInfo* encryption_info,
+                            const RangeCallback& cb);
 
     // Reads only the pos column, for a delete file whose rows all reference one data file.
     using PositionsCallback = std::function<void(const int64_t* pos, size_t num_rows)>;
     static Status read_positions(RandomAccessFile* file, const std::string& path, int64_t length,
                                  const std::string& format, // "parquet" | "orc"
                                  int32_t chunk_size, const std::string& timezone, const FormatScannerOptions& options,
-                                 FormatScannerStats* stats, const PositionsCallback& cb);
+                                 FormatScannerStats* stats, const TParquetEncryptionInfo* encryption_info,
+                                 const PositionsCallback& cb);
 };
 
 class IcebergDeleteBuilder {
@@ -107,6 +114,9 @@ private:
             const std::shared_ptr<CacheInputStream>& cache_input_stream,
             const std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream) const;
     static void update_delete_file_io_counter(RuntimeProfile* parent_profile, const PositionDeleteIoStats& stats);
+    // Adds the bytes of a delete file read to the audit counters of the scanner reading the data file.
+    void add_delete_file_audit_bytes(const FormatScannerStats& fs_stats,
+                                     const std::shared_ptr<CacheInputStream>& cache_input_stream) const;
 
     IcebergDeleteBuilderContext _ctx;
     DeletionBitmapPtr _deletion_bitmap;

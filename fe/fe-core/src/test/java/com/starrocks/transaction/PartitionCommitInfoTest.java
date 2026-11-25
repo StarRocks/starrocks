@@ -15,6 +15,7 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Partition;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.TabletStatPB;
@@ -210,6 +211,47 @@ public class PartitionCommitInfoTest {
 
         // through TransactionState copy used by finish/replay
         Assertions.assertEquals(5L, copyViaTransactionState(pci).getVersion());
+    }
+
+    @Test
+    public void testTakeDictMetadataFrom() {
+        // The commit drops a double write whose commit info carries the dictionary metadata of the load: the commit
+        // info it keeps takes the metadata over.
+        ColumnId invalid = ColumnId.create("c1");
+        ColumnId valid = ColumnId.create("c2");
+        PartitionCommitInfo dropped = new PartitionCommitInfo(PID, 101, 0, Lists.newArrayList(invalid),
+                Lists.newArrayList(valid), Lists.newArrayList(7L));
+        dropped.setDictContentIdentities(List.of(9L));
+        PartitionCommitInfo kept = new PartitionCommitInfo(PID + 1, 101, 0);
+        kept.takeDictMetadataFrom(dropped);
+        Assertions.assertEquals(List.of(invalid), kept.getInvalidDictCacheColumns());
+        Assertions.assertEquals(List.of(valid), kept.getValidDictCacheColumns());
+        Assertions.assertEquals(List.of(7L), kept.getDictCollectedVersions());
+        Assertions.assertEquals(List.of(9L), kept.getDictContentIdentities());
+
+        // A commit info with valid columns of its own keeps them, and adds the invalid ones.
+        ColumnId own = ColumnId.create("c3");
+        PartitionCommitInfo carrier = new PartitionCommitInfo(PID + 2, 101, 0, Lists.newArrayList(),
+                Lists.newArrayList(own), Lists.newArrayList(5L));
+        carrier.takeDictMetadataFrom(dropped);
+        Assertions.assertEquals(List.of(invalid), carrier.getInvalidDictCacheColumns());
+        Assertions.assertEquals(List.of(own), carrier.getValidDictCacheColumns());
+        Assertions.assertEquals(List.of(5L), carrier.getDictCollectedVersions());
+    }
+
+    @Test
+    public void testDoubleWriteSurvivesJsonRoundTrip() {
+        // A follower replays the commit of a double write from the journal: it must see the flag the leader set, or
+        // its applyCommitLog moves the next version of the temp partition differently from the leader's.
+        PartitionCommitInfo doubleWrite = new PartitionCommitInfo(PID, 101, 0);
+        doubleWrite.setIsDoubleWrite(true);
+        Assertions.assertTrue(
+                GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(doubleWrite), PartitionCommitInfo.class).isDoubleWrite());
+        Assertions.assertTrue(copyViaTransactionState(doubleWrite).isDoubleWrite());
+
+        PartitionCommitInfo normal = new PartitionCommitInfo(PID, 101, 0);
+        Assertions.assertFalse(
+                GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(normal), PartitionCommitInfo.class).isDoubleWrite());
     }
 
     @Test

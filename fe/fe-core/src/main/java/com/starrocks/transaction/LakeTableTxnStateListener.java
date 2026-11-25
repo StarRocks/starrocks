@@ -98,9 +98,14 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
         List<Long> tabletIds = finishedTablets.stream().map(TabletCommitInfo::getTabletId).collect(Collectors.toList());
         List<TabletMeta> tabletMetaList = tabletInvertedIndex.getTabletMetaList(tabletIds);
+        Map<Long, Set<Long>> ignoredTabletsByPartition = Maps.newHashMap();
+        Set<Long> unresolvedTablets = Sets.newLinkedHashSet();
         for (int i = 0; i < tabletMetaList.size(); i++) {
             TabletMeta tabletMeta = tabletMetaList.get(i);
             if (tabletMeta == TabletInvertedIndex.NOT_EXIST_TABLET_META) {
+                // The FE does not know this tablet at all, so it cannot tell which table, if any, it belongs to.
+                // Rows written into it are skipped by the commit, record it so that this leaves a trace.
+                unresolvedTablets.add(tabletIds.get(i));
                 continue;
             }
             if (tabletMeta.getTableId() != table.getId()) {
@@ -108,6 +113,11 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             }
             if (table.getPhysicalPartition(tabletMeta.getPhysicalPartitionId()) == null) {
                 // this can happen when partitionId == -1 (tablet being dropping) or partition really not exist.
+                // Rows written into those tablets are dropped while this transaction still succeeds, record
+                // them so that the loss leaves a trace, see TxnStateLogUtils. A set, so that a tablet reported
+                // more than once is recorded once.
+                ignoredTabletsByPartition.computeIfAbsent(tabletMeta.getPhysicalPartitionId(), id -> Sets.newLinkedHashSet())
+                        .add(tabletIds.get(i));
                 continue;
             }
             dirtyPartitionSet.add(tabletMeta.getPhysicalPartitionId());
@@ -164,6 +174,16 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
         checkShadowIndexesLoaded(txnState);
         checkSynchronousMaterializedViewIndexesLoaded(txnState);
+
+        // Reported only once the transaction is committed (DatabaseTransactionMgr#commitPreparedTransaction), so
+        // that a commit rejected later, or a prepared transaction that is aborted, is not recorded as having
+        // dropped rows.
+        txnState.setIgnoredTablets(table.getId(), ignoredTabletsByPartition);
+        // Unresolved tablets belong to no table the FE can name, so they are recorded under table id -1 and
+        // physical partition id -1. Every listener of the transaction receives the same finished tablets and
+        // writes the same entry, which gives one record per transaction.
+        txnState.setIgnoredTablets(TabletInvertedIndex.NOT_EXIST_VALUE, unresolvedTablets.isEmpty() ? Map.of()
+                : Map.of((long) TabletInvertedIndex.NOT_EXIST_VALUE, unresolvedTablets));
     }
 
     /**

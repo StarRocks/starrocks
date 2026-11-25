@@ -17,6 +17,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
@@ -42,6 +43,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * When some tables(eg: hive) have been dropped and recreated, the table identifier may change, we can repair it by updating the
@@ -157,7 +159,7 @@ public class MVPCTMetaRepairer {
             return;
         }
         Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos = partitionDataInfosOpt.get();
-        List<String> updatedPartitionNames =
+        Set<String> updatedPartitionNames =
                 getUpdatedPartitionNames(partitionNames, partitionInfoMap, partitionDataInfos);
         LOG.info("try to get updated partitions names based on data.partitionNames:{}, isAutoRefresh:{}," +
                         " autoRefreshPartitionsLimit:{}, updatedPartitionNames:{}",
@@ -168,18 +170,18 @@ public class MVPCTMetaRepairer {
         // The condition mirrors the one it replaces -- nothing was fetched when every partition had
         // already changed, because then the repair needs no partition metadata at all.
         Map<String, com.starrocks.connector.PartitionInfo> newPartitionInfos = Maps.newHashMap();
-        if (partitionNames.stream().anyMatch(name -> !updatedPartitionNames.contains(name))) {
+        if (!updatedPartitionNames.containsAll(partitionNames)) {
             newPartitionInfos = PartitionUtil.getPartitionNameWithPartitionInfo(table, partitionNames);
         }
         // if partition is not modified, change the last refresh time to update
         repairMvBaseTableMeta(mv, baseTableInfo, table, updatedPartitionNames, newPartitionInfos);
     }
 
-    private List<String> getUpdatedPartitionNames(
+    private Set<String> getUpdatedPartitionNames(
             List<String> partitionNames,
             Map<String, MaterializedView.BasePartitionInfo> tablePartitionInfoMap,
             Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos) {
-        List<String> updatedPartitionNames = Lists.newArrayList();
+        Set<String> updatedPartitionNames = Sets.newLinkedHashSet();
         for (int i = 0; i < partitionNames.size(); i++) {
             String partitionName = partitionNames.get(i);
             if (!partitionDataInfos.containsKey(partitionName)) {
@@ -203,7 +205,7 @@ public class MVPCTMetaRepairer {
     }
 
     private void repairMvBaseTableMeta(MaterializedView mv, BaseTableInfo oldBaseTableInfo,
-                                       Table newTable, List<String> updatedPartitionNames,
+                                       Table newTable, Set<String> updatedPartitionNames,
                                        Map<String, com.starrocks.connector.PartitionInfo> newPartitionInfos) {
         if (oldBaseTableInfo.isInternalCatalog()) {
             return;

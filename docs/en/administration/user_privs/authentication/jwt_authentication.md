@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 40
 description: "From v3.5.0 onwards, StarRocks supports authenticating client access using JSON Web Tokens."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # JSON Web Token Authentication
@@ -16,7 +17,7 @@ This topic describes how to manually create and authenticate users using JWT in 
 
 ## Prerequisites
 
-If you want to connect to StarRocks from a MySQL client, the MySQL client version must be 9.2 or later.
+If you want to connect to StarRocks from a MySQL client, the MySQL client version must be 9.1 or later. From 9.1, the `authentication_openid_connect_client` plugin ships with all MySQL client distributions, community distributions included.
 
 ## Create a user with JWT
 
@@ -37,7 +38,7 @@ CREATE USER <username> IDENTIFIED WITH authentication_jwt [AS
 | Property            | Corresponding FE Configuration | Description                                                                                                            |
 | ------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
 | `jwks_url`          | `jwt_jwks_url`                 | The URL to the JSON Web Key Set (JWKS) service or the path to the public key local file under the `fe/conf` directory. |
-| `principal_field`   | `jwt_principal_field`          | The string used to identify the field that indicates the subject (`sub`) in the JWT. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks. |
+| `principal_field`   | `jwt_principal_field`          | The field in the JWT that identifies the subject. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks. To extract a value from a nested claim, specify an [RFC 6901 JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) (a path starting with `/`). Use `~1` to escape `/` and `~0` to escape `~` in key names. |
 | `required_issuer`   | `jwt_required_issuer`          | (Optional) The list of strings used to identify the issuers (`iss`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT issuer. |
 | `required_audience` | `jwt_required_audience`        | (Optional) The list of strings used to identify the audience (`aud`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT audience. |
 

@@ -1,0 +1,60 @@
+name: BACKPORT BOXES
+
+# A main PR ticked for backport to the previous release branch (4.1) but not to the newest one
+# (4.2) gets the newest ticked: a PR opened before the newest branch was
+# in the PR template has no row for it. The assignees are told in a comment; if the author
+# unticks it afterwards it stays unticked. Older versions are left alone. Reverse-sync PRs from
+# CelerData are skipped (their versions come from the CelerData PR). Per PR on open/edit/push; a
+# daily sweep catches open PRs created at most 30 days before the newest branch was cut (an older
+# PR is fixed when it is next pushed or edited). The body is written
+# with the starrocks-bot token so the `edited` event re-runs pr-checker, which sets the label.
+# Thin caller: the logic is ci-tool lib/backport_boxes.py.
+
+on:
+  pull_request_target:
+    types: [opened, reopened, edited, synchronize]
+    branches: [main]
+  schedule:
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Only print what the sweep would tick'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backport-boxes-${{ github.event.pull_request.number || 'sweep' }}
+  cancel-in-progress: false
+
+jobs:
+  backport-boxes:
+    name: backport-boxes
+    # Bot events are skipped: this job's own body edit fires `edited` again.
+    if: >-
+      github.repository == 'StarRocks/starrocks' &&
+      (github.event_name != 'pull_request_target' || github.event.sender.type != 'Bot')
+    runs-on: [self-hosted, quick]
+    steps:
+      - name: starrocks-bot token
+        id: bot-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.STARROCKS_BOT_APP_ID }}
+          private-key: ${{ secrets.STARROCKS_BOT_PRIVATE_KEY }}
+
+      - name: tick newer backport versions
+        env:
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '--dry-run' || '' }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && (cd ci-tool && git pull -q || true)
+          if [ -n "${PR_NUMBER}" ]; then
+            python3 ci-tool/lib/backport_boxes.py --repo "${{ github.repository }}" --pr "${PR_NUMBER}"
+          else
+            python3 ci-tool/lib/backport_boxes.py --repo "${{ github.repository }}" --sweep --created-since-cut 30 ${DRY_RUN}
+          fi

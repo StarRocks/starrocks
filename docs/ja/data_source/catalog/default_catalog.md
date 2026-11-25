@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "Default catalog は StarRocks クラスター内の内部データを管理する組み込み internal catalog。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Default catalog

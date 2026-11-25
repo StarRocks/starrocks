@@ -157,6 +157,27 @@ TEST(VariantRowConverterTest, CastArithmeticAndTemporalValues) {
 // TIMESTAMP_TZ casts to DATETIME / DATE / TIME show the instant in the zone with its offset at that instant, the
 // same with a bound offset cache (as the column loops pass) as with the per-row cctz conversion, across DST changes,
 // in any order and far outside the usual range.
+TEST(VariantRowConverterTest, CastNanosecondTimestampsToDatetime) {
+    cctz::time_zone shanghai;
+    ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone("Asia/Shanghai", shanghai));
+    const auto cast = [](VariantType type, int64_t nanos, const cctz::time_zone& zone) {
+        VariantRowValue row = make_variant_row(encode_primitive<int64_t>(type, nanos));
+        ColumnBuilder<TYPE_DATETIME> builder(1);
+        Status status = VariantRowConverter::cast_to<TYPE_DATETIME, true>(row.as_ref(), zone, builder);
+        EXPECT_TRUE(status.ok()) << status;
+        return builder.build(false)->debug_item(0);
+    };
+    // 2025-01-02 03:04:05.123456789 UTC: the nanoseconds below a microsecond are truncated.
+    constexpr int64_t kNanos = 1735787045LL * 1000000000 + 123456789;
+    EXPECT_EQ("2025-01-02 03:04:05.123456", cast(VariantType::TIMESTAMP_NTZ_NANOS, kNanos, shanghai));
+    EXPECT_EQ("2025-01-02 03:04:05.123456", cast(VariantType::TIMESTAMP_TZ_NANOS, kNanos, cctz::utc_time_zone()));
+    EXPECT_EQ("2025-01-02 11:04:05.123456", cast(VariantType::TIMESTAMP_TZ_NANOS, kNanos, shanghai));
+    // Before the epoch the seconds are floored: -1ns is 1969-12-31 23:59:59.999999.
+    EXPECT_EQ("1969-12-31 23:59:59.999999", cast(VariantType::TIMESTAMP_NTZ_NANOS, -1, shanghai));
+    EXPECT_EQ("1970-01-01 07:59:59.999999", cast(VariantType::TIMESTAMP_TZ_NANOS, -1, shanghai));
+    EXPECT_EQ("1969-12-31 23:59:58.999999", cast(VariantType::TIMESTAMP_TZ_NANOS, -1000000001, cctz::utc_time_zone()));
+}
+
 TEST(VariantRowConverterTest, CastTimestampTzWithOffsetCache) {
     std::mt19937_64 rng(3);
     std::vector<int64_t> micros_values = {0,

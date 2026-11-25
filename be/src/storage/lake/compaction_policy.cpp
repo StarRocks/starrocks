@@ -662,9 +662,14 @@ StatusOr<CompactionPolicyPtr> CompactionPolicy::create(TabletManager* tablet_mgr
         if (!tablet_metadata->has_range()) {
             return Status::InvalidArgument("unshare compaction requires a tablet range");
         }
-        if ((tablet_metadata->has_dcg_meta() && !tablet_metadata->dcg_meta().dcgs().empty()) ||
-            (tablet_metadata->has_idg_meta() && !tablet_metadata->idg_meta().idgs().empty())) {
-            return Status::NotSupported("unshare compaction does not support DCG or IDG metadata yet");
+        // A column-mode update or ADD INDEX that lands on an input segment between pick and publish makes the
+        // conflict check drop the rewrite of that one child, while a split of a tablet with a separate sort key
+        // needs every child to switch to its rewritten files together. Keep refusing DCG and IDG for that shape.
+        if (TabletSchema::create(tablet_metadata->schema())->has_separate_sort_key()) {
+            if ((tablet_metadata->has_dcg_meta() && !tablet_metadata->dcg_meta().dcgs().empty()) ||
+                (tablet_metadata->has_idg_meta() && !tablet_metadata->idg_meta().idgs().empty())) {
+                return Status::NotSupported("unshare compaction does not support DCG or IDG metadata yet");
+            }
         }
         return std::make_shared<UnshareCompactionPolicy>(tablet_mgr, std::move(tablet_metadata));
     }
@@ -678,6 +683,14 @@ StatusOr<CompactionPolicyPtr> CompactionPolicy::create(TabletManager* tablet_mgr
         return std::make_shared<BaseAndCumulativeCompactionPolicy>(tablet_mgr, std::move(tablet_metadata),
                                                                    force_base_compaction, allow_base_compaction);
     }
+}
+
+StatusOr<bool> CompactionPolicy::runs_as_unshare(const TabletMetadataPB& metadata, bool is_unshare,
+                                                 bool force_base_compaction) {
+    if (!is_unshare || !force_base_compaction) {
+        return is_unshare;
+    }
+    return UnshareCompactionPolicy::has_work(metadata);
 }
 
 double compaction_score(TabletManager* tablet_mgr, const std::shared_ptr<const TabletMetadataPB>& metadata) {

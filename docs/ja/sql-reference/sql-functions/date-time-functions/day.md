@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "日付または日時式の日の部分を抽出し、1から31の範囲の値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # day

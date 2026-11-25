@@ -17,6 +17,8 @@
 #include <algorithm>
 #include <atomic>
 #include <map>
+#include <numeric>
+#include <optional>
 #include <random>
 
 #include "base/container/lru_cache.h"
@@ -30,19 +32,26 @@
 #include "column/datum_convert.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
+#include "column/json_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_compaction_fwd.h"
 #include "common/config_ingest_fwd.h"
+#include "common/config_json_flat_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
+#include "gutil/strings/substitute.h"
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/datum_variant.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
+#include "storage/lake/compaction_task.h"
+#include "storage/lake/compaction_task_context.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
@@ -110,8 +119,8 @@ public:
             c2->set_default_value("10");
         }
 
-        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        _slots.emplace_back(1, "c1", TYPE_INT_DESC);
         _slot_pointers.emplace_back(&_slots[0]);
         _slot_pointers.emplace_back(&_slots[1]);
 
@@ -317,7 +326,7 @@ public:
         Chunk key_chunk({std::move(key_column)}, key_slot_map);
         auto update_chunk = condition_update ? generate_data(kChunkSize, 0, true, 7) : std::move(key_chunk);
         std::vector<SlotDescriptor> key_slots;
-        key_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        key_slots.emplace_back(0, "c0", TYPE_INT_DESC);
         std::vector<SlotDescriptor*> key_slot_pointers{&key_slots[0]};
         const auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
@@ -343,9 +352,9 @@ public:
 
         // Clear only metacache: a PK rebuild can open the full base schema first and hide the bug.
         _tablet_mgr->prune_metacache();
-        ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(base_cache_key));
+        ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(MetacacheKey::TEST_from_string(base_cache_key)));
         ASSERT_EQ(base_version, _primary_key_mgr->get_primary_index_data_version(tablet_id));
-        ASSERT_GE(_tablet_mgr->metacache()->capacity(), 2 * 1024);
+        ASSERT_GE(_tablet_mgr->metacache()->segment_metadata_capacity(), 2 * 1024);
         ASSIGN_OR_ABORT(auto new_metadata, publish_single_version(tablet_id, base_version + 1, txn_id));
         EXPECT_EQ(0, index_load_count.load()) << "PK index rebuild must not seed the base segment cache";
         ASSERT_EQ(base_version + 1, _primary_key_mgr->get_primary_index_data_version(tablet_id));
@@ -359,7 +368,7 @@ public:
             ASSERT_EQ(_tablet_schema->id(), new_metadata->rowset_to_schema().at(old_metadata->rowsets(0).id()));
         }
 
-        auto cached = _tablet_mgr->metacache()->lookup_segment(base_cache_key);
+        auto cached = _tablet_mgr->metacache()->lookup_segment(MetacacheKey::TEST_from_string(base_cache_key));
         if (legacy_schema_change) {
             // With no schema pin, publish can cache S1. Force that precondition to prove the old
             // reader uses a private full-schema Segment without replacing the narrowed shared one.
@@ -414,7 +423,8 @@ public:
         };
         read_and_check(old_reader, _tablet_schema, /*c1_multiplier=*/3);
         if (legacy_schema_change) {
-            auto cached_after_old_read = _tablet_mgr->metacache()->lookup_segment(base_cache_key);
+            auto cached_after_old_read =
+                    _tablet_mgr->metacache()->lookup_segment(MetacacheKey::TEST_from_string(base_cache_key));
             ASSERT_NE(nullptr, cached_after_old_read);
             EXPECT_NE(cached.get(), cached_after_old_read.get());
             EXPECT_EQ(_tablet_schema->id(), cached_after_old_read->tablet_schema().id());
@@ -551,7 +561,7 @@ TEST_P(LakePartialUpdateTest, test_column_mode_partial_update_streams_source_seg
     ASSERT_OK(delta_writer->finish_with_txnlog());
     delta_writer->close();
 
-    ConfigResetGuard<int32_t> chunk_size_guard(&config::vector_chunk_size, 4);
+    ConfigResetGuard<int32_t> chunk_size_guard(&config::pk_vector_chunk_size, 4);
     ConfigResetGuard<int64_t> memory_limit_guard(&config::partial_update_memory_limit_per_worker, 80);
     int64_t upt_memory_usage_per_row = 0;
     std::vector<std::pair<uint32_t, uint32_t>> emitted_ranges;
@@ -1021,6 +1031,109 @@ TEST_P(LakePartialUpdateTest, test_dcg_not_found_and_fallback_to_segment) {
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c1 == c0 * 7) && (c2 == c0 * 4); }));
 }
 
+// A row mode publish reads the rows it replaces from the base segment and from its `.cols` file, and opens both
+// again every time. Their footer reads have to fill the local data cache, and the column reads go through the
+// page cache.
+TEST_P(LakePartialUpdateTest, test_dcg_segment_open_fills_data_cache_on_publish) {
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    auto write_and_publish = [&](const Chunk& chunk, std::vector<SlotDescriptor*>* slots, PartialUpdateMode mode) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(slots)
+                                                   .set_partial_update_mode(mode)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    };
+
+    // Base rows, then a column mode update that moves c1 into a `.cols` file.
+    ASSERT_NO_FATAL_FAILURE(
+            write_and_publish(generate_data(kChunkSize, 0, false, 3), nullptr, PartialUpdateMode::ROW_MODE));
+    ASSERT_NO_FATAL_FAILURE(write_and_publish(generate_data(kChunkSize, 0, true, 7), &_slot_pointers,
+                                              PartialUpdateMode::COLUMN_UPDATE_MODE));
+
+    // A row mode update of (c0, c2): its publish reads the unmodified c1 from the `.cols` file.
+    std::vector<int> keys(kChunkSize);
+    std::vector<int> c2_vals(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        keys[i] = i;
+        c2_vals[i] = i * 5;
+    }
+    auto c0_col = Int32Column::create();
+    auto c2_col = Int32Column::create();
+    c0_col->append_numbers(keys.data(), keys.size() * sizeof(int));
+    c2_col->append_numbers(c2_vals.data(), c2_vals.size() * sizeof(int));
+    Chunk::SlotHashMap slot_map;
+    slot_map[0] = 0;
+    slot_map[2] = 1;
+    Chunk c0_c2_chunk({std::move(c0_col), std::move(c2_col)}, slot_map);
+    std::vector<SlotDescriptor> c0_c2_slots;
+    c0_c2_slots.emplace_back(0, "c0", TYPE_INT_DESC);
+    c0_c2_slots.emplace_back(2, "c2", TYPE_INT_DESC);
+    std::vector<SlotDescriptor*> c0_c2_slot_pointers{&c0_c2_slots[0], &c0_c2_slots[1]};
+
+    // The base segment holding the rows this update replaces.
+    ASSIGN_OR_ABORT(auto base_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_GT(base_metadata->rowsets_size(), 0);
+    ASSERT_GT(base_metadata->rowsets(0).segment_metas_size(), 0);
+    const std::string base_segment_name = base_metadata->rowsets(0).segment_metas(0).filename();
+
+    std::vector<bool> cols_skip_fill;
+    std::vector<bool> base_skip_fill;
+    std::vector<bool> iter_use_page_cache;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("Segment::_open:footer_file_options", [&](void* arg) {
+        auto* path_and_opts = static_cast<std::pair<const std::string*, const RandomAccessFileOptions*>*>(arg);
+        if (path_and_opts->first->ends_with(".cols")) {
+            cols_skip_fill.push_back(path_and_opts->second->skip_fill_local_cache);
+        } else if (path_and_opts->first->ends_with(base_segment_name)) {
+            base_skip_fill.push_back(path_and_opts->second->skip_fill_local_cache);
+        }
+    });
+    // Take the static open, so the base segment footer is read by this publish even if an earlier step
+    // left the segment in the metacache.
+    sync->SetCallBack("UpdateManager::get_column_values:fill_meta_cache",
+                      [](void* arg) { *static_cast<bool*>(arg) = false; });
+    sync->SetCallBack("UpdateManager::get_column_values:iter_opts", [&](void* arg) {
+        iter_use_page_cache.push_back(static_cast<ColumnIteratorOptions*>(arg)->use_page_cache);
+    });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+    ASSERT_NO_FATAL_FAILURE(write_and_publish(c0_c2_chunk, &c0_c2_slot_pointers, PartialUpdateMode::ROW_MODE));
+    sync->DisableProcessing();
+
+    // The footer reads of both the `.cols` file and the base segment fill the local data cache.
+    ASSERT_FALSE(cols_skip_fill.empty());
+    for (bool skip_fill : cols_skip_fill) {
+        EXPECT_FALSE(skip_fill);
+    }
+    // Other steps of the publish (rebuilding the primary key index, for one) may open the base segment with
+    // their own options, so only require that the open made by get_column_values fills the cache.
+    EXPECT_TRUE(std::any_of(base_skip_fill.begin(), base_skip_fill.end(), [](bool skip_fill) { return !skip_fill; }));
+    // The column reads of the publish go through the page cache.
+    ASSERT_FALSE(iter_use_page_cache.empty());
+    for (bool use_page_cache : iter_use_page_cache) {
+        EXPECT_EQ(!config::disable_storage_page_cache, use_page_cache);
+    }
+    ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return c1 == c0 * 7 && c2 == c0 * 5; }));
+}
+
 // Explicitly test DCG column file missing: column_file_by_idx returns a path but the file is removed,
 // so new_dcg_segment fails and get_column_values should surface an InternalError during publish.
 TEST_P(LakePartialUpdateTest, test_dcg_segment_missing_files_returns_error) {
@@ -1095,7 +1208,7 @@ TEST_P(LakePartialUpdateTest, test_dcg_segment_missing_files_returns_error) {
     Chunk c0_only_chunk({std::move(c0_only)}, slot_only);
     // Build local slot descriptors with single column (c0) to match chunk schema
     std::vector<SlotDescriptor> local_slots;
-    local_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    local_slots.emplace_back(0, "c0", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> local_slot_ptrs;
     local_slot_ptrs.emplace_back(&local_slots[0]);
 
@@ -1889,18 +2002,19 @@ TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_reads_base_segment_th
     _tablet_mgr->prune_metacache();
     config::lake_pk_partial_update_use_segment_cache = false;
     write_and_publish(chunk_range0, /*row_mode_partial_update=*/true);
-    EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(base_segment_key));
+    EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(MetacacheKey::TEST_from_string(base_segment_key)));
 
     // Switched on, the first publish after a prune populates the cache ...
     _tablet_mgr->prune_metacache();
     config::lake_pk_partial_update_use_segment_cache = true;
     write_and_publish(chunk_range1, /*row_mode_partial_update=*/true);
-    auto cached_segment = _tablet_mgr->metacache()->lookup_segment(base_segment_key);
+    auto cached_segment = _tablet_mgr->metacache()->lookup_segment(MetacacheKey::TEST_from_string(base_segment_key));
     ASSERT_NE(nullptr, cached_segment);
 
     // ... and the next publish reuses that very object rather than parsing the footer again.
     write_and_publish(chunk_range2, /*row_mode_partial_update=*/true);
-    auto cached_segment_again = _tablet_mgr->metacache()->lookup_segment(base_segment_key);
+    auto cached_segment_again =
+            _tablet_mgr->metacache()->lookup_segment(MetacacheKey::TEST_from_string(base_segment_key));
     EXPECT_EQ(cached_segment.get(), cached_segment_again.get());
 
     // The row count catches a cached Segment carrying the wrong id: the delvec lookup key a query
@@ -1956,7 +2070,7 @@ TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_respects_segment_and_
         GTEST_SKIP() << "Only row mode reads base segments through UpdateManager::get_column_values";
     }
 
-    // TestBase constructs its TabletManager with this metacache capacity.
+    // TestBase constructs its TabletManager with this segment metadata cache capacity.
     constexpr int64_t kDefaultMetacacheLimit = 1024 * 1024;
     constexpr int kRanges = 6;
     constexpr int kRangeSize = kChunkSize / kRanges;
@@ -1969,7 +2083,7 @@ TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_respects_segment_and_
     SyncPoint::GetInstance()->EnableProcessing();
     DeferOp restore([&]() {
         config::lake_pk_partial_update_use_segment_cache = saved_use_segment_cache;
-        _tablet_mgr->update_metacache_limit(kDefaultMetacacheLimit);
+        _tablet_mgr->metacache()->update_segment_metadata_capacity(kDefaultMetacacheLimit);
         SyncPoint::GetInstance()->ClearAllCallBacks();
         SyncPoint::GetInstance()->DisableProcessing();
     });
@@ -2018,7 +2132,7 @@ TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_respects_segment_and_
     // while a shard gets only 2 KiB. An aggregate-only gate incorrectly enables caching here.
     constexpr int64_t kSmallMetacacheLimit = 64 * 1024;
     ASSERT_LT(base_metadata->rowsets_size() * _tablet_schema->num_columns() * 1024, kSmallMetacacheLimit);
-    _tablet_mgr->update_metacache_limit(kSmallMetacacheLimit);
+    _tablet_mgr->metacache()->update_segment_metadata_capacity(kSmallMetacacheLimit);
     fill_decisions.clear();
     write_and_publish(generate_data(kThirdKeys, 1, true, 5), /*row_mode_partial_update=*/true);
     ASSERT_EQ(kRanges / 3, fill_decisions.size()) << "expected one decision per base segment read";
@@ -2027,13 +2141,13 @@ TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_respects_segment_and_
 
     // No room: every segment is skipped, the first one included -- nothing has to be cached before
     // the gate can decide.
-    _tablet_mgr->update_metacache_limit(0);
+    _tablet_mgr->metacache()->update_segment_metadata_capacity(0);
     fill_decisions.clear();
     write_and_publish(generate_data(kThirdKeys, 2, true, 5), /*row_mode_partial_update=*/true);
     ASSERT_EQ(kRanges / 3, fill_decisions.size()) << "expected one decision per base segment read";
     EXPECT_TRUE(std::none_of(fill_decisions.begin(), fill_decisions.end(), [](bool v) { return v; }));
 
-    _tablet_mgr->update_metacache_limit(kDefaultMetacacheLimit);
+    _tablet_mgr->metacache()->update_segment_metadata_capacity(kDefaultMetacacheLimit);
     EXPECT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return c0 * 5 == c1 && c0 * 4 == c2; }));
 }
 
@@ -2136,7 +2250,7 @@ TEST_P(LakeNestedSegmentCacheTest, get_column_values_bypasses_complex_readers) {
     // cannot fit in a shard. Opening the probe privately must not seed the segment cache.
     ASSERT_LE(tablet_schema->num_columns() * 1024, kCacheCapacity / kNumShards);
     ASSERT_GT(probe->mem_usage(), kCacheCapacity / kNumShards);
-    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(file_info.cache_key()));
+    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(MetacacheKey::TEST_from_string(file_info.cache_key())));
     auto* rowset = metadata->add_rowsets();
     rowset->set_id(1);
     rowset->set_num_rows(kChunkSize);
@@ -2156,12 +2270,12 @@ TEST_P(LakeNestedSegmentCacheTest, get_column_values_bypasses_complex_readers) {
     const bool saved_use_segment_cache = config::lake_pk_partial_update_use_segment_cache;
     DeferOp restore([&]() {
         config::lake_pk_partial_update_use_segment_cache = saved_use_segment_cache;
-        _tablet_mgr->update_metacache_limit(1024 * 1024);
+        _tablet_mgr->metacache()->update_segment_metadata_capacity(1024 * 1024);
         SyncPoint::GetInstance()->ClearAllCallBacks();
         SyncPoint::GetInstance()->DisableProcessing();
     });
     config::lake_pk_partial_update_use_segment_cache = true;
-    _tablet_mgr->update_metacache_limit(kCacheCapacity);
+    _tablet_mgr->metacache()->update_segment_metadata_capacity(kCacheCapacity);
     std::vector<bool> decisions;
     SyncPoint::GetInstance()->SetCallBack("UpdateManager::get_column_values:fill_meta_cache",
                                           [&](void* arg) { decisions.push_back(*static_cast<bool*>(arg)); });
@@ -2202,7 +2316,7 @@ TEST_F(LakeZstdSegmentCacheTest, get_column_values_bypasses_persisted_compressio
     DeferOp restore([&]() {
         config::lake_pk_partial_update_use_segment_cache = saved_use_segment_cache;
         config::enable_zstd_compression_dict = saved_write_dictionary;
-        _tablet_mgr->update_metacache_limit(1024 * 1024);
+        _tablet_mgr->metacache()->update_segment_metadata_capacity(1024 * 1024);
         SyncPoint::GetInstance()->ClearAllCallBacks();
         SyncPoint::GetInstance()->DisableProcessing();
     });
@@ -2286,7 +2400,7 @@ TEST_F(LakeZstdSegmentCacheTest, get_column_values_bypasses_persisted_compressio
         RecordProperty("cache_shard_bytes", static_cast<int>(kCacheCapacity / kNumShards));
         ASSERT_GT(dictionary_bytes, kCacheCapacity / kNumShards);
     }
-    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(file_info.cache_key()));
+    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(MetacacheKey::TEST_from_string(file_info.cache_key())));
     auto* rowset = metadata->add_rowsets();
     rowset->set_id(1);
     rowset->set_num_rows(kRows);
@@ -2300,7 +2414,7 @@ TEST_F(LakeZstdSegmentCacheTest, get_column_values_bypasses_persisted_compressio
     const TxnLogPB_OpWrite op_write;
     const RowsetUpdateStateParams params{op_write, tablet_schema, read_metadata, &tablet, container};
     const std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid{{1, rowids}};
-    _tablet_mgr->update_metacache_limit(kCacheCapacity);
+    _tablet_mgr->metacache()->update_segment_metadata_capacity(kCacheCapacity);
     std::vector<bool> decisions;
     SyncPoint::GetInstance()->SetCallBack("UpdateManager::get_column_values:fill_meta_cache",
                                           [&](void* arg) { decisions.push_back(*static_cast<bool*>(arg)); });
@@ -2374,9 +2488,9 @@ public:
             //c2->set_default_value("10");
         }
 
-        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(2, "__op", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        _slots.emplace_back(1, "c1", TYPE_INT_DESC);
+        _slots.emplace_back(2, "__op", TYPE_INT_DESC);
         _slot_pointers.emplace_back(&_slots[0]);
         _slot_pointers.emplace_back(&_slots[1]);
         _slot_pointers.emplace_back(&_slots[2]);
@@ -2492,8 +2606,8 @@ public:
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
 
         // A DELETE hands the writer the key columns plus the trailing __op marker.
-        _delete_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        _delete_slots.emplace_back(1, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT});
+        _delete_slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        _delete_slots.emplace_back(1, "__op", TYPE_TINYINT_DESC);
         for (auto& slot : _delete_slots) {
             _delete_slot_pointers.emplace_back(&slot);
         }
@@ -4240,7 +4354,7 @@ TEST_F(LakeColumnUpsertModeTest, partial_update_reads_encrypted_dcg_segments) {
     Chunk c0_chunk({std::move(c0_only)}, slot_only);
 
     std::vector<SlotDescriptor> key_slots;
-    key_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    key_slots.emplace_back(0, "c0", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> key_slot_ptrs;
     key_slot_ptrs.emplace_back(&key_slots[0]);
 
@@ -4567,7 +4681,7 @@ TEST_F(LakeColumnUpsertModeTest, test_default_values_handling) {
     auto chunk_partial = Chunk({std::move(c0_partial)}, partial_slot_map);
 
     std::vector<SlotDescriptor> slots;
-    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    slots.emplace_back(0, "c0", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> slot_pointers;
     slot_pointers.emplace_back(&slots[0]);
 
@@ -4936,8 +5050,8 @@ TEST_F(LakeColumnUpsertModeTest, test_auto_increment_column_handling) {
     auto chunk_update = Chunk({std::move(c0_update), std::move(c1_update)}, update_slot_map);
 
     std::vector<SlotDescriptor> update_slots;
-    update_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-    update_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
+    update_slots.emplace_back(0, "c0", TYPE_INT_DESC);
+    update_slots.emplace_back(1, "c1", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> update_slot_pointers;
     update_slot_pointers.emplace_back(&update_slots[0]);
     update_slot_pointers.emplace_back(&update_slots[1]);
@@ -4994,9 +5108,9 @@ TEST_F(LakeColumnUpsertModeTest, test_auto_increment_column_handling) {
     auto chunk_insert = Chunk({std::move(c0_insert), std::move(c1_insert), std::move(c2_insert)}, insert_slot_map);
 
     std::vector<SlotDescriptor> insert_slots;
-    insert_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-    insert_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-    insert_slots.emplace_back(2, "c2", TypeDescriptor{LogicalType::TYPE_BIGINT});
+    insert_slots.emplace_back(0, "c0", TYPE_INT_DESC);
+    insert_slots.emplace_back(1, "c1", TYPE_INT_DESC);
+    insert_slots.emplace_back(2, "c2", TYPE_BIGINT_DESC);
     std::vector<SlotDescriptor*> insert_slot_pointers;
     insert_slot_pointers.emplace_back(&insert_slots[0]);
     insert_slot_pointers.emplace_back(&insert_slots[1]);
@@ -5160,10 +5274,10 @@ TEST_F(LakeColumnUpsertModeTest, test_handle_delete_files) {
 
         // Create slot descriptors including operation column
         std::vector<SlotDescriptor> op_slots;
-        op_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        op_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-        op_slots.emplace_back(2, "c2", TypeDescriptor{LogicalType::TYPE_INT});
-        op_slots.emplace_back(3, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT});
+        op_slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        op_slots.emplace_back(1, "c1", TYPE_INT_DESC);
+        op_slots.emplace_back(2, "c2", TYPE_INT_DESC);
+        op_slots.emplace_back(3, "__op", TYPE_TINYINT_DESC);
         std::vector<SlotDescriptor*> op_slot_pointers;
         for (auto& slot : op_slots) {
             op_slot_pointers.emplace_back(&slot);
@@ -5326,7 +5440,7 @@ TEST_F(LakeColumnUpsertModeTest, test_bundle_files_and_encryption_handling) {
     auto chunk_partial = Chunk({std::move(c0_partial)}, partial_slot_map);
 
     std::vector<SlotDescriptor> slots;
-    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    slots.emplace_back(0, "c0", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> slot_pointers;
     slot_pointers.emplace_back(&slots[0]);
 
@@ -5474,7 +5588,7 @@ TEST_F(LakeColumnUpsertModeTest, test_default_value_and_null_handling) {
     auto chunk_partial = Chunk({std::move(c0_partial)}, partial_slot_map);
 
     std::vector<SlotDescriptor> slots;
-    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    slots.emplace_back(0, "c0", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> slot_pointers;
     slot_pointers.emplace_back(&slots[0]);
 
@@ -5876,9 +5990,9 @@ TEST_F(LakeColumnUpsertModeTest, test_del_files_handling_in_column_upsert_mode) 
         for (int i = 0; i < kChunkSize; i++) idx[i] = i;
 
         std::vector<SlotDescriptor> op_slots;
-        op_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        op_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-        op_slots.emplace_back(3, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT});
+        op_slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        op_slots.emplace_back(1, "c1", TYPE_INT_DESC);
+        op_slots.emplace_back(3, "__op", TYPE_TINYINT_DESC);
         std::vector<SlotDescriptor*> op_slot_pointers;
         for (auto& slot : op_slots) {
             op_slot_pointers.emplace_back(&slot);
@@ -5990,6 +6104,170 @@ TEST_F(LakeColumnUpsertModeTest, test_del_files_handling_in_column_upsert_mode) 
     }
 }
 
+// A column-mode partial update adds deletes to delete vectors at the publish's base version in two places:
+// _handle_delete_files, for the old segments its delete ops hit, and _handle_column_upsert_mode, for a
+// segment it synthesizes whose rows a later segment of the same load supersedes. Both take that version from
+// the metadata the publish already read rather than reading it back from storage once per segment (RB-792),
+// so with a metacache that keeps nothing, such a publish reads its base version exactly as often as one that
+// deletes nothing.
+TEST_F(LakeColumnUpsertModeTest, test_deletes_reuse_base_metadata) {
+    const auto tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+    // kOldLoads full-row loads of kChunkSize keys each, one segment per load: keys [0, kOldLoads * kChunkSize).
+    constexpr int kOldLoads = 4;
+    for (int i = 0; i < kOldLoads; i++) {
+        auto chunk = generate_data(kChunkSize, i, false, 3);
+        std::vector<uint32_t> indexes(kChunkSize);
+        std::iota(indexes.begin(), indexes.end(), 0);
+        const auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // The column-upsert loads below write c0, c1 and __op; the rows they insert keep c2's default (10).
+    std::vector<SlotDescriptor> op_slots;
+    op_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    op_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
+    op_slots.emplace_back(3, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT});
+    std::vector<SlotDescriptor*> op_slot_pointers;
+    for (auto& slot : op_slots) {
+        op_slot_pointers.emplace_back(&slot);
+    }
+    struct Batch {
+        std::vector<int> keys;
+        std::vector<int> values; // c1
+        std::vector<uint8_t> ops;
+        void add(int key, int value, uint8_t op) {
+            keys.push_back(key);
+            values.push_back(value);
+            ops.push_back(op);
+        }
+    };
+    // Writes one COLUMN_UPSERT_MODE load with one update segment per batch and returns its txn id.
+    auto column_upsert = [&](const std::vector<Batch>& batches) {
+        const auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&op_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
+                                                   .build());
+        CHECK_OK(delta_writer->open());
+        for (const auto& batch : batches) {
+            auto c0 = Int32Column::create();
+            auto c1 = Int32Column::create();
+            auto cop = Int8Column::create();
+            c0->append_numbers(batch.keys.data(), batch.keys.size() * sizeof(int));
+            c1->append_numbers(batch.values.data(), batch.values.size() * sizeof(int));
+            cop->append_numbers(batch.ops.data(), batch.ops.size() * sizeof(uint8_t));
+            Chunk::SlotHashMap slot_map;
+            slot_map[0] = 0;
+            slot_map[1] = 1;
+            slot_map[3] = 2; // op column
+            Chunk chunk({std::move(c0), std::move(c1), std::move(cop)}, slot_map);
+            std::vector<uint32_t> indexes(batch.keys.size());
+            std::iota(indexes.begin(), indexes.end(), 0);
+            CHECK_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+            // Close the memtable so each batch becomes its own update segment.
+            CHECK_OK(delta_writer->flush());
+        }
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        return txn_id;
+    };
+
+    // A metacache that keeps nothing once it is released, like a shard the base metadata outgrew: every
+    // read of the base version goes to storage.
+    const size_t metacache_capacity = _tablet_mgr->metacache()->tablet_metadata_capacity();
+    _tablet_mgr->metacache()->update_tablet_metadata_capacity(1);
+    DeferOp restore_metacache([&]() { _tablet_mgr->metacache()->update_tablet_metadata_capacity(metacache_capacity); });
+    ASSERT_EQ(1, _tablet_mgr->metacache()->tablet_metadata_capacity());
+    _tablet_mgr->metacache()->prune();
+
+    // While one publish runs, count its reads of the version it publishes on. The callback fires for the
+    // whole process, so this relies on nothing else reading this tablet's metadata meanwhile, which holds
+    // here: the test runs nothing in the background.
+    std::atomic<const std::string*> counted_file = nullptr;
+    std::atomic<int> base_metadata_reads = 0;
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::load_tablet_metadata:path", [&](void* arg) {
+        const std::string* file = counted_file.load();
+        if (file != nullptr && std::string_view(*static_cast<std::string*>(arg)).ends_with(*file)) {
+            ++base_metadata_reads;
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_callbacks([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::load_tablet_metadata:path");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    auto publish_counting = [&](int64_t txn_id) {
+        const std::string base_file = tablet_metadata_filename(tablet_id, version);
+        base_metadata_reads = 0;
+        counted_file = &base_file;
+        auto metadata_or = publish_single_version(tablet_id, version + 1, txn_id);
+        counted_file = nullptr;
+        version++;
+        return metadata_or;
+    };
+
+    constexpr int kNewKeys = kChunkSize / 2;
+    // New keys only: the publish deletes nothing and reads its base version for itself.
+    Batch insert;
+    for (int i = 0; i < kNewKeys; i++) {
+        insert.add(200 + i, (200 + i) * 11, TOpType::UPSERT);
+    }
+    ASSERT_OK(publish_counting(column_upsert({insert})).status());
+    const int own_reads = base_metadata_reads.load();
+    ASSERT_GE(own_reads, 1) << "the publish should have read its base version from storage";
+
+    // The first segment deletes the first key of every old load and inserts keys [100, 100 + kNewKeys); the
+    // second inserts those keys again and supersedes the first segment's rows of them.
+    Batch first;
+    Batch second;
+    for (int i = 0; i < kOldLoads; i++) {
+        first.add(i * kChunkSize, 0, TOpType::DELETE);
+    }
+    for (int i = 0; i < kNewKeys; i++) {
+        first.add(100 + i, (100 + i) * 5, TOpType::UPSERT);
+        second.add(100 + i, (100 + i) * 7, TOpType::UPSERT);
+    }
+    const auto txn_id = column_upsert({first, second});
+    {
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        ASSERT_EQ(2, txn_log->op_write().rowset().segment_metas_size());
+        ASSERT_GT(txn_log->op_write().dels_meta_size(), 0);
+    }
+    ASSIGN_OR_ABORT(auto published, publish_counting(txn_id));
+    // Nothing beyond the publish's own reads. Before RB-792 it read the base version once more for each of
+    // the kOldLoads old segments and for the superseded synthesized segment.
+    EXPECT_EQ(own_reads, base_metadata_reads.load());
+    // Every old load lost one row.
+    ASSERT_GE(published->delvec_meta().delvecs_size(), kOldLoads);
+
+    // The old keys but the deleted ones, and each new key once with the value its last writer gave it.
+    EXPECT_EQ(kOldLoads * (kChunkSize - 1) + 2 * kNewKeys, check(version, [](int c0, int c1, int c2) {
+                  if (c0 >= 200) return c1 == c0 * 11 && c2 == 10;
+                  if (c0 >= 100) return c1 == c0 * 7 && c2 == 10;
+                  return c0 % kChunkSize != 0 && c1 == c0 * 3 && c2 == c0 * 4;
+              }));
+}
+
 // A column-mode partial update publishes its del files through PrimaryKeyManager::_handle_delete_files,
 // which always erases via the memtable path and never reads op_write.del_ssts(). The import-time
 // tombstone-sstable build is byte-threshold-driven and would otherwise fire here too, producing a
@@ -6051,9 +6329,9 @@ TEST_F(LakeColumnUpsertModeTest, test_no_del_tombstone_sstable_in_column_upsert_
         for (int i = 0; i < kChunkSize; i++) idx[i] = i;
 
         std::vector<SlotDescriptor> op_slots;
-        op_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        op_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-        op_slots.emplace_back(3, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT});
+        op_slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        op_slots.emplace_back(1, "c1", TYPE_INT_DESC);
+        op_slots.emplace_back(3, "__op", TYPE_TINYINT_DESC);
         std::vector<SlotDescriptor*> op_slot_pointers;
         for (auto& slot : op_slots) {
             op_slot_pointers.emplace_back(&slot);
@@ -6368,9 +6646,9 @@ protected:
         _tablet_schema = TabletSchema::create(*schema);
 
         // Build slot descriptors. Slot id <-> column id mapping mirrors LakePartialUpdateTestBase.
-        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(1, "v_int", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(2, "v_arr", TypeDescriptor::create_array_type(TypeDescriptor{LogicalType::TYPE_INT}));
+        _slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        _slots.emplace_back(1, "v_int", TYPE_INT_DESC);
+        _slots.emplace_back(2, "v_arr", TypeDescriptor::create_array_type(TYPE_INT_DESC));
 
         _slot_pointers_full.emplace_back(&_slots[0]);
         _slot_pointers_full.emplace_back(&_slots[1]);
@@ -6916,6 +7194,308 @@ TEST_F(LakePcuSchemaDriftTest, WriteThenDropTargetColumn_ReturnsInternalError) {
             << "expected 'unique id' in message; got: " << st.message();
 }
 
+// A primary key tablet with a JSON column, for a column-mode partial update followed by a compaction.
+class LakeColumnModeFlatJsonConfigTest : public TestBase {
+public:
+    LakeColumnModeFlatJsonConfigTest() : TestBase(kTestDirectory) {
+        _tablet_metadata = std::make_shared<TabletMetadata>();
+        _tablet_metadata->set_id(next_id());
+        _tablet_metadata->set_version(1);
+        _tablet_metadata->set_next_rowset_id(1);
+
+        //  | column | type | KEY | NULL |
+        //  +--------+------+-----+------+
+        //  |   c0   |  INT | YES |  NO  |
+        //  |   c1   |  INT | NO  |  YES |
+        //  |   c2   | JSON | NO  |  YES |
+        auto schema = _tablet_metadata->mutable_schema();
+        schema->set_id(next_id());
+        schema->set_num_short_key_columns(1);
+        schema->set_keys_type(PRIMARY_KEYS);
+        schema->set_num_rows_per_row_block(65535);
+        auto c0 = schema->add_column();
+        {
+            c0->set_unique_id(next_id());
+            c0->set_name("c0");
+            c0->set_type("INT");
+            c0->set_is_key(true);
+            c0->set_is_nullable(false);
+        }
+        auto c1 = schema->add_column();
+        {
+            c1->set_unique_id(next_id());
+            c1->set_name("c1");
+            c1->set_type("INT");
+            c1->set_is_key(false);
+            c1->set_is_nullable(true);
+            c1->set_aggregation("REPLACE");
+        }
+        auto c2 = schema->add_column();
+        {
+            c2->set_unique_id(next_id());
+            c2->set_name("c2");
+            c2->set_type("JSON");
+            c2->set_is_key(false);
+            c2->set_is_nullable(true);
+            c2->set_aggregation("REPLACE");
+        }
+
+        // The partial update carries the key and the JSON column only, so the .cols file it produces
+        // holds exactly the JSON column -- the thing under test.
+        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(2, "c2", TypeDescriptor{LogicalType::TYPE_JSON});
+        _slot_pointers.emplace_back(&_slots[0]);
+        _slot_pointers.emplace_back(&_slots[1]);
+
+        _full_slot_cid_map.emplace(0, 0);
+        _full_slot_cid_map.emplace(1, 1);
+        _full_slot_cid_map.emplace(2, 2);
+        _partial_slot_cid_map.emplace(0, 0);
+        _partial_slot_cid_map.emplace(2, 1);
+
+        _tablet_schema = TabletSchema::create(*schema);
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+    }
+
+    void SetUp() override {
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        CHECK_OK(_tablet_mgr->create_schema_file(_tablet_metadata->id(), _tablet_metadata->schema()));
+    }
+
+    void TearDown() override {
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
+        remove_test_dir_or_die();
+    }
+
+    // The table was created with the given "flat_json.enable"; the other knobs keep the be.conf
+    // defaults, exactly as an FE-issued TFlatJsonConfig does.
+    void set_table_flat_json_enable(bool enable) {
+        auto* flat_json_config = _tablet_metadata->mutable_flat_json_config();
+        flat_json_config->set_flat_json_enable(enable);
+        flat_json_config->set_flat_json_null_factor(config::json_flat_null_factor);
+        flat_json_config->set_flat_json_sparsity_factor(config::json_flat_sparsity_factor);
+        flat_json_config->set_flat_json_max_column_max(config::json_flat_column_max);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
+    // Rows whose JSON values all share the same two keys, i.e. the shape the flattener does extract.
+    Chunk generate_data(int64_t chunk_size, bool partial, int update_ratio) {
+        auto c0 = Int32Column::create();
+        auto c2 = JsonColumn::create();
+        for (int i = 0; i < chunk_size; i++) {
+            c0->append(i);
+            auto json = JsonValue::parse(strings::Substitute(R"({"a": $0, "b": $1})", i, i * update_ratio));
+            CHECK(json.ok());
+            c2->append(&json.value());
+        }
+        if (partial) {
+            return Chunk({std::move(c0), std::move(c2)}, _partial_slot_cid_map);
+        }
+        auto c1 = Int32Column::create();
+        for (int i = 0; i < chunk_size; i++) {
+            c1->append(i * update_ratio);
+        }
+        return Chunk({std::move(c0), std::move(c1), std::move(c2)}, _full_slot_cid_map);
+    }
+
+    // Every physical place the JSON column ends up, as <where, was it written flat>: the base
+    // segments of every rowset, and the .cols delta column groups the update produced.
+    std::vector<std::pair<std::string, bool>> collect_json_column_forms(int64_t version) {
+        std::vector<std::pair<std::string, bool>> forms;
+        const auto tablet_id = _tablet_metadata->id();
+        auto metadata = _tablet_mgr->get_tablet_metadata(tablet_id, version).value();
+        const auto j_uid = static_cast<size_t>(_tablet_schema->column(2).unique_id());
+        auto fs = FileSystemFactory::CreateSharedFromString(kTestDirectory).value();
+        auto form_of = [&](const std::string& kind, const std::string& name) {
+            auto path = _tablet_mgr->segment_location(tablet_id, name);
+            auto segment = Segment::open(fs, FileInfo{path}, 0, _tablet_schema).value();
+            const ColumnReader* reader = segment->column_with_uid(j_uid);
+            if (reader != nullptr) {
+                forms.emplace_back(kind + " " + name, reader->is_flat_json());
+            }
+        };
+        for (const auto& rowset : metadata->rowsets()) {
+            for (const auto& seg_meta : rowset.segment_metas()) {
+                form_of("segment", seg_meta.filename());
+            }
+        }
+        for (const auto& [rssid, dcg_ver] : metadata->dcg_meta().dcgs()) {
+            for (const auto& name : dcg_ver.column_files()) {
+                form_of("cols", name);
+            }
+        }
+        return forms;
+    }
+
+    // Whether a delta column group of |metadata| holds the column with |unique_id|.
+    static bool has_dcg_of(const TabletMetadataPB& metadata, int32_t unique_id) {
+        for (const auto& [_, dcg] : metadata.dcg_meta().dcgs()) {
+            for (const auto& ids : dcg.unique_column_ids()) {
+                for (auto id : ids.column_ids()) {
+                    if (static_cast<int64_t>(id) == unique_id) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    // Three rowsets of {"a": key, "b": 3 * key}; a column-mode partial update of the keys |updated| picks to a
+    // document with a key the segments never had (kNew) and a string where they have the BIGINT sub-column a;
+    // then a compaction of all of it, writing its output as the chunks arrive when |stream_output|. Every document
+    // must read the same before and after the compaction, and the compacted JSON column must be flat.
+    void column_update_then_compaction(bool (*updated)(int), bool stream_output) {
+        // Three small rowsets: let the primary key compaction policy pick them.
+        ConfigResetGuard<int64_t> min_input_guard(&config::lake_pk_compaction_min_input_segments, 1);
+        set_table_flat_json_enable(true);
+        const auto tablet_id = _tablet_metadata->id();
+        const auto json_uid = _tablet_schema->column(2).unique_id();
+        auto table_flat_json_config = std::make_shared<FlatJsonConfig>();
+        table_flat_json_config->update(_tablet_metadata->flat_json_config());
+        int64_t version = 1;
+
+        auto write = [&](const Chunk& chunk, uint32_t begin, uint32_t end, bool column_mode) {
+            auto indexes = std::vector<uint32_t>(end - begin);
+            std::iota(indexes.begin(), indexes.end(), begin);
+            const auto txn_id = next_id();
+            DeltaWriterBuilder builder;
+            builder.set_tablet_manager(_tablet_mgr.get())
+                    .set_tablet_id(tablet_id)
+                    .set_txn_id(txn_id)
+                    .set_partition_id(_partition_id)
+                    .set_mem_tracker(_mem_tracker.get())
+                    .set_schema_id(_tablet_schema->id())
+                    .set_flat_json_config(table_flat_json_config);
+            if (column_mode) {
+                builder.set_slot_descriptors(&_slot_pointers)
+                        .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE);
+            }
+            auto delta_writer = builder.build().value();
+            CHECK_OK(delta_writer->open());
+            CHECK_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+            CHECK_OK(delta_writer->finish_with_txnlog());
+            delta_writer->close();
+            CHECK_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+        };
+
+        // The keys not updated keep the loaded {"a": key, "b": 3 * key}.
+        auto expected = [&](int key) {
+            return updated(key) ? strings::Substitute(R"({"a": "s$0", "kNew": $0})", key)
+                                : strings::Substitute(R"({"a": $0, "b": $1})", key, key * 3);
+        };
+
+        auto chunk_full = generate_data(kChunkSize, false, 3);
+        write(chunk_full, 0, 43, false);
+        write(chunk_full, 43, 86, false);
+        write(chunk_full, 86, static_cast<uint32_t>(kChunkSize), false);
+        {
+            auto c0 = Int32Column::create();
+            auto c2 = JsonColumn::create();
+            for (int key = 0; key < kChunkSize; key++) {
+                if (!updated(key)) {
+                    continue;
+                }
+                c0->append(key);
+                ASSIGN_OR_ABORT(auto json, JsonValue::parse(expected(key)));
+                c2->append(&json);
+            }
+            Chunk chunk_partial({std::move(c0), std::move(c2)}, _partial_slot_cid_map);
+            write(chunk_partial, 0, static_cast<uint32_t>(chunk_partial.num_rows()), true);
+        }
+
+        auto check_documents = [&](const char* when) {
+            ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+            auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+            ASSERT_OK(reader->prepare());
+            ASSERT_OK(reader->open(TabletReaderParams()));
+            auto chunk = ChunkFactory::new_chunk(*_schema, 128);
+            std::vector<bool> seen(kChunkSize, false);
+            while (true) {
+                auto st = reader->get_next(chunk.get());
+                if (st.is_end_of_file()) {
+                    break;
+                }
+                ASSERT_OK(st);
+                for (size_t i = 0; i < chunk->num_rows(); i++) {
+                    const int key = chunk->get_column_by_index(0)->get(i).get_int32();
+                    ASSERT_TRUE(key >= 0 && key < kChunkSize && !seen[key]) << when << ", key " << key;
+                    seen[key] = true;
+                    const auto datum = chunk->get_column_by_index(2)->get(i);
+                    ASSERT_FALSE(datum.is_null()) << when << ", key " << key;
+                    ASSIGN_OR_ABORT(auto want, JsonValue::parse(expected(key)));
+                    EXPECT_EQ(want.to_string_uncheck(), datum.get_json()->to_string_uncheck())
+                            << when << ", key " << key;
+                }
+                chunk->reset();
+            }
+            EXPECT_EQ(kChunkSize, std::count(seen.begin(), seen.end(), true)) << when;
+        };
+
+        ASSIGN_OR_ABORT(auto updated_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        ASSERT_EQ(3, updated_metadata->rowsets_size());
+        ASSERT_TRUE(has_dcg_of(*updated_metadata, json_uid)) << "the update did not produce a delta column group";
+        ASSERT_FALSE(has_dcg_of(*updated_metadata, _tablet_schema->column(1).unique_id()));
+        check_documents("before compaction");
+
+        {
+            // A budget of 8 bytes makes the compaction's JSON column writer stream from the first chunk on.
+            ConfigResetGuard<int64_t> mem_limit_guard(&config::compaction_memory_limit_per_worker,
+                                                      stream_output ? 8 : config::compaction_memory_limit_per_worker);
+            const auto txn_id = next_id();
+            auto task_context =
+                    std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+            ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+            ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+            ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+        }
+        ASSIGN_OR_ABORT(auto compacted, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        ASSERT_EQ(1, compacted->rowsets_size());
+        ASSERT_FALSE(has_dcg_of(*compacted, json_uid));
+        check_documents("after compaction");
+        for (const auto& [where, is_flat] : collect_json_column_forms(version)) {
+            EXPECT_TRUE(is_flat) << where;
+        }
+    }
+
+    constexpr static const char* const kTestDirectory = "test_lake_column_mode_flat_json_config";
+
+protected:
+    constexpr static int64_t kChunkSize = 128;
+
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    std::shared_ptr<Schema> _schema;
+    int64_t _partition_id = next_id();
+    std::vector<SlotDescriptor> _slots;
+    std::vector<SlotDescriptor*> _slot_pointers;
+    Chunk::SlotHashMap _full_slot_cid_map;
+    Chunk::SlotHashMap _partial_slot_cid_map;
+};
+
+// A column-mode partial update gives a segment a .cols delta column group holding the whole new JSON column, and
+// the segment iterator reads that column from the .cols file. Compaction derived the flat JSON layout from the
+// segments' own column readers and read the .cols values through it, so a string written over the segments' BIGINT
+// sub-column a came back NULL and the compaction wrote what it read (RB-1351). The layout now comes from the .cols
+// file's reader for such a segment.
+TEST_F(LakeColumnModeFlatJsonConfigTest, compaction_keeps_json_values_of_delta_column_groups) {
+    ASSERT_NO_FATAL_FAILURE(column_update_then_compaction([](int key) { return key % 2 == 0; }, false));
+}
+
+// The same through a vertical compaction, which reads the JSON column in a column group of its own.
+TEST_F(LakeColumnModeFlatJsonConfigTest, vertical_compaction_keeps_json_values_of_delta_column_groups) {
+    ConfigResetGuard<int64_t> group_guard(&config::vertical_compaction_max_columns_per_group, 1);
+    ASSERT_NO_FATAL_FAILURE(column_update_then_compaction([](int key) { return key % 2 == 0; }, false));
+}
+
+// Only the first rowset updated, so the layout is derived from one .cols reader and two segments' own readers, and
+// the output written as the chunks arrive. The writer keeps streaming flat only while every chunk has one layout:
+// a column read whole instead has none, and the output would be written as whole JSON.
+TEST_F(LakeColumnModeFlatJsonConfigTest, compaction_streams_json_of_delta_column_groups_flat) {
+    ASSERT_NO_FATAL_FAILURE(column_update_then_compaction([](int key) { return key < 43 && key % 2 == 0; }, true));
+}
+
 // A publish iterator narrowed to this tablet's slice of a shared post-split segment reports NO
 // ownership mask -- every row it emitted is this tablet's -- so an empty mask cannot be read as "the
 // iterator emitted the whole segment". Reading it that way sends the segment down the copy-and-append
@@ -6952,5 +7532,355 @@ TEST(RowsetUpdateStateNarrowedEmitTest, a_whole_segment_emit_keeps_the_copy_and_
     EXPECT_FALSE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/301, /*source_rows=*/300, &mask));
     EXPECT_TRUE(mask.empty());
 }
+
+// The statements of ONE multi-statement transaction that write the same tablet -- a SQL BEGIN ...
+// COMMIT, published with a TxnInfoPB that carries each statement's load_id -- are applied together:
+// TxnLogApplier folds every statement's op_write into one merged rowset (MetaFileBuilder::
+// batch_apply_opwrite() per statement, then set_final_rowset()). These tests drive that path with
+// row-mode partial updates through the real writer and publish_version(), once with the serial
+// per-segment rewrite (one partial-update thread) and once with the parallel one.
+class LakeMultiStatementPartialUpdateTest : public LakePartialUpdateTestBase, public testing::WithParamInterface<int> {
+public:
+    LakeMultiStatementPartialUpdateTest() : LakePartialUpdateTestBase(kTestDirectory) {
+        _tablet_metadata->set_enable_persistent_index(true);
+        _tablet_metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+
+        _c2_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        _c2_slots.emplace_back(2, "c2", TypeDescriptor{LogicalType::TYPE_INT});
+        for (auto& slot : _c2_slots) {
+            _c2_slot_pointers.emplace_back(&slot);
+        }
+    }
+
+    void SetUp() override {
+        LakePartialUpdateTestBase::SetUp();
+        auto* pool = RuntimeEnv::GetInstance()->lake_partial_update_thread_pool();
+        _saved_partial_update_threads = pool->max_threads();
+        ASSERT_OK(pool->update_max_threads(GetParam()));
+    }
+
+    void TearDown() override {
+        EXPECT_TRUE(RuntimeEnv::GetInstance()
+                            ->lake_partial_update_thread_pool()
+                            ->update_max_threads(_saved_partial_update_threads)
+                            .ok());
+        LakePartialUpdateTestBase::TearDown();
+    }
+
+    constexpr static const char* const kTestDirectory = "test_lake_multi_statement_partial_update";
+
+protected:
+    // The seeded rows carry c1 = 3 * c0 and c2 = 4 * c0, as generate_data() makes them; a partial
+    // update of c1 writes 5 * c0 and one of c2 writes 7 * c0.
+    constexpr static int kSeedC1 = 3;
+    constexpr static int kSeedC2 = 4;
+    constexpr static int kNewC1 = 5;
+    constexpr static int kNewC2 = 7;
+
+    enum class Write {
+        kFullRow, // every column, seeded values
+        kC1,      // row-mode partial update of c1
+        kC2,      // row-mode partial update of c2
+    };
+
+    // A row as the reader returns it; nullopt is NULL.
+    struct Row {
+        std::optional<int32_t> c1;
+        std::optional<int32_t> c2;
+        bool operator==(const Row& other) const { return c1 == other.c1 && c2 == other.c2; }
+    };
+
+    static std::string to_string(const Row& row) {
+        auto value = [](const std::optional<int32_t>& v) { return v.has_value() ? std::to_string(*v) : "NULL"; };
+        return "(" + value(row.c1) + ", " + value(row.c2) + ")";
+    }
+
+    static std::vector<int> key_range(int begin, int end) {
+        std::vector<int> result(end - begin);
+        std::iota(result.begin(), result.end(), begin);
+        return result;
+    }
+
+    static void add_rows(std::map<int, Row>* rows, const std::vector<int>& keys, int c1_factor, int c2_factor) {
+        for (int key : keys) {
+            (*rows)[key] = Row{key * c1_factor, key * c2_factor};
+        }
+    }
+
+    static PUniqueId statement_load_id(int64_t lo) {
+        PUniqueId id;
+        id.set_hi(1);
+        id.set_lo(lo);
+        return id;
+    }
+
+    Chunk make_chunk(Write kind, const std::vector<int>& keys) {
+        auto column = [&keys](int factor) {
+            auto c = Int32Column::create();
+            for (int key : keys) {
+                c->append(key * factor);
+            }
+            return c;
+        };
+        Chunk::SlotHashMap slot_map;
+        switch (kind) {
+        case Write::kFullRow:
+            return Chunk({column(1), column(kSeedC1), column(kSeedC2)}, _slot_cid_map);
+        case Write::kC1:
+            slot_map[0] = 0;
+            slot_map[1] = 1;
+            return Chunk({column(1), column(kNewC1)}, slot_map);
+        case Write::kC2:
+            slot_map[0] = 0;
+            slot_map[2] = 1;
+            return Chunk({column(1), column(kNewC2)}, slot_map);
+        }
+        return Chunk();
+    }
+
+    StatusOr<std::unique_ptr<DeltaWriter>> new_writer(int64_t tablet_id, int64_t txn_id, const PUniqueId* load_id,
+                                                      Write kind) {
+        DeltaWriterBuilder builder;
+        builder.set_tablet_manager(_tablet_mgr.get())
+                .set_tablet_id(tablet_id)
+                .set_txn_id(txn_id)
+                .set_partition_id(_partition_id)
+                .set_mem_tracker(_mem_tracker.get())
+                .set_schema_id(_tablet_schema->id());
+        if (kind == Write::kC1) {
+            builder.set_slot_descriptors(&_slot_pointers).set_partial_update_mode(PartialUpdateMode::ROW_MODE);
+        } else if (kind == Write::kC2) {
+            builder.set_slot_descriptors(&_c2_slot_pointers).set_partial_update_mode(PartialUpdateMode::ROW_MODE);
+        }
+        if (load_id != nullptr) {
+            // A statement of a multi-statement transaction writes its own txn log, keyed by load_id.
+            builder.set_load_id(*load_id).set_is_multi_statements_txn(true);
+        }
+        return builder.build();
+    }
+
+    void write_chunk(DeltaWriter* writer, Write kind, const std::vector<int>& keys) {
+        auto chunk = make_chunk(kind, keys);
+        std::vector<uint32_t> indexes(keys.size());
+        std::iota(indexes.begin(), indexes.end(), 0);
+        ASSERT_OK(writer->write(chunk, indexes.data(), indexes.size()));
+    }
+
+    // Write one statement to `tablet_id`, one segment per entry of `segments`: write_buffer_size is 1,
+    // so every write() call flushes. A null `load_id` writes an ordinary single-statement load.
+    void write_statement(int64_t tablet_id, int64_t txn_id, const PUniqueId* load_id, Write kind,
+                         const std::vector<std::vector<int>>& segments) {
+        ConfigResetGuard<int64_t> one_segment_per_write(&config::write_buffer_size, 1);
+        ASSIGN_OR_ABORT(auto writer, new_writer(tablet_id, txn_id, load_id, kind));
+        ASSERT_OK(writer->open());
+        for (const auto& keys : segments) {
+            ASSERT_NO_FATAL_FAILURE(write_chunk(writer.get(), kind, keys));
+        }
+        ASSERT_OK(writer->finish_with_txnlog());
+        writer->close();
+    }
+
+    // Version `version` of `tablet_id`: one ordinary load of full rows for `keys`.
+    void seed(int64_t tablet_id, int64_t version, const std::vector<int>& keys) {
+        const int64_t txn_id = next_id();
+        ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, nullptr, Write::kFullRow, {keys}));
+        ASSERT_OK(publish_single_version(tablet_id, version, txn_id).status());
+    }
+
+    // The statement's txn log holds `segments` segments and `dels` del files: the shape the test means
+    // to publish.
+    void expect_statement_shape(int64_t tablet_id, int64_t txn_id, const PUniqueId& load_id, int segments, int dels) {
+        ASSIGN_OR_ABORT(auto log, _tablet_mgr->get_txn_log(tablet_id, txn_id, load_id));
+        ASSERT_TRUE(log->has_op_write());
+        EXPECT_EQ(segments, log->op_write().rowset().segment_metas_size());
+        EXPECT_EQ(dels, log->op_write().dels_meta_size());
+    }
+
+    // Publish `txn_id` as the multi-statement transaction made of the statements written under
+    // `load_ids`, with the TxnInfoPB the FE sends for a SQL BEGIN ... COMMIT.
+    StatusOr<TabletMetadataPtr> publish_statements(int64_t tablet_id, int64_t new_version, int64_t txn_id,
+                                                   const std::vector<PUniqueId>& load_ids) {
+        auto txn_info = TEST_txn_info(txn_id, time(nullptr));
+        for (const auto& load_id : load_ids) {
+            txn_info.add_load_ids()->CopyFrom(load_id);
+        }
+        std::vector<TxnInfoPB> txns{std::move(txn_info)};
+        return publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), new_version - 1, new_version, txns,
+                               false);
+    }
+
+    // Every row of `tablet_id` visible at `version`, keyed by c0. A key read a second time is a
+    // duplicate primary key and goes to `duplicates`.
+    Status read_rows(int64_t tablet_id, int64_t version, std::map<int, Row>* rows, std::vector<int>* duplicates) {
+        ASSIGN_OR_RETURN(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+        RETURN_IF_ERROR(reader->prepare());
+        RETURN_IF_ERROR(reader->open(TabletReaderParams()));
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
+        while (true) {
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            RETURN_IF_ERROR(st);
+            const auto& columns = chunk->columns();
+            for (size_t i = 0; i < chunk->num_rows(); i++) {
+                const int key = columns[0]->get(i).get_int32();
+                Row row;
+                if (auto c1 = columns[1]->get(i); !c1.is_null()) {
+                    row.c1 = c1.get_int32();
+                }
+                if (auto c2 = columns[2]->get(i); !c2.is_null()) {
+                    row.c2 = c2.get_int32();
+                }
+                if (!rows->emplace(key, row).second) {
+                    duplicates->push_back(key);
+                }
+            }
+            chunk->reset();
+        }
+        return Status::OK();
+    }
+
+    // `tablet_id` at `version` holds exactly `expected`: the same keys, one live row per key, the same
+    // values. Every difference is reported, so a failure shows all of the damage at once.
+    void expect_rows(int64_t tablet_id, int64_t version, const std::map<int, Row>& expected) {
+        std::map<int, Row> actual;
+        std::vector<int> duplicates;
+        ASSERT_OK(read_rows(tablet_id, version, &actual, &duplicates));
+        EXPECT_TRUE(duplicates.empty()) << "duplicate primary keys: " << JoinInts(duplicates, ",");
+        for (const auto& [key, row] : expected) {
+            auto it = actual.find(key);
+            if (it == actual.end()) {
+                ADD_FAILURE() << "key " << key << " is missing, expected " << to_string(row);
+            } else if (!(it->second == row)) {
+                ADD_FAILURE() << "key " << key << " reads " << to_string(it->second) << ", expected " << to_string(row);
+            }
+        }
+        for (const auto& [key, row] : actual) {
+            if (expected.count(key) == 0) {
+                ADD_FAILURE() << "key " << key << " " << to_string(row) << " should not exist";
+            }
+        }
+    }
+
+    std::vector<SlotDescriptor> _c2_slots;
+    std::vector<SlotDescriptor*> _c2_slot_pointers;
+    int _saved_partial_update_threads = 0;
+};
+
+// Two row-mode partial updates of different keys. The second statement has one segment more than the
+// first, so its rewrite of segment 0 comes from the same position of its own op_write as the first
+// statement's rewrite, and its rewrite of segment 1 from a position the first statement does not
+// have. Each rewrite must replace its own statement's segment of the merged rowset.
+TEST_P(LakeMultiStatementPartialUpdateTest, partial_updates_of_different_keys) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    const auto g0 = key_range(0, 12);
+    const auto g1 = key_range(12, 24);
+    const auto g2 = key_range(24, 36);
+    const auto g3 = key_range(36, 48);
+    ASSERT_NO_FATAL_FAILURE(seed(tablet_id, 2, key_range(0, 48)));
+
+    // version 3: BEGIN; UPDATE c1 of g0; UPDATE c2 of g2 and g3; COMMIT;
+    const int64_t txn_id = next_id();
+    const auto stmt1 = statement_load_id(1);
+    const auto stmt2 = statement_load_id(2);
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt1, Write::kC1, {g0}));
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt2, Write::kC2, {g2, g3}));
+    ASSERT_NO_FATAL_FAILURE(expect_statement_shape(tablet_id, txn_id, stmt1, 1, 0));
+    ASSERT_NO_FATAL_FAILURE(expect_statement_shape(tablet_id, txn_id, stmt2, 2, 0));
+    ASSERT_OK(publish_statements(tablet_id, 3, txn_id, {stmt1, stmt2}).status());
+
+    std::map<int, Row> expected;
+    add_rows(&expected, g0, kNewC1, kSeedC2);
+    add_rows(&expected, g1, kSeedC1, kSeedC2);
+    add_rows(&expected, g2, kSeedC1, kNewC2);
+    add_rows(&expected, g3, kSeedC1, kNewC2);
+    expect_rows(tablet_id, 3, expected);
+}
+
+// The second statement also updates keys the first one updated in the same transaction, so its rewrite
+// has to read the column it does not write, c1, from the first statement's rows -- which exist only in
+// the rowset this publish is still merging. Its segment 0 holds other keys, so a rewrite registered
+// under the rssid of the first statement's segment would be read in their place.
+TEST_P(LakeMultiStatementPartialUpdateTest, partial_update_of_keys_an_earlier_statement_updated) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    const auto g0 = key_range(0, 12);
+    const auto g1 = key_range(12, 24);
+    const auto g2 = key_range(24, 36);
+    const auto g3 = key_range(36, 48);
+    ASSERT_NO_FATAL_FAILURE(seed(tablet_id, 2, key_range(0, 48)));
+
+    // version 3: BEGIN; UPDATE c1 of g0; UPDATE c2 of g2 and g0; COMMIT;
+    const int64_t txn_id = next_id();
+    const auto stmt1 = statement_load_id(1);
+    const auto stmt2 = statement_load_id(2);
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt1, Write::kC1, {g0}));
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt2, Write::kC2, {g2, g0}));
+    ASSERT_NO_FATAL_FAILURE(expect_statement_shape(tablet_id, txn_id, stmt1, 1, 0));
+    ASSERT_NO_FATAL_FAILURE(expect_statement_shape(tablet_id, txn_id, stmt2, 2, 0));
+    ASSERT_OK(publish_statements(tablet_id, 3, txn_id, {stmt1, stmt2}).status());
+
+    std::map<int, Row> expected;
+    add_rows(&expected, g0, kNewC1, kNewC2);
+    add_rows(&expected, g1, kSeedC1, kSeedC2);
+    add_rows(&expected, g2, kSeedC1, kNewC2);
+    add_rows(&expected, g3, kSeedC1, kSeedC2);
+    expect_rows(tablet_id, 3, expected);
+
+    // version 4: rebuild the primary index from the persisted metadata (what a CN restart does), then
+    // write g0 again. An index rebuilt differently from what the publish applied would leave the old
+    // rows of g0 live next to the new ones.
+    const int64_t probe_txn_id = next_id();
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, probe_txn_id, nullptr, Write::kFullRow, {g0}));
+    ASSERT_OK(publish_single_version(tablet_id, 4, probe_txn_id, /*rebuild_pindex=*/true).status());
+    add_rows(&expected, g0, kSeedC1, kSeedC2);
+    expect_rows(tablet_id, 4, expected);
+}
+
+// A statement that routes no row to this tablet still leaves an op_write here, with no segment. It
+// takes an rssid slot of the merged rowset (get_rowset_id_step() reserves one) but no segment
+// position, so the segments of every statement after it sit one position below their slot, and the
+// rewrite of the last statement has to be placed by position.
+TEST_P(LakeMultiStatementPartialUpdateTest, statement_without_rows_between_partial_updates) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    const auto g0 = key_range(0, 12);
+    const auto g1 = key_range(12, 24);
+    const auto g2 = key_range(24, 36);
+    const auto g3 = key_range(36, 48);
+    ASSERT_NO_FATAL_FAILURE(seed(tablet_id, 2, key_range(0, 48)));
+
+    // version 3: BEGIN; UPDATE c1 of g0 and g1; INSERT rows of other tablets only; UPDATE c2 of g2; COMMIT;
+    const int64_t txn_id = next_id();
+    const auto stmt1 = statement_load_id(1);
+    const auto stmt2 = statement_load_id(2);
+    const auto stmt3 = statement_load_id(3);
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt1, Write::kC1, {g0, g1}));
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt2, Write::kFullRow, {}));
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt3, Write::kC2, {g2}));
+    ASSERT_NO_FATAL_FAILURE(expect_statement_shape(tablet_id, txn_id, stmt1, 2, 0));
+    ASSERT_NO_FATAL_FAILURE(expect_statement_shape(tablet_id, txn_id, stmt2, 0, 0));
+    ASSERT_NO_FATAL_FAILURE(expect_statement_shape(tablet_id, txn_id, stmt3, 1, 0));
+    ASSERT_OK(publish_statements(tablet_id, 3, txn_id, {stmt1, stmt2, stmt3}).status());
+
+    std::map<int, Row> expected;
+    add_rows(&expected, g0, kNewC1, kSeedC2);
+    add_rows(&expected, g1, kNewC1, kSeedC2);
+    add_rows(&expected, g2, kSeedC1, kNewC2);
+    add_rows(&expected, g3, kSeedC1, kSeedC2);
+    expect_rows(tablet_id, 3, expected);
+
+    // version 4: rebuild the primary index from the persisted metadata, then write g2 again.
+    const int64_t probe_txn_id = next_id();
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, probe_txn_id, nullptr, Write::kFullRow, {g2}));
+    ASSERT_OK(publish_single_version(tablet_id, 4, probe_txn_id, /*rebuild_pindex=*/true).status());
+    add_rows(&expected, g2, kSeedC1, kSeedC2);
+    expect_rows(tablet_id, 4, expected);
+}
+
+INSTANTIATE_TEST_SUITE_P(LakeMultiStatementPartialUpdateTest, LakeMultiStatementPartialUpdateTest,
+                         ::testing::Values(1, 4), [](const testing::TestParamInfo<int>& info) {
+                             return info.param == 1 ? std::string("serial_rewrite") : std::string("parallel_rewrite");
+                         });
 
 } // namespace starrocks::lake

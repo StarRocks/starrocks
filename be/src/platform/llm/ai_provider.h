@@ -15,6 +15,8 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -30,20 +32,37 @@
 
 namespace starrocks {
 
+class TAIProvider;
+
 enum class AIProviderProtocol {
     OPENAI,
-    DASHSCOPE_MULTIMODAL,
+    DASHSCOPE,
 };
+
+// Query-plan snapshot. Provider credentials belong to this query. Never print this object.
+struct AIProviderConfig {
+    std::string endpoint;
+    std::string model;
+    std::string api_key;
+    AICapability capability = AICapability::CHAT;
+    std::optional<int64_t> timeout_ms;
+    std::optional<int32_t> dimensions;
+    AIProviderProtocol protocol = AIProviderProtocol::OPENAI;
+
+    static StatusOr<AIProviderConfig> parse(std::string_view id, const TAIProvider& provider);
+};
+
+// Map keys are Provider registry IDs carried by the AI expressions.
+using AIProviderConfigs = std::map<std::string, AIProviderConfig, std::less<>>;
 
 struct AIChatRequest {
     std::string_view endpoint;
     std::string_view model;
     std::string_view api_key;
     std::string_view prompt;
-    const AIProviderOptions* options = nullptr;
+    std::shared_ptr<const AIProviderOptions> options;
     AICapability capability = AICapability::CHAT;
-    // Borrowed only for the synchronous build_request call.
-    const AIMediaInput* media = nullptr;
+    std::shared_ptr<const AIMediaInput> media;
 };
 
 struct AIProviderHttpRequest {
@@ -110,6 +129,6 @@ public:
 };
 
 Status validate_ai_protocol(AIProviderProtocol protocol, AICapability capability);
-StatusOr<std::unique_ptr<AIProvider>> create_ai_provider(AIProviderProtocol protocol, AICapability capability);
+StatusOr<std::unique_ptr<AIProvider>> create_ai_provider(const AIProviderConfig& config);
 
 } // namespace starrocks

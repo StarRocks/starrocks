@@ -1,4 +1,7 @@
 -- name: test_transparent_mv_hive @slow
+-- Test Point: Checked Hive MV queries preserve current data across refreshed and changed partitions.
+-- Method: Strict refresh results, dirty/clean partition checks, independent Hive oracles and complete ordered results.
+-- Scope: Hive partition compensation, DATE/STRING expressions, transparent and nested UNION MVs.
 create external catalog mv_hive_${uuid0}
 properties
 (
@@ -12,6 +15,9 @@ set new_planner_optimize_timeout=10000;
 -- result:
 -- !result
 set enable_materialized_view_transparent_union_rewrite = true;
+-- result:
+-- !result
+set enable_materialized_view_rewrite = true;
 -- result:
 -- !result
 set catalog mv_hive_${uuid0};
@@ -38,6 +44,9 @@ INSERT INTO t1 VALUES
   (2,"2020-07-02"),(3,"2020-07-05"),(4,"2020-07-08"),(5,"2020-07-11");
 -- result:
 -- !result
+REFRESH EXTERNAL TABLE mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1;
+-- result:
+-- !result
 CREATE TABLE t2 (
   num int,
   dt string
@@ -53,6 +62,9 @@ INSERT INTO t2 VALUES
   (2,"2020-07-02"),(3,"2020-07-05"),(4,"2020-07-08"),(5,"2020-07-11");
 -- result:
 -- !result
+REFRESH EXTERNAL TABLE mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2;
+-- result:
+-- !result
 set catalog default_catalog;
 -- result:
 -- !result
@@ -62,6 +74,8 @@ create database db_${uuid0};
 use db_${uuid0};
 -- result:
 -- !result
+
+-- Scenario 1: DATE partitions.
 CREATE MATERIALIZED VIEW test_mv1 
 PARTITION BY dt 
 REFRESH DEFERRED MANUAL 
@@ -70,7 +84,10 @@ AS
   SELECT dt, sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt;
 -- result:
 -- !result
-REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: refresh_mv_manual("db_${uuid0}", "test_mv1")
+-- result:
+True
+-- !result
 function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;", "test_mv1")
 -- result:
 True
@@ -243,13 +260,28 @@ SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;
 INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 VALUES (3, "2020-06-15");
 -- result:
 -- !result
+REFRESH EXTERNAL TABLE mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1;
+-- result:
+-- !result
+
+-- Check the changed partition explicitly; a metadata/version collision must fail rather than be hidden by a sleep.
+function: check_mv_to_refresh_contains("test_mv1", "p20200615")
+-- result:
+True
+-- !result
+function: check_mv_to_refresh_not_contains("test_mv1", "p20200621")
+-- result:
+True
+-- !result
 function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;", "test_mv1")
 -- result:
 True
 -- !result
-function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+
+-- Dirty-only queries may retain an empty MV branch: protect data correctness instead of marker absence.
+function: assert_equal_result("SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;", "SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt, num FROM (SELECT dt,sum(num) AS num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt) expanded where dt='2020-06-15' order by 1, 2 limit 3;")
 -- result:
-False
+None
 -- !result
 function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt!='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
 -- result:
@@ -267,9 +299,9 @@ function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2
 -- result:
 True
 -- !result
-function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: assert_equal_result("SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt,sum(num) FROM (SELECT dt,sum(num) AS num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt) expanded where dt='2020-06-15' GROUP BY dt order by 1, 2 limit 3;")
 -- result:
-False
+None
 -- !result
 function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt !='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
@@ -299,9 +331,9 @@ function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt
 -- result:
 True
 -- !result
-function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: assert_equal_result("SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt,sum(num) FROM (SELECT dt,sum(num) AS num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt) expanded where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;")
 -- result:
-False
+None
 -- !result
 function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
@@ -412,9 +444,44 @@ SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;
 2020-06-18	5
 2020-06-21	7
 -- !result
+
+-- The oracle reads only Hive; disabling ordinary rewrite alone would not disable transparent MV expansion.
+function: check_no_hit_materialized_view('SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt,num FROM (SELECT dt,sum(num) AS num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt) expanded ORDER BY 1,2;', "TABLE: test_mv1", "TABLE: test_mv10", "TABLE: test_mv12")
+-- result:
+None
+-- !result
+function: assert_equal_result('SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ dt,num FROM test_mv1 ORDER BY 1,2;', 'SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt,num FROM (SELECT dt,sum(num) AS num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt) expanded ORDER BY 1,2;')
+-- result:
+None
+-- !result
+
+-- Check the complete result, including rows beyond the original LIMIT 3.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ dt,num FROM test_mv1 ORDER BY 1,2;
+-- result:
+2020-06-15	6
+2020-06-18	5
+2020-06-21	7
+2020-06-24	9
+2020-07-02	3
+2020-07-05	5
+2020-07-08	7
+2020-07-11	9
+2020-07-16	1
+2020-07-19	2
+2020-07-22	3
+2020-07-25	4
+-- !result
+
+-- Require the mixed-partition MV and Hive compensation path, without fixing an empty-branch pruning shape.
+function: print_hit_materialized_view('SELECT dt,num FROM test_mv1 ORDER BY 1,2;', 'test_mv1', 'UNION', 'TABLE: t1')
+-- result:
+True
+-- !result
 drop materialized view default_catalog.db_${uuid0}.test_mv1;
 -- result:
 -- !result
+
+-- Scenario 2: day expression.
 CREATE MATERIALIZED VIEW test_mv1 
 PARTITION BY date_trunc('day', dt)
 REFRESH DEFERRED MANUAL 
@@ -423,17 +490,35 @@ AS
   SELECT dt,sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt;
 -- result:
 -- !result
-REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: refresh_mv_manual("db_${uuid0}", "test_mv1")
+-- result:
+True
+-- !result
 INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 VALUES (3, "2020-06-15");
 -- result:
+-- !result
+REFRESH EXTERNAL TABLE mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1;
+-- result:
+-- !result
+
+-- Check the changed partition explicitly; a metadata/version collision must fail rather than be hidden by a sleep.
+function: check_mv_to_refresh_contains("test_mv1", "p20200615_20200616")
+-- result:
+True
+-- !result
+function: check_mv_to_refresh_not_contains("test_mv1", "p20200621_20200622")
+-- result:
+True
 -- !result
 function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;", "test_mv1")
 -- result:
 True
 -- !result
-function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+
+-- Dirty-only queries may retain an empty MV branch: protect data correctness instead of marker absence.
+function: assert_equal_result("SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;", "SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt, num FROM (SELECT dt,sum(num) AS num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt) expanded where dt='2020-06-15' order by 1, 2 limit 3;")
 -- result:
-False
+None
 -- !result
 function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt!='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
 -- result:
@@ -451,9 +536,9 @@ function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2
 -- result:
 True
 -- !result
-function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: assert_equal_result("SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt,sum(num) FROM (SELECT dt,sum(num) AS num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt) expanded where dt='2020-06-15' GROUP BY dt order by 1, 2 limit 3;")
 -- result:
-False
+None
 -- !result
 function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt !='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
@@ -483,9 +568,9 @@ function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt
 -- result:
 True
 -- !result
-function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: assert_equal_result("SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt,sum(num) FROM (SELECT dt,sum(num) AS num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt) expanded where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;")
 -- result:
-False
+None
 -- !result
 function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
@@ -597,9 +682,44 @@ SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;
 2020-06-18	5
 2020-06-21	7
 -- !result
+
+-- The oracle reads only Hive; disabling ordinary rewrite alone would not disable transparent MV expansion.
+function: check_no_hit_materialized_view('SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt,num FROM (SELECT dt,sum(num) AS num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt) expanded ORDER BY 1,2;', "TABLE: test_mv1", "TABLE: test_mv10", "TABLE: test_mv12")
+-- result:
+None
+-- !result
+function: assert_equal_result('SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ dt,num FROM test_mv1 ORDER BY 1,2;', 'SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt,num FROM (SELECT dt,sum(num) AS num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt) expanded ORDER BY 1,2;')
+-- result:
+None
+-- !result
+
+-- Check the complete result, including rows beyond the original LIMIT 3.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ dt,num FROM test_mv1 ORDER BY 1,2;
+-- result:
+2020-06-15	9
+2020-06-18	5
+2020-06-21	7
+2020-06-24	9
+2020-07-02	3
+2020-07-05	5
+2020-07-08	7
+2020-07-11	9
+2020-07-16	1
+2020-07-19	2
+2020-07-22	3
+2020-07-25	4
+-- !result
+
+-- Require the mixed-partition MV and Hive compensation path, without fixing an empty-branch pruning shape.
+function: print_hit_materialized_view('SELECT dt,num FROM test_mv1 ORDER BY 1,2;', 'test_mv1', 'UNION', 'TABLE: t1')
+-- result:
+True
+-- !result
 drop materialized view default_catalog.db_${uuid0}.test_mv1;
 -- result:
 -- !result
+
+-- Scenario 3: STRING partitions.
 CREATE MATERIALIZED VIEW test_mv1 
 PARTITION BY str2date(dt, '%Y-%m-%d')
 REFRESH DEFERRED MANUAL 
@@ -608,9 +728,25 @@ AS
   SELECT dt,sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 GROUP BY dt;
 -- result:
 -- !result
-REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: refresh_mv_manual("db_${uuid0}", "test_mv1")
+-- result:
+True
+-- !result
 INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 VALUES (3, "2020-06-16");
 -- result:
+-- !result
+REFRESH EXTERNAL TABLE mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2;
+-- result:
+-- !result
+
+-- Check the changed partition explicitly; a metadata/version collision must fail rather than be hidden by a sleep.
+function: check_mv_to_refresh_contains("test_mv1", "p20200616_20200617")
+-- result:
+True
+-- !result
+function: check_mv_to_refresh_not_contains("test_mv1", "p20200621_20200622")
+-- result:
+True
 -- !result
 function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;", "test_mv1")
 -- result:
@@ -781,9 +917,45 @@ SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;
 2020-06-16	3
 2020-06-18	5
 -- !result
+
+-- The oracle reads only Hive; disabling ordinary rewrite alone would not disable transparent MV expansion.
+function: check_no_hit_materialized_view('SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt,num FROM (SELECT dt,sum(num) AS num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 GROUP BY dt) expanded ORDER BY 1,2;', "TABLE: test_mv1", "TABLE: test_mv10", "TABLE: test_mv12")
+-- result:
+None
+-- !result
+function: assert_equal_result('SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ dt,num FROM test_mv1 ORDER BY 1,2;', 'SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt,num FROM (SELECT dt,sum(num) AS num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 GROUP BY dt) expanded ORDER BY 1,2;')
+-- result:
+None
+-- !result
+
+-- Check the complete result, including rows beyond the original LIMIT 3.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ dt,num FROM test_mv1 ORDER BY 1,2;
+-- result:
+2020-06-15	3
+2020-06-16	3
+2020-06-18	5
+2020-06-21	7
+2020-06-24	9
+2020-07-02	3
+2020-07-05	5
+2020-07-08	7
+2020-07-11	9
+2020-07-16	1
+2020-07-19	2
+2020-07-22	3
+2020-07-25	4
+-- !result
+
+-- Require the mixed-partition MV and Hive compensation path, without fixing an empty-branch pruning shape.
+function: print_hit_materialized_view('SELECT dt,num FROM test_mv1 ORDER BY 1,2;', 'test_mv1', 'UNION', 'TABLE: t2')
+-- result:
+True
+-- !result
 drop materialized view default_catalog.db_${uuid0}.test_mv1;
 -- result:
 -- !result
+
+-- Scenario 4: UNION definition.
 CREATE MATERIALIZED VIEW test_mv1 
 PARTITION BY date_trunc('day', dt)
 REFRESH DEFERRED MANUAL 
@@ -794,9 +966,25 @@ UNION ALL
 SELECT  str2date(dt, '%Y-%m-%d'), sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 GROUP BY dt) t order by 1, 2;
 -- result:
 -- !result
-REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: refresh_mv_manual("db_${uuid0}", "test_mv1")
+-- result:
+True
+-- !result
 INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 VALUES (3, "2020-06-18");
 -- result:
+-- !result
+REFRESH EXTERNAL TABLE mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2;
+-- result:
+-- !result
+
+-- Check the changed partition explicitly; a metadata/version collision must fail rather than be hidden by a sleep.
+function: check_mv_to_refresh_contains("test_mv1", "p20200618_20200619")
+-- result:
+True
+-- !result
+function: check_mv_to_refresh_not_contains("test_mv1", "p20200621_20200622")
+-- result:
+True
 -- !result
 function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;", "test_mv1")
 -- result:
@@ -964,6 +1152,52 @@ SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;
 2020-06-16	3
 2020-06-18	13
 -- !result
+
+-- The oracle reads only Hive; disabling ordinary rewrite alone would not disable transparent MV expansion.
+function: check_no_hit_materialized_view("SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt,num FROM (SELECT dt,sum(num) AS num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt UNION ALL SELECT str2date(dt, '%Y-%m-%d'),sum(num) AS num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 GROUP BY dt) expanded ORDER BY 1,2;", "TABLE: test_mv1", "TABLE: test_mv10", "TABLE: test_mv12")
+-- result:
+None
+-- !result
+function: assert_equal_result('SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ dt,num FROM test_mv1 ORDER BY 1,2;', "SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt,num FROM (SELECT dt,sum(num) AS num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt UNION ALL SELECT str2date(dt, '%Y-%m-%d'),sum(num) AS num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 GROUP BY dt) expanded ORDER BY 1,2;")
+-- result:
+None
+-- !result
+
+-- Check the complete result, including rows beyond the original LIMIT 3.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ dt,num FROM test_mv1 ORDER BY 1,2;
+-- result:
+2020-06-15	3
+2020-06-15	9
+2020-06-16	3
+2020-06-18	5
+2020-06-18	8
+2020-06-21	7
+2020-06-21	7
+2020-06-24	9
+2020-06-24	9
+2020-07-02	3
+2020-07-02	3
+2020-07-05	5
+2020-07-05	5
+2020-07-08	7
+2020-07-08	7
+2020-07-11	9
+2020-07-11	9
+2020-07-16	1
+2020-07-16	1
+2020-07-19	2
+2020-07-19	2
+2020-07-22	3
+2020-07-22	3
+2020-07-25	4
+2020-07-25	4
+-- !result
+
+-- Require the mixed-partition MV and Hive compensation path, without fixing an empty-branch pruning shape.
+function: print_hit_materialized_view('SELECT dt,num FROM test_mv1 ORDER BY 1,2;', 'test_mv1', 'UNION', 'TABLE: t2')
+-- result:
+True
+-- !result
 drop materialized view default_catalog.db_${uuid0}.test_mv1;
 -- result:
 -- !result
@@ -983,8 +1217,16 @@ AS
   SELECT dt,sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 GROUP BY dt;
 -- result:
 -- !result
-REFRESH MATERIALIZED VIEW test_mv10 WITH SYNC MODE;
-REFRESH MATERIALIZED VIEW test_mv12 WITH SYNC MODE;
+function: refresh_mv_manual("db_${uuid0}", "test_mv10")
+-- result:
+True
+-- !result
+function: refresh_mv_manual("db_${uuid0}", "test_mv12")
+-- result:
+True
+-- !result
+
+-- Scenario 5: nested UNION definition.
 CREATE MATERIALIZED VIEW test_mv1
 PARTITION BY dt
 REFRESH DEFERRED MANUAL 
@@ -992,9 +1234,24 @@ PROPERTIES ("transparent_mv_rewrite_mode" = "true")
 AS  select * from (SELECT dt, num FROM test_mv10 UNION ALL SELECT str2date(dt, '%Y-%m-%d'), num FROM test_mv12)as t order by 1, 2;
 -- result:
 -- !result
-REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: refresh_mv_manual("db_${uuid0}", "test_mv1")
+-- result:
+True
+-- !result
 INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 VALUES (3, "2020-06-18");
 -- result:
+-- !result
+REFRESH EXTERNAL TABLE mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2;
+-- result:
+-- !result
+-- Check the changed dependency; the outer UNION can inherit either equal-range partition name.
+function: check_mv_to_refresh_contains("test_mv12", "p20200618_20200619")
+-- result:
+True
+-- !result
+function: check_mv_to_refresh_not_contains("test_mv12", "p20200621_20200622")
+-- result:
+True
 -- !result
 function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;", "test_mv1")
 -- result:
@@ -1083,7 +1340,7 @@ SELECT dt, num FROM test_mv1 where dt!='2020-06-15' order by 1, 2 limit 3;
 -- result:
 2020-06-16	3
 2020-06-18	5
-2020-06-18	8
+2020-06-18	11
 -- !result
 SELECT dt, num FROM test_mv1 where dt>='2020-06-15' order by 1, 2 limit 3;
 -- result:
@@ -1093,6 +1350,7 @@ SELECT dt, num FROM test_mv1 where dt>='2020-06-15' order by 1, 2 limit 3;
 -- !result
 SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and num > 10 order by 1, 2 limit 3;
 -- result:
+2020-06-18	11
 -- !result
 SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and 1 < num < 10 order by 1, 2 limit 3;
 -- result:
@@ -1107,37 +1365,37 @@ SELECT dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2
 SELECT dt,sum(num) FROM test_mv1 where dt !='2020-06-15' GROUP BY dt order by 1, 2 limit 3;
 -- result:
 2020-06-16	3
-2020-06-18	13
+2020-06-18	16
 2020-06-21	14
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where dt>='2020-06-15' GROUP BY dt order by 1, 2 limit 3;
 -- result:
 2020-06-15	12
 2020-06-16	3
-2020-06-18	13
+2020-06-18	16
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' GROUP BY dt order by 1, 2 limit 3;
 -- result:
 2020-06-16	3
-2020-06-18	13
+2020-06-18	16
 2020-06-21	14
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt order by 1, 2 limit 3;
 -- result:
 2020-06-16	3
-2020-06-18	13
+2020-06-18	16
 2020-06-21	14
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt order by 1, 2 limit 3;
 -- result:
 2020-06-16	3
-2020-06-18	13
+2020-06-18	16
 2020-06-21	14
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt order by 1, 2 limit 3;
 -- result:
 2020-06-16	3
-2020-06-18	13
+2020-06-18	16
 2020-06-21	14
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt order by 1, 2 limit 3;
@@ -1152,7 +1410,7 @@ SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GRO
 -- result:
 2020-06-15	12
 2020-06-16	3
-2020-06-18	13
+2020-06-18	16
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;
 -- result:
@@ -1164,7 +1422,53 @@ SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;
 -- result:
 2020-06-15	12
 2020-06-16	3
-2020-06-18	13
+2020-06-18	16
+-- !result
+
+-- The oracle reads only Hive; disabling ordinary rewrite alone would not disable transparent MV expansion.
+function: check_no_hit_materialized_view("SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt,num FROM (SELECT dt,sum(num) AS num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt UNION ALL SELECT str2date(dt, '%Y-%m-%d'),sum(num) AS num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 GROUP BY dt) expanded ORDER BY 1,2;", "TABLE: test_mv1", "TABLE: test_mv10", "TABLE: test_mv12")
+-- result:
+None
+-- !result
+function: assert_equal_result('SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ dt,num FROM test_mv1 ORDER BY 1,2;', "SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt,num FROM (SELECT dt,sum(num) AS num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt UNION ALL SELECT str2date(dt, '%Y-%m-%d'),sum(num) AS num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 GROUP BY dt) expanded ORDER BY 1,2;")
+-- result:
+None
+-- !result
+
+-- Check the complete result, including rows beyond the original LIMIT 3.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ dt,num FROM test_mv1 ORDER BY 1,2;
+-- result:
+2020-06-15	3
+2020-06-15	9
+2020-06-16	3
+2020-06-18	5
+2020-06-18	11
+2020-06-21	7
+2020-06-21	7
+2020-06-24	9
+2020-06-24	9
+2020-07-02	3
+2020-07-02	3
+2020-07-05	5
+2020-07-05	5
+2020-07-08	7
+2020-07-08	7
+2020-07-11	9
+2020-07-11	9
+2020-07-16	1
+2020-07-16	1
+2020-07-19	2
+2020-07-19	2
+2020-07-22	3
+2020-07-22	3
+2020-07-25	4
+2020-07-25	4
+-- !result
+
+-- Require the mixed-partition MV and Hive compensation path, without fixing an empty-branch pruning shape.
+function: print_hit_materialized_view('SELECT dt,num FROM test_mv1 ORDER BY 1,2;', 'test_mv1', 'UNION', 'TABLE: t2')
+-- result:
+True
 -- !result
 drop materialized view default_catalog.db_${uuid0}.test_mv1;
 -- result:
@@ -1184,3 +1488,25 @@ drop table mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 force;
 drop database mv_hive_${uuid0}.mv_hive_db_${uuid0} force;
 -- result:
 -- !result
+DROP DATABASE default_catalog.db_${uuid0} FORCE;
+-- result:
+-- !result
+DROP CATALOG mv_hive_${uuid0};
+-- result:
+-- !result
+
+-- Cleanup also handles failure before either database has been created, or after normal cleanup.
+CLEANUP {
+    SET CATALOG default_catalog;
+    CREATE DATABASE IF NOT EXISTS default_catalog.db_${uuid0};
+    DROP MATERIALIZED VIEW IF EXISTS default_catalog.db_${uuid0}.test_mv1;
+    DROP MATERIALIZED VIEW IF EXISTS default_catalog.db_${uuid0}.test_mv10;
+    DROP MATERIALIZED VIEW IF EXISTS default_catalog.db_${uuid0}.test_mv12;
+    DROP DATABASE IF EXISTS default_catalog.db_${uuid0} FORCE;
+    CREATE EXTERNAL CATALOG IF NOT EXISTS mv_hive_${uuid0} PROPERTIES ("type"="hive", "hive.catalog.type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+    CREATE DATABASE IF NOT EXISTS mv_hive_${uuid0}.mv_hive_db_${uuid0};
+    DROP TABLE IF EXISTS mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 FORCE;
+    DROP TABLE IF EXISTS mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 FORCE;
+    DROP DATABASE IF EXISTS mv_hive_${uuid0}.mv_hive_db_${uuid0} FORCE;
+    DROP CATALOG IF EXISTS mv_hive_${uuid0};
+} END CLEANUP

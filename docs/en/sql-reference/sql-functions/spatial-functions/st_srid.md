@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 50
 description: "Returns the numeric EPSG SRID recorded in a native GEOMETRY descriptor."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_SRID

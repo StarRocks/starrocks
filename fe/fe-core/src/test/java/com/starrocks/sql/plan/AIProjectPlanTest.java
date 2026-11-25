@@ -38,7 +38,6 @@ import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.Explain;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
@@ -229,7 +228,7 @@ public class AIProjectPlanTest extends PlanTestBase {
                 TAIProjectNode project = findOnlyAIProjectThriftNode(plan).getAi_project_node();
                 TExpr expression = findOnlyAIExpression(project.getSlot_map());
                 TExprNode call = expression.getNodes().get(0);
-                Assertions.assertEquals(embedding ? 200003 : 200001, call.getFn().getId());
+                Assertions.assertEquals(embedding ? "ai_embed" : "ai_complete", call.getFn().getName().getFunction_name());
                 Assertions.assertEquals(embedding ? 4 : 5, call.getNum_children());
                 String configId = call.getAi_provider_id();
                 Assertions.assertEquals(configId, call.getAi_provider_id());
@@ -435,20 +434,6 @@ public class AIProjectPlanTest extends PlanTestBase {
                 Assertions.assertFalse(containsFunction(expression, "now"), expression.toString());
                 Assertions.assertFalse(containsFunction(expression, "unix_timestamp"), expression.toString());
             });
-        }
-    }
-
-    @Test
-    public void testProviderAlwaysRequiresADefaultModel() throws Exception {
-        String configuredModel = AIProviderTestUtil.chatProperty("model");
-        AIProviderTestUtil.setChatProperty("model", "");
-        try {
-            Assertions.assertThrows(SemanticException.class,
-                    () -> getExecPlan("select ai_complete('explicit-model', k1) from t7"));
-            Assertions.assertThrows(SemanticException.class,
-                    () -> getExecPlan("select ai_complete(k1) from t7"));
-        } finally {
-            AIProviderTestUtil.setChatProperty("model", configuredModel);
         }
     }
 

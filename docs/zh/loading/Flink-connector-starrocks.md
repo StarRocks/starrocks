@@ -2,6 +2,7 @@
 sidebar_position: 110
 displayed_sidebar: docs
 description: "通过 Apache Flink connector 持续加载数据到 StarRocks，支持 DataStream、Table API 和 Python API。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 从 Apache Flink® 持续导入
@@ -24,10 +25,9 @@ StarRocks 提供的 Flink connector，相比于 Flink 提供的 [flink-connector
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.17    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及更高版本 | 8    | 2.11,2.12 |
+| 1.2.16    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及更高版本 | 8    | 2.11,2.12 |
 | 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及更高版本 | 8    | 2.11,2.12 |
-| 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及更高版本 | 8    | 2.11,2.12 |
-| 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及更高版本 | 8    | 2.11,2.12 |
-| 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 及更高版本 | 8    | 2.11,2.12 |
 
 ## 获取 Flink connector
 
@@ -189,8 +189,14 @@ Flink connector JAR 文件的命名格式如下：
 #### sink.max-retries
 
 - **是否必填**：否
-- **默认值**：3
-- **描述**：系统重试执行 Stream Load 作业的次数。仅当您将 `sink.version` 设置为 `V1` 时，此参数才可用。有效值：0 到 10。
+- **默认值**：3（启用 Merge Commit 时为 `0`）
+- **描述**：系统重试执行 Stream Load 作业的次数。当您将 `sink.version` 设置为 `V1` 或启用 Merge Commit 时，此参数生效。有效值：0 到 10。启用 Merge Commit 时，除非显式设置此参数（例如 `'sink.max-retries' = '3'`），否则 connector 不会重试失败的导入请求。启用重试后，connector 会将每个导入请求的数据保留在内存中，直到该请求成功，因此会增加内存使用。由于 Merge Commit 仅保证 at-least-once 语义，如果原始请求实际已成功（例如其响应丢失），重试的请求可能导致数据被导入两次。
+
+#### sink.retry.interval-ms
+
+- **是否必填**：否
+- **默认值**：10000
+- **描述**：启用 Merge Commit 时，失败的导入请求两次重试之间的间隔。单位：ms。仅当 `sink.max-retries` 大于 `0` 时，此参数才生效。当 `sink.version` 设置为 `V1` 时，此参数不生效。
 
 #### sink.connect.timeout-ms
 
@@ -215,6 +221,18 @@ Flink connector JAR 文件的命名格式如下：
 - **是否必填**：否
 - **默认值**：10000
 - **描述**：自 1.2.7 版本起支持。等待 FE 返回 HTTP 100-continue 响应的超时时间。取值范围：`3000` 到 `60000`。单位：毫秒（ms）。
+
+#### sink.http.keep-alive.enabled
+
+- **是否必填**：否
+- **默认值**：false
+- **描述**：自 1.2.17 版本起支持。Stream Load 请求和事务请求（begin、prepare、commit、rollback）是否复用 HTTP 连接（keep-alive），而不是为每个请求新建一个连接。每个 sink 子任务到每个主机最多保持 `sink.io.thread-count` + 2 个连接。当 `sink.version` 为 `V2` 时生效。默认关闭：除非将此参数设置为 `true`，否则与早期版本一样，每个请求都会新建一个连接。
+
+#### sink.http.keep-alive.idle-timeout-ms
+
+- **是否必填**：否
+- **默认值**：60000
+- **描述**：自 1.2.17 版本起支持。空闲时间超过此值的 keep-alive 连接将不再被复用，并会在超时后 10 秒内关闭。单位：毫秒。该值必须小于 Flink 与 StarRocks 之间每个代理或负载均衡器的空闲超时时间。例如，AWS Network Load Balancer 默认会断开空闲 350 秒的 TCP 连接。
 
 #### sink.ignore.update-before
 
@@ -397,7 +415,7 @@ Flink connector JAR 文件的命名格式如下：
 
     请注意：当您将此配置值设为较大数值时，建议同时指定 `sink.label-prefix` 的值，以便根据标签前缀和检查点中的信息清理滞留事务，而非依赖超时机制（后者可能导致数据丢失）。
 
-  - `label_keep_max_second` 和 `label_keep_max_num`：StarRocks FE 参数，默认值分别为 `259200` 和 `1000`。更多信息，参见[FE 配置](./loading_introduction/loading_considerations.md#fe-配置)。`label_keep_max_second` 的值需要大于 Flink job 的停止时间。否则，Flink connector 无法使用保存在 Flink 的 savepoint 或 checkpoint 中的事务 label 来检查事务在 StarRocks 中的状态，并判断这些事务是否已提交，最终可能导致数据丢失。
+  - `label_keep_max_second` 和 `label_keep_max_num`：StarRocks FE 参数，默认值分别为 `259200` 和 `1000`。更多信息，参见[FE 配置](../administration/configuration/FE_parameters/user_query_loading.md#label_keep_max_second)。`label_keep_max_second` 的值需要大于 Flink job 的停止时间。否则，Flink connector 无法使用保存在 Flink 的 savepoint 或 checkpoint 中的事务 label 来检查事务在 StarRocks 中的状态，并判断这些事务是否已提交，最终可能导致数据丢失。
 
 - 如何设置 `PREPARED` 事务的超时时间
 
@@ -431,6 +449,10 @@ Merge Commit 有助于扩展吞吐量，而不会成比例地增加 StarRocks �
 - **仅保证 at-least-once 语义**
 
   Merge Commit 仅保证 at-least-once 语义。它不支持 exactly-once 语义。启用 Merge Commit 后，请勿将 `sink.semantic` 设置为 `exactly-once`。
+
+- **默认不重试**
+
+  启用 Merge Commit 时，`sink.max-retries` 默认为 `0`。因此，因瞬时错误（例如 StarRocks 节点缩容）而失败的导入请求不会被重试，sink 会直接失败。如需重试失败的导入请求，请显式设置 `sink.max-retries`，例如 `'sink.max-retries' = '3'`。您可以通过 `sink.retry.interval-ms` 控制重试间隔。
 
 - **主键表的排序**
 
@@ -481,6 +503,7 @@ Flink connector 提供以下指标来监控导入情况。
 | totalFlushSucceededTimes | Counter |  flush 数据的成功次数。                           |
 | totalFlushFailedTimes    | Counter | flush 数据的失败次数。                                   |
 | totalFilteredRows        | Counter | 已过滤的行数，这些行数也包含在 totalFlushRows 中。 |
+| sharedTxnLatencyMs       | Histogram | 仅适用于多表事务模式：从共享事务的最早一行进入 sink 缓冲区到该事务提交所经过的时间（毫秒）。 |
 
 ## 使用示例
 

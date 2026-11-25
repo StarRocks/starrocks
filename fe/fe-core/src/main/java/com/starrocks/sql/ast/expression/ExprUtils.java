@@ -461,6 +461,22 @@ public class ExprUtils {
         return GlobalStateMgr.getCurrentState().getFunction(searchDesc, mode);
     }
 
+    // Looks up the array_agg_distinct overload for rewriting array_agg(distinct x). Returns null when no overload
+    // takes x's type: the non-strict lookup would otherwise return any overload x is castable to (e.g. DECIMALV2
+    // for VARIANT), and since no cast is planned in between, the BE would read x's column as that type and crash.
+    public static Function getArrayAggDistinctFunction(Type[] argTypes) {
+        Function fn = getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT, argTypes,
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        if (fn == null || argTypes.length != 1) {
+            return null;
+        }
+        Type argType = argTypes[0];
+        if (!argType.isNull() && !argType.matchesType(fn.getArgs()[0])) {
+            return null;
+        }
+        return fn;
+    }
+
     public static boolean isAggregateFunction(String name) {
         return GlobalStateMgr.getCurrentState().isAggregateFunction(name);
     }

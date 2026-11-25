@@ -14,13 +14,26 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.Config;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergEqualityDeleteScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergEqualityDeleteScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+
+import java.util.List;
+import java.util.Map;
 
 public class ExplainTest extends PlanTestBase {
     @Test
@@ -54,18 +67,21 @@ public class ExplainTest extends PlanTestBase {
     @Test
     public void testDesensitizeExplain() throws Exception {
         connectContext.getSessionVariable().setEnableDesensitizeExplain(true);
-        String sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4 WHERE t0.v1 > 1000";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "PREDICATES: 1: v1 > ?\n");
+        try {
+            String sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4 WHERE t0.v1 > 1000";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "PREDICATES: 1: v1 > ?\n");
 
-        sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4 and t0.v2 + t1.v5 > 1000";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "other join predicates: 2: v2 + 5: v5 > ?");
+            sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4 and t0.v2 + t1.v5 > 1000";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "other join predicates: 2: v2 + 5: v5 > ?");
 
-        sql = "SELECT MIN(pow(t0.v1, 2)) FROM t0";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "min(pow(CAST(1: v1 AS DOUBLE), ?))");
-
+            sql = "SELECT MIN(pow(t0.v1, 2)) FROM t0";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "min(pow(CAST(1: v1 AS DOUBLE), ?))");
+        } finally {
+            connectContext.getSessionVariable().setEnableDesensitizeExplain(false);
+        }
     }
 
     @Test
@@ -154,5 +170,67 @@ public class ExplainTest extends PlanTestBase {
         Assertions.assertTrue(queryStatement.isExplain());
         Assertions.assertEquals(StatementBase.ExplainLevel.NORMAL, queryStatement.getExplainLevel());
 
+    }
+
+    @Test
+    public void testExplainLogicalIcebergEqualityDeleteScan() {
+        IcebergTable table = Mockito.mock(IcebergTable.class);
+        Mockito.when(table.getName()).thenReturn("eqd_repro");
+        Column column = new Column("id", IntegerType.INT);
+        ColumnRefOperator ref = new ColumnRefOperator(1, IntegerType.INT, "id", true);
+        LogicalIcebergEqualityDeleteScanOperator logicalScan = new LogicalIcebergEqualityDeleteScanOperator(
+                table, Map.of(ref, column), Map.of(column, ref), -1, null);
+        OptExpression root = OptExpression.create(new PhysicalIcebergEqualityDeleteScanOperator(logicalScan));
+
+        String plan = new Explain(false, false, "    ", "    ").print(root, List.of(ref));
+        assertContains(plan, "- ICEBERG-EQUALITY-DELETE-SCAN [eqd_repro] => [1:id]");
+    }
+
+    @Test
+    public void testExplainLogicalIcebergEqualityDeleteScanWithRows() {
+        IcebergTable table = Mockito.mock(IcebergTable.class);
+        Mockito.when(table.getName()).thenReturn("eqd_repro");
+        Column column = new Column("id", IntegerType.INT);
+        ColumnRefOperator ref = new ColumnRefOperator(1, IntegerType.INT, "id", true);
+        LogicalIcebergEqualityDeleteScanOperator logicalScan = new LogicalIcebergEqualityDeleteScanOperator(
+                table, Map.of(ref, column), Map.of(column, ref), -1, null);
+        OptExpression root = OptExpression.create(new PhysicalIcebergEqualityDeleteScanOperator(logicalScan));
+        root.setStatistics(Statistics.builder().setOutputRowCount(5).build());
+
+        String plan = new Explain(true, true, " ", " |").print(root, List.of(ref));
+        assertContains(plan, "- ICEBERG-EQUALITY-DELETE-SCAN [eqd_repro] => [1:id] {rows: 5}");
+    }
+
+    @Test
+    public void testExplainLogicalRawValues() throws Exception {
+        SessionVariable sv = connectContext.getSessionVariable();
+        int threshold = sv.getLargeInPredicateThreshold();
+        sv.setLargeInPredicateThreshold(3);
+        try {
+            String plan = getExecPlan("select * from t0 where v1 in (1, 2, 3, 4)")
+                    .getExplainString(StatementBase.ExplainLevel.LOGICAL);
+            assertContains(plan, "LEFT SEMI JOIN");
+            assertContains(plan, "- RAW-VALUES");
+        } finally {
+            sv.setLargeInPredicateThreshold(threshold);
+        }
+    }
+
+    @Test
+    public void testExplainLogicalFetch() throws Exception {
+        SessionVariable sv = connectContext.getSessionVariable();
+        boolean glm = sv.isEnableGlobalLateMaterialization();
+        boolean costBased = sv.isEnableGlobalLateMaterializationCostBased();
+        sv.setEnableGlobalLateMaterialization(true);
+        sv.setEnableGlobalLateMaterializationCostBased(false);
+        try {
+            String plan = getExecPlan("select * from supplier where S_SUPPKEY < 10 order by 1,2 limit 10")
+                    .getExplainString(StatementBase.ExplainLevel.LOGICAL);
+            assertContains(plan, "- FETCH");
+            assertContains(plan, "- LOOKUP");
+        } finally {
+            sv.setEnableGlobalLateMaterialization(glm);
+            sv.setEnableGlobalLateMaterializationCostBased(costBased);
+        }
     }
 }

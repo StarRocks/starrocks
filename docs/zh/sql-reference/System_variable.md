@@ -2,12 +2,11 @@
 displayed_sidebar: docs
 description: "StarRocks 系统变量可通过 SET 命令动态设置，支持全局和会话范围的配置。"
 keywords: ['session','variable']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 系统变量
 
-import VariableWarehouse from '../_assets/commonMarkdown/variable_warehouse.mdx'
-import EditionSpecificVariable from '../_assets/commonMarkdown/Edition_Specific_Variable.mdx'
 
 StarRocks 提供多个系统变量（system variables），方便您根据业务情况进行调整。本文介绍 StarRocks 支持的变量。您可以在 MySQL 客户端通过命令 [SHOW VARIABLES](sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) 查看当前变量。也可以通过 [SET](sql-statements/cluster-management/config_vars/SET.md) 命令动态设置或者修改变量。您可以设置变量在系统全局 (global) 范围内生效、仅在当前会话 (session) 中生效、或者仅在单个查询语句中生效。
 
@@ -15,7 +14,7 @@ StarRocks 中的变量参考 MySQL 中的变量设置，但**部分变量仅用�
 
 > **说明**
 >
-> 任何用户都有权限通过 SHOW VARIABLES 查看变量。任何用户都有权限设置变量在 Session 级别生效。只有拥有 System 级 OPERATE 权限的用户才可以设置变量为全局生效。设置全局生效后，后续所有新的会话都会使用新配置，当前会话仍然使用老的配置。
+> 任何用户都有权限通过 SHOW VARIABLES 查看变量。任何用户都有权限设置变量在 Session 级别生效。只有拥有 System 级 OPERATE 权限的用户才可以设置变量为全局生效。设置全局生效后，当前会话和后续所有新的会话都会使用新配置，其他已有的会话仍然使用老的配置。
 
 ## 查看变量
 
@@ -42,7 +41,7 @@ StarRocks 支持三种类型（层级）的变量：全局变量、Session 变�
 
 ### 设置变量全局生效或在会话中生效
 
-变量一般可以设置为**全局**生效或**仅当前会话**生效。设置为全局生效后，**后续所有新的会话**连接中会使用新设置的值，当前会话还会继续使用之前设置的值；设置为仅当前会话生效时，变量仅对当前会话产生作用。
+变量一般可以设置为**全局**生效或**仅当前会话**生效。设置为全局生效后，当前会话和**后续所有新的会话**连接中会使用新设置的值，其他已有的会话还会继续使用之前设置的值，直到执行 [REFRESH CONNECTIONS](sql-statements/cluster-management/config_vars/REFRESH_CONNECTIONS.md)。下文所列仅支持全局生效的变量除外，其新值会立即对所有会话生效；设置为仅当前会话生效时，变量仅对当前会话产生作用。
 
 通过 `SET <var_name> = xxx;` 语句设置的变量仅在当前会话生效。如：
 
@@ -137,7 +136,7 @@ DELETE /*+ SET_VAR(query_mem_limit = 8589934592) */
 FROM my_table PARTITION p1
 WHERE k1 = 3;
 
-INSERT /*+ SET_VAR(insert_timeout = 10000000) */
+INSERT /*+ SET_VAR(insert_timeout = 86400) */
 INTO insert_wiki_edit
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
@@ -153,8 +152,8 @@ StarRocks 同时支持在单个语句中设置多个变量，参考如下示例�
 ```sql
 SELECT /*+ SET_VAR
   (
-  exec_mem_limit = 515396075520,
-  query_timeout=10000000,
+  query_mem_limit = 515396075520,
+  query_timeout=86400,
   batch_size=4096,
   parallel_fragment_exec_instance_num=32
   )
@@ -250,8 +249,8 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：用于设定大查询的阈值。当会话变量 `enable_profile` 设置为 `false` 且查询时间超过 `big_query_profile_threshold` 设定的阈值时，则会生成 Profile。
 
   NOTE：在 v3.1.5 至 v3.1.7 以及 v3.2.0 至 v3.2.2 中，引入了 `big_query_profile_second_threshold` 参数，用于设定大查询的阈值。而在 v3.1.8、v3.2.3 及后续版本中，此参数被 `big_query_profile_threshold` 替代，以便提供更加灵活的配置选项。
-* 默认值：0
-* 单位：秒
+* 默认值：从 v3.3.12、v3.4.2 和 v3.5.0 开始为 `30s`。更早版本为 `0`，即不启用该功能。
+* 单位：在取值中指定时间单位，例如 `30s`、`500ms` 或 `1m`。
 * 类型：String
 * 引入版本：v3.1
 
@@ -263,7 +262,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **默认值**：`TABLET_HASH`
 * **类型**：String
 * **合法取值**：`CIRCULAR`、`RANDOM`、`TABLET_HASH`
-* **引入版本**：-
+* **引入版本**：v4.1.1
 
 ### broadcast_mem_exceeded_penalty_factor
 
@@ -551,8 +550,10 @@ FROM test;
 
 ### enable_adaptive_sink_dop
 
-* 描述：是否开启导入自适应并行度。开启后 INSERT INTO 和 Broker Load 自动设置导入并行度，保持和 `pipeline_dop` 一致。新部署的 2.5 版本默认值为 `true`，从 2.4 版本升级上来为 `false`。
-* 默认值：false
+* 描述：是否开启导入自适应并行度。开启后 INSERT INTO 和 Broker Load 自动设置导入并行度，保持和 `pipeline_dop` 一致。默认行为因版本而异：
+  * v4.2.0 之后的版本：默认值为 `true`。如果集群持久化的元数据中已保存该变量的值，则保留该值。例如，从 v2.4 及更早版本升级上来的集群保持 `false`。执行 `SET enable_adaptive_sink_dop = DEFAULT` 或 `SET GLOBAL enable_adaptive_sink_dop = DEFAULT` 会将该变量设为 `true`，即使集群当前的值为 `false`。
+  * v4.2.0 及更早版本：默认值为 `false`，但新部署的集群会在首次启动时将该变量的全局值设为 `true`。从 v2.4 及更早版本升级上来的集群保持 `false`。
+* 默认值：true（v4.2.0 及更早版本：false）
 * 引入版本：v2.5
 
 ### enable_bucket_aware_execution_on_lake
@@ -615,6 +616,12 @@ FROM test;
 - 描述：是否启用 Cache Sharing。设置为 `true` 可启用该功能。Cache Sharing 能够在本地缓存未命中时通过网络访问其他节点上的缓存数据，这有助于减少集群扩展过程中缓存失效造成的性能抖动。只有当 FE 参数 `enable_trace_historical_node` 设置为 `true` 时，此变量才会生效。
 - 默认值：true
 - 引入版本：v3.5.1
+
+### enable_delta_lake_function_predicate_pruning
+
+* 描述：对 Delta Lake 表列取函数后的谓词，是否用于跳过数据文件。StarRocks 会把这类谓词转换为该列本身的条件，例如把 `year(dt) = 2024` 转换为 `dt >= '2024-01-01' AND dt < '2025-01-01'`，从而通过分区值和文件列统计信息跳过文件，并通过 Parquet row group 的列统计信息跳过 row group。适用的函数与 `enable_iceberg_function_predicate_pruning` 相同。原谓词仍会对数据行求值。设置为 `false` 时按原方式规划这类查询，例如用于对比结果。
+* 默认值：true
+* 引入版本：v26.3
 
 ### enable_distinct_agg_over_window
 
@@ -685,9 +692,21 @@ FROM test;
 * 默认值：false，表示不开启。
 * 引入版本：v3.1.4
 
+### enable_hive_function_predicate_pruning
+
+* 描述：对 Hive 表日期或日期时间列取函数后的谓词，是否用于裁剪分区。StarRocks 会把这类谓词转换为该列本身的条件，例如把 `year(dt) = 2024` 转换为 `dt >= '2024-01-01' AND dt < '2025-01-01'`，从而在分区列上裁剪分区，并通过 row group 的列统计信息跳过 row group。适用于 `enable_iceberg_function_predicate_pruning` 中列出的日期和时间函数。原谓词仍会对数据行求值。设置为 `false` 时按原方式规划这类查询，例如用于对比结果。
+* 默认值：true
+* 引入版本：v26.3
+
 ### enable_iceberg_eq_delete_runtime_filter_pruning
 
 * 描述：是否允许 Runtime Filter 跳过 Iceberg 表的 Equality Delete 文件。仅当表从未变更过分区规格（Partition Spec），且每个分区字段都是查询所读取的 INT、DATE 或 STRING 列的 identity 转换时生效。此时，Join 在这些列上生成的 Runtime Filter 会跳过被其过滤掉的分区的 Equality Delete 文件。设置为 `false` 时会应用所有 Equality Delete 文件，例如查询报错且错误信息中提到该变量时。
+* 默认值：true
+* 引入版本：v26.2
+
+### enable_iceberg_function_predicate_pruning
+
+* 描述：对 Iceberg 表列取函数后的谓词，是否用于跳过数据文件。StarRocks 会把这类谓词转换为该列本身的条件，例如把 `year(dt) = 2024` 转换为 `dt >= '2024-01-01' AND dt < '2025-01-01'`，从而通过该列的任意分区转换（`year`、`month`、`day`、`hour`、`truncate`）以及文件列统计信息跳过文件。适用于 `year()`、`to_date()`、`date()`、`date_trunc()`、使用 `'%Y-%m'` 等补零格式的 `date_format()`、`datediff()`、`weeks_add()`/`hours_add()`/`minutes_add()`/`seconds_add()` 及对应的 `_sub` 形式、`year() = ... AND month()/quarter() = ...`、做等值比较的 `left()`/`substr(s, 1, n)`，以及 `starts_with()`。原谓词仍会对数据行求值。设置为 `false` 时按原方式规划这类查询，例如用于对比结果。
 * 默认值：true
 * 引入版本：v26.2
 
@@ -701,7 +720,7 @@ FROM test;
 
 ### enable_insert_partial_update
 
-* **描述**：是否为主键表的 INSERT 语句启用部分更新（Partial Update）。当设置为 `true`（默认）时，如果 INSERT 语句只指定了部分列（少于表中所有非生成列），系统会执行部分更新，即仅更新指定列，并保留其他列的现有值。当设置为 `false` 时，系统会对未指定的列使用默认值，而不是保留已有值。此功能特别适用于对主键表的特定列进行更新，而不影响其他列的值。
+* **描述**：是否为主键表的 INSERT 语句启用部分更新（Partial Update）。当设置为 `true`（默认）时，如果 INSERT 语句只指定了部分列（少于表中所有非生成列），系统会执行部分更新，即仅更新指定列，并保留其他列的现有值。当设置为 `false` 时，系统会对未指定的列使用默认值，而不是保留已有值。此功能特别适用于对主键表的特定列进行更新，而不影响其他列的值。如果目标分区从未有任何事务提交过数据，就不存在需要保留的已有值，此时 INSERT 会作为普通插入执行，未指定的列填充默认值，跳过部分更新的处理。这只在未指定的列都能这样填充（可为空或有默认值，且不是 AUTO_INCREMENT 列）时生效，INSERT OVERWRITE 和显式事务（`BEGIN ... COMMIT`）内的 INSERT 不适用，仍按部分更新执行。如果有其他写入抢先提交到了这些分区，该 INSERT 会自动重新规划并按部分更新再执行一次。
 * **默认值**：true
 * **引入版本**：v3.3.20、v3.4.9、v3.5.8、v4.0.2
 
@@ -898,7 +917,7 @@ FROM test;
 
 用于设置是否需要查看查询的 profile。默认为 `false`，即不需要查看 profile。2.5 版本之前，该变量名称为 `is_report_success`，2.5 版本之后更名为 `enable_profile`。
 
-默认情况下，只有在查询发生错误时，BE 才会发送 profile 给 FE，用于查看错误。正常结束的查询不会发送 profile。发送 profile 会产生一定的网络开销，对高并发查询场景不利。当用户希望对一个查询的 profile 进行分析时，可以将这个变量设为 `true` 后，发送查询。查询结束后，可以通过在当前连接的 FE 的 web 页面（地址：fe_host:fe_http_port/query）查看 profile。该页面会显示最近 100 条开启了 `enable_profile` 的查询的 profile。
+默认情况下，只有在查询发生错误时，BE 才会发送 profile 给 FE，用于查看错误。正常结束的查询不会发送 profile。发送 profile 会产生一定的网络开销，对高并发查询场景不利。当用户希望对一个查询的 profile 进行分析时，可以将这个变量设为 `true` 后，发送查询。查询结束后，可以通过在当前连接的 FE 的 web 页面（地址：fe_host:fe_http_port/query）查看 profile。该页面会列出该 FE 上缓存的最近的 profile，数量上限由 FE 配置项 `profile_info_reserved_num`（默认值：500）指定。
 
 ### enable_explain_in_profile
 
@@ -916,6 +935,7 @@ FROM test;
 * **默认值**: -1
 * **类型**: long
 * **单位**: 毫秒
+* **引入版本**: v4.2
 
 ### enable_query_cache
 
@@ -997,6 +1017,8 @@ FROM test;
 * 描述：是否启用中间结果落盘。默认值：`false`。如果将其设置为 `true`，StarRocks 会将中间结果落盘，以减少在查询中处理聚合、排序或连接算子时的内存使用量。
 * 默认值：false
 * 引入版本：v3.0
+
+启用聚合落盘时，MAP 或包含 MAP 的 ARRAY/STRUCT 等不可排序的分组键会自动使用基于哈希分区的 partitionwise 落盘，即使 `spill_partitionwise_agg` 为 `false`。可排序的分组键仍遵循该设置。
 
 ### enable_spill_to_remote_storage
 
@@ -1106,31 +1128,26 @@ FROM test;
 
 用于设置是否将一些命令转发到 Leader FE 节点执行。默认为 `false`，即不转发。StarRocks 中存在多个 FE 节点，其中一个为 Leader 节点。通常用户可以连接任意 FE 节点进行全功能操作。但部分信息查看指令只有从 Leader FE 节点才能获取详细信息。别名 `forward_to_master`。
 
-如 `SHOW BACKENDS;` 命令，如果不转发到 Leader FE 节点，则仅能看到节点是否存活等一些基本信息，而转发到 Leader FE 则可以获取包括节点启动时间、最后一次心跳时间等更详细的信息。
+`SHOW FRONTENDS;`、`SHOW BACKENDS;` 和 `SHOW COMPUTE NODES;` 无论该参数如何设置，始终会转发到 Leader FE 节点执行。
 
 当前受该参数影响的命令如下：
-
-* SHOW FRONTENDS;
-
-  转发到 Leader 可以查看最后一次心跳信息。
-
-* SHOW BACKENDS;
-
-  转发到 Leader 可以查看启动时间、最后一次心跳信息、磁盘容量信息。
 
 * SHOW BROKER;
 
   转发到 Leader 可以查看启动时间、最后一次心跳信息。
 
 * SHOW TABLET;
+* SHOW RESOURCES;
 * ADMIN SHOW REPLICA DISTRIBUTION;
 * ADMIN SHOW REPLICA STATUS;
 
   转发到 Leader 可以查看 Leader FE 元数据中存储的 tablet 信息。正常情况下，不同 FE 元数据中 tablet 信息应该是一致的。当出现问题时，可以通过这个方法比较当前 FE 和 Leader FE 元数据的差异。
 
+* ADMIN SHOW TABLET STATUS;
+* ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT;
 * SHOW PROC;
 
-  转发到 Leader 可以查看 Leader FE 元数据中存储的相关 PROC 的信息。主要用于元数据比对。
+  转发到 Leader 可以查看 Leader FE 元数据中存储的相关 PROC 的信息。主要用于元数据比对。部分 PROC 路径（如 `/transactions` 和 `/routine_loads`）无论该参数如何设置，始终会转发到 Leader FE。
 
 ### group_concat_max_len
 
@@ -1190,7 +1207,7 @@ FROM test;
 ### interactive_timeout
 
 * 描述：用于兼容 MySQL 客户端。无实际作用。
-* 默认值：1024
+* 默认值：3600
 * 单位：秒
 * 类型：Int
 
@@ -1220,7 +1237,7 @@ FROM test;
 
 ### lake_bucket_assign_mode
 
-* 描述：数据湖表查询的分桶分配模式。此变量控制系统执行查询期间启用 Bucket-aware 执行时如何将分桶分配给工作节点。有效值：
+* 描述：External Catalog（数据湖）表查询的分桶分配模式。仅作用于 Colocate 或 Bucket Shuffle Join Fragment 中对 External Catalog 表的扫描，对 StarRocks 内表（包括存算分离集群中的云原生表）无效。此变量控制系统执行查询期间启用 Bucket-aware 执行时如何将分桶分配给工作节点。有效值：
   * `balance`：在工作节点间均匀分配分桶以实现负载均衡，以获取更好的性能。
   * `elastic`：使用一致性哈希将分桶分配给工作节点，可以在弹性环境中提供更好的负载分配。
 * 默认值：balance
@@ -1239,11 +1256,11 @@ FROM test;
 
 ### load_mem_limit
 
-* 描述：用于指定导入操作的内存限制，单位为 Byte。默认值为 0，即表示不使用该变量，而采用 `query_mem_limit` 作为导入操作的内存限制。
+* 描述：用于指定导入操作的内存限制，单位为 Byte。默认值为 0，即表示不限制单个导入任务的内存，导入仅受各 BE 节点上所有导入任务的内存上限（BE 配置项 `load_process_max_memory_limit_percent` 和 `load_process_max_memory_limit_bytes`）限制。
 
-  这个变量仅用于 INSERT 操作。因为 INSERT 操作涉及查询和导入两个部分，如果用户不设置此变量，则查询和导入操作各自的内存限制均为 `query_mem_limit`。否则，INSERT 的查询部分内存限制为 `query_mem_limit`，而导入部分限制为 `load_mem_limit`。
+  INSERT 操作涉及查询和导入两个部分，其中查询部分的内存限制由 `query_mem_limit` 设置，导入部分的内存限制由 `load_mem_limit` 设置。
 
-  其他导入方式，如 Broker Load，STREAM LOAD 的内存限制依然使用 `query_mem_limit`。
+  如果未指定作业属性 `load_mem_limit`，Broker Load 也使用该变量。对于 Broker Load，该值同时限制作业的查询部分和导入部分。Stream Load 则使用 HTTP Header `load_mem_limit`。Routine Load 不使用该变量。
 
 * 默认值：0
 * 单位：Byte
@@ -1390,6 +1407,18 @@ FROM test;
 * 描述：设置通过 Hive Catalog 读取 ORC 文件时，列的对应方式。默认值是 `false`，即按照 Hive 表中列的顺序对应。如果设置为 `true`，则按照列名称对应。
 * 引入版本：v3.1.10
 
+### paimon_global_index_mode
+
+* 描述：控制扫描规划期间 Paimon Global Index 谓词的求值位置。取值不区分大小写：
+  * `off`：禁用 Global Index，包括优化器收集统计信息时。仍可使用普通的分区和文件裁剪。
+  * `local`：由 FE 中的 Paimon Java SDK 处理，遵循表的 `global-index.enabled` 配置。
+  * `distributed`：将符合条件的标量 BTree 索引文件信息交给 BE/CN 求值，再将返回的 bitmap 交给 Java SDK 生成数据分片。关闭 SDK 自动索引求值，包括优化器收集统计信息时。分布式求值不可用或失败时，回退到不使用 Global Index 裁剪的数据扫描。
+* 默认值：local
+* 类型：String
+* 引入版本：v4.2
+* 限制：分布式模式适用于 main 分支上 data evolution 表的快照查询，要求索引键的 schema 兼容且索引完整覆盖数据。最多 4096 个索引分片，每个分片最多返回 1 MiB 序列化 bitmap。FE 收集预算最多为查询内存限制的八分之一，上限 64 MiB，并对序列化字节数和候选行数实施保守限制。分布式索引不可用、执行失败或超过限制时，保留原谓词，规划不使用 Global Index 裁剪的数据扫描。查询被取消或外层超时预算耗尽时停止规划。有行过滤或列脱敏策略时不使用此优化。
+* 诊断：External Trace 包括 `PaimonGlobalIndex.Mode`、`PaimonGlobalIndex.Evaluate`、`PaimonGlobalIndex.ValidateCoverage`、`PaimonGlobalIndex.Result` 和 `PaimonGlobalIndex.Fallback`。开启 metadata profile 后，可查看原生 scanner 的索引打开、求值、序列化耗时、序列化字节数以及文件系统 I/O 计数。
+
 ### paimon_reader_mode
 
 * 描述：控制 Paimon 表使用的 Reader。有效值为 `AUTO`、`JNI` 和 `NATIVE`（不区分大小写）。
@@ -1413,6 +1442,8 @@ FROM test;
 ### parallel_fragment_exec_instance_num
 
 针对扫描节点，设置其在每个 BE 节点上执行实例的个数。默认为 1。
+
+该变量仅在关闭 Pipeline 引擎（`enable_pipeline_engine` 为 `false`）时生效。开启 Pipeline 引擎时（默认），StarRocks 不使用该变量设置查询并行度，请使用 [pipeline_dop](#pipeline_dop)。唯一的例外是：当 `enable_adaptive_sink_dop` 为 `false` 时，INSERT INTO、UPDATE 和 DELETE 作业的 Sink 并行度取该变量的值。
 
 一个查询计划通常会产生一组 scan range，即需要扫描的数据范围。这些数据分布在多个 BE 节点上。一个 BE 节点会有一个或多个 scan range。默认情况下，每个 BE 节点的一组 scan range 只由一个执行实例处理。当机器资源比较充裕时，可以将增加该变量，让更多的执行实例同时处理一组 scan range，从而提升查询效率。
 
@@ -1457,9 +1488,10 @@ FROM test;
 ### pipeline_profile_level
 
 * 描述：用于控制 profile 的等级。一个 profile 通常有 5 个层级：Fragment、FragmentInstance、Pipeline、PipelineDriver、Operator。不同等级下，profile 的详细程度有所区别：
-  * 0：在此等级下，StarRocks 会合并 profile，只显示几个核心指标。
   * 1：默认值。在此等级下，StarRocks 会对 profile 进行简化处理，将同一个 pipeline 的指标做合并来缩减层级。
   * 2：在此等级下，StarRocks 会保留 Profile 所有的层级，不做简化。该设置下 profile 的体积会非常大，特别是 SQL 较复杂时，因此不推荐该设置。
+
+  从 v3.1.3 开始，不再支持等级 0，除 `2` 以外的取值均按 `1` 处理。
 * 默认值：1
 * 类型：Int
 
@@ -1500,6 +1532,12 @@ FROM test;
 * **数据类型**：Double
 * **作用域**：Session
 
+### prefer_compute_node
+
+* 描述：将部分执行计划调度到 CN 节点执行。该变量仅在存算一体集群中生效。无论该变量如何设置，只要有存活的 CN 节点，外表的扫描都只会在 CN 节点上执行。
+* 默认值：false
+* 引入版本：v2.4
+
 ### query_cache_agg_cardinality_limit
 
 * 描述：GROUP BY 聚合的高基数上限。GROUP BY 聚合的输出预估超过该行数, 则不启用 cache。
@@ -1530,6 +1568,13 @@ FROM test;
 ### query_cache_type
 
  用于兼容 JDBC 连接池 C3P0。无实际作用。
+
+### query_history_load_interval_seconds (global)
+
+* 描述：当 `enable_query_history` 为 `true` 时，FE 内存中缓存的查询历史写入 `_statistics_.query_history` 表的间隔。系统没有后台定时任务：在距上次写入超过该间隔后有 SELECT 语句执行结束时，会写入缓存的查询历史。在繁忙的集群上，如果序列化后的缓存达到 200 MB，也可能在间隔到期之前写入。
+* 单位：秒
+* 默认值：`900`
+* 引入版本：v4.0
 
 ### query_mem_limit
 
@@ -1580,6 +1625,26 @@ FROM test;
 * 描述：设置进行 Range 分区裁剪时，最多能使用的 IN 谓词的个数，默认值：100。如果超过该值，会扫描全部 tablet，降低查询性能。
 * 默认值：100
 * 引入版本：v3.0
+
+### range_scan_execution_mode
+
+* 描述：原生存算分离范围 Colocate 表的只读单表聚合实验执行模式。`colocate` 保留范围 Colocate 执行；`parallel` 将扫描的有效分布设为 ANY，通过 Hash/Gather Exchange 合并聚合结果，包括精确的 `COUNT DISTINCT`。取值不区分大小写，不支持 `auto`。
+* 作用域：Session
+* 默认值：`colocate`
+* 数据类型：String
+* 有效值：`colocate`、`parallel`、`grouped`
+
+非空并行扫描必须选中至少两个逻辑分区和两个真实 Tablet，所选计算资源中必须至少有两个可用 CN。使用 DISTINCT 修饰符的聚合目前仅支持 `COUNT DISTINCT`。必须启用 Pipeline 执行，且 `parallel_fragment_exec_instance_num = 1`。并行模式会增加网络及聚合状态传输开销，并可能增加非归属节点的远程读取；不保证加速或使用全部计算节点。分区及 Tablet 裁剪保持不变。
+
+并行模式不支持写入/刷新、JOIN、集合运算、CTE、子查询、窗口函数、Grouping Sets、特殊/历史/元数据/缓存统计扫描、采样或扫描 Hint、MV/Rollup 源替换、多个最终扫描、Query Cache、分阶段调度、预备物理分片扫描、单节点计划和非 Pipeline 执行。输入完全裁剪时保留普通空输入聚合语义。不支持的请求会明确报错，不会修改其他会话设置。
+
+`grouped` 是仅限会话的实验性显式选项。它根据 Tablet 范围边界构造临时键范围分组，跨选中分区对齐同一键范围内的扫描任务。同一 SQL 聚合分组的全部输入由同一 CN 上的一个聚合逻辑 driver 处理，从而省去原始行在 CN 之间及节点内的按键 Shuffle。过滤条件、输出别名、HAVING 和最终 ORDER BY/LIMIT 在保留完整分组归属证明时继续生效。该模式的适用性在规划阶段检查，不满足当前实验性实现条件的请求会明确报错。
+
+Grouped 执行一次性捕获源版本和 Tablet 范围，在所有选中物理分区上构造完整键范围分组。至少需要两个选中物理分区和两个非空键范围分组。每个分组交给一个阻塞式 HASH 聚合，仅汇总已最终计算的标量结果。必须启用 Pipeline 和 Group Execution，且 `parallel_fragment_exec_instance_num = 1`。并行模式的限制同样适用；不支持强制多阶段聚合及不兼容的全局延迟物化。此路径禁用排序聚合和逐桶聚合。完全裁剪的输入保留普通空输入语义。PREPARE/EXECUTE 按当前模式重新规划聚合，不复用完整物理计划。
+
+当 `enable_lake_tablet_internal_parallel` 开启时，grouped 扫描支持普通的非 prepared 物理行号拆分。每个完整键分组仍由一个 CN 上的一个聚合逻辑 driver 处理；新增 I/O 任务直接向同一个 driver 提供数据，不引入按键 Shuffle。关闭 `enable_lake_tablet_internal_parallel` 时保留不拆分路径。默认的 16 个 I/O 槽位限制同时活跃的 I/O 数量，并非生成子任务的数量上限。
+
+每次扫描最多支持 1,024 个分组和 8,192 个根裁剪任务；这两个限制不约束生成的 I/O 子任务数量。Group Execution 容量限制仍然适用。EXPLAIN 显示 grouped 执行以及唯一源、分组和根任务数量。`RangeClipTasks` 对成功打开的根裁剪任务计数一次，不包含子任务；`MorselsCount` 包含根任务和子任务。结合 `PeakIOTasks`、扫描时间、行数和远端读取字节数评估 I/O 并发。普通 Tablet 和 Segment 计数可能包含重复任务读取，不代表全局唯一源数量。此模式不保证加速，也不保证 DISTINCT 聚合使用恒定内存。默认模式仍为 `colocate`。
 
 ### resource_group
 
@@ -1793,6 +1858,13 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 * **类型**: long
 * **引入版本**: v3.2.0
 
+### use_compute_nodes
+
+* 描述：用于设置使用 CN 节点的数量上限。该变量仅在存算一体集群中生效，用于限制 `prefer_compute_node=true` 时使用的 CN 节点以及扫描外表时使用的 CN 节点。小于或等于 `0` 的值（如 `-1`）表示使用所有 CN 节点。正整数表示最多使用该数量的 CN 节点。
+* 默认值：-1
+* 类型：Int
+* 引入版本：v2.4
+
 ### version (global)
 
 MySQL 服务器的版本，取值等于 FE 参数 `mysql_server_version`。
@@ -1808,6 +1880,3 @@ MySQL 服务器的版本，取值等于 FE 参数 `mysql_server_version`。
 * 单位：秒
 * 类型：Int
 
-<EditionSpecificVariable />
-
-<VariableWarehouse />

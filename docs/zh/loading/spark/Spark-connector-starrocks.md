@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "通过 StarRocks Spark connector 从 Apache Spark DataFrame 或 SQL 导入数据到 StarRocks，支持批处理和流式处理。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 使用 Spark connector 导入数据（推荐）
@@ -17,12 +18,11 @@ StarRocks 提供 Apache Spark™ 连接器 (StarRocks Connector for Apache Spark
 
 | Spark connector | Spark              | StarRocks     | Java | Scala |
 | --------------- | ------------------ | ------------- | ---- | ----- |
+| 1.1.5           | 4.0, 4.1           | 2.5 及以上     | 17   | 2.13  |
+| 1.1.5           | 3.3, 3.4, 3.5      | 2.5 及以上     | 8    | 2.12  |
 | 1.1.4           | 4.0, 4.1           | 2.5 及以上     | 17   | 2.13  |
 | 1.1.4           | 3.3, 3.4, 3.5      | 2.5 及以上     | 8    | 2.12  |
 | 1.1.3           | 3.2, 3.3, 3.4, 3.5 | 2.5 及以上     | 8    | 2.12  |
-| 1.1.2           | 3.2, 3.3, 3.4, 3.5 | 2.5 及以上     | 8    | 2.12  |
-| 1.1.1           | 3.2, 3.3, or 3.4   | 2.5 及以上     | 8    | 2.12  |
-| 1.1.0           | 3.2, 3.3, or 3.4   | 2.5 及以上     | 8    | 2.12  |
 
 > **注意**
 >

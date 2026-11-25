@@ -1,0 +1,25 @@
+-- name: test_in_all_null_push_down
+CREATE TABLE t_in_null_${uuid0} (
+    k INT,
+    v SMALLINT NOT NULL,
+    w SMALLINT NULL,
+    s VARCHAR(16) NULL,
+    d DATE NULL
+)
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO t_in_null_${uuid0} VALUES (1, 0, 0, 'a', '2024-01-01'), (2, 5, 5, 'b', '2024-01-02'), (3, 7, NULL, NULL, NULL);
+SELECT count(*) FROM t_in_null_${uuid0} WHERE v IN (NULL, NULL);
+SELECT count(*) FROM t_in_null_${uuid0} WHERE w IN (NULL, NULL);
+SELECT count(*) FROM t_in_null_${uuid0} WHERE s IN (NULL, NULL);
+SELECT count(*) FROM t_in_null_${uuid0} WHERE d IN (NULL, NULL);
+SELECT count(*) FROM t_in_null_${uuid0} WHERE v IN (NULL, NULL) AND k = 1;
+SELECT count(*) FROM t_in_null_${uuid0} WHERE NOT (v IN (NULL, NULL));
+SELECT count(*) FROM t_in_null_${uuid0} WHERE (v IN (NULL, NULL)) IS NULL;
+SELECT k FROM t_in_null_${uuid0} WHERE v IN (NULL, NULL) OR k = 2 ORDER BY k;
+SELECT k FROM t_in_null_${uuid0} WHERE (v IN (NULL, NULL) AND k = 1) OR k = 2 ORDER BY k;
+SELECT k FROM t_in_null_${uuid0} WHERE w IN (NULL, NULL) OR w IS NULL ORDER BY k;
+SELECT k FROM t_in_null_${uuid0} WHERE v IN (NULL, NULL, 5) ORDER BY k;
+SELECT k FROM t_in_null_${uuid0} WHERE v NOT IN (NULL, NULL) OR k = 3 ORDER BY k;
+DROP TABLE t_in_null_${uuid0};

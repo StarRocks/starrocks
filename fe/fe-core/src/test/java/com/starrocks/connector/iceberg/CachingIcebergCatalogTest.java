@@ -34,6 +34,7 @@ import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mocked;
 import mockit.Verifications;
+import org.apache.iceberg.BaseMetastoreTableOperations;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
@@ -59,6 +60,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.BrokenBarrierException;
@@ -69,6 +71,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.HIVE_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
@@ -317,6 +320,57 @@ public class CachingIcebergCatalogTest {
                 DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
         Assertions.assertEquals(nativeTable, cachingIcebergCatalog.getTable(connectContext, "test", "table"));
         Assertions.assertEquals(nativeTable, cachingIcebergCatalog.getTable(connectContext, "test", "table"));
+        cachingIcebergCatalog.invalidateCache("test", "table");
+    }
+
+    @Test
+    public void testReloadCachedTableThatLostItsMetadata(@Mocked IcebergCatalog icebergCatalog) {
+        AtomicReference<String> location = new AtomicReference<>("hdfs://path/to/table/metadata/v1.metadata.json");
+        BaseMetastoreTableOperations ops = Mockito.mock(BaseMetastoreTableOperations.class);
+        Mockito.when(ops.currentMetadataLocation()).thenAnswer(invocation -> location.get());
+        Table cached = new BaseTable(ops, "test.table");
+        Table reloaded = createBaseTableWithManifests(1, 1);
+        new Expectations() {
+            {
+                icebergCatalog.getTable(connectContext, "test", "table");
+                returns(cached, reloaded);
+                times = 2;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        Assertions.assertSame(cached, cachingIcebergCatalog.getTable(connectContext, "test", "table"));
+        Assertions.assertSame(cached, cachingIcebergCatalog.getTable(connectContext, "test", "table"));
+
+        // A commit racing an external drop refreshes the shared operations into a table that is not found.
+        location.set(null);
+        Assertions.assertSame(reloaded, cachingIcebergCatalog.getTable(connectContext, "test", "table"));
+        Assertions.assertSame(reloaded, cachingIcebergCatalog.getTable(connectContext, "test", "table"));
+    }
+
+    @Test
+    public void testTableLoadedAtMs(@Mocked IcebergCatalog icebergCatalog) {
+        Table nativeTable = createBaseTableWithManifests(1, 1);
+        new Expectations() {
+            {
+                icebergCatalog.getTable(connectContext, "test", "table");
+                result = nativeTable;
+                minTimes = 1;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        long before = System.currentTimeMillis();
+        Table cached = cachingIcebergCatalog.getTable(connectContext, "test", "table");
+        long now = System.currentTimeMillis();
+        OptionalLong loadedAt = cachingIcebergCatalog.tableLoadedAtMs(connectContext, "test", "table", cached, now);
+        Assertions.assertTrue(loadedAt.isPresent());
+        Assertions.assertTrue(loadedAt.getAsLong() >= before - 1000 && loadedAt.getAsLong() <= now,
+                before + " <= " + loadedAt + " <= " + now);
+
+        // A table object the cache did not load: its age is unknown.
+        Assertions.assertFalse(cachingIcebergCatalog.tableLoadedAtMs(connectContext, "test", "table",
+                createBaseTableWithManifests(1, 1), now).isPresent());
         cachingIcebergCatalog.invalidateCache("test", "table");
     }
 

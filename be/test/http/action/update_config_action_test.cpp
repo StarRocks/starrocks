@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <arrow/io/interfaces.h>
 #include <gflags/gflags.h>
 #include <gtest/gtest.h>
 
@@ -42,16 +43,23 @@
 #include "common/system/cpu_info.h"
 #include "common/thread/threadpool.h"
 #include "common/util/bthreads/executor.h"
+#include "compute_env/arrow_io_thread_pool.h"
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "exec/exec_env.h"
 #include "fs/fs_util.h"
+#include "fs/remote_read_context.h"
+#ifdef USE_STAROS
+#include "fslib/star_cache_configuration.h"
+#endif
 #include "gen_cpp/Types_types.h"
 #include "platform/platform_env.h"
 #include "platform/store_path.h"
 #include "runtime/runtime_env.h"
 #include "service/service_be/config_update_hooks.h"
 #include "storage/index/vector/vector_index_cache.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/primary_key_manager.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/persistent_index_load_executor.h"
 #include "storage/storage_cleanup_executor.h"
 #include "storage/storage_engine.h"
@@ -66,6 +74,11 @@ DECLARE_int64(fslib_gs_max_single_part_size);
 DECLARE_int64(fslib_azure_storage_max_single_part_size);
 DECLARE_int64(fslib_azure_storage_min_upload_part_size);
 DECLARE_bool(fslib_s3_multipart_equal_part_size);
+DECLARE_bool(fs_enable_buffer_prefetch);
+namespace staros::starlet::fslib {
+DECLARE_bool(remote_read_skip_contended_cache_writes);
+DECLARE_int64(remote_read_retain_prefetched_bytes);
+} // namespace staros::starlet::fslib
 #endif
 
 namespace brpc {
@@ -116,6 +129,16 @@ TEST_F(ConfigUpdateHooksTest, update_datacache_config) {
     ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("datacache_disk_size", "100000000"));
     // update inline cache limit
     ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("datacache_inline_item_count_limit", "260344"));
+    // update lru shard refill
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("datacache_lru_shard_evict_fallback_enable", "false"));
+    ASSERT_OK(
+            ConfigUpdateRegistry::instance()->update_config("datacache_lru_shard_refill_low_watermark_percent", "30"));
+    ASSERT_OK(
+            ConfigUpdateRegistry::instance()->update_config("datacache_lru_shard_refill_high_watermark_percent", "60"));
+    ASSERT_ERROR(
+            ConfigUpdateRegistry::instance()->update_config("datacache_lru_shard_refill_low_watermark_percent", "80"));
+    ASSERT_ERROR(ConfigUpdateRegistry::instance()->update_config("datacache_lru_shard_refill_high_watermark_percent",
+                                                                 "101"));
 
     std::vector<DirSpace> spaces;
     cache->disk_spaces(&spaces);
@@ -144,11 +167,9 @@ TEST_F(ConfigUpdateHooksTest, test_update_lake_pk_preload_memory_limit_percent) 
 
     ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_preload_memory_limit_percent", "50"));
     ASSERT_EQ(primary_key_mem_limit * 50 / 100, primary_key_mgr->update_state_mem_tracker()->limit());
-    ASSERT_EQ(primary_key_mem_limit * 50 / 100, primary_key_mgr->compaction_state_mem_tracker()->limit());
 
     ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_preload_memory_limit_percent", "10"));
     ASSERT_EQ(primary_key_mem_limit * 10 / 100, primary_key_mgr->update_state_mem_tracker()->limit());
-    ASSERT_EQ(primary_key_mem_limit * 10 / 100, primary_key_mgr->compaction_state_mem_tracker()->limit());
 }
 
 TEST_F(ConfigUpdateHooksTest, test_update_lake_pk_index_block_cache_limit_percent) {
@@ -166,6 +187,37 @@ TEST_F(ConfigUpdateHooksTest, test_update_lake_pk_index_block_cache_limit_percen
 
     ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_index_block_cache_limit_percent", "5"));
     ASSERT_EQ(primary_key_mem_limit * 5 / 100, primary_key_mgr->block_cache()->cache()->get_capacity());
+}
+
+TEST_F(ConfigUpdateHooksTest, test_update_lake_metadata_cache_limit_percent) {
+    auto* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
+    ASSERT_NE(nullptr, tablet_mgr);
+    auto* metacache = tablet_mgr->metacache();
+    const int64_t process_mem_limit = _runtime_env->process_mem_limit();
+    ASSERT_GT(process_mem_limit, 0);
+    const std::string saved_tablet_percent = std::to_string(config::lake_tablet_metadata_cache_limit_percent);
+    const std::string saved_segment_percent = std::to_string(config::lake_segment_metadata_cache_limit_percent);
+    DeferOp defer([&]() {
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config("lake_tablet_metadata_cache_limit_percent",
+                                                                 saved_tablet_percent));
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config("lake_segment_metadata_cache_limit_percent",
+                                                                 saved_segment_percent));
+    });
+
+    // Each knob resizes only its own LRU.
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_tablet_metadata_cache_limit_percent", "5"));
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_segment_metadata_cache_limit_percent", "7"));
+    ASSERT_EQ(process_mem_limit * 5 / 100, metacache->tablet_metadata_capacity());
+    ASSERT_EQ(process_mem_limit * 7 / 100, metacache->segment_metadata_capacity());
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_tablet_metadata_cache_limit_percent", "3"));
+    ASSERT_EQ(process_mem_limit * 3 / 100, metacache->tablet_metadata_capacity());
+    ASSERT_EQ(process_mem_limit * 7 / 100, metacache->segment_metadata_capacity());
+
+    // Out-of-range percentages are clamped to [0, 100].
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_tablet_metadata_cache_limit_percent", "150"));
+    ASSERT_EQ(process_mem_limit, metacache->tablet_metadata_capacity());
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_segment_metadata_cache_limit_percent", "-1"));
+    ASSERT_EQ(0, metacache->segment_metadata_capacity());
 }
 
 TEST_F(ConfigUpdateHooksTest, test_update_memory_limit_percent) {
@@ -186,14 +238,14 @@ TEST_F(ConfigUpdateHooksTest, test_update_memory_limit_percent) {
     ASSERT_EQ(process_mem_limit * 30 / 100, StorageEngine::instance()->update_manager()->index_cache().capacity());
     ASSERT_EQ(process_mem_limit * 30 / 100, primary_key_mgr->index_cache().capacity());
     ASSERT_EQ(process_mem_limit * 30 / 100 * preload_mem_percent / 100,
-              primary_key_mgr->compaction_state_mem_tracker()->limit());
+              primary_key_mgr->update_state_mem_tracker()->limit());
 
     ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("update_memory_limit_percent", "50"));
     ASSERT_EQ(process_mem_limit * 50 / 100, _runtime_env->update_mem_tracker()->limit());
     ASSERT_EQ(process_mem_limit * 50 / 100, StorageEngine::instance()->update_manager()->index_cache().capacity());
     ASSERT_EQ(process_mem_limit * 50 / 100, primary_key_mgr->index_cache().capacity());
     ASSERT_EQ(process_mem_limit * 50 / 100 * preload_mem_percent / 100,
-              primary_key_mgr->compaction_state_mem_tracker()->limit());
+              primary_key_mgr->update_state_mem_tracker()->limit());
 }
 
 TEST_F(ConfigUpdateHooksTest, test_update_load_sink_close_thread_pool_num_max) {
@@ -241,6 +293,27 @@ TEST_F(ConfigUpdateHooksTest, test_update_number_tablet_writer_threads) {
         // only matches on hosts with at least 32 cores.
         ASSERT_EQ(caculate_delta_writer_thread_num(0), pool->max_threads());
     }
+}
+
+TEST_F(ConfigUpdateHooksTest, test_update_arrow_io_thread_pool_size) {
+    auto* registry = ConfigUpdateRegistry::instance();
+    const int default_capacity = arrow_io_thread_pool_default_capacity();
+    DeferOp restore([&]() { CHECK_OK(registry->update_config("arrow_io_thread_pool_size", "0")); });
+
+    const int32_t size = default_capacity + 4;
+    ASSERT_OK(registry->update_config("arrow_io_thread_pool_size", std::to_string(size)));
+    EXPECT_EQ(size, arrow::io::GetIOThreadPoolCapacity());
+
+    // An out-of-range value is rejected and rolled back, and the pool keeps its size.
+    for (const std::string& value : {std::string("-1"), std::to_string(kMaxArrowIOThreadPoolSize + 1)}) {
+        EXPECT_TRUE(registry->update_config("arrow_io_thread_pool_size", value).is_invalid_argument()) << value;
+        EXPECT_EQ(size, config::arrow_io_thread_pool_size) << value;
+        EXPECT_EQ(size, arrow::io::GetIOThreadPoolCapacity()) << value;
+    }
+
+    // 0 goes back to the size Arrow chose for itself.
+    ASSERT_OK(registry->update_config("arrow_io_thread_pool_size", "0"));
+    EXPECT_EQ(default_capacity, arrow::io::GetIOThreadPoolCapacity());
 }
 
 TEST_F(ConfigUpdateHooksTest, test_update_transaction_publish_version_worker_count) {
@@ -578,6 +651,144 @@ TEST_F(ConfigUpdateHooksTest, update_s3_multipart_equal_part_size) {
         ASSERT_TRUE(st.ok()) << st;
         EXPECT_EQ(value, config::s3_multipart_equal_part_size);
         EXPECT_EQ(value, FLAGS_fslib_s3_multipart_equal_part_size);
+    }
+}
+
+// While the remote I/O scheduler runs, the read-ahead strategies it replaces cannot be turned back on and the cache
+// it needs cannot be turned off: the update is rejected and rolled back. Without the scheduler they update as before.
+TEST_F(ConfigUpdateHooksTest, remote_io_scheduler_rejects_conflicting_updates) {
+    gflags::FlagSaver flag_saver;
+    DeferOp restore([] {
+        g_remote_io_scheduler_enabled.store(false);
+        EXPECT_OK(config::set_config("io_coalesce_lake_read_enable", "false"));
+        EXPECT_OK(config::set_config("starlet_fs_read_prefetch_enable", "false"));
+    });
+    auto* registry = ConfigUpdateRegistry::instance();
+
+    g_remote_io_scheduler_enabled.store(true);
+    EXPECT_TRUE(registry->update_config("io_coalesce_lake_read_enable", "true").is_not_supported());
+    EXPECT_FALSE(config::io_coalesce_lake_read_enable);
+    EXPECT_OK(registry->update_config("io_coalesce_lake_read_enable", "false"));
+
+    EXPECT_TRUE(registry->update_config("starlet_fs_read_prefetch_enable", "true").is_not_supported());
+    EXPECT_FALSE(config::starlet_fs_read_prefetch_enable);
+    // Turning it off is accepted, and the starlet flag stays off.
+    FLAGS_fs_enable_buffer_prefetch = true;
+    EXPECT_OK(registry->update_config("starlet_fs_read_prefetch_enable", "false"));
+    EXPECT_FALSE(FLAGS_fs_enable_buffer_prefetch);
+
+    const bool use_star_cache = config::starlet_use_star_cache;
+    EXPECT_TRUE(registry->update_config("starlet_use_star_cache", "false").is_not_supported());
+    EXPECT_EQ(use_star_cache, config::starlet_use_star_cache);
+
+    g_remote_io_scheduler_enabled.store(false);
+    EXPECT_OK(registry->update_config("io_coalesce_lake_read_enable", "true"));
+    EXPECT_TRUE(config::io_coalesce_lake_read_enable);
+    EXPECT_OK(registry->update_config("starlet_fs_read_prefetch_enable", "true"));
+    EXPECT_TRUE(config::starlet_fs_read_prefetch_enable);
+    EXPECT_TRUE(FLAGS_fs_enable_buffer_prefetch);
+}
+
+TEST_F(ConfigUpdateHooksTest, update_remote_read_skip_contended_cache_writes) {
+    namespace fslib = staros::starlet::fslib;
+    const bool saved = config::remote_read_skip_contended_cache_writes;
+    gflags::FlagSaver flag_saver;
+    // Declared after the FlagSaver so it runs first: the config is restored through set_config, for
+    // the reason ScopedStarletUploadThresholdConfigs gives, and the gflag is restored after it.
+    DeferOp restore_config([saved] {
+        auto st = config::set_config("remote_read_skip_contended_cache_writes", saved ? "true" : "false");
+        EXPECT_TRUE(st.ok()) << st;
+    });
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    // Start from the opposite flag value each time, so both directions are really forwarded.
+    for (bool value : {true, false}) {
+        fslib::FLAGS_remote_read_skip_contended_cache_writes = !value;
+        auto st = registry->update_config("remote_read_skip_contended_cache_writes", value ? "true" : "false");
+        ASSERT_TRUE(st.ok()) << st;
+        EXPECT_EQ(value, config::remote_read_skip_contended_cache_writes);
+        EXPECT_EQ(value, fslib::FLAGS_remote_read_skip_contended_cache_writes);
+    }
+
+    // A value that is not a boolean is refused; neither the config nor the flag moves.
+    EXPECT_FALSE(registry->update_config("remote_read_skip_contended_cache_writes", "maybe").ok());
+    EXPECT_FALSE(config::remote_read_skip_contended_cache_writes);
+    EXPECT_FALSE(fslib::FLAGS_remote_read_skip_contended_cache_writes);
+}
+
+// The skip and retain configs go through separate hooks. With a small retain budget, which a scan exhausts quickly,
+// toggling skip leaves the budget alone, and changing the budget (including a refused value that is rolled back)
+// leaves skip alone, in both the BE configs and the starlet flags.
+TEST_F(ConfigUpdateHooksTest, update_skip_contended_cache_writes_with_small_retain_budget) {
+    namespace fslib = staros::starlet::fslib;
+    const bool saved_skip = config::remote_read_skip_contended_cache_writes;
+    const int64_t saved_retain = config::remote_read_retain_prefetched_bytes;
+    gflags::FlagSaver flag_saver;
+    // Declared after the FlagSaver so it runs first: the configs are restored through set_config, for the reason
+    // ScopedStarletUploadThresholdConfigs gives, and the gflags are restored after it.
+    DeferOp restore_configs([saved_skip, saved_retain] {
+        auto st = config::set_config("remote_read_skip_contended_cache_writes", saved_skip ? "true" : "false");
+        EXPECT_TRUE(st.ok()) << st;
+        st = config::set_config("remote_read_retain_prefetched_bytes", std::to_string(saved_retain));
+        EXPECT_TRUE(st.ok()) << st;
+    });
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    constexpr int64_t kSmallBudget = 1L << 20;
+    auto st = registry->update_config("remote_read_retain_prefetched_bytes", std::to_string(kSmallBudget));
+    ASSERT_TRUE(st.ok()) << st;
+
+    // Start from the opposite flag value each time, so both directions are really forwarded.
+    for (bool value : {true, false, true}) {
+        fslib::FLAGS_remote_read_skip_contended_cache_writes = !value;
+        st = registry->update_config("remote_read_skip_contended_cache_writes", value ? "true" : "false");
+        ASSERT_TRUE(st.ok()) << st;
+        EXPECT_EQ(value, config::remote_read_skip_contended_cache_writes);
+        EXPECT_EQ(value, fslib::FLAGS_remote_read_skip_contended_cache_writes);
+        EXPECT_EQ(kSmallBudget, config::remote_read_retain_prefetched_bytes);
+        EXPECT_EQ(kSmallBudget, fslib::FLAGS_remote_read_retain_prefetched_bytes);
+    }
+
+    // A refused skip value moves neither skip nor the budget.
+    EXPECT_FALSE(registry->update_config("remote_read_skip_contended_cache_writes", "maybe").ok());
+    EXPECT_TRUE(config::remote_read_skip_contended_cache_writes);
+    EXPECT_TRUE(fslib::FLAGS_remote_read_skip_contended_cache_writes);
+    EXPECT_EQ(kSmallBudget, config::remote_read_retain_prefetched_bytes);
+    EXPECT_EQ(kSmallBudget, fslib::FLAGS_remote_read_retain_prefetched_bytes);
+
+    // With skip on, a refused budget is rolled back to the small one, and accepted budgets reach starlet; skip stays
+    // on throughout.
+    EXPECT_FALSE(registry->update_config("remote_read_retain_prefetched_bytes", "-1").ok());
+    EXPECT_EQ(kSmallBudget, config::remote_read_retain_prefetched_bytes);
+    EXPECT_EQ(kSmallBudget, fslib::FLAGS_remote_read_retain_prefetched_bytes);
+    EXPECT_TRUE(config::remote_read_skip_contended_cache_writes);
+    EXPECT_TRUE(fslib::FLAGS_remote_read_skip_contended_cache_writes);
+    for (int64_t bytes : {int64_t{0}, kSmallBudget * 2}) {
+        st = registry->update_config("remote_read_retain_prefetched_bytes", std::to_string(bytes));
+        ASSERT_TRUE(st.ok()) << st;
+        EXPECT_EQ(bytes, config::remote_read_retain_prefetched_bytes);
+        EXPECT_EQ(bytes, fslib::FLAGS_remote_read_retain_prefetched_bytes);
+        EXPECT_TRUE(config::remote_read_skip_contended_cache_writes);
+        EXPECT_TRUE(fslib::FLAGS_remote_read_skip_contended_cache_writes);
+    }
+}
+
+TEST_F(ConfigUpdateHooksTest, update_starlet_star_cache_write_overwrite) {
+    const bool saved = config::starlet_star_cache_write_overwrite;
+    gflags::FlagSaver flag_saver;
+    DeferOp restore_config([saved] {
+        auto st = config::set_config("starlet_star_cache_write_overwrite", saved ? "true" : "false");
+        EXPECT_TRUE(st.ok()) << st;
+    });
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    // Start from the opposite flag value each time, so both directions are really forwarded.
+    for (bool value : {true, false}) {
+        staros::starlet::fslib::FLAGS_star_cache_write_overwrite = !value;
+        auto st = registry->update_config("starlet_star_cache_write_overwrite", value ? "true" : "false");
+        ASSERT_TRUE(st.ok()) << st;
+        EXPECT_EQ(value, config::starlet_star_cache_write_overwrite);
+        EXPECT_EQ(value, staros::starlet::fslib::FLAGS_star_cache_write_overwrite);
     }
 }
 

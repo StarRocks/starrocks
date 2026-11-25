@@ -30,7 +30,9 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.statistics.ConnectorColumnStatsCacheLoader;
 import com.starrocks.connector.statistics.ConnectorTableColumnKey;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
+import com.starrocks.connector.statistics.ConnectorTableTriggerAnalyzeMgr;
 import com.starrocks.connector.statistics.StatisticsUtils;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.metric.CounterMetric;
 import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricRepo;
@@ -40,6 +42,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
@@ -54,13 +57,18 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -292,6 +300,175 @@ public class CachedStatisticStorageTest {
     }
 
     @Test
+    public void testConnectorTableStatisticsResolveAnalyzeMetaOnce() {
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "hive0", "partitioned_db", "t1");
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public static boolean checkStatisticTableStateNormal() {
+                return true;
+            }
+        };
+        new MockUp<ConnectorColumnStatsCacheLoader>() {
+            @Mock
+            public List<TStatisticData> queryStatisticsData(ConnectContext context, String tableUUID,
+                                                            List<String> columns) {
+                List<TStatisticData> rows = new ArrayList<>();
+                for (String column : columns) {
+                    TStatisticData data = new TStatisticData();
+                    data.setColumnName(column);
+                    data.setRowCount(5);
+                    data.setDataSize(100);
+                    data.setCountDistinct(5);
+                    data.setNullCount(0);
+                    data.setMin("0");
+                    data.setMax("10");
+                    rows.add(data);
+                }
+                return rows;
+            }
+        };
+        // Resolving the analyze metadata rebuilds the table; it must happen once per call, not once per column.
+        AtomicInteger lookups = new AtomicInteger();
+        new MockUp<StatisticsUtils>() {
+            @Mock
+            public Table getTableByUUID(ConnectContext context, String tableUUID) {
+                return table;
+            }
+
+            @Mock
+            public ExternalBasicStatsMeta getExternalBasicStatsMeta(Table t) {
+                lookups.incrementAndGet();
+                return null;
+            }
+        };
+
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        // Load inline so the first lookup already finds the statistics.
+        Deencapsulation.setField(storage, "connectorTableCachedStatistics",
+                Caffeine.newBuilder().executor(Runnable::run).buildAsync(new ConnectorColumnStatsCacheLoader()));
+        try {
+            List<ConnectorTableColumnStats> stats =
+                    storage.getConnectorTableStatistics(table, ImmutableList.of("c1", "c2", "c3"));
+            Assertions.assertEquals(3, stats.size());
+            Assertions.assertEquals(1, lookups.get());
+            // No analyze metadata still means unknown for every column, as before.
+            Assertions.assertTrue(stats.stream().allMatch(ConnectorTableColumnStats::isUnknown));
+        } finally {
+            // The inline load clears the thread's context when it finishes.
+            connectContext.setThreadLocalInfo();
+        }
+    }
+
+    /**
+     * A lookup with the query trigger disabled (the column pruning an authorization check runs on a statement
+     * not yet authorized) must not ask for a collection; an ordinary lookup still does.
+     */
+    @Test
+    public void testALookupWithTriggerDisabledQueuesNoCollection() {
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "hive0", "partitioned_db", "t1");
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public static boolean checkStatisticTableStateNormal() {
+                return true;
+            }
+        };
+        new MockUp<ConnectorColumnStatsCacheLoader>() {
+            @Mock
+            public List<TStatisticData> queryStatisticsData(ConnectContext context, String tableUUID,
+                                                            List<String> columns) {
+                return new ArrayList<>();
+            }
+        };
+        new MockUp<StatisticsUtils>() {
+            @Mock
+            public Table getTableByUUID(ConnectContext context, String tableUUID) {
+                return table;
+            }
+        };
+        AtomicInteger requests = new AtomicInteger();
+        new MockUp<ConnectorTableTriggerAnalyzeMgr>() {
+            @Mock
+            public void checkAndUpdateTableStats(
+                    Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> stats) {
+                requests.incrementAndGet();
+            }
+        };
+
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        // Both the load and the callback that asks for a collection run inline, so the count is settled on return.
+        Deencapsulation.setField(storage, "connectorTableCachedStatistics",
+                Caffeine.newBuilder().executor(Runnable::run).buildAsync(new ConnectorColumnStatsCacheLoader()));
+        Deencapsulation.setField(storage, "statsCacheRefresherExecutor", (Executor) Runnable::run);
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        FrontendNodeType restore = state.getFeType();
+        state.setFrontendNodeType(FrontendNodeType.LEADER);
+        try {
+            connectContext.setThreadLocalInfo();
+            storage.getConnectorTableStatistics(table, ImmutableList.of("c1", "c2"), false);
+            Assertions.assertEquals(0, requests.get(), "a lookup with the trigger disabled asked for a collection");
+
+            // The inline load clears the thread's context when it finishes.
+            connectContext.setThreadLocalInfo();
+            storage.getConnectorTableStatistics(table, ImmutableList.of("c1", "c2"), true);
+            Assertions.assertEquals(1, requests.get(), "an ordinary lookup did not ask for a collection");
+
+            connectContext.setThreadLocalInfo();
+            storage.getConnectorTableStatistics(table, ImmutableList.of("c1", "c2"));
+            Assertions.assertEquals(2, requests.get(), "the two-argument lookup is the ordinary one");
+        } finally {
+            state.setFrontendNodeType(restore);
+            connectContext.setThreadLocalInfo();
+        }
+    }
+
+    @Test
+    public void testFollowerQueryTriggersAnalyze() throws Exception {
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "hive0", "partitioned_db", "t1");
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public static boolean checkStatisticTableStateNormal() {
+                return true;
+            }
+        };
+        // no statistics collected yet
+        new MockUp<ConnectorColumnStatsCacheLoader>() {
+            @Mock
+            public List<TStatisticData> queryStatisticsData(ConnectContext context, String tableUUID,
+                                                            List<String> columns) {
+                return new ArrayList<>();
+            }
+        };
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+        };
+        CountDownLatch triggered = new CountDownLatch(1);
+        new MockUp<ConnectorTableTriggerAnalyzeMgr>() {
+            @Mock
+            public void checkAndUpdateTableStats(
+                    Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> columnStats) {
+                triggered.countDown();
+            }
+        };
+
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        Deencapsulation.setField(storage, "connectorTableCachedStatistics",
+                Caffeine.newBuilder().executor(Runnable::run).buildAsync(new ConnectorColumnStatsCacheLoader()));
+        try {
+            storage.getConnectorTableStatistics(table, ImmutableList.of("c1"));
+            // a follower's query reaches the trigger manager, which forwards the request to the leader
+            Assertions.assertTrue(triggered.await(30, TimeUnit.SECONDS));
+        } finally {
+            connectContext.setThreadLocalInfo();
+        }
+    }
+
+    @Test
     public void testGetConnectorTableStatisticsSync(
             @Mocked AsyncLoadingCache<ConnectorTableColumnKey,
                     Optional<ConnectorTableColumnStats>> connectorTableCachedStatistics,
@@ -370,6 +547,258 @@ public class CachedStatisticStorageTest {
         } catch (Exception e) {
             Assertions.fail();
         }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testRefreshReplacesInFlightPartitionLoad(boolean isSync) {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t0");
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        storage.partitionStatistics = Caffeine.newBuilder().recordStats().executor(Runnable::run)
+                .buildAsync(new PartitionStatsCacheLoader());
+        ColumnStatsCacheKey key = new ColumnStatsCacheKey(table.getId(), "v1");
+        ColumnStatsCacheKey unrelated = new ColumnStatsCacheKey(table.getId(), "v2");
+        ColumnStatsCacheKey cold = new ColumnStatsCacheKey(table.getId(), "v3");
+        CompletableFuture<Optional<PartitionStats>> unrelatedLoad = new CompletableFuture<>();
+        storage.partitionStatistics.put(unrelated, unrelatedLoad);
+        PartitionStats previous = new PartitionStats();
+        previous.getDistinctCount().put(1L, 9.0);
+        PartitionStats current = new PartitionStats();
+        current.getDistinctCount().put(1L, 3.0);
+        CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> earlierLoad = new CompletableFuture<>();
+        AtomicInteger loads = new AtomicInteger();
+        new MockUp<PartitionStatsCacheLoader>() {
+            @Mock
+            public CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> asyncLoadAll(
+                    Iterable<? extends ColumnStatsCacheKey> keys, java.util.concurrent.Executor executor) {
+                Assertions.assertEquals(ImmutableList.of(key), ImmutableList.copyOf(keys));
+                return loads.incrementAndGet() == 1 ? earlierLoad :
+                        CompletableFuture.completedFuture(ImmutableMap.of(key, Optional.of(current)));
+            }
+        };
+        // A real bulk cache miss installs incomplete per-key proxy futures before ANALYZE finishes.
+        CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> queried =
+                storage.partitionStatistics.getAll(ImmutableList.of(key));
+        Assertions.assertFalse(queried.isDone());
+        long hits = storage.partitionStatistics.synchronous().stats().hitCount();
+        long misses = storage.partitionStatistics.synchronous().stats().missCount();
+
+        storage.refreshColumnStatistics(table, ImmutableList.of("v1", "v3"), isSync);
+        Assertions.assertEquals(2, loads.get());
+        earlierLoad.complete(ImmutableMap.of(key, Optional.of(previous)));
+
+        // The earlier query may finish with its old snapshot, but must not overwrite the refreshed cache entry.
+        Assertions.assertSame(previous, queried.join().get(key).orElseThrow());
+        Assertions.assertSame(current, storage.partitionStatistics.asMap().get(key).join().orElseThrow());
+        Assertions.assertSame(unrelatedLoad, storage.partitionStatistics.asMap().get(unrelated));
+        Assertions.assertFalse(storage.partitionStatistics.asMap().containsKey(cold));
+        Assertions.assertEquals(hits, storage.partitionStatistics.synchronous().stats().hitCount());
+        Assertions.assertEquals(misses, storage.partitionStatistics.synchronous().stats().missCount());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testAsyncPartitionRefreshHandlesBothCompletionOrders(boolean earlierLoadCompletesFirst) {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t0");
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        storage.partitionStatistics = Caffeine.newBuilder().executor(Runnable::run)
+                .buildAsync(new PartitionStatsCacheLoader());
+        ColumnStatsCacheKey key = new ColumnStatsCacheKey(table.getId(), "v1");
+        PartitionStats previous = new PartitionStats();
+        PartitionStats current = new PartitionStats();
+        CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> earlierLoad = new CompletableFuture<>();
+        CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> refreshedLoad = new CompletableFuture<>();
+        AtomicInteger loads = new AtomicInteger();
+        new MockUp<PartitionStatsCacheLoader>() {
+            @Mock
+            public CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> asyncLoadAll(
+                    Iterable<? extends ColumnStatsCacheKey> keys, java.util.concurrent.Executor executor) {
+                return loads.incrementAndGet() == 1 ? earlierLoad : refreshedLoad;
+            }
+        };
+        storage.partitionStatistics.getAll(ImmutableList.of(key));
+
+        storage.refreshColumnStatistics(table, ImmutableList.of("v1"), false);
+        Assertions.assertEquals(2, loads.get());
+        Assertions.assertFalse(refreshedLoad.isDone());
+        if (earlierLoadCompletesFirst) {
+            earlierLoad.complete(ImmutableMap.of(key, Optional.of(previous)));
+            Assertions.assertSame(previous, storage.partitionStatistics.asMap().get(key).join().orElseThrow());
+        }
+        refreshedLoad.complete(ImmutableMap.of(key, Optional.of(current)));
+        if (!earlierLoadCompletesFirst) {
+            earlierLoad.complete(ImmutableMap.of(key, Optional.of(previous)));
+        }
+        Assertions.assertSame(current, storage.partitionStatistics.asMap().get(key).join().orElseThrow());
+    }
+
+    @Test
+    public void testFailedPartitionRefreshInvalidatesInFlightLoad() {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t0");
+        ColumnStatsCacheKey key = new ColumnStatsCacheKey(table.getId(), "v1");
+        AtomicInteger outcome = new AtomicInteger();
+        new MockUp<PartitionStatsCacheLoader>() {
+            @Mock
+            public CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> asyncLoadAll(
+                    Iterable<? extends ColumnStatsCacheKey> keys, java.util.concurrent.Executor executor) {
+                return switch (outcome.get()) {
+                    case 0 -> CompletableFuture.completedFuture(ImmutableMap.of());
+                    case 1 -> CompletableFuture.completedFuture(null);
+                    default -> CompletableFuture.failedFuture(new RuntimeException("statistics query failure"));
+                };
+            }
+        };
+        for (boolean isSync : new boolean[] {true, false}) {
+            for (int i = 0; i < 3; i++) {
+                outcome.set(i);
+                CachedStatisticStorage storage = new CachedStatisticStorage();
+                CompletableFuture<Optional<PartitionStats>> earlierLoad = new CompletableFuture<>();
+                storage.partitionStatistics.put(key, earlierLoad);
+                storage.refreshColumnStatistics(table, ImmutableList.of("v1"), isSync);
+                Assertions.assertFalse(storage.partitionStatistics.asMap().containsKey(key));
+                earlierLoad.complete(Optional.of(new PartitionStats()));
+                Assertions.assertFalse(storage.partitionStatistics.asMap().containsKey(key),
+                        "A late pre-collection load must not undo invalidation: isSync=" + isSync + ", outcome=" + i);
+            }
+        }
+    }
+
+    @Test
+    public void testRefreshReloadsOnlyCachedPartitionStatistics() {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t0");
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        ColumnStatsCacheKey v1 = new ColumnStatsCacheKey(table.getId(), "v1");
+        ColumnStatsCacheKey v2 = new ColumnStatsCacheKey(table.getId(), "v2");
+        ColumnStatsCacheKey v3 = new ColumnStatsCacheKey(table.getId(), "v3");
+        PartitionStats previous = new PartitionStats();
+        previous.getDistinctCount().put(1L, 9.0);
+        storage.partitionStatistics.synchronous().put(v1, Optional.of(previous));
+        storage.partitionStatistics.synchronous().put(v2, Optional.of(previous));
+        new Expectations() {
+            {
+                statisticExecutor.queryPartitionLevelColumnNDV((ConnectContext) any, table.getId(),
+                        (List<Long>) any, ImmutableList.of("v1"));
+                TStatisticData data = new TStatisticData();
+                data.setColumnName("v1");
+                data.setPartitionId(1L);
+                data.setCountDistinct(3);
+                data.setRowCount(10);
+                data.setNullCount(2);
+                result = ImmutableList.of(data);
+            }
+        };
+
+        // ANALYZE v1 and v3: update the warm entry, without loading cold or unrelated columns.
+        storage.refreshColumnStatistics(table, ImmutableList.of("v1", "v3"), true);
+        PartitionStats refreshed = storage.partitionStatistics.synchronous().getIfPresent(v1).orElseThrow();
+        Assertions.assertEquals(3.0, refreshed.getDistinctCount().get(1L));
+        Assertions.assertEquals(0.2, refreshed.getNullFraction().get(1L));
+        Assertions.assertSame(previous, storage.partitionStatistics.synchronous().getIfPresent(v2).orElseThrow());
+        Assertions.assertNull(storage.partitionStatistics.synchronous().getIfPresent(v3));
+    }
+
+    @Test
+    public void testRefreshDoesNotLoadColdPartitionStatistics() {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t0");
+        AtomicInteger loads = new AtomicInteger();
+        new MockUp<PartitionStatsCacheLoader>() {
+            @Mock
+            public CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> asyncLoadAll(
+                    Iterable<? extends ColumnStatsCacheKey> keys, java.util.concurrent.Executor executor) {
+                loads.incrementAndGet();
+                return CompletableFuture.completedFuture(ImmutableMap.of());
+            }
+        };
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        storage.refreshColumnStatistics(table, ImmutableList.of("v1", "v2"), true);
+        Assertions.assertEquals(0, loads.get());
+        Assertions.assertEquals(0, storage.partitionStatistics.synchronous().estimatedSize());
+    }
+
+    @Test
+    @Timeout(10)
+    public void testAsyncRefreshAppliesPartitionStatisticsAfterCompletion() {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t0");
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        ColumnStatsCacheKey key = new ColumnStatsCacheKey(table.getId(), "v1");
+        PartitionStats previous = new PartitionStats();
+        storage.partitionStatistics.synchronous().put(key, Optional.of(previous));
+        CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> loaded = new CompletableFuture<>();
+        new MockUp<PartitionStatsCacheLoader>() {
+            @Mock
+            public CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> asyncLoadAll(
+                    Iterable<? extends ColumnStatsCacheKey> keys, java.util.concurrent.Executor executor) {
+                Assertions.assertEquals(ImmutableList.of(key), ImmutableList.copyOf(keys));
+                return loaded;
+            }
+        };
+
+        // Follower replay must return while the asynchronous load is still pending.
+        storage.refreshColumnStatistics(table, ImmutableList.of("v1"), false);
+        Assertions.assertSame(previous, storage.partitionStatistics.synchronous().getIfPresent(key).orElseThrow());
+        PartitionStats current = new PartitionStats();
+        current.getDistinctCount().put(1L, 3.0);
+        loaded.complete(ImmutableMap.of(key, Optional.of(current)));
+        Assertions.assertSame(current, storage.partitionStatistics.synchronous().getIfPresent(key).orElseThrow());
+    }
+
+    @Test
+    public void testPartitionRefreshDropsStaleValuesWhenNotLoaded() {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t0");
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        ColumnStatsCacheKey key = new ColumnStatsCacheKey(table.getId(), "v1");
+        AtomicInteger outcome = new AtomicInteger();
+        new MockUp<PartitionStatsCacheLoader>() {
+            @Mock
+            public CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> asyncLoadAll(
+                    Iterable<? extends ColumnStatsCacheKey> keys, java.util.concurrent.Executor executor) {
+                return switch (outcome.get()) {
+                    case 0 -> CompletableFuture.completedFuture(ImmutableMap.of());
+                    case 1 -> CompletableFuture.completedFuture(null);
+                    default -> CompletableFuture.failedFuture(new RuntimeException("statistics query failure"));
+                };
+            }
+        };
+
+        for (boolean isSync : new boolean[] {true, false}) {
+            for (int i = 0; i < 3; i++) {
+                outcome.set(i);
+                storage.partitionStatistics.synchronous().put(key, Optional.of(new PartitionStats()));
+                storage.refreshColumnStatistics(table, ImmutableList.of("v1"), isSync);
+                Assertions.assertNull(storage.partitionStatistics.synchronous().getIfPresent(key),
+                        "isSync=" + isSync + ", outcome=" + i);
+            }
+        }
+    }
+
+    @Test
+    public void testPartitionRefreshCachesConfirmedAbsence() {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t0");
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        ColumnStatsCacheKey key = new ColumnStatsCacheKey(table.getId(), "v1");
+        storage.partitionStatistics.synchronous().put(key, Optional.of(new PartitionStats()));
+
+        // The real loader distinguishes a successful query with no rows from a load failure.
+        storage.refreshColumnStatistics(table, ImmutableList.of("v1"), true);
+        Assertions.assertEquals(Optional.empty(), storage.partitionStatistics.synchronous().getIfPresent(key));
+    }
+
+    @Test
+    public void testExpireDropsOnlyRequestedPartitionStatistics() {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t0");
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        ColumnStatsCacheKey v1 = new ColumnStatsCacheKey(table.getId(), "v1");
+        ColumnStatsCacheKey v2 = new ColumnStatsCacheKey(table.getId(), "v2");
+        storage.partitionStatistics.synchronous().put(v1, Optional.of(new PartitionStats()));
+        storage.partitionStatistics.synchronous().put(v2, Optional.empty());
+        storage.addColumnStatistic(table, "v1", ColumnStatistic.builder().setDistinctValuesCount(9).build());
+
+        storage.expireTableAndColumnStatistics(table, ImmutableList.of("v1"));
+        Assertions.assertNull(storage.partitionStatistics.synchronous().getIfPresent(v1));
+        Assertions.assertNull(storage.columnStatistics.synchronous().getIfPresent(v1));
+        Assertions.assertEquals(Optional.empty(), storage.partitionStatistics.synchronous().getIfPresent(v2));
+        storage.expireTableAndColumnStatistics(table, ImmutableList.of("v2"));
+        Assertions.assertNull(storage.partitionStatistics.synchronous().getIfPresent(v2));
     }
 
     @Test

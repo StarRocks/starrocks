@@ -1,0 +1,27 @@
+-- name: test_deltalake_cast_predicate_pushdown
+create external catalog delta_test_${uuid0} PROPERTIES (
+    "type"="deltalake",
+    "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+-- result:
+-- !result
+select col_date, count(*) from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_date where cast(col_date as varchar) < '2024-04-25 00:00:01' group by col_date order by col_date;
+-- result:
+2024-04-24	3
+2024-04-25	3
+-- !result
+select col_date, count(*) from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_date where cast(col_date as varchar) >= '2024-04-25 00:00:01' group by col_date order by col_date;
+-- result:
+2024-04-26	3
+2024-04-27	3
+-- !result
+function: assert_explain_verbose_contains("select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_date where col_date < '2024-04-25'", "partitions=1/4")
+-- result:
+None
+-- !result
+drop catalog delta_test_${uuid0};
+-- result:
+-- !result

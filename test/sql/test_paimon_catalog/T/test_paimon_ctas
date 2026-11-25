@@ -1,0 +1,110 @@
+-- name: test_paimon_ctas_append
+function: create_paimon_ddl_catalog("paimon_ctas_${uuid0}", "${uuid0}")
+set paimon_reader_mode = 'native';
+create database paimon_ctas_${uuid0}.writer_db;
+create table paimon_ctas_${uuid0}.writer_db.copied_rows (id, p)
+partition by (p) properties ('bucket'='-1', 'file.format'='parquet')
+as select 1, cast(null as date) union all select 2, cast('2026-11-01' as date);
+[ORDER]select id, p from paimon_ctas_${uuid0}.writer_db.copied_rows order by id;
+create table if not exists paimon_ctas_${uuid0}.writer_db.copied_rows
+properties ('bucket'='-1', 'file.format'='parquet') as select 3 as id;
+select count(*) from paimon_ctas_${uuid0}.writer_db.copied_rows;
+create table paimon_ctas_${uuid0}.writer_db.empty_rows
+properties ('bucket'='-1', 'file.format'='parquet') as select 1 as id where false;
+select count(*) from paimon_ctas_${uuid0}.writer_db.empty_rows;
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db.empty_rows;
+  drop table if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db.copied_rows;
+  drop database if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_ctas_${paimon_ddl_warehouse_id};
+} END CLEANUP
+
+-- name: test_paimon_ctas_primary_key
+function: create_paimon_ddl_catalog("paimon_ctas_${uuid0}", "${uuid0}")
+set paimon_reader_mode = 'native';
+set pipeline_dop = 4;
+create database paimon_ctas_${uuid0}.writer_db;
+create table paimon_ctas_${uuid0}.writer_db.pk_rows primary key (id)
+properties ('bucket'='4', 'file.format'='parquet')
+as select if(generate_series > 0, generate_series, null) as id, 'value' as payload
+from table(generate_series(1, 8));
+[ORDER]select count(*), min(id), max(id) from paimon_ctas_${uuid0}.writer_db.pk_rows;
+set paimon_reader_mode = 'jni';
+[ORDER]select count(*), min(id), max(id) from paimon_ctas_${uuid0}.writer_db.pk_rows;
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db.pk_rows;
+  drop database if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_ctas_${paimon_ddl_warehouse_id};
+} END CLEANUP
+
+-- name: test_paimon_ctas_drops_table_on_write_failure
+function: create_paimon_ddl_catalog("paimon_ctas_${uuid0}", "${uuid0}")
+create database paimon_ctas_${uuid0}.writer_db;
+create table paimon_ctas_${uuid0}.writer_db.failed_rows
+properties ('bucket'='-1', 'file.format'='orc') as select 1 as id;
+show tables from paimon_ctas_${uuid0}.writer_db;
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db.failed_rows;
+  drop database if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_ctas_${paimon_ddl_warehouse_id};
+} END CLEANUP
+
+-- name: test_paimon_ctas_to_internal_catalog
+function: create_paimon_ddl_catalog("paimon_ctas_${uuid0}", "${uuid0}")
+set paimon_reader_mode = 'native';
+create database default_catalog.ctas_internal_${uuid0};
+create database paimon_ctas_${uuid0}.writer_db;
+create table paimon_ctas_${uuid0}.writer_db.source_rows (id int, payload varchar(20))
+properties ('bucket'='-1', 'file.format'='parquet');
+insert into paimon_ctas_${uuid0}.writer_db.source_rows values (1, 'paimon'), (2, null);
+create table default_catalog.ctas_internal_${uuid0}.copied_rows
+properties ('replication_num'='1')
+as select id, payload from paimon_ctas_${uuid0}.writer_db.source_rows;
+[ORDER]select id, payload from default_catalog.ctas_internal_${uuid0}.copied_rows order by id;
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db.source_rows;
+  drop database if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_ctas_${paimon_ddl_warehouse_id};
+  drop database if exists default_catalog.ctas_internal_${paimon_ddl_warehouse_id} force;
+} END CLEANUP
+
+-- name: test_paimon_ctas_from_internal_catalog
+function: create_paimon_ddl_catalog("paimon_ctas_${uuid0}", "${uuid0}")
+set paimon_reader_mode = 'native';
+create database default_catalog.ctas_internal_${uuid0};
+create database paimon_ctas_${uuid0}.writer_db;
+create table default_catalog.ctas_internal_${uuid0}.source_rows (id int not null, payload varchar(20))
+duplicate key (id) distributed by hash(id) buckets 1 properties ('replication_num'='1');
+insert into default_catalog.ctas_internal_${uuid0}.source_rows values (3, 'internal'), (4, null);
+create table paimon_ctas_${uuid0}.writer_db.copied_rows
+properties ('bucket'='-1', 'file.format'='parquet')
+as select id, payload from default_catalog.ctas_internal_${uuid0}.source_rows;
+[ORDER]select id, payload from paimon_ctas_${uuid0}.writer_db.copied_rows order by id;
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db.copied_rows;
+  drop database if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_ctas_${paimon_ddl_warehouse_id};
+  drop database if exists default_catalog.ctas_internal_${paimon_ddl_warehouse_id} force;
+} END CLEANUP
+
+-- name: test_paimon_ctas_nullable_union
+function: create_paimon_ddl_catalog("paimon_ctas_${uuid0}", "${uuid0}")
+set paimon_reader_mode = 'native';
+create database paimon_ctas_${uuid0}.writer_db;
+set catalog paimon_ctas_${uuid0};
+use writer_db;
+create table union_rows
+properties ('bucket'='-1', 'file.format'='parquet')
+as select 1 as id union all select cast(null as int);
+[ORDER]select id from union_rows order by id nulls last;
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db.union_rows;
+  drop database if exists paimon_ctas_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_ctas_${paimon_ddl_warehouse_id};
+} END CLEANUP

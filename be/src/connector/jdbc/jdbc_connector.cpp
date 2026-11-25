@@ -121,6 +121,16 @@ int64_t JDBCDataSource::num_rows_read() const {
 int64_t JDBCDataSource::num_bytes_read() const {
     return _bytes_read;
 }
+ScanAuditCounters JDBCDataSource::scan_audit_counters() const {
+    // The rows the remote database returned are both the physical and the logical rows. The bytes are the decoded
+    // in-memory size, an estimate of what came over the wire, and nothing is read from the datacache.
+    ScanAuditCounters counters;
+    counters.mask = ScanAuditCounters::ROWS_AND_BYTES;
+    counters.physical_rows = _rows_read;
+    counters.logical_rows = _rows_read;
+    counters.remote_bytes = _bytes_read;
+    return counters;
+}
 int64_t JDBCDataSource::cpu_time_spent() const {
     // TODO: calculte the real cputime
     return 0;

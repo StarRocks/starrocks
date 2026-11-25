@@ -96,7 +96,8 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_horizontal_compaction_fill_data_cache,
                                   .buffer_size = _stream_buffer_size,
                                   .fill_metadata_cache = reuse_via_shared_cache,
-                                  .hold_segments = _hold_input_segments};
+                                  .hold_segments = _hold_input_segments,
+                                  .remote_read = remote_read_context()};
     reader_params.column_access_paths = &_column_access_paths;
 
     // Apply range filter for range-split parallel compaction. TabletReader requires
@@ -154,7 +155,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
         ASSIGN_OR_RETURN(pk_range_filter, PrimaryKeyRangeFilter::create(_tablet.metadata()->range(), _tablet_schema));
     }
 
-    const bool enable_light_pk_compaction_publish = StorageEngine::instance()->enable_light_pk_compaction_publish();
+    const bool is_pk = _tablet_schema->keys_type() == KeysType::PRIMARY_KEYS;
     while (true) {
         if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
             return Status::Aborted("background worker stopped");
@@ -169,7 +170,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
             auto st = Status::OK();
             {
                 SCOPED_RAW_TIMER(&_context->stats->reader_get_next_ns);
-                if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && enable_light_pk_compaction_publish) {
+                if (is_pk) {
                     st = reader.get_next(chunk.get(), &rssid_rowids);
                 } else {
                     st = reader.get_next(chunk.get());
@@ -267,13 +268,6 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
         SCOPED_RAW_TIMER(&_context->stats->txn_log_write_ns);
         RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
     }
-    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-        // preload primary key table's compaction state
-        SCOPED_RAW_TIMER(&_context->stats->preload_compaction_state_ns);
-        Tablet t(_tablet.tablet_manager(), _tablet.id());
-        _tablet.tablet_manager()->primary_key_mgr()->preload_compaction_state(*txn_log, t, _tablet_schema);
-    }
-
     if (config::enable_tablet_write_log) {
         SCOPED_RAW_TIMER(&_context->stats->tablet_write_log_ns);
         int64_t begin_time = _context->start_time.load(std::memory_order_relaxed) * 1000; // Convert to ms
@@ -320,7 +314,8 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
         LakeIOOptions lake_io_opts{.fill_data_cache = false,
                                    .buffer_size = _stream_buffer_size,
                                    .fill_metadata_cache = reuse_via_shared_cache,
-                                   .hold_segments = _hold_input_segments};
+                                   .hold_segments = _hold_input_segments,
+                                   .remote_read = remote_read_context()};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
         // Ask the rowset what it actually pins rather than re-measuring the vector: a rowset that
         // could not hold (segment-range / partial compaction) or that has given holding up reports

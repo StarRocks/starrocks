@@ -51,6 +51,7 @@ import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobRunner;
 import com.starrocks.load.InsertOverwriteJobState;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.EditLogException;
 import com.starrocks.persist.WALApplier;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.OlapTableSink;
@@ -117,9 +118,12 @@ public class TabletReshardConcurrencyTest {
     @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
-        TabletReshardJobMgr sharedMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
-        sharedMgr.setStop();
-        LeaderDaemon.awaitQuiesced(List.of(sharedMgr), 30_000L);
+        // Queued WAL tests replace getEditLog() for every thread. Stop and drain all leader daemons,
+        // including heartbeat-mgr and timePrinter, before they can submit unrelated journal entries
+        // to a test-owned queue and participate in its WAL fence.
+        List<LeaderDaemon> daemons = LeaderDaemon.getRunningInstances();
+        daemons.forEach(LeaderDaemon::setStop);
+        LeaderDaemon.awaitQuiesced(daemons, 30_000L);
         ConnectContext context = UtFrameUtils.createDefaultCtx();
         Config.enable_range_distribution = true;
         StarRocksAssert starRocksAssert = new StarRocksAssert(context);
@@ -335,27 +339,27 @@ public class TabletReshardConcurrencyTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
-    public void failedCleaningLogRetriesBeforeCleanup(boolean merge) throws Exception {
+    public void failedCleaningLogLeavesJobRunning(boolean merge) throws Exception {
         TabletReshardJob pending = job(merge, partitions.get(0));
         mgr.addTabletReshardJob(pending);
         AtomicBoolean fail = new AtomicBoolean(true);
+        AtomicInteger runningRuns = new AtomicInteger();
         AtomicInteger cleaningRuns = new AtomicInteger();
         AtomicInteger installations = new AtomicInteger();
-        List<String> payloads = new ArrayList<>();
         new MockUp<EditLog>() {
             @Mock
-            public void logUpdateTabletReshardJob(TabletReshardJob logged) {
-                payloads.add(GsonUtils.GSON.toJson(logged));
+            public void logUpdateTabletReshardJob(Invocation invocation, TabletReshardJob logged, WALApplier applier) {
                 if (fail.get()) {
-                    throw new IllegalStateException("injected CLEANING WAL failure");
+                    throw new EditLogException("injected CLEANING WAL failure");
                 }
+                invocation.proceed();
             }
         };
         new MockUp<SplitTabletJob>() {
             @Mock
             protected void runRunningJob() {
-                installations.incrementAndGet();
-                pending.setJobState(TabletReshardJob.JobState.CLEANING);
+                runningRuns.incrementAndGet();
+                pending.journalCleaningThenInstall(pending.newCleaningRecord(), installations::incrementAndGet);
             }
             @Mock
             protected void runCleaningJob() {
@@ -365,8 +369,8 @@ public class TabletReshardConcurrencyTest {
         new MockUp<MergeTabletJob>() {
             @Mock
             protected void runRunningJob() {
-                installations.incrementAndGet();
-                pending.setJobState(TabletReshardJob.JobState.CLEANING);
+                runningRuns.incrementAndGet();
+                pending.journalCleaningThenInstall(pending.newCleaningRecord(), installations::incrementAndGet);
             }
             @Mock
             protected void runCleaningJob() {
@@ -376,17 +380,19 @@ public class TabletReshardConcurrencyTest {
         pending.jobState = TabletReshardJob.JobState.RUNNING;
         pending.run();
         pending.run();
+        // Nothing of CLEANING took effect: the job repeats its RUNNING step until the record is durable.
+        assertEquals(TabletReshardJob.JobState.RUNNING, pending.getJobState());
         assertFalse(pending.isLayoutReady());
-        assertEquals(0, cleaningRuns.get(), "cleanup must wait for a successful frozen CLEANING log retry");
-        assertEquals(2, payloads.size());
-        assertEquals(payloads.get(0), payloads.get(1));
+        assertEquals(2, runningRuns.get());
+        assertEquals(0, installations.get(), "the layout must not be installed before its CLEANING record is durable");
+        assertEquals(0, cleaningRuns.get());
         fail.set(false);
         pending.run();
-        assertEquals(1, cleaningRuns.get());
+        assertEquals(TabletReshardJob.JobState.CLEANING, pending.getJobState());
         assertTrue(pending.isLayoutReady());
-        assertEquals(3, payloads.size());
-        assertEquals(payloads.get(0), payloads.get(2));
-        assertEquals(1, installations.get(), "failed CLEANING WAL must not repeat index installation");
+        assertEquals(3, runningRuns.get());
+        assertEquals(1, installations.get());
+        assertEquals(1, cleaningRuns.get());
     }
 
     @Test
@@ -614,12 +620,14 @@ public class TabletReshardConcurrencyTest {
         JournalTask task = queue.poll(5, TimeUnit.SECONDS);
         assertNotNull(task);
         try {
-            assertEquals(TabletReshardJob.JobState.CLEANING, pending.getJobState());
+            // The state changes only once the CLEANING record is durable.
+            assertEquals(TabletReshardJob.JobState.PENDING, pending.getJobState());
             assertFalse(pending.isLayoutReady());
         } finally {
             task.markSucceed();
         }
         transition.get(5, TimeUnit.SECONDS);
+        assertEquals(TabletReshardJob.JobState.CLEANING, pending.getJobState());
         assertTrue(pending.isLayoutReady());
         pending.jobState = TabletReshardJob.JobState.ABORTING;
         assertFalse(pending.isLayoutReady());
@@ -885,6 +893,7 @@ public class TabletReshardConcurrencyTest {
         BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
         EditLog editLog = useQueuedWal(queue);
         TabletReshardJob pending = job(false, partitions.get(0));
+        AtomicBoolean rolledBack = new AtomicBoolean();
         new MockUp<EditLog>() {
             @Mock
             public void logUpdateTabletReshardJob(Invocation invocation, TabletReshardJob snapshot, WALApplier applier) {
@@ -898,12 +907,17 @@ public class TabletReshardConcurrencyTest {
             @Mock
             void refreshTableStateLocked(Invocation invocation, OlapTable lockedTable, long excludedJobId) {
                 assertEquals(1, (int) Deencapsulation.invoke(editLog, "inFlightForTest"));
+                rolledBack.set(true);
                 invocation.proceed(lockedTable, excludedJobId);
             }
         };
-        assertThrows(RuntimeException.class, () -> mgr.addTabletReshardJob(pending));
+        EditLogException failure = assertThrows(EditLogException.class, () -> mgr.addTabletReshardJob(pending));
+        assertTrue(failure.getMessage().contains("leader WAL gate is closed"));
+        assertTrue(rolledBack.get());
         assertTrue(mgr.getTabletReshardJobs().isEmpty());
         assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        assertFalse(pending.isAdmissionReady());
+        assertTrue(queue.isEmpty());
         assertEquals(0, (int) Deencapsulation.invoke(editLog, "inFlightForTest"));
     }
 

@@ -13,7 +13,7 @@ participant "Object store" as OBJ
 participant "KMS" as KMS
 participant "Iceberg catalog" as CAT
 
-C -> FE : INSERT / DELETE / UPDATE / MERGE\non an encryption-enabled iceberg table
+C -> FE : INSERT / INSERT OVERWRITE\non an encryption-enabled iceberg table
 note over FE
   A table is encrypted iff it declares encryption.key-id.
   IcebergEncryption.writeSignalOrNull reads that property --
@@ -24,13 +24,13 @@ note over FE
   supplied a PlaintextEncryptionManager.
 end note
 note over FE
-  All three sinks derive the signal from that one place:
-  IcebergTableSink (INSERT), IcebergDeleteSink (DELETE) and
-  IcebergRowDeltaSink (UPDATE / MERGE), so a position-delete
-  file is encrypted exactly like a data file.
+  Only IcebergTableSink writes into an encrypted table. An
+  encrypted table is format version 3, which takes position
+  deletes only as deletion vectors, so DELETE / UPDATE / MERGE
+  that would write Parquet position deletes are refused.
 end note
 
-== Data file (and position-delete file) ==
+== Data file ==
 FE -> BE : sink encryption info -- algorithm + DEK length, NO key
 note over FE
   Algorithm is always AES_GCM_V1. Iceberg has no cipher table
@@ -48,11 +48,11 @@ note over BE : zeroize the DEK (OPENSSL_cleanse) on writer destroy
 == Commit ==
 note over FE
   key_metadata = StandardKeyMetadata(DEK, aad_prefix), applied to
-  data files AND position-delete files alike.
-  -- the data key IN THE CLEAR. Safe only because the
+  each data file -- the data key IN THE CLEAR. Safe only because the
   manifest carrying it is encrypted below.
-  An encrypted table whose file arrives with NO key, or a key of
-  the wrong length, is refused rather than committed.
+  An encrypted table whose file arrives with NO key, a key of the
+  wrong length, or as a position-delete file is refused rather
+  than committed.
 end note
 FE -> ICE : commit data file + key_metadata
 note over ICE : generate manifest key + AAD prefix\n(driver side, secure RNG)

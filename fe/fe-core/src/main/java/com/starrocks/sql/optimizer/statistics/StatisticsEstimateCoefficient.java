@@ -44,6 +44,10 @@ public class StatisticsEstimateCoefficient {
     public static final int SMALL_BROADCAST_JOIN_MAX_COMBINED_NDV_LIMIT = 1000000;
 
     public static final double EXTREME_HIGH_AGGREGATE_EFFECT_COEFFICIENT = 3;
+    // An aggregation pushed down with a high cardinality group-by column must be able to reduce its rows this many
+    // times, judged by an upper bound of the reduction. The bound is loose: a filter shrinks the rows but not the NDV,
+    // so a pushed aggregation with a bound of 6.7x can still reduce 12x.
+    public static final double HIGH_CARDINALITY_PUSH_DOWN_MIN_REDUCTION = 5;
     // default selectivity for anti join
     public static final double DEFAULT_ANTI_JOIN_SELECTIVITY_COEFFICIENT = 0.4;
     // default shuffle column row count limit

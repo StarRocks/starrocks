@@ -27,6 +27,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.LoadStmt;
@@ -186,8 +187,10 @@ public class LoadLoadingTaskTest {
         Database database = new Database(10000L, "test");
         OlapTable olapTable = new OlapTable(10001L, "tbl", null, KeysType.AGG_KEYS, null, null);
         connectContext.setStartTime();
+        // BrokerLoadJob always sets the compute resource; LoadPlanner needs it to resolve adaptive sink DOP.
         LoadLoadingTask loadLoadingTask = new LoadLoadingTask.Builder().setLoadId(new TUniqueId(2, 3))
-                .setContext(connectContext).setDb(database).setTable(olapTable).setCallback(new BrokerLoadJob()).build();
+                .setContext(connectContext).setDb(database).setTable(olapTable).setCallback(new BrokerLoadJob())
+                .setComputeResource(WarehouseManager.DEFAULT_RESOURCE).build();
 
         boolean exceptionThrown = false;
         GlobalStateMgr.getCurrentState().getLocalMetastore().unprotectCreateDb(database);

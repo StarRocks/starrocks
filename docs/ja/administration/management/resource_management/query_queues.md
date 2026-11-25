@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "v2.5以降、StarRocks はクエリキューで同時実行やリソース制限に達時にクエリを自動的にキューイングします。"
 sidebar_position: 20
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # クエリキュー
@@ -68,7 +69,7 @@ SET GLOBAL enable_group_level_query_queue = true;
 
 | **Variable**                        | **Default** | **Description**                                              |
 | ----------------------------------- | ----------- | ------------------------------------------------------------ |
-| query_queue_concurrency_limit       | 0           | BE 上の同時クエリの上限。`0` より大きく設定された場合にのみ有効になります。`0` に設定すると、制限がないことを示します。 |
+| query_queue_concurrency_limit       | 0           | 同時クエリの上限。v3.1.4 以降、実行中のクエリ数は Leader FE によってカウントされます。それ以前のバージョンでは、この上限は各 BE が報告する実行中のクエリ数に適用されます。`0` より大きく設定された場合にのみ有効になります。`0` に設定すると、制限がないことを示します。 |
 | query_queue_mem_used_pct_limit      | 0           | BE 上のメモリ使用率の上限。`0` より大きく設定された場合にのみ有効になります。`0` に設定すると、制限がないことを示します。範囲: [0, 1] |
 | query_queue_cpu_used_permille_limit | 0           | BE 上の CPU 使用率のパーミル (CPU 使用率 * 1000) の上限。`0` より大きく設定された場合にのみ有効になります。`0` に設定すると、制限がないことを示します。範囲: [0, 1000] |
 
@@ -85,11 +86,11 @@ v3.1.4 以降、リソースグループを作成する際に、個別の同時�
 
 | **Variable**       | **Default** | **Description**                                                                                                                                                                       |
 |--------------------|-------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| concurrency_limit  | 0           | 単一の BE ノード上のリソースグループの同時実行制限。`0` より大きく設定された場合にのみ有効になります。                                                                                    |
+| concurrency_limit  | 0           | リソースグループの同時実行制限。リソースグループレベルのクエリキューでは、リソースグループの実行中のクエリ数は Leader FE によってカウントされます。`0` より大きく設定された場合にのみ有効になります。                                                                                    |
 | max_cpu_cores      | 0           | 単一の BE ノード上のこのリソースグループの CPU コア制限。`0` より大きく設定された場合にのみ有効になります。範囲: [0, `avg_be_cpu_cores`]、ここで `avg_be_cpu_cores` はすべての BE ノードの平均 CPU コア数を表します。 |
 | mem_used_pct_limit | 0           | 単一の BE ノード上のこのリソースグループのメモリ使用率制限。`0` より大きく設定された場合にのみ有効になります。範囲: [0, 1]                                                                |
 
-`mem_used_pct_limit` は Query Queue v1 にのみ適用されます。Query Queue v2 を有効にする（`enable_query_queue_v2` を `true` に設定する）と、このパラメータは有効になりません。
+リソースグループレベルのクエリキューは Query Queue v1 でのみ実装されています。Query Queue v2 を有効にする（`enable_query_queue_v2` を `true` に設定する。v4.1 以降のデフォルト）と、リソースグループの `concurrency_limit`、`max_cpu_cores`、`mem_used_pct_limit` によってクエリがキューに入れられることはなくなります。この場合、`max_cpu_cores` と `mem_used_pct_limit` は効果がありません。`concurrency_limit` が適用されないのは、`enable_group_level_query_queue` が `true` で、かつクエリ自体がクエリキューの対象である（そのクエリタイプでクエリキューが有効である）場合のみです。それ以外の場合、例えば `enable_group_level_query_queue` が `false`（デフォルト）の場合やそのクエリタイプでクエリキューが無効な場合、BE ノードで `concurrency_limit` を超えたクエリはキューに入れられず、エラー `Exceed concurrency limit` で失敗します。
 
 各 BE ノードのリソースグループごとのリソース使用情報を表示するには、[View Resource Group Usage Information](./resource_group.md#view-resource-group-usage-information) を参照してください。
 
@@ -144,7 +145,7 @@ Query Queue v2 は FE 設定項目で有効化および調整します。`enable
 | `query_queue_v2_mem_bytes_per_slot` | `0` | メモリベース推定方式（MBE）で使用する、1 スロットあたりのメモリ目標値です。`query_queue_slots_estimator_strategy` が `MBE` の場合、総スロット数はウェアハウス全体のメモリ予算から算出され、各クエリのスロット数はクエリ全体のメモリコストをこの値で割って推定されます。その後、`number_of_workers * max(1, pipeline_dop / 2)` を上限として制限されます。この値が 0 以下の場合、Query Queue V2 はワーカーあたりの平均コアメモリ容量を使用します。 |
 | `query_queue_v2_cpu_costs_per_slot` | `1000000000` | CPU ベース推定方式（CBE）で使用する、1 スロットあたりの CPU コストしきい値です。スケジューラは `ceil(plan_cpu_costs / query_queue_v2_cpu_costs_per_slot)` によって必要スロット数を算出し、その結果を `[1, min(totalSlots, number_of_workers * max(1, pipeline_dop / 2))]` の範囲に制限します。この値が 0 以下の場合は `1` として扱われます。この値を大きくすると、各クエリに割り当てられるスロット数が減少し、同時実行性が高くなります。逆に値を小さくすると、各クエリがより多くのスロットを使用するため、同時実行性は低くなります。 |
 | `query_queue_mem_used_pct_limit` | `0` | グローバルセッション変数です。ノードのメモリ使用率の上限で、ノードのメモリ上限に対する比率で表します。いずれかの稼働中のノードのプロセスメモリ使用率がこの値に達している間、新しいクエリはキューで待機します。範囲: [0, 1]。`0` はメモリアドミッションを行わないことを意味します。[メモリアドミッション](#メモリアドミッション) を参照してください。 |
-| `query_queue_concurrency_limit` | `0` | BE ごとの同時実行クエリ数の上限を指定します。この設定は `0` より大きい値を指定した場合のみ有効です。`0` を指定すると、同時実行数に制限はありません。 |
+| `query_queue_concurrency_limit` | `0` | 同時実行クエリ数の上限を指定します。実行中のクエリ数は Leader FE によってカウントされます。この設定は `0` より大きい値を指定した場合のみ有効です。`0` を指定すると、同時実行数に制限はありません。 |
 
 :::note
 
@@ -161,7 +162,7 @@ Query Queue v2 は BE リソースを論理 Slot として表現します。
 
 ### キューイングロジック
 
-ある Query が必要とする Slot 数が現在の残り Slot 数を超える場合、その Query はキューで待機します。Query Queue v2 は、必要な Slot 数が少ない Query を優先的に満たすことで、小さいクエリが先にリソースを取得できるようにし、大きいクエリがキューの先頭に長時間とどまって後続の小さいクエリをブロックするヘッドオブラインブロッキング (Head-of-line blocking) を避けます。
+ある Query が必要とする Slot 数が現在の残り Slot 数を超える場合、その Query はキューで待機します。デフォルト (`query_queue_v2_schedule_strategy` が `SWRR`) では、Query Queue v2 は、キュー内の Query を必要な Slot 数に応じて複数のカテゴリに分け、スムーズ加重ラウンドロビン (Smooth Weighted Round Robin) アルゴリズムを使用して各カテゴリから Query を選択します。必要な Slot 数が少ないカテゴリほど重みが大きいため、小さいクエリが先にリソースを取得でき、大きいクエリがキューの先頭に長時間とどまって後続の小さいクエリをブロックするヘッドオブラインブロッキング (Head-of-line blocking) を避けつつ、必要な Slot 数が多い Query も枯渇しません。v4.1.4 より前のバージョンでは、1 つの Slot のみを必要とする Query は、追加の小さい Slot プールからも受け入れられます。`query_queue_v2_schedule_strategy` を `SJF` (v3.5.0 以降でサポート) に設定すると、Query Queue v2 は短いジョブを優先してスケジュールし、エージングによって枯渇を回避します。
 
 キューイングロジック全体は FE 上で完了します。これには、クラスタ全体の Slot 総数の設定、Query が必要とする Slot 数の見積もり、およびどの Query の Slot 要求を優先的に満たすかの決定が含まれます。Slot のスケジューリングは、BE の実際のリソース使用状況に依存しません。実際の使用量を入力とするのはオプションのメモリ使用率の上限 `query_queue_mem_used_pct_limit` だけで、ノードのメモリ使用量が多すぎる間、新しいクエリを待機させます。詳細は [メモリアドミッション](#メモリアドミッション) を参照してください。
 
@@ -264,8 +265,16 @@ ADMIN SET FRONTEND CONFIG ("query_queue_v2_concurrency_level" = "<value>");
 デフォルト値 `0` は無制限を意味します。実行中のクエリ数に絶対的な上限を設けたい場合にのみ設定してください。
 
 ```SQL
+SET GLOBAL query_queue_concurrency_limit = 8;
+```
+
+複数の Warehouse をサポートするエディションでは、特定の Warehouse に対して上限を設定することもできます。
+
+```SQL
 ALTER WAREHOUSE default_warehouse SET ("query_queue_concurrency_limit" = "8");
 ```
+
+StarRocks オープンソース版には `default_warehouse` のみが存在し、ALTER WAREHOUSE などの Warehouse DDL ステートメントはサポートされていません（`Multi-Warehouse is not implemented` エラーで失敗します）。代わりにグローバル変数を使用してください。
 
 まず `query_queue_v2_concurrency_level` を使用してリソース容量を調整してください。`query_queue_concurrency_limit` は、同時に実行できるクエリ数を明示的に制限する必要がある場合にのみ使用してください。
 
@@ -370,7 +379,7 @@ FE の監査ログファイル **fe.audit.log** を確認できます。フィ�
 
 ### Monitoring metrics
 
-[Monitor and Alert](../monitoring/monitoring.md) 機能を使用して、StarRocks のクエリキューのメトリクスを取得できます。次の FE メトリクスは、各 FE ノードの統計データから導出されます。
+[Monitor and Alert](../monitoring/prometheus_grafana.md) 機能を使用して、StarRocks のクエリキューのメトリクスを取得できます。次の FE メトリクスは、各 FE ノードの統計データから導出されます。
 
 | Metric                                          | Unit | Type    | Description                                                    |
 | ----------------------------------------------- | ---- | ------- | -------------------------------------------------------------- |
@@ -380,6 +389,14 @@ FE の監査ログファイル **fe.audit.log** を確認できます。フィ�
 | starrocks_fe_resource_group_query_queue_total   | Count | Instantaneous | このリソースグループでキューに入れられたクエリの総数 (現在実行中のものを含む)。`name` ラベルはリソースグループの名前を示します。このメトリクスは v3.1.4 以降でサポートされています。 |
 | starrocks_fe_resource_group_query_queue_pending | Count | Instantaneous | このリソースグループのキューに現在あるクエリの数。`name` ラベルはリソースグループの名前を示します。このメトリクスは v3.1.4 以降でサポートされています。 |
 | starrocks_fe_resource_group_query_queue_timeout | Count | Instantaneous | このリソースグループのキュー内でタイムアウトしたクエリの数。`name` ラベルはリソースグループの名前を示します。このメトリクスは v3.1.4 以降でサポートされています。 |
+| starrocks_fe_query_queue_slot_pending           | Count | Instantaneous | キュー内のクエリが必要とする現在の Slot 数。このメトリクスは Leader FE のみが報告し、v3.4.0 以降でサポートされています。 |
+| starrocks_fe_query_queue_slot_running           | Count | Instantaneous | 実行中のクエリに割り当てられている現在の Slot 数。このメトリクスは Leader FE のみが報告し、v3.4.0 以降でサポートされています。 |
+| starrocks_fe_query_queue_v2_category_pending_slots | Count | Instantaneous | Query Queue v2: カテゴリごとのキュー内のクエリが必要とする現在の Slot 数。`category` ラベルはカテゴリの番号を示します。このメトリクスは Leader FE のみが報告し、v3.4.0 以降でサポートされています。 |
+| starrocks_fe_query_queue_v2_category_running_slots | Count | Instantaneous | Query Queue v2: カテゴリごとの実行中のクエリに割り当てられている現在の Slot 数。`category` ラベルはカテゴリの番号を示します。このメトリクスは Leader FE のみが報告し、v3.4.0 以降でサポートされています。 |
+| starrocks_fe_query_queue_v2_category_total_allocated_slots | Count | Instantaneous | Query Queue v2: カテゴリごとにこれまでに割り当てられた Slot の総数。`category` ラベルはカテゴリの番号を示します。このメトリクスは Leader FE のみが報告し、v3.4.0 以降でサポートされています。 |
+| starrocks_fe_query_queue_v2_category_weight     | - | Instantaneous | Query Queue v2: スムーズ加重ラウンドロビンアルゴリズムにおける各カテゴリの重み。`category` ラベルはカテゴリの番号を示します。このメトリクスは Leader FE のみが報告し、v3.4.0 以降でサポートされています。 |
+| starrocks_fe_query_queue_v2_category_min_slots  | Count | Instantaneous | Query Queue v2: 各カテゴリのクエリが必要とする最小 Slot 数。`category` ラベルはカテゴリの番号を示します。このメトリクスは Leader FE のみが報告し、v3.4.0 以降でサポートされています。 |
+| starrocks_fe_query_queue_v2_category_state      | - | Instantaneous | Query Queue v2: スムーズ加重ラウンドロビンアルゴリズムにおける各カテゴリの現在の状態値。`category` ラベルはカテゴリの番号を示します。このメトリクスは Leader FE のみが報告し、v3.4.0 以降でサポートされています。 |
 
 ### SHOW RUNNING QUERIES
 

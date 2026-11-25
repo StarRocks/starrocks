@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "判断点是否被多边形覆盖，包括边界。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_CoveredBy

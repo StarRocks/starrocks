@@ -361,9 +361,11 @@ public class MvRewritePreprocessor {
         // metadata race for different operations.
         // Ensure to re-optimize if the mv's version has changed after the optimization.
         long timeoutMsPerTry = timeoutMs <= 0 ? 1000 : timeoutMs;
+        // A synchronous MV shares its base table's physical partitions, and so its lock.
+        Pair<Long, Long> lockTarget = mv.getPartitionLockTarget();
         Locker locker = new Locker();
         // Add a timeout to avoid waiting too long for the lock in some cases to avoid affecting query latency.
-        if (!locker.tryLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.READ,
+        if (!locker.tryLockTableWithIntensiveDbLock(lockTarget.first, lockTarget.second, LockType.READ,
                 timeoutMsPerTry, TimeUnit.MILLISECONDS)) {
             if (copyFailurePolicy == MvCopyFailurePolicy.FALLBACK_TO_LIVE_MV) {
                 logMVPrepare("Failed to lock mv {} for copying, use live mv to preserve transparent rewrite semantics",
@@ -379,7 +381,7 @@ public class MvRewritePreprocessor {
             mv.copyOnlyForQuery(copiedMV);
             return copiedMV;
         } finally {
-            locker.unLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(lockTarget.first, lockTarget.second, LockType.READ);
         }
     }
 
@@ -533,6 +535,14 @@ public class MvRewritePreprocessor {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
             return MVPlanValidationResult.invalid(MVPlanValidationResult.Reason.QUERY_REWRITE_DISABLED, message);
         }
+        // Fast path: if the mv plan is already loaded in the plan cache and known to be invalid (e.g. it
+        // contains non-SPJG operators), reject it before canMVRewriteIfMVHasExtraTables, which resolves
+        // every base table (including views) and can issue remote metadata calls for external catalogs.
+        final MVPlanValidationResult cachedPlanResult = checkPlanContexts(connectContext, mv,
+                CachingMvPlanContextBuilder.getInstance().getPlanContextIfLoaded(mv));
+        if (cachedPlanResult != null) {
+            return cachedPlanResult;
+        }
         // if mv is a subset of query tables, it can be used for rewrite.
         if (CollectionUtils.isNotEmpty(queryTables) &&
                 !canMVRewriteIfMVHasExtraTables(connectContext, mv, queryTables)) {
@@ -551,18 +561,32 @@ public class MvRewritePreprocessor {
             return MVPlanValidationResult.unknown(MVPlanValidationResult.Reason.UNKNOWN,
                     "MV plan is not in cache, valid check is unknown");
         }
-        if (CollectionUtils.isNotEmpty(planContexts) &&
-                planContexts.stream().noneMatch(MvPlanContext::isValidMvPlan)) {
-            logMVPrepare(connectContext, "MV {} has no valid plan from {} plan contexts",
-                    mv.getName(), planContexts.size());
-            String message = planContexts.stream()
-                    .map(MvPlanContext::getInvalidReason)
-                    .collect(Collectors.joining(";"));
-            OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
-            return MVPlanValidationResult.invalid(MVPlanValidationResult.Reason.UNSUPPORTED_DEFINITION,
-                    "no valid plan: " + message);
+        final MVPlanValidationResult planResult = checkPlanContexts(connectContext, mv, planContexts);
+        if (planResult != null) {
+            return planResult;
         }
         return MVPlanValidationResult.valid();
+    }
+
+    /**
+     * Return an invalid result if the given plan contexts are non-empty and none of them is a valid mv plan,
+     * otherwise null (meaning the plan contexts do not rule the mv out).
+     */
+    private static MVPlanValidationResult checkPlanContexts(ConnectContext connectContext,
+                                                            MaterializedView mv,
+                                                            List<MvPlanContext> planContexts) {
+        if (CollectionUtils.isEmpty(planContexts) ||
+                planContexts.stream().anyMatch(MvPlanContext::isValidMvPlan)) {
+            return null;
+        }
+        logMVPrepare(connectContext, "MV {} has no valid plan from {} plan contexts",
+                mv.getName(), planContexts.size());
+        String message = planContexts.stream()
+                .map(MvPlanContext::getInvalidReason)
+                .collect(Collectors.joining(";"));
+        OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
+        return MVPlanValidationResult.invalid(MVPlanValidationResult.Reason.UNSUPPORTED_DEFINITION,
+                "no valid plan: " + message);
     }
 
     private List<MaterializedViewWrapper> chooseBestRelatedMVsByCorrelations(Set<Table> queryTables,

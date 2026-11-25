@@ -2056,25 +2056,83 @@ public class AuthorizationMgr {
         return getRoleIdsByUser(user);
     }
 
-    // get the list of roles for the current user
-    public List<RolePrivilegeCollectionV2> getApplicableRoles(UserIdentity user) throws PrivilegeException {
-        List<RolePrivilegeCollectionV2> applicableRoles = new ArrayList<>();
+    /**
+     * The ids of the roles a caller can use: the roles granted to the user, plus the roles granted to its groups,
+     * which the privilege collection always adds. An ephemeral user, one authenticated through a security
+     * integration, owns no roles: its roles are the ones its session activated. They are taken from the caller, not
+     * looked up, as the lookup reads the session of the current thread, and the RPC threads calling this have none.
+     * Roles that no longer exist are left out. The roles these inherit from are not added.
+     */
+    public Set<Long> getApplicableRoleIds(UserIdentity user, Set<String> groups, Set<Long> activatedRoleIds)
+            throws PrivilegeException {
+        Set<Long> roleIds = new HashSet<>();
+        if (user.isEphemeral()) {
+            // The activated set is the only place some of these roles live: an LDAP security integration with a
+            // role mapping puts the mapped roles there at login, not on a group. The privilege collection reads
+            // them from the same place.
+            if (activatedRoleIds != null) {
+                roleIds.addAll(activatedRoleIds);
+            }
+        } else {
+            roleIds.addAll(getRoleIdsByUser(user));
+        }
+
+        roleReadLock();
+        try {
+            // Under the lock: getRoleIdListByGroup can return the live set, which GRANT and REVOKE change in place.
+            if (groups != null) {
+                for (String group : groups) {
+                    roleIds.addAll(getRoleIdListByGroup(group));
+                }
+            }
+            roleIds.removeIf(roleId -> !roleIdToPrivilegeCollection.containsKey(roleId));
+        } finally {
+            roleReadUnlock();
+        }
+        return roleIds;
+    }
+
+    /**
+     * The roles of {@link #getApplicableRoleIds} together with every role they inherit from. Roles
+     * that no longer exist are left out.
+     */
+    public Set<Long> getApplicableRoleIdsWithPredecessors(UserIdentity user, Set<String> groups,
+                                                          Set<Long> activatedRoleIds) throws PrivilegeException {
+        // Hold both locks across the lookup and the expansion, as getEffectiveRoleIds does with the
+        // user lock: otherwise a role revoked from the user or its group and then granted db_admin
+        // in between would be expanded against the new inheritance graph and count as held. The
+        // lookup takes the same read locks again, which they allow.
         userReadLock();
         try {
-            Set<Long> roleIds = getRoleIdsByUser(user);
             roleReadLock();
             try {
-                for (Long roleId : roleIds) {
-                    RolePrivilegeCollectionV2 rolePrivilegeCollection = roleIdToPrivilegeCollection.get(roleId);
-                    if (rolePrivilegeCollection != null) {
-                        applicableRoles.add(rolePrivilegeCollection);
-                    }
-                }
+                Set<Long> roleIds = getApplicableRoleIds(user, groups, activatedRoleIds);
+                return getAllPredecessorRoleIdsUnlocked(roleIds);
             } finally {
                 roleReadUnlock();
             }
         } finally {
             userReadUnlock();
+        }
+    }
+
+    /**
+     * The roles of {@link #getApplicableRoleIds}, for listing them.
+     */
+    public List<RolePrivilegeCollectionV2> getApplicableRoles(UserIdentity user, Set<String> groups,
+                                                              Set<Long> activatedRoleIds) throws PrivilegeException {
+        Set<Long> roleIds = getApplicableRoleIds(user, groups, activatedRoleIds);
+        List<RolePrivilegeCollectionV2> applicableRoles = new ArrayList<>();
+        roleReadLock();
+        try {
+            for (Long roleId : roleIds) {
+                RolePrivilegeCollectionV2 rolePrivilegeCollection = roleIdToPrivilegeCollection.get(roleId);
+                if (rolePrivilegeCollection != null) { // null when the role was dropped meanwhile
+                    applicableRoles.add(rolePrivilegeCollection);
+                }
+            }
+        } finally {
+            roleReadUnlock();
         }
         return applicableRoles;
     }

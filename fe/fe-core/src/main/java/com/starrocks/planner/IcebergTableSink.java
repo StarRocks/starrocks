@@ -17,6 +17,7 @@ package com.starrocks.planner;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
+import com.starrocks.connector.iceberg.IcebergEncryption;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
@@ -26,14 +27,19 @@ import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TIcebergTableSink;
+import com.starrocks.thrift.TParquetEncryptionInfo;
 import org.apache.iceberg.Table;
 
 import static com.starrocks.sql.ast.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION;
+import static org.apache.iceberg.TableProperties.PARQUET_DICT_SIZE_BYTES;
+import static org.apache.iceberg.TableProperties.PARQUET_PAGE_SIZE_BYTES;
+import static org.apache.iceberg.TableProperties.PARQUET_ROW_GROUP_SIZE_BYTES;
 
 public class IcebergTableSink extends DataSink {
+
     public final static int ICEBERG_SINK_MAX_DOP = 32;
     protected final TupleDescriptor desc;
     private final long targetTableId;
@@ -41,11 +47,20 @@ public class IcebergTableSink extends DataSink {
     private final String tableLocation;
     private final String dataLocation;
     private final String compressionType;
+    private final Integer parquetCompressionLevel;
+    private final String parquetDataPageVersion;
     private final long targetMaxFileSize;
+    private final Integer parquetPageSizeBytes;
+    private final Integer parquetDictSizeBytes;
+    private final Integer parquetRowGroupSizeBytes;
     private final boolean isStaticPartitionSink;
     private final String tableIdentifier;
     private final CloudConfiguration cloudConfiguration;
     private String targetBranch;
+
+    // FE->BE encryption signal, or null when the table is not encrypted. Algorithm and key length
+    // only -- BE generates the per-file DEK and returns it at commit. See initEncryption().
+    private TParquetEncryptionInfo encryptionInfo;
 
     public IcebergTableSink(IcebergTable icebergTable, TupleDescriptor desc, boolean isStaticPartitionSink,
                             SessionVariable sessionVariable, String targetBranch) {
@@ -61,11 +76,26 @@ public class IcebergTableSink extends DataSink {
                 .toLowerCase();
         this.compressionType = nativeTable.properties().getOrDefault(PARQUET_COMPRESSION,
                 sessionVariable.getConnectorSinkCompressionCodec());
+        this.parquetCompressionLevel = IcebergUtil.getParquetCompressionLevel(nativeTable.properties(), compressionType);
+        this.parquetDataPageVersion = IcebergUtil.getParquetDataPageVersion(nativeTable.properties());
         this.targetMaxFileSize = IcebergUtil.resolveTargetMaxFileSize(nativeTable, sessionVariable);
+        this.parquetPageSizeBytes = IcebergUtil.getPositiveIntProperty(nativeTable.properties(), PARQUET_PAGE_SIZE_BYTES);
+        this.parquetDictSizeBytes = IcebergUtil.getPositiveIntProperty(nativeTable.properties(), PARQUET_DICT_SIZE_BYTES);
+        this.parquetRowGroupSizeBytes =
+                IcebergUtil.getPositiveIntProperty(nativeTable.properties(), PARQUET_ROW_GROUP_SIZE_BYTES);
         this.targetBranch = targetBranch;
 
         String catalogName = icebergTable.getCatalogName();
         this.cloudConfiguration = IcebergUtil.getVendedCloudConfiguration(catalogName, icebergTable);
+
+        // Initialize encryption if table is encrypted
+        initEncryption(nativeTable);
+    }
+
+    private void initEncryption(Table nativeTable) {
+        // Shared with IcebergDeleteSink and IcebergRowDeltaSink so the three write paths cannot drift.
+        // Also runs the unsupported-catalog gate, failing the statement at planning.
+        this.encryptionInfo = IcebergEncryption.writeSignalOrNull(nativeTable, tableIdentifier);
     }
 
     public String getTargetBranch() {
@@ -95,10 +125,29 @@ public class IcebergTableSink extends DataSink {
         TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);
         Preconditions.checkState(compression != null, "compression type not supported");
         tIcebergTableSink.setCompression_type(compression);
+        if (parquetCompressionLevel != null) {
+            tIcebergTableSink.setParquet_compression_level(parquetCompressionLevel);
+        }
+        if (parquetDataPageVersion != null) {
+            tIcebergTableSink.setParquet_data_page_version(parquetDataPageVersion);
+        }
         tIcebergTableSink.setTarget_max_file_size(targetMaxFileSize);
+        if (parquetPageSizeBytes != null) {
+            tIcebergTableSink.setParquet_page_size_bytes(parquetPageSizeBytes);
+        }
+        if (parquetDictSizeBytes != null) {
+            tIcebergTableSink.setParquet_dict_size_bytes(parquetDictSizeBytes);
+        }
+        if (parquetRowGroupSizeBytes != null) {
+            tIcebergTableSink.setParquet_row_group_size_bytes(parquetRowGroupSizeBytes);
+        }
         TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
         cloudConfiguration.toThrift(tCloudConfiguration);
         tIcebergTableSink.setCloud_configuration(tCloudConfiguration);
+
+        if (encryptionInfo != null) {
+            tIcebergTableSink.setParquet_encryption_info(encryptionInfo);
+        }
 
         tDataSink.setIceberg_table_sink(tIcebergTableSink);
         return tDataSink;

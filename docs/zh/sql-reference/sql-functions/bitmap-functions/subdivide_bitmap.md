@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将大 BITMAP 拆分成多个不超过指定大小的子 BITMAP。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # subdivide_bitmap

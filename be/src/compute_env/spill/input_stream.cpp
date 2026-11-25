@@ -24,7 +24,6 @@
 #include <vector>
 
 #include "base/concurrency/blocking_queue.hpp"
-#include "base/utility/defer_op.h"
 #include "common/status.h"
 #include "compute_env/sorting/sorted_chunks_merger.h"
 #include "compute_env/spill/block_manager.h"
@@ -165,6 +164,8 @@ public:
     StatusOr<ChunkUniquePtr> read_from_buffer();
 
 private:
+    Status _prefetch_one(workgroup::YieldContext& yield_ctx, SerdeContext& ctx);
+
     bool _acquire() {
         bool expected = false;
         return _is_prefetching.compare_exchange_strong(expected, true);
@@ -181,6 +182,9 @@ private:
     InputStreamPtr _input_stream;
     UnboundedBlockingQueue<ChunkUniquePtr> _chunk_buffer;
     std::atomic_bool _is_prefetching = false;
+    // Set by every prefetch caller before it tries to take _is_prefetching; the holder re-checks it after
+    // releasing the flag so that a request which lost the race is never dropped. See prefetch().
+    std::atomic_bool _prefetch_requested = false;
     Spiller* _spiller = nullptr;
 };
 
@@ -210,17 +214,7 @@ StatusOr<ChunkUniquePtr> BufferedInputStream::get_next(workgroup::YieldContext& 
     return Status::InternalError("spill BufferedInputStream: no buffered chunk and stream is not at EOF");
 }
 
-Status BufferedInputStream::prefetch(workgroup::YieldContext& yield_ctx, SerdeContext& ctx) {
-    if (is_buffer_full() || eof()) {
-        return Status::OK();
-    }
-    // concurrent prefetch is not allowed, should call _acquire and _release before and after prefetch
-    // to ensure that it doesn't happen.
-    if (!_acquire()) {
-        return Status::OK();
-    }
-    DeferOp defer([this]() { _release(); });
-
+Status BufferedInputStream::_prefetch_one(workgroup::YieldContext& yield_ctx, SerdeContext& ctx) {
     auto res = _input_stream->get_next(yield_ctx, ctx);
     if (res.ok()) {
         COUNTER_ADD(_spiller->metrics().input_stream_peak_memory_usage, res.value()->memory_usage());
@@ -231,6 +225,35 @@ Status BufferedInputStream::prefetch(workgroup::YieldContext& yield_ctx, SerdeCo
         return Status::OK();
     }
     return res.status();
+}
+
+Status BufferedInputStream::prefetch(workgroup::YieldContext& yield_ctx, SerdeContext& ctx) {
+    while (true) {
+        if (is_buffer_full() || eof()) {
+            return Status::OK();
+        }
+        // Concurrent prefetch is not allowed (it would reorder chunks of an ordered stream), so only the
+        // task holding _is_prefetching reads. A task that fails to take the flag must not simply drop its
+        // request: the holder may already have published its chunk and be on its way out, while the reader
+        // consumes that chunk and triggers new restore tasks that all land in this window. Each of them
+        // would see the flag held and return, the holder would exit after its single chunk, and the stream
+        // would be left with an empty buffer, not at EOF, and no restore task in flight -- the source
+        // operator then waits forever for data nothing will produce.
+        // So announce the request before trying to take the flag; the holder re-checks it after releasing
+        // the flag and serves it. The store precedes the CAS and the holder's load follows its release (all
+        // seq_cst), so either the holder observes the request or the requester's CAS succeeds.
+        _prefetch_requested.store(true);
+        if (!_acquire()) {
+            return Status::OK();
+        }
+        _prefetch_requested.store(false);
+        Status st = _prefetch_one(yield_ctx, ctx);
+        _release();
+        RETURN_IF_ERROR(st);
+        if (!_prefetch_requested.load()) {
+            return Status::OK();
+        }
+    }
 }
 
 InputStreamPtr detail::make_buffered_input_stream(int capacity, InputStreamPtr stream, Spiller* spiller) {

@@ -149,6 +149,73 @@ public class HashRingTest {
     }
 
     @Test
+    public void testConsistentHashRingArrayLookupMatchesRingWalk() {
+        // Asking for all 20 nodes takes the TreeMap walk; its first k nodes are what the array lookup must return.
+        List<String> nodes = generateNodes(20);
+        ConsistentHashRing<String, String> hashRing =
+                new ConsistentHashRing<>(Hashing.murmur3_128(), funnel, funnel, nodes, kVirtualNumber);
+        List<String> keys = generateKeys(kKeySize);
+        for (int round = 0; round < 3; round++) {
+            int nodeCount = 20 - round;
+            for (String key : keys) {
+                List<String> walk = hashRing.get(key, nodeCount);
+                Assertions.assertEquals(nodeCount, walk.size());
+                for (int k = 1; k <= 8; k++) {
+                    Assertions.assertEquals(walk.subList(0, k), hashRing.get(key, k), key + " k=" + k);
+                }
+            }
+            // the array snapshot must follow ring changes
+            hashRing.removeNode("Host" + round);
+        }
+    }
+
+    @Test
+    public void testConsistentHashRingArrayLookupAtVirtualNodeHashes() {
+        // A key funneled as (node bytes, index) hashes exactly like that virtual node, so these keys land on ring
+        // positions: the lookup starts at the node itself (inclusive), and the largest hash must wrap around.
+        Funnel<Map.Entry<String, Integer>> vnodeKeyFunnel = (key, into) -> {
+            into.putBytes(key.getKey().getBytes(StandardCharsets.UTF_8));
+            into.putInt(key.getValue());
+        };
+        List<String> nodes = generateNodes(12);
+        ConsistentHashRing<Map.Entry<String, Integer>, String> hashRing =
+                new ConsistentHashRing<>(Hashing.murmur3_128(), vnodeKeyFunnel, funnel, nodes, kVirtualNumber);
+
+        List<Map.Entry<String, Integer>> keys = new ArrayList<>();
+        Map.Entry<String, Integer> largest = null;
+        Map.Entry<String, Integer> smallest = null;
+        long largestHash = Long.MIN_VALUE;
+        long smallestHash = Long.MAX_VALUE;
+        for (String node : nodes) {
+            for (int i = 0; i < kVirtualNumber; i++) {
+                Map.Entry<String, Integer> key = Map.entry(node, i);
+                long hash = Hashing.murmur3_128().newHasher().putObject(key, vnodeKeyFunnel).hash().asLong();
+                if (hash > largestHash) {
+                    largestHash = hash;
+                    largest = key;
+                }
+                if (hash < smallestHash) {
+                    smallestHash = hash;
+                    smallest = key;
+                }
+                if (i % 10 == 0) {
+                    keys.add(key);
+                }
+            }
+        }
+        keys.add(largest);
+        keys.add(smallest);
+
+        for (Map.Entry<String, Integer> key : keys) {
+            List<String> walk = hashRing.get(key, nodes.size());
+            Assertions.assertEquals(key.getKey(), walk.get(0), key.toString());
+            for (int k = 1; k <= 8; k++) {
+                Assertions.assertEquals(walk.subList(0, k), hashRing.get(key, k), key + " k=" + k);
+            }
+        }
+    }
+
+    @Test
     public void testRendezvousHashRing() {
         List<String> nodes = generateNodes(kNodeSize);
         RendezvousHashRing hashRing = new RendezvousHashRing<>(Hashing.murmur3_128(), funnel, funnel, nodes);

@@ -40,6 +40,7 @@ import com.starrocks.connector.partitiontraits.PaimonPartitionTraits;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -248,7 +249,7 @@ public class ConnectorPartitionTraitsTest {
                 return Map.of("p1", new PartitionInfo() {
                     @Override
                     public long getModifiedTime() {
-                        return 100L;
+                        return 1_710_000_000_000_000L;
                     }
 
                     @Override
@@ -273,7 +274,7 @@ public class ConnectorPartitionTraitsTest {
         MaterializedView.AsyncRefreshContext context = new MaterializedView.AsyncRefreshContext();
         // Legacy external-table metadata stored version == lastRefreshTime == modifiedTime.
         context.getBaseTableRefreshInfo(baseTableInfo)
-                .put("p1", new MaterializedView.BasePartitionInfo(-1, 100L, 100L));
+                .put("p1", new MaterializedView.BasePartitionInfo(-1, 1_710_000_000_000_000L, 1_710_000_000_000_000L));
 
         Set<String> updated = traits.getUpdatedPartitionNames(List.of(baseTableInfo), context);
         Assertions.assertEquals(Set.of(), updated);
@@ -353,6 +354,64 @@ public class ConnectorPartitionTraitsTest {
     }
 
     @Test
+    public void testDefaultTraitsDetectsIcebergFileRemovalWithUnchangedModifiedTime() {
+        // Removing an older data file leaves last_updated_at at the newest live file, so only the stats
+        // fingerprint changes.
+        long modifiedTimeMicros = 1_710_000_000_000_000L;
+        Set<String> updated = getIcebergUpdatedPartitionNames(modifiedTimeMicros, 7L,
+                new MaterializedView.BasePartitionInfo(-1, 5L, modifiedTimeMicros));
+        Assertions.assertEquals(Set.of("p1"), updated);
+    }
+
+    @Test
+    public void testDefaultTraitsSkipsUnchangedIcebergPartition() {
+        long modifiedTimeMicros = 1_710_000_000_000_000L;
+        Set<String> updated = getIcebergUpdatedPartitionNames(modifiedTimeMicros, 5L,
+                new MaterializedView.BasePartitionInfo(-1, 5L, modifiedTimeMicros));
+        Assertions.assertEquals(Set.of(), updated);
+    }
+
+    private static Set<String> getIcebergUpdatedPartitionNames(long latestModifiedTime, long latestVersion,
+                                                               MaterializedView.BasePartitionInfo refreshed) {
+        DefaultTraits traits = new DefaultTraits() {
+            @Override
+            public boolean isSupportPCTRefresh() {
+                return true;
+            }
+
+            @Override
+            public PartitionKey createEmptyKey() {
+                return null;
+            }
+
+            @Override
+            public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo() {
+                return Map.of("p1", new PartitionInfo() {
+                    @Override
+                    public long getModifiedTime() {
+                        return latestModifiedTime;
+                    }
+
+                    @Override
+                    public long getVersion() {
+                        return latestVersion;
+                    }
+                });
+            }
+        };
+
+        Table table = Mockito.mock(Table.class);
+        Mockito.when(table.getTableIdentifier()).thenReturn("identifier");
+        Mockito.when(table.getType()).thenReturn(Table.TableType.ICEBERG);
+        traits.table = table;
+
+        BaseTableInfo baseTableInfo = new BaseTableInfo("iceberg", "db", "tbl", "identifier");
+        MaterializedView.AsyncRefreshContext context = new MaterializedView.AsyncRefreshContext();
+        context.getBaseTableRefreshInfo(baseTableInfo).put("p1", refreshed);
+        return traits.getUpdatedPartitionNames(List.of(baseTableInfo), context);
+    }
+
+    @Test
     public void testPinnedVersionRangeDefaultNull() {
         // Base class default: pinnedVersionRange is null
         ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(Table.TableType.ICEBERG);
@@ -425,5 +484,43 @@ public class ConnectorPartitionTraitsTest {
         Assertions.assertEquals(99L, cached.getPinnedVersionRange().to().getVersion());
         Assertions.assertNotNull(innerTraits.getPinnedVersionRange());
         Assertions.assertEquals(99L, innerTraits.getPinnedVersionRange().to().getVersion());
+    }
+
+    /**
+     * One mv refresh task run shares this cache and asks the same base table both questions: the IVM
+     * attempt reads live, the pinned PCT fallback reads the frozen snapshot. Keying only on the table
+     * would serve whichever ran first to both.
+     */
+    @Test
+    public void testCachedPartitionTraitsSeparatesPinnedAndLiveAnswers(@Mocked org.apache.iceberg.Table nativeTable) {
+        IcebergTable icebergTable = new IcebergTable(0, "name", "iceberg_catalog", "resource_name", "icebergDb",
+                "icebergTable", "",
+                Lists.newArrayList(), nativeTable, Maps.newHashMap());
+        new MockUp<IcebergPartitionTraits>() {
+            @Mock
+            public List<String> getPartitionNames(Invocation invocation) {
+                ConnectorPartitionTraits traits = invocation.getInvokedInstance();
+                return traits.getPinnedVersionRange() == null
+                        ? Lists.newArrayList("p1")
+                        : Lists.newArrayList("p1", "p2");
+            }
+        };
+
+        com.github.benmanes.caffeine.cache.Cache<Object, Object> cache =
+                com.github.benmanes.caffeine.cache.Caffeine.newBuilder().build();
+        com.starrocks.sql.optimizer.QueryMaterializationContext.QueryCacheStats stats =
+                Mockito.mock(com.starrocks.sql.optimizer.QueryMaterializationContext.QueryCacheStats.class);
+
+        com.starrocks.connector.partitiontraits.CachedPartitionTraits live =
+                new com.starrocks.connector.partitiontraits.CachedPartitionTraits(
+                        cache, ConnectorPartitionTraits.build(icebergTable), stats, null);
+        Assertions.assertEquals(Lists.newArrayList("p1"), live.getPartitionNames());
+
+        com.starrocks.connector.partitiontraits.CachedPartitionTraits pinned =
+                new com.starrocks.connector.partitiontraits.CachedPartitionTraits(
+                        cache, ConnectorPartitionTraits.build(icebergTable), stats, null);
+        pinned.setPinnedVersionRange(TvrTableSnapshot.of(42L));
+        Assertions.assertEquals(Lists.newArrayList("p1", "p2"), pinned.getPartitionNames(),
+                "a pinned caller was served the live answer cached earlier in the same task run");
     }
 }

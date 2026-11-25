@@ -42,7 +42,7 @@ struct AIProjectPreparedOutput {
     // projected column order. Test projections may leave this false and let
     // materialization append the AI column.
     bool replace_existing = false;
-    TypeDescriptor result_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    TypeDescriptor result_type = TYPE_VARCHAR_DESC;
     AIFunctionResultKind result_kind = AIFunctionResultKind::STRING;
     std::string provider_id;
     AICapability capability = AICapability::CHAT;
@@ -71,15 +71,14 @@ public:
 
 struct AIProjectTaskRequest {
     uint64_t task_id = 0;
-    // Borrowed from the active subchunk. submit() must synchronously copy or
-    // consume these views before it returns.
+    // The string views borrow from the active subchunk until submit() returns.
     std::string_view model;
     std::string_view prompt;
-    // Includes Provider defaults prepared once for the expression's subchunk.
-    const AIProviderOptions* options = nullptr;
+    // SQL options shared by rows of the same expression in this subchunk.
+    std::shared_ptr<const AIProviderOptions> options;
     std::string_view provider_id;
     AICapability capability = AICapability::CHAT;
-    const AIMediaInput* media = nullptr;
+    std::shared_ptr<const AIMediaInput> media;
 };
 
 class AIProjectTaskHandle {

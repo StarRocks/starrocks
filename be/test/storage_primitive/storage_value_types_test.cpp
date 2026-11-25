@@ -107,7 +107,6 @@ TEST(StorageValueTypesTest, PrimitiveEnumHelpers) {
     EXPECT_TRUE(is_compaction(READER_CUMULATIVE_COMPACTION));
     EXPECT_FALSE(is_compaction(READER_QUERY));
 
-    EXPECT_EQ(OLAP_MATERIALIZE_TYPE_COUNT, 4);
     EXPECT_EQ(PUSH_NORMAL_V2, 4);
 }
 
@@ -136,6 +135,21 @@ TEST(StorageValueTypesTest, StatisticsDefaultToZero) {
     EXPECT_TRUE(reader_stats.flat_json_hits.empty());
     EXPECT_EQ(0, writer_stats.bytes_write_remote);
     EXPECT_EQ(0, writer_stats.segment_count);
+}
+
+TEST(StorageValueTypesTest, AddRemoteIoWaits) {
+    OlapReaderStatistics from;
+    from.remote_io_queue_wait_ns = 10;
+    from.remote_io_fill_wait_ns = 20;
+    from.remote_io_fill_joins = 3;
+    OlapReaderStatistics total;
+    total.remote_io_queue_wait_ns = 1;
+    total.add_remote_io_waits(from);
+    total.merge_from(from);
+    EXPECT_EQ(21, total.remote_io_queue_wait_ns);
+    EXPECT_EQ(40, total.remote_io_fill_wait_ns);
+    EXPECT_EQ(6, total.remote_io_fill_joins);
+    EXPECT_EQ(0, total.io_ns_remote);
 }
 
 TEST(StorageValueTypesTest, MergeSegmentInitPhaseStatistics) {

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "CREATE TABLE AS SELECT (CTAS) creates a new table and populates it with query results, supporting synchronous and asynchronous modes."
 keywords: ['CTAS']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE TABLE AS SELECT
@@ -63,9 +64,9 @@ CREATE TABLE AS SELECT (CTAS) 文を使用して、同期または非同期で�
 
 ## 使用上の注意
 
-- CTAS 文は、次の要件を満たす新しいテーブルのみを作成できます:
-  - `ENGINE` は `OLAP` です。
+- Paimon CTAS の対象テーブルには Paimon カタログを使用してください。Unified Catalog を対象に指定すると、StarRocks はテーブルを作成する前にエラーを返します。対象テーブル名で catalog またはデータベースを省略すると、セッションの現在の catalog またはデータベースが使用されます。サポートされるオプションと失敗時の動作については、[Paimon CTAS](../../../data_source/catalog/paimon_catalog.md#create-table-as-select) を参照してください。
 
+- OLAP テーブルには以下のデフォルトが適用されます。
   - テーブルはデフォルトで重複キーテーブルです。`key_desc` で主キーテーブルとして指定することもできます。
 
   - ソートキーは最初の 3 列であり、これらの 3 列のデータ型のストレージスペースは 36 バイトを超えません。

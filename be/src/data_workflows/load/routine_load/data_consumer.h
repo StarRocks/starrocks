@@ -38,12 +38,15 @@
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include "base/concurrency/blocking_queue.hpp"
 #include "base/uid_util.h"
 #include "compute_env/load/stream_load_context.h"
 #include "librdkafka/rdkafkacpp.h"
 #include "pulsar/Client.h"
+
+struct rd_kafka_queue_s;
 
 namespace starrocks {
 
@@ -72,9 +75,14 @@ public:
     virtual Status reset() = 0;
     // return true the if the consumer match the need
     virtual bool match(StreamLoadContext* ctx) = 0;
+    // Whether an offset commit of the consumer is still on its way. Until it completes, the consumer fetches nothing
+    // for a new assignment, and closing the consumer waits for it. Asking frees the results of the commits that have
+    // completed.
+    virtual bool has_commit_in_flight() { return false; }
 
     const UniqueId& id() { return _id; }
     time_t last_visit_time() const { return _last_visit_time; }
+    void set_last_visit_time(time_t last_visit_time) { _last_visit_time = last_visit_time; }
     void set_grp(const UniqueId& grp_id) { _grp_id = grp_id; }
 
 protected:
@@ -147,17 +155,7 @@ public:
     explicit KafkaDataConsumer(StreamLoadContext* ctx)
             : DataConsumer(), _brokers(ctx->kafka_info->brokers), _topic(ctx->kafka_info->topic) {}
 
-    ~KafkaDataConsumer() override {
-        VLOG(3) << "deconstruct consumer";
-        if (_k_consumer) {
-            // consumer may be already closed when get partition meta failed
-            if (!_k_consumer->closed()) {
-                _k_consumer->close();
-            }
-            delete _k_consumer;
-            _k_consumer = nullptr;
-        }
-    }
+    ~KafkaDataConsumer() override;
 
     Status init(StreamLoadContext* ctx) override;
     // TODO(cmy): currently do not implement single consumer start method, using group_consume
@@ -166,14 +164,20 @@ public:
     // reassign partition topics
     Status reset() override;
     bool match(StreamLoadContext* ctx) override;
-    // commit kafka offset
-    Status commit(const std::string& topic, const std::map<int32_t, int64_t>& offsets);
+    // Commits the offsets after the last consumed messages. With a timeout_ms above 0 it waits at most that long for
+    // the result and returns TimedOut after it. The commit is still on its way then, which has_commit_in_flight()
+    // reports until it completes.
+    Status commit(const std::string& topic, const std::map<int32_t, int64_t>& offsets, int timeout_ms = -1);
+    bool has_commit_in_flight() override;
 
     Status assign_topic_partitions(const std::map<int32_t, int64_t>& begin_partition_offset, const std::string& topic,
                                    StreamLoadContext* ctx);
 
-    // start the consumer and put msgs to queue
-    Status group_consume(TimedBlockingQueue<RdKafka::Message*>* queue, int64_t max_running_time_ms);
+    // Starts the consumer and puts the messages to the queue. With stop_at_eof, the consumer stops once all of its
+    // partitions are at their end; without, it keeps consuming them until its time is up, it is cancelled or the queue
+    // closes.
+    Status group_consume(TimedBlockingQueue<RdKafka::Message*>* queue, int64_t max_running_time_ms,
+                         bool stop_at_eof = true);
 
     // get the partitions ids of the topic
     Status get_partition_meta(std::vector<int32_t>* partition_ids, int timeout);
@@ -187,12 +191,17 @@ private:
     std::string _topic;
     std::string _group_id;
     std::unordered_map<std::string, std::string> _custom_properties;
+    // routine_load_kafka_fetch_queue_backoff_ms when the consumer was created
+    int32_t _fetch_queue_backoff_ms = -1;
 
     size_t _assigned_partition_count = 0;
     // Partitions whose latest delivered event is EOF; new data clears the state.
     std::unordered_set<int32_t> _eof_partitions;
     KafkaEventCb _k_event_cb;
     RdKafka::KafkaConsumer* _k_consumer = nullptr;
+    // the queues that the commits that timed out post their results to, kept until has_commit_in_flight() finds their
+    // results; guarded by _lock
+    std::vector<rd_kafka_queue_s*> _commit_result_queues;
 };
 
 class PulsarDataConsumer : public DataConsumer {

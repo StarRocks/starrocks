@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts an input bitmap into a string that is separated by commas (,)."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_to_string

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "Query and Loading"
 description: "BE configuration parameters for query execution and data loading."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -176,6 +177,15 @@ This topic introduces the following types of BE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: Gates aggregation hash-table software prefetch on L2 residency. Prefetch is enabled only once the bucket array spills L2, that is, when `bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio`, where the L2 size is detected at runtime (falling back to 1 MiB if detection fails). Below this point the table is L2-resident and prefetching is a net loss. Lower the ratio on contended deployments that run many drivers per core, where the effective per-table share of L2 is smaller than the nominal per-core size; raising it above 1.0 delays prefetch until the table is well past L2. See also `agg_hash_map_prefetch_dist`.
+- Introduced in: -
+
+### arrow_io_thread_pool_size
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of threads in the process-wide I/O thread pool of Apache Arrow, which runs Arrow's asynchronous I/O tasks. `0` keeps the size Arrow chooses at startup: the value of the environment variable `ARROW_IO_THREADS` if it is a positive integer, and 8 otherwise. A value greater than `0` overrides `ARROW_IO_THREADS`. Valid range: [0, 32768]. A change takes effect immediately without a restart: growing the pool starts threads for queued tasks at once, and shrinking it lets each excess thread exit after it finishes its current task. Setting the value back to `0` restores the size Arrow chose at startup. If the value in the configuration file is out of range, the BE logs a warning and keeps the size Arrow chose.
 - Introduced in: -
 
 ### clear_udf_cache_when_start
@@ -408,6 +418,15 @@ This topic introduces the following types of BE configurations:
 - Description: Specifies the number of milliseconds to wait before starting up a hedged read. For example, you have set this parameter to `30`. In this situation, if a read from a block has not returned within 30 milliseconds, your HDFS client immediately starts up a new read against a different block replica. It is equivalent to the `dfs.client.hedged.read.threshold.millis` parameter in the **hdfs-site.xml** file of your HDFS cluster.
 - Introduced in: v3.0
 
+### iceberg_metadata_table_cache_capacity
+
+- Default: 128
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of idle Iceberg tables that the JNI scanner of Iceberg metadata tables (such as `t$files` and `t$partitions`) keeps deserialized on a BE or CN node. All scan tasks of one query share one deserialized table instead of each deserializing its own copy, which keeps the JVM heap usage independent of the number of concurrent scan tasks. A table unused for 60 seconds is released. A value less than or equal to `0` turns the sharing off for scans that start afterwards.
+- Introduced in: -
+
 ### io_coalesce_adaptive_lazy_active
 
 - Default: true
@@ -461,6 +480,15 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: The proportion of columns with the same name for Flat JSON. Extraction is not performed if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `enable_json_flat` is set to `true`.
 - Introduced in: v3.3.0
+
+### json_max_parse_nesting_depth
+
+- Default: 1024
+- Type: Int
+- Unit:
+- Is mutable: Yes
+- Description: The maximum object/array nesting depth accepted when parsing JSON (for example `parse_json`, `CAST AS JSON`, and JSON column ingestion). The parser recurses once per nesting level, so an unbounded depth allows a deeply nested document to overflow the thread stack and crash the BE. Input nested deeper than this value fails with a data quality error instead. A positive value sets the cap; a value of `0` or below keeps the built-in default (1024) rather than disabling the check.
+- Introduced in: v4.2.0
 
 ### lake_tablet_ignore_invalid_delete_predicate
 
@@ -802,6 +830,15 @@ This topic introduces the following types of BE configurations:
 - Unit: Minutes
 - Is mutable: Yes
 - Description: The time interval at which to clean the Scan Context.
+- Introduced in: -
+
+### scan_credential_refresh_rpc_timeout_ms
+
+- Default: 10000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The timeout of the RPC with which a scan asks its coordinator FE for renewed credentials once the credentials vended for it (Iceberg REST catalog vended credentials) are about to expire. The RPC is not retried: when it fails or times out, the scan keeps its current credentials and asks again a minute later. A value less than or equal to `0` turns the renewal off for scans that start afterwards, which then keep the credentials they were deployed with.
 - Introduced in: -
 
 ### scanner_row_num
@@ -1553,6 +1590,24 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: No
 - Description: Filesystem path where the BE stores data and working files for "pull load" tasks (downloaded source files, task state, temporary output, etc.). The directory must be writable by the BE process and have sufficient disk space for incoming loads. The default is relative to STARROCKS_HOME; tests create and expect this directory to exist (see test configuration).
 - Introduced in: v3.2.0
+
+### routine_load_kafka_consumer_pool_size
+
+- Default: 64
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of idle consumers that a BE keeps for routine load, so that the next task or round of a job reuses their connections instead of creating new ones. Kafka and Pulsar consumers share this pool and this limit. When the pool is full, the consumer that has been idle longest is closed. Consumers idle for more than 10 minutes are also closed. The default value covers 16 routine load tasks per BE (`max_routine_load_task_num_per_be`) with up to 3 consumers each (`max_consumer_num_per_group`).
+- Introduced in: -
+
+### routine_load_kafka_fetch_queue_backoff_ms
+
+- Default: 10
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: How long a Kafka consumer of routine load waits before it fetches a partition again once its local message queue exceeds the queue thresholds of librdkafka (`queued.min.messages` or `queued.max.messages.kbytes`). The value is passed to librdkafka as `fetch.queue.backoff.ms`, whose own default is 1000 ms. librdkafka does not fetch earlier when the queue is drained, so with a long backoff a consumer that reads its queue quickly waits idle for the rest of it, which lowers the throughput of routine load. The `property.fetch.queue.backoff.ms` property of a routine load job overrides this item. A negative value keeps the default of librdkafka, and a value greater than 300000 is treated as 300000. Do not set it to `0`: the librdkafka broker thread then polls in a busy loop while the queue stays over the thresholds, which consumes CPU. After this item is changed, routine load tasks use new consumers that are created with the new value.
+- Introduced in: -
 
 ### routine_load_kafka_timeout_second
 

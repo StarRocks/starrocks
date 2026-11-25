@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回值在一组值中的索引位置。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # field

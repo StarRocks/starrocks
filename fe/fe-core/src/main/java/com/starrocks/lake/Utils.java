@@ -123,13 +123,24 @@ public class Utils {
     public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
                                       long newVersion, ComputeResource computeResource, boolean useAggregatePublish)
             throws NoAliveBackendException, RpcException {
+        publishVersion(tablets, txnInfo, baseVersion, newVersion, computeResource, useAggregatePublish, false);
+    }
+
+    /**
+     * @param isRetryPublish see {@link Utils#publishVersionBatch}; true when an earlier attempt of this publish
+     *        was sent and did not finish.
+     */
+    public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
+                                      long newVersion, ComputeResource computeResource, boolean useAggregatePublish,
+                                      boolean isRetryPublish)
+            throws NoAliveBackendException, RpcException {
         // Collect async vector index build infos reported by BE and enqueue them into the
         // scheduler. Callers of this simplified overload (lake alter/rollup/schema-change
         // paths) would otherwise drop those infos and the newly published versions would
         // stay unbuilt until the next normal publish or leader recoveryScan.
         List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
-        publishVersion(tablets, txnInfo, baseVersion, newVersion, null, computeResource,
-                null, useAggregatePublish, vectorIndexBuildInfos);
+        publishVersion(tablets, txnInfo, baseVersion, newVersion, null, null, computeResource,
+                null, useAggregatePublish, vectorIndexBuildInfos, false, isRetryPublish);
         VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, /* fromCompaction= */ false);
     }
 
@@ -153,7 +164,7 @@ public class Utils {
      *         in which case the caller should leave the job at
      *         {@code FINISHED_REWRITING} so the operator can retry.
      */
-    public static boolean noOpPublishForForceSkip(long jobId, String reason, long watershedTxnId, long watershedGtid,
+    public static boolean noOpPublishForForceSkip(long jobId, String reason, long watershedTxnId, long commitGtid,
                                                   Map<Long, Long> commitVersionMap,
                                                   Map<Long, List<Tablet>> tabletsByPartition,
                                                   ComputeResource computeResource, boolean useAggregatePublish) {
@@ -169,12 +180,8 @@ public class Utils {
                 if (commitVersion == null) {
                     continue;
                 }
-                TxnInfoPB txnInfo = new TxnInfoPB();
-                txnInfo.txnId = watershedTxnId;
-                txnInfo.combinedTxnLog = false;
-                txnInfo.commitTime = System.currentTimeMillis() / 1000;
-                txnInfo.txnType = TxnTypePB.TXN_NORMAL;
-                txnInfo.gtid = watershedGtid;
+                TxnInfoPB txnInfo = TxnInfoHelper.forJobPublish(watershedTxnId, TxnTypePB.TXN_NORMAL,
+                        System.currentTimeMillis(), commitGtid);
                 txnInfo.noOpPublish = true;
                 publishVersion(tablets, txnInfo, commitVersion - 1, commitVersion, computeResource,
                         useAggregatePublish);
@@ -207,6 +214,25 @@ public class Utils {
                                            Map<Long, TabletStatPB> tabletStats,
                                            List<VectorIndexBuildInfoPB> vectorIndexBuildInfos)
             throws NoAliveBackendException, RpcException {
+        publishVersionBatch(tablets, txnInfos, baseVersion, newVersion, compactionScores, tabletRanges, nodeToTablets,
+                computeResource, tabletStats, vectorIndexBuildInfos, false);
+    }
+
+    /**
+     * @param isRetryPublish see {@code PublishVersionRequest.is_retry_publish}: true when an earlier attempt of
+     *        this publish was sent and did not finish. It makes each tablet read the new version from storage on a
+     *        metacache miss, one read per tablet that is pure waste on a first attempt.
+     */
+    public static void publishVersionBatch(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
+                                           long baseVersion, long newVersion,
+                                           Map<Long, Double> compactionScores,
+                                           Map<Long, TabletRange> tabletRanges,
+                                           Map<ComputeNode, List<Long>> nodeToTablets,
+                                           ComputeResource computeResource,
+                                           Map<Long, TabletStatPB> tabletStats,
+                                           List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                           boolean isRetryPublish)
+            throws NoAliveBackendException, RpcException {
         // The brpc send is asynchronous, but this method waits for every response before
         // returning, so the wait is what a lock would be held across.
         BlockingCallValidator.validateNotUnderLock("lake-publish");
@@ -238,6 +264,7 @@ public class Utils {
             request.newVersion = newVersion;
             request.tabletIds = publishTabletInfo.getTabletIds(); // todo: limit the number of Tablets sent to a single node
             request.timeoutMs = timeoutMs;
+            request.isRetryPublish = isRetryPublish;
             request.txnInfos = txnInfos;
             if (!rebuildPindexTabletIds.isEmpty()) {
                 request.rebuildPindexTabletIds = rebuildPindexTabletIds;
@@ -326,15 +353,32 @@ public class Utils {
                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
                                       boolean preferSharedInitialMetadata)
             throws NoAliveBackendException, RpcException {
+        publishVersion(tablets, txnInfo, baseVersion, newVersion, compactionScores, tabletRanges, computeResource,
+                tabletStats, useAggregatePublish, vectorIndexBuildInfos, preferSharedInitialMetadata, false);
+    }
+
+    /**
+     * @param isRetryPublish see {@link Utils#publishVersionBatch}; true when an earlier attempt of this publish
+     *        was sent and did not finish.
+     */
+    public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
+                                      long newVersion, Map<Long, Double> compactionScores,
+                                      Map<Long, TabletRange> tabletRanges, ComputeResource computeResource,
+                                      Map<Long, TabletStatPB> tabletStats,
+                                      boolean useAggregatePublish,
+                                      List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                      boolean preferSharedInitialMetadata,
+                                      boolean isRetryPublish)
+            throws NoAliveBackendException, RpcException {
         List<TxnInfoPB> txnInfos = Lists.newArrayList(txnInfo);
         if (!useAggregatePublish) {
             publishVersionBatch(tablets, txnInfos, baseVersion, newVersion,
                     compactionScores, tabletRanges, null, computeResource, tabletStats,
-                    vectorIndexBuildInfos);
+                    vectorIndexBuildInfos, isRetryPublish);
         } else {
             aggregatePublishVersion(tablets, txnInfos, baseVersion, newVersion, compactionScores,
                     tabletRanges, null, computeResource, tabletStats, vectorIndexBuildInfos,
-                    preferSharedInitialMetadata);
+                    preferSharedInitialMetadata, isRetryPublish);
         }
     }
 
@@ -472,6 +516,22 @@ public class Utils {
                                                            AggregatePublishVersionRequest request,
                                                            boolean preferSharedInitialMetadata)
             throws NoAliveBackendException, RpcException {
+        createSubRequestForAggregatePublish(tablets, txnInfos, baseVersion, newVersion, nodeToTablets, computeResource,
+                request, preferSharedInitialMetadata, false);
+    }
+
+    /**
+     * @param isRetryPublish see {@link Utils#publishVersionBatch}; set on every sub-request, so each node checks
+     *        its own tablets.
+     */
+    public static void createSubRequestForAggregatePublish(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
+                                                           long baseVersion, long newVersion,
+                                                           Map<ComputeNode, List<Long>> nodeToTablets,
+                                                           ComputeResource computeResource,
+                                                           AggregatePublishVersionRequest request,
+                                                           boolean preferSharedInitialMetadata,
+                                                           boolean isRetryPublish)
+            throws NoAliveBackendException, RpcException {
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         if (!warehouseManager.isResourceAvailable(computeResource)) {
             LOG.warn("publish version operation should be successful even if the warehouse is not exist, " +
@@ -499,6 +559,7 @@ public class Utils {
             singleReq.setNewVersion(newVersion);
             singleReq.setTabletIds(publishTabletInfo.getTabletIds());
             singleReq.setTimeoutMs(timeoutMs);
+            singleReq.isRetryPublish = isRetryPublish;
             singleReq.setTxnInfos(txnInfos);
             singleReq.setEnableAggregatePublish(true);
             singleReq.setPreferSharedInitialMetadata(preferSharedInitialMetadata);
@@ -729,11 +790,30 @@ public class Utils {
                                                List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
                                                boolean preferSharedInitialMetadata)
             throws NoAliveBackendException, RpcException {
+        aggregatePublishVersion(tablets, txnInfos, baseVersion, newVersion, compactionScores, tabletRanges,
+                nodeToTablets, computeResource, tabletStats, vectorIndexBuildInfos, preferSharedInitialMetadata, false);
+    }
+
+    /**
+     * @param isRetryPublish see {@link Utils#publishVersionBatch}; true when an earlier attempt of this publish
+     *        was sent and did not finish.
+     */
+    public static void aggregatePublishVersion(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
+                                               long baseVersion, long newVersion,
+                                               Map<Long, Double> compactionScores,
+                                               Map<Long, TabletRange> tabletRanges,
+                                               Map<ComputeNode, List<Long>> nodeToTablets,
+                                               ComputeResource computeResource,
+                                               Map<Long, TabletStatPB> tabletStats,
+                                               List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                               boolean preferSharedInitialMetadata,
+                                               boolean isRetryPublish)
+            throws NoAliveBackendException, RpcException {
         AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
         try {
             createSubRequestForAggregatePublish(tablets, txnInfos, baseVersion, newVersion,
                                                 nodeToTablets, computeResource, request,
-                                                preferSharedInitialMetadata);
+                                                preferSharedInitialMetadata, isRetryPublish);
             sendAggregatePublishVersionRequest(request, baseVersion, computeResource, compactionScores,
                                                tabletRanges, tabletStats, vectorIndexBuildInfos);
         } catch (Exception e) {

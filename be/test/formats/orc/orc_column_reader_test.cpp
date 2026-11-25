@@ -72,7 +72,7 @@ TEST(OrcColumnReaderTest, TestDateColumn) {
         OrcChunkReader orcChunkReader(batchSize, {});
         orcChunkReader.disable_broker_load_mode();
 
-        TypeDescriptor c0Type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATE);
+        TypeDescriptor c0Type = TYPE_DATE_DESC;
 
         std::unique_ptr<ORCColumnReader> orcColumnReader =
                 ORCColumnReader::create(c0Type, orcType, true, orcMapping, &orcChunkReader).value();
@@ -115,7 +115,7 @@ TEST(OrcColumnReaderTest, TestTimestampColumnsInDstZone) {
             chunk_reader.disable_broker_load_mode();
             ASSERT_TRUE(chunk_reader.set_timezone(zone).ok());
             std::unique_ptr<orc::Type> orc_type = orc::createPrimitiveType(kind);
-            TypeDescriptor type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+            TypeDescriptor type = TYPE_DATETIME_DESC;
             auto reader = ORCColumnReader::create(type, orc_type.get(), true, nullptr, &chunk_reader).value();
 
             const size_t leading = 5;

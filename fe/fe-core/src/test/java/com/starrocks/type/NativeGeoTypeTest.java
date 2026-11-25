@@ -17,6 +17,7 @@ package com.starrocks.type;
 import com.baidu.bjf.remoting.protobuf.ProtobufProxy;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.proto.GeoEdgeAlgorithmPB;
@@ -52,7 +53,6 @@ public class NativeGeoTypeTest {
         boolean geography = primitive == PrimitiveType.GEOGRAPHY;
         return new GeoTypeDescriptor(
                 geography ? GeoTypeDescriptor.LogicalType.GEOGRAPHY : GeoTypeDescriptor.LogicalType.GEOMETRY,
-                geography ? GeoTypeDescriptor.CoordinateSystem.SPHERICAL : GeoTypeDescriptor.CoordinateSystem.CARTESIAN,
                 geography ? GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL : GeoTypeDescriptor.EdgeAlgorithm.PLANAR,
                 "OGC:CRS84", 4326);
     }
@@ -66,7 +66,7 @@ public class NativeGeoTypeTest {
         assertFalse(new MapType(VarcharType.VARCHAR, new ArrayType(IntegerType.BIGINT)).hasNestedGeoType());
         assertFalse(new StructType(List.of(new ArrayType(NullType.NULL))).hasNestedGeoType());
         for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
-            Type geo = ScalarType.createGeoType(primitive, descriptor(primitive));
+            Type geo = new GeoType(primitive, descriptor(primitive));
             for (Type type : List.of(new ArrayType(geo), new MapType(geo, IntegerType.INT),
                     new MapType(IntegerType.INT, geo), new StructType(List.of(IntegerType.INT, geo)))) {
                 assertTrue(type.hasNestedGeoType(), type.toSql());
@@ -79,7 +79,7 @@ public class NativeGeoTypeTest {
     @Test
     public void testScanSlotPreservesGeoDescriptor() {
         for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
-            ScalarType type = ScalarType.createGeoType(primitive, descriptor(primitive));
+            ScalarType type = new GeoType(primitive, descriptor(primitive));
             SlotDescriptor slot = new SlotDescriptor(new SlotId(0), null);
             slot.setColumn(new Column("shape", type));
             assertEquals(type, slot.getType());
@@ -90,9 +90,107 @@ public class NativeGeoTypeTest {
     }
 
     @Test
+    public void testGeoTypeClass() {
+        for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
+            GeoTypeDescriptor descriptor = descriptor(primitive);
+            GeoType type = new GeoType(primitive, descriptor);
+            assertSame(GeoType.class, type.clone().getClass());
+            assertEquals(primitive, type.getPrimitiveType());
+            assertSame(descriptor, type.getGeoDescriptor());
+            GeoType same = new GeoType(primitive, descriptor(primitive));
+            assertEquals(type, same);
+            assertEquals(type.hashCode(), same.hashCode());
+            // A GEO type without a descriptor is still a plain ScalarType and differs from a described one.
+            assertNotEquals(new ScalarType(primitive), type);
+            assertNotEquals(type, new ScalarType(primitive));
+            // The descriptor lives on GeoType alone: a plain ScalarType has none, and a clone keeps the class.
+            assertNull(new ScalarType(primitive).getGeoDescriptor());
+            assertSame(GeoType.class, type.clone().getClass());
+            assertSame(descriptor, type.clone().getGeoDescriptor());
+            assertEquals(type, type.clone());
+
+            // FE metadata keeps the descriptor under the GeoType subtype label.
+            Column column = new Column("shape", type);
+            String json = GsonUtils.GSON.toJson(column);
+            assertTrue(json.contains("\"clazz\":\"GeoType\""));
+            Type restored = GsonUtils.GSON.fromJson(json, Column.class).getType();
+            assertSame(GeoType.class, restored.getClass());
+            assertEquals(type, restored);
+            assertEquals(descriptor, ((GeoType) restored).getGeoDescriptor());
+        }
+        // The descriptor is written whole, as one nested object.
+        GeoType geometry3857 = GeoType.createGeometryType("EPSG:3857");
+        String geometryJson = "{\"clazz\":\"GeoType\",\"geo\":{\"logicalType\":\"GEOMETRY\",\"edgeAlgorithm\":\"PLANAR\","
+                + "\"crs\":\"EPSG:3857\",\"srid\":3857},\"type\":\"GEOMETRY\",\"len\":-1,\"precision\":0,\"scale\":0}";
+        assertEquals(geometryJson, GsonUtils.GSON.toJson(geometry3857, Type.class));
+        assertEquals(geometry3857, GsonUtils.GSON.fromJson(geometryJson, Type.class));
+        // A null SRID is omitted and read back as null.
+        GeoType custom = GeoType.createGeometryType("custom:local");
+        assertFalse(GsonUtils.GSON.toJson(custom, Type.class).contains("srid"));
+        assertEquals(custom, GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(custom, Type.class), Type.class));
+        // Nested in a complex type, the descriptor survives too.
+        Type nested = new ArrayType(new MapType(IntegerType.INT, new StructType(List.of(geometry3857))));
+        assertEquals(nested, GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(nested, Type.class), Type.class));
+        // GEO metadata written before descriptors were persisted stays a plain ScalarType and is written back as is.
+        String legacyJson = "{\"clazz\":\"ScalarType\",\"type\":\"GEOMETRY\",\"len\":-1,\"precision\":0,\"scale\":0}";
+        Type legacy = GsonUtils.GSON.fromJson(legacyJson, Type.class);
+        assertSame(ScalarType.class, legacy.getClass());
+        assertNull(((ScalarType) legacy).getGeoDescriptor());
+        assertEquals(legacyJson, GsonUtils.GSON.toJson(legacy, Type.class));
+        // The descriptor is a value: equal by content, with a stable text form.
+        GeoTypeDescriptor one = GeoTypeDescriptor.geometry("EPSG:3857");
+        assertEquals(one, one);
+        assertEquals(one, GeoTypeDescriptor.geometry("EPSG:3857"));
+        assertEquals(one.hashCode(), GeoTypeDescriptor.geometry("EPSG:3857").hashCode());
+        assertNotEquals(one, GeoTypeDescriptor.geometry("EPSG:4326"));
+        assertNotEquals(one, new GeoTypeDescriptor(one.logicalType(), one.edgeAlgorithm(), one.crs(), null));
+        assertNotEquals(one, GeoTypeDescriptor.geography("EPSG:3857"));
+        assertNotEquals(one, "EPSG:3857");
+        assertEquals("GeoTypeDescriptor[logicalType=GEOMETRY, edgeAlgorithm=PLANAR, crs=EPSG:3857, srid=3857]",
+                one.toString());
+        assertThrows(NullPointerException.class, () -> new GeoTypeDescriptor(null, one.edgeAlgorithm(), "x", null));
+        assertThrows(NullPointerException.class, () -> new GeoTypeDescriptor(one.logicalType(), null, "x", null));
+        assertThrows(NullPointerException.class, () -> new GeoTypeDescriptor(one.logicalType(), one.edgeAlgorithm(),
+                null, null));
+        // The convenience factories fill in everything that follows from the kind and the CRS.
+        assertEquals(new GeoType(PrimitiveType.GEOGRAPHY, descriptor(PrimitiveType.GEOGRAPHY)),
+                GeoType.createGeographyType("OGC:CRS84"));
+        assertEquals(new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
+                GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "custom:local", null),
+                GeoType.createGeographyType("custom:local").getGeoDescriptor());
+        GeoType geometry = GeoType.createGeometryType("EPSG:3857");
+        assertEquals(PrimitiveType.GEOMETRY, geometry.getPrimitiveType());
+        assertEquals(new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOMETRY,
+                GeoTypeDescriptor.EdgeAlgorithm.PLANAR, "EPSG:3857", 3857),
+                geometry.getGeoDescriptor());
+        assertThrows(IllegalArgumentException.class, () -> GeoType.createGeographyType(""));
+        assertThrows(IllegalArgumentException.class, () -> GeoType.createGeometryType(""));
+        assertThrows(NullPointerException.class, () -> GeoType.createGeographyType((String) null));
+        assertThrows(NullPointerException.class, () -> GeoType.createGeometryType((String) null));
+
+        // The descriptor overloads fix the primitive type and validate the descriptor against it.
+        GeoTypeDescriptor geographyDescriptor = descriptor(PrimitiveType.GEOGRAPHY);
+        GeoTypeDescriptor geometryDescriptor = descriptor(PrimitiveType.GEOMETRY);
+        assertEquals(new GeoType(PrimitiveType.GEOGRAPHY, geographyDescriptor),
+                GeoType.createGeographyType(geographyDescriptor));
+        assertEquals(new GeoType(PrimitiveType.GEOMETRY, geometryDescriptor),
+                GeoType.createGeometryType(geometryDescriptor));
+        assertSame(geometryDescriptor, GeoType.createGeometryType(geometryDescriptor).getGeoDescriptor());
+        assertThrows(IllegalArgumentException.class, () -> GeoType.createGeographyType(geometryDescriptor));
+        assertThrows(IllegalArgumentException.class, () -> GeoType.createGeometryType(geographyDescriptor));
+        assertThrows(NullPointerException.class, () -> GeoType.createGeographyType((GeoTypeDescriptor) null));
+        assertThrows(NullPointerException.class, () -> GeoType.createGeometryType((GeoTypeDescriptor) null));
+
+        GeoTypeDescriptor geography = descriptor(PrimitiveType.GEOGRAPHY);
+        assertThrows(IllegalArgumentException.class, () -> new GeoType(PrimitiveType.GEOMETRY, geography));
+        assertThrows(IllegalArgumentException.class, () -> new GeoType(PrimitiveType.INT, geography));
+        assertThrows(NullPointerException.class, () -> new GeoType(PrimitiveType.GEOGRAPHY, null));
+    }
+
+    @Test
     public void testWireRoundTrips() throws Exception {
         for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
-            ScalarType type = ScalarType.createGeoType(primitive, descriptor(primitive));
+            ScalarType type = new GeoType(primitive, descriptor(primitive));
             TTypeDesc thrift = TypeSerializer.toThrift(type);
             assertEquals(TGeoTypeDesc.class, thrift.types.get(0).scalar_type.geo.getClass());
             assertEquals(primitive, TypeDeserializer.fromThrift(thrift.types.get(0).scalar_type.type));
@@ -114,9 +212,9 @@ public class NativeGeoTypeTest {
     @Test
     public void testRejectConflictingPrimitive() {
         var geography = descriptor(PrimitiveType.GEOGRAPHY);
-        assertThrows(IllegalArgumentException.class, () -> ScalarType.createGeoType(PrimitiveType.VARBINARY, geography));
-        assertThrows(IllegalArgumentException.class, () -> ScalarType.createGeoType(PrimitiveType.GEOMETRY, geography));
-        ScalarType type = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, geography);
+        assertThrows(IllegalArgumentException.class, () -> new GeoType(PrimitiveType.VARBINARY, geography));
+        assertThrows(IllegalArgumentException.class, () -> GeoType.createGeometryType(geography));
+        ScalarType type = GeoType.createGeographyType(geography);
         TTypeDesc thrift = TypeSerializer.toThrift(type);
         thrift.types.get(0).scalar_type.setType(TPrimitiveType.VARBINARY);
         assertThrows(IllegalArgumentException.class, () -> TypeDeserializer.fromThrift(thrift));
@@ -128,7 +226,7 @@ public class NativeGeoTypeTest {
     @Test
     public void testRejectMissingMetadataAndWrongEdge() {
         for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
-            ScalarType type = ScalarType.createGeoType(primitive, descriptor(primitive));
+            ScalarType type = new GeoType(primitive, descriptor(primitive));
             TTypeDesc thrift = TypeSerializer.toThrift(type);
             thrift.types.get(0).scalar_type.geo.setEdge_algorithm(
                     primitive == PrimitiveType.GEOGRAPHY ? TGeoEdgeAlgorithm.PLANAR : TGeoEdgeAlgorithm.SPHERICAL);
@@ -148,11 +246,11 @@ public class NativeGeoTypeTest {
     @Test
     public void testDescriptorIdentity() {
         var geography = descriptor(PrimitiveType.GEOGRAPHY);
-        ScalarType type = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, geography);
-        ScalarType copy = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, geography);
+        ScalarType type = GeoType.createGeographyType(geography);
+        ScalarType copy = GeoType.createGeographyType(geography);
         assertEquals(type, copy);
         assertEquals(type.hashCode(), copy.hashCode());
-        assertNotEquals(type, ScalarType.createGeoType(PrimitiveType.GEOMETRY, descriptor(PrimitiveType.GEOMETRY)));
+        assertNotEquals(type, GeoType.createGeometryType(descriptor(PrimitiveType.GEOMETRY)));
         assertNotEquals(type, new ScalarType(PrimitiveType.VARBINARY));
         assertNotEquals(type, new ScalarType(PrimitiveType.GEOGRAPHY));
     }
@@ -167,9 +265,9 @@ public class NativeGeoTypeTest {
     @Test
     public void testSemanticWireFixture() throws Exception {
         // Shared with the BE FrontendWireFixture test: no column/storage wrapper.
-        String wire = "0a1c08001218081e2a1408011001180122094f47433a435253383428e621";
+        String wire = "0a1a08001216081e2a12080110011a094f47433a435253383420e621";
         var codec = ProtobufProxy.create(PTypeDesc.class);
-        ScalarType type = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, descriptor(PrimitiveType.GEOGRAPHY));
+        ScalarType type = GeoType.createGeographyType(descriptor(PrimitiveType.GEOGRAPHY));
         assertEquals(type, TypeDeserializer.fromProtobuf(codec.decode(HexFormat.of().parseHex(wire))));
         assertEquals(wire, HexFormat.of().formatHex(codec.encode(TypeSerializer.toProtobuf(type))));
     }
@@ -179,19 +277,19 @@ public class NativeGeoTypeTest {
         // Produced by BE TypeDescriptor::to_thrift/to_protobuf with direct geo type metadata,
         // then serialized with Thrift TBinaryProtocol and protobuf SerializeAsString respectively.
         String[] protobufWires = {
-                "0a2708001223081e10ffffffffffffffffff012a1408011001180122094f47433a435253383428e621",
-                "0a2708001223081f10ffffffffffffffffff012a1408021002180622094f47433a435253383428e621"
+                "0a2508001221081e10ffffffffffffffffff012a12080110011a094f47433a435253383420e621",
+                "0a2508001221081f10ffffffffffffffffff012a12080210061a094f47433a435253383420e621"
         };
         String[] thriftWires = {
                 "0f00010c00000001080001000000000c00020800010000001e080002ffffffff0c000608000100000001"
-                        + "08000200000001080003000000010b0004000000094f47433a4352533834080005000010e600000000",
+                        + "080002000000010b0003000000094f47433a4352533834080004000010e600000000",
                 "0f00010c00000001080001000000000c00020800010000001f080002ffffffff0c000608000100000002"
-                        + "08000200000002080003000000060b0004000000094f47433a4352533834080005000010e600000000"
+                        + "080002000000060b0003000000094f47433a4352533834080004000010e600000000"
         };
         PrimitiveType[] primitives = {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY};
         var codec = ProtobufProxy.create(PTypeDesc.class);
         for (int i = 0; i < primitives.length; i++) {
-            ScalarType expected = ScalarType.createGeoType(primitives[i], descriptor(primitives[i]));
+            ScalarType expected = new GeoType(primitives[i], descriptor(primitives[i]));
             PTypeDesc proto = codec.decode(HexFormat.of().parseHex(protobufWires[i]));
             TTypeDesc thrift = new TTypeDesc();
             new TDeserializer().deserialize(thrift, HexFormat.of().parseHex(thriftWires[i]));
@@ -209,7 +307,7 @@ public class NativeGeoTypeTest {
     @Test
     public void testRejectMissingSemanticMetadata() {
         for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
-            ScalarType type = ScalarType.createGeoType(primitive, descriptor(primitive));
+            ScalarType type = new GeoType(primitive, descriptor(primitive));
             TTypeDesc thrift = TypeSerializer.toThrift(type);
             PTypeDesc proto = TypeSerializer.toProtobuf(type);
             thrift.types.get(0).scalar_type.setGeo(new TGeoTypeDesc());
@@ -223,8 +321,8 @@ public class NativeGeoTypeTest {
     public void testSemanticFieldsPreservedWithoutSrid() throws Exception {
         for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
             GeoTypeDescriptor metadata = descriptor(primitive);
-            ScalarType expected = ScalarType.createGeoType(primitive, new GeoTypeDescriptor(metadata.logicalType(),
-                    metadata.coordinateSystem(), metadata.edgeAlgorithm(), metadata.crs(), null));
+            ScalarType expected = new GeoType(primitive, new GeoTypeDescriptor(metadata.logicalType(),
+                    metadata.edgeAlgorithm(), metadata.crs(), null));
             TTypeDesc thrift = TypeSerializer.toThrift(expected);
             assertFalse(thrift.types.get(0).scalar_type.geo.isSetSrid());
             TTypeDesc decoded = new TTypeDesc();
@@ -253,7 +351,7 @@ public class NativeGeoTypeTest {
     @Test
     public void testGeoCapabilities() {
         for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
-            ScalarType type = ScalarType.createGeoType(primitive, descriptor(primitive));
+            ScalarType type = new GeoType(primitive, descriptor(primitive));
             assertGeoCapabilitiesRejected(new ScalarType(primitive));
             assertGeoCapabilitiesRejected(type);
             assertGeoCapabilitiesRejected(TypeDeserializer.fromThrift(TypeSerializer.toThrift(type)));
@@ -264,7 +362,7 @@ public class NativeGeoTypeTest {
     @Test
     public void testNestedGeoCapabilities() {
         for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
-            ScalarType geo = ScalarType.createGeoType(primitive, descriptor(primitive));
+            ScalarType geo = new GeoType(primitive, descriptor(primitive));
             for (Type type : List.of(new ArrayType(geo), new MapType(IntegerType.INT, geo),
                     new MapType(geo, IntegerType.INT),
                     new StructType(List.of(IntegerType.INT, geo)),
@@ -313,7 +411,7 @@ public class NativeGeoTypeTest {
     @Test
     public void testGeoPartitionBy() {
         for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
-            ScalarType geo = ScalarType.createGeoType(primitive, descriptor(primitive));
+            ScalarType geo = new GeoType(primitive, descriptor(primitive));
             for (Type scalar : List.of(new ScalarType(primitive), geo,
                     TypeDeserializer.fromThrift(TypeSerializer.toThrift(geo)),
                     TypeDeserializer.fromProtobuf(TypeSerializer.toProtobuf(geo)))) {
@@ -328,7 +426,7 @@ public class NativeGeoTypeTest {
     @Test
     public void testGeoStatistics() {
         for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
-            ScalarType geo = ScalarType.createGeoType(primitive, descriptor(primitive));
+            ScalarType geo = new GeoType(primitive, descriptor(primitive));
             for (Type type : List.of(new ScalarType(primitive), geo,
                     TypeDeserializer.fromThrift(TypeSerializer.toThrift(geo)),
                     TypeDeserializer.fromProtobuf(TypeSerializer.toProtobuf(geo)))) {
@@ -354,7 +452,7 @@ public class NativeGeoTypeTest {
     @Test
     public void testGeoPseudoTypeMatching() {
         for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
-            ScalarType geo = ScalarType.createGeoType(primitive, descriptor(primitive));
+            ScalarType geo = new GeoType(primitive, descriptor(primitive));
             for (Type type : List.of(new ScalarType(primitive), geo,
                     TypeDeserializer.fromThrift(TypeSerializer.toThrift(geo)),
                     TypeDeserializer.fromProtobuf(TypeSerializer.toProtobuf(geo)))) {
@@ -372,13 +470,13 @@ public class NativeGeoTypeTest {
                 assertEquals(geo.equals(type), geo.matchesType(type));
             }
             GeoTypeDescriptor metadata = descriptor(primitive);
-            ScalarType withoutSrid = ScalarType.createGeoType(primitive, new GeoTypeDescriptor(
-                    metadata.logicalType(), metadata.coordinateSystem(), metadata.edgeAlgorithm(), metadata.crs(), null));
+            ScalarType withoutSrid = new GeoType(primitive, new GeoTypeDescriptor(
+                    metadata.logicalType(), metadata.edgeAlgorithm(), metadata.crs(), null));
             assertFalse(geo.matchesType(withoutSrid));
             assertFalse(withoutSrid.matchesType(geo));
         }
-        assertFalse(ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, descriptor(PrimitiveType.GEOGRAPHY))
-                .matchesType(ScalarType.createGeoType(PrimitiveType.GEOMETRY, descriptor(PrimitiveType.GEOMETRY))));
+        assertFalse(GeoType.createGeographyType(descriptor(PrimitiveType.GEOGRAPHY))
+                .matchesType(GeoType.createGeometryType(descriptor(PrimitiveType.GEOMETRY))));
     }
 
     @Test
@@ -405,11 +503,10 @@ public class NativeGeoTypeTest {
         for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
             GeoTypeDescriptor metadata = descriptor(primitive);
             for (Integer srid : new Integer[] {null, 4326}) {
-                GeoTypeDescriptor emptyCrs = new GeoTypeDescriptor(metadata.logicalType(), metadata.coordinateSystem(),
-                        metadata.edgeAlgorithm(), "", srid);
-                assertThrows(IllegalArgumentException.class, () -> ScalarType.createGeoType(primitive, emptyCrs));
-                ScalarType valid = ScalarType.createGeoType(primitive, new GeoTypeDescriptor(metadata.logicalType(),
-                        metadata.coordinateSystem(), metadata.edgeAlgorithm(), metadata.crs(), srid));
+                GeoTypeDescriptor emptyCrs = new GeoTypeDescriptor(metadata.logicalType(), metadata.edgeAlgorithm(), "", srid);
+                assertThrows(IllegalArgumentException.class, () -> new GeoType(primitive, emptyCrs));
+                ScalarType valid = new GeoType(primitive, new GeoTypeDescriptor(metadata.logicalType(),
+                        metadata.edgeAlgorithm(), metadata.crs(), srid));
                 assertEquals(valid, TypeDeserializer.fromThrift(TypeSerializer.toThrift(valid)));
                 assertEquals(valid, TypeDeserializer.fromProtobuf(TypeSerializer.toProtobuf(valid)));
                 for (boolean missing : new boolean[] {false, true}) {
@@ -431,20 +528,62 @@ public class NativeGeoTypeTest {
         }
     }
 
+
+    @Test
+    public void testDescriptorAwareGeoIdentityCast() {
+        Type geometry3857 = GeoType.createGeometryType("EPSG:3857");
+        Type geometry4326 = GeoType.createGeometryType("EPSG:4326");
+        ScalarType geography = GeoType.createGeographyType(descriptor(PrimitiveType.GEOGRAPHY));
+        for (Type geo : List.of(geometry3857, geometry4326, geography)) {
+            for (Type wrapped : geoCastTypes(geo)) {
+                assertTrue(TypeManager.canCastTo(wrapped, wrapped.clone()));
+                assertTrue(TypeManager.canCastTo(NullType.NULL, wrapped));
+            }
+        }
+        assertTrue(TypeManager.canCastTo(new ArrayType(NullType.NULL), new ArrayType(geometry3857)));
+        GeoTypeDescriptor metadata = geography.getGeoDescriptor();
+        Type differentEdge = GeoType.createGeographyType(new GeoTypeDescriptor(
+                metadata.logicalType(), GeoTypeDescriptor.EdgeAlgorithm.KARNEY,
+                metadata.crs(), metadata.srid()));
+        Type differentSrid = GeoType.createGeographyType(new GeoTypeDescriptor(
+                metadata.logicalType(), metadata.edgeAlgorithm(), metadata.crs(), null));
+        Type differentCrs = GeoType.createGeographyType(new GeoTypeDescriptor(
+                metadata.logicalType(), metadata.edgeAlgorithm(), "EPSG:4326", metadata.srid()));
+        for (Type[] pair : List.of(new Type[] {geometry3857, geometry4326}, new Type[] {geography, geometry4326},
+                new Type[] {geography, differentCrs}, new Type[] {geography, differentEdge},
+                new Type[] {geography, differentSrid},
+                new Type[] {geography, VarcharType.VARCHAR}, new Type[] {geometry3857, VarbinaryType.VARBINARY})) {
+            List<Type> from = geoCastTypes(pair[0]);
+            List<Type> to = geoCastTypes(pair[1]);
+            for (int i = 0; i < from.size(); i++) {
+                assertFalse(TypeManager.canCastTo(from.get(i), to.get(i)));
+                assertFalse(TypeManager.canCastTo(to.get(i), from.get(i)));
+            }
+        }
+        assertTrue(TypeManager.canCastTo(new ArrayType(IntegerType.INT), new ArrayType(IntegerType.BIGINT)));
+        assertFalse(TypeManager.canCastTo(new ArrayType(IntegerType.INT), IntegerType.INT));
+        assertFalse(TypeManager.canCastTo(AnyArrayType.ANY_ARRAY, AnyArrayType.ANY_ARRAY));
+        assertFalse(TypeManager.canCastTo(AnyArrayType.ANY_ARRAY, new ArrayType(IntegerType.INT)));
+    }
+
+    private static List<Type> geoCastTypes(Type leaf) {
+        return List.of(leaf, new ArrayType(leaf), new MapType(IntegerType.INT, leaf),
+                new StructType(List.of(leaf)), new ArrayType(new StructType(List.of(new ArrayType(leaf)))));
+    }
+
     @Test
     public void testGeoSemanticCompatibilityDoesNotEnableCasts() {
         for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
             GeoTypeDescriptor metadata = descriptor(primitive);
-            ScalarType withSrid = ScalarType.createGeoType(primitive, metadata);
-            ScalarType withoutSrid = ScalarType.createGeoType(primitive, new GeoTypeDescriptor(
-                    metadata.logicalType(), metadata.coordinateSystem(), metadata.edgeAlgorithm(), metadata.crs(), null));
+            ScalarType withSrid = new GeoType(primitive, metadata);
+            ScalarType withoutSrid = new GeoType(primitive, new GeoTypeDescriptor(
+                    metadata.logicalType(), metadata.edgeAlgorithm(), metadata.crs(), null));
 
             assertNotEquals(withSrid, withoutSrid);
             assertTrue(metadata.isSemanticallyCompatible(withoutSrid.getGeoDescriptor()));
             assertTrue(withoutSrid.getGeoDescriptor().isSemanticallyCompatible(metadata));
-            boolean sameKindCastAllowed = primitive == PrimitiveType.GEOGRAPHY;
-            assertEquals(sameKindCastAllowed, TypeManager.canCastTo(withSrid, withoutSrid));
-            assertEquals(sameKindCastAllowed, TypeManager.canCastTo(withoutSrid, withSrid));
+            assertFalse(TypeManager.canCastTo((Type) withSrid, withoutSrid));
+            assertFalse(TypeManager.canCastTo((Type) withoutSrid, withSrid));
             assertTrue(TypeManager.canCastTo(NullType.NULL, withSrid));
             assertFalse(TypeManager.isImplicitlyCastable(withSrid, withoutSrid, true));
             assertFalse(TypeManager.isImplicitlyCastable(withoutSrid, withSrid, true));
@@ -457,8 +596,8 @@ public class NativeGeoTypeTest {
                     new Type[] {new MapType(IntegerType.INT, withSrid),
                             new MapType(IntegerType.INT, withoutSrid)},
                     new Type[] {new StructType(List.of(withSrid)), new StructType(List.of(withoutSrid))})) {
-                assertEquals(sameKindCastAllowed, TypeManager.canCastTo(pair[0], pair[1]));
-                assertEquals(sameKindCastAllowed, TypeManager.canCastTo(pair[1], pair[0]));
+                assertFalse(TypeManager.canCastTo(pair[0], pair[1]));
+                assertFalse(TypeManager.canCastTo(pair[1], pair[0]));
                 assertTrue(TypeManager.getCommonSuperType(pair[0], pair[1]).isInvalid());
             }
         }
@@ -468,30 +607,62 @@ public class NativeGeoTypeTest {
     public void testGeoCrsAndSridConflicts() {
         for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
             GeoTypeDescriptor metadata = descriptor(primitive);
-            ScalarType geo = ScalarType.createGeoType(primitive, metadata);
-            ScalarType differentCrs = ScalarType.createGeoType(primitive, new GeoTypeDescriptor(
-                    metadata.logicalType(), metadata.coordinateSystem(), metadata.edgeAlgorithm(), "EPSG:4326", 4326));
+            ScalarType geo = new GeoType(primitive, metadata);
+            ScalarType differentCrs = new GeoType(primitive, new GeoTypeDescriptor(
+                    metadata.logicalType(), metadata.edgeAlgorithm(), "EPSG:4326", 4326));
 
             assertFalse(metadata.isSemanticallyCompatible(differentCrs.getGeoDescriptor()));
-            boolean sameKindCastAllowed = primitive == PrimitiveType.GEOGRAPHY;
-            assertEquals(sameKindCastAllowed, TypeManager.canCastTo(geo, differentCrs));
-            assertEquals(sameKindCastAllowed, TypeManager.canCastTo(differentCrs, geo));
+            assertFalse(TypeManager.canCastTo(geo, differentCrs));
+            assertFalse(TypeManager.canCastTo(differentCrs, geo));
             assertFalse(TypeManager.isImplicitlyCastable(geo, differentCrs, true));
             assertIncompatibleGeoPair(geo, differentCrs);
-            assertThrows(IllegalArgumentException.class, () -> ScalarType.createGeoType(primitive,
-                    new GeoTypeDescriptor(metadata.logicalType(), metadata.coordinateSystem(),
-                            metadata.edgeAlgorithm(), metadata.crs(), 3857)));
-            assertThrows(IllegalArgumentException.class, () -> ScalarType.createGeoType(primitive,
-                    new GeoTypeDescriptor(metadata.logicalType(), metadata.coordinateSystem(),
-                            metadata.edgeAlgorithm(), "EPSG:3857", 4326)));
+            assertThrows(IllegalArgumentException.class, () -> new GeoType(primitive,
+                    new GeoTypeDescriptor(metadata.logicalType(), metadata.edgeAlgorithm(), metadata.crs(), 3857)));
+            assertThrows(IllegalArgumentException.class, () -> new GeoType(primitive,
+                    new GeoTypeDescriptor(metadata.logicalType(), metadata.edgeAlgorithm(), "EPSG:3857", 4326)));
         }
-        ScalarType geography = ScalarType.createGeoType(
+        ScalarType geography = new GeoType(
                 PrimitiveType.GEOGRAPHY, descriptor(PrimitiveType.GEOGRAPHY));
-        ScalarType geometry = ScalarType.createGeoType(
+        ScalarType geometry = new GeoType(
                 PrimitiveType.GEOMETRY, descriptor(PrimitiveType.GEOMETRY));
         assertFalse(TypeManager.canCastTo(geography, geometry));
         assertFalse(TypeManager.canCastTo(geometry, geography));
         assertIncompatibleGeoPair(geography, geometry);
+    }
+
+    @Test
+    public void testGeoCastOverloadsAgree() {
+        for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
+            GeoTypeDescriptor metadata = descriptor(primitive);
+            ScalarType geo = new GeoType(primitive, metadata);
+            assertGeoCastOverloads(true, geo, new GeoType(primitive, new GeoTypeDescriptor(
+                    metadata.logicalType(), metadata.edgeAlgorithm(),
+                    metadata.crs(), metadata.srid())));
+            assertGeoCastOverloads(true, NullType.NULL, geo);
+            assertGeoCastOverloads(false, geo, NullType.NULL);
+            PrimitiveType otherKind = primitive == PrimitiveType.GEOGRAPHY ? PrimitiveType.GEOMETRY : PrimitiveType.GEOGRAPHY;
+            for (ScalarType other : List.of(
+                    new GeoType(primitive, new GeoTypeDescriptor(metadata.logicalType(),
+                            metadata.edgeAlgorithm(), "EPSG:4326", 4326)),
+                    new GeoType(primitive, new GeoTypeDescriptor(metadata.logicalType(),
+                            metadata.edgeAlgorithm(), metadata.crs(), null)),
+                    new GeoType(otherKind, descriptor(otherKind)), VarcharType.VARCHAR, VarbinaryType.VARBINARY)) {
+                assertGeoCastOverloads(false, geo, other);
+                assertGeoCastOverloads(false, other, geo);
+            }
+        }
+        ScalarType geography = GeoType.createGeographyType(descriptor(PrimitiveType.GEOGRAPHY));
+        GeoTypeDescriptor metadata = geography.getGeoDescriptor();
+        ScalarType differentEdge = GeoType.createGeographyType(new GeoTypeDescriptor(
+                metadata.logicalType(), GeoTypeDescriptor.EdgeAlgorithm.KARNEY,
+                metadata.crs(), metadata.srid()));
+        assertGeoCastOverloads(false, geography, differentEdge);
+        assertGeoCastOverloads(false, differentEdge, geography);
+    }
+
+    private static void assertGeoCastOverloads(boolean expected, ScalarType from, ScalarType to) {
+        assertEquals(expected, TypeManager.canCastTo((Type) from, (Type) to));
+        assertEquals(expected, TypeManager.canCastTo(from, to));
     }
 
     @Test
@@ -524,23 +695,23 @@ public class NativeGeoTypeTest {
                 TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 8), JsonType.JSON, VariantType.VARIANT);
         for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
             GeoTypeDescriptor metadata = descriptor(primitive);
-            ScalarType geo = ScalarType.createGeoType(primitive, metadata);
+            ScalarType geo = new GeoType(primitive, metadata);
             for (ScalarType other : ordinary) {
                 assertIncompatibleGeoPair(geo, other);
             }
             assertIncompatibleGeoPair(geo, new ScalarType(primitive));
-            assertIncompatibleGeoPair(geo, ScalarType.createGeoType(primitive, new GeoTypeDescriptor(
-                    metadata.logicalType(), metadata.coordinateSystem(), metadata.edgeAlgorithm(), "EPSG:4326", 4326)));
+            assertIncompatibleGeoPair(geo, new GeoType(primitive, new GeoTypeDescriptor(
+                    metadata.logicalType(), metadata.edgeAlgorithm(), "EPSG:4326", 4326)));
         }
         assertIncompatibleGeoPair(
-                ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, descriptor(PrimitiveType.GEOGRAPHY)),
-                ScalarType.createGeoType(PrimitiveType.GEOMETRY, descriptor(PrimitiveType.GEOMETRY)));
+                GeoType.createGeographyType(descriptor(PrimitiveType.GEOGRAPHY)),
+                GeoType.createGeometryType(descriptor(PrimitiveType.GEOMETRY)));
     }
 
     @Test
     public void testNestedGeoCommonTypeDiagnostic() {
         for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
-            ScalarType geo = ScalarType.createGeoType(primitive, descriptor(primitive));
+            ScalarType geo = new GeoType(primitive, descriptor(primitive));
             List<Type> geoTypes = List.of(geo, new ArrayType(geo), new MapType(IntegerType.INT, geo),
                     new MapType(geo, IntegerType.INT), new StructType(List.of(geo)));
             List<Type> intTypes = List.of(IntegerType.INT, new ArrayType(IntegerType.INT),
@@ -561,7 +732,7 @@ public class NativeGeoTypeTest {
     @Test
     public void testCommonTypeShortcutsUnchanged() {
         for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
-            ScalarType geo = ScalarType.createGeoType(primitive, descriptor(primitive));
+            ScalarType geo = new GeoType(primitive, descriptor(primitive));
             for (boolean strict : new boolean[] {false, true}) {
                 assertSame(geo, TypeManager.getAssignmentCompatibleType(geo, geo.clone(), strict));
                 assertTrue(TypeManager.isImplicitlyCastable(geo, geo.clone(), strict));
@@ -572,7 +743,7 @@ public class NativeGeoTypeTest {
                 assertSame(InvalidType.INVALID,
                         TypeManager.getAssignmentCompatibleType(geo, InvalidType.INVALID, strict));
             }
-            assertEquals(primitive == PrimitiveType.GEOGRAPHY, TypeManager.canCastTo(geo, geo.clone()));
+            assertTrue(TypeManager.canCastTo((Type) geo, geo.clone()));
             assertTrue(TypeManager.canCastTo(NullType.NULL, geo));
         }
         assertEquals(IntegerType.BIGINT, TypeManager.getCommonSuperType(IntegerType.INT, IntegerType.BIGINT));

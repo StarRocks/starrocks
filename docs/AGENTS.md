@@ -198,11 +198,22 @@ Place images in `_assets/` and reference:
 2. Set `sidebar_position` in its frontmatter to order it within that section
 3. Add English and Chinese versions; add Japanese version when applicable
 
-### For Bug Fixes
+### Pull Requests
 
 1. Create PR with `[Doc]` prefix in title
 2. Sign off commit: `git commit -s`
-3. Select "Doc" checkbox in PR template
+3. Use `.github/PULL_REQUEST_TEMPLATE.md` as the PR description. Copy the whole
+   template and fill it in. Do not write a free-form description and do not drop
+   sections: every block is required, including the final
+   "Bugfix cherry-pick branch check" block.
+4. Select the "Doc" checkbox in the PR template
+5. In "Bugfix cherry-pick branch check", always tick "I have checked the version
+   labels which the pr will be auto-backported to the target branch". Tick a
+   version (4.2, 4.1, ...) only to have the PR auto-backported to that branch.
+   When you open the branch PRs yourself (manual backports, for example because
+   links differ between branches), leave every version unticked.
+6. On a backport PR that you open yourself, tick "This is a backport pr" and
+   link the original PR in "Why I'm doing".
 
 ### Translation
 

@@ -41,13 +41,6 @@ public:
 
     bool all_range() const { return _lower.empty() && _upper.empty(); }
 
-    void convert_to(SeekRange* dst, const std::vector<LogicalType>& new_types) const {
-        dst->_inc_lower = _inc_lower;
-        dst->_inc_upper = _inc_upper;
-        _lower.convert_to(&dst->_lower, new_types);
-        _upper.convert_to(&dst->_upper, new_types);
-    }
-
     std::string debug_string() const {
         std::stringstream ss;
         if (_inc_lower) {

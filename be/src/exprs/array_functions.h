@@ -186,6 +186,7 @@ public:
     DEFINE_VECTORIZED_FN(array_filter);
     DEFINE_VECTORIZED_FN(all_match);
     DEFINE_VECTORIZED_FN(any_match);
+    DEFINE_VECTORIZED_FN(none_match);
 
     DEFINE_VECTORIZED_FN(array_contains_seq);
     template <LogicalType LT>

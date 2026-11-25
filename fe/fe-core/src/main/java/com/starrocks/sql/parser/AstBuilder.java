@@ -1687,6 +1687,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitRefreshTableStatement(com.starrocks.sql.parser.StarRocksParser.RefreshTableStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         NodePosition tablePos = createPos(context.qualifiedName().start, context.qualifiedName().stop);
+        checkTableNameParts(qualifiedName, tablePos);
         TableRef tableRef = new TableRef(normalizeName(qualifiedName), null, tablePos);
         List<String> partitionNames = null;
         if (context.string() != null) {
@@ -9634,8 +9635,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         } else if (context.IMMEDIATE() != null) {
             refreshMoment = RefreshSchemeClause.RefreshMoment.IMMEDIATE;
         }
-        // SCHEDULE is the preferred keyword; ASYNC is kept as a synonym for compatibility.
-        if (context.ASYNC() != null || context.SCHEDULE() != null) {
+        // SCHEDULE / ON_CHANGE are the preferred keywords; ASYNC is the legacy synonym for both.
+        if (context.ASYNC() != null || context.SCHEDULE() != null || context.ON_CHANGE() != null) {
             boolean defineStartTime = false;
             if (context.START() != null) {
                 NodePosition timePos = createPos(context.string());
@@ -10001,6 +10002,15 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         } else {
             throw new ParsingException(PARSER_ERROR_MSG.invalidTaskFormat(qualifiedName.toString()),
                     qualifiedName.getPos());
+        }
+    }
+
+    // Hierarchy: catalog.database.table. TableRef only keeps the first part as catalog and the
+    // last two parts as database and table, so a longer name would silently drop the middle parts.
+    private static void checkTableNameParts(QualifiedName qualifiedName, NodePosition pos) {
+        int size = qualifiedName.getParts().size();
+        if (size < 1 || size > 3) {
+            throw new ParsingException(PARSER_ERROR_MSG.invalidTableFormat(qualifiedName.toString()), pos);
         }
     }
 

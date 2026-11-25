@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "BE 設定パラメーター：クエリ実行とデータロードに関連する設定項目。"
 sidebar_label: "Query and Loading"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -177,6 +178,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 単位: -
 - 変更可能: はい
 - 説明: L2 レジデンシーに基づいて、集約ハッシュテーブルのソフトウェアプリフェッチを制御します。プリフェッチは、バケット配列が L2 から溢れ出した場合、つまり `bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio` となった場合にのみ有効になります。ここで、L2 サイズは実行時に検出されます（検出に失敗した場合は 1 MiB にフォールバックします）。この閾値未満の場合、テーブルは L2 に常駐しており、プリフェッチは実質的な損失となります。コアあたり多数のドライバを実行する競合の激しい環境では、テーブルあたりのL2占有率が名目上のコアあたりサイズよりも小さくなるため、この比率を下げてください。1.0 以上に設定すると、テーブルが L2 を大幅に超えるまでプリフェッチが遅延します。`agg_hash_map_prefetch_dist` も参照してください。
+- 導入バージョン: -
+
+### arrow_io_thread_pool_size
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: Apache Arrow のプロセス全体で共有される I/O スレッドプールのスレッド数。Arrow の非同期 I/O タスクはこのプールで実行されます。`0` の場合、Arrow が起動時に決定したサイズを使用します。環境変数 `ARROW_IO_THREADS` が正の整数であればその値、そうでなければ 8 です。`0` より大きい値を設定すると、`ARROW_IO_THREADS` より優先されます。有効範囲: [0, 32768]。変更は再起動なしで即座に反映されます。増やすと待機中のタスク用のスレッドがすぐに起動し、減らすと余分なスレッドは実行中のタスクを終えた後に終了します。`0` に戻すと、Arrow が起動時に決定したサイズに戻ります。設定ファイルの値が範囲外の場合、BE は警告ログを出力し、Arrow が決定したサイズを維持します。
 - 導入バージョン: -
 
 ### clear_udf_cache_when_start
@@ -382,6 +392,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: ヘッジドリードを開始する前に待機するミリ秒数を指定します。たとえば、このパラメーターを `30` に設定したとします。この状況で、ブロックからの読み取りが30ミリ秒以内に返されない場合、HDFS クライアントはすぐに別のブロックレプリカに対して新しい読み取りを開始します。これは、`dfs.client.hedged.read.threshold.millis` パラメーターに相当します。**hdfs-site.xml**HDFS クラスターのファイル。
 - 導入バージョン: v3.0
 
+### iceberg_metadata_table_cache_capacity
+
+- デフォルト: 128
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: Iceberg メタデータテーブル（`t$files`、`t$partitions` など）の JNI スキャナーが BE または CN ノード上で保持する、未使用のデシリアライズ済み Iceberg テーブルの最大数。1 つのクエリのすべてのスキャンタスクは、タスクごとに個別にデシリアライズする代わりに、1 つのデシリアライズ済みテーブルを共有します。そのため、JVM ヒープの使用量は同時実行のスキャンタスク数に依存しません。60 秒間使用されなかったテーブルは解放されます。`0` 以下の値を指定すると、それ以降に開始するスキャンでは共有が無効になります。
+- 導入バージョン: -
+
 ### io_coalesce_adaptive_lazy_active
 
 - デフォルト: true
@@ -435,6 +454,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: Flat JSONで同じ名前を持つカラムの割合。同じ名前を持つカラムの割合がこの値より低い場合、抽出は実行されません。このパラメータは、`enable_json_flat`が`true`に設定されている場合にのみ有効です。
 - 導入バージョン: v3.3.0
+
+### json_max_parse_nesting_depth
+
+- デフォルト: 1024
+- 型: Int
+- 単位:
+- 変更可能: はい
+- 説明: JSON（例: `parse_json`、`CAST AS JSON`、JSON カラムへのインポート）を解析する際に許容されるオブジェクト/配列の最大ネスト深度。パーサーはネストのレベルごとに 1 回再帰するため、上限がないと、深くネストしたドキュメントがスレッドスタックをオーバーフローさせ、BE をクラッシュさせる可能性があります。この値より深くネストした入力は、代わりにデータ品質エラーで失敗します。正の値は上限を設定します。`0` 以下の場合は組み込みのデフォルト値（1024）を維持し、チェックを無効化しません。
+- 導入バージョン: v4.2.0
 
 ### lake_tablet_ignore_invalid_delete_predicate
 
@@ -767,6 +795,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 単位: 分
 - 変更可能: はい
 - 説明: スキャンコンテキストをクリーンアップする時間間隔。
+- 導入バージョン: -
+
+### scan_credential_refresh_rpc_timeout_ms
+
+- デフォルト: 10000
+- タイプ: Int
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: スキャンに払い出された認証情報（Iceberg REST カタログの vended credentials）の有効期限が近づいたときに、スキャンがコーディネーター FE に更新済みの認証情報を要求する RPC のタイムアウト。この RPC はリトライされません。失敗またはタイムアウトした場合、スキャンは現在の認証情報を使い続け、1 分後に再度要求します。`0` 以下の値を指定すると、それ以降に開始するスキャンでは更新が無効になり、デプロイ時の認証情報を使い続けます。
 - 導入バージョン: -
 
 ### scanner_row_num
@@ -1465,6 +1502,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: いいえ
 - Description: BEが「プルロード」タスク（ダウンロードされたソースファイル、タスク状態、一時出力など）のデータと作業ファイルを保存するファイルシステムパス。このディレクトリはBEプロセスによって書き込み可能であり、受信するロードのために十分なディスクスペースが必要です。デフォルトはSTARROCKS_HOMEからの相対パスです。テストはこのディレクトリが作成され、存在することを期待します（テスト設定を参照）。
 - 導入バージョン: v3.2.0
+
+### routine_load_kafka_consumer_pool_size
+
+- デフォルト: 64
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- Description: BE がルーチンロード用に保持するアイドル状態のコンシューマーの最大数。ジョブの次のタスクやラウンドは、新しく作成する代わりにそれらの接続を再利用します。Kafka と Pulsar のコンシューマーは、このプールとこの上限を共有します。プールがいっぱいになると、最も長くアイドル状態のコンシューマーが閉じられます。10 分以上アイドル状態のコンシューマーも閉じられます。デフォルト値は、BE あたり 16 個のルーチンロードタスク（`max_routine_load_task_num_per_be`）と、タスクあたり最大 3 個のコンシューマー（`max_consumer_num_per_group`）に対応します。
+- 導入バージョン: -
+
+### routine_load_kafka_fetch_queue_backoff_ms
+
+- デフォルト: 10
+- タイプ: Int
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: ルーチンロードの Kafka コンシューマーのローカルメッセージキューが librdkafka のキューのしきい値（`queued.min.messages` または `queued.max.messages.kbytes`）を超えた後、そのパーティションを再びフェッチするまでの待機時間。この値は `fetch.queue.backoff.ms` として librdkafka に渡されます。librdkafka 自体のデフォルトは 1000 ms です。キューが空になっても librdkafka は早めにフェッチしないため、待機時間が長いと、キューを速く読むコンシューマーは残りの時間を待つことになり、ルーチンロードのスループットが低下します。ルーチンロードジョブの `property.fetch.queue.backoff.ms` プロパティはこの項目より優先されます。負の値を指定すると librdkafka のデフォルトを使用し、300000 より大きい値は 300000 として扱われます。`0` に設定しないでください。`0` の場合、キューがしきい値を超えている間、librdkafka のブローカースレッドがビジーループでポーリングし、CPU を消費します。変更後、ルーチンロードのタスクは新しい値で作成されたコンシューマーを使用します。
+- 導入バージョン: -
 
 ### routine_load_kafka_timeout_second
 

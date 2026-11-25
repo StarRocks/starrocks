@@ -26,6 +26,7 @@ import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
@@ -217,6 +218,16 @@ public class MVPartitionExprResolverTest extends MVTestBase {
                 " select k1, k2 from tbl1 union all select k1, k2 from tbl2 " +
                 " ) t group by k1";
         checkMVPartitionExprs(sql, slot, 2);
+    }
+
+    @Test
+    public void testMVPartitionResolverUnresolvedSlot() {
+        // k4 is not a column of tbl1
+        SlotRef slot = makeMvSlotRef("tbl1", "k4");
+        QueryStatement query = getQueryStatement("select k1, k2 from tbl1");
+        SemanticException e = Assertions.assertThrows(SemanticException.class,
+                () -> MVPartitionExprResolver.getMVPartitionExprsChecked(Lists.newArrayList(slot), query, null));
+        Assertions.assertEquals("Failed to build mv partition expr from base table: k4", e.getDetailMsg());
     }
 
     private QueryStatement getQueryStatement(String sql) {

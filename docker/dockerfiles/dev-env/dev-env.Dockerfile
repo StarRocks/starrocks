@@ -24,7 +24,7 @@ ARG predownload_thirdparty=false
 ARG thirdparty_url=https://cdn-thirdparty.starrocks.com/starrocks-thirdparty-main-20260526.tar
 ARG commit_id
 # check thirdparty/starlet-artifacts-version.sh, to get the right tag
-ARG starlet_tag=v4.3-rc1
+ARG starlet_tag=v4.3-rc2
 # build for which linux distro: centos7|ubuntu|rocky9
 ARG distro=ubuntu
 # Token to access artifacts in private github repositories.
@@ -32,7 +32,7 @@ ARG GITHUB_TOKEN
 # the root directory to build the project
 ARG BUILD_ROOT=/build
 
-FROM starrocks/toolchains-${distro}:main-20260707 as base
+FROM starrocks/toolchains-${distro}:main-20261029 as base
 ENV STARROCKS_THIRDPARTY=/var/local/thirdparty
 
 WORKDIR /
@@ -78,15 +78,6 @@ FROM starrocks/starlet-artifacts-centos7:${starlet_tag} as starlet-centos7
 FROM starrocks/starlet-artifacts-centos7:${starlet_tag} as starlet-rocky9
 # determine which artifacts to use
 FROM starlet-${distro} as starlet
-ARG BUILD_ROOT
-# remove unnecessary and big starlet dependencies
-COPY --from=builder_stage1 ${BUILD_ROOT}/docker/dockerfiles/dev-env/starlet_exclude.txt .
-RUN while read line; do \
-        if [[ "$line" == \#* ]] ; then \
-            continue ; \
-        fi ; \
-        rm -rvf /release/$line ; \
-    done < starlet_exclude.txt
 
 
 FROM base as dev-env
@@ -102,5 +93,6 @@ COPY --from=build_stage2 $STARROCKS_THIRDPARTY $STARROCKS_THIRDPARTY
 # Copy maven dependencies
 COPY --from=build_stage2 /root/.m2 /root/.m2/
 COPY --from=build_stage2 /root/.mvn /root/.mvn/
-# Copy starlet dependencies
-COPY --from=starlet /release $STARLET_INSTALL_DIR
+# Copy starlet itself only. Its third party dependencies (/release/third_party in the
+# artifacts) are not needed: BE links the ones thirdparty/build-thirdparty.sh builds.
+COPY --from=starlet /release/starlet_install $STARLET_INSTALL_DIR/starlet_install

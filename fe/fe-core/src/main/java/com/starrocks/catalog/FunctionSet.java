@@ -287,6 +287,7 @@ public class FunctionSet {
     // Json functions:
     public static final String JSON_ARRAY = "json_array";
     public static final String JSON_OBJECT = "json_object";
+    public static final String TO_JSON = "to_json";
     public static final String PARSE_JSON = "parse_json";
     public static final String JSON_QUERY = "json_query";
     public static final String JSON_EXISTS = "json_exists";
@@ -466,10 +467,13 @@ public class FunctionSet {
     public static final String ARRAY_REMOVE = "array_remove";
     public static final String ARRAY_FILTER = "array_filter";
     public static final String ARRAY_SORTBY = "array_sortby";
+    public static final String ARRAY_TOP_N = "array_top_n";
     public static final String ANY_MATCH = "any_match";
     public static final String ALL_MATCH = "all_match";
+    public static final String NONE_MATCH = "none_match";
 
     public static final String ARRAY_GENERATE = "array_generate";
+    public static final String ARRAY_REPEAT = "array_repeat";
 
     public static final String ARRAY_TO_BITMAP = "array_to_bitmap";
     public static final String ARRAY_FLATTEN = "array_flatten";
@@ -688,6 +692,12 @@ public class FunctionSet {
     public static final String BOOL_OR = "bool_or";
     public static final String BOOLOR_AGG = "boolor_agg";
 
+    // file function
+    public static final String TO_FILE = "to_file";
+    public static final String TRY_TO_FILE = "try_to_file";
+    public static final String GET_PRESIGNED_URL = "get_presigned_url";
+    public static final String GET_PRESIGNED_FILE = "get_presigned_file";
+
     public static final ImmutableList<ScalarType> NUMERIC_TYPES = ImmutableList.<ScalarType>builder()
             .addAll(IntegerType.INTEGER_TYPES)
             .addAll(FloatType.FLOAT_TYPES)
@@ -779,6 +789,7 @@ public class FunctionSet {
                     .add(IF, CONCAT_WS, IFNULL, NULLIF, NULL_OR_EMPTY, COALESCE, BITMAP_HASH, BITMAP_HASH64,
                             PERCENTILE_HASH, HLL_HASH, JSON_ARRAY, JSON_OBJECT, ROW, STRUCT, NAMED_STRUCT, AES_ENCRYPT,
                             AES_DECRYPT, ENCODE_FINGERPRINT_SHA256, ENCODE_FINGERPRINT_SHA256_V2, ENCODE_SORT_KEY)
+                    .add(GET_PRESIGNED_URL, GET_PRESIGNED_FILE)
                     .addAll(VectorizedBuiltinFunctions.AI_FUNCTION_NAMES)
                     .build();
 
@@ -840,6 +851,9 @@ public class FunctionSet {
                     .add(QUERY_ID)
                     .add(SLEEP)
                     .add(HTTP_REQUEST)
+                    // A presigned URL embeds the signing time, so it must never be folded, reused or cached.
+                    .add(GET_PRESIGNED_URL)
+                    .add(GET_PRESIGNED_FILE)
                     .addAll(VectorizedBuiltinFunctions.AI_FUNCTION_NAMES)
                     .build();
 
@@ -1383,7 +1397,14 @@ public class FunctionSet {
                 false, false, false));
 
         for (Type t : SUPPORTED_TYPES) {
-            if (t.isFunctionType() || t.isVariantType()) {
+            if (t.isFunctionType()) {
+                continue;
+            }
+            if (t.isVariantType()) {
+                // Only count: without it count(v) casts v to VARCHAR, which turns a variant null into a SQL NULL
+                // and drops it from the count, although `v IS NULL` is false.
+                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.COUNT,
+                        Lists.newArrayList(t), IntegerType.BIGINT, IntegerType.BIGINT, false, true, true));
                 continue;
             }
             if (t.isNull()) {

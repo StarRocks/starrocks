@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Obtains the ID of the most recently executed query in the current session."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # last_query_id

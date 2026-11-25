@@ -115,6 +115,7 @@ void StorageMetrics::install(MetricRegistry* registry) {
     REGISTER_ENGINE_REQUEST_METRIC(lake_add_index, failed, lake_add_index_requests_failed);
     REGISTER_ENGINE_REQUEST_METRIC(lake_drop_index, total, lake_drop_index_requests_total);
     REGISTER_STORAGE_METRIC(lake_idg_files_written_total);
+    REGISTER_STORAGE_METRIC(lake_idg_files_missing_total);
     REGISTER_STORAGE_METRIC(zstd_compression_dict_pages_written);
     REGISTER_STORAGE_METRIC(zstd_compression_dict_bytes);
     REGISTER_STORAGE_METRIC(zstd_compression_dict_build_fallback);

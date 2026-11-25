@@ -114,8 +114,13 @@ public:
                                                      const SegmentReadOptions& read_options,
                                                      ChunkIteratorPtr* reusable_slot);
 
+    // Opens the `.cols` file |idx| of |dcg|. The result is not cached, so every caller reads the
+    // footer again: |lake_io_opts| decides whether that read fills the local data cache, and the
+    // read is added to |stats| when it is not null.
     StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
-                                                       const TabletSchemaCSPtr& read_tablet_schema);
+                                                       const TabletSchemaCSPtr& read_tablet_schema,
+                                                       const LakeIOOptions& lake_io_opts = {},
+                                                       OlapReaderStatistics* stats = nullptr);
 
     uint64_t id() const { return _segment_id; }
 
@@ -210,6 +215,9 @@ public:
 
     uint32_t num_rows() const { return _num_rows; }
 
+    // The short key index page, as the footer gives it. Set when the segment is opened.
+    const PagePointer& short_key_index_page() const { return _short_key_index_page; }
+
     // True when the segment footer explicitly marks no .vi file for this segment
     // (e.g. the writer's vector index build threshold was not met). The
     // SegmentIterator uses this to skip opening the .vi file and go straight to
@@ -221,6 +229,8 @@ public:
     // If |stats| is not null, the read of the index page is added to it; only the call that loads counts.
     Status load_index(const LakeIOOptions& lake_io_opts = {}, OlapReaderStatistics* stats = nullptr);
     bool has_loaded_index() const;
+    // True only after a successful footer open; a metadata cache entry may still be opening.
+    bool has_opened() const { return invoked(_open_once); }
 
     Status new_inverted_index_iterator(uint32_t cid, InvertedIndexIterator** iter, const SegmentReadOptions& opts,
                                        const IndexReadOptions& index_opt);

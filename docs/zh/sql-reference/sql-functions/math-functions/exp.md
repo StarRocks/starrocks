@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回e的x次幂。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # exp, dexp

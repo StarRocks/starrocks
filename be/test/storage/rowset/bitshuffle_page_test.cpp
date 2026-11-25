@@ -648,11 +648,7 @@ TEST_F(BitShufflePageTest, TestReadByRowids) {
     st = page_decoder.read_by_rowids(0, rowids, &num_read, column.get());
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(3, num_read);
-    ASSERT_EQ(3, column->size());
-
-    ASSERT_EQ(0, column->get(0).get_int32());
-    ASSERT_EQ(50, column->get(1).get_int32());
-    ASSERT_EQ(99, column->get(2).get_int32());
+    ASSERT_EQ("[0, 50, 99]", column->debug_string());
 }
 
 } // namespace starrocks

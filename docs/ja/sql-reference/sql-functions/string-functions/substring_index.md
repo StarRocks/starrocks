@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "区切り文字のカウント回出現の前後の部分文字列を抽出します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # substring_index

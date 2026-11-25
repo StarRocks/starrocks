@@ -18,6 +18,10 @@
 #include "connector/file/scanner/file_scanner.h"
 #include "connector_primitive/connector.h"
 
+namespace starrocks {
+class StreamLoadPipe;
+} // namespace starrocks
+
 namespace starrocks::connector {
 
 class FileConnector final : public Connector {
@@ -68,6 +72,10 @@ public:
     int64_t num_bytes_read() const override;
     int64_t cpu_time_spent() const override;
 
+    // Only the pipe of a Kafka scan range is waited for: its consumption fills it while the scan reads it.
+    bool can_wait_for_input() const override;
+    bool wait_for_input(std::function<void()> on_readable) override;
+
 private:
     const FileDataSourceProvider* _provider;
     mutable TBrokerScanRange _scan_range;
@@ -76,6 +84,8 @@ private:
     RuntimeState* _runtime_state = nullptr;
     bool _scan_finished{false};
     bool _closed{false};
+    // the pipe of a Kafka scan range, looked up when the scan first waits for it
+    std::shared_ptr<StreamLoadPipe> _input_pipe;
 
     std::unique_ptr<starrocks::FileScanner> _scanner;
     starrocks::ScannerCounter _counter;

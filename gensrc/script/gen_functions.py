@@ -524,6 +524,7 @@ def generate_cpp(path):
     value["functions"] = ", \n        ".join([gen_be_fn(i) for i in builtin_functions])
 
     modules = [
+        "PaimonFunctions",
         "MathFunctions",
         "StringFunctions",
         "LikePredicate",
@@ -537,6 +538,7 @@ def generate_cpp(path):
         "HashFunctions",
         "GroupingSetsFunctions",
         "StructFunctions",
+        "FileFunctions",
         "UtilityFunctions",
         "JsonFunctions",
         "VariantFunctions",

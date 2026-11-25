@@ -228,7 +228,7 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
 
     private ManifestReader<? extends ContentFile<?>> readerForManifest(Table table, ManifestFile manifest) {
         return switch (manifest.content()) {
-            case DATA -> ManifestFiles.read(manifest, table.io()).select(MANIFEST_ENTRY_PROJECTION);
+            case DATA -> ManifestFiles.read(manifest, table.io(), table.specs()).select(MANIFEST_ENTRY_PROJECTION);
             case DELETES ->
                     ManifestFiles.readDeleteManifest(manifest, table.io(), table.specs()).select(MANIFEST_ENTRY_PROJECTION);
         };

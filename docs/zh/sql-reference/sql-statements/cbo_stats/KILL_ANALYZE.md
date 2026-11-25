@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "KILL ANALYZE 取消正在运行中的统计信息收集任务。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # KILL ANALYZE

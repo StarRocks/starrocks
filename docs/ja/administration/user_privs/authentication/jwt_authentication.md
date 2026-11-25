@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "v3.5.0以降、JSON Web Token を使用してクライアントアクセスを認証します。"
 sidebar_position: 40
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # JSON Web Token 認証
@@ -16,7 +17,7 @@ JSON Web Token（JWT）は、当事者間で情報をJSONオブジェクトと�
 
 ## 前提条件
 
-MySQL クライアントから StarRocks に接続する場合、MySQL クライアントのバージョンは 9.2 以降である必要があります。
+MySQL クライアントから StarRocks に接続する場合、MySQL クライアントのバージョンは 9.1 以降である必要があります。9.1 以降、`authentication_openid_connect_client` プラグインはコミュニティ版を含むすべての MySQL クライアントのディストリビューションに同梱されています。
 
 ## JWT でユーザーを作成する
 

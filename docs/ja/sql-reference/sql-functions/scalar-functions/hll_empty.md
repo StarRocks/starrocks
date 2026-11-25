@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "データ挿入またはロード時にデフォルト値を補完する空のHLLカラムを生成します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # hll_empty

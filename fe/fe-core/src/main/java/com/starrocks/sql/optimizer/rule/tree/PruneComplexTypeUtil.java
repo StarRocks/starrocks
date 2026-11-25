@@ -24,6 +24,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperat
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
@@ -38,9 +39,11 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class PruneComplexTypeUtil {
     private static final Logger LOG = LogManager.getLogger(PruneComplexTypeUtil.class);
@@ -64,6 +67,8 @@ public class PruneComplexTypeUtil {
         private final Map<ColumnRefOperator, ComplexTypeAccessGroup> accessGroups;
         private final Map<ColumnRefOperator, ColumnRefOperator> unnestColRefMap;
         private final List<ColumnRefOperator> scanRefs;
+        // Every scan output column in the plan, collected before the top-down walk reaches the scans.
+        private final Set<ColumnRefOperator> scanOutputs = new HashSet<>();
         private boolean enablePruneComplexTypesInUnnest;
         private boolean enablePruneComplexTypes;
 
@@ -111,6 +116,24 @@ public class PruneComplexTypeUtil {
 
         public List<ColumnRefOperator> getScanRefs() {
             return scanRefs;
+        }
+
+        public void addScanOutput(ColumnRefOperator columnRefOperator) {
+            scanOutputs.add(columnRefOperator);
+        }
+
+        // True if the operator is a scan column or struct subfields of one. A path into its value is then the
+        // same path into the scan column, after the subfield names are prepended.
+        //
+        // A column defined by a lower projection does not qualify, even a plain alias or col.items: only scan
+        // columns get their type narrowed (pruneForComplexType), so such a column would keep declaring the full
+        // element type while BE fills it from the narrowed scan column, and the two widths disagree once it
+        // crosses an exchange.
+        public boolean isScanColumnSubfieldChain(ScalarOperator operator) {
+            while (operator instanceof SubfieldOperator) {
+                operator = operator.getChild(0);
+            }
+            return operator instanceof ColumnRefOperator && scanOutputs.contains(operator);
         }
 
         public void add(ColumnRefOperator outputColumnRefOperator, ScalarOperator scalarOperator) {
@@ -245,6 +268,10 @@ public class PruneComplexTypeUtil {
         // be attributed to the columns it reads - see visit() and visitVariableReference().
         private boolean inUnknownExpr = false;
 
+        // Arguments of the enclosing array_map lambdas whose array is a scan column subfield chain: their paths
+        // reach that column, so an array taken from them qualifies as well (nested lambdas).
+        private final Set<ColumnRefOperator> elementBoundLambdaArgs = new HashSet<>();
+
         public MarkSubfieldsVisitor(ComplexTypeAccessGroup visitedAccessGroup) {
             this.visitedAccessGroup = visitedAccessGroup;
         }
@@ -353,7 +380,16 @@ public class PruneComplexTypeUtil {
             }
 
             collectionElementOp.getChild(0).accept(this, context);
-            collectionElementOp.getChild(1).accept(this, context);
+            // The paths on the stack lead into the element, not into the index or key: in
+            // col.items[array_length(col.other)].a, `.a` must not be appended to col.other.
+            Deque<ComplexTypeAccessPath> savedAccessPaths = new LinkedList<>(complexTypeAccessPaths);
+            complexTypeAccessPaths.clear();
+            try {
+                collectionElementOp.getChild(1).accept(this, context);
+            } finally {
+                complexTypeAccessPaths.clear();
+                complexTypeAccessPaths.addAll(savedAccessPaths);
+            }
 
             if (collectionElementOp.getChild(0).getType().isMapType()) {
                 complexTypeAccessPaths.pop();
@@ -363,6 +399,10 @@ public class PruneComplexTypeUtil {
 
         @Override
         public Void visitCall(CallOperator call, Context context) {
+            if (FunctionSet.ARRAY_MAP.equals(call.getFnName()) && call.getChildren().size() >= 2 &&
+                    call.getChild(0) instanceof LambdaFunctionOperator) {
+                return visitArrayMap(call, (LambdaFunctionOperator) call.getChild(0), context);
+            }
             ComplexTypeAccessPathType pathType = accessPathTypeOf(call);
             if (pathType == null) {
                 // A function whose effect on its arguments' subfields we cannot describe - map_filter and
@@ -386,6 +426,91 @@ public class PruneComplexTypeUtil {
             return null;
         }
 
+        // array_map(x -> f(x), arr): x is bound to the elements of arr, and the result is built from what the
+        // lambda returns, so the paths the lambda takes into x are the only paths into the elements of arr.
+        // Element-relative paths apply to the array as they are, since setAccessGroup steps through ArrayType.
+        //
+        // Only an array that is a scan column or struct subfields of one (Context#isScanColumnSubfieldChain), or
+        // struct subfields of an enclosing lambda's argument that is, gets the paths: an element path then names
+        // the same subfields in the scan column. Anything else is read in full: a function may reshape the
+        // elements - map_entries(m) yields synthetic struct<key, value> elements whose paths do not exist in m -
+        // and a column computed by a lower projection, whatever its definition, keeps its full declared type.
+        //
+        // Like visit(), the access path stack is cleared for the whole call: a path pushed by an enclosing
+        // expression, or recorded downstream for the column the call defines, describes array_map's result, not
+        // its arguments. An argument the lambda does not use through subfields only (unused, or used whole)
+        // registers an empty path for its array, i.e. reads it in full, as before. So does an argument whose
+        // type is not the array's element type. A lambda anywhere in the body with hoisted common expressions
+        // makes the whole call fall back to visit(): this visitor does not walk those expressions, so reads of
+        // x in them would be missed.
+        private Void visitArrayMap(CallOperator call, LambdaFunctionOperator lambda, Context context) {
+            List<ColumnRefOperator> args = lambda.getRefColumns();
+            if (!context.getEnablePruneComplexTypes() || hasHoistedExpressions(lambda) ||
+                    args.size() != call.getChildren().size() - 1) {
+                return visit(call, context);
+            }
+            List<ColumnRefOperator> boundArgs = Lists.newArrayList();
+            for (int i = 0; i < args.size(); i++) {
+                ScalarOperator array = call.getChild(i + 1);
+                if (array.getType().isArrayType() && args.get(i).getType().isComplexType() &&
+                        args.get(i).getType().equals(((ArrayType) array.getType()).getItemType()) &&
+                        isElementSource(array, context)) {
+                    boundArgs.add(args.get(i));
+                }
+            }
+            Deque<ComplexTypeAccessPath> savedAccessPaths = new LinkedList<>(complexTypeAccessPaths);
+            boolean savedInUnknownExpr = inUnknownExpr;
+            complexTypeAccessPaths.clear();
+            inUnknownExpr = true;
+            elementBoundLambdaArgs.addAll(boundArgs);
+            try {
+                lambda.getLambdaExpr().accept(this, context);
+                for (int i = 0; i < args.size(); i++) {
+                    ScalarOperator array = call.getChild(i + 1);
+                    ComplexTypeAccessGroup argGroup =
+                            boundArgs.contains(args.get(i)) ? context.getVisitedAccessGroup(args.get(i)) : null;
+                    if (argGroup == null ||
+                            argGroup.getAccessGroup().stream().anyMatch(ComplexTypeAccessPaths::isEmpty)) {
+                        complexTypeAccessPaths.clear();
+                        array.accept(this, context);
+                        continue;
+                    }
+                    for (ComplexTypeAccessPaths paths : ImmutableList.copyOf(argGroup.getAccessGroup())) {
+                        complexTypeAccessPaths.clear();
+                        complexTypeAccessPaths.addAll(paths.getAccessPaths());
+                        array.accept(this, context);
+                    }
+                }
+            } finally {
+                elementBoundLambdaArgs.removeAll(boundArgs);
+                inUnknownExpr = savedInUnknownExpr;
+                complexTypeAccessPaths.clear();
+                complexTypeAccessPaths.addAll(savedAccessPaths);
+            }
+            return null;
+        }
+
+        private boolean isElementSource(ScalarOperator array, Context context) {
+            ScalarOperator base = array;
+            while (base instanceof SubfieldOperator) {
+                base = base.getChild(0);
+            }
+            return elementBoundLambdaArgs.contains(base) || context.isScanColumnSubfieldChain(array);
+        }
+
+        private static boolean hasHoistedExpressions(ScalarOperator operator) {
+            if (operator instanceof LambdaFunctionOperator &&
+                    !((LambdaFunctionOperator) operator).getColumnRefMap().isEmpty()) {
+                return true;
+            }
+            for (ScalarOperator child : operator.getChildren()) {
+                if (hasHoistedExpressions(child)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         // The access path a function takes into its map argument, or null when we cannot describe it.
         private static ComplexTypeAccessPathType accessPathTypeOf(CallOperator call) {
             String name = call.getFnName();
@@ -395,10 +520,9 @@ public class PruneComplexTypeUtil {
             if (FunctionSet.MAP_VALUES.equals(name)) {
                 return ComplexTypeAccessPathType.MAP_VALUE;
             }
-            if (FunctionSet.MAP_ENTRIES.equals(name)) {
-                // map_entries returns array<struct<key, value>>, so it needs both key and value
-                return ComplexTypeAccessPathType.ALL_SUBFIELDS;
-            }
+            // map_entries is left out on purpose: it returns array<struct<key, value>>, so a path into its
+            // elements ([value, a]) is not a path into the map, and appending it to ALL_SUBFIELDS made
+            // setAccessGroup look up a `value` field in the map's value struct. visit() reads the map in full.
             return null;
         }
     }

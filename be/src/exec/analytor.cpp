@@ -744,14 +744,24 @@ int64_t Analytor::_seek_range_frame_boundary_with_offset(const RangeBoundarySpec
 
     // Constant offsets make boundary keys monotonic in physical order, so cursors only move forward.
     cursor = std::clamp(cursor, _range_nonnull_start, _range_nonnull_end);
+    // Compare the data columns: the order keys in the cursor range and the boundary of the current row are all
+    // non-NULL here, but the order column and the boundary column can differ in nullability (e.g. a NOT NULL
+    // DECIMAL order key and a nullable `key - offset` boundary), and compare_at of a plain column down_casts its
+    // argument to its own column type.
+    DCHECK(!_order_columns[0]->is_constant());
+    const Column* order_data = ColumnHelper::get_data_column(_order_columns[0].get());
+    const Column* boundary_data = ColumnHelper::get_data_column(boundary.column.get());
+    const size_t boundary_row = boundary.column->is_constant() ? 0 : _current_row_position;
+    DCHECK(!boundary.column->is_null(_current_row_position));
     while (cursor < _range_nonnull_end) {
+        DCHECK(!_order_columns[0]->is_null(cursor));
         // cmp compares order_key[cursor] with boundary_value[current_row].
         // For the start boundary, keep skipping rows before the inclusive lower bound:
         //   ASC:  key < bound; DESC: key > bound.
         // For the end boundary, keep skipping rows still inside the inclusive upper bound:
         //   ASC:  key <= bound; DESC: key >= bound.
         // The returned cursor is therefore a half-open frame boundary [start, end).
-        const int cmp = _order_columns[0]->compare_at(cursor, _current_row_position, *boundary.column, 1);
+        const int cmp = order_data->compare_at(cursor, boundary_row, *boundary_data, 1);
         bool should_advance;
         if (is_start) {
             should_advance = _range_order_is_asc ? cmp < 0 : cmp > 0;
@@ -1009,13 +1019,6 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
 void Analytor::_append_column(size_t chunk_size, Column* dst_column, ColumnPtr& src_column) {
     DCHECK(!(src_column->is_constant() && dst_column->is_constant() && (!dst_column->empty()) &&
              (!src_column->empty()) && (src_column->compare_at(0, 0, *dst_column, 1) != 0)));
-    if (dst_column->empty() && !src_column->only_null()) {
-        // TypeDescriptor does not carry physical storage metadata. Preserve it
-        // from the first evaluated column before buffering values (e.g. GEO XY).
-        auto* dst_data = ColumnHelper::get_data_column(dst_column);
-        auto empty = ColumnHelper::get_data_column(src_column.get())->clone_empty();
-        dst_data->swap_column(*empty);
-    }
     if (src_column->only_null()) {
         static_cast<void>(dst_column->append_nulls(chunk_size));
     } else if (src_column->is_constant() && !dst_column->is_constant()) {

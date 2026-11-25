@@ -567,6 +567,17 @@ requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize
             values.insert(decoder.decode(value));
         }
 
+        if (values.empty()) {
+            // and col in (null, null): no value is left once NULL is eliminated, so the predicate is never
+            // true. Empty the range instead of calling `add_fixed_values`, which reads an empty set as
+            // "no constraint". The root builder then ends the scan; a builder under OR gives up the push-down.
+            if constexpr (!Negative) {
+                range->clear_to_empty();
+                _normalized_exprs[i] = true;
+            }
+            return Status::OK();
+        }
+
         if (range->add_fixed_values(FILTER_IN, values).ok()) {
             _normalized_exprs[i] = true;
         }
@@ -702,7 +713,12 @@ requires lt_is_date<SlotType> Status ChunkPredicateBuilder<E, Type>::normalize_i
                     }
                 }
                 if (values.empty()) {
-                    status = Status::EndOfFile("const false predicate result");
+                    // No value can match (all NULL, or DATETIME values that are not a whole day),
+                    // so the predicate is never true.
+                    if constexpr (!Negative) {
+                        range->clear_to_empty();
+                        _normalized_exprs[i] = true;
+                    }
                     continue;
                 }
                 if (range->add_fixed_values(FILTER_IN, values).ok()) {
@@ -826,6 +842,15 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
                 if (!l->is_slotref() ||
                     (l->type().type != slot.type().type && l->type().type != MappingType && !ignore_cast(slot, *l))) {
                     continue;
+                }
+                // Under a global dictionary MappingType is the dictionary code type, but only a predicate
+                // rewritten onto the codes holds codes. One still over the strings -- an IN list too long
+                // for normalize_in_or_equal_predicate, left unnormalized -- is a VARCHAR predicate, and
+                // reading it as the code type below is a bad cast. Leave it to be evaluated as a conjunct.
+                if constexpr (MappingType != SlotType) {
+                    if (l->type().type != MappingType) {
+                        continue;
+                    }
                 }
 
                 std::vector<SlotId> slot_ids;
@@ -1415,7 +1440,7 @@ Expr* ChunkPredicateBuilder<E, Type>::_gen_min_binary_pred(Expr* col_ref, Vector
                                                            bool is_close_interval) {
     TExprNode node;
     node.node_type = TExprNodeType::BINARY_PRED;
-    node.type = TypeDescriptor(TYPE_BOOLEAN).to_thrift();
+    node.type = TYPE_BOOLEAN_DESC.to_thrift();
     node.child_type = to_thrift(col_ref->type().type);
     if (is_close_interval) {
         node.__set_opcode(TExprOpcode::GE);
@@ -1434,7 +1459,7 @@ Expr* ChunkPredicateBuilder<E, Type>::_gen_max_binary_pred(Expr* col_ref, Vector
                                                            bool is_close_interval) {
     TExprNode node;
     node.node_type = TExprNodeType::BINARY_PRED;
-    node.type = TypeDescriptor(TYPE_BOOLEAN).to_thrift();
+    node.type = TYPE_BOOLEAN_DESC.to_thrift();
     node.child_type = to_thrift(col_ref->type().type);
     if (is_close_interval) {
         node.__set_opcode(TExprOpcode::LE);
@@ -1475,7 +1500,7 @@ Expr* ChunkPredicateBuilder<E, Type>::_gen_and_pred(Expr* left, Expr* right) {
     and_pred_node.is_nullable = true;
     and_pred_node.__set_opcode(TExprOpcode::COMPOUND_AND);
     and_pred_node.__set_child_type(TPrimitiveType::BOOLEAN);
-    and_pred_node.__set_type(TypeDescriptor(TYPE_BOOLEAN).to_thrift());
+    and_pred_node.__set_type(TYPE_BOOLEAN_DESC.to_thrift());
 
     Expr* expr = _opts.obj_pool->add(VectorizedCompoundPredicateFactory::from_thrift(and_pred_node));
     expr->add_child(left);

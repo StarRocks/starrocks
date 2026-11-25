@@ -295,6 +295,7 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic(int6
     query_statistic->add_read_stats(_query_runtime_state.consume_delta_read_local_cnt(),
                                     _query_runtime_state.consume_delta_read_remote_cnt());
     _query_runtime_state.consume_delta_scan_stats(query_statistic.get());
+    _query_runtime_state.consume_delta_per_scan_stats(query_statistic.get());
     query_statistic->add_ai_statistics(_query_runtime_state.consume_delta_ai_statistics());
     for (const auto& [node_id, exec_stats] : _query_runtime_state.node_exec_stats()) {
         query_statistic->add_exec_stats_item(
@@ -316,6 +317,7 @@ std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
     res->add_transmitted_bytes(get_transmitted_bytes());
 
     _query_runtime_state.add_total_scan_stats(res.get());
+    _query_runtime_state.add_total_per_scan_stats(res.get());
     res->add_ai_statistics(_query_runtime_state.ai_statistics());
 
     for (const auto& [node_id, exec_stats] : _query_runtime_state.node_exec_stats()) {
@@ -338,6 +340,7 @@ std::shared_ptr<QueryStatistics> QueryContext::snapshot_query_statistic() {
     res->add_transmitted_bytes(get_transmitted_bytes());
 
     _query_runtime_state.add_total_scan_stats(res.get());
+    _query_runtime_state.add_total_per_scan_stats(res.get());
     res->add_ai_statistics(_query_runtime_state.ai_statistics());
 
     for (const auto& [node_id, exec_stats] : _query_runtime_state.node_exec_stats()) {

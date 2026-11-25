@@ -1,0 +1,130 @@
+-- name: test_to_file
+create database test_to_file_${uuid0};
+-- result:
+-- !result
+use test_to_file_${uuid0};
+-- result:
+-- !result
+create table input_files (id int, uri char(16), payload varbinary, file_size int, metadata struct<uri varchar(256), size int>)
+duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+insert into input_files values
+(1, 'a.jpg', NULL, 12, named_struct('uri', 'a.jpg', 'size', 12)),
+(2, NULL, to_binary('01', 'hex'), NULL, NULL),
+(3, '', NULL, 0, named_struct('uri', '', 'size', 0));
+-- result:
+-- !result
+select id, to_file(metadata), to_file(metadata) is null from input_files order by id;
+-- result:
+1	{"uri":"a.jpg","offset":null,"size":12,"content_type":null,"checksum":null,"inline":null}	0
+2	None	1
+3	{"uri":"","offset":null,"size":0,"content_type":null,"checksum":null,"inline":null}	0
+-- !result
+select id, to_file(named_struct('size', file_size, 'uri', uri, 'inline', payload)) from input_files order by id;
+-- result:
+1	{"uri":"a.jpg","offset":null,"size":12,"content_type":null,"checksum":null,"inline":null}
+2	{"uri":null,"offset":null,"size":null,"content_type":null,"checksum":null,"inline":"01"}
+3	{"uri":"","offset":null,"size":0,"content_type":null,"checksum":null,"inline":null}
+-- !result
+drop database test_to_file_${uuid0};
+-- result:
+-- !result
+
+-- name: test_try_to_file
+select try_to_file(named_struct('uri', fl_get_uri(to_file(named_struct('uri', NULL)))));
+-- result:
+[REGEX].*TO_FILE requires exactly one.*
+-- !result
+select count(*), sum(cast(f is null as int)), sum(fl_get_size(f)) from (
+select try_to_file(named_struct('uri', if(generate_series % 3 = 0, NULL, 'a'),
+'size', if(generate_series % 5 = 0, -generate_series, generate_series))) f from table(generate_series(1, 10000))) t;
+-- result:
+10000	4667	26663332
+-- !result
+create database test_try_to_file_${uuid0};
+-- result:
+-- !result
+use test_try_to_file_${uuid0};
+-- result:
+-- !result
+create table input_files (id int, uri varchar(256), payload varbinary, file_offset bigint, file_size bigint)
+duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+insert into input_files values
+(1, 'a.jpg', NULL, 0, 12),
+(2, NULL, NULL, 0, 0),
+(3, NULL, to_binary('610062', 'hex'), NULL, NULL);
+-- result:
+-- !result
+select id, f is null, fl_get_uri(f), hex(fl_get_inline(f)), fl_get_offset(f), fl_get_size(f)
+from (select id, try_to_file(named_struct('uri', uri, 'inline', payload, 'offset', file_offset, 'size', file_size)) f from input_files) t order by id;
+-- result:
+1	0	a.jpg	None	0	12
+2	1	None	None	None	None
+3	0	None	610062	None	None
+-- !result
+select id from input_files where try_to_file(named_struct('uri', uri, 'inline', payload, 'offset', file_offset, 'size', file_size)) is not null order by id;
+-- result:
+1
+3
+-- !result
+drop database test_try_to_file_${uuid0};
+-- result:
+-- !result
+
+-- name: test_get_presigned
+fixture_suffix=SELECT '${uuid0}';
+-- result:
+[REGEX]^[0-9a-f]{32}$
+-- !result
+CREATE STORAGE VOLUME "presign_${uuid0}"
+TYPE = S3
+LOCATIONS = ("s3://${oss_bucket}/test_presign_${uuid0}/")
+PROPERTIES
+(
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}"
+);
+-- result:
+-- !result
+select fl_get_uri(f) like 'http%', fl_get_uri(f) like '%X-Amz-Signature=%', fl_get_uri(f) like '%X-Amz-Expires=3600%', fl_get_offset(f), fl_get_size(f), fl_get_content_type(f), fl_get_checksum(f), fl_get_inline(f) is null
+from (select get_presigned_file('presign_${uuid0}', to_file(named_struct('uri', 's3://${oss_bucket}/dir/a.png', 'offset', 0, 'size', 12, 'content_type', 'image/png', 'checksum', 'opaque'))) f) t;
+-- result:
+1	1	1	0	12	image/png	opaque	1
+-- !result
+create database test_get_presigned_${uuid0};
+-- result:
+-- !result
+use test_get_presigned_${uuid0};
+-- result:
+-- !result
+create table media (id int, uri varchar(256), ttl bigint)
+duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+insert into media values
+(1, 's3://${oss_bucket}/dir/a.png', 60),
+(2, NULL, 0),
+(3, 'oss://${oss_bucket}/dir/b c.png', NULL);
+-- result:
+-- !result
+select id, u is null, u like '%X-Amz-Signature=%', concat(u, '&') like concat('%X-Amz-Expires=', ifnull(ttl, 3600), '&%')
+from (select id, ttl, get_presigned_url('presign_${uuid0}', uri, ttl) u from media) t order by id;
+-- result:
+1	0	1	1
+2	1	None	None
+3	0	1	1
+-- !result
+select count(*) from media where fl_get_uri(get_presigned_file('presign_${uuid0}', try_to_file(named_struct('uri', uri)))) like '%X-Amz-Signature=%';
+-- result:
+2
+-- !result
+drop database test_get_presigned_${uuid0};
+-- result:
+-- !result
+CLEANUP {
+    DROP STORAGE VOLUME IF EXISTS "presign_${fixture_suffix}";
+} END CLEANUP

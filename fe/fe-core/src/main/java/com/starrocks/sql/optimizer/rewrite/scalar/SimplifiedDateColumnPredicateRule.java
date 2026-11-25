@@ -21,9 +21,9 @@ import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.DateTextShape;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import com.starrocks.type.DateType;
@@ -50,10 +50,13 @@ import static com.starrocks.sql.ast.expression.BinaryType.LT;
  * if it is datetime
  * date_format(t, '%Y-%m-%d') >=/< '2023-03-27' -> t >=/< '2023-03-27'
  * date_format(t, '%Y-%m-%d') >/<= '2023-03-27' -> t >=/< days_add('2023-03-27', 1)
+ *
+ * The shapes are recognized by {@link DateTextShape}, which {@link com.starrocks.sql.optimizer.rewrite.FunctionPreimage}
+ * shares to derive pruning-only supersets for the cases not rewritten here (e.g. {@code =} on a DATETIME).
  */
 public class SimplifiedDateColumnPredicateRule extends BottomUpScalarOperatorRewriteRule {
-    private static final String DATE_PATTERN1 = "%Y%m%d";
-    private static final String DATE_PATTERN2 = "%Y-%m-%d";
+    private static final String DATE_PATTERN1 = DateTextShape.DATE_PATTERN_COMPACT;
+    private static final String DATE_PATTERN2 = DateTextShape.DATE_PATTERN_DASHED;
     private static final Pattern DATE_PATTERN_REG = Pattern.compile("\\d{8}");
     private static final Pattern DATE_PATTERN_REG2 = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
 
@@ -68,14 +71,11 @@ public class SimplifiedDateColumnPredicateRule extends BottomUpScalarOperatorRew
         if (!(right instanceof ConstantOperator)) {
             return predicate;
         }
-        ScalarOperator columnRef = null;
-        Extractor extractor = newExtractor((CallOperator) op, (ConstantOperator) right);
-        if (extractor != null && extractor.check()) {
-            columnRef = extractor.extractColumn();
-        }
-        if (columnRef == null) {
+        DateTextShape shape = DateTextShape.match((CallOperator) op);
+        if (shape == null || !isDatePattern(shape.pattern, (ConstantOperator) right)) {
             return predicate;
         }
+        ScalarOperator columnRef = shape.operand;
         BinaryType binaryType = predicate.getBinaryType();
         if (columnRef.getType().getPrimitiveType() == PrimitiveType.DATE) {
             return new BinaryPredicateOperator(binaryType, columnRef, right);
@@ -98,22 +98,6 @@ public class SimplifiedDateColumnPredicateRule extends BottomUpScalarOperatorRew
         return predicate;
     }
 
-    private static boolean isSubstrFn(CallOperator call) {
-        return FunctionSet.SUBSTR.equalsIgnoreCase(call.getFnName())
-                || FunctionSet.SUBSTRING.equalsIgnoreCase(call.getFnName());
-    }
-
-    private Extractor newExtractor(CallOperator call, ConstantOperator value) {
-        if (FunctionSet.DATE_FORMAT.equalsIgnoreCase(call.getFnName())) {
-            return new DateFormatExtractor(call, value);
-        } else if (isSubstrFn(call)) {
-            return new SubstrExtractor(call, value, DATE_PATTERN2);
-        } else if (FunctionSet.REPLACE.equalsIgnoreCase(call.getFnName())) {
-            return new ReplaceAndSubstrExtractor(call, value);
-        }
-        return null;
-    }
-
     private static boolean isDatePattern(String datePattern, ConstantOperator date) {
         if (DATE_PATTERN1.equalsIgnoreCase(datePattern) && DATE_PATTERN_REG.matcher(date.getVarchar()).matches()) {
             return verifyDate(datePattern, date);
@@ -131,119 +115,5 @@ public class SimplifiedDateColumnPredicateRule extends BottomUpScalarOperatorRew
             return false;
         }
         return true;
-    }
-
-    private interface Extractor {
-        ScalarOperator extractColumn();
-
-        boolean check();
-    }
-
-    /**
-     * date_format(t, '%Y%m%d') -> t
-     */
-    private static class DateFormatExtractor implements Extractor {
-        private final CallOperator call;
-        private final ConstantOperator value;
-
-        public DateFormatExtractor(CallOperator call, ConstantOperator value) {
-            this.call = call;
-            this.value = value;
-        }
-
-        @Override
-        public boolean check() {
-            if (!call.getChild(1).isConstantRef()) {
-                return false;
-            }
-            ScalarOperator dateColumn = call.getChild(0);
-            return dateColumn.getType().getPrimitiveType() == PrimitiveType.DATE
-                    || dateColumn.getType().getPrimitiveType() == PrimitiveType.DATETIME;
-        }
-
-        @Override
-        public ScalarOperator extractColumn() {
-            ScalarOperator dateColumn = call.getChild(0);
-            String pattern = ((ConstantOperator) call.getChild(1)).getVarchar();
-            if (isDatePattern(pattern, value)) {
-                return dateColumn;
-            }
-            return null;
-        }
-    }
-
-    /**
-     * substr(cast(t as varchar), 1, 10) -> t
-     */
-    private static class SubstrExtractor implements Extractor {
-        private final CallOperator call;
-        private final ConstantOperator value;
-        private final String datePattern;
-
-        public SubstrExtractor(CallOperator call, ConstantOperator value, String datePattern) {
-            this.call = call;
-            this.value = value;
-            this.datePattern = datePattern;
-        }
-
-        @Override
-        public boolean check() {
-            if (!(call.getChild(1).isConstantRef() && ((ConstantOperator) call.getChild(1)).getInt() == 1)
-                    || !(call.getChild(2).isConstantRef() && ((ConstantOperator) call.getChild(2)).getInt() == 10)) {
-                return false;
-            }
-            if (!(call.getChild(0) instanceof CastOperator)) {
-                return false;
-            }
-            CastOperator op = call.getChild(0).cast();
-            return op.getChild(0).getType().getPrimitiveType() == PrimitiveType.DATE
-                    || op.getChild(0).getType().getPrimitiveType() == PrimitiveType.DATETIME;
-        }
-
-        @Override
-        public ScalarOperator extractColumn() {
-            CastOperator castOperator = call.getChild(0).cast();
-            ScalarOperator dateColumn = castOperator.getChild(0);
-            if (isDatePattern(datePattern, value)) {
-                return dateColumn;
-            }
-            return null;
-        }
-    }
-
-    /**
-     * replace(substring(cast(t as varchar), 1, 10), "-", "") -> t
-     */
-    private static class ReplaceAndSubstrExtractor implements Extractor {
-        private final CallOperator call;
-        private final ConstantOperator value;
-
-        public ReplaceAndSubstrExtractor(CallOperator call, ConstantOperator value) {
-            this.call = call;
-            this.value = value;
-        }
-
-        @Override
-        public boolean check() {
-            if (!(call.getChild(0) instanceof CallOperator && isSubstrFn((CallOperator) call.getChild(0)))) {
-                return false;
-            }
-            if (!call.getChild(1).isConstantRef() || !((ConstantOperator) call.getChild(1)).getVarchar().equals("-")) {
-                return false;
-            }
-            if (!call.getChild(2).isConstantRef() || !((ConstantOperator) call.getChild(2)).getVarchar().isEmpty()) {
-                return false;
-            }
-            // yyyyMMdd
-            if (value.getVarchar().length() != 8) {
-                return false;
-            }
-            return new SubstrExtractor((CallOperator) call.getChild(0), value, DATE_PATTERN1).check();
-        }
-
-        @Override
-        public ScalarOperator extractColumn() {
-            return new SubstrExtractor((CallOperator) call.getChild(0), value, DATE_PATTERN1).extractColumn();
-        }
     }
 }

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回一个空 Bitmap。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_empty

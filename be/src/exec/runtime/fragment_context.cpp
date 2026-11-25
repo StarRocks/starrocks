@@ -17,6 +17,7 @@
 #include <atomic>
 #include <chrono>
 #include <future>
+#include <iterator>
 #include <memory>
 #include <thread>
 
@@ -69,9 +70,10 @@ const RuntimeServices& runtime_services(const RuntimeState* state) {
 // RAII guard for pass-through chunk buffer lifecycle.
 class PassThroughChunkBufferGuard {
 public:
-    PassThroughChunkBufferGuard(DataStreamMgr* stream_mgr, const TUniqueId& query_id)
+    PassThroughChunkBufferGuard(DataStreamMgr* stream_mgr, const TUniqueId& query_id,
+                                std::shared_ptr<MemTracker> query_mem_tracker)
             : _stream_mgr(stream_mgr), _query_id(query_id) {
-        _stream_mgr->prepare_pass_through_chunk_buffer(_query_id);
+        _stream_mgr->prepare_pass_through_chunk_buffer(_query_id, std::move(query_mem_tracker));
     }
 
     ~PassThroughChunkBufferGuard() { _stream_mgr->destroy_pass_through_chunk_buffer(_query_id); }
@@ -354,6 +356,12 @@ void FragmentContext::set_fragment_attachments(std::vector<std::unique_ptr<Fragm
     _fragment_attachments = std::move(attachments);
 }
 
+void FragmentContext::append_fragment_attachments(std::vector<std::unique_ptr<FragmentAttachment>>&& attachments) {
+    _fragment_attachments.insert(_fragment_attachments.end(), std::make_move_iterator(attachments.begin()),
+                                 std::make_move_iterator(attachments.end()));
+    attachments.clear();
+}
+
 // Note: this function should be thread safe
 void FragmentContext::cancel(const Status& status) {
     _runtime_state->set_is_cancelled(true);
@@ -369,8 +377,8 @@ void FragmentContext::cancel(const Status& status) {
 }
 
 void FragmentContext::prepare_pass_through_chunk_buffer() {
-    _pass_through_chunk_buffer_guard =
-            std::make_unique<PassThroughChunkBufferGuard>(runtime_services(_runtime_state.get()).stream_mgr, _query_id);
+    _pass_through_chunk_buffer_guard = std::make_unique<PassThroughChunkBufferGuard>(
+            runtime_services(_runtime_state.get()).stream_mgr, _query_id, _runtime_state->query_mem_tracker_ptr());
 }
 void FragmentContext::destroy_pass_through_chunk_buffer() {
     _pass_through_chunk_buffer_guard.reset();

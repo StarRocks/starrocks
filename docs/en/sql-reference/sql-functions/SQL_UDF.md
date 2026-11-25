@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 0.95
 description: "Since version 4.1, StarRocks supports creating SQL user-define-functions(UDFs), allowing users to create functions using SQL expressions."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SQL UDF

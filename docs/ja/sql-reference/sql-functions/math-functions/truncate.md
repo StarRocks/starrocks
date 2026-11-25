@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された小数点以下の桁数で入力を切り捨てます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # truncate

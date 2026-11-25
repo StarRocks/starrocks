@@ -33,6 +33,7 @@ import org.apache.logging.log4j.Logger;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -173,13 +174,14 @@ public class StatisticAutoCollector extends LeaderDaemon {
             LocalTime start = LocalTime.parse(startTimeStr, DateUtils.TIME_FORMATTER);
             LocalTime end = LocalTime.parse(endTimeStr, DateUtils.TIME_FORMATTER);
 
-            if (start.isAfter(end) && (now.isAfter(start) || now.isBefore(end))) {
-                return true;
-            } else if (now.isAfter(start) && now.isBefore(end)) {
-                return true;
-            } else {
-                return false;
+            // The configured times have second precision and both ends are inclusive, so the default
+            // 00:00:00 - 23:59:59 covers the whole day, including the second 23:59:59.
+            LocalTime current = now.truncatedTo(ChronoUnit.SECONDS);
+            if (start.isAfter(end)) {
+                // The window crosses midnight, e.g. 20:00:00 - 06:00:00.
+                return !current.isBefore(start) || !current.isAfter(end);
             }
+            return !current.isBefore(start) && !current.isAfter(end);
         } catch (DateTimeParseException e) {
             LOG.warn("Parse analyze start/end time format fail : " + e.getMessage());
             // If the time format configuration is incorrect,

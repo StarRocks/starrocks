@@ -23,11 +23,21 @@ public class IcebergMetaSpec implements SerializedMetaSpec {
     public static final IcebergMetaSpec EMPTY = new IcebergMetaSpec(null, null, false);
 
     private final String serializedTable;
+    // The JSON forms of the table (IcebergTablePayload) and predicate (ExpressionParser), null when not shipped.
+    private final String jsonPayload;
+    private final String predicateJson;
     private final List<RemoteMetaSplit> splits;
     private boolean loadColumnStats;
 
     public IcebergMetaSpec(String serializedTable, List<RemoteMetaSplit> splits, boolean loadColumnStats) {
+        this(serializedTable, null, null, splits, loadColumnStats);
+    }
+
+    public IcebergMetaSpec(String serializedTable, String jsonPayload, String predicateJson,
+                           List<RemoteMetaSplit> splits, boolean loadColumnStats) {
         this.serializedTable = serializedTable;
+        this.jsonPayload = jsonPayload;
+        this.predicateJson = predicateJson;
         this.splits = splits;
         this.loadColumnStats = loadColumnStats;
     }
@@ -36,6 +46,14 @@ public class IcebergMetaSpec implements SerializedMetaSpec {
     @Override
     public String getTable() {
         return serializedTable;
+    }
+
+    public String getJsonPayload() {
+        return jsonPayload;
+    }
+
+    public String getPredicateJson() {
+        return predicateJson;
     }
 
     @Override

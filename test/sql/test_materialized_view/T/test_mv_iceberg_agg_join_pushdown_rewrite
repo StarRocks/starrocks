@@ -65,7 +65,12 @@ refresh materialized view mv_online_by_city with sync mode;
 
 -- The target rewrite path: AGGREGATE_JOIN_PUSH_DOWN_RULE rewrites the joined
 -- aggregation against an MV whose only base table is the Iceberg fact table.
+-- Force mode loads the MV plan synchronously and picks the MV whenever the rewrite succeeds. Without it, the MV is
+-- skipped while its plan is still being loaded asynchronously from the Iceberg metastore, and the cost-based choice
+-- between the MV and the base table is close on this tiny data set, so the check was flaky. A failed rewrite still
+-- falls back to the base table, so the check still catches the bug this case covers.
 set enable_materialized_view_rewrite = true;
+set materialized_view_rewrite_mode = "force";
 function: check_hit_materialized_view("select d.city_name, sum(f.online_seconds) from iceberg_mv_${uuid0}.ice_db_${uuid0}.f_driver_online_detail_h f left join d_city d on d.city_id = f.city_id where f.date_id >= 20260101 and f.date_id < 20260103 and f.business = 'Transport' and f.granularity = 'WHEELS' group by d.city_name", "mv_online_by_city")
 
 drop materialized view mv_online_by_city;

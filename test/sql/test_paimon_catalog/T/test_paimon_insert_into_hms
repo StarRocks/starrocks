@@ -1,0 +1,12 @@
+-- name: test_paimon_insert_into_hms
+function: create_paimon_ddl_catalog("paimon_hms_write_${uuid0}", "${uuid0}", "hive")
+CREATE DATABASE paimon_hms_write_${uuid0}.paimon_hms_write_${uuid0};
+CREATE TABLE paimon_hms_write_${uuid0}.paimon_hms_write_${uuid0}.append_rows (id INT, value VARCHAR(32))
+PROPERTIES ('bucket' = '-1', 'file.format' = 'parquet');
+INSERT INTO paimon_hms_write_${uuid0}.paimon_hms_write_${uuid0}.append_rows VALUES (1, 'one'), (2, 'two');
+[ORDER]SELECT id, value FROM paimon_hms_write_${uuid0}.paimon_hms_write_${uuid0}.append_rows ORDER BY id;
+CLEANUP {
+  DROP TABLE IF EXISTS paimon_hms_write_${paimon_ddl_warehouse_id}.paimon_hms_write_${paimon_ddl_warehouse_id}.append_rows;
+  DROP DATABASE IF EXISTS paimon_hms_write_${paimon_ddl_warehouse_id}.paimon_hms_write_${paimon_ddl_warehouse_id};
+  DROP CATALOG IF EXISTS paimon_hms_write_${paimon_ddl_warehouse_id};
+} END CLEANUP

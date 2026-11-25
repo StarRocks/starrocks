@@ -30,6 +30,7 @@ set(EXPR_TEST_FILES
     array_expr_test.cpp
     case_expr_test.cpp
     cast_expr_core_test.cpp
+    cast_geo_null_test.cpp
     cast_expr_test.cpp
     function_context_core_test.cpp
     expr_test.cpp
@@ -75,6 +76,7 @@ set(EXPR_TEST_FILES
     decimal_cast_expr_decimalv2_test.cpp
     decimal_cast_expr_integer_test.cpp
     decimal_cast_expr_time_test.cpp
+    decimal_null_row_report_error_test.cpp
     encryption_functions_test.cpp
     function_call_expr_test.cpp
     generate_series_core_test.cpp
@@ -101,13 +103,16 @@ set(EXPR_TEST_FILES
     string_fn_test.cpp
     string_fn_trim_test.cpp
     string_fn_url_extract_parameter_test.cpp
+    file_functions_test.cpp
     struct_functions_test.cpp
     subfield_expr_test.cpp
     table_function/multi_unnest_core_test.cpp
     table_function/unnest_bitmap_core_test.cpp
     table_function/unnest_core_test.cpp
+    table_function/unnest_geo_test.cpp
     table_function/subdivide_bitmap_core_test.cpp
     udf/python/env_test.cpp
+    udf/udf_call_stub_test.cpp
     unary_function_test.cpp
     unnest_core_test.cpp
     unnest_variant_test.cpp

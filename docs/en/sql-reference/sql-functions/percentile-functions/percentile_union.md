@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Aggregates PERCENTILE data."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # percentile_union

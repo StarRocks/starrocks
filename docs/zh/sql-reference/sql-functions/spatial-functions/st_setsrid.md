@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 51
 description: "仅修改原生 GEOMETRY 的 CRS 元数据，不转换坐标。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_SetSRID

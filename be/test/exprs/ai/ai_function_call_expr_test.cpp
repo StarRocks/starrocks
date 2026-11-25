@@ -49,6 +49,7 @@
 #include "platform/llm/ai_provider.h"
 #include "platform/llm/openai_compatible_provider.h"
 #include "runtime/runtime_state.h"
+#include "testutil/type_test_helper.h"
 #include "types/json_value.h"
 #include "types/type_descriptor.h"
 
@@ -136,7 +137,7 @@ private:
 };
 
 TypeDescriptor varchar_type() {
-    return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    return TYPE_VARCHAR_DESC;
 }
 
 TypeDescriptor options_type() {
@@ -358,7 +359,7 @@ std::string request_body(const AIFunctionInputBatch& batch, const AIFunctionRowI
             .model = row.model,
             .api_key = "test-key",
             .prompt = row.prompt,
-            .options = batch.options.get(),
+            .options = batch.options,
     });
     EXPECT_TRUE(request.ok()) << request.status().message();
     return request.ok() ? std::move(request).value().body : std::string();
@@ -416,13 +417,12 @@ TEST_F(AIFunctionCallExprTest, FactoryRejectsMalformedAIThriftWithoutDelegatingT
             {"wrong config", [](TExprNode& node) { node.ai_provider_id = "invalid\nconfig"; }},
             {"missing nullable", [](TExprNode& node) { node.__isset.is_nullable = false; }},
             {"non-nullable", [](TExprNode& node) { node.__set_is_nullable(false); }},
-            {"wrong node return", [](TExprNode& node) { node.type = TypeDescriptor(TYPE_INT).to_thrift(); }},
-            {"wrong function return", [](TExprNode& node) { node.fn.ret_type = TypeDescriptor(TYPE_INT).to_thrift(); }},
+            {"wrong node return", [](TExprNode& node) { node.type = TYPE_INT_DESC.to_thrift(); }},
+            {"wrong function return", [](TExprNode& node) { node.fn.ret_type = TYPE_INT_DESC.to_thrift(); }},
             {"wrong arity", [](TExprNode& node) { node.num_children = 2; }},
             {"wrong argument count",
              [](TExprNode& node) { node.fn.arg_types.emplace_back(varchar_type().to_thrift()); }},
-            {"wrong argument type",
-             [](TExprNode& node) { node.fn.arg_types[0] = TypeDescriptor(TYPE_INT).to_thrift(); }},
+            {"wrong argument type", [](TExprNode& node) { node.fn.arg_types[0] = TYPE_INT_DESC.to_thrift(); }},
             {"mismatched fid", [](TExprNode& node) { node.fn.fid = 200004; }},
     };
 
@@ -638,7 +638,7 @@ TEST_F(AIFunctionCallExprTest, FactoryRejectsArgumentTypesThatDoNotMatchEachFid)
     for (const auto& test_case : test_cases) {
         SCOPED_TRACE(test_case.fid);
         TExpr expression = make_ai_expression(test_case.fid);
-        expression.nodes.front().fn.arg_types[test_case.argument_index] = TypeDescriptor(TYPE_INT).to_thrift();
+        expression.nodes.front().fn.arg_types[test_case.argument_index] = TYPE_INT_DESC.to_thrift();
 
         ObjectPool pool;
         Expr* root = nullptr;
@@ -665,8 +665,7 @@ TEST_F(AIFunctionCallExprTest, PrepareRejectsFlattenedChildTypesThatDisagreeWith
     for (const auto& test_case : test_cases) {
         SCOPED_TRACE(test_case.fid);
         TExpr expression = make_ai_expression(test_case.fid);
-        expression.nodes[test_case.argument_index + 1] =
-                make_slot_ref(TypeDescriptor(TYPE_INT), test_case.argument_index + 1);
+        expression.nodes[test_case.argument_index + 1] = make_slot_ref(TYPE_INT_DESC, test_case.argument_index + 1);
 
         ObjectPool pool;
         Expr* root = nullptr;
@@ -716,7 +715,7 @@ TEST_F(AIFunctionCallExprTest, PrepareAcceptsCurrentMainCompatibleStringChildTyp
 
 TEST_F(AIFunctionCallExprTest, PrepareRejectsConcreteOptionTypesThatDisagreeWithTheValidatedFunctionType) {
     TExpr expression = make_ai_expression(kPromptFid);
-    expression.nodes[4] = make_slot_ref(TypeDescriptor::create_map_type(varchar_type(), TypeDescriptor(TYPE_INT)), 4);
+    expression.nodes[4] = make_slot_ref(TypeDescriptor::create_map_type(varchar_type(), TYPE_INT_DESC), 4);
 
     ObjectPool pool;
     Expr* root = nullptr;
@@ -891,7 +890,7 @@ TEST_F(AIFunctionCallExprTest, PromptOptionsAreConstantPreparedOnceAndSharedByTh
 
 TEST_F(AIFunctionCallExprTest, FactoryRejectsNonJsonOptions) {
     for (const auto& type : {varchar_type(), TypeDescriptor::create_map_type(varchar_type(), varchar_type()),
-                             TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_DOUBLE))}) {
+                             TypeDescriptor::create_map_type(TYPE_INT_DESC, TYPE_DOUBLE_DESC)}) {
         ObjectPool pool;
         auto wire = make_ai_expression(kPromptFid);
         wire.nodes.front().__set_num_children(4);
@@ -1130,10 +1129,7 @@ struct AIOverloadCase {
 std::vector<AIOverloadCase> ai_overload_cases() {
     const TypeDescriptor text = varchar_type();
     const TypeDescriptor strings = TypeDescriptor::create_array_type(text);
-    const TypeDescriptor embedding = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT));
     const TypeDescriptor json(TYPE_JSON);
-    const TypeDescriptor similarity(TYPE_FLOAT);
-    const TypeDescriptor boolean(TYPE_BOOLEAN);
     const TypeDescriptor options = options_type();
     const TypeDescriptor file(TYPE_FILE);
     using Result = AIFunctionResultKind;
@@ -1146,11 +1142,11 @@ std::vector<AIOverloadCase> ai_overload_cases() {
             {200007, "ai_fix_grammar", text, {text, text, text}, Result::STRING, 2, 1},
             {200008, "ai_redact", text, {text, strings, text, text}, Result::STRING, 3, 2},
             {200009, "ai_translate", text, {text, text, text, text, text}, Result::STRING, 4, 3},
-            {200010, "ai_similarity", similarity, {text, text, text, text}, Result::SIMILARITY, 3, 2},
+            {200010, "ai_similarity", TYPE_FLOAT_DESC, {text, text, text, text}, Result::SIMILARITY, 3, 2},
             {200011, "ai_summarize", text, {text, text, text}, Result::STRING, 2, 1},
-            {200012, "ai_filter", boolean, {text, text, text, text}, Result::BOOLEAN, 3, 2},
-            {200002, "ai_embed", embedding, {text, text, text, options}, Result::EMBEDDING, 2, 1},
-            {200003, "ai_embed", embedding, {file, text, text, options}, Result::EMBEDDING, 2, 1},
+            {200012, "ai_filter", TYPE_BOOLEAN_DESC, {text, text, text, text}, Result::BOOLEAN, 3, 2},
+            {200002, "ai_embed", TYPE_ARRAY_FLOAT_DESC, {text, text, text, options}, Result::EMBEDDING, 2, 1},
+            {200003, "ai_embed", TYPE_ARRAY_FLOAT_DESC, {file, text, text, options}, Result::EMBEDDING, 2, 1},
     };
 }
 
@@ -1181,12 +1177,12 @@ TEST_F(AIFunctionCallExprTest, EveryRegisteredOverloadRetainsValidatedSemanticsW
         invalid.fn.name.function_name = test.name == "ai_complete" ? "ai_embed" : "ai_complete";
         EXPECT_FALSE(AIFunctionCallExpr::create(&pool, invalid).ok());
         invalid = wire.nodes.front();
-        invalid.__set_type(TypeDescriptor(TYPE_DOUBLE).to_thrift());
+        invalid.__set_type(TYPE_DOUBLE_DESC.to_thrift());
         EXPECT_FALSE(AIFunctionCallExpr::create(&pool, invalid).ok());
         for (size_t argument = 0; argument < test.arguments.size(); ++argument) {
             SCOPED_TRACE(argument);
             invalid = wire.nodes.front();
-            invalid.fn.arg_types[argument] = TypeDescriptor(TYPE_INT).to_thrift();
+            invalid.fn.arg_types[argument] = TYPE_INT_DESC.to_thrift();
             EXPECT_FALSE(AIFunctionCallExpr::create(&pool, invalid).ok());
         }
     }
@@ -1199,44 +1195,51 @@ TEST_F(AIFunctionCallExprTest, EveryRegisteredOverloadRetainsValidatedSemanticsW
     EXPECT_FALSE(AIFunctionCallExpr::is_ai_function_name("ai_query"));
 }
 
-TEST_F(AIFunctionCallExprTest, FileInputsPreserveNullsAndOwnInlineBytes) {
-    const std::string png("\x89PNG\r\n\x1a\n", 8);
-    auto files = NullableColumn::create(FileColumn::create(), NullColumn::create());
-    files->append_datum(FileDatumBuilder::make({}, {}, {}, {}, {}, Slice(png)));
-    files->append_nulls(1);
-    files->append_datum(FileDatumBuilder::make(Slice("s3://private/object"), 0, -1, {}, {}, {}));
-    ObjectPool pool;
-    auto wire = make_extended_ai_expression(200001, "ai_complete", varchar_type(),
-                                            {varchar_type(), TypeDescriptor(TYPE_FILE)});
-    auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
-    ASSERT_TRUE(created.ok()) << created.status();
-    auto* expression = created.value();
-    auto children =
-            replace_complete_inputs(&pool, expression,
-                                    {{varchar_type(), make_varchar_column({"describe", "unused", std::nullopt})},
-                                     {TypeDescriptor(TYPE_FILE), files}});
-    RuntimeState state;
-    ExprContext context(expression);
-    ASSERT_TRUE(context.prepare(&state).ok());
-    ASSERT_TRUE(context.open(&state).ok());
-    auto chunk = make_chunk(3);
-    auto result = expression->build_input_batch(&context, chunk.get(), "vision");
-    ASSERT_TRUE(result.ok()) << result.status();
-    auto batch = std::move(result).value();
-    ASSERT_EQ(3, batch.rows.size());
+TEST_F(AIFunctionCallExprTest, BatchOwnsInlineAndUrlAfterFileColumnIsReleased) {
+    constexpr std::string_view png("\x89PNG\r\n\x1a\n", 8);
+    constexpr std::string_view url = "https://example.com/photo.JPG?signature=secret";
+    AIFunctionInputBatch batch;
+    {
+        auto files = NullableColumn::create(FileColumn::create(), NullColumn::create());
+        files->append_datum(FileDatumBuilder::make({}, {}, {}, {}, {}, Slice(png)));
+        files->append_nulls(1);
+        files->append_datum(FileDatumBuilder::make(Slice("s3://private/object"), 0, -1, {}, {}, {}));
+        files->append_datum(FileDatumBuilder::make(Slice(url), {}, {}, {}, {}, {}));
+        ObjectPool pool;
+        auto wire = make_extended_ai_expression(200001, "ai_complete", varchar_type(),
+                                                {varchar_type(), TypeDescriptor(TYPE_FILE)});
+        auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
+        ASSERT_TRUE(created.ok()) << created.status();
+        auto* expression = created.value();
+        auto children = replace_complete_inputs(
+                &pool, expression,
+                {{varchar_type(), make_varchar_column({"describe", "unused", std::nullopt, "describe URL"})},
+                 {TypeDescriptor(TYPE_FILE), std::move(files)}});
+        RuntimeState state;
+        ExprContext context(expression);
+        ASSERT_TRUE(context.prepare(&state).ok());
+        ASSERT_TRUE(context.open(&state).ok());
+        auto chunk = make_chunk(4); // Only row IDs. The FILE column comes from the child expression.
+        auto result = expression->build_input_batch(&context, chunk.get(), "vision");
+        ASSERT_TRUE(result.ok()) << result.status();
+        batch = std::move(result).value();
+        for (auto* child : children) {
+            EXPECT_EQ(1, child->evaluation_count());
+        }
+    }
+    ASSERT_EQ(4, batch.rows.size());
     EXPECT_EQ(AIFunctionRowAction::DISPATCH, batch.rows[0].action);
     EXPECT_EQ("describe", batch.rows[0].prompt);
-    ASSERT_TRUE(batch.rows[0].media.has_value());
-    EXPECT_EQ("image/png", batch.rows[0].media->mime_type);
-    EXPECT_EQ(png, batch.rows[0].media->bytes);
+    ASSERT_TRUE(batch.rows[0].media);
+    EXPECT_EQ("image/png", batch.rows[0].media->content_type);
+    EXPECT_EQ(png, batch.rows[0].media->inline_bytes);
     EXPECT_EQ(AIFunctionRowAction::SQL_NULL, batch.rows[1].action);
-    // A NULL prompt short-circuits even a reference FILE without attempting to read it.
+    // A NULL prompt short-circuits even an invalid FILE URL.
     EXPECT_EQ(AIFunctionRowAction::SQL_NULL, batch.rows[2].action);
-    for (auto* child : children) {
-        EXPECT_EQ(1, child->evaluation_count());
-    }
-    files->reset_column();
-    EXPECT_EQ(png, batch.rows[0].media->bytes);
+    EXPECT_EQ(AIFunctionRowAction::DISPATCH, batch.rows[3].action);
+    ASSERT_TRUE(batch.rows[3].media);
+    EXPECT_EQ("image/jpeg", batch.rows[3].media->content_type);
+    EXPECT_EQ(url, batch.rows[3].media->referenced_url);
 }
 
 TEST_F(AIFunctionCallExprTest, FileEmbeddingIsNotAStringCastAndEnforcesInputLimit) {
@@ -1244,9 +1247,7 @@ TEST_F(AIFunctionCallExprTest, FileEmbeddingIsNotAStringCastAndEnforcesInputLimi
     auto files = FileColumn::create();
     files->append_datum(FileDatumBuilder::make({}, {}, {}, Slice("image/png"), {}, Slice(png)));
     ObjectPool pool;
-    auto wire = make_extended_ai_expression(200003, "ai_embed",
-                                            TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)),
-                                            {TypeDescriptor(TYPE_FILE)});
+    auto wire = make_extended_ai_expression(200003, "ai_embed", TYPE_ARRAY_FLOAT_DESC, {TypeDescriptor(TYPE_FILE)});
     auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
     ASSERT_TRUE(created.ok()) << created.status();
     auto* expression = created.value();
@@ -1261,52 +1262,25 @@ TEST_F(AIFunctionCallExprTest, FileEmbeddingIsNotAStringCastAndEnforcesInputLimi
     auto batch = std::move(result).value();
     ASSERT_EQ(2, batch.rows.size());
     EXPECT_TRUE(batch.rows[0].prompt.empty());
-    EXPECT_EQ(png, batch.rows[1].media->bytes);
+    ASSERT_TRUE(batch.rows[1].media);
+    EXPECT_EQ(png, batch.rows[1].media->inline_bytes);
     auto limited = expression->build_input_batch(&context, chunk.get(), "embed", png.size() - 1);
     ASSERT_TRUE(limited.ok()) << limited.status();
     EXPECT_EQ(AIFunctionRowAction::TERMINAL_ROW_FAILURE, limited->rows[0].action);
-    EXPECT_FALSE(limited->rows[0].media.has_value());
+    EXPECT_FALSE(limited->rows[0].media);
     wire.nodes.front().fn.arg_types[0] = varchar_type().to_thrift();
     EXPECT_FALSE(AIFunctionCallExpr::create(&pool, wire.nodes.front()).ok());
 }
 
-TEST_F(AIFunctionCallExprTest, FileReferencesAreRejectedWithoutDisclosingLocation) {
-    auto files = FileColumn::create();
-    files->append_datum(FileDatumBuilder::make(Slice("s3://private/object?credential=secret"), 12, -1, {}, {}, {}));
-    ObjectPool pool;
-    auto wire = make_extended_ai_expression(200001, "ai_complete", varchar_type(),
-                                            {varchar_type(), TypeDescriptor(TYPE_FILE)});
-    auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
-    ASSERT_TRUE(created.ok()) << created.status();
-    auto* expression = created.value();
-    replace_complete_inputs(&pool, expression,
-                            {{varchar_type(), make_varchar_column({"describe"})}, {TypeDescriptor(TYPE_FILE), files}});
-    RuntimeState state;
-    ExprContext context(expression);
-    ASSERT_TRUE(context.prepare(&state).ok());
-    ASSERT_TRUE(context.open(&state).ok());
-    auto chunk = make_chunk(1);
-    auto batch = expression->build_input_batch(&context, chunk.get(), "vision");
-    ASSERT_FALSE(batch.ok());
-    EXPECT_TRUE(batch.status().is_not_supported());
-    EXPECT_EQ(std::string::npos, batch.status().message().find("private"));
-    EXPECT_EQ(std::string::npos, batch.status().message().find("secret"));
-}
-
-TEST_F(AIFunctionCallExprTest, MalformedInlineFilesFailOnlyTheirOwnRows) {
+TEST_F(AIFunctionCallExprTest, InvalidMediaFailsOnlyItsOwnRow) {
     const std::string png("\x89PNG\r\n\x1a\n", 8);
+    constexpr std::string_view url = "https://bucket.example/photo.jpg";
     auto files = FileColumn::create();
-    files->append_datum(FileDatumBuilder::make(Slice("s3://private/object"), {}, {}, {}, {}, Slice(png)));
-    files->append_datum(FileDatumBuilder::make({}, 0, {}, {}, {}, Slice(png)));
-    files->append_datum(FileDatumBuilder::make({}, {}, -1, {}, {}, Slice(png)));
-    files->append_datum(FileDatumBuilder::make({}, {}, {}, {}, {}, {}));
-    files->append_datum(FileDatumBuilder::make({}, {}, {}, Slice("image/jpeg"), {}, Slice(png)));
-    files->append_datum(FileDatumBuilder::make({}, {}, {}, {}, {}, Slice("not-an-image")));
     files->append_datum(FileDatumBuilder::make({}, {}, {}, {}, {}, Slice(png)));
+    files->append_datum(FileDatumBuilder::make({}, {}, {}, {}, {}, Slice("not-an-image")));
+    files->append_datum(FileDatumBuilder::make(Slice(url), {}, {}, {}, {}, {}));
     ObjectPool pool;
-    auto wire = make_extended_ai_expression(200003, "ai_embed",
-                                            TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)),
-                                            {TypeDescriptor(TYPE_FILE)});
+    auto wire = make_extended_ai_expression(200003, "ai_embed", TYPE_ARRAY_FLOAT_DESC, {TypeDescriptor(TYPE_FILE)});
     auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
     ASSERT_TRUE(created.ok()) << created.status();
     auto* expression = created.value();
@@ -1315,18 +1289,18 @@ TEST_F(AIFunctionCallExprTest, MalformedInlineFilesFailOnlyTheirOwnRows) {
     ExprContext context(expression);
     ASSERT_TRUE(context.prepare(&state).ok());
     ASSERT_TRUE(context.open(&state).ok());
-    auto chunk = make_chunk(7);
+    auto chunk = make_chunk(3);
     auto batch = expression->build_input_batch(&context, chunk.get(), "embed");
     ASSERT_TRUE(batch.ok()) << batch.status();
-    ASSERT_EQ(7, batch->rows.size());
-    for (size_t row = 0; row < 6; ++row) {
-        SCOPED_TRACE(row);
-        EXPECT_EQ(AIFunctionRowAction::TERMINAL_ROW_FAILURE, batch->rows[row].action);
-        EXPECT_FALSE(batch->rows[row].media.has_value());
-    }
-    EXPECT_EQ(AIFunctionRowAction::DISPATCH, batch->rows[6].action);
-    ASSERT_TRUE(batch->rows[6].media.has_value());
-    EXPECT_EQ(png, batch->rows[6].media->bytes);
+    ASSERT_EQ(3, batch->rows.size());
+    EXPECT_EQ(AIFunctionRowAction::DISPATCH, batch->rows[0].action);
+    ASSERT_TRUE(batch->rows[0].media);
+    EXPECT_EQ(png, batch->rows[0].media->inline_bytes);
+    EXPECT_EQ(AIFunctionRowAction::TERMINAL_ROW_FAILURE, batch->rows[1].action);
+    EXPECT_FALSE(batch->rows[1].media);
+    EXPECT_EQ(AIFunctionRowAction::DISPATCH, batch->rows[2].action);
+    ASSERT_TRUE(batch->rows[2].media);
+    EXPECT_EQ(url, batch->rows[2].media->referenced_url);
 }
 
 TEST_F(AIFunctionCallExprTest, FilterPromptRequestsUnquotedBooleanTokens) {
@@ -1334,7 +1308,7 @@ TEST_F(AIFunctionCallExprTest, FilterPromptRequestsUnquotedBooleanTokens) {
         SCOPED_TRACE(explicit_model);
         ObjectPool pool;
         std::vector<TypeDescriptor> arguments(4, varchar_type());
-        auto wire = make_extended_ai_expression(200012, "ai_filter", TypeDescriptor(TYPE_BOOLEAN), arguments);
+        auto wire = make_extended_ai_expression(200012, "ai_filter", TYPE_BOOLEAN_DESC, arguments);
         auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
         ASSERT_TRUE(created.ok()) << created.status();
         auto* expression = created.value();
@@ -1527,8 +1501,8 @@ TEST_F(AIFunctionCallExprTest, EveryOverloadAndCloneDispatchesItsDeclaredInputsA
             EXPECT_EQ(test.model_argument >= 0 ? "explicit-model" : "snapshot-model", batch->rows[0].model);
             const bool has_file = std::any_of(test.arguments.begin(), test.arguments.end(),
                                               [](const TypeDescriptor& type) { return type.type == TYPE_FILE; });
-            EXPECT_EQ(has_file, batch->rows[0].media.has_value());
-            EXPECT_FALSE(batch->rows[1].media.has_value());
+            EXPECT_EQ(has_file, batch->rows[0].media != nullptr);
+            EXPECT_FALSE(batch->rows[1].media);
             for (size_t index = 0; index < test.arguments.size(); ++index) {
                 if (static_cast<int>(index) != test.model_argument &&
                     static_cast<int>(index) != test.provider_argument && test.arguments[index].type == TYPE_VARCHAR) {
@@ -1782,8 +1756,7 @@ TEST_F(AIFunctionCallExprTest, OpenValidatesNativeStringAndJsonArrayCasts) {
 
 TEST_F(AIFunctionCallExprTest, EmbeddingOptionsCannotOverrideProviderInput) {
     ObjectPool pool;
-    auto wire = make_extended_ai_expression(200002, "ai_embed",
-                                            TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)),
+    auto wire = make_extended_ai_expression(200002, "ai_embed", TYPE_ARRAY_FLOAT_DESC,
                                             {varchar_type(), varchar_type(), varchar_type(), options_type()});
     auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
     ASSERT_TRUE(created.ok()) << created.status();
@@ -1806,8 +1779,7 @@ TEST_F(AIFunctionCallExprTest, EmbeddingOptionsCannotOverrideProviderInput) {
 
 TEST_F(AIFunctionCallExprTest, CapabilityAndResultKindMatchTheDescriptor) {
     ObjectPool pool;
-    const auto embedding_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT));
-    auto embedding = make_extended_ai_expression(200002, "ai_embed", embedding_type, {varchar_type()});
+    auto embedding = make_extended_ai_expression(200002, "ai_embed", TYPE_ARRAY_FLOAT_DESC, {varchar_type()});
     auto created = AIFunctionCallExpr::create(&pool, embedding.nodes.front());
     ASSERT_TRUE(created.ok());
     EXPECT_EQ(AICapability::EMBEDDING, created.value()->capability());

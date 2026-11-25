@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从集群中删除一个 AI provider。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP AI PROVIDER
@@ -27,7 +28,7 @@ DROP AI PROVIDER [IF EXISTS] <provider_name>
 
 ```sql
 DROP AI PROVIDER openai;
-DROP AI PROVIDER IF EXISTS cohere_rerank;
+DROP AI PROVIDER IF EXISTS dashscope_chat;
 ```
 
 ## 相关文档

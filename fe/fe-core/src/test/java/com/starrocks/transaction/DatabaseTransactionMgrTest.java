@@ -87,6 +87,7 @@ import com.starrocks.sql.OptimisticVersion;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.thrift.TLoadSourceType;
@@ -113,6 +114,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -1420,6 +1422,14 @@ public class DatabaseTransactionMgrTest {
             }
         };
 
+        List<Long> loadRowsTxnIds = new ArrayList<>();
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public void updateLoadRows(TransactionState transactionState) {
+                loadRowsTxnIds.add(transactionState.getTransactionId());
+            }
+        };
+
         TransactionStateBatch stateBatch = new TransactionStateBatch(states);
         masterTransMgr.finishTransactionBatch(GlobalStateMgrTestUtil.testDbId1, stateBatch, null);
 
@@ -1428,14 +1438,102 @@ public class DatabaseTransactionMgrTest {
         assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTransactionState(txnId6).getTransactionStatus());
         assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTransactionState(txnId7).getTransactionStatus());
         assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTransactionState(txnId8).getTransactionStatus());
+        // every txn of the batch updates load rows, as an individually published txn does
+        assertEquals(Lists.newArrayList(txnId6, txnId7, txnId8), loadRowsTxnIds);
 
         FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
         TransactionStateBatch replayStateBatch = new TransactionStateBatch(List.of(
                 fakeEditLog.getTransaction(txnId6),
                 fakeEditLog.getTransaction(txnId7),
                 fakeEditLog.getTransaction(txnId8)));
+        loadRowsTxnIds.clear();
         slaveTransMgr.replayUpsertTransactionStateBatch(replayStateBatch);
         assertEquals(4, masterDbTransMgr.getFinishedTxnNums());
+        // the follower counts them too when replaying the batch
+        assertEquals(Lists.newArrayList(txnId6, txnId7, txnId8), loadRowsTxnIds);
+    }
+
+    // The committed txns 6, 7 and 8 of the fixture, alone in a fresh graph, so that the next publish batch
+    // from txn 6 is [6, 7, 8].
+    private DatabaseTransactionMgr dbTransMgrWithThreeBatchableTxns() throws AnalysisException {
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        TransactionGraph graph = new TransactionGraph();
+        for (String label : List.of(GlobalStateMgrTestUtil.testTxnLable6, GlobalStateMgrTestUtil.testTxnLable7,
+                GlobalStateMgrTestUtil.testTxnLable8)) {
+            graph.add(lableToTxnId.get(label), Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1));
+        }
+        Deencapsulation.setField(masterDbTransMgr, "transactionGraph", graph);
+        return masterDbTransMgr;
+    }
+
+    // As the publish daemon does when it sends a publish attempt for these txns.
+    private static void markSent(DatabaseTransactionMgr mgr, long... txnIds) {
+        for (long txnId : txnIds) {
+            mgr.getTransactionState(txnId).setHasSendTask(true);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testRetryBatchTakesOnlyTheTxnsOfTheLastAttempt(boolean multiTable) throws AnalysisException {
+        boolean oldMultiTable = Config.lake_enable_batch_publish_multi_table;
+        Config.lake_enable_batch_publish_multi_table = multiTable;
+        try {
+            DatabaseTransactionMgr masterDbTransMgr = dbTransMgrWithThreeBatchableTxns();
+            long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+            long txnId7 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable7);
+            long txnId8 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable8);
+            List<TransactionStateBatch> batches = masterDbTransMgr.getReadyToPublishTxnListBatch();
+            assertEquals(1, batches.size());
+            assertEquals(List.of(txnId6, txnId7, txnId8), batches.get(0).getTxnIds());
+
+            // An attempt [6, 7] did not finish and txn 8 committed after it: the retry must leave txn 8 out.
+            markSent(masterDbTransMgr, txnId6, txnId7);
+            for (int round = 0; round < 2; round++) {
+                batches = masterDbTransMgr.getReadyToPublishTxnListBatch();
+                assertEquals(1, batches.size());
+                assertEquals(List.of(txnId6, txnId7), batches.get(0).getTxnIds());
+            }
+        } finally {
+            Config.lake_enable_batch_publish_multi_table = oldMultiTable;
+        }
+    }
+
+    @Test
+    public void testRetryOfAOneTxnBatchStaysAlone() throws AnalysisException {
+        int oldMinVersionNum = Config.lake_batch_publish_min_version_num;
+        Config.lake_batch_publish_min_version_num = 3;
+        try {
+            DatabaseTransactionMgr masterDbTransMgr = dbTransMgrWithThreeBatchableTxns();
+            long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+            // Txn 6 was sent alone: its retry stays alone even though 7 and 8 are ready to join it, and even
+            // though a fresh batch would need three txns.
+            markSent(masterDbTransMgr, txnId6);
+            List<TransactionStateBatch> batches = masterDbTransMgr.getReadyToPublishTxnListBatch();
+            assertEquals(1, batches.size());
+            assertEquals(List.of(txnId6), batches.get(0).getTxnIds());
+        } finally {
+            Config.lake_batch_publish_min_version_num = oldMinVersionNum;
+        }
+    }
+
+    @Test
+    public void testRetryTakesInNewTxnsWhenRetryFreezeIsOff() throws AnalysisException {
+        boolean oldRetryFreeze = Config.lake_enable_batch_publish_retry_freeze;
+        Config.lake_enable_batch_publish_retry_freeze = false;
+        try {
+            DatabaseTransactionMgr masterDbTransMgr = dbTransMgrWithThreeBatchableTxns();
+            long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+            long txnId7 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable7);
+            long txnId8 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable8);
+            markSent(masterDbTransMgr, txnId6, txnId7);
+            List<TransactionStateBatch> batches = masterDbTransMgr.getReadyToPublishTxnListBatch();
+            assertEquals(1, batches.size());
+            assertEquals(List.of(txnId6, txnId7, txnId8), batches.get(0).getTxnIds());
+        } finally {
+            Config.lake_enable_batch_publish_retry_freeze = oldRetryFreeze;
+        }
     }
 
     private static TransactionState makeVisibleBatchTxn(long txnId, List<Long> tableIds) {
@@ -1523,12 +1621,21 @@ public class DatabaseTransactionMgrTest {
                 return true;
             }
         };
+        List<Long> loadRowsTxnIds = new ArrayList<>();
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public void updateLoadRows(TransactionState transactionState) {
+                loadRowsTxnIds.add(transactionState.getTransactionId());
+            }
+        };
 
         slaveTransMgr.replayUpsertTransactionStateBatch(stateBatch);
 
         // both tables' visible versions advanced; table2 only by the two txns that write it
         assertEquals(t1BaseVersion + 3, slaveT1Partition.getVisibleVersion());
         assertEquals(t2BaseVersion + 2, slaveT2Partition.getVisibleVersion());
+        // every txn of the batch updates load rows, as an individually published txn does
+        assertEquals(Lists.newArrayList(9001L, 9002L, 9003L), loadRowsTxnIds);
         assertEquals(deleteOnlySubset, slaveTable1.hasDelete());
         Assertions.assertFalse(table2.hasDelete(), "the DELETE does not write table2");
 
@@ -1537,6 +1644,106 @@ public class DatabaseTransactionMgrTest {
         assertEquals(TransactionStatus.VISIBLE, slaveDbTransMgr.getTransactionState(9001L).getTransactionStatus());
         assertEquals(TransactionStatus.VISIBLE, slaveDbTransMgr.getTransactionState(9002L).getTransactionStatus());
         assertEquals(TransactionStatus.VISIBLE, slaveDbTransMgr.getTransactionState(9003L).getTransactionStatus());
+    }
+
+    /**
+     * StarRocksTest#12648: a follower replays one VISIBLE record of a transaction that wrote two partitions of a
+     * table. The leader moved both partitions' visible versions under the table WRITE lock; the replay has to as
+     * well, or a reader holding the table lock -- a query planning on the follower -- sees the transaction in one
+     * partition and not in the other.
+     */
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testReplayVisibleTransactionHoldsTableWriteLock(boolean lake) throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
+        long dbId = GlobalStateMgrTestUtil.testDbId1;
+        OlapTable table = (OlapTable) slaveGlobalStateMgr.getLocalMetastore()
+                .getTable(dbId, GlobalStateMgrTestUtil.testTableId1);
+        PhysicalPartition first = table.getPartition(GlobalStateMgrTestUtil.testPartition1)
+                .getDefaultPhysicalPartition();
+        long base = first.getVisibleVersion();
+
+        // A second partition of the same table, at the same version.
+        long partition2Id = 30001L;
+        Partition partition2 = new Partition(partition2Id, partition2Id + 100, "p2",
+                new MaterializedIndex(GlobalStateMgrTestUtil.testIndexId1, IndexState.NORMAL),
+                new RandomDistributionInfo(10));
+        PhysicalPartition second = partition2.getDefaultPhysicalPartition();
+        second.updateVisibleVersion(base);
+        second.setNextVersion(base + 1);
+        table.getPartitionInfo().setDataProperty(partition2Id, DataProperty.DEFAULT_DATA_PROPERTY);
+        table.getPartitionInfo().setReplicationNum(partition2Id, (short) 3);
+        table.addPartition(partition2);
+
+        TransactionState txn = new TransactionState(dbId, List.of(table.getId()), 97001L, "replay_two_partitions",
+                null, TransactionState.LoadJobSourceType.FRONTEND, transactionSource, -1, 60_000);
+        long now = System.currentTimeMillis();
+        txn.setPrepareTime(now);
+        txn.setCommitTime(now);
+        txn.setFinishTime(now);
+        txn.setTransactionStatus(TransactionStatus.VISIBLE);
+        txn.setFinishState(new TxnFinishState());
+        addCommitInfo(txn, table.getId(), first.getId(), base + 1, now);
+        addCommitInfo(txn, table.getId(), second.getId(), base + 1, now);
+        // What the follower reads back from the journal.
+        TransactionState replayed = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(txn), TransactionState.class);
+
+        if (lake) {
+            new MockUp<Table>() {
+                @Mock
+                public boolean isCloudNativeTableOrMaterializedView() {
+                    return true;
+                }
+            };
+        }
+        // Stop the replayer right after it has published the first of the two partitions.
+        String replayerName = "follower-replayer";
+        CountDownLatch onePublished = new CountDownLatch(1);
+        CountDownLatch allowRest = new CountDownLatch(1);
+        AtomicBoolean paused = new AtomicBoolean(false);
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public void setVisibleVersion(Invocation invocation, long version, long time) throws InterruptedException {
+                invocation.proceed(version, time);
+                if (Thread.currentThread().getName().equals(replayerName) && paused.compareAndSet(false, true)) {
+                    onePublished.countDown();
+                    assertTrue(allowRest.await(10, TimeUnit.SECONDS));
+                }
+            }
+        };
+
+        DatabaseTransactionMgr mgr = slaveTransMgr.getDatabaseTransactionMgr(dbId);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread replayer = new Thread(() -> {
+            try {
+                mgr.replayUpsertTransactionState(replayed);
+            } catch (Throwable t) {
+                failure.set(t);
+            }
+        }, replayerName);
+        replayer.start();
+        try {
+            assertTrue(onePublished.await(10, TimeUnit.SECONDS));
+            // A query planning on the follower now asks for the table READ lock.
+            Locker locker = new Locker();
+            boolean locked = locker.tryLockTablesWithIntensiveDbLock(dbId, List.of(table.getId()), LockType.READ,
+                    200, TimeUnit.MILLISECONDS);
+            long seenFirst = first.getVisibleVersion();
+            long seenSecond = second.getVisibleVersion();
+            if (locked) {
+                locker.unLockTablesWithIntensiveDbLock(dbId, List.of(table.getId()), LockType.READ);
+            }
+            Assertions.assertFalse(locked, "a reader holding the table lock got in between the partitions of one "
+                    + "transaction and saw versions " + seenFirst + " and " + seenSecond);
+        } finally {
+            allowRest.countDown();
+            replayer.join(10_000);
+        }
+        Assertions.assertFalse(replayer.isAlive());
+        assertNull(failure.get());
+        assertEquals(base + 1, first.getVisibleVersion());
+        assertEquals(base + 1, second.getVisibleVersion());
+        assertEquals(TransactionStatus.VISIBLE, mgr.getTransactionState(97001L).getTransactionStatus());
     }
 
     @Test
@@ -1841,6 +2048,204 @@ public class DatabaseTransactionMgrTest {
             commitCompleted.countDown();
             abortThread.join(5_000);
         }
+    }
+
+    // The other order of the race above (StarRocksTest#12666): COMMIT and ROLLBACK sent together to a PREPARED
+    // transaction, and the rollback takes the transaction lock first, after the commit has looked the transaction
+    // up. The commit must fail on the ABORTED state. It used to check and copy the PREPARED object it had looked
+    // up and store a COMMITTED state over the abort, while the abort had already told the backends to delete the
+    // load's txn logs and segments: publish never finished, or the data became visible without its files.
+    @Test
+    public void testCommitPreparedLosingRaceToRollbackKeepsTxnAborted() throws Exception {
+        Database db = masterGlobalStateMgr.getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDbId1);
+        DatabaseTransactionMgr dbTxnMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        int runningTxnNumsBefore = dbTxnMgr.getRunningTxnNums();
+        long nextVersionBefore = racePartition().getNextVersion();
+
+        long txnId = beginStreamLoadTxn("test_commit_rollback_race_");
+        masterTransMgr.prepareTransaction(GlobalStateMgrTestUtil.testDbId1, txnId, -1,
+                buildTabletCommitInfoList(), Lists.newArrayList(), null);
+        assertEquals(TransactionStatus.PREPARED, dbTxnMgr.getTransactionState(txnId).getTransactionStatus());
+
+        Throwable[] errors = raceWithRollback(dbTxnMgr, txnId, () -> {
+            masterTransMgr.commitPreparedTransaction(db, txnId, 1000L);
+            return null;
+        });
+
+        assertTxnStaysAborted(dbTxnMgr, txnId, runningTxnNumsBefore, nextVersionBefore);
+        assertNull(errors[1], "the rollback must succeed");
+        assertTrue(errors[0] instanceof TransactionCommitFailedException, "the commit must fail, got " + errors[0]);
+    }
+
+    // The same race one step earlier: the rollback lands after prepare has looked the transaction up. Prepare must
+    // fail on the ABORTED state; storing PREPARED over the abort would let a later commit publish a load whose files
+    // the abort has removed.
+    @Test
+    public void testPrepareLosingRaceToRollbackKeepsTxnAborted() throws Exception {
+        DatabaseTransactionMgr dbTxnMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        int runningTxnNumsBefore = dbTxnMgr.getRunningTxnNums();
+        long nextVersionBefore = racePartition().getNextVersion();
+
+        long txnId = beginStreamLoadTxn("test_prepare_rollback_race_");
+
+        Throwable[] errors = raceWithRollback(dbTxnMgr, txnId, () -> {
+            masterTransMgr.prepareTransaction(GlobalStateMgrTestUtil.testDbId1, txnId, -1,
+                    buildTabletCommitInfoList(), Lists.newArrayList(), null);
+            return null;
+        });
+
+        assertTxnStaysAborted(dbTxnMgr, txnId, runningTxnNumsBefore, nextVersionBefore);
+        assertNull(errors[1], "the rollback must succeed");
+        assertTrue(errors[0] instanceof TransactionCommitFailedException, "the prepare must fail, got " + errors[0]);
+    }
+
+    // A one-step commit (prepare and commit in one call, as a plain load does) racing an abort, such as the one the
+    // timeout checker or a cancel sends. Checking the latest state in the commit step alone is not enough: the
+    // prepare step would store PREPARED over the abort, and the commit step would then commit that PREPARED state.
+    @Test
+    public void testOneStepCommitLosingRaceToAbortKeepsTxnAborted() throws Exception {
+        DatabaseTransactionMgr dbTxnMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        int runningTxnNumsBefore = dbTxnMgr.getRunningTxnNums();
+        long nextVersionBefore = racePartition().getNextVersion();
+
+        long txnId = beginStreamLoadTxn("test_one_step_commit_abort_race_");
+
+        Throwable[] errors = raceWithRollback(dbTxnMgr, txnId, () -> masterTransMgr.commitTransaction(
+                GlobalStateMgrTestUtil.testDbId1, txnId, buildTabletCommitInfoList(), Lists.newArrayList(), null));
+
+        assertTxnStaysAborted(dbTxnMgr, txnId, runningTxnNumsBefore, nextVersionBefore);
+        assertNull(errors[1], "the abort must succeed");
+        assertTrue(errors[0] instanceof TransactionCommitFailedException, "the commit must fail, got " + errors[0]);
+    }
+
+    // The rollback aborts the transaction and the label cleaner then drops it, both after the commit has looked it
+    // up. The commit must report the transaction as not found: falling back to the PREPARED copy it looked up would
+    // bring back, as COMMITTED, a load whose files the abort has already removed.
+    @Test
+    public void testCommitPreparedLosingRaceToAbortAndLabelCleanupReportsNotFound() throws Exception {
+        Database db = masterGlobalStateMgr.getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDbId1);
+        DatabaseTransactionMgr dbTxnMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        int runningTxnNumsBefore = dbTxnMgr.getRunningTxnNums();
+        long nextVersionBefore = racePartition().getNextVersion();
+
+        long txnId = beginStreamLoadTxn("test_commit_rollback_cleanup_race_");
+        masterTransMgr.prepareTransaction(GlobalStateMgrTestUtil.testDbId1, txnId, -1,
+                buildTabletCommitInfoList(), Lists.newArrayList(), null);
+
+        // An hour from now every finished transaction has outlived label_keep_max_second, so the cleaner drops them all.
+        Throwable[] errors = raceWithRollback(dbTxnMgr, txnId, () -> {
+            masterTransMgr.commitPreparedTransaction(db, txnId, 1000L);
+            return null;
+        }, () -> dbTxnMgr.removeExpiredTxns(System.currentTimeMillis() + 3_600_000L));
+
+        assertNull(errors[1], "the rollback must succeed");
+        assertTrue(errors[0] instanceof TransactionNotFoundException, "the commit must fail, got " + errors[0]);
+        assertNull(dbTxnMgr.getTransactionState(txnId), "the dropped transaction must not come back");
+        assertEquals(runningTxnNumsBefore, dbTxnMgr.getRunningTxnNums(),
+                "the dropped transaction must not be back among the running ones");
+        assertEquals(nextVersionBefore, racePartition().getNextVersion(),
+                "no partition version may be handed to the dropped transaction");
+    }
+
+    private long beginStreamLoadTxn(String labelPrefix) throws Exception {
+        return masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1), labelPrefix + System.nanoTime(),
+                transactionSource, TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                Config.stream_load_default_timeout_second);
+    }
+
+    private PhysicalPartition racePartition() {
+        OlapTable table = (OlapTable) masterGlobalStateMgr.getLocalMetastore().getTable(
+                GlobalStateMgrTestUtil.testDbId1, GlobalStateMgrTestUtil.testTableId1);
+        return table.getPartition(GlobalStateMgrTestUtil.testPartition1).getDefaultPhysicalPartition();
+    }
+
+    // Runs stateChange on its own thread and parks it at its first write lock on txnId, that is after it has looked
+    // the transaction up and before it holds the transaction lock. A rollback then aborts the transaction from a
+    // third thread, and the parked thread goes on once the ABORTED state is stored. The rollback cannot run on the
+    // test thread: OlapTable's postAbort takes a table read lock, which a parked prepare or commit holds in write
+    // mode until it returns.
+    // Returns {error of stateChange, error of the rollback}, null where the call succeeded.
+    private Throwable[] raceWithRollback(DatabaseTransactionMgr dbTxnMgr, long txnId, Callable<?> stateChange)
+            throws InterruptedException {
+        return raceWithRollback(dbTxnMgr, txnId, stateChange, () -> {});
+    }
+
+    // Same, and the parked thread runs beforeRelease once the ABORTED state is stored, before it goes on.
+    private Throwable[] raceWithRollback(DatabaseTransactionMgr dbTxnMgr, long txnId, Callable<?> stateChange,
+                                         Runnable beforeRelease) throws InterruptedException {
+        AtomicReference<Thread> racerRef = new AtomicReference<>();
+        AtomicBoolean parked = new AtomicBoolean(false);
+        CountDownLatch racerLookedUpTxn = new CountDownLatch(1);
+        // The mock acts only on the racing thread, which is dead once this method returns, so it does not affect
+        // the tests that run after this one.
+        new MockUp<TransactionState>() {
+            @Mock
+            public void writeLock(Invocation inv) {
+                TransactionState ts = inv.getInvokedInstance();
+                if (Thread.currentThread() == racerRef.get() && ts.getTransactionId() == txnId
+                        && parked.compareAndSet(false, true)) {
+                    racerLookedUpTxn.countDown();
+                    awaitTxnStatus(dbTxnMgr, txnId, TransactionStatus.ABORTED);
+                    beforeRelease.run();
+                }
+                inv.proceed();
+            }
+        };
+
+        Throwable[] errors = new Throwable[2];
+        Thread racer = new Thread(() -> {
+            try {
+                stateChange.call();
+            } catch (Throwable t) {
+                errors[0] = t;
+            }
+        }, "txn-race-state-change");
+        Thread rollback = new Thread(() -> {
+            try {
+                dbTxnMgr.abortTransaction(txnId, true, "User Aborted", null,
+                        Lists.newArrayList(), Lists.newArrayList());
+            } catch (Throwable t) {
+                errors[1] = t;
+            }
+        }, "txn-race-rollback");
+        racerRef.set(racer);
+        racer.start();
+        assertTrue(racerLookedUpTxn.await(10, TimeUnit.SECONDS), "the racing thread did not reach the txn lock");
+        rollback.start();
+        racer.join(30_000);
+        rollback.join(30_000);
+        assertFalse(racer.isAlive(), "the racing thread did not finish");
+        assertFalse(rollback.isAlive(), "the rollback did not finish");
+        return errors;
+    }
+
+    private static void awaitTxnStatus(DatabaseTransactionMgr dbTxnMgr, long txnId, TransactionStatus status) {
+        long deadline = System.currentTimeMillis() + 10_000;
+        while (dbTxnMgr.getTransactionState(txnId).getTransactionStatus() != status) {
+            if (System.currentTimeMillis() > deadline) {
+                throw new IllegalStateException("transaction " + txnId + " did not reach " + status);
+            }
+            try {
+                Thread.sleep(5);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(e);
+            }
+        }
+    }
+
+    private void assertTxnStaysAborted(DatabaseTransactionMgr dbTxnMgr, long txnId, int runningTxnNumsBefore,
+                                       long nextVersionBefore) {
+        TransactionState state = dbTxnMgr.getTransactionState(txnId);
+        assertEquals(TransactionStatus.ABORTED, state.getTransactionStatus(), "the abort must stand");
+        assertEquals("User Aborted", state.getReason());
+        assertTrue(dbTxnMgr.getCommittedTxnList().stream().noneMatch(txn -> txn.getTransactionId() == txnId),
+                "an aborted transaction must not be queued for publish");
+        assertEquals(runningTxnNumsBefore, dbTxnMgr.getRunningTxnNums(),
+                "the aborted transaction must not be back among the running ones");
+        assertEquals(nextVersionBefore, racePartition().getNextVersion(),
+                "no partition version may be handed to the aborted transaction");
     }
 
     @Test

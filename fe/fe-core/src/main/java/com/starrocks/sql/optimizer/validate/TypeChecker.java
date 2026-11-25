@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.optimizer.validate;
 
+import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.Function;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.JoinHelper;
@@ -35,8 +37,12 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 
 import java.util.List;
@@ -93,6 +99,7 @@ public class TypeChecker implements PlanValidator.Checker {
         @Override
         public Void visitLogicalAggregate(OptExpression optExpression, Void context) {
             LogicalAggregationOperator operator = (LogicalAggregationOperator) optExpression.getOp();
+            checkFunctionSignatures(operator.getAggregations());
             checkAggCall(operator.getAggregations(), operator.getType(), operator.isSplit(), operator.hasRemoveDistinctFunc());
             visit(optExpression, context);
             return null;
@@ -101,6 +108,7 @@ public class TypeChecker implements PlanValidator.Checker {
         @Override
         public Void visitLogicalWindow(OptExpression optExpression, Void context) {
             LogicalWindowOperator operator = (LogicalWindowOperator) optExpression.getOp();
+            checkFunctionSignatures(operator.getWindowCall());
             checkFuncCall(operator.getWindowCall());
             visit(optExpression, context);
             return null;
@@ -110,6 +118,7 @@ public class TypeChecker implements PlanValidator.Checker {
         @Override
         public Void visitPhysicalHashAggregate(OptExpression optExpression, Void context) {
             PhysicalHashAggregateOperator operator = (PhysicalHashAggregateOperator) optExpression.getOp();
+            checkFunctionSignatures(operator.getAggregations());
             checkAggCall(operator.getAggregations(), operator.getType(), operator.isSplit(), operator.hasRemovedDistinctFunc());
             visit(optExpression, context);
             return null;
@@ -159,6 +168,7 @@ public class TypeChecker implements PlanValidator.Checker {
         @Override
         public Void visitPhysicalAnalytic(OptExpression optExpression, Void context) {
             PhysicalWindowOperator operator = (PhysicalWindowOperator) optExpression.getOp();
+            checkFunctionSignatures(operator.getAnalyticCall());
             // if input is binary, which only happen with rank-pre-agg optimization
             // in this case, The type of col -> aggCall in intermediate phase is a bit of messy, check it may
             // lead to forbid normal plan.
@@ -169,6 +179,51 @@ public class TypeChecker implements PlanValidator.Checker {
             return null;
         }
 
+
+        // A builtin aggregate signature is registered with wildcard decimal types such as DECIMAL128(-1, -1).
+        // The analyzer replaces them with the concrete types, and an optimizer rule that looks a builtin up
+        // again must do the same. BE builds the result and intermediate columns of an aggregate or analytic
+        // function from these types, so a wildcard that reaches BE corrupts memory instead of failing.
+        private void checkFunctionSignatures(Map<ColumnRefOperator, CallOperator> functionCalls) {
+            for (CallOperator call : functionCalls.values()) {
+                Function fn = call.getFunction();
+                if (fn == null) {
+                    continue;
+                }
+                checkArgument(!containsWildcardDecimal(fn.getReturnType()),
+                        "%s expr '%s' has a wildcard decimal return type in its function signature: %s",
+                        PREFIX, call, fn.getReturnType());
+                if (fn instanceof AggregateFunction aggFn) {
+                    checkArgument(!containsWildcardDecimal(aggFn.getIntermediateType()),
+                            "%s expr '%s' has a wildcard decimal intermediate type in its function signature: %s",
+                            PREFIX, call, aggFn.getIntermediateType());
+                }
+            }
+        }
+
+        private static boolean containsWildcardDecimal(Type type) {
+            if (type == null) {
+                return false;
+            }
+            if (type.isDecimalV3()) {
+                ScalarType scalarType = (ScalarType) type;
+                return scalarType.getScalarPrecision() < 0 || scalarType.getScalarScale() < 0;
+            }
+            if (type instanceof ArrayType arrayType) {
+                return containsWildcardDecimal(arrayType.getItemType());
+            }
+            if (type instanceof MapType mapType) {
+                return containsWildcardDecimal(mapType.getKeyType()) || containsWildcardDecimal(mapType.getValueType());
+            }
+            if (type instanceof StructType structType) {
+                for (StructField field : structType.getFields()) {
+                    if (containsWildcardDecimal(field.getType())) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
 
         private void checkFuncCall(Map<ColumnRefOperator, CallOperator> functionCalls) {
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : functionCalls.entrySet()) {

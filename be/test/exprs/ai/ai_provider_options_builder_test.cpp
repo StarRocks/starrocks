@@ -19,6 +19,7 @@
 
 #include <future>
 #include <initializer_list>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -29,6 +30,7 @@
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "platform/llm/openai_compatible_provider.h"
+#include "testutil/column_test_helper.h"
 #include "types/json_value.h"
 #include "types/type_descriptor.h"
 
@@ -61,7 +63,7 @@ std::string request_body(const AIProviderOptions& options) {
             .model = "test-model",
             .api_key = "test-api-key",
             .prompt = "test-prompt",
-            .options = &options,
+            .options = std::make_shared<const AIProviderOptions>(options),
     });
     CHECK(request.ok()) << request.status().message();
     return std::move(request).value().body;
@@ -143,10 +145,9 @@ TEST(AIProviderOptionsBuilderTest, NonObjectJsonIsRejectedWithoutEchoingValues) 
 
 TEST(AIProviderOptionsBuilderTest, OnlyJsonTypedColumnsAreAccepted) {
     auto json = make_json("{}");
-    EXPECT_FALSE(build_ai_provider_options(*json, TypeDescriptor(TYPE_VARCHAR), 0).ok());
+    EXPECT_FALSE(build_ai_provider_options(*json, TYPE_VARCHAR_DESC, 0).ok());
     EXPECT_FALSE(build_ai_provider_options(*json, TypeDescriptor(TYPE_MAP), 0).ok());
-    auto string = BinaryColumn::create();
-    string->append("secret-value");
+    auto string = ColumnTestHelper::build_column<Slice>({"secret-value"});
     auto result = build_ai_provider_options(*string, TypeDescriptor(TYPE_JSON), 0);
     ASSERT_FALSE(result.ok());
     expect_redacted(result.status(), {"secret-value"});

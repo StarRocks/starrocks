@@ -120,6 +120,7 @@ import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.statistics.ConnectorTableTriggerAnalyzeMgr;
 import com.starrocks.failpoint.FailPoint;
 import com.starrocks.failpoint.TriggerPolicy;
 import com.starrocks.http.BaseAction;
@@ -133,6 +134,9 @@ import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.load.EtlJobType;
+import com.starrocks.load.LoadJobRedaction;
+import com.starrocks.load.LoadJobVisibility;
+import com.starrocks.load.LoadJobVisibility.VisibleTask;
 import com.starrocks.load.batchwrite.RequestLoadResult;
 import com.starrocks.load.batchwrite.TableId;
 import com.starrocks.load.loadv2.LoadJob;
@@ -166,6 +170,7 @@ import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.ProxyContextManager;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryStatisticsInfo;
+import com.starrocks.qe.ScanCredentialsRefresher;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.warehouse.WarehouseQueryQueueMetrics;
@@ -196,6 +201,7 @@ import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.staros.StarMgrServer;
@@ -367,6 +373,8 @@ import com.starrocks.thrift.TPrivilegeRequirement;
 import com.starrocks.thrift.TQueryStatisticsInfo;
 import com.starrocks.thrift.TRefreshConnectionsRequest;
 import com.starrocks.thrift.TRefreshConnectionsResponse;
+import com.starrocks.thrift.TRefreshScanCredentialsRequest;
+import com.starrocks.thrift.TRefreshScanCredentialsResponse;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TReleaseSlotRequest;
@@ -406,6 +414,9 @@ import com.starrocks.thrift.TTabletReshardJobsResponse;
 import com.starrocks.thrift.TTaskInfo;
 import com.starrocks.thrift.TTrackingLoadInfo;
 import com.starrocks.thrift.TTransactionStatus;
+import com.starrocks.thrift.TTriggerExternalAnalyzeRequest;
+import com.starrocks.thrift.TTriggerExternalAnalyzeResponse;
+import com.starrocks.thrift.TTriggerExternalAnalyzeTable;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
 import com.starrocks.thrift.TUpdateFailPointRequest;
@@ -662,7 +673,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (!params.isSetUser_ident()) {
             throw new TException("missed user_identity");
         }
-        // TODO: check privilege
+        ConnectContext context = new ConnectContext();
+        UserIdentityUtils.setAuthInfoFromThrift(context, params.getUser_ident());
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
         Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
         TListPipesResult result = new TListPipesResult();
@@ -670,6 +682,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             String databaseName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(pipe.getPipeId().getDbId())
                     .map(Database::getOriginName)
                     .orElse(null);
+            if (databaseName == null || !hasAnyActionOnPipe(context, databaseName, pipe.getName())) {
+                continue;
+            }
 
             TListPipesInfo row = new TListPipesInfo();
             row.setPipe_id(pipe.getPipeId().getId());
@@ -698,25 +713,33 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new TException("missed user_identity");
         }
         LOG.info("listPipeFiles params={}", params);
-        // TODO: check privilege
+        ConnectContext context = new ConnectContext();
+        UserIdentityUtils.setAuthInfoFromThrift(context, params.getUser_ident());
         TListPipeFilesResult result = new TListPipeFilesResult();
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
         RepoAccessor repo = RepoAccessor.getInstance();
         List<PipeFileRecord> files = repo.listAllFiles();
+        // pipe id -> database name, empty if the caller holds no privilege on the pipe
+        Map<Long, Optional<String>> visiblePipes = new HashMap<>();
         for (PipeFileRecord record : files) {
-            TListPipeFilesInfo file = new TListPipeFilesInfo();
             Optional<Pipe> mayPipe = pm.mayGetPipe(record.pipeId);
             if (!mayPipe.isPresent()) {
                 LOG.warn("Pipe not found with id {}", record.pipeId);
+                continue;
+            }
+            Pipe pipe = mayPipe.get();
+            Optional<String> databaseName = visiblePipes.computeIfAbsent(record.pipeId, id ->
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(pipe.getDbAndName().first)
+                            .map(Database::getOriginName)
+                            .filter(db -> hasAnyActionOnPipe(context, db, pipe.getName())));
+            if (databaseName.isEmpty()) {
+                continue;
             }
 
+            TListPipeFilesInfo file = new TListPipeFilesInfo();
             file.setPipe_id(record.pipeId);
-            file.setDatabase_name(
-                    mayPipe.flatMap(p ->
-                                    GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(p.getDbAndName().first)
-                                            .map(Database::getOriginName))
-                            .orElse(""));
-            file.setPipe_name(mayPipe.map(Pipe::getName).orElse(""));
+            file.setDatabase_name(databaseName.get());
+            file.setPipe_name(pipe.getName());
 
             file.setFile_name(record.fileName);
             file.setFile_version(record.fileVersion);
@@ -737,6 +760,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         return result;
+    }
+
+    private static boolean hasAnyActionOnPipe(ConnectContext context, String dbName, String pipeName) {
+        try {
+            Authorizer.checkAnyActionOnPipe(context, new PipeName(dbName, pipeName));
+            return true;
+        } catch (AccessDeniedException e) {
+            return false;
+        }
     }
 
     @Override
@@ -2051,6 +2083,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             String catalog = request.getCatalog_name();
             String db = request.getDb_name();
             String table = request.getTable_name();
+            if (request.isInvalidate_only()) {
+                // The sender committed to the table and waits for this; drop the cached copy, load nothing
+                GlobalStateMgr.getCurrentState().getMetadataMgr().invalidateCachedTable(catalog, db, table);
+                LOG.info("Invalidated cached external table {}.{}.{}", catalog, db, table);
+                return new TRefreshTableResponse(new TStatus(TStatusCode.OK));
+            }
             List<String> partitions = request.getPartitions() == null ? new ArrayList<>() : request.getPartitions();
             LOG.info("Start to refresh external table {}.{}.{}.{}", catalog, db, table, partitions);
             GlobalStateMgr.getCurrentState().refreshExternalTable(new ConnectContext(),
@@ -2062,6 +2100,34 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             return new TRefreshTableResponse(status);
         }
+    }
+
+    @Override
+    public TRefreshScanCredentialsResponse refreshScanCredentials(TRefreshScanCredentialsRequest request)
+            throws TException {
+        return ScanCredentialsRefresher.refresh(request);
+    }
+
+    // A follower's query found external table statistics missing or expired; the leader runs the analyze. Only
+    // buffered here, the trigger analyze scheduler resolves and queues the tables.
+    @Override
+    public TTriggerExternalAnalyzeResponse triggerExternalAnalyze(TTriggerExternalAnalyzeRequest request)
+            throws TException {
+        TTriggerExternalAnalyzeResponse response = new TTriggerExternalAnalyzeResponse();
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            TStatus status = new TStatus(TStatusCode.CANCELLED);
+            status.addToError_msgs("current node is not leader");
+            response.setStatus(status);
+            return response;
+        }
+        if (request != null && request.isSetTables()) {
+            ConnectorTableTriggerAnalyzeMgr mgr = GlobalStateMgr.getCurrentState().getConnectorTableTriggerAnalyzeMgr();
+            for (TTriggerExternalAnalyzeTable table : request.getTables()) {
+                mgr.addTriggeredColumns(table.getTable_uuid(), table.getColumns());
+            }
+        }
+        response.setStatus(new TStatus(OK));
+        return response;
     }
 
     @Override
@@ -3521,12 +3587,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("Receive getRoutineLoadJobs: {}", request);
         TGetRoutineLoadJobsResult result = new TGetRoutineLoadJobsResult();
         RoutineLoadMgr routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
+        ConnectContext caller = LoadJobVisibility.callerOf(request);
         List<TRoutineLoadJobInfo> loads = Lists.newArrayList();
         try {
             if (request.isSetJob_id()) {
                 RoutineLoadJob job = routineLoadManager.getJob(request.getJob_id());
                 if (job != null) {
-                    loads.add(job.toThrift());
+                    addRoutineLoadJobInfo(loads, caller, job);
                 }
             } else {
                 List<RoutineLoadJob> loadJobList;
@@ -3543,7 +3610,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         loadJobList = routineLoadManager.getJob(null, null, true);
                     }
                 }
-                loads.addAll(loadJobList.stream().map(RoutineLoadJob::toThrift).collect(Collectors.toList()));
+                for (RoutineLoadJob job : loadJobList) {
+                    addRoutineLoadJobInfo(loads, caller, job);
+                }
             }
             result.setLoads(loads);
         } catch (MetaNotFoundException e) {
@@ -3558,18 +3627,32 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("Receive getStreamLoads: {}", request);
         TGetStreamLoadsResult result = new TGetStreamLoadsResult();
         StreamLoadMgr loadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
+        ConnectContext caller = LoadJobVisibility.callerOf(request);
         List<TStreamLoadInfo> loads = Lists.newArrayList();
         try {
             if (request.isSetJob_id()) {
-                AbstractStreamLoadTask task = loadManager.getTaskById(request.getJob_id());
-                if (task != null) {
-                    loads.addAll(task.toStreamLoadThrift());
+                long jobId = request.getJob_id();
+                if (LoadJobVisibility.isEnabled()) {
+                    // A statement of a multi-statement transaction is authorized with the transaction.
+                    AbstractStreamLoadTask task = loadManager.getRegisteredTaskById(jobId);
+                    if (task != null) {
+                        for (VisibleTask visibleTask : LoadJobVisibility.visibleTasks(caller, task)) {
+                            if (task.getId() == jobId || visibleTask.task().getId() == jobId) {
+                                addStreamLoadInfos(loads, visibleTask);
+                            }
+                        }
+                    }
+                } else {
+                    AbstractStreamLoadTask task = loadManager.getTaskById(jobId);
+                    if (task != null) {
+                        addStreamLoadInfos(loads, caller, task);
+                    }
                 }
             } else {
                 List<AbstractStreamLoadTask> streamLoadTaskList = loadManager.getTaskByName(request.getLabel());
                 if (streamLoadTaskList != null) {
                     for (AbstractStreamLoadTask task : streamLoadTaskList) {
-                        loads.addAll(task.toStreamLoadThrift());
+                        addStreamLoadInfos(loads, caller, task);
                     }
                 }
             }
@@ -3578,6 +3661,33 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             LOG.warn("Failed to getStreamLoads", e);
         }
         return result;
+    }
+
+    private static void addRoutineLoadJobInfo(List<TRoutineLoadJobInfo> loads, ConnectContext caller,
+                                              RoutineLoadJob job) {
+        // With the rule off the views check nothing, as before it.
+        LoadJobVisibility.Access access = LoadJobVisibility.isEnabled() ? LoadJobVisibility.accessOf(caller, job)
+                : LoadJobVisibility.Access.FULL;
+        if (access != LoadJobVisibility.Access.NONE) {
+            TRoutineLoadJobInfo info = job.toThrift();
+            loads.add(access == LoadJobVisibility.Access.FULL ? info : LoadJobRedaction.redact(info));
+        }
+    }
+
+    private static void addStreamLoadInfos(List<TStreamLoadInfo> loads, ConnectContext caller,
+                                           AbstractStreamLoadTask task) {
+        List<VisibleTask> visibleTasks = LoadJobVisibility.isEnabled() ? LoadJobVisibility.visibleTasks(caller, task)
+                : LoadJobVisibility.allTasksInFull(task);
+        for (VisibleTask visibleTask : visibleTasks) {
+            addStreamLoadInfos(loads, visibleTask);
+        }
+    }
+
+    private static void addStreamLoadInfos(List<TStreamLoadInfo> loads, VisibleTask visibleTask) {
+        for (TStreamLoadInfo info : visibleTask.task().toStreamLoadThrift()) {
+            boolean full = visibleTask.access() == LoadJobVisibility.Access.FULL;
+            loads.add(full ? info : LoadJobRedaction.redact(info));
+        }
     }
 
     @Override

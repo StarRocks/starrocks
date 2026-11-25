@@ -7,6 +7,7 @@ keywords:
   - sync
   - Flink CDC
 description: "使用 Flink CDC pipeline 捕获 PostgreSQL 变更数据，并实时同步至 StarRocks 主键表。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 从 PostgreSQL 实时同步

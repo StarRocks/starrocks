@@ -225,6 +225,11 @@ void BatchWriteMgr::receive_stream_load_rpc(brpc::Controller* cntl, const PStrea
         }
         ctx->timeout_second = timeout_second;
     }
+    Status skip_header_status = check_merge_commit_skip_header(GET_PARAMETER_OR_EMPTY(parameters, HTTP_FORMAT_KEY),
+                                                               GET_PARAMETER_OR_EMPTY(parameters, HTTP_SKIP_HEADER));
+    if (UNLIKELY(!skip_header_status.ok())) {
+        ASSIGN_AND_RETURN(ctx->status, skip_header_status);
+    }
     auto user_ip = butil::ip2str(cntl->remote_side().ip);
     ctx->auth.user = request->user();
     ctx->auth.passwd = request->passwd();

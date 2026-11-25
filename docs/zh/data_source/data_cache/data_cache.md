@@ -2,6 +2,7 @@
 sidebar_position: 10
 displayed_sidebar: docs
 description: "Data Cache 缓存内外部表数据，由内存缓存 Page Cache 和磁盘缓存 Block Cache 组成。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Data Cache
@@ -167,7 +168,8 @@ Block Cache 支持两种模式，即同步填充和异步填充。您可以根�
 
 - `DataCacheReadBytes`：系统直接从内存和磁盘读取的数据大小。
 - `DataCacheWriteBytes`：从远程存储系统加载到内存和磁盘的数据大小。
-- `BytesRead`：读取的总数据量，包括系统从远程存储系统、内存和磁盘读取的数据。
+- `AppIOBytesRead`：读取的总数据量，包括系统从远程存储系统、内存和磁盘读取的数据。
+- `FSIOBytesRead`：系统从远程存储系统读取的数据大小。
 
 示例 1：在此示例中，系统从远程存储系统读取了大量数据（7.65 GB），而从磁盘读取的数据很少（518.73 MB）。这意味着很少有 Block Cache 被命中。
 
@@ -189,12 +191,9 @@ Block Cache 支持两种模式，即同步填充和异步填充。您可以根�
  - DataCacheWriteTimer: 23.467ms
    - __MAX_OF_DataCacheWriteTimer: 62.280ms
    - __MIN_OF_DataCacheWriteTimer: 0ns
- - BufferUnplugCount: 15
-   - __MAX_OF_BufferUnplugCount: 2
-   - __MIN_OF_BufferUnplugCount: 0
- - BytesRead: 7.65 GB
-   - __MAX_OF_BytesRead: 64.39 MB
-   - __MIN_OF_BytesRead: 0.00
+ - FSIOBytesRead: 7.65 GB
+   - __MAX_OF_FSIOBytesRead: 64.39 MB
+   - __MIN_OF_FSIOBytesRead: 0.00
 ```
 
 示例 2：在此示例中，系统从数据缓存中读取了大量数据（46.08 GB），而没有从远程存储系统读取数据，这意味着它仅从 Block Cache 中读取数据。
@@ -213,12 +212,9 @@ Table: lineitem
 - DataCacheWriteBytes: 0.00 
 - DataCacheWriteCounter: 0
 - DataCacheWriteTimer: 0ns
-- BufferUnplugCount: 1.231K (1231)
- - __MAX_OF_BufferUnplugCount: 81
- - __MIN_OF_BufferUnplugCount: 35
-- BytesRead: 46.08 GB
- - __MAX_OF_BytesRead: 194.99 MB
- - __MIN_OF_BytesRead: 81.25 MB
+- AppIOBytesRead: 46.08 GB
+ - __MAX_OF_AppIOBytesRead: 194.99 MB
+ - __MIN_OF_AppIOBytesRead: 81.25 MB
 ```
 
 ## I/O 自适配
@@ -259,12 +255,12 @@ UPDATE be_configs SET VALUE="2T" WHERE NAME="datacache_disk_size";
 
 ### 自动扩缩容
 
-StarRocks 目前支持磁盘容量的自动扩缩容。如果您未在 BE 配置中指定缓存磁盘路径和容量限制，则默认启用自动扩缩容。
+StarRocks 目前支持磁盘容量的自动扩缩容。自动扩缩容默认启用。如果您指定了 `datacache_disk_size`，自动扩缩容仍然启用，并以该值作为缓存容量的上限。
 
 您还可以通过在配置文件中添加以下配置项并重启 BE 或 CN 进程来启用自动扩缩容：
 
 ```Plain
-datacache_auto_adjust_enable=true
+enable_datacache_disk_auto_adjust=true
 ```
 
 启用自动扩缩容后：
@@ -310,15 +306,18 @@ datacache_auto_adjust_enable=true
 
 ### BE 配置
 
-- [datacache_enable](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_enable)
-- [datacache_mem_size](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_mem_size)
-- [datacache_disk_size](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_size)
-- [datacache_auto_adjust_enable](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_auto_adjust_enable)
-- [datacache_disk_high_level](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_high_level)
-- [datacache_disk_safe_level](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_safe_level)
-- [datacache_disk_low_level](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_low_level)
-- [datacache_disk_adjust_interval_seconds](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_adjust_interval_seconds)
-- [datacache_disk_idle_seconds_for_expansion](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_idle_seconds_for_expansion)
-- [datacache_min_disk_quota_for_adjustment](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_min_disk_quota_for_adjustment)
-- [datacache_eviction_policy](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_eviction_policy)
-- [datacache_inline_item_count_limit](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_inline_item_count_limit)
+- [datacache_enable](../../administration/configuration/BE_parameters/shared_lake_other.md#datacache_enable)
+- [datacache_mem_size](../../administration/configuration/BE_parameters/shared_lake_other.md#datacache_mem_size)
+- [datacache_disk_size](../../administration/configuration/BE_parameters/shared_lake_other.md#datacache_disk_size)
+- [enable_datacache_disk_auto_adjust](../../administration/configuration/BE_parameters/shared_lake_other.md#enable_datacache_disk_auto_adjust)
+- [disk_high_level](../../administration/configuration/BE_parameters/shared_lake_other.md#disk_high_level)
+- [disk_safe_level](../../administration/configuration/BE_parameters/shared_lake_other.md#disk_safe_level)
+- [disk_low_level](../../administration/configuration/BE_parameters/shared_lake_other.md#disk_low_level)
+- [datacache_disk_adjust_interval_seconds](../../administration/configuration/BE_parameters/shared_lake_other.md#datacache_disk_adjust_interval_seconds)
+- [datacache_disk_idle_seconds_for_expansion](../../administration/configuration/BE_parameters/shared_lake_other.md#datacache_disk_idle_seconds_for_expansion)
+- [datacache_min_disk_quota_for_adjustment](../../administration/configuration/BE_parameters/shared_lake_other.md#datacache_min_disk_quota_for_adjustment)
+- [datacache_eviction_policy](../../administration/configuration/BE_parameters/shared_lake_other.md#datacache_eviction_policy)
+- [datacache_inline_item_count_limit](../../administration/configuration/BE_parameters/shared_lake_other.md#datacache_inline_item_count_limit)
+- [datacache_lru_shard_evict_fallback_enable](../../administration/configuration/BE_parameters/shared_lake_other.md#datacache_lru_shard_evict_fallback_enable)
+- [datacache_lru_shard_refill_low_watermark_percent](../../administration/configuration/BE_parameters/shared_lake_other.md#datacache_lru_shard_refill_low_watermark_percent)
+- [datacache_lru_shard_refill_high_watermark_percent](../../administration/configuration/BE_parameters/shared_lake_other.md#datacache_lru_shard_refill_high_watermark_percent)

@@ -198,6 +198,10 @@ message PTabletWriterOpenRequest {
         // `txn_log_location(tablet_id, txn_id)`: publish looks that key up first and would
         // short-circuit on the partial log, silently dropping the other nodes' data.
         optional bool multi_node_write = 5;
+        // The destination table's flat_json.* properties; absent when the table sets none. Decides
+        // the physical shape of JSON columns the delta writer produces, replacing the lookup in the
+        // tablet metadata cache (empty before a tablet's first publish under light_weight_tablet_creation).
+        optional FlatJsonConfigPB flat_json_config = 6;
     };
 
     required PUniqueId id = 1;
@@ -586,11 +590,22 @@ message PKafkaOffsetBatchProxyRequest {
     repeated PKafkaOffsetProxyRequest requests = 1;
 };
 
+// Commits the consumer group offsets of a routine load round; offsets[i] is the last consumed offset of
+// partition_ids[i]
+message PKafkaCommitOffsetProxyRequest {
+    optional PKafkaLoadInfo kafka_info = 1;
+    repeated int32 partition_ids = 2;
+    repeated int64 offsets = 3;
+};
+
 message PProxyRequest {
     optional PKafkaMetaProxyRequest kafka_meta_request = 1;
     optional PKafkaOffsetProxyRequest kafka_offset_request = 101;
     optional PKafkaOffsetBatchProxyRequest kafka_offset_batch_request = 102;
     optional int64 timeout = 103;
+    // Enterprise-only fields start at 300, reserve some fields for upstream StarRocks so a sync
+    // never collides on ordinals.
+    optional PKafkaCommitOffsetProxyRequest kafka_commit_offset_request = 300;
 };
 
 message PKafkaMetaProxyResult {

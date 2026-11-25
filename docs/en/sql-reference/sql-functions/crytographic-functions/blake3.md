@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Uses the BLAKE3 digest algorithm to hash a string into a 256-bit hexadecimal string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # blake3

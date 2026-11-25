@@ -18,6 +18,8 @@
 #include <ctime>
 #include <map>
 #include <memory>
+#include <mutex>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -43,6 +45,7 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
+#include "storage/lake/location_provider.h"
 #include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard.h"
@@ -51,6 +54,49 @@
 #include "storage/storage_env.h"
 
 namespace starrocks::lake {
+
+// Serves the anchor tablet from the real partition directory and every other tablet from a directory
+// that does not exist, standing in for a tablet this node does not hold and could only resolve through
+// a StarMgr GetShard RPC. Records every real_location() argument so a test can tell whether any read
+// resolved a non-anchor tablet's location.
+class AnchorOnlyLocationProvider final : public LocationProvider {
+public:
+    AnchorOnlyLocationProvider(std::string partition_dir, std::string unreachable_dir, int64_t anchor_tablet_id)
+            : _partition_dir(std::move(partition_dir)),
+              _unreachable_dir(std::move(unreachable_dir)),
+              _anchor_tablet_id(anchor_tablet_id) {}
+
+    std::string root_location(int64_t tablet_id) const override {
+        if (tablet_id == _anchor_tablet_id) {
+            return _partition_dir;
+        }
+        return join_path(_unreachable_dir, std::to_string(tablet_id));
+    }
+
+    StatusOr<std::string> real_location(const std::string& virtual_path) const override {
+        std::lock_guard l(_mtx);
+        _resolved.push_back(virtual_path);
+        return virtual_path;
+    }
+
+    std::vector<std::string> resolved_outside_partition() const {
+        std::lock_guard l(_mtx);
+        std::vector<std::string> outside;
+        for (const auto& path : _resolved) {
+            if (path.starts_with(_unreachable_dir)) {
+                outside.push_back(path);
+            }
+        }
+        return outside;
+    }
+
+private:
+    const std::string _partition_dir;
+    const std::string _unreachable_dir;
+    const int64_t _anchor_tablet_id;
+    mutable std::mutex _mtx;
+    mutable std::vector<std::string> _resolved;
+};
 
 StatusOr<TabletMetadataPtr> TEST_publish_single_version(TabletManager* tablet_mgr, int64_t tablet_id,
                                                         int64_t new_version, int64_t txn_id,
@@ -63,7 +109,8 @@ Status TEST_publish_single_log_version(TabletManager* tablet_mgr, int64_t tablet
                                        int64_t log_version);
 
 StatusOr<TabletMetadataPtr> TEST_batch_publish(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
-                                               int64_t new_version, std::vector<int64_t>& txn_ids);
+                                               int64_t new_version, std::vector<int64_t>& txn_ids,
+                                               bool is_retry_publish = false);
 
 std::shared_ptr<RuntimeState> create_runtime_state();
 
@@ -112,7 +159,7 @@ protected:
               _mem_tracker(std::make_unique<MemTracker>(10 * 1024 * 1024, "", _parent_tracker.get())),
               _lp(std::make_shared<FixedLocationProvider>(_test_dir)),
               _primary_key_mgr(std::make_unique<PrimaryKeyManager>(_lp, _mem_tracker.get())),
-              _tablet_mgr(std::make_unique<TabletManager>(_lp, _primary_key_mgr.get(), cache_limit,
+              _tablet_mgr(std::make_unique<TabletManager>(_lp, _primary_key_mgr.get(), cache_limit, cache_limit,
                                                           PlatformEnv::GetInstance()->store_path_registry())) {
         if (auto* parallel_compact_mgr = StorageEnv::GetInstance()->parallel_compact_mgr();
             parallel_compact_mgr != nullptr) {
@@ -151,7 +198,7 @@ protected:
     Status publish_single_log_version(int64_t tablet_id, int64_t txn_id, int64_t log_version);
 
     StatusOr<TabletMetadataPtr> batch_publish(int64_t tablet_id, int64_t base_version, int64_t new_version,
-                                              std::vector<int64_t>& txn_ids);
+                                              std::vector<int64_t>& txn_ids, bool is_retry_publish = false);
 
     std::string _test_dir;
     std::unique_ptr<MemTracker> _parent_tracker;
@@ -261,14 +308,15 @@ inline Status TEST_aggregate_publish_version(TabletManager* tablet_mgr, std::vec
 
 inline StatusOr<TabletMetadataPtr> TEST_batch_publish(TabletManager* tablet_mgr, int64_t tablet_id,
                                                       int64_t base_version, int64_t new_version,
-                                                      std::vector<int64_t>& txn_ids) {
+                                                      std::vector<int64_t>& txn_ids, bool is_retry_publish) {
     auto txns = std::vector<TxnInfoPB>();
     txns.reserve(txn_ids.size());
     auto commit_time = time(nullptr);
     for (auto& txn_id : txn_ids) {
         txns.emplace_back(TEST_txn_info(txn_id, commit_time));
     }
-    auto result = publish_version(tablet_mgr, PublishTabletInfo(tablet_id), base_version, new_version, txns, false);
+    auto result = publish_version(tablet_mgr, PublishTabletInfo(tablet_id), base_version, new_version, txns, false,
+                                  /*fe_built_version=*/0, InitialMetadataOrder::kPerTabletFirst, is_retry_publish);
     if (!result.ok()) {
         return Status::InternalError(
                 fmt::format("failed to publish version. tablet_id={} txn_ids={} base_version={} new_version={}: {}",
@@ -304,8 +352,8 @@ inline Status TestBase::publish_single_log_version(int64_t tablet_id, int64_t tx
 }
 
 inline StatusOr<TabletMetadataPtr> TestBase::batch_publish(int64_t tablet_id, int64_t base_version, int64_t new_version,
-                                                           std::vector<int64_t>& txn_ids) {
-    return TEST_batch_publish(_tablet_mgr.get(), tablet_id, base_version, new_version, txn_ids);
+                                                           std::vector<int64_t>& txn_ids, bool is_retry_publish) {
+    return TEST_batch_publish(_tablet_mgr.get(), tablet_id, base_version, new_version, txn_ids, is_retry_publish);
 }
 
 inline std::shared_ptr<TabletMetadataPB> generate_simple_tablet_metadata(KeysType keys_type, size_t num_of_columns) {

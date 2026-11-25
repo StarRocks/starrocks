@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "StarRocks v3.3 以降の全文転置インデックスはテキストを単語に分割してキーワード検索を加速します。"
 toc_max_heading_level: 4
 sidebar_position: 50
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
@@ -28,12 +29,6 @@ StarRocksは、基盤となるデータを列ごとに整理されたデータ�
 ## 基本操作
 
 ### 全文転置インデックスの作成
-
-全文転置インデックスを作成する前に、FE構成項目`enable_experimental_gin`を有効にする必要があります。
-
-```sql
-ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
-```
 
 :::note
 テーブルに全文転置インデックスを作成する場合、`replicated_storage`機能を無効にする必要があります。

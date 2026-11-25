@@ -853,6 +853,20 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.dbId = dbId;
     }
 
+    /**
+     * The database and table ids of the lock that guards this MV's partitions. A synchronous MV that MV rewrite builds
+     * over a rollup index carries the index's id and shares its base table's partitions: its base table's lock.
+     */
+    public Pair<Long, Long> getPartitionLockTarget() {
+        if (refreshScheme != null && refreshScheme.getType() == MaterializedViewRefreshType.SYNC
+                && baseTableInfos != null && baseTableInfos.size() == 1
+                && GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(getDbId(), getId()) == null) {
+            BaseTableInfo baseTable = baseTableInfos.get(0);
+            return Pair.create(baseTable.getDbId(), baseTable.getTableId());
+        }
+        return Pair.create(getDbId(), getId());
+    }
+
     public synchronized boolean isActive() {
         return active;
     }
@@ -1414,14 +1428,20 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 .stream().map(BasePartitionInfo::fromExternalTable).collect(Collectors.toList());
     }
 
+    public Set<String> getUpdatedPartitionNamesOfExternalTable(Table baseTable, boolean isQueryRewrite) {
+        return getUpdatedPartitionNamesOfExternalTable(baseTable, isQueryRewrite, null);
+    }
+
     /**
      * Get the updated partition names of the external base table of the materialized view.
      *
      * @param baseTable:      the external base table of the materialized view to check the updated partition names
      * @param isQueryRewrite: whether it's for query rewrite or not
+     * @param pinnedVersionRange: the frozen snapshot to compare against, null to compare against the live table
      * @return: the updated partition names of the external base table
      */
-    public Set<String> getUpdatedPartitionNamesOfExternalTable(Table baseTable, boolean isQueryRewrite) {
+    public Set<String> getUpdatedPartitionNamesOfExternalTable(Table baseTable, boolean isQueryRewrite,
+                                                               TvrVersionRange pinnedVersionRange) {
         Set<String> result = Sets.newHashSet();
         // NOTE: For query dump replay, ignore updated partition infos only to check mv can rewrite query or not.
         // Ignore partitions when mv 's last refreshed time period is less than `maxMVRewriteStaleness`
@@ -1429,7 +1449,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return result;
         }
 
-        ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(this, baseTable);
+        ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(this, baseTable, pinnedVersionRange);
         traits.setQueryMVRewrite(isQueryRewrite);
         return traits.getUpdatedPartitionNames(
                 this.getBaseTableInfos(),
@@ -1496,10 +1516,20 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     @Override
     public void dropPartition(long dbId, String partitionName, boolean isForceDrop) {
+        dropPartition(dbId, partitionName, isForceDrop, 0L);
+    }
+
+    /**
+     * A force drop of an mv partition always keeps its tablets for a while: for `retentionPeriod` seconds
+     * when the caller gives one (e.g. partition TTL), otherwise for partition_recycle_retention_period_secs.
+     */
+    @Override
+    public void dropPartition(long dbId, String partitionName, boolean isForceDrop, long retentionPeriod) {
         if (isForceDrop) {
-            super.dropPartitionWithRetention(dbId, partitionName, Config.partition_recycle_retention_period_secs);
+            long period = retentionPeriod > 0 ? retentionPeriod : Config.partition_recycle_retention_period_secs;
+            super.dropPartitionWithRetention(dbId, partitionName, period);
         } else {
-            super.dropPartition(dbId, partitionName, isForceDrop);
+            super.dropPartition(dbId, partitionName, false);
         }
 
         // if mv's partition is dropped, we need to update mv's timeliness.
@@ -2377,7 +2407,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // ALTER ... ACTIVE re-analyzes this DDL, and the analyzer requires one listed column per
         // query output field, then re-appends storage-filled ones (AUTO_INCREMENT __ROW_ID__ on
         // non-aggregate IVM) itself — listing those here breaks the round trip.
+        // The simple form, shown to users, leaves an incremental mv's hidden columns for the analyzer to regenerate.
+        boolean omitHiddenColumns = simple && getCurrentRefreshMode().isIncrementalOrAuto();
         for (Column column : queryProducedColumns()) {
+            if (omitHiddenColumns && column.isHidden()) {
+                continue;
+            }
             StringBuilder colSb = new StringBuilder();
             // Since mv supports complex expressions as the output column, add `` to support to replay it.
             colSb.append("`" + column.getName() + "`");
@@ -2431,13 +2466,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (refreshScheme == null) {
             sb.append("\nREFRESH ").append("UNKNOWN");
         } else {
-            // Prefer the SCHEDULE keyword for scheduled refresh (ASYNC + EVERY). ASYNC is kept
-            // as the legacy synonym in the parser; for bare ASYNC (no EVERY) we still emit
-            // ASYNC because bare SCHEDULE is not a valid form.
+            // Must stay parseable by the current grammar: AlterJobMgr.recreateMVQuery renders the MV
+            // back to DDL and re-parses it when activating, driven by the MVActiveChecker daemon.
             String typeName = refreshScheme.getType().name();
-            if (refreshScheme.getType() == MaterializedViewRefreshType.ASYNC
-                    && refreshScheme.getAsyncRefreshContext().getTimeUnit() != null) {
-                typeName = "SCHEDULE";
+            if (refreshScheme.getType() == MaterializedViewRefreshType.ASYNC) {
+                typeName = refreshScheme.getAsyncRefreshContext().getTimeUnit() != null
+                        ? "SCHEDULE" : "ON_CHANGE";
             }
             if (refreshScheme.getMoment().equals(RefreshMoment.DEFERRED)) {
                 sb.append(String.format("\nREFRESH %s %s", refreshScheme.getMoment(), typeName));

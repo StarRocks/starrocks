@@ -37,7 +37,7 @@ public interface PreSplitPipeline {
      *
      * @return {@link Optional#empty()} when the planner concluded no useful
      *         split exists (the orchestrator then returns
-     *         {@link SkipReason#NO_USEFUL_CUTS}); otherwise a
+     *         {@link #emptyPreSubmitReason()}); otherwise a
      *         {@link PreparedReshardJob} ready to submit.
      * @throws PreSplitPreSubmitTimeoutException when the phase exceeds {@code timeout}.
      * @throws StarRocksException for any other sampling / planning / factory error;
@@ -45,6 +45,15 @@ public interface PreSplitPipeline {
      */
     Optional<PreparedReshardJob> preSubmit(SampleRequest request, int activeComputeNodeCount, Duration timeout)
             throws PreSplitPreSubmitTimeoutException, StarRocksException;
+
+    /**
+     * Why the last {@link #preSubmit} returned {@link Optional#empty()}. A pipeline that knows a more specific
+     * reason than {@link SkipReason#NO_USEFUL_CUTS}, and has already recorded it in the skip metric, returns
+     * that reason so the outcome names it too.
+     */
+    default SkipReason emptyPreSubmitReason() {
+        return SkipReason.NO_USEFUL_CUTS;
+    }
 
     /** Submit step. Hands the prepared job to {@code TabletReshardJobMgr.addTabletReshardJob}. */
     void submit(PreparedReshardJob preparedJob) throws StarRocksException;

@@ -21,6 +21,7 @@
 #include "common/config_exec_fwd.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -125,9 +126,7 @@ TEST_F(StringFunctionSubstrTest, substringleftTest) {
 }
 
 TEST_F(StringFunctionSubstrTest, substrConstASCIITest) {
-    auto str = BinaryColumn::create();
-    str->append("123456789");
-    str->append("");
+    auto str = ColumnTestHelper::build_column<Slice>({"123456789", ""});
     std::vector<std::tuple<int, int, std::string>> cases = {
             {1, 2, "12"},          {1, 0, ""},   {2, 100, "23456789"}, {9, 1, "9"},
             {9, 100, "9"},         {10, 1, ""},  {-9, 1, "1"},         {-9, 9, "123456789"},
@@ -155,9 +154,7 @@ TEST_F(StringFunctionSubstrTest, substrConstASCIITest) {
 }
 
 TEST_F(StringFunctionSubstrTest, substrConstZhTest) {
-    auto str = BinaryColumn::create();
-    str->append("壹贰叁肆伍陆柒捌玖");
-    str->append("");
+    auto str = ColumnTestHelper::build_column<Slice>({"壹贰叁肆伍陆柒捌玖", ""});
 
     std::vector<std::tuple<int, int, std::string>> cases = {
             {1, 2, "壹贰"},
@@ -317,10 +314,8 @@ TEST_F(StringFunctionSubstrTest, substringConstTest) {
     Columns columns;
 
     auto str = BinaryColumn::create();
-    auto pos = Int32Column::create();
-    auto len = Int32Column::create();
-    pos->append(5);
-    len->append(2);
+    auto pos = ColumnTestHelper::build_column<int32_t>({5});
+    auto len = ColumnTestHelper::build_column<int32_t>({2});
 
     for (int j = 0; j < 20; ++j) {
         str->append("test" + std::to_string(j));
@@ -345,10 +340,8 @@ TEST_F(StringFunctionSubstrTest, substringNullTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
 
-    auto pos = Int32Column::create();
-    auto len = Int32Column::create();
-    pos->append(5);
-    len->append(2);
+    auto pos = ColumnTestHelper::build_column<int32_t>({5});
+    auto len = ColumnTestHelper::build_column<int32_t>({2});
 
     ColumnBuilder<TYPE_VARCHAR> b(config::vector_chunk_size);
 
@@ -594,10 +587,7 @@ static void test_left_and_right_const(
 }
 
 TEST_F(StringFunctionSubstrTest, leftAndRightConstASCIITest) {
-    auto str_col = BinaryColumn::create();
-    str_col->append("");
-    str_col->append("a");
-    str_col->append("ABCDEFG_HIJKLMN");
+    auto str_col = ColumnTestHelper::build_column<Slice>({"", "a", "ABCDEFG_HIJKLMN"});
 
     std::vector<std::tuple<int, std::vector<std::string>, std::vector<std::string>>> cases = {
             {0, {"", "", ""}, {"", "", ""}},
@@ -615,11 +605,8 @@ TEST_F(StringFunctionSubstrTest, leftAndRightConstASCIITest) {
 }
 
 TEST_F(StringFunctionSubstrTest, leftAndRightConstUtf8Test) {
-    auto str_col = BinaryColumn::create();
-    str_col->append("");
-    str_col->append("a");
-    str_col->append("三十年众生牛马，六十年诸佛龙象");
-    str_col->append("a三b十c年d众e生f牛g马");
+    auto str_col =
+            ColumnTestHelper::build_column<Slice>({"", "a", "三十年众生牛马，六十年诸佛龙象", "a三b十c年d众e生f牛g马"});
 
     std::vector<std::tuple<int, std::vector<std::string>, std::vector<std::string>>> cases = {
             {0, {"", "", "", ""}, {"", "", "", ""}},

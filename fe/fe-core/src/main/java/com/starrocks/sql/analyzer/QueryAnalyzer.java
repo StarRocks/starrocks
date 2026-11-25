@@ -22,6 +22,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.authorization.SecurityPolicyRewriteRule;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ConnectorView;
 import com.starrocks.catalog.Database;
@@ -31,6 +32,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
@@ -48,6 +50,8 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.concurrent.lock.SnapshotCopyValidator;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorType;
+import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -187,6 +191,10 @@ public class QueryAnalyzer {
      */
     public void analyzeExternalTablesOnly(StatementBase node, boolean refreshFilesystemExternalTables) {
         new ExternalTablesOnlyVisitor(refreshFilesystemExternalTables).process(node);
+    }
+
+    public void preResolvePaimonInsertTarget(InsertStmt statement) {
+        new ExternalTablesOnlyVisitor(false).preResolveInsertTarget(statement, true);
     }
 
     public void analyze(StatementBase node, Scope parent) {
@@ -623,7 +631,7 @@ public class QueryAnalyzer {
                         originField.getRelationAlias() == null ? session.getDatabase() : originField.getRelationAlias().getDb();
                 TableName tableName = new TableName(database, cteName);
                 outputFields.add(new Field(withQuery.getColumnOutputNames().get(fieldIdx), originField.getType(), tableName,
-                        originField.getOriginExpression()));
+                        originField.getOriginExpression(), true, originField.isNullable()));
             }
 
             /*
@@ -832,7 +840,7 @@ public class QueryAnalyzer {
                             Field originField = withRelationFields.getAllFields().get(fieldIdx);
                             outputFields.add(new Field(
                                     originField.getName(), originField.getType(), tableRelation.getResolveTableName(),
-                                    originField.getOriginExpression()));
+                                    originField.getOriginExpression(), true, originField.isNullable()));
                         }
 
                         // The CTERelation stored in the Scope is not used directly here, but a new Relation is copied.
@@ -1025,6 +1033,10 @@ public class QueryAnalyzer {
         public Scope visitTable(TableRelation node, Scope outerScope) {
             TableName tableName = node.getResolveTableName();
             Table table = node.getTable();
+            if (table instanceof MetadataTable metadata
+                    && metadata.isInternalOnly() && !session.isMetadataContext()) {
+                throw new SemanticException("This metadata relation is only available to internal collection queries");
+            }
 
             ImmutableList.Builder<Field> fields = ImmutableList.builder();
             ImmutableMap.Builder<Field, Column> columns = ImmutableMap.builder();
@@ -1201,7 +1213,7 @@ public class QueryAnalyzer {
                         originField.getName() : cteRelation.getColumnOutputNames().get(fieldIdx),
                         originField.getType(),
                         cteRelation.getResolveTableName(),
-                        originField.getOriginExpression()));
+                        originField.getOriginExpression(), true, originField.isNullable()));
             }
             Scope scope = new Scope(RelationId.of(cteRelation), new RelationFields(outputFields.build()));
             cteRelation.setScope(scope);
@@ -1638,7 +1650,7 @@ public class QueryAnalyzer {
                 }
 
                 outputFields.add(new Field(fieldResolveName, field.getType(), subquery.getResolveTableName(),
-                        field.getOriginExpression()));
+                        field.getOriginExpression(), true, field.isNullable()));
 
             }
             Scope scope = new Scope(RelationId.of(subquery), new RelationFields(outputFields.build()));
@@ -1689,12 +1701,23 @@ public class QueryAnalyzer {
                 throw new CyclicViewException(
                         "View " + node.getName() + " contains a cycle in its definition");
             }
+            ConnectContext aliasContext = ConnectContext.get();
             boolean isRelationAliasCaseInSensitive = false;
-            if (ConnectContext.get() != null) {
-                isRelationAliasCaseInSensitive = ConnectContext.get().isRelationAliasCaseInsensitive();
-                // For hive view, relation alias is case-insensitive
-                if (node.getView().isHiveView()) {
-                    ConnectContext.get().setRelationAliasCaseInSensitive(true);
+            Boolean aliasModeOutsideConnectorView = null;
+            if (aliasContext != null) {
+                isRelationAliasCaseInSensitive = aliasContext.isRelationAliasCaseInsensitive();
+                aliasModeOutsideConnectorView = aliasContext.getRelationAliasCaseInsensitiveOutsideConnectorView();
+                if (node.getView().isConnectorView()) {
+                    // Views defined by external engines (Hive, Spark, Trino) resolve relation aliases
+                    // case-insensitively
+                    if (aliasModeOutsideConnectorView == null) {
+                        aliasContext.setRelationAliasCaseInsensitiveOutsideConnectorView(
+                                isRelationAliasCaseInSensitive);
+                    }
+                    aliasContext.setRelationAliasCaseInSensitive(true);
+                } else if (aliasModeOutsideConnectorView != null) {
+                    // A native view keeps the alias rule of the query that references the connector view
+                    aliasContext.setRelationAliasCaseInSensitive(aliasModeOutsideConnectorView);
                 }
             }
             Scope queryOutputScope;
@@ -1709,8 +1732,9 @@ public class QueryAnalyzer {
                         "function(s) or definer/invoker of view lack rights to use them: " + e.getMessage(), e);
             } finally {
                 viewExpansionStack.remove(viewKey);
-                if (ConnectContext.get() != null && node.getView().isHiveView()) {
-                    ConnectContext.get().setRelationAliasCaseInSensitive(isRelationAliasCaseInSensitive);
+                if (aliasContext != null) {
+                    aliasContext.setRelationAliasCaseInSensitive(isRelationAliasCaseInSensitive);
+                    aliasContext.setRelationAliasCaseInsensitiveOutsideConnectorView(aliasModeOutsideConnectorView);
                 }
             }
 
@@ -1821,6 +1845,10 @@ public class QueryAnalyzer {
             ArrayList<Field> fields = new ArrayList<>();
             for (int fieldIdx = 0; fieldIdx < outputSize; ++fieldIdx) {
                 Field oldField = leftChildScope.getRelationFields().getFieldByIndex(fieldIdx);
+                if ((outputTypes[fieldIdx].isGeoType() || outputTypes[fieldIdx].hasNestedGeoType()) &&
+                        !(node instanceof UnionRelation && node.getQualifier().equals(SetQualifier.ALL))) {
+                    throw new SemanticException("%s not support set operation", outputTypes[fieldIdx]);
+                }
                 fields.add(new Field(oldField.getName(), outputTypes[fieldIdx], oldField.getRelationAlias(),
                         oldField.getOriginExpression(), true, nullables.get(fieldIdx)));
             }
@@ -1835,10 +1863,14 @@ public class QueryAnalyzer {
         @Override
         public Scope visitValues(ValuesRelation node, Scope scope) {
             Type[] outputTypes;
+            boolean[] nullableColumns;
             List<List<Expr>> rows = node.getRows();
             List<Type> outputColumnTypes = node.getOutputColumnTypes();
             if (!outputColumnTypes.isEmpty()) {
                 outputTypes = outputColumnTypes.toArray(new Type[0]);
+                nullableColumns = new boolean[outputTypes.length];
+                // Pretyped VALUES may have no rows from which to infer nullability.
+                Arrays.fill(nullableColumns, true);
             } else {
                 Preconditions.checkState(!rows.isEmpty());
                 AnalyzeState analyzeState = new AnalyzeState();
@@ -1846,19 +1878,21 @@ public class QueryAnalyzer {
                 List<Expr> firstRow = node.getRow(0);
                 firstRow.forEach(e -> analyzeExpression(e, analyzeState, scope));
                 outputTypes = firstRow.stream().map(Expr::getType).toArray(Type[]::new);
+                nullableColumns = new boolean[outputTypes.length];
                 for (List<Expr> row : rows) {
                     if (row.size() != firstRow.size()) {
                         throw new SemanticException("Values have unequal number of columns");
                     }
                     for (int fieldIdx = 0; fieldIdx < row.size(); ++fieldIdx) {
-                        analyzeExpression(row.get(fieldIdx), analyzeState, scope);
-                        Type commonType =
-                                TypeManager.getCommonSuperType(outputTypes[fieldIdx], row.get(fieldIdx).getType());
+                        Expr value = row.get(fieldIdx);
+                        analyzeExpression(value, analyzeState, scope);
+                        Type commonType = TypeManager.getCommonSuperType(outputTypes[fieldIdx], value.getType());
                         if (!commonType.isValid()) {
                             throw new SemanticException(String.format("Incompatible return types '%s' and '%s'",
-                                    outputTypes[fieldIdx], row.get(fieldIdx).getType()));
+                                    outputTypes[fieldIdx], value.getType()));
                         }
                         outputTypes[fieldIdx] = commonType;
+                        nullableColumns[fieldIdx] |= value.isNullable();
                     }
                 }
             }
@@ -1866,7 +1900,8 @@ public class QueryAnalyzer {
             List<Field> fields = new ArrayList<>();
             for (int fieldIdx = 0; fieldIdx < outputTypes.length; ++fieldIdx) {
                 fields.add(new Field(node.getColumnOutputNames().get(fieldIdx), outputTypes[fieldIdx],
-                        node.getResolveTableName(), rows.isEmpty() ? null : rows.get(0).get(fieldIdx)));
+                        node.getResolveTableName(), rows.isEmpty() ? null : rows.get(0).get(fieldIdx),
+                        true, nullableColumns[fieldIdx]));
             }
 
             Scope valuesScope = new Scope(RelationId.of(node), new RelationFields(fields));
@@ -2202,28 +2237,43 @@ public class QueryAnalyzer {
 
         @Override
         public Void visitSelect(SelectRelation node, Void context) {
-            if (node.hasWithClause()) {
-                cteNameStack.push(collectCteNames(node.getCteRelations()));
-                try {
-                    return super.visitSelect(node, context);
-                } finally {
-                    cteNameStack.pop();
-                }
-            }
-            return super.visitSelect(node, context);
+            inWithClauseOf(node, () -> super.visitSelect(node, context));
+            return null;
         }
 
         @Override
         public Void visitSetOp(SetOperationRelation node, Void context) {
-            if (node.hasWithClause()) {
-                cteNameStack.push(collectCteNames(node.getCteRelations()));
-                try {
-                    return super.visitSetOp(node, context);
-                } finally {
+            inWithClauseOf(node, () -> super.visitSetOp(node, context));
+            return null;
+        }
+
+        /** Run {@code body} in the scope of the with clause of {@code node}, which {@link #visitCTE} fills. */
+        private void inWithClauseOf(QueryRelation node, Runnable body) {
+            boolean scoped = node.hasWithClause();
+            if (scoped) {
+                cteNameStack.push(new HashSet<>());
+            }
+            try {
+                body.run();
+            } finally {
+                if (scoped) {
                     cteNameStack.pop();
                 }
             }
-            return super.visitSetOp(node, context);
+        }
+
+        /**
+         * A CTE's name is in scope only after its own definition, as the analyzer has it: in
+         * {@code WITH t0 AS (SELECT * FROM t0)} the inner {@code t0} is the table. Taking it for the CTE would leave
+         * an external table of that name to the locked analyzer.
+         */
+        @Override
+        public Void visitCTE(CTERelation node, Void context) {
+            super.visitCTE(node, context);
+            if (!cteNameStack.isEmpty() && node.getName() != null) {
+                cteNameStack.peek().add(node.getName());
+            }
+            return null;
         }
 
         /**
@@ -2345,6 +2395,17 @@ public class QueryAnalyzer {
          * error at the same place.
          */
         private void preResolveExternalWriteTarget(TableRef tableRef) {
+            preResolveExternalWriteTarget(tableRef, false, false);
+        }
+
+        private void preResolveInsertTarget(InsertStmt statement, boolean paimonOnly) {
+            if (!statement.useTableFunctionAsTargetTable() && !statement.useBlackHoleTableAsTargetTable()) {
+                // The CTAS write is planned after CREATE TABLE. Resolve its Paimon UUID before locking.
+                preResolveExternalWriteTarget(statement.getTableRef(), true, paimonOnly || statement.isForCTAS());
+            }
+        }
+
+        private void preResolveExternalWriteTarget(TableRef tableRef, boolean insertTarget, boolean paimonOnly) {
             if (tableRef == null) {
                 return;
             }
@@ -2360,25 +2421,39 @@ public class QueryAnalyzer {
                     || CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
                 return;
             }
+            if (paimonOnly) {
+                Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(tableName.getCatalog());
+                if (catalog == null || !ConnectorType.PAIMON.getName().equalsIgnoreCase(catalog.getType())) {
+                    return;
+                }
+            }
             try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
-                Table table = metadataMgr.getTable(session, tableName.getCatalog(), tableName.getDb(),
-                        tableName.getTbl());
+                Table table;
+                try {
+                    table = metadataMgr.getTable(session, tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+                } catch (RuntimeException e) {
+                    // Leave lookup errors to the analyzer so it can report them in the usual way.
+                    return;
+                }
+                if (insertTarget && table instanceof PaimonTable paimonTable && paimonTable.supportInsert()) {
+                    // Capture the schema and identity from one native table before entering the metadata lock.
+                    table = paimonTable.copyForWrite();
+                }
                 if (table != null) {
                     session.getPreResolvedState().put(PreResolvedState.WRITE_TARGET, tableName, table);
                 }
-            } catch (RuntimeException e) {
-                // left to the locked analyzer, which reports it the way it always has
             }
         }
 
         /**
-         * Run {@code body} with these CTE names in scope, the way {@link #visitSelect} does for a with
-         * clause: a name that resolves to a CTE must not be pre-resolved as a table.
+         * Run {@code body} with these CTEs in scope, the way {@link #visitSelect} does for a with clause: a
+         * name that resolves to a CTE must not be pre-resolved as a table. {@link #visitCTE} brings each name
+         * into scope once its definition has been walked.
          */
         private void withCteScope(List<CTERelation> cteRelations, Runnable body) {
             boolean scoped = cteRelations != null && !cteRelations.isEmpty();
             if (scoped) {
-                cteNameStack.push(collectCteNames(cteRelations));
+                cteNameStack.push(new HashSet<>());
             }
             try {
                 if (scoped) {
@@ -2575,12 +2650,8 @@ public class QueryAnalyzer {
             // An internal target's metadata is deliberately not touched here -- that is the object the lock
             // is taken for. An external one is pre-resolved, because the lock covers nothing about it and
             // resolving it under the lock only binds the hold time to that catalog. Not for the targets
-            // that are not catalog objects at all: a CTAS target does not exist yet, and files() / blackhole
-            // are built from the statement rather than looked up.
-            if (!statement.isForCTAS() && !statement.useTableFunctionAsTargetTable()
-                    && !statement.useBlackHoleTableAsTargetTable()) {
-                preResolveExternalWriteTarget(statement.getTableRef());
-            }
+            // that are built from the statement, such as files() and blackhole.
+            preResolveInsertTarget(statement, false);
             if (statement.getQueryStatement() != null) {
                 visit(statement.getQueryStatement());
             }
@@ -2652,16 +2723,6 @@ public class QueryAnalyzer {
             }
             node.setQueryTable(jdbcTable);
             return null;
-        }
-
-        private Set<String> collectCteNames(List<CTERelation> cteRelations) {
-            Set<String> names = Sets.newHashSet();
-            for (CTERelation cteRelation : cteRelations) {
-                if (cteRelation.getName() != null) {
-                    names.add(cteRelation.getName());
-                }
-            }
-            return names;
         }
 
         private boolean isCteName(String name) {
@@ -2817,18 +2878,32 @@ public class QueryAnalyzer {
             Table table = null;
             if (tableRelation.isSyncMVQuery()) {
                 try (Timer ignored = Tracers.watchScope("AnalyzeSyncMV")) {
+                    // [_SYNC_MV_] gives a materialized index name where a table name goes.
+                    String indexName = tbName;
+                    List<Pair<Table, MaterializedIndexMeta>> materializedIndexes =
+                            GlobalStateMgr.getCurrentState().getLocalMetastore().getMaterializedViewIndexes(dbName,
+                                    indexName, session.getSessionId());
+                    if (materializedIndexes.size() > 1) {
+                        // A rollup's name is unique only in its table. Which of them a read would get is up to the
+                        // order of a hash map, and can change as tables come and go: refuse to pick one.
+                        throw new SemanticException("Duplicate rollup name '%s': more than one table has a rollup "
+                                + "of that name", indexName);
+                    }
                     Pair<Table, MaterializedIndexMeta> materializedIndex =
-                            GlobalStateMgr.getCurrentState().getLocalMetastore().getMaterializedViewIndex(dbName, tbName);
+                            materializedIndexes.isEmpty() ? null : materializedIndexes.get(0);
                     if (materializedIndex != null) {
                         Table mvTable = materializedIndex.first;
                         Preconditions.checkState(mvTable != null);
                         Preconditions.checkState(mvTable instanceof OlapTable);
-                        // Add read lock to avoid concurrent problems.
                         OlapTable mvOlapTable = new OlapTable(mvTable.getType());
-                        // Known: PlannerMetaLocker does not collect a [_SYNC_MV_] relation, so this copies the
-                        // base table without its lock. Tracked as 2-g in the FE lock todo, fixed on its own.
+                        // Known: when a statement is planned, PlannerMetaLocker collects the base table of a
+                        // [_SYNC_MV_] relation by its index name, so this copy is taken under its READ lock -- but not
+                        // yet for a read in GROUP BY, which that collection does not walk before analysis. Nor does
+                        // every analysis run under the planner lock: CREATE VIEW analyzes its query
+                        // holding none, and the copy is taken all the same. Tracked as 2-g in the FE lock todo: the
+                        // analyzer is to stop copying, leaving the copy to the planner.
                         try (SnapshotCopyValidator.KnownViolation known = SnapshotCopyValidator.exemptKnownViolation(
-                                "[_SYNC_MV_] relation is not in the planner lock set (2-g)")) {
+                                "[_SYNC_MV_] base table copied by analysis outside the planner lock (2-g)")) {
                             ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
                         }
                         // Copy the necessary olap table meta to avoid changing original meta;

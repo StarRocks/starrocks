@@ -277,6 +277,30 @@ public class AlterTableOperationStmtTest {
     }
 
     @Test
+    public void testRollbackToTimestampProcedure() {
+        AnalyzeTestUtil.analyzeSuccess("ALTER TABLE iceberg_catalog.iceberg_db.test_table " +
+                "EXECUTE rollback_to_timestamp(timestamp = '2024-01-01 00:00:00')");
+        AnalyzeTestUtil.analyzeSuccess("ALTER TABLE iceberg_catalog.iceberg_db.test_table " +
+                "EXECUTE rollback_to_timestamp('2024-01-01 00:00:00')");
+        AnalyzeTestUtil.analyzeFail("ALTER TABLE iceberg_catalog.iceberg_db.test_table " +
+                "EXECUTE rollback_to_timestamp()");
+        AnalyzeTestUtil.analyzeFail("ALTER TABLE iceberg_catalog.iceberg_db.test_table " +
+                "EXECUTE rollback_to_timestamp(timestamp = 'not a time')");
+    }
+
+    @Test
+    public void testSetCurrentSnapshotProcedure() {
+        AnalyzeTestUtil.analyzeSuccess("ALTER TABLE iceberg_catalog.iceberg_db.test_table " +
+                "EXECUTE set_current_snapshot(snapshot_id = 98765)");
+        AnalyzeTestUtil.analyzeSuccess("ALTER TABLE iceberg_catalog.iceberg_db.test_table " +
+                "EXECUTE set_current_snapshot(98765)");
+        AnalyzeTestUtil.analyzeFail("ALTER TABLE iceberg_catalog.iceberg_db.test_table " +
+                "EXECUTE set_current_snapshot()");
+        AnalyzeTestUtil.analyzeFail("ALTER TABLE iceberg_catalog.iceberg_db.test_table " +
+                "EXECUTE set_current_snapshot(snapshot_id = 'invalid')");
+    }
+
+    @Test
     public void testCaseInsensitiveProcedureNames() {
         String[] procedures = {
             "EXPIRE_SNAPSHOTS",
@@ -382,7 +406,7 @@ public class AlterTableOperationStmtTest {
 
         RewriteDataFilesProcedure rewriteProc = RewriteDataFilesProcedure.getInstance();
         Assertions.assertEquals("rewrite_data_files", rewriteProc.getProcedureName());
-        Assertions.assertEquals(4, rewriteProc.getArguments().size());
+        Assertions.assertEquals(6, rewriteProc.getArguments().size());
 
         RollbackToSnapshotProcedure rollbackProc = RollbackToSnapshotProcedure.getInstance();
         Assertions.assertEquals("rollback_to_snapshot", rollbackProc.getProcedureName());
