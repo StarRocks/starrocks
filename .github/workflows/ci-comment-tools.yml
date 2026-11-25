@@ -17,10 +17,17 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.issue.number }}
       GITHUB_TOKEN: ${{ secrets.PAT }}
+      COMMENTER: ${{ github.event.comment.user.login }}
+      ORG: ${{ github.repository_owner }}
 
     steps:
+      # Runs with secrets.PAT, so only org members can trigger it (see AutoMerge below).
       - name: CLOSE
         run: |
+          if ! gh api "orgs/${ORG}/members/${COMMENTER}" --silent; then
+            echo "::error::${COMMENTER} is not a member of ${ORG}; not closing."
+            exit 1
+          fi
           gh pr close ${PR_NUMBER} -R ${{ github.repository }} -c "PR was manually closed."
 
   automerge:
@@ -42,11 +49,23 @@ jobs:
           base_ref=$(gh pr view ${PR_NUMBER} -R ${{ github.repository }} --json baseRefName | jq -r '.baseRefName')
           echo "base_ref=${base_ref}" >> $GITHUB_OUTPUT
 
+      # Conflict-fix PRs into a Mergify backport branch (mergify/bp/...) or into the head
+      # branch of a contributed sync PR (main-cd-contributed-pr-N, main-ms-contributed-pr-N).
+      # The merge runs with secrets.PAT, so only org members can trigger it. Membership is
+      # checked with the PAT: author_association reads CONTRIBUTOR for private members.
       - name: AutoMerge
-        if: startsWith(steps.get_base_ref.outputs.base_ref, 'mergify/bp')
+        if: >
+          startsWith(steps.get_base_ref.outputs.base_ref, 'mergify/bp/') ||
+          contains(steps.get_base_ref.outputs.base_ref, '-contributed-pr-')
         env:
           GITHUB_TOKEN: ${{ secrets.PAT }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+          ORG: ${{ github.repository_owner }}
         run: |
+          if ! gh api "orgs/${ORG}/members/${COMMENTER}" --silent; then
+            echo "::error::${COMMENTER} is not a member of ${ORG}; not merging."
+            exit 1
+          fi
           gh pr merge ${PR_NUMBER} -R ${{ github.repository }} -s --auto
 
   rerun:
