@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.sql.ast.StatementBase;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -179,4 +180,12 @@ public class GlobalLateMaterializationTest extends ConnectorPlanTestBase {
                 "  3:HASH JOIN");
     }
 
+    @Test
+    public void testExplainLogicalFetch() throws Exception {
+        String plan = getExecPlan("select * from iceberg0.unpartitioned_db.t0 t0 " +
+                "inner join iceberg0.partitioned_db.t1 t1 on t0.id = t1.id")
+                .getExplainString(StatementBase.ExplainLevel.LOGICAL);
+        assertContains(plan, "- FETCH");
+        assertContains(plan, "- LOOKUP");
+    }
 }
