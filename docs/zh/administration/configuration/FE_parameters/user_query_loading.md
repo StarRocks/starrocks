@@ -552,7 +552,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
     - 否则，如果 `targetRows > statistic_sample_collect_rows` (默认值: 200000)，则使用 SAMPLE 统计信息收集。
     - 否则，使用 FULL 统计信息收集。
   
-  - 对于首次加载：`deltaRatio = loadRows / (totalRows + 1)`
+  - 对于 INSERT 首次加载：`deltaRatio = loadRows / (totalRows + 1)`，其中 `totalRows` 是本次首载候选逻辑分区的 FE 行数之和。候选逻辑分区由提交版本等于 2 的物理分区映射得到。
+    - 如果无法获取 `loadRows`，或 `loadRows <= 0`，则不执行统计信息收集。
+    - 如果 `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load` (默认值: 0.1)，则不执行统计信息收集。
+    - 否则，如果 `loadRows > statistic_sample_collect_rows` (默认值: 200000)，则使用 SAMPLE 统计信息收集。
+    - 否则，使用 FULL 统计信息收集。
+
+  - 对于 UPDATE，当 `enable_statistic_collect_on_update` 启用时：`deltaRatio = loadRows / (totalRows + 1)`。`totalRows` 优先使用表统计中的正数行数，否则回退到本次涉及分区的 FE 行数之和。
     - 如果 `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load` (默认值: 0.1)，则不执行统计信息收集。
     - 否则，如果 `loadRows > statistic_sample_collect_rows` (默认值: 200000)，则使用 SAMPLE 统计信息收集。
     - 否则，使用 FULL 统计信息收集。
