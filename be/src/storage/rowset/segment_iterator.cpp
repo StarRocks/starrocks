@@ -530,7 +530,7 @@ private:
     // Whether this reader reads ahead through SegmentPrefetchWindow at all.
     bool _should_read_ahead() const;
     // lake_scan_warm_index: whether the bitmap index lookups ask for the pages they read ahead of the reads.
-    bool _should_prefetch_index_pages() const;
+    bool _should_prefetch_bitmap_index_pages() const;
     void _reset_prefetch_window() {
         _prefetch_window.reset();
         _prefetch_late_columns.clear();
@@ -1247,7 +1247,7 @@ bool SegmentIterator::_should_read_ahead() const {
 #endif // USE_STAROS
 }
 
-bool SegmentIterator::_should_prefetch_index_pages() const {
+bool SegmentIterator::_should_prefetch_bitmap_index_pages() const {
 #ifndef USE_STAROS
     return false;
 #else
@@ -4783,7 +4783,7 @@ Status SegmentIterator::_apply_bitmap_index() {
     RETURN_IF(!config::enable_index_bitmap_filter, Status::OK());
     RETURN_IF(_scan_range.empty(), Status::OK());
     DCHECK_EQ(_predicate_columns, _opts.pred_tree.num_columns());
-    const bool prefetch = _should_prefetch_index_pages();
+    const bool prefetch = _should_prefetch_bitmap_index_pages();
 
     {
         SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_iterator_init_ns);
@@ -4820,7 +4820,7 @@ Status SegmentIterator::_apply_bitmap_index() {
             opts.lake_io_opts = _opts.lake_io_opts;
             opts.read_file = _column_files[cid].get();
             opts.stats = _opts.stats;
-            opts.prefetch_pages = prefetch;
+            opts.prefetch_bitmap_index_pages = prefetch;
             // IDG context — without this, the IDG branch in
             // ColumnReader::new_bitmap_index_iterator is unreachable and
             // fast-path built bitmap indexes stored in .idx sidecar files

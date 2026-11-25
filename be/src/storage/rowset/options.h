@@ -72,9 +72,9 @@ public:
 
     std::optional<size_t> segment_rows = std::nullopt;
 
-    // Whether an index iterator may ask |read_file| to fetch the pages its lookups read next in the background, ahead
-    // of the reads (lake_scan_warm_index). Only bitmap index iterators do so far.
-    bool prefetch_pages = false;
+    // Whether a bitmap index iterator may ask |read_file| to fetch the pages its lookups read next in the background,
+    // ahead of the reads (lake_scan_warm_index).
+    bool prefetch_bitmap_index_pages = false;
 
     // ============================================================
     // Index Delta Group context (lake-only).

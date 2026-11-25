@@ -138,7 +138,7 @@ Status BitmapIndexReader::new_iterator(const IndexReadOptions& opts, SegmentBitm
     *iterator = new SegmentBitmapIndexIterator(this, std::move(dict_iter), std::move(bitmap_iter),
                                                std::move(ngram_dict_iter), std::move(ngram_bitmap_iter), _has_null,
                                                bitmap_nums(), opts.idg_bitmap_file_missing);
-    if (opts.prefetch_pages && opts.read_file != nullptr) {
+    if (opts.prefetch_bitmap_index_pages && opts.read_file != nullptr) {
         (*iterator)->enable_prefetch(opts.read_file, opts.use_page_cache, opts.stats);
     }
     return Status::OK();

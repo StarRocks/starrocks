@@ -208,7 +208,7 @@ protected:
         *stream = std::make_unique<RecordingBitmapInputStream>(rfile->stream());
         _opts.read_file = stream->get();
         _opts.use_page_cache = false;
-        _opts.prefetch_pages = true;
+        _opts.prefetch_bitmap_index_pages = true;
         ASSIGN_OR_ABORT(auto first_load, reader->load(_opts, meta->bitmap_index()));
         ASSERT_TRUE(first_load);
         (*stream)->events.clear();
@@ -1017,13 +1017,13 @@ TEST_F(BitmapIndexTest, prefetch_stops_when_the_file_cannot_fill_in_the_backgrou
     EXPECT_TRUE(rows.contains(99999));
 }
 
-// An iterator created without IndexReadOptions::prefetch_pages never asks.
+// An iterator created without IndexReadOptions::prefetch_bitmap_index_pages never asks.
 TEST_F(BitmapIndexTest, prefetch_is_off_unless_the_options_allow_it) {
     ColumnIndexMetaPB meta;
     std::unique_ptr<RecordingBitmapInputStream> stream;
     BitmapIndexReader reader;
     open_prefetch_index("prefetch_off", &meta, &stream, &reader);
-    _opts.prefetch_pages = false;
+    _opts.prefetch_bitmap_index_pages = false;
     SegmentBitmapIndexIterator* raw = nullptr;
     ASSERT_OK(reader.new_iterator(_opts, &raw));
     std::unique_ptr<SegmentBitmapIndexIterator> iter(raw);
