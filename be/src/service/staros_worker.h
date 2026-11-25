@@ -142,6 +142,9 @@ private:
     std::shared_mutex _cache_mtx;
     std::mutex _fs_cache_key_reset_mtx; // Protects fs_cache_key reset operations
     std::unordered_map<ShardId, ShardInfoDetails> _shards;
+    // Filesystems by the hash of their configuration. `starlet_filesystem_instance_cache_capacity` is a number of
+    // filesystems; the cache charges each its handle and key as well, so its capacity is converted, see
+    // `fs_cache_capacity`.
     std::unique_ptr<Cache> _fs_cache;
     add_shard_listener _add_shard_listener;
 };

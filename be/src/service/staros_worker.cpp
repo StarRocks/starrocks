@@ -93,18 +93,28 @@ std::optional<int32_t> starlet_request_timeout_ms(int64_t configured_timeout_ms,
     return static_cast<int32_t>(configured_timeout_ms);
 }
 
+// Every key of `_fs_cache` is a SHA-256 hex digest, see `get_cache_key`.
+static constexpr size_t kFsCacheKeySize = 2 * SHA256_DIGEST_LENGTH;
+
+// The capacity of `_fs_cache` that holds |filesystems| filesystems. The cache charges an entry its handle and key
+// on top of the 1 it is inserted with, and every key has the same size, so every filesystem is charged the same.
+static size_t fs_cache_capacity(int32_t filesystems) {
+    static const size_t kEntryCharge = 1 + LRUCache::key_handle_size(CacheKey(std::string(kFsCacheKeySize, '0')));
+    return static_cast<size_t>(std::max(filesystems, 0)) * kEntryCharge;
+}
+
 StarOSWorker::StarOSWorker()
         : _mtx(),
           _cache_mtx(),
           _shards(),
-          _fs_cache(new_lru_cache(config::starlet_filesystem_instance_cache_capacity)) {}
+          _fs_cache(new_lru_cache(fs_cache_capacity(config::starlet_filesystem_instance_cache_capacity))) {}
 
 StarOSWorker::~StarOSWorker() = default;
 
 static const uint64_t kUnknownTableId = UINT64_MAX;
 
 void StarOSWorker::set_fs_cache_capacity(int32_t capacity) {
-    _fs_cache->set_capacity(capacity);
+    _fs_cache->set_capacity(fs_cache_capacity(capacity));
 }
 
 uint64_t StarOSWorker::get_table_id(const ShardInfo& shard) {
@@ -445,6 +455,8 @@ std::shared_ptr<std::string> StarOSWorker::insert_fs_cache(const std::string& ke
 
     CacheKey cache_key(key);
     auto value = new CacheValue(fs_cache_key, fs);
+    // Charged 1 plus its handle and key, as `fs_cache_capacity` assumes.
+    DCHECK_EQ(kFsCacheKeySize, key.size());
     auto handle = _fs_cache->insert(cache_key, value, 1, cache_value_deleter);
     if (handle == nullptr) {
         delete value;
