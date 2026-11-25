@@ -156,6 +156,9 @@ public class PrepareStmtPlanner {
             prepareStmtContext.reset();
             return execPlan;
         }
+        // A hit rebuilds the scan ranges off this copy and reads the live versions, as it always has; the versions the
+        // first EXECUTE recorded would pin every later hit to them.
+        plannedTable.forgetPlanningVisibleVersions();
 
         prepareStmtContext.setExecPlan(execPlan);
         prepareStmtContext.updateLastSchemaUpdateTime(queryStmt, session);

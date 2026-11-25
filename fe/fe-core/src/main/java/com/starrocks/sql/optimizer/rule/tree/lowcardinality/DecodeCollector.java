@@ -99,6 +99,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.LongPredicate;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -1239,6 +1240,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
         // check dict column
         DecodeInfo info = DecodeInfo.create();
+        List<Pair<ColumnRefOperator, ColumnDict>> dictColumns = Lists.newArrayList();
         for (ColumnRefOperator column : scan.getColRefToColumnMetaMap().keySet()) {
             // Condition 1:
             if (!supportAndEnabledLowCardinalityForScanOperator(column.getType())) {
@@ -1296,10 +1298,22 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             if (dict.isEmpty()) {
                 continue;
             }
+            dictColumns.add(Pair.create(column, dict.get()));
+        }
 
-            markedAsGlobalDictOpt(info, column, dict.get());
+        // The scan reads the versions the plan's table copy recorded, and BE encodes a value the dict lacks as 0. A dict
+        // collected from a newer state may lack a value those versions hold: one updated or deleted since, whose old
+        // rows a compaction dropped before the dict was collected again. Tested once every dict is fetched.
+        LongPredicate copyOlderThan = table.planningCopyOlderThan(scan.getSelectedPartitionId());
+        for (Pair<ColumnRefOperator, ColumnDict> dictColumn : dictColumns) {
+            ColumnRefOperator column = dictColumn.first;
+            if (copyOlderThan.test(dictColumn.second.getCollectedVersion())) {
+                LOG.debug("{} has a global dict collected after the planning copy", column.getName());
+                continue;
+            }
+            markedAsGlobalDictOpt(info, column, dictColumn.second);
             if (captureGlobalDictForDump) {
-                capturedGlobalDicts.add(new CapturedGlobalDict(table, column.getName(), dict.get()));
+                capturedGlobalDicts.add(new CapturedGlobalDict(table, column.getName(), dictColumn.second));
             }
         }
 

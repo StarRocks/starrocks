@@ -291,6 +291,11 @@ public class PlannerMetaLocker implements AutoCloseable {
         this.acquireTimeoutMs = acquireTimeoutMs;
     }
 
+    /** The bound {@link #setAcquireTimeoutMs} set, or negative for none. */
+    public long getAcquireTimeoutMs() {
+        return acquireTimeoutMs;
+    }
+
     /**
      * {@link #lock()}, unless {@link #setAcquireTimeoutMs} bounded the wait: then {@link #tryLock} with that bound,
      * throwing {@link AcquireTimeoutException} when it runs out. Nothing is held after the throw.

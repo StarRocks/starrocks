@@ -77,6 +77,7 @@ import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
@@ -2350,6 +2351,31 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         job.runFinishedRewritingJob();
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
         return job;
+    }
+
+    @Test
+    public void testFlipInvalidatesPlansBeforeExposingTheShadowIndex() throws Exception {
+        LakeRangeRewriteSchemaChangeJob job = jobInFinishedRewritingWithCommitReserved();
+        job.setFinishedTimeMs(System.currentTimeMillis());
+
+        // A lock-free plan reads the versions its table copy recorded and the layout later: the invalidation has to be
+        // in place when each shadow index replaces its origin, not only once the flip is done.
+        long beforeFlip = table.lastSchemaUpdateTime.get();
+        List<Long> invalidationAtExposure = new ArrayList<>();
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public boolean visualiseShadowIndex(Invocation invocation, long shadowIndexId, boolean isBaseIndex) {
+                invalidationAtExposure.add(table.lastSchemaUpdateTime.get());
+                return invocation.proceed(shadowIndexId, isBaseIndex);
+            }
+        };
+
+        job.visualiseShadowIndex(table);
+
+        Assertions.assertFalse(invalidationAtExposure.isEmpty(), "the flip exposed no shadow index");
+        Assertions.assertTrue(invalidationAtExposure.stream().allMatch(time -> time > beforeFlip),
+                "plans must be invalidated before the shadow index is exposed (before=" + beforeFlip
+                        + ", at exposure=" + invalidationAtExposure + ")");
     }
 
     @Test
