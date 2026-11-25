@@ -4054,6 +4054,55 @@ TEST_F(MetaFileTest, test_apply_add_index_dcg_without_source_files_is_not_instal
     EXPECT_EQ("rewritten.cols", metadata->orphan_files(0).name());
 }
 
+TEST_F(MetaFileTest, test_apply_add_index_dcg_checks_each_column_against_its_source) {
+    // One rewrite entry carries several columns copied from different layers.
+    // Each column is installed only while its own source still serves it: a
+    // partial update after the snapshot replaced column 101, so 100 and 102
+    // move to the rewrite while 101 stays on the newer overlay.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20039);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20039);
+    metadata->set_version(9);
+    MetaFileBuilder builder(*tablet, metadata);
+    builder.append_dcg(4, {{"a.cols", ""}}, {{100, 101}}, {111});
+    metadata->set_version(10);
+    builder.append_dcg(4, {{"b.cols", ""}}, {{102}}, {222});
+
+    // ADD INDEX reads version 10; a partial update changes column 101 at 11.
+    metadata->set_version(11);
+    builder.append_dcg(4, {{"c.cols", ""}}, {{101}}, {333});
+    metadata->set_version(12);
+    TxnLogPB_OpAddIndex op;
+    op.set_alter_version(10);
+    auto* de = op.add_dcg_entries();
+    de->set_segment_id(4);
+    de->set_column_file("rewritten.cols");
+    de->set_file_size(456);
+    for (uint32_t uid : {100u, 101u, 102u}) {
+        de->add_col_unique_ids(uid);
+    }
+    de->add_source_column_files("a.cols");
+    de->add_source_column_files("a.cols");
+    de->add_source_column_files("b.cols");
+    ASSERT_OK(builder.apply_add_index(op));
+    ASSERT_OK(builder.apply_add_index(op));
+
+    const auto& dcg = metadata->dcg_meta().dcgs().at(4);
+    ASSERT_EQ(2, dcg.column_files_size());
+    EXPECT_EQ("rewritten.cols", dcg.column_files(0));
+    const auto& rewritten_ids = dcg.unique_column_ids(0).column_ids();
+    EXPECT_EQ((std::vector<uint32_t>{100, 102}), std::vector<uint32_t>(rewritten_ids.begin(), rewritten_ids.end()));
+    EXPECT_EQ("c.cols", dcg.column_files(1));
+    ASSERT_EQ(1, dcg.unique_column_ids(1).column_ids_size());
+    EXPECT_EQ(101, dcg.unique_column_ids(1).column_ids(0));
+    // a.cols and b.cols hold no columns anymore; the replay adds nothing.
+    std::map<std::string, int> orphan_count;
+    for (const auto& f : metadata->orphan_files()) {
+        orphan_count[f.name()]++;
+    }
+    EXPECT_EQ((std::map<std::string, int>{{"a.cols", 1}, {"b.cols", 1}}), orphan_count);
+}
+
 TEST_F(MetaFileTest, test_append_dcg_carries_forward_shared_flag) {
     // append_dcg rebuilds the whole per-segment entry list, so a surviving
     // layer's shared bit has to be copied over; losing it would let a single

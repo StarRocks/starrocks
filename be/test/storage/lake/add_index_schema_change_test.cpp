@@ -15,9 +15,11 @@
 #include "storage/lake/add_index_schema_change.h"
 
 #include <gtest/gtest.h>
+#include <roaring/roaring.hh>
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
@@ -510,12 +512,13 @@ protected:
         return chunk;
     }
 
-    // Whether the bitmap in the `.cols` footer has `value` as an exact
-    // dictionary entry for column `uid`. `value` points at the column's
-    // in-memory type: int32_t, int64_t, or a Slice (padded to the declared
-    // width for CHAR, whose dictionary keeps the padding).
-    bool cols_bitmap_has(int64_t tablet_id, const std::string& filename, const std::shared_ptr<Segment>& seg,
-                         int32_t uid, const void* value) {
+    // The rows the bitmap in the `.cols` footer maps `value` to for column
+    // `uid`, ascending; empty when the dictionary has no exact entry for it.
+    // `value` points at the column's in-memory type: int32_t, int64_t, or a
+    // Slice (padded to the declared width for CHAR, whose dictionary keeps the
+    // padding).
+    std::vector<uint32_t> cols_bitmap_rows(int64_t tablet_id, const std::string& filename,
+                                           const std::shared_ptr<Segment>& seg, int32_t uid, const void* value) {
         const std::string path = _tablet_manager->segment_location(tablet_id, filename);
         ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(path));
         FileInfo info{.path = path};
@@ -533,7 +536,20 @@ protected:
         std::unique_ptr<BitmapIndexIterator> owned(iter);
         bool exact = false;
         CHECK_OK(owned->seek_dictionary(value, &exact));
-        return exact;
+        if (!exact) {
+            return {};
+        }
+        roaring::Roaring rows;
+        CHECK_OK(owned->read_bitmap(owned->current_ordinal(), &rows));
+        std::vector<uint32_t> out(rows.cardinality());
+        rows.toUint32Array(out.data());
+        return out;
+    }
+
+    // Whether that bitmap has `value` as a dictionary entry at all.
+    bool cols_bitmap_has(int64_t tablet_id, const std::string& filename, const std::shared_ptr<Segment>& seg,
+                         int32_t uid, const void* value) {
+        return !cols_bitmap_rows(tablet_id, filename, seg, uid, value).empty();
     }
 
     // Tablet metadata `md` with column `uid` retyped, as FE's catalog sees it
@@ -2598,10 +2614,15 @@ TEST_F(AddIndexSchemaChangeTest, dcg_overlay_rewrite_spans_multiple_batches) {
     for (int i = 0; i < kRows; ++i) {
         ASSERT_EQ(10000 + i, chunk->get_column_by_index(0)->get(i).get_int32()) << "row " << i;
     }
-    // The bitmap is built over the overlay, not over the base values under it.
+    // The bitmap is built over the overlay, not over the base values under it,
+    // and maps each value to the row holding it, in a later batch too.
     const int32_t overlay_value = 10005;
+    const int32_t late_batch_value = 10000 + 8500;
     const int32_t base_only_value = 3; // row 0 of the base segment: 0 * 7 + 3
-    EXPECT_TRUE(cols_bitmap_has(tablet_id, op.dcg_entries(0).column_file(), seg, _c1_uid, &overlay_value));
+    EXPECT_EQ(std::vector<uint32_t>{5},
+              cols_bitmap_rows(tablet_id, op.dcg_entries(0).column_file(), seg, _c1_uid, &overlay_value));
+    EXPECT_EQ(std::vector<uint32_t>{8500},
+              cols_bitmap_rows(tablet_id, op.dcg_entries(0).column_file(), seg, _c1_uid, &late_batch_value));
     EXPECT_FALSE(cols_bitmap_has(tablet_id, op.dcg_entries(0).column_file(), seg, _c1_uid, &base_only_value));
 }
 
@@ -2691,7 +2712,8 @@ TEST_F(AddIndexSchemaChangeTest, dcg_overlay_rewrites_nullable_column) {
     }
     const int32_t overlay_value = 4001;
     const int32_t base_only_value = 11; // row 1 of the base segment: 1 * 11
-    EXPECT_TRUE(cols_bitmap_has(tablet_id, op.dcg_entries(0).column_file(), seg, _c3_uid, &overlay_value));
+    EXPECT_EQ(std::vector<uint32_t>{1},
+              cols_bitmap_rows(tablet_id, op.dcg_entries(0).column_file(), seg, _c3_uid, &overlay_value));
     EXPECT_FALSE(cols_bitmap_has(tablet_id, op.dcg_entries(0).column_file(), seg, _c3_uid, &base_only_value));
 }
 
@@ -2742,7 +2764,8 @@ TEST_F(AddIndexSchemaChangeTest, dcg_overlay_rewrites_char_column_with_repad) {
     base_only_key.resize(16, '\0');
     const Slice overlay_slice(overlay_key);
     const Slice base_only_slice(base_only_key);
-    EXPECT_TRUE(cols_bitmap_has(tablet_id, op.dcg_entries(0).column_file(), seg, _c4_uid, &overlay_slice));
+    EXPECT_EQ(std::vector<uint32_t>{2},
+              cols_bitmap_rows(tablet_id, op.dcg_entries(0).column_file(), seg, _c4_uid, &overlay_slice));
     EXPECT_FALSE(cols_bitmap_has(tablet_id, op.dcg_entries(0).column_file(), seg, _c4_uid, &base_only_slice));
 }
 
@@ -2786,7 +2809,8 @@ TEST_F(AddIndexSchemaChangeTest, dcg_rewrite_uses_catalog_type_after_char_to_var
     std::string padded_key = "ov22";
     padded_key.resize(16, '\0');
     const Slice padded(padded_key);
-    EXPECT_TRUE(cols_bitmap_has(tablet_id, op.dcg_entries(0).column_file(), seg, _c4_uid, &unpadded));
+    EXPECT_EQ(std::vector<uint32_t>{2},
+              cols_bitmap_rows(tablet_id, op.dcg_entries(0).column_file(), seg, _c4_uid, &unpadded));
     EXPECT_FALSE(cols_bitmap_has(tablet_id, op.dcg_entries(0).column_file(), seg, _c4_uid, &padded));
 
     auto chunk = read_cols_chunk(tablet_id, op.dcg_entries(0).column_file(), seg, partial_schema);
@@ -2830,7 +2854,8 @@ TEST_F(AddIndexSchemaChangeTest, dcg_rewrite_uses_catalog_type_after_int_to_bigi
     ASSERT_TRUE(reader->has_bitmap_index());
 
     const int64_t overlay_value = 3002;
-    EXPECT_TRUE(cols_bitmap_has(tablet_id, op.dcg_entries(0).column_file(), seg, _c1_uid, &overlay_value));
+    EXPECT_EQ(std::vector<uint32_t>{2},
+              cols_bitmap_rows(tablet_id, op.dcg_entries(0).column_file(), seg, _c1_uid, &overlay_value));
 
     auto chunk = read_cols_chunk(tablet_id, op.dcg_entries(0).column_file(), seg, partial_schema);
     ASSERT_EQ(5u, chunk->num_rows());

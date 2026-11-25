@@ -54,6 +54,9 @@ select count(*) from t_pu_then_bitmap where v1 = 777;
 select count(*) from t_pu_then_bitmap where v1 = 20;
 select count(*) from t_pu_then_bitmap where v1 = 10;
 select count(*) from t_pu_then_bitmap where v1 = 30;
+-- The bitmap must also map each value to its rows: return the keys it selects.
+select k1 from t_pu_then_bitmap where v1 = 777 order by k1;
+select k1 from t_pu_then_bitmap where v1 = 20 order by k1;
 select * from t_pu_then_bitmap where k1 <= 5 order by k1;
 
 -- Correct results alone do not prove the fix: before it, results were already
@@ -167,6 +170,7 @@ function: wait_alter_table_finish()
 select count(*) from t_pu_char_to_varchar where s1 = 'hit';
 select count(*) from t_pu_char_to_varchar where s1 = 's10';
 select count(*) from t_pu_char_to_varchar where s1 = 's1';
+select k1 from t_pu_char_to_varchar where s1 = 'hit' order by k1;
 select k1, s1 from t_pu_char_to_varchar where k1 <= 5 order by k1;
 
 drop database lake_idx_after_pu_${uuid0};

@@ -52,6 +52,16 @@ select count(*) from t_pu_then_bitmap where v1 = 30;
 -- result:
 1
 -- !result
+select k1 from t_pu_then_bitmap where v1 = 777 order by k1;
+-- result:
+1
+2
+-- !result
+select k1 from t_pu_then_bitmap where v1 = 20 order by k1;
+-- result:
+4
+5
+-- !result
 select * from t_pu_then_bitmap where k1 <= 5 order by k1;
 -- result:
 1	777	1	1	1	1
@@ -257,6 +267,12 @@ select count(*) from t_pu_char_to_varchar where s1 = 's10';
 select count(*) from t_pu_char_to_varchar where s1 = 's1';
 -- result:
 0
+-- !result
+select k1 from t_pu_char_to_varchar where s1 = 'hit' order by k1;
+-- result:
+1
+2
+3
 -- !result
 select k1, s1 from t_pu_char_to_varchar where k1 <= 5 order by k1;
 -- result:

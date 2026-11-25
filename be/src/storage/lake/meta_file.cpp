@@ -21,6 +21,8 @@
 #include <map>
 #include <memory>
 #include <tuple>
+#include <unordered_map>
+#include <vector>
 
 #include "base/coding.h"
 #include "base/container/raw_container.h"
@@ -448,17 +450,44 @@ void MetaFileBuilder::apply_column_mode_partial_update(const TxnLogPB_OpWrite& o
     }
 }
 
-// The `.cols` that currently serves `uid` among a segment's DCG layers, or an
-// empty view when no layer carries the column (the base segment serves it).
-// append_dcg keeps every column in exactly one layer.
-static std::string_view serving_column_file(const DeltaColumnGroupVerPB& dcg_ver, ColumnUID uid) {
-    for (int i = 0; i < dcg_ver.unique_column_ids_size() && i < dcg_ver.column_files_size(); ++i) {
-        const auto& ids = dcg_ver.unique_column_ids(i).column_ids();
-        if (std::find(ids.begin(), ids.end(), static_cast<uint32_t>(uid)) != ids.end()) {
-            return dcg_ver.column_files(i);
+// The columns of a rewrite entry that publish may install: those whose `.cols`
+// in the segment's current DCG (`dcg_ver`, nullptr when it has none) is still
+// the file the rewrite copied them from. A column whose source the log does not
+// record cannot be shown to be current, so it is left out. The DCG's column
+// lists are walked once, however many columns the entry has; append_dcg keeps
+// every column in exactly one layer.
+static std::vector<ColumnUID> columns_served_by_source(const DeltaColumnGroupVerPB* dcg_ver,
+                                                       const TxnLogPB_OpAddIndex_DcgEntry& entry) {
+    std::vector<ColumnUID> uids;
+    if (dcg_ver == nullptr) {
+        return uids;
+    }
+    // The layer serving each of the entry's columns, -1 while none is found.
+    std::unordered_map<uint32_t, int> layer_of;
+    layer_of.reserve(entry.col_unique_ids_size());
+    for (uint32_t uid : entry.col_unique_ids()) {
+        layer_of.emplace(uid, -1);
+    }
+    for (int i = 0; i < dcg_ver->unique_column_ids_size() && i < dcg_ver->column_files_size(); ++i) {
+        for (uint32_t uid : dcg_ver->unique_column_ids(i).column_ids()) {
+            auto it = layer_of.find(uid);
+            if (it != layer_of.end() && it->second < 0) {
+                it->second = i;
+            }
         }
     }
-    return {};
+    uids.reserve(entry.col_unique_ids_size());
+    for (int i = 0; i < entry.col_unique_ids_size(); ++i) {
+        if (i >= entry.source_column_files_size() || entry.source_column_files(i).empty()) {
+            continue;
+        }
+        const auto it = layer_of.find(entry.col_unique_ids(i));
+        if (it != layer_of.end() && it->second >= 0 &&
+            dcg_ver->column_files(it->second) == entry.source_column_files(i)) {
+            uids.push_back(static_cast<ColumnUID>(entry.col_unique_ids(i)));
+        }
+    }
+    return uids;
 }
 
 Status MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
@@ -764,17 +793,7 @@ Status MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
                 continue;
             }
         }
-        std::vector<ColumnUID> uids;
-        uids.reserve(dcg.col_unique_ids_size());
-        for (int i = 0; i < dcg.col_unique_ids_size(); ++i) {
-            const ColumnUID uid = static_cast<ColumnUID>(dcg.col_unique_ids(i));
-            // A log without the source of a column cannot show that the copy is
-            // still current, so that column is not installed.
-            if (current != nullptr && i < dcg.source_column_files_size() && !dcg.source_column_files(i).empty() &&
-                serving_column_file(*current, uid) == dcg.source_column_files(i)) {
-                uids.push_back(uid);
-            }
-        }
+        std::vector<ColumnUID> uids = columns_served_by_source(current, dcg);
         stale_dcg_columns += dcg.col_unique_ids_size() - uids.size();
         if (uids.empty()) {
             // No rewritten column applies on this tablet. The file is unused
