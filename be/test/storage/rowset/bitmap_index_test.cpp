@@ -193,13 +193,18 @@ protected:
         ASSERT_TRUE(wfile->close().ok());
     }
 
-    // A BIGINT bitmap index of the values 0..kPrefetchRows-1 and one null, spread over many dictionary and bitmap
-    // pages, read through |stream| with prefetching allowed.
+    // A BIGINT bitmap index of one value per row, prefetch_value(0..kPrefetchRows-1), and one null, over several
+    // dictionary and bitmap pages, read through |stream| with prefetching allowed. The dictionary of a value seek
+    // index is frame-of-reference encoded, which packs consecutive integers into one page; values 2^40 apart take
+    // 41 bits each, about 3 MB.
     static constexpr int kPrefetchRows = 600000;
+    static int64_t prefetch_value(int64_t row) { return row << 40; }
     void open_prefetch_index(const std::string& name, ColumnIndexMetaPB* meta,
                              std::unique_ptr<RecordingBitmapInputStream>* stream, BitmapIndexReader* reader) {
         std::vector<int64_t> values(kPrefetchRows);
-        std::iota(values.begin(), values.end(), 0);
+        for (int row = 0; row < kPrefetchRows; row++) {
+            values[row] = prefetch_value(row);
+        }
         std::string filename = kTestDir + "/" + name;
         write_index_file<TYPE_BIGINT>(filename, values.data(), values.size(), 1, meta);
         ASSERT_FALSE(meta->bitmap_index().dict_column().value_index_meta().is_root_data_page());
@@ -913,9 +918,11 @@ TEST_F(BitmapIndexTest, prefetch_asks_for_exactly_the_pages_the_lookups_read) {
     ASSERT_OK(reader.new_iterator(_opts, &raw));
     std::unique_ptr<SegmentBitmapIndexIterator> iter(raw);
 
-    // 40000 and 40001 share a dictionary page and a bitmap page; the others are far apart.
-    const std::vector<int64_t> lookups{3, 40000, 40001, 99999, 77777};
-    for (auto value : lookups) {
+    // The rows (and ordinals) of the looked-up values: 3 and 4 share a dictionary page and a bitmap page, the others
+    // are far apart, so the lookups read more than one page of each but fewer pages than lookups.
+    const std::vector<int64_t> lookups{3, 4, kPrefetchRows / 2, kPrefetchRows - 1};
+    for (auto row : lookups) {
+        int64_t value = prefetch_value(row);
         iter->prefetch_dictionary_page(&value);
     }
     EXPECT_EQ(0, stream->count('r'));
@@ -926,11 +933,12 @@ TEST_F(BitmapIndexTest, prefetch_asks_for_exactly_the_pages_the_lookups_read) {
 
     stream->events.clear();
     SparseRange<> ordinals;
-    for (auto value : lookups) {
+    for (auto row : lookups) {
+        int64_t value = prefetch_value(row);
         bool exact_match = false;
         ASSERT_OK(iter->seek_dictionary(&value, &exact_match));
         ASSERT_TRUE(exact_match);
-        ASSERT_EQ(value, iter->current_ordinal());
+        ASSERT_EQ(row, iter->current_ordinal());
         ordinals.add(Range<>(iter->current_ordinal(), iter->current_ordinal() + 1));
     }
     EXPECT_EQ(dict_pages, stream->offsets('r'));
@@ -960,14 +968,15 @@ TEST_F(BitmapIndexTest, prefetch_asks_for_exactly_the_pages_the_lookups_read) {
 
     // A page asked for once is not asked for again.
     stream->events.clear();
-    for (auto value : lookups) {
+    for (auto row : lookups) {
+        int64_t value = prefetch_value(row);
         iter->prefetch_dictionary_page(&value);
     }
     iter->prefetch_bitmap_pages(ordinals);
     EXPECT_TRUE(stream->events.empty());
 }
 
-// A long ordinal range asks for its first pages only, in order.
+// A long ordinal range asks for its first pages only, in order. The cap is lowered to fit the index of the test.
 TEST_F(BitmapIndexTest, prefetch_caps_the_bitmap_pages_of_a_long_range) {
     ColumnIndexMetaPB meta;
     std::unique_ptr<RecordingBitmapInputStream> stream;
@@ -980,9 +989,10 @@ TEST_F(BitmapIndexTest, prefetch_caps_the_bitmap_pages_of_a_long_range) {
     std::vector<PagePointer> all_pages;
     // Every bitmap of the index: the null bitmap is the last one.
     ASSERT_TRUE(reader_bitmap_pages(reader, 0, iter->bitmap_nums(), &all_pages));
+    const size_t expected = 2;
+    ASSERT_GT(all_pages.size(), expected);
+    iter->_max_prefetch_bitmap_pages = expected;
     iter->prefetch_bitmap_pages(SparseRange<>(0, iter->bitmap_nums()));
-    ASSERT_GT(all_pages.size(), 64);
-    const size_t expected = 64;
     ASSERT_EQ(expected, stream->count('w'));
     for (size_t i = 0; i < expected; i++) {
         EXPECT_EQ(static_cast<int64_t>(all_pages[i].offset), stream->events[i].second);
@@ -1000,14 +1010,15 @@ TEST_F(BitmapIndexTest, prefetch_stops_when_the_file_cannot_fill_in_the_backgrou
     ASSERT_OK(reader.new_iterator(_opts, &raw));
     std::unique_ptr<SegmentBitmapIndexIterator> iter(raw);
 
-    for (int64_t value : {3, 99999}) {
+    for (int64_t row : {3, 99999}) {
+        int64_t value = prefetch_value(row);
         iter->prefetch_dictionary_page(&value);
     }
     iter->prefetch_bitmap_pages(SparseRange<>(3, 4));
     EXPECT_EQ(1, stream->count('w'));
     EXPECT_EQ(0, _stats.bitmap_index_prefetch_pages);
 
-    int64_t value = 99999;
+    int64_t value = prefetch_value(99999);
     bool exact_match = false;
     ASSERT_OK(iter->seek_dictionary(&value, &exact_match));
     ASSERT_TRUE(exact_match);
@@ -1027,7 +1038,7 @@ TEST_F(BitmapIndexTest, prefetch_is_off_unless_the_options_allow_it) {
     SegmentBitmapIndexIterator* raw = nullptr;
     ASSERT_OK(reader.new_iterator(_opts, &raw));
     std::unique_ptr<SegmentBitmapIndexIterator> iter(raw);
-    int64_t value = 3;
+    int64_t value = prefetch_value(3);
     iter->prefetch_dictionary_page(&value);
     iter->prefetch_bitmap_pages(SparseRange<>(3, 4));
     EXPECT_EQ(0, stream->count('w'));
@@ -1043,8 +1054,11 @@ TEST_F(BitmapIndexTest, evaluator_prefetches_the_pages_before_reading_them) {
     open_prefetch_index("prefetch_evaluator", &meta, &stream, &reader);
 
     Schema schema({std::make_shared<Field>(0, "indexed", TYPE_BIGINT, true)});
+    // 123456789 is not a value of the index.
     std::unique_ptr<ColumnPredicate> in(
-            new_column_in_predicate(get_type_info(TYPE_BIGINT), 0, {"99999", "3", "40000", "123456789"}));
+            new_column_in_predicate(get_type_info(TYPE_BIGINT), 0,
+                                    {std::to_string(prefetch_value(99999)), std::to_string(prefetch_value(3)),
+                                     std::to_string(prefetch_value(40000)), "123456789"}));
     auto evaluate = [&](bool prefetch) {
         PredicateAndNode root;
         root.add_child(PredicateColumnNode{in.get()});

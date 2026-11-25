@@ -241,6 +241,9 @@ private:
 
     void _prefetch_page(const PagePointer& page);
 
+    // kMaxPrefetchBitmapPages; tests lower it, since an index with that many bitmap pages is too large for them.
+    size_t _max_prefetch_bitmap_pages = kMaxPrefetchBitmapPages;
+
     BitmapIndexReader* _reader;
     std::unique_ptr<IndexedColumnIterator> _dict_column_iter;
     std::unique_ptr<IndexedColumnIterator> _bitmap_column_iter;

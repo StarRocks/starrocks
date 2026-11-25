@@ -422,9 +422,9 @@ void SegmentBitmapIndexIterator::prefetch_bitmap_pages(const SparseRange<>& ordi
         return;
     }
     std::vector<PagePointer> pages;
-    for (size_t i = 0; i < ordinals.size() && pages.size() < kMaxPrefetchBitmapPages; i++) { // NOLINT
+    for (size_t i = 0; i < ordinals.size() && pages.size() < _max_prefetch_bitmap_pages; i++) { // NOLINT
         _reader->_bitmap_column_reader->data_pages_of_ordinals(ordinals[i].begin(), ordinals[i].end(),
-                                                               kMaxPrefetchBitmapPages - pages.size(), &pages);
+                                                               _max_prefetch_bitmap_pages - pages.size(), &pages);
     }
     for (const auto& page : pages) {
         _prefetch_page(page);
