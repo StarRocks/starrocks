@@ -103,7 +103,11 @@ public class IcebergMetadataScanner extends AbstractIcebergMetadataScanner {
 
     @Override
     public void doOpen() {
-        this.predicate = predicateInfo.isEmpty() ? Expressions.alwaysTrue() : deserializeFromBase64(predicateInfo);
+        if (jsonPredicate != null) {
+            this.predicate = jsonPredicate;
+        } else {
+            this.predicate = predicateInfo.isEmpty() ? Expressions.alwaysTrue() : deserializeFromBase64(predicateInfo);
+        }
         this.manifestFile = deserializeFromBase64(manifestBean);
         initSerializer();
     }

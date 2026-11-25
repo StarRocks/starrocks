@@ -15,16 +15,26 @@
 package com.starrocks.connector.iceberg;
 
 import com.github.benmanes.caffeine.cache.Scheduler;
+import com.starrocks.connector.share.iceberg.IcebergTablePayload;
+import com.starrocks.connector.share.iceberg.SerializableTable;
+import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.inmemory.InMemoryCatalog;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
 import org.apache.iceberg.io.OutputFile;
+import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.SerializationUtil;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -38,6 +48,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -266,6 +278,7 @@ public class SharedTableCacheTest {
 
     @Test
     public void testSha256MatchesUtf8Digest() throws Exception {
+        // The base64 Java form is digested as its bytes.
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < 200_000; i++) {
             sb.append((char) ('A' + i % 26));
@@ -273,6 +286,51 @@ public class SharedTableCacheTest {
         for (String payload : new String[] {"", "abc", sb.toString()}) {
             byte[] expected = MessageDigest.getInstance("SHA-256").digest(payload.getBytes(StandardCharsets.UTF_8));
             assertEquals(HexFormat.of().formatHex(expected), SharedTableCache.sha256(payload));
+        }
+    }
+
+    @Test
+    public void testSha256KeepsNonAsciiPayloadsApart() {
+        // The JSON form may hold any char: payloads that differ only in chars sharing a low byte, in unpaired
+        // surrogates (which a UTF-8 encoder would all replace with '?'), or past the first chunk get distinct
+        // digests, and so does an ASCII payload whose bytes spell the UTF-16 code units of a non-ASCII one.
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 200_000; i++) {
+            sb.append((char) ('A' + i % 26));
+        }
+        String[][] pairs = {
+                {"{\"location\":\"\u0101\"}", "{\"location\":\"\u0201\"}"},
+                {"{\"k\":\"\uD800\"}", "{\"k\":\"\uD801\"}"},
+                {"{\"k\":\"\uD800\"}", "{\"k\":\"?\"}"},
+                {sb + "\u0101", sb + "\u0201"},
+                {"\u0001\u0000", "\u0100"},
+        };
+        for (String[] pair : pairs) {
+            assertNotEquals(SharedTableCache.sha256(pair[0]), SharedTableCache.sha256(pair[1]));
+        }
+        String json = "{\"t\":\"\u4e2d\u6587\uD83D\uDE00\"}";
+        assertEquals(SharedTableCache.sha256(json), SharedTableCache.sha256(new String(json.toCharArray())));
+    }
+
+    @Test
+    public void testLoadReadsBothPayloadForms() {
+        InMemoryCatalog catalog = new InMemoryCatalog();
+        catalog.initialize("test", new HashMap<>());
+        catalog.createNamespace(Namespace.of("db"));
+        Schema schema = new Schema(Types.NestedField.required(1, "id", Types.LongType.get()));
+        Table table = catalog.createTable(TableIdentifier.of("db", "t"), schema, PartitionSpec.unpartitioned());
+        SerializableTable source = new SerializableTable(table, table.io());
+
+        String javaForm = SerializationUtil.serializeToBase64(source);
+        String jsonForm = IcebergTablePayload.toJson(source, "b1");
+        // the two forms are told apart by their first character and keyed apart
+        assertEquals('{', jsonForm.charAt(0));
+        assertNotEquals(SharedTableCache.sha256(javaForm), SharedTableCache.sha256(jsonForm));
+        for (String payload : new String[] {javaForm, jsonForm}) {
+            Table loaded = assertInstanceOf(SerializableTable.class, SharedTableCache.load(payload));
+            assertEquals(table.name(), loaded.name());
+            assertEquals(table.uuid(), loaded.uuid());
+            assertEquals(table.schemas().keySet(), loaded.schemas().keySet());
         }
     }
 }

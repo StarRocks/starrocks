@@ -1014,6 +1014,15 @@ replication 移行では、`lake_compaction_max_tasks = 0` を維持したまま
 - 説明：すべての Iceberg カタログで共有する 1 つのパーティションキャッシュに使用できる FE JVM ヒープの割合。デフォルトの `0` では、カタログごとに専用のキャッシュを持ち、その上限はカタログプロパティ `iceberg_partition_cache_memory_usage_ratio` で決まります。`0` より大きい場合、そのカタログプロパティは無視されます。有効な値は `0` から `1` までです。変更を反映するには FE の再起動が必要です。
 - 導入時期：-
 
+### `iceberg_metadata_table_payload_mode`
+
+- デフォルト：1
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：Iceberg メタデータテーブルのクエリ（`$files`、`$snapshots`、`$partitions` など）に必要なテーブルと述語を、FE が BE と CN に送る方式。FE は常に Java シリアライズされたオブジェクトとして送りますが、ローリングアップグレード中のように BE が FE と異なるビルドで異なる Iceberg バージョンを使用している場合、BE はそれを読み取れないことがあります。`0`：Java シリアライズ形式のみを送ります。`1`：FE と異なるビルドを報告する稼働中の BE または CN がある間、FE はどのビルドでも読み取れる JSON 形式も送り、それらのノードは JSON 形式を読み取ります。`2`：FE は常に JSON 形式を送り、すべての BE と CN が JSON 形式を読み取ります。テスト専用です。
+- 導入時期：-
+
 ### `iceberg_remove_orphan_files_min_retention_seconds`
 
 - デフォルト：86400

@@ -1577,6 +1577,13 @@ struct THdfsScanNode {
 
     // database name it scans, used to disambiguate same-named tables across databases
     29: optional string database_name
+
+    // The table of serialized_table in a JSON form that FE and BE of different versions can both read, stamped
+    // with the build of the FE (IcebergTablePayload), and the predicate of serialized_predicate as Iceberg
+    // ExpressionParser JSON. A BE of another build reads them instead of the Java-serialized ones. Sent only
+    // while some BE/CN runs another build.
+    30: optional string iceberg_metadata_payload
+    31: optional string iceberg_predicate_json
 }
 
 struct TProjectNode {
