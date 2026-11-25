@@ -104,6 +104,13 @@
             <scope>provided</scope>
         </dependency>
 
+        <!-- IcebergTablePayload; iceberg-core uses the same unshaded jackson -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-api</artifactId>

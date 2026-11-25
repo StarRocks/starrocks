@@ -3608,6 +3608,15 @@ public class Config extends ConfigBase {
     public static int iceberg_table_refresh_expire_sec = 86400;
 
     /**
+     * How the FE ships an Iceberg table to the BE metadata table scanners. 0: the Java-serialized table only,
+     * as before. 1: also a JSON form FE and BE of different versions can both read, while some alive BE or CN
+     * runs another build than this FE (a rolling upgrade); such a BE reads the JSON one. 2: always the JSON form
+     * too, and every BE reads it; for tests only (a BE without JSON support still reads the Java one).
+     */
+    @ConfField(mutable = true)
+    public static int iceberg_metadata_table_payload_mode = 1;
+
+    /**
      * iceberg metadata cache dir
      */
     @ConfField

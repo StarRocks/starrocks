@@ -956,6 +956,15 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Description: The maximum number of pending commit operations per Iceberg table. When using the commit queue (`enable_iceberg_commit_queue=true`), this limits the number of commit operations that can be queued for a single table. When the limit is reached, additional commit operations will execute in the caller thread (blocking until capacity available). This configuration is read at FE startup and applies to newly created table executors. Requires FE restart to take effect. Increase this value if you expect many concurrent commits to the same table. If this value is too low, commits may block in the caller thread during high concurrency.
 - Introduced in: v4.1.0
 
+### `iceberg_metadata_table_payload_mode`
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: How the FE sends the Iceberg table and predicate of a metadata table query (such as `$files`, `$snapshots`, and `$partitions`) to the BEs and CNs. The FE always sends them as Java-serialized objects, which a BE can fail to read when it runs another build than the FE with another Iceberg version, as during a rolling upgrade. `0`: only the Java-serialized form. `1`: while some alive BE or CN reports another build than the FE, the FE also sends a JSON form that any build can read, and those nodes read it. `2`: the FE always sends the JSON form and every BE and CN reads it. Use `2` for testing only.
+- Introduced in: -
+
 ### `iceberg_remove_orphan_files_min_retention_seconds`
 
 - Default: 86400
