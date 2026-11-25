@@ -42,6 +42,7 @@
 #include <ctime>
 #include <limits>
 #include <sstream>
+#include <stdexcept>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -60,6 +61,7 @@
 #include "types/datetime_value.h"
 #include "types/datum.h"
 #include "types/decimalv2_value.h"
+#include "types/geo_type_info.h"
 #include "types/storage_type_traits.h"
 #include "types/time_types.h"
 #include "types/type_descriptor.h"
@@ -112,6 +114,64 @@ namespace starrocks {
 
 inline uint32_t type_info_string_max_length() {
     return config::olap_string_max_length;
+}
+
+namespace {
+
+// Descriptor for column materialization. A GEO field has no ordered storage-row representation.
+class GeoTypeInfo final : public TypeInfo {
+public:
+    explicit GeoTypeInfo(const GeoTypeDescriptor& descriptor) : _descriptor(descriptor) {}
+
+    LogicalType type() const override {
+        return _descriptor.logical_type == GEO_LOGICAL_TYPE_GEOGRAPHY ? TYPE_GEOGRAPHY : TYPE_GEOMETRY;
+    }
+    const GeoTypeDescriptor& descriptor() const { return _descriptor; }
+
+    Status from_string(void*, const std::string&) const override {
+        return Status::NotSupported("Native GEO does not support row string conversion");
+    }
+    size_t size() const override { unsupported(); }
+    void shallow_copy(void*, const void*) const override { unsupported(); }
+    void deep_copy(void*, const void*, const TypeInfoAllocator*) const override { unsupported(); }
+    void direct_copy(void*, const void*) const override { unsupported(); }
+    std::string to_string(const void*) const override { unsupported(); }
+    void set_to_min(void*) const override { unsupported(); }
+    void set_to_max(void*) const override { unsupported(); }
+
+protected:
+    int _datum_cmp_impl(const Datum&, const Datum&) const override { unsupported(); }
+
+private:
+    // As with GeoColumn, these legacy interfaces have no Status channel. Callers
+    // reject GEO before using row operations, including ordering and bounds.
+    [[noreturn]] static void unsupported() { throw std::runtime_error("Native GEO does not support row operations"); }
+
+    const GeoTypeDescriptor _descriptor;
+};
+
+} // namespace
+
+StatusOr<TypeInfoPtr> get_geo_type_info(const TypeDescriptor& type) {
+    if (!type.geo_type) {
+        return Status::InvalidArgument("Missing GEO field descriptor");
+    }
+    const auto kind = type.geo_type->logical_type;
+    if (!((type.type == TYPE_GEOGRAPHY && kind == GEO_LOGICAL_TYPE_GEOGRAPHY) ||
+          (type.type == TYPE_GEOMETRY && kind == GEO_LOGICAL_TYPE_GEOMETRY))) {
+        return Status::InvalidArgument("GEO field descriptor kind does not match the logical type");
+    }
+    return TypeInfoPtr(std::make_shared<GeoTypeInfo>(*type.geo_type));
+}
+
+const GeoTypeDescriptor* get_geo_type_descriptor(const TypeInfo* type_info) {
+    if (type_info != nullptr) {
+        const auto type = type_info->type();
+        if (type == TYPE_GEOGRAPHY || type == TYPE_GEOMETRY) {
+            return &down_cast<const GeoTypeInfo*>(type_info)->descriptor();
+        }
+    }
+    return nullptr;
 }
 
 int TypeInfo::cmp(const Datum& left, const Datum& right) const {
