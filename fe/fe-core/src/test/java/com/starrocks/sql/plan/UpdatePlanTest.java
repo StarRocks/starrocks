@@ -39,6 +39,7 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.UpdatePlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TDataSink;
@@ -50,6 +51,7 @@ import com.starrocks.thrift.TPartitionType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -255,6 +257,37 @@ public class UpdatePlanTest extends PlanTestBase {
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statements.get(0));
         stmtExecutor.execute();
         Assertions.assertEquals(QueryState.MysqlStateType.EOF, connectContext.getState().getStateType());
+    }
+
+    @Test
+    public void testSubmitTaskUpdatePlan() throws Exception {
+        String plan = getSubmitTaskUpdatePlan("submit task t_update_plan as " +
+                "update tprimary set v1 = 'aaa' where pk = 1");
+        assertContains(plan, "OLAP TABLE SINK");
+        assertContains(plan, "PREDICATES: 1: pk = 1");
+        assertContains(plan, "<slot 4> : 'aaa'");
+    }
+
+    @Test
+    public void testSubmitTaskUpdateFromPlan() throws Exception {
+        String plan = getSubmitTaskUpdatePlan("submit task t_update_from_plan as " +
+                "update tprimary set v2 = t0.v3 from t0 where tprimary.pk = t0.v1");
+        assertContains(plan, "OLAP TABLE SINK");
+        assertContains(plan, "HASH JOIN");
+        assertContains(plan, "TABLE: tprimary");
+        assertContains(plan, "TABLE: t0");
+    }
+
+    private static String getSubmitTaskUpdatePlan(String submitSql) throws Exception {
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
+        SubmitTaskStmt submitStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSql, connectContext);
+        connectContext.getDumpInfo().setOriginStmt(submitStmt.getSqlText());
+        String submittedPlan = new UpdatePlanner().plan(submitStmt.getUpdateStmt(), connectContext)
+                .getExplainString(TExplainLevel.NORMAL);
+        assertEquals(getUpdateExecPlan(submitStmt.getSqlText()), submittedPlan);
+        return submittedPlan;
     }
 
     private void testExplain(String explainStmt) throws Exception {
