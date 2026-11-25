@@ -59,6 +59,14 @@ using SkipRowsContextPtr = std::shared_ptr<SkipRowsContext>;
 struct FormatScannerStats {
     int64_t raw_rows_read = 0;
     int64_t rows_read = 0;
+    // Audit log row counters, kept by the Parquet and ORC readers: rows read from the file after pruning and
+    // before deletes are applied, and those rows after the deletes.
+    int64_t physical_rows_read = 0;
+    int64_t logical_rows_read = 0;
+    // Audit log byte counters of the Iceberg position-delete files and deletion vectors read for the data file: bytes
+    // read from the file system below the datacache, and bytes served by the datacache.
+    int64_t delete_file_remote_bytes = 0;
+    int64_t delete_file_cache_bytes = 0;
     int64_t late_materialize_skip_rows = 0;
 
     // Parquet lazy materialization: rows filtered before lazy columns were read.

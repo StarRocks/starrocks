@@ -469,12 +469,38 @@ StatusOr<ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
         evaluate_topn_runtime_filters(res.get());
         eval_runtime_bloom_filters(res.get());
         res->owner_info().set_owner_id(owner_id, is_eos);
+        _audit_output_rows += res->num_rows();
     }
 
     if (_scan_node->limit() != -1 && _op_pull_rows >= _scan_node->limit()) {
         _morsel_queue->set_reach_limit(true);
     }
 
+    return res;
+}
+
+void ScanOperator::_add_scan_audit_counters(const ScanAuditCounters& delta) {
+    if (delta.empty()) {
+        return;
+    }
+    std::lock_guard l(_audit_counters_lock);
+    _audit_counters.add(delta);
+}
+
+ScanAuditCounters ScanOperator::take_scan_audit_counters() {
+    ScanAuditCounters res;
+    {
+        std::lock_guard l(_audit_counters_lock);
+        std::swap(res, _audit_counters);
+    }
+    // Every scan counts its output rows; the reader counters apply only where the reader tracks them.
+    res.output_rows = _audit_output_rows.exchange(0);
+    // Report at least once, even a scan that read nothing: the receiver tells a scan that read nothing from one that
+    // never reported.
+    if (!res.empty() || !_audit_counters_reported) {
+        res.mask |= ScanAuditCounters::OUTPUT_ROWS;
+        _audit_counters_reported = true;
+    }
     return res;
 }
 
@@ -601,6 +627,10 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
 void ScanOperator::_close_chunk_source_unlocked(RuntimeState* state, int chunk_source_index) {
     if (_chunk_sources[chunk_source_index] != nullptr) {
         _chunk_sources[chunk_source_index]->close(state);
+        // Some readers complete their audit counters only when closed, e.g. a lake tablet reader adds the IO bytes of
+        // its segment files then. Taken before the detach: is_finished() holds while the source is attached, so the
+        // driver collects the scan statistics for the last time after these counters are in.
+        _add_scan_audit_counters(_chunk_sources[chunk_source_index]->take_unreported_scan_audit_counters());
         _chunk_sources[chunk_source_index] = nullptr;
         detach_chunk_source(chunk_source_index);
     }
@@ -630,6 +660,8 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
             if (!_is_finished && _chunk_sources[chunk_source_index]->has_reusable_state()) {
                 auto reusable_chunk_source = std::move(_chunk_sources[chunk_source_index]);
                 reusable_chunk_source->release_for_reuse(state);
+                // Counters completed by the release, taken before the detach as in _close_chunk_source_unlocked.
+                _add_scan_audit_counters(reusable_chunk_source->take_unreported_scan_audit_counters());
                 detach_chunk_source(chunk_source_index);
                 _stash_reusable_chunk_source(state, chunk_source_index, std::move(reusable_chunk_source));
             } else {
@@ -710,6 +742,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             }
 
             int64_t delta_cpu_time = chunk_source->get_cpu_time_spent() - prev_cpu_time;
+            _add_scan_audit_counters(chunk_source->take_unreported_scan_audit_counters());
             _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
                                       chunk_source->get_scan_rows() - prev_scan_rows,
                                       chunk_source->get_scan_bytes() - prev_scan_bytes);

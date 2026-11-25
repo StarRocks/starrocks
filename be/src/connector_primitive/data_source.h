@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "common/runtime_profile.h"
+#include "common/scan_audit_counters.h"
 #include "common/statusor.h"
 #include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "exec_primitive/runtime_filter/runtime_filter_probe.h"
@@ -62,6 +63,8 @@ public:
     virtual int64_t cpu_time_spent() const = 0;
     // IO time of this data source
     virtual int64_t io_time_spent() const { return 0; }
+    // Cumulative audit read counters, see ScanAuditCounters. A data source that tracks none returns an empty mask.
+    virtual ScanAuditCounters scan_audit_counters() const { return {}; }
     virtual bool can_estimate_mem_usage() const { return false; }
     virtual int64_t estimated_mem_usage() const { return 0; }
 

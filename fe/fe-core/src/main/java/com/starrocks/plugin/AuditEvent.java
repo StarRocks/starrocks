@@ -218,6 +218,10 @@ public class AuditEvent {
     @AuditField(value = "QueriedRelations", ignore_empty = true)
     public List<String> queriedRelations = Collections.emptyList();
 
+    /** JSON of the read statistics of each scan of the statement, per execution attempt; see ScanStatsRecorder. */
+    @AuditField(value = "ScanStats", ignore_empty = true)
+    public String scanStats = "";
+
     public long readLocalCnt = 0;
     public long readRemoteCnt = 0;
     @AuditField(value = "CacheHitRatio", ignore_empty = true)
@@ -663,6 +667,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setPreparedStmtId(String preparedStmtId) {
             auditEvent.preparedStmtId = preparedStmtId;
+            return this;
+        }
+
+        public AuditEventBuilder setScanStats(String scanStats) {
+            auditEvent.scanStats = scanStats == null ? "" : scanStats;
             return this;
         }
 
