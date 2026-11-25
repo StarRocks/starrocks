@@ -637,6 +637,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：内存紧急阈值（占进程内存上限的百分比）。当消耗超过该值时会触发更激进的即时回收；需满足 `memory_urgent_level > memory_high_level` 且不超过 100。
 - 引入版本：-
 
+### olap_string_max_length
+
+- 默认值：1048576
+- 类型：Int
+- 单位：字节
+- 是否动态：是
+- 描述：BE 字符串函数（如 `repeat` 和 `concat`）用于限制单个结果大小的最大字符串长度，默认值为 1 MiB。当结果超过此限制时，这些函数返回 `NULL`。此限制按字节数计算，而非字符数。
+- 引入版本：-
+
 ### report_exec_rpc_request_retry_num
 
 - 默认值：10
