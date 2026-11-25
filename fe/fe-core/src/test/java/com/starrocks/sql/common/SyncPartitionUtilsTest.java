@@ -28,6 +28,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -39,6 +40,8 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.mv.MVEagerRangePartitionMapper;
 import com.starrocks.sql.common.mv.MVLazyRangePartitionMapper;
+import com.starrocks.sql.common.mv.MVMirrorRangePartitionMapper;
+import com.starrocks.sql.common.mv.MVRangePartitionMapper;
 import com.starrocks.type.DateType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.TypeFactory;
@@ -1142,5 +1145,177 @@ public class SyncPartitionUtilsTest extends StarRocksTestBase {
         result = SyncPartitionUtils.isCalcPotentialRefreshPartition(
                 emptyBaseChangedPartitions, mvPartitionMap);
         Assertions.assertFalse(result, "Empty base changed partitions should return false");
+    }
+
+    private static Map<String, Range<PartitionKey>> toMirrorMappingRanges(
+            Map<String, Range<PartitionKey>> baseRangeMap, String granularity, PrimitiveType partitionType) {
+        PCellSortedSet baseRangeSet = toPCellSortedSet(baseRangeMap);
+        PCellSortedSet result =
+                MVMirrorRangePartitionMapper.INSTANCE.toMappingRanges(baseRangeSet, granularity, partitionType);
+        return toRangeMap(result);
+    }
+
+    @Test
+    public void testGetInstanceReturnsMirrorWhenEnabled() {
+        boolean original = Config.enable_mv_mirror_base_partition;
+        try {
+            Config.enable_mv_mirror_base_partition = true;
+            Assertions.assertSame(MVMirrorRangePartitionMapper.INSTANCE,
+                    MVRangePartitionMapper.getInstance("day"));
+            Assertions.assertSame(MVMirrorRangePartitionMapper.INSTANCE,
+                    MVRangePartitionMapper.getInstance("month"));
+            // sub-day granularities always use lazy to avoid eager's partition explosion
+            Assertions.assertSame(MVLazyRangePartitionMapper.INSTANCE,
+                    MVRangePartitionMapper.getInstance("hour"));
+            Assertions.assertSame(MVLazyRangePartitionMapper.INSTANCE,
+                    MVRangePartitionMapper.getInstance("minute"));
+        } finally {
+            Config.enable_mv_mirror_base_partition = original;
+        }
+        // when the flag is off the default eager mapper is used
+        Assertions.assertSame(MVEagerRangePartitionMapper.INSTANCE,
+                MVRangePartitionMapper.getInstance("day"));
+    }
+
+    @Test
+    public void testMirrorMapperEquivalentToEagerForDiscreteDays() throws AnalysisException {
+        // clone the discrete multi-union case: 2024-03-10..18 then a gap then 2024-04-10
+        Map<String, Range<PartitionKey>> baseRangeMap = Maps.newHashMap();
+        for (int day = 10; day <= 18; day++) {
+            baseRangeMap.put("p202403" + day,
+                    createRange("2024-03-" + day, "2024-03-" + (day + 1)));
+        }
+        baseRangeMap.put("p20240410", createRange("2024-04-10", "2024-04-11"));
+
+        Map<String, Range<PartitionKey>> mirror =
+                toMirrorMappingRanges(baseRangeMap, "day", PrimitiveType.DATE);
+        Map<String, Range<PartitionKey>> eager =
+                toEagerMappingRanges(baseRangeMap, "day", PrimitiveType.DATE);
+
+        // for base partitions that are exactly one granularity unit wide, mirror is identical to eager
+        Assertions.assertEquals(eager.keySet(), mirror.keySet());
+        for (String name : eager.keySet()) {
+            Assertions.assertEquals(eager.get(name), mirror.get(name), name);
+        }
+    }
+
+    @Test
+    public void testMirrorMapperMixedGranularity() throws AnalysisException {
+        Map<String, Range<PartitionKey>> baseRangeMap = Maps.newHashMap();
+        // a merged historical month partition
+        baseRangeMap.put("p202105", createRange("2021-05-01", "2021-06-01"));
+        // recent day partitions
+        baseRangeMap.put("p20240601", createRange("2024-06-01", "2024-06-02"));
+        baseRangeMap.put("p20240602", createRange("2024-06-02", "2024-06-03"));
+
+        Map<String, Range<PartitionKey>> mirror =
+                toMirrorMappingRanges(baseRangeMap, "day", PrimitiveType.DATE);
+
+        // the month stays a month, the days stay days, one-to-one with the base table
+        Assertions.assertEquals(3, mirror.size());
+        Assertions.assertTrue(mirror.containsKey("p20210501_20210601"));
+        Assertions.assertEquals("2021-05-01",
+                mirror.get("p20210501_20210601").lowerEndpoint().getKeys().get(0).getStringValue());
+        Assertions.assertEquals("2021-06-01",
+                mirror.get("p20210501_20210601").upperEndpoint().getKeys().get(0).getStringValue());
+        Assertions.assertTrue(mirror.containsKey("p20240601_20240602"));
+        Assertions.assertTrue(mirror.containsKey("p20240602_20240603"));
+
+        // eager would unroll the month into 31 day partitions
+        Map<String, Range<PartitionKey>> eager =
+                toEagerMappingRanges(baseRangeMap, "day", PrimitiveType.DATE);
+        Assertions.assertEquals(33, eager.size());
+    }
+
+    @Test
+    public void testMirrorMapperFallsBackToEagerForUnaligned() throws AnalysisException {
+        // base ranges cross the month boundary and overlap after snapping -> must fall back to eager
+        Map<String, Range<PartitionKey>> baseRangeMap = Maps.newHashMap();
+        baseRangeMap.put("p1", createRange("2020-05-15", "2020-06-15"));
+        baseRangeMap.put("p2", createRange("2020-06-20", "2020-06-25"));
+
+        Map<String, Range<PartitionKey>> mirror =
+                toMirrorMappingRanges(baseRangeMap, "month", PrimitiveType.DATE);
+        Map<String, Range<PartitionKey>> eager =
+                toEagerMappingRanges(baseRangeMap, "month", PrimitiveType.DATE);
+
+        Assertions.assertEquals(eager.keySet(), mirror.keySet());
+        for (String name : eager.keySet()) {
+            Assertions.assertEquals(eager.get(name), mirror.get(name), name);
+        }
+    }
+
+    @Test
+    public void testMirrorMapperMaxValue() throws AnalysisException {
+        Map<String, Range<PartitionKey>> baseRangeMap = Maps.newHashMap();
+        baseRangeMap.put("p20200503", createMaxValueRange("2020-05-03"));
+
+        Map<String, Range<PartitionKey>> mirror =
+                toMirrorMappingRanges(baseRangeMap, "day", PrimitiveType.DATE);
+
+        Assertions.assertEquals(1, mirror.size());
+        Assertions.assertTrue(mirror.containsKey("p20200503_99991231"));
+        Assertions.assertEquals("9999-12-31",
+                mirror.get("p20200503_99991231").upperEndpoint().getKeys().get(0).getStringValue());
+    }
+
+    @Test
+    public void testMirrorMapperMinValueWithWeekGranularity() throws AnalysisException {
+        // A base table whose first partition is `VALUES LESS THAN (...)` has a MIN lower bound.
+        // It must not be floored (for week granularity, flooring 0000-01-01 would go negative and
+        // produce an invalid date), the MIN lower bound should be kept as-is.
+        Map<String, Range<PartitionKey>> baseRangeMap = Maps.newHashMap();
+        baseRangeMap.put("p_less_than", createLessThanRange("2020-05-13"));
+
+        Map<String, Range<PartitionKey>> mirror =
+                toMirrorMappingRanges(baseRangeMap, "week", PrimitiveType.DATE);
+
+        Assertions.assertEquals(1, mirror.size());
+        Assertions.assertTrue(mirror.containsKey("p00010101_20200518"), "mirror: " + mirror.keySet());
+        Assertions.assertEquals("2020-05-18",
+                mirror.get("p00010101_20200518").upperEndpoint().getKeys().get(0).getStringValue());
+    }
+
+    @Test
+    public void testMirrorMapperRollupDaysToMonth() throws AnalysisException {
+        Map<String, Range<PartitionKey>> baseRangeMap = Maps.newHashMap();
+        baseRangeMap.put("p20200101", createRange("2020-01-01", "2020-01-02"));
+        baseRangeMap.put("p20200102", createRange("2020-01-02", "2020-01-03"));
+        baseRangeMap.put("p20200103", createRange("2020-01-03", "2020-01-04"));
+
+        Map<String, Range<PartitionKey>> mirror =
+                toMirrorMappingRanges(baseRangeMap, "month", PrimitiveType.DATE);
+
+        // all days roll up into the same month and are de-duplicated into one partition
+        Assertions.assertEquals(1, mirror.size());
+        Assertions.assertTrue(mirror.containsKey("p202001_202002"));
+    }
+
+    @Test
+    public void testMirrorDiffMigrateDaysToMonth() throws AnalysisException {
+        boolean original = Config.enable_mv_mirror_base_partition;
+        try {
+            Config.enable_mv_mirror_base_partition = true;
+
+            // base table already merged 2021-05 into a single month partition
+            Map<String, Range<PartitionKey>> baseRange = Maps.newHashMap();
+            baseRange.put("p202105", createRange("2021-05-01", "2021-06-01"));
+
+            // mv currently holds day partitions for May
+            Map<String, Range<PartitionKey>> mvRange = Maps.newHashMap();
+            mvRange.put("p20210501_20210502", createRange("2021-05-01", "2021-05-02"));
+            mvRange.put("p20210502_20210503", createRange("2021-05-02", "2021-05-03"));
+
+            PartitionDiff diff = getRangePartitionDiffOfExpr(baseRange, mvRange,
+                    createDateTruncFunc("day", PrimitiveType.DATE), null);
+            Map<String, Range<PartitionKey>> adds = toRangeMap(diff.getAdds());
+            Map<String, Range<PartitionKey>> deletes = toRangeMap(diff.getDeletes());
+
+            Assertions.assertTrue(adds.containsKey("p20210501_20210601"));
+            Assertions.assertTrue(deletes.containsKey("p20210501_20210502"));
+            Assertions.assertTrue(deletes.containsKey("p20210502_20210503"));
+        } finally {
+            Config.enable_mv_mirror_base_partition = original;
+        }
     }
 }
