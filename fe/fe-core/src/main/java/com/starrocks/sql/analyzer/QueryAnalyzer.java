@@ -2237,28 +2237,43 @@ public class QueryAnalyzer {
 
         @Override
         public Void visitSelect(SelectRelation node, Void context) {
-            if (node.hasWithClause()) {
-                cteNameStack.push(collectCteNames(node.getCteRelations()));
-                try {
-                    return super.visitSelect(node, context);
-                } finally {
-                    cteNameStack.pop();
-                }
-            }
-            return super.visitSelect(node, context);
+            inWithClauseOf(node, () -> super.visitSelect(node, context));
+            return null;
         }
 
         @Override
         public Void visitSetOp(SetOperationRelation node, Void context) {
-            if (node.hasWithClause()) {
-                cteNameStack.push(collectCteNames(node.getCteRelations()));
-                try {
-                    return super.visitSetOp(node, context);
-                } finally {
+            inWithClauseOf(node, () -> super.visitSetOp(node, context));
+            return null;
+        }
+
+        /** Run {@code body} in the scope of the with clause of {@code node}, which {@link #visitCTE} fills. */
+        private void inWithClauseOf(QueryRelation node, Runnable body) {
+            boolean scoped = node.hasWithClause();
+            if (scoped) {
+                cteNameStack.push(new HashSet<>());
+            }
+            try {
+                body.run();
+            } finally {
+                if (scoped) {
                     cteNameStack.pop();
                 }
             }
-            return super.visitSetOp(node, context);
+        }
+
+        /**
+         * A CTE's name is in scope only after its own definition, as the analyzer has it: in
+         * {@code WITH t0 AS (SELECT * FROM t0)} the inner {@code t0} is the table. Taking it for the CTE would leave
+         * an external table of that name to the locked analyzer.
+         */
+        @Override
+        public Void visitCTE(CTERelation node, Void context) {
+            super.visitCTE(node, context);
+            if (!cteNameStack.isEmpty() && node.getName() != null) {
+                cteNameStack.peek().add(node.getName());
+            }
+            return null;
         }
 
         /**
@@ -2431,13 +2446,14 @@ public class QueryAnalyzer {
         }
 
         /**
-         * Run {@code body} with these CTE names in scope, the way {@link #visitSelect} does for a with
-         * clause: a name that resolves to a CTE must not be pre-resolved as a table.
+         * Run {@code body} with these CTEs in scope, the way {@link #visitSelect} does for a with clause: a
+         * name that resolves to a CTE must not be pre-resolved as a table. {@link #visitCTE} brings each name
+         * into scope once its definition has been walked.
          */
         private void withCteScope(List<CTERelation> cteRelations, Runnable body) {
             boolean scoped = cteRelations != null && !cteRelations.isEmpty();
             if (scoped) {
-                cteNameStack.push(collectCteNames(cteRelations));
+                cteNameStack.push(new HashSet<>());
             }
             try {
                 if (scoped) {
@@ -2707,16 +2723,6 @@ public class QueryAnalyzer {
             }
             node.setQueryTable(jdbcTable);
             return null;
-        }
-
-        private Set<String> collectCteNames(List<CTERelation> cteRelations) {
-            Set<String> names = Sets.newHashSet();
-            for (CTERelation cteRelation : cteRelations) {
-                if (cteRelation.getName() != null) {
-                    names.add(cteRelation.getName());
-                }
-            }
-            return names;
         }
 
         private boolean isCteName(String name) {
