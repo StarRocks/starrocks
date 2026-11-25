@@ -18,8 +18,20 @@ import com.starrocks.statistic.sample.SampleInfo;
 import com.starrocks.type.Type;
 
 public class PrimitiveTypeColumnStats extends BaseColumnStats {
+    private final boolean metaSupported;
+
     public PrimitiveTypeColumnStats(String columnName, Type columnType) {
+        this(columnName, columnType, true);
+    }
+
+    public PrimitiveTypeColumnStats(String columnName, Type columnType, boolean metaSupported) {
         super(columnName, columnType);
+        this.metaSupported = metaSupported;
+    }
+
+    @Override
+    public boolean supportMeta() {
+        return metaSupported && super.supportMeta();
     }
 
     @Override
