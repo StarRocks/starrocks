@@ -93,31 +93,6 @@ std::optional<int32_t> starlet_request_timeout_ms(int64_t configured_timeout_ms,
     return static_cast<int32_t>(configured_timeout_ms);
 }
 
-<<<<<<< HEAD:be/src/service/staros_worker.cpp
-StarOSWorker::StarOSWorker()
-        : _mtx(),
-          _cache_mtx(),
-          _shards(),
-          _fs_cache(new_lru_cache(config::starlet_filesystem_instance_cache_capacity)) {}
-=======
-// Turning the TTL to 0 also stops using what was kept before, not only keeping more.
-static bool shard_info_cache_enabled() {
-    return config::lake_shard_info_cache_ttl_sec > 0;
-}
-
-// A borrowed shard info is |fetched| from starmgr by this worker, or handed over by the owner otherwise.
-// Each kind has its own metrics.
-static void count_borrowed_hit(bool fetched) {
-    auto* metrics = StarOSWorkerMetrics::instance();
-    (fetched ? metrics->staros_shard_info_fallback_cache_hits_total : metrics->lake_tablet_location_handoff_hits_total)
-            .increment(1);
-}
-
-static IntGauge& borrowed_entries_gauge(bool fetched) {
-    auto* metrics = StarOSWorkerMetrics::instance();
-    return fetched ? metrics->staros_shard_info_fallback_cache_entries : metrics->lake_tablet_location_handoff_entries;
-}
-
 // Every key of `_fs_cache` is a SHA-256 hex digest, see `get_cache_key`.
 static constexpr size_t kFsCacheKeySize = 2 * SHA256_DIGEST_LENGTH;
 
@@ -128,14 +103,11 @@ static size_t fs_cache_capacity(int32_t filesystems) {
     return static_cast<size_t>(std::max(filesystems, 0)) * kEntryCharge;
 }
 
-StarOSWorker::StarOSWorker(TableMetricsManager* table_metrics_mgr)
+StarOSWorker::StarOSWorker()
         : _mtx(),
           _cache_mtx(),
           _shards(),
-          _borrowed_cache(new_lru_cache(kBorrowedShardInfoCacheCapacity)),
-          _fs_cache(new_lru_cache(fs_cache_capacity(config::starlet_filesystem_instance_cache_capacity))),
-          _table_metrics_mgr(table_metrics_mgr) {}
->>>>>>> 07a3e5b ([BugFix] Fix StarOS fs cache holding 64 filesystems, not 10000 (#84414)):be/src/compute_env/staros/staros_worker.cpp
+          _fs_cache(new_lru_cache(fs_cache_capacity(config::starlet_filesystem_instance_cache_capacity))) {}
 
 StarOSWorker::~StarOSWorker() = default;
 

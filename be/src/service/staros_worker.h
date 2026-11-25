@@ -142,17 +142,9 @@ private:
     std::shared_mutex _cache_mtx;
     std::mutex _fs_cache_key_reset_mtx; // Protects fs_cache_key reset operations
     std::unordered_map<ShardId, ShardInfoDetails> _shards;
-<<<<<<< HEAD:be/src/service/staros_worker.h
-=======
-    // Shards this worker does not own, see `borrow_shard_info` and `retrieve_shard_info`. The cache is
-    // thread-safe on its own; `_borrowed_mtx` orders the writes to it against each other and against
-    // `add_shard`. Never taken inside `_mtx`; `keep_borrowed_shard_info` takes `_mtx` inside it.
-    mutable std::mutex _borrowed_mtx;
-    std::unique_ptr<Cache> _borrowed_cache;
     // Filesystems by the hash of their configuration. `starlet_filesystem_instance_cache_capacity` is a number of
     // filesystems; the cache charges each its handle and key as well, so its capacity is converted, see
     // `fs_cache_capacity`.
->>>>>>> 07a3e5b ([BugFix] Fix StarOS fs cache holding 64 filesystems, not 10000 (#84414)):be/src/compute_env/staros/staros_worker.h
     std::unique_ptr<Cache> _fs_cache;
     add_shard_listener _add_shard_listener;
 };

@@ -23,13 +23,16 @@
 #include <manager.grpc.pb.h>
 #include <shard.pb.h>
 
+#include <algorithm>
 #include <condition_variable>
 #include <functional>
 #include <limits>
 
 #include "common/config.h"
 #include "common/shutdown_hook.h"
+#include "testutil/scoped_updater.h"
 #include "util/defer_op.h"
+#include "util/lru_cache.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
 
@@ -260,6 +263,137 @@ TEST_F(StarOSWorkerTest, test_fs_cache_concurrent) {
     key2.reset();
 
     EXPECT_FALSE(worker->lookup_fs_cache(cache_key));
+}
+
+static StarOSWorker::ShardInfo make_s3_shard_info(StarOSWorker::ShardId id, const std::string& full_path) {
+    StarOSWorker::ShardInfo info;
+    info.id = id;
+    info.hash_code = 0;
+    auto* fs_info = info.path_info.mutable_fs_info();
+    fs_info->set_fs_type(staros::FileStoreType::S3);
+    auto* s3_fs_info = fs_info->mutable_s3_fs_info();
+    s3_fs_info->set_bucket("test_bucket");
+    s3_fs_info->set_endpoint("test_endpoint");
+    s3_fs_info->set_region("us-east-1");
+    auto* simple_credential = s3_fs_info->mutable_credential()->mutable_simple_credential();
+    simple_credential->set_access_key("test_ak");
+    simple_credential->set_access_key_secret("test_sk");
+    info.path_info.set_full_path(full_path);
+    info.cache_info.set_enable_cache(false);
+    return info;
+}
+
+// Builds a filesystem for each of |count| partitions of one table and returns the keys of their filesystem
+// cache entries. FE gives every partition its own path, so each partition gets its own entry. A caller
+// holds the keys for as long as the entries must stay: releasing a key erases its entry.
+static std::vector<std::shared_ptr<std::string>> build_partition_filesystems(StarOSWorker* worker, int count) {
+    std::vector<std::shared_ptr<std::string>> keys;
+    keys.reserve(count);
+    for (int i = 0; i < count; ++i) {
+        auto info = make_s3_shard_info(20000 + i, absl::StrFormat("s3://test_bucket/db/tbl/p%d", i));
+        auto built = worker->build_filesystem_from_shard_info(info, {});
+        EXPECT_TRUE(built.ok()) << built.status();
+        if (built.ok()) {
+            keys.push_back(std::move(built->first));
+        }
+    }
+    return keys;
+}
+
+// Whether |key| is still the key of a live filesystem cache entry.
+static bool is_live_fs_cache_key(StarOSWorker* worker, const std::shared_ptr<std::string>& key) {
+    if (key == nullptr) {
+        return false;
+    }
+    auto value_or = worker->find_fs_cache(*key);
+    return value_or.ok() && value_or->first == key;
+}
+
+static int count_live_fs_cache_keys(StarOSWorker* worker, const std::vector<std::shared_ptr<std::string>>& keys) {
+    return std::count_if(keys.begin(), keys.end(),
+                         [&](const std::shared_ptr<std::string>& key) { return is_live_fs_cache_key(worker, key); });
+}
+
+// What the filesystem cache charges a filesystem: the 1 it is inserted with plus its handle and key.
+static size_t fs_cache_entry_charge(const std::string& key) {
+    return 1 + LRUCache::key_handle_size(CacheKey(key));
+}
+
+// `starlet_filesystem_instance_cache_capacity` is a number of filesystems. A node that reads more
+// partitions than that number misses the cache on almost every lookup and builds a new filesystem each time,
+// so a number of partitions well below the capacity must all stay cached, although the cache itself charges each
+// entry its handle and key as well.
+TEST_F(StarOSWorkerTest, fs_cache_capacity_counts_filesystems) {
+    staros::starlet::fslib::register_builtin_filesystems();
+    SCOPED_UPDATE(int32_t, config::starlet_filesystem_instance_cache_capacity, 10000);
+    // A released key erases its entry through the global worker.
+    auto origin = g_worker;
+    auto worker = std::make_shared<StarOSWorker>();
+    g_worker = worker;
+    DeferOp restore([&] { g_worker = origin; });
+
+    // Each LRU shard holds a 32nd of the capacity, so stay well below it.
+    constexpr int kPartitions = 1000;
+    auto keys = build_partition_filesystems(worker.get(), kPartitions);
+    ASSERT_EQ(kPartitions, keys.size());
+    EXPECT_EQ(kPartitions, count_live_fs_cache_keys(worker.get(), keys));
+    // Every filesystem is charged the same, which the conversion of the capacity relies on.
+    const size_t entry_charge = fs_cache_entry_charge(*keys.front());
+    EXPECT_EQ(kPartitions * entry_charge, worker->_fs_cache->get_memory_usage());
+    EXPECT_EQ(10000 * entry_charge, worker->_fs_cache->get_capacity());
+}
+
+// Each LRU shard of the filesystem cache gets a 32nd of its capacity, so a multiple of 32 divides evenly.
+static constexpr int kExactFsCacheCapacity = 4 * kNumShards;
+
+// The exact bound: once every LRU shard overflows, the cache holds exactly as many filesystems as its capacity.
+// One fewer per shard means each filesystem is charged more than the capacity was converted for; the usage check
+// catches a charge that is off in either direction.
+TEST_F(StarOSWorkerTest, fs_cache_holds_exactly_its_capacity) {
+    staros::starlet::fslib::register_builtin_filesystems();
+    SCOPED_UPDATE(int32_t, config::starlet_filesystem_instance_cache_capacity, kExactFsCacheCapacity);
+    auto origin = g_worker;
+    auto worker = std::make_shared<StarOSWorker>();
+    g_worker = worker;
+    DeferOp restore([&] { g_worker = origin; });
+
+    // About 31 partitions per LRU shard, well above the 4 each one holds.
+    constexpr int kPartitions = 1000;
+    auto keys = build_partition_filesystems(worker.get(), kPartitions);
+    ASSERT_EQ(kPartitions, keys.size());
+    EXPECT_EQ(kExactFsCacheCapacity, count_live_fs_cache_keys(worker.get(), keys));
+    const size_t entry_charge = fs_cache_entry_charge(*keys.front());
+    EXPECT_EQ(kExactFsCacheCapacity * entry_charge, worker->_fs_cache->get_memory_usage());
+    EXPECT_EQ(kExactFsCacheCapacity * entry_charge, worker->_fs_cache->get_capacity());
+}
+
+// The config is mutable: raising it through `set_fs_cache_capacity` makes room for that many more filesystems,
+// and lowering it evicts down to exactly that many.
+TEST_F(StarOSWorkerTest, fs_cache_capacity_update_counts_filesystems) {
+    staros::starlet::fslib::register_builtin_filesystems();
+    SCOPED_UPDATE(int32_t, config::starlet_filesystem_instance_cache_capacity, 64);
+    auto origin = g_worker;
+    auto worker = std::make_shared<StarOSWorker>();
+    g_worker = worker;
+    DeferOp restore([&] { g_worker = origin; });
+
+    constexpr int kPartitions = 1000;
+    auto evicted = build_partition_filesystems(worker.get(), kPartitions);
+    ASSERT_EQ(kPartitions, evicted.size());
+    // 64 filesystems split over 32 LRU shards: 2 per shard.
+    const size_t entry_charge = fs_cache_entry_charge(*evicted.front());
+    EXPECT_GT(count_live_fs_cache_keys(worker.get(), evicted), 0);
+    EXPECT_LE(worker->_fs_cache->get_memory_usage(), 64 * entry_charge);
+
+    worker->set_fs_cache_capacity(10000);
+    auto keys = build_partition_filesystems(worker.get(), kPartitions);
+    ASSERT_EQ(kPartitions, keys.size());
+    EXPECT_EQ(kPartitions, count_live_fs_cache_keys(worker.get(), keys));
+    EXPECT_EQ(kPartitions * entry_charge, worker->_fs_cache->get_memory_usage());
+
+    worker->set_fs_cache_capacity(kExactFsCacheCapacity);
+    EXPECT_EQ(kExactFsCacheCapacity, count_live_fs_cache_keys(worker.get(), keys));
+    EXPECT_EQ(kExactFsCacheCapacity * entry_charge, worker->_fs_cache->get_memory_usage());
 }
 
 // Verify that a cache hit in retrieve_shard_info() does not trigger the fallback path
