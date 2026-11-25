@@ -186,7 +186,7 @@ StatusOr<pipeline::OpFactories> AggregateBlockingNode::decompose_to_pipeline(
             enable_agg_spill = false;
         }
         if (enable_agg_spill && has_group_by_keys) {
-            if (runtime_state()->enable_spill_partitionwise_agg()) {
+            if (runtime_state()->spill_partitionwise_agg() || !_group_by_keys_support_orderby()) {
                 ASSIGN_OR_RETURN(
                         ops_with_source,
                         (_decompose_to_pipeline<AggregatorFactory, SpillablePartitionWiseAggregateSourceOperatorFactory,
