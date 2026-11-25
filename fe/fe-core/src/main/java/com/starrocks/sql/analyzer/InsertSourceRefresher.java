@@ -53,6 +53,13 @@ public final class InsertSourceRefresher {
         return session.getSessionVariable().isEnableInsertSelectExternalAutoRefresh();
     }
 
+    /**
+     * @return this table as reloaded after it was refreshed for the plan being built, or null if it was not
+     */
+    static Table refreshedTable(ConnectContext session, Table table) {
+        return session.getRefreshedInsertSources().get(keyOf(table));
+    }
+
     /** Called by the pre-pass for each source it refreshed and reloaded. */
     static void recordRefreshed(ConnectContext session, Table table, Table reloaded) {
         session.getRefreshedInsertSources().put(keyOf(table), reloaded);
