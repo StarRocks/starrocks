@@ -59,11 +59,7 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.http.rest.RestBaseAction;
-<<<<<<< HEAD
-=======
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.load.pipe.PipeManager;
->>>>>>> 8977f266ef4... [BugFix][RB-1915] Require DROP on the existing pipe for CREATE OR REPLACE PIPE (#71052)
 import com.starrocks.load.pipe.PipeManagerTest;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.mysql.MysqlChannel;
