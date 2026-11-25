@@ -229,16 +229,19 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
             case BITMAP_INDEX:
                 _bitmap_index_meta.reset(index_meta->release_bitmap_index());
                 if (_bitmap_index_meta->dict_column().has_value_index_meta()) {
-                    _index_root_pages.bitmap_dict_value =
-                            PagePointer(_bitmap_index_meta->dict_column().value_index_meta().root_page());
+                    const auto& index_meta = _bitmap_index_meta->dict_column().value_index_meta();
+                    _index_root_pages.bitmap_dict_value = PagePointer(index_meta.root_page());
+                    _index_root_pages.bitmap_dict_value_root_is_data = index_meta.is_root_data_page();
                 }
                 if (_bitmap_index_meta->dict_column().has_ordinal_index_meta()) {
-                    _index_root_pages.bitmap_dict_ordinal =
-                            PagePointer(_bitmap_index_meta->dict_column().ordinal_index_meta().root_page());
+                    const auto& index_meta = _bitmap_index_meta->dict_column().ordinal_index_meta();
+                    _index_root_pages.bitmap_dict_ordinal = PagePointer(index_meta.root_page());
+                    _index_root_pages.bitmap_dict_ordinal_root_is_data = index_meta.is_root_data_page();
                 }
                 if (_bitmap_index_meta->bitmap_column().has_ordinal_index_meta()) {
-                    _index_root_pages.bitmap_ordinal =
-                            PagePointer(_bitmap_index_meta->bitmap_column().ordinal_index_meta().root_page());
+                    const auto& index_meta = _bitmap_index_meta->bitmap_column().ordinal_index_meta();
+                    _index_root_pages.bitmap_ordinal = PagePointer(index_meta.root_page());
+                    _index_root_pages.bitmap_ordinal_root_is_data = index_meta.is_root_data_page();
                 }
                 MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->bitmap_index_mem_tracker(),
                                          _bitmap_index_meta->SpaceUsedLong());

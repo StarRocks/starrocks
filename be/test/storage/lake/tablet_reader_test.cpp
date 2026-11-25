@@ -3951,8 +3951,9 @@ TEST_F(LakeTabletReaderSpit, test_column_reader_keeps_index_root_pages) {
     }
 }
 
-// The bitmap index roots of a predicate column are warmed with its other index roots, and skipped once the segment has
-// loaded the bitmap index.
+// The bitmap index roots of a predicate column are warmed with its other index roots. In this small segment each root
+// is the only data page of its column, which the load of the index does not read, so the roots are still warmed once
+// the segment has loaded the bitmap index.
 TEST_F(LakeTabletReaderSpit, test_index_warm_includes_bitmap_index_roots) {
     _tablet_metadata->mutable_schema()->mutable_column(1)->set_has_bitmap_index(true);
     _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
@@ -4016,7 +4017,7 @@ TEST_F(LakeTabletReaderSpit, test_index_warm_includes_bitmap_index_roots) {
     const auto cold = read();
     EXPECT_EQ(1, cold.lake_prepared_tablet_warm_index_segments);
 
-    // A cached segment whose bitmap index is loaded: the next scan skips its bitmap roots.
+    // A cached segment whose bitmap index is loaded: the next scan still warms its bitmap roots, which are data pages.
     _tablet_mgr->metacache()->prune();
     auto rowsets = Rowset::get_rowsets(_tablet_mgr.get(), _tablet_metadata);
     ASSERT_EQ(1, rowsets.size());
@@ -4037,9 +4038,12 @@ TEST_F(LakeTabletReaderSpit, test_index_warm_includes_bitmap_index_roots) {
     ASSERT_OK(column->new_bitmap_index_iterator(opts, &raw));
     std::unique_ptr<BitmapIndexIterator> iter(raw);
     ASSERT_TRUE(column->has_loaded_bitmap_index());
+    EXPECT_TRUE(roots.bitmap_dict_value_root_is_data);
+    EXPECT_TRUE(roots.bitmap_ordinal_root_is_data);
     const auto warm = read();
-    // Two roots per bitmap index in this segment (no dictionary ordinal index), on top of what the cold scan skipped.
-    EXPECT_EQ(cold.lake_prepared_tablet_warm_index_skipped + 2, warm.lake_prepared_tablet_warm_index_skipped);
+    EXPECT_EQ(cold.lake_prepared_tablet_warm_index_skipped, warm.lake_prepared_tablet_warm_index_skipped);
+    EXPECT_TRUE(covered(roots.bitmap_dict_value));
+    EXPECT_TRUE(covered(roots.bitmap_ordinal));
 }
 
 // Concurrent readers of the index roots while other threads load the indexes see the same, stable values.

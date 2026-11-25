@@ -555,11 +555,16 @@ static void warm_prepared_indexes(PreparedTabletReadState* state, const TabletSc
                     add(roots.bloom_filter, !roots.bloom_filter_root_is_data);
                     if (config::enable_index_bitmap_filter) {
                         // The bitmap index lookups of each segment load these roots before anything else. Their
-                        // indexes have a single level, so no other index page sits before a root.
+                        // indexes have a single level, so no other index page sits before a root. A root that is
+                        // its column's only data page is read by the lookups, not by the load, so a loaded index
+                        // says nothing about it: it is warmed either way.
                         const bool loaded = reader->has_loaded_bitmap_index();
-                        add_unloaded(roots.bitmap_dict_value, loaded, false);
-                        add_unloaded(roots.bitmap_dict_ordinal, loaded, false);
-                        add_unloaded(roots.bitmap_ordinal, loaded, false);
+                        auto add_bitmap_root = [&](const PagePointer& pp, bool root_is_data) {
+                            add_unloaded(pp, loaded && !root_is_data, false);
+                        };
+                        add_bitmap_root(roots.bitmap_dict_value, roots.bitmap_dict_value_root_is_data);
+                        add_bitmap_root(roots.bitmap_dict_ordinal, roots.bitmap_dict_ordinal_root_is_data);
+                        add_bitmap_root(roots.bitmap_ordinal, roots.bitmap_ordinal_root_is_data);
                     }
                 }
             }

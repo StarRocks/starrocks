@@ -171,9 +171,13 @@ public:
         // The bitmap index loads the root of its dictionary's value index, of its dictionary's ordinal index when it
         // has one, and of its bitmaps' ordinal index. The dictionary and the bitmaps are IndexedColumns, whose index
         // has a single level: each root is the only index page of its index, or the only data page of its column.
+        // The load does not read a root that is a data page: the lookups do.
         PagePointer bitmap_dict_value;
+        bool bitmap_dict_value_root_is_data = true;
         PagePointer bitmap_dict_ordinal;
+        bool bitmap_dict_ordinal_root_is_data = true;
         PagePointer bitmap_ordinal;
+        bool bitmap_ordinal_root_is_data = true;
     };
     const IndexRootPages& index_root_pages() const { return _index_root_pages; }
 
