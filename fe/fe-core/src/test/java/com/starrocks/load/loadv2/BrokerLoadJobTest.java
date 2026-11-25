@@ -40,6 +40,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
@@ -83,6 +84,7 @@ import mockit.MockUp;
 import mockit.Mocked;
 import mockit.Verifications;
 import org.apache.spark.sql.AnalysisException;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -97,9 +99,22 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class BrokerLoadJobTest {
 
+    private static boolean savedEnableMetricCalculator;
+
     @BeforeAll
     public static void start() {
+        // MetricRepo.init() otherwise schedules MetricCalculator, which calls the @Mocked GlobalStateMgr
+        // on a background thread. A call that cascades a new mocked type (e.g. getRoutineLoadMgr()) registers
+        // it in JMockit's shared state while the test thread iterates that state, and the test fails with a
+        // ConcurrentModificationException.
+        savedEnableMetricCalculator = Config.enable_metric_calculator;
+        Config.enable_metric_calculator = false;
         MetricRepo.init();
+    }
+
+    @AfterAll
+    public static void tearDown() {
+        Config.enable_metric_calculator = savedEnableMetricCalculator;
     }
 
     @Test
