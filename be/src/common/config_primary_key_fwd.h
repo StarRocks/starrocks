@@ -57,7 +57,8 @@ CONF_mInt32(pk_vector_chunk_size, "4096");
 // re-read.
 CONF_mInt32(lake_pk_column_mode_spill_min_source_segments, "32");
 
-// Memory the partition pass may buffer before flushing to the spill file.
+// Rows the partition pass may buffer before flushing to the spill file. A flush also holds their
+// serialized copy, so the pass peaks at about twice this.
 CONF_mInt64(lake_pk_column_mode_spill_buffer_bytes, "67108864"); // 64MB
 
 // The minimum threshold of data size for enabling pk index eager build.

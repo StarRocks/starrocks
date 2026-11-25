@@ -499,6 +499,29 @@ Status ColumnModePartialUpdateHandler::_spill_update_rows(
     if (dir_mgr == nullptr) {
         return Status::InternalError("column-mode partial update: no local spill directory");
     }
+    // The spill is written uncompressed and stays on disk until the column batch is done, and the
+    // query and load spill fail when these directories are full. So spill only what fits in half of
+    // the room that is left; a larger update takes the re-read. The estimate is the matched rows at
+    // the row size of the whole update, which is on the high side for a batch of some of its columns.
+    {
+        double room = 0;
+        for (const auto& dir : dir_mgr->dirs()) {
+            if (!dir->is_remote()) {
+                room += std::max<double>(
+                        0, static_cast<double>(dir->get_max_size()) - static_cast<double>(dir->get_current_size()));
+            }
+        }
+        double estimate = 0;
+        for (const size_t rows : rows_per_upt) {
+            estimate += static_cast<double>(rows) * static_cast<double>(_upt_memory_usage_per_row);
+        }
+        TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_spill_update_rows:estimate", &estimate);
+        if (estimate * 2 > room) {
+            return Status::CapacityLimitExceed(fmt::format(
+                    "column-mode partial update: about {} bytes to spill, {} bytes left in the local spill directories",
+                    static_cast<int64_t>(estimate), static_cast<int64_t>(std::min<double>(room, 9e18))));
+        }
+    }
     spill::AcquireBlockOptions block_opts;
     // One directory per spill under the spill root, so a publish retried on the same tablet and txn
     // never shares files with an earlier attempt.
@@ -863,8 +886,10 @@ Status ColumnModePartialUpdateHandler::_spill_update_rows(
 
 Status ColumnModePartialUpdateHandler::_update_source_chunk_from_spill(uint32_t rssid, const Schema& partial_schema,
                                                                        StreamChunkContainer container,
-                                                                       int32_t condition_idx_in_partial_schema) {
+                                                                       int32_t condition_idx_in_partial_schema,
+                                                                       bool* spill_unreadable) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pcu_update_source_by_upt_us");
+    *spill_unreadable = false;
     RETURN_ERROR_IF_FALSE(_spill.ready, "column-mode partial update spill is not ready");
     auto it = _spill.records.find(rssid);
     if (it == _spill.records.end()) {
@@ -946,29 +971,47 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_from_spill(uint32_t 
                                                     "column mode partial update merged source chunk",
                                                     _rowset_ptr->tablet_id(), _txn_id);
     };
-    for (const auto& rec : records) {
+    // Reading a record back and decoding it. A failure here is a problem of the local spill (disk
+    // error, file removed, damaged bytes), not of the update, and is reported through
+    // `spill_unreadable` so the caller can apply this range from the update files instead.
+    auto read_record = [&](const SpillRecord& rec, Chunk* rec_chunk, UInt32Column* rowids) -> Status {
         const int64_t length = rec.length;
-        payload.resize(length);
+        TRY_CATCH_BAD_ALLOC(payload.resize(length));
         if (const int64_t grown = static_cast<int64_t>(payload.capacity()) - payload_bytes; grown > 0) {
             _tracker->consume(grown);
             payload_bytes += grown;
         }
+        Status st;
+        TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:read", &st);
+        RETURN_IF_ERROR(st);
         // The records of one flush share a block, and every read opens its own stream on it: the
         // segment tasks share no file position.
         ASSIGN_OR_RETURN(auto readable, rec.block->get_readable());
         RETURN_IF_ERROR(readable->skip(rec.offset));
         RETURN_IF_ERROR(readable->read_fully(payload.data(), length));
         RETURN_IF_ERROR(crypt_spill_record(_spill.key, rec.seq, false, payload.data(), length));
-        auto rec_chunk = ChunkFactory::new_chunk(partial_schema, rec.num_rows);
-        auto rowids = UInt32Column::create();
         const auto* cur = reinterpret_cast<const uint8_t*>(payload.data());
         const auto* end = cur + length;
         for (auto& column : rec_chunk->columns()) {
             ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::deserialize(cur, end, column->as_mutable_raw_ptr()));
         }
-        ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::deserialize(cur, end, rowids.get()));
+        ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::deserialize(cur, end, rowids));
         RETURN_ERROR_IF_FALSE(rec_chunk->num_rows() == rec.num_rows && rowids->size() == rec.num_rows,
                               "column-mode partial update spill record is corrupted");
+        uint64_t run_rows = 0;
+        for (const auto& run : rec.runs) {
+            run_rows += run.num_rows;
+        }
+        RETURN_ERROR_IF_FALSE(run_rows == rec.num_rows, "column-mode partial update spill record runs are corrupted");
+        return Status::OK();
+    };
+    for (const auto& rec : records) {
+        auto rec_chunk = ChunkFactory::new_chunk(partial_schema, rec.num_rows);
+        auto rowids = UInt32Column::create();
+        if (auto st = read_record(rec, rec_chunk.get(), rowids.get()); !st.ok()) {
+            *spill_unreadable = !st.is_mem_limit_exceeded();
+            return st;
+        }
         // Charge the record's decoded copies (chunk, rowids) for as long as they live, as the
         // whole-file path charges its update chunk: segment tasks run concurrently and a record can
         // be most of a buffer limit. The payload is charged above.
@@ -981,8 +1024,6 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_from_spill(uint32_t 
         const auto& src = rowids->get_data();
         uint32_t row = 0;
         for (const auto& run : rec.runs) {
-            RETURN_ERROR_IF_FALSE(run.num_rows <= rec.num_rows - row,
-                                  "column-mode partial update spill record runs are corrupted");
             if (run.upt_id != pending_upt_id) {
                 RETURN_IF_ERROR(apply_pending());
                 pending_upt_id = run.upt_id;
@@ -1017,7 +1058,6 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_from_spill(uint32_t 
             _tracker->consume(bytes);
             upt_bytes += bytes;
         }
-        RETURN_ERROR_IF_FALSE(row == rec.num_rows, "column-mode partial update spill record runs are corrupted");
     }
     return apply_pending();
 }
@@ -1246,6 +1286,8 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
             auto func = [this, &params, &partial_schema, &partial_tschema, &selective_unique_update_column_ids, rssid,
                          upt_pairs_ptr, condition_idx_in_partial_schema, spill_update_rows, &dcg_column_ids,
                          &dcg_column_file_with_encryption_metas, &dcg_column_file_sizes, &result_mutex]() -> Status {
+                // Set once this task fails to read its rows back from the spill.
+                bool spill_unreadable = false;
                 // 3.3 prepare one DCG writer, then stream source-segment chunks through update and append.
                 ASSIGN_OR_RETURN(auto delta_column_group_writer,
                                  _prepare_delta_column_group_writer(params, partial_tschema));
@@ -1257,10 +1299,29 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
 
                             // 3.4 apply this source range's update rows (from the spill, or by
                             // reading the update files).
-                            if (spill_update_rows) {
-                                RETURN_IF_ERROR(_update_source_chunk_from_spill(rssid, partial_schema, container,
-                                                                                condition_idx_in_partial_schema));
-                            } else {
+                            bool from_spill = spill_update_rows && !spill_unreadable;
+                            if (from_spill) {
+                                auto spill_st = _update_source_chunk_from_spill(rssid, partial_schema, container,
+                                                                                condition_idx_in_partial_schema,
+                                                                                &spill_unreadable);
+                                if (!spill_unreadable) {
+                                    RETURN_IF_ERROR(spill_st);
+                                } else {
+                                    // The local spill cannot be read back. The update files are
+                                    // still there, so this range and the rest of the segment are
+                                    // applied from them. Update files of this range that the spill
+                                    // already applied are applied again, in the same order, which
+                                    // gives the same rows: a plain update overwrites the same
+                                    // values, and a condition update keeps the row it kept before.
+                                    LOG(WARNING) << "Column-mode partial update cannot read its spill back and "
+                                                 << "re-reads the update files, tablet: " << params.tablet->id()
+                                                 << ", txn: " << _txn_id << ", rssid: " << rssid << ": " << spill_st;
+                                    TRACE_COUNTER_INCREMENT("pcu_spill_fallback_cnt", 1);
+                                    TEST_SYNC_POINT("ColumnModePartialUpdateHandler::execute:spill_read_fallback");
+                                    from_spill = false;
+                                }
+                            }
+                            if (!from_spill) {
                                 RETURN_IF_ERROR(_update_source_chunk_by_upt(*upt_pairs_ptr, partial_schema, container,
                                                                             condition_idx_in_partial_schema));
                             }

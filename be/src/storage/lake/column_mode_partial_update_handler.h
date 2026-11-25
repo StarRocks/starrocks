@@ -26,10 +26,6 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/rowset_column_update_state.h"
 
-namespace starrocks {
-class WritableFile;
-} // namespace starrocks
-
 namespace starrocks::lake {
 
 class LakeDeltaColumnGroupLoader : public DeltaColumnGroupLoader {
@@ -68,8 +64,8 @@ private:
     // every source segment, and a full-table column update read every update file once per source
     // segment, O(source segments x update files) reads of the same data. The partition pass reads each
     // update file once, in update-file order, and writes each row (its columns of this batch plus
-    // its source rowid) to a block of its segment. The segment tasks then read their own blocks from
-    // local disk. The blocks come from the block manager and local spill directories the query and
+    // its source rowid) to a record of its segment. A flush writes the records of all segments as
+    // one block. The segment tasks then read their own records from local disk. The blocks come from the block manager and local spill directories the query and
     // load spill use, so their space counts against the same per-directory limit and a file a dead
     // process left behind is removed with the other spill leftovers at startup. The pass buffers up to lake_pk_column_mode_spill_buffer_bytes of rows,
     // plus the serialized copy of the buffer being flushed and the routing entries of the update file
@@ -87,8 +83,10 @@ private:
     // are at most one update file's columns of this batch, which
     // the per-segment re-read path holds too, and _read_from_source_segment_and_update sizes `container`
     // with this update memory in its budget. All of it is charged to the update memory tracker.
+    // `spill_unreadable` is set when the call fails because a record could not be read back from
+    // local disk or decoded. The caller then applies the range from the update files.
     Status _update_source_chunk_from_spill(uint32_t rssid, const Schema& partial_schema, StreamChunkContainer container,
-                                           int32_t condition_idx_in_partial_schema);
+                                           int32_t condition_idx_in_partial_schema, bool* spill_unreadable);
     void _release_spill();
     Status _read_from_source_segment_and_update(const RowsetUpdateStateParams& params, const Schema& schema,
                                                 uint32_t rssid,

@@ -613,19 +613,6 @@ TEST_P(LakePartialUpdateTest, test_column_mode_partial_update_streams_source_seg
     EXPECT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return c0 * 5 == c1 && c0 * 4 == c2; }));
 }
 
-// Regression test: when a partial update orphans a bundled segment, the orphan_files entry must be
-// flagged shared so vacuum's cross-tablet alive-check protects it.
-//
-// Under file bundling one physical .dat holds the segments of several sibling tablets, and a
-// segment's shared-ness is encoded by bundle_file_offset (not the `shared` flag). The orphan
-// FileMetaPB only carries `shared`, so the orphan-producing paths must set it to
-// is_shared_segment() = shared || has_bundle_file_offset(). Otherwise collect_garbage_files sees
-// file.shared()==false, routes the orphan to the plain deleter, and deletes the physical bundle
-// file even while a sibling tablet still references it in a live rowset -- wedging that publish.
-//
-// This test stamps a bundle_file_offset onto a row-mode partial update segment (as a bundled load
-// records it), publishes so rewrite_segment orphans the raw segment, and asserts the orphaned
-// segment is flagged shared.
 // Many update files, each touching rows of every source segment. The update rows are partitioned by
 // source segment into a local spill file, so every update file is read once; the result must equal
 // the per-segment re-read path, whether the partition pass flushes once per update file or on every
@@ -777,7 +764,12 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
     });
 
     // With `disjoint`, every update file holds the rows of one source segment only.
-    auto run_update = [&](int update_ratio, bool disjoint = false) {
+    // With `condition`, c1 is the merge condition and the rows are expected to end at
+    // `expected_ratio`.
+    auto run_update = [&](int update_ratio, bool disjoint = false, bool condition = false, int expected_ratio = 0) {
+        if (!condition) {
+            expected_ratio = update_ratio;
+        }
         // One column-mode update that rewrites c1 of every row, flushed as one update file per write.
         ConfigResetGuard<int64_t> write_buffer_guard(&config::write_buffer_size, 1);
         upt_reads = 0;
@@ -793,6 +785,7 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
                                                    .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .set_merge_condition(condition ? "c1" : "")
                                                    .build());
         ASSERT_OK(delta_writer->open());
         for (int slice = 0; slice < kSourceSegments; slice++) {
@@ -803,8 +796,8 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
         ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
-        ASSERT_EQ(kChunkSize * kSourceSegments, check(version, [update_ratio](int c0, int c1, int c2) {
-                      return (c0 * update_ratio == c1) && (c0 * 4 == c2);
+        ASSERT_EQ(kChunkSize * kSourceSegments, check(version, [expected_ratio](int c0, int c1, int c2) {
+                      return (c0 * expected_ratio == c1) && (c0 * 4 == c2);
                   }));
     };
 
@@ -856,6 +849,59 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
         EXPECT_EQ(kSourceSegments, upt_reads.load());
         EXPECT_GT(flushes.load(), 1) << "limit " << limit;
         EXPECT_EQ(kSourceSegments * kSourceSegments, applies.load()) << "limit " << limit;
+    }
+    // A source segment applied in several ranges: every range takes its own rows of every record,
+    // with row ids relative to the start of the range. Each update file has one row in each of the
+    // three ranges of every source segment.
+    {
+        ConfigResetGuard<int32_t> chunk_size_guard(&config::pk_vector_chunk_size, 4);
+        ConfigResetGuard<int64_t> memory_limit_guard(&config::partial_update_memory_limit_per_worker, 80);
+        applies = 0;
+        run_update(33);
+        EXPECT_EQ(kSourceSegments, upt_reads.load());
+        EXPECT_EQ(kSourceSegments * kSourceSegments * 3, applies.load());
+    }
+    // Condition update through the spill: a smaller condition value changes nothing, a larger one
+    // replaces the row, whether the rows of an update file come from one record or from several.
+    {
+        run_update(3, false, true, 33);
+        EXPECT_EQ(kSourceSegments, upt_reads.load());
+        ConfigResetGuard<int64_t> buffer_guard(&config::lake_pk_column_mode_spill_buffer_bytes, 1);
+        ConfigResetGuard<int32_t> chunk_size_guard(&config::pk_vector_chunk_size, 4);
+        run_update(5, false, true, 33);
+        run_update(40, false, true, 40);
+        EXPECT_EQ(kSourceSegments, upt_reads.load());
+    }
+    // A record that cannot be read back from local disk: the range is applied from the update files
+    // instead, also when update files of the range were already applied from earlier records, and
+    // with a condition update on top of rows the spill already replaced.
+    {
+        ConfigResetGuard<int64_t> buffer_guard(&config::lake_pk_column_mode_spill_buffer_bytes, 1);
+        ConfigResetGuard<int32_t> chunk_size_guard(&config::pk_vector_chunk_size, 4);
+        std::atomic<int> reads{0};
+        std::atomic<int> read_fallbacks{0};
+        int fail_from = 0;
+        SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:read",
+                                              [&](void* arg) {
+                                                  if (reads++ >= fail_from) {
+                                                      *static_cast<Status*>(arg) = Status::IOError("injected");
+                                                  }
+                                              });
+        SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::execute:spill_read_fallback",
+                                              [&](void*) { read_fallbacks++; });
+        for (const bool condition : {false, true}) {
+            for (const int from : {0, 2 * kSourceSegments + 1}) {
+                fail_from = from;
+                reads = 0;
+                read_fallbacks = 0;
+                const int ratio = 50 + (condition ? 10 : 0) + from;
+                run_update(ratio, false, condition, ratio);
+                EXPECT_EQ(kSourceSegments, upt_reads.load());
+                EXPECT_GT(read_fallbacks.load(), 0) << "condition " << condition << " from " << from;
+            }
+        }
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:read");
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::execute:spill_read_fallback");
     }
     // A record lands on disk as it was serialized, unless transparent data encryption is on: then
     // the bytes on disk differ from the serialized record, and the update still applies.
@@ -984,6 +1030,19 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
     EXPECT_EQ(0, _primary_key_mgr->update_state_mem_tracker()->consumption());
 }
 
+// Regression test: when a partial update orphans a bundled segment, the orphan_files entry must be
+// flagged shared so vacuum's cross-tablet alive-check protects it.
+//
+// Under file bundling one physical .dat holds the segments of several sibling tablets, and a
+// segment's shared-ness is encoded by bundle_file_offset (not the `shared` flag). The orphan
+// FileMetaPB only carries `shared`, so the orphan-producing paths must set it to
+// is_shared_segment() = shared || has_bundle_file_offset(). Otherwise collect_garbage_files sees
+// file.shared()==false, routes the orphan to the plain deleter, and deletes the physical bundle
+// file even while a sibling tablet still references it in a live rowset -- wedging that publish.
+//
+// This test stamps a bundle_file_offset onto a row-mode partial update segment (as a bundled load
+// records it), publishes so rewrite_segment orphans the raw segment, and asserts the orphaned
+// segment is flagged shared.
 TEST_P(LakePartialUpdateTest, test_bundled_orphan_segment_marked_shared) {
     // Column mode orphans the partial-column update segment via a different path; this test targets
     // the row-mode rewrite orphan path.
