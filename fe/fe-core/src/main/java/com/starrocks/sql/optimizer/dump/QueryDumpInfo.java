@@ -62,6 +62,8 @@ public class QueryDumpInfo implements DumpInfo {
 
     private final List<String> exceptionList = new ArrayList<>();
     private int beNum;
+    // Alive execution nodes the query could run on, only recorded for shared-data clusters. 0 if not recorded.
+    private int execNodeNumber;
 
     // Be core stat
     private int cachedAvgNumCores = -1;
@@ -317,6 +319,14 @@ public class QueryDumpInfo implements DumpInfo {
 
     public int getBeNum() {
         return this.beNum;
+    }
+
+    public void setExecNodeNumber(int execNodeNumber) {
+        this.execNodeNumber = execNodeNumber;
+    }
+
+    public int getExecNodeNumber() {
+        return this.execNodeNumber;
     }
 
     public boolean isDesensitizedInfo() {
