@@ -44,10 +44,13 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class PluginMgrTest {
@@ -65,6 +68,44 @@ public class PluginMgrTest {
         Files.createDirectory(PluginTestUtil.getTestPath(TARGET_DIR));
         assertTrue(Files.exists(PluginTestUtil.getTestPath(TARGET_DIR)));
         Config.plugin_dir = PluginTestUtil.getTestPathString(TARGET_DIR);
+    }
+
+    /**
+     * The plugin dir is created by another process -- a parallel FE unit test starting its own frontend -- after this
+     * one found it missing: mkdir fails, as the directory exists. It does exist, so that is no failure.
+     */
+    @Test
+    public void testCreatePluginDirCreatedConcurrently() throws Exception {
+        File dir = PluginTestUtil.getTestFile(TARGET_DIR + "/created_concurrently");
+        File checkedBeforeCreated = new File(dir.getPath()) {
+            @Override
+            public boolean mkdir() {
+                // Missing when checked; another process creates it right before this one's mkdir.
+                assertTrue(dir.mkdir());
+                return super.mkdir();
+            }
+        };
+        assertDoesNotThrow(() -> PluginMgr.createPluginDir(checkedBeforeCreated));
+        assertTrue(dir.isDirectory());
+    }
+
+    @Test
+    public void testCreatePluginDir() throws Exception {
+        File dir = PluginTestUtil.getTestFile(TARGET_DIR + "/missing");
+        PluginMgr.createPluginDir(dir);
+        assertTrue(dir.isDirectory());
+        // Already there.
+        PluginMgr.createPluginDir(dir);
+        assertTrue(dir.isDirectory());
+
+        File notADirectory = PluginTestUtil.getTestFile(TARGET_DIR + "/a_file");
+        assertTrue(notADirectory.createNewFile());
+        PluginException e = assertThrows(PluginException.class, () -> PluginMgr.createPluginDir(notADirectory));
+        assertTrue(e.getMessage().contains("is not a directory"), e.getMessage());
+
+        File parentMissing = PluginTestUtil.getTestFile(TARGET_DIR + "/no_such_parent/plugins");
+        e = assertThrows(PluginException.class, () -> PluginMgr.createPluginDir(parentMissing));
+        assertTrue(e.getMessage().contains("failed to create FE plugin dir"), e.getMessage());
     }
 
     @Test
