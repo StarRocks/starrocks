@@ -27,22 +27,16 @@ Spark SQL を使用して StarRocks テーブルに一時ビューを作成し�
 
 | Spark コネクタ    | Spark              | StarRocks     | Java | Scala |
 |---------------- | ------------------ | ------------- | ---- | ----- |
+| 1.1.5           | 4.0, 4.1           | 2.5 以降       | 17   | 2.13  |
+| 1.1.5           | 3.3, 3.4, 3.5      | 2.5 以降       | 8    | 2.12  |
 | 1.1.4           | 4.0, 4.1           | 2.5  以降      | 17   | 2.13  |
 | 1.1.4           | 3.3, 3.4, 3.5      | 2.5  以降      | 8    | 2.12  |
 | 1.1.3           | 3.2, 3.3, 3.4, 3.5 | 2.5 以降       | 8    | 2.12  |
-| 1.1.2           | 3.2, 3.3, 3.4, 3.5 | 2.5 以降       | 8    | 2.12  |
-| 1.1.1           | 3.2, 3.3, 3.4      | 2.5 以降       | 8    | 2.12  |
-| 1.1.0           | 3.2, 3.3, 3.4      | 2.5 以降       | 8    | 2.12  |
-| 1.0.0           | 3.x                | 1.18 以降      | 8    | 2.12  |
-| 1.0.0           | 2.x                | 1.18 以降      | 8    | 2.11  |
 
 > **注意**
 >
 > - 異なるコネクタバージョン間の動作変更については、[Upgrade Spark connector](#spark-コネクタのアップグレード) を参照してください。
 > - バージョン 1.1.1 以降、コネクタは MySQL JDBC ドライバを提供していないため、Spark のクラスパスに手動でドライバをインポートする必要があります。ドライバは [Maven Central](https://repo1.maven.org/maven2/mysql/mysql-connector-java/) で見つけることができます。
-> - バージョン 1.0.0 では、Spark コネクタは StarRocks からのデータ読み取りのみをサポートしています。バージョン 1.1.0 以降、Spark コネクタは StarRocks からのデータ読み取りと書き込みの両方をサポートしています。
-> - バージョン 1.0.0 とバージョン 1.1.0 では、パラメータとデータ型マッピングが異なります。[Upgrade Spark connector](#spark-コネクタのアップグレード) を参照してください。
-> - 一般的な場合、バージョン 1.0.0 に新しい機能は追加されません。できるだけ早く Spark コネクタをアップグレードすることをお勧めします。
 
 ## Spark コネクタの入手
 
@@ -173,6 +167,7 @@ Spark コネクタに必要な依存関係を次のように設定します。
 | starrocks.request.read.timeout.ms    | 30000             | StarRocks に送信されたリクエストの読み取りがタイムアウトするまでの最大時間。 |
 | starrocks.request.query.timeout.s    | 3600              | StarRocks からデータをクエリする際の最大タイムアウト時間。デフォルトのタイムアウト期間は 1 時間です。`-1` はタイムアウト期間が指定されていないことを意味します。 |
 | starrocks.request.tablet.size        | Integer.MAX_VALUE | 各 Spark RDD パーティションにグループ化される StarRocks タブレットの数。このパラメータの値が小さいほど、生成される Spark RDD パーティションの数が多くなります。Spark の並行性が高くなる一方で、StarRocks への負荷も大きくなります。 |
+| starrocks.request.warehouse          | None              | 1.1.5 以降でサポートされています。共有データクラスタで読み取りを処理するウェアハウス。FE はこのウェアハウス上で読み取りを計画し、Spark はそのウェアハウスのコンピュートノードからデータを読み取ります。設定されていない場合、FE は `default_warehouse` を使用します。指定したウェアハウスが存在しない場合、読み取りは `The warehouse parameter [<name>] is invalid` というエラーで失敗します。StarRocks v3.4.5+、v3.5.1+、v4.0+ で有効です。それより前のバージョンではこのパラメータは無視され、`default_warehouse` から読み取ります。[特定のウェアハウスからデータを読み取る](#特定のウェアハウスからデータを読み取る) を参照してください。 |
 | starrocks.batch.size                 | 4096              | 一度に BEs から読み取ることができる最大行数。このパラメータの値を増やすことで、Spark と StarRocks 間で確立される接続数を減らし、ネットワーク遅延による余分な時間オーバーヘッドを軽減できます。 |
 | starrocks.exec.mem.limit             | 2147483648        | クエリごとに許可される最大メモリ量。単位: バイト。デフォルトのメモリ制限は 2 GB です。 |
 | starrocks.deserialize.arrow.async    | false             | Arrow メモリ形式を Spark コネクタの反復に必要な RowBatches に非同期で変換することをサポートするかどうかを指定します。 |
@@ -514,6 +509,26 @@ Spark が配置されているマシンが、StarRocks クラスターの FE ノ
    ```Scala
    res1: Array[AnyRef] = Array([1, Bob, 21], [2, Stan, 21], [3, Sam, 22], [4, Tony, 22], [5, Alice, 22], [6, Lucy, 23], [7, Polly, 23], [8, Tom, 23], [9, Rose, 24], [10, Jerry, 24], [11, Jason, 24], [12, Lily, 25], [13, Stephen, 25], [14, David, 25], [15, Eddie, 26], [16, Kate, 27], [17, Cathy, 27], [18, Judy, 27], [19, Julia, 28], [20, Robert, 28], [21, Jack, 29])
    ```
+
+### 特定のウェアハウスからデータを読み取る
+
+複数のウェアハウスを持つ共有データクラスタでは、`starrocks.request.warehouse`（1.1.5 以降でサポート）を設定しない限り、Spark の読み取りは `default_warehouse` で実行されます。このパラメータを設定すると、大量のデータの読み取りを、ロードやクエリを処理するウェアハウスから切り離すことができます。FE は指定したウェアハウス上で読み取りを計画し、Spark executor はそのウェアハウスのコンピュートノードからデータを読み取ります。そのため、Spark executor は BE Thrift ポート（デフォルトは `9060`）でこれらのノードにアクセスできる必要があります。
+
+- Spark SQL: `OPTIONS` に `"starrocks.request.warehouse" = "<warehouse_name>"` を追加します。
+- Spark DataFrame:
+
+  ```Scala
+  scala> val starrocksSparkDF = spark.read.format("starrocks")
+             .option("starrocks.table.identifier", s"test.score_board")
+             .option("starrocks.fe.http.url", s"<fe_host>:<fe_http_port>")
+             .option("starrocks.fe.jdbc.url", s"jdbc:mysql://<fe_host>:<fe_query_port>")
+             .option("starrocks.user", s"root")
+             .option("starrocks.password", s"")
+             .option("starrocks.request.warehouse", s"<warehouse_name>")
+             .load()
+  ```
+
+- Spark RDD: `cfg` に `"starrocks.request.warehouse" -> "<warehouse_name>"` を追加します。
 
 ## ベストプラクティス
 
