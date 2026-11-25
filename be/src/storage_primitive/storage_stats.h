@@ -39,6 +39,13 @@ inline bool is_compaction(ReaderType reader_type) {
 
 // ReaderStatistics used to collect statistics when scan data from storage
 struct OlapReaderStatistics {
+    // Bytes read from remote storage, including those a lake reader read while preparing its splits, which are kept
+    // apart from compressed_bytes_read_remote.
+    int64_t remote_bytes_read_with_prepare() const {
+        return compressed_bytes_read_remote + lake_prepared_tablet_bytes_read_remote +
+               lake_prepared_seed_bytes_read_remote;
+    }
+
     int64_t create_segment_iter_ns = 0;
     int64_t io_ns = 0;
     int64_t compressed_bytes_read = 0;
@@ -121,6 +128,8 @@ struct OlapReaderStatistics {
     int64_t rows_vector_index_filtered = 0;
     int64_t rows_bf_filtered = 0;
     int64_t rows_del_filtered = 0;
+    // The part of rows_del_filtered removed after the rows were read, so counted in raw_rows_read.
+    int64_t rows_del_filtered_after_read = 0;
     int64_t del_filter_ns = 0;
     // Rows a vector (ANN) query skipped from the row-level delete-predicate evaluation because their page's
     // zone map proved they match no delete predicate (see SegmentIterator::_apply_del_predicate).
@@ -365,6 +374,7 @@ struct OlapReaderStatistics {
         rows_vector_index_filtered += other.rows_vector_index_filtered;
         rows_bf_filtered += other.rows_bf_filtered;
         rows_del_filtered += other.rows_del_filtered;
+        rows_del_filtered_after_read += other.rows_del_filtered_after_read;
         del_filter_ns += other.del_filter_ns;
         rows_del_predicate_zone_map_pruned += other.rows_del_predicate_zone_map_pruned;
         total_pages_num += other.total_pages_num;

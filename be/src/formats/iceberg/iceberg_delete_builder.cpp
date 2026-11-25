@@ -208,6 +208,7 @@ Status IcebergDeleteBuilder::build(const TIcebergDeleteFile& delete_file, const 
     ASSIGN_OR_RETURN(auto file, open_random_access_file(delete_file, fs_stats, app_stats, shared_buffered_input_stream,
                                                         cache_input_stream));
 
+<<<<<<< HEAD
     RETURN_IF_ERROR(IcebergPositionDeleteReader::read_rows(
             file.get(), delete_file.full_path, delete_file.length, format, _ctx.chunk_size, _ctx.scan_context->timezone,
             _ctx.scan_context->options, &app_stats, [this](const Slice& file_path, int64_t pos) {
@@ -217,7 +218,46 @@ Status IcebergDeleteBuilder::build(const TIcebergDeleteFile& delete_file, const 
             }));
     update_delete_file_io_counter(_ctx.runtime_profile, app_stats, fs_stats, cache_input_stream,
                                   shared_buffered_input_stream);
+=======
+    // A position-delete file in an encrypted table carries its own per-file key; both read paths below need it.
+    const TParquetEncryptionInfo* encryption_info =
+            delete_file.__isset.parquet_encryption_info ? &delete_file.parquet_encryption_info : nullptr;
+    if (delete_file.__isset.references_only_data_file && delete_file.references_only_data_file) {
+        // Every row references this data file: the file_path column is not read at all.
+        RETURN_IF_ERROR(IcebergPositionDeleteReader::read_positions(
+                file.get(), delete_file.full_path, delete_file.length, format, _ctx.chunk_size,
+                _ctx.scan_context->timezone, _ctx.scan_context->options, &app_stats, encryption_info,
+                [this](const int64_t* pos, size_t num_rows) {
+                    _deletion_bitmap->add_values(reinterpret_cast<const uint64_t*>(pos), num_rows);
+                }));
+    } else {
+        RETURN_IF_ERROR(IcebergPositionDeleteReader::read_rows(
+                file.get(), delete_file.full_path, delete_file.length, format, _ctx.chunk_size,
+                _ctx.scan_context->timezone, _ctx.scan_context->options, &app_stats, encryption_info,
+                IcebergPositionDeleteReader::RangeCallback(
+                        [this](const Slice& file_path, const int64_t* pos, size_t num_rows) {
+                            if (file_path == _ctx.data_file_path) {
+                                _deletion_bitmap->add_values(reinterpret_cast<const uint64_t*>(pos), num_rows);
+                            }
+                        })));
+    }
+    accumulate_position_delete_io(app_stats, fs_stats, cache_input_stream, shared_buffered_input_stream);
+    add_delete_file_audit_bytes(fs_stats, cache_input_stream);
+>>>>>>> 921d5c4 ([Feature] Report per-scan read statistics in the audit log (#84442))
     return Status::OK();
+}
+
+void IcebergDeleteBuilder::add_delete_file_audit_bytes(
+        const FormatScannerStats& fs_stats, const std::shared_ptr<CacheInputStream>& cache_input_stream) const {
+    if (_ctx.scan_context == nullptr || _ctx.scan_context->stats == nullptr) {
+        return;
+    }
+    FormatScannerStats* stats = _ctx.scan_context->stats;
+    stats->delete_file_remote_bytes += fs_stats.bytes_read;
+    if (cache_input_stream != nullptr) {
+        const CacheInputStream::Stats& cache_stats = cache_input_stream->stats();
+        stats->delete_file_cache_bytes += cache_stats.read_block_cache_bytes + cache_stats.read_peer_cache_bytes;
+    }
 }
 
 Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file) const {

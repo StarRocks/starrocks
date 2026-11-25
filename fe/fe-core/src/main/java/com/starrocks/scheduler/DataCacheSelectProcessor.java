@@ -68,7 +68,7 @@ public class DataCacheSelectProcessor extends BaseTaskRunProcessor {
         } finally {
             Tracers.close();
             if (executor != null) {
-                auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
+                auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog(), executor);
             } else {
                 // executor can be null if we encounter analysis error.
                 auditAfterExec(context, null, null);

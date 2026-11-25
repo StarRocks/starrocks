@@ -149,6 +149,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 在 `audit_log_roll_interval` 参数指定的每个保留期内，可以保留的审计日志文件的最大数量。
 - 引入版本: -
 
+### `audit_scan_stats_max_scans`
+
+- 默认值: 1000
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 一次执行尝试（attempt）在查询审计事件 `ScanStats` 字段中最多记录的 scan 条目数。计划中 scan 节点更多时只保留前面的条目，并将该 attempt 标记为 `scansTruncated`。会话变量 `enable_collect_table_level_scan_stats` 为 `true` 时才记录 `ScanStats`。
+- 引入版本: -
+
 ### `audit_stmt_before_execute`
 
 - 默认值: false

@@ -812,6 +812,12 @@ void OlapChunkSource::_update_realtime_counter(Chunk* chunk) {
     _num_rows_read += num_rows;
     _scan_rows_num = stats.raw_rows_read;
     _scan_bytes = stats.bytes_read;
+    // A local tablet reads its pages from local disk: the bytes of the page reads that missed the page cache. There
+    // is no datacache.
+    _scan_audit_counters.mask = ScanAuditCounters::ROWS_AND_BYTES;
+    _scan_audit_counters.physical_rows = stats.raw_rows_read;
+    _scan_audit_counters.logical_rows = stats.raw_rows_read - stats.rows_del_filtered_after_read;
+    _scan_audit_counters.remote_bytes = stats.compressed_bytes_read_request;
     _cpu_time_spent_ns = stats.decompress_ns + stats.vec_cond_ns + stats.del_filter_ns;
 
     const TQueryOptions& query_options = _runtime_state->query_options();
