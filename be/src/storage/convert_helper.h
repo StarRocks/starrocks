@@ -59,19 +59,4 @@ public:
 
 const FieldConverter* get_field_converter(LogicalType from_type, LogicalType to_type);
 
-class RowConverter {
-public:
-    RowConverter() = default;
-
-    Status init(const TabletSchema& in_schema, const TabletSchema& out_schema);
-
-    Status init(const Schema& in_schema, const Schema& out_schema);
-
-    void convert(std::vector<Datum>* dst, const std::vector<Datum>& src) const;
-
-private:
-    std::vector<ColumnId> _cids;
-    std::vector<const FieldConverter*> _converters;
-};
-
 } // namespace starrocks
