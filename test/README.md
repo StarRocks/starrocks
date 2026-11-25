@@ -120,6 +120,10 @@ The format of the value is a regular expression, and only test cases whose names
 **`--skip_reruns` [Optional]**
 By default, all cases will run 3 times and passed 3 times, if this parameter provided, all case will be run exactly only once, default False.
 
+**`--random-settings=SEED|auto` [Optional. Validate mode only]**
+Runs every case with random, result-invariant session variables -- `pipeline_dop`, `chunk_size`, spilling, query cache, runtime filters, aggregation stages, join reorder and other optimizer switches -- so the same cases also cover the execution paths behind them. The variables and their values are in `lib/random_settings.py`. A case's values come from the seed and the case name: the run prints the seed, each case prints its settings and a replay command, and `--random-settings=SEED --case_filter='^case_name$'` gives the case the same settings again. `auto` picks a new seed.
+A case keeps the default settings when its output shows them: EXPLAIN, TRACE, profiles, `@@` variables, and the `function:` checks that read a plan, such as `print_hit_materialized_view` and `assert_explain_contains`. Tag any other case whose result depends on the settings with `@no_random_settings` (see [KEEP THE DEFAULT SESSION VARIABLES](#12-keep-the-default-session-variables)).
+
 # Grammar
 This describes the grammar of SQL-tester framework, and how to add your cases.
 
@@ -562,3 +566,14 @@ SET_VAR {
 * In **validate mode** (`-v`), the framework executes the block once per combination and checks every run against the same expected results from the R file.
 * The `[UC]` (uncheck), `[ORDER]`, `[UNORDERED]`, and `[REGEX]` flags are supported on individual statements inside the block.
 * `SET_VAR` blocks must NOT be nested inside `LOOP` blocks.
+
+### 12. KEEP THE DEFAULT SESSION VARIABLES
+
+`run.py --random-settings` gives each case random, result-invariant session variables. A case whose result depends on them anyway -- it expects a memory-limit error that spilling avoids, or reads row order that `pipeline_dop` changes -- opts out with the `@no_random_settings` tag and runs with the defaults:
+
+```sql
+-- name: test_agg_mem_limit_error @no_random_settings
+...
+```
+
+Cases with EXPLAIN, TRACE, profiles, `@@` variables or plan-reading `function:` checks keep the defaults without the tag.
