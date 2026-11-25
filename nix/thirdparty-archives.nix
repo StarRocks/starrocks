@@ -379,10 +379,10 @@ let
       md5 = "72337e6a7d2662af50a4ed0274c61b7e";
       sha256 = "1l87r6h8qccba1yjx6n13q36yh0wrq3rzz9nnraq5ssjr2lmmipr";
     };
-    "zstd-1.5.7.tar.gz" = {
-      url = "https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz";
-      md5 = "780fc1896922b1bc52a4e90980cdda48";
-      sha256 = "18vgkvh7w6zw4jn2aj1mp0yv98m4fk52ay6da0wh4pm194gyaczb";
+    "zstd-1.6.0.tar.gz" = {
+      url = "https://github.com/facebook/zstd/releases/download/v1.6.0/zstd-1.6.0.tar.gz";
+      md5 = "b9ed8b476cd65a9c0122d630684237fc";
+      sha256 = "1f79yn25vz99h9kphyxa33ypnf1s8fcfjwbyiqkpcy955ap9k99b";
     };
   };
 
@@ -503,7 +503,7 @@ let
       "flatbuffers-v1.10.0.tar.gz"
       "arrow-apache-arrow-24.0.0.tar.gz"
       "brotli-1.0.9.tar.gz"
-      "zstd-1.5.7.tar.gz"
+      "zstd-1.6.0.tar.gz"
       "s2geometry-0.9.0.tar.gz"
       "h3-4.5.0-1b536c34225191ba24a75a840f634d4a48c3b206.tar.gz"
       "bitshuffle-0.5.1.tar.gz"
@@ -578,7 +578,7 @@ let
       "flatbuffers-v1.10.0.tar.gz"
       "arrow-apache-arrow-24.0.0.tar.gz"
       "brotli-1.0.9.tar.gz"
-      "zstd-1.5.7.tar.gz"
+      "zstd-1.6.0.tar.gz"
       "s2geometry-0.9.0.tar.gz"
       "h3-4.5.0-1b536c34225191ba24a75a840f634d4a48c3b206.tar.gz"
       "bitshuffle-0.5.1.tar.gz"
@@ -652,7 +652,7 @@ let
       "flatbuffers-v1.10.0.tar.gz"
       "arrow-apache-arrow-24.0.0.tar.gz"
       "brotli-1.0.9.tar.gz"
-      "zstd-1.5.7.tar.gz"
+      "zstd-1.6.0.tar.gz"
       "s2geometry-0.9.0.tar.gz"
       "h3-4.5.0-1b536c34225191ba24a75a840f634d4a48c3b206.tar.gz"
       "bitshuffle-0.5.1.tar.gz"

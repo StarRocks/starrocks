@@ -232,10 +232,10 @@ PULSAR_SOURCE=pulsar-client-cpp-3.3.0
 PULSAR_MD5SUM="348b7e5ec39e50547668520d13a417a1"
 
 # zstd
-ZSTD_DOWNLOAD="https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz"
-ZSTD_NAME=zstd-1.5.7.tar.gz
-ZSTD_SOURCE=zstd-1.5.7
-ZSTD_MD5SUM="780fc1896922b1bc52a4e90980cdda48"
+ZSTD_DOWNLOAD="https://github.com/facebook/zstd/releases/download/v1.6.0/zstd-1.6.0.tar.gz"
+ZSTD_NAME=zstd-1.6.0.tar.gz
+ZSTD_SOURCE=zstd-1.6.0
+ZSTD_MD5SUM="b9ed8b476cd65a9c0122d630684237fc"
 
 # brotli
 BROTLI_DOWNLOAD="https://github.com/google/brotli/archive/v1.0.9.tar.gz"
