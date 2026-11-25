@@ -1,7 +1,4 @@
 -- name: test_clone_for_gin @native
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
--- result:
--- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result
@@ -47,9 +44,6 @@ SELECT * FROM t_clone_for_gin ORDER BY id1;
 2	ABC	ABC	ABC	ABC
 -- !result
 -- name: test_alter_replicated_storage @native
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
--- result:
--- !result
 CREATE TABLE `t_alter_replicated_storage` (
   `id` bigint(20) NOT NULL COMMENT "",
   `text` varchar(255) NULL COMMENT "",
@@ -89,9 +83,6 @@ DROP TABLE t_alter_replicated_storage;
 -- result:
 -- !result
 -- name: test_alter_gin_col_into_other_type @native
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
--- result:
--- !result
 CREATE TABLE `t_alter_gin_col_into_other_type` (
   `id` bigint(20) NOT NULL COMMENT "",
   `v1` varchar(255) NULL COMMENT "",
@@ -145,9 +136,6 @@ DROP TABLE t_alter_gin_col_into_other_type;
 -- result:
 -- !result
 -- name: test_gin_var @sequential @native
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
--- result:
--- !result
 CREATE TABLE `t_gin_var` (
   `id` bigint(20) NOT NULL COMMENT "",
   `v1` varchar(255) NULL COMMENT "",
@@ -187,49 +175,6 @@ SELECT * FROM t_gin_var WHERE v1 MATCH "abc";
 DROP TABLE t_gin_var;
 -- result:
 -- !result
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "false");
--- result:
--- !result
-CREATE TABLE `t_gin_var` (
-  `id` bigint(20) NOT NULL COMMENT "",
-  `v1` varchar(255) NULL COMMENT "",
-  INDEX gin_none (`v1`) USING GIN ("parser" = "standard")
-) ENGINE=OLAP
-DUPLICATE KEY(`id`)
-DISTRIBUTED BY HASH(`id`) BUCKETS 1
-PROPERTIES (
-"replication_num" = "1",
-"enable_persistent_index" = "true",
-"replicated_storage" = "false",
-"compression" = "LZ4"
-);
--- result:
-E: (1064, 'Getting analyzing error. Detail message: The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true.')
--- !result
-CREATE TABLE `t_gin_var` (
-  `id` bigint(20) NOT NULL COMMENT "",
-  `v1` varchar(255) NULL COMMENT ""
-) ENGINE=OLAP
-DUPLICATE KEY(`id`)
-DISTRIBUTED BY HASH(`id`) BUCKETS 1
-PROPERTIES (
-"replication_num" = "1",
-"enable_persistent_index" = "true",
-"replicated_storage" = "false",
-"compression" = "LZ4"
-);
--- result:
--- !result
-ALTER TABLE t_gin_var add index idx (v1) USING GIN('parser' = 'standard');
--- result:
-E: (1064, 'Getting analyzing error. Detail message: The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true.')
--- !result
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
--- result:
--- !result
-DROP TABLE t_gin_var;
--- result:
--- !result
 CREATE TABLE `t_gin_var` (
   `id` bigint(20) NOT NULL COMMENT "",
   `v1` varchar(255) NULL COMMENT "",
@@ -248,15 +193,9 @@ PROPERTIES (
 DROP TABLE t_gin_var;
 -- result:
 -- !result
-CLEANUP {
-    ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
-} END CLEANUP
 
 
 -- name: test_gin_view @native
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
--- result:
--- !result
 CREATE TABLE `t_gin_view` (
   `id` bigint(20) NOT NULL COMMENT "",
   `v1` varchar(255) NULL COMMENT "",
@@ -424,9 +363,6 @@ DROP TABLE t_gin_like_underscore;
 -- result:
 -- !result
 -- name: test_gin_or_prune_after_index_filter @native
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
--- result:
--- !result
 CREATE TABLE `t_gin_or_prune_${uuid0}` (
   `id` bigint NOT NULL,
   `k`  bigint NOT NULL,
@@ -477,9 +413,6 @@ DROP TABLE t_gin_or_prune_${uuid0};
 -- result:
 -- !result
 -- name: test_gin_prune_primary_key_table @native
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
--- result:
--- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result
@@ -558,9 +491,6 @@ DROP TABLE t_gin_prune_pk_${uuid0};
 -- result:
 -- !result
 -- name: test_gin_prune_on_table_with_delete @native
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
--- result:
--- !result
 CREATE TABLE `t_gin_del_prune_${uuid0}` (
   `id` bigint NOT NULL,
   `k`  bigint NOT NULL,

@@ -23,7 +23,6 @@ import com.starrocks.catalog.IndexParams.IndexParamItem;
 import com.starrocks.catalog.IndexParams.IndexParamType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.InvertedIndexParams;
 import com.starrocks.common.NgramBfIndexParamsKey;
 import com.starrocks.common.VectorIndexParams;
@@ -179,11 +178,6 @@ public class IndexAnalyzer {
         if (!validGinColumnType(column)) {
             throw new SemanticException("The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type.");
         }
-        if (!Config.enable_experimental_gin) {
-            throw new SemanticException(
-                    "The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true");
-        }
-
         lowerCasePropertyKeys(properties);
 
         if (properties.containsKey(INVERTED_INDEX_IMP_LIB_KEY)) {

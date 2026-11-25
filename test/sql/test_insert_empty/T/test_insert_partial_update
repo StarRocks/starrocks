@@ -15,7 +15,6 @@ insert into t_non_replicated_storage_multi_replica_pk (k,v2) select "abc", 10;
 select * from t_non_replicated_storage_multi_replica_pk;
 
 -- name: test_insert_partial_update_with_inverted_index @native
-ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
 CREATE TABLE t_gin (
     pk BIGINT NOT NULL,
     v1 INT NOT NULL DEFAULT '0',
