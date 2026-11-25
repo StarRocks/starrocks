@@ -738,14 +738,24 @@ const OlapReaderStatistics& TabletReader::compaction_stats() const {
 }
 
 TabletReader::RealtimeStats TabletReader::realtime_stats() const {
-    RealtimeStats result{_stats.raw_rows_read, _stats.bytes_read, _stats.decompress_ns, _stats.vec_cond_ns,
-                         _stats.del_filter_ns};
+    RealtimeStats result;
+    result.raw_rows_read = _stats.raw_rows_read;
+    result.bytes_read = _stats.bytes_read;
+    result.decompress_ns = _stats.decompress_ns;
+    result.vec_cond_ns = _stats.vec_cond_ns;
+    result.del_filter_ns = _stats.del_filter_ns;
+    result.rows_del_filtered_after_read = _stats.rows_del_filtered_after_read;
+    result.remote_bytes_read = _stats.remote_bytes_read_with_prepare();
+    result.compressed_bytes_read_local_disk = _stats.compressed_bytes_read_local_disk;
     for (const auto& rowset_stats : _parallel_rowset_stats) {
         result.raw_rows_read += rowset_stats->raw_rows_read;
         result.bytes_read += rowset_stats->bytes_read;
         result.decompress_ns += rowset_stats->decompress_ns;
         result.vec_cond_ns += rowset_stats->vec_cond_ns;
         result.del_filter_ns += rowset_stats->del_filter_ns;
+        result.rows_del_filtered_after_read += rowset_stats->rows_del_filtered_after_read;
+        result.remote_bytes_read += rowset_stats->remote_bytes_read_with_prepare();
+        result.compressed_bytes_read_local_disk += rowset_stats->compressed_bytes_read_local_disk;
     }
     return result;
 }

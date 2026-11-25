@@ -1141,6 +1141,10 @@ void PipelineDriver::_update_scan_statistics(RuntimeState* state) {
                 _query_runtime_state->update_scan_stats(table_id, scan_rows, scan_bytes);
             }
         }
+        if (state->enable_collect_table_level_scan_stats()) {
+            _query_runtime_state->update_per_scan_stats(scan->get_scan_plan_node_id(),
+                                                        scan->take_scan_audit_counters());
+        }
     }
 }
 

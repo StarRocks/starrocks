@@ -218,6 +218,17 @@ public class AuditEvent {
     @AuditField(value = "QueriedRelations", ignore_empty = true)
     public List<String> queriedRelations = Collections.emptyList();
 
+<<<<<<< HEAD
+=======
+    /** JSON of the read statistics of each scan of the statement, per execution attempt; see ScanStatsRecorder. */
+    @AuditField(value = "ScanStats", ignore_empty = true)
+    public String scanStats = "";
+
+    /** Optional compact JSON identifying the operation target; producers must escape log separators. */
+    @AuditField(value = "Target", ignore_empty = true)
+    public String target = "";
+
+>>>>>>> ca19c5aa042... [Feature][RB-659] Report per-scan read statistics in the audit log (#71038)
     public long readLocalCnt = 0;
     public long readRemoteCnt = 0;
     @AuditField(value = "CacheHitRatio", ignore_empty = true)
@@ -663,6 +674,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setPreparedStmtId(String preparedStmtId) {
             auditEvent.preparedStmtId = preparedStmtId;
+            return this;
+        }
+
+        public AuditEventBuilder setScanStats(String scanStats) {
+            auditEvent.scanStats = scanStats == null ? "" : scanStats;
             return this;
         }
 

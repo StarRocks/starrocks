@@ -17,14 +17,17 @@ package com.starrocks.common.util;
 import com.starrocks.proto.AIExecutionStatisticsPB;
 import com.starrocks.proto.NodeExecStatsItemPB;
 import com.starrocks.proto.PQueryStatistics;
+import com.starrocks.proto.PerScanStatsItemPB;
 import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.thrift.TAIExecutionStatistics;
+import com.starrocks.thrift.TAuditPerScanStatsItem;
 import com.starrocks.thrift.TAuditStatistics;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 
 public class AuditStatisticsUtilTest {
     @Test
@@ -349,5 +352,69 @@ public class AuditStatisticsUtilTest {
         Assertions.assertEquals(ts2.getTransmitted_bytes(), 7);
         Assertions.assertEquals(ts2.getRead_local_cnt(), 8);
         Assertions.assertEquals(ts2.getRead_remote_cnt(), 9);
+    }
+
+    private static PerScanStatsItemPB perScanItem(int planNodeId, Long physical, Long logical, Long output,
+                                                  Long remote, Long cache) {
+        PerScanStatsItemPB item = new PerScanStatsItemPB();
+        item.planNodeId = planNodeId;
+        item.physicalRowsRead = physical;
+        item.logicalRowsRead = logical;
+        item.outputRows = output;
+        item.remoteBytes = remote;
+        item.cacheBytes = cache;
+        return item;
+    }
+
+    private static PerScanStatsItemPB findPerScanItem(PQueryStatistics stats, int planNodeId) {
+        return stats.perScanStatsItems.stream().filter(item -> item.planNodeId == planNodeId).findFirst()
+                .orElse(null);
+    }
+
+    @Test
+    public void testPerScanStatsMergeSumsSamePlanNodeAndKeepsUnsetCounters() {
+        PQueryStatistics from = new PQueryStatistics();
+        from.perScanStatsItems = new ArrayList<>(List.of(
+                perScanItem(1, 10L, 8L, 5L, 100L, 20L),
+                perScanItem(2, null, null, 3L, null, null)));
+        PQueryStatistics to = new PQueryStatistics();
+        AuditStatisticsUtil.mergeProtobuf(from, to);
+        AuditStatisticsUtil.mergeProtobuf(from, to);
+
+        Assertions.assertEquals(2, to.perScanStatsItems.size());
+        PerScanStatsItemPB scan1 = findPerScanItem(to, 1);
+        Assertions.assertEquals(20L, scan1.physicalRowsRead);
+        Assertions.assertEquals(16L, scan1.logicalRowsRead);
+        Assertions.assertEquals(10L, scan1.outputRows);
+        Assertions.assertEquals(200L, scan1.remoteBytes);
+        Assertions.assertEquals(40L, scan1.cacheBytes);
+        PerScanStatsItemPB scan2 = findPerScanItem(to, 2);
+        Assertions.assertEquals(6L, scan2.outputRows);
+        Assertions.assertNull(scan2.physicalRowsRead);
+        Assertions.assertNull(scan2.remoteBytes);
+        // The merged items are copies: the source is left unchanged.
+        Assertions.assertEquals(10L, from.perScanStatsItems.get(0).physicalRowsRead);
+    }
+
+    @Test
+    public void testPerScanStatsThriftRoundTripAndCopy() {
+        PQueryStatistics pb = new PQueryStatistics();
+        pb.perScanStatsItems = new ArrayList<>(List.of(
+                perScanItem(3, 7L, 6L, 2L, 70L, 0L),
+                perScanItem(4, null, null, 1L, null, null)));
+        TAuditStatistics thrift = AuditStatisticsUtil.toThrift(pb);
+        Assertions.assertEquals(2, thrift.getPer_scan_stats_itemsSize());
+        TAuditPerScanStatsItem t4 = thrift.getPer_scan_stats_items().get(1);
+        Assertions.assertTrue(t4.isSetOutput_rows());
+        Assertions.assertFalse(t4.isSetPhysical_rows_read());
+
+        PQueryStatistics back = AuditStatisticsUtil.toProtobuf(thrift);
+        Assertions.assertEquals(7L, findPerScanItem(back, 3).physicalRowsRead);
+        Assertions.assertEquals(0L, findPerScanItem(back, 3).cacheBytes);
+        Assertions.assertNull(findPerScanItem(back, 4).physicalRowsRead);
+
+        PQueryStatistics copy = AuditStatisticsUtil.copyProtobuf(back);
+        Assertions.assertNotSame(back.perScanStatsItems.get(0), copy.perScanStatsItems.get(0));
+        Assertions.assertEquals(6L, findPerScanItem(copy, 3).logicalRowsRead);
     }
 }

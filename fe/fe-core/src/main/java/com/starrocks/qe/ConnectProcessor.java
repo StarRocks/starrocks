@@ -82,6 +82,12 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.AgentBaseQueryRelation;
+import com.starrocks.sql.ast.AlterUserStmt;
+import com.starrocks.sql.ast.CreateTableAsSelectStmt;
+>>>>>>> ca19c5aa042... [Feature][RB-659] Report per-scan read statistics in the audit log (#71038)
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.OriginStatement;
@@ -135,6 +141,8 @@ public class ConnectProcessor {
     private ByteBuffer packetBuf;
 
     protected StmtExecutor executor = null;
+    // Set only by callers that audit a statement another executor ran; see setScanStatsExecutor.
+    private StmtExecutor scanStatsExecutor = null;
     // Whether StmtExecutor.execute() was entered for the statement currently being processed.
     // execute() owns the session diagnostics area: it clears the previous statement's entries on
     // entry and records its own failure on exit. The failure paths below must therefore do that
@@ -381,7 +389,10 @@ public class ConnectProcessor {
         }
 
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
-        ctx.getAuditEventBuilder().setQueriedRelations(queriedRelationsForAudit(executor, parsedStmt));
+        List<String> queriedRelations = queriedRelationsForAudit(executor, parsedStmt);
+        ctx.getAuditEventBuilder().setQueriedRelations(queriedRelations);
+        ctx.getAuditEventBuilder().setScanStats(scanStatsForAudit(scanStatsExecutor != null ? scanStatsExecutor : executor,
+                parsedStmt, statistics, queriedRelations));
 
         ctx.getAuditEventBuilder().setStmt(formatStmt(origStmt, parsedStmt));
 
@@ -505,6 +516,46 @@ public class ConnectProcessor {
     // the statement ran locally or the Leader did not provide them (e.g. an older version).
     // Package-private (would otherwise be private) so ConnectProcessorTest can exercise it directly.
     @VisibleForTesting
+    // The ScanStats audit JSON of a query, DML or CTAS: the one the Leader built when the statement was forwarded,
+    // else built from the executor that ran it.
+    private String scanStatsForAudit(StmtExecutor stmtExecutor, StatementBase parsedStmt, PQueryStatistics statistics,
+                                     List<String> queriedRelations) {
+        if (stmtExecutor == null || !(ctx.getState().isQuery() || parsedStmt instanceof DmlStmt ||
+                parsedStmt instanceof CreateTableAsSelectStmt)) {
+            return null;
+        }
+        if (stmtExecutor.getIsForwardToLeaderOrInit(false)) {
+            LeaderOpExecutor leaderOpExecutor = stmtExecutor.getLeaderOpExecutor();
+            TMasterOpResult leaderResult = leaderOpExecutor == null ? null : leaderOpExecutor.getResult();
+            return leaderResult != null && leaderResult.isSetAudit_scan_stats() ? leaderResult.getAudit_scan_stats()
+                    : null;
+        }
+        return stmtExecutor.getScanStatsForAuditLog(statistics, scanStatsAttemptState(stmtExecutor),
+                queriedRelations != null && !queriedRelations.isEmpty());
+    }
+
+    /**
+     * The executor whose ScanStats an audit reports, for a caller that audits a statement without being the
+     * processor that ran it (task runs).
+     */
+    public void setScanStatsExecutor(StmtExecutor scanStatsExecutor) {
+        this.scanStatsExecutor = scanStatsExecutor;
+    }
+
+    // The state of the attempt a statement ended with, from how the statement ended.
+    private ScanStatsRecorder.AttemptState scanStatsAttemptState(StmtExecutor stmtExecutor) {
+        if (ctx.getState().getStateType() != QueryState.MysqlStateType.ERR) {
+            return ScanStatsRecorder.AttemptState.OK;
+        }
+        if (ctx.getState().getErrType() == QueryState.ErrType.EXEC_TIME_OUT) {
+            return ScanStatsRecorder.AttemptState.TIMEOUT;
+        }
+        if (stmtExecutor.isCancelled()) {
+            return ScanStatsRecorder.AttemptState.CANCELLED;
+        }
+        return ScanStatsRecorder.AttemptState.ERR;
+    }
+
     List<String> queriedRelationsForAudit(StmtExecutor stmtExecutor, StatementBase parsedStmt) {
         List<String> relationsFromLeader = getQueriedRelationsFromLeader(stmtExecutor);
         if (relationsFromLeader != null) {
@@ -1505,8 +1556,14 @@ public class ConnectProcessor {
         // field -- an older leader, or no executor at all -- which makes the follower fall back.
         StmtExecutor executedStmt = ctx.getExecutor();
         if (executedStmt != null) {
-            result.setQueried_relations(AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(
-                    executedStmt.getParsedStmt()));
+            List<String> queriedRelations =
+                    AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(executedStmt.getParsedStmt());
+            result.setQueried_relations(queriedRelations);
+            String scanStats = scanStatsForAudit(executedStmt, executedStmt.getParsedStmt(),
+                    executedStmt.getQueryStatisticsForAuditLog(), queriedRelations);
+            if (scanStats != null) {
+                result.setAudit_scan_stats(scanStats);
+            }
         }
         return result;
     }
