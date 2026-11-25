@@ -1734,6 +1734,36 @@ struct IndexOnlyPredicateChecker {
     }
 };
 
+<<<<<<< HEAD
+=======
+// Expression predicates and the OR subtrees holding one. With `expr_cids`, also any predicate on one of those
+// columns, so that no column is read for both the expression and the non-expression predicates.
+struct ExprPredicateChecker {
+    const std::unordered_set<ColumnId>* expr_cids = nullptr;
+
+    bool operator()(const PredicateColumnNode& node) const {
+        const auto* pred = node.col_pred();
+        return pred->is_expr_predicate() || (expr_cids != nullptr && expr_cids->contains(pred->column_id()));
+    }
+
+    template <CompoundNodeType Type>
+    bool operator()(const PredicateCompoundNode<Type>& node) const {
+        return std::any_of(node.children().begin(), node.children().end(),
+                           [&](const auto& child) { return child.visit(*this); });
+    }
+};
+
+namespace {
+
+StatusOr<roaring::Roaring> evaluate_tree_to_bitmap(
+        const PredicateTree& used_tree, const Schema& schema,
+        const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid,
+        std::vector<rowid_t>* fallback_rowids, const roaring::Roaring& candidate,
+        const std::vector<uint8_t>* dict_code_candidates_by_cid, bool by_rowid, bool bridge_gaps);
+
+} // namespace
+
+>>>>>>> 6c40254efea... [Enhancement][RB-1782] Read across short gaps when evaluating the residual bitmap for filtered vector search (#70524)
 StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
         const PredicateTree& pred_tree, const Schema& schema,
         const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid,
@@ -1759,6 +1789,76 @@ StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
         return candidate;
     }
 
+<<<<<<< HEAD
+=======
+    // The non-expression predicates (=, IN, ranges) run over `candidate` first; the expression predicates (and the OR
+    // subtrees holding one) then run only for the rows they keep, so their (often wide) columns are not read and their
+    // (often expensive) expressions are not computed for rows the cheap predicates already rejected.
+    // Repeat until the expression columns stop growing (a non-expression OR pulled in may bring another column). They
+    // only grow and are bounded by the tree's columns; max_rounds guards a non-monotonic checker. Any split is correct,
+    // the root being an AND of both groups: the fixpoint only keeps a column from being read twice.
+    std::unordered_set<ColumnId> expr_pred_cids;
+    PredicateTree non_expr_pred_tree;
+    PredicateTree expr_pred_tree;
+    const size_t max_rounds = used_tree.column_ids().size() + 1;
+    size_t prev = SIZE_MAX;
+    for (size_t round = 0; round < max_rounds && prev != expr_pred_cids.size(); round++) {
+        prev = expr_pred_cids.size();
+        PredicateAndNode expr_pred_root;
+        PredicateAndNode non_expr_pred_root;
+        used_tree.root().partition_copy(
+                [&](const auto& node) { return node.visit(ExprPredicateChecker{&expr_pred_cids}); }, &expr_pred_root,
+                &non_expr_pred_root);
+        non_expr_pred_tree = PredicateTree::create(std::move(non_expr_pred_root));
+        expr_pred_tree = PredicateTree::create(std::move(expr_pred_root));
+        expr_pred_cids = expr_pred_tree.column_ids();
+    }
+    DCHECK_EQ(prev, expr_pred_cids.size()) << "expression predicate columns did not converge";
+    if (non_expr_pred_tree.empty() || expr_pred_tree.empty()) {
+        if (expr_read_rows != nullptr && !expr_pred_tree.empty()) {
+            *expr_read_rows += candidate.cardinality();
+        }
+        return evaluate_tree_to_bitmap(used_tree, schema, column_iterators_by_cid, fallback_rowids, candidate,
+                                       dict_code_candidates_by_cid, /*by_rowid=*/false,
+                                       /*bridge_gaps=*/expr_pred_tree.empty());
+    }
+    ASSIGN_OR_RETURN(auto survivors,
+                     evaluate_tree_to_bitmap(non_expr_pred_tree, schema, column_iterators_by_cid, fallback_rowids,
+                                             candidate, dict_code_candidates_by_cid, /*by_rowid=*/false,
+                                             /*bridge_gaps=*/true));
+    if (survivors.isEmpty()) {
+        return survivors;
+    }
+    // Sparse survivors are read by rowid. Once they are nearly all of `candidate`, the expression predicates read the
+    // whole candidate like the single pass: cheaper than the survivors' many short runs, at the cost of the few rows
+    // the non-expression predicates rejected.
+    const bool by_rowid = static_cast<double>(survivors.cardinality()) <=
+                          static_cast<double>(candidate.cardinality()) * rowid_read_max_ratio;
+    const roaring::Roaring& expr_input = by_rowid ? survivors : candidate;
+    if (expr_read_rows != nullptr) {
+        *expr_read_rows += expr_input.cardinality();
+    }
+    ASSIGN_OR_RETURN(auto matched,
+                     evaluate_tree_to_bitmap(expr_pred_tree, schema, column_iterators_by_cid, fallback_rowids,
+                                             expr_input, dict_code_candidates_by_cid, by_rowid, /*bridge_gaps=*/false));
+    if (!by_rowid) {
+        matched &= survivors;
+    }
+    return matched;
+}
+
+namespace {
+
+// Read the columns `used_tree` references at the rows in `candidate` and return the rows that satisfy it.
+// Each batch reads its runs in order, or with `by_rowid` only its rows, which is cheaper when they are sparse.
+// `bridge_gaps` lets a contiguous batch read across short gaps between runs: allowed only for trees without
+// expression predicates, which are cheap and safe to evaluate on the rows outside `candidate`.
+StatusOr<roaring::Roaring> evaluate_tree_to_bitmap(
+        const PredicateTree& used_tree, const Schema& schema,
+        const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid,
+        std::vector<rowid_t>* fallback_rowids, const roaring::Roaring& candidate,
+        const std::vector<uint8_t>* dict_code_candidates_by_cid, bool by_rowid, bool bridge_gaps) {
+>>>>>>> 6c40254efea... [Enhancement][RB-1782] Read across short gaps when evaluating the residual bitmap for filtered vector search (#70524)
     // cid -> field index in `schema`.
     std::unordered_map<ColumnId, size_t> cid_2_fid;
     for (size_t i = 0; i < schema.num_fields(); i++) {
@@ -1803,9 +1903,58 @@ StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
     SparseRange<> rows = roaring2range(candidate);
     roaring::Roaring result;
     std::vector<uint8_t> selection;
+<<<<<<< HEAD
     for (auto iter = rows.new_iterator(); iter.has_more();) {
         Range<> r = iter.next(kEvalBatch);
         const uint32_t bn = r.end() - r.begin();
+=======
+    std::vector<rowid_t> rowids;
+    auto rowid_col = UInt32Column::create();
+    // A delete vector scattered over the segment splits `candidate` into many short runs. A batch per run costs about
+    // 1us (column, seek, chunk, tree evaluation) while reading a row costs a few ns, so a contiguous batch reads
+    // across gaps of up to kMaxBridgedGap rows, and the rows it picks up from the gaps are dropped at the end.
+    constexpr rowid_t kMaxBridgedGap = 128;
+    size_t run = 0;
+    rowid_t next_row = rows.empty() ? 0 : rows[0].begin();
+    bool bridged = false;
+    const auto next_span = [&]() {
+        const rowid_t begin = std::max(next_row, rows[run].begin());
+        const rowid_t limit = begin + kEvalBatch;
+        rowid_t end = std::min(rows[run].end(), limit);
+        while (bridge_gaps && end == rows[run].end() && run + 1 < rows.size() &&
+               rows[run + 1].begin() - end <= kMaxBridgedGap && rows[run + 1].begin() < limit) {
+            ++run;
+            bridged = true;
+            end = std::min(rows[run].end(), limit);
+        }
+        if (end == rows[run].end()) {
+            ++run;
+        }
+        next_row = end;
+        return Range<>(begin, end);
+    };
+    auto iter = rows.new_iterator();
+    while (by_rowid ? iter.has_more() : run < rows.size()) {
+        // A batch is one contiguous span, except by rowid: then it takes its rows across the runs of `candidate`.
+        SparseRange<> sub;
+        if (by_rowid) {
+            iter.next_range(kEvalBatch, &sub);
+            rowids.clear();
+            for (size_t i = 0; i < sub.size(); i++) {
+                for (rowid_t id = sub[i].begin(); id < sub[i].end(); id++) {
+                    rowids.push_back(id);
+                }
+            }
+            rowid_col->resize(0);
+            rowid_col->append_numbers(rowids.data(), rowids.size() * sizeof(rowid_t));
+        } else {
+            sub.add(next_span());
+        }
+        const uint32_t bn = sub.span_size();
+        // The segment rowid of chunk row i.
+        const rowid_t first = sub.begin();
+        const auto rowid_at = [&](uint32_t i) -> rowid_t { return by_rowid ? rowids[i] : first + i; };
+>>>>>>> 6c40254efea... [Enhancement][RB-1782] Read across short gaps when evaluating the residual bitmap for filtered vector search (#70524)
 
         // Build a chunk keyed by column id so PredicateTree::evaluate (chunk->get_column_by_id(cid))
         // can evaluate the WHOLE tree -- AND / OR / compound / single-column expr -- not just a
@@ -1842,6 +1991,9 @@ StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
                 result.add(r.begin() + i);
             }
         }
+    }
+    if (bridged) {
+        result &= candidate;
     }
     return result;
 }

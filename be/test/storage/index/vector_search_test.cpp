@@ -1590,6 +1590,48 @@ TEST_F(EvaluatePredTreeBitmapTest, scattered_candidate_ranges) {
     EXPECT_TRUE(expect == got);
 }
 
+TEST_F(EvaluatePredTreeBitmapTest, fragmented_candidate_bridges_short_gaps) {
+    // A scattered delete vector: about half the rows gone in runs and gaps of a few rows, plus one 10000-row gap.
+    // Batches read across the short gaps; the rows a predicate matches inside them must not reach the result, on the
+    // non-expression path (bridged), the expression path (not bridged) and the two combined.
+    roaring::Roaring candidate;
+    uint32_t seed = 1;
+    for (uint32_t i = 0; i < kRows; i++) {
+        seed = seed * 1103515245u + 12345u;
+        if (((seed >> 16) & 1) && (i < 30000 || i >= 40000)) {
+            candidate.add(i);
+        }
+    }
+    roaring::Roaring expect_eq;
+    roaring::Roaring expect_and;
+    for (uint32_t v : candidate) {
+        if (v % 7 == 3) {
+            expect_eq.add(v);
+            if (v >= 50000) {
+                expect_and.add(v);
+            }
+        }
+    }
+
+    std::unique_ptr<ColumnPredicate> eq(new_column_eq_predicate(get_type_info(TYPE_INT), 2, "3"));
+    ASSIGN_OR_ABORT(auto got_eq, evaluate_pred_tree_to_bitmap(single_node_tree(eq.get()), _schema, _iters_by_cid,
+                                                              nullptr, candidate));
+    EXPECT_TRUE(expect_eq == got_eq);
+
+    auto eq_expr = c2_eq_expr(3);
+    ASSIGN_OR_ABORT(auto got_expr, evaluate_pred_tree_to_bitmap(single_node_tree(eq_expr.get()), _schema, _iters_by_cid,
+                                                                nullptr, candidate));
+    EXPECT_TRUE(expect_eq == got_expr);
+
+    std::unique_ptr<ColumnPredicate> ge(new_column_ge_predicate(get_type_info(TYPE_INT), 1, "50000"));
+    PredicateAndNode root;
+    root.add_child(PredicateColumnNode(ge.get()));
+    root.add_child(PredicateColumnNode(eq_expr.get()));
+    ASSIGN_OR_ABORT(auto got_and, evaluate_pred_tree_to_bitmap(PredicateTree::create(std::move(root)), _schema,
+                                                               _iters_by_cid, nullptr, candidate));
+    EXPECT_TRUE(expect_and == got_and);
+}
+
 TEST_F(EvaluatePredTreeBitmapTest, empty_tree_returns_candidate) {
     roaring::Roaring candidate;
     for (uint32_t v : {5u, 100u, 4242u}) {
