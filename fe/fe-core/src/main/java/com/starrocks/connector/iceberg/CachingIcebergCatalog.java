@@ -31,10 +31,12 @@ import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import org.apache.iceberg.BaseMetastoreTableOperations;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.HasTableOperations;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionSpec;
@@ -280,6 +282,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         if (ConnectContext.get() == null || ConnectContext.get().getCommand() == MysqlCommand.COM_QUERY) {
             tableLatestAccessTime.put(icebergTableName, System.currentTimeMillis());
         }
+        evictIfMetadataLost(icebergTableName);
         try {
             if (shouldOnlyReadCache(connectContext)) {
                 Table cachedTable = tables.getIfPresent(icebergTableName);
@@ -295,6 +298,19 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     String.format("Failed to get iceberg table %s.%s.%s", catalogName, dbName, tableName), e);
         } finally {
             TABLE_LOAD_CONTEXT.remove();
+        }
+    }
+
+    // A refresh that finds the table dropped clears the shared operations' metadata, and once refreshed again while
+    // the table is still missing, current() stays null for good. Drop such an entry so the table is loaded again.
+    private void evictIfMetadataLost(IcebergTableName key) {
+        Table cachedTable = tables.getIfPresent(key);
+        if (cachedTable instanceof HasTableOperations hasOps
+                && hasOps.operations() instanceof BaseMetastoreTableOperations ops
+                && ops.currentMetadataLocation() == null
+                && tables.asMap().remove(key, cachedTable)) {
+            LOG.warn("Evicted cached iceberg table {}.{}.{}: it lost its metadata to a refresh that did not find it",
+                    catalogName, key.dbName, key.tableName);
         }
     }
 
