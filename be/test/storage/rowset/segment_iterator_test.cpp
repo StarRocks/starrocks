@@ -2718,28 +2718,6 @@ TEST_F(SegmentIteratorTest, GroupedTaskIntersectsQueryUnionAndPhysicalRange) {
     EXPECT_EQ((std::vector<int64_t>{2, 2, 6, 6, 7, 7}), grouped_read_keys(iter));
 }
 
-TEST_F(SegmentIteratorTest, GroupedTaskConversionRetainsBothIndependentRanges) {
-    auto schema =
-            std::shared_ptr<TabletSchema>(test::TabletSchemaBuilder().create(0, false, TYPE_BIGINT, true).build());
-    auto read_schema = ChunkHelper::convert_schema(schema);
-    SegmentReadOptions original, converted;
-    original.task_range = grouped_test_range(read_schema, -3, 7);
-    original.tablet_range = grouped_test_range(read_schema, 2, 9);
-    ObjectPool pool;
-    ASSERT_OK(original.convert_to(&converted, {TYPE_BIGINT}, &pool));
-    ASSERT_TRUE(converted.task_range);
-    ASSERT_TRUE(converted.tablet_range);
-    EXPECT_EQ(-3, converted.task_range->lower().get(0).get_int64());
-    EXPECT_EQ(7, converted.task_range->upper().get(0).get_int64());
-    EXPECT_TRUE(converted.task_range->inclusive_lower());
-    EXPECT_FALSE(converted.task_range->inclusive_upper());
-    EXPECT_EQ(2, converted.tablet_range->lower().get(0).get_int64());
-    EXPECT_EQ(9, converted.tablet_range->upper().get(0).get_int64());
-    original.task_range.reset();
-    ASSERT_OK(original.convert_to(&converted, {TYPE_BIGINT}, &pool));
-    EXPECT_FALSE(converted.task_range);
-}
-
 TEST_F(SegmentIteratorTest, GroupedTaskRejectsPreparedCacheAndReuse) {
     auto schema =
             std::shared_ptr<TabletSchema>(test::TabletSchemaBuilder().create(0, false, TYPE_BIGINT, true).build());

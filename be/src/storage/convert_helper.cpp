@@ -754,38 +754,4 @@ const FieldConverter* get_field_converter(LogicalType from_type, LogicalType to_
     return nullptr;
 }
 
-Status RowConverter::init(const TabletSchema& in_schema, const TabletSchema& out_schema) {
-    auto num_columns = in_schema.num_columns();
-    _converters.resize(num_columns);
-    _cids.resize(num_columns, 0);
-    for (int i = 0; i < in_schema.num_columns(); ++i) {
-        _cids[i] = i;
-        _converters[i] = get_field_converter(in_schema.column(i).type(), out_schema.column(i).type());
-        if (_converters[i] == nullptr) {
-            return Status::NotSupported("Cannot get field converter");
-        }
-    }
-    return Status::OK();
-}
-
-Status RowConverter::init(const Schema& in_schema, const Schema& out_schema) {
-    auto num_columns = in_schema.num_fields();
-    _converters.resize(num_columns);
-    for (int i = 0; i < num_columns; ++i) {
-        _converters[i] = get_field_converter(in_schema.field(i)->type()->type(), out_schema.field(i)->type()->type());
-        if (_converters[i] == nullptr) {
-            return Status::NotSupported("Cannot get field converter");
-        }
-    }
-    return Status::OK();
-}
-
-void RowConverter::convert(std::vector<Datum>* dst, const std::vector<Datum>& src) const {
-    size_t num_datums = src.size();
-    dst->resize(num_datums);
-    for (size_t i = 0; i < num_datums; ++i) {
-        _converters[i]->convert(&(*dst)[i], src[i]);
-    }
-}
-
 } // namespace starrocks

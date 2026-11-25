@@ -178,8 +178,6 @@ public:
 
     starrocks::StorageAggregateType aggregate_method() const { return _agg_method; }
 
-    FieldPtr convert_to(LogicalType to_type) const;
-
     void add_sub_field(const Field& sub_field);
 
     void set_sub_fields(const std::vector<Field>& sub_fields);
