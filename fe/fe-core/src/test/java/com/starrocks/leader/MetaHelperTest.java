@@ -17,22 +17,16 @@ package com.starrocks.leader;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.InvalidMetaDirException;
-import com.starrocks.common.util.NetUtils;
 import com.starrocks.persist.ImageFormatVersion;
-import com.sun.net.httpserver.HttpServer;
+import com.starrocks.utframe.MockImageSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.OutputStream;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.nio.file.Files;
-import java.util.Random;
 import java.util.UUID;
-import java.util.zip.CRC32;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -178,13 +172,12 @@ public class MetaHelperTest {
      */
     @Test
     public void testDownloadImageFileRejectsBytesThatDoNotMatchTheChecksum() throws Exception {
-        byte[] image = imageBytes();
-        byte[] damaged = image.clone();
-        damaged[1] ^= 0x20;
+        byte[] image = MockImageSource.imageBytes();
         File dir = newImageDir();
-        try (ImageServer server = new ImageServer(damaged, String.valueOf(crc32(image)))) {
-            IOException e = assertThrows(IOException.class,
-                    () -> MetaHelper.downloadImageFile(server.url(), 5000, "147304", dir, ImageFormatVersion.v2));
+        try (MockImageSource source = new MockImageSource(MockImageSource.damaged(image),
+                MockImageSource.checksum(image), 147304, ImageFormatVersion.v2)) {
+            IOException e = assertThrows(IOException.class, () ->
+                    MetaHelper.downloadImageFile(source.imageUrl(), 5000, "147304", dir, ImageFormatVersion.v2));
             Assertions.assertTrue(e.getMessage().contains("checksum"), e.getMessage());
         }
         Assertions.assertArrayEquals(new String[0], dir.list());
@@ -193,20 +186,21 @@ public class MetaHelperTest {
     @Test
     public void testDownloadImageFileRejectsAChecksumThatIsNotANumber() throws Exception {
         File dir = newImageDir();
-        try (ImageServer server = new ImageServer(imageBytes(), "22513?2568")) {
+        try (MockImageSource source = new MockImageSource(MockImageSource.imageBytes(), "22513?2568", 147304,
+                ImageFormatVersion.v2)) {
             assertThrows(IOException.class, () ->
-                    MetaHelper.downloadImageFile(server.url(), 5000, "147304", dir, ImageFormatVersion.v2));
+                    MetaHelper.downloadImageFile(source.imageUrl(), 5000, "147304", dir, ImageFormatVersion.v2));
         }
         Assertions.assertArrayEquals(new String[0], dir.list());
     }
 
     @Test
     public void testDownloadImageFileKeepsAnImageThatMatchesItsChecksum() throws Exception {
-        byte[] image = imageBytes();
-        String checksum = String.valueOf(crc32(image));
+        byte[] image = MockImageSource.imageBytes();
+        String checksum = MockImageSource.checksum(image);
         File dir = newImageDir();
-        try (ImageServer server = new ImageServer(image, checksum)) {
-            MetaHelper.downloadImageFile(server.url(), 5000, "147304", dir, ImageFormatVersion.v2);
+        try (MockImageSource source = new MockImageSource(image, checksum, 147304, ImageFormatVersion.v2)) {
+            MetaHelper.downloadImageFile(source.imageUrl(), 5000, "147304", dir, ImageFormatVersion.v2);
         }
         Assertions.assertArrayEquals(image, Files.readAllBytes(new File(dir, "image.147304").toPath()));
         Assertions.assertEquals(checksum, Files.readString(new File(dir, "checksum.147304").toPath()));
@@ -218,10 +212,10 @@ public class MetaHelperTest {
      */
     @Test
     public void testDownloadImageFileAcceptsAV1ImageWithoutAChecksum() throws Exception {
-        byte[] image = imageBytes();
+        byte[] image = MockImageSource.imageBytes();
         File dir = newImageDir();
-        try (ImageServer server = new ImageServer(image, null)) {
-            MetaHelper.downloadImageFile(server.url(), 5000, "147304", dir, ImageFormatVersion.v1);
+        try (MockImageSource source = new MockImageSource(image, null, 147304, ImageFormatVersion.v1)) {
+            MetaHelper.downloadImageFile(source.imageUrl(), 5000, "147304", dir, ImageFormatVersion.v1);
         }
         Assertions.assertArrayEquals(image, Files.readAllBytes(new File(dir, "image.147304").toPath()));
         Assertions.assertFalse(new File(dir, "checksum.147304").exists());
@@ -234,65 +228,17 @@ public class MetaHelperTest {
     @Test
     public void testDownloadImageFileRejectsAV2ImageWithoutAChecksum() throws Exception {
         File dir = newImageDir();
-        try (ImageServer server = new ImageServer(imageBytes(), null)) {
+        try (MockImageSource source = new MockImageSource(MockImageSource.imageBytes(), null, 147304,
+                ImageFormatVersion.v2)) {
             assertThrows(IOException.class, () ->
-                    MetaHelper.downloadImageFile(server.url(), 5000, "147304", dir, ImageFormatVersion.v2));
+                    MetaHelper.downloadImageFile(source.imageUrl(), 5000, "147304", dir, ImageFormatVersion.v2));
         }
         Assertions.assertArrayEquals(new String[0], dir.list());
-    }
-
-    private static byte[] imageBytes() {
-        byte[] bytes = new byte[256 * 1024];
-        new Random(42).nextBytes(bytes);
-        // the meta version in the image header
-        bytes[0] = 0;
-        bytes[1] = 0;
-        bytes[2] = 0;
-        bytes[3] = 4;
-        return bytes;
-    }
-
-    private static long crc32(byte[] bytes) {
-        CRC32 crc = new CRC32();
-        crc.update(bytes);
-        return crc.getValue();
     }
 
     private File newImageDir() {
         File dir = new File(testDir, "image/v2");
         Assertions.assertTrue(dir.mkdirs());
         return dir;
-    }
-
-    /**
-     * Serves one image the way MetaBaseAction does: with X-Image-Size and, when given, X-Image-Checksum.
-     */
-    private static class ImageServer implements AutoCloseable {
-        private final HttpServer server;
-
-        ImageServer(byte[] body, String checksum) throws IOException {
-            server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-            server.createContext("/image", exchange -> {
-                exchange.getResponseHeaders().set(MetaHelper.X_IMAGE_SIZE, String.valueOf(body.length));
-                if (checksum != null) {
-                    exchange.getResponseHeaders().set(MetaHelper.X_IMAGE_CHECKSUM, checksum);
-                }
-                exchange.sendResponseHeaders(200, body.length);
-                try (OutputStream out = exchange.getResponseBody()) {
-                    out.write(body);
-                }
-            });
-            server.start();
-        }
-
-        String url() {
-            return "http://" + NetUtils.getHostPortInAccessibleFormat(server.getAddress().getHostString(),
-                    server.getAddress().getPort()) + "/image?version=147304";
-        }
-
-        @Override
-        public void close() {
-            server.stop(0);
-        }
     }
 }
