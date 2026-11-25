@@ -299,16 +299,16 @@ public class SharedTableCacheTest {
             sb.append((char) ('A' + i % 26));
         }
         String[][] pairs = {
-                {"{\"location\":\"\u0101\"}", "{\"location\":\"\u0201\"}"},
-                {"{\"k\":\"\uD800\"}", "{\"k\":\"\uD801\"}"},
-                {"{\"k\":\"\uD800\"}", "{\"k\":\"?\"}"},
-                {sb + "\u0101", sb + "\u0201"},
-                {"\u0001\u0000", "\u0100"},
+                {"{\"location\":\"\u0101\"}", "{\"location\":\"\u0201\"}"}, // two non-ASCII letters
+                {"{\"k\":\"\uD800\"}", "{\"k\":\"\uD801\"}"}, // two lone high surrogates
+                {"{\"k\":\"\uD800\"}", "{\"k\":\"?\"}"}, // lone high surrogate vs '?'
+                {sb + "\u0101", sb + "\u0201"}, // non-ASCII past the first chunk
+                {"\u0001\u0000", "\u0100"}, // ASCII bytes spelling a UTF-16 code unit
         };
         for (String[] pair : pairs) {
             assertNotEquals(SharedTableCache.sha256(pair[0]), SharedTableCache.sha256(pair[1]));
         }
-        String json = "{\"t\":\"\u4e2d\u6587\uD83D\uDE00\"}";
+        String json = "{\"t\":\"\u4e2d\u6587\uD83D\uDE00\"}"; // CJK text plus an emoji surrogate pair
         assertEquals(SharedTableCache.sha256(json), SharedTableCache.sha256(new String(json.toCharArray())));
     }
 
