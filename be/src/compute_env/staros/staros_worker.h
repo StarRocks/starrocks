@@ -199,6 +199,9 @@ private:
     // `add_shard`. Never taken inside `_mtx`; `keep_borrowed_shard_info` takes `_mtx` inside it.
     mutable std::mutex _borrowed_mtx;
     std::unique_ptr<Cache> _borrowed_cache;
+    // Filesystems by the hash of their configuration. `starlet_filesystem_instance_cache_capacity` is a number of
+    // filesystems; the cache charges each its handle and key as well, so its capacity is converted, see
+    // `fs_cache_capacity`.
     std::unique_ptr<Cache> _fs_cache;
     add_shard_listener _add_shard_listener;
     TableMetricsManager* _table_metrics_mgr = nullptr;
