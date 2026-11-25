@@ -1007,6 +1007,32 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testSignedIntervalLiteral() throws Exception {
+        // Trino keeps the sign in front of the quoted value apart from the value.
+        assertPlanContains("select date '2022-01-03' + interval -'1' day;", "<slot 2> : '2022-01-02'");
+        assertPlanContains("select date '2022-01-03' - interval -'1' day;", "<slot 2> : '2022-01-04'");
+        assertPlanContains("select date '2022-01-03' + interval -'-1' day;", "<slot 2> : '2022-01-04'");
+        assertPlanContains("select date '2022-01-03' + interval '-1' day;", "<slot 2> : '2022-01-02'");
+        assertPlanContains("select date '2022-03-31' + interval -'1' month;", "<slot 2> : '2022-02-28'");
+        assertPlanContains("select timestamp '2022-01-01 00:00:00' + interval -'90' minute;",
+                "<slot 2> : '2021-12-31 22:30:00'");
+
+        // A same-unit qualifier is a single-unit interval and keeps the sign the same way.
+        assertPlanContains("select date '2022-01-03' + interval '1' day to day;", "<slot 2> : '2022-01-04'");
+        assertPlanContains("select date '2022-01-03' + interval -'1' day to day;", "<slot 2> : '2022-01-02'");
+        assertPlanContains("select date '2022-01-03' + interval -'-1' day to day;", "<slot 2> : '2022-01-04'");
+        assertPlanContains("select date '2022-01-03' + interval '1' year to year;", "<slot 2> : '2023-01-03'");
+        assertPlanContains("select date '2022-01-03' + interval -'1' year to year;", "<slot 2> : '2021-01-03'");
+        assertPlanContains("select date '2022-01-03' + interval -'-1' year to year;", "<slot 2> : '2023-01-03'");
+
+        // A compound qualifier is rejected instead of losing its end field.
+        analyzeFail("select date '2022-01-03' + interval '1 12' day to hour",
+                "does not support the interval qualifier DAY TO HOUR");
+        analyzeFail("select date '2022-01-03' + interval '1-2' year to month",
+                "does not support the interval qualifier YEAR TO MONTH");
+    }
+
+    @Test
     public void selectDoubleLiteral() throws Exception {
         String sql = "select 1.0";
         assertPlanContains(sql, "<slot 2> : 1.0");
@@ -1214,6 +1240,54 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "cross join unnest(plat.pid) as t(plat_id);";
         assertPlanContains(sql, "[1,2]", "[10: expr,11: expr]", "returnTypes: [TINYINT, ARRAY<TINYINT>]",
                 "returnTypes: [TINYINT]");
+    }
+
+    @Test
+    public void testStandaloneUnnest() throws Exception {
+        // Only the UNNEST columns are visible, not the one-row relation it is joined to.
+        assertOutputColumns("select * from unnest(array[1, 2])", List.of("unnest"));
+        assertOutputColumns("select * from unnest(array[1, 2]) as t(x)", List.of("x"));
+        assertOutputColumns("select t.* from unnest(array[1, 2], array['a', 'b']) as t(x, y)", List.of("x", "y"));
+        assertPlanContains("select x from unnest(array[1, 2]) as t(x)", "tableFunctionName: unnest");
+
+        // UNNEST on the left side of a join
+        String sql = "select t.x, t0.v2 from unnest(array[1, 2]) as t(x) join t0 on t.x = t0.v1";
+        assertOutputColumns(sql, List.of("x", "v2"));
+        assertPlanContains(sql, "tableFunctionName: unnest");
+
+        // UNNEST in a CTE
+        sql = "with xs as (select x from unnest(array[1, 2, 3]) as t(x)) select count(*) from xs";
+        assertPlanContains(sql, "tableFunctionName: unnest");
+
+        // UNNEST on the right side of a join still references its left input.
+        sql = "select t0.v1, t.x from t0 cross join unnest(array[t0.v2, t0.v3]) as t(x)";
+        assertOutputColumns(sql, List.of("v1", "x"));
+        assertPlanContains(sql, "tableFunctionName: unnest", "[2: v2,3: v3]");
+
+        // A USING join on UNNEST joins and outputs the UNNEST columns, not the one-row relation's column.
+        sql = "select x from unnest(array[1, 2]) as u(x) join (select 2 as x) as s using (x)";
+        assertPlanContains(sql, "OUTPUT EXPRS:2: x", "predicates: 2: x = 2");
+        sql = "select x, y from unnest(array[1, 2], array['a', 'b']) as u(x, y) " +
+                "join (select 2 as x, 'b' as y) as s using (x, y)";
+        assertPlanContains(sql, "OUTPUT EXPRS:2: x | 3: y", "predicates: 2: x = 2, 3: y = 'b'");
+        sql = "select x from unnest(array[1, 2]) as u(x) full join (select 2 as x union all select 3 as x) as s using (x)";
+        assertPlanContains(sql, "equal join conjunct: 8: expr = 2: x", "coalesce(2: x, 8: expr)");
+
+        // A subquery in the JOIN ON clause can reference the UNNEST alias.
+        sql = "select u.x from unnest(array[1, 2]) as u(x) join (select 1 as k) as s " +
+                "on exists (select 1 from (values (1)) as r(y) where r.y = u.x)";
+        assertPlanContains(sql, "LEFT SEMI JOIN", "equal join conjunct: 2: x = 6: y");
+
+        analyzeFail("select * from unnest(array[1, 2]) as t(x, y)", "has 1 columns available but 2 columns specified");
+        analyzeFail("select * from unnest(array[10, 20]) with ordinality",
+                "does not support UNNEST WITH ORDINALITY");
+        analyzeFail("select t0.v1, u.x, u.n from t0 cross join unnest(array[t0.v2]) with ordinality as u(x, n)",
+                "does not support UNNEST WITH ORDINALITY");
+    }
+
+    private static void assertOutputColumns(String sql, List<String> expected) {
+        QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
+        Assertions.assertEquals(expected, statement.getQueryRelation().getColumnOutputNames());
     }
 
     @Test

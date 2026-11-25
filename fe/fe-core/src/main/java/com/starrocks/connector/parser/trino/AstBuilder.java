@@ -78,6 +78,7 @@ import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
+import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryPeriod;
@@ -395,7 +396,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 collect(Collectors.toList());
         boolean isDistinct = node.getSelect().isDistinct();
         SelectList selectList = new SelectList(selectListItems, isDistinct);
-        Relation from = (Relation) processOptional(node.getFrom(), context);
+        Relation from = normalizeStandaloneUnnest((Relation) processOptional(node.getFrom(), context));
 
         // from == null means a statement without from or from dual, add a single row of null values here
         if (from == null) {
@@ -479,6 +480,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitUnnest(Unnest node, ParseTreeContext context) {
+        if (node.isWithOrdinality()) {
+            throw unsupportedException("Trino Parser on StarRocks does not support UNNEST WITH ORDINALITY now");
+        }
         List<Expr> arguments = visit(node.getExpressions(), context, Expr.class);
         List<Expr> expressions = new ArrayList<>();
 
@@ -517,6 +521,22 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         FunctionCallExpr functionCallExpr = new FunctionCallExpr("unnest", expressions);
         TableFunctionRelation tableFunctionRelation = new TableFunctionRelation(functionCallExpr);
         return tableFunctionRelation;
+    }
+
+    // Trino accepts UNNEST anywhere a relation can appear, but StarRocks only accepts a bare table function on
+    // the right side of a lateral join. A standalone UNNEST, or one on the left side of a join, has no left input
+    // to correlate with, so normalize it the same way as TABLE(unnest(...)): a lateral join with a one-row
+    // relation that exposes only the UNNEST columns. An UNNEST on the right side of a join stays attached to its
+    // left input and can still reference that input's columns.
+    private static Relation normalizeStandaloneUnnest(Relation relation) {
+        if (relation instanceof TableFunctionRelation) {
+            NormalizedTableFunctionRelation normalized =
+                    new NormalizedTableFunctionRelation((TableFunctionRelation) relation);
+            // Expose the UNNEST alias on the wrapper too, so a subquery in a JOIN ON clause can resolve it.
+            normalized.setAlias(relation.getResolveTableName());
+            return normalized;
+        }
+        return relation;
     }
 
     @Override
@@ -654,7 +674,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitJoin(Join node, ParseTreeContext context) {
-        Relation left = (Relation) visit(node.getLeft(), context);
+        Relation left = normalizeStandaloneUnnest((Relation) visit(node.getLeft(), context));
         Relation right = (Relation) visit(node.getRight(), context);
         JoinOperator joinType = JOIN_TYPE_MAP.get(node.getType());
         if (joinType == null) {
@@ -1056,7 +1076,23 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitIntervalLiteral(IntervalLiteral node, ParseTreeContext context) {
-        return new com.starrocks.sql.ast.IntervalLiteral(new com.starrocks.analysis.StringLiteral(node.getValue()),
+        // StarRocks intervals have a single unit, so translating DAY TO SECOND as DAY would change the value.
+        // A same-unit qualifier such as DAY TO DAY is a plain DAY interval.
+        if (node.getEndField().isPresent() && node.getEndField().get() != node.getStartField()) {
+            throw unsupportedException(String.format("Trino parser on StarRocks does not support the interval " +
+                    "qualifier %s TO %s now", node.getStartField(), node.getEndField().get()));
+        }
+        // Trino keeps the sign of INTERVAL -'1' DAY apart from its value. Apply it to the value, so that -'1' is
+        // -1 day and -'-1' is 1 day.
+        String value = node.getValue().trim();
+        if (node.getSign() == IntervalLiteral.Sign.NEGATIVE) {
+            if (value.startsWith("-")) {
+                value = value.substring(1);
+            } else {
+                value = "-" + (value.startsWith("+") ? value.substring(1) : value);
+            }
+        }
+        return new com.starrocks.sql.ast.IntervalLiteral(new com.starrocks.analysis.StringLiteral(value),
                 new UnitIdentifier(node.getStartField().toString()));
     }
 

@@ -41,7 +41,7 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 - [Docker](https://docs.docker.com/engine/install/)
 - 分配给 Docker 的 4 GB RAM
-- 分配给 Docker 的 10 GB 可用磁盘空间
+- 分配给 Docker 的 20 GB 可用磁盘空间
 
 ### SQL 客户端
 
@@ -158,7 +158,7 @@ container quickstart-minio_mc-1 exited (0)
 
 要将 MinIO 用作 StarRocks 的对象存储，StarRocks 需要一个 MinIO 访问密钥。访问密钥是在 Docker 服务启动时生成的。为了帮助您更好地理解 StarRocks 如何连接到 MinIO，您应该验证密钥是否存在。
 
-浏览到 [http://localhost:9001/access-keys](http://localhost:9001/access-keys) 用户名和密码在 Docker compose 文件中指定，分别是 `miniouser` 和 `miniopassword`。您应该看到有一个访问密钥。密钥是 `AAAAAAAAAAAAAAAAAAAA`，您无法在 MinIO 控制台中看到密钥，但它在 Docker compose 文件中是 `BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB`：
+浏览到 [http://localhost:9001/console/identity](http://localhost:9001/console/identity) 用户名和密码在 Docker compose 文件中指定，分别是 `miniouser` 和 `miniopassword`。您应该看到有一个访问密钥。密钥是 `AAAAAAAAAAAAAAAAAAAA`，您无法在 MinIO 控制台中看到密钥，但它在 Docker compose 文件中是 `BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB`：
 
 ![查看 MinIO 访问密钥](../_assets/quick-start/MinIO-view-key.png)
 
@@ -184,7 +184,7 @@ docker compose run minio_mc
     LOCATIONS = ("s3://my-starrocks-bucket/")
 ```
 
-打开 [http://localhost:9001/buckets](http://localhost:9001/buckets) 并为存储卷添加一个 bucket。将 bucket 命名为 `my-starrocks-bucket`。接受列出的三个选项的默认值。
+打开 [http://localhost:9001/console/buckets](http://localhost:9001/console/buckets) 并为存储卷添加一个 bucket。将 bucket 命名为 `my-starrocks-bucket`。接受列出的三个选项的默认值。
 
 ---
 
@@ -448,7 +448,7 @@ curl --location-trusted -u root             \
 
 ## 验证数据是否存储在 MinIO 中
 
-打开 MinIO [http://localhost:9001/browser/my-starrocks-bucket](http://localhost:9001/browser/my-starrocks-bucket) 并验证您在 `my-starrocks-bucket/` 下是否有条目
+打开 MinIO [http://localhost:9001/console/browser/my-starrocks-bucket](http://localhost:9001/console/browser/my-starrocks-bucket) 并验证您在 `my-starrocks-bucket/` 下是否有条目
 
 :::tip
 `my-starrocks-bucket/` 下的文件夹名称是在加载数据时生成的。您应该在 `my-starrocks-bucket` 下看到一个目录，然后在其下看到两个目录。在这些目录中，您会找到数据、元数据或模式条目。
