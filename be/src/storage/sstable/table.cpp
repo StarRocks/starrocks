@@ -426,8 +426,12 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
     for (auto it = begin; it != end; ++it, ++i) {
         Slice k = keys[*it];
         if (key_dict != nullptr) {
-            key_dict->encode(k, &stored_key);
-            k = Slice(stored_key);
+            if (options.key_encode_cache != nullptr) {
+                k = options.key_encode_cache->encode(rep_->key_dict, keys, *it);
+            } else {
+                key_dict->encode(k, &stored_key);
+                k = Slice(stored_key);
+            }
         }
         const bool timed = i == next_timed;
         int64_t clock_read_ns = 0;

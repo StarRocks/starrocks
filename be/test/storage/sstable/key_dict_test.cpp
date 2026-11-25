@@ -222,6 +222,29 @@ TEST(KeyDictTest, test_values_sharing_long_prefixes) {
     }
 }
 
+TEST(KeyDictTest, test_encode_cache) {
+    auto dict = make_dict();
+    // The same values in another object, as two sstables loading their own copy would have.
+    std::string data;
+    dict->serialize(&data);
+    ASSIGN_OR_ABORT(auto same, KeyDict::deserialize(Slice(data)));
+    ASSIGN_OR_ABORT(auto other, KeyDict::create(kLayout, {{1, {enc_middle("banana")}}}));
+    ASSERT_TRUE(dict->same_as(*same));
+    ASSERT_FALSE(dict->same_as(*other));
+
+    auto keys = make_keys(300, 4);
+    std::vector<Slice> slices(keys.begin(), keys.end());
+    KeyEncodeCache cache(slices.size());
+    std::string expected;
+    std::mt19937 rng(9);
+    for (int round = 0; round < 3000; ++round) {
+        const size_t index = rng() % slices.size();
+        const auto& d = round % 3 == 0 ? dict : (round % 3 == 1 ? same : other);
+        d->encode(slices[index], &expected);
+        ASSERT_EQ(expected, cache.encode(d, slices.data(), index).to_string()) << round;
+    }
+}
+
 TEST(KeyDictTest, test_serialize) {
     auto dict = make_dict();
     std::string data;
@@ -459,14 +482,20 @@ protected:
             slices.emplace_back(lookups[j]);
             indexes.insert(j);
         }
-        std::vector<std::string> values(lookups.size());
-        ASSERT_OK(table->MultiGet(read_options, slices.data(), indexes.begin(), indexes.end(), &values));
-        for (size_t j = 0; j < lookups.size(); ++j) {
-            auto it = std::lower_bound(keys.begin(), keys.end(), lookups[j]);
-            if (it != keys.end() && *it == lookups[j]) {
-                ASSERT_EQ(fmt::format("value_{}", it - keys.begin()), values[j]);
-            } else {
-                ASSERT_TRUE(values[j].empty()) << j;
+        // Without and with an encode cache, which the second lookup finds already filled.
+        KeyEncodeCache cache(lookups.size());
+        for (KeyEncodeCache* key_encode_cache : {static_cast<KeyEncodeCache*>(nullptr), &cache, &cache}) {
+            ReadOptions get_options;
+            get_options.key_encode_cache = key_encode_cache;
+            std::vector<std::string> values(lookups.size());
+            ASSERT_OK(table->MultiGet(get_options, slices.data(), indexes.begin(), indexes.end(), &values));
+            for (size_t j = 0; j < lookups.size(); ++j) {
+                auto it = std::lower_bound(keys.begin(), keys.end(), lookups[j]);
+                if (it != keys.end() && *it == lookups[j]) {
+                    ASSERT_EQ(fmt::format("value_{}", it - keys.begin()), values[j]);
+                } else {
+                    ASSERT_TRUE(values[j].empty()) << j;
+                }
             }
         }
 
@@ -512,8 +541,16 @@ TEST_F(KeyDictTableTest, test_sampled_dictionary) {
     build("sampled_plain.sst", keys, nullptr, &plain);
     ASSERT_EQ(nullptr, plain.table->key_dict());
     ASSERT_LT(built.file_size, plain.file_size);
-    ASSERT_LT(built.table->index_block_memory_usage(), plain.table->index_block_memory_usage() + dict->memory_usage());
     verify(plain.table.get(), keys);
+
+    // The dictionary shrinks the blocks along with the entries, so a block holds about as many entries as before
+    // and a point lookup reads no more of them. Sampling every index entry counts the blocks.
+    std::vector<std::string> dict_blocks;
+    std::vector<std::string> plain_blocks;
+    ASSERT_OK(built.table->sample_keys(&dict_blocks, 0));
+    ASSERT_OK(plain.table->sample_keys(&plain_blocks, 0));
+    ASSERT_GT(dict_blocks.size(), plain_blocks.size() * 7 / 10);
+    ASSERT_LT(dict_blocks.size(), plain_blocks.size() * 14 / 10);
 }
 
 TEST_F(KeyDictTableTest, test_exact_dictionary_when_smaller_than_sample) {

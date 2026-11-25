@@ -421,9 +421,12 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
     if (key_indexes->empty() || _sstable_filesets.empty()) {
         return Status::OK();
     }
+    // A key is looked up in one sstable of each fileset that may hold it; those sstables usually have the same key
+    // dictionary, so encode the key once per dictionary for all of them.
+    sstable::KeyEncodeCache key_encode_cache(n);
     for (auto iter = _sstable_filesets.rbegin(); iter != _sstable_filesets.rend(); ++iter) {
         KeyIndexSet found_key_indexes;
-        RETURN_IF_ERROR((*iter)->multi_get(keys, *key_indexes, version, values, &found_key_indexes));
+        RETURN_IF_ERROR((*iter)->multi_get(keys, *key_indexes, version, values, &found_key_indexes, &key_encode_cache));
         set_difference(key_indexes, found_key_indexes);
         if (key_indexes->empty()) {
             break;

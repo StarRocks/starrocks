@@ -310,11 +310,13 @@ Status PersistentIndexSstable::build_tombstone_sstable(const Slice* sorted_keys,
 }
 
 Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version,
-                                         IndexValue* values, KeyIndexSet* found_key_indexes) const {
+                                         IndexValue* values, KeyIndexSet* found_key_indexes,
+                                         sstable::KeyEncodeCache* key_encode_cache) const {
     std::vector<std::string> index_value_with_vers(key_indexes.size());
     sstable::ReadIOStat stat;
     sstable::ReadOptions options;
     options.stat = &stat;
+    options.key_encode_cache = key_encode_cache;
     // Catch corrupted data blocks as Corruption (instead of silently returning wrong
     // index values) so the drop-cache-and-retry below can heal a bad local cache.
     options.verify_checksums = config::lake_pk_index_sst_verify_checksum;

@@ -26,6 +26,7 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/sstable/comparator.h"
+#include "storage/sstable/key_dict.h"
 
 namespace starrocks {
 
@@ -53,8 +54,9 @@ public:
     const std::string& standalone_sstable_filename() const;
 
     // multi get from sstable fileset
+    // |key_encode_cache|: optional, see PersistentIndexSstable::multi_get().
     Status multi_get(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version, IndexValue* values,
-                     KeyIndexSet* found_key_indexes) const;
+                     KeyIndexSet* found_key_indexes, sstable::KeyEncodeCache* key_encode_cache = nullptr) const;
 
     void get_all_sstable_pbs(PersistentIndexSstableMetaPB* sstable_pbs) const;
 

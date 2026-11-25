@@ -90,8 +90,10 @@ public:
     // |version| : when < 0, means we want the latest version.
     // |values| : result array of get, should have some count as keys.
     // |found_key_indexes| : the index of key array that we found, it should be the subset of key_indexes_info
+    // |key_encode_cache| : optional; when the sstable dictionary encodes its keys, the stored forms of |keys| are
+    //                      kept there and reused by the other sstables of the same lookup with the same dictionary.
     Status multi_get(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version, IndexValue* values,
-                     KeyIndexSet* found_key_indexes) const;
+                     KeyIndexSet* found_key_indexes, sstable::KeyEncodeCache* key_encode_cache = nullptr) const;
 
     sstable::Iterator* new_iterator(const sstable::ReadOptions& options) { return _sst->NewIterator(options); }
 

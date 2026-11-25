@@ -4,6 +4,8 @@
 
 #include "storage/sstable/table_builder.h"
 
+#include <algorithm>
+
 #include "base/compression/compression_headers.h"
 #include "base/hash/crc32c.h"
 #include "base/string/slice.h"
@@ -19,6 +21,9 @@
 #include "storage/sstable/key_dict.h"
 
 namespace starrocks::sstable {
+
+// Smallest data block a table with a key dictionary is cut into.
+static constexpr size_t kMinKeyDictBlockSize = 256;
 
 struct TableBuilder::Rep {
     Rep(const Options& opt, WritableFile* f)
@@ -69,6 +74,9 @@ struct TableBuilder::Rep {
     std::shared_ptr<const KeyDict> key_dict;
     std::string encoded_key;
     uint64_t num_stored{0};
+    // Bytes of the entries as given and as stored, to scale the data block size by.
+    uint64_t logical_entry_bytes{0};
+    uint64_t stored_entry_bytes{0};
     // The entries held back while the dictionary is not chosen yet: key and value lengths, and their bytes.
     bool sampling{false};
     std::vector<std::pair<uint32_t, uint32_t>> sample_sizes;
@@ -201,7 +209,17 @@ Status TableBuilder::AddStored(const Slice& logical_key, const Slice& value) {
     r->data_block.Add(key, value);
 
     const size_t estimated_block_size = r->data_block.CurrentSizeEstimate();
-    if (estimated_block_size >= r->options.block_size) {
+    size_t block_size = r->options.block_size;
+    if (r->key_dict != nullptr) {
+        // Keep about as many entries in a block as without the dictionary. A point lookup reads a whole block, and
+        // with block_size bytes of shorter entries it would read more bytes than before: shorter entries also
+        // compress less.
+        r->logical_entry_bytes += logical_key.get_size() + value.get_size();
+        r->stored_entry_bytes += key.get_size() + value.get_size();
+        block_size = std::max<size_t>(kMinKeyDictBlockSize,
+                                      r->options.block_size * r->stored_entry_bytes / r->logical_entry_bytes);
+    }
+    if (estimated_block_size >= block_size) {
         Flush();
     }
     return Status::OK();

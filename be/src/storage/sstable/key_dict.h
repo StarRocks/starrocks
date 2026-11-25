@@ -83,6 +83,9 @@ public:
     const std::vector<ColumnDict>& columns() const { return _columns; }
     size_t memory_usage() const { return _memory_usage; }
 
+    // Whether |other| encodes every key the same way, i.e. has the same layout and dictionaries.
+    bool same_as(const KeyDict& other) const;
+
     static uint32_t code_width(size_t cardinality) { return cardinality <= 127 ? 1 : 2; }
 
 private:
@@ -101,6 +104,8 @@ private:
     // Number of leading layout columns that have to be parsed: up to and including the last dictionary column.
     size_t _parsed_columns = 0;
     size_t _memory_usage = 0;
+    // Hash of the layout and dictionaries, to tell different dictionaries apart cheaply in same_as().
+    size_t _fingerprint = 0;
 };
 
 // How a TableBuilder dictionary encodes the keys it is given. See TableBuilder::Add.
@@ -157,6 +162,32 @@ private:
     uint32_t _max_cardinality;
     std::vector<ColumnState> _states;
     size_t _parsed_columns = 0;
+};
+
+// The stored forms of one batch of lookup keys, kept for the sstables of the lookup whose dictionaries are the same:
+// a key is looked up in one sstable of each fileset that may hold it, and those sstables usually share their
+// dictionary values, so encoding the key once per distinct dictionary rather than once per sstable saves most of the
+// encoding work. Not thread-safe; one per batch.
+class KeyEncodeCache {
+public:
+    // |num_keys|: size of the key array the lookups index into.
+    explicit KeyEncodeCache(size_t num_keys) : _num_keys(num_keys) {}
+
+    // Stored form of keys[index] under |dict|. Valid until the next call.
+    Slice encode(const std::shared_ptr<const KeyDict>& dict, const Slice* keys, size_t index);
+
+private:
+    struct Entry {
+        std::shared_ptr<const KeyDict> dict;
+        // Where the stored form of each key starts in |data|, or -1 when it has not been encoded yet.
+        std::vector<int64_t> offsets;
+        std::vector<uint32_t> sizes;
+        std::string data;
+    };
+
+    size_t _num_keys;
+    std::vector<Entry> _entries;
+    std::string _scratch;
 };
 
 // Wraps an iterator over dictionary encoded keys: key() returns decoded keys and Seek() takes decoded targets.

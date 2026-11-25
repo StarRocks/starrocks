@@ -127,7 +127,50 @@ Status KeyDict::_init() {
         _parsed_columns = column.column + 1;
     }
     _memory_usage += _columns.size() * sizeof(ColumnDict);
+    std::string serialized;
+    serialize(&serialized);
+    _fingerprint = std::hash<std::string>()(serialized);
     return Status::OK();
+}
+
+bool KeyDict::same_as(const KeyDict& other) const {
+    if (this == &other) {
+        return true;
+    }
+    if (_fingerprint != other._fingerprint || !same_layout(_layout, other._layout) ||
+        _columns.size() != other._columns.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < _columns.size(); ++i) {
+        if (_columns[i].column != other._columns[i].column || _columns[i].values != other._columns[i].values) {
+            return false;
+        }
+    }
+    return true;
+}
+
+Slice KeyEncodeCache::encode(const std::shared_ptr<const KeyDict>& dict, const Slice* keys, size_t index) {
+    DCHECK_LT(index, _num_keys);
+    Entry* entry = nullptr;
+    for (auto& e : _entries) {
+        if (e.dict == dict || e.dict->same_as(*dict)) {
+            entry = &e;
+            break;
+        }
+    }
+    if (entry == nullptr) {
+        entry = &_entries.emplace_back();
+        entry->dict = dict;
+        entry->offsets.assign(_num_keys, -1);
+        entry->sizes.assign(_num_keys, 0);
+    }
+    if (entry->offsets[index] < 0) {
+        entry->dict->encode(keys[index], &_scratch);
+        entry->offsets[index] = static_cast<int64_t>(entry->data.size());
+        entry->sizes[index] = static_cast<uint32_t>(_scratch.size());
+        entry->data.append(_scratch);
+    }
+    return {entry->data.data() + entry->offsets[index], entry->sizes[index]};
 }
 
 void KeyDict::serialize(std::string* dst) const {

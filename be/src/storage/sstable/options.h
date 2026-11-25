@@ -19,6 +19,7 @@ namespace sstable {
 class Comparator;
 class FilterPolicy;
 struct KeyDictOptions;
+class KeyEncodeCache;
 // DB contents are stored in a set of blocks, each of which holds a
 // sequence of key,value pairs.  Each block may be compressed before
 // being stored in a file.  The following enum describes which
@@ -147,6 +148,10 @@ struct ReadOptions {
 
     // Use for multi-thread read scenario, to avoid multiple threads read same file concurrently
     RandomAccessFile* file = nullptr;
+
+    // For MultiGet on a table whose keys are dictionary encoded: where to keep the stored forms of the keys, so
+    // that the other tables of the same lookup with the same dictionary reuse them. See KeyEncodeCache.
+    KeyEncodeCache* key_encode_cache = nullptr;
 };
 
 // Options that control write operations
