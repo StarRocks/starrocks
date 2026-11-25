@@ -823,14 +823,17 @@ fi
 if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$ARROW_SOURCE
     if [ ! -f $PATCHED_MARK ] && [ $ARROW_SOURCE = "arrow-apache-arrow-24.0.0" ] ; then
-        # - arrow-24.0.0-parquet-map-key.patch: allow reading parquet files with Hive-style optional MAP keys.
-        # - arrow-24.0.0-use-zstd-1.6.0.patch: bump bundled zstd from 1.5.7 to 1.6.0 and enable ZSTD_LEGACY_SUPPORT=ON.
+        # Allow reading parquet files with Hive-style optional MAP keys.
         # The remaining arrow-19.0.1 patches are obsolete on 24.0.0: thrift is provided
         # via the system build (-DThrift_SOURCE=SYSTEM); the flight-types reorder and
         # the macOS libtool-version check are fixed upstream.
         apply_patch -p1 $TP_PATCH_DIR/arrow-24.0.0-parquet-map-key.patch
-        apply_patch -p1 $TP_PATCH_DIR/arrow-24.0.0-use-zstd-1.6.0.patch
         touch $PATCHED_MARK
+    fi
+    if [ ! -f $PATCHED_MARK.zstd_1_6_0 ] && [ $ARROW_SOURCE = "arrow-apache-arrow-24.0.0" ] ; then
+        # Bump Arrow's bundled zstd from 1.5.7 to 1.6.0 (CVE-2026-124851).
+        apply_patch -p1 $TP_PATCH_DIR/arrow-24.0.0-use-zstd-1.6.0.patch
+        touch $PATCHED_MARK.zstd_1_6_0
     fi
     cd -
     echo "Finished patching $ARROW_SOURCE"
