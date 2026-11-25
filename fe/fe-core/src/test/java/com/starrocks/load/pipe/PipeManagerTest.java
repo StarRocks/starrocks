@@ -1324,6 +1324,26 @@ public class PipeManagerTest {
     }
 
     @Test
+    public void testDescPipeRedactsCredentials() throws Exception {
+        String name = "desc_redact";
+        createPipe("create pipe " + name + " as insert into tbl1 select * from files('path'='fake://pipe', " +
+                "'format'='parquet', 'aws.s3.access_key'='PROBEAK123', 'aws.s3.secret_key'='PROBESECRET123')");
+        try {
+            DescPipeStmt stmt = (DescPipeStmt) UtFrameUtils.parseStmtWithNewParser("desc pipe " + name, ctx);
+            ShowResultSet result = ShowExecutor.execute(stmt, ctx);
+            String sql = result.getResultRows().get(0).get(6);
+            Assertions.assertFalse(sql.contains("PROBEAK123"), sql);
+            Assertions.assertFalse(sql.contains("PROBESECRET123"), sql);
+            Assertions.assertTrue(sql.contains("'aws.s3.secret_key' = ***"), sql);
+
+            // The stored SQL keeps the credentials: every batch reads its files with it.
+            Assertions.assertTrue(getPipe(name).getOriginSql().contains("PROBESECRET123"));
+        } finally {
+            dropPipe(name);
+        }
+    }
+
+    @Test
     public void testListPipes() throws Exception {
         mockRepoExecutor();
         ExecuteEnv env = Mockito.mock(ExecuteEnv.class);
