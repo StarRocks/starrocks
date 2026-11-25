@@ -20,15 +20,12 @@
 #include <limits>
 #include <unordered_set>
 
-<<<<<<< HEAD
-=======
-#include "base/testutil/assert.h"
 #include "column/array_column.h"
->>>>>>> 981ec22 ([BugFix] Do not use the prepared state for a computed constant array in array_contains_all/seq (#84260))
 #include "column/const_column.h"
 #include "column/map_column.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/mock_vectorized_expr.h"
+#include "testutil/assert.h"
 #include "types/constexpr.h"
 
 namespace starrocks {
@@ -769,12 +766,22 @@ TEST_F(ArrayFunctionsTest, array_contains_nullable_array) {
 // crashed the BE, and a state built from the other input answered from a result prepare() never computed.
 // NOLINTNEXTLINE
 TEST_F(ArrayFunctionsTest, array_contains_all_computed_const_argument) {
-    auto make_const = [](const ArrayRow<int32_t>& value, size_t rows) -> ColumnPtr {
-        auto array = ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, true, {value});
-        return ConstColumn::create(std::move(array), rows);
+    auto make_array = [this](const std::vector<std::vector<int32_t>>& rows) -> ColumnPtr {
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+        for (const auto& row : rows) {
+            DatumArray datums;
+            for (int32_t v : row) {
+                datums.emplace_back(v);
+            }
+            array->append_datum(datums);
+        }
+        return array;
+    };
+    auto make_const = [&](const std::vector<int32_t>& value, size_t rows) -> ColumnPtr {
+        return ConstColumn::create(make_array({value}), rows);
     };
     auto run = [&](bool seq, const std::vector<ColumnPtr>& literals, const Columns& args) {
-        std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_ARRAY_INT_DESC, TYPE_ARRAY_INT_DESC};
+        std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_ARRAY_INT, TYPE_ARRAY_INT};
         std::unique_ptr<FunctionContext> ctx(
                 FunctionContext::create_test_context(std::move(arg_types), TYPE_BOOLEAN_DESC));
         ctx->set_constant_columns(literals);
@@ -799,7 +806,7 @@ TEST_F(ArrayFunctionsTest, array_contains_all_computed_const_argument) {
         EXPECT_EQ("[0, 0, 0]", run(seq, {nullptr, nullptr}, {make_const({1, 2, 3}, 3), make_const({4}, 3)})) << seq;
 
         // one input computed constant, the other a column: no state at all
-        auto column = ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, true, {{1, 2}, {3}});
+        auto column = make_array({{1, 2}, {3}});
         EXPECT_EQ("[1, 0]", run(seq, {nullptr, nullptr}, {column, make_const({1, 2}, 2)})) << seq;
         EXPECT_EQ("[1, 0]", run(seq, {nullptr, nullptr}, {make_const({1, 2}, 2), column})) << seq;
     }
