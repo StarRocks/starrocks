@@ -32,11 +32,15 @@ set partial_update_mode = "row";
 -- !result
 insert into t (id, val) values (1, 111), (2, 222);
 -- result:
+E: (1064, 'Getting analyzing error. Detail message: Partial update of table t must include vector index column v: rows with new keys would get an empty vector, which the vector index rejects. Use UPDATE to change existing rows only..')
+-- !result
+insert into t (id, v) values (1, [0,1,0,0]), (2, [1,0,0,0]);
+-- result:
 -- !result
 select id, val from t order by id;
 -- result:
-1	111
-2	222
+1	10
+2	20
 3	30
 4	40
 -- !result
@@ -46,11 +50,11 @@ None
 -- !result
 select id, val from t order by approx_l2_distance([1,0,0,0], v) limit 1;
 -- result:
-1	111
+2	20
 -- !result
 select id, val from t order by approx_l2_distance([0,1,0,0], v) limit 1;
 -- result:
-2	222
+1	10
 -- !result
 drop database db_sd_pk_pu_vidx_sync_${uuid0} force;
 -- result:
@@ -81,21 +85,25 @@ set partial_update_mode = "row";
 -- !result
 insert into t (id, val) values (1, 111), (2, 222);
 -- result:
+E: (1064, 'Getting analyzing error. Detail message: Partial update of table t must include vector index column v: rows with new keys would get an empty vector, which the vector index rejects. Use UPDATE to change existing rows only..')
+-- !result
+insert into t (id, v) values (1, [0,1,0,0]), (2, [1,0,0,0]);
+-- result:
 -- !result
 select id, val from t order by id;
 -- result:
-1	111
-2	222
+1	10
+2	20
 3	30
 4	40
 -- !result
 select id, val from t order by approx_l2_distance([1,0,0,0], v) limit 1;
 -- result:
-1	111
+2	20
 -- !result
 select id, val from t order by approx_l2_distance([0,1,0,0], v) limit 1;
 -- result:
-2	222
+1	10
 -- !result
 drop database db_sd_pk_pu_vidx_async_${uuid0} force;
 -- result:
