@@ -391,7 +391,7 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
 
         JoinOperator type = join.getJoinType();
         boolean nullSupplyingChild = type.isFullOuterJoin()
-                || (child == 0 ? type.isRightOuterJoin() : type.isLeftOuterJoin());
+                || (child == 0 ? type.isRightOuterJoin() : type.isAnyLeftOuterJoin());
         // A NULL-extended aggregate result cannot stand in for evaluating an expression
         // such as COALESCE on a NULL-extended input row. Only push direct column inputs
         // or NULL literals through this side of an outer join.
