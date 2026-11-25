@@ -567,7 +567,8 @@ public class PaimonMetadata implements ConnectorMetadata {
             paimonNativeTable = this.paimonNativeCatalog.getTable(identifier);
         } catch (Catalog.TableNotExistException e) {
             LOG.error("Paimon table {}.{} does not exist.", dbName, tblName, e);
-            return getView(dbName, tblName);
+            // Once a native system table is claimed, a missing table must not resolve to a view.
+            return PaimonUtils.systemTableBaseName(dbName, tblName) == null ? getView(dbName, tblName) : null;
         }
         List<DataField> fields = paimonNativeTable.rowType().getFields();
         List<Column> fullSchema = ColumnTypeConverter.fromPaimonSchemas(fields);
