@@ -618,14 +618,11 @@ Status AddIndexSchemaChange::rewrite_dcg_for_segment(const RowsetMetadataPB& row
                     column.unique_id(), rssid));
         }
         if (dcg_files.count(dcg_segment->file_name()) == 0) {
-            RandomAccessFileOptions ropts;
-            if (auto enc = dcg_segment->encryption_info(); enc) {
-                ropts.encryption_info = *enc;
-            }
-            ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(dcg_segment->file_name()));
-            // `.cols` files are standalone segments, never packed into a
-            // bundle, so a plain random access file is the right opener here.
-            ASSIGN_OR_RETURN(auto rfile, fs->new_random_access_file(ropts, dcg_segment->file_info()));
+            // A lake file's cache mode is fixed when it is opened, so the
+            // handle itself must skip the local data cache: fill_data_cache in
+            // the iterator options below does not change it. The segment's
+            // opener also applies the file's encryption.
+            ASSIGN_OR_RETURN(auto rfile, dcg_segment->new_segment_read_file(read_opts));
             dcg_files[dcg_segment->file_name()] = std::move(rfile);
         }
         ASSIGN_OR_RETURN(auto col_iter, dcg_segment->new_column_iterator(column, /*path=*/nullptr));
