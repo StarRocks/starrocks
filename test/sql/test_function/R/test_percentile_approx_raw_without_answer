@@ -19,6 +19,14 @@ SELECT k, PERCENTILE_APPROX_RAW(percentile_hash(v), q) FROM tq ORDER BY k;
 4	5.0
 5	None
 -- !result
+SELECT k, PERCENTILE_APPROX_RAW(percentile_hash(5), q) FROM tq ORDER BY k;
+-- result:
+1	5.0
+2	None
+3	None
+4	5.0
+5	5.0
+-- !result
 SELECT (SELECT count(*) FROM tq WHERE v > PERCENTILE_APPROX_RAW(percentile_hash(5), -1))
      + (SELECT count(*) FROM tq WHERE NOT (v > PERCENTILE_APPROX_RAW(percentile_hash(5), -1)))
      + (SELECT count(*) FROM tq WHERE (v > PERCENTILE_APPROX_RAW(percentile_hash(5), -1)) IS NULL);

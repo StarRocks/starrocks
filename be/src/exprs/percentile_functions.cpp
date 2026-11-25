@@ -70,7 +70,8 @@ StatusOr<ColumnPtr> PercentileFunctions::percentile_approx_raw(FunctionContext* 
             }
         }
     }
-    return builder.build(columns[0]->is_constant());
+    // Constant only when both arguments are: a constant percentile with a column of quantiles gives one answer per row.
+    return builder.build(ColumnHelper::is_all_const(columns));
 }
 
 struct LCPercentileExtracter {
