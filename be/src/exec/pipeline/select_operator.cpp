@@ -128,6 +128,7 @@ Status SelectOperatorFactory::prepare(RuntimeState* state) {
 
 void SelectOperatorFactory::close(RuntimeState* state) {
     ExprExecutor::close(_conjunct_ctxs, state);
+    ExprExecutor::close(_common_exprs, state);
     OperatorFactory::close(state);
 }
 

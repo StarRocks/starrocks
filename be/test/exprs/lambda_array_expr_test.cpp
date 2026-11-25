@@ -834,4 +834,93 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_keeps_outer_expr_in_lambda_in
     }
 }
 
+// Regression test for the destruction-order use-after-free in ArrayMapExpr::close.
+//
+// LambdaFunction::extract_outer_common_exprs replaces lambda-independent subtrees (here length(z)) with
+// ColumnRefs created at prepare time. They used to be added to RuntimeState::obj_pool() AFTER the
+// ExprContext (created at plan-init time), and ObjectPool::clear() destroys in reverse order, so they were
+// freed before the ExprContext. An ExprContext that nobody closed explicitly (e.g. the common-expr contexts
+// of SelectOperatorFactory) then closed itself in ~ExprContext through freed children.
+// Before the fix this test is a heap-use-after-free under ASAN; after the fix it is clean.
+TEST_F(VectorizedLambdaFunctionExprTest, unclosed_ctx_destroyed_with_runtime_state_pool) {
+    auto state = std::make_unique<RuntimeState>();
+    ObjectPool* state_pool = state->obj_pool();
+
+    TypeDescriptor type_arr_int = array_type(TYPE_INT);
+
+    auto make_slot_ref = [](SlotId id, TPrimitiveType::type t) {
+        TExprNode n;
+        n.node_type = TExprNodeType::SLOT_REF;
+        n.type = gen_type_desc(t);
+        n.num_children = 0;
+        n.__isset.slot_ref = true;
+        n.slot_ref.slot_id = id;
+        n.slot_ref.tuple_id = 0;
+        n.__set_is_nullable(true);
+        return n;
+    };
+
+    // Build the tree exactly like Expr::create_tree_from_thrift: nodes first, ExprContext last, all in the
+    // RuntimeState pool.
+    auto array_col = ColumnHelper::create_column(type_arr_int, false);
+    array_col->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)2)});
+    auto* input = new_fake_const_expr(std::move(array_col), type_arr_int); // lives in the fixture pool
+
+    auto* col_x = state_pool->add(new ColumnRef(make_slot_ref(100000, TPrimitiveType::INT)));
+    auto* col_x_arg = state_pool->add(new ColumnRef(make_slot_ref(100000, TPrimitiveType::INT)));
+    auto* col_z = state_pool->add(new ColumnRef(make_slot_ref(2, TPrimitiveType::VARCHAR)));
+
+    TExprNode length_node;
+    length_node.node_type = TExprNodeType::FUNCTION_CALL;
+    length_node.type = gen_type_desc(TPrimitiveType::INT);
+    length_node.num_children = 1;
+    length_node.__isset.fn = true;
+    length_node.fn.name.function_name = "length";
+    length_node.fn.fid = 30120;
+    length_node.fn.__isset.fid = true;
+    length_node.fn.binary_type = TFunctionBinaryType::BUILTIN;
+    auto* length_expr = state_pool->add(new VectorizedFunctionCallExpr(length_node)); // independent of x
+    length_expr->add_child(col_z);
+
+    TExprNode add_node;
+    add_node.opcode = TExprOpcode::ADD;
+    add_node.child_type = TPrimitiveType::INT;
+    add_node.node_type = TExprNodeType::BINARY_PRED;
+    add_node.num_children = 2;
+    add_node.__isset.opcode = true;
+    add_node.__isset.child_type = true;
+    add_node.type = gen_type_desc(TPrimitiveType::INT);
+    auto* add_expr = state_pool->add(VectorizedArithmeticExprFactory::from_thrift(add_node));
+    add_expr->add_child(col_x);
+    add_expr->add_child(length_expr); // gets replaced by a prepare-time ColumnRef
+
+    TExprNode tlambda;
+    tlambda.opcode = TExprOpcode::ADD;
+    tlambda.child_type = TPrimitiveType::INT;
+    tlambda.node_type = TExprNodeType::LAMBDA_FUNCTION_EXPR;
+    tlambda.num_children = 2; // lambda body + 1 argument
+    tlambda.__isset.opcode = true;
+    tlambda.__isset.child_type = true;
+    tlambda.type = gen_type_desc(TPrimitiveType::INT);
+    auto* lambda = state_pool->add(new LambdaFunction(tlambda));
+    lambda->add_child(add_expr);
+    lambda->add_child(col_x_arg);
+
+    auto* array_map = state_pool->add(new ArrayMapExpr(type_arr_int));
+    array_map->clear_children();
+    array_map->add_child(lambda);
+    array_map->add_child(input);
+
+    ExprContext* ctx = state_pool->add(new ExprContext(array_map)); // last, as in create_tree_from_thrift
+
+    ASSERT_OK(ctx->prepare(state.get()));
+    ASSERT_OK(ctx->open(state.get()));
+    // The extraction really happened: length(z) was replaced in the lambda body.
+    ASSERT_NE(length_expr, add_expr->get_child(1));
+
+    // Deliberately DO NOT close ctx. Destroying the RuntimeState clears its pool in reverse order and
+    // runs ~ExprContext -> close() -> Expr::close over the (possibly dangling) children.
+    state.reset();
+}
+
 } // namespace starrocks

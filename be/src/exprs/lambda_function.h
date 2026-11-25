@@ -81,6 +81,12 @@ public:
         std::unordered_set<SlotId> all_common_sub_expr_ids;
         SlotId next_slot_id;
         std::map<SlotId, Expr*> outer_common_exprs;
+        // Owner of the ColumnRefs that replace the extracted subtrees. It MUST be owned by the expr that
+        // calls extract_outer_common_exprs (ArrayMapExpr / ArraySortLambdaExpr), NOT by RuntimeState::obj_pool():
+        // that pool is cleared in reverse insertion order, so ColumnRefs added at prepare time are freed
+        // before the ExprContext that was created at plan-init time, and ~ExprContext -> close() would walk
+        // the tree through dangling `_children` entries. If null, falls back to state->obj_pool().
+        ObjectPool* column_ref_pool = nullptr;
     };
 
     // Extract the outer common expression in lambda expr.

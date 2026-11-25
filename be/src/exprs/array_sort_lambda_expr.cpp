@@ -46,6 +46,10 @@ Status ArraySortLambdaExpr::prepare(RuntimeState* state, ExprContext* context) {
 
     auto lambda_fun = down_cast<LambdaFunction*>(_children[1]);
     LambdaFunction::ExtractContext extract_ctx;
+    if (_column_ref_pool == nullptr) {
+        _column_ref_pool = std::make_shared<ObjectPool>();
+    }
+    extract_ctx.column_ref_pool = _column_ref_pool.get();
 
     extract_ctx.next_slot_id = context->root()->max_used_slot_id() + 1;
     std::vector<SlotId> tmp_slots;

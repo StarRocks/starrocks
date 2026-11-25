@@ -54,6 +54,10 @@ private:
 
     // use map to make sure the order of execution
     std::map<SlotId, Expr*> _outer_common_exprs;
+    // Owns the ColumnRefs that LambdaFunction::extract_outer_common_exprs splices into the lambda body.
+    // They must live exactly as long as the expr tree that points at them (shared by shallow copies made by
+    // clone()), not as long as RuntimeState::obj_pool(), which frees them before the owning ExprContext.
+    std::shared_ptr<ObjectPool> _column_ref_pool;
     // the slots initially required for lambda function evaluation, excluding lambda arguments,
     // other common expressions can be evaluated based on these slots.
     std::unordered_set<SlotId> _initial_required_slots;

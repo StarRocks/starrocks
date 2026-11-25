@@ -15,6 +15,7 @@
 #pragma once
 
 #include <atomic>
+#include <memory>
 #include <unordered_set>
 
 #include "column/nullable_column.h"
@@ -42,6 +43,7 @@ public:
     ArraySortLambdaExpr(const ArraySortLambdaExpr& other)
             : Expr(other),
               _outer_common_exprs(other._outer_common_exprs),
+              _column_ref_pool(other._column_ref_pool),
               _initial_required_slots(other._initial_required_slots),
               _comparator_validated(other._comparator_validated.load(std::memory_order_relaxed)) {}
 
@@ -63,6 +65,8 @@ private:
     Status check_lambda_only_depends_on_args(const LambdaFunction* lambda_function);
     // use map to make sure the order of execution
     std::map<SlotId, Expr*> _outer_common_exprs;
+    // See ArrayMapExpr::_column_ref_pool.
+    std::shared_ptr<ObjectPool> _column_ref_pool;
     // the slots initially required for lambda function evaluation, excluding lambda arguments,
     // other common expressions can be evaluated based on these slots.
     std::unordered_set<SlotId> _initial_required_slots;
