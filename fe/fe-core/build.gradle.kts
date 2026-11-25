@@ -90,6 +90,8 @@ dependencies {
     implementation("com.fasterxml.uuid:java-uuid-generator")
     implementation("com.github.ben-manes.caffeine:caffeine")
     testImplementation("com.github.hazendaz.jmockit:jmockit")
+    // Must precede paimon-bundle which embeds unrelocated com.github.luben.zstd classes
+    implementation("com.github.luben:zstd-jni")
     implementation("com.github.oshi:oshi-core")
     implementation("com.github.seancfoley:ipaddress")
     implementation("com.google.cloud.bigdataoss:gcs-connector")
@@ -324,7 +326,6 @@ dependencies {
     implementation("tools.profiler:async-profiler")
     implementation("com.github.vertical-blank:sql-formatter:2.0.4")
     implementation("at.yawk.lz4:lz4-java")
-    implementation("com.github.luben:zstd-jni")
     // dependency sync end
 
     // extra dependencies pom.xml does not have
