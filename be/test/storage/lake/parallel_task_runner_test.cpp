@@ -17,8 +17,10 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <string>
+#include <thread>
 
 #include "base/debug/trace.h"
 #include "base/testutil/assert.h"
@@ -232,6 +234,56 @@ TEST(ParallelTaskRunnerTest, async_tasks_read_under_the_callers_remote_read_cont
     }
     ASSERT_OK(runner.join());
     ASSERT_EQ(8, unattributed.load());
+}
+
+// ThreadPool::shutdown() drops the tasks still queued on a token without running them, and the token's
+// wait() then returns as usual. join() must not report OK for that work: a caller that trusts it reads
+// results the dropped tasks never wrote, such as a null sstable slot or a PK index rebuilt without the rows
+// of the dropped segment scans.
+TEST(ParallelTaskRunnerTest, join_fails_when_pool_shutdown_drops_queued_tasks) {
+    auto pool = make_pool(1);
+    auto token = pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    std::atomic<bool> blocker_started{false};
+    std::atomic<bool> release_blocker{false};
+    std::atomic<int> ran{0};
+    ParallelTaskRunner runner(token.get());
+    // Occupies the only worker so the tasks below stay queued.
+    runner.run([&]() {
+        blocker_started = true;
+        while (!release_blocker) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        ran++;
+        return Status::OK();
+    });
+    while (!blocker_started) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    const int kQueued = 4;
+    for (int i = 0; i < kQueued; ++i) {
+        runner.run([&ran]() {
+            ran++;
+            return Status::OK();
+        });
+    }
+
+    // shutdown() clears the queues, then waits for the running blocker, so it runs on its own thread.
+    std::thread shutdown_thread([&pool]() { pool->shutdown(); });
+    // The pool status flips in the same critical section that drops the queued tasks.
+    while (pool->is_pool_status_ok()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    release_blocker = true;
+    shutdown_thread.join();
+
+    auto st = runner.join();
+    ASSERT_TRUE(st.is_aborted()) << st;
+    ASSERT_NE(std::string::npos, st.to_string().find("4 of 5 parallel tasks did not run")) << st;
+    ASSERT_EQ(1, ran.load());
+    // The error is sticky and is not counted again.
+    st = runner.join();
+    ASSERT_TRUE(st.is_aborted()) << st;
+    ASSERT_NE(std::string::npos, st.to_string().find("4 of 5")) << st;
 }
 
 TEST(ParallelTaskRunnerTest, destructor_joins_in_flight_tasks) {
