@@ -112,6 +112,9 @@ bool IndexedColumnReader::data_page_at_or_after(const void* key, PagePointer* pa
         *page = _sole_data_page;
         return true;
     }
+    if (_value_index_reader.get_keys().empty()) {
+        return false;
+    }
     std::string encoded_key;
     _validx_key_coder->full_encode_ascending(key, &encoded_key);
     IndexPageIterator iter(&_value_index_reader);
@@ -142,6 +145,9 @@ bool IndexedColumnReader::data_pages_of_ordinals(ordinal_t from, ordinal_t to, s
     KeyCoderTraits<TYPE_UNSIGNED_BIGINT>::full_encode_ascending(&from, &from_key);
     KeyCoderTraits<TYPE_UNSIGNED_BIGINT>::full_encode_ascending(&to, &to_key);
     const auto& keys = _ordinal_index_reader.get_keys();
+    if (keys.empty()) {
+        return false;
+    }
     // The first page is the last one starting at or before |from|; the pages that follow it up to the first one
     // starting at or after |to| hold the rest.
     auto first = std::upper_bound(keys.begin(), keys.end(), Slice(from_key));
