@@ -2508,4 +2508,25 @@ public class MvRewriteTest extends MVTestBase {
             starRocksAssert.dropTable("t_rb1226");
         }
     }
+
+    @Test
+    public void testSelfEqualityIsCompensatedOnMv() throws Exception {
+        // v2 = v2 is not TRUE where v2 is NULL, so the scan of the MV must still filter on it.
+        createAndRefreshMv("create materialized view mv_self_eq distributed by hash(v1) as " +
+                "select v1, v2, v3 from t0");
+        try {
+            for (String query : new String[] {
+                    "select v1, v2 from t0 where v2 = v2",
+                    "select * from (select v1, v3 from t0 where v2 = v2) s",
+                    "select v1 from t0 where v2 = v2 and v1 = v1"}) {
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "TABLE: mv_self_eq");
+                PlanTestBase.assertContains(plan, "v2 = ");
+            }
+            String plan = getFragmentPlan("select v1 from t0 where v2 = v2 and v1 = v1");
+            PlanTestBase.assertContains(plan, "v1 = ");
+        } finally {
+            dropMv("test", "mv_self_eq");
+        }
+    }
 }
