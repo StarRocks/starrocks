@@ -1432,12 +1432,7 @@ public class PipeManagerTest {
         String createSql =
                 "create pipe list_p2 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
-<<<<<<< HEAD
-        pm.createPipe(createStmt);
-=======
         pm.createPipe(ctx, createStmt);
-        long pipeId = getPipe("list_p2").getPipeId().getId();
->>>>>>> 8977f266ef4... [BugFix][RB-1915] Require DROP on the existing pipe for CREATE OR REPLACE PIPE (#71052)
 
         List<PipeFileRecord> records = Arrays.asList(
                 new PipeFileRecord(1, "file1", "version1", 1024),
