@@ -83,6 +83,8 @@ private:
     friend struct BitmapIndexSeeker;
     friend struct BitmapIndexRetriver;
     friend struct BitmapIndexPredicateEraser;
+    friend struct BitmapIndexDictionaryPrefetcher;
+    friend struct BitmapIndexBitmapPrefetcher;
 
     const Schema& _schema;
     const PredicateTree& _pred_tree;

@@ -225,6 +225,45 @@ protected:
                                                                     pages);
     }
 
+    static uint64_t reader_dictionary_page(const BitmapIndexReader& reader, int64_t value) {
+        PagePointer page;
+        EXPECT_TRUE(reader._dict_column_reader->data_page_at_or_after(&value, &page));
+        return page.offset;
+    }
+
+    static uint64_t reader_bitmap_page(const BitmapIndexReader& reader, ordinal_t ordinal) {
+        std::vector<PagePointer> pages;
+        EXPECT_TRUE(reader_bitmap_pages(reader, ordinal, ordinal + 1, &pages));
+        EXPECT_EQ(size_t{1}, pages.size());
+        return pages.empty() ? 0 : pages[0].offset;
+    }
+
+    // Evaluates |root| with prefetch over the prefetch index of |reader|, which serves every column but |unindexed|,
+    // and checks that it keeps row 3 only and reads every page it asked for.
+    void check_evaluator_reads_every_page_it_asks_for(const Schema& schema, PredicateAndNode root,
+                                                      RecordingBitmapInputStream* stream, BitmapIndexReader* reader,
+                                                      std::optional<ColumnId> unindexed) {
+        auto tree = PredicateTree::create(std::move(root));
+        BitmapIndexEvaluator evaluator(schema, tree);
+        ASSERT_OK(evaluator.init([&](ColumnId cid) -> StatusOr<BitmapIndexIterator*> {
+            if (unindexed.has_value() && cid == *unindexed) {
+                return nullptr;
+            }
+            BitmapIndexIterator* iter = nullptr;
+            RETURN_IF_ERROR(reader->new_iterator(_opts, &iter));
+            return iter;
+        }));
+        SparseRange<> range(0, kPrefetchRows + 1);
+        stream->events.clear();
+        ASSERT_OK(evaluator.evaluate(range, tree, true));
+        EXPECT_EQ(SparseRange<>(3, 4), range);
+        EXPECT_GT(stream->count('w'), 0);
+        const auto read = stream->offsets('r');
+        for (auto offset : stream->offsets('w')) {
+            EXPECT_TRUE(read.count(offset)) << "page at " << offset << " asked for but never read";
+        }
+    }
+
     std::shared_ptr<MemoryFileSystem> _fs = nullptr;
     MemPool _pool;
     IndexReadOptions _opts;
@@ -1101,6 +1140,73 @@ TEST_F(BitmapIndexTest, evaluator_prefetches_the_pages_before_reading_them) {
     }
     EXPECT_EQ(2, waves);
     EXPECT_GT(stream->count('r'), 0);
+}
+
+// c = v3 AND (a IN (vm, vl) OR b = 2), where b has no bitmap index: the seek does not descend into the OR, which is
+// filtered row by row, so the dictionary pages of a's values are not asked for either, whichever child of the OR the
+// initializer visits first.
+TEST_F(BitmapIndexTest, evaluator_asks_for_no_page_under_an_or_without_bitmap_index) {
+    ColumnIndexMetaPB meta;
+    std::unique_ptr<RecordingBitmapInputStream> stream;
+    BitmapIndexReader reader;
+    open_prefetch_index("prefetch_unindexed_or", &meta, &stream, &reader);
+    const int64_t c_value = prefetch_value(3);
+    const std::vector<int64_t> a_values{prefetch_value(kPrefetchRows / 2), prefetch_value(kPrefetchRows - 1)};
+    for (auto value : a_values) {
+        ASSERT_NE(reader_dictionary_page(reader, c_value), reader_dictionary_page(reader, value));
+    }
+
+    Schema schema({std::make_shared<Field>(0, "c", TYPE_BIGINT, true),
+                   std::make_shared<Field>(1, "b", TYPE_BIGINT, true),
+                   std::make_shared<Field>(2, "a", TYPE_BIGINT, true)});
+    const auto type = get_type_info(TYPE_BIGINT);
+    std::unique_ptr<ColumnPredicate> c_eq(new_column_eq_predicate(type, 0, std::to_string(c_value)));
+    std::unique_ptr<ColumnPredicate> b_eq(new_column_eq_predicate(type, 1, "2"));
+    std::unique_ptr<ColumnPredicate> a_in(
+            new_column_in_predicate(type, 2, {std::to_string(a_values[0]), std::to_string(a_values[1])}));
+    PredicateOrNode or_node;
+    or_node.add_child(PredicateColumnNode{a_in.get()});
+    or_node.add_child(PredicateColumnNode{b_eq.get()});
+    PredicateAndNode root;
+    root.add_child(PredicateColumnNode{c_eq.get()});
+    root.add_child(std::move(or_node));
+    check_evaluator_reads_every_page_it_asks_for(schema, std::move(root), stream.get(), &reader, 1);
+}
+
+// d = v3 AND ((a = vm AND c = vm) OR (a >= v100 AND c >= v100)): the second AND selects too many rows, so the OR is
+// not used and the retrieval does not descend into it. The bitmaps of the first AND, which the seek kept, are not
+// asked for.
+TEST_F(BitmapIndexTest, evaluator_asks_for_no_bitmap_under_an_or_it_does_not_use) {
+    ColumnIndexMetaPB meta;
+    std::unique_ptr<RecordingBitmapInputStream> stream;
+    BitmapIndexReader reader;
+    open_prefetch_index("prefetch_unused_or", &meta, &stream, &reader);
+    const ordinal_t middle = kPrefetchRows / 2;
+    ASSERT_NE(reader_bitmap_page(reader, 3), reader_bitmap_page(reader, middle));
+    ASSERT_NE(reader_bitmap_page(reader, kPrefetchRows), reader_bitmap_page(reader, middle)); // the null bitmap
+
+    Schema schema({std::make_shared<Field>(0, "d", TYPE_BIGINT, true),
+                   std::make_shared<Field>(1, "a", TYPE_BIGINT, true),
+                   std::make_shared<Field>(2, "c", TYPE_BIGINT, true)});
+    const auto type = get_type_info(TYPE_BIGINT);
+    std::unique_ptr<ColumnPredicate> d_eq(new_column_eq_predicate(type, 0, std::to_string(prefetch_value(3))));
+    std::unique_ptr<ColumnPredicate> a_eq(new_column_eq_predicate(type, 1, std::to_string(prefetch_value(middle))));
+    std::unique_ptr<ColumnPredicate> c_eq(new_column_eq_predicate(type, 2, std::to_string(prefetch_value(middle))));
+    std::unique_ptr<ColumnPredicate> a_ge(new_column_ge_predicate(type, 1, std::to_string(prefetch_value(100))));
+    std::unique_ptr<ColumnPredicate> c_ge(new_column_ge_predicate(type, 2, std::to_string(prefetch_value(100))));
+    PredicateAndNode selective;
+    selective.add_child(PredicateColumnNode{a_eq.get()});
+    selective.add_child(PredicateColumnNode{c_eq.get()});
+    PredicateAndNode unselective;
+    unselective.add_child(PredicateColumnNode{a_ge.get()});
+    unselective.add_child(PredicateColumnNode{c_ge.get()});
+    PredicateOrNode or_node;
+    or_node.add_child(std::move(selective));
+    or_node.add_child(std::move(unselective));
+    PredicateAndNode root;
+    root.add_child(PredicateColumnNode{d_eq.get()});
+    root.add_child(std::move(or_node));
+    check_evaluator_reads_every_page_it_asks_for(schema, std::move(root), stream.get(), &reader, std::nullopt);
 }
 
 } // namespace starrocks

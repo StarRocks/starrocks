@@ -399,6 +399,72 @@ struct BitmapIndexRetriver {
     BitmapIndexEvaluator* parent;
 };
 
+// Asks for the dictionary pages BitmapIndexSeeker reads: like the seeker, it does not descend into a compound node that
+// cannot use the bitmap indexes, and asks only for the values of the column predicates that can. An AND whose first
+// column turns out ALWAYS_FALSE stops the seek before its other columns, whose pages are still asked for: asking for
+// every value up front cannot know that.
+struct BitmapIndexDictionaryPrefetcher {
+    template <CompoundNodeType Type>
+    void operator()(const PredicateCompoundNode<Type>& node) const {
+        if (!_supports_bitmap(&node)) {
+            return;
+        }
+        const auto it = parent->_ctx.compound_node_to_context.find(&node);
+        if (it != parent->_ctx.compound_node_to_context.end()) {
+            for (const auto& [cid, col_ctx] : it->second.col_contexts) {
+                auto* bitmap_iter = parent->_bitmap_index_iterators[cid];
+                if (bitmap_iter == nullptr) {
+                    continue;
+                }
+                for (const auto* col_node : col_ctx.nodes) {
+                    if (_supports_bitmap(col_node)) {
+                        col_node->col_pred()->visit_bitmap_seek_values(
+                                [bitmap_iter](const void* value) { bitmap_iter->prefetch_dictionary_page(value); });
+                    }
+                }
+            }
+        }
+        for (const auto& child : node.compound_children()) {
+            child.visit(*this);
+        }
+    }
+
+    bool _supports_bitmap(const PredicateBaseNode* node) const {
+        const auto it = parent->_ctx.is_node_support_bitmap.find(node);
+        return it != parent->_ctx.is_node_support_bitmap.end() && it->second;
+    }
+
+    BitmapIndexEvaluator* parent;
+};
+
+// Asks for the bitmap pages BitmapIndexRetriver reads: like the retriever, it does not descend into a compound node
+// the seek did not keep.
+struct BitmapIndexBitmapPrefetcher {
+    template <CompoundNodeType Type>
+    void operator()(const PredicateCompoundNode<Type>& node) const {
+        const auto it = parent->_ctx.compound_node_to_context.find(&node);
+        if (it == parent->_ctx.compound_node_to_context.end() || !it->second.used) {
+            return;
+        }
+        for (const auto& [cid, col_ctx] : it->second.col_contexts) {
+            auto* bitmap_iter = parent->_bitmap_index_iterators[cid];
+            if (bitmap_iter == nullptr) {
+                continue;
+            }
+            bitmap_iter->prefetch_bitmap_pages(col_ctx.bitmap_ranges);
+            if (bitmap_iter->has_null_bitmap() && !col_ctx.has_is_null_pred) {
+                const rowid_t null_ordinal = bitmap_iter->bitmap_nums() - 1;
+                bitmap_iter->prefetch_bitmap_pages(SparseRange<>(null_ordinal, null_ordinal + 1));
+            }
+        }
+        for (const auto& child : node.compound_children()) {
+            child.visit(*this);
+        }
+    }
+
+    BitmapIndexEvaluator* parent;
+};
+
 struct BitmapIndexPredicateEraser {
     template <CompoundNodeType ParentType>
     void operator()(const PredicateColumnNode& node, PredicateCompoundNode<ParentType>& parent_node) const {
@@ -467,42 +533,11 @@ Status BitmapIndexEvaluator::init(BitmapIndexIteratorSupplier&& supplier) {
 }
 
 void BitmapIndexEvaluator::_prefetch_dictionary_pages() {
-    for (const auto& [node, node_ctx] : _ctx.compound_node_to_context) {
-        for (const auto& [cid, col_ctx] : node_ctx.col_contexts) {
-            auto* bitmap_iter = _bitmap_index_iterators[cid];
-            if (bitmap_iter == nullptr) {
-                continue;
-            }
-            for (const auto* col_node : col_ctx.nodes) {
-                const auto it = _ctx.is_node_support_bitmap.find(col_node);
-                if (it == _ctx.is_node_support_bitmap.end() || !it->second) {
-                    continue;
-                }
-                col_node->col_pred()->visit_bitmap_seek_values(
-                        [bitmap_iter](const void* value) { bitmap_iter->prefetch_dictionary_page(value); });
-            }
-        }
-    }
+    _pred_tree.visit(BitmapIndexDictionaryPrefetcher{this});
 }
 
 void BitmapIndexEvaluator::_prefetch_bitmap_pages() {
-    // The bitmaps BitmapIndexRetriver reads: those of the nodes the seek kept.
-    for (const auto& [node, node_ctx] : _ctx.compound_node_to_context) {
-        if (!node_ctx.used) {
-            continue;
-        }
-        for (const auto& [cid, col_ctx] : node_ctx.col_contexts) {
-            auto* bitmap_iter = _bitmap_index_iterators[cid];
-            if (bitmap_iter == nullptr) {
-                continue;
-            }
-            bitmap_iter->prefetch_bitmap_pages(col_ctx.bitmap_ranges);
-            if (bitmap_iter->has_null_bitmap() && !col_ctx.has_is_null_pred) {
-                const rowid_t null_ordinal = bitmap_iter->bitmap_nums() - 1;
-                bitmap_iter->prefetch_bitmap_pages(SparseRange<>(null_ordinal, null_ordinal + 1));
-            }
-        }
-    }
+    _pred_tree.visit(BitmapIndexBitmapPrefetcher{this});
 }
 
 Status BitmapIndexEvaluator::evaluate(SparseRange<>& dst_scan_range, PredicateTree& dst_pred_tree, bool prefetch) {
