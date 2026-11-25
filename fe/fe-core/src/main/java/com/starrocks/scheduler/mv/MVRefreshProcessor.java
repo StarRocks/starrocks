@@ -958,6 +958,9 @@ public abstract class MVRefreshProcessor {
             locker.unLockTableWithIntensiveDbLock(db.getId(), this.mv.getId(), LockType.WRITE);
         }
 
+        if (execPlan == null) {
+            return;
+        }
         // update mv status message
         updateTaskRunStatus(status -> {
             try {
