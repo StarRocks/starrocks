@@ -100,6 +100,10 @@ Status SpillablePartitionWiseDistinctSinkOperator::prepare(RuntimeState* state) 
     _peak_revocable_mem_bytes = _unique_metrics->AddHighWaterMarkCounter(
             "PeakRevocableMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
     _hash_table_spill_times = ADD_COUNTER(_unique_metrics.get(), "HashTableSpillTimes", TUnit::UNIT);
+    // A spill empties the hash set, so a key seen again after it would count twice against the limit
+    // shared by the drivers, and the input would stop before `limit` distinct keys are kept. The
+    // per-driver check stays: it only counts the keys in the current hash set.
+    _distinct_op->aggregator()->params()->enable_pipeline_share_limit = false;
 
     return Status::OK();
 }

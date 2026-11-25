@@ -1,0 +1,25 @@
+-- name: test_spill_distinct_limit
+-- for issue: https://github.com/StarRocks/starrocks/issues/84386
+-- Each key is in two rowsets of its tablet, so with every chunk spilled the distinct sink sees it again after the
+-- spill has emptied the hash set. DISTINCT ... LIMIT must still return `limit` keys.
+CREATE TABLE t1 (c0 STRING, c1 BIGINT) DUPLICATE KEY(c0)
+  DISTRIBUTED BY HASH(c0) BUCKETS 96 PROPERTIES ("replication_num" = "1");
+INSERT INTO t1 SELECT generate_series, generate_series FROM TABLE(generate_series(1, 4096));
+INSERT INTO t1 SELECT * FROM t1;
+set pipeline_dop = 1;
+set enable_spill = true;
+set spill_mode = "force";
+select count(*) from (select distinct c0 from t1 limit 100) t;
+select count(*) from (select distinct c0, c1 from t1 limit 100) t;
+select count(*) from (select distinct c0 from t1 limit 1000) t;
+select count(*) from (select distinct c0 from t1) t;
+set spill_partitionwise_agg = true;
+select count(*) from (select distinct c0 from t1 limit 100) t;
+select count(*) from (select distinct c0, c1 from t1 limit 100) t;
+select count(*) from (select distinct c0 from t1 limit 1000) t;
+-- with several drivers sharing the limit
+set pipeline_dop = 4;
+set spill_partitionwise_agg = false;
+select count(*) from (select distinct c0 from t1 limit 1000) t;
+set spill_partitionwise_agg = true;
+select count(*) from (select distinct c0 from t1 limit 1000) t;

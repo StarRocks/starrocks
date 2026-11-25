@@ -1,0 +1,68 @@
+-- name: test_spill_distinct_limit
+CREATE TABLE t1 (c0 STRING, c1 BIGINT) DUPLICATE KEY(c0)
+  DISTRIBUTED BY HASH(c0) BUCKETS 96 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t1 SELECT generate_series, generate_series FROM TABLE(generate_series(1, 4096));
+-- result:
+-- !result
+INSERT INTO t1 SELECT * FROM t1;
+-- result:
+-- !result
+set pipeline_dop = 1;
+-- result:
+-- !result
+set enable_spill = true;
+-- result:
+-- !result
+set spill_mode = "force";
+-- result:
+-- !result
+select count(*) from (select distinct c0 from t1 limit 100) t;
+-- result:
+100
+-- !result
+select count(*) from (select distinct c0, c1 from t1 limit 100) t;
+-- result:
+100
+-- !result
+select count(*) from (select distinct c0 from t1 limit 1000) t;
+-- result:
+1000
+-- !result
+select count(*) from (select distinct c0 from t1) t;
+-- result:
+4096
+-- !result
+set spill_partitionwise_agg = true;
+-- result:
+-- !result
+select count(*) from (select distinct c0 from t1 limit 100) t;
+-- result:
+100
+-- !result
+select count(*) from (select distinct c0, c1 from t1 limit 100) t;
+-- result:
+100
+-- !result
+select count(*) from (select distinct c0 from t1 limit 1000) t;
+-- result:
+1000
+-- !result
+set pipeline_dop = 4;
+-- result:
+-- !result
+set spill_partitionwise_agg = false;
+-- result:
+-- !result
+select count(*) from (select distinct c0 from t1 limit 1000) t;
+-- result:
+1000
+-- !result
+set spill_partitionwise_agg = true;
+-- result:
+-- !result
+select count(*) from (select distinct c0 from t1 limit 1000) t;
+-- result:
+1000
+-- !result
