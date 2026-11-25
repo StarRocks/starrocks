@@ -61,6 +61,32 @@ namespace {
 constexpr auto kUnsupportedBooleanV2 =
         "Parquet DataPage V2 with BOOLEAN columns is not supported by the StarRocks reader (issue #78692)";
 
+bool contains_boolean(const TypeDescriptor& type) {
+    if (type.type == TYPE_BOOLEAN) {
+        return true;
+    }
+    for (const auto& child : type.children) {
+        if (contains_boolean(child)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// StarRocks' native Parquet reader cannot decode RLE-encoded BOOLEAN values
+// currently emitted by V2 writers (see issue #78692).
+Status check_data_page_version(::parquet::ParquetDataPageVersion version, const std::vector<TypeDescriptor>& types) {
+    if (version != ::parquet::ParquetDataPageVersion::V2) {
+        return Status::OK();
+    }
+    for (const auto& type : types) {
+        if (contains_boolean(type)) {
+            return Status::NotSupported(kUnsupportedBooleanV2);
+        }
+    }
+    return Status::OK();
+}
+
 } // namespace
 
 DEFINE_FAIL_POINT(parquet_writer_close_failed);
@@ -326,15 +352,7 @@ Status ParquetFileWriter::init() {
         return Status::NotSupported(status.message());
     }
 
-    // StarRocks' native Parquet reader cannot decode RLE-encoded BOOLEAN values
-    // currently emitted by V2 writers (see issue #78692).
-    if (_writer_options->data_page_version == ::parquet::ParquetDataPageVersion::V2) {
-        for (int i = 0; i < _schema->num_columns(); ++i) {
-            if (_schema->Column(i)->physical_type() == ::parquet::Type::BOOLEAN) {
-                return Status::NotSupported(kUnsupportedBooleanV2);
-            }
-        }
-    }
+    RETURN_IF_ERROR(check_data_page_version(_writer_options->data_page_version, _type_descs));
 
     ASSIGN_OR_RETURN(auto compression, parquet::ParquetBuildHelper::convert_compression_type(_compression_type));
 
@@ -535,6 +553,10 @@ Status ParquetFileWriterFactory::init() {
 }
 
 StatusOr<WriterAndStream> ParquetFileWriterFactory::create(const std::string& path) const {
+    auto types = ColumnEvaluator::types(*_column_evaluators);
+    // Reject an unsupported schema before the file exists: a writer that fails init() is never committed, so
+    // its rollback action would not run and the empty file would be left behind.
+    RETURN_IF_ERROR(check_data_page_version(_parsed_options->data_page_version, types));
     ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(WritableFileOptions{.direct_write = true,
                                                                            .content_type = http::ContentType::PARQUET},
                                                        path));
@@ -543,7 +565,6 @@ StatusOr<WriterAndStream> ParquetFileWriterFactory::create(const std::string& pa
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
     };
     auto column_evaluators = ColumnEvaluator::clone(*_column_evaluators);
-    auto types = ColumnEvaluator::types(*_column_evaluators);
     auto async_output_stream =
             std::make_unique<formats::AsyncFlushOutputStream>(std::move(file), _executors, _runtime_state);
     auto parquet_output_stream = std::make_shared<parquet::AsyncParquetOutputStream>(async_output_stream.get());

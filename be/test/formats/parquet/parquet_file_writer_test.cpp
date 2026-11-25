@@ -973,7 +973,7 @@ TEST_F(ParquetFileWriterTest, TestDataPageV2) {
     _writer_options->data_page_version = ::parquet::ParquetDataPageVersion::V2;
     ASSIGN_OR_ASSERT_FAIL(auto writer, _create_writer(type_descs));
     auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnTestHelper::build_column<int32_t>({1, 2, 3}), 0);
+    chunk->append_column(ColumnTestHelper::build_nullable_column<int32_t>({1, 2, 3}), 0);
     ASSERT_OK(writer->write(chunk.get()));
     ASSERT_OK(writer->close().io_status);
 
@@ -1033,6 +1033,14 @@ TEST_F(ParquetFileWriterTest, TestDataPageVersionFactoryValidation) {
             ParquetFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, options, _make_type_names(boolean_types),
                                      boolean_evaluators, std::nullopt, nullptr, nullptr);
     ASSERT_OK(boolean_factory.init());
+    // The schema is rejected when a data file is created, before the file exists, so a failed
+    // write leaves nothing behind. init() must still succeed: a delete-only MERGE initializes the
+    // data sink without ever writing a data file.
+    const std::string boolean_path = "/v2_boolean.parquet";
+    auto created = boolean_factory.create(boolean_path);
+    ASSERT_FALSE(created.ok());
+    EXPECT_NE(created.status().to_string().find("BOOLEAN"), std::string::npos);
+    EXPECT_FALSE(fs->path_exists(boolean_path).ok());
 }
 
 TEST_F(ParquetFileWriterTest, TestWriteJson) {
