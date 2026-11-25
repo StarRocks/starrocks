@@ -222,23 +222,25 @@ public class UnifiedMetadataTest {
     }
 
     @Test
-    public void testSystemTableBaseLookupErrors() {
-        HiveTable physical = HiveTable.builder().setTableName("missing$snapshots").setFullSchema(List.of())
+    public void testSystemTableBaseLookupErrorsUseFullName() {
+        HiveTable physical = HiveTable.builder().setTableName("orders$schemas").setFullSchema(List.of())
                 .setProperties(Map.of()).build();
-        StarRocksConnectorException unavailable = new StarRocksConnectorException("Metastore unavailable");
+        var fullNameFailure = new StarRocksConnectorException("Failed to read db.missing$snapshots");
         new Expectations() {{
+                hiveMetadata.getTable((ConnectContext) any, "db", "orders");
+                result = new StarRocksConnectorException("db.orders is a hive transactional table(insert only)");
+                hiveMetadata.getTable((ConnectContext) any, "db", "orders$schemas");
+                result = physical;
                 hiveMetadata.getTable((ConnectContext) any, "db", "missing");
                 result = new StarRocksConnectorException("Failed to get table",
                         new InvocationTargetException(new NoSuchObjectException("missing")));
                 hiveMetadata.getTable((ConnectContext) any, "db", "missing$snapshots");
-                result = physical;
-                hiveMetadata.getTable((ConnectContext) any, "db", "unavailable");
-                result = unavailable;
+                result = fullNameFailure;
             }};
         CatalogConnectorMetadata catalog = unifiedCatalog();
-        assertSame(physical, catalog.getTable(connectContext, "db", "missing$snapshots"));
-        assertSame(unavailable, assertThrows(StarRocksConnectorException.class,
-                () -> catalog.getTable(connectContext, "db", "unavailable$snapshots")));
+        assertSame(physical, catalog.getTable(connectContext, "db", "orders$schemas"));
+        assertSame(fullNameFailure, assertThrows(StarRocksConnectorException.class,
+                () -> catalog.getTable(connectContext, "db", "missing$snapshots")));
     }
 
     @Test

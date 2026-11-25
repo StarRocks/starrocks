@@ -55,8 +55,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TSinkCommitInfo;
-import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 
 import java.util.List;
 import java.util.Map;
@@ -145,10 +143,8 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
         try {
             owner = getTableType(dbName, paimonBase != null ? paimonBase : metadataName.getTableName());
         } catch (StarRocksConnectorException e) {
-            if (ExceptionUtils.indexOfType(e, NoSuchObjectException.class) >= 0) {
-                return this;
-            }
-            throw e;
+            // The full name can identify a physical table even when the base cannot be read.
+            return this;
         }
         if (owner == PAIMON && paimonBase != null) {
             return metadataOfType(PAIMON);
