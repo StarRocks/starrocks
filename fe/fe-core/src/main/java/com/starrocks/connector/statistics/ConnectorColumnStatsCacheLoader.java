@@ -31,12 +31,14 @@ import org.apache.logging.log4j.Logger;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
+import java.util.stream.Collectors;
 
 import static com.starrocks.connector.statistics.StatisticsUtils.getTableByUUID;
 
@@ -140,7 +142,15 @@ public class ConnectorColumnStatsCacheLoader implements
 
     public List<TStatisticData> queryStatisticsData(ConnectContext context, String tableUUID, List<String> columns) {
         Table table = getTableByUUID(context, tableUUID);
-        return statisticExecutor.queryStatisticSync(context, tableUUID, table, columns);
+        // A column the table does not have has no statistics. Querying it would fail the whole batch,
+        // so no other column of the batch would get statistics either.
+        List<String> existingColumns = columns.stream()
+                .filter(column -> StatisticUtils.findQueryStatisticsColumnType(table, column) != null)
+                .collect(Collectors.toList());
+        if (existingColumns.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return statisticExecutor.queryStatisticSync(context, tableUUID, table, existingColumns);
     }
 
     private ConnectorTableColumnStats convert2ColumnStatistics(ConnectContext context, String tableUUID,

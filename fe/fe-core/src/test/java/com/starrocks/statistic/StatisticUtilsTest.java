@@ -328,6 +328,15 @@ class StatisticUtilsTest extends PlanTestBase {
     }
 
     @Test
+    void testFindQueryStatisticsColumnTypeReturnsNullWhenNotFound() {
+        Table table = Mockito.mock(Table.class);
+        Mockito.when(table.getColumn(Mockito.anyString())).thenReturn(null);
+
+        Assertions.assertNull(StatisticUtils.findQueryStatisticsColumnType(table, "nonexistent"));
+        Assertions.assertNull(StatisticUtils.findQueryStatisticsColumnType(table, "a.b"));
+    }
+
+    @Test
     void testFilterOnColumnWithoutStatisticType() throws Exception {
         Assertions.assertTrue(StatisticUtils.convertStatisticsToDouble(VarbinaryType.VARBINARY, "abc").isEmpty());
 
