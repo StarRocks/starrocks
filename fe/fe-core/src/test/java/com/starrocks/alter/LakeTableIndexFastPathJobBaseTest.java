@@ -32,6 +32,7 @@ import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.WALApplier;
+import com.starrocks.proto.TxnTypePB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
@@ -450,6 +451,133 @@ public class LakeTableIndexFastPathJobBaseTest {
                     any(), any(), any(), anyBoolean()), never());
             verify(pp, never()).setVisibleVersion(anyLong(), anyLong());
             verify(table, never()).setState(OlapTable.OlapTableState.NORMAL);
+        }
+    }
+
+    // -------- txn abort of a cancelled job --------
+
+    private static Map<Long, List<Long>> twoPartitionsThreeTablets() {
+        Map<Long, List<Long>> partitionToTablets = new HashMap<>();
+        partitionToTablets.put(100L, List.of(11L, 12L));
+        partitionToTablets.put(200L, List.of(21L));
+        return partitionToTablets;
+    }
+
+    @Test
+    public void testCancelImpl_FromRunning_AbortsTxnOnEveryTablet() throws Exception {
+        // The tasks of a RUNNING job may have written their txn logs and .idx files on any tablet, a tablet whose
+        // task failed included. Once CANCELLED is journaled the txn is never published, so the cancel aborts it with
+        // cleanup on every tablet the job dispatched to.
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        setField(job, "watershedTxnId", 1000L);
+        setField(job, "partitionToTablets", twoPartitionsThreeTablets());
+
+        Database db = new Database(2L, "db");
+        OlapTable table = mock(OlapTable.class);
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        GlobalStateMgr gsm = buildLockableGsm(db, table);
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            assertTrue(job.cancelImpl("fast-path index alter task failed after retries"));
+            assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+            utilsStatic.verify(() -> Utils.abortTxnWithCleanup(
+                    argThat(tabletIds -> tabletIds.size() == 3 && tabletIds.containsAll(List.of(11L, 12L, 21L))),
+                    argThat(txnInfo -> txnInfo.txnId == 1000L && !txnInfo.combinedTxnLog
+                            && txnInfo.txnType == TxnTypePB.TXN_NORMAL),
+                    any()), times(1));
+        }
+    }
+
+    @Test
+    public void testCancelImpl_BeforeWatershed_SendsNoAbort() throws Exception {
+        // Without a watershed txn id no task was ever sent, so there is no txn log to abort.
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "partitionToTablets", twoPartitionsThreeTablets());
+
+        Database db = new Database(2L, "db");
+        OlapTable table = mock(OlapTable.class);
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        GlobalStateMgr gsm = buildLockableGsm(db, table);
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            assertTrue(job.cancelImpl("err"));
+            utilsStatic.verify(() -> Utils.abortTxnWithCleanup(any(), any(), any()), never());
+        }
+    }
+
+    @Test
+    public void testCancelImpl_ForcedOutOfFinishedRewriting_SendsNoAbort() throws Exception {
+        // A job in FINISHED_REWRITING has reserved its commit version and may have published on some tablets
+        // before the operator forced the cancel; deleting the files of its txn logs would pull them from under the
+        // published metadata.
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.FINISHED_REWRITING);
+        setField(job, "watershedTxnId", 1000L);
+        setField(job, "partitionToTablets", twoPartitionsThreeTablets());
+        Map<Long, Long> commit = new HashMap<>();
+        commit.put(100L, 5L);
+        setField(job, "commitVersionMap", commit);
+
+        Database db = new Database(2L, "db");
+        OlapTable table = mock(OlapTable.class);
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        when(table.isFileBundling()).thenReturn(false);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        MaterializedIndex idx = mock(MaterializedIndex.class);
+        when(idx.getTablets()).thenReturn(new ArrayList<>());
+        when(pp.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(Collections.singletonList(idx));
+        when(pp.getVisibleVersion()).thenReturn(4L);
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+
+        GlobalStateMgr gsm = buildLockableGsm(db, table);
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            utilsStatic.when(() -> Utils.noOpPublishForForceSkip(anyLong(), any(), anyLong(), anyLong(),
+                    any(), any(), any(), anyBoolean())).thenReturn(true);
+
+            assertTrue(job.cancelImpl("force skip", true));
+
+            assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+            utilsStatic.verify(() -> Utils.abortTxnWithCleanup(any(), any(), any()), never());
+        }
+    }
+
+    @Test
+    public void testHandleFinishReportOfRemovedTask_AbortsOnlyForJobCancelledBeforeReservingVersion()
+            throws Exception {
+        // A task still running or queued on a node when its job was cancelled writes its txn log after the cancel's
+        // abort looked for it; its finish report aborts again, on that tablet only.
+        LakeTableAddIndexJob cancelled = newJob();
+        setField(cancelled, "jobState", AlterJobV2.JobState.CANCELLED);
+        setField(cancelled, "watershedTxnId", 1000L);
+        // Cancelled by force out of FINISHED_REWRITING: some tablet may have published.
+        LakeTableAddIndexJob forcedOut = newJob();
+        setField(forcedOut, "jobState", AlterJobV2.JobState.CANCELLED);
+        setField(forcedOut, "watershedTxnId", 1001L);
+        Map<Long, Long> commit = new HashMap<>();
+        commit.put(100L, 5L);
+        setField(forcedOut, "commitVersionMap", commit);
+        // A duplicate report while the job runs, and one after it finished, are not the job's to clean up.
+        LakeTableAddIndexJob running = newJob();
+        setField(running, "jobState", AlterJobV2.JobState.RUNNING);
+        setField(running, "watershedTxnId", 1002L);
+        LakeTableAddIndexJob finished = newJob();
+        setField(finished, "jobState", AlterJobV2.JobState.FINISHED);
+        setField(finished, "watershedTxnId", 1003L);
+        setField(finished, "commitVersionMap", new HashMap<>(commit));
+
+        try (MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
+            for (LakeTableAddIndexJob job : List.of(cancelled, forcedOut, running, finished)) {
+                job.handleFinishReportOfRemovedTask(11L);
+            }
+            utilsStatic.verify(() -> Utils.abortTxnWithCleanup(eq(List.of(11L)),
+                    argThat(txnInfo -> txnInfo.txnId == 1000L), any()), times(1));
+            utilsStatic.verify(() -> Utils.abortTxnWithCleanup(any(), any(), any()), times(1));
         }
     }
 

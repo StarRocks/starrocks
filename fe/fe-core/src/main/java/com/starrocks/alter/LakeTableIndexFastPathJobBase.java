@@ -708,8 +708,57 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             releaseRetainPins();
             persistStateChange(this, JobState.CANCELLED);
         }
+        // CANCELLED is in the journal now, so no leader will publish this txn. A task still running or queued on a
+        // node writes its txn log after this abort looked for it; its finish report aborts that tablet again
+        // (handleFinishReportOfRemovedTask).
+        abortTxnOnTablets(allTabletIds());
         LOG.info("index fast-path job {} cancelled (force={}): {}", jobId, force, errMsg);
         return true;
+    }
+
+    /**
+     * Handles the finish report of one of this job's AlterReplicaTasks that arrives after the task left
+     * AgentTaskQueue. A cancel removes every task from the queue, but a node may still be running or queueing some
+     * of them: such a node writes the task's txn log and files after the abort sent at the cancel looked for them,
+     * so the report is when they can be reclaimed.
+     */
+    public void handleFinishReportOfRemovedTask(long tabletId) {
+        if (jobState != JobState.CANCELLED) {
+            return;
+        }
+        // Decide under the monitor run() and cancel() hold while they write the fields the decision reads. A
+        // cancelled job is final, so neither of them holds it for long any more.
+        synchronized (this) {
+            abortTxnOnTablets(List.of(tabletId));
+        }
+    }
+
+    /**
+     * Aborts this job's txn on {@code tabletIds}: BE deletes the txn log the tablet's AlterReplicaTask wrote under
+     * {@link #watershedTxnId} and the files it references, the .idx files of an ADD INDEX, which nothing else
+     * reclaims once the job is cancelled. Only for a cancelled job that never reserved its commit versions: a
+     * publish is sent only after they are reserved at the RUNNING -> FINISHED_REWRITING transition, and a job forced
+     * out of FINISHED_REWRITING may already have published on some tablets, whose files the cleanup would delete
+     * from under the published metadata.
+     */
+    private void abortTxnOnTablets(Collection<Long> tabletIds) {
+        boolean hasReservedVersion = commitVersionMap != null && !commitVersionMap.isEmpty();
+        if (jobState != JobState.CANCELLED || hasReservedVersion || watershedTxnId == -1 || tabletIds.isEmpty()) {
+            return;
+        }
+        // The txn info this job's publish sends, so BE reads the same txn log a publish would.
+        TxnInfoPB txnInfo = TxnInfoHelper.forJobPublish(watershedTxnId, TxnTypePB.TXN_NORMAL,
+                System.currentTimeMillis(), commitGtid);
+        LOG.info("index fast-path job {} aborts txn {} on {} tablet(s)", jobId, watershedTxnId, tabletIds.size());
+        Utils.abortTxnWithCleanup(tabletIds, txnInfo, computeResource);
+    }
+
+    private List<Long> allTabletIds() {
+        List<Long> tabletIds = new ArrayList<>();
+        if (partitionToTablets != null) {
+            partitionToTablets.values().forEach(tabletIds::addAll);
+        }
+        return tabletIds;
     }
 
     /** True iff this job's database and table both still exist in the catalog. */

@@ -18,6 +18,7 @@
 
 #include <memory>
 
+#include "base/testutil/sync_point.h"
 #include "column/chunk_factory.h"
 #include "column/chunk_schema_helper.h"
 #include "common/config_exec_fwd.h"
@@ -920,7 +921,13 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
               << " segment_entries=" << op_add_index->segment_entries_size()
               << " new_indexes=" << op_add_index->new_indexes_size();
     StorageMetrics::instance()->lake_idg_files_written_total.increment(op_add_index->segment_entries_size());
-    return _tablet_manager->put_txn_log(std::move(txn_log));
+    // A failed put keeps the files written above. The error does not say whether the store kept the log (a request
+    // can time out after the object was stored), and a log that landed can still be published: another run of
+    // this task, a resent or a duplicate one, may report success while this log is the one stored. The txn abort FE
+    // sends for a cancelled alter deletes them with the log when the log landed; when it did not, they stay.
+    auto put_st = _tablet_manager->put_txn_log(std::move(txn_log));
+    TEST_SYNC_POINT_CALLBACK("SchemaChangeHandler::do_process_add_index_only:put_txn_log", &put_st);
+    return put_st;
 }
 
 // =============================================================================

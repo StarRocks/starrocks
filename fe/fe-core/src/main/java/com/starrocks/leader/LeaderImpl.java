@@ -235,6 +235,16 @@ public class LeaderImpl {
 
         AgentTask task = AgentTaskQueue.getTask(backendId, taskType, signature);
         if (task == null) {
+            if (taskType == TTaskType.ALTER && request.isSetAlter_job_id()) {
+                // An ALTER task's signature is the id of the tablet it altered.
+                try {
+                    GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
+                            .handleFinishReportOfRemovedAlterTask(request.getAlter_job_id(), signature);
+                } catch (Exception e) {
+                    LOG.warn("fail to handle the finish report of removed alter task {} of job {}", signature,
+                            request.getAlter_job_id(), e);
+                }
+            }
             if (taskType != TTaskType.DROP && taskType != TTaskType.STORAGE_MEDIUM_MIGRATE
                     && taskType != TTaskType.RELEASE_SNAPSHOT && taskType != TTaskType.CLEAR_TRANSACTION_TASK) {
                 String errMsg = "cannot find task. type: " + taskType + ", backendId: " + backendId

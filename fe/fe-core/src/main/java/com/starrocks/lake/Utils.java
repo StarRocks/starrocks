@@ -32,6 +32,7 @@ import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
+import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.ComputeNodePB;
 import com.starrocks.proto.ParentTabletPublishInfoPB;
@@ -190,6 +191,51 @@ public class Utils {
         } catch (Exception e) {
             LOG.error("Fail to no-op publish for force-cancel of alter job {}: {}", jobId, e.getMessage());
             return false;
+        }
+    }
+
+    /**
+     * Aborts the transaction {@code txnInfo} on {@code tabletIds} with cleanup: for each tablet, BE deletes the
+     * tablet's txn log of that transaction and the data files the log references. Only for a transaction that will
+     * never be published, since what it deletes is exactly what a publish would install.
+     *
+     * <p>Best effort. Tablets are grouped by the compute node {@code computeResource} assigns them, one request per
+     * node, and the responses are not awaited. A tablet with no assigned node is skipped and keeps its files.
+     */
+    public static void abortTxnWithCleanup(Collection<Long> tabletIds, TxnInfoPB txnInfo,
+                                           ComputeResource computeResource) {
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Map<ComputeNode, List<Long>> tabletsByNode = new HashMap<>();
+        int skipped = 0;
+        for (Long tabletId : tabletIds) {
+            ComputeNode node = null;
+            try {
+                node = warehouseManager.getComputeNodeAssignedToTablet(computeResource, tabletId);
+            } catch (RuntimeException e) {
+                LOG.debug("no node to abort txn {} on tablet {}", txnInfo.txnId, tabletId, e);
+            }
+            if (node == null) {
+                skipped++;
+                continue;
+            }
+            tabletsByNode.computeIfAbsent(node, k -> new ArrayList<>()).add(tabletId);
+        }
+        if (skipped > 0) {
+            LOG.warn("skip aborting txn {} on {} of {} tablet(s): no compute node is assigned to them",
+                    txnInfo.txnId, skipped, tabletIds.size());
+        }
+        for (Map.Entry<ComputeNode, List<Long>> entry : tabletsByNode.entrySet()) {
+            ComputeNode node = entry.getKey();
+            AbortTxnRequest request = new AbortTxnRequest();
+            request.tabletIds = entry.getValue();
+            request.txnInfos = Lists.newArrayList(txnInfo);
+            request.skipCleanup = false;
+            try {
+                BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort()).abortTxn(request);
+            } catch (Throwable e) {
+                LOG.warn("fail to send abort of txn {} for {} tablet(s) to node {}: {}", txnInfo.txnId,
+                        request.tabletIds.size(), node.getId(), e.getMessage());
+            }
         }
     }
 

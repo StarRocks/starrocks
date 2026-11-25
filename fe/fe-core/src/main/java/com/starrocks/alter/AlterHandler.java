@@ -344,6 +344,17 @@ public abstract class AlterHandler extends LeaderDaemon {
         executor.submit(task);
     }
 
+    /**
+     * Handles the finish report of an ALTER task of job {@code jobId} that is no longer in AgentTaskQueue, e.g. one
+     * a cancel removed while the node was still running it. Only the lake index fast-path jobs act on it.
+     */
+    public void handleFinishReportOfRemovedAlterTask(long jobId, long tabletId) {
+        AlterJobV2 job = alterJobsV2.get(jobId);
+        if (job instanceof LakeTableIndexFastPathJobBase fastPathJob) {
+            fastPathJob.handleFinishReportOfRemovedTask(tabletId);
+        }
+    }
+
     // replay the alter job v2
     public void replayAlterJobV2(AlterJobV2 alterJob) {
         AlterJobV2 existingJob = alterJobsV2.get(alterJob.getJobId());

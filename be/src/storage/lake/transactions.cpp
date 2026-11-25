@@ -1148,6 +1148,18 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
             collect_vi_files(op_write.rowset());
         }
     }
+    if (txn_log.has_op_add_index()) {
+        // The .idx files the ADD INDEX fast path wrote. Until publish nothing but this log references them, and
+        // full vacuum (off by default) is the only other path that would reclaim them. A file marked shared is
+        // referenced by other tablets as well and is not this tablet's to delete. Only .idx names are files:
+        // index_file may also name a GIN directory.
+        for (const auto& segment_entry : txn_log.op_add_index().segment_entries()) {
+            const auto& entry = segment_entry.entry();
+            if (!entry.shared_file() && is_idx(entry.index_file())) {
+                files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, entry.index_file()));
+            }
+        }
+    }
 
     // Multi-statement transactions cache the .log under the 4-segment key; use the
     // same path here so the cache entry actually drops.

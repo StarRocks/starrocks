@@ -349,6 +349,38 @@ public class LeaderImplTest {
     }
 
     @Test
+    public void testAlterFinishOfRemovedTaskGoesToItsJob(@Mocked GlobalStateMgr globalStateMgr,
+                                                         @Mocked NodeMgr nodeMgr,
+                                                         @Mocked SystemInfoService clusterInfo,
+                                                         @Mocked SchemaChangeHandler schemaChangeHandler) {
+        expectLeaderAcceptingAlterFinish(globalStateMgr, nodeMgr, clusterInfo, schemaChangeHandler);
+
+        // Nothing is queued under the signature: the job dropped the task when it was cancelled, while the backend
+        // was still running it. Both a successful and a failed run report back.
+        for (TStatusCode statusCode : List.of(TStatusCode.OK, TStatusCode.INTERNAL_ERROR)) {
+            TMasterResult result = leader.finishTask(alterFinishRequest(statusCode, OLD_JOB_ID));
+            Assertions.assertEquals(TStatusCode.CANCELLED, result.getStatus().getStatus_code(), statusCode.toString());
+        }
+        // A backend that does not send alter_job_id names no job to hand the report to.
+        leader.finishTask(alterFinishRequest(TStatusCode.OK, null));
+
+        new Verifications() {
+            {
+                schemaChangeHandler.handleFinishReportOfRemovedAlterTask(OLD_JOB_ID, tabletId);
+                times = 2;
+                schemaChangeHandler.handleFinishAlterTask((AlterReplicaTask) any);
+                times = 0;
+            }
+        };
+        new Verifications() {
+            {
+                schemaChangeHandler.handleFinishReportOfRemovedAlterTask(anyLong, anyLong);
+                times = 2;
+            }
+        };
+    }
+
+    @Test
     public void testAlterFinishKeepsTaskQueuedInItsPlace(@Mocked GlobalStateMgr globalStateMgr,
                                                          @Mocked NodeMgr nodeMgr,
                                                          @Mocked SystemInfoService clusterInfo,
