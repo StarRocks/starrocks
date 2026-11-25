@@ -324,6 +324,20 @@ public class PaimonMetadataTest {
     }
 
     @Test
+    public void testMissingSystemTableDoesNotResolveToView() throws Exception {
+        Identifier identifier = Identifier.create("db", "orders$schemas");
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable(identifier);
+                result = new Catalog.TableNotExistException(identifier);
+                paimonNativeCatalog.getView(identifier);
+                times = 0;
+            }
+        };
+        assertNull(metadata.getTable(connectContext, "db", "orders$schemas"));
+    }
+
+    @Test
     public void testGetSystemTable(@Mocked ManifestsTable paimonSystemTable,
                                    @Mocked ReadBuilder readBuilder,
                                    @Mocked InnerTableScan scan) throws Exception {
