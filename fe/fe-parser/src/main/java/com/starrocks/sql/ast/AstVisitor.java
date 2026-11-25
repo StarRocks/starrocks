@@ -42,6 +42,7 @@ import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
 import com.starrocks.sql.ast.expression.LargeInPredicate;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.LargeStringLiteral;
+import com.starrocks.sql.ast.expression.LikeEscapeExpr;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -1293,6 +1294,10 @@ public interface AstVisitor<R, C> {
 
     default R visitLikePredicate(LikePredicate node, C context) {
         return visitPredicate(node, context);
+    }
+
+    default R visitLikeEscapeExpr(LikeEscapeExpr node, C context) {
+        return visitExpression(node, context);
     }
 
     default R visitCompoundPredicate(CompoundPredicate node, C context) {

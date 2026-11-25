@@ -125,6 +125,7 @@ import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
 import com.starrocks.sql.ast.expression.LargeInPredicate;
 import com.starrocks.sql.ast.expression.LargeStringLiteral;
+import com.starrocks.sql.ast.expression.LikeEscapeExpr;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -1511,8 +1512,14 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
     }
 
     public String visitLikePredicate(LikePredicate node, Void context) {
-        return printWithParentheses(node.getChild(0))
-                + " " + node.getOp() + " " + printWithParentheses(node.getChild(1));
+        Expr pattern = node.getChild(1);
+        return printWithParentheses(node.getChild(0)) + " " + node.getOp() + " "
+                + (pattern instanceof LikeEscapeExpr ? visit(pattern) : printWithParentheses(pattern));
+    }
+
+    @Override
+    public String visitLikeEscapeExpr(LikeEscapeExpr node, Void context) {
+        return printWithParentheses(node.getChild(0)) + " ESCAPE " + visit(new StringLiteral(node.getEscape()));
     }
 
     public String visitMatchExpr(MatchExpr node, Void context) {

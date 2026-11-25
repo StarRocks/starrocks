@@ -81,6 +81,7 @@ import com.starrocks.sql.ast.expression.LambdaArgument;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
 import com.starrocks.sql.ast.expression.LargeInPredicate;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
+import com.starrocks.sql.ast.expression.LikeEscapeExpr;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MapExpr;
@@ -998,6 +999,17 @@ public class ExpressionAnalyzer {
                 }
             }
 
+            return null;
+        }
+
+        @Override
+        public Void visitLikeEscapeExpr(LikeEscapeExpr node, Scope scope) {
+            Expr pattern = node.getChild(0);
+            // The pattern is rewritten when the statement is planned, which takes its value.
+            if (!pattern.isConstant()) {
+                throw new SemanticException("The pattern of LIKE ... ESCAPE must be a constant", node.getPos());
+            }
+            node.setType(pattern.getType());
             return null;
         }
 

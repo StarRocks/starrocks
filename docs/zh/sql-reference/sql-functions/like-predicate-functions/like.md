@@ -22,6 +22,23 @@ BOOLEAN like(VARCHAR expr, VARCHAR pattern);
 
 `pattern`: 字符串需匹配的模式，支持的数据类型为 VARCHAR。
 
+## 转义字符
+
+如需匹配字面量 `%` 或 `_`，请在其前面加上转义字符。默认的转义字符是反斜杠，在字符串字面量中写作 `\\`。
+
+将 LIKE 用作运算符时，可以通过 ESCAPE 子句为模式指定其他转义字符：
+
+```SQL
+expr [NOT] LIKE pattern ESCAPE 'escape_char'
+```
+
+`escape_char` 为单个字符；如果模式没有转义字符，则为空字符串。使用 ESCAPE 子句时，`pattern` 必须是常量表达式。
+
+```SQL
+-- 返回 c1 以 "50%" 结尾的行。
+SELECT * FROM t1 WHERE c1 LIKE '%50^%' ESCAPE '^';
+```
+
 ## 返回值说明
 
 返回值的数据类型为 BOOLEAN。

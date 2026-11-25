@@ -52,6 +52,7 @@ import com.starrocks.sql.ast.expression.LambdaArgument;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
 import com.starrocks.sql.ast.expression.LargeInPredicate;
 import com.starrocks.sql.ast.expression.LargeStringLiteral;
+import com.starrocks.sql.ast.expression.LikeEscapeExpr;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MapExpr;
@@ -299,6 +300,12 @@ public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Voi
         String expr = node.getChild(0).accept(this, context);
         String pattern = node.getChild(1).accept(this, context);
         return expr + " " + node.getOp().toString() + " " + pattern;
+    }
+
+    @Override
+    public String visitLikeEscapeExpr(LikeEscapeExpr node, Void context) {
+        return node.getChild(0).accept(this, context) + " ESCAPE "
+                + new StringLiteral(node.getEscape()).accept(this, context);
     }
 
     @Override

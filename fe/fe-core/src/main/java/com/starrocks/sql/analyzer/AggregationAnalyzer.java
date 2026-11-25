@@ -46,6 +46,7 @@ import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.InformationFunction;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
+import com.starrocks.sql.ast.expression.LikeEscapeExpr;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MatchExpr;
@@ -316,6 +317,11 @@ public class AggregationAnalyzer {
         public Boolean visitLikePredicate(LikePredicate node, Void context) {
             // The pattern only has to be a string expression, not a literal, so it can carry a bare column.
             return node.getChildren().stream().allMatch(this::visit);
+        }
+
+        @Override
+        public Boolean visitLikeEscapeExpr(LikeEscapeExpr node, Void context) {
+            return visit(node.getChild(0));
         }
 
         @Override
