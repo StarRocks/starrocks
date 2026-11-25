@@ -82,9 +82,8 @@ Status ParallelTaskRunner::join() {
         // wait() also returns when the pool is shut down, and ThreadPool::shutdown() drops queued tasks
         // without running them. Reporting OK here would hand the caller results for work that never
         // happened, e.g. a PK index rebuilt without the rows of the segments whose scan was dropped.
-        _status.update(Status::Aborted(fmt::format(
-                "{} of {} parallel tasks did not run, the thread pool was shut down", _submitted - _finished,
-                _submitted)));
+        _status.update(Status::Aborted(fmt::format("{} of {} parallel tasks did not run, the thread pool was shut down",
+                                                   _submitted - _finished, _submitted)));
         // Counted once: a later phase on the same runner only reports its own dropped tasks.
         _submitted = _finished;
     }
