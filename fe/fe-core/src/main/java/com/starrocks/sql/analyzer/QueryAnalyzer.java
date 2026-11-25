@@ -171,7 +171,16 @@ public class QueryAnalyzer {
      * while deferring normal table analysis to the locked phase.
      */
     public void analyzeFilesOnly(StatementBase node) {
-        new FilesOnlyVisitor().process(node, new Scope(RelationId.anonymous(), new RelationFields()));
+        // The planner calls this when AnalyzerUtils#collectFileTableFunctionRelation finds a files() call; resolving
+        // what that same walk finds leaves none of them to the analyzer, which runs under the planner lock.
+        AnalyzerUtils.collectFileTableFunctionRelation(node).forEach(this::initializeFileTableIfAbsent);
+    }
+
+    private void initializeFileTableIfAbsent(FileTableFunctionRelation relation) {
+        if (relation.getTable() instanceof TableFunctionTable) {
+            return;
+        }
+        relation.setTable(resolveTableFunctionTable(relation.getProperties(), relation.getPushDownSchemaFunc()));
     }
 
     /**
@@ -2772,113 +2781,6 @@ public class QueryAnalyzer {
                 }
             }
             return false;
-        }
-    }
-
-    /**
-     * A lightweight visitor that only resolves FileTableFunctionRelation so that
-     * files() schema can be inferred without acquiring DB/table locks. Normal tables/views are skipped.
-     */
-    private class FilesOnlyVisitor implements AstVisitorExtendInterface<Scope, Scope> {
-        public FilesOnlyVisitor() {}
-
-        public Scope process(ParseNode node, Scope scope) {
-            return node.accept(this, scope);
-        }
-
-        @Override
-        public Scope visitQueryStatement(QueryStatement node, Scope parent) {
-            QueryRelation queryRelation = node.getQueryRelation();
-            if (queryRelation != null && !queryRelation.getCteRelations().isEmpty()) {
-                for (CTERelation cteRelation : queryRelation.getCteRelations()) {
-                    process(cteRelation.getCteQueryStatement(), parent);
-                }
-            }
-            return process(queryRelation, parent);
-        }
-
-        @Override
-        public Scope visitQueryRelation(QueryRelation node, Scope parent) {
-            return process(node, parent);
-        }
-
-        @Override
-        public Scope visitSelect(SelectRelation selectRelation, Scope scope) {
-            Relation r = selectRelation.getRelation();
-            // Only touch files(); keep others intact
-            if (r instanceof FileTableFunctionRelation) {
-                FileTableFunctionRelation f = (FileTableFunctionRelation) r;
-                initializeFileTableIfAbsent(f);
-            } else if (r instanceof JoinRelation) {
-                visitJoin((JoinRelation) r, scope);
-            } else if (r instanceof SubqueryRelation) {
-                visitSubqueryRelation((SubqueryRelation) r, scope);
-            } else if (r instanceof SetOperationRelation) {
-                visitSetOp((SetOperationRelation) r, scope);
-            } else if (r instanceof PivotRelation) {
-                PivotRelation p = (PivotRelation) r;
-                process(p.getQuery(), scope);
-            }
-            return scope;
-        }
-
-        public Scope visitJoin(JoinRelation join, Scope scope) {
-            Relation l = join.getLeft();
-            Relation r = join.getRight();
-            // SubqueryRelation/SetOperationRelation/PivotRelation are intentionally skipped here, because
-            // pre-analyzing them would still require table metadata and locks; the full analyzer pass will
-            // revisit them after files() has been resolved where necessary.
-            if (l instanceof FileTableFunctionRelation) {
-                FileTableFunctionRelation f = (FileTableFunctionRelation) l;
-                initializeFileTableIfAbsent(f);
-            } else if (l instanceof JoinRelation) {
-                visitJoin((JoinRelation) l, scope);
-            } else if (l instanceof SelectRelation) {
-                visitSelect((SelectRelation) l, scope);
-            } else if (l instanceof SubqueryRelation) {
-                visitSubqueryRelation((SubqueryRelation) l, scope);
-            } else if (l instanceof SetOperationRelation) {
-                visitSetOp((SetOperationRelation) l, scope);
-            }
-
-            // Same as the left side. We continue to recurse into joins, subqueries and set operations to locate
-            // nested files() invocations, while still avoiding any metadata access for normal table relations.
-            if (r instanceof FileTableFunctionRelation) {
-                FileTableFunctionRelation f = (FileTableFunctionRelation) r;
-                initializeFileTableIfAbsent(f);
-                // Do NOT mark lateral here: the relation remains a FileTableFunctionRelation, and the main analyzer
-                // will decide whether lateral semantics are required once it has the final relation type.
-            } else if (r instanceof JoinRelation) {
-                visitJoin((JoinRelation) r, scope);
-            } else if (r instanceof SelectRelation) {
-                visitSelect((SelectRelation) r, scope);
-            } else if (r instanceof SubqueryRelation) {
-                visitSubqueryRelation((SubqueryRelation) r, scope);
-            } else if (r instanceof SetOperationRelation) {
-                visitSetOp((SetOperationRelation) r, scope);
-            }
-            return scope;
-        }
-
-        private void initializeFileTableIfAbsent(FileTableFunctionRelation relation) {
-            if (relation.getTable() instanceof TableFunctionTable) {
-                return;
-            }
-
-            Table table = resolveTableFunctionTable(relation.getProperties(), relation.getPushDownSchemaFunc());
-            relation.setTable(table);
-        }
-
-        public Scope visitSubqueryRelation(SubqueryRelation subquery, Scope scope) {
-            process(subquery.getQueryStatement(), scope);
-            return scope;
-        }
-
-        public Scope visitSetOp(SetOperationRelation set, Scope scope) {
-            for (QueryRelation qr : set.getRelations()) {
-                process(qr, scope);
-            }
-            return scope;
         }
     }
 
