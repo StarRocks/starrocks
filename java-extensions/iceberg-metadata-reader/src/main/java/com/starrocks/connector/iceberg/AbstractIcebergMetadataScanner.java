@@ -14,12 +14,16 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.starrocks.connector.share.iceberg.IcebergTablePayload;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ConnectorScanner;
 import com.starrocks.jni.connector.ScannerHelper;
 import com.starrocks.jni.connector.SelectedFields;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.expressions.ExpressionParser;
+import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.io.FileIO;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -33,6 +37,12 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
     private static final Logger LOG = LogManager.getLogger(AbstractIcebergMetadataScanner.class);
     // Dropped once the table is resolved: the base64 payload can be tens of MB.
     private String serializedTable;
+    // The JSON forms of the table (IcebergTablePayload) and predicate, read instead when the FE is of another build.
+    private String jsonPayload;
+    private final String predicateJson;
+    private final String readerBuild;
+    // The predicate of the JSON form, when the table came from it; null when the table is the Java form.
+    protected Expression jsonPredicate;
     private final long tableCacheCapacity;
     private SharedTableCache.Lease tableLease;
     protected final String[] requiredFields;
@@ -53,6 +63,9 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
         this.metadataColumnNames = params.get("metadata_column_names").split(",");
         this.metadataColumnTypes = params.get("metadata_column_types").split("#");
         this.serializedTable = params.get("serialized_table");
+        this.jsonPayload = params.get("iceberg_metadata_payload");
+        this.predicateJson = params.get("iceberg_predicate_json");
+        this.readerBuild = params.get("reader_build");
         this.timezone = params.getOrDefault("time_zone", TimeZone.getDefault().getID());
         // An older BE does not pass the capacity: keep the per-task table it expects.
         this.tableCacheCapacity = Long.parseLong(params.getOrDefault("table_cache_capacity", "0"));
@@ -64,8 +77,9 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
             // The scan tasks of one query share the deserialized table and its FileIO (keyed by the payload, so
             // credentials included). The lease, not the scanner, decides when that FileIO is closed.
-            this.tableLease = SharedTableCache.acquire(serializedTable, tableCacheCapacity);
+            this.tableLease = acquireTable();
             this.serializedTable = null;
+            this.jsonPayload = null;
             this.table = tableLease.table();
             this.fileIO = table.io();
             parseRequiredTypes();
@@ -108,6 +122,28 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
             LOG.error("Failed to close the {}.", this.getClass().getSimpleName(), e);
             throw new IOException(String.format("Failed to close the %s.", this.getClass().getSimpleName()), e);
         }
+    }
+
+    // An FE of the same build: the Java-serialized table, as before. An FE of another build (a rolling
+    // upgrade, whose Iceberg classes may not deserialize here) or a failed deserialization: the JSON form.
+    private SharedTableCache.Lease acquireTable() {
+        boolean hasJson = jsonPayload != null && !jsonPayload.isEmpty();
+        boolean hasJava = serializedTable != null && !serializedTable.isEmpty();
+        if (!hasJson || (hasJava && IcebergTablePayload.readBuild(jsonPayload).equals(readerBuild))) {
+            try {
+                return SharedTableCache.acquire(serializedTable, tableCacheCapacity);
+            } catch (RuntimeException | LinkageError e) {
+                if (!hasJson) {
+                    throw e;
+                }
+                // Never log the payloads: they hold storage credentials.
+                LOG.warn("Failed to deserialize the iceberg table of an FE of the same build, reading its JSON form: {}",
+                        e.toString());
+            }
+        }
+        jsonPredicate = predicateJson == null || predicateJson.isEmpty()
+                ? Expressions.alwaysTrue() : ExpressionParser.fromJson(predicateJson);
+        return SharedTableCache.acquire(jsonPayload, tableCacheCapacity);
     }
 
     protected abstract void doOpen();

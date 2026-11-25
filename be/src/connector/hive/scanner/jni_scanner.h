@@ -99,8 +99,13 @@ private:
     std::map<std::string, std::string> _jni_scanner_params;
     std::string _jni_scanner_factory_class;
 
-    const std::set<std::string> _skipped_log_jni_scanner_params = {
-            "native_table", "split_info", "predicate_info", "access_id", "access_key", "read_session", "runtime_conf"};
+    // Encoded objects and secrets: the Iceberg metadata table and its payload carry storage credentials (in clear
+    // text in the JSON form), and each would fill a log line per scan range (glog truncates at 30000 bytes).
+    const std::set<std::string> _skipped_log_jni_scanner_params = {"native_table",         "split_info",
+                                                                   "predicate_info",       "access_id",
+                                                                   "access_key",           "read_session",
+                                                                   "runtime_conf",         "serialized_table",
+                                                                   "serialized_predicate", "iceberg_metadata_payload"};
 
 private:
     long* _chunk_meta_ptr;
