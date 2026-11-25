@@ -387,6 +387,23 @@ def is_range_distribution(distribution: Union[ReflectedDistributionInfo, str, No
     return bool(_RANGE_DISTRIBUTION_PATTERN.match(distribution))
 
 
+_RANDOM_DISTRIBUTION_PATTERN = re.compile(r'^\s*RANDOM\b', re.IGNORECASE)
+
+
+def is_random_distribution(distribution: Union[ReflectedDistributionInfo, str, None]) -> bool:
+    """Whether a DISTRIBUTED BY value denotes random distribution.
+
+    Accepts a reflected value such as 'RANDOM BUCKETS 4' or a metadata value such as 'RANDOM'.
+    """
+    if not distribution:
+        return False
+    if isinstance(distribution, ReflectedDistributionInfo):
+        if distribution.type and not distribution.distribution_method:
+            return str(distribution.type).strip().upper() == TableDistribution.RANDOM
+        distribution = str(distribution)
+    return bool(_RANDOM_DISTRIBUTION_PATTERN.match(distribution))
+
+
 def find_matching_parenthesis(text: str, start_index: int = 0) -> int:
     """
     Finds the index of the matching closing parenthesis for a given starting parenthesis.

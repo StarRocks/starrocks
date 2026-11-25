@@ -872,7 +872,6 @@ def test_alter_table_properties_and_comment(database: str, alembic_env: AlembicT
             "starrocks_properties": {
                 "replication_num": "1",
                 "storage_medium": "HDD",
-                "bucket_size": "4294967296",
             },
         }
     alembic_env.harness.generate_autogen_revision(metadata=Base.metadata, message="Initial")
@@ -893,7 +892,6 @@ def test_alter_table_properties_and_comment(database: str, alembic_env: AlembicT
                 "replication_num": "1",
                 "replicated_storage": "false",
                 "storage_medium": "SSD",
-                "bucket_size": "1000000000",
             },
         }
     alembic_env.harness.generate_autogen_revision(metadata=AlteredBase.metadata, message="Alter props")
@@ -901,7 +899,6 @@ def test_alter_table_properties_and_comment(database: str, alembic_env: AlembicT
     # 3. Verify and apply the ALTER script
     script_content = ScriptContentParser.check_script_content(alembic_env, 1, "alter_props")
     assert "op.alter_table" in script_content
-    assert "bucket_size" in script_content
     sr_engine.dialect._init_run_mode(sr_engine.connect())  # make sure the run_mode is set
     # logger.debug(f"system run mode: {sr_engine.dialect.run_mode} with dialect: {sr_engine.dialect}")
     if sr_engine.dialect.run_mode == SystemRunMode.SHARED_DATA:
@@ -942,6 +939,69 @@ def test_alter_table_properties_and_comment(database: str, alembic_env: AlembicT
     logger.debug("Downgraded to base.")
     inspector.clear_cache()
     is_true(not inspector.has_table("t_alter_props"))
+
+
+def test_alter_table_bucket_size_random(database: str, alembic_env: AlembicTestEnv, sr_engine: Engine):
+    """
+    Tests altering bucket_size on a RANDOM-distributed table, the only kind StarRocks reports it for.
+
+    - Changes an explicitly set 'bucket_size'.
+    - A second autogenerate after the upgrade produces no changes.
+    """
+    # 1. Initial state
+    Base = declarative_base()
+    class Event(Base):
+        __tablename__ = "t_alter_bucket_size"
+        id = Column(INTEGER, primary_key=True)
+        __table_args__ = {
+            "starrocks_duplicate_key": "id",
+            "starrocks_distributed_by": "RANDOM",
+            "starrocks_properties": {
+                "replication_num": "1",
+                "bucket_size": "4294967296",
+            },
+        }
+    alembic_env.harness.generate_autogen_revision(metadata=Base.metadata, message="Initial")
+    alembic_env.harness.upgrade("head")
+
+    # 2. Alter bucket_size in metadata
+    AlteredBase = declarative_base()
+    class AlteredEvent(AlteredBase):
+        __tablename__ = "t_alter_bucket_size"
+        id = Column(INTEGER, primary_key=True)
+        __table_args__ = {
+            "starrocks_duplicate_key": "id",
+            "starrocks_distributed_by": "RANDOM",
+            "starrocks_properties": {
+                "replication_num": "1",
+                "bucket_size": "2147483648",
+            },
+        }
+    alembic_env.harness.generate_autogen_revision(metadata=AlteredBase.metadata, message="Alter bucket size")
+
+    # 3. Verify and apply the ALTER script
+    script_content = ScriptContentParser.check_script_content(alembic_env, 1, "alter_bucket_size")
+    assert "op.alter_table" in script_content
+    assert "'bucket_size': '2147483648'" in script_content
+    assert "'bucket_size': '4294967296'" in script_content  # downgrade
+    alembic_env.harness.upgrade("head")
+
+    # 4. Verify in DB
+    inspector = inspect(sr_engine)
+    options = inspector.get_table_options("t_alter_bucket_size")
+    assert options[TableInfoKeyWithPrefix.PROPERTIES]['bucket_size'] == '2147483648'
+
+    # 5. A second autogenerate produces no changes
+    alembic_env.harness.generate_autogen_revision(metadata=AlteredBase.metadata, message="Second run bucket size")
+    script_content = ScriptContentParser.check_script_content(alembic_env, 1, "second_run_bucket_size")
+    is_true(re.search(re.compile(UPGRADE_STR + r"pass"), script_content), "Upgrade script should be empty")
+    is_true(re.search(re.compile(DOWNGRADE_STR + r"pass"), script_content), "Downgrade script should be empty")
+
+    # 6. Downgrade one revision (the empty one was never applied), not to the base
+    alembic_env.harness.downgrade("-1")
+    inspector.clear_cache()
+    options = inspector.get_table_options("t_alter_bucket_size")
+    assert options[TableInfoKeyWithPrefix.PROPERTIES]['bucket_size'] == '4294967296'
 
 
 def test_drop_table(database: str, alembic_env: AlembicTestEnv, sr_engine: Engine):
