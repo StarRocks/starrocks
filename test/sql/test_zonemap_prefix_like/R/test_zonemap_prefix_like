@@ -1,0 +1,131 @@
+-- name: test_zonemap_prefix_like
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_sorted (
+    k VARCHAR(32) NOT NULL,
+    v INT NOT NULL
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(v) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_sorted
+select concat(case x % 4 when 0 then 'aaa_' when 1 then 'abc_' when 2 then 'mmm_' else 'zzz_' end,
+              lpad(cast(x as varchar), 8, '0')), x
+from table(generate_series(1, 200000)) t(x);
+-- result:
+-- !result
+select count(*) from t_sorted where k like 'abc%';
+-- result:
+50000
+-- !result
+select count(*) from t_sorted where k like 'ab_\\_%';
+-- result:
+50000
+-- !result
+select count(*) from t_sorted where k like 'abc\\_0000000%';
+-- result:
+3
+-- !result
+select count(*) from t_sorted where starts_with(k, 'mmm');
+-- result:
+50000
+-- !result
+select count(*) from t_sorted where k like 'abc%' and k < 'abc_00000100';
+-- result:
+25
+-- !result
+select count(*) from t_sorted where k not like 'abc%';
+-- result:
+150000
+-- !result
+select count(*) from t_sorted where k like '%bc_%';
+-- result:
+50000
+-- !result
+CREATE TABLE t_dict (
+    code VARCHAR(16) NOT NULL,
+    v INT NOT NULL
+) DUPLICATE KEY(code)
+DISTRIBUTED BY HASH(v) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_dict
+select case x % 8 when 0 then 'aaa_1' when 1 then 'aaa_2' when 2 then 'abc_1' when 3 then 'abc_2'
+                  when 4 then 'abc_3' when 5 then 'mmm_1' when 6 then 'zzz_1' else 'zzz_2' end, x
+from table(generate_series(1, 1000000)) t(x);
+-- result:
+-- !result
+[UC] ANALYZE FULL TABLE t_dict;
+function: wait_global_dict_ready('code', 't_dict')
+-- result:
+
+-- !result
+function: assert_explain_verbose_contains('select count(*) from t_dict where code like \'abc%\'', 'DictDecode')
+-- result:
+None
+-- !result
+select count(*) from t_dict where code like 'abc%';
+-- result:
+375000
+-- !result
+select count(*) from t_dict where code like 'abc\\_%';
+-- result:
+375000
+-- !result
+set enable_profile = true;
+-- result:
+-- !result
+set enable_async_profile = false;
+-- result:
+-- !result
+[UC]select count(*) from t_sorted where k like 'abc%';
+create table profile_like properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+-- result:
+-- !result
+select assert_true(count(1) > 0)
+    from profile_like
+    where line like '%- ZoneMapIndexFilterRows%';
+-- result:
+1
+-- !result
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- ZoneMapIndexFilterRows: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_like
+    where line like '%- ZoneMapIndexFilterRows%';
+-- result:
+1
+-- !result
+[UC]select count(*) from t_sorted where starts_with(k, 'mmm');
+create table profile_starts_with properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+-- result:
+-- !result
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- ZoneMapIndexFilterRows: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_starts_with
+    where line like '%- ZoneMapIndexFilterRows%';
+-- result:
+1
+-- !result
+[UC]select count(*) from t_dict where code like 'abc%';
+create table profile_dict properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+-- result:
+-- !result
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- ZoneMapIndexFilterRows: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_dict
+    where line like '%- ZoneMapIndexFilterRows%';
+-- result:
+1
+-- !result
+set enable_profile = false;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

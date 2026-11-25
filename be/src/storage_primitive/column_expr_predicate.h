@@ -1,6 +1,8 @@
 #pragma once
 
 #include <optional>
+#include <string>
+#include <string_view>
 #include <utility>
 
 #include "common/column_id.h"
@@ -99,6 +101,18 @@ private:
 
 std::optional<InvertedIndexQueryType> choose_inverted_index_query_type(bool valid_like, bool valid_match,
                                                                        TExprOpcode::type op, std::string_view pattern);
+
+// The literal prefix of a LIKE pattern. `exact` is true when the pattern has no wildcard, so it matches `prefix` only.
+struct LikePatternPrefix {
+    std::string prefix;
+    bool exact = false;
+};
+
+// Returns the text before the first unescaped '%' or '_' of a LIKE pattern, with "\%", "\_" and "\\" read as literals,
+// as the LIKE fast path reads them (LIKE_STARTS_WITH_RE in exprs/like_predicate.cpp). Any other escape, or a trailing
+// '\', ends the prefix, which keeps the prefix correct however the escape is read.
+// Returns std::nullopt when the prefix is empty.
+std::optional<LikePatternPrefix> extract_like_pattern_prefix(std::string_view pattern);
 
 class ColumnTruePredicate final : public ColumnPredicate {
 public:

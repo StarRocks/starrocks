@@ -27,8 +27,6 @@
 namespace starrocks {
 class FunctionContext;
 
-std::string get_next_prefix(const Slice& prefix_s);
-
 class BuiltinInvertedIndexIterator final : public SegmentInvertedIndexIterator {
 public:
     BuiltinInvertedIndexIterator(const std::shared_ptr<TabletIndex>& index_meta, InvertedReader* reader,
