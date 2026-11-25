@@ -55,6 +55,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_ROLLUP_AGG;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.addExtraPredicate;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.deriveLogicalProperty;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.genRollupProject;
@@ -858,6 +859,7 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
         Projection projection = new Projection(newProjection);
         aggBuilder.setProjection(projection);
         LogicalAggregationOperator newAggOp = aggBuilder.build();
+        newAggOp.setOpRuleBit(OP_MV_ROLLUP_AGG);
         OptExpression rewriteOp = OptExpression.create(newAggOp, mvOptExpr);
         deriveLogicalProperty(rewriteOp);
         return rewriteOp;

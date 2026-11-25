@@ -34,4 +34,7 @@ public class OpRuleBit {
     public static final int OP_MV_AGG_PRUNE_COLUMNS = 4;
     // Operator has been push down topn below agg or not, if push down topn, no need to push down again.
     public static final int OP_PUSH_DOWN_TOPN_AGG = 5;
+    // Aggregate built by mv rollup rewrite: it re-aggregates the mv rows below it.
+    // Bit 6 is reserved for OP_SPLIT_WINDOW_SKEW on main; keep the same value here.
+    public static final int OP_MV_ROLLUP_AGG = 7;
 }
