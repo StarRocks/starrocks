@@ -34,4 +34,11 @@ public class OpRuleBit {
     public static final int OP_MV_AGG_PRUNE_COLUMNS = 4;
     // Operator has been push down topn below agg or not, if push down topn, no need to push down again.
     public static final int OP_PUSH_DOWN_TOPN_AGG = 5;
+<<<<<<< HEAD
+=======
+    // Window operator has been split by the window skew rewrite, no need to split again.
+    public static final int OP_SPLIT_WINDOW_SKEW = 6;
+    // Aggregate built by mv rollup rewrite: it re-aggregates the mv rows below it.
+    public static final int OP_MV_ROLLUP_AGG = 7;
+>>>>>>> 8fe5371 ([BugFix] Keep grouping keys of an MV compensation aggregate unless an MV rollup re-aggregates it (#84411))
 }
