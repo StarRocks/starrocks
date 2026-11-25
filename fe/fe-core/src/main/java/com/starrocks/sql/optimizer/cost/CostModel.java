@@ -423,11 +423,15 @@ public class CostModel {
                     result = CostEstimate.ofCpu(outputSize);
                     break;
                 case BROADCAST:
-                    // beNum is the number of right table should broadcast, now use alive backends
-                    int aliveBackendNumber = ctx.getAliveBackendNumber();
-                    int beNum = Math.max(1, aliveBackendNumber);
+                    // execNodeNumber is the number of nodes the right table is copied to. In shared-data mode these
+                    // are the alive execution nodes of the query's warehouse; otherwise (or with
+                    // enable_cbo_warehouse_exec_nodes off) the alive backends, which is 0 in a shared-data cluster
+                    // without backends.
+                    int execNodeNumber = ctx.isUseWarehouseExecNodes() ?
+                            ctx.getQueryExecNodeNumber() : ctx.getAliveBackendNumber();
+                    int beNum = Math.max(1, execNodeNumber);
 
-                    result = CostEstimate.of(outputSize * aliveBackendNumber,
+                    result = CostEstimate.of(outputSize * execNodeNumber,
                             outputSize * beNum,
                             Math.max(outputSize * beNum, 1));
                     long broadcastMemThreshold = sessionVariable.getBroadcastMemThreshold();
@@ -436,9 +440,9 @@ public class CostModel {
                     if (outputSize > broadcastMemThreshold) {
                         result = result.multiplyBy(broadcastMemExceededPenaltyFactor);
                     }
-                    LOG.debug("beNum: {}, aliveBeNum: {}, outputSize: {}, broadcastMemThreshold: {}, " +
+                    LOG.debug("beNum: {}, execNodeNumber: {}, outputSize: {}, broadcastMemThreshold: {}, " +
                                     "broadcastMemExceededPenaltyFactor: {}.",
-                            beNum, aliveBackendNumber, outputSize, broadcastMemThreshold,
+                            beNum, execNodeNumber, outputSize, broadcastMemThreshold,
                             broadcastMemExceededPenaltyFactor);
                     break;
                 case SHUFFLE:
