@@ -1,0 +1,52 @@
+-- name: test_flat_json_cast_zone_map
+-- A flat JSON sub-column keeps its zone map in the stored type, and a query that reads the sub-column as another
+-- type parses that zone map as the type it reads. A number read as a string, a string read as a number, or the DOUBLE
+-- 1.5e-05 read as a BIGINT compares in another order, and the zone map used to skip pages that hold matching rows.
+-- Every count must equal a full scan.
+create table t_${uuid0}(k int not null, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+-- Each data page holds the values 1 to 1000, so a BIGINT page has the zone map "1" to "1000".
+insert into t_${uuid0}
+select x, parse_json(concat('{"i":', x % 1000 + 1, ',"d":', x % 1000 + 1, '.5,"e":0.000015,"s":"', x % 1000 + 1, '"}'))
+from table(generate_series(1, 200000)) t(x);
+-- result:
+-- !result
+select flat_json_meta(j) from t_${uuid0} [_META_];
+-- result:
+["nulls(TINYINT), d(DOUBLE), e(DOUBLE), i(BIGINT), s(VARCHAR)"]
+-- !result
+-- BIGINT read as a string.
+select count(*) from t_${uuid0} where get_json_string(j, '$.i') = '5';
+-- result:
+200
+-- !result
+select count(*) from t_${uuid0} where get_json_string(j, '$.i') >= '5' and get_json_string(j, '$.i') < '6';
+-- result:
+22200
+-- !result
+-- DOUBLE read as a string.
+select count(*) from t_${uuid0} where get_json_string(j, '$.d') = '5.5';
+-- result:
+200
+-- !result
+-- DOUBLE read as BIGINT: the zone map "1.5e-05" reads as 1.
+select count(*) from t_${uuid0} where get_json_int(j, '$.e') = 0;
+-- result:
+200000
+-- !result
+-- A string read as BIGINT.
+select count(*) from t_${uuid0} where get_json_int(j, '$.s') = 1000;
+-- result:
+200
+-- !result
+-- BIGINT read as DOUBLE keeps the order, and its zone map is still used.
+select count(*) from t_${uuid0} where get_json_double(j, '$.i') = 5;
+-- result:
+200
+-- !result
+drop table t_${uuid0} force;
+-- result:
+-- !result

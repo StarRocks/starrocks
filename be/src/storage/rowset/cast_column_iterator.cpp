@@ -31,7 +31,8 @@ CastColumnIterator::CastColumnIterator(std::unique_ptr<ColumnIterator> source_it
           _source_chunk(),
           _flat_json_to_json(flat_json_source && target_type.type == TYPE_JSON &&
                              flat_json::JSON_MERGE_FUNC.contains(source_type.type)),
-          _source_type(source_type.type) {
+          _source_type(source_type.type),
+          _zone_map_prunes(!flat_json_source || (source_type.type == TYPE_BIGINT && target_type.type == TYPE_DOUBLE)) {
     auto slot_id = SlotId{0};
     auto column = ColumnHelper::create_column(source_type, nullable_source);
     auto slot_desc = SlotDescriptor(slot_id, "", source_type);
@@ -89,6 +90,17 @@ Status CastColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t s
     RETURN_IF_ERROR(_parent->fetch_values_by_rowid(rowids, size, source_column));
     RETURN_IF_ERROR(do_cast(values));
     return Status::OK();
+}
+
+Status CastColumnIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
+                                                      CompoundNodeType pred_relation, const Range<>* src_range) {
+    if (_zone_map_prunes) {
+        return _parent->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges, pred_relation, src_range);
+    }
+    // A delete condition names a column of the table (DeleteMgr), never a flat JSON sub-column, so there is no delete
+    // predicate to evaluate here.
+    return ColumnIterator::get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges, pred_relation, src_range);
 }
 
 StatusOr<std::vector<std::pair<int64_t, int64_t>>> CastColumnIterator::get_io_range_vec(const SparseRange<>& range,
