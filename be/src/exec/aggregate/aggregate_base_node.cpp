@@ -46,6 +46,7 @@ Status AggregateBaseNode::init(const TPlanNode& tnode, RuntimeState* state) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status AggregateBaseNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
     auto params = convert_to_aggregator_params(_tnode);
@@ -55,6 +56,15 @@ Status AggregateBaseNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(aggregator->prepare(state, runtime_profile()));
     _aggregator = std::move(aggregator);
     return Status::OK();
+=======
+bool AggregateBaseNode::_group_by_keys_support_orderby() const {
+    for (auto* expr : _group_by_expr_ctxs) {
+        if (!expr->root()->type().support_orderby()) {
+            return false;
+        }
+    }
+    return true;
+>>>>>>> e4d8a33 ([BugFix] Use partitionwise spill for unorderable aggregation keys (#82919))
 }
 
 void AggregateBaseNode::close(RuntimeState* state) {
