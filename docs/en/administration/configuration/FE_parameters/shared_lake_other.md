@@ -956,53 +956,6 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Description: The maximum number of pending commit operations per Iceberg table. When using the commit queue (`enable_iceberg_commit_queue=true`), this limits the number of commit operations that can be queued for a single table. When the limit is reached, additional commit operations will execute in the caller thread (blocking until capacity available). This configuration is read at FE startup and applies to newly created table executors. Requires FE restart to take effect. Increase this value if you expect many concurrent commits to the same table. If this value is too low, commits may block in the caller thread during high concurrency.
 - Introduced in: v4.1.0
 
-<<<<<<< HEAD
-=======
-### `deltalake_checkpoint_meta_cache_global_memory_ratio`
-
-- Default: 0
-- Type: Double
-- Unit: -
-- Is mutable: No
-- Description: The share of the FE JVM heap for one Delta Log Checkpoint file cache shared by all Delta Lake catalogs, so that its total stays within this bound however many catalogs there are. `0` (default) keeps a cache per catalog, bounded by the catalog property `deltalake_checkpoint_meta_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
-- Introduced in: -
-
-### `deltalake_json_meta_cache_global_memory_ratio`
-
-- Default: 0
-- Type: Double
-- Unit: -
-- Is mutable: No
-- Description: The share of the FE JVM heap for one Delta Log JSON file cache shared by all Delta Lake catalogs. `0` (default) keeps a cache per catalog, bounded by the catalog property `deltalake_json_meta_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
-- Introduced in: -
-
-### `iceberg_data_file_cache_global_memory_ratio`
-
-- Default: 0
-- Type: Double
-- Unit: -
-- Is mutable: No
-- Description: The share of the FE JVM heap for one data file Manifest cache shared by all Iceberg catalogs, so that its total stays within this bound however many catalogs there are. `0` (default) keeps a cache per catalog, bounded by the catalog property `iceberg_data_file_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
-- Introduced in: -
-
-### `iceberg_delete_file_cache_global_memory_ratio`
-
-- Default: 0
-- Type: Double
-- Unit: -
-- Is mutable: No
-- Description: The share of the FE JVM heap for one delete file Manifest cache shared by all Iceberg catalogs; the delete file indexes built from them get the same share in a cache of their own. `0` (default) keeps both caches per catalog, bounded by the catalog property `iceberg_delete_file_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
-- Introduced in: -
-
-### `iceberg_partition_cache_global_memory_ratio`
-
-- Default: 0
-- Type: Double
-- Unit: -
-- Is mutable: No
-- Description: The share of the FE JVM heap for one partition cache shared by all Iceberg catalogs. `0` (default) keeps a cache per catalog, bounded by the catalog property `iceberg_partition_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
-- Introduced in: -
-
 ### `iceberg_metadata_table_payload_mode`
 
 - Default: 1
@@ -1012,7 +965,6 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Description: How the FE sends the Iceberg table and predicate of a metadata table query (such as `$files`, `$snapshots`, and `$partitions`) to the BEs and CNs. The FE always sends them as Java-serialized objects, which a BE can fail to read when it runs another build than the FE with another Iceberg version, as during a rolling upgrade. `0`: only the Java-serialized form. `1`: while some alive BE or CN reports another build than the FE, the FE also sends a JSON form that any build can read, and those nodes read it. `2`: the FE always sends the JSON form and every BE and CN reads it. Use `2` for testing only.
 - Introduced in: -
 
->>>>>>> df5e2c5 ([Enhancement] Ship the Iceberg metadata table to BEs of another build in a version-independent JSON form (#84441))
 ### `iceberg_remove_orphan_files_min_retention_seconds`
 
 - Default: 86400
