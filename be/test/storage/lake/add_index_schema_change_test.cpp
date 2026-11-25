@@ -2480,14 +2480,14 @@ TEST_F(AddIndexSchemaChangeTest, dcg_overlay_does_not_seed_metacache_with_curren
     if (segment_meta.has_bundle_file_offset()) {
         seg_fi.bundle_file_offset = segment_meta.bundle_file_offset();
     }
-    ASSERT_TRUE(_tablet_manager->metacache()->lookup_segment(seg_fi.cache_key()) == nullptr);
+    ASSERT_TRUE(_tablet_manager->metacache()->lookup_segment(MetacacheKey::segment(seg_fi)) == nullptr);
 
     std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid)};
     AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, vt.get_schema());
     TxnLogPB_OpAddIndex op;
     ASSERT_OK(sc.run(&op));
     ASSERT_EQ(1, op.dcg_entries_size());
-    EXPECT_TRUE(_tablet_manager->metacache()->lookup_segment(seg_fi.cache_key()) == nullptr);
+    EXPECT_TRUE(_tablet_manager->metacache()->lookup_segment(MetacacheKey::segment(seg_fi)) == nullptr);
 
     // A reader using the original schema must still see c3's stored values,
     // instead of receiving an already-cached Segment without its reader.
