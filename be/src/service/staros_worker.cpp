@@ -93,18 +93,56 @@ std::optional<int32_t> starlet_request_timeout_ms(int64_t configured_timeout_ms,
     return static_cast<int32_t>(configured_timeout_ms);
 }
 
+<<<<<<< HEAD:be/src/service/staros_worker.cpp
 StarOSWorker::StarOSWorker()
         : _mtx(),
           _cache_mtx(),
           _shards(),
           _fs_cache(new_lru_cache(config::starlet_filesystem_instance_cache_capacity)) {}
+=======
+// Turning the TTL to 0 also stops using what was kept before, not only keeping more.
+static bool shard_info_cache_enabled() {
+    return config::lake_shard_info_cache_ttl_sec > 0;
+}
+
+// A borrowed shard info is |fetched| from starmgr by this worker, or handed over by the owner otherwise.
+// Each kind has its own metrics.
+static void count_borrowed_hit(bool fetched) {
+    auto* metrics = StarOSWorkerMetrics::instance();
+    (fetched ? metrics->staros_shard_info_fallback_cache_hits_total : metrics->lake_tablet_location_handoff_hits_total)
+            .increment(1);
+}
+
+static IntGauge& borrowed_entries_gauge(bool fetched) {
+    auto* metrics = StarOSWorkerMetrics::instance();
+    return fetched ? metrics->staros_shard_info_fallback_cache_entries : metrics->lake_tablet_location_handoff_entries;
+}
+
+// Every key of `_fs_cache` is a SHA-256 hex digest, see `get_cache_key`.
+static constexpr size_t kFsCacheKeySize = 2 * SHA256_DIGEST_LENGTH;
+
+// The capacity of `_fs_cache` that holds |filesystems| filesystems. The cache charges an entry its handle and key
+// on top of the 1 it is inserted with, and every key has the same size, so every filesystem is charged the same.
+static size_t fs_cache_capacity(int32_t filesystems) {
+    static const size_t kEntryCharge = 1 + LRUCache::key_handle_size(CacheKey(std::string(kFsCacheKeySize, '0')));
+    return static_cast<size_t>(std::max(filesystems, 0)) * kEntryCharge;
+}
+
+StarOSWorker::StarOSWorker(TableMetricsManager* table_metrics_mgr)
+        : _mtx(),
+          _cache_mtx(),
+          _shards(),
+          _borrowed_cache(new_lru_cache(kBorrowedShardInfoCacheCapacity)),
+          _fs_cache(new_lru_cache(fs_cache_capacity(config::starlet_filesystem_instance_cache_capacity))),
+          _table_metrics_mgr(table_metrics_mgr) {}
+>>>>>>> 07a3e5b ([BugFix] Fix StarOS fs cache holding 64 filesystems, not 10000 (#84414)):be/src/compute_env/staros/staros_worker.cpp
 
 StarOSWorker::~StarOSWorker() = default;
 
 static const uint64_t kUnknownTableId = UINT64_MAX;
 
 void StarOSWorker::set_fs_cache_capacity(int32_t capacity) {
-    _fs_cache->set_capacity(capacity);
+    _fs_cache->set_capacity(fs_cache_capacity(capacity));
 }
 
 uint64_t StarOSWorker::get_table_id(const ShardInfo& shard) {
@@ -445,6 +483,8 @@ std::shared_ptr<std::string> StarOSWorker::insert_fs_cache(const std::string& ke
 
     CacheKey cache_key(key);
     auto value = new CacheValue(fs_cache_key, fs);
+    // Charged 1 plus its handle and key, as `fs_cache_capacity` assumes.
+    DCHECK_EQ(kFsCacheKeySize, key.size());
     auto handle = _fs_cache->insert(cache_key, value, 1, cache_value_deleter);
     if (handle == nullptr) {
         delete value;
