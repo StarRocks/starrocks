@@ -63,12 +63,8 @@ import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.metadata.iceberg.IcebergMetadataCollectJob;
 import com.starrocks.connector.share.iceberg.IcebergPartitionUtils;
-<<<<<<< HEAD
-=======
 import com.starrocks.connector.share.iceberg.IcebergTablePayload;
 import com.starrocks.connector.share.iceberg.SerializableTable;
-import com.starrocks.epack.connector.iceberg.IcebergDeletionVectorSupport;
->>>>>>> c209e01bd3e... [Enhancement][RB-1706] Ship the Iceberg metadata table to BEs of another build in a version-independent JSON form (#71035)
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric;
