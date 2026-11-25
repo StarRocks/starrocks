@@ -1297,7 +1297,8 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         // Column prune, only the table function columns should be returned.
         OptExprBuilder rootBuilder = plan.getRootBuilder();
         rootBuilder.setExpressionMapping(rootBuilder.getInputs().get(1).getExpressionMapping());
-        return plan;
+        // The output columns must match the pruned mapping too: JOIN ... USING reads them by position.
+        return new LogicalPlan(rootBuilder, rootBuilder.getFieldMappings(), plan.getCorrelation());
     }
 
     @Override
