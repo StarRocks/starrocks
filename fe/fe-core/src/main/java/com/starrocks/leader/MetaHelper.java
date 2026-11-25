@@ -63,6 +63,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
+import java.util.zip.CRC32;
+import java.util.zip.CheckedOutputStream;
 
 public class MetaHelper {
     private static final Logger LOG = LogManager.getLogger(MetaHelper.class);
@@ -87,24 +89,31 @@ public class MetaHelper {
         return newFile;
     }
 
-    public static void downloadImageFile(String urlStr, int timeout, String journalId, File destDir)
+    /**
+     * Downloads image.{journalId} into destDir. The image is checked against the checksum its source
+     * sends (required for a v2 image) and is not published when it does not match.
+     */
+    public static void downloadImageFile(String urlStr, int timeout, String journalId, File destDir,
+                                         ImageFormatVersion imageFormatVersion)
             throws IOException {
-        downloadImageFile(urlStr, timeout, journalId, destDir, null);
+        downloadImageFile(urlStr, timeout, journalId, destDir, imageFormatVersion, null);
     }
 
     /**
-     * Same as {@link #downloadImageFile(String, int, String, File)} but publishes the freshly
-     * opened {@link HttpURLConnection} to {@code onConnect} so the *calling* leader daemon can
+     * Same as {@link #downloadImageFile(String, int, String, File, ImageFormatVersion)} but publishes the
+     * freshly opened {@link HttpURLConnection} to {@code onConnect} so the *calling* leader daemon can
      * hold its own reference and {@link HttpURLConnection#disconnect() disconnect} it on demotion
      * to break out of a stuck socket read. MetaHelper itself performs no cancellation.
      */
     public static void downloadImageFile(String urlStr, int timeout, String journalId, File destDir,
+                                         ImageFormatVersion imageFormatVersion,
                                          Consumer<HttpURLConnection> onConnect)
             throws IOException {
         HttpURLConnection conn = null;
         String checksum = null;
         String destFilename = Storage.IMAGE + "." + journalId;
         File partFile = new File(destDir, destFilename + MetaHelper.PART_SUFFIX);
+        CRC32 crc = new CRC32();
         // 1. download to a tmp file image.xxx.part
         try (FileOutputStream out = new FileOutputStream(partFile)) {
             URL url = new URL(urlStr);
@@ -125,7 +134,8 @@ public class MetaHelper {
             BufferedInputStream bin = new BufferedInputStream(conn.getInputStream());
 
             // Do not limit speed in client side.
-            long bytes = IOUtils.copyBytes(bin, out, BUFFER_BYTES, CHECKPOINT_LIMIT_BYTES, false);
+            long bytes = IOUtils.copyBytes(bin, new CheckedOutputStream(out, crc), BUFFER_BYTES,
+                    CHECKPOINT_LIMIT_BYTES, false);
             if ((imageSize > 0) && (bytes != imageSize)) {
                 throw new IOException("Unexpected image size, expected: " + imageSize + ", actual: " + bytes);
             }
@@ -139,16 +149,28 @@ public class MetaHelper {
             }
         }
 
-        // 2. write checksum if exists
+        // 2. check the image against the checksum its source sent (ImageWriter's CRC32 of the whole image).
+        // A mismatch means the image was damaged before it arrived, for example on the source FE's disk;
+        // publishing it would make the caller replace its loadable images with one that cannot be loaded.
+        // Every v2 image has a checksum and cannot be loaded without one, so a v2 image without it is refused.
+        String actual = String.valueOf(crc.getValue());
+        if (Strings.isNullOrEmpty(checksum) ? imageFormatVersion == ImageFormatVersion.v2
+                : !checksum.trim().equals(actual)) {
+            Files.deleteIfExists(partFile.toPath());
+            throw new IOException(String.format("image checksum mismatch, expected: %s, actual: %s, url: %s",
+                    checksum, actual, urlStr));
+        }
+
+        // 3. write checksum if exists
         if (!Strings.isNullOrEmpty(checksum)) {
             File checksumFile = Path.of(destDir.getAbsolutePath(), Storage.CHECKSUM + "." + journalId).toFile();
             try (FileOutputStream fos = new FileOutputStream(checksumFile)) {
-                fos.write(checksum.getBytes(StandardCharsets.UTF_8));
+                fos.write(actual.getBytes(StandardCharsets.UTF_8));
                 fos.getChannel().force(true);
             }
         }
 
-        // 3. rename to image.xxx
+        // 4. rename to image.xxx
         File imageFile = new File(destDir, destFilename);
         if (!partFile.renameTo(imageFile)) {
             throw new IOException("rename file:" + partFile.getName() + " to file:" + destFilename + " failed");
