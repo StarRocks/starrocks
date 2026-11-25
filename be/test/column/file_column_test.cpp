@@ -31,6 +31,7 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
+#include "types/file_value.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
@@ -132,6 +133,43 @@ TEST(FileColumnTest, test_get_datum) {
     const DatumStruct& row2 = datum2.get_struct();
     ASSERT_EQ("image/jpeg", row2[FileColumn::CONTENT_TYPE].get_slice().to_string());
     ASSERT_EQ("crc32:1", row2[FileColumn::CHECKSUM].get_slice().to_string());
+}
+
+TEST(FileColumnTest, test_file_row_ref) {
+    auto column = create_test_column();
+    column->append_datum(make_inline(""));
+
+    const Datum datum = column->get(2);
+    auto ref = FileRowRef::from_datum(datum);
+    ASSERT_OK(ref.status());
+    ASSERT_TRUE(ref->uri.has_value());
+    EXPECT_EQ(ref->uri->data, datum.get_struct()[FileColumn::URI].get_slice().data);
+    EXPECT_EQ("hdfs://ns/b.jpg", ref->uri->to_string());
+    EXPECT_EQ(0, ref->offset);
+    EXPECT_EQ(16, ref->size);
+    ASSERT_TRUE(ref->content_type.has_value());
+    EXPECT_EQ("image/jpeg", ref->content_type->to_string());
+    ASSERT_TRUE(ref->checksum.has_value());
+    EXPECT_EQ("crc32:1", ref->checksum->to_string());
+    EXPECT_FALSE(ref->inline_bytes.has_value());
+
+    auto empty = FileRowRef::from_datum(column->get(3));
+    ASSERT_OK(empty.status());
+    EXPECT_FALSE(empty->uri.has_value());
+    EXPECT_FALSE(empty->offset.has_value());
+    EXPECT_FALSE(empty->size.has_value());
+    EXPECT_FALSE(empty->content_type.has_value());
+    EXPECT_FALSE(empty->checksum.has_value());
+    ASSERT_TRUE(empty->inline_bytes.has_value());
+    EXPECT_TRUE(empty->inline_bytes->empty());
+}
+
+TEST(FileColumnTest, test_file_row_ref_rejects_malformed_datum) {
+    EXPECT_TRUE(FileRowRef::from_datum(Datum()).status().is_invalid_argument());
+    EXPECT_TRUE(FileRowRef::from_datum(Datum(DatumStruct{})).status().is_invalid_argument());
+    DatumStruct fields(FileColumn::NUM_FIELDS);
+    fields[FileColumn::OFFSET].set_slice(Slice("invalid offset"));
+    EXPECT_TRUE(FileRowRef::from_datum(Datum(fields)).status().is_invalid_argument());
 }
 
 TEST(FileColumnTest, test_clone) {

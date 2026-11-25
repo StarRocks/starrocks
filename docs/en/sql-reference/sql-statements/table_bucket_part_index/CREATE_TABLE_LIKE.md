@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CREATE TABLE LIKE creates an identical empty table based on the definition of another table."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE TABLE LIKE

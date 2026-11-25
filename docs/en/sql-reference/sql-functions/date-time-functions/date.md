@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Extracts the date part of a date or datetime expression."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # date

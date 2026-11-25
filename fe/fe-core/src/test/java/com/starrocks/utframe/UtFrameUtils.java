@@ -169,6 +169,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -212,7 +213,10 @@ public class UtFrameUtils {
     private static final AtomicBoolean CREATED_MIN_CLUSTER = new AtomicBoolean(false);
     private static final Map<Integer, PortReservation> RESERVED_PORTS = new ConcurrentHashMap<>();
     // findValidPort() prefers ports in [MIN_UT_PORT, EPHEMERAL_PORT_LOW), below the kernel's ephemeral port range.
-    private static final int MIN_UT_PORT = 10000;
+    static final int MIN_UT_PORT = 10000;
+    static final String EPHEMERAL_PORT_RANGE_FILE = "/proc/sys/net/ipv4/ip_local_port_range";
+    // 32768 is the Linux default, and is below the 49152-65535 range that macOS uses.
+    private static final int DEFAULT_EPHEMERAL_PORT_LOW = 32768;
     private static final int EPHEMERAL_PORT_LOW = readEphemeralPortLow();
     // Serializes findValidPort() in this JVM. Two callers could otherwise pick the same port, both pass the
     // RESERVED_PORTS check, and the second tryLock() on its file would throw OverlappingFileLockException.
@@ -464,6 +468,7 @@ public class UtFrameUtils {
         be.setBrpcPort(backend.getBrpcPort());
         be.setHttpPort(backend.getHttpPort());
         be.setStarletPort(backend.getStarletPort());
+        be.setSupportLakeIndexFastPath(MockedBackend.reportLakeIndexFastPath);
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(be);
         if (RunMode.isSharedDataMode()) {
             int starletPort = backend.getStarletPort();
@@ -482,6 +487,7 @@ public class UtFrameUtils {
         cn.setHttpPort(backend.getHttpPort());
         cn.setStarletPort(backend.getStarletPort());
         cn.setIsStoragePath(false);
+        cn.setSupportLakeIndexFastPath(MockedBackend.reportLakeIndexFastPath);
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn);
         if (RunMode.isSharedDataMode()) {
             int starletPort = backend.getStarletPort();
@@ -530,6 +536,7 @@ public class UtFrameUtils {
                 releasePort(port);
             }
         }
+        System.out.println("no free port in [" + MIN_UT_PORT + ", " + EPHEMERAL_PORT_LOW + "), fall back to an ephemeral port");
         for (int i = 0; i < 50; i++) {
             int port;
             try (ServerSocket socket = new ServerSocket(0)) {
@@ -599,13 +606,55 @@ public class UtFrameUtils {
         }
     }
 
+    static int getEphemeralPortLow() {
+        return EPHEMERAL_PORT_LOW;
+    }
+
     private static int readEphemeralPortLow() {
+        Path path = Paths.get(EPHEMERAL_PORT_RANGE_FILE);
+        if (!Files.exists(path)) {
+            // not Linux
+            return DEFAULT_EPHEMERAL_PORT_LOW;
+        }
+        String range;
         try {
-            String range = new String(Files.readAllBytes(Paths.get("/proc/sys/net/ipv4/ip_local_port_range"))).trim();
-            return Integer.parseInt(range.split("\\s+")[0]);
-        } catch (Exception e) {
-            // Not Linux. 32768 is the Linux default, and is below the 49152-65535 range that macOS uses.
-            return 32768;
+            range = readEphemeralPortRange(path);
+        } catch (IOException e) {
+            range = e.toString();
+        }
+        int low = parseEphemeralPortLow(range);
+        if (low < 0) {
+            System.out.println("unexpected ephemeral port range [" + range + "] in " + EPHEMERAL_PORT_RANGE_FILE
+                    + ", assume it starts at " + DEFAULT_EPHEMERAL_PORT_LOW);
+            return DEFAULT_EPHEMERAL_PORT_LOW;
+        }
+        return low;
+    }
+
+    // Returns the first line of the file, e.g. "32768\t60999". Files.readAllBytes() does not work here: procfs
+    // reports a size of 0, so it reads a single byte and then sees EOF, which returned "3" and made every
+    // findValidPort() fall back to the ephemeral range.
+    static String readEphemeralPortRange(Path path) throws IOException {
+        try (BufferedReader reader = Files.newBufferedReader(path)) {
+            return reader.readLine();
+        }
+    }
+
+    // Parses "<low> <high>" and returns low, or -1 if the range is malformed.
+    static int parseEphemeralPortLow(String range) {
+        if (range == null) {
+            return -1;
+        }
+        String[] parts = range.trim().split("\\s+");
+        if (parts.length != 2) {
+            return -1;
+        }
+        try {
+            int low = Integer.parseInt(parts[0]);
+            int high = Integer.parseInt(parts[1]);
+            return low > 0 && low <= high && high <= 65535 ? low : -1;
+        } catch (NumberFormatException e) {
+            return -1;
         }
     }
 
@@ -1143,9 +1192,20 @@ public class UtFrameUtils {
             UtFrameUtils.dropMockBackend(backendId++);
         }
 
-        // mock be num
+        // mock be num. A shared-data dump taken with enable_cbo_warehouse_exec_nodes on records the alive execution
+        // nodes of the query's warehouse, which the cluster costed broadcasts and hash joins with, and usually no
+        // backends. Replay runs in shared-nothing mode, where the cost model counts backends, so mock that many nodes
+        // (up to replayMaxBackendNum) and pass the recorded number on through cbo_debug_alive_backend_number, which
+        // the backend counts of the cost model return. With the variable turned off in the replay, the recorded
+        // backends are used instead, as the cluster would have with it off.
         backendId = 10002;
-        int beNumToAdd = Math.min(replayMaxBackendNum, replayDumpInfo.getBeNum());
+        boolean useExecNodeNumber = replayDumpInfo.getExecNodeNumber() > 0
+                && connectContext.getSessionVariable().isEnableCboWarehouseExecNodes();
+        if (useExecNodeNumber && connectContext.getSessionVariable().getCboDebugAliveBackendNumber() <= 0) {
+            connectContext.getSessionVariable().setCboDebugAliveBackendNumber(replayDumpInfo.getExecNodeNumber());
+        }
+        int replayNodeNum = useExecNodeNumber ? replayDumpInfo.getExecNodeNumber() : replayDumpInfo.getBeNum();
+        int beNumToAdd = Math.min(replayMaxBackendNum, replayNodeNum);
         for (int i = 1; i < beNumToAdd; ++i) {
             //UtFrameUtils.addMockBackend(backendId++);
             String host = String.format("127.0.0.%s", i + 1);
@@ -1736,6 +1796,23 @@ public class UtFrameUtils {
                     dis.close();
                 }
             }
+        }
+
+        /**
+         * Removes every record queued for the follower and returns them deserialized, in journal order.
+         */
+        public static synchronized List<JournalEntity> drainFollowerJournal() throws InterruptedException, IOException {
+            assert (followerJournalQueue != null);
+            List<JournalEntity> entities = new ArrayList<>();
+            while (!followerJournalQueue.isEmpty()) {
+                DataOutputBuffer buffer = followerJournalQueue.take().getBuffer();
+                try (DataInputStream dis = new DataInputStream(
+                        new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()))) {
+                    short opCode = dis.readShort();
+                    entities.add(new JournalEntity(opCode, EditLogDeserializer.deserialize(opCode, dis)));
+                }
+            }
+            return entities;
         }
 
         public static synchronized void replayJournalToEnd() throws InterruptedException, IOException {

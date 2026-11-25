@@ -17,12 +17,14 @@
 #include <atomic>
 #include <functional>
 #include <mutex>
+#include <optional>
 #include <ostream>
 #include <shared_mutex>
 #include <string>
 
 #include "column/vectorized_fwd.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
+#include "storage/lake/sst_seek_range.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
@@ -118,8 +120,10 @@ public:
     // on its pointer to this class, and that pointer became non-null as soon as the object existed.
     // Most tests drive init() alone, so a stricter guard would reject them -- and would be a change
     // in behaviour, not just in strictness.
+    //
+    // |base_metadata| goes to load_from_lake_tablet(); see there.
     Status lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
-                     const MetaFileBuilder* builder);
+                     const MetaFileBuilder* builder, const TabletMetadataPtr& base_metadata = nullptr);
 
     // Put this back to its just-constructed shape, so the next lake_load() rebuilds from scratch.
     // [thread-safe]
@@ -227,15 +231,23 @@ public:
     Status ingest_sst(const FileMetaPB& sst_meta, const PersistentIndexSstableRangePB& sst_range, uint32_t rssid,
                       int64_t version, const DelvecPagePB& delvec_page, DelVectorPtr delvec);
 
+    // Major-compact the tablet's index files into txn_log's op_compaction. With unshare, rewrite the filesets the
+    // tablet cannot keep as they are (see pick_unshare_candidates) instead of picking by size.
     static Status parallel_major_compact(LakePersistentIndexParallelCompactMgr* compact_mgr, TabletManager* tablet_mgr,
-                                         const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
+                                         const TabletMetadataPtr& metadata, TxnLogPB* txn_log, bool unshare = false);
 
     Status apply_opcompaction(const TabletMetadataPtr& metadata, const TxnLogPB_OpCompaction& op_compaction);
 
     Status commit(MetaFileBuilder* builder, int64_t generation_version = 0);
 
+    // Every rebuilt segment reads its delete vector at |base_version|, from one tablet metadata at that
+    // version that the rebuild resolves once. |base_metadata| is that metadata when the caller already holds
+    // it, else null: when |metadata| is another version (publish passes the metadata it is building, already
+    // stamped with the new version), the rebuild takes the delete vectors from |base_metadata| instead of
+    // reading the base version back from storage, which it does once when it has neither. A |base_metadata|
+    // of another tablet or version is ignored.
     Status load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
-                                 const MetaFileBuilder* builder);
+                                 const MetaFileBuilder* builder, const TabletMetadataPtr& base_metadata = nullptr);
 
     size_t memory_usage() const;
 
@@ -375,7 +387,8 @@ private:
 
     void _unload_without_lock();
 
-    Status _do_lake_load(const TabletMetadataPtr& metadata, int64_t base_version, const MetaFileBuilder* builder);
+    Status _do_lake_load(const TabletMetadataPtr& metadata, int64_t base_version, const MetaFileBuilder* builder,
+                         const TabletMetadataPtr& base_metadata);
 
     // Open all SSTables in parallel using thread pool.
     // Returns opened SSTables in the same order as sstable_meta.sstables().
@@ -419,17 +432,25 @@ private:
                         DelFilter* filter_words);
 
     // rebuild delete operation from rowset.
-    Status load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version);
+    // Delete keys outside |tablet_range| (nullptr = no clip) are skipped: they belong to a sibling.
+    Status load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version,
+                     const SstSeekRange* tablet_range = nullptr);
 
     static void set_difference(KeyIndexSet* key_indexes, const KeyIndexSet& found_key_indexes);
 
     Status merge_sstable_into_fileset(std::unique_ptr<PersistentIndexSstable>& sstable);
+
+    // The tablet's key range, or nullptr when there is none to clip to (see _tablet_sst_range).
+    const SstSeekRange* tablet_sst_range() const { return _tablet_sst_range ? &*_tablet_sst_range : nullptr; }
 
 private:
     std::shared_ptr<PersistentIndexMemtable> _memtable;
     std::vector<std::shared_ptr<PersistentIndexMemtable>> _inactive_memtables;
     TabletManager* _tablet_mgr{nullptr};
     int64_t _tablet_id{0};
+    // Key range of a range-distribution tablet, set by load_from_lake_tablet; empty when the tablet
+    // is unbounded (or not range-distributed).
+    std::optional<SstSeekRange> _tablet_sst_range;
     size_t _need_rebuild_file_cnt{0};
     int64_t _need_rebuild_row_cnt{0};
     // Collection of sstable fileset, from old to new.

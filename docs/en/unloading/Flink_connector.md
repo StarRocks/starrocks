@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 description: "StarRocks provides a self-developed connector named StarRocks Connector for Apache Flink® (Flink connector for short) to help you read data in bulk from a..."
+products: [oss, enterprise]
 ---
 
 # Read data from StarRocks using Flink connector
@@ -34,11 +35,9 @@ Unlike the JDBC connector provided by Flink, the Flink connector of StarRocks su
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.17    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.16    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 and later | 8    | 2.11,2.12 |
 
 ## Prerequisites
 
@@ -259,7 +258,7 @@ The following examples assume you have created a database named `test` in your S
 
 ### Read data using Flink SQL
 
-1. In your Flink cluster, create a table named `flink_test` based on the schema of the source StarRocks table (which is `score_board` in this example). In the table creation command, you must configure the read task properties, including the information about the Flink connector, the source StarRock database, and the source StarRocks table.
+1. In your Flink cluster, create a table named `flink_test` based on the schema of the source StarRocks table (which is `score_board` in this example). In the table creation command, you must configure the read task properties, including the information about the Flink connector, the source StarRocks database, and the source StarRocks table.
 
    ```SQL
    CREATE TABLE flink_test

@@ -2,9 +2,9 @@
 displayed_sidebar: docs
 hide_table_of_contents: true
 description: "Alphabetical i - p"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
-import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 
 # メトリクス iからpまで
 
@@ -15,11 +15,40 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - [非同期マテリアライズドビューのメトリクスに関するメトリクス](../metrics-materialized_view.md)
 - [共有データダッシュボードのメトリクス、およびスターレットダッシュボードのメトリクスに関するメトリクス](../metrics-shared-data.md)
 
-StarRocksクラスターの監視サービスを構築する方法の詳細については、以下を参照してください。[監視とアラート](../monitoring.md)。
+StarRocksクラスターの監視サービスを構築する方法の詳細については、以下を参照してください。[監視とアラート](../prometheus_grafana.md)。
 
 :::
 
-<MetricsIP />
+## `iceberg_delete_bytes`
+
+- 単位: バイト
+- 種類: 累積
+- ラベル: `delete_type` (`position` または `metadata`)
+- 説明: Iceberg `DELETE` タスクから削除された合計バイト数。`metadata` 削除の場合、これは削除されたデータファイルのサイズを表します。`position` 削除の場合、これは作成された位置削除ファイルのサイズを表します。
+
+## `iceberg_delete_duration_ms_total`
+
+- 単位: ミリ秒
+- タイプ: 累積
+- ラベル: `delete_type` (`position`または`metadata`)
+- 説明: Iceberg `DELETE` タスクの合計実行時間（ミリ秒）。各タスクの実行時間は、終了後に加算されます。`delete_type` は、2つの削除方法を区別します。
+
+## `iceberg_delete_rows`
+
+- 単位: 行
+- タイプ: 累積
+- ラベル: `delete_type` (`position` または `metadata`)
+- 説明: Iceberg `DELETE` タスクから削除された行の合計数。`metadata` 削除の場合、これは削除されたデータファイル内の行数を表します。`position` 削除の場合、これは作成された位置削除の数を表します。
+
+## `iceberg_delete_total`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル:
+  - `status` (`success` または `failed`)
+  - `reason` (`none`、`timeout`、`oom`、`access_denied`、`unknown`)
+  - `delete_type` (`position` または `metadata`)
+- 説明: Icebergテーブルをターゲットとする`DELETE`タスクの合計数。このメトリックは、各タスクの終了後、成功または失敗にかかわらず1ずつ増加します。`delete_type`は、2つの削除方法を区別します: `position` (位置削除ファイルを生成する) と `metadata` (メタデータレベルの削除)。
 
 ## `iceberg_compaction_duration_ms_total`
 
@@ -354,6 +383,12 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: 件数
 - 説明: 成功したストレージ・コンピュート分離（lake）コンパクションジョブのカウンタ。
 
+## `lake_idg_files_missing_total`
+
+- 単位: 操作回数
+- タイプ: Counter
+- 説明: 共有データモードで、Index Delta Group（IDG）の `.idx` 初期化時のファイル欠落によるフォールバックと、各ビットマップインデックスイテレータが遅延ページ読み取りで最初に検出したファイル欠落を計上します。ブルームフィルタページの遅延読み取り失敗は含みません。同じ欠落ファイルを再度開くと再計上されるため、ファイルの重複を除いた件数ではありません。値の増加はインデックスによる絞り込みの低下を示し、例えば Vacuum とクエリの競合や、ダウングレード後の再アップグレードで発生することがあります。
+
 ## `lake_pk_index_cache_delvec_bytes`
 
 - 単位: バイト
@@ -395,6 +430,30 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: 件数
 - タイプ: 累積
 - 説明: 共有データモード専用。主キーテーブルの Publish 時に、tablet の主キーインデックスが主キーインデックスキャッシュになく、インデックス全体をロードする必要があった回数。インデックスがキャッシュにないのは、BE の起動後にまだロードされていないか、削除（evict）されたためです。ロードでは、その tablet のすべての主キーインデックス SST ファイルを開き、それらのファイルがまだカバーしていない rowset を再生します。失敗したロードも数えられます。ロード先の tablet が変わらないのにこの値が増え続ける場合、インデックスの削除と再ロードが繰り返されています。
+
+## `lake_publish_batch_retry_total`
+
+- 単位: 件数
+- タイプ: 累積
+- 説明: 共有データクラスタで、完了しなかった試行を再試行したバッチ発行の回数。つまり、バッチの最初のトランザクションが以前の試行ですでに送信されていたものです。`lake_enable_batch_publish_retry_freeze` が `true` の場合、このような再試行には以前の試行のトランザクションだけが含まれます。このカウンタを増加させるのは Leader FE のみです。
+
+## `lake_publish_partial_meta_written`
+
+- 単位: 件数
+- タイプ: Gauge
+- 説明: この BE/CN の起動以降、tablet の publish 結果をこのノードの Data Cache に書き込んだ累積回数。BE 設定項目 `lake_enable_publish_partial_meta` が `true` の場合のみ、File Bundling が有効なテーブルについてカウントされます。tablet の publish がリクエスト到着から publish RPC タイムアウト + 3 秒を超えて完了した場合、または publish が再試行の場合に結果を書き込みます。保持済みの結果を使った再試行でも、もう一度書き込みます。同じノードでの後続の再試行は、再適用せずにこの結果を読み出します（`lake_publish_skipped_by_partial_meta` を参照）。共有データクラスタのみ。`dump_metrics_with_bvar` が有効な場合に `/metrics` で公開されます。
+
+## `lake_publish_skipped_by_partial_meta`
+
+- 単位: 件数
+- タイプ: Gauge
+- 説明: この BE/CN の起動以降、再試行された publish が、このノードの Data Cache に保持された tablet の publish 結果（`lake_publish_partial_meta_written` を参照）を使い、トランザクションを再適用しなかった tablet の累積回数。BE 設定項目 `lake_enable_publish_partial_meta` が `true` の場合のみ、File Bundling が有効なテーブルについてカウントされます。共有データクラスタのみ。`dump_metrics_with_bvar` が有効な場合に `/metrics` で公開されます。
+
+## `lake_publish_version_skipped_durable`
+
+- 単位: 件数
+- タイプ: Gauge
+- 説明: この BE/CN の起動以降、再試行された publish が、ストレージにすでに書き込まれている新しいバージョンの tablet メタデータを使い、トランザクションを再適用しなかった tablet の累積回数。再試行（そのパーティションの以前の publish リクエストが送信され、完了しなかった場合）で、新しいバージョンがメタデータキャッシュにない場合のみカウントされます。メタデータキャッシュでヒットした tablet と初回の publish はカウントされません。共有データクラスタのみ。`dump_metrics_with_bvar` が有効な場合に `/metrics` で公開されます。
 
 ## `lake_segment_cache_hit_minute`
 

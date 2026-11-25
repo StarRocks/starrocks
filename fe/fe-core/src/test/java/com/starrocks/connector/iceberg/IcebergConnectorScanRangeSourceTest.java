@@ -30,6 +30,7 @@ import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsPartition;
@@ -37,6 +38,7 @@ import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TIcebergDeleteFile;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.type.DateType;
+import com.starrocks.type.VarbinaryType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.iceberg.AppendFiles;
@@ -131,6 +133,59 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
                 // 2 * (64 + 1) + 1 data-j2
                 Assertions.assertEquals(2 * (BUCKETS_NUMBER2 + 1) + 1, mappingId);
             }
+        }
+    }
+
+    @Test
+    public void testExtractBucketIdAfterBucketColumnRename() {
+        // The partition field keeps its name (k1_bucket) after the source column is renamed.
+        mockedNativeTable2Bucket.newFastAppend().appendFile(FILE_J_1).appendFile(FILE_J_2).commit();
+        mockedNativeTable2Bucket.updateSchema().renameColumn("k1", "k1_new").commit();
+        List<Column> schema = new ArrayList<>();
+        schema.add(new Column("id", INT));
+        schema.add(new Column("k1_new", INT));
+        schema.add(new Column("k2", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTable2Bucket, Maps.newHashMap());
+        List<BucketProperty> bucketProperties = icebergTable.getBucketProperties();
+        Assertions.assertEquals(2, bucketProperties.size());
+
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, tupleDescriptor, Optional.of(bucketProperties),
+                PartitionIdGenerator.of(), false, false);
+
+        for (FileScanTask fileScanTask : mockedNativeTable2Bucket.newScan().planFiles()) {
+            int mappingId = scanRangeSource.extractBucketId(fileScanTask);
+            if (fileScanTask.file().location().endsWith("data-j1.parquet")) {
+                Assertions.assertEquals((BUCKETS_NUMBER2 + 1) + 1, mappingId);
+            } else {
+                Assertions.assertEquals(2 * (BUCKETS_NUMBER2 + 1) + 1, mappingId);
+            }
+        }
+    }
+
+    @Test
+    public void testExtractBucketIdTwoBucketTransformsOnOneColumn() {
+        // bucket(k1, 4) named k1_4 comes first; the bucket property is the 8-bucket one (field k1_bucket).
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_J).bucket("k1", 4, "k1_4").bucket("k1", 8).build();
+        TestTables.TestTable nativeTable = create(SCHEMA_J, spec, "k1_two_buckets", 2);
+        DataFile file = DataFiles.builder(spec).withPath("/path/to/k1_4=1/k1_bucket=3/a.parquet")
+                .withFileSizeInBytes(10).withPartitionPath("k1_4=1/k1_bucket=3").withRecordCount(1).build();
+        nativeTable.newFastAppend().appendFile(file).commit();
+        List<Column> schema = new ArrayList<>();
+        schema.add(new Column("id", INT));
+        schema.add(new Column("k1", INT));
+        schema.add(new Column("k2", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, nativeTable, Maps.newHashMap());
+        BucketProperty bucket8 = icebergTable.getBucketProperties().stream()
+                .filter(bp -> bp.getBucketNum() == 8).findFirst().orElseThrow();
+
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, tupleDescriptor, Optional.of(List.of(bucket8)),
+                PartitionIdGenerator.of(), false, false);
+        for (FileScanTask fileScanTask : nativeTable.newScan().planFiles()) {
+            Assertions.assertEquals(3, scanRangeSource.extractBucketId(fileScanTask));
         }
     }
 
@@ -531,6 +586,70 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
                 PartitionIdGenerator.of(), false, false);
         notPartitioned.setRuntimeFilterPruningColumns(Set.of("k1"));
         Assertions.assertThrows(StarRocksConnectorException.class, () -> notPartitioned.toScanRanges(task));
+    }
+
+    @Test
+    public void testRuntimeFilterProbeSlotsCarryFileBounds() throws Exception {
+        TupleDescriptor localTupleDescriptor = new TupleDescriptor(new TupleId(20));
+        SlotDescriptor k1Slot = new SlotDescriptor(new SlotId(1), localTupleDescriptor);
+        k1Slot.setType(INT);
+        k1Slot.setColumn(new Column("k1", INT));
+        localTupleDescriptor.addSlot(k1Slot);
+        SlotDescriptor k2Slot = new SlotDescriptor(new SlotId(2), localTupleDescriptor);
+        k2Slot.setType(INT);
+        k2Slot.setColumn(new Column("k2", INT));
+        localTupleDescriptor.addSlot(k2Slot);
+
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_3).commit();
+        List<Column> schema = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableB, Maps.newHashMap());
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+
+        FileScanTask task = Lists.newArrayList(mockedNativeTableB.newScan().includeColumnStats().planFiles()).get(0);
+        long partitionId = scanRangeSource.addPartition(task);
+        // without probe slots (and without the min/max optimization) no bounds are sent
+        Assertions.assertFalse(scanRangeSource.buildScanRange(task, task.file(), partitionId).isSetMin_max_values());
+
+        scanRangeSource.setRuntimeFilterProbeSlotIds(Set.of(k1Slot.getId().asInt()));
+        THdfsScanRange range = scanRangeSource.buildScanRange(task, task.file(), partitionId);
+        Assertions.assertEquals(Set.of(k1Slot.getId().asInt()), range.getMin_max_values().keySet());
+        Assertions.assertEquals(1, range.getMin_max_values().get(k1Slot.getId().asInt()).getMin_int_value());
+        Assertions.assertEquals(2, range.getMin_max_values().get(k1Slot.getId().asInt()).getMax_int_value());
+    }
+
+    // A time-travel read binds the slots to the snapshot schema: the bounds are looked up by the name there, not in
+    // the current schema where the column was renamed since.
+    @Test
+    public void testRuntimeFilterProbeSlotBoundsUseReadSchema() throws Exception {
+        TupleDescriptor localTupleDescriptor = new TupleDescriptor(new TupleId(21));
+        SlotDescriptor k1Slot = new SlotDescriptor(new SlotId(1), localTupleDescriptor);
+        k1Slot.setType(INT);
+        k1Slot.setColumn(new Column("k1", INT));
+        localTupleDescriptor.addSlot(k1Slot);
+
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_3).commit();
+        long snapshotId = mockedNativeTableB.currentSnapshot().snapshotId();
+        Schema snapshotSchema = mockedNativeTableB.schema();
+        mockedNativeTableB.updateSchema().renameColumn("k1", "k1_renamed").commit();
+
+        List<Column> schema = Lists.newArrayList(new Column("k1_renamed", INT), new Column("k2", INT));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableB, Maps.newHashMap())
+                .withReadMetadata(snapshotSchema, IcebergMetadata.getSnapshotSpecs(mockedNativeTableB, snapshotId));
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+        scanRangeSource.setRuntimeFilterProbeSlotIds(Set.of(k1Slot.getId().asInt()));
+
+        FileScanTask task = Lists.newArrayList(
+                mockedNativeTableB.newScan().useSnapshot(snapshotId).includeColumnStats().planFiles()).get(0);
+        long partitionId = scanRangeSource.addPartition(task);
+        THdfsScanRange range = scanRangeSource.buildScanRange(task, task.file(), partitionId);
+        Assertions.assertEquals(1, range.getMin_max_values().get(k1Slot.getId().asInt()).getMin_int_value());
+        Assertions.assertEquals(2, range.getMin_max_values().get(k1Slot.getId().asInt()).getMax_int_value());
     }
 
     @Test
@@ -1243,6 +1362,158 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
                 Assertions.assertEquals(0, keyExprsSize,
                         "VoidTransform field must NOT contribute to partition_key_exprs");
             }
+        } finally {
+            if (prevCtx == null) {
+                ConnectContext.remove();
+            } else {
+                prevCtx.setThreadLocalInfo();
+            }
+        }
+    }
+
+    // An identity partition column always takes the partition value, also without a session (incremental scan
+    // ranges): a data file may not store the column (e.g. a migrated Hive file), and reading it from the file gives
+    // NULL.
+    @Test
+    public void testIdentityPartitionValueAlwaysUsed() throws Exception {
+        ConnectContext prevCtx = ConnectContext.get();
+        ConnectContext.remove();
+        try {
+            PartitionSpec specIdentityK1 = PartitionSpec.builderFor(SCHEMA_F).identity("k1").build();
+            TestTables.TestTable table = create(SCHEMA_F, specIdentityK1, "ti_identity_opt_off", 2);
+            DataFile file = DataFiles.builder(specIdentityK1)
+                    .withPath("/path/to/identity-opt-off.parquet")
+                    .withFileSizeInBytes(10)
+                    .withRecordCount(2)
+                    .withPartitionPath("k1=7")
+                    .build();
+            table.newFastAppend().appendFile(file).commit();
+
+            TupleDescriptor localTuple = new TupleDescriptor(new TupleId(103));
+            SlotDescriptor k1Slot = new SlotDescriptor(new SlotId(1), localTuple);
+            k1Slot.setType(INT);
+            k1Slot.setColumn(new Column("k1", INT));
+            localTuple.addSlot(k1Slot);
+
+            List<Column> schema = Lists.newArrayList(new Column("k1", INT), new Column("dt", DateType.DATE));
+            IcebergTable icebergTable = new IcebergTable(1, "iceberg_identity_opt_off", "iceberg_catalog",
+                    "resource", "db", "table", "", schema, table, Maps.newHashMap());
+            IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                    RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTuple, Optional.empty(),
+                    PartitionIdGenerator.of(), false, false);
+
+            FileScanTask task = Lists.newArrayList(table.newScan().planFiles()).get(0);
+            long pid = scanRangeSource.addPartition(task);
+            THdfsScanRange range = scanRangeSource.buildScanRange(task, task.file(), pid);
+            Assertions.assertEquals(pid, range.getPartition_id());
+            Assertions.assertEquals(List.of(1), range.getIdentity_partition_slot_ids());
+            Assertions.assertEquals(1, range.getPartition_value().getPartition_key_exprs().size());
+        } finally {
+            if (prevCtx == null) {
+                ConnectContext.remove();
+            } else {
+                prevCtx.setThreadLocalInfo();
+            }
+        }
+    }
+
+    // An identity partition column takes the raw bytes of a BINARY partition value, and a partition field named apart
+    // from its source column (identity(q) named P, next to a column p) fills its source column.
+    @Test
+    public void testIdentityPartitionValueBinaryAndRenamedField() throws Exception {
+        ConnectContext prevCtx = ConnectContext.get();
+        new ConnectContext().setThreadLocalInfo();
+        try {
+            Schema schema = new Schema(
+                    Types.NestedField.optional(1, "b", Types.BinaryType.get()),
+                    Types.NestedField.optional(2, "q", Types.IntegerType.get()),
+                    Types.NestedField.optional(3, "p", Types.IntegerType.get()));
+            PartitionSpec spec = PartitionSpec.builderFor(schema).identity("b").identity("q", "P").build();
+            TestTables.TestTable table = create(schema, spec, "ti_binary_renamed_field", 2);
+            byte[] bytes = new byte[] {0x41, 0x00, (byte) 0xff};
+            PartitionData partition = new PartitionData(spec.partitionType());
+            partition.set(0, ByteBuffer.wrap(bytes));
+            partition.set(1, 7);
+            table.newFastAppend().appendFile(DataFiles.builder(spec)
+                    .withPath("/path/to/binary-renamed-field.parquet")
+                    .withFileSizeInBytes(10)
+                    .withRecordCount(1)
+                    .withPartition(partition)
+                    .build()).commit();
+
+            TupleDescriptor localTuple = new TupleDescriptor(new TupleId(104));
+            List<Column> columns = Lists.newArrayList(new Column("b", VarbinaryType.VARBINARY),
+                    new Column("q", INT), new Column("p", INT));
+            for (Column column : columns) {
+                SlotDescriptor slot = new SlotDescriptor(new SlotId(localTuple.getSlots().size() + 1), localTuple);
+                slot.setType(column.getType());
+                slot.setColumn(column);
+                localTuple.addSlot(slot);
+            }
+            IcebergTable icebergTable = new IcebergTable(1, "iceberg_binary_renamed_field", "iceberg_catalog",
+                    "resource", "db", "table", "", columns, table, Maps.newHashMap());
+            IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                    RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTuple, Optional.empty(),
+                    PartitionIdGenerator.of(), false, false);
+
+            FileScanTask task = Lists.newArrayList(table.newScan().planFiles()).get(0);
+            long pid = scanRangeSource.addPartition(task);
+            THdfsScanRange range = scanRangeSource.buildScanRange(task, task.file(), pid);
+            Assertions.assertEquals(List.of(localTuple.getColumnSlot("b").getId().asInt(),
+                    localTuple.getColumnSlot("q").getId().asInt()), range.getIdentity_partition_slot_ids());
+            List<TExpr> keys = range.getPartition_value().getPartition_key_exprs();
+            Assertions.assertEquals(2, keys.size());
+            Assertions.assertEquals(TExprNodeType.BINARY_LITERAL, keys.get(0).getNodes().get(0).getNode_type());
+            Assertions.assertArrayEquals(bytes, keys.get(0).getNodes().get(0).getBinary_literal().getValue());
+            Assertions.assertEquals(7, keys.get(1).getNodes().get(0).getInt_literal().getValue());
+        } finally {
+            if (prevCtx == null) {
+                ConnectContext.remove();
+            } else {
+                prevCtx.setThreadLocalInfo();
+            }
+        }
+    }
+
+    // A TIME identity partition value has no literal to send, so the TIME column is read from the file instead of
+    // failing the scan.
+    @Test
+    public void testTimeIdentityPartitionReadFromFile() throws Exception {
+        ConnectContext prevCtx = ConnectContext.get();
+        new ConnectContext().setThreadLocalInfo();
+        try {
+            Schema schema = new Schema(
+                    Types.NestedField.optional(1, "id", Types.IntegerType.get()),
+                    Types.NestedField.optional(2, "t", Types.TimeType.get()));
+            PartitionSpec spec = PartitionSpec.builderFor(schema).identity("t").build();
+            TestTables.TestTable table = create(schema, spec, "ti_time_identity", 2);
+            PartitionData partition = new PartitionData(spec.partitionType());
+            partition.set(0, 36672123456L);
+            table.newFastAppend().appendFile(DataFiles.builder(spec)
+                    .withPath("/path/to/time-identity.parquet")
+                    .withFileSizeInBytes(10)
+                    .withRecordCount(1)
+                    .withPartition(partition)
+                    .build()).commit();
+
+            TupleDescriptor localTuple = new TupleDescriptor(new TupleId(105));
+            List<Column> columns = Lists.newArrayList(new Column("id", INT), new Column("t", DateType.TIME));
+            for (Column column : columns) {
+                SlotDescriptor slot = new SlotDescriptor(new SlotId(localTuple.getSlots().size() + 1), localTuple);
+                slot.setType(column.getType());
+                slot.setColumn(column);
+                localTuple.addSlot(slot);
+            }
+            IcebergTable icebergTable = new IcebergTable(1, "iceberg_time_identity", "iceberg_catalog",
+                    "resource", "db", "table", "", columns, table, Maps.newHashMap());
+            IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                    RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTuple, Optional.empty(),
+                    PartitionIdGenerator.of(), false, false);
+
+            FileScanTask task = Lists.newArrayList(table.newScan().planFiles()).get(0);
+            long pid = scanRangeSource.addPartition(task);
+            THdfsScanRange range = scanRangeSource.buildScanRange(task, task.file(), pid);
+            Assertions.assertEquals(List.of(), range.getIdentity_partition_slot_ids());
         } finally {
             if (prevCtx == null) {
                 ConnectContext.remove();

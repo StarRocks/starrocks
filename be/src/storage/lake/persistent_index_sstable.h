@@ -117,6 +117,15 @@ public:
                                                                  const TabletMetadataPtr& metadata = nullptr,
                                                                  TabletManager* tablet_mgr = nullptr);
 
+    // Open the sstable file at |location| for reading, handing |file_size|, the size recorded in the
+    // metadata, to the filesystem. A file opened without its size has the size looked up on the first
+    // read; on shared-data that reads the file meta from the star cache and, when the star cache does
+    // not hold it, sends a synchronous HEAD request to the object storage. A |file_size| that is not
+    // positive means the size is unknown, and the filesystem looks it up as before.
+    static StatusOr<std::unique_ptr<RandomAccessFile>> open_sstable_file(const RandomAccessFileOptions& opts,
+                                                                         const std::string& location,
+                                                                         int64_t file_size);
+
 private:
     std::unique_ptr<sstable::Table> _sst{nullptr};
     std::unique_ptr<sstable::FilterPolicy> _filter_policy{nullptr};

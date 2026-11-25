@@ -258,7 +258,7 @@ Status ORCScannerTest::_scan_multi_stripes(const std::vector<TBrokerRangeDesc>& 
     out_rows->clear();
 
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor(TYPE_INT));
+    types.emplace_back(TYPE_INT_DESC);
     types.emplace_back(TYPE_VARCHAR_DESC);
     std::vector<std::string> col_names = {"c0", "c1"};
 

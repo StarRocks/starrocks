@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ADMIN CANCEL REPAIR cancels prioritized repairing schedules for specified tables or partitions."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ADMIN CANCEL REPAIR

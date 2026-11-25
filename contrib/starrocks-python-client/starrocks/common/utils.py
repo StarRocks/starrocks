@@ -19,6 +19,7 @@ from sqlalchemy import schema as sa_schema
 from sqlalchemy.exc import StatementError
 
 from starrocks.common.params import DialectName
+from starrocks.common.types import TableDistribution
 from starrocks.engine.interfaces import ReflectedDistributionInfo, ReflectedPartitionInfo, ReflectedTableKeyInfo
 
 
@@ -369,6 +370,23 @@ class TableAttributeNormalizer:
         return text.replace('"', "'")
 
 
+_RANGE_DISTRIBUTION_PATTERN = re.compile(r'^\s*RANGE\b', re.IGNORECASE)
+
+
+def is_range_distribution(distribution: Union[ReflectedDistributionInfo, str, None]) -> bool:
+    """Whether a DISTRIBUTED BY value denotes range distribution.
+
+    Accepts a reflected value such as 'RANGE BUCKETS 1' or a metadata value such as 'RANGE'.
+    """
+    if not distribution:
+        return False
+    if isinstance(distribution, ReflectedDistributionInfo):
+        if distribution.type and not distribution.distribution_method:
+            return str(distribution.type).strip().upper() == TableDistribution.RANGE
+        distribution = str(distribution)
+    return bool(_RANGE_DISTRIBUTION_PATTERN.match(distribution))
+
+
 def find_matching_parenthesis(text: str, start_index: int = 0) -> int:
     """
     Finds the index of the matching closing parenthesis for a given starting parenthesis.
@@ -397,3 +415,34 @@ def find_matching_parenthesis(text: str, start_index: int = 0) -> int:
 def gen_simple_qualified_name(table_name: str, schema: Optional[str] = None) -> str:
     """Generate a simple qualified name for a table."""
     return f"{schema}.{table_name}" if schema else table_name
+
+
+# StarRocks 26.2 renamed the untimed asynchronous refresh mode from ASYNC to ON_CHANGE and
+# rejects the old spelling; releases before it only know ASYNC. One dialect serves both.
+ON_CHANGE_MIN_SERVER_VERSION: Tuple[int, int] = (26, 2)
+
+# The untimed form is ASYNC with no START/EVERY after it; ASYNC EVERY(...) is a different mode
+# that keeps its spelling on every release.
+_UNTIMED_ASYNC_REFRESH = re.compile(
+    r"^(\s*(?:(?:IMMEDIATE|DEFERRED)\s+)?)ASYNC\b(?!\s*(?:START|EVERY))", re.IGNORECASE)
+_ON_CHANGE_REFRESH = re.compile(
+    r"^(\s*(?:(?:IMMEDIATE|DEFERRED)\s+)?)ON_CHANGE\b", re.IGNORECASE)
+
+
+def is_untimed_async_refresh(refresh: str) -> bool:
+    """True for a REFRESH clause body that names the untimed asynchronous mode as ASYNC."""
+    return _UNTIMED_ASYNC_REFRESH.match(refresh) is not None
+
+
+def render_refresh_for_server(refresh: str, server_version_info: Tuple[int, ...]) -> str:
+    """Spell the untimed asynchronous refresh mode the way the target server accepts it.
+
+    Takes the body of a REFRESH clause (no leading REFRESH) and returns it unchanged unless
+    it names that one mode, in which case the keyword is swapped for the target server's.
+    An unknown server version leaves the caller's spelling alone.
+    """
+    if not server_version_info:
+        return refresh
+    if tuple(server_version_info) >= ON_CHANGE_MIN_SERVER_VERSION:
+        return _UNTIMED_ASYNC_REFRESH.sub(r"\g<1>ON_CHANGE", refresh, count=1)
+    return _ON_CHANGE_REFRESH.sub(r"\g<1>ASYNC", refresh, count=1)

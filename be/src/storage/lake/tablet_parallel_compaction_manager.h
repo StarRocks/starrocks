@@ -113,6 +113,9 @@ struct TabletParallelCompactionState {
     int64_t txn_id = 0;
     int64_t version = 0;
     bool is_unshare = false;
+    // An UNSHARE that also rewrites the index files the tablet cannot keep: false when the tablet's sort key is not
+    // its primary key, whose UNSHARE rewrites shared data files only.
+    bool unshare_rewrites_index = false;
     bool is_base_compaction = false;
 
     // Rowsets currently being compacted (to avoid conflicts)
@@ -342,8 +345,10 @@ private:
     // Execute SST compaction once after all subtasks complete
     // This is called from get_merged_txn_log to perform unified SST compaction
     // Results are stored in OpParallelCompaction instead of OpCompaction
+    // With unshare, rewrite the index files the tablet cannot keep as they are, and fail when the tablet metadata
+    // cannot be read.
     Status execute_sst_compaction_for_parallel(int64_t tablet_id, int64_t version,
-                                               TxnLogPB_OpParallelCompaction* op_parallel);
+                                               TxnLogPB_OpParallelCompaction* op_parallel, bool unshare);
 
     // Pick rowsets for compaction using CompactionPolicy
     StatusOr<std::vector<RowsetPtr>> pick_rowsets_for_compaction(int64_t tablet_id, int64_t txn_id, int64_t version,
@@ -375,11 +380,16 @@ private:
     // |submitted_out|, when non-null, is kept up to date with that count as the subtasks are handed to the
     // thread pool, so it stays readable if this throws. The tablet state cannot be used for that: a subtask
     // may already have completed and cleaned the state up by the time the exception is handled.
+    // |reserved_tokens| is the number of limiter tokens the caller already holds for this submission
+    // (create_parallel_tasks() reserves them before it settles the plan). This function settles them from
+    // then on: one goes to each subtask, and the rest go back through |return_token|, whatever the outcome.
+    // It acquires the tokens the groups need beyond that itself, all or nothing.
     StatusOr<int> submit_subtasks_from_groups(const std::shared_ptr<TabletParallelCompactionState>& state_ptr,
                                               std::vector<SubtaskGroup> groups, bool force_base_compaction,
                                               ThreadPool* thread_pool, const AcquireTokenFunc& acquire_token,
                                               const ReleaseTokenFunc& release_token,
-                                              const ReturnTokenFunc& return_token, int* submitted_out = nullptr);
+                                              const ReturnTokenFunc& return_token, int* submitted_out = nullptr,
+                                              int32_t reserved_tokens = 0);
 
     // Execute a single subtask for large rowset split (segment range mode)
     void execute_subtask_segment_range(int64_t tablet_id, int64_t txn_id, int32_t subtask_id,
@@ -485,7 +495,7 @@ private:
                                                    const std::vector<SubtaskGroup>& groups);
 
     // Merge multiple subtask LCRM files into a single LCRM file for the merged compaction.
-    // This enables the light publish path (SST ingestion) for large rowset split compaction.
+    // Publish of a large rowset split compaction reads this merged LCRM.
     Status _merge_subtask_lcrm_files(int64_t tablet_id, int64_t txn_id, const std::vector<FileMetaPB>& lcrm_files,
                                      const std::vector<int64_t>& num_rows_per_subtask,
                                      TxnLogPB_OpCompaction* merged_compaction);
@@ -495,8 +505,13 @@ private:
     // ================================================================================
 
     // Check if range split is applicable for the given rowsets.
-    // All segments must have sort_key_min/max metadata.
+    // All segments must have sort_key_min/max metadata, and no rowset may be in partial segments compaction.
     static bool _can_use_range_split(const std::vector<RowsetPtr>& rowsets);
+
+    // Whether _create_subtask_groups() would plan |rowsets| as a range split. That plan samples the sort keys
+    // of the input segments, the only planning step that reads segment files; this check reads metadata only.
+    static bool _plans_range_split(const std::vector<RowsetPtr>& rowsets, int32_t max_parallel,
+                                   int64_t max_bytes_per_subtask);
 
     // Collect sort key bounds from all segments across all rowsets.
     // Returns SegmentSplitInfo (defined in tablet_splitter.h) for each segment.

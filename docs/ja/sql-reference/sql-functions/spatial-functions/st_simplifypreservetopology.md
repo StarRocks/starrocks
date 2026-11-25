@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "トポロジーと CRS を維持しながらネイティブ XY ジオメトリを簡略化します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_SimplifyPreserveTopology

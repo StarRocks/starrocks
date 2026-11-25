@@ -2,21 +2,17 @@
 displayed_sidebar: docs
 sidebar_position: 20
 description: "Integrate StarRocks with external authentication systems using security integration."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Authenticate with Security Integration
 
-import SecurityIntegrationRangerLink from '../../../_assets/user_priv/security_integration_ranger_link.mdx'
-import SecurityIntegrationIntro from '../../../_assets/user_priv/security_integration_intro.mdx'
-import SecurityIntegrationJWT from '../../../_assets/user_priv/security_integration_jwt.mdx'
-import SecurityIntegrationOAuth from '../../../_assets/user_priv/security_integration_oauth.mdx'
-import SecurityIntegrationConnectSeeAlso from '../../../_assets/user_priv/security_integration_connect_see_also.mdx'
 
 Integrate StarRocks with external authentication systems using security integration.
 
 By creating a security integration within your StarRocks cluster, you can allow access of your external authentication service to StarRocks. With the security integration, you do not need to manually create users within StarRocks. When a user tries to log in using an external identity, StarRocks will use the corresponding security integration according to the configuration in `authentication_chain` to authenticate the user. After the authentication is successful and the user is allowed to log in, StarRocks creates a virtual user in the session for the user to perform subsequent operations.
 
-<SecurityIntegrationRangerLink />
+Please note that if you use the security integration to configure an external authentication method, you must also [integrate StarRocks with Apache Ranger](../authorization/ranger_plugin.md) to enable external authorization. Currently, integrating Security Integration with the StarRocks native authorization is not supported.
 
 You can also enable [Group Provider](../group_provider.md) for StarRocks to access the group information in you external authentication systems, thus allowing creating, authenticating, and authorizing user groups in StarRocks.
 
@@ -24,7 +20,10 @@ Manually creating and managing users with external authentication services are a
 
 ## Create a security integration
 
-<SecurityIntegrationIntro />
+Currently, StarRocks' security integration supports the following authentication systems:
+- LDAP
+- JSON Web Token (JWT)
+- OAuth 2.0
 
 :::note
 StarRocks does not offer connectivity checks when you create a security integration.
@@ -179,9 +178,179 @@ For more details, see the DN matching mechanism in [Authenticate User Groups](..
 - Required: No
 - Description: The description of the security integration.
 
-<SecurityIntegrationJWT />
+### Create a security integration with JWT
 
-<SecurityIntegrationOAuth />
+#### Syntax
+
+```SQL
+CREATE SECURITY INTEGRATION <security_integration_name> 
+PROPERTIES (
+    "type" = "authentication_jwt",
+    "jwks_url" = "",
+    "principal_field" = "",
+    "required_issuer" = "",
+    "required_audience" = "",
+    "group_source" = "",
+    "group_claim" = "",
+    "comment" = ""
+);
+```
+
+#### Parameters
+
+##### security_integration_name
+
+- Required: Yes
+- Description: The name of the security integration.<br />**NOTE**<br />The security integration name is globally unique. You cannot specify this parameter as `native`.
+
+##### type
+
+- Required: Yes
+- Description: The type of the security integration. Specify it as `jwt`.
+
+##### jwks_url
+
+- Required: Yes
+- Description: The URL to the JSON Web Key Set (JWKS) service or the path to the local file under the `fe/conf` directory.
+
+##### principal_field
+
+- Required: Yes
+- Description: The field in the JWT that identifies the subject. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks. To extract a value from a nested claim, specify an [RFC 6901 JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) (a path starting with `/`). Use `~1` to escape `/` and `~0` to escape `~` in key names. For example, `/https:~1~1sts.amazonaws.com~1/request_tags/starrocks_user` resolves the `starrocks_user` field nested under the URI-namespaced claim `https://sts.amazonaws.com/`.
+
+##### required_issuer
+
+- Required: No
+- Description: The list of strings used to identify the issuers (`iss`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT issuer.
+
+##### required_audience
+
+- Required: No
+- Description: The list of strings used to identify the audience (`aud`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT audience.
+
+##### group_source
+
+- Required: No
+- Description: Where the groups of a user authenticated by this integration come from. Valid values:
+  - `group_provider` (default): only the group providers listed in `group_provider` are used. This is the behavior of earlier versions.
+  - `claim`: only the claim named by `group_claim` of the verified token is used. Group providers listed in `group_provider` are ignored, but their configuration is kept, so switching back takes one `ALTER SECURITY INTEGRATION`.
+  - `both`: the union of the two sources.
+
+  Taking the groups from the token is what lets an identity provider with no LDAP directory grant any privilege at all: the resolved groups take part in role mapping via `GRANT ... TO EXTERNAL GROUP`, in the `permitted_groups` login check, in `current_group()`, and in Apache Ranger authorization, exactly like the groups of a group provider. Supported from v4.2 onwards.
+
+##### group_claim
+
+- Required: Yes when `group_source` is `claim` or `both`. Setting it without `group_source` is refused, because it would have no effect; together with an explicit `group_source` of `group_provider` it is accepted and kept, so the claim can be put in place before an `ALTER SECURITY INTEGRATION` switches the source.
+- Description: The claim of the token that holds the user's groups, dot-separated for a claim nested inside another object. For example, `groups` for a top-level claim, `realm_access.roles` for the realm roles of Keycloak, and `resource_access.<client_id>.roles` for its client roles. The claim should hold an array of strings; a single string is accepted as one group. Surrounding whitespace is removed from each name; nothing else is rewritten - not the case, not a leading slash - because the names are handed to Apache Ranger, which matches them exactly. Whether a name matches a `GRANT ... TO EXTERNAL GROUP` or `permitted_groups` entry that differs only in case is decided by the FE configuration item `authentication_group_case_insensitive` (ignoring case by default; set it to `false` if your identity provider distinguishes groups by case).
+
+  There is deliberately no default: the claim an identity provider emits differs per provider, and a wrong guess would let users log in with no privileges instead of failing visibly. The claim is read only after the signature, the required issuer and the required audience have been verified, so the holder of a token cannot choose their own groups. If the claim is absent from a token, the login still succeeds with no groups and the reason is logged rather than reported as an authentication failure - Microsoft Entra ID drops the claim entirely for a user in more than 200 groups, so an absent claim is a state a correct configuration produces. Note that most identity providers do not put groups in a token unless asked to: Keycloak needs a group membership mapper on the client, and Entra ID needs the groups claim added to the token configuration. Supported from v4.2 onwards.
+
+##### comment
+
+- Required: No
+- Description: The description of the security integration.
+
+### Create a security integration with OAuth 2.0
+
+#### Syntax
+
+```SQL
+CREATE SECURITY INTEGRATION <security_integration_name> 
+PROPERTIES (
+    "type" = "authentication_oauth2",
+    "auth_server_url" = "",
+    "token_server_url" = "",
+    "client_id" = "",
+    "client_secret" = "",
+    "redirect_url" = "",
+    "jwks_url" = "",
+    "principal_field" = "",
+    "required_issuer" = "",
+    "required_audience" = "",
+    "group_source" = "",
+    "group_claim" = "",
+    "comment" = ""
+)
+```
+
+#### Parameters
+
+##### security_integration_name
+
+- Required: Yes
+- Description: The name of the security integration.<br />**NOTE**<br />The security integration name is globally unique. You cannot specify this parameter as `native`.
+
+##### auth_server_url
+
+- Required: Yes
+- Description: The authorization URL. The URL to which the users’ browser will be redirected in order to begin the OAuth 2.0 authorization process.
+
+##### token_server_url
+
+- Required: Yes
+- Description: The URL of the endpoint on the authorization server from which StarRocks obtains the access token.
+
+##### client_id
+
+- Required: Yes
+- Description: The public identifier of the StarRocks client.
+
+##### client_secret
+
+- Required: Yes
+- Description: The secret used to authorize StarRocks client with the authorization server.
+
+##### redirect_url
+
+- Required: Yes
+- Description: The URL to which the users’ browser will be redirected after the OAuth 2.0 authentication succeeds. The authorization code will be sent to this URL. In most cases, it need to be configured as `http://<starrocks_fe_url>:<fe_http_port>/api/oauth2`.
+
+##### type
+
+- Required: Yes
+- Description: The type of the security integration. Specify it as `authentication_oauth2`.
+
+##### jwks_url
+
+- Required: Yes
+- Description: The URL to the JSON Web Key Set (JWKS) service or the path to the local file under the `fe/conf` directory.
+
+##### principal_field
+
+- Required: Yes
+- Description: The field in the JWT that identifies the subject. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks. To extract a value from a nested claim, specify an [RFC 6901 JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) (a path starting with `/`). Use `~1` to escape `/` and `~0` to escape `~` in key names. For example, `/https:~1~1sts.amazonaws.com~1/request_tags/starrocks_user` resolves the `starrocks_user` field nested under the URI-namespaced claim `https://sts.amazonaws.com/`.
+
+##### required_issuer
+
+- Required: No
+- Description: The list of strings used to identify the issuers (`iss`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT issuer.
+
+##### required_audience
+
+- Required: No
+- Description: The list of strings used to identify the audience (`aud`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT audience.
+
+##### group_source
+
+- Required: No
+- Description: Where the groups of a user authenticated by this integration come from. Valid values:
+  - `group_provider` (default): only the group providers listed in `group_provider` are used. This is the behavior of earlier versions.
+  - `claim`: only the claim named by `group_claim` of the verified token is used. Group providers listed in `group_provider` are ignored, but their configuration is kept, so switching back takes one `ALTER SECURITY INTEGRATION`.
+  - `both`: the union of the two sources.
+
+  Taking the groups from the token is what lets an identity provider with no LDAP directory grant any privilege at all: the resolved groups take part in role mapping via `GRANT ... TO EXTERNAL GROUP`, in the `permitted_groups` login check, in `current_group()`, and in Apache Ranger authorization, exactly like the groups of a group provider. For an OAuth 2.0 integration this also covers the browser login over the MySQL protocol: there the token reaches StarRocks only after the user has signed in through the browser, so the groups are read from the ID token when it arrives, and `permitted_groups` is checked on the first statement after the browser login rather than when the connection opens. With `group_source` left at `group_provider`, nothing changes: the groups and the check are decided when the connection opens, as before. Supported from v4.2 onwards.
+
+##### group_claim
+
+- Required: Yes when `group_source` is `claim` or `both`; setting it with any other `group_source` is refused, because it would have no effect.
+- Description: The claim of the token that holds the user's groups, dot-separated for a claim nested inside another object. For example, `groups` for a top-level claim, `realm_access.roles` for the realm roles of Keycloak, and `resource_access.<client_id>.roles` for its client roles. The claim should hold an array of strings; a single string is accepted as one group. Surrounding whitespace is removed from each name; nothing else is rewritten - not the case, not a leading slash - because the names are handed to Apache Ranger, which matches them exactly. Whether a name matches a `GRANT ... TO EXTERNAL GROUP` or `permitted_groups` entry that differs only in case is decided by the FE configuration item `authentication_group_case_insensitive` (ignoring case by default; set it to `false` if your identity provider distinguishes groups by case).
+
+  There is deliberately no default: the claim an identity provider emits differs per provider, and a wrong guess would let users log in with no privileges instead of failing visibly. The claim is read only after the signature, the required issuer and the required audience have been verified, so the holder of a token cannot choose their own groups. If the claim is absent from a token, the login still succeeds with no groups and the reason is logged rather than reported as an authentication failure - Microsoft Entra ID drops the claim entirely for a user in more than 200 groups, so an absent claim is a state a correct configuration produces. Note that most identity providers do not put groups in a token unless asked to: Keycloak needs a group membership mapper on the client, and Entra ID needs the groups claim added to the token configuration. Supported from v4.2 onwards.
+
+##### comment
+
+- Required: No
+- Description: The description of the security integration.
 
 ## Configure authentication chain
 
@@ -196,12 +365,46 @@ ADMIN SET FRONTEND CONFIG (
 :::note
 - StarRocks prioritizes native authentication for local users. If a local user with the same username does not exist, authentication is performed in the order configured by `authentication_chain`. If login fails using the native authentication method, the cluster will try the next authentication method in the specified order.
 - You can specify multiple security integrations in `authentication_chain` except for OAuth 2.0 security integration. You cannot specify multiple OAuth 2.0 security integrations or one with other security integrations.
+- `authentication_chain` can hold both LDAP and JWT security integrations, but over the MySQL protocol this is only partially supported. See [Mix LDAP and JWT security integrations](#mix-ldap-and-jwt-security-integrations).
 :::
 
 You can check the value of `authentication_chain` using the following statement:
 
 ```SQL
 ADMIN SHOW FRONTEND CONFIG LIKE 'authentication_chain';
+```
+
+### Mix LDAP and JWT security integrations
+
+Over HTTP and Arrow Flight, LDAP and JWT security integrations on one `authentication_chain` work side by side, because the credential itself says what it is: `Basic` (user name and password) is tried against the LDAP security integrations, and `Bearer` (a token) against the JWT and OAuth 2.0 security integrations. See [Connect over HTTP and Arrow Flight](#connect-over-http-and-arrow-flight).
+
+Over the MySQL protocol the support is partial. StarRocks has to choose one client authentication plugin for a connection before it sees any credential, and the two kinds of security integration need different plugins: `mysql_clear_password` for LDAP and `authentication_openid_connect_client` for JWT. StarRocks chooses by the plugin the client declares in its handshake:
+
+| The client declares | Security integration used |
+| --- | --- |
+| `authentication_openid_connect_client` | The first JWT security integration on the chain |
+| `mysql_clear_password` | The first LDAP security integration on the chain |
+| Neither (most clients send `mysql_native_password` by default) | The first security integration on the chain |
+
+Therefore:
+
+- Put first the security integration that most of your clients use without any extra setting.
+- Clients of the other kind must declare their plugin: `--default-auth=<plugin>` with the MySQL client, `defaultAuthenticationPlugin=<plugin>` with MySQL Connector/J. The MySQL client includes `authentication_openid_connect_client` from version 9.1, community distributions included. Older MySQL clients and the MariaDB client do not have this plugin.
+- A client that cannot declare a plugin, such as PyMySQL, always gets the first security integration on the chain.
+
+```Bash
+# A JWT security integration user, with the LDAP security integration first on the chain
+mysql -h <fe_host> -P <query_port> --default-auth=authentication_openid_connect_client \
+    --authentication-openid-connect-client-id-token-file=<path_to_token_file> -u <username>
+
+# An LDAP security integration user, with the JWT security integration first on the chain
+mysql -h <fe_host> -P <query_port> --default-auth=mysql_clear_password --enable-cleartext-plugin -u <username> -p
+```
+
+If your JWT clients cannot load the OpenID Connect plugin, set the FE configuration item `authentication_chain_accept_jwt_as_password` to `true` and put the LDAP security integration first. A JWT client then passes its token as the password: when the password of a MySQL login has the shape of a JWT, StarRocks first verifies it against the JWT and OAuth 2.0 security integrations, and only if none accepts it tries it as a password against the LDAP security integrations. The token travels like a clear-text password, so use an SSL connection. This item applies to the MySQL protocol only; over HTTP and Arrow Flight, send the token as `Bearer`.
+
+```Bash
+mysql -h <fe_host> -P <query_port> --ssl-mode=REQUIRED --enable-cleartext-plugin -u <username> -p"$(cat <path_to_token_file>)"
 ```
 
 ## Connect over HTTP and Arrow Flight
@@ -233,7 +436,7 @@ Note the following points:
 - Privileges for security-integration users come from [Group Provider](../group_provider.md) and `GRANT ... TO EXTERNAL GROUP` only; the groups a user is resolved into apply on every entry point.
 - On Arrow Flight SQL, a JWT is authenticated exactly like a user name and password: the server answers with its own session token, which the client uses for the rest of the connection. The session cannot outlive the JWT; once the token's `exp` passes, the connection is refused and the client must authenticate again with a new JWT.
 - The FE configuration item `enable_rest_bearer_authentication` (default `true`) turns Bearer authentication on the HTTP and Arrow Flight entry points off. It never affects the MySQL protocol, where token logins keep using the `authentication_openid_connect_client` and `authentication_oauth2_client` plugins.
-- The MySQL protocol can offer a client only one token plugin at a time: the first JWT or OAuth 2.0 integration on `authentication_chain` decides which one. HTTP and Arrow Flight do not have this limit, because the token itself is routed by issuer and audience.
+- The MySQL protocol can offer a client only one plugin at a time: the plugin the client declares picks the matching security integration, and a client that declares none gets the first security integration on `authentication_chain` (see [Mix LDAP and JWT security integrations](#mix-ldap-and-jwt-security-integrations)). HTTP and Arrow Flight do not have this limit, because the token itself is routed by issuer and audience.
 - Every failed HTTP authentication answers `401` with both a `Basic` and a `Bearer` challenge in `WWW-Authenticate`, and does not say which integration refused or why. Use the `authentication_failure_total` and `authentication_failure_reason_total` metrics on the FE to diagnose failures.
 
 ## Manage security integrations
@@ -321,4 +524,15 @@ SHOW CREATE SECURITY INTEGRATION LDAP1；
 `ldap_bind_root_pwd` is masked when SHOW CREATE SECURITY INTEGRATION is executed.
 :::
 
-<SecurityIntegrationConnectSeeAlso />
+## Connect to StarRocks via a security integration
+
+- For instructions on how to connect to StarRocks via LDAP, see [LDAP Authentication - Connect to StarRocks](./ldap_authentication.md#connect-from-mysql-client-with-ldap).
+- For instructions on how to connect to StarRocks via JWT, see [JSON Web Token Authentication - Connect to StarRocks](./jwt_authentication.md#connect-from-mysql-client-with-jwt).
+- For instructions on how to connect to StarRocks via OAuth 2.0, see [OAuth 2.0 Authentication - Connect to StarRocks](./oauth2_authentication.md#connect-from-jdbc-client-with-oauth-20).
+
+## See also
+
+- For instructions on how to manually authenticate users via LDAP in StarRocks, see [LDAP Authentication](./ldap_authentication.md).
+- For instructions on how to manually authenticate users via JSON Web Token in StarRocks, see [JSON Web Token Authentication](./jwt_authentication.md).
+- For instructions on how to manually authenticate users via OAuth 2.0 in StarRocks, see [OAuth 2.0 Authentication](./oauth2_authentication.md).
+- For instructions on how to authenticate user groups, see [Authenticate User Groups](../group_provider.md).

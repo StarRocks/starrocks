@@ -763,7 +763,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
                     column->crc32_hash(&_hash_values[0], 0, num_rows);
                 }
             } else {
-                _calc_hash_values_and_bucket_ids();
+                _compute_hash_values_and_bucket_ids();
             }
 
             // Compute row indexes for each channel's each shuffle
@@ -850,7 +850,7 @@ size_t ExchangeSinkOperator::num_buffered_shuffle_rows_for_testing() const {
 }
 #endif
 
-void ExchangeSinkOperator::_calc_hash_values_and_bucket_ids() {
+void ExchangeSinkOperator::_compute_hash_values_and_bucket_ids() {
     std::vector<const Column*> partitions_columns;
     partitions_columns.reserve(_partitions_columns.size());
     for (size_t i = 0; i < _partitions_columns.size(); i++) {
@@ -858,7 +858,7 @@ void ExchangeSinkOperator::_calc_hash_values_and_bucket_ids() {
     }
 
     BucketAwarePartitionCtx bctx(_bucket_properties, _hash_values, _round_hashes, _bucket_ids, _round_ids);
-    calc_hash_values_and_bucket_ids(partitions_columns, bctx);
+    compute_hash_values_and_bucket_ids(partitions_columns, bctx);
 }
 
 void ExchangeSinkOperator::update_metrics(RuntimeState* state) {

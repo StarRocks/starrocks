@@ -14,6 +14,8 @@
 
 #include "storage/rowset/bitmap_index_evaluator.h"
 
+#include <algorithm>
+
 #include "column/chunk_schema_helper.h"
 #include "common/config_rowset_fwd.h"
 #include "storage_primitive/predicate_tree/predicate_tree.hpp"
@@ -411,13 +413,29 @@ struct BitmapIndexPredicateEraser {
             return;
         }
 
+        // BitmapIndexRetriver skips compound nodes that are not marked as used, so the bitmap of such a node is
+        // never applied to the scan range. Erasing any predicate below it would therefore drop a filter that
+        // nothing else enforces, even if a descendant was marked in `nodes_to_erase`. Keep the whole subtree intact.
+        const auto it = parent->_ctx.compound_node_to_context.find(&node);
+        if (it == parent->_ctx.compound_node_to_context.end() || !it->second.used) {
+            parent_node.add_child(node);
+            return;
+        }
+
         PredicateCompoundNode<Type> new_node;
         for (const auto& child : node.children()) {
             child.visit(*this, new_node);
         }
 
         if (!new_node.empty()) {
-            parent_node.add_child(new_node);
+            // Erase an OR all or nothing. If only some children were erased, the remaining ones would reject
+            // the erased children's rows. E.g. in (a = 1 AND (b = 2 OR b = 3)) OR c = 4, if the inner OR can't
+            // use the bitmap index, only (b = 2 OR b = 3) would remain and rows matching c = 4 would be lost.
+            if constexpr (Type == CompoundNodeType::OR) {
+                parent_node.add_child(node);
+            } else {
+                parent_node.add_child(new_node);
+            }
         }
     }
 
@@ -449,6 +467,13 @@ Status BitmapIndexEvaluator::init(BitmapIndexIteratorSupplier&& supplier) {
 }
 
 Status BitmapIndexEvaluator::evaluate(SparseRange<>& dst_scan_range, PredicateTree& dst_pred_tree) {
+    const auto optional_file_missing = [this]() {
+        return std::ranges::any_of(_bitmap_index_iterators,
+                                   [](const auto* iter) { return iter != nullptr && iter->is_file_missing(); });
+    };
+    if (optional_file_missing()) {
+        return Status::OK();
+    }
     // ---------------------------------------------------------
     // Seek bitmap index.
     //  - Seek to the position of predicate's operand within
@@ -456,7 +481,14 @@ Status BitmapIndexEvaluator::evaluate(SparseRange<>& dst_scan_range, PredicateTr
     // ---------------------------------------------------------
     // The root is an AND whose bitmap is intersected into the scan range, so predicates matched at the top
     // level are erasable. Erasability is only revoked while descending through a not-fully-covered OR.
-    ASSIGN_OR_RETURN(const auto seek_res, _pred_tree.visit(BitmapIndexSeeker{this}, /*erasable=*/true));
+    auto seek_result = _pred_tree.visit(BitmapIndexSeeker{this}, /*erasable=*/true);
+    // Both dictionary data and row bitmaps are lazy. A file can disappear after iterator construction;
+    // never commit partial pruning or erase predicates in that case. Only the actual optional-file I/O
+    // NotFound sets the marker; ordinary dictionary misses and other I/O errors retain their semantics.
+    if (optional_file_missing()) {
+        return Status::OK();
+    }
+    ASSIGN_OR_RETURN(const auto seek_res, std::move(seek_result));
     switch (seek_res) {
     case BitmapIndexSeeker::ResultType::ALWAYS_FALSE:
         dst_scan_range.clear();
@@ -478,7 +510,11 @@ Status BitmapIndexEvaluator::evaluate(SparseRange<>& dst_scan_range, PredicateTr
     const size_t input_rows = row_bitmap.cardinality();
     DCHECK_EQ(input_rows, dst_scan_range.span_size());
 
-    ASSIGN_OR_RETURN(auto roaring, _pred_tree.visit(BitmapIndexRetriver{this}));
+    auto retrieve_result = _pred_tree.visit(BitmapIndexRetriver{this});
+    if (optional_file_missing()) {
+        return Status::OK();
+    }
+    ASSIGN_OR_RETURN(auto roaring, std::move(retrieve_result));
     if (!roaring.has_value()) {
         return Status::OK();
     }

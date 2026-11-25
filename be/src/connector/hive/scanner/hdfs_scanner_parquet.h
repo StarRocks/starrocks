@@ -33,8 +33,10 @@ public:
     void do_update_counter(HdfsScannerProfile* profile) override;
 
 protected:
+    bool tracks_scan_audit_rows() const override { return true; }
     // do_open() rebuilds the reader from the file start.
     bool support_reopen_without_datacache() const override { return true; }
+    bool support_file_stats_pruning() const override { return true; }
 
 private:
     std::shared_ptr<parquet::FileReader> _reader = nullptr;

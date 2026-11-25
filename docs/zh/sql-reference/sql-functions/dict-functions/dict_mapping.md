@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "通过指定字典表和key，返回该key所映射的value。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # dict_mapping

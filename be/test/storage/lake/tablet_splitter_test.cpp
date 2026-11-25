@@ -18,8 +18,12 @@
 #include <google/protobuf/util/message_differencer.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <limits>
+#include <map>
 #include <numeric>
 #include <optional>
+#include <unordered_map>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
@@ -40,10 +44,12 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/sort_key_bounds_test_util.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage/sort_key_bounds.h"
 #include "storage/sort_key_sampler.h"
 #include "storage/tablet_range.h"
 #include "storage/tablet_schema.h"
@@ -1223,8 +1229,8 @@ static TabletMetadataPtr make_dup_keys_metadata_with_rowsets(
         sm->set_filename("seg" + std::to_string(id));
         sm->set_size(data_size);
         sm->set_num_rows(num_rows);
-        *sm->mutable_sort_key_min() = make_bigint_tuple_pb(lo);
-        *sm->mutable_sort_key_max() = make_bigint_tuple_pb(hi);
+        *sm->mutable_deprecated_sort_key_min() = make_bigint_tuple_pb(lo);
+        *sm->mutable_deprecated_sort_key_max() = make_bigint_tuple_pb(hi);
     }
     return m;
 }
@@ -1319,8 +1325,8 @@ TEST(TabletSplitterExternalBoundariesTest, ExternalRanges_AssignsPointAtPhysical
     *point = rowset->segment_metas(0);
     point->set_filename("point");
     point->set_segment_idx(7);
-    *point->mutable_sort_key_min() = make_bigint_tuple_pb(50);
-    *point->mutable_sort_key_max() = make_bigint_tuple_pb(50);
+    *point->mutable_deprecated_sort_key_min() = make_bigint_tuple_pb(50);
+    *point->mutable_deprecated_sort_key_max() = make_bigint_tuple_pb(50);
     RepeatedPtrField<TabletRangePB> external;
     *external.Add() = make_bigint_range_pb(std::nullopt, 50);
     *external.Add() = make_bigint_range_pb(50, std::nullopt);
@@ -1555,8 +1561,8 @@ static void add_bigint_seg(RowsetMetadataPB* rs, int64_t mn, int64_t mx, const s
     auto* m = rs->add_segment_metas();
     m->set_filename(name);
     m->set_num_rows(1);
-    *m->mutable_sort_key_min() = make_bigint_tuple_pb(mn);
-    *m->mutable_sort_key_max() = make_bigint_tuple_pb(mx);
+    *m->mutable_deprecated_sort_key_min() = make_bigint_tuple_pb(mn);
+    *m->mutable_deprecated_sort_key_max() = make_bigint_tuple_pb(mx);
 }
 } // namespace
 
@@ -1585,7 +1591,7 @@ TEST(TabletSplitterTest, CanPruneRowsetSegments_predicates) {
     } // (c) missing bound on extra segment
     {
         auto rs = make_pruneable();
-        rs.mutable_segment_metas(0)->clear_sort_key_max();
+        rs.mutable_segment_metas(0)->clear_deprecated_sort_key_max();
         EXPECT_FALSE(can_prune_rowset_segments(rs, /*sort_key_arity=*/1));
     } // (c) missing bound
     {
@@ -1618,8 +1624,8 @@ TEST(TabletSplitterTest, CanPruneRowsetSegments_predicates) {
         auto rs = make_pruneable(); // s0's bounds are arity 1
         auto* s1 = rs.add_segment_metas();
         s1->set_filename("s1");
-        *s1->mutable_sort_key_min() = wide_bound;
-        *s1->mutable_sort_key_max() = wide_bound;
+        *s1->mutable_deprecated_sort_key_min() = wide_bound;
+        *s1->mutable_deprecated_sort_key_max() = wide_bound;
         EXPECT_FALSE(can_prune_rowset_segments(rs, /*sort_key_arity=*/2));
     }
 }
@@ -1668,6 +1674,470 @@ TEST(TabletSplitterTest, ComputeOwnership_failclosed_when_not_contained) {
     ASSERT_TRUE(own.ok());
     EXPECT_TRUE(own->segments[0].keep[0]);
     EXPECT_TRUE(own->segments[0].shared[0]); // fail-closed (not provably contained)
+}
+
+// Encoded bounds narrower than the current sort key keep the rowset unpruned, exactly like deprecated ones: a
+// rowset written before a metadata-only trailing sort-key ADD is not comparable with the new tablets' ranges.
+TEST(TabletSplitterTest, NarrowerEncodedBoundsAreNotPrunable) {
+    TuplePB wide_bound = make_bigint_tuple_pb(5);
+    *wide_bound.add_values() = make_bigint_tuple_pb(5).values(0);
+    for (const auto repr : {SortKeyBoundsRepr::kDeprecated, SortKeyBoundsRepr::kEncoded}) {
+        SCOPED_TRACE(repr == SortKeyBoundsRepr::kEncoded ? "encoded" : "deprecated");
+        RowsetMetadataPB narrow;
+        add_bigint_seg(&narrow, 0, 1, "s0");
+        convert_sort_key_bounds(&narrow, repr);
+        EXPECT_TRUE(can_prune_rowset_segments(narrow, /*sort_key_arity=*/1));
+        EXPECT_FALSE(can_prune_rowset_segments(narrow, /*sort_key_arity=*/2));
+
+        // One narrow segment disqualifies a rowset whose other segments are at the current arity.
+        RowsetMetadataPB mixed_arity;
+        auto* wide = mixed_arity.add_segment_metas();
+        wide->set_filename("s1");
+        wide->set_num_rows(1);
+        *wide->mutable_deprecated_sort_key_min() = wide_bound;
+        *wide->mutable_deprecated_sort_key_max() = wide_bound;
+        convert_sort_key_bounds(&mixed_arity, repr);
+        EXPECT_TRUE(can_prune_rowset_segments(mixed_arity, /*sort_key_arity=*/2));
+        EXPECT_FALSE(can_prune_rowset_segments(mixed_arity, /*sort_key_arity=*/1));
+        *mixed_arity.add_segment_metas() = narrow.segment_metas(0);
+        EXPECT_FALSE(can_prune_rowset_segments(mixed_arity, /*sort_key_arity=*/2));
+    }
+}
+
+// Encoded bounds in format version 1 that do not decode, whether the header or a value is damaged, fail ownership the
+// way an unparseable deprecated tuple does, so the caller never prunes a rowset on bounds it cannot read.
+TEST(TabletSplitterTest, CorruptEncodedBoundsFailOwnership) {
+    const std::vector<TabletRangePB> ranges{make_bigint_range_pb(0, 11), make_bigint_range_pb(11, 21)};
+    {
+        RowsetMetadataPB rs;
+        add_bigint_seg(&rs, 1, 5, "s0");
+        // A non-NULL value without its text does not parse.
+        rs.mutable_segment_metas(0)->mutable_deprecated_sort_key_min()->mutable_values(0)->clear_value();
+        EXPECT_FALSE(compute_rowset_segment_ownership(rs, ranges).ok());
+    }
+    RowsetMetadataPB encoded;
+    add_bigint_seg(&encoded, 1, 5, "s0");
+    convert_sort_key_bounds(&encoded, SortKeyBoundsRepr::kEncoded);
+    {
+        ASSIGN_OR_ABORT(auto own, compute_rowset_segment_ownership(encoded, ranges));
+        EXPECT_TRUE(own.segments[0].keep[0]);
+        EXPECT_FALSE(own.segments[0].keep[1]);
+        EXPECT_FALSE(own.segments[0].shared[0]);
+    }
+    const std::string valid = encoded.segment_metas(0).sort_key_min_encoded();
+    // One BIGINT column: a 4-byte header ending in the type byte (byte 3), the value marker (byte 4) and the 8-byte
+    // payload.
+    ASSERT_EQ(13u, valid.size());
+    std::string bad_type = valid;
+    bad_type[3] = static_cast<char>(0xFF);
+    std::string bad_marker = valid;
+    bad_marker[4] = 0x02;
+    for (const std::string& corrupt :
+         {bad_type, valid.substr(0, valid.size() - 1), bad_marker, valid + std::string(1, '\0')}) {
+        for (const bool corrupt_min : {true, false}) {
+            RowsetMetadataPB rs(encoded);
+            if (corrupt_min) {
+                rs.mutable_segment_metas(0)->set_sort_key_min_encoded(corrupt);
+            } else {
+                rs.mutable_segment_metas(0)->set_sort_key_max_encoded(corrupt);
+            }
+            EXPECT_TRUE(can_prune_rowset_segments(rs, /*sort_key_arity=*/1)) << rs.ShortDebugString();
+            auto own = compute_rowset_segment_ownership(rs, ranges);
+            EXPECT_TRUE(own.status().is_corruption()) << own.status() << " " << rs.ShortDebugString();
+        }
+    }
+}
+
+// Encoded bounds in a format version this binary does not know count as no bounds: the rowset is not prunable, so the
+// caller keeps every segment on every new tablet as shared instead of failing.
+TEST(TabletSplitterTest, UnknownEncodedFormatVersionIsNotPrunable) {
+    RowsetMetadataPB encoded;
+    add_bigint_seg(&encoded, 1, 5, "s0");
+    convert_sort_key_bounds(&encoded, SortKeyBoundsRepr::kEncoded);
+    ASSERT_TRUE(can_prune_rowset_segments(encoded, /*sort_key_arity=*/1));
+    const std::string valid = encoded.segment_metas(0).sort_key_min_encoded();
+    std::string unknown_version = valid;
+    unknown_version[0] = 0x03;
+    for (const std::string& corrupt : {unknown_version, std::string("garbage"), std::string()}) {
+        for (const bool corrupt_min : {true, false}) {
+            RowsetMetadataPB rs(encoded);
+            if (corrupt_min) {
+                rs.mutable_segment_metas(0)->set_sort_key_min_encoded(corrupt);
+            } else {
+                rs.mutable_segment_metas(0)->set_sort_key_max_encoded(corrupt);
+            }
+            EXPECT_FALSE(has_segment_sort_key_bounds(rs.segment_metas(0))) << rs.ShortDebugString();
+            EXPECT_FALSE(can_prune_rowset_segments(rs, /*sort_key_arity=*/1)) << rs.ShortDebugString();
+            EXPECT_FALSE(can_prune_rowset_segments(rs, /*sort_key_arity=*/0)) << rs.ShortDebugString();
+        }
+    }
+}
+
+// =============================================================================
+// Sort key bounds stored truncated to the value budget
+// =============================================================================
+//
+// set_segment_sort_key_bounds stores a bound whose values exceed kSortKeyBoundPayloadBudget in format version 2: the
+// minimum cut to a prefix of the segment's minimum, the maximum replaced by a successor of a prefix of its maximum.
+// Both still bound the segment's keys, only more loosely.
+
+namespace {
+
+VariantTuple make_varchar_tuple(const std::string& value) {
+    VariantTuple tuple;
+    tuple.append(DatumVariant(get_type_info(TYPE_VARCHAR), Datum(Slice(value))));
+    return tuple;
+}
+
+// A (c0 VARCHAR, c1 BIGINT, c2 BIGINT) sort key tuple; an absent c1 or c2 is NULL.
+VariantTuple make_vbb_tuple(const std::string& c0, std::optional<int64_t> c1, std::optional<int64_t> c2) {
+    VariantTuple tuple = make_varchar_tuple(c0);
+    for (const auto& value : {c1, c2}) {
+        tuple.append(DatumVariant(get_type_info(TYPE_BIGINT), value.has_value() ? Datum(*value) : Datum()));
+    }
+    return tuple;
+}
+
+std::string tuple_debug_string(const VariantTuple& tuple) {
+    TuplePB pb;
+    tuple.to_proto(&pb);
+    return pb.ShortDebugString();
+}
+
+// Closed-open [lower, upper) over one VARCHAR column; an absent side is unbounded.
+TabletRangePB make_varchar_range_pb(const std::optional<std::string>& lower, const std::optional<std::string>& upper) {
+    TabletRangePB range;
+    if (lower.has_value()) {
+        *range.mutable_lower_bound()->add_values() = make_varchar_variant_pb(*lower);
+        range.set_lower_bound_included(true);
+    }
+    if (upper.has_value()) {
+        *range.mutable_upper_bound()->add_values() = make_varchar_variant_pb(*upper);
+        range.set_upper_bound_included(false);
+    }
+    return range;
+}
+
+// A DUP_KEYS tablet without rowsets whose sort key is |key_types| in order. GlobalTabletSchemaMap caches schemas by id,
+// so |schema_id| must not be used by a different schema elsewhere in this binary.
+std::shared_ptr<TabletMetadataPB> make_dup_keys_metadata_with_key_types(const std::vector<std::string>& key_types,
+                                                                        int64_t schema_id) {
+    auto m = std::make_shared<TabletMetadataPB>();
+    m->set_id(1);
+    m->set_version(1);
+    auto* schema = m->mutable_schema();
+    schema->set_keys_type(DUP_KEYS);
+    schema->set_id(schema_id);
+    for (size_t i = 0; i < key_types.size(); ++i) {
+        auto* column = schema->add_column();
+        column->set_unique_id(static_cast<int32_t>(i));
+        column->set_name("c" + std::to_string(i));
+        column->set_type(key_types[i]);
+        column->set_is_key(true);
+        column->set_is_nullable(false);
+        if (key_types[i] == "VARCHAR") column->set_length(128);
+        schema->add_sort_key_idxes(static_cast<int32_t>(i));
+    }
+    return m;
+}
+
+// Appends a segment whose bounds are stored the way a writer stores them, truncated when over the value budget.
+void add_segment_with_stored_bounds(RowsetMetadataPB* rowset, const VariantTuple& min, const VariantTuple& max,
+                                    int64_t num_rows, int64_t size) {
+    const int index = rowset->segment_metas_size();
+    auto* segment = rowset->add_segment_metas();
+    segment->set_filename(fmt::format("r{}s{}", rowset->id(), index));
+    segment->set_segment_idx(index);
+    segment->set_num_rows(num_rows);
+    segment->set_size(size);
+    set_segment_sort_key_bounds(min, max, segment);
+}
+
+SortKeyBoundsExactness stored_bounds_exactness(const SegmentMetadataPB& segment) {
+    VariantTuple min;
+    VariantTuple max;
+    SortKeyBoundsExactness exactness;
+    CHECK_OK(decode_segment_sort_key_bounds(segment, &min, &max, &exactness));
+    return exactness;
+}
+
+// A rowset with one segment whose (c0 VARCHAR, c1 BIGINT, c2 BIGINT) bounds are stored truncated to c0 alone: 30
+// bytes of c0 leave no room for c1 in the budget.
+RowsetMetadataPB make_rowset_with_bounds_truncated_to_one_of_three_columns() {
+    RowsetMetadataPB rowset;
+    const std::string c0(30, 'x');
+    add_segment_with_stored_bounds(&rowset, make_vbb_tuple(c0, 1, 1), make_vbb_tuple(c0, 1, 100), /*num_rows=*/100,
+                                   /*size=*/1000);
+    VariantTuple min;
+    VariantTuple max;
+    SortKeyBoundsExactness exactness;
+    CHECK_OK(decode_segment_sort_key_bounds(rowset.segment_metas(0), &min, &max, &exactness));
+    CHECK(exactness.min_truncated && exactness.max_truncated);
+    CHECK_EQ(1u, min.size());
+    CHECK_EQ(1u, max.size());
+    return rowset;
+}
+
+constexpr int64_t kVarcharKeySchemaId = 14851;
+constexpr int64_t kVarcharBigintBigintKeySchemaId = 14852;
+constexpr int64_t kIntVarcharIntKeySchemaId = 14853;
+
+} // namespace
+
+// A colocate-aware split must not emit a colocate prefix that no row has. Columns of a truncated bound past its exact
+// ones are not key values -- a dropped column projects to NULL, a successor is above every key -- so a bound with fewer
+// exact columns than the colocate prefix is not a boundary candidate. One with enough exact columns still is.
+TEST(TabletSplitterTest, ColocateSynthesisSkipsInexactTruncatedBounds) {
+    // Exact segments ("m", 1, 1..100) and ("z", 1, 1..100) around a middle segment holding 100 rows.
+    auto build_segments = [](const VariantTuple& middle_min, const VariantTuple& middle_max, int64_t left_rows,
+                             int64_t right_rows) {
+        auto m =
+                make_dup_keys_metadata_with_key_types({"VARCHAR", "BIGINT", "BIGINT"}, kVarcharBigintBigintKeySchemaId);
+        const std::vector<std::tuple<uint32_t, VariantTuple, VariantTuple, int64_t>> rowsets{
+                {1, make_vbb_tuple("m", 1, 1), make_vbb_tuple("m", 1, 100), left_rows},
+                {2, middle_min, middle_max, 100},
+                {3, make_vbb_tuple("z", 1, 1), make_vbb_tuple("z", 1, 100), right_rows}};
+        for (const auto& [id, min, max, rows] : rowsets) {
+            auto* rowset = m->add_rowsets();
+            rowset->set_id(id);
+            rowset->set_num_rows(rows);
+            rowset->set_data_size(rows * 10);
+            rowset->set_num_dels(0);
+            add_segment_with_stored_bounds(rowset, min, max, rows, rows * 10);
+        }
+        std::vector<SegmentSplitInfo> segments;
+        CHECK_OK(build_segments_from_rowsets(/*tablet_manager=*/nullptr, m, /*split_width=*/2,
+                                             /*data_page_split_width=*/0, &segments));
+        CHECK_EQ(3u, segments.size());
+        std::sort(segments.begin(), segments.end(),
+                  [](const auto& lhs, const auto& rhs) { return lhs.source_id < rhs.source_id; });
+        return segments;
+    };
+    auto split = [](const std::vector<SegmentSplitInfo>& segments, int32_t colocate_column_count) {
+        ASSIGN_OR_ABORT(auto result, calculate_range_split_boundaries(segments, /*target_split_count=*/2,
+                                                                      /*target_value_per_split=*/200,
+                                                                      /*use_num_rows=*/true, /*track_sources=*/false,
+                                                                      /*tablet_range=*/nullptr, colocate_column_count));
+        return result.boundaries;
+    };
+
+    {
+        SCOPED_TRACE("one exact column, colocate prefix of 2");
+        // 30 bytes of c0 leave no room for c1: the stored minimum keeps c0 alone, and the stored maximum is the
+        // successor of c0.
+        const std::string c0(30, 'x');
+        const auto segments = build_segments(make_vbb_tuple(c0, 10, 0), make_vbb_tuple(c0, 10, 50), 200, 100);
+        const auto& middle = segments[1];
+        EXPECT_TRUE(middle.bounds_exactness.min_truncated);
+        EXPECT_TRUE(middle.bounds_exactness.max_truncated);
+        EXPECT_EQ(1u, middle.bounds_exactness.min_exact_columns);
+        EXPECT_EQ(0u, middle.bounds_exactness.max_exact_columns);
+        // Counted before SortKeyProjection pads the tuples with NULLs.
+        EXPECT_EQ(tuple_debug_string(make_vbb_tuple(c0, std::nullopt, std::nullopt)),
+                  tuple_debug_string(middle.min_key));
+        EXPECT_EQ(tuple_debug_string(make_vbb_tuple(std::string(29, 'x') + "y", std::nullopt, std::nullopt)),
+                  tuple_debug_string(middle.max_key));
+        for (const size_t i : {0, 2}) {
+            EXPECT_FALSE(segments[i].bounds_exactness.min_truncated);
+            EXPECT_FALSE(segments[i].bounds_exactness.max_truncated);
+        }
+        // Without the skip the boundary is the middle segment's (c0, NULL, NULL): a colocate prefix (c0, NULL) that
+        // no row has.
+        const auto boundaries = split(segments, /*colocate_column_count=*/2);
+        ASSERT_EQ(1u, boundaries.size());
+        EXPECT_EQ(tuple_debug_string(make_vbb_tuple("m", 1, 100)), tuple_debug_string(boundaries[0]));
+    }
+
+    // 22 bytes of c0 leave room for c1 but not c2: the stored minimum keeps (c0, 10) with both columns exact, and the
+    // stored maximum is (c0, 11), whose c1 is a successor.
+    const std::string c0(22, 'x');
+    const auto segments = build_segments(make_vbb_tuple(c0, 10, 0), make_vbb_tuple(c0, 10, 50), 200, 100);
+    ASSERT_TRUE(segments[1].bounds_exactness.min_truncated);
+    ASSERT_TRUE(segments[1].bounds_exactness.max_truncated);
+    ASSERT_EQ(2u, segments[1].bounds_exactness.min_exact_columns);
+    ASSERT_EQ(1u, segments[1].bounds_exactness.max_exact_columns);
+    {
+        SCOPED_TRACE("two exact columns, colocate prefix of 2");
+        // The minimum's colocate prefix (c0, 10) is the segment's own, so it is still a boundary candidate.
+        const auto boundaries = split(segments, /*colocate_column_count=*/2);
+        ASSERT_EQ(1u, boundaries.size());
+        EXPECT_EQ(tuple_debug_string(make_vbb_tuple(c0, 10, std::nullopt)), tuple_debug_string(boundaries[0]));
+    }
+    {
+        SCOPED_TRACE("two exact columns, colocate prefix of 3");
+        // Both bounds now have fewer exact columns than the prefix. Without the skip the boundary is the stored
+        // maximum (c0, 11, NULL).
+        const auto shifted = build_segments(make_vbb_tuple(c0, 10, 0), make_vbb_tuple(c0, 10, 50), 100, 200);
+        const auto boundaries = split(shifted, /*colocate_column_count=*/3);
+        ASSERT_EQ(1u, boundaries.size());
+        EXPECT_EQ(tuple_debug_string(make_vbb_tuple("z", 1, 1)), tuple_debug_string(boundaries[0]));
+    }
+}
+
+// Truncated bounds widen a segment's envelope past its keys. Here the stored minimum of a one-row segment falls below
+// the parent's range, so the existing geometry gives the row to no child at all. The statistics are estimates, so a
+// rowset with a truncated bound shares them evenly among its emitted children instead of failing the split. The same
+// geometry from exact bounds still fails: there it means the metadata is wrong.
+TEST(TabletSplitterTest, ProjectRowsetStatsFallsBackForTruncatedBounds) {
+    const std::string lower(40, 'x');
+    const std::string middle(45, 'x');
+    const std::string cut_min(36, 'x');
+    const std::string successor = std::string(35, 'x') + "y";
+    // Parent [x40, +inf); the rowset's only row is x50, in the right child.
+    auto make_metadata = [&](const VariantTuple& min, const VariantTuple& max) {
+        auto m = make_dup_keys_metadata_with_key_types({"VARCHAR"}, kVarcharKeySchemaId);
+        *m->mutable_range() = make_varchar_range_pb(lower, std::nullopt);
+        auto* rowset = m->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_num_rows(1);
+        rowset->set_data_size(1000);
+        rowset->set_num_dels(1);
+        add_segment_with_stored_bounds(rowset, min, max, /*num_rows=*/1, /*size=*/1000);
+        return m;
+    };
+    const auto external =
+            make_ranges({make_varchar_range_pb(lower, middle), make_varchar_range_pb(middle, std::nullopt)});
+
+    const std::string key(50, 'x');
+    auto truncated = make_metadata(make_varchar_tuple(key), make_varchar_tuple(key));
+    VariantTuple stored_min;
+    VariantTuple stored_max;
+    SortKeyBoundsExactness exactness;
+    ASSERT_OK(decode_segment_sort_key_bounds(truncated->rowsets(0).segment_metas(0), &stored_min, &stored_max,
+                                             &exactness));
+    ASSERT_TRUE(exactness.min_truncated);
+    ASSERT_TRUE(exactness.max_truncated);
+    ASSERT_EQ(tuple_debug_string(make_varchar_tuple(cut_min)), tuple_debug_string(stored_min));
+    ASSERT_EQ(tuple_debug_string(make_varchar_tuple(successor)), tuple_debug_string(stored_max));
+
+    std::vector<TabletRangeInfo> ranges;
+    ASSERT_OK(compute_split_ranges_from_external_boundaries(/*tablet_manager=*/nullptr, truncated, external, &ranges));
+    ASSERT_EQ(2u, ranges.size());
+    ASSERT_TRUE(ranges[0].rowset_stats.contains(1));
+    ASSERT_TRUE(ranges[1].rowset_stats.contains(1));
+    const auto& left = ranges[0].rowset_stats.at(1);
+    const auto& right = ranges[1].rowset_stats.at(1);
+    EXPECT_EQ(1, left.num_rows + right.num_rows);
+    EXPECT_EQ(1000, left.data_size + right.data_size);
+    EXPECT_EQ(1, left.num_dels + right.num_dels);
+    EXPECT_LE(std::max(left.num_rows, right.num_rows) - std::min(left.num_rows, right.num_rows), 1);
+    EXPECT_EQ(500, left.data_size);
+    EXPECT_LE(std::max(left.num_dels, right.num_dels) - std::min(left.num_dels, right.num_dels), 1);
+
+    // The same declaration with exact bounds: identical decoded tuples, identical geometry.
+    auto exact = make_metadata(make_varchar_tuple(cut_min), make_varchar_tuple(successor));
+    VariantTuple exact_min;
+    VariantTuple exact_max;
+    SortKeyBoundsExactness exact_exactness;
+    ASSERT_OK(decode_segment_sort_key_bounds(exact->rowsets(0).segment_metas(0), &exact_min, &exact_max,
+                                             &exact_exactness));
+    ASSERT_FALSE(exact_exactness.min_truncated);
+    ASSERT_FALSE(exact_exactness.max_truncated);
+    ASSERT_EQ(tuple_debug_string(stored_min), tuple_debug_string(exact_min));
+    ASSERT_EQ(tuple_debug_string(stored_max), tuple_debug_string(exact_max));
+    std::vector<TabletRangeInfo> exact_ranges;
+    auto st = compute_split_ranges_from_external_boundaries(/*tablet_manager=*/nullptr, exact, external, &exact_ranges);
+    EXPECT_TRUE(st.is_corruption()) << st;
+    EXPECT_NE(std::string_view::npos, st.message().find("zero emitted weight")) << st;
+}
+
+// Truncation only widens a segment's [min, max], so ownership keeps a segment on every child that holds one of its
+// rows: s0's keys span both children, and s1's keys all lie in child 1 although its stored minimum lies in child 0.
+TEST(TabletSplitterTest, OwnershipWithTruncatedBoundsNeverDropsRows) {
+    const std::string middle(40, 'm');
+    const std::vector<TabletRangePB> ranges{make_varchar_range_pb(std::nullopt, middle),
+                                            make_varchar_range_pb(middle, std::nullopt)};
+    const std::vector<std::pair<std::string, std::string>> true_bounds{
+            {std::string(39, 'm') + std::string(6, 'a'), std::string(50, 'm')},
+            {std::string(41, 'm'), std::string(50, 'm')}};
+    RowsetMetadataPB rowset;
+    for (const auto& [min, max] : true_bounds) {
+        add_segment_with_stored_bounds(&rowset, make_varchar_tuple(min), make_varchar_tuple(max), /*num_rows=*/1,
+                                       /*size=*/10);
+        const auto exactness = stored_bounds_exactness(rowset.segment_metas(rowset.segment_metas_size() - 1));
+        ASSERT_TRUE(exactness.min_truncated);
+        ASSERT_TRUE(exactness.max_truncated);
+    }
+    ASSERT_TRUE(can_prune_rowset_segments(rowset, /*sort_key_arity=*/1));
+
+    ASSIGN_OR_ABORT(auto ownership, compute_rowset_segment_ownership(rowset, ranges));
+    ASSERT_EQ(true_bounds.size(), ownership.segments.size());
+    for (size_t s = 0; s < true_bounds.size(); ++s) {
+        for (size_t c = 0; c < ranges.size(); ++c) {
+            TabletRange child;
+            ASSERT_OK(child.from_proto(ranges[c]));
+            if (child.contains(make_varchar_tuple(true_bounds[s].first)) ||
+                child.contains(make_varchar_tuple(true_bounds[s].second))) {
+                EXPECT_TRUE(ownership.segments[s].keep[c]) << "segment " << s << " dropped from child " << c;
+            }
+        }
+        // Both stored envelopes overlap both children, so neither segment becomes private to one of them.
+        EXPECT_TRUE(ownership.segments[s].keep[0]) << s;
+        EXPECT_TRUE(ownership.segments[s].keep[1]) << s;
+        EXPECT_TRUE(ownership.segments[s].shared[0]) << s;
+        EXPECT_TRUE(ownership.segments[s].shared[1]) << s;
+    }
+}
+
+// A segment whose truncated minimum is a child's lower bound belongs to that child alone. The boundary planner pads the
+// decoded bounds with NULL to the sort-key arity before it picks boundaries, so a boundary taken from the stored minimum
+// (5, cut) is (5, cut, NULL). Ownership must compare the same padded form: unpadded, (5, cut) sorts below the boundary
+// and the segment is also kept, shared, on child 0, which holds none of its rows.
+TEST(TabletSplitterTest, OwnershipOfSegmentWhoseTruncatedMinIsTheBoundary) {
+    const auto metadata = make_dup_keys_metadata_with_key_types({"INT", "VARCHAR", "INT"}, kIntVarcharIntKeySchemaId);
+    const auto schema = TabletSchema::create(metadata->schema());
+    const auto int_value = [](std::optional<int32_t> value) {
+        return DatumVariant(get_type_info(TYPE_INT), value.has_value() ? Datum(*value) : Datum());
+    };
+    const auto key = [&](const std::string& b, int32_t c) {
+        VariantTuple tuple;
+        tuple.append(int_value(5));
+        tuple.append(DatumVariant(get_type_info(TYPE_VARCHAR), Datum(Slice(b))));
+        tuple.append(int_value(c));
+        return tuple;
+    };
+    // The 4 bytes of a leave 32 of the budget for b, so both bounds are cut inside b.
+    const auto true_min = key(std::string(40, 'm'), 1);
+    const auto true_max = key(std::string(40, 'n'), 9);
+    RowsetMetadataPB rowset;
+    add_segment_with_stored_bounds(&rowset, true_min, true_max, /*num_rows=*/100, /*size=*/1000);
+    ASSERT_TRUE(can_prune_rowset_segments(rowset, /*sort_key_arity=*/3));
+    VariantTuple stored_min;
+    VariantTuple stored_max;
+    SortKeyBoundsExactness exactness;
+    ASSERT_OK(decode_segment_sort_key_bounds(rowset.segment_metas(0), &stored_min, &stored_max, &exactness));
+    ASSERT_TRUE(exactness.min_truncated);
+    ASSERT_TRUE(exactness.max_truncated);
+    ASSERT_EQ(2u, stored_min.size());
+
+    VariantTuple boundary = stored_min;
+    boundary.append(int_value(std::nullopt));
+    const std::vector<TabletRange> ranges{
+            TabletRange(VariantTuple(), boundary, /*lower_bound_included=*/false, /*upper_bound_included=*/false),
+            TabletRange(boundary, VariantTuple(), /*lower_bound_included=*/true, /*upper_bound_included=*/false)};
+    ASSERT_FALSE(ranges[0].contains(true_min));
+    ASSERT_TRUE(ranges[1].contains(true_min));
+    ASSERT_TRUE(ranges[1].contains(true_max));
+
+    ASSIGN_OR_ABORT(auto ownership, compute_rowset_segment_ownership(rowset, ranges, schema.get()));
+    ASSERT_EQ(1u, ownership.segments.size());
+    EXPECT_FALSE(ownership.segments[0].keep[0]);
+    EXPECT_TRUE(ownership.segments[0].keep[1]);
+    EXPECT_FALSE(ownership.segments[0].shared[1]);
+}
+
+// The arity of truncated bounds is the column count they were cut from, not the number of values they kept.
+TEST(TabletSplitterTest, CanPruneAcceptsTruncatedBoundsAtCurrentArity) {
+    const auto rowset = make_rowset_with_bounds_truncated_to_one_of_three_columns();
+    EXPECT_TRUE(can_prune_rowset_segments(rowset, /*sort_key_arity=*/3));
+    EXPECT_FALSE(can_prune_rowset_segments(rowset, /*sort_key_arity=*/1));
+}
+
+// Bounds cut from a 3-column sort key, as written before a metadata-only trailing sort-key ADD widened it to 4, are not
+// comparable with the new tablets' ranges.
+TEST(TabletSplitterTest, CanPruneRejectsTruncatedBoundsOfOlderArity) {
+    const auto rowset = make_rowset_with_bounds_truncated_to_one_of_three_columns();
+    EXPECT_FALSE(can_prune_rowset_segments(rowset, /*sort_key_arity=*/4));
 }
 
 TEST(TabletSplitterTest, ApplyOwnership_prunes_and_rebuilds_shared) {
@@ -1804,8 +2274,8 @@ TEST(TabletSplitterTest, BuildSegmentsFromRowsets_NullTabletManagerSkipsSampling
     sm->set_filename("never_written.dat");
     sm->set_size(100);
     sm->set_num_rows(10);
-    sm->mutable_sort_key_min()->CopyFrom(make_bigint_tuple_pb(0));
-    sm->mutable_sort_key_max()->CopyFrom(make_bigint_tuple_pb(9));
+    sm->mutable_deprecated_sort_key_min()->CopyFrom(make_bigint_tuple_pb(0));
+    sm->mutable_deprecated_sort_key_max()->CopyFrom(make_bigint_tuple_pb(9));
 
     std::vector<SegmentSplitInfo> segments;
     ASSERT_OK(build_segments_from_rowsets(/*tablet_manager=*/nullptr, metadata, /*split_width=*/2,
@@ -1925,8 +2395,8 @@ static std::shared_ptr<TabletMetadataPB> make_trailing_key_added_metadata(
         sm->set_size(data_size);
         sm->set_num_rows(num_rows);
         // Arity 1: written before `ADD COLUMN k2`.
-        *sm->mutable_sort_key_min() = make_bigint_tuple_pb(lo);
-        *sm->mutable_sort_key_max() = make_bigint_tuple_pb(hi);
+        *sm->mutable_deprecated_sort_key_min() = make_bigint_tuple_pb(lo);
+        *sm->mutable_deprecated_sort_key_max() = make_bigint_tuple_pb(hi);
     }
     return m;
 }
@@ -1963,8 +2433,8 @@ TEST(TabletSplitterTest, BuildSegmentsFromRowsets_LeavesUnsetSegmentKeysEmpty) {
             std::make_tuple<uint32_t, int64_t, int64_t, int64_t, int64_t>(1, 0, 499, 500, 5000),
     });
     auto* sm = m->mutable_rowsets(0)->mutable_segment_metas(0);
-    sm->clear_sort_key_min();
-    sm->clear_sort_key_max();
+    sm->clear_deprecated_sort_key_min();
+    sm->clear_deprecated_sort_key_max();
 
     std::vector<SegmentSplitInfo> segments;
     ASSERT_OK(build_segments_from_rowsets(/*tablet_manager=*/nullptr, m, /*split_width=*/2,
@@ -2151,7 +2621,7 @@ protected:
         _location_provider = std::make_shared<FixedLocationProvider>(_test_dir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _primary_key_manager = std::make_unique<PrimaryKeyManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 16384);
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 16384, 16384);
     }
 
     void TearDown() override {
@@ -2315,8 +2785,8 @@ protected:
             // Path A verifies that entry 0 of the short key index decodes EQUAL to sort_key_min, and
             // both paths reject a sample outside [sort_key_min, sort_key_max], so these must be the
             // segment's real first/last key -- not a rounded envelope.
-            *sm->mutable_sort_key_min() = key_tuple_pb(keys.front());
-            *sm->mutable_sort_key_max() = key_tuple_pb(keys.back());
+            *sm->mutable_deprecated_sort_key_min() = key_tuple_pb(keys.front());
+            *sm->mutable_deprecated_sort_key_max() = key_tuple_pb(keys.back());
         }
         return metadata;
     }
@@ -2383,8 +2853,8 @@ protected:
             sm->set_num_rows(num_rows);
             // A lost segment keeps the bounds its metadata declares -- the file is gone, the
             // metadata is not.
-            *sm->mutable_sort_key_min() = key_tuple_pb(keys.front());
-            *sm->mutable_sort_key_max() = key_tuple_pb(keys.back());
+            *sm->mutable_deprecated_sort_key_min() = key_tuple_pb(keys.front());
+            *sm->mutable_deprecated_sort_key_max() = key_tuple_pb(keys.back());
             rowset_rows += num_rows;
             rowset_size += static_cast<int64_t>(size);
             key_start += num_rows;
@@ -2426,8 +2896,8 @@ protected:
             sm->set_filename(name);
             sm->set_size(static_cast<int64_t>(size));
             sm->set_num_rows(rows_per_segment);
-            *sm->mutable_sort_key_min() = key_tuple_pb(key_start);
-            *sm->mutable_sort_key_max() = key_tuple_pb(key_start + rows_per_segment - 1);
+            *sm->mutable_deprecated_sort_key_min() = key_tuple_pb(key_start);
+            *sm->mutable_deprecated_sort_key_max() = key_tuple_pb(key_start + rows_per_segment - 1);
         };
 
         std::vector<int64_t> shared_keys(rows_per_segment);
@@ -2486,8 +2956,8 @@ protected:
             sm->set_filename(name);
             sm->set_size(static_cast<int64_t>(size));
             sm->set_num_rows(rows_per_segment);
-            *sm->mutable_sort_key_min() = key_tuple_pb(keys.front());
-            *sm->mutable_sort_key_max() = key_tuple_pb(keys.back());
+            *sm->mutable_deprecated_sort_key_min() = key_tuple_pb(keys.front());
+            *sm->mutable_deprecated_sort_key_max() = key_tuple_pb(keys.back());
         }
         return metadata;
     }
@@ -2534,8 +3004,8 @@ protected:
             sm->set_size(static_cast<int64_t>(size));
             sm->set_num_rows(num_rows);
             sm->set_segment_idx(0);
-            *sm->mutable_sort_key_min() = key_tuple_pb(keys.front());
-            *sm->mutable_sort_key_max() = key_tuple_pb(keys.back());
+            *sm->mutable_deprecated_sort_key_min() = key_tuple_pb(keys.front());
+            *sm->mutable_deprecated_sort_key_max() = key_tuple_pb(keys.back());
         }
         return metadata;
     }
@@ -2648,9 +3118,124 @@ protected:
         sm->set_size(static_cast<int64_t>(size));
         sm->set_num_rows(num_rows);
         // Arity 1: written before the ADD, exactly like the samples the sampler will decode.
-        *sm->mutable_sort_key_min() = key_tuple_pb(keys.front());
-        *sm->mutable_sort_key_max() = key_tuple_pb(keys.back());
+        *sm->mutable_deprecated_sort_key_min() = key_tuple_pb(keys.front());
+        *sm->mutable_deprecated_sort_key_max() = key_tuple_pb(keys.back());
         return metadata;
+    }
+
+    // DUP_KEYS, sort key (k BIGINT, s VARCHAR(64), x INT), value v INT. Only k is in the short key, so the short key
+    // index does not encode the sort key and sampling reads data pages.
+    static TabletSchemaPB wide_key_schema_pb() {
+        TabletSchemaPB pb;
+        pb.set_keys_type(DUP_KEYS);
+        pb.set_id(7705);
+        pb.set_num_short_key_columns(1);
+        pb.set_num_rows_per_row_block(65535);
+        const auto add_key = [&pb](int32_t unique_id, const std::string& name, const std::string& type,
+                                   int32_t length) {
+            auto* column = pb.add_column();
+            column->set_unique_id(unique_id);
+            column->set_name(name);
+            column->set_type(type);
+            column->set_is_key(true);
+            column->set_is_nullable(false);
+            column->set_length(length);
+            column->set_index_length(length);
+            pb.add_sort_key_idxes(unique_id - 1);
+        };
+        add_key(1, "k", "BIGINT", 8);
+        add_key(2, "s", "VARCHAR", 64);
+        add_key(3, "x", "INT", 4);
+        auto* v = pb.add_column();
+        v->set_unique_id(4);
+        v->set_name("v");
+        v->set_type("INT");
+        v->set_is_key(false);
+        v->set_is_nullable(false);
+        v->set_aggregation("NONE");
+        return pb;
+    }
+
+    // The s of every row of the wide-key fixture: 40 bytes, so with the 8-byte k it exceeds the value budget of a
+    // stored bound and every bound is cut inside it.
+    static std::string wide_key_string() { return std::string(40, 's'); }
+
+    static VariantTuple wide_key_tuple(int64_t k) {
+        const std::string s = wide_key_string();
+        VariantTuple tuple;
+        tuple.append(DatumVariant(get_type_info(LogicalType::TYPE_BIGINT), Datum(k)));
+        tuple.append(DatumVariant(get_type_info(LogicalType::TYPE_VARCHAR), Datum(Slice(s))));
+        tuple.append(DatumVariant(get_type_info(LogicalType::TYPE_INT), Datum(static_cast<int32_t>(0))));
+        return tuple;
+    }
+
+    // write_one_rowset_with_segments under wide_key_schema_pb(): segment i holds the rows (k, wide_key_string(), 0)
+    // for a run of k ascending from where segment i - 1 stopped. The bounds are stored by set_segment_sort_key_bounds,
+    // so they are cut to the budget as a writer cuts them.
+    std::shared_ptr<TabletMetadataPB> write_wide_key_rowset_with_segments(
+            const std::vector<int64_t>& rows_per_segment) {
+        const int64_t tablet_id = next_id();
+        prepare_tablet_dirs(tablet_id);
+        const auto schema_pb = wide_key_schema_pb();
+        auto tablet_schema = TabletSchema::create(schema_pb);
+        const auto chunk_schema = ChunkHelper::convert_schema(tablet_schema);
+        const std::string s = wide_key_string();
+
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(1);
+        *metadata->mutable_schema() = schema_pb;
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_overlapped(false);
+        rowset->set_num_dels(0); // explicit: skips build_rowset_anchor's PK delvec fallback
+
+        int64_t key_start = 0;
+        int64_t rowset_rows = 0;
+        int64_t rowset_size = 0;
+        for (size_t i = 0; i < rows_per_segment.size(); ++i) {
+            const int64_t num_rows = rows_per_segment[i];
+            const std::string name = fmt::format("seg_wide_{}.dat", i);
+            WritableFileOptions fopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+            auto wfile_or = fs::new_writable_file(fopts, _tablet_manager->segment_location(tablet_id, name));
+            CHECK_OK(wfile_or.status());
+            SegmentWriter writer(std::move(wfile_or.value()), /*segment_id=*/0, tablet_schema, SegmentWriterOptions());
+            CHECK_OK(writer.init());
+            auto chunk = ChunkFactory::new_chunk(chunk_schema, num_rows);
+            auto cols = chunk->columns();
+            for (int64_t k = key_start; k < key_start + num_rows; ++k) {
+                cols[0]->as_mutable_ptr()->append_datum(Datum(k));
+                cols[1]->as_mutable_ptr()->append_datum(Datum(Slice(s)));
+                cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(0)));
+                cols[3]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(0)));
+            }
+            CHECK_OK(writer.append_chunk(*chunk));
+            uint64_t file_size = 0, index_size = 0, footer_position = 0;
+            CHECK_OK(writer.finalize(&file_size, &index_size, &footer_position));
+
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename(name);
+            sm->set_size(static_cast<int64_t>(file_size));
+            sm->set_num_rows(num_rows);
+            set_segment_sort_key_bounds(wide_key_tuple(key_start), wide_key_tuple(key_start + num_rows - 1), sm);
+            rowset_rows += num_rows;
+            rowset_size += static_cast<int64_t>(file_size);
+            key_start += num_rows;
+        }
+        rowset->set_num_rows(rowset_rows);
+        rowset->set_data_size(rowset_size);
+        return metadata;
+    }
+
+    // The k of a wide-key range bound, or nullopt when the bound is absent (unbounded).
+    static std::optional<int64_t> decode_wide_key_bound(const TabletRangePB& range, bool lower) {
+        if (lower ? !range.has_lower_bound() : !range.has_upper_bound()) {
+            return std::nullopt;
+        }
+        VariantTuple tuple;
+        CHECK_OK(tuple.from_proto(lower ? range.lower_bound() : range.upper_bound()));
+        CHECK_EQ(3u, tuple.size());
+        return tuple[0].value().get_int64();
     }
 
     // The integer key a range bound denotes, or nullopt when the bound is absent (unbounded).
@@ -2942,6 +3527,51 @@ TEST_F(SortKeySamplingSplitterTest, an_out_of_range_segment_does_not_starve_the_
         // out-of-range segment's keys are all below 70000, so a boundary there would be direct
         // evidence the budget went to the segment the range filter discards.
         const auto boundary = decode_bound(ranges[i].range, /*lower=*/false);
+        ASSERT_TRUE(boundary.has_value());
+        EXPECT_GT(*boundary, 70000);
+        EXPECT_LT(*boundary, 70500);
+    }
+}
+
+// The same layout under a wide sort key whose stored bounds are truncated: with (k BIGINT, s VARCHAR, x INT) and a
+// 40-byte s, each stored bound decodes to (k, cut s or its successor), two columns of the sort key's three. The
+// weighting must accept bounds cut from the tablet's sort key by the arity they were cut from, not by their decoded
+// size, or every such segment keeps its physical weight and the in-range segment is starved as above.
+TEST_F(SortKeySamplingSplitterTest, an_out_of_range_segment_with_truncated_bounds_does_not_starve_the_in_range_one) {
+    auto metadata = write_wide_key_rowset_with_segments({70000, 500});
+    for (const auto& segment_meta : metadata->rowsets(0).segment_metas()) {
+        ASSERT_EQ(2, segment_meta.sort_key_min_encoded()[0]);
+        ASSERT_EQ(2, segment_meta.sort_key_max_encoded()[0]);
+        ASSERT_TRUE(segment_sort_key_bounds_have_arity(segment_meta, 3));
+        VariantTuple segment_min;
+        VariantTuple segment_max;
+        ASSERT_OK(decode_segment_sort_key_bounds(segment_meta, &segment_min, &segment_max));
+        ASSERT_EQ(2u, segment_min.size());
+        ASSERT_EQ(2u, segment_max.size());
+    }
+    // The range a previous split would have left on the upper child: the first key of the in-range segment.
+    auto* tablet_range = metadata->mutable_range();
+    wide_key_tuple(70000).to_proto(tablet_range->mutable_lower_bound());
+    tablet_range->set_lower_bound_included(true);
+
+    // The out-of-range segment gets no sample budget, so the in-range one gets all of it: at least the three interior
+    // samples a 4-way split of it needs.
+    std::vector<SegmentSplitInfo> segments;
+    ASSERT_OK(build_segments_from_rowsets(_tablet_manager.get(), metadata, /*split_width=*/4,
+                                          /*data_page_split_width=*/4, &segments));
+    ASSERT_EQ(2u, segments.size());
+    EXPECT_TRUE(segments[0].sort_key_samples.empty()) << segments[0].sort_key_samples.size();
+    EXPECT_GE(segments[1].sort_key_samples.size(), 3u);
+
+    std::vector<TabletRangeInfo> ranges;
+    ASSERT_OK(get_tablet_split_ranges(_tablet_manager.get(), metadata, 4, &ranges));
+    ASSERT_EQ(4u, ranges.size());
+    EXPECT_TRUE(MessageDifferencer::Equals(tablet_range->lower_bound(), ranges.front().range.lower_bound()));
+    EXPECT_FALSE(ranges.back().range.has_upper_bound());
+    for (size_t i = 0; i + 1 < ranges.size(); ++i) {
+        EXPECT_TRUE(MessageDifferencer::Equals(ranges[i].range.upper_bound(), ranges[i + 1].range.lower_bound()));
+        // Every interior boundary comes from the in-range segment's keys.
+        const auto boundary = decode_wide_key_bound(ranges[i].range, /*lower=*/false);
         ASSERT_TRUE(boundary.has_value());
         EXPECT_GT(*boundary, 70000);
         EXPECT_LT(*boundary, 70500);
@@ -3288,8 +3918,8 @@ TEST_F(SortKeySamplingSplitterTest, split_boundary_planner_skips_zero_row_segmen
     live->set_segment_idx(1);
     live->set_num_rows(100);
     live->set_size(live_size);
-    live->mutable_sort_key_min()->CopyFrom(key_tuple_pb(0));
-    live->mutable_sort_key_max()->CopyFrom(key_tuple_pb(99));
+    live->mutable_deprecated_sort_key_min()->CopyFrom(key_tuple_pb(0));
+    live->mutable_deprecated_sort_key_max()->CopyFrom(key_tuple_pb(99));
     live->set_deprecated_sort_key_sample_row_interval(50);
     live->add_deprecated_sort_key_samples()->CopyFrom(key_tuple_pb(50));
 
@@ -3311,6 +3941,138 @@ TEST_F(SortKeySamplingSplitterTest, split_boundary_planner_skips_zero_row_segmen
     ASSERT_EQ(2, ranges.size());
     ASSERT_TRUE(ranges[0].range.has_upper_bound());
     EXPECT_EQ(1, ranges[0].range.upper_bound().values_size());
+}
+
+// The child metadata split_tablet produced, each segment's bounds rewritten into one representation so that the
+// splits of sources in different representations compare byte for byte.
+static std::map<int64_t, std::string> normalized_children(
+        const std::unordered_map<int64_t, MutableTabletMetadataPtr>& children) {
+    std::map<int64_t, std::string> normalized;
+    for (const auto& [id, child] : children) {
+        TabletMetadataPB copy(*child);
+        normalize_sort_key_bounds(&copy);
+        normalized.emplace(id, copy.SerializeAsString());
+    }
+    return normalized;
+}
+
+// split_tablet produces the same children whether the source's segments carry the deprecated pair, the encoded pair
+// or a mix of both, through the FE-supplied boundaries and through the data-driven planner, and every child segment
+// keeps the representation of the source segment it was copied from. A segment with rows but without bounds makes
+// every representation fall back to an identical tablet.
+TEST_F(SortKeySamplingSplitterTest, SplitTabletIdenticalAcrossRepresentations) {
+    // One compacted rowset over the disjoint key runs [0, 300), [300, 500) and [500, 800). Split at about 400, the
+    // middle segment stays shared and the outer ones become private to their child.
+    const auto base = write_one_rowset_with_segments({300, 200, 300});
+    auto* base_rowset = base->mutable_rowsets(0);
+    tablet_reshard_helper::set_rowset_uid(base_rowset);
+    for (int i = 0; i < base_rowset->segment_metas_size(); ++i) {
+        base_rowset->mutable_segment_metas(i)->set_segment_idx(i);
+    }
+    TabletMetadataPB boundless(*base);
+    auto* boundless_segment = boundless.mutable_rowsets(0)->add_segment_metas();
+    boundless_segment->set_filename("boundless.dat");
+    boundless_segment->set_segment_idx(3);
+    boundless_segment->set_num_rows(100);
+    boundless_segment->set_size(100);
+
+    const int64_t left_id = next_id();
+    const int64_t right_id = next_id();
+    auto split = [&](const TabletMetadataPB& source, bool external) {
+        SplittingTabletInfoPB splitting;
+        splitting.set_old_tablet_id(source.id());
+        splitting.add_new_tablet_ids(left_id);
+        splitting.add_new_tablet_ids(right_id);
+        if (external) *splitting.mutable_new_tablet_ranges() = two_external_ranges();
+        TxnInfoPB txn_info;
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+        return split_tablet(_tablet_manager.get(), std::make_shared<TabletMetadataPB>(source), splitting,
+                            /*new_version=*/2, txn_info);
+    };
+
+    for (const bool external : {true, false}) {
+        SCOPED_TRACE(external ? "FE-supplied boundaries" : "data-driven boundaries");
+        std::map<int64_t, std::string> expected;
+        for (const auto repr :
+             {SortKeyBoundsRepr::kDeprecated, SortKeyBoundsRepr::kEncoded, SortKeyBoundsRepr::kMixed}) {
+            SCOPED_TRACE(fmt::format("representation {}", static_cast<int>(repr)));
+            TabletMetadataPB source(*base);
+            convert_sort_key_bounds(&source, repr);
+            std::map<std::string, SegmentMetadataPB> source_segments;
+            for (const auto& segment : source.rowsets(0).segment_metas()) source_segments[segment.filename()] = segment;
+
+            ASSIGN_OR_ABORT(auto children, split(source, external));
+            ASSERT_EQ(2u, children.size());
+            int private_segments = 0;
+            for (const auto& [id, child] : children) {
+                for (const auto& rowset : child->rowsets()) {
+                    for (const auto& segment : rowset.segment_metas()) {
+                        const auto& from = source_segments.at(segment.filename());
+                        EXPECT_EQ(from.has_sort_key_min_encoded(), segment.has_sort_key_min_encoded());
+                        EXPECT_EQ(from.has_sort_key_max_encoded(), segment.has_sort_key_max_encoded());
+                        EXPECT_EQ(from.has_deprecated_sort_key_min(), segment.has_deprecated_sort_key_min());
+                        EXPECT_EQ(from.has_deprecated_sort_key_max(), segment.has_deprecated_sort_key_max());
+                        private_segments += segment.shared() ? 0 : 1;
+                    }
+                }
+            }
+            EXPECT_GT(private_segments, 0) << "no segment was pruned to one child, so ownership was not computed";
+            if (repr == SortKeyBoundsRepr::kDeprecated) {
+                expected = normalized_children(children);
+            } else {
+                EXPECT_EQ(expected, normalized_children(children));
+            }
+
+            TabletMetadataPB boundless_source(boundless);
+            convert_sort_key_bounds(&boundless_source, repr);
+            ASSIGN_OR_ABORT(auto fallback, split(boundless_source, external));
+            ASSERT_EQ(1u, fallback.size());
+            EXPECT_EQ(boundless_source.rowsets(0).SerializeAsString(),
+                      fallback.begin()->second->rowsets(0).SerializeAsString());
+        }
+    }
+}
+
+// get_tablet_split_ranges returns the same ranges and projected statistics whether the source's segments carry the
+// deprecated pair, the encoded pair or a mix of both. The tablet range leaves the large segment wholly outside it, so
+// the boundaries can come only from the small in-range segment, which gets a sample budget only when the large one is
+// weighed by its bounds against the tablet range.
+TEST_F(SortKeySamplingSplitterTest, SplitRangesIdenticalAcrossRepresentations) {
+    const auto base = write_one_rowset_with_segments({70000, 500});
+    *base->mutable_range()->mutable_lower_bound() = key_tuple_pb(70000);
+    base->mutable_range()->set_lower_bound_included(true);
+
+    std::vector<TabletRangeInfo> expected;
+    for (const auto repr : {SortKeyBoundsRepr::kDeprecated, SortKeyBoundsRepr::kEncoded, SortKeyBoundsRepr::kMixed}) {
+        SCOPED_TRACE(fmt::format("representation {}", static_cast<int>(repr)));
+        auto metadata = std::make_shared<TabletMetadataPB>(*base);
+        convert_sort_key_bounds(metadata.get(), repr);
+        std::vector<TabletRangeInfo> ranges;
+        ASSERT_OK(get_tablet_split_ranges(_tablet_manager.get(), metadata, 4, &ranges));
+        ASSERT_EQ(4u, ranges.size());
+        for (size_t i = 0; i + 1 < ranges.size(); ++i) {
+            const auto boundary = decode_bound(ranges[i].range, /*lower=*/false);
+            ASSERT_TRUE(boundary.has_value());
+            EXPECT_GT(*boundary, 70000);
+            EXPECT_LT(*boundary, 70500);
+        }
+        if (repr == SortKeyBoundsRepr::kDeprecated) {
+            expected = ranges;
+            continue;
+        }
+        for (size_t i = 0; i < ranges.size(); ++i) {
+            EXPECT_TRUE(MessageDifferencer::Equals(expected[i].range, ranges[i].range)) << i;
+            ASSERT_EQ(expected[i].rowset_stats.size(), ranges[i].rowset_stats.size()) << i;
+            for (const auto& [rowset_id, stats] : expected[i].rowset_stats) {
+                ASSERT_TRUE(ranges[i].rowset_stats.contains(rowset_id)) << i;
+                const auto& actual = ranges[i].rowset_stats.at(rowset_id);
+                EXPECT_EQ(stats.num_rows, actual.num_rows) << i;
+                EXPECT_EQ(stats.data_size, actual.data_size) << i;
+                EXPECT_EQ(stats.num_dels, actual.num_dels) << i;
+            }
+        }
+    }
 }
 
 } // namespace starrocks::lake

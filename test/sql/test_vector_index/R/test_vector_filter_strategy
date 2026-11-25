@@ -1,7 +1,4 @@
 -- name: test_vector_filter_strategy @sequential @native
-ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
--- result:
--- !result
 function: update_be_config("enable_vector_index_topk_underfill_fallback", "true")
 -- result:
 None
@@ -142,7 +139,4 @@ DROP TABLE vt_pk;
 function: update_be_config("enable_vector_index_topk_underfill_fallback", "false")
 -- result:
 None
--- !result
-ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "false");
--- result:
 -- !result

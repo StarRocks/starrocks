@@ -15,8 +15,13 @@
 package com.starrocks.scheduler;
 
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
+import com.starrocks.scheduler.persist.TaskSchedule;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -29,6 +34,8 @@ import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 @TestMethodOrder(MethodName.class)
 public class PCTRefreshRangePartitionOlapTest extends MVTestBase {
@@ -229,9 +236,42 @@ public class PCTRefreshRangePartitionOlapTest extends MVTestBase {
         Assertions.assertNotNull(nextTaskRun);
         Assertions.assertEquals(String.valueOf(leaderStartTime),
                 nextTaskRun.getProperties().get(TaskRun.MV_FRESHNESS_BASELINE_TIME));
+        Assertions.assertEquals(String.valueOf(leaderStartTime),
+                nextTaskRun.getProperties().get(TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME));
+        Assertions.assertNull(taskRun.getProperties().get(TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME),
+                "the first run must not write the job process start onto itself");
         String leaderSubmitUser = taskRun.getStatus().getSubmitUser();
         Assertions.assertNotNull(leaderSubmitUser);
         Assertions.assertEquals(leaderSubmitUser, nextTaskRun.getExecuteOption().getSubmitUser());
+    }
+
+    @Test
+    public void testMVBatchRefreshDoesNotSeedJobProcessStartTimeWhenUnset() throws Exception {
+        String partitionTable = "CREATE TABLE range_job_start_t0 (dt1 date, int1 int)\n" +
+                "PARTITION BY date_trunc('day', dt1)";
+        starRocksAssert.withTable(partitionTable);
+        addRangePartition("range_job_start_t0", "p1", "2024-01-04", "2024-01-05");
+        addRangePartition("range_job_start_t0", "p2", "2024-01-05", "2024-01-06");
+        executeInsertSql("INSERT INTO range_job_start_t0 partition(p1) VALUES (\"2024-01-04\",1);");
+        executeInsertSql("INSERT INTO range_job_start_t0 partition(p2) VALUES (\"2024-01-05\",1);");
+
+        String mvQuery = "CREATE MATERIALIZED VIEW test_mv_job_start_0 " +
+                "PARTITION BY date_trunc('day', dt1) " +
+                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"1\")\n" +
+                "AS SELECT dt1,sum(int1) from range_job_start_t0 group by dt1";
+        starRocksAssert.withMaterializedView(mvQuery);
+
+        MaterializedView mv = getMv("test_mv_job_start_0");
+        TaskRun taskRun = buildMVTaskRun(mv, "test");
+        taskRun.getProperties().put(TaskRun.FORCE, "true");
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        // processStartTime left at 0: unknown, so the job-start property must not be written as "0".
+        taskRun.executeTaskRun();
+
+        TaskRun nextTaskRun = getPartitionBasedRefreshProcessor(taskRun).getNextTaskRun();
+        Assertions.assertNotNull(nextTaskRun);
+        Assertions.assertFalse(nextTaskRun.getProperties().containsKey(TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME),
+                "unknown processStartTime must not seed a 0 sentinel onto the next run");
     }
 
     @Test
@@ -488,4 +528,147 @@ public class PCTRefreshRangePartitionOlapTest extends MVTestBase {
                 "lastFreshnessConfirmedAt must advance to this run's start time for a complete " +
                         "refresh that did not exclude any partitions");
     }
+    @Test
+    public void testLeaderCatchUpUsesPeriodicRefreshScope() throws Exception {
+        checkPeriodicCatchUpScope(false);
+    }
+
+    @Test
+    public void testManualPeriodicMvRefreshRetainsExplicitHistoricalScope() throws Exception {
+        checkPeriodicCatchUpScope(true);
+    }
+
+    private void checkPeriodicCatchUpScope(boolean manual) throws Exception {
+        String tableName = manual ? "manual_scope_base" : "catch_up_scope_base";
+        String mvName = manual ? "manual_scope_mv" : "catch_up_scope_mv";
+        starRocksAssert.withTable("CREATE TABLE " + tableName + " (dt date, v int) " +
+                "PARTITION BY date_trunc('day', dt)");
+        try {
+            addRangePartition(tableName, "p1", "2024-01-04", "2024-01-05");
+            addRangePartition(tableName, "p2", "2024-01-05", "2024-01-06");
+            addRangePartition(tableName, "p3", "2024-01-06", "2024-01-07");
+            for (int day = 4; day <= 6; day++) {
+                executeInsertSql("INSERT INTO " + tableName + " VALUES ('2024-01-0" + day + "', 1)");
+            }
+            // Real ASYNC metadata, with the global timer far in the future. Only the local controlled timer fires.
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName +
+                    " PARTITION BY date_trunc('day', dt) " +
+                    "REFRESH DEFERRED ASYNC START ('2122-01-01 00:00:00') EVERY (INTERVAL 60 SECOND) " +
+                    "PROPERTIES ('partition_refresh_number'='-1', 'partition_refresh_strategy'='strict') " +
+                    "AS SELECT dt, sum(v) AS total FROM " + tableName + " GROUP BY dt");
+            try {
+                MaterializedView mv = getMv(mvName);
+                TaskRun baseline = buildMVTaskRun(mv, "test");
+                baseline.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+                executeDirectRun(baseline, 0);
+                Assertions.assertNull(getPartitionBasedRefreshProcessor(baseline).getNextTaskRun());
+                OlapTable base = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable("test", tableName);
+                Map<String, MaterializedView.BasePartitionInfo> versions = mv.getRefreshScheme().getAsyncRefreshContext()
+                        .getBaseTableVisibleVersionMap().get(base.getId());
+                Assertions.assertEquals(3, versions.size());
+                long oldVersion = versions.get("p1").getVersion();
+                long secondOldVersion = versions.get("p2").getVersion();
+                long confirmedBefore = mv.getRefreshScheme().getLastFreshnessConfirmedAt();
+                Assertions.assertTrue(confirmedBefore > 0);
+                mv.getTableProperty().setAutoRefreshPartitionsLimit(1);
+                mv.getTableProperty().setPartitionRefreshNumber(1);
+                for (int day = 4; day <= 6; day++) {
+                    executeInsertSql("INSERT INTO " + tableName + " VALUES ('2024-01-0" + day + "', 2)");
+                }
+                Assertions.assertTrue(base.getPartition("p1").getLatestPhysicalPartition().getVisibleVersion() > oldVersion);
+
+                Task registered = GlobalStateMgr.getCurrentState().getTaskManager().getTask(mv);
+                Assertions.assertEquals(Constants.TaskType.PERIODICAL, registered.getType());
+                Task task = TaskBuilder.buildMvTask(mv, "test");
+                task.setId(registered.getId());
+                task.setType(registered.getType());
+                task.setState(Constants.TaskState.ACTIVE);
+                long now = TimeUtils.getEpochSeconds();
+                task.setSchedule(new TaskSchedule(now - 3600, 60, TimeUnit.SECONDS));
+                task.setLastScheduleTime(now - 180);
+                task.getProperties().put(TaskRun.IS_TEST, "true");
+                try (TaskManagerTest.PeriodicTaskFixture fixture = new TaskManagerTest.PeriodicTaskFixture(task)) {
+                    if (manual) {
+                        fixture.manager.executeTask(task.getName());
+                    } else {
+                        fixture.manager.registerScheduler(task);
+                    }
+                    TaskRun run = fixture.takeRun();
+                    if (manual) {
+                        Assertions.assertEquals(Constants.TaskType.MANUAL, run.getType());
+                        Assertions.assertTrue(run.getExecuteOption().isManual());
+                    }
+                    // The scope oracle is independent of the type assertion in TaskManagerTest (including in red).
+                    executeCapturedRun(fixture, run, confirmedBefore);
+                    Assertions.assertEquals(Set.of("p20240106_20240107"),
+                            run.getStatus().getMvTaskRunExtraMessage().getMvPartitionsToRefresh());
+                    Assertions.assertNull(getPartitionBasedRefreshProcessor(run).getNextTaskRun());
+                    Assertions.assertEquals(oldVersion, versions.get("p1").getVersion());
+                    Assertions.assertEquals(secondOldVersion, versions.get("p2").getVersion());
+                    Assertions.assertEquals(confirmedBefore, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+
+                    if (manual) {
+                        ExecuteOption range = new ExecuteOption(task);
+                        range.setManual(true);
+                        range.getTaskRunProperties().put(TaskRun.PARTITION_START, "2024-01-05");
+                        range.getTaskRunProperties().put(TaskRun.PARTITION_END, "2024-01-06");
+                        fixture.manager.executeTask(task.getName(), range);
+                        TaskRun historical = fixture.takeRun();
+                        executeCapturedRun(fixture, historical, confirmedBefore);
+                        Assertions.assertEquals(Set.of("p20240105_20240106"),
+                                historical.getStatus().getMvTaskRunExtraMessage().getMvPartitionsToRefresh());
+                        Assertions.assertEquals(Constants.TaskType.MANUAL, historical.getType());
+                        Assertions.assertTrue(versions.get("p2").getVersion() > secondOldVersion);
+                    } else {
+                        // Re-dirty the latest partition and compare the actual normal tick against catch-up.
+                        executeInsertSql("INSERT INTO " + tableName + " VALUES ('2024-01-06', 3)");
+                        fixture.tick.run();
+                        TaskRun periodic = fixture.takeRun();
+                        Assertions.assertEquals(Constants.TaskType.PERIODICAL, periodic.getType());
+                        Assertions.assertFalse(periodic.getExecuteOption().isManual());
+                        executeCapturedRun(fixture, periodic, confirmedBefore);
+                        Assertions.assertEquals(run.getStatus().getMvTaskRunExtraMessage().getMvPartitionsToRefresh(),
+                                periodic.getStatus().getMvTaskRunExtraMessage().getMvPartitionsToRefresh());
+                        Assertions.assertNull(getPartitionBasedRefreshProcessor(periodic).getNextTaskRun());
+                    }
+                }
+            } finally {
+                starRocksAssert.dropMaterializedView(mvName);
+            }
+        } finally {
+            starRocksAssert.dropTable(tableName);
+        }
+    }
+
+    private static void executeCapturedRun(TaskManagerTest.PeriodicTaskFixture fixture, TaskRun run,
+                                            long confirmedBefore) throws Exception {
+        try {
+            executeDirectRun(run, confirmedBefore);
+        } finally {
+            fixture.manager.getTaskRunScheduler().removeRunningTask(run.getTaskId());
+        }
+    }
+
+    private static void executeDirectRun(TaskRun run, long confirmedBefore) throws Exception {
+        ConnectContext previous = ConnectContext.get();
+        run.getStatus().setState(Constants.TaskRunState.RUNNING);
+        run.getStatus().setProcessStartTime(Math.max(System.currentTimeMillis(), confirmedBefore + 1));
+        try {
+            Constants.TaskRunState state = run.executeTaskRun();
+            run.getStatus().setState(state);
+            run.getFuture().complete(state);
+            Assertions.assertEquals(Constants.TaskRunState.SUCCESS, state);
+        } finally {
+            if (!run.getFuture().isDone()) {
+                run.getFuture().cancel(true);
+            }
+            if (previous == null) {
+                ConnectContext.remove();
+            } else {
+                previous.setThreadLocalInfo();
+            }
+        }
+    }
+
 }

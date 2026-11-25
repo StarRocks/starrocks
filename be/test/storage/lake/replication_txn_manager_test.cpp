@@ -26,6 +26,7 @@
 #include "base/path/filesystem_util.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_storage_fwd.h"
@@ -75,7 +76,8 @@ public:
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->segment_root_location(1)));
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 16384);
+        _tablet_manager =
+                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 16384, 16384);
         _replication_txn_manager =
                 std::make_unique<lake::ReplicationTxnManager>(_tablet_manager.get(), local_snapshot_client_for_test());
 
@@ -744,6 +746,45 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_delete_predicat
     EXPECT_EQ("1", delete_predicate.in_predicates(0).values(0));
 }
 
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, conversion_preserves_overlap_across_versions) {
+    const auto encryption_enabled = config::enable_transparent_data_encryption;
+    DeferOp restore_encryption([&] { config::enable_transparent_data_encryption = encryption_enabled; });
+    config::enable_transparent_data_encryption = false;
+    for (const auto& version : {Version(2, 2), Version(0, 2)}) {
+        for (auto overlap : {OVERLAPPING, NONOVERLAPPING}) {
+            for (int segments : {0, 1, 2}) {
+                SCOPED_TRACE(testing::Message() << version.first << "," << overlap << "," << segments);
+                RowsetMetaPB pb;
+                pb.set_rowset_id("0");
+                pb.set_start_version(version.first);
+                pb.set_end_version(version.second);
+                pb.set_segments_overlap_pb(overlap);
+                pb.set_num_segments(segments);
+                pb.set_num_rows(segments * 10);
+                pb.set_data_disk_size(segments * 1024);
+                pb.set_rowset_seg_id(5);
+                RowsetMeta source(pb);
+                TxnLogPB::OpWrite converted;
+                std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
+                ASSERT_OK(lake::ReplicationTxnManager::convert_rowset_meta(source, 12345, &converted, &filename_map));
+
+                TxnLogPB::OpWrite reloaded;
+                ASSERT_TRUE(reloaded.ParseFromString(converted.SerializeAsString()));
+                EXPECT_EQ(segments > 1 && overlap == OVERLAPPING, reloaded.rowset().overlapped());
+                EXPECT_EQ(segments, reloaded.rowset().segment_metas_size());
+                EXPECT_EQ(segments, filename_map.size());
+                EXPECT_EQ(segments * 10, reloaded.rowset().num_rows());
+                EXPECT_EQ(segments * 1024, reloaded.rowset().data_size());
+                for (int i = 0; i < segments; ++i) {
+                    const auto canonical = source.rowset_id().to_string() + "_" + std::to_string(i) + ".dat";
+                    ASSERT_EQ(1, filename_map.count(canonical));
+                    EXPECT_EQ(filename_map.at(canonical).first, reloaded.rowset().segment_metas(i).filename());
+                }
+            }
+        }
+    }
+}
+
 TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_rowset_meta_column_mode_partial_update) {
     // Create a RowsetMetaPB with num_update_files > 0 (column mode partial update)
     RowsetMetaPB rowset_meta_pb;
@@ -946,7 +987,8 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_build_file_converters_d
     ASSERT_TRUE(FileSystem::Default()->create_dir_recursive(location_provider->segment_root_location(1)).ok());
     auto mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
     auto primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(location_provider, mem_tracker.get());
-    auto tablet_manager = std::make_unique<lake::TabletManager>(location_provider, primary_key_manager.get(), 16384);
+    auto tablet_manager =
+            std::make_unique<lake::TabletManager>(location_provider, primary_key_manager.get(), 16384, 16384);
 
     TReplicateSnapshotRequest request;
     request.tablet_id = 1;
@@ -997,7 +1039,8 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_build_file_converters_d
     ASSERT_TRUE(FileSystem::Default()->create_dir_recursive(location_provider->segment_root_location(1)).ok());
     auto mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
     auto primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(location_provider, mem_tracker.get());
-    auto tablet_manager = std::make_unique<lake::TabletManager>(location_provider, primary_key_manager.get(), 16384);
+    auto tablet_manager =
+            std::make_unique<lake::TabletManager>(location_provider, primary_key_manager.get(), 16384, 16384);
 
     TReplicateSnapshotRequest request;
     request.tablet_id = 1;

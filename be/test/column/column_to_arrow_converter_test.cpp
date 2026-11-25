@@ -265,20 +265,17 @@ TEST_F(StarRocksColumnToArrowTest, testDecimalColumn) {
 
 TEST_F(StarRocksColumnToArrowTest, testBooleanColumn) {
     std::vector<uint8_t> data{0, 1, 0, 0, 1};
-    TypeDescriptor type_desc(TYPE_BOOLEAN);
-    NotNullableColumnTester<TYPE_BOOLEAN, ArrowTypeId::BOOL>::apply(201, data, type_desc);
+    NotNullableColumnTester<TYPE_BOOLEAN, ArrowTypeId::BOOL>::apply(201, data, TYPE_BOOLEAN_DESC);
 }
 
 TEST_F(StarRocksColumnToArrowTest, testSmallIntColumn) {
     std::vector<int16_t> data{1, 6654, -4291, 804, -1, -32768, 32767};
-    TypeDescriptor type_desc(TYPE_SMALLINT);
-    NotNullableColumnTester<TYPE_SMALLINT, ArrowTypeId::INT16>::apply(253, data, type_desc);
+    NotNullableColumnTester<TYPE_SMALLINT, ArrowTypeId::INT16>::apply(253, data, TYPE_SMALLINT_DESC);
 }
 
 TEST_F(StarRocksColumnToArrowTest, testDoubleColumn) {
     std::vector<double> data{3.14, -1E307, 1E307, 10000.124, -99999.34};
-    TypeDescriptor type_desc(TYPE_DOUBLE);
-    NotNullableColumnTester<TYPE_DOUBLE, ArrowTypeId::DOUBLE>::apply(253, data, type_desc);
+    NotNullableColumnTester<TYPE_DOUBLE, ArrowTypeId::DOUBLE>::apply(253, data, TYPE_DOUBLE_DESC);
 }
 
 TEST_F(StarRocksColumnToArrowTest, testStringColumn) {
@@ -327,8 +324,7 @@ TEST_F(StarRocksColumnToArrowTest, testDateColumn) {
     data[0].from_date_literal(19881218);
     data[1].from_date_literal(20210101);
     data[2].from_date_literal(20010808);
-    TypeDescriptor type_desc(TYPE_DATE);
-    NotNullableColumnTester<TYPE_DATE, ArrowTypeId::STRING>::apply(997, data, type_desc);
+    NotNullableColumnTester<TYPE_DATE, ArrowTypeId::STRING>::apply(997, data, TYPE_DATE_DESC);
 }
 
 TEST_F(StarRocksColumnToArrowTest, testDateTimeColumn) {
@@ -336,8 +332,7 @@ TEST_F(StarRocksColumnToArrowTest, testDateTimeColumn) {
     data[0].from_timestamp_literal(19881218230159ll);
     data[1].from_timestamp_literal(20180119000114ll);
     data[2].from_timestamp_literal(20190228010131ll);
-    TypeDescriptor type_desc(TYPE_DATETIME);
-    NotNullableColumnTester<TYPE_DATETIME, ArrowTypeId::STRING>::apply(997, data, type_desc);
+    NotNullableColumnTester<TYPE_DATETIME, ArrowTypeId::STRING>::apply(997, data, TYPE_DATETIME_DESC);
 }
 
 TEST_F(StarRocksColumnToArrowTest, testHllColumn) {
@@ -385,22 +380,19 @@ TEST_F(StarRocksColumnToArrowTest, testNullableDecimalColumn) {
 TEST_F(StarRocksColumnToArrowTest, testNullableBooleanColumn) {
     std::vector<uint8_t> data{0, 1, 0, 0, 1};
     std::set<size_t> null_index{0, 100, 110, 111, 252};
-    TypeDescriptor type_desc(TYPE_BOOLEAN);
-    NullableColumnTester<TYPE_BOOLEAN, ArrowTypeId::BOOL>::apply(253, null_index, data, type_desc);
+    NullableColumnTester<TYPE_BOOLEAN, ArrowTypeId::BOOL>::apply(253, null_index, data, TYPE_BOOLEAN_DESC);
 }
 
 TEST_F(StarRocksColumnToArrowTest, testNullableSmallIntColumn) {
     std::vector<int16_t> data{1, 6654, -4291, 804, -1, -32768, 32767};
     std::set<size_t> null_index{0, 100, 110, 111, 252};
-    TypeDescriptor type_desc(TYPE_SMALLINT);
-    NullableColumnTester<TYPE_SMALLINT, ArrowTypeId::INT16>::apply(253, null_index, data, type_desc);
+    NullableColumnTester<TYPE_SMALLINT, ArrowTypeId::INT16>::apply(253, null_index, data, TYPE_SMALLINT_DESC);
 }
 
 TEST_F(StarRocksColumnToArrowTest, testNullableDoubleColumn) {
     std::vector<double> data{3.14, -1E307, 1E307, 10000.124, -99999.34};
     std::set<size_t> null_index{1, 99, 100, 111, 252};
-    TypeDescriptor type_desc(TYPE_DOUBLE);
-    NullableColumnTester<TYPE_DOUBLE, ArrowTypeId::DOUBLE>::apply(253, null_index, data, type_desc);
+    NullableColumnTester<TYPE_DOUBLE, ArrowTypeId::DOUBLE>::apply(253, null_index, data, TYPE_DOUBLE_DESC);
 }
 
 TEST_F(StarRocksColumnToArrowTest, testNullableStringColumn) {
@@ -455,8 +447,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableDateColumn) {
     data[1].from_date_literal(20210101);
     data[2].from_date_literal(20010808);
     std::set<size_t> null_index{1, 99, 100, 111, 252, 900, 993};
-    TypeDescriptor type_desc(TYPE_DATE);
-    NullableColumnTester<TYPE_DATE, ArrowTypeId::STRING>::apply(997, null_index, data, type_desc);
+    NullableColumnTester<TYPE_DATE, ArrowTypeId::STRING>::apply(997, null_index, data, TYPE_DATE_DESC);
 }
 
 TEST_F(StarRocksColumnToArrowTest, testNullableDateTimeColumn) {
@@ -465,8 +456,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableDateTimeColumn) {
     data[1].from_timestamp_literal(20180119000114ll);
     data[2].from_timestamp_literal(20190228010131ll);
     std::set<size_t> null_index{1, 99, 100, 111, 252, 900, 993};
-    TypeDescriptor type_desc(TYPE_DATETIME);
-    NullableColumnTester<TYPE_DATETIME, ArrowTypeId::STRING>::apply(997, null_index, data, type_desc);
+    NullableColumnTester<TYPE_DATETIME, ArrowTypeId::STRING>::apply(997, null_index, data, TYPE_DATETIME_DESC);
 }
 
 TEST_F(StarRocksColumnToArrowTest, testNullableHllColumn) {
@@ -489,8 +479,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableHllColumn) {
 TEST_F(StarRocksColumnToArrowTest, testConstDateTimeColumn) {
     TimestampValue datum;
     datum.from_timestamp_literal(19881218230159ll);
-    TypeDescriptor type_desc(TYPE_DATETIME);
-    ConstColumnTester<TYPE_DATETIME, ArrowTypeId::STRING>::apply(997, datum, type_desc);
+    ConstColumnTester<TYPE_DATETIME, ArrowTypeId::STRING>::apply(997, datum, TYPE_DATETIME_DESC);
 }
 
 TEST_F(StarRocksColumnToArrowTest, testConstNullColumn) {
@@ -555,8 +544,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableArrayColumn) {
 
 TEST_F(StarRocksColumnToArrowTest, testStructColumn) {
     std::vector<std::string> field_names{"id", "name"};
-    auto struct_type_desc =
-            TypeDescriptor::create_struct_type(field_names, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_CHAR)});
+    auto struct_type_desc = TypeDescriptor::create_struct_type(field_names, {TYPE_INT_DESC, TYPE_CHAR_DESC});
     auto column = ColumnHelper::create_column(struct_type_desc, false, false, 0, false);
 
     // {1, "test1"}
@@ -585,8 +573,7 @@ TEST_F(StarRocksColumnToArrowTest, testStructColumn) {
 
 TEST_F(StarRocksColumnToArrowTest, testNullableStructColumn) {
     std::vector<std::string> field_names{"id", "name"};
-    auto struct_type_desc =
-            TypeDescriptor::create_struct_type(field_names, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_CHAR)});
+    auto struct_type_desc = TypeDescriptor::create_struct_type(field_names, {TYPE_INT_DESC, TYPE_CHAR_DESC});
     auto column = ColumnHelper::create_column(struct_type_desc, true, false, 0, false);
 
     // {1, "test1"}
@@ -618,7 +605,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableStructColumn) {
 }
 
 TEST_F(StarRocksColumnToArrowTest, testMapColumn) {
-    auto map_type_desc = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_CHAR));
+    auto map_type_desc = TypeDescriptor::create_map_type(TYPE_INT_DESC, TYPE_CHAR_DESC);
     auto column = ColumnHelper::create_column(map_type_desc, false, false, 0, false);
 
     // {1:"test1"},{2,"test2"}
@@ -660,7 +647,7 @@ TEST_F(StarRocksColumnToArrowTest, testMapColumn) {
 }
 
 TEST_F(StarRocksColumnToArrowTest, testNullableMapColumn) {
-    auto map_type_desc = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_CHAR));
+    auto map_type_desc = TypeDescriptor::create_map_type(TYPE_INT_DESC, TYPE_CHAR_DESC);
     auto column = ColumnHelper::create_column(map_type_desc, true, false, 0, false);
 
     // {1:"test1"},{2,"test2"}
@@ -707,9 +694,9 @@ TEST_F(StarRocksColumnToArrowTest, testNullableMapColumn) {
 
 TEST_F(StarRocksColumnToArrowTest, testNestedArrayStructMap) {
     // ARRAY<STRUCT<INT,MAP<INT,CHAR>>>>
-    auto map_type_desc = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_CHAR));
+    auto map_type_desc = TypeDescriptor::create_map_type(TYPE_INT_DESC, TYPE_CHAR_DESC);
     std::vector<std::string> field_names{"id", "map"};
-    auto struct_type_desc = TypeDescriptor::create_struct_type(field_names, {TypeDescriptor(TYPE_INT), map_type_desc});
+    auto struct_type_desc = TypeDescriptor::create_struct_type(field_names, {TYPE_INT_DESC, map_type_desc});
     auto array_type_desc = TypeDescriptor::create_array_type(struct_type_desc);
     auto column = ColumnHelper::create_column(array_type_desc, true, false, 0, false);
     // [{"id": 1, "map": {11:"test11"},{111:"test111"}}, null]

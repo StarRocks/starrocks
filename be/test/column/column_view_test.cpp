@@ -48,7 +48,7 @@ static ColumnPtr create_int32_array_column(const std::vector<std::vector<int32_t
 static void test_array_column_view_helper(bool nullable, bool append_default, long concat_row_limit,
                                           long concat_bytes_limit, std::vector<uint32_t> selection,
                                           const std::string& expect_result) {
-    auto child_type_desc = TypeDescriptor(LogicalType::TYPE_INT);
+    auto child_type_desc = TYPE_INT_DESC;
     auto type_desc = TypeDescriptor::create_array_type(child_type_desc);
     auto opt_array_column_view =
             ColumnViewHelper::create_column_view(type_desc, nullable, concat_row_limit, concat_bytes_limit);

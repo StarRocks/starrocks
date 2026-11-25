@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回受支持的 GEOGRAPHY 或 GEOMETRY 值之间的最小距离。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_DISTANCE

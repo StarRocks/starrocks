@@ -414,6 +414,13 @@ public class FragmentInstance {
                 || dataSink instanceof IcebergDeleteSink
                 || dataSink instanceof HiveTableSink
                 || dataSink instanceof TableFunctionTableSink)) {
+            // With scan ranges assigned per driver sequence, this instance's pipeline DOP is its own scan DOP
+            // (min(pipeline_dop, its scan ranges)), so a sink with the same DOP needs no local exchange in between.
+            // The fragment-wide DOP holds the scan DOP of whichever instance was assigned last, which differs from
+            // this one whenever workers get different numbers of scan ranges.
+            if (fragment.isForceAssignScanRangesPerDriverSeq() && isSetPipelineDop()) {
+                return getPipelineDop();
+            }
             return dop;
         } else if (dataSink instanceof IcebergDeleteSink icebergDeleteSink && icebergDeleteSink.isUnpartitionedTable()) {
             if (sessionVariable == null) {

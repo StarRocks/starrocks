@@ -14,12 +14,14 @@
 
 #include "storage_primitive/merge_iterator.h"
 
+#include <algorithm>
 #include <memory>
 #include <queue>
 #include <vector>
 
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
+#include "column/nullable_column.h"
 #include "column/sorting/sorting.h"
 #include "gutil/strings/substitute.h"
 
@@ -90,29 +92,32 @@ protected:
 };
 
 // Compare two chunks by the one specific row of each other.
+// How the chunks of one heap merge compare. Owned by the merge iterator and shared by all its ComparableChunks, so
+// that moving a chunk in and out of the heap, once per run of rows it contributes, copies no vector, string or
+// shared pointer.
+struct MergeKeys {
+    size_t key_columns = 0;
+    std::vector<uint32_t> sort_key_idxes;
+    std::shared_ptr<SortDescs> sort_descs;
+    std::string merge_condition;
+};
+
 class ComparableChunk : public MergingChunk {
 public:
-    explicit ComparableChunk(Chunk* chunk, size_t order, size_t key_columns, std::vector<uint32_t> sort_key_idxes,
-                             std::shared_ptr<SortDescs> sort_descs, std::string merge_condition)
-            : MergingChunk(chunk),
-              _order(order),
-              _key_columns(key_columns),
-              _sort_key_idxes(std::move(sort_key_idxes)),
-              _sort_descs(std::move(sort_descs)),
-              _merge_condition(std::move(merge_condition)) {}
+    // `keys` must outlive the chunk.
+    explicit ComparableChunk(Chunk* chunk, size_t order, const MergeKeys* keys)
+            : MergingChunk(chunk), _order(order), _keys(keys) {}
 
-    explicit ComparableChunk(Chunk* chunk, size_t order, size_t key_columns, std::vector<uint32_t> sort_key_idxes,
-                             std::shared_ptr<SortDescs> sort_descs, std::string merge_condition,
+    explicit ComparableChunk(Chunk* chunk, size_t order, const MergeKeys* keys,
                              std::shared_ptr<std::vector<uint64_t>> rssid_rowids)
-            : ComparableChunk(chunk, order, key_columns, std::move(sort_key_idxes), std::move(sort_descs),
-                              std::move(merge_condition)) {
+            : ComparableChunk(chunk, order, keys) {
         _rssid_rowids = std::move(rssid_rowids);
     }
 
     bool operator>(const ComparableChunk& rhs) const {
-        DCHECK_EQ(_key_columns, rhs._key_columns);
-        int r = compare_chunk(_key_columns, _sort_key_idxes, _sort_descs, *_chunk, _compared_row, *rhs._chunk,
-                              rhs._compared_row, _merge_condition);
+        DCHECK_EQ(_keys, rhs._keys);
+        int r = compare_chunk(_keys->key_columns, _keys->sort_key_idxes, _keys->sort_descs, *_chunk, _compared_row,
+                              *rhs._chunk, rhs._compared_row, _keys->merge_condition);
         return (r > 0) | ((r == 0) & (_order > rhs._order));
     }
 
@@ -137,8 +142,8 @@ public:
     }
 
     bool less_than(size_t lhs_row, const ComparableChunk& rhs) {
-        int r = compare_chunk(_key_columns, _sort_key_idxes, _sort_descs, *_chunk, lhs_row, *rhs._chunk,
-                              rhs._compared_row, _merge_condition);
+        int r = compare_chunk(_keys->key_columns, _keys->sort_key_idxes, _keys->sort_descs, *_chunk, lhs_row,
+                              *rhs._chunk, rhs._compared_row, _keys->merge_condition);
         return (r < 0) | ((r == 0) & (_order < rhs._order));
     }
 
@@ -147,10 +152,7 @@ private:
 
     // used to determinate the order of two rows when their key columns are all equals.
     uint16_t _order;
-    uint16_t _key_columns;
-    std::vector<uint32_t> _sort_key_idxes;
-    std::shared_ptr<SortDescs> _sort_descs;
-    std::string _merge_condition;
+    const MergeKeys* _keys;
     std::shared_ptr<std::vector<uint64_t>> _rssid_rowids;
 };
 
@@ -263,7 +265,26 @@ private:
     using MinPriorityQueue = std::priority_queue<T, Container, std::greater<T>>;
     using ChunkHeap = MinPriorityQueue<ComparableChunk>;
 
+    // A run of rows picked from one child for the output chunk.
+    struct Run {
+        uint32_t child;
+        uint32_t offset;
+        uint32_t count;
+    };
+    // Appends the runs picked so far to `chunk`, in pick order. Must run before a child's chunk is refilled, since
+    // the runs point into it.
+    void flush_runs(Chunk* chunk);
+    // Whether column `column` is cheap enough to copy twice for the two gathers of flush_runs().
+    bool gather_column(size_t column) const;
+
     ChunkHeap _heap;
+    // Set up from the schema on the first fill, once the schema and merge_condition are final.
+    MergeKeys _keys;
+    bool _keys_ready = false;
+    // The runs picked for the output chunk and not copied yet, and the scratch index arrays of flush_runs().
+    std::vector<Run> _runs;
+    std::vector<uint32_t> _gather_rows;
+    std::vector<uint32_t> _gather_perm;
 };
 
 inline Status HeapMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks,
@@ -323,7 +344,8 @@ inline Status HeapMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
 
         DCHECK_GT(append_row_num, 0);
 
-        chunk->append(*min_chunk._chunk, offset, append_row_num);
+        // Copied by flush_runs(), once the rows of this output chunk are known.
+        _runs.push_back(Run{min_chunk._order, static_cast<uint32_t>(offset), static_cast<uint32_t>(append_row_num)});
         if (rssid_rowids != nullptr && need_rssid_rowids) {
             // insert into `rssid_rowids` only when need_rssid_rowids is true.
             DCHECK(min_chunk._rssid_rowids != nullptr);
@@ -341,12 +363,15 @@ inline Status HeapMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
         if (min_chunk.remaining_rows() > 0) {
             _heap.push(min_chunk);
         } else {
+            // The child's chunk is about to be refilled: copy out what was picked from it first.
+            flush_runs(chunk);
             st = fill(min_chunk._order);
             if (!st.ok()) {
                 break;
             }
         }
     }
+    flush_runs(chunk);
     if (!st.ok()) {
         return st;
     } else if (rows > 0) {
@@ -354,6 +379,100 @@ inline Status HeapMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
     } else {
         return Status::EndOfFile("End of heap merge iterator");
     }
+}
+
+// When the children interleave closely, an output chunk is made of many short runs, and appending each run to every
+// column costs a virtual call per column per run. Instead the runs are copied per column with two typed gathers: first
+// the rows of each child, grouped by child, then a permutation back to pick order. Runs this long or longer on average
+// are cheaper to append directly.
+static constexpr uint32_t kMinAvgRunToAppend = 8;
+// The gathers copy every value twice, so they only pay off for values that are cheap to copy: fixed-length values and
+// strings up to this many bytes per row on average. Object (HLL, bitmap, percentile), JSON, array, map and struct
+// values, and longer strings, are appended run by run.
+static constexpr size_t kMaxGatherBytesPerRow = 64;
+
+bool HeapMergeIterator::gather_column(size_t column) const {
+    const Column* col = _chunk_pool[_runs.front().child]->get_column_by_index(column).get();
+    if (col->is_nullable()) {
+        col = down_cast<const NullableColumn*>(col)->data_column().get();
+    }
+    if (col->is_numeric() || col->is_decimal() || col->is_date() || col->is_timestamp()) {
+        return true;
+    }
+    if (!col->is_binary()) {
+        return false;
+    }
+    size_t bytes = 0;
+    size_t rows = 0;
+    for (const auto& child_chunk : _chunk_pool) {
+        // An exhausted child is closed and its chunk released.
+        if (child_chunk == nullptr) {
+            continue;
+        }
+        const Column* src = child_chunk->get_column_by_index(column).get();
+        bytes += src->byte_size();
+        rows += src->size();
+    }
+    return bytes <= kMaxGatherBytesPerRow * rows;
+}
+
+void HeapMergeIterator::flush_runs(Chunk* chunk) {
+    if (_runs.empty()) {
+        return;
+    }
+    const uint32_t first_child = _runs.front().child;
+    uint32_t total = 0;
+    bool one_child = true;
+    for (const Run& r : _runs) {
+        total += r.count;
+        one_child &= r.child == first_child;
+    }
+    if (one_child || total >= kMinAvgRunToAppend * _runs.size()) {
+        for (const Run& r : _runs) {
+            chunk->append(*_chunk_pool[r.child], r.offset, r.count);
+        }
+        _runs.clear();
+        return;
+    }
+    // start[k]: where the rows of child k begin in the grouped order.
+    const size_t num_children = _chunk_pool.size();
+    std::vector<uint32_t> start(num_children + 1, 0);
+    for (const Run& r : _runs) {
+        start[r.child + 1] += r.count;
+    }
+    for (size_t k = 0; k < num_children; ++k) {
+        start[k + 1] += start[k];
+    }
+    _gather_rows.resize(total);
+    _gather_perm.resize(total);
+    std::vector<uint32_t> next(start.begin(), start.end() - 1);
+    uint32_t out = 0;
+    for (const Run& r : _runs) {
+        for (uint32_t i = 0; i < r.count; ++i) {
+            _gather_rows[next[r.child]] = r.offset + i;
+            _gather_perm[out++] = next[r.child]++;
+        }
+    }
+    const size_t num_columns = chunk->num_columns();
+    for (size_t c = 0; c < num_columns; ++c) {
+        Column* dst = chunk->get_column_by_index(c)->as_mutable_raw_ptr();
+        if (!gather_column(c)) {
+            for (const Run& r : _runs) {
+                dst->append(*_chunk_pool[r.child]->get_column_by_index(c), r.offset, r.count);
+            }
+            continue;
+        }
+        auto grouped = dst->clone_empty();
+        grouped->reserve(total);
+        for (size_t k = 0; k < num_children; ++k) {
+            if (start[k + 1] > start[k]) {
+                grouped->append_selective(*_chunk_pool[k]->get_column_by_index(c), _gather_rows.data(), start[k],
+                                          start[k + 1] - start[k]);
+            }
+        }
+        dst->append_selective(*grouped, _gather_perm.data(), 0, total);
+    }
+    _runs.clear();
 }
 
 inline Status HeapMergeIterator::fill(size_t child) {
@@ -375,12 +494,17 @@ inline Status HeapMergeIterator::fill(size_t child) {
             return Status::InternalError(strings::Substitute(
                     "Merge iterator only supports merging chunks with rows less than $0", max_merge_chunk_size));
         }
+        if (!_keys_ready) {
+            _keys.key_columns = _schema.num_key_fields();
+            _keys.sort_key_idxes = _schema.sort_key_idxes();
+            _keys.sort_descs = _schema.sort_descs();
+            _keys.merge_condition = merge_condition;
+            _keys_ready = true;
+        }
         if (need_rssid_rowids) {
-            _heap.emplace(chunk, child, _schema.num_key_fields(), _schema.sort_key_idxes(), _schema.sort_descs(),
-                          merge_condition, std::move(rssid_rowids));
+            _heap.emplace(chunk, child, &_keys, std::move(rssid_rowids));
         } else {
-            _heap.emplace(chunk, child, _schema.num_key_fields(), _schema.sort_key_idxes(), _schema.sort_descs(),
-                          merge_condition);
+            _heap.emplace(chunk, child, &_keys);
         }
     } else if (st.is_end_of_file()) {
         // ignore Status::EndOfFile.

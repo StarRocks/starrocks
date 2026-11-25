@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 
+#include <algorithm>
 #include <numeric>
 #include <utility>
 
@@ -151,6 +152,10 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     if (is_colocate_runtime_filter) {
         // init local colocate in/bloom filters
         RuntimeInFilterList in_filter_lists(partial_in_filters.begin(), partial_in_filters.end());
+        // Skip the nullptr kept for a join key without an IN filter (e.g. an ARRAY or MAP key), as
+        // PartialRuntimeFilterMerger::merge_local_in_filters does on the non-colocate path.
+        in_filter_lists.erase(std::remove(in_filter_lists.begin(), in_filter_lists.end(), nullptr),
+                              in_filter_lists.end());
         if (partial_bloom_filters.size() == partial_bloom_filter_build_params.size()) {
             for (size_t i = 0; i < partial_bloom_filters.size(); ++i) {
                 if (partial_bloom_filter_build_params[i].has_value()) {

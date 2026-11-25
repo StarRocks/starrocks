@@ -27,7 +27,7 @@
 namespace starrocks {
 
 TEST(AIFunctionResultTest, BooleanAcceptsOnlyWholeTrimmedTokens) {
-    auto output = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), true);
+    auto output = ColumnHelper::create_column(TYPE_BOOLEAN_DESC, true);
     for (const auto& text : {"true", " TRUE \n", "false", "\tFalse"}) {
         ASSERT_TRUE(append_ai_function_result(AIFunctionResultKind::BOOLEAN, std::string(text), output.get()).ok());
     }
@@ -42,7 +42,7 @@ TEST(AIFunctionResultTest, BooleanAcceptsOnlyWholeTrimmedTokens) {
 }
 
 TEST(AIFunctionResultTest, SimilarityRequiresFiniteWholeValueWithinUnitInterval) {
-    auto output = ColumnHelper::create_column(TypeDescriptor(TYPE_FLOAT), true);
+    auto output = ColumnHelper::create_column(TYPE_FLOAT_DESC, true);
     for (const auto& text : {"0", " 0.25\n", "1.0", "1e-1"}) {
         ASSERT_TRUE(append_ai_function_result(AIFunctionResultKind::SIMILARITY, std::string(text), output.get()).ok());
     }

@@ -85,7 +85,7 @@ public class CacheStatsScanNode extends ScanNode {
         for (PhysicalPartition partition : partitions) {
             MaterializedIndex index = partition.getQueryableBaseIndex();
             List<Tablet> tablets = index.getTablets();
-            long visibleVersion = partition.getVisibleVersion();
+            long visibleVersion = olapTable.getVisibleVersionForQuery(partition);
 
             for (Tablet tablet : tablets) {
                 long tabletId = tablet.getId();

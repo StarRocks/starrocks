@@ -29,6 +29,7 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.connector.paimon.PaimonSinkExtra;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.datacache.LoadDataCacheMetrics;
 import com.starrocks.load.loadv2.LoadJob;
@@ -138,6 +139,7 @@ public class QueryRuntimeProfile {
     // Fields for external table sink
     // ------------------------------------------------------------------------------------
     private final List<TSinkCommitInfo> sinkCommitInfos = Lists.newCopyOnWriteArrayList();
+    private PaimonSinkExtra paimonOperation;
 
     // Fields for datacache
     private final DataCacheSelectMetrics dataCacheSelectMetrics = new DataCacheSelectMetrics();
@@ -202,6 +204,22 @@ public class QueryRuntimeProfile {
 
     public List<TSinkCommitInfo> getSinkCommitInfos() {
         return sinkCommitInfos;
+    }
+
+    public synchronized void initPaimonSink(PaimonSinkExtra operation, Map<TUniqueId, Integer> sinkInstanceDops) {
+        Preconditions.checkState(paimonOperation == null, "Paimon sink producers were already initialized");
+        operation.initCommitValidator(sinkInstanceDops, queryProfile);
+        paimonOperation = operation;
+    }
+
+    public synchronized boolean hasPaimonSink() {
+        return paimonOperation != null;
+    }
+
+    public synchronized void recordPaimonReportFailure() {
+        if (paimonOperation != null) {
+            paimonOperation.getCommitValidator().recordAggregationFailure();
+        }
     }
 
     public List<String> getExportFiles() {
@@ -377,34 +395,51 @@ public class QueryRuntimeProfile {
         return dataCacheSelectMetrics;
     }
 
-    public void updateLoadInformation(FragmentInstanceExecState execState, TReportExecStatusParams params) {
+    /**
+     * Prepare load updates without mutating the profile. The caller must execute the whole nonempty batch
+     * under the coordinator lock. Keeping each field check with its update avoids a separate presence check
+     * that could miss newly supported fields.
+     */
+    public List<Runnable> buildLoadInformationUpdates(FragmentInstanceExecState execState, TReportExecStatusParams params) {
+        List<Runnable> updates = new ArrayList<>();
+        boolean paimonSink = hasPaimonSink();
+        if (paimonSink && params.isSetSink_commit_infos()) {
+            // Retain the abort payload even if a later load update fails.
+            updates.add(() -> sinkCommitInfos.addAll(params.getSink_commit_infos()));
+        }
         if (params.isSetDelta_urls()) {
-            deltaUrls.addAll(params.getDelta_urls());
+            updates.add(() -> deltaUrls.addAll(params.getDelta_urls()));
         }
         if (params.isSetLoad_counters()) {
-            updateLoadCounters(params.getLoad_counters());
+            updates.add(() -> updateLoadCounters(params.getLoad_counters()));
         }
         if (params.isSetTracking_url()) {
-            trackingUrl = params.tracking_url;
+            updates.add(() -> trackingUrl = params.tracking_url);
         }
         if (params.isSetExport_files()) {
-            exportFiles.addAll(params.getExport_files());
+            updates.add(() -> exportFiles.addAll(params.getExport_files()));
         }
         if (params.isSetCommitInfos()) {
-            commitInfos.addAll(params.getCommitInfos());
+            updates.add(() -> commitInfos.addAll(params.getCommitInfos()));
         }
         if (params.isSetFailInfos()) {
-            failInfos.addAll(params.getFailInfos());
+            updates.add(() -> failInfos.addAll(params.getFailInfos()));
         }
         if (params.isSetRejected_record_path()) {
-            rejectedRecordPaths.add(execState.getAddress().getHostname() + ":" + params.getRejected_record_path());
+            updates.add(() -> rejectedRecordPaths.add(
+                    execState.getAddress().getHostname() + ":" + params.getRejected_record_path()));
         }
-        if (params.isSetSink_commit_infos()) {
-            sinkCommitInfos.addAll(params.getSink_commit_infos());
+        if (!paimonSink && params.isSetSink_commit_infos()) {
+            updates.add(() -> sinkCommitInfos.addAll(params.getSink_commit_infos()));
         }
         if (params.isSetLoad_datacache_metrics()) {
-            updateDataCacheSelectMetrics(params.backend_id, params.load_datacache_metrics);
+            updates.add(() -> updateDataCacheSelectMetrics(params.backend_id, params.load_datacache_metrics));
         }
+        if (paimonSink) {
+            // A sink instance must report its producers even when no commit payload was received.
+            updates.add(() -> paimonOperation.getCommitValidator().validateReport(execState.getInstanceId(), params));
+        }
+        return updates;
     }
 
     public RuntimeProfile buildQueryProfile(boolean needMerge) {

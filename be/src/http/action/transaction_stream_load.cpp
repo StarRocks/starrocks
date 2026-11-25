@@ -515,6 +515,17 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
                                           std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max()));
         request.__set_load_dop(static_cast<int32_t>(parallel_request_num));
     }
+    // Parsed as on the streaming endpoint. The FE plans the load with this value, and without it the compute
+    // nodes record none of the load's rejected rows.
+    if (!http_req->header(HTTP_LOG_REJECTED_RECORD_NUM).empty()) {
+        int64_t log_rejected_record_num = 0;
+        RETURN_IF_ERROR(parse_int64_param(HTTP_LOG_REJECTED_RECORD_NUM, http_req->header(HTTP_LOG_REJECTED_RECORD_NUM),
+                                          &log_rejected_record_num));
+        if (log_rejected_record_num < -1) {
+            return Status::InvalidArgument("log_rejected_record_num must be equal or greater than -1");
+        }
+        request.__set_log_rejected_record_num(log_rejected_record_num);
+    }
     if (ctx->timeout_second != -1) {
         request.__set_timeout(ctx->timeout_second);
     }

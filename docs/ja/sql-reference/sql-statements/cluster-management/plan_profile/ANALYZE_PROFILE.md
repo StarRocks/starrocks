@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ANALYZE PROFILE は、特定のクエリプロファイルをフラグメントごとに分析し、ツリー構造で表示します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ANALYZE PROFILE

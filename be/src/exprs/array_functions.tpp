@@ -1022,11 +1022,12 @@ private:
     }
 };
 
-// all/any_match(lambda_func, array1, array2...)-> all/any_match(array_map(lambda_func, array1, array2...))
-// -> all/any_match(bool_array), result is bool type.
-// any_match: if there are true  matched, return true,  else if there are null, return null, otherwise, return false;
-// all_match: if there are false matched, return false, else if there are null, return null, otherwise, return true;
-template <bool isAny>
+// all/any/none_match(lambda_func, array1, array2...)-> all/any/none_match(array_map(lambda_func, array1, array2...))
+// -> all/any/none_match(bool_array), result is bool type.
+// any_match:  if there are true  matched, return true,  else if there are null, return null, otherwise, return false;
+// all_match:  if there are false matched, return false, else if there are null, return null, otherwise, return true;
+// none_match: if there are true  matched, return false, else if there are null, return null, otherwise, return true;
+template <bool isAny, bool negate = false>
 class ArrayMatch {
 public:
     static ColumnPtr process([[maybe_unused]] FunctionContext* ctx, const Columns& columns) {
@@ -1076,7 +1077,7 @@ private:
                     }
                 }
                 dest_null_column->get_data()[i] = res != isAny && has_null;
-                dest_data_column->get_data()[i] = res;
+                dest_data_column->get_data()[i] = negate ? !res : res;
             } else { // array_null_map[i] is null, result is null
                 dest_null_column->get_data()[i] = 1;
                 dest_data_column->get_data()[i] = 0;
@@ -2559,6 +2560,9 @@ class ArrayContainsAll {
         bool has_null = false;
         // final result, only used when both two inputs are constant
         bool contains = false;
+        // which inputs prepare() saw as constant, i.e. which ones the state was built from
+        bool left_const = false;
+        bool right_const = false;
         std::variant<HashMap, PrefixTable> variant;
     };
 
@@ -2587,6 +2591,8 @@ public:
 
         auto* state = new ArrayContainsAllState();
         context->set_function_state(scope, state);
+        state->left_const = is_left_notnull_const;
+        state->right_const = is_right_notnull_const;
 
         ColumnPtr column;
         if constexpr (ContainsSeq) {
@@ -2651,12 +2657,21 @@ public:
         }
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-        const ColumnPtr& left_column = columns[0];
-        const ColumnPtr& right_column = columns[1];
-        bool is_const_left = left_column->is_constant();
-        bool is_const_right = right_column->is_constant();
         [[maybe_unused]] auto* state =
                 reinterpret_cast<ArrayContainsAllState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+        // A computed constant such as `array_sort([2, 1])` is a ConstColumn at runtime, but prepare() did not see
+        // it as constant, so the state was not built from it (and there may be no state at all). Only an input
+        // prepare() saw as constant may use the state; expand any other constant input to a full column.
+        ColumnPtr left_column = columns[0];
+        ColumnPtr right_column = columns[1];
+        if (left_column->is_constant() && (state == nullptr || !state->left_const)) {
+            left_column = ColumnHelper::unpack_and_duplicate_const_column(left_column->size(), left_column);
+        }
+        if (right_column->is_constant() && (state == nullptr || !state->right_const)) {
+            right_column = ColumnHelper::unpack_and_duplicate_const_column(right_column->size(), right_column);
+        }
+        bool is_const_left = left_column->is_constant();
+        bool is_const_right = right_column->is_constant();
 
         if (is_const_left && is_const_right) {
             // if both input columns are constant, return result directly

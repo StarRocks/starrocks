@@ -14,25 +14,54 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.ScanNode;
 import com.starrocks.scheduler.history.TaskRunHistoryTable;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
+import mockit.Mocked;
+import mockit.Verifications;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 public class SimpleExecutorTest {
 
@@ -107,6 +136,114 @@ public class SimpleExecutorTest {
         ConnectContext.remove();
     }
 
+    @Test
+    public void testRemainingTimeoutExcludesCompletedQueueWait() {
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.getSessionVariable().setQueryTimeoutS(60);
+        context.setStartTime(Instant.now().minusSeconds(125));
+        context.setPendingTimeSecond(120);
+
+        int remaining = SimpleExecutor.checkInternalQueryState(context);
+        assertTrue(remaining > 50 && remaining <= 55, "remaining=" + remaining);
+
+        context.setStartTime(Instant.now().minusSeconds(181));
+        context.setPendingTimeSecond(120);
+        assertThrows(SemanticException.class, () -> SimpleExecutor.checkInternalQueryState(context));
+    }
+
+    @Test
+    public void testRemainingTimeoutAccountsForEachContextsOwnQueueWait() {
+        ConnectContext parent = UtFrameUtils.createDefaultCtx();
+        parent.getSessionVariable().setQueryTimeoutS(60);
+        parent.setStartTime(Instant.now().minusSeconds(125));
+        parent.setPendingTimeSecond(120);
+        ConnectContext child = UtFrameUtils.createDefaultCtx();
+        child.setParentConnectContext(parent);
+        child.getSessionVariable().setQueryTimeoutS(60);
+        child.setStartTime(Instant.now().minusSeconds(140));
+        child.setPendingTimeSecond(90);
+
+        // The child has 10 seconds left; the parent has 55.
+        int remaining = SimpleExecutor.checkInternalQueryState(child);
+        assertTrue(remaining > 5 && remaining <= 10, "remaining=" + remaining);
+
+        // The parent's execution deadline must still bound the child after excluding its own queue wait.
+        parent.setStartTime(Instant.now().minusSeconds(170));
+        parent.setPendingTimeSecond(115);
+        remaining = SimpleExecutor.checkInternalQueryState(child);
+        assertTrue(remaining > 0 && remaining <= 5, "remaining=" + remaining);
+        parent.setPendingTimeSecond(100);
+        assertThrows(SemanticException.class, () -> SimpleExecutor.checkInternalQueryState(child));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "'SELECT 1', 300",
+            "'INSERT INTO dst SELECT * FROM iceberg.db.src', 3600",
+            "'INSERT INTO dst PROPERTIES (\"timeout\"=\"180\") SELECT * FROM iceberg.db.src', 180",
+            "'CREATE TABLE dst AS SELECT * FROM iceberg.db.src', 3600"
+    })
+    public void testRemainingTimeoutUsesEachStatementsOwnContext(String sql, int executionTimeout) {
+        ConnectContext parent = UtFrameUtils.createDefaultCtx();
+        parent.getSessionVariable().setQueryTimeoutS(300);
+        parent.getSessionVariable().setInsertTimeoutS(3600);
+        parent.setExecutor(new StmtExecutor(parent,
+                SqlParser.parseOneWithStarRocksDialect(sql, parent.getSessionVariable())));
+        parent.setStartTime(Instant.now().minusSeconds(185));
+        parent.setPendingTimeSecond(120);
+        ConnectContext child = UtFrameUtils.createDefaultCtx();
+        child.setParentConnectContext(parent);
+        child.getSessionVariable().setQueryTimeoutS(10000);
+        child.getSessionVariable().setInsertTimeoutS(1);
+        child.setExecutor(new StmtExecutor(child,
+                SqlParser.parseOneWithStarRocksDialect("SELECT 1", child.getSessionVariable())));
+        child.setStartTime();
+
+        try (var scope = child.bindScope()) {
+            // The worker has the child's session bound, but each executor must use its own session.
+            assertEquals(executionTimeout, parent.getExecTimeoutWithoutPendingTime());
+            int remaining = SimpleExecutor.checkInternalQueryState(child);
+            assertTrue(remaining > executionTimeout - 70 && remaining <= executionTimeout - 65,
+                    "remaining=" + remaining);
+            assertSame(child, ConnectContext.get());
+
+            // An explicit context must also work on a thread with no session bound.
+            ConnectContext.remove();
+            assertEquals(executionTimeout, parent.getExecTimeoutWithoutPendingTime());
+            assertTrue(SimpleExecutor.checkInternalQueryState(child) > executionTimeout - 70);
+            assertNull(ConnectContext.get());
+
+            // The effective parent deadline still stops the child after subtracting its queue wait.
+            parent.setStartTime(Instant.now().minusSeconds(executionTimeout + 121L));
+            parent.setPendingTimeSecond(120);
+            SemanticException error = assertThrows(SemanticException.class,
+                    () -> SimpleExecutor.checkInternalQueryState(child));
+            assertTrue(error.getMessage().contains("Internal query timed out"));
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testPendingAllowanceDoesNotIncreaseExecutionBudget() {
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.getSessionVariable().setQueryTimeoutS(60);
+        context.setStartTime(Instant.now().minusSeconds(125));
+        context.setPending(true);
+        context.setPendingTimeSecond(300);
+        assertEquals(60, SimpleExecutor.checkInternalQueryState(context));
+        context.setPendingTimeSecond(Integer.MAX_VALUE);
+        assertEquals(60, SimpleExecutor.checkInternalQueryState(context));
+
+        // On admission the queue manager replaces the allowance with the actual wait.
+        context.setPendingTimeSecond(120);
+        context.setPending(false);
+        int remaining = SimpleExecutor.checkInternalQueryState(context);
+        assertTrue(remaining > 50 && remaining <= 55, "remaining=" + remaining);
+        assertEquals(60, context.getSessionVariable().getQueryTimeoutS());
+        assertEquals(120, context.getPendingTimeSecond());
+    }
+
     /**
      * The internal task_run_history read (fired while filling information_schema.materialized_views /
      * SHOW MATERIALIZED VIEWS) must inherit the OUTER user query's remaining query_timeout, not the
@@ -133,6 +270,343 @@ public class SimpleExecutorTest {
 
         // Inherited the outer query_timeout (~300s), not statistic_collect_query_timeout (3600s).
         assertTrue(capturedTimeout[0] > 290 && capturedTimeout[0] <= 300, "timeout=" + capturedTimeout[0]);
+    }
+
+    @Test
+    public void testParentQueryPolicyIsInheritedWithoutMutatingCaller() throws Exception {
+        ConnectContext parent = UtFrameUtils.createDefaultCtx();
+        parent.setQualifiedUser("index_reader");
+        parent.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("index_reader", "%"));
+        parent.setCurrentRoleIds(Set.of(101L));
+        parent.setGroups(Set.of("analysts"));
+        parent.setRemoteIP("192.0.2.1");
+        parent.setBypassAuthorizerCheck(true);
+        parent.setDatabase("caller_db");
+        parent.getSessionVariable().setResourceGroup("user_group");
+        GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(parent.getSessionVariable(),
+                new SystemVariable(SessionVariable.QUERY_MEM_LIMIT, new IntLiteral(123456789L)), false);
+        GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(parent.getSessionVariable(),
+                new SystemVariable(SessionVariable.RESOURCE_GROUP_ID, new IntLiteral(42)), false);
+        parent.getSessionVariable().setMaxExecMemByte(234567890L);
+        parent.getSessionVariable().setCatalog("caller_catalog");
+        parent.getSessionVariable().setTimeZone("UTC");
+        parent.getSessionVariable().setSqlMode(0L);
+        parent.getSessionVariable().setSqlSelectLimit(7);
+        parent.getSessionVariable().setQueryTimeoutS(120);
+        parent.getSessionVariable().setEnableProfile(true);
+        parent.setThreadLocalInfo();
+        SimpleExecutor executor = new SimpleExecutor("testExecutor", TResultSinkType.HTTP_PROTOCAL) {
+            @Override
+            public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
+                assertSame(parent, context.getParent());
+                assertEquals(parent.getCurrentUserIdentity(), context.getCurrentUserIdentity());
+                assertEquals(parent.getCurrentRoleIds(), context.getCurrentRoleIds());
+                assertEquals(parent.getGroups(), context.getGroups());
+                assertEquals(parent.getRemoteIP(), context.getRemoteIP());
+                assertFalse(context.isBypassAuthorizerCheck());
+                assertFalse(context.isStatisticsJob());
+                assertFalse(context.isOnlyReadIcebergCache());
+                assertSame(context, ConnectContext.get());
+                assertNotSame(parent.getSessionVariable(), context.getSessionVariable());
+                assertEquals("caller_db", context.getDatabase());
+                assertEquals("caller_catalog", context.getCurrentCatalog());
+                assertEquals("user_group", context.getSessionVariable().getResourceGroup());
+                assertEquals(42, context.getSessionVariable().getResourceGroupId());
+                assertEquals(123456789L, context.getSessionVariable().toThrift().getQuery_mem_limit());
+                assertEquals(234567890L, context.getSessionVariable().getMaxExecMemByte());
+                assertEquals(parent.getCurrentWarehouseName(), context.getCurrentWarehouseName());
+                assertEquals("UTC", context.getSessionVariable().getTimeZone());
+                assertEquals(0L, context.getSessionVariable().getSqlMode());
+                assertEquals(SessionVariable.DEFAULT_SELECT_LIMIT, context.getSessionVariable().getSqlSelectLimit());
+                assertEquals(30, context.getSessionVariable().getQueryTimeoutS());
+                assertFalse(context.getSessionVariable().isEnableProfile());
+                return List.of();
+            }
+        };
+        try {
+            executor.executeDQLAsCaller("select 1", 30, parent);
+            assertSame(parent, ConnectContext.get());
+            assertEquals(7, parent.getSessionVariable().getSqlSelectLimit());
+            assertEquals(120, parent.getSessionVariable().getQueryTimeoutS());
+            assertEquals("user_group", parent.getSessionVariable().getResourceGroup());
+            assertTrue(parent.getSessionVariable().isEnableProfile());
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testResolvedResourceGroupAndContextRestoredOnFailure() {
+        ConnectContext parent = UtFrameUtils.createDefaultCtx();
+        parent.setResourceGroup(new TWorkGroup().setName("classified_group"));
+        parent.setThreadLocalInfo();
+        SimpleExecutor executor = new SimpleExecutor("testExecutor", TResultSinkType.HTTP_PROTOCAL) {
+            @Override
+            public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
+                assertEquals("classified_group", context.getSessionVariable().getResourceGroup());
+                throw new SemanticException("test failure");
+            }
+        };
+        try {
+            assertThrows(SemanticException.class, () -> executor.executeDQLAsCaller("select 1", 30, parent));
+            assertSame(parent, ConnectContext.get());
+            assertEquals("", parent.getSessionVariable().getResourceGroup());
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testBackgroundQueryRetainsGlobalSessionDefaults() {
+        SessionVariable defaults = GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable();
+        long originalLimit = defaults.getSqlSelectLimit();
+        defaults.setSqlSelectLimit(3);
+        SimpleExecutor executor = new SimpleExecutor("testExecutor", TResultSinkType.HTTP_PROTOCAL) {
+            @Override
+            public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
+                assertEquals(UserIdentity.ROOT, context.getCurrentUserIdentity());
+                assertEquals(3, context.getSessionVariable().getSqlSelectLimit());
+                return List.of();
+            }
+        };
+        try {
+            executor.executeDQL("select 1", 30);
+        } finally {
+            defaults.setSqlSelectLimit(originalLimit);
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testCallerBoundQueryDisablesShortCircuit() {
+        assumeFalse(RunMode.isSharedDataMode());
+        SessionVariable defaults = GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable();
+        boolean originalShortCircuit = defaults.isEnableShortCircuit();
+        defaults.setEnableShortCircuit(true);
+        try {
+            ConnectContext caller = UtFrameUtils.createDefaultCtx();
+            List<Boolean> shortCircuitSettings = new ArrayList<>();
+            SimpleExecutor executor = new SimpleExecutor("testExecutor", TResultSinkType.HTTP_PROTOCAL) {
+                @Override
+                public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
+                    shortCircuitSettings.add(context.getSessionVariable().isEnableShortCircuit());
+                    return List.of();
+                }
+            };
+
+            executor.executeDQLAsCaller("select 1", 30, caller);
+            executor.executeDQL("select 1", 30);
+
+            assertEquals(List.of(false, true), shortCircuitSettings);
+            assertTrue(caller.getSessionVariable().isEnableShortCircuit());
+        } finally {
+            defaults.setEnableShortCircuit(originalShortCircuit);
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testRestoresPreviousContextDifferentFromCaller() {
+        ConnectContext caller = UtFrameUtils.createDefaultCtx();
+        caller.getSessionVariable().setSqlSelectLimit(0);
+        // The explicitly supplied caller need not be the thread-local context being restored.
+        ConnectContext previous = UtFrameUtils.createDefaultCtx();
+        previous.setThreadLocalInfo();
+        SimpleExecutor executor = new SimpleExecutor("testExecutor", TResultSinkType.HTTP_PROTOCAL) {
+            @Override
+            public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
+                assertSame(caller, context.getParent());
+                assertSame(context, ConnectContext.get());
+                throw new SemanticException("test failure");
+            }
+        };
+        try {
+            assertThrows(SemanticException.class, () -> executor.executeDQLAsCaller(
+                    "select 1", 30, caller));
+            assertSame(previous, ConnectContext.get());
+            assertEquals(0, caller.getSessionVariable().getSqlSelectLimit());
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testCallerRemainingBudgetCapsExplicitTimeout() {
+        ConnectContext caller = UtFrameUtils.createDefaultCtx();
+        caller.getSessionVariable().setQueryTimeoutS(300);
+        caller.setStartTime(Instant.now().minusSeconds(100));
+        ConnectContext.remove();
+        SimpleExecutor executor = new SimpleExecutor("testExecutor", TResultSinkType.HTTP_PROTOCAL) {
+            @Override
+            public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
+                long timeout = context.getSessionVariable().getQueryTimeoutS();
+                assertTrue(timeout > 190 && timeout <= 200, "timeout=" + timeout);
+                return List.of();
+            }
+        };
+        executor.executeDQLAsCaller("select 1", 600, caller);
+        assertNull(ConnectContext.get());
+        assertEquals(300, caller.getSessionVariable().getQueryTimeoutS());
+    }
+
+    @Test
+    public void testCancelledOrExpiredCallerDoesNotStartInternalQuery() throws Exception {
+        ConnectContext caller = UtFrameUtils.createDefaultCtx();
+        StmtExecutor statement = new StmtExecutor(caller,
+                SqlParser.parseOneWithStarRocksDialect("select 1", caller.getSessionVariable()));
+        caller.setExecutor(statement);
+        caller.setThreadLocalInfo();
+        SimpleExecutor executor = new SimpleExecutor("testExecutor", TResultSinkType.HTTP_PROTOCAL) {
+            @Override
+            public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
+                throw new AssertionError("cancelled/expired query must not execute a child query");
+            }
+        };
+        try {
+            caller.getSessionVariable().setQueryTimeoutS(1);
+            caller.setStartTime(Instant.now().minusSeconds(2));
+            assertTrue(assertThrows(SemanticException.class,
+                    () -> executor.executeDQLAsCaller("select 1", 30, caller)).getMessage().contains("timed out"));
+            caller.setStartTime();
+            caller.kill(false, "test cancellation");
+            assertTrue(assertThrows(SemanticException.class,
+                    () -> executor.executeDQLAsCaller("select 1", 30, caller)).getMessage().contains("cancelled"));
+            assertSame(caller, ConnectContext.get());
+            assertTrue(statement.getSubStmtExecutors().isEmpty());
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testLateChildRegistrationInheritsCancellation() throws Exception {
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        StmtExecutor parent = new StmtExecutor(context,
+                SqlParser.parseOneWithStarRocksDialect("select 1", context.getSessionVariable()));
+        StmtExecutor child = new StmtExecutor(context,
+                SqlParser.parseOneWithStarRocksDialect("select 2", context.getSessionVariable()));
+        parent.cancel("cancel before registration");
+        parent.registerSubStmtExecutor(child);
+        assertTrue(child.isCancelled());
+        assertEquals(List.of(child), parent.getSubStmtExecutors());
+    }
+
+    @Test
+    public void testChildRegistrationDuringCancellation() throws Exception {
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        StmtExecutor parent = new StmtExecutor(context,
+                SqlParser.parseOneWithStarRocksDialect("select 1", context.getSessionVariable()));
+        StmtExecutor lateChild = new StmtExecutor(context,
+                SqlParser.parseOneWithStarRocksDialect("select 2", context.getSessionVariable()));
+        StmtExecutor child = new StmtExecutor(context,
+                SqlParser.parseOneWithStarRocksDialect("select 3", context.getSessionVariable())) {
+            @Override
+            public void cancel(String message) {
+                // Add a child while cancel() is traversing its original child snapshot.
+                parent.registerSubStmtExecutor(lateChild);
+                super.cancel(message);
+            }
+        };
+        parent.registerSubStmtExecutor(child);
+        parent.cancel("cancel during registration");
+        assertTrue(child.isCancelled());
+        assertTrue(lateChild.isCancelled());
+        assertEquals(List.of(child, lateChild), parent.getSubStmtExecutors());
+    }
+
+    @Test
+    public void testCallerQueryRegistersChildExecutor() throws Exception {
+        ConnectContext caller = UtFrameUtils.createDefaultCtx();
+        StmtExecutor parent = new StmtExecutor(caller,
+                SqlParser.parseOneWithStarRocksDialect("select 1", caller.getSessionVariable()));
+        caller.setExecutor(parent);
+        caller.setThreadLocalInfo();
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public Pair<List<TResultBatch>, Status> executeStmtWithExecPlan(ConnectContext context, ExecPlan plan) {
+                assertSame(caller, context.getParent());
+                assertEquals(List.of(context.getExecutor()), parent.getSubStmtExecutors());
+                return Pair.create(List.of(), Status.OK);
+            }
+        };
+        try {
+            new SimpleExecutor("testExecutor", TResultSinkType.HTTP_PROTOCAL)
+                    .executeDQLAsCaller("select 1", 30, caller);
+            assertEquals(1, parent.getSubStmtExecutors().size());
+            assertSame(caller, ConnectContext.get());
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testCancellationBeforeCoordinatorIsPublished(@Mocked DefaultCoordinator coordinator) throws Exception {
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.setQueryId(UUID.randomUUID());
+        context.setThreadLocalInfo();
+        new MockUp<DefaultCoordinator.Factory>() {
+            @Mock
+            public DefaultCoordinator createQueryScheduler(ConnectContext child, List<PlanFragment> fragments,
+                                                           List<ScanNode> scans, TDescriptorTable descriptors,
+                                                           ExecPlan plan) {
+                // Simulate cancellation before StmtExecutor can publish its coordinator.
+                child.setKilled();
+                return coordinator;
+            }
+        };
+        try {
+            var statement = SqlParser.parseOneWithStarRocksDialect("select 1", context.getSessionVariable());
+            ExecPlan plan = StatementPlanner.plan(statement, context, TResultSinkType.HTTP_PROTOCAL);
+            StmtExecutor executor = StmtExecutor.newInternalExecutor(context, statement);
+            context.setExecutor(executor);
+            assertSame(Status.CANCELLED, executor.executeStmtWithExecPlan(context, plan).second);
+            new Verifications() {
+                {
+                    coordinator.exec();
+                    times = 0;
+                    coordinator.cancel("User cancelled");
+                    times = 1;
+                }
+            };
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testCancellationDuringCoordinatorStartupPreservesStatus(@Mocked DefaultCoordinator coordinator)
+            throws Exception {
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.setQueryId(UUID.randomUUID());
+        context.setThreadLocalInfo();
+        Status cancelled = new Status(TStatusCode.CANCELLED, "cancel during preparation");
+        new MockUp<DefaultCoordinator.Factory>() {
+            @Mock
+            public DefaultCoordinator createQueryScheduler(ConnectContext child, List<PlanFragment> fragments,
+                                                           List<ScanNode> scans, TDescriptorTable descriptors,
+                                                           ExecPlan plan) {
+                return coordinator;
+            }
+        };
+        new Expectations() {
+            {
+                coordinator.exec();
+                result = new StarRocksException(cancelled.getErrorMsg());
+                coordinator.getExecStatus();
+                result = cancelled;
+            }
+        };
+        try {
+            var statement = SqlParser.parseOneWithStarRocksDialect("select 1", context.getSessionVariable());
+            ExecPlan plan = StatementPlanner.plan(statement, context, TResultSinkType.HTTP_PROTOCAL);
+            StmtExecutor executor = StmtExecutor.newInternalExecutor(context, statement);
+            context.setExecutor(executor);
+            Status result = executor.executeStmtWithExecPlan(context, plan).second;
+            assertTrue(result.isCancelled());
+            assertEquals("cancel during preparation", result.getErrorMsg());
+        } finally {
+            ConnectContext.remove();
+        }
     }
 
     private static void mockStatementFailure(String errorMessage) {

@@ -25,6 +25,7 @@
 #include "exec/exec_env.h"
 #include "fs/fs_util.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/primary_key_compaction_policy.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/tablet_schema.h"
@@ -939,6 +940,75 @@ TEST_F(LakeCompactionPolicyTest, test_unshare_picks_complete_shared_rowsets_only
     EXPECT_EQ(3, rowsets[1]->num_segments());
 }
 
+// Fills `metadata` with rowsets that hold different kinds of files. Rowset 1 is private; 2 has a
+// shared del file; 3 holds nothing but a shared del file; 4 and 5 are private segments whose
+// rssid carries a shared DCG / IDG sidecar; 6 is private with a private del file.
+static void add_rowsets_holding_shared_files(TabletMetadataPB* metadata) {
+    auto add_rowset = [&](uint32_t id, bool with_segment, std::initializer_list<bool> shared_dels) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(id);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(100);
+        if (with_segment) {
+            auto* segment = rowset->add_segment_metas();
+            segment->set_filename("rowset_" + std::to_string(id) + "_segment_0");
+            segment->set_shared(false);
+        }
+        for (bool shared : shared_dels) {
+            auto* del = rowset->add_del_files();
+            del->set_name("rowset_" + std::to_string(id) + "_del_" + std::to_string(rowset->del_files_size()));
+            del->set_shared(shared);
+        }
+    };
+    add_rowset(1, true, {});
+    add_rowset(2, true, {true});
+    add_rowset(3, false, {true});
+    add_rowset(4, true, {});
+    add_rowset(5, true, {});
+    add_rowset(6, true, {false});
+
+    auto& dcg = (*metadata->mutable_dcg_meta()->mutable_dcgs())[4];
+    dcg.add_column_files("dcg.cols");
+    dcg.add_shared_files(true);
+    (*metadata->mutable_idg_meta()->mutable_idgs())[5].add_entries()->set_shared_file(true);
+}
+
+TEST_F(LakeCompactionPolicyTest, test_unshare_picks_rowsets_holding_any_shared_file) {
+    auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    metadata->set_version(2);
+    metadata->mutable_range();
+    add_rowsets_holding_shared_files(metadata.get());
+
+    UnshareCompactionPolicy policy(_tablet_mgr.get(), metadata);
+    ASSIGN_OR_ABORT(auto rowsets, policy.pick_rowsets());
+    std::vector<uint32_t> ids;
+    for (const auto& rowset : rowsets) {
+        ids.push_back(rowset->id());
+    }
+    EXPECT_EQ((std::vector<uint32_t>{2, 3, 4, 5}), ids);
+}
+
+TEST_F(LakeCompactionPolicyTest, test_unshare_with_separate_sort_key_picks_shared_segments_only) {
+    auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    metadata->set_version(2);
+    metadata->mutable_range();
+    // Column 1 is a value column, so the sort key differs from the primary key.
+    metadata->mutable_schema()->add_sort_key_idxes(1);
+    add_rowsets_holding_shared_files(metadata.get());
+    auto* rowset = metadata->add_rowsets();
+    rowset->set_id(7);
+    rowset->set_num_rows(10);
+    rowset->set_data_size(100);
+    auto* segment = rowset->add_segment_metas();
+    segment->set_filename("rowset_7_segment_0");
+    segment->set_shared(true);
+
+    UnshareCompactionPolicy policy(_tablet_mgr.get(), metadata);
+    ASSIGN_OR_ABORT(auto rowsets, policy.pick_rowsets());
+    ASSERT_EQ(1, rowsets.size());
+    EXPECT_EQ(7, rowsets[0]->id());
+}
+
 TEST_F(LakeCompactionPolicyTest, test_unshare_rejects_unsupported_metadata) {
     auto non_pk = generate_simple_tablet_metadata(DUP_KEYS);
     non_pk->mutable_range();
@@ -947,19 +1017,31 @@ TEST_F(LakeCompactionPolicyTest, test_unshare_rejects_unsupported_metadata) {
     auto no_range = generate_simple_tablet_metadata(PRIMARY_KEYS);
     EXPECT_FALSE(CompactionPolicy::create(_tablet_mgr.get(), no_range, false, true).ok());
 
-    auto dcg = generate_simple_tablet_metadata(PRIMARY_KEYS);
-    dcg->mutable_range();
-    (*dcg->mutable_dcg_meta()->mutable_dcgs())[1].add_column_files("dcg.cols");
-    auto dcg_status = CompactionPolicy::create(_tablet_mgr.get(), dcg, false, true);
-    ASSERT_FALSE(dcg_status.ok());
-    EXPECT_TRUE(dcg_status.status().is_not_supported());
-
-    auto idg = generate_simple_tablet_metadata(PRIMARY_KEYS);
-    idg->mutable_range();
-    (*idg->mutable_idg_meta()->mutable_idgs())[1].add_entries()->set_index_file("idg.idx");
-    auto idg_status = CompactionPolicy::create(_tablet_mgr.get(), idg, false, true);
-    ASSERT_FALSE(idg_status.ok());
-    EXPECT_TRUE(idg_status.status().is_not_supported());
+    // DCG and IDG metadata are accepted when ORDER BY is the primary key, and still refused when the
+    // tablet has a separate sort key.
+    for (bool separate_sort_key : {false, true}) {
+        SCOPED_TRACE(separate_sort_key);
+        auto dcg = generate_simple_tablet_metadata(PRIMARY_KEYS);
+        dcg->mutable_range();
+        (*dcg->mutable_dcg_meta()->mutable_dcgs())[1].add_column_files("dcg.cols");
+        auto idg = generate_simple_tablet_metadata(PRIMARY_KEYS);
+        idg->mutable_range();
+        (*idg->mutable_idg_meta()->mutable_idgs())[1].add_entries()->set_index_file("idg.idx");
+        if (separate_sort_key) {
+            // Column 1 is a value column, so the sort key differs from the primary key.
+            dcg->mutable_schema()->add_sort_key_idxes(1);
+            idg->mutable_schema()->add_sort_key_idxes(1);
+        }
+        for (const auto& metadata : {dcg, idg}) {
+            auto status = CompactionPolicy::create(_tablet_mgr.get(), metadata, false, true);
+            if (separate_sort_key) {
+                ASSERT_FALSE(status.ok());
+                EXPECT_TRUE(status.status().is_not_supported()) << status.status();
+            } else {
+                EXPECT_OK(status.status());
+            }
+        }
+    }
 }
 
 // The guard that keeps everyday compaction off a split's inherited files. Without it an ordinary

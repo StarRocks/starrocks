@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "データロードテンプレートおよびベストプラクティスのガイドライン。"
 unlisted: True
+products: [oss]
 ---
 
 # データを \<SOURCE\> からロードするテンプレート

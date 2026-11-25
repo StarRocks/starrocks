@@ -26,7 +26,7 @@
 #include "base/utility/defer_op.h"
 
 namespace starrocks {
-static void encode_base64_internal(const std::string& in, std::string* out, const unsigned char* basis, bool padding) {
+static void encode_base64_internal(std::string_view in, std::string* out, const unsigned char* basis, bool padding) {
     size_t len = in.size();
     // Every 3 source bytes will be encoded into 4 bytes.
     std::unique_ptr<unsigned char[]> buf(new unsigned char[(((len + 2) / 3) * 4)]);
@@ -59,7 +59,7 @@ static void encode_base64_internal(const std::string& in, std::string* out, cons
     out->assign((char*)buf.get(), d - buf.get());
 }
 
-void base64_encode(const std::string& in, std::string* out) {
+void base64_encode(std::string_view in, std::string* out) {
     static unsigned char basis64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     encode_base64_internal(in, out, basis64, true);
 }

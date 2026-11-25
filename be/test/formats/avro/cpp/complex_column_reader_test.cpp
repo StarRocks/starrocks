@@ -265,7 +265,7 @@ TEST_F(ComplexColumnReaderTest, test_map_unknown_value_type_skips_value_decode) 
 
     auto datum = avro::GenericDatum(map_schema, map_datum);
 
-    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor(TYPE_UNKNOWN));
+    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_UNKNOWN_DESC);
     auto column = create_adaptive_nullable_column(type_desc);
     auto reader = get_column_reader(type_desc, false);
 
@@ -303,7 +303,7 @@ TEST_F(ComplexColumnReaderTest, test_array_unknown_element_type_skips_element_de
 
     auto datum = avro::GenericDatum(array_schema, array_datum);
 
-    TypeDescriptor reader_type_desc = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_UNKNOWN));
+    TypeDescriptor reader_type_desc = TypeDescriptor::create_array_type(TYPE_UNKNOWN_DESC);
     TypeDescriptor column_type_desc = TypeDescriptor::create_array_type(TypeDescriptor{TYPE_NULL});
     auto column = create_adaptive_nullable_column(column_type_desc);
     auto reader = get_column_reader(reader_type_desc, false);
@@ -341,7 +341,7 @@ TEST_F(ComplexColumnReaderTest, test_struct_unknown_field_type_skips_field_decod
     auto datum = avro::GenericDatum(record_schema, record_datum);
 
     TypeDescriptor reader_type_desc =
-            TypeDescriptor::create_struct_type({"int_col", "ts_col"}, {TYPE_INT_DESC, TypeDescriptor(TYPE_UNKNOWN)});
+            TypeDescriptor::create_struct_type({"int_col", "ts_col"}, {TYPE_INT_DESC, TYPE_UNKNOWN_DESC});
     TypeDescriptor column_type_desc =
             TypeDescriptor::create_struct_type({"int_col", "ts_col"}, {TYPE_INT_DESC, TypeDescriptor{TYPE_NULL}});
     auto column = create_adaptive_nullable_column(column_type_desc);

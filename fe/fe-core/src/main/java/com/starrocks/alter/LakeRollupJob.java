@@ -40,6 +40,7 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTableHelper;
+import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.persist.OriginStatementInfo;
@@ -293,6 +294,10 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                             .setLatch(countDownLatch)
                             .setEnablePersistentIndex(table.enablePersistentIndex())
                             .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
+                            // Carry the table's flat-json config so the rollup tablets' metadata has it, as every
+                            // other create-replica path does; without it later compactions of the new index
+                            // write JSON columns with the be.conf globals.
+                            .setFlatJsonConfig(table.getFlatJsonConfig())
                             .setTabletType(TTabletType.TABLET_TYPE_LAKE)
                             .setCompressionType(table.getCompressionType())
                             .setCreateSchemaFile(createSchemaFile)
@@ -323,7 +328,8 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 throw new IllegalStateException("Table State doesn't equal to ROLLUP, it is " + table.getState() + ".");
             }
             watershedTxnId = getNextTransactionId();
-            watershedGtid = getNextGtid();
+            // Only for an older FE taking the job over after a downgrade; this FE redraws it when reserving versions.
+            commitGtid = getNextGtid();
             addRollupIndexToCatalog(table);
         }
 
@@ -358,6 +364,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         try {
             if (!isPreviousLoadFinished(dbId, tableId, watershedTxnId)) {
                 LOG.info("wait transactions before {} to be finished, rollup job: {}", watershedTxnId, jobId);
+                LakeAlterWaitGuard.cancelIfCommitsRejected(this, watershedTxnId);
                 return;
             }
         } catch (AnalysisException e) {
@@ -412,7 +419,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                             baseTabletId, visibleVersion, jobId, rollupJobV2Params, baseTabletReadSchema, watershedTxnId);
                     rollupBatchTask.addTask(rollupTask);
                 }
-                partition.setMinRetainVersion(visibleVersion);
+                pinVersionForRewrite(partition, visibleVersion);
             }
         }
 
@@ -449,11 +456,13 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
 
         try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
             OlapTable table = getTableOrThrow();
+            // Same lock as the version reservation, so the gtid falls between those of commits before and after.
+            commitGtid = getNextGtid();
             commitVersionMap = new HashMap<>();
             for (long physicalPartitionId : physicalPartitionIdToRollupIndex.keySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                 Preconditions.checkNotNull(physicalPartition, physicalPartitionId);
-                physicalPartition.setMinRetainVersion(0);
+                releaseRewriteVersionPin(physicalPartition);
                 long commitVersion = physicalPartition.getNextVersion();
                 commitVersionMap.put(physicalPartitionId, commitVersion);
                 LOG.debug("commit version of partition {} is {}. jobId={}", physicalPartitionId, commitVersion, jobId);
@@ -583,7 +592,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             this.timeoutMs = other.timeoutMs;
 
             this.watershedTxnId = other.watershedTxnId;
-            this.watershedGtid = other.watershedGtid;
+            this.commitGtid = other.commitGtid;
             this.commitVersionMap = other.commitVersionMap;
 
             this.physicalPartitionIdToBaseRollupTabletIdMap = other.physicalPartitionIdToBaseRollupTabletIdMap;
@@ -763,35 +772,30 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                     }
                 }
                 long commitVersion = commitVersionMap.get(partitionId);
+                // A retry lets the tablets an earlier attempt already published answer from storage.
+                boolean isRetryPublish = getAndMarkLakePublishSent(partitionId);
 
-                TxnInfoPB rollUpTxnInfo = new TxnInfoPB();
-                rollUpTxnInfo.txnId = watershedTxnId;
-                rollUpTxnInfo.combinedTxnLog = false;
-                rollUpTxnInfo.commitTime = finishedTimeMs / 1000;
-                rollUpTxnInfo.txnType = TxnTypePB.TXN_NORMAL;
-                rollUpTxnInfo.gtid = watershedGtid;
+                TxnInfoPB rollUpTxnInfo = TxnInfoHelper.forJobPublish(watershedTxnId, TxnTypePB.TXN_NORMAL,
+                        finishedTimeMs, commitGtid);
                 if (!useAggregatePublish) {
                     // publish rollup tablets
                     Utils.publishVersion(physicalPartitionIdToRollupIndex.get(partitionId).getTablets(), rollUpTxnInfo,
-                            1, commitVersion, computeResource, false);
+                            1, commitVersion, computeResource, false, isRetryPublish);
                 } else {
                     Utils.createSubRequestForAggregatePublish(physicalPartitionIdToRollupIndex.get(partitionId).getTablets(), 
-                            Lists.newArrayList(rollUpTxnInfo), 1, commitVersion, null, computeResource, request);
+                            Lists.newArrayList(rollUpTxnInfo), 1, commitVersion, null, computeResource, request,
+                            false, isRetryPublish);
                 }
 
-                TxnInfoPB originTxnInfo = new TxnInfoPB();
-                originTxnInfo.txnId = -1L;
-                originTxnInfo.combinedTxnLog = false;
-                originTxnInfo.commitTime = finishedTimeMs / 1000;
-                originTxnInfo.txnType = TxnTypePB.TXN_EMPTY;
-                originTxnInfo.gtid = watershedGtid;
+                TxnInfoPB originTxnInfo = TxnInfoHelper.forJobPublish(-1L, TxnTypePB.TXN_EMPTY, finishedTimeMs,
+                        commitGtid);
                 if (!useAggregatePublish) {
                     // publish origin tablets
                     Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, commitVersion - 1,
-                            commitVersion, computeResource, false);
+                            commitVersion, computeResource, false, isRetryPublish);
                 } else {
                     Utils.createSubRequestForAggregatePublish(allOtherPartitionTablets, Lists.newArrayList(originTxnInfo), 
-                            commitVersion - 1, commitVersion, null, computeResource, request);
+                            commitVersion - 1, commitVersion, null, computeResource, request, false, isRetryPublish);
                 }
 
                 if (useAggregatePublish) {
@@ -817,12 +821,15 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             }
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             partition.deleteMaterializedIndexByMetaId(rollupIndexMetaId);
-            partition.setMinRetainVersion(0);
+            releaseRewriteVersionPin(partition);
         }
         table.deleteIndexInfo(rollupIndexName);
     }
 
     public void visualiseRollupIndex(OlapTable table) {
+        // Invalidate lock-free plans first: they read the versions their copies recorded and resolve the layout later,
+        // so a plan that finds the new index has to fail validation and be planned again.
+        table.lastSchemaUpdateTime.set(System.nanoTime());
         for (Partition partition : table.getPartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 Preconditions.checkState(commitVersionMap.containsKey(physicalPartition.getId()));
@@ -841,7 +848,6 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             }
         }
         table.rebuildFullSchema();
-        table.lastSchemaUpdateTime.set(System.nanoTime());
     }
 
     private void addTabletToInvertedIndex(OlapTable tbl) {
@@ -879,6 +885,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
      */
     @Override
     public void pruneMeta() {
+        super.pruneMeta();
         physicalPartitionIdToRollupIndex = Maps.newHashMap();
         physicalPartitionIdToBaseRollupTabletIdMap = Maps.newHashMap();
         rollupBatchTask = new AgentBatchTask();

@@ -16,7 +16,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -31,8 +30,11 @@ namespace starrocks {
 struct AIFunctionDescriptor;
 
 enum class AIFunctionRowAction : uint8_t {
+    // Row input is ready. Queue a provider request for this row.
     DISPATCH,
+    // SQL null propagation applies. Complete the row with NULL without sending a request.
     SQL_NULL,
+    // Row input is invalid. Skip the request and return NULL if on_error is "ignore", otherwise fail the query.
     TERMINAL_ROW_FAILURE,
 };
 
@@ -40,7 +42,8 @@ struct AIFunctionRowInput {
     AIFunctionRowAction action = AIFunctionRowAction::SQL_NULL;
     std::string model;
     std::string prompt;
-    std::optional<AIMediaInput> media;
+    // media null means it's none multimodel
+    std::shared_ptr<const AIMediaInput> media;
 };
 
 struct AIFunctionInputBatch {

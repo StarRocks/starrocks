@@ -498,11 +498,11 @@ public:
         _chunk_2 = std::make_shared<Chunk>(std::move(columns2), map);
         _chunk_3 = std::make_shared<Chunk>(std::move(columns3), map);
 
-        _expr_cust_key = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_INT), 0);     // refer to cust_key
-        _expr_nation = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 1);   // refer to nation
-        _expr_region = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 2);   // refer to region
-        _expr_mkt_sgmt = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 3); // refer to mkt_sgmt
-        _expr_constant = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_SMALLINT),
+        _expr_cust_key = std::make_unique<ColumnRef>(TYPE_INT_DESC, 0);     // refer to cust_key
+        _expr_nation = std::make_unique<ColumnRef>(TYPE_VARCHAR_DESC, 1);   // refer to nation
+        _expr_region = std::make_unique<ColumnRef>(TYPE_VARCHAR_DESC, 2);   // refer to region
+        _expr_mkt_sgmt = std::make_unique<ColumnRef>(TYPE_VARCHAR_DESC, 3); // refer to mkt_sgmt
+        _expr_constant = std::make_unique<ColumnRef>(TYPE_SMALLINT_DESC,
                                                      4); // refer to constant value
     }
 
@@ -713,7 +713,7 @@ TEST_F(ChunksSorterTest, sort_binary_column_with_large_offsets) {
 // into a fresh BinaryColumn with 32-bit offsets, and get_next hands its output on without downgrade(), so the output
 // must stay a sorted BinaryColumn.
 TEST_F(ChunksSorterTest, full_sort_binary_column_with_large_offsets) {
-    auto expr_varchar = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 0);
+    auto expr_varchar = std::make_unique<ColumnRef>(TYPE_VARCHAR_DESC, 0);
     std::vector<bool> is_asc{true};
     std::vector<bool> is_null_first{true};
     std::vector<ExprContext*> sort_exprs{new ExprContext(expr_varchar.get())};
@@ -750,7 +750,7 @@ TEST_F(ChunksSorterTest, full_sort_binary_column_with_large_offsets) {
 // new rows into it in _merge_sort_common. get_next hands the output on without downgrade(), so it must stay a sorted
 // BinaryColumn.
 TEST_F(ChunksSorterTest, topn_binary_column_with_large_offsets) {
-    auto expr_varchar = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 0);
+    auto expr_varchar = std::make_unique<ColumnRef>(TYPE_VARCHAR_DESC, 0);
     std::vector<bool> is_asc{true};
     std::vector<bool> is_null_first{true};
     std::vector<ExprContext*> sort_exprs{new ExprContext(expr_varchar.get())};
@@ -790,7 +790,7 @@ TEST_F(ChunksSorterTest, topn_binary_column_with_large_offsets) {
 // update_to_all_null for RANK (close interval, only NULLs are kept). Both run under the slice lock.
 TEST_F(ChunksSorterTest, topn_varchar_runtime_filter_overrun_by_nulls_first) {
     for (auto topn_type : {TTopNType::ROW_NUMBER, TTopNType::RANK}) {
-        auto expr_varchar = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 0);
+        auto expr_varchar = std::make_unique<ColumnRef>(TYPE_VARCHAR_DESC, 0);
         std::vector<bool> is_asc{true};
         std::vector<bool> is_null_first{true};
         std::vector<ExprContext*> sort_exprs{new ExprContext(expr_varchar.get())};
@@ -1308,7 +1308,7 @@ static void reset_permutation(SmallPermutation& permutation, int n) {
 
 TEST_F(ChunksSorterTest, stable_sort) {
     constexpr int N = 7;
-    TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
+    TypeDescriptor type_desc = TYPE_INT_DESC;
     MutableColumnPtr col1 = ColumnHelper::create_column(type_desc, false);
     MutableColumnPtr col2 = ColumnHelper::create_column(type_desc, false);
     Columns columns{col1, col2};
@@ -1348,8 +1348,8 @@ void pack_nullable(Chunk* chunk) {
 }
 
 TEST_F(ChunksSorterTest, get_filter_test) {
-    auto c0 = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_INT), 0);
-    auto c1 = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_INT), 1);
+    auto c0 = std::make_unique<ColumnRef>(TYPE_INT_DESC, 0);
+    auto c1 = std::make_unique<ColumnRef>(TYPE_INT_DESC, 1);
     ObjectPool pool;
 
     std::vector<ExprContext*> sort_exprs;
@@ -1421,7 +1421,7 @@ TEST_F(ChunksSorterTest, get_filter_test) {
 }
 
 TEST_F(ChunksSorterTest, column_incremental_sort) {
-    TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
+    TypeDescriptor type_desc = TYPE_INT_DESC;
     MutableColumnPtr nullable_column = ColumnHelper::create_column(type_desc, true);
 
     // sort empty column
@@ -1535,12 +1535,7 @@ TEST_F(ChunksSorterTest, test_compare_column) {
     rhs_values.emplace_back(int32_t(1));
 
     // get filter array x < 1
-    TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
-    MutableColumnPtr nullable_column = ColumnHelper::create_column(type_desc, true);
-
-    nullable_column->append_datum(Datum(1));
-    nullable_column->append_datum(Datum(2));
-    nullable_column->append_nulls(2);
+    auto nullable_column = ColumnTestHelper::build_nullable_column<int32_t>({1, 2, 0, 0}, {0, 0, 1, 1});
 
     cmp_vector.resize(nullable_column->size());
 

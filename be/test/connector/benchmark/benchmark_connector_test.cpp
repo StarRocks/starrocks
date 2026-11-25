@@ -88,25 +88,25 @@ protected:
     static bool _map_arrow_type(const std::shared_ptr<arrow::DataType>& type, TypeDescriptor* type_desc) {
         switch (type->id()) {
         case arrow::Type::BOOL:
-            *type_desc = TypeDescriptor(TYPE_BOOLEAN);
+            *type_desc = TYPE_BOOLEAN_DESC;
             return true;
         case arrow::Type::INT8:
-            *type_desc = TypeDescriptor(TYPE_TINYINT);
+            *type_desc = TYPE_TINYINT_DESC;
             return true;
         case arrow::Type::INT16:
-            *type_desc = TypeDescriptor(TYPE_SMALLINT);
+            *type_desc = TYPE_SMALLINT_DESC;
             return true;
         case arrow::Type::INT32:
-            *type_desc = TypeDescriptor(TYPE_INT);
+            *type_desc = TYPE_INT_DESC;
             return true;
         case arrow::Type::INT64:
-            *type_desc = TypeDescriptor(TYPE_BIGINT);
+            *type_desc = TYPE_BIGINT_DESC;
             return true;
         case arrow::Type::FLOAT:
-            *type_desc = TypeDescriptor(TYPE_FLOAT);
+            *type_desc = TYPE_FLOAT_DESC;
             return true;
         case arrow::Type::DOUBLE:
-            *type_desc = TypeDescriptor(TYPE_DOUBLE);
+            *type_desc = TYPE_DOUBLE_DESC;
             return true;
         case arrow::Type::STRING:
         case arrow::Type::LARGE_STRING:
@@ -133,7 +133,7 @@ protected:
 };
 
 TEST_F(BenchmarkConnectorTest, ProviderTupleDescriptor) {
-    _create_table_desc("col", TypeDescriptor(TYPE_INT));
+    _create_table_desc("col", TYPE_INT_DESC);
 
     TBenchmarkScanNode scan_node;
     scan_node.__set_tuple_id(0);

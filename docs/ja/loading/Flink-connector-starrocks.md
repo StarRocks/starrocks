@@ -2,6 +2,7 @@
 sidebar_position: 110
 displayed_sidebar: docs
 description: "StarRocks Flink コネクタは DataStream API・Table API & SQL・Python API に対応し、Flink から StarRocks への継続的なデータロードを実現します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Apache Flink® からデータを継続的にロードする
@@ -20,10 +21,9 @@ Flink コネクタは DataStream API、Table API & SQL、Python API をサポー
 
 | コネクタ | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.17    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降      | 8    | 2.11,2.12 |
+| 1.2.16    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降      | 8    | 2.11,2.12 |
 | 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降      | 8    | 2.11,2.12 |
-| 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降      | 8    | 2.11,2.12 |
-| 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降      | 8    | 2.11,2.12 |
-| 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 以降      | 8    | 2.11,2.12 |
 
 ## Flink コネクタの取得
 
@@ -219,6 +219,18 @@ Maven プロジェクトの `pom.xml` ファイルに、以下の形式で Flink
 - **デフォルト値**: 10000
 - **説明**: 1.2.7 以降でサポートされています。 FE からの HTTP 100-continue の応答を待機するタイムアウト。有効な値: `3000` ～ `60000`。単位: ミリ秒
 
+#### sink.http.keep-alive.enabled
+
+- **必須**: いいえ
+- **デフォルト値**: false
+- **説明**: 1.2.17 以降でサポートされています。Stream Load リクエストおよびトランザクションリクエスト（begin、prepare、commit、rollback）で、リクエストごとに新しい接続を開く代わりに HTTP 接続を再利用（keep-alive）するかどうかを指定します。各シンクサブタスクは、各ホストに対して最大 `sink.io.thread-count` + 2 個の接続を保持します。`sink.version` が `V2` の場合に有効です。デフォルトでは無効です。この項目を `true` に設定しない限り、以前のバージョンと同様に、リクエストごとに新しい接続が開かれます。
+
+#### sink.http.keep-alive.idle-timeout-ms
+
+- **必須**: いいえ
+- **デフォルト値**: 60000
+- **説明**: 1.2.17 以降でサポートされています。keep-alive で保持されている接続のうち、この時間を超えてアイドル状態が続いた接続は再利用されなくなり、タイムアウト後 10 秒以内にクローズされます。単位: ミリ秒。Flink と StarRocks の間にあるすべてのプロキシまたはロードバランサーのアイドルタイムアウトよりも短くする必要があります。たとえば、AWS Network Load Balancer は、デフォルトで 350 秒間アイドル状態が続いた TCP 接続を切断します。
+
 #### sink.ignore.update-before
 
 - **必須**: いいえ
@@ -393,7 +405,7 @@ v1.2.14 以降でサポートされています。Merge Commit を使用する�
 
     タイムアウトは Flink ジョブのダウンタイムよりも長く設定する必要があります。そうしないと、正常なチェックポイントに含まれる未処理トランザクションが、Flink ジョブを再起動する前にタイムアウトにより中止され、データ損失が発生する可能性があります。
 
-  - `label_keep_max_second` および `label_keep_max_num`: StarRocks FE の設定で、デフォルト値はそれぞれ `259200` および `1000` です。詳細については、[FE 設定](./loading_introduction/loading_considerations.md#fe-configurations) を参照してください。`label_keep_max_second` の値は Flink ジョブのダウンタイムよりも大きくする必要があります。そうしないと、Flink コネクタは Flink のセーブポイントまたはチェックポイントに保存されたトランザクションラベルを使用して StarRocks のトランザクションの状態を確認し、これらのトランザクションがコミットされているかどうかを判断できず、最終的にデータ損失につながる可能性があります。
+  - `label_keep_max_second` および `label_keep_max_num`: StarRocks FE の設定で、デフォルト値はそれぞれ `259200` および `1000` です。詳細については、[FE 設定](../administration/configuration/FE_parameters/user_query_loading.md#label_keep_max_second) を参照してください。`label_keep_max_second` の値は Flink ジョブのダウンタイムよりも大きくする必要があります。そうしないと、Flink コネクタは Flink のセーブポイントまたはチェックポイントに保存されたトランザクションラベルを使用して StarRocks のトランザクションの状態を確認し、これらのトランザクションがコミットされているかどうかを判断できず、最終的にデータ損失につながる可能性があります。
 
 - PREPARED トランザクションのタイムアウト設定方法
 
@@ -481,6 +493,7 @@ Flink コネクタは、データロードをモニタリングするために�
 | totalFlushSucceededTimes | counter | データが正常にフラッシュされた回数。                                  |
 | totalFlushFailedTimes    | counter | データのフラッシュに失敗した回数。                                    |
 | totalFilteredRows        | counter | フィルタリングされた行数。totalFlushRows にも含まれます。              |
+| sharedTxnLatencyMs       | histogram | マルチテーブルトランザクションモードのみ: 共有トランザクションの最も早い行がシンクバッファに入ってから、そのトランザクションがコミットされるまでの時間（ms）。 |
 
 ## 例
 

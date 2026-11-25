@@ -37,11 +37,9 @@ protected:
     static TypeDescriptor geo_type(LogicalType primitive) {
         const bool geography = primitive == TYPE_GEOGRAPHY;
         return TypeDescriptor::create_geo_type(
-                primitive,
-                GeoTypeDescriptor{geography ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY,
-                                  geography ? GEO_COORDINATE_SYSTEM_SPHERICAL : GEO_COORDINATE_SYSTEM_CARTESIAN,
-                                  geography ? GEO_EDGE_ALGORITHM_KARNEY : GEO_EDGE_ALGORITHM_PLANAR, "custom:geo-crs",
-                                  4326});
+                primitive, GeoTypeDescriptor{geography ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY,
+                                             geography ? GEO_EDGE_ALGORITHM_KARNEY : GEO_EDGE_ALGORITHM_PLANAR,
+                                             "custom:geo-crs", 4326});
     }
 
     MutableColumnPtr create_column() {
@@ -68,6 +66,30 @@ protected:
         return builder.build(true);
     }
 };
+
+// A const column may report size 1 for a chunk of N rows; the row count comes from a non-const column (RB-1379).
+TEST_F(ColumnHelperTest, num_packed_rows_with_size_one_const) {
+    auto const_data = Int32Column::create();
+    const_data->append(7);
+    ColumnPtr const_column = ConstColumn::create(std::move(const_data), 1);
+    auto vector_data = Int32Column::create();
+    for (int32_t v : {1, 2, 3, 4}) {
+        vector_data->append(v);
+    }
+    ColumnPtr vector_column = std::move(vector_data);
+
+    auto [all_const, num_rows] = ColumnHelper::num_packed_rows(Columns{const_column, vector_column});
+    ASSERT_FALSE(all_const);
+    ASSERT_EQ(4, num_rows);
+
+    std::tie(all_const, num_rows) = ColumnHelper::num_packed_rows(Columns{vector_column, const_column});
+    ASSERT_FALSE(all_const);
+    ASSERT_EQ(4, num_rows);
+
+    std::tie(all_const, num_rows) = ColumnHelper::num_packed_rows(Columns{const_column, const_column});
+    ASSERT_TRUE(all_const);
+    ASSERT_EQ(1, num_rows);
+}
 
 TEST_F(ColumnHelperTest, mark_binary_columns_skips_const_null) {
     const auto binary_type = TYPE_VARBINARY_DESC;
@@ -98,6 +120,48 @@ TEST_F(ColumnHelperTest, align_return_type) {
             *ColumnHelper::align_return_type(std::move(not_null_column), TYPE_VARCHAR_DESC, col_size, true));
     ASSERT_TRUE(nullable_column->is_nullable());
     ASSERT_FALSE(nullable_column->is_constant());
+}
+
+TEST_F(ColumnHelperTest, materialize_const_column) {
+    // A NULL literal is a Nullable(Int8) column; materializing it must give an all-NULL column of the given type.
+    auto null_col =
+            ColumnHelper::materialize_const_column(TYPE_VARCHAR_DESC, 3, ColumnHelper::create_const_null_column(1));
+    ASSERT_FALSE(null_col->is_constant());
+    ASSERT_FALSE(null_col->only_null());
+    ASSERT_EQ(3, null_col->size());
+    ASSERT_TRUE(down_cast<const NullableColumn*>(null_col.get())->data_column()->is_binary());
+    for (size_t i = 0; i < 3; ++i) {
+        ASSERT_TRUE(null_col->is_null(i));
+    }
+
+    // A non-NULL constant is duplicated, and a shared reference to it is left untouched.
+    auto inner = Int32Column::create();
+    inner->append(7);
+    ColumnPtr const_col = ConstColumn::create(std::move(inner), 1);
+    ColumnPtr shared = const_col;
+    auto col = ColumnHelper::materialize_const_column(TYPE_INT_DESC, 3, std::move(const_col));
+    ASSERT_FALSE(col->is_constant());
+    ASSERT_EQ(3, col->size());
+    for (size_t i = 0; i < 3; ++i) {
+        ASSERT_EQ(7, col->get(i).get_int32());
+    }
+    ASSERT_EQ(1, shared->size());
+    ASSERT_EQ(1, down_cast<const ConstColumn*>(shared.get())->data_column()->size());
+
+    // A shared non-constant column is copied on write: the result keeps the contents, and the other owner is untouched.
+    const Column* plain_addr = col.get();
+    ColumnPtr plain = col;
+    auto copied = ColumnHelper::materialize_const_column(TYPE_INT_DESC, 3, std::move(col));
+    ASSERT_NE(plain_addr, copied.get());
+    ASSERT_EQ(plain_addr, plain.get());
+    ASSERT_EQ(3, copied->size());
+    for (size_t i = 0; i < 3; ++i) {
+        ASSERT_EQ(7, copied->get(i).get_int32());
+        ASSERT_EQ(7, plain->get(i).get_int32());
+    }
+
+    // A non-constant column owned only by the caller is returned as is.
+    ASSERT_EQ(plain_addr, ColumnHelper::materialize_const_column(TYPE_INT_DESC, 3, std::move(plain)).get());
 }
 
 TEST_F(ColumnHelperTest, get_data_column_by_type) {
@@ -346,6 +410,20 @@ TEST_F(ColumnHelperTest, update_nested_has_null_struct) {
     EXPECT_FALSE(b_col->has_null());
 }
 
+#ifndef NDEBUG
+TEST(ColumnHelperDeathTest, create_geo_requires_descriptor) {
+    testing::FLAGS_gtest_death_test_style = "threadsafe";
+    for (const auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
+        EXPECT_DEATH((void)ColumnHelper::create_column(TypeDescriptor(primitive), false), "geo_type");
+        TypeDescriptor mismatched(primitive);
+        mismatched.geo_type = GeoTypeDescriptor{};
+        mismatched.geo_type->logical_type =
+                primitive == TYPE_GEOGRAPHY ? GEO_LOGICAL_TYPE_GEOMETRY : GEO_LOGICAL_TYPE_GEOGRAPHY;
+        EXPECT_DEATH((void)ColumnHelper::create_column(mismatched, false), "Check failed");
+    }
+}
+#endif
+
 TEST_F(ColumnHelperTest, create_geo_placeholder_and_copy) {
     for (const auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
         const auto type = geo_type(primitive);
@@ -356,9 +434,6 @@ TEST_F(ColumnHelperTest, create_geo_placeholder_and_copy) {
         EXPECT_FALSE(geo->is_binary());
         // Generic creation preserves semantic metadata; storage starts unvalidated.
         EXPECT_EQ(*type.geo_type, geo->descriptor().type);
-        EXPECT_EQ(GEO_ENCODING_WKB, geo->descriptor().storage.encoding);
-        EXPECT_EQ(GEO_DIMENSION_UNKNOWN, geo->descriptor().storage.dimension);
-        EXPECT_EQ(GEO_VALIDATION_STATE_UNVALIDATED, geo->descriptor().storage.validation_state);
         for (size_t i = 0; i < geo->size(); ++i) {
             EXPECT_TRUE(geo->get_wkb(i).empty());
         }
@@ -377,28 +452,6 @@ TEST_F(ColumnHelperTest, create_geo_placeholder_and_copy) {
         ASSERT_NE(nullptr, destination_geo);
         EXPECT_EQ(geo->descriptor(), destination_geo->descriptor());
         EXPECT_EQ("payload", destination_geo->get_wkb(0).to_string());
-    }
-}
-
-TEST_F(ColumnHelperTest, create_geo_does_not_infer_metadata) {
-    for (const auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
-        TypeDescriptor type(primitive);
-        auto absent = ColumnHelper::create_column(type, false);
-        const auto* absent_geo = dynamic_cast<const GeoColumn*>(absent.get());
-        ASSERT_NE(nullptr, absent_geo);
-        const auto& descriptor = absent_geo->descriptor().type;
-        EXPECT_EQ(GEO_LOGICAL_TYPE_UNKNOWN, descriptor.logical_type);
-        EXPECT_EQ(GEO_COORDINATE_SYSTEM_UNKNOWN, descriptor.coordinate_system);
-        EXPECT_EQ(GEO_EDGE_ALGORITHM_UNKNOWN, descriptor.edge_algorithm);
-        EXPECT_TRUE(descriptor.crs.empty());
-        EXPECT_FALSE(descriptor.srid.has_value());
-
-        type.geo_type = GeoTypeDescriptor{};
-        auto empty = ColumnHelper::create_column(type, false);
-        const auto* empty_geo = dynamic_cast<const GeoColumn*>(empty.get());
-        ASSERT_NE(nullptr, empty_geo);
-        EXPECT_EQ(*type.geo_type, empty_geo->descriptor().type);
-        EXPECT_EQ(GEO_LOGICAL_TYPE_UNKNOWN, empty_geo->descriptor().type.logical_type);
     }
 }
 
@@ -447,7 +500,7 @@ TEST_F(ColumnHelperTest, create_nested_geo_columns) {
     for (const auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
         const auto type = geo_type(primitive);
         const auto array_type = TypeDescriptor::create_array_type(type);
-        const auto map_type = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), array_type);
+        const auto map_type = TypeDescriptor::create_map_type(TYPE_INT_DESC, array_type);
         const auto struct_type =
                 TypeDescriptor::create_struct_type({"direct", "array", "map"}, {type, array_type, map_type});
         auto column = ColumnHelper::create_column(struct_type, false);

@@ -20,17 +20,24 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Pair;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.HintNode;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.DistributionCol;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
@@ -320,6 +327,9 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
 
         context = new AggregatePushDownContext(context.rootToLeafPathIndex);
         context.setAggregator(aggregate);
+        Statistics inputStatistics = optExpression.inputAt(0).getStatistics();
+        context.origAggReducedLocally = inputStatistics != null &&
+                isReducedLocally(new ColumnRefSet(aggregate.getGroupingKeys()), inputStatistics, true);
         return processChild(optExpression, context);
     }
 
@@ -433,6 +443,8 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
 
         childContext.immediateChildOfSmallBroadcastJoin = immediateChildOfSmallBroadcastJoin;
         childContext.origAggregator = context.origAggregator;
+        childContext.origAggReducedLocally = context.origAggReducedLocally;
+        childContext.belowBroadcastableJoinProbe = child == 0 && canBroadcastBuildSide(optExpression);
         childContext.pushPaths.addAll(context.pushPaths);
         childContext.pushPaths.add(child);
         return childContext;
@@ -457,6 +469,7 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rewriteMap);
             AggregatePushDownContext childContext = new AggregatePushDownContext(nextRootToLeafPathIndex.getAndIncrement());
             childContext.origAggregator = context.origAggregator;
+            childContext.origAggReducedLocally = context.origAggReducedLocally;
             childContext.aggregations.putAll(context.aggregations);
             childContext.aggregations.replaceAll((k, v) -> (CallOperator) rewriter.rewrite(v));
 
@@ -656,10 +669,19 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
             return false;
         }
 
-        // 3. Extremely low cardinality for lower with at most one medium or high.
+        // 3. Extremely low cardinality for lower with at most one medium or high. The groups are at least the NDV of
+        // the high column, so rows / that NDV bounds the reduction from above, whatever the correlation of the
+        // columns; push only if even that bound reaches HIGH_CARDINALITY_PUSH_DOWN_MIN_REDUCTION. Grouping lineitem
+        // by (l_orderkey, l_linenumber) bounds it at 4x (the key is unique, it reduces nothing), while grouping
+        // web_sales of one year by (ws_bill_customer_sk, d_date) bounds it at 6.7x and reduces 12x: the NDV product
+        // would wrongly call both of them unreduced.
         double lowerCartesianLowerBound =
                 statistics.getOutputRowCount() / StatisticsEstimateCoefficient.LOWER_AGGREGATE_EFFECT_COEFFICIENT;
-        if (high.size() + medium.size() == 1 && lower.size() <= 2 && lowerCartesian <= lowerCartesianLowerBound) {
+        if (high.size() + medium.size() == 1 && lower.size() <= 2 && lowerCartesian <= lowerCartesianLowerBound
+                && (high.isEmpty() || !sessionVariable.isCboPushDownAggregateCheckReduction()
+                || high.get(0).getDistinctValuesCount()
+                * StatisticsEstimateCoefficient.HIGH_CARDINALITY_PUSH_DOWN_MIN_REDUCTION <=
+                statistics.getOutputRowCount())) {
             return true;
         }
 
@@ -700,6 +722,23 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
         }
 
         return 2;
+    }
+
+    // Whether the join can run without moving its probe rows: no hint asks for another distribution, the join type
+    // allows broadcasting the build side, and the build side is under the broadcast row limit.
+    private boolean canBroadcastBuildSide(OptExpression optExpression) {
+        LogicalJoinOperator join = (LogicalJoinOperator) optExpression.getOp();
+        String hint = join.getJoinHint();
+        if (hint != null && !hint.isEmpty() && !HintNode.HINT_JOIN_BROADCAST.equalsIgnoreCase(hint)) {
+            return false;
+        }
+        JoinOperator type = join.getJoinType();
+        if (type.isRightJoin() || type.isFullOuterJoin()) {
+            return false;
+        }
+        Statistics rightStatistics = optExpression.inputAt(1).getStatistics();
+        return rightStatistics != null &&
+                rightStatistics.getOutputRowCount() <= sessionVariable.getBroadcastRowCountLimit();
     }
 
     private boolean isSmallBroadcastJoin(OptExpression optExpression) {
@@ -805,7 +844,83 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
             return false;
         }
 
+        // Only for a scan: a join candidate (above a small broadcast join) keeps the distribution of its probe side,
+        // which this check cannot see, and it is where a push down lands when the scan below is refused.
+        // Only when the plan without the push down need not shuffle the scan rows either: the scan is the probe side
+        // of a join that can broadcast its build side. Below a shuffle join the rows move anyway, and a pushed
+        // aggregation that saves the join probe is kept. Only in `global` mode: `local`/`auto` may push a local-only
+        // aggregation, which shuffles nothing.
+        if (sessionVariable.getCboPushDownAggregateMode() == PUSH_DOWN_AGG_AUTO
+                && sessionVariable.isCboPushDownAggregateCheckReduction()
+                && "global".equalsIgnoreCase(sessionVariable.getCboPushDownAggregate())
+                && optExpression.getOp() instanceof LogicalScanOperator
+                && context.belowBroadcastableJoinProbe
+                && context.origAggReducedLocally
+                && !isGroupedByDistribution(optExpression, allGroupByColumns)
+                && !isReducedLocally(allGroupByColumns, expressionContext.getStatistics(), false)) {
+            return false;
+        }
+
         return true;
+    }
+
+    // Whether the rows of one group all live in one tablet, so the pushed aggregation can finish locally.
+    private static boolean isGroupedByDistribution(OptExpression optExpression, ColumnRefSet groupBys) {
+        if (!(optExpression.getOp() instanceof LogicalOlapScanOperator)) {
+            return false;
+        }
+        LogicalOlapScanOperator scan = (LogicalOlapScanOperator) optExpression.getOp();
+        DistributionSpec spec = scan.getDistributionSpec();
+        if (!(spec instanceof HashDistributionSpec)) {
+            return false;
+        }
+        List<DistributionCol> columns = ((HashDistributionSpec) spec).getShuffleColumns();
+        return !columns.isEmpty() && columns.stream().allMatch(c -> groupBys.contains(c.getColId()));
+    }
+
+    /**
+     * Whether a two-phase aggregation over these rows still reduces them in its local phase. Each instance only sees
+     * rows / instances rows, so the local reduction is bounded by that and not by the whole input.
+     * <p>
+     * A pushed aggregation that is not grouped by the distribution of its input runs in two phases: a local
+     * aggregation per instance, a shuffle, a merge. If its local phase cannot reduce the rows, all of them are
+     * shuffled. That is fine when the aggregation above the join could not reduce them locally either (it shuffles
+     * the same rows, and the push down saves probing them into the join). It is a regression when the aggregation
+     * above the join could: grouping 600M lineitem rows by l_suppkey (1M groups, 25M rows on each of 24 instances)
+     * below `lineitem JOIN supplier GROUP BY s_nationkey` shuffles all 600M rows, where the original plan
+     * broadcast supplier, moved no lineitem row and reduced to 25 groups locally.
+     * <p>
+     * Both sides are judged so that a push down is only rejected when it surely hurts. The original aggregation must
+     * surely reduce: `certain` takes the product of the NDVs (capped at the rows) as its groups, an upper bound, and
+     * unknown statistics answer false. `GROUP BY d_date, c_first_name, c_last_name` has a largest NDV of 5K but many
+     * more groups, and does not reduce locally. The pushed aggregation must surely not reduce: the largest NDV, a
+     * lower bound, and unknown statistics answer true. It must also have more groups than
+     * SMALL_BROADCAST_JOIN_MAX_NDV_LIMIT: a small hash table keeps the streaming pre-aggregation reducing even when
+     * the rows are not MEDIUM_AGGREGATE_EFFECT_COEFFICIENT times its groups, while 1M groups made it pass all 600M
+     * rows through, though on paper 25M rows per instance held only 1M groups.
+     */
+    private boolean isReducedLocally(ColumnRefSet groupBys, Statistics statistics, boolean certain) {
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext == null || groupBys.isEmpty()) {
+            return !certain;
+        }
+        int execNodes = connectContext.getAliveBackendNumber() +
+                connectContext.getGlobalStateMgr().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
+        int instances = Math.max(1, execNodes) *
+                Math.max(1, sessionVariable.getDegreeOfParallelism(connectContext.getCurrentWarehouseId()));
+        double rows = statistics.getOutputRowCount();
+
+        double groups = 1;
+        for (int colId : groupBys.getColumnIds()) {
+            ColumnStatistic stat = ExpressionStatisticCalculator.calculate(factory.getColumnRef(colId), statistics);
+            if (stat.isUnknown()) {
+                return !certain;
+            }
+            double ndv = Math.max(1, stat.getDistinctValuesCount());
+            groups = certain ? Math.min(rows, groups * ndv) : Math.max(groups, ndv);
+        }
+        boolean reducedPerRows = groups * StatisticsEstimateCoefficient.MEDIUM_AGGREGATE_EFFECT_COEFFICIENT <= rows / instances;
+        return certain ? reducedPerRows : reducedPerRows || groups <= SMALL_BROADCAST_JOIN_MAX_NDV_LIMIT;
     }
 
 }

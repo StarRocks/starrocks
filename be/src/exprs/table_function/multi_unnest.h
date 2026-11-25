@@ -174,10 +174,10 @@ public:
         // the batch's input-row range plus the intra-row offset it stopped at is exactly what the
         // operator pairs its outer columns against. Same VLOG level as TableFunctionOperator's own
         // per-bracket trace, so both sides of the contract can be read together.
-        VLOG(2) << "MultiUnnest batch: input_rows=" << input_rows << " first_row=" << first_row
-                << " processed_rows=" << state->processed_rows() << " offset=" << state->get_offset()
-                << " emitted=" << emitted << " max_output_rows=" << max_output_rows
-                << " required=" << fn_result_required;
+        VLOG_ROW << "MultiUnnest batch: input_rows=" << input_rows << " first_row=" << first_row
+                 << " processed_rows=" << state->processed_rows() << " offset=" << state->get_offset()
+                 << " emitted=" << emitted << " max_output_rows=" << max_output_rows
+                 << " required=" << fn_result_required;
 
         Columns result;
         result.reserve(num_args);

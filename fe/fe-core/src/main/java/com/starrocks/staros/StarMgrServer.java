@@ -180,6 +180,12 @@ public class StarMgrServer {
         // restart, and applying one at runtime would leave an index that was never seeded.
         com.staros.util.Config.ENABLE_SHARDMANAGER_WORKER_SHARD_REVERSE_INDEX =
                 Config.lake_enable_worker_shard_reverse_index;
+        // Deliberately not refreshed below, and set before StarOSAgent builds the StarOS client further down:
+        // StarMgr and the StarOS client read it whenever they build a gRPC channel, which happens at unrelated
+        // times, so a runtime change would reach some channels and not others.
+        com.staros.util.Config.GRPC_CLIENT_ENABLE_HTTP_PROXY = Config.starmgr_grpc_client_enable_http_proxy;
+        LOG.info("StarMgr and StarOS client gRPC channels use the JVM HTTP proxy: {}",
+                Config.starmgr_grpc_client_enable_http_proxy);
 
         // The pool runs every call stage of short reads and heartbeats, and also handlers that block for
         // seconds (CreateShard, GetShard waiting for placement), so it must be able to grow large. A fixed

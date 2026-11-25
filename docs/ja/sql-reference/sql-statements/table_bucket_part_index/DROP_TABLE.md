@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP TABLE deletes a table and allows recovery within the retention period."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP TABLE

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "了解 StarRocks 文档贡献流程、反馈方式及编写规范，帮助改进文档质量。"
+products: [oss]
 ---
 
 # How to feedback and contribute
@@ -66,4 +67,3 @@ description: "了解 StarRocks 文档贡献流程、反馈方式及编写规范�
 
 - [函数文档模板](./sql-reference/How_to_Write_Functions_Documentation.md)
 - [SQL命令模板](./sql-reference/How_to_write_SQL_command_doc.md)
-- [参数/变量模板](./sql-reference/template_for_config.md)

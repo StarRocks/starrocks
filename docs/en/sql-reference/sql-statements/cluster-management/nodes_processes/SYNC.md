@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Synchronizes the data consistency among different sessions."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SYNC

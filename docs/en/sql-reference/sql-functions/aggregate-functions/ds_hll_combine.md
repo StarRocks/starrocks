@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Combines multiple serialized DataSketches HyperLogLog (HLL) sketches into a single serialized sketch for approximate distinct counting."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_hll_combine

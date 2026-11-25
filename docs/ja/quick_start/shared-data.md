@@ -2,6 +2,7 @@
 sidebar_position: 30
 description: 計算とストレージの分離
 displayed_sidebar: docs
+products: [oss]
 ---
 
 # ストレージとコンピュートの分離
@@ -10,6 +11,7 @@ import DDL from '../_assets/quick-start/_DDL.mdx'
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 import SQL from '../_assets/quick-start/_SQL.mdx'
 import Curl from '../_assets/quick-start/_curl.mdx'
+import AIStorLicense from '../_assets/commonMarkdown/aistor_license.mdx'
 
 ストレージとコンピュートを分離したシステムでは、データは Amazon S3、Google Cloud Storage、Azure Blob Storage、MinIO などの S3 互換ストレージのような低コストで信頼性の高いリモートストレージシステムに保存されます。ホットデータはローカルにキャッシュされ、キャッシュがヒットすると、クエリパフォーマンスはストレージとコンピュートが結合されたアーキテクチャと同等になります。コンピュートノード (CN) は、数秒でオンデマンドで追加または削除できます。このアーキテクチャは、ストレージコストを削減し、リソースの分離を改善し、弾力性とスケーラビリティを提供します。
 
@@ -40,7 +42,7 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 - [Docker](https://docs.docker.com/engine/install/)
 - Docker に割り当てられた 4 GB の RAM
-- Docker に割り当てられた 10 GB の空きディスクスペース
+- Docker に割り当てられた 20 GB の空きディスクスペース
 
 ### SQL クライアント
 
@@ -49,6 +51,10 @@ Docker 環境で提供される SQL クライアントを使用するか、シ�
 ### curl
 
 `curl` は StarRocks にデータロードジョブを発行し、データセットをダウンロードするために使用されます。OS のプロンプトで `curl` または `curl.exe` を実行してインストールされているか確認してください。curl がインストールされていない場合は、[こちらから curl を取得してください](https://curl.se/) 。
+
+### MinIO AIStor ライセンス
+
+このガイドでは、オブジェクトストレージとして MinIO AIStor を使用します。MinIO AIStor にはライセンスが必要です。Free Tier ライセンスで十分です。ライセンスの取得手順は、このガイドの後半で説明します。
 
 ### `/etc/hosts`
 
@@ -96,7 +102,7 @@ Docker 環境で提供される SQL クライアントを使用するか、シ�
 - ニューヨーク市のクラッシュデータ
 - 気象データ
 
-このガイドでは、GNU Affero General Public License の下で提供される S3 互換のオブジェクトストレージである MinIO を使用します。
+このガイドでは、S3 互換のオブジェクトストレージである MinIO AIStor を使用します。MinIO AIStor にはライセンスが必要です。
 
 ### ラボファイルを保存するディレクトリを作成する
 
@@ -126,6 +132,10 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 ```bash
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/72505394728.csv
 ```
+
+### MinIO AIStor ライセンスの取得
+
+<AIStorLicense />
 
 ---
 
@@ -157,7 +167,7 @@ container quickstart-minio_mc-1 exited (0)
 
 StarRocks で MinIO をオブジェクトストレージとして使用するには、StarRocks に MinIO のアクセスキーが必要です。アクセスキーは Docker サービスの起動時に生成されました。StarRocks が MinIO に接続する方法をよりよく理解するために、キーが存在することを確認してください。
 
-[http://localhost:9001/access-keys](http://localhost:9001/access-keys) にアクセスします。ユーザー名とパスワードは Docker compose ファイルに指定されており、`miniouser` と `miniopassword` です。1 つのアクセスキーがあることが確認できます。キーは `AAAAAAAAAAAAAAAAAAAA` で、MinIO コンソールではシークレットは表示されませんが、Docker compose ファイルには `BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB` と記載されています。
+[http://localhost:9001/console/identity](http://localhost:9001/console/identity) にアクセスします。ユーザー名とパスワードは Docker compose ファイルに指定されており、`miniouser` と `miniopassword` です。1 つのアクセスキーがあることが確認できます。キーは `AAAAAAAAAAAAAAAAAAAA` で、MinIO コンソールではシークレットは表示されませんが、Docker compose ファイルには `BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB` と記載されています。
 
 ![MinIO アクセスキーを表示](../_assets/quick-start/MinIO-view-key.png)
 
@@ -183,7 +193,7 @@ StarRocks でストレージボリュームを作成する際に、データの 
     LOCATIONS = ("s3://my-starrocks-bucket/")
 ```
 
-[http://localhost:9001/buckets](http://localhost:9001/buckets) を開き、ストレージボリューム用のバケットを追加します。バケット名は `my-starrocks-bucket` とします。3 つのリストされたオプションのデフォルトを受け入れます。
+[http://localhost:9001/console/buckets](http://localhost:9001/console/buckets) を開き、ストレージボリューム用のバケットを追加します。バケット名は `my-starrocks-bucket` とします。3 つのリストされたオプションのデフォルトを受け入れます。
 
 ---
 
@@ -245,7 +255,7 @@ Empty set (0.04 sec)
 
 #### 共有データストレージボリュームを作成する
 
-以前に MinIO に `my-starrocks-volume` という名前のバケットを作成し、MinIO に `AAAAAAAAAAAAAAAAAAAA` という名前のアクセスキーがあることを確認しました。次の SQL は、アクセスキーとシークレットを使用して MionIO バケットにストレージボリュームを作成します。
+以前に MinIO に `my-starrocks-volume` という名前のバケットを作成し、MinIO に `AAAAAAAAAAAAAAAAAAAA` という名前のアクセスキーがあることを確認しました。次の SQL は、アクセスキーとシークレットを使用して MinIO バケットにストレージボリュームを作成します。
 
 ```sql
 CREATE STORAGE VOLUME s3_volume
@@ -447,7 +457,7 @@ curl --location-trusted -u root             \
 
 ## MinIO にデータが保存されていることを確認する
 
-MinIO を開き、[http://localhost:9001/browser/my-starrocks-bucket](http://localhost:9001/browser/my-starrocks-bucket) にアクセスして、`my-starrocks-bucket/` 以下にエントリがあることを確認します。
+MinIO を開き、[http://localhost:9001/console/browser/my-starrocks-bucket](http://localhost:9001/console/browser/my-starrocks-bucket) にアクセスして、`my-starrocks-bucket/` 以下にエントリがあることを確認します。
 
 :::tip
 `my-starrocks-bucket/` 以下のフォルダ名はデータをロードした際に生成されます。`my-starrocks-bucket` の下に単一のディレクトリがあり、その下にさらに 2 つのディレクトリがあるはずです。それらのディレクトリにはデータ、メタデータ、またはスキーマエントリが含まれています。

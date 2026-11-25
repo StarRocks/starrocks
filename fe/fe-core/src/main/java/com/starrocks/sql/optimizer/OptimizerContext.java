@@ -77,7 +77,6 @@ public class OptimizerContext {
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
 
-    private boolean isObtainedFromInternalStatistics = false;
     private boolean inMemoPhase = false;
 
     // Is not null predicate can be derived from inner join or semi join,
@@ -89,6 +88,7 @@ public class OptimizerContext {
 
     // source tables count in the query
     private int sourceTablesCount = 0;
+    private boolean materializedViewRefresh = false;
     // see JoinKeyContainmentBound: column id -> upper bound on its distinct values, for join keys unknown on both sides
     private Map<Integer, Double> joinKeyNdvBounds = Map.of();
 
@@ -237,14 +237,6 @@ public class OptimizerContext {
         this.enableJoinIsNullPredicateDerive = enableJoinIsNullPredicateDerive;
     }
 
-    public boolean isObtainedFromInternalStatistics() {
-        return isObtainedFromInternalStatistics;
-    }
-
-    public void setObtainedFromInternalStatistics(boolean obtainedFromInternalStatistics) {
-        isObtainedFromInternalStatistics = obtainedFromInternalStatistics;
-    }
-
     public void setInMemoPhase(boolean inMemoPhase) {
         this.inMemoPhase = inMemoPhase;
     }
@@ -263,6 +255,14 @@ public class OptimizerContext {
 
     public void setSourceTablesCount(int count) {
         this.sourceTablesCount = count;
+    }
+
+    public boolean isMaterializedViewRefresh() {
+        return materializedViewRefresh;
+    }
+
+    public void setMaterializedViewRefresh(boolean materializedViewRefresh) {
+        this.materializedViewRefresh = materializedViewRefresh;
     }
 
     /**

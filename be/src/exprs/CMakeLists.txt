@@ -56,6 +56,7 @@ set(EXPR_FILES
   array_functions.cpp
   array_map_expr.cpp
   array_sort_lambda_expr.cpp
+  paimon_functions.cpp
   binary_functions.cpp
   bit_functions.cpp
   binary_predicate.cpp
@@ -118,6 +119,7 @@ set(EXPR_FILES
   split_part.cpp
   str_to_map.cpp
   string_functions.cpp
+  file_functions.cpp
   struct_functions.cpp
   subfield_expr.cpp
   substring_index.cpp

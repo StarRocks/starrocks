@@ -14,6 +14,8 @@
 
 #include "cache/disk_cache/starcache_engine.h"
 
+#include <fmt/format.h>
+
 #include <filesystem>
 
 #include "base/path/filesystem_util.h"
@@ -54,6 +56,15 @@ Status StarCacheEngine::init(const DiskCacheOptions& options) {
         opt.lru_segment_ratios = {35, 65};
     }
     opt.lru_segment_freq_bits = 0;
+    if (options.lru_shard_refill_low_watermark_percent > options.lru_shard_refill_high_watermark_percent ||
+        options.lru_shard_refill_high_watermark_percent > 100) {
+        return Status::InvalidArgument(fmt::format(
+                "invalid lru shard refill watermarks: low={}, high={}, expect low <= high <= 100",
+                options.lru_shard_refill_low_watermark_percent, options.lru_shard_refill_high_watermark_percent));
+    }
+    opt.lru_shard_evict_fallback_enable = options.lru_shard_evict_fallback_enable;
+    opt.lru_shard_refill_low_watermark_percent = options.lru_shard_refill_low_watermark_percent;
+    opt.lru_shard_refill_high_watermark_percent = options.lru_shard_refill_high_watermark_percent;
 
     _cache = std::make_shared<starcache::StarCache>();
     RETURN_IF_ERROR(to_status(_cache->init(opt)));
@@ -134,6 +145,11 @@ Status StarCacheEngine::update_disk_spaces(const std::vector<DirSpace>& spaces) 
 
 Status StarCacheEngine::update_inline_cache_count_limit(int32_t limit) {
     return to_status(_cache->update_inline_cache_count_limit(limit));
+}
+
+Status StarCacheEngine::update_lru_shard_refill(bool fallback_enable, uint32_t low_watermark_percent,
+                                                uint32_t high_watermark_percent) {
+    return to_status(_cache->update_lru_shard_refill(fallback_enable, low_watermark_percent, high_watermark_percent));
 }
 
 const StarCacheMetrics StarCacheEngine::starcache_metrics(int level) const {

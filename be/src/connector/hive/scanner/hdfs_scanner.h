@@ -23,6 +23,7 @@
 
 #include "cache/scan/cache_input_stream.h"
 #include "cache/scan/shared_buffered_input_stream.h"
+#include "common/scan_audit_counters.h"
 #include "connector/hive/scanner/hdfs_scanner_context.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state_fwd.h"
@@ -44,6 +45,8 @@ public:
     int64_t num_rows_read() const { return _app_stats.rows_read; }
     int64_t cpu_time_spent() const { return _total_running_time - _app_stats.io_ns; }
     int64_t io_time_spent() const { return _app_stats.io_ns; }
+    // Cumulative audit read counters; empty for a format that does not track physical and logical rows.
+    ScanAuditCounters scan_audit_counters() const;
     virtual int64_t estimated_mem_usage() const;
     void update_counter();
 
@@ -66,6 +69,11 @@ protected:
 
     // Whether do_close() and do_open() restart reading from the file start, to read it again bypassing the datacache.
     virtual bool support_reopen_without_datacache() const { return false; }
+    // Whether the file may be skipped before do_open() when its min/max values from the scan range fail the
+    // predicates, which include the join runtime filters that have arrived.
+    virtual bool support_file_stats_pruning() const { return false; }
+    // Whether the format reader counts FormatScannerStats::physical_rows_read and logical_rows_read.
+    virtual bool tracks_scan_audit_rows() const { return false; }
     static CompressionTypePB get_compression_type_from_path(const std::string& filename);
 
     void do_update_iceberg_v2_counter(RuntimeProfile* parquet_profile, const std::string& parent_name);
@@ -75,6 +83,9 @@ protected:
 private:
     bool _opened = false;
     std::atomic<bool> _closed = false;
+    // The file was skipped by _pruned_by_file_stats(): do_open() never ran.
+    bool _skipped_by_file_stats = false;
+    bool _pruned_by_file_stats() const;
     // A failure which may come from the datacache has been handled.
     bool _datacache_error_handled = false;
     bool _may_be_caused_by_datacache(const Status& status);

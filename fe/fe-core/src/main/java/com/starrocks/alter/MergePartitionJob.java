@@ -23,6 +23,7 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -47,6 +48,7 @@ import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.load.PartitionUtils;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.ConnectContext;
@@ -66,6 +68,7 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.OptimizeRange;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -305,6 +308,7 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
             DistributionDesc distributionDesc, long warehouseId) throws DdlException {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         ExpressionRangePartitionInfo sourcePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+        List<Column> partitionColumns = sourcePartitionInfo.getPartitionColumns(olapTable.getIdToColumn());
 
         // Group source partitions by target partition ranges and calculate sizes
         // This handles the n:m relationship between source and target partitions
@@ -324,7 +328,6 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
             if (sourcePartition == null) {
                 continue;
             }
-            LOG.info("create temp partition from partition values: {} {}", partitionValues, sourcePartitionId);
 
             AddPartitionClause addPartitionClause;
             try (AutoCloseableLock ignore = new AutoCloseableLock(
@@ -339,12 +342,27 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
 
             PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
             List<String> partitionNames;
+            Range<PartitionKey> targetRange;
             if (partitionDesc instanceof RangePartitionDesc) {
-                partitionNames = ((RangePartitionDesc) partitionDesc).getPartitionNames();
+                RangePartitionDesc rangePartitionDesc = (RangePartitionDesc) partitionDesc;
+                partitionNames = rangePartitionDesc.getPartitionNames();
+                Preconditions.checkState(rangePartitionDesc.getSingleRangePartitionDescs().size() == 1);
+                targetRange = getRange(rangePartitionDesc.getSingleRangePartitionDescs().get(0).getPartitionKeyDesc(),
+                        partitionColumns);
             } else {
                 throw new DdlException("Unsupported partitionDesc");
             }
             Preconditions.checkState(partitionNames.size() == 1);
+            // A source partition that spans its whole target partition has nothing to merge. It is the partition an
+            // earlier merge into the same granularity made, whose rewrite would only copy it under its own name, or a
+            // coarser one, which does not fit into the target partition of its lower bound. Leave it as it is. No
+            // other source partition maps to the same target partition, since that one would overlap this one.
+            if (range.encloses(targetRange)) {
+                LOG.info("merge partition job {} leaves partition {} {} as it is, it already spans target partition {} {}",
+                        jobId, sourcePartition.getName(), range, partitionNames.get(0), targetRange);
+                continue;
+            }
+            LOG.info("create temp partition from partition values: {} {}", partitionValues, sourcePartitionId);
             targetPartitionToSourceIds.computeIfAbsent(partitionNames.get(0), k -> Lists.newArrayList()).add(sourcePartitionId);
             targetPartitionToSourceDataSize.merge(partitionNames.get(0), sourcePartition.getDataSize(), Long::sum);
             targetPartitionToAddPartitionClause.put(partitionNames.get(0), addPartitionClause);
@@ -385,16 +403,54 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                 LOG.warn(ex);
                 throw new DdlException(ex.getMessage());
             }
-            Partition partition = olapTable.getPartition(partitionName, true);
-            if (partition == null) {
-                throw new DdlException("Partition " + partitionName
-                        + " does not exist in table " + olapTable.getName());
+            Partition partition;
+            // Loads may add partitions to the table meanwhile, since automatic partition creation goes on in OPTIMIZE
+            // state, so look the partitions up under the table lock.
+            try (AutoCloseableLock ignore = new AutoCloseableLock(
+                    new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ)) {
+                partition = olapTable.getPartition(partitionName, true);
+                if (partition == null) {
+                    // addPartitions skips a temp partition whose name a partition already has (IF NOT EXISTS).
+                    if (olapTable.getPartition(partitionName) != null) {
+                        throw new DdlException("Cannot merge partitions "
+                                + getPartitionNames(olapTable, targetSourcePartitionIds) + " into partition "
+                                + partitionName + ": table " + olapTable.getName()
+                                + " already has a partition named " + partitionName);
+                    }
+                    throw new DdlException("Partition " + partitionName
+                            + " does not exist in table " + olapTable.getName());
+                }
             }
             LOG.info("create temp partition {} from {}", partitionName, targetSourcePartitionIds);
             for (Long sourcePartitionId : targetSourcePartitionIds) {
                 tempPartitionIdToSourcePartitionIds.put(partition.getId(), sourcePartitionId);
             }
         }
+    }
+
+    /**
+     * The range of the partition that the key desc of an automatic partition describes.
+     */
+    private static Range<PartitionKey> getRange(PartitionKeyDesc partitionKeyDesc, List<Column> partitionColumns)
+            throws DdlException {
+        try {
+            PartitionKey lower = PartitionKey.createPartitionKey(partitionKeyDesc.getLowerValues(), partitionColumns);
+            PartitionKey upper = partitionKeyDesc.isMax()
+                    ? PartitionKey.createInfinityPartitionKey(partitionColumns, true)
+                    : PartitionKey.createPartitionKey(partitionKeyDesc.getUpperValues(), partitionColumns);
+            return Range.closedOpen(lower, upper);
+        } catch (AnalysisException e) {
+            throw new DdlException("Invalid range of merged partition " + partitionKeyDesc + ": " + e.getMessage());
+        }
+    }
+
+    private static List<String> getPartitionNames(OlapTable olapTable, List<Long> partitionIds) {
+        return partitionIds.stream()
+                .map(olapTable::getPartition)
+                .filter(partition -> partition != null)
+                .map(Partition::getName)
+                .sorted()
+                .collect(Collectors.toList());
     }
 
     /**
@@ -653,6 +709,10 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
             if (status.getState() == Constants.TaskRunState.FAILED) {
                 LOG.warn("optimize task {} failed", rewriteTask.getName());
                 rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
+            } else if (status.getState() == Constants.TaskRunState.SUCCESS) {
+                // Remember the success: the job may then wait for the rewrite to be published, and the task run
+                // history can be archived in the meantime.
+                rewriteTask.setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
             }
             progressAcc += 100.0 / taskCount;
         }
@@ -666,11 +726,28 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
 
         this.progress = 99;
 
+        // A rewrite can be committed without being published yet: the insert stops waiting for its publish
+        // when enable_sync_publish is off or the insert timeout runs out, and the task still succeeds. Swapping
+        // such a temp partition in would expose a partition that misses rows until the publish lands, and
+        // dropping it would throw away a rewrite that succeeded, so wait for the publish instead. The job
+        // timeout bounds this wait, see AlterJobV2#run.
+        try (AutoCloseableLock ignore =
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ)) {
+            if (hasUnpublishedRewrite(tbl)) {
+                return;
+            }
+        }
+
         LOG.info("all insert overwrite tasks finished, merge partition job: {}", jobId);
 
         // replace partition
         try (AutoCloseableLock ignore =
                     new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
+            // Only the rewrite tasks write to the temp partitions and they have all finished, so the check above
+            // should still hold. Check again under the write lock that the replacement runs under anyway.
+            if (hasUnpublishedRewrite(tbl)) {
+                return;
+            }
             onFinished(db, tbl);
         }
 
@@ -688,9 +765,55 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         // nothing to do
     }
 
-    protected boolean hasCommittedNotVisible(long partitionId) {
-        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                .existCommittedTxns(dbId, tableId, partitionId);
+    /**
+     * Find, for each of the given partitions, the transactions that may still write to it, see
+     * {@link PartitionUtils#getConflictingIngestionTxnIds(long, long, Collection)}.
+     * Must be called while holding the table write lock. Overridable for testability.
+     */
+    protected Map<Long, List<Long>> getConflictingTxnIds(Collection<Partition> partitions) {
+        return PartitionUtils.getConflictingIngestionTxnIds(dbId, tableId, partitions);
+    }
+
+    /**
+     * Of the given temp partitions, the ones whose rewritten data is committed but not published yet, all looked
+     * up at once, see {@link PartitionUtils#getPartitionsWithCommittedNotVisibleTxn(long, long, Collection)}.
+     * Overridable for testability.
+     *
+     * @return ids of those temp partitions
+     */
+    protected Set<Long> getNotVisibleTempPartitionIds(Collection<Partition> tempPartitions) {
+        return PartitionUtils.getPartitionsWithCommittedNotVisibleTxn(dbId, tableId, tempPartitions);
+    }
+
+    /**
+     * Whether the rewritten data of some temp partition is committed but not published yet, in which case the
+     * replacement has to wait for it. Must be called while holding the table lock, and checks all the temp
+     * partitions in one lookup.
+     */
+    private boolean hasUnpublishedRewrite(OlapTable tbl) {
+        List<Partition> rewrittenTempPartitions = Lists.newArrayList();
+        for (OptimizeTask rewriteTask : rewriteTasks) {
+            if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED) {
+                continue;
+            }
+            Partition tempPartition = tbl.getPartition(rewriteTask.getTempPartitionName(), true);
+            if (tempPartition != null) {
+                rewrittenTempPartitions.add(tempPartition);
+            }
+        }
+        Set<Long> notVisibleTempPartitionIds = getNotVisibleTempPartitionIds(rewrittenTempPartitions);
+        List<String> unpublishedTempPartitionNames = Lists.newArrayList();
+        for (Partition tempPartition : rewrittenTempPartitions) {
+            if (notVisibleTempPartitionIds.contains(tempPartition.getId())) {
+                unpublishedTempPartitionNames.add(tempPartition.getName());
+            }
+        }
+        if (unpublishedTempPartitionNames.isEmpty()) {
+            return false;
+        }
+        LOG.info("merge partitions job {} waits rewritten data of temp partitions {} to be visible",
+                jobId, unpublishedTempPartitionNames);
+        return true;
     }
 
     private void onFinished(Database db, OlapTable targetTable) throws AlterCancelException {
@@ -713,47 +836,65 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                     )
             );
 
+            // Ingestion that is concurrent with this job would be silently dropped by the replacement
+            // below, so a source partition that any transaction can still write to must not be replaced.
+            // The visible version covers already published transactions, the conflicting transaction ids
+            // cover the ones that are committed but not published yet, and the in flight ones.
+            // all the source partitions of all the groups at once, a load can target every partition of the table
+            List<Partition> allSourcePartitions = tempPartitionNameToSourcePartitionNames.values().stream()
+                    .map(sourcePartitionName -> targetTable.getPartition(sourcePartitionName))
+                    .filter(sourcePartition -> sourcePartition != null)
+                    .collect(Collectors.toList());
+            Map<Long, List<Long>> conflictingTxnIdsByPartition = getConflictingTxnIds(allSourcePartitions);
+            Map<String, List<Long>> partitionConflictingTxnIds = Maps.newHashMap();
+            tempPartitionNameToSourcePartitionNames.asMap().forEach((tempPartitionName, sourcePartitionNames) -> {
+                // a load into several source partitions of the group blocks it once
+                Set<Long> conflictingTxnIds = Sets.newLinkedHashSet();
+                for (String sourcePartitionName : sourcePartitionNames) {
+                    Partition sourcePartition = targetTable.getPartition(sourcePartitionName);
+                    if (sourcePartition != null) {
+                        conflictingTxnIds.addAll(conflictingTxnIdsByPartition.getOrDefault(sourcePartition.getId(),
+                                Collections.emptyList()));
+                    }
+                }
+                partitionConflictingTxnIds.put(tempPartitionName, Lists.newArrayList(conflictingTxnIds));
+            });
+
             boolean hasFailedTask = false;
             String errMsg = "";
             for (OptimizeTask rewriteTask : rewriteTasks) {
-                if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED
-                            || partitionLastVersion.get(rewriteTask.getTempPartitionName()) != rewriteTask.getLastVersion()) {
-                    LOG.info("merge partitions job {} rewrite task {} state {} failed or partition {} version {} change to {}",
+                String tempPartitionName = rewriteTask.getTempPartitionName();
+                List<Long> conflictingTxnIds =
+                        partitionConflictingTxnIds.getOrDefault(tempPartitionName, Lists.newArrayList());
+                boolean versionChanged = partitionLastVersion.get(tempPartitionName) != rewriteTask.getLastVersion();
+                boolean hasIngestion = versionChanged || !conflictingTxnIds.isEmpty();
+
+                if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED || hasIngestion) {
+                    LOG.info("merge partitions job {} rewrite task {} state {} failed or partition {} version {} "
+                                    + "change to {}, conflicting txns {}",
                                 jobId, rewriteTask.getName(), rewriteTask.getOptimizeTaskState(),
-                                rewriteTask.getTempPartitionName(), rewriteTask.getLastVersion(),
-                                partitionLastVersion.get(rewriteTask.getTempPartitionName()));
-                    tempPartitionNameToSourcePartitionNames.removeAll(rewriteTask.getTempPartitionName());
-                    targetTable.dropTempPartition(rewriteTask.getTempPartitionName(), true);
+                                tempPartitionName, rewriteTask.getLastVersion(),
+                                partitionLastVersion.get(tempPartitionName), conflictingTxnIds);
+                    tempPartitionNameToSourcePartitionNames.removeAll(tempPartitionName);
+                    targetTable.dropTempPartition(tempPartitionName, true);
                     hasFailedTask = true;
-                    if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED) {
-                        errMsg += rewriteTask.getTempPartitionName() + " rewrite task execute failed, ";
+                    if (hasIngestion) {
+                        errMsg += tempPartitionName + " has ingestion during merge partitions"
+                                + PartitionUtils.formatConflictingTxnIds(conflictingTxnIds) + ", ";
                     } else {
-                        errMsg += rewriteTask.getTempPartitionName() + " has ingestion during optimize, ";
+                        errMsg += tempPartitionName + " rewrite task execute failed, ";
                     }
                 }
             }
 
+            // Rewrites that are committed but not published yet never get here, runRunningJob waits for them
+            // under this same write lock.
             for (String tempPartitionName : Lists.newArrayList(tempPartitionNameToSourcePartitionNames.keySet())) {
-                Partition tempPartition = targetTable.getPartition(tempPartitionName, true);
-                if (tempPartition == null) {
+                if (targetTable.getPartition(tempPartitionName, true) == null) {
                     LOG.warn("merge partitions job {} temp partition {} missing before replace", jobId, tempPartitionName);
                     tempPartitionNameToSourcePartitionNames.removeAll(tempPartitionName);
                     hasFailedTask = true;
                     errMsg += tempPartitionName + " temp partition missing, ";
-                    continue;
-                }
-                if (hasCommittedNotVisible(tempPartition.getId())) {
-                    LOG.warn("merge partitions job {} temp partition {} has committed transactions not visible, drop it",
-                            jobId, tempPartitionName);
-                    tempPartitionNameToSourcePartitionNames.removeAll(tempPartitionName);
-                    targetTable.dropTempPartition(tempPartitionName, true);
-                    hasFailedTask = true;
-                    errMsg += tempPartitionName + " rewrite task not visible, ";
-                    for (OptimizeTask task : rewriteTasks) {
-                        if (tempPartitionName.equals(task.getTempPartitionName())) {
-                            task.setOptimizeTaskState(Constants.TaskRunState.FAILED);
-                        }
-                    }
                 }
             }
 

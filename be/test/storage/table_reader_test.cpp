@@ -329,4 +329,68 @@ TEST_F(TableReaderTest, test_basic_read) {
     verify_chunk_eq(scan_value_schema, expect_scan_result.get(), scan_result.get());
 }
 
+// multi_get reads through TabletUpdates::get_column_values, which pads CHAR to its declared width for a partial
+// update. A lookup hands the values to a query (a short-circuit point lookup, dict_mapping) and must return them
+// as a scan does: 'ab' in a CHAR(10) came back as 'ab' and eight '\0', length 10.
+TEST_F(TableReaderTest, test_multi_get_char_is_not_padded) {
+    TCreateTabletReq request;
+    request.tablet_id = rand();
+    request.__set_version(1);
+    request.tablet_schema.schema_hash = rand();
+    request.tablet_schema.short_key_column_count = 1;
+    request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
+    request.tablet_schema.storage_type = TStorageType::COLUMN;
+    TColumn pk;
+    pk.column_name = "pk";
+    pk.__set_is_key(true);
+    pk.column_type.type = TPrimitiveType::BIGINT;
+    request.tablet_schema.columns.push_back(pk);
+    TColumn c;
+    c.column_name = "c";
+    c.__set_is_key(false);
+    c.column_type.type = TPrimitiveType::CHAR;
+    c.column_type.__set_len(10);
+    request.tablet_schema.columns.push_back(c);
+    ASSERT_OK(StorageEngine::instance()->create_tablet(request));
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id, false);
+    _tablets.push_back(tablet);
+
+    DatumTupleVector rows(2);
+    rows[0].append(Datum((int64_t)1));
+    rows[0].append(Datum(Slice("ab")));
+    rows[1].append(Datum((int64_t)2));
+    rows[1].append(Datum(Slice("")));
+    create_rowset(tablet, 2, rows, 0, 2);
+    while (true) {
+        std::vector<RowsetSharedPtr> dummy_rowsets;
+        EditVersion full_version;
+        ASSERT_OK(tablet->updates()->get_applied_rowsets(2, &dummy_rowsets, &full_version));
+        if (full_version.major_number() == 2) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+
+    LocalTableReaderParams params;
+    params.version = 2;
+    params.tablet_id = tablet->tablet_id();
+    auto table_reader = std::make_shared<TableReader>();
+    ASSERT_OK(table_reader->init(params));
+
+    Schema key_schema = ChunkHelper::convert_schema(tablet->tablet_schema(), {0});
+    Schema value_schema = ChunkHelper::convert_schema(tablet->tablet_schema(), {1});
+    ChunkPtr key_chunk = ChunkFactory::new_chunk(key_schema, 2);
+    key_chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum((int64_t)1));
+    key_chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum((int64_t)2));
+    std::vector<bool> found;
+    ChunkPtr value_chunk = ChunkFactory::new_chunk(value_schema, 2);
+    ASSERT_OK(table_reader->multi_get(*key_chunk, {"c"}, found, *value_chunk));
+    ASSERT_EQ(2, found.size());
+    ASSERT_TRUE(found[0]);
+    ASSERT_TRUE(found[1]);
+    ASSERT_EQ(2, value_chunk->num_rows());
+    EXPECT_EQ("ab", value_chunk->get(0).get(0).get_slice().to_string());
+    EXPECT_EQ("", value_chunk->get(1).get(0).get_slice().to_string());
+}
+
 } // namespace starrocks

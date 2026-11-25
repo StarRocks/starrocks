@@ -14,8 +14,12 @@
 
 #include "formats/parquet/parquet_file_writer.h"
 
+#include <arrow/util/secure_string.h>
 #include <fmt/core.h>
 #include <glog/logging.h>
+#include <openssl/crypto.h>
+#include <openssl/rand.h>
+#include <parquet/encryption/encryption.h>
 #include <parquet/exception.h>
 #include <parquet/file_writer.h>
 #include <parquet/metadata.h>
@@ -24,6 +28,7 @@
 #include <parquet/statistics.h>
 #include <runtime/current_thread.h>
 
+#include <charconv>
 #include <future>
 #include <ostream>
 #include <sstream>
@@ -51,9 +56,62 @@ class ColumnHelper;
 
 namespace starrocks::formats {
 
+namespace {
+
+constexpr auto kUnsupportedBooleanV2 =
+        "Parquet DataPage V2 with BOOLEAN columns is not supported by the StarRocks reader (issue #78692)";
+
+bool contains_boolean(const TypeDescriptor& type) {
+    if (type.type == TYPE_BOOLEAN) {
+        return true;
+    }
+    for (const auto& child : type.children) {
+        if (contains_boolean(child)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// StarRocks' native Parquet reader cannot decode RLE-encoded BOOLEAN values
+// currently emitted by V2 writers (see issue #78692).
+Status check_data_page_version(::parquet::ParquetDataPageVersion version, const std::vector<TypeDescriptor>& types) {
+    if (version != ::parquet::ParquetDataPageVersion::V2) {
+        return Status::OK();
+    }
+    for (const auto& type : types) {
+        if (contains_boolean(type)) {
+            return Status::NotSupported(kUnsupportedBooleanV2);
+        }
+    }
+    return Status::OK();
+}
+
+} // namespace
+
 DEFINE_FAIL_POINT(parquet_writer_close_failed);
 DEFINE_FAIL_POINT(parquet_writer_throw_exception);
 DEFINE_FAIL_POINT(parquet_writer_rowgroup_write_failed);
+
+namespace {
+// Map the Iceberg/Parquet cipher wire name to the parquet-cpp enum. FE sends the normalized Parquet
+// name ("AES_GCM_V1" / "AES_GCM_CTR_V1"); an unrecognised name is rejected rather than silently
+// defaulted, because a wrong cipher would be undetectable on disk.
+//
+// An ABSENT name maps to AES_GCM_V1 deliberately, and it is not the same case: that is what an FE
+// which sends only a length looks like, and GCM is both parquet-java's default under Iceberg and the
+// only PME mode that authenticates page data -- so it is the safe reading of "unspecified", not a
+// guess between two options.
+StatusOr<::parquet::ParquetCipher::type> parquet_cipher_from_name(const std::string& name) {
+    if (name == "AES_GCM_V1" || name.empty()) {
+        return ::parquet::ParquetCipher::AES_GCM_V1;
+    }
+    if (name == "AES_GCM_CTR_V1") {
+        return ::parquet::ParquetCipher::AES_GCM_CTR_V1;
+    }
+    return Status::NotSupported(fmt::format("unsupported parquet encryption algorithm: {}", name));
+}
+} // namespace
 
 Status ParquetFileWriter::write(Chunk* chunk) {
     if (_rowgroup_writer == nullptr) {
@@ -96,6 +154,12 @@ FileCommitResult ParquetFileWriter::close() {
     if (result.io_status.ok()) {
         result.file_statistics = _statistics(_writer->metadata().get(), _writer_options->column_ids.has_value());
         result.file_statistics.file_size = _output_stream->Tell().MoveValueUnsafe();
+        // Hand the per-file encryption material to the sink so FE can build the
+        // Iceberg key_metadata. Only set when the file was written encrypted.
+        if (!_file_dek.empty()) {
+            result.encryption_dek = _file_dek;
+            result.encryption_aad_prefix = _aad_prefix;
+        }
     }
 
     _writer = nullptr;
@@ -288,9 +352,64 @@ Status ParquetFileWriter::init() {
         return Status::NotSupported(status.message());
     }
 
+    RETURN_IF_ERROR(check_data_page_version(_writer_options->data_page_version, _type_descs));
+
     ASSIGN_OR_RETURN(auto compression, parquet::ParquetBuildHelper::convert_compression_type(_compression_type));
+
+    // Build Parquet Modular Encryption properties if this is an encrypted Iceberg
+    // table. BE generates a fresh per-file DEK (footer key) here; FE supplies only
+    // the algorithm; the DEK and the AAD prefix are both generated here and returned to FE at
+    // commit so FE can record them in the Iceberg key_metadata.
+    std::shared_ptr<::parquet::FileEncryptionProperties> encryption_properties;
+    if (_writer_options->encryption_enabled) {
+        const int dek_len = _writer_options->encryption_dek_length;
+        if (dek_len == 0) {
+            return Status::InvalidArgument(
+                    "encryption is enabled but no DEK length was supplied; refusing to pick one, as that "
+                    "could write a key weaker than the table's encryption.data-key-length policy");
+        }
+        if (dek_len != 16 && dek_len != 24 && dek_len != 32) {
+            return Status::InvalidArgument(fmt::format("invalid DEK length for encryption: {}", dek_len));
+        }
+        ASSIGN_OR_RETURN(auto cipher, parquet_cipher_from_name(_writer_options->encryption_algorithm));
+
+        _file_dek.resize(dek_len);
+        if (RAND_bytes(reinterpret_cast<unsigned char*>(_file_dek.data()), dek_len) != 1) {
+            wipe_key_material();
+            return Status::InternalError("failed to generate Parquet encryption key");
+        }
+        // 16-byte AAD prefix. Applied to the file's AAD below and recorded in key_metadata by FE;
+        // the two must agree or no conforming reader can decrypt the file.
+        _aad_prefix.resize(16);
+        if (RAND_bytes(reinterpret_cast<unsigned char*>(_aad_prefix.data()), 16) != 1) {
+            wipe_key_material();
+            return Status::InternalError("failed to generate Parquet encryption AAD prefix");
+        }
+
+        try {
+            // arrow 24 takes the footer key as a SecureString, which wipes its own buffer on
+            // destruction. Copy _file_dek rather than moving it: it is still needed after this
+            // block, to be returned to FE at commit for the Iceberg key_metadata.
+            encryption_properties =
+                    ::parquet::FileEncryptionProperties::Builder(::arrow::util::SecureString(std::string(_file_dek)))
+                            .algorithm(cipher)
+                            ->aad_prefix(_aad_prefix)
+                            // Withhold the prefix from the file so a reader must supply it from the
+                            // Iceberg key_metadata. That is what binds a file to its identity in the
+                            // table: with the prefix stored in the file, substituting one file's bytes
+                            // for another's carries the prefix along and verifies fine. Iceberg's own
+                            // writer does the same.
+                            ->disable_aad_prefix_storage()
+                            ->build();
+        } catch (const ::parquet::ParquetException& e) {
+            wipe_key_material();
+            return Status::InternalError(fmt::format("failed to build parquet encryption properties: {}", e.what()));
+        }
+    }
+
     ::parquet::WriterProperties::Builder builder;
     builder.version(_writer_options->version)
+            ->data_page_version(_writer_options->data_page_version)
             ->enable_write_page_index()
             ->data_pagesize(_writer_options->page_size)
             ->write_batch_size(_writer_options->write_batch_size)
@@ -298,6 +417,9 @@ Status ParquetFileWriter::init() {
             ->compression(compression)
             ->created_by(fmt::format("{} starrocks-{}", CREATED_BY_VERSION, get_short_version()))
             ->memory_pool(&_memory_pool);
+    if (_writer_options->compression_level.has_value()) {
+        builder.compression_level(*_writer_options->compression_level);
+    }
 
     // Apply column-level dictionary encoding configuration
     for (const auto& [col_name, enabled] : _writer_options->column_dictionary_enabled) {
@@ -308,13 +430,35 @@ Status ParquetFileWriter::init() {
         }
     }
 
+    // Parquet Modular Encryption is configured on the writer properties, not passed to
+    // ParquetFileWriter::Open.
+    if (encryption_properties != nullptr) {
+        builder.encryption(encryption_properties);
+    }
     _properties = builder.build();
 
     _writer = ::parquet::ParquetFileWriter::Open(_output_stream, _schema, _properties);
     return Status::OK();
 }
 
-ParquetFileWriter::~ParquetFileWriter() = default;
+ParquetFileWriter::~ParquetFileWriter() {
+    wipe_key_material();
+}
+
+// std::string::clear() leaves the bytes in the buffer, so every path that drops the key -- the error
+// paths in init() as well as destruction -- zeroes it first. This covers the writer's own copy only: the
+// copies handed to FileCommitResult and on to FE in thrift are needed to commit the key and are not
+// wiped here.
+void ParquetFileWriter::wipe_key_material() {
+    if (!_file_dek.empty()) {
+        OPENSSL_cleanse(_file_dek.data(), _file_dek.size());
+        _file_dek.clear();
+    }
+    if (!_aad_prefix.empty()) {
+        OPENSSL_cleanse(_aad_prefix.data(), _aad_prefix.size());
+        _aad_prefix.clear();
+    }
+}
 
 ParquetFileWriterFactory::ParquetFileWriterFactory(
         std::shared_ptr<FileSystem> fs, TCompressionType::type compression_type,
@@ -336,6 +480,41 @@ Status ParquetFileWriterFactory::init() {
     RETURN_IF_ERROR(ColumnEvaluator::init(*_column_evaluators));
     _parsed_options = std::make_shared<ParquetWriterOptions>();
     _parsed_options->column_ids = _field_ids;
+    auto apply_size = [this](const std::string& key, int64_t* target) -> Status {
+        auto it = _options.find(key);
+        if (it == _options.end()) {
+            return Status::OK();
+        }
+        int value = 0;
+        const auto& bytes = it->second;
+        auto [end, error] = std::from_chars(bytes.data(), bytes.data() + bytes.size(), value);
+        if (error != std::errc{} || end != bytes.data() + bytes.size() || value <= 0) {
+            return Status::InvalidArgument(fmt::format("{} must be a positive 32-bit byte count: {}", key, bytes));
+        }
+        *target = value;
+        return Status::OK();
+    };
+    RETURN_IF_ERROR(apply_size(ParquetWriterOptions::PAGE_SIZE_BYTES, &_parsed_options->page_size));
+    RETURN_IF_ERROR(apply_size(ParquetWriterOptions::DICT_SIZE_BYTES, &_parsed_options->dictionary_pagesize));
+    RETURN_IF_ERROR(apply_size(ParquetWriterOptions::ROW_GROUP_SIZE_BYTES, &_parsed_options->rowgroup_size));
+    if (auto it = _options.find(ParquetWriterOptions::COMPRESSION_LEVEL); it != _options.end()) {
+        int level = 0;
+        const auto& value = it->second;
+        auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), level);
+        if (error != std::errc{} || end != value.data() + value.size()) {
+            return Status::InvalidArgument(fmt::format("invalid parquet compression level: {}", value));
+        }
+        _parsed_options->compression_level = level;
+    }
+    if (auto it = _options.find(ParquetWriterOptions::DATA_PAGE_VERSION); it != _options.end()) {
+        if (boost::iequals(it->second, "v1")) {
+            _parsed_options->data_page_version = ::parquet::ParquetDataPageVersion::V1;
+        } else if (boost::iequals(it->second, "v2")) {
+            _parsed_options->data_page_version = ::parquet::ParquetDataPageVersion::V2;
+        } else {
+            return Status::InvalidArgument(fmt::format("write.parquet.page-version must be v1 or v2: {}", it->second));
+        }
+    }
     if (_options.contains(ParquetWriterOptions::USE_LEGACY_DECIMAL_ENCODING)) {
         _parsed_options->use_legacy_decimal_encoding =
                 boost::iequals(_options[ParquetWriterOptions::USE_LEGACY_DECIMAL_ENCODING], "true");
@@ -361,10 +540,23 @@ Status ParquetFileWriterFactory::init() {
 #endif
     // Apply column-level dictionary encoding configuration set via setter
     _parsed_options->column_dictionary_enabled = std::move(_column_dictionary_enabled);
+    if (_options.contains("encryption_enabled") && boost::iequals(_options.at("encryption_enabled"), "true")) {
+        _parsed_options->encryption_enabled = true;
+        if (_options.contains("encryption_algorithm")) {
+            _parsed_options->encryption_algorithm = _options.at("encryption_algorithm");
+        }
+        if (_options.contains("encryption_dek_length")) {
+            _parsed_options->encryption_dek_length = std::stoi(_options.at("encryption_dek_length"));
+        }
+    }
     return Status::OK();
 }
 
 StatusOr<WriterAndStream> ParquetFileWriterFactory::create(const std::string& path) const {
+    auto types = ColumnEvaluator::types(*_column_evaluators);
+    // Reject an unsupported schema before the file exists: a writer that fails init() is never committed, so
+    // its rollback action would not run and the empty file would be left behind.
+    RETURN_IF_ERROR(check_data_page_version(_parsed_options->data_page_version, types));
     ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(WritableFileOptions{.direct_write = true,
                                                                            .content_type = http::ContentType::PARQUET},
                                                        path));
@@ -373,7 +565,6 @@ StatusOr<WriterAndStream> ParquetFileWriterFactory::create(const std::string& pa
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
     };
     auto column_evaluators = ColumnEvaluator::clone(*_column_evaluators);
-    auto types = ColumnEvaluator::types(*_column_evaluators);
     auto async_output_stream =
             std::make_unique<formats::AsyncFlushOutputStream>(std::move(file), _executors, _runtime_state);
     auto parquet_output_stream = std::make_shared<parquet::AsyncParquetOutputStream>(async_output_stream.get());

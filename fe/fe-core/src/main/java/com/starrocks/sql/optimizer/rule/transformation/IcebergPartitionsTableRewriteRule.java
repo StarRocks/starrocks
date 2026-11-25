@@ -27,7 +27,7 @@ import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergMetadataScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -44,16 +44,16 @@ import java.util.Map;
 
 public class IcebergPartitionsTableRewriteRule extends TransformationRule {
     public IcebergPartitionsTableRewriteRule() {
-        super(RuleType.TF_ICEBERG_PARTITIONS_TABLE_REWRITE_RULE, Pattern.create(OperatorType.LOGICAL_ICEBERG_METADATA_SCAN));
+        super(RuleType.TF_ICEBERG_PARTITIONS_TABLE_REWRITE_RULE, Pattern.create(OperatorType.LOGICAL_METADATA_SCAN));
     }
 
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
         Operator op = input.getOp();
-        if (!(op instanceof LogicalIcebergMetadataScanOperator)) {
+        if (!(op instanceof LogicalMetadataScanOperator)) {
             return false;
         }
-        LogicalIcebergMetadataScanOperator scanOperator = op.cast();
+        LogicalMetadataScanOperator scanOperator = op.cast();
         if (scanOperator.isTransformed()) {
             return false;
         }
@@ -63,7 +63,7 @@ public class IcebergPartitionsTableRewriteRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        LogicalIcebergMetadataScanOperator operator = input.getOp().cast();
+        LogicalMetadataScanOperator operator = input.getOp().cast();
         List<ColumnRefOperator> groupingKeys = new ArrayList<>();
         Map<ColumnRefOperator, CallOperator> aggregations = new HashMap<>();
         for (Map.Entry<ColumnRefOperator, Column> entries : operator.getColRefToColumnMetaMap().entrySet()) {
@@ -106,7 +106,7 @@ public class IcebergPartitionsTableRewriteRule extends TransformationRule {
         }
 
         LogicalAggregationOperator agg = new LogicalAggregationOperator(AggType.GLOBAL, groupingKeys, aggregations);
-        LogicalIcebergMetadataScanOperator newScanOp = new LogicalIcebergMetadataScanOperator(
+        LogicalMetadataScanOperator newScanOp = new LogicalMetadataScanOperator(
                 operator.getTable(),
                 operator.getColRefToColumnMetaMap(),
                 operator.getColumnMetaToColRefMap(),

@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 description: "Environment and system configuration checklist to complete before deploying StarRocks."
+products: [oss]
 ---
 
 # Check environment configurations

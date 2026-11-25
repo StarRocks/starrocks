@@ -137,8 +137,7 @@ TEST_F(ArrayExprTest, test_evaluate) {
     // ["ab", "bcd", NULL]
     // ["", "xyz", "x"]
     {
-        TypeDescriptor type_varchar(LogicalType::TYPE_VARCHAR);
-        type_varchar.len = 10;
+        TypeDescriptor type_varchar = TypeDescriptor::create_varchar_type(10);
         std::unique_ptr<Expr> expr = create_array_expr(type_arr_str);
         expr->add_child(new_mock_expr(ColumnTestHelper::build_column<Slice>({"a", "ab", ""}), type_varchar));
         expr->add_child(new_mock_expr(ColumnTestHelper::build_column<Slice>({"", "bcd", "xyz"}), type_varchar));

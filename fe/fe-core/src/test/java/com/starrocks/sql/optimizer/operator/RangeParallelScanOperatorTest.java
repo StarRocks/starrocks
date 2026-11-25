@@ -61,4 +61,25 @@ public class RangeParallelScanOperatorTest {
         Assertions.assertNotEquals(physical, physicalCopy);
         Assertions.assertNotEquals(physical.hashCode(), physicalCopy.hashCode());
     }
+    @Test
+    public void groupedModeAndPhysicalKeyIdentitySurviveCopies() {
+        SessionVariable variables = new SessionVariable();
+        variables.setRangeScanExecutionMode("GrOuPeD");
+        Assertions.assertTrue(variables.isGroupedRangeScan());
+        Assertions.assertTrue(variables.isRangeScanExecutionOverride());
+        Assertions.assertFalse(variables.isParallelRangeScan());
+        LogicalOlapScanOperator logical = LogicalOlapScanOperator.builder()
+                .withOperator(new LogicalOlapScanOperator(new OlapTable())).setGroupedRangeScan(true)
+                .setOrderedPhysicalCUniqueIds(java.util.List.of(4, 5, 6)).build();
+        LogicalOlapScanOperator copy = LogicalOlapScanOperator.builder().withOperator(logical).build();
+        Assertions.assertTrue(copy.isGroupedRangeScan());
+        Assertions.assertEquals(java.util.List.of(4, 5, 6), copy.getOrderedPhysicalCUniqueIds());
+        PhysicalOlapScanOperator physical = new PhysicalOlapScanOperator(copy);
+        PhysicalOlapScanOperator physicalCopy = PhysicalOlapScanOperator.builder().withOperator(physical).build();
+        Assertions.assertTrue(physicalCopy.isGroupedRangeScan());
+        Assertions.assertEquals(java.util.List.of(4, 5, 6), physicalCopy.getOrderedPhysicalCUniqueIds());
+        Assertions.assertEquals(physical, physicalCopy);
+        physicalCopy.setGroupedRangeScan(false);
+        Assertions.assertNotEquals(physical, physicalCopy);
+    }
 }

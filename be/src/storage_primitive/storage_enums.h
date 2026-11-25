@@ -23,14 +23,6 @@ enum RangeCondition {
     LE = 3, // less or equal
 };
 
-enum MaterializeType {
-    OLAP_MATERIALIZE_TYPE_UNKNOWN = 0,
-    OLAP_MATERIALIZE_TYPE_PERCENTILE = 1,
-    OLAP_MATERIALIZE_TYPE_HLL = 2,
-    OLAP_MATERIALIZE_TYPE_BITMAP = 3,
-    OLAP_MATERIALIZE_TYPE_COUNT = 4
-};
-
 enum PushType {
     PUSH_FOR_DELETE = 2, // for delete
     PUSH_NORMAL_V2 = 4,  // for spark load

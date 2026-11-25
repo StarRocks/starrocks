@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 0.91
 description: "Since v3.4.0, StarRocks supports creating Python UDFs."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Experimental from '../../_assets/commonMarkdown/_experimental.mdx'
@@ -24,6 +25,8 @@ Make sure the following requirements are met before proceeding:
 - Enable UDF in StarRocks by setting  `enable_udf` to `true` in the FE configuration file **fe/conf/fe.conf**, and then restart the FE nodes to allow the configuration to take effect. For more information, see [FE configuration - enable_udf](../../administration/configuration/FE_parameters/FE_parameters.md#enable_udf).
 - Python UDF requires the following packages: pyarrow
 - Set the location of the Python interpreter environment in the BE instance using environment variable. Add the variable item `python_envs` and set it to the location of the Python interpreter installation, for example, `/opt/Python-3.8/`.
+
+Optionally, set the BE configuration item `python_worker_max_per_driver` (default: `3`) to change how many local Python worker processes one pipeline driver uses. Each worker runs Python separately, so a larger value lets more UDF calls of a driver run in parallel, for example when the UDF is evaluated in a scan, at the cost of more worker processes. You can change it without restarting the BE.
 
 ## Develop and use Python UDFs
 

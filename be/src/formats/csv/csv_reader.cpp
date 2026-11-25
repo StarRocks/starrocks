@@ -37,7 +37,9 @@ inline bool CSVReader::is_column_delimiter(bool expandBuffer) {
                *(base_ptr + p) == _parse_options.column_delimiter[i]) {
             i++;
             p++;
-            if (UNLIKELY(_buff.limit_offset() - p < 1)) {
+            // Read more only while the delimiter is incomplete. A delimiter that ends the data has nothing after it,
+            // and a read at the end of the data adds nothing, which would reject the match.
+            if (UNLIKELY(i < _column_delimiter_length && _buff.limit_offset() - p < 1)) {
                 Status s = readMore(expandBuffer);
                 if (!s.ok()) {
                     return false;
@@ -72,7 +74,8 @@ inline bool CSVReader::is_row_delimiter(bool expandBuffer) {
                *(base_ptr + p) == _parse_options.row_delimiter[i]) {
             i++;
             p++;
-            if (UNLIKELY(_buff.limit_offset() - p < 1)) {
+            // Read more only while the delimiter is incomplete (see is_column_delimiter()).
+            if (UNLIKELY(i < _row_delimiter_length && _buff.limit_offset() - p < 1)) {
                 Status s = readMore(expandBuffer);
                 if (!s.ok()) {
                     return false;
@@ -112,16 +115,26 @@ Status CSVReader::buffInit() {
 }
 
 Status CSVReader::readMore(bool expandBuffer) {
-    if (_buff.free_space() > 0) {
-        return _fill_buffer();
-    } else {
-        if (expandBuffer) {
-            RETURN_IF_ERROR(_expand_buffer_loosely());
-            return _fill_buffer();
-        } else {
-            return Status::OK();
-        }
+    // Once a read of this more_rows() call has timed out, the row being parsed cannot be completed in this call.
+    // Every later read fails at once too, also one inside is_row_delimiter() or is_column_delimiter(), which only
+    // returns false: the parser then reaches NEWROW without taking bytes of a delimiter for data, and parses the
+    // row again on the next call.
+    if (UNLIKELY(!_read_timeout.ok())) {
+        return _read_timeout;
     }
+    Status st;
+    if (_buff.free_space() > 0) {
+        st = _fill_buffer();
+    } else if (expandBuffer) {
+        RETURN_IF_ERROR(_expand_buffer_loosely());
+        st = _fill_buffer();
+    } else {
+        return Status::OK();
+    }
+    if (UNLIKELY(st.is_time_out())) {
+        _read_timeout = st;
+    }
+    return st;
 }
 
 #define DOUBLE_CHECK_AVAILABLE()                \
@@ -156,6 +169,7 @@ Status CSVReader::more_rows() {
     if (UNLIKELY(_limit > 0 && _parsed_bytes > _limit)) {
         return Status::EndOfFile("Reached limit");
     }
+    _read_timeout = Status::OK();
     Status status = Status::OK();
     status = buffInit();
     if (!status.ok()) {
@@ -195,6 +209,8 @@ Status CSVReader::more_rows() {
             if (UNLIKELY(_parse_options.trim_space)) {
                 while (*(_buff.position()) == ' ') {
                     _buff.skip(1);
+                    // The data can end here: the column is empty then, not the spaces before it.
+                    column_start = _buff.position_offset();
                     READ_MORE()
                 }
             }
@@ -395,6 +411,9 @@ Status CSVReader::more_rows() {
             }
             // push column
             _columns.emplace_back(column_start, column_length, is_escape_column);
+            // The next column starts here. If the data ends before START runs, NEWROW pushes it as an empty column;
+            // column_start must not point at the column just pushed.
+            column_start = _buff.position_offset();
             is_escape_column = false;
             curState = START;
             is_enclose_column = false;
@@ -403,10 +422,12 @@ Status CSVReader::more_rows() {
 
         newrow_label:
         case NEWROW:
-            if (reachBuffEnd) {
-                // We dot get the complete row, back the read pointer, continue next time.
+            if (reachBuffEnd || UNLIKELY(status.is_time_out())) {
+                // The row is not complete: move the read pointer back to its start and parse it again next time. A
+                // timed-out read (a stream load pipe that has no data yet) returns its status so that the scanner
+                // yields; the bytes of the row stay in the buffer for the next call.
                 _buff.set_position_offset(parsed_start);
-                return Status::OK();
+                return status;
             }
             _parsed_bytes += _buff.position_offset() - parsed_start;
             parsed_end = _buff.position_offset();

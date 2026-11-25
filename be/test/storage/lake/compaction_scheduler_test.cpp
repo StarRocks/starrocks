@@ -411,8 +411,8 @@ TEST_F(LakeCompactionSchedulerTest, test_abort_with_not_write_txnlog) {
     SyncPoint::GetInstance()->DisableProcessing();
 
     // A task that failed before producing a txn log must not leave anything behind in the metacache.
-    EXPECT_EQ(nullptr,
-              _tablet_mgr->metacache()->lookup_txn_log(_tablet_mgr->txn_log_location(_tablet_metadata->id(), txn_id)));
+    EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_txn_log(
+                               MetacacheKey::txn_log(_tablet_mgr->txn_log_location(_tablet_metadata->id(), txn_id))));
 }
 
 // skip_write_txnlog is the aggregate/file-bundling path: the compaction worker returns the txn log
@@ -432,7 +432,7 @@ TEST_F(LakeCompactionSchedulerTest, test_skip_write_txnlog_fills_metacache) {
     request.set_skip_write_txnlog(true);
 
     auto log_path = _tablet_mgr->txn_log_location(_tablet_metadata->id(), txn_id);
-    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_txn_log(log_path));
+    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_txn_log(MetacacheKey::txn_log(log_path)));
 
     auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
     _compaction_scheduler.compact(nullptr, &request, &response, cb);
@@ -444,7 +444,7 @@ TEST_F(LakeCompactionSchedulerTest, test_skip_write_txnlog_fills_metacache) {
     // The log was not written to object storage ...
     EXPECT_FALSE(fs::path_exist(log_path));
     // ... but the publish path can still find it without a remote read.
-    auto cached = _tablet_mgr->metacache()->lookup_txn_log(log_path);
+    auto cached = _tablet_mgr->metacache()->lookup_txn_log(MetacacheKey::txn_log(log_path));
     ASSERT_NE(nullptr, cached);
     EXPECT_EQ(_tablet_metadata->id(), cached->tablet_id());
     EXPECT_EQ(txn_id, cached->txn_id());
@@ -495,6 +495,74 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_basic) {
 
     // The response should have some result (success or failure with txn_log)
     // Since we're testing the code path, we verify it didn't crash
+}
+
+// A tablet whose table allows more subtasks than there are free limiter tokens is planned for the free tokens
+// instead of falling back to serial compaction. One of the four tokens is held here, as another compaction on
+// the node would hold it, and the table allows five subtasks, more than the limiter has tokens at all: the
+// tablet still runs in parallel, on the three tokens that are left.
+TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_narrows_to_the_free_tokens) {
+    auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+    metadata->set_id(next_id());
+    metadata->set_version(11);
+    for (int i = 0; i < 10; i++) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(i);
+        rowset->set_overlapped(true);
+        rowset->set_num_rows(100);
+        rowset->set_data_size(1024 * 1024);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(fmt::format("segment_{}.dat", i));
+        segment_meta->set_size(1024 * 1024);
+    }
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    // The idle workers take a token for an instant each time they look for work, so retry.
+    bool token_held = false;
+    for (int i = 0; i < 1000 && !token_held; i++) {
+        token_held = _compaction_scheduler.acquire_token_for_test();
+        if (!token_held) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    }
+    ASSERT_TRUE(token_held);
+    SCOPED_CLEANUP({ _compaction_scheduler.return_token_for_test(); });
+
+    auto txn_id = next_id();
+    auto latch = std::make_shared<CountDownLatch>(1);
+    CompactRequest request;
+    CompactResponse response;
+    request.add_tablet_ids(metadata->id());
+    request.set_timeout_ms(60 * 1000);
+    request.set_txn_id(txn_id);
+    request.set_version(11);
+    // Ten rowsets of 1MB at 2MB per subtask make five groups of two, as many as the table allows. Three
+    // tokens are free, so three of the groups are compacted in this round.
+    auto* parallel_config = request.mutable_parallel_config();
+    parallel_config->set_enable_parallel(true);
+    parallel_config->set_max_parallel_per_tablet(5);
+    parallel_config->set_max_bytes_per_subtask(2 * 1024 * 1024);
+
+    // Counted when a subtask is registered, before it can run and complete the request.
+    std::atomic<int> subtasks{0};
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->SetCallBack("TabletParallelCompactionManager::submit_subtasks_from_groups:after_register",
+                            [&](void* /*arg*/) { subtasks.fetch_add(1); });
+    sync_point->EnableProcessing();
+    SCOPED_CLEANUP({
+        sync_point->ClearCallBack("TabletParallelCompactionManager::submit_subtasks_from_groups:after_register");
+        sync_point->DisableProcessing();
+    });
+
+    auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
+    _compaction_scheduler.compact(nullptr, &request, &response, cb);
+    latch->wait();
+
+    // The segment files do not exist, so every subtask fails; what matters is that there were subtasks, which a
+    // tablet compacted serially does not have. Three is the expected number. An idle worker holding a token at the
+    // instant the free ones are counted leaves two.
+    EXPECT_GE(subtasks.load(), 2);
+    EXPECT_LE(subtasks.load(), 3);
 }
 
 // Test parallel compaction with single tablet fallback on failure

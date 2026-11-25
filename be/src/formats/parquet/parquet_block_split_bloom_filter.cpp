@@ -16,11 +16,27 @@
 
 #ifdef __AVX2__
 #include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
 #endif
 
 #include "common/util/debug_util.h"
 
 namespace starrocks {
+
+#if defined(__ARM_NEON) && defined(__aarch64__)
+namespace {
+static inline void compute_neon_masks(uint32_t key, uint32x4_t* mask_lo, uint32x4_t* mask_hi) {
+    static constexpr uint32_t kSaltLo[4] = {0x47b6137bU, 0x44974d91U, 0x8824ad5bU, 0xa2b7289dU};
+    static constexpr uint32_t kSaltHi[4] = {0x705495c7U, 0x2df1424bU, 0x9efc4947U, 0x5c6bfb31U};
+    const uint32x4_t ones = vdupq_n_u32(1);
+    int32x4_t shift_lo = vreinterpretq_s32_u32(vshrq_n_u32(vmulq_n_u32(vld1q_u32(kSaltLo), key), 27));
+    int32x4_t shift_hi = vreinterpretq_s32_u32(vshrq_n_u32(vmulq_n_u32(vld1q_u32(kSaltHi), key), 27));
+    *mask_lo = vshlq_u32(ones, shift_lo);
+    *mask_hi = vshlq_u32(ones, shift_hi);
+}
+} // namespace
+#endif
 
 void ParquetBlockSplitBloomFilter::add_hash(uint64_t hash) {
     // most significant 32 bit mod block size as block index(BTW:block size is
@@ -30,6 +46,15 @@ void ParquetBlockSplitBloomFilter::add_hash(uint64_t hash) {
     uint32_t block_index = (uint32_t)(((hash >> 32) * num_blocks) >> 32);
     auto key = (uint32_t)hash;
 
+#if defined(__ARM_NEON) && defined(__aarch64__)
+    auto* block_bytes = reinterpret_cast<uint8_t*>(_data + BYTES_PER_BLOCK * block_index);
+    uint32x4_t mask_lo, mask_hi;
+    compute_neon_masks(key, &mask_lo, &mask_hi);
+    uint32x4_t block_lo = vreinterpretq_u32_u8(vld1q_u8(block_bytes));
+    uint32x4_t block_hi = vreinterpretq_u32_u8(vld1q_u8(block_bytes + 16));
+    vst1q_u8(block_bytes, vreinterpretq_u8_u32(vorrq_u32(block_lo, mask_lo)));
+    vst1q_u8(block_bytes + 16, vreinterpretq_u8_u32(vorrq_u32(block_hi, mask_hi)));
+#else
     // Calculate masks for bucket.
     uint32_t masks[8];
     _set_masks(key, masks);
@@ -45,6 +70,7 @@ void ParquetBlockSplitBloomFilter::add_hash(uint64_t hash) {
         *(block_offset + i) |= masks[i];
     }
 #endif
+#endif
 }
 
 bool ParquetBlockSplitBloomFilter::test_hash(uint64_t hash) const {
@@ -53,6 +79,16 @@ bool ParquetBlockSplitBloomFilter::test_hash(uint64_t hash) const {
     uint32_t num_blocks = _num_bytes / BYTES_PER_BLOCK;
     uint32_t block_index = (uint32_t)(((hash >> 32) * num_blocks) >> 32);
     auto key = (uint32_t)hash;
+
+#if defined(__ARM_NEON) && defined(__aarch64__)
+    const auto* block_bytes = reinterpret_cast<const uint8_t*>(_data + BYTES_PER_BLOCK * block_index);
+    uint32x4_t mask_lo, mask_hi;
+    compute_neon_masks(key, &mask_lo, &mask_hi);
+    uint32x4_t block_lo = vreinterpretq_u32_u8(vld1q_u8(block_bytes));
+    uint32x4_t block_hi = vreinterpretq_u32_u8(vld1q_u8(block_bytes + 16));
+    uint32x4_t diff = vorrq_u32(vbicq_u32(mask_lo, block_lo), vbicq_u32(mask_hi, block_hi));
+    return vmaxvq_u32(diff) == 0;
+#else
     // Calculate masks for bucket.
     uint32_t masks[BITS_SET_PER_BLOCK];
     _set_masks(key, masks);
@@ -72,6 +108,7 @@ bool ParquetBlockSplitBloomFilter::test_hash(uint64_t hash) const {
         }
     }
     return true;
+#endif
 #endif
 }
 

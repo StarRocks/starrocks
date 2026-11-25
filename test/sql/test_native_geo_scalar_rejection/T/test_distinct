@@ -1,0 +1,16 @@
+-- name: test_distinct_geo_geography
+CREATE TABLE geo_distinct_${uuid0} (id INT, wkt VARCHAR(64)) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num"="1");
+INSERT INTO geo_distinct_${uuid0} VALUES (1, 'POINT (1 2)'), (2, 'POINT (1 2)'), (3, 'POINT (3 4)'), (4, NULL), (5, 'POINT EMPTY');
+function: assert_query_error_contains("select count(distinct id, g) from (select id, ST_GeogFromText(wkt) g from geo_distinct_${uuid0}) t", "DISTINCT aggregation is not supported for GEOGRAPHY type")
+function: assert_query_error_contains("select count(distinct id, g) from (select id, ST_GeogFromText(wkt) g from geo_distinct_${uuid0}) t where id >= 4", "DISTINCT aggregation is not supported for GEOGRAPHY type")
+function: assert_query_error_contains("select count(distinct id, g) over (partition by id) from (select id, ST_GeogFromText(wkt) g from geo_distinct_${uuid0}) t", "DISTINCT aggregation is not supported for GEOGRAPHY type")
+SELECT count(DISTINCT ST_AsText(g)), count(DISTINCT ST_AsBinary(g)) from (select id, ST_GeogFromText(wkt) g from geo_distinct_${uuid0}) t;
+DROP TABLE geo_distinct_${uuid0};
+-- name: test_distinct_geo_geometry
+CREATE TABLE geo_distinct_${uuid0} (id INT, wkt VARCHAR(64)) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num"="1");
+INSERT INTO geo_distinct_${uuid0} VALUES (1, 'POINT (1 2)'), (2, 'POINT (1 2)'), (3, 'POINT (3 4)'), (4, NULL), (5, 'POINT EMPTY');
+function: assert_query_error_contains("select count(distinct id, g) from (select id, ST_GeomFromText(wkt, 'EPSG:3857') g from geo_distinct_${uuid0}) t", "DISTINCT aggregation is not supported for GEOMETRY type")
+function: assert_query_error_contains("select count(distinct id, g) from (select id, ST_GeomFromText(wkt, 'EPSG:3857') g from geo_distinct_${uuid0}) t where id >= 4", "DISTINCT aggregation is not supported for GEOMETRY type")
+function: assert_query_error_contains("select count(distinct id, g) over (partition by id) from (select id, ST_GeomFromText(wkt, 'EPSG:3857') g from geo_distinct_${uuid0}) t", "DISTINCT aggregation is not supported for GEOMETRY type")
+SELECT count(DISTINCT ST_AsText(g)), count(DISTINCT ST_AsBinary(g)) from (select id, ST_GeomFromText(wkt, 'EPSG:3857') g from geo_distinct_${uuid0}) t;
+DROP TABLE geo_distinct_${uuid0};

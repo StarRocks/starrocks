@@ -3,6 +3,7 @@ sidebar_position: 60
 displayed_sidebar: docs
 keywords: ['iceberg', 'dml', 'insert', 'sink data', 'overwrite']
 description: "StarRocks Iceberg Catalog supports a variety of Data Manipulation Language (DML) operations, including inserting data into Iceberg tables."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Iceberg DML operations
@@ -16,6 +17,10 @@ You must have the appropriate privileges to perform DML operations. For more inf
 Inserts data into an Iceberg table. This feature is supported from v3.1 onwards.
 
 Similar to loading data into StarRocks native tables, if you have the [INSERT privilege](../../../administration/user_privs/authorization/privilege_item.md#table) on an Iceberg table, you can use the [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) statement to sink the data to the Iceberg table. Currently, only Parquet-formatted Iceberg tables are supported.
+
+For Parquet data files, StarRocks honors the Iceberg table properties `write.parquet.page-size-bytes`, `write.parquet.dict-size-bytes`, and `write.parquet.row-group-size-bytes`. Each value must be a positive integer no greater than 2,147,483,647 bytes; an invalid value rejects the write. If a property is absent, StarRocks uses its writer default: 1 MiB for data pages and dictionary pages, and 128 MiB for row groups. These properties do not configure position-delete files.
+
+For Parquet data files, set the Iceberg table property `write.parquet.compression-level` to an integer to control the selected codec's compression level. Accepted ranges are -131072 to 22 for ZSTD, -1 to 9 for GZIP, and 0 to 11 for Brotli. Other codecs do not support an explicit level. An invalid value rejects the write. If this property is absent, the Parquet writer uses its codec default. The level does not apply to position-delete files.
 
 ### Syntax
 
@@ -32,7 +37,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 :::note
 
-`NULL` values are not allowed in partition columns. Therefore, you must make sure that no empty values are loaded into the partition columns of the Iceberg table.
+`NULL` values are allowed in partition columns. Rows whose partition value is `NULL` are written to the partition whose partition value is `NULL`.
 
 :::
 
@@ -44,7 +49,7 @@ Appends the data to the Iceberg table.
 
 #### OVERWRITE
 
-Overwrites the existing data of the Iceberg table.
+Overwrites the existing data of the Iceberg table. Only the partitions that receive new data are overwritten, and the other partitions are kept. This behavior does not depend on the `dynamic_overwrite` variable, which has no effect on Iceberg tables. For an unpartitioned table, all existing data is replaced. If the query returns no rows, no data is overwritten, even for an unpartitioned table.
 
 #### column_name
 
@@ -74,7 +79,7 @@ Query statement whose result will be loaded into the Iceberg table. It can be an
 
 #### PARTITION
 
-The partitions into which you want to load data. You must specify all partition columns of the Iceberg table in this property. The partition columns that you specify in this property can be in a different sequence than the partition columns that you have defined in the table creation statement.
+The partitions into which you want to load data. You must specify all partition columns of the Iceberg table in this property. The partition columns that you specify in this property can be in a different sequence than the partition columns that you have defined in the table creation statement. If the partition spec of the Iceberg table contains a non-identity transform (for example, `day()` or `bucket()`), the PARTITION clause is not supported.
 
 :::note
 You cannot specify the `column_name` property if you have specified the PARTITION clause.
@@ -130,9 +135,13 @@ You cannot specify the `column_name` property if you have specified the PARTITIO
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
    ```
 
+### Parquet data-page version
+
+For Parquet data files, the Iceberg table property `write.parquet.page-version` accepts `v1` or `v2` (case-insensitive). If absent, StarRocks writes DataPage V1. An invalid value rejects the write. DataPage V2 writes are rejected when the data-file schema contains a BOOLEAN column, including one nested in an array, map, or struct, because the StarRocks reader cannot currently decode its RLE-encoded values. This property does not configure position-delete files. Parquet data-page version is separate from Iceberg table format version.
+
 ## DELETE
 
-You can use the DELETE statement to delete data from Iceberg tables based on specified conditions. This feature is supported from v4.1 and later.
+You can use the DELETE statement to delete data from Iceberg tables based on specified conditions. This feature is supported from v4.1 and later. The `WITH` clause, the `USING` clause, and `FOR VERSION AS OF` are supported from v4.2 and later. The WHERE clause is required, and the PARTITION clause is not supported.
 
 ### Syntax
 
@@ -264,7 +273,7 @@ WHERE <condition>
 
 ### Usage notes
 
-- Only Iceberg tables with **format version 2** are supported. UPDATE on V1 and V3 tables is rejected the query analysis phase.
+- Only Iceberg tables with **format version 2** are supported. UPDATE on V1, V3, and V4 tables is rejected the query analysis phase.
 - A `WHERE` clause is **required** to prevent accidental full-table updates.
 - Partition columns cannot be updated. Use `INSERT OVERWRITE` if you need to rewrite partition columns.
 - The hidden metadata columns `_file` and `_pos` cannot be assigned in `SET`.
@@ -380,7 +389,7 @@ ON <merge_condition>
 
 ### Usage notes
 
-- Only Iceberg tables with **format version 2** are supported. MERGE INTO on V1 and V3 tables, or on non-Iceberg tables (for example, native OLAP tables), is rejected during query analysis.
+- Only Iceberg tables with **format version 2** are supported. MERGE INTO on V1, V3, and V4 tables, or on non-Iceberg tables (for example, native OLAP tables), is rejected during query analysis.
 - At least one `WHEN` clause is required.
 - Each target row must be matched by **at most one** source row. If a target row matches more than one source row, the statement fails at runtime rather than applying an ambiguous change. Deduplicate or aggregate the source in advance when necessary.
 - Partition columns cannot be updated in a `WHEN MATCHED ... THEN UPDATE` clause.
@@ -472,7 +481,7 @@ A MERGE INTO statement that writes to the Iceberg table emits the following FE-s
 
 ## TRUNCATE
 
-You can use the TRUNCATE TABLE statement to quickly delete all data from Iceberg tables.
+You can use the TRUNCATE TABLE statement to quickly delete all data from Iceberg tables. Truncating specific partitions (`TRUNCATE TABLE ... PARTITION`) is not supported for Iceberg tables.
 
 ### Syntax
 

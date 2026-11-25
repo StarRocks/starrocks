@@ -17,6 +17,7 @@ package com.starrocks.lake.compaction;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -33,10 +34,16 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
+import org.apache.logging.log4j.core.config.Configurator;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -232,9 +239,12 @@ public class CompactionMgrTest {
             // The scheduler defers the pending UNSHARE (e.g. its request could not be sent). SplitTabletJob keeps
             // re-triggering it on every reshard tick, which must not erase the retry deadline.
             compactionManager.enableCompactionAfter(partition, 60_000);
+            compactionManager.deferCompactionForAlter(partition, 120_000);
+            long retryTime = compactionManager.getStatistics(partition).getNextCompactionTime();
             compactionManager.triggerUnshareCompaction(partition);
             Assertions.assertEquals(PartitionStatistics.CompactionPriority.UNSHARE,
                     compactionManager.getStatistics(partition).getPriority());
+            Assertions.assertEquals(retryTime, compactionManager.getStatistics(partition).getNextCompactionTime());
             Assertions.assertTrue(compactionManager.choosePartitionsToCompact(new HashSet<>()).isEmpty());
 
             // Once the request is dropped back to DEFAULT, the next trigger is a new request and runs at once.
@@ -244,6 +254,44 @@ public class CompactionMgrTest {
         } finally {
             Config.lake_compaction_selector = oldSelector;
         }
+    }
+
+    // A split waiting for UNSHARE re-triggers its pending request on every reshard tick. Only the request itself is
+    // worth an INFO line; the repeats go to DEBUG.
+    @Test
+    public void testUnshareTriggerLogsOncePerRequest() {
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+
+        List<String> logs = new ArrayList<>();
+        AbstractAppender appender = new AbstractAppender("unshare-trigger-log-capture", null, null) {
+            @Override
+            public void append(LogEvent event) {
+                String message = event.getMessage().getFormattedMessage();
+                if (message.startsWith("Trigger UNSHARE compaction")) {
+                    logs.add(event.getLevel().name());
+                }
+            }
+        };
+        org.apache.logging.log4j.core.Logger logger =
+                (org.apache.logging.log4j.core.Logger) LogManager.getLogger(CompactionMgr.class);
+        Level oldLevel = logger.getLevel();
+        appender.start();
+        logger.addAppender(appender);
+        Configurator.setLevel(CompactionMgr.class.getName(), Level.DEBUG);
+        try {
+            compactionManager.triggerUnshareCompaction(partition);
+            compactionManager.triggerUnshareCompaction(partition);
+            // Once the request has run (or been dropped) its priority is reset, so the next trigger is a new request.
+            compactionManager.resetPriority(partition);
+            compactionManager.triggerUnshareCompaction(partition);
+        } finally {
+            Configurator.setLevel(CompactionMgr.class.getName(), oldLevel);
+            logger.removeAppender(appender);
+            appender.stop();
+        }
+
+        Assertions.assertEquals(List.of("INFO", "DEBUG", "INFO"), logs);
     }
 
     @Test
@@ -258,6 +306,7 @@ public class CompactionMgrTest {
                 compactionManager.handleLoadingFinished(partition, 1, System.currentTimeMillis(),
                         Quantiles.compute(Lists.newArrayList(1d)));
                 compactionManager.enableCompactionAfter(partition, 60_000);
+                compactionManager.deferCompactionForAlter(partition, 120_000);
             }
 
             // A new manual or UNSHARE request runs on the next cycle even while the partition is cooling down.
@@ -412,5 +461,32 @@ public class CompactionMgrTest {
         // Unknown partitions are a no-op rather than an error: the scheduler may drop a request for a
         // partition the manager has already forgotten.
         compactionMgr.resetPriority(new PartitionIdentifier(9, 9, 9));
+    }
+
+    @Test
+    public void testResumeCompactionAfterAlterPreservesOtherRetryTimes() {
+        CompactionMgr compactionManager = new CompactionMgr();
+        LakeTable table = new LakeTable();
+        table.setId(2);
+        table.addPartition(new Partition(10, 3, "regular", new MaterializedIndex(), null));
+        table.addTempPartition(new Partition(11, 4, "temporary", new MaterializedIndex(), null));
+        PartitionIdentifier first = new PartitionIdentifier(1, 2, 3);
+        PartitionIdentifier second = new PartitionIdentifier(1, 2, 4);
+        PartitionIdentifier otherTable = new PartitionIdentifier(1, 5, 6);
+        long now = System.currentTimeMillis();
+        for (PartitionIdentifier partition : List.of(first, second, otherTable)) {
+            compactionManager.handleLoadingFinished(partition, 2, now, new Quantiles(1.0, 1.0, 50.0));
+        }
+        compactionManager.enableCompactionAfter(first, 60_000);
+        long failureRetryTime = compactionManager.getStatistics(first).getNextCompactionTime();
+        for (PartitionIdentifier partition : List.of(first, second, otherTable)) {
+            compactionManager.deferCompactionForAlter(partition, 120_000);
+        }
+        long otherTableRetryTime = compactionManager.getStatistics(otherTable).getNextCompactionTime();
+
+        compactionManager.resumeCompactionAfterAlter(1, table);
+        Assertions.assertEquals(failureRetryTime, compactionManager.getStatistics(first).getNextCompactionTime());
+        Assertions.assertEquals(0, compactionManager.getStatistics(second).getNextCompactionTime());
+        Assertions.assertEquals(otherTableRetryTime, compactionManager.getStatistics(otherTable).getNextCompactionTime());
     }
 }

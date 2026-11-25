@@ -53,7 +53,7 @@ protected:
     }
 
 private:
-    std::vector<TypeInfoPtr> _field_types;
+    const std::vector<TypeInfoPtr> _field_types;
 };
 
 TypeInfoPtr get_struct_type_info(std::vector<TypeInfoPtr> field_types) {

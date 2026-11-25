@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Obtains the profile of a query by using its query_id."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # get_query_profile

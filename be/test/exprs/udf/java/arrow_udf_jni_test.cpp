@@ -30,7 +30,7 @@ TEST(ExportedArrowBatchTest, ExportColumnsPopulatesCStructs) {
     auto column = ColumnTestHelper::build_column<int32_t>({1, 2, 3});
     Columns columns;
     columns.emplace_back(std::move(column));
-    TypeDescriptor type_descs[] = {TypeDescriptor(TYPE_INT)};
+    TypeDescriptor type_descs[] = {TYPE_INT_DESC};
 
     ExportedArrowBatch batch;
     ASSERT_OK(batch.export_columns(3, columns, type_descs));
@@ -49,7 +49,7 @@ TEST(ExportedArrowBatchTest, ExportRawColumnPointers) {
     auto column = Int32Column::create();
     column->append(7);
     column->append(8);
-    TypeDescriptor type_descs[] = {TypeDescriptor(TYPE_INT)};
+    TypeDescriptor type_descs[] = {TYPE_INT_DESC};
     const Column* raw[] = {column.get()};
 
     ExportedArrowBatch batch;

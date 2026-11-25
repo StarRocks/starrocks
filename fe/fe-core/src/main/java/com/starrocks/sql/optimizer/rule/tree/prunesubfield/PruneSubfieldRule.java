@@ -113,7 +113,8 @@ public class PruneSubfieldRule extends TransformationRule {
 
         // project expression
         SubfieldExpressionCollector collector =
-                new SubfieldExpressionCollector(context.getSessionVariable().isCboPruneJsonSubfield());
+                new SubfieldExpressionCollector(context.getSessionVariable().isCboPruneJsonSubfield())
+                        .enableVariantNullCheck();
         for (ScalarOperator value : project.getColumnRefMap().values()) {
             value.accept(collector, null);
         }

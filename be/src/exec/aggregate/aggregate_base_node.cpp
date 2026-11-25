@@ -49,6 +49,15 @@ Status AggregateBaseNode::init(const TPlanNode& tnode, RuntimeState* state) {
     return Status::OK();
 }
 
+bool AggregateBaseNode::_group_by_keys_support_orderby() const {
+    for (auto* expr : _group_by_expr_ctxs) {
+        if (!expr->root()->type().support_orderby()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void AggregateBaseNode::close(RuntimeState* state) {
     if (is_closed()) {
         return;

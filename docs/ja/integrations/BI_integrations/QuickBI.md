@@ -2,6 +2,7 @@
 sidebar_position: 50
 displayed_sidebar: docs
 description: "QuickBI を StarRocks に接続して、StarRocks データを QuickBI 上で可視化分析する方法を説明します。"
+products: [oss, enterprise, anywhere]
 ---
 
 # QuickBI

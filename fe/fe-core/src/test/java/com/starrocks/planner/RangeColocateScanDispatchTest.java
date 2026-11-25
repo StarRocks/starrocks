@@ -187,7 +187,8 @@ public class RangeColocateScanDispatchTest {
 
         // Insert in non-range order — bucketSeq must come from ColocateRange index,
         // not insertion position.
-        MaterializedIndex index = new MaterializedIndex(99L);
+        MaterializedIndex index = new MaterializedIndex(99L, table.getBaseIndexMetaId(),
+                MaterializedIndex.IndexState.NORMAL, PhysicalPartition.INVALID_SHARD_GROUP_ID);
         addSyntheticTablet(index, makeLakeTabletWithRange(902L, Range.ge(makeTuple(200))));
         Tuple lower1 = new Tuple(Arrays.asList(
                 Variant.of(IntegerType.INT, "150"), Variant.of(IntegerType.INT, "1")));
@@ -251,7 +252,8 @@ public class RangeColocateScanDispatchTest {
                 new ColocateRange(Range.gelt(makeTuple(100), makeTuple(200)), 9002L),
                 new ColocateRange(Range.ge(makeTuple(200)), 9003L)));
 
-        MaterializedIndex index = new MaterializedIndex(98L);
+        MaterializedIndex index = new MaterializedIndex(98L, table.getBaseIndexMetaId(),
+                MaterializedIndex.IndexState.NORMAL, PhysicalPartition.INVALID_SHARD_GROUP_ID);
         addSyntheticTablet(index, makeLakeTabletWithRange(800L, Range.lt(makeTuple(100))));
 
         RangeColocateScanDispatch dispatch =
@@ -269,7 +271,8 @@ public class RangeColocateScanDispatchTest {
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(db.getFullName(), "t_facade_norange");
 
-        MaterializedIndex index = new MaterializedIndex(97L);
+        MaterializedIndex index = new MaterializedIndex(97L, table.getBaseIndexMetaId(),
+                MaterializedIndex.IndexState.NORMAL, PhysicalPartition.INVALID_SHARD_GROUP_ID);
         addSyntheticTablet(index, new LakeTablet(701L)); // no TabletRange
 
         RangeColocateScanDispatch dispatch =

@@ -45,9 +45,8 @@ constexpr const char* shifted = "POLYGON ((2 0,6 0,6 4,2 4,2 0))";
 constexpr const char* empty = "POLYGON EMPTY";
 
 TypeDescriptor geo_type(std::string crs = "EPSG:3857") {
-    return TypeDescriptor::create_geo_type(
-            TYPE_GEOMETRY, {GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR, crs,
-                            crs == "EPSG:4326" ? 4326 : 3857});
+    return TypeDescriptor::create_geo_type(TYPE_GEOMETRY, {GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, crs,
+                                                           crs == "EPSG:4326" ? 4326 : 3857});
 }
 
 ColumnPtr geometries(std::initializer_list<const char*> values, const TypeDescriptor& type = geo_type()) {
@@ -63,13 +62,12 @@ ColumnPtr geometries(std::initializer_list<const char*> values, const TypeDescri
     ColumnPtr input = NullableColumn::create(text, nulls);
     auto crs = ColumnHelper::create_const_column<TYPE_VARCHAR>(type.geo_type->crs, input->size());
     std::unique_ptr<FunctionContext> ctx(
-            FunctionContext::create_test_context({TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR)}, type));
+            FunctionContext::create_test_context({TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC}, type));
     return GeoFunctions::st_geom_from_text(ctx.get(), {input, crs}).value();
 }
 
 ColumnPtr raw_geometry(std::string_view wkb) {
-    GeoColumnDescriptor descriptor{geo_type().geo_type.value(),
-                                   {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED}};
+    GeoColumnDescriptor descriptor{geo_type().geo_type.value()};
     auto column = GeoColumn::create(descriptor);
     column->append_datum(Datum(Slice(wkb)));
     return column;
@@ -477,9 +475,7 @@ TEST(GeoOverlayTest, RejectsMalformedNonFiniteDimensionsAndReturnDescriptor) {
         auto bad_return = context(geo_type("EPSG:4326"));
         EXPECT_FALSE(fn(bad_return.get(), {geometries({square}), geometries({square})}).ok());
         auto wrong_kind = GeoColumn::create(
-                GeoColumnDescriptor{{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                     GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326},
-                                    {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED}});
+                GeoColumnDescriptor{{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326}});
         wrong_kind->append_datum(Datum(Slice(wkb)));
         EXPECT_FALSE(fn(ctx.get(), {wrong_kind, geometries({square})}).ok());
     }
@@ -631,7 +627,6 @@ TEST(GeoOverlayTest, IntersectionReturnsAreaLinePointAndEmptyWithInputCrs) {
         ASSERT_TRUE(result.ok()) << result.status();
         const auto* data = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(*result));
         EXPECT_EQ(type.geo_type.value(), data->descriptor().type);
-        EXPECT_EQ(GEO_DIMENSION_XY, data->descriptor().storage.dimension);
     }
 }
 TEST(GeoOverlayTest, IntersectionCrossingsRemainPolygonForDownstreamOverlays) {

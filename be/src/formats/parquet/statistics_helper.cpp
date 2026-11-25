@@ -60,7 +60,9 @@ Status StatisticsHelper::decode_min_max_into_columns(const MutableColumnPtr& min
                 src_column->append_nulls(1);
             } else {
                 RETURN_IF_ERROR(PlainDecoder<int64_t>::decode(values[i], &decode_value));
-                src_column->append_numbers(&decode_value, sizeof(int64_t));
+                if (src_column->append_numbers(&decode_value, sizeof(int64_t)) == 0) {
+                    return Status::InternalError("Decode min-max column failed");
+                }
             }
         }
         return Status::OK();
@@ -172,6 +174,15 @@ Status StatisticsHelper::decode_value_into_column(const MutableColumnPtr& column
                 }
             }
             RETURN_IF_ERROR(converter->convert(src_column.get(), column.get()));
+            // A BYTE_ARRAY decimal that does not fit into the target type converts to null. A null
+            // bound is not a usable bound (IS NOT NULL would drop the page), so give up pruning.
+            if (field->physical_type == tparquet::Type::type::BYTE_ARRAY && type.is_decimal_type()) {
+                for (size_t i = 0; i < values.size(); i++) {
+                    if (!null_pages[i] && column->is_null(column->size() - values.size() + i)) {
+                        return Status::NotSupported("min/max value does not fit into the column type");
+                    }
+                }
+            }
         }
         break;
     }

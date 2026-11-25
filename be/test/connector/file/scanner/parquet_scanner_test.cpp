@@ -73,7 +73,7 @@ TEST(ParquetGeoReaderTest, EmptyFileKeepsExistingInferenceAndEof) {
         EXPECT_EQ(TYPE_VARBINARY, inferred[0].type().type);
         SlotDescriptor binary(0, "shape", TypeDescriptor::create_varbinary_type(1024));
         EXPECT_TRUE(reader.init_parquet_reader({&binary}).is_end_of_file());
-        SlotDescriptor missing(1, "missing", TypeDescriptor(TYPE_INT));
+        SlotDescriptor missing(1, "missing", TYPE_INT_DESC);
         ParquetReaderWrap ordinary(std::make_shared<ParquetChunkFile>(file, 0, &counter), 1, 0,
                                    result.ValueOrDie()->size());
         EXPECT_TRUE(ordinary.init_parquet_reader({&missing}).is_end_of_file());
@@ -109,7 +109,7 @@ TEST(ParquetGeoReaderTest, AnnotatedColumnsKeepExistingReads) {
         ScannerCounter counter;
         ParquetReaderWrap reader(std::make_shared<ParquetChunkFile>(file, 0, &counter), 1, 0,
                                  result.ValueOrDie()->size());
-        SlotDescriptor supported(0, "id", TypeDescriptor(TYPE_INT));
+        SlotDescriptor supported(0, "id", TYPE_INT_DESC);
         auto status = reader.init_parquet_reader({&supported});
         ASSERT_TRUE(status.ok()) << status;
         auto batch = reader.get_batch();
@@ -211,7 +211,7 @@ TEST(ParquetChunkFileTest, PreBufferedReadsRunOnCallerThread) {
     auto file = std::make_shared<RandomAccessFile>(stream, "caller-thread.parquet");
     ScannerCounter counter;
     ParquetReaderWrap reader(std::make_shared<ParquetChunkFile>(file, 0, &counter), 1, 0, contents.size());
-    SlotDescriptor slot(0, "id", TypeDescriptor(TYPE_INT));
+    SlotDescriptor slot(0, "id", TYPE_INT_DESC);
     ASSERT_OK(reader.init_parquet_reader({&slot}));
     auto batch = reader.get_batch();
     ASSERT_NE(nullptr, batch);
@@ -243,7 +243,7 @@ TEST(ParquetChunkFileTest, CancelledQuerySkipsReads) {
 
     // The scan stops with the cancellation instead of reading the file or reporting a read error.
     ParquetReaderWrap reader(std::move(chunk_file), 1, 0, contents.size());
-    SlotDescriptor slot(0, "id", TypeDescriptor(TYPE_INT));
+    SlotDescriptor slot(0, "id", TYPE_INT_DESC);
     auto st = reader.init_parquet_reader({&slot});
     EXPECT_TRUE(st.is_cancelled()) << st;
     EXPECT_NE(std::string_view::npos, st.message().find("query cancelled")) << st;
@@ -257,7 +257,7 @@ TEST(ParquetChunkFileTest, CancelAfterFooterStopsColumnRead) {
     auto file = std::make_shared<RandomAccessFile>(stream, "cancel-after-footer.parquet");
     ScannerCounter counter;
     ParquetReaderWrap reader(std::make_shared<ParquetChunkFile>(file, 0, &counter, &state), 1, 0, contents.size());
-    SlotDescriptor slot(0, "id", TypeDescriptor(TYPE_INT));
+    SlotDescriptor slot(0, "id", TYPE_INT_DESC);
     auto st = reader.init_parquet_reader({&slot});
     // The footer was parsed, then the column chunk read stopped at the cancellation.
     EXPECT_EQ(10, reader.num_rows());
@@ -274,7 +274,7 @@ TEST(ParquetChunkFileTest, CancelAfterInitStopsNextRowGroup) {
     RuntimeState state{TQueryGlobals()};
     ScannerCounter counter;
     ParquetReaderWrap reader(std::make_shared<ParquetChunkFile>(file, 0, &counter, &state), 1, 0, contents.size());
-    SlotDescriptor slot(0, "id", TypeDescriptor(TYPE_INT));
+    SlotDescriptor slot(0, "id", TYPE_INT_DESC);
     ASSERT_OK(reader.init_parquet_reader({&slot}));
     ASSERT_EQ(rows_per_group, reader.get_batch()->num_rows());
     const int64_t reads_before_cancel = counter.file_read_count;

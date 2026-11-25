@@ -17,9 +17,21 @@ package com.starrocks.connector.metadata;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metadata.iceberg.IcebergMetadataTableFactory;
+import com.starrocks.connector.paimon.PaimonMetadataTableFactory;
 
 public class MetadataTableFactoryProvider {
+    public static AbstractMetadataTableFactory getFactory(String catalogType, MetadataTableType type) {
+        if (type == MetadataTableType.PAIMON_GLOBAL_INDEX
+                && catalogType.equalsIgnoreCase(ConnectorType.UNIFIED.getName())) {
+            return PaimonMetadataTableFactory.INSTANCE;
+        }
+        return getFactory(catalogType);
+    }
+
     public static AbstractMetadataTableFactory getFactory(String catalogType) {
+        if (catalogType.equalsIgnoreCase(ConnectorType.PAIMON.getName())) {
+            return PaimonMetadataTableFactory.INSTANCE;
+        }
         if (catalogType.equalsIgnoreCase(ConnectorType.ICEBERG.getName()) ||
                 catalogType.equalsIgnoreCase(ConnectorType.UNIFIED.getName())) {
             return IcebergMetadataTableFactory.INSTANCE;

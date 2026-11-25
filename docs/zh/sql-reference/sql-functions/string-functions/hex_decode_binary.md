@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将十六进制编码的字符串解码为VARBINARY类型的值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # hex_decode_binary

@@ -54,7 +54,7 @@ public class RefreshTableStatementAnalyzer {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
             }
             if (metadataMgr.getDb(context, catalogName, dbName) == null) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, dbName);
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
             if (metadataMgr.getTable(context, catalogName, dbName, tblName) == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);

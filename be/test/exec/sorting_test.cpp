@@ -111,7 +111,7 @@ class MergeTestFixture : public testing::TestWithParam<MergeParamType> {};
 
 TEST_P(MergeTestFixture, merge_sorter_chunks_two_way) {
     auto runtime_state = create_runtime_state();
-    TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
+    TypeDescriptor type_desc = TYPE_INT_DESC;
     std::vector<int> sort_slots = std::get<0>(GetParam());
     std::vector<std::vector<int32_t>> sorting_data = std::get<1>(GetParam());
     int total_columns = sorting_data.size();
@@ -371,8 +371,8 @@ TEST(SortingTest, materialize_by_permutation_json) {
 }
 
 TEST(SortingTest, steal_chunk) {
-    ColumnPtr col1 = build_sorted_column(TypeDescriptor(TYPE_INT), 0, 100, 1);
-    ColumnPtr col2 = build_sorted_column(TypeDescriptor(TYPE_INT), 0, 100, 1);
+    ColumnPtr col1 = build_sorted_column(TYPE_INT_DESC, 0, 100, 1);
+    ColumnPtr col2 = build_sorted_column(TYPE_INT_DESC, 0, 100, 1);
     Chunk::SlotHashMap slot_map{{0, 0}, {1, 1}};
     ChunkPtr chunk = std::make_shared<Chunk>(Columns{std::move(col1), std::move(col2)}, slot_map);
 
@@ -391,8 +391,8 @@ TEST(SortingTest, steal_chunk) {
 }
 
 TEST(SortingTest, sorted_runs) {
-    ColumnPtr col1 = build_sorted_column(TypeDescriptor(TYPE_INT), 0, 100, 1);
-    ColumnPtr col2 = build_sorted_column(TypeDescriptor(TYPE_INT), 0, 100, 1);
+    ColumnPtr col1 = build_sorted_column(TYPE_INT_DESC, 0, 100, 1);
+    ColumnPtr col2 = build_sorted_column(TYPE_INT_DESC, 0, 100, 1);
     Chunk::SlotHashMap slot_map{{0, 0}, {1, 1}};
     ChunkPtr chunk = std::make_shared<Chunk>(Columns{std::move(col1), std::move(col2)}, slot_map);
 
@@ -424,7 +424,7 @@ TEST(SortingTest, merge_sorted_chunks) {
                                                 {-2118, -2065, -1328, -1103, -1099, -1093},
                                                 {-950, -807, -604}};
     for (auto& input_numbers : input_runs) {
-        MutableColumnPtr column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+        MutableColumnPtr column = ColumnHelper::create_column(TYPE_INT_DESC, false);
         for (int x : input_numbers) {
             column->append_datum(Datum((int32_t)x));
         }
@@ -434,7 +434,7 @@ TEST(SortingTest, merge_sorted_chunks) {
 
     std::vector<std::unique_ptr<ColumnRef>> exprs;
     std::vector<ExprContext*> sort_exprs;
-    exprs.emplace_back(std::make_unique<ColumnRef>(TypeDescriptor(TYPE_INT), 0));
+    exprs.emplace_back(std::make_unique<ColumnRef>(TYPE_INT_DESC, 0));
     sort_exprs.emplace_back(new ExprContext(exprs.back().get()));
     ASSERT_OK(ExprExecutor::prepare(sort_exprs, runtime_state.get()));
     ASSERT_OK(ExprExecutor::open(sort_exprs, runtime_state.get()));
@@ -563,7 +563,7 @@ TEST(SortingTest, merge_sorted_stream) {
     std::vector<std::unique_ptr<ColumnRef>> exprs;
     std::vector<ExprContext*> sort_exprs;
     Chunk::SlotHashMap map;
-    TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
+    TypeDescriptor type_desc = TYPE_INT_DESC;
     SortDescs sort_desc(std::vector<int>{1, 1, 1}, std::vector<int>{-1, -1, -1});
 
     for (int i = 0; i < num_columns; i++) {
@@ -625,7 +625,7 @@ static void test_merge_path(const size_t num_cols, const size_t left_start, cons
                             const size_t processor_num, bool& success) {
     ASSERT_LE(dest_num_rows, (left_num_rows - left_start) + (right_num_rows - right_start));
     auto runtime_state = create_runtime_state();
-    TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
+    TypeDescriptor type_desc = TYPE_INT_DESC;
     std::vector<bool> orders(num_cols, true);
     std::vector<bool> null_firsts(num_cols, false);
     SortDescs sort_descs(std::move(orders), std::move(null_firsts));

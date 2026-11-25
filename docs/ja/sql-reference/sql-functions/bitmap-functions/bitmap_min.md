@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ビットマップの最小値を取得します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_min

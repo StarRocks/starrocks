@@ -137,8 +137,8 @@ void CompactionTaskCallback::cache_txn_log(const CompactionTaskContext& context)
         return;
     }
     auto* tablet_mgr = _scheduler->_tablet_mgr;
-    tablet_mgr->metacache()->cache_txn_log(tablet_mgr->txn_log_location(context.tablet_id, context.txn_id),
-                                           context.txn_log);
+    tablet_mgr->metacache()->cache_txn_log(
+            MetacacheKey::txn_log(tablet_mgr->txn_log_location(context.tablet_id, context.txn_id)), context.txn_log);
 }
 
 void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&& context) {
@@ -631,10 +631,9 @@ bool CompactionScheduler::try_hand_off_to_parallel(std::unique_ptr<CompactionTas
     // This worker holds one of the limiter's tokens for as long as do_compaction() runs. Hand it back
     // before planning, for two reasons:
     //
-    //  - the subtasks are reserved all-or-nothing, so holding onto it would make parallel compaction need
-    //    max_parallel_per_tablet + 1 free tokens; with the defaults (3 subtasks, compact_threads=4) a
-    //    single other compaction anywhere on the CN would then be enough to quietly downgrade every
-    //    tablet to serial compaction;
+    //  - every subtask needs a token of its own before the first one is submitted, and the plan is cut
+    //    down to the tokens that are free, so holding onto this one would cost the tablet a subtask --
+    //    and, with a single other token free, the parallel plan altogether;
     //  - keeping it and settling up later cannot work: a handed-off do_compaction() returns while the
     //    subtasks are still running, so thread_task() would credit the token back and leave a phantom
     //    free token -- letting compactions exceed the configured (or memory-reduced) concurrency for as
@@ -680,7 +679,16 @@ bool CompactionScheduler::try_hand_off_to_parallel(std::unique_ptr<CompactionTas
 
     TabletParallelConfig parallel_config;
     parallel_config.set_enable_parallel(true);
-    parallel_config.set_max_parallel_per_tablet(context->parallel_max_parallel_per_tablet);
+    // Plan for the limiter tokens that are free right now -- the one this worker just returned among them --
+    // rather than for the width the table allows. A wider plan could not get its tokens: the planner would
+    // find that out when it reserves them and plan a second time for the number it did get, and each plan of
+    // a range split samples the input segments. The count is only a snapshot, so the planner keeps that
+    // second plan for the case where another worker takes a token in between. Never below two: a tablet
+    // that meets a limiter with fewer free then fails to reserve them, and is reported and compacted serially.
+    const int32_t requested_parallel = context->parallel_max_parallel_per_tablet;
+    const int32_t planned_parallel =
+            std::min<int32_t>(requested_parallel, std::max<int32_t>(2, _limiter.free_tokens()));
+    parallel_config.set_max_parallel_per_tablet(planned_parallel);
     parallel_config.set_max_bytes_per_subtask(context->parallel_max_bytes_per_subtask);
 
     auto result = [&]() -> StatusOr<int> {
@@ -708,13 +716,14 @@ bool CompactionScheduler::try_hand_off_to_parallel(std::unique_ptr<CompactionTas
 
     if (!result.ok() || result.value() <= 0) {
         if (!result.ok()) {
-            // Planning reserves one limiter token per subtask, all or nothing, so a busy scheduler can
-            // leave too few for the whole set. That is a silent downgrade to serial compaction.
-            LOG_IF(WARNING, result.status().is_resource_busy())
-                    << "Not enough compaction limiter tokens to run tablet " << tablet_id
-                    << " in parallel out of a concurrency of " << _limiter.concurrency()
-                    << "; compacting it serially. Other compactions are holding tokens -- parallel "
-                       "compaction wants compact_threads to be at least max_parallel_per_tablet.";
+            // Planning reserves one limiter token per subtask and cuts the plan down to the tokens that are
+            // free. With fewer than two free there is nothing to run in parallel: the node's compaction
+            // concurrency is in use, and the tablet is compacted serially on this worker's token. That is
+            // the node working at its limit, not a fault, so it is logged for the record and no louder.
+            LOG_IF(INFO, result.status().is_resource_busy())
+                    << "Fewer than two compaction limiter tokens are free out of a concurrency of "
+                    << _limiter.concurrency() << ", so tablet " << tablet_id
+                    << " is compacted serially. Other compactions are holding the rest.";
             VLOG(1) << "Parallel compaction planning failed for tablet " << tablet_id << ": " << result.status()
                     << ", compacting serially";
         } else {
@@ -724,6 +733,12 @@ bool CompactionScheduler::try_hand_off_to_parallel(std::unique_ptr<CompactionTas
     }
 
     VLOG(1) << "Created " << result.value() << " parallel subtasks for tablet " << tablet_id << ", txn_id=" << txn_id;
+    // The plan filled the width it was given, and that width was the free tokens, not the table's setting.
+    LOG_IF(INFO, planned_parallel < requested_parallel && result.value() >= planned_parallel)
+            << "Parallel compaction of tablet " << tablet_id << ", txn_id=" << txn_id << " runs " << result.value()
+            << " subtasks: it was planned for the " << planned_parallel
+            << " compaction limiter tokens that were free, not for the " << requested_parallel
+            << " subtasks its table allows";
 
     // The subtasks are running and will complete this tablet, so retire our context. It has to leave
     // _contexts before it is destroyed: the list holds a bare pointer that list_tasks() and abort() walk

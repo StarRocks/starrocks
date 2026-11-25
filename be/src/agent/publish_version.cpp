@@ -255,13 +255,20 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
             if (st.ok()) {
                 st = task.st;
             }
-        } else if (!task.is_shadow) {
+        } else if (!task.is_shadow && !task.is_double_write) {
+            // A sync publish reports the task finished only once these versions are applied.
             auto& pair = tablet_publish_versions.emplace_back();
             pair.__set_tablet_id(task.tablet_id);
             pair.__set_version(task.version);
         } else {
+            // A double write of an online optimize lands in a temp partition, where a primary key tablet keeps it
+            // pending until the rewrite of the partition puts its version overwrite there. Waiting for it to be
+            // applied would hold the load, and every later one in its partitions, until the rewrite is done; and
+            // a load that has to finish before the rewrite starts would never finish. Nothing reads the temp
+            // partition before it replaces the source one, and a read after that waits for the apply as a read of
+            // any primary key tablet does when its versions are not applied yet.
             VLOG(1) << "publish_version success tablet:" << task.tablet_id << " version:" << task.version
-                    << " is_shadow:" << task.is_shadow;
+                    << " is_shadow:" << task.is_shadow << " is_double_write:" << task.is_double_write;
         }
     }
     // return tablet and its version which has already finished.

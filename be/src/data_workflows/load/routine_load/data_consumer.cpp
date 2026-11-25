@@ -34,6 +34,7 @@
 
 #include "data_workflows/load/routine_load/data_consumer.h"
 
+#include <algorithm>
 #include <functional>
 #include <string>
 #include <vector>
@@ -48,10 +49,30 @@
 #include "exec/exec_env.h"
 #include "fmt/format.h"
 #include "gutil/strings/split.h"
+#include "librdkafka/rdkafka.h"
 #include "platform/platform_env.h"
 #include "platform/small_file_mgr.h"
 
 namespace starrocks {
+
+// the largest fetch.queue.backoff.ms librdkafka accepts
+static constexpr int32_t MAX_KAFKA_FETCH_QUEUE_BACKOFF_MS = 300000;
+
+KafkaDataConsumer::~KafkaDataConsumer() {
+    VLOG(3) << "deconstruct consumer";
+    // Nothing waits for the results of the commits still on their way any more; closing waits for the commits.
+    for (rd_kafka_queue_t* queue : _commit_result_queues) {
+        rd_kafka_queue_destroy(queue);
+    }
+    if (_k_consumer) {
+        // consumer may be already closed when get partition meta failed
+        if (!_k_consumer->closed()) {
+            _k_consumer->close();
+        }
+        delete _k_consumer;
+        _k_consumer = nullptr;
+    }
+}
 
 // init kafka consumer will only set common configs such as
 // brokers, groupid
@@ -113,6 +134,15 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
     RETURN_IF_ERROR(set_conf("auto.offset.reset", "error"));
     if (config::dependency_librdkafka_debug_enable) {
         RETURN_IF_ERROR(set_conf("debug", config::dependency_librdkafka_debug));
+    }
+    // Once the local queue is over queued.min.messages or queued.max.messages.kbytes, librdkafka holds off the next
+    // fetch of a partition for fetch.queue.backoff.ms and does not fetch earlier when the load drains the queue: with
+    // its default of 1000 ms, a consumer that reads faster waits for the rest of the second. The job's own
+    // fetch.queue.backoff.ms, set below, overrides this one.
+    _fetch_queue_backoff_ms = config::routine_load_kafka_fetch_queue_backoff_ms;
+    if (_fetch_queue_backoff_ms >= 0) {
+        RETURN_IF_ERROR(set_conf("fetch.queue.backoff.ms",
+                                 std::to_string(std::min(_fetch_queue_backoff_ms, MAX_KAFKA_FETCH_QUEUE_BACKOFF_MS))));
     }
 
     for (auto& item : ctx->kafka_info->properties) {
@@ -196,7 +226,12 @@ Status KafkaDataConsumer::assign_topic_partitions(const std::map<int32_t, int64_
     return Status::OK();
 }
 
-Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* queue, int64_t max_running_time_ms) {
+// How long a consumer that does not stop at the end of its partitions waits for a message at a time, so that it sees
+// the cancellation soon after the consumption it feeds has ended.
+static constexpr int64_t CONSUME_POLL_MS_WITHOUT_STOP_AT_EOF = 100;
+
+Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* queue, int64_t max_running_time_ms,
+                                        bool stop_at_eof) {
     DCHECK(!_k_consumer->closed());
     _last_visit_time = time(nullptr);
     int64_t left_time = max_running_time_ms;
@@ -225,7 +260,9 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
         bool done = false;
         // consume 1 message at a time
         consumer_watch.start();
-        int64_t consume_timeout = std::min<int64_t>(left_time, config::routine_load_kafka_timeout_second * 1000);
+        int64_t consume_timeout =
+                std::min<int64_t>(left_time, stop_at_eof ? config::routine_load_kafka_timeout_second * 1000
+                                                         : CONSUME_POLL_MS_WITHOUT_STOP_AT_EOF);
         std::unique_ptr<RdKafka::Message> msg(_k_consumer->consume(consume_timeout /* timeout, ms */));
         consumer_watch.stop();
         switch (msg->err()) {
@@ -244,9 +281,12 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
         case RdKafka::ERR__TIMED_OUT: {
             // leave the status as OK, because this may happened
             // if there is no data in kafka.
-            std::stringstream ss;
-            ss << msg->errstr() << ", timeout " << consume_timeout;
-            LOG(INFO) << "kafka consume timeout: " << _id << " msg " << ss.str();
+            // Without stopping at the end, the short polls of idle partitions time out all the time.
+            if (stop_at_eof) {
+                std::stringstream ss;
+                ss << msg->errstr() << ", timeout " << consume_timeout;
+                LOG(INFO) << "kafka consume timeout: " << _id << " msg " << ss.str();
+            }
             break;
         }
         case RdKafka::ERR_OFFSET_OUT_OF_RANGE: {
@@ -278,7 +318,7 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
             if (!queue->blocking_put(msg.get())) {
                 finish_reason = "queue closed";
                 done = true;
-            } else if (all_partitions_eof) {
+            } else if (all_partitions_eof && stop_at_eof) {
                 msg.release();
                 finish_reason = "all partitions EOF";
                 done = true;
@@ -340,15 +380,30 @@ Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_i
     latest_offsets->reserve(partition_ids->size());
     MonotonicStopWatch watch;
     watch.start();
+    bool metadata_refreshed = false;
     for (auto p_id : *partition_ids) {
         int64_t beginning_offset;
         int64_t latest_offset;
-        auto left_ms = timeout - watch.elapsed_time() / 1000 / 1000;
+        // elapsed_time() is unsigned. Keep the difference signed, so running past the timeout makes it negative.
+        int64_t left_ms = timeout - static_cast<int64_t>(watch.elapsed_time() / 1000 / 1000);
         if (left_ms <= 0) {
             return Status::TimedOut("get kafka partition offset timeout");
         }
         RdKafka::ErrorCode err =
                 _k_consumer->query_watermark_offsets(_topic, p_id, &beginning_offset, &latest_offset, left_ms);
+        if (err == RdKafka::ERR__UNKNOWN_PARTITION && !metadata_refreshed) {
+            // A pooled consumer knows the partitions of the topic as of its last metadata refresh, which librdkafka
+            // repeats only every topic.metadata.refresh.interval.ms, so a partition added since is unknown to it until
+            // then. Refresh the metadata of the topic once and query again.
+            metadata_refreshed = true;
+            std::vector<int32_t> refreshed_partition_ids;
+            RETURN_IF_ERROR(get_partition_meta(&refreshed_partition_ids, left_ms));
+            left_ms = timeout - static_cast<int64_t>(watch.elapsed_time() / 1000 / 1000);
+            if (left_ms <= 0) {
+                return Status::TimedOut("get kafka partition offset timeout");
+            }
+            err = _k_consumer->query_watermark_offsets(_topic, p_id, &beginning_offset, &latest_offset, left_ms);
+        }
         if (err != RdKafka::ERR_NO_ERROR) {
             LOG(WARNING) << "failed to get offset of partition: " << p_id << " in topic: " << _topic
                          << ", err: " << RdKafka::err2str(err);
@@ -365,14 +420,13 @@ Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_i
 Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids, int timeout) {
     DCHECK(!_k_consumer->closed());
     _last_visit_time = time(nullptr);
-    // create topic conf
-    RdKafka::Conf* tconf = RdKafka::Conf::create(RdKafka::Conf::CONF_TOPIC);
-    auto conf_deleter = [tconf]() { delete tconf; };
-    DeferOp delete_conf([conf_deleter] { return conf_deleter(); });
-
-    // create topic
+    // Create the topic with the consumer's default topic configuration, not a new one. librdkafka keeps one topic
+    // object per name, configured by whoever creates it first, and consuming the topic later uses that object too. A
+    // new configuration carries the default auto.offset.reset (largest) instead of the consumer's "error", so a pooled
+    // consumer that queried the metadata before consuming would jump to the end of a partition whose offset is out of
+    // range, skipping what is there, instead of failing.
     std::string errstr;
-    RdKafka::Topic* topic = RdKafka::Topic::create(_k_consumer, _topic, tconf, errstr);
+    RdKafka::Topic* topic = RdKafka::Topic::create(_k_consumer, _topic, nullptr, errstr);
     if (topic == nullptr) {
         std::stringstream ss;
         ss << "failed to create topic: " << errstr;
@@ -455,6 +509,10 @@ Status KafkaDataConsumer::reset() {
     _cancelled = false;
     DCHECK(!_k_consumer->closed());
     _k_consumer->unassign();
+    // unassign() stops the fetchers but leaves the messages they have already fetched in the consumer queue, where
+    // librdkafka drops them as outdated only when the queue is polled. Nobody polls a pooled consumer, so poll once
+    // here: otherwise an idle consumer keeps up to queued.max.messages.kbytes (64 MB by default) of them.
+    std::unique_ptr<RdKafka::Message> outdated(_k_consumer->consume(0 /* timeout, ms */));
     _assigned_partition_count = 0;
     _eof_partitions.clear();
     _k_event_cb.reset_error_msg();
@@ -462,8 +520,45 @@ Status KafkaDataConsumer::reset() {
 }
 
 // The offsets is the last consumed message for every partition. We need to +1 when we commit offset.
-Status KafkaDataConsumer::commit(const std::string& topic, const std::map<int32_t, int64_t>& offsets) {
+Status KafkaDataConsumer::commit(const std::string& topic, const std::map<int32_t, int64_t>& offsets, int timeout_ms) {
     DCHECK(!_k_consumer->closed());
+    if (timeout_ms > 0) {
+        // commitSync() takes no timeout: the commit posts its result to a queue of its own instead, which is waited
+        // for at most timeout_ms. A commit still on its way then completes or fails by itself, and its queue is kept
+        // to tell when.
+        const int partition_count = static_cast<int>(offsets.size());
+        rd_kafka_topic_partition_list_t* partitions = rd_kafka_topic_partition_list_new(partition_count);
+        DeferOp destroy_partitions([partitions] { rd_kafka_topic_partition_list_destroy(partitions); });
+        for (const auto& [partition, offset] : offsets) {
+            rd_kafka_topic_partition_list_add(partitions, topic.c_str(), partition)->offset = offset + 1;
+        }
+        rd_kafka_t* rk = _k_consumer->c_ptr();
+        rd_kafka_queue_t* queue = rd_kafka_queue_new(rk);
+        DeferOp destroy_queue([&queue] {
+            if (queue != nullptr) {
+                rd_kafka_queue_destroy(queue);
+            }
+        });
+        rd_kafka_resp_err_t err = rd_kafka_commit_queue(rk, partitions, queue, nullptr, nullptr);
+        if (err == RD_KAFKA_RESP_ERR_NO_ERROR) {
+            rd_kafka_event_t* event = rd_kafka_queue_poll(queue, timeout_ms);
+            if (event == nullptr) {
+                std::unique_lock<std::mutex> l(_lock);
+                _commit_result_queues.push_back(queue);
+                queue = nullptr;
+                return Status::TimedOut(fmt::format("kafka offset commit did not finish in {}ms", timeout_ms));
+            }
+            err = rd_kafka_event_error(event);
+            rd_kafka_event_destroy(event);
+        }
+        if (err != RD_KAFKA_RESP_ERR_NO_ERROR) {
+            std::stringstream ss;
+            ss << "failed to commit kafka offset, topic: " << topic << ", group id: " << _group_id
+               << ", err: " << rd_kafka_err2str(err);
+            return Status::InternalError(ss.str());
+        }
+        return Status::OK();
+    }
     std::vector<RdKafka::TopicPartition*> topic_partitions;
     // delete TopicPartition finally
     auto tp_deleter = [&topic_partitions]() {
@@ -487,6 +582,23 @@ Status KafkaDataConsumer::commit(const std::string& topic, const std::map<int32_
     return Status::OK();
 }
 
+bool KafkaDataConsumer::has_commit_in_flight() {
+    std::unique_lock<std::mutex> l(_lock);
+    // A commit has completed once its result has come. librdkafka counts the commit out before it posts the result, so
+    // the consumer fetches for a new assignment again by then.
+    for (auto it = _commit_result_queues.begin(); it != _commit_result_queues.end();) {
+        rd_kafka_event_t* event = rd_kafka_queue_poll(*it, 0);
+        if (event == nullptr) {
+            ++it;
+            continue;
+        }
+        rd_kafka_event_destroy(event);
+        rd_kafka_queue_destroy(*it);
+        it = _commit_result_queues.erase(it);
+    }
+    return !_commit_result_queues.empty();
+}
+
 // if the kafka brokers and topic are same,
 // we considered this consumer as matched, thus can be reused.
 bool KafkaDataConsumer::match(StreamLoadContext* ctx) {
@@ -494,6 +606,10 @@ bool KafkaDataConsumer::match(StreamLoadContext* ctx) {
         return false;
     }
     if (_brokers != ctx->kafka_info->brokers || _topic != ctx->kafka_info->topic) {
+        return false;
+    }
+    // once routine_load_kafka_fetch_queue_backoff_ms changes, the tasks get consumers created with the new value
+    if (_fetch_queue_backoff_ms != config::routine_load_kafka_fetch_queue_backoff_ms) {
         return false;
     }
     // check properties

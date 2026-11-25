@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <optional>
 #include <unordered_map>
 
 #include "compute_env/query/scan_conjuncts_manager.h"
@@ -75,6 +76,7 @@ public:
     int64_t raw_rows_read() const override { return _raw_rows_read; }
     int64_t num_rows_read() const override { return _num_rows_read; }
     int64_t num_bytes_read() const override { return _bytes_read; }
+    ScanAuditCounters scan_audit_counters() const override { return _scan_audit_counters; }
     int64_t cpu_time_spent() const override { return _cpu_time_spent_ns; }
 
     void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) override {
@@ -114,6 +116,8 @@ private:
     void apply_child_split_context(const pipeline::LakeSplitContext& split_context, bool use_prepared_state);
     Status build_scan_range(RuntimeState* state);
     void init_counter(RuntimeState* state);
+    void _update_scan_audit_counters(int64_t raw_rows_read, int64_t rows_del_filtered_after_read, int64_t remote_bytes,
+                                     int64_t local_disk_bytes);
     void update_realtime_counter(Chunk* chunk);
     void update_counter(RuntimeState* state);
     void refresh_reusable_reader_key();
@@ -135,6 +139,9 @@ private:
 private:
     const LakeDataSourceProvider* _provider;
     const TInternalScanRange _scan_range;
+    const std::optional<TGroupedRangeTask> _wire_grouped_range_task;
+    bool _range_clip_task_counted = false;
+    Status _scan_range_status = Status::OK();
 
     Status _status = Status::OK();
     // The conjuncts couldn't push down to storage engine
@@ -180,6 +187,7 @@ private:
     int64_t _num_rows_read = 0;
     int64_t _raw_rows_read = 0;
     int64_t _bytes_read = 0;
+    ScanAuditCounters _scan_audit_counters;
     int64_t _cpu_time_spent_ns = 0;
 
     RuntimeProfile::Counter* _bytes_read_counter = nullptr;
@@ -291,6 +299,13 @@ private:
     RuntimeProfile::Counter* _lake_tablet_prepare_io_remote_timer = nullptr;
     RuntimeProfile::Counter* _lake_tablet_prepare_io_count_remote_counter = nullptr;
     RuntimeProfile::Counter* _lake_tablet_prepare_bytes_read_remote_counter = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_cached_segments_counter = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_warm_index_segments_counter = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_warm_index_ranges_counter = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_warm_index_blocks_counter = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_warm_index_skipped_counter = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_warm_index_pruned_segments_counter = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_inline_rowsets_counter = nullptr;
     RuntimeProfile::Counter* _lake_initial_coarse_counter = nullptr;
     RuntimeProfile::Counter* _lake_refined_counter = nullptr;
     // SeedPrepareTime breakdown (children of SeedPrepareTime): the seed's one-time per-segment prune cost.
@@ -346,6 +361,16 @@ private:
     RuntimeProfile::Counter* _prefetch_hit_counter = nullptr;
     RuntimeProfile::Counter* _prefetch_wait_finish_timer = nullptr;
     RuntimeProfile::Counter* _prefetch_pending_timer = nullptr;
+    RuntimeProfile::Counter* _remote_io_queue_wait_timer = nullptr;
+    RuntimeProfile::Counter* _remote_io_fill_wait_timer = nullptr;
+    RuntimeProfile::Counter* _remote_io_fill_join_counter = nullptr;
+    RuntimeProfile::Counter* _segment_first_chunk_counter = nullptr;
+    RuntimeProfile::Counter* _segment_read_ahead_counter = nullptr;
+    RuntimeProfile::Counter* _segment_first_chunk_timer = nullptr;
+    RuntimeProfile::Counter* _remote_prefetch_block_counter = nullptr;
+    RuntimeProfile::Counter* _remote_prefetch_rejected_block_counter = nullptr;
+    RuntimeProfile::Counter* _remote_prefetch_range_counter = nullptr;
+    RuntimeProfile::Counter* _remote_prefetch_late_read_ahead_counter = nullptr;
 
     RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
 };
@@ -364,6 +389,7 @@ public:
     const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
     bool always_shared_scan() const override { return false; }
+    bool is_grouped_scan() const { return _is_grouped_scan; }
 
     StatusOr<pipeline::MorselQueueBuilderPtr> convert_scan_range_to_morsel_queue_builder(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
@@ -401,15 +427,21 @@ public:
 
     bool could_split_physically() const { return _could_split_physically; }
 
-    bool enable_lake_prepared_physical_split_scan() const { return _enable_lake_prepared_physical_split_scan; }
+    bool enable_lake_prepared_physical_split_scan() const {
+        return !_is_grouped_scan && _enable_lake_prepared_physical_split_scan;
+    }
 
-    bool enable_prepared_split_chunk_source_reuse() const override { return _enable_lake_prepared_physical_split_scan; }
+    bool enable_prepared_split_chunk_source_reuse() const override {
+        return enable_lake_prepared_physical_split_scan();
+    }
 
     int64_t get_splitted_scan_rows() const { return splitted_scan_rows; }
 
 protected:
     const int32_t _plan_node_id;
     const TLakeScanNode _t_lake_scan_node;
+    const bool _is_grouped_scan;
+    const bool _has_lake_scan_node;
 
     // for ut
     lake::TabletManager* _tablet_manager = nullptr;
@@ -420,10 +452,13 @@ protected:
     int64_t splitted_scan_rows = 0;
 
 private:
+    Status validate_grouped_scan() const;
+    Status validate_scan_range(const TScanRange& range) const;
     StatusOr<bool> _could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,
                                                    int32_t pipeline_dop, size_t num_total_scan_ranges,
                                                    TTabletInternalParallelMode::type tablet_internal_parallel_mode,
                                                    int64_t* scan_dop, int64_t* splitted_scan_rows) const;
+    StatusOr<int64_t> _compute_splitted_scan_rows() const;
     StatusOr<bool> _could_split_tablet_physically(const std::vector<TScanRangeParams>& scan_ranges) const;
 
     // Partition conjuncts used for BE-side dynamic partition pruning. Distinct from the

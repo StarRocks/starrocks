@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Troubleshooting guide for asynchronous materialized views: diagnose and fix refresh failures, query rewrite issues, and data consistency problems."
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 异步物化视图故障排除
@@ -56,7 +57,7 @@ last_refresh_error_message           |
 rows                                 | 0
 text                                 | CREATE MATERIALIZED VIEW `mv_pred_2` (`lo_quantity`, `lo_revenue`, `sum`)
 DISTRIBUTED BY HASH(`lo_quantity`, `lo_revenue`) BUCKETS 2
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PROPERTIES (
 "replication_num" = "3",
 "storage_medium" = "HDD"
@@ -173,7 +174,7 @@ MySQL > SHOW CREATE TABLE mv_agg\G
 Materialized View        | mv_agg
 Create Materialized View | CREATE MATERIALIZED VIEW `mv_agg` (`c_custkey`)
 DISTRIBUTED BY RANDOM
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PROPERTIES (
 "replication_num" = "3",
 "replicated_storage" = "true",
@@ -241,7 +242,7 @@ MySQL > EXPLAIN LOGICAL SELECT `customer`.`c_custkey`
 
   ```SQL
   CREATE MATERIALIZED VIEW <mv_name> 
-  REFRESH ASYNC -- 异步物化视图的刷新策略。
+  REFRESH <refresh_strategy> -- 异步物化视图的刷新策略。
   DISTRIBUTED BY HASH(<column>) -- 异步物化视图的数据分布策略。
   AS <query>
   ```
@@ -276,7 +277,7 @@ MySQL > EXPLAIN LOGICAL SELECT `customer`.`c_custkey`
   ```SQL
   -- 在创建物化视图时定义属性。
   CREATE MATERIALIZED VIEW mv1 
-  REFRESH ASYNC
+  REFRESH ON_CHANGE
   PROPERTIES ( 'session.enable_spill'='true' )
   AS <query>;
 
@@ -405,7 +406,7 @@ ALTER MATERIALIZED VIEW mv1 ACTIVE;
 示例1：物化视图 `mv1` 使用了嵌套聚合，因此无法用于重写查询。
 
 ```SQL
-CREATE MATERIALIZED VIEW mv1 REFRESH ASYNC AS
+CREATE MATERIALIZED VIEW mv1 REFRESH ON_CHANGE AS
 select count(distinct cnt) 
 from (
     select c_city, count(*) cnt 
@@ -417,7 +418,7 @@ from (
 示例2：物化视图 `mv2` 使用了 Join 加聚合，因此无法用于重写查询。要解决这个问题，您可以创建一个带有聚合的物化视图，然后基于该物化视图创建带有 Join 的嵌套物化视图。
 
 ```SQL
-CREATE MATERIALIZED VIEW mv2 REFRESH ASYNC AS
+CREATE MATERIALIZED VIEW mv2 REFRESH ON_CHANGE AS
 select *
 from (
     select lo_orderkey, lo_custkey, p_partkey, p_name
@@ -435,14 +436,14 @@ on lo.lo_custkey = cust.c_custkey;
 示例3：物化视图 `mv3` 无法改写模式为 `SELECT c_city, sum(tax) FROM tbl WHERE dt='2023-01-01' AND c_city = 'xxx'` 的查询，因为谓词引用的列不在 SELECT 表达式中。
 
 ```SQL
-CREATE MATERIALIZED VIEW mv3 REFRESH ASYNC AS
+CREATE MATERIALIZED VIEW mv3 REFRESH ON_CHANGE AS
 SELECT c_city, sum(tax) FROM tbl GROUP BY c_city;
 ```
 
 要解决这个问题，您可以按照以下方式创建物化视图：
 
 ```SQL
-CREATE MATERIALIZED VIEW mv3 REFRESH ASYNC AS
+CREATE MATERIALIZED VIEW mv3 REFRESH ON_CHANGE AS
 SELECT dt, c_city, sum(tax) FROM tbl GROUP BY dt, c_city;
 ```
 
@@ -451,16 +452,12 @@ SELECT dt, c_city, sum(tax) FROM tbl GROUP BY dt, c_city;
 #### 哪个资源组控制异步物化视图的资源？如何调整其配置？
 
 如果在创建异步物化视图时未指定 `resource_group` 属性，系统会将其分配给默认资源组 `default_mv_wg`。其默认配置为：
-- `cpu_core_limit`: 1
+- `cpu_weight_percent`: 1
 - `mem_limit`: 80%
 - `concurrency_limit`: 0
 - `spill_mem_limit_threshold`: 80%
 
-您可以通过以下 BE 配置项调整其 CPU 限制、内存限制、并发限制和溢出阈值：
-- `default_mv_resource_group_cpu_limit`
-- `default_mv_resource_group_memory_limit`
-- `default_mv_resource_group_concurrency_limit`
-- `default_mv_resource_group_spill_mem_limit_threshold`
+`default_mv_wg` 由 FE 存储并持久化。您可以通过 [ALTER RESOURCE GROUP](../../sql-reference/sql-statements/cluster-management/resource_group/ALTER_RESOURCE_GROUP.md) 调整其 CPU 限制、内存限制、并发限制和溢出阈值，例如 `ALTER RESOURCE GROUP default_mv_wg WITH ('mem_limit' = '60%')`。BE 配置项 `default_mv_resource_group_cpu_limit`、`default_mv_resource_group_memory_limit`、`default_mv_resource_group_concurrency_limit` 和 `default_mv_resource_group_spill_mem_limit_threshold` 已废弃，不再对 `default_mv_wg` 生效。
 
 您还可以通过指定 `resource_group` 属性为物化视图分配专用资源组。
 

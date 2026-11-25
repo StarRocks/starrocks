@@ -199,6 +199,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
 
         auto r = _range_iter.next(*row_count);
         _param.stats->raw_rows_read += r.span_size();
+        _param.stats->physical_rows_read += r.span_size();
 
         _column_materializer->reset_read_chunk();
         _variant->reset_iteration_state();
@@ -212,6 +213,8 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
 
         // 1. Prune deleted rows
         ASSIGN_OR_RETURN(bool rows_survive, _prune_deleted_rows(r, state));
+        _param.stats->logical_rows_read +=
+                state.has_filter ? SIMD::count_nonzero(state.chunk_filter.data(), state.row_count) : state.row_count;
         if (!rows_survive) continue;
 
         // 2. Read & filter active columns
@@ -313,9 +316,13 @@ StatusOr<bool> GroupReader::_evaluate_compound_predicates(const Range<uint64_t>&
 
     // Append side columns to active_chunk so compound conjuncts referencing
     // partition / not-existed / extended slots can be evaluated correctly.
+    // get_next() appends them again for the output, so this evaluation-only
+    // copy must not consume the file min/max values the output still has to emit.
     if (state.active_chunk->num_rows() > 0) {
-        RETURN_IF_ERROR(
-                _param.scan_ctx->append_side_columns_to_chunk(&state.active_chunk, state.active_chunk->num_rows()));
+        auto saved_min_max_value_cursors = _param.scan_ctx->min_max_value_cursors;
+        Status st = _param.scan_ctx->append_side_columns_to_chunk(&state.active_chunk, state.active_chunk->num_rows());
+        _param.scan_ctx->min_max_value_cursors = std::move(saved_min_max_value_cursors);
+        RETURN_IF_ERROR(st);
     }
 
     // Finalize all active columns to logical form before compound conjunct eval.

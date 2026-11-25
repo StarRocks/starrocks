@@ -750,9 +750,7 @@ PARALLEL_TEST(VecStringFunctionsTest, str_to_map_v1) {
     array_str_null->append_datum(Datum(DatumArray{Datum("ab:b"), Datum("ab:b"), Datum("")}));
 
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    auto string_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
-    string_column->append_datum("a:b,c:d");
-    string_column->append_datum("a:1,b:2");
+    auto string_column = ColumnTestHelper::build_nullable_column<Slice>({"a:b,c:d", "a:1,b:2"});
 
     auto array_str_notnull = ColumnTestHelper::build_array_column<Slice>(TYPE_ARRAY_VARCHAR_DESC, false,
                                                                          {{},
@@ -776,9 +774,7 @@ PARALLEL_TEST(VecStringFunctionsTest, str_to_map_v1) {
     map_delimiter_builder_nullable.append("");
     map_delimiter_builder_nullable.append_null();
     ColumnPtr map_delimiter_nullable = map_delimiter_builder_nullable.build_nullable_column();
-    auto delimiter_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
-    delimiter_column->append_datum(",");
-    delimiter_column->append_datum(",");
+    auto delimiter_column = ColumnTestHelper::build_nullable_column<Slice>({",", ","});
 
     auto map_delimiter_builder_notnull = ColumnBuilder<TYPE_VARCHAR>(chunk_size);
     map_delimiter_builder_notnull.append(":");
@@ -4349,8 +4345,8 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpPositionInvalidRegex) {
 PARALLEL_TEST(VecStringFunctionsTest, regexpCountTest) {
     // regexp_count_prepare runs under FRAGMENT_LOCAL and validates get_num_args() == 2, so the
     // test context must carry the two (str, pattern) argument types.
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(
-            {TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR)}, TypeDescriptor(TYPE_BIGINT)));
+    std::unique_ptr<FunctionContext> ctx(
+            FunctionContext::create_test_context({TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC}, TYPE_BIGINT_DESC));
     auto context = ctx.get();
 
     {

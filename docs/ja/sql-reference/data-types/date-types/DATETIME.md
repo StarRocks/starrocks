@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "日付と時刻の型で、ミリ秒とマイクロ秒の精度をサポート。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import DateTip from '../../../_assets/commonMarkdown/dateTimeTip.mdx'

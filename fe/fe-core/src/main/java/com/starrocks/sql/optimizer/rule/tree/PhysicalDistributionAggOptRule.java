@@ -36,7 +36,7 @@ public class PhysicalDistributionAggOptRule implements TreeRewriteRule {
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
         SessionVariable sv = ConnectContext.get().getSessionVariable();
-        if (sv.isEnableQueryCache()) {
+        if (sv.isEnableQueryCache() || sv.isGroupedRangeScan()) {
             return root;
         }
         if (sv.isEnableSortAggregate()) {

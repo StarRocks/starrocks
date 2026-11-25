@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将整数转换为二进制表示。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bin

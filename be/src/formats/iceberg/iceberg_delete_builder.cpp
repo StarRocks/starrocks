@@ -323,7 +323,21 @@ Status IcebergDeleteBuilder::build(const TIcebergDeleteFile& delete_file, const 
                         })));
     }
     accumulate_position_delete_io(app_stats, fs_stats, cache_input_stream, shared_buffered_input_stream);
+    add_delete_file_audit_bytes(fs_stats, cache_input_stream);
     return Status::OK();
+}
+
+void IcebergDeleteBuilder::add_delete_file_audit_bytes(
+        const FormatScannerStats& fs_stats, const std::shared_ptr<CacheInputStream>& cache_input_stream) const {
+    if (_ctx.scan_context == nullptr || _ctx.scan_context->stats == nullptr) {
+        return;
+    }
+    FormatScannerStats* stats = _ctx.scan_context->stats;
+    stats->delete_file_remote_bytes += fs_stats.bytes_read;
+    if (cache_input_stream != nullptr) {
+        const CacheInputStream::Stats& cache_stats = cache_input_stream->stats();
+        stats->delete_file_cache_bytes += cache_stats.read_block_cache_bytes + cache_stats.read_peer_cache_bytes;
+    }
 }
 
 Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file) const {

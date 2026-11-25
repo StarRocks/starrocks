@@ -1,8 +1,8 @@
 name: PAI Contributed Auto Approve
 run-name: PAI Contributed Auto Approve(#${{ github.event.number }})
 
-# Auto-approve the PRs carrying the `PAI-contributed` label -- changes contributed upstream
-# by the reverse sync.
+# Auto-approve PRs carrying `PAI-contributed` or `MS-contributed` -- changes contributed
+# upstream by the reverse sync.
 #
 # WHY: these PRs are created by the sync bot from changes that were already reviewed and
 # merged downstream, so nobody on the StarRocks side owns reviewing them and they accumulate
@@ -13,7 +13,7 @@ run-name: PAI Contributed Auto Approve(#${{ github.event.number }})
 # the base branch needs -- lives in ci-tool bin/auto-approve-contributed.sh, where it can be
 # run and tested outside a workflow trigger.
 #
-# The `PAI-contributed` label filter below is a cheap pre-filter, NOT the authorization: any
+# The contributed label filter below is a cheap pre-filter, NOT the authorization: any
 # user with triage rights can add a label. The script re-derives trust from the PR author,
 # the head repo and the head branch shape, and skips unless all three match the sync flow.
 #
@@ -35,11 +35,12 @@ permissions:
 
 jobs:
   auto-approve:
-    name: Auto approve PAI-contributed PR
+    name: Auto approve contributed PR
     if: >
       github.repository == 'StarRocks/starrocks' &&
       (
         contains(github.event.pull_request.labels.*.name, 'PAI-contributed') ||
+        contains(github.event.pull_request.labels.*.name, 'MS-contributed') ||
         contains(github.event.pull_request.labels.*.name, 'cd-contributed')
       )
     runs-on: [self-hosted, normal]

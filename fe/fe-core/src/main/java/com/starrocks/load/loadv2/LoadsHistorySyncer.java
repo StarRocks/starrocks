@@ -14,6 +14,7 @@
 
 package com.starrocks.load.loadv2;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -103,15 +104,18 @@ public class LoadsHistorySyncer extends LeaderDaemon {
         super("load-history-syncer", Config.loads_history_sync_interval_second * 1000L);
     }
 
-    public void syncData() {
+    // returns whether the sync succeeded
+    public boolean syncData() {
         if (getInterval() != Config.loads_history_sync_interval_second * 1000L) {
             setInterval(Config.loads_history_sync_interval_second * 1000L);
         }
 
         try {
             SimpleExecutor.getRepoExecutor().executeDML(SQLBuilder.buildSyncSql());
+            return true;
         } catch (Exception e) {
-            LOG.error("Failed to sync loads history", e); 
+            LOG.error("Failed to sync loads history", e);
+            return false;
         }
     }
 
@@ -124,19 +128,32 @@ public class LoadsHistorySyncer extends LeaderDaemon {
             // wait table keeper to create table
             if (firstSync) {
                 firstSync = false;
+                // This FE syncs loads_history from now on, so the load managers keep the jobs and tasks leaving them
+                // listed until a sync has copied them.
+                setLoadsHistorySyncedBeforeMs(0L);
                 return;
             }
 
-            long latestFinishTime = getLatestFinishTime();
-            if (syncedLoadFinishTime < latestFinishTime) {
-                // refer to SQL:LOADS_HISTORY_SYNC. Only sync loads that completed more than 1 minute ago
-                long oneMinAgo = System.currentTimeMillis() - 60000;
-                syncData();
-                // use (oneMinAgo - 10000) to cover the clock skew between FE and BE
-                syncedLoadFinishTime = Math.min(latestFinishTime, oneMinAgo - 10000);
-            }
+            syncIfNewLoadsFinished(getLatestFinishTime());
         } catch (Throwable e) {
             LOG.warn("Failed to process one round of LoadJobScheduler with error message {}", e.getMessage(), e);
+        }
+    }
+
+    @VisibleForTesting
+    void syncIfNewLoadsFinished(long latestFinishTime) {
+        if (syncedLoadFinishTime < latestFinishTime) {
+            // refer to SQL:LOADS_HISTORY_SYNC. Only sync loads that completed more than 1 minute ago
+            long oneMinAgo = System.currentTimeMillis() - 60000;
+            // A failed sync copied nothing, so the next round tries again.
+            if (syncData()) {
+                // The sync has copied every listed load that finished more than one minute before it ran, except
+                // the ones finishing before the latest load loads_history already had, which it never copies.
+                // use (oneMinAgo - 10000) to cover the clock skew between FE and BE, which also covers
+                // load_finish_time being cut to seconds
+                setLoadsHistorySyncedBeforeMs(oneMinAgo - 10000);
+                syncedLoadFinishTime = Math.min(latestFinishTime, oneMinAgo - 10000);
+            }
         }
     }
 
@@ -147,6 +164,15 @@ public class LoadsHistorySyncer extends LeaderDaemon {
         // syncing rows whose finish times pre-date its activation.
         firstSync = true;
         syncedLoadFinishTime = -1L;
+        // This FE no longer syncs loads_history, so the load managers stop keeping jobs and tasks for it.
+        setLoadsHistorySyncedBeforeMs(Long.MAX_VALUE);
+    }
+
+    // Tells the load managers which finished loads loads_history has, see StreamLoadMgr#setLoadsHistorySyncedBeforeMs.
+    private static void setLoadsHistorySyncedBeforeMs(long syncedBeforeMs) {
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        state.getLoadMgr().setLoadsHistorySyncedBeforeMs(syncedBeforeMs);
+        state.getStreamLoadMgr().setLoadsHistorySyncedBeforeMs(syncedBeforeMs);
     }
 
     /**

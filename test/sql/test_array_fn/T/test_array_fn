@@ -655,6 +655,16 @@ select any_match(null,[]);
 select any_match(null,null);
 select all_match([[]]);
 
+select none_match([true,false]);
+select none_match([false,null]);
+select none_match([false,false]);
+select none_match([]);
+select none_match(null);
+select none_match([0],x->1);
+select none_match((x,y) -> x < y, [1,2,8], [4,5,6]);
+select none_match((x,y) -> x < y, [11,12,8], [4,5,6]);
+select s_1, none_match(s_1, x->x like 'a%'), not any_match(s_1, x->x like 'a%') from array_test order by pk;
+
 
 select array_sum(array_map(x->not like(x, 'starRocks'),s_1)) from array_test order by 1;
 

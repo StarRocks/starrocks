@@ -138,6 +138,7 @@ public class ConstArrayFunctionFoldingTest extends PlanTestBase {
                 "SELECT 'array_contains_seq' as func_name, array_contains_seq([1, 2], NULL) as result;",
                 "SELECT 'all_match' as func_name, all_match(NULL) as result;",
                 "SELECT 'any_match' as func_name, any_match(NULL) as result;",
+                "SELECT 'none_match' as func_name, none_match(NULL) as result;",
                 "SELECT 'array_generate' as func_name, array_generate(NULL, 1, 1) as result;",
                 "SELECT 'array_generate' as func_name, array_generate(1, NULL, 1) as result;",
                 "SELECT 'array_generate' as func_name, array_generate(1, 1, NULL) as result;",

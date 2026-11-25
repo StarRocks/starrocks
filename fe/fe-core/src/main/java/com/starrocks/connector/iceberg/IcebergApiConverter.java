@@ -14,6 +14,8 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -58,6 +60,9 @@ import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.Metrics;
+import org.apache.iceberg.MetricsConfig;
+import org.apache.iceberg.MetricsModes;
+import org.apache.iceberg.MetricsUtil;
 import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
@@ -76,9 +81,12 @@ import org.apache.iceberg.expressions.ManifestEvaluator;
 import org.apache.iceberg.expressions.Projections;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.transforms.PartitionSpecVisitor;
+import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.TypeUtil;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.BinaryUtil;
 import org.apache.iceberg.util.DateTimeUtil;
+import org.apache.iceberg.util.UnicodeUtil;
 import org.apache.iceberg.view.SQLViewRepresentation;
 import org.apache.iceberg.view.View;
 import org.apache.iceberg.view.ViewVersion;
@@ -94,7 +102,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -102,6 +112,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -119,10 +130,16 @@ import static org.apache.iceberg.view.ViewProperties.COMMENT;
 
 public class IcebergApiConverter {
     private static final Logger LOG = LogManager.getLogger(IcebergApiConverter.class);
+    private static final ObjectMapper NAME_MAPPING_READER = new ObjectMapper();
     public static final String PARTITION_NULL_VALUE = "null";
+    public static final String IDENTIFIER_FIELDS = "identifier-fields";
     private static final Pattern ICEBERG_BUCKET_PATTERN = Pattern.compile("bucket\\[(\\d+)]");
     private static final Pattern ICEBERG_TRUNCATE_PATTERN = Pattern.compile("truncate\\[(\\d+)]");
     private static final int FAKE_FIELD_ID = -1;
+    private static final List<String> DATA_FILE_FORMATS = List.of("parquet", "orc", "avro");
+    // the names Iceberg's parquet writer parses; SR's own aliases zlib and none are not among them
+    private static final List<String> PARQUET_CODECS =
+            List.of("uncompressed", "snappy", "gzip", "lzo", "brotli", "lz4", "zstd", "lz4_raw");
 
     public static IcebergTable toIcebergTable(Table nativeTbl, String catalogName, String remoteDbName,
                                               String remoteTableName, String nativeCatalogType) {
@@ -171,6 +188,54 @@ public class IcebergApiConverter {
         AtomicInteger nextFieldId = new AtomicInteger(1);
         icebergSchema = TypeUtil.assignFreshIds(icebergSchema, nextFieldId::getAndIncrement);
         return new Schema(icebergSchema.asStructType().fields());
+    }
+
+    // Resolves comma-separated top-level column names into the schema's identifier fields; Iceberg validates each.
+    public static Schema withIdentifierFields(Schema schema, String identifierFields) throws DdlException {
+        Set<Integer> fieldIds = resolveIdentifierFieldIds(schema, identifierFields);
+        try {
+            return new Schema(schema.columns(), fieldIds);
+        } catch (IllegalArgumentException e) {
+            throw new DdlException(e.getMessage(), e);
+        }
+    }
+
+    private static Set<Integer> resolveIdentifierFieldIds(Schema schema, String identifierFields) throws DdlException {
+        Set<Integer> fieldIds = new LinkedHashSet<>();
+        for (String name : identifierFields.split(",")) {
+            String colName = name.trim();
+            if (colName.isEmpty()) {
+                continue;
+            }
+            Types.NestedField field = schema.columns().stream()
+                    .filter(f -> f.name().equalsIgnoreCase(colName)).findFirst().orElse(null);
+            if (field == null) {
+                throw new DdlException("Unknown column '" + colName + "' in property " + IDENTIFIER_FIELDS);
+            }
+            if (!fieldIds.add(field.fieldId())) {
+                throw new DdlException("Duplicate column '" + colName + "' in property " + IDENTIFIER_FIELDS);
+            }
+        }
+        if (fieldIds.isEmpty()) {
+            throw new DdlException("Property " + IDENTIFIER_FIELDS + " must name at least one column");
+        }
+        return fieldIds;
+    }
+
+    // Inverse of withIdentifierFields, for SHOW CREATE TABLE. Null when there are none, or when the property would
+    // not resolve back to the same fields (nested identifiers set by other engines, names with commas, padding or
+    // case collisions), so replaying the DDL never fails or picks other columns.
+    public static String toIdentifierFieldsProperty(Schema schema) {
+        Set<Integer> ids = schema.identifierFieldIds();
+        if (ids.isEmpty()) {
+            return null;
+        }
+        String property = ids.stream().sorted().map(schema::findColumnName).collect(Collectors.joining(","));
+        try {
+            return resolveIdentifierFieldIds(schema, property).equals(ids) ? property : null;
+        } catch (DdlException e) {
+            return null;
+        }
     }
 
     public static SortOrder toIcebergSortOrder(Schema schema, List<OrderByElement> orderByElements) throws DdlException {
@@ -596,6 +661,53 @@ public class IcebergApiConverter {
         return tIcebergSchema;
     }
 
+    // Older names of the top-level columns from the table's name mapping (schema.name-mapping.default). A data file
+    // without field ids may store a renamed column under one of them; the scan reads it from there when the file has
+    // no column of the current name.
+    public static void setMappedNames(TIcebergSchema tIcebergSchema, Map<String, String> tableProperties) {
+        String mappingJson = tableProperties.get(TableProperties.DEFAULT_NAME_MAPPING);
+        if (mappingJson == null) {
+            return;
+        }
+        // Read the top-level entries only: NameMappingParser indexes every nested name path, which grows with the
+        // product of the names at each level.
+        Map<Integer, List<String>> idToNames = new HashMap<>();
+        try {
+            JsonNode root = NAME_MAPPING_READER.readTree(mappingJson);
+            if (root == null || !root.isArray()) {
+                throw new IllegalArgumentException("not a JSON array");
+            }
+            for (JsonNode entry : root) {
+                JsonNode id = entry.get("field-id");
+                JsonNode names = entry.get("names");
+                if (id == null || !id.canConvertToInt() || names == null || !names.isArray()) {
+                    continue;
+                }
+                List<String> nameList = new ArrayList<>();
+                for (JsonNode name : names) {
+                    nameList.add(name.asText());
+                }
+                idToNames.put(id.asInt(), nameList);
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to parse iceberg name mapping {}", mappingJson, e);
+            return;
+        }
+        for (TIcebergSchemaField field : tIcebergSchema.getFields()) {
+            List<String> names = idToNames.get(field.getField_id());
+            if (names == null) {
+                continue;
+            }
+            List<String> olderNames = names.stream()
+                    .filter(name -> !name.equals(field.getName()))
+                    .sorted()
+                    .toList();
+            if (!olderNames.isEmpty()) {
+                field.setMapped_names(olderNames);
+            }
+        }
+    }
+
     private static TIcebergSchemaField getTIcebergSchemaField(Types.NestedField nestedField) {
         TIcebergSchemaField tIcebergSchemaField = new TIcebergSchemaField();
         tIcebergSchemaField.setField_id(nestedField.fieldId());
@@ -707,6 +819,104 @@ public class IcebergApiConverter {
                 nullValueCounts, null, lowerBounds, upperBounds);
     }
 
+    /**
+     * Applies the table's write.metadata.metrics.* config to the metrics of a data file SR wrote, the same way an
+     * Iceberg writer does (ParquetUtil footer metrics):
+     * - none: drop every stat of the column, column size included
+     * - counts: keep column size and value/null/nan counts, drop the bounds
+     * - truncate(n): truncate STRING and BINARY/FIXED bounds to n; a max that cannot be truncated is dropped
+     * - full: unchanged
+     * The config follows the Iceberg table properties: write.metadata.metrics.default (truncate(16) when unset),
+     * write.metadata.metrics.column.<col>, and write.metadata.metrics.max-inferred-column-defaults (100), past
+     * which columns get none unless a default is set. MetricsConfig.forTable resolves all of them.
+     * Only for data files: position delete files need their file_path bounds, so they keep their stats.
+     */
+    public static Metrics applyWriteMetricsConfig(Metrics metrics, org.apache.iceberg.Table nativeTable) {
+        if (metrics == null) {
+            return metrics;
+        }
+        Schema schema = nativeTable.schema();
+        MetricsConfig config = MetricsConfig.forTable(nativeTable);
+        Map<Integer, MetricsModes.MetricsMode> modes = new HashMap<>();
+        Function<Integer, MetricsModes.MetricsMode> modeOf =
+                fieldId -> modes.computeIfAbsent(fieldId, id -> MetricsUtil.metricsMode(schema, config, id));
+
+        Map<Integer, Long> columnSizes = filterCounts(metrics.columnSizes(), modeOf);
+        Map<Integer, Long> valueCounts = filterCounts(metrics.valueCounts(), modeOf);
+        Map<Integer, Long> nullValueCounts = filterCounts(metrics.nullValueCounts(), modeOf);
+        Map<Integer, Long> nanValueCounts = filterCounts(metrics.nanValueCounts(), modeOf);
+        Map<Integer, ByteBuffer> lowerBounds = filterBounds(metrics.lowerBounds(), schema, modeOf, true);
+        Map<Integer, ByteBuffer> upperBounds = filterBounds(metrics.upperBounds(), schema, modeOf, false);
+        return new Metrics(metrics.recordCount(), columnSizes, valueCounts, nullValueCounts, nanValueCounts,
+                lowerBounds, upperBounds);
+    }
+
+    private static Map<Integer, Long> filterCounts(Map<Integer, Long> counts,
+                                                   Function<Integer, MetricsModes.MetricsMode> modeOf) {
+        if (counts == null) {
+            return null;
+        }
+        Map<Integer, Long> result = new HashMap<>();
+        counts.forEach((fieldId, value) -> {
+            if (modeOf.apply(fieldId) != MetricsModes.None.get()) {
+                result.put(fieldId, value);
+            }
+        });
+        return result;
+    }
+
+    private static Map<Integer, ByteBuffer> filterBounds(Map<Integer, ByteBuffer> bounds, Schema schema,
+                                                         Function<Integer, MetricsModes.MetricsMode> modeOf,
+                                                         boolean isLower) {
+        if (bounds == null) {
+            return null;
+        }
+        Map<Integer, ByteBuffer> result = new HashMap<>();
+        bounds.forEach((fieldId, value) -> {
+            MetricsModes.MetricsMode mode = modeOf.apply(fieldId);
+            if (mode == MetricsModes.None.get() || mode == MetricsModes.Counts.get()) {
+                return;
+            }
+            ByteBuffer bound = value;
+            if (mode instanceof MetricsModes.Truncate && value != null) {
+                Types.NestedField field = schema.findField(fieldId);
+                bound = field == null ? value :
+                        truncateBound(field.type(), value, ((MetricsModes.Truncate) mode).length(), isLower);
+            }
+            if (bound != null) {
+                result.put(fieldId, bound);
+            }
+        });
+        return result;
+    }
+
+    // Returns null when the bound cannot be truncated (an upper bound with no larger prefix, or a string bound
+    // that is not valid UTF-8); the bound is then dropped.
+    private static ByteBuffer truncateBound(org.apache.iceberg.types.Type type, ByteBuffer bound, int length,
+                                            boolean isLower) {
+        switch (type.typeId()) {
+            case STRING: {
+                String str;
+                try {
+                    str = StandardCharsets.UTF_8.newDecoder().decode(bound.duplicate()).toString();
+                } catch (CharacterCodingException e) {
+                    // BE reports the raw bytes of a string column; a bound that is not valid UTF-8 cannot be
+                    // truncated as a string, so drop it instead of failing the commit.
+                    return null;
+                }
+                String truncated = isLower ? UnicodeUtil.truncateStringMin(str, length) :
+                        UnicodeUtil.truncateStringMax(str, length);
+                return truncated == null ? null : Conversions.toByteBuffer(Types.StringType.get(), truncated);
+            }
+            case FIXED:
+            case BINARY:
+                return isLower ? BinaryUtil.truncateBinaryMin(bound, length) :
+                        BinaryUtil.truncateBinaryMax(bound, length);
+            default:
+                return bound;
+        }
+    }
+
     private static void setFormatProperties(ImmutableMap.Builder<String, String> tableProperties,
                                          String fileFormat, String compressionCodec) {
         String format = "parquet";
@@ -737,10 +947,46 @@ public class IcebergApiConverter {
         }
     }
 
+    // These values are stored in the table metadata for every engine, so they must be ones Iceberg itself accepts.
+    public static void checkWriteProperty(String key, String value) {
+        switch (key) {
+            case TableProperties.DEFAULT_FILE_FORMAT:
+                checkOneOf(key, value, DATA_FILE_FORMATS);
+                break;
+            case TableProperties.PARQUET_COMPRESSION:
+            case TableProperties.DELETE_PARQUET_COMPRESSION:
+                checkOneOf(key, value, PARQUET_CODECS);
+                break;
+            case TableProperties.WRITE_TARGET_FILE_SIZE_BYTES:
+                // parsed as Iceberg's PropertyUtil.propertyAsLong does, without trimming
+                long size;
+                try {
+                    size = Long.parseLong(value);
+                } catch (NumberFormatException e) {
+                    size = 0;
+                }
+                if (size <= 0) {
+                    throw new StarRocksConnectorException("Invalid value '%s' for property '%s', expected a positive integer",
+                            value, key);
+                }
+                break;
+            default:
+        }
+    }
+
+    private static void checkOneOf(String key, String value, List<String> allowed) {
+        if (!allowed.contains(value.toLowerCase(Locale.ROOT))) {
+            throw new StarRocksConnectorException("Unsupported value '%s' for property '%s', supported: %s",
+                    value, key, String.join(", ", allowed));
+        }
+    }
+
     public static Map<String, String> rebuildCreateTableProperties(Map<String, String> createProperties) {
         ImmutableMap.Builder<String, String> tableProperties = ImmutableMap.builder();
         createProperties.entrySet().forEach(tableProperties::put);
-        String fileFormat = createProperties.getOrDefault(FILE_FORMAT, TableProperties.DEFAULT_FILE_FORMAT_DEFAULT);
+        // the alias codec follows the alias format, else the native default format
+        String fileFormat = createProperties.getOrDefault(FILE_FORMAT, createProperties.getOrDefault(
+                TableProperties.DEFAULT_FILE_FORMAT, TableProperties.DEFAULT_FILE_FORMAT_DEFAULT));
         String compressionCodec = createProperties.get(COMPRESSION_CODEC);
 
         if (!createProperties.containsKey(TableProperties.DEFAULT_FILE_FORMAT)) {
@@ -803,7 +1049,9 @@ public class IcebergApiConverter {
         List<Column> columns = toFullSchemas(icebergView.schema());
         ViewVersion currentVersion = icebergView.currentVersion();
         String defaultCatalogName = currentVersion.defaultCatalog();
-        String defaultDbName = currentVersion.defaultNamespace().level(0);
+        Namespace defaultNamespace = currentVersion.defaultNamespace();
+        String defaultDbName = defaultNamespace == null || defaultNamespace.isEmpty()
+                ? dbName : defaultNamespace.level(0);
         String viewName = icebergView.name();
         String location = icebergView.location();
         IcebergView view = new IcebergView(CONNECTOR_ID_GENERATOR.getNextId().asLong(), catalogName, dbName, viewName,

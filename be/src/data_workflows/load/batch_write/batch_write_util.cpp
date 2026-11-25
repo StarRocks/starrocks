@@ -14,8 +14,13 @@
 
 #include "data_workflows/load/batch_write/batch_write_util.h"
 
+#include <fmt/format.h>
+
+#include <boost/algorithm/string/predicate.hpp>
+#include <limits>
 #include <vector>
 
+#include "base/string/string_parser.hpp"
 #include "compute_env/load/http_load_params.h"
 #include "platform/http/http_request.h"
 
@@ -101,6 +106,48 @@ BatchWriteLoadParams get_load_parameters_from_http(HttpRequest* http_req) {
             return std::nullopt;
         }
     });
+}
+
+// The format names of Stream Load that are CSV, as parse_format of the Stream Load action maps them. A request that
+// sets no format is CSV.
+static bool is_csv_format(const std::string& format) {
+    if (format.empty()) {
+        return true;
+    }
+    for (const char* name : {"csv", "gzip", "bzip2", "lz4", "deflate", "zstd"}) {
+        if (boost::iequals(format, name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+Status check_merge_commit_skip_header(const std::string& format, const std::string& skip_header) {
+    if (skip_header.empty() || !is_csv_format(format)) {
+        return Status::OK();
+    }
+    // Parsed and reported as parse_int64_param does for the classic Stream Load.
+    StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+    int64_t value = StringParser::string_to_int<int64_t>(skip_header.data(), skip_header.length(), &parse_result);
+    if (parse_result == StringParser::PARSE_FAILURE) {
+        return Status::InvalidArgument(
+                fmt::format("Invalid parameter {}. The value must be an integer", HTTP_SKIP_HEADER));
+    }
+    if (parse_result != StringParser::PARSE_SUCCESS) {
+        return Status::InvalidArgument(fmt::format("Invalid parameter {}. The value must be between {} and {}",
+                                                   HTTP_SKIP_HEADER, std::numeric_limits<int64_t>::min(),
+                                                   std::numeric_limits<int64_t>::max()));
+    }
+    if (value < 0) {
+        return Status::InvalidArgument("skip_header must be equal or greater than 0");
+    }
+    if (value > 0) {
+        return Status::InvalidArgument(
+                "skip_header is not supported by merge commit, which loads the requests of a merge window as one "
+                "file. Send the data without its header rows and without skip_header, or load it with an HTTP "
+                "Stream Load that does not enable merge commit");
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

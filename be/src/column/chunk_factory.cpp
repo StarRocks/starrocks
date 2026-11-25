@@ -25,6 +25,7 @@
 #include "column/decimalv3_column.h"
 #include "column/field.h"
 #include "column/fixed_length_column.h"
+#include "column/geo_column.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
@@ -95,9 +96,13 @@ struct ColumnPtrBuilder {
 };
 
 MutableColumnPtr column_from_pool(const Field& field) {
+    const auto type = field.type()->type();
+    if (type == TYPE_GEOGRAPHY || type == TYPE_GEOMETRY) {
+        return ChunkFactory::column_from_field(field);
+    }
     auto precision = field.type()->precision();
     auto scale = field.type()->scale();
-    return field_type_dispatch_column(field.type()->type(), ColumnPtrBuilder(), field, precision, scale);
+    return field_type_dispatch_column(type, ColumnPtrBuilder(), field, precision, scale);
 }
 
 Chunk* ChunkFactory::new_chunk_pooled(const Schema& schema, size_t chunk_size) {
@@ -147,6 +152,9 @@ MutableColumnPtr ChunkFactory::column_from_field(const Field& field) {
     };
     auto type = field.type()->type();
     switch (type) {
+    case TYPE_GEOGRAPHY:
+    case TYPE_GEOMETRY:
+        return NullableIfNeed(GeoColumn::create(GeoColumnDescriptor{*field.geo_descriptor()}));
     case TYPE_DECIMAL32:
         return NullableIfNeed(Decimal32Column::create(field.type()->precision(), field.type()->scale()));
     case TYPE_DECIMAL64:

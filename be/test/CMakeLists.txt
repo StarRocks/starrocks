@@ -25,6 +25,7 @@ set(EXEC_FILES
         ./exec/pipeline/multi_cast_local_exchange_test.cpp
         ./exec/pipeline/fetch_task_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
+        ./exec/data_sinks/iceberg_encryption_signal_test.cpp
         ./formats/parquet/decrypt_metadata_module_test.cpp
         ./formats/parquet/encrypted_file_reader_test.cpp
         ./exec/data_sinks/pipeline_sink_builder_test.cpp
@@ -150,6 +151,7 @@ set(EXEC_FILES
         ./compute_env/load/stream_load_metrics_test.cpp
         ./compute_env/load/stream_load_context_handle_test.cpp
         #./orchestration/routine_load_task_executor_test.cpp
+        ./orchestration/routine_load_kafka_scan_range_test.cpp
         ./compute_env/load/time_bounded_stream_load_pipe_test.cpp
         ./runtime/merge_cascade_test.cpp
         ./runtime/exec_env_test.cpp
@@ -165,6 +167,7 @@ set(EXEC_FILES
         ./service/daemon_test.cpp
         ./service/mem_hook_test.cpp
         ./service/service_metrics_test.cpp
+        ./service/service_be/arrow_flight_auth_server_middleware_test.cpp
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
         ./service/service_be/backend_service_test.cpp
         ./base/auth/auth_info_test.cpp
@@ -243,6 +246,17 @@ list(REMOVE_ITEM STARROCKS_TEST_LINK_LIBS arrow_testing)
 TARGET_LINK_LIBRARIES(starrocks_test ServiceBE Service SchemaScannerBuiltin ${STARROCKS_TEST_LINK_LIBS})
 STARROCKS_FORCE_LOAD_LIBS(starrocks_test ${EXPR_FORCE_LOAD_LIBS})
 
+# Keep the aggregate spill selector regression runnable without compiling every
+# source in starrocks_test_objs, while retaining the standard BE test environment.
+add_executable(aggregate_spill_selection_test
+        test_main.cpp
+        exec/aggregate_spill_selection_test.cpp
+        ${TEST_EXTRA_SOURCES})
+set_target_properties(aggregate_spill_selection_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+target_link_libraries(aggregate_spill_selection_test
+        StarRocksPCH ServiceBE Service SchemaScannerBuiltin ${STARROCKS_TEST_LINK_LIBS})
+STARROCKS_FORCE_LOAD_LIBS(aggregate_spill_selection_test ${EXPR_FORCE_LOAD_LIBS})
+
 
 SET(DW_TEST_FILES
     ./storage/base_compaction_test.cpp
@@ -257,7 +271,6 @@ SET(DW_TEST_FILES
     ./storage/compaction_parallelization_test.cpp
     ./storage/compaction_utils_test.cpp
     ./storage/conjunctive_predicates_test.cpp
-    ./storage/convert_helper_test.cpp
     ./storage/cumulative_compaction_test.cpp
     ./storage/data_dir_test.cpp
     ./storage/datum_variant_test.cpp
@@ -293,6 +306,7 @@ SET(DW_TEST_FILES
     ./storage/lake/shared_data_vector_index_test.cpp
     ./storage/lake/vector_index_build_task_test.cpp
     ./storage/lake/lake_delvec_loader_test.cpp
+    ./storage/lake/lake_grouped_range_reader_test.cpp
     ./storage/lake/lake_meta_reader_test.cpp
     ./storage/lake/lake_persistent_index_test.cpp
     ./storage/lake/lake_persistent_index_selection_test.cpp
@@ -300,6 +314,7 @@ SET(DW_TEST_FILES
     ./storage/lake/lake_primary_key_recover_test.cpp
     ./exec/lake_connector_scan_node_test.cpp
     ./storage/lake/metacache_test.cpp
+    ./storage/lake/metacache_adjuster_test.cpp
     ./storage/lake/meta_file_test.cpp
     ./storage/lake/lake_proto_normalizer_test.cpp
     ./storage/lake/partial_update_test.cpp
@@ -309,12 +324,14 @@ SET(DW_TEST_FILES
     ./storage/lake/primary_key_compaction_task_test.cpp
     ./storage/lake/primary_key_publish_test.cpp
     ./storage/lake/lake_merged_del_op_offset_test.cpp
+    ./storage/lake/lake_merged_bundled_segments_test.cpp
     ./storage/lake/lake_multi_statement_bundle_mix_test.cpp
     ./storage/lake/lake_multi_statement_publish_test.cpp
     ./storage/lake/tablet_merger_test.cpp
     ./storage/lake/tablet_reshard_helper_test.cpp
     ./storage/lake/tablet_reshard_test.cpp
     ./storage/lake/tablet_splitter_test.cpp
+    ./storage/lake/replication_schema_utils_test.cpp
     ./storage/lake/replication_txn_manager_test.cpp
     ./storage/lake/rowset_test.cpp
     ./storage/lake/segment_metadata_filter_test.cpp
@@ -339,6 +356,7 @@ SET(DW_TEST_FILES
     ./storage/lake/multi_node_write_txn_log_test.cpp
     ./storage/lake/transactions_test.cpp
     ./storage/lake/pk_tablet_sst_writer_test.cpp
+    ./storage/lake/txn_log_applier_lake_replication_test.cpp
     ./storage/lake/txn_log_applier_test.cpp
     ./storage/lake/txn_log_applier_idg_test.cpp
     ./storage/lake/vacuum_test.cpp
@@ -392,8 +410,10 @@ SET(DW_TEST_FILES
     ./storage/rowset/page_io_test.cpp
     ./storage/rowset/plain_page_test.cpp
     ./storage/rowset/rle_page_test.cpp
+    ./storage/rowset/rowset_meta_test.cpp
     ./storage/rowset/rowset_test.cpp
     ./storage/rowset/segment_iterator_test.cpp
+    ./storage/rowset/segment_prefetch_window_test.cpp
     ./storage/rowset/segment_rewriter_test.cpp
     ./storage/rowset/segment_tail_index_region_test.cpp
     ./storage/rowset/segment_test.cpp
@@ -403,6 +423,7 @@ SET(DW_TEST_FILES
     ./storage/rowset/unique_rowset_id_generator_test.cpp
     ./storage/rowset_update_state_test.cpp
     ./storage/rowset/zone_map_index_test.cpp
+    ./storage/query/range_group_task_test.cpp
     ./storage/rows_mapper_test.cpp
     ./storage/row_store_encoder_test.cpp
     ./storage/schema_change_test.cpp
@@ -412,6 +433,7 @@ SET(DW_TEST_FILES
     ./storage/size_tiered_compaction_policy_test.cpp
     ./storage/snapshot_manager_test.cpp
     ./storage/snapshot_meta_test.cpp
+    ./storage/sort_key_bounds_test.cpp
     ./storage/sort_key_sampler_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp
     ./storage/storage_cleanup_executor_test.cpp
@@ -468,23 +490,27 @@ endif()
 # --without-paimon-cpp, so no other test binary depends on libpaimon.so.
 # The paimon include path comes from the imported `paimon` target, so other
 # test sources cannot include paimon headers.
-# The production sources are compiled directly into this binary: they ship in
-# the dlopen()ed libstarrocks_paimon.so shim and are no longer part of
-# ConnectorHive, while tests link paimon the ordinary build-time way.
+# Production sources come from the UT-only object library under src/ so their
+# coverage survives CI cleanup of the test build directory. Production builds
+# ship them in the dlopen()ed libstarrocks_paimon.so shim instead.
 if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
     ADD_BE_TEST(connector/paimon/paimon_cpp_test)
     target_sources(paimon_cpp_test PRIVATE
+        connector/paimon/paimon_test_main.cpp
+        connector/paimon/paimon_global_index_evaluator_test.cpp
+        connector/paimon/paimon_global_index_reader_test.cpp
+        connector/paimon/paimon_global_index_scanner_test.cpp
         connector/paimon/paimon_scanner_mem_usage_test.cpp
         connector/paimon/paimon_scanner_projection_test.cpp
         connector/paimon/paimon_predicate_converter_test.cpp
         connector/paimon/paimon_file_system_test.cpp
         connector/paimon/paimon_blob_converter_test.cpp
-        ${SRC_DIR}/connector/hive/paimon/paimon_predicate_converter.cpp
-        ${SRC_DIR}/connector/hive/paimon/paimon_file_system.cpp
-        ${SRC_DIR}/connector/hive/paimon/paimon_scanner.cpp
-        ${SRC_DIR}/connector/hive/paimon/paimon_blob_converter.cpp
+        connector/paimon/paimon_bucket_function_test.cpp
+        connector/paimon/paimon_chunk_sink_test.cpp
+        connector/paimon/paimon_file_system_write_test.cpp
+        connector/paimon/paimon_write_column_converter_test.cpp
     )
-    target_link_libraries(paimon_cpp_test paimon)
+    target_link_libraries(paimon_cpp_test paimon_cpp_test_support paimon)
 endif ()
 
 # you can simply add test case as single binary without adding `main`
