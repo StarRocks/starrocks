@@ -363,6 +363,7 @@ Status HdfsOrcScanner::build_paimon_delete_file_builder() {
     ASSIGN_OR_RETURN(auto deletion_bitmap,
                      paimon_delete_file_builder.build(*_scanner_ctx->table_specific.paimon_deletion_file));
     _skip_rows_ctx->deletion_bitmap = std::move(deletion_bitmap);
+    _app_stats.delete_file_remote_bytes += paimon_delete_file_builder.bytes_read();
     return Status::OK();
 }
 
@@ -688,6 +689,13 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
             }
             // read num values is how many rows actually read before doing dict filtering.
             read_num_values = position.num_values;
+            _app_stats.physical_rows_read += read_num_values;
+            if (_skip_rows_ctx != nullptr && _skip_rows_ctx->has_skip_rows()) {
+                const auto& kept = down_cast<const BooleanColumn*>(row_delete_filter.get())->get_data();
+                _app_stats.logical_rows_read += SIMD::count_nonzero(kept);
+            } else {
+                _app_stats.logical_rows_read += read_num_values;
+            }
             if (_row_position_slot != nullptr) {
                 row_positions =
                         ColumnHelper::create_column(_row_position_slot->type(), _row_position_slot->is_nullable());

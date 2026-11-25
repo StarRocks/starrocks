@@ -60,7 +60,7 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
         } finally {
             Tracers.close();
             if (executor != null) {
-                auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
+                auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog(), executor);
                 executor.addFinishedQueryDetail();
             } else {
                 // executor can be null if we encounter analysis error.

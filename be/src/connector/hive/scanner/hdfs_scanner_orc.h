@@ -38,6 +38,7 @@ public:
     void disable_use_orc_sargs() { _use_orc_sargs = false; }
 
 protected:
+    bool tracks_scan_audit_rows() const override { return true; }
     bool support_file_stats_pruning() const override { return true; }
 
 private:

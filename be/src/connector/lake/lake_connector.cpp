@@ -292,6 +292,9 @@ void LakeDataSource::close(RuntimeState* state) {
         // close reader to update statistics before update counters
         _reader->close();
         update_counter(state);
+        const auto& stats = _reader->stats();
+        _update_scan_audit_counters(stats.raw_rows_read, stats.rows_del_filtered_after_read,
+                                    stats.remote_bytes_read_with_prepare(), stats.compressed_bytes_read_local_disk);
     }
     if (_prj_iter) {
         _prj_iter->close();
@@ -327,6 +330,7 @@ Status LakeDataSource::reuse(RuntimeState* state, pipeline::ScanMorsel* morsel) 
     _morsel = morsel;
     _split_context = morsel->get_split_context();
     _needs_reopen = true;
+    _scan_audit_counters = ScanAuditCounters{};
     return Status::OK();
 }
 
@@ -338,6 +342,12 @@ void LakeDataSource::release_for_reuse(RuntimeState* state) {
     // The reused segment iterators stay open across scans; report what this scan read through them.
     _reader->flush_reusable_iterator_io_stats();
     update_counter(state);
+    {
+        // Kept until reuse(): the chunk source reads them after this release.
+        const auto& stats = _reader->stats();
+        _update_scan_audit_counters(stats.raw_rows_read, stats.rows_del_filtered_after_read,
+                                    stats.remote_bytes_read_with_prepare(), stats.compressed_bytes_read_local_disk);
+    }
     _reader->reset_stats();
     _num_rows_read = 0;
     _raw_rows_read = 0;
@@ -1644,7 +1654,20 @@ void LakeDataSource::update_realtime_counter(Chunk* chunk) {
     const auto stats = _reader->realtime_stats();
     _raw_rows_read = stats.raw_rows_read;
     _bytes_read = stats.bytes_read;
+    _update_scan_audit_counters(stats.raw_rows_read, stats.rows_del_filtered_after_read, stats.remote_bytes_read,
+                                stats.compressed_bytes_read_local_disk);
     _cpu_time_spent_ns = stats.decompress_ns + stats.vec_cond_ns + stats.del_filter_ns;
+}
+
+// The IO bytes of a segment file reach the reader statistics only when its iterator is closed or flushed, so they
+// are complete once the reader is closed or released. Local disk is the datacache of shared-data.
+void LakeDataSource::_update_scan_audit_counters(int64_t raw_rows_read, int64_t rows_del_filtered_after_read,
+                                                 int64_t remote_bytes, int64_t local_disk_bytes) {
+    _scan_audit_counters.mask = ScanAuditCounters::ROWS_AND_BYTES;
+    _scan_audit_counters.physical_rows = raw_rows_read;
+    _scan_audit_counters.logical_rows = raw_rows_read - rows_del_filtered_after_read;
+    _scan_audit_counters.remote_bytes = remote_bytes;
+    _scan_audit_counters.cache_bytes = local_disk_bytes;
 }
 
 void LakeDataSource::update_counter(RuntimeState* state) {

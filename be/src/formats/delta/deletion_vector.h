@@ -44,6 +44,8 @@ struct DeletionVectorOptions {
     std::string table_location;
     DataCacheOptions datacache_options;
     RuntimeProfile* runtime_profile = nullptr;
+    // When set, the bytes read from the deletion vector file are added to its delete_file_*_bytes.
+    FormatScannerStats* scan_stats = nullptr;
 };
 
 class DeletionVector {

@@ -49,6 +49,7 @@ StatusOr<DeletionBitmapPtr> PaimonDeleteFileBuilder::build(const TPaimonDeletion
 
     std::unique_ptr<char[]> deletion_vector(new char[static_cast<size_t>(read_length)]);
     ASSIGN_OR_RETURN(auto bytes_read, raw_deletion_vector->read_at(offset, deletion_vector.get(), read_length));
+    _bytes_read += bytes_read;
     RETURN_IF(bytes_read < BITMAP_SIZE_LENGTH + MAGIC_NUMBER_LENGTH,
               Status::IOError("short read of paimon deletion vector header"));
 

@@ -615,6 +615,26 @@ int64_t HdfsScanner::estimated_mem_usage() const {
     return 0;
 }
 
+ScanAuditCounters HdfsScanner::scan_audit_counters() const {
+    ScanAuditCounters counters;
+    if (!tracks_scan_audit_rows()) {
+        return counters;
+    }
+    counters.mask = ScanAuditCounters::ROWS_AND_BYTES;
+    counters.physical_rows = _app_stats.physical_rows_read;
+    counters.logical_rows = _app_stats.logical_rows_read;
+    // _fs_stats counts the bytes read from the file system below the datacache, the cache stream those it served.
+    // Plus the bytes of the Iceberg position-delete files and deletion vectors read for the data file.
+    counters.remote_bytes = _fs_stats.bytes_read + _app_stats.delete_file_remote_bytes;
+    const auto& cache_input_stream = _cache_input_stream ? _cache_input_stream : _bypassed_cache_input_stream;
+    if (cache_input_stream != nullptr) {
+        const auto& stats = cache_input_stream->stats();
+        counters.cache_bytes = stats.read_block_cache_bytes + stats.read_peer_cache_bytes;
+    }
+    counters.cache_bytes += _app_stats.delete_file_cache_bytes;
+    return counters;
+}
+
 void HdfsScanner::update_hdfs_counter(HdfsScannerProfile* profile) {
     if (_file == nullptr) return;
     static const char* const kHdfsIOProfileSectionPrefix = "HdfsIOMetrics";
