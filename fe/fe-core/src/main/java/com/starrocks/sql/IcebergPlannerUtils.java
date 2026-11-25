@@ -237,6 +237,9 @@ public class IcebergPlannerUtils {
         SessionVariable sv = session.getSessionVariable();
         if (sv.isEnableConnectorSinkSpill()) {
             sv.setEnableSpill(true);
+            // The fragments were built while spill was off, so they may use runtime adaptive DOP, which must not run
+            // together with spill (see SessionVariable.isEnableRuntimeAdaptiveDop).
+            execPlan.getFragments().forEach(PlanFragment::disableRuntimeAdaptiveDop);
             if (sv.getConnectorSinkSpillMemLimitThreshold() < sv.getSpillMemLimitThreshold()) {
                 sv.setSpillMemLimitThreshold(sv.getConnectorSinkSpillMemLimitThreshold());
             }

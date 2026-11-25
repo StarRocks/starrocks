@@ -731,6 +731,9 @@ public class InsertPlanner {
             if (session.getSessionVariable().isEnableConnectorSinkSpill() && (targetTable instanceof IcebergTable
                     || targetTable instanceof HiveTable || targetTable instanceof TableFunctionTable)) {
                 session.getSessionVariable().setEnableSpill(true);
+                // The fragments were built while spill was off, so they may use runtime adaptive DOP, which must not run
+                // together with spill (see SessionVariable.isEnableRuntimeAdaptiveDop).
+                execPlan.getFragments().forEach(PlanFragment::disableRuntimeAdaptiveDop);
                 if (currentVariable.getConnectorSinkSpillMemLimitThreshold() < currentVariable.getSpillMemLimitThreshold()) {
                     currentVariable.setSpillMemLimitThreshold(currentVariable.getConnectorSinkSpillMemLimitThreshold());
                 }

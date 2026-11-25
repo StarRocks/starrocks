@@ -2168,4 +2168,27 @@ public class InsertPlanTest extends PlanTestBase {
         plan = getExecPlan("insert into tpk_autopart (pk, dt) values (1, '2026-10-15')");
         Assertions.assertTrue(plan.isPlainInsertOnEmptyPartitions());
     }
+
+    @Test
+    public void testConnectorSinkSpillDisablesRuntimeAdaptiveDop() throws Exception {
+        String query = "select t0.v1, count(*) from t1 cross join t0 group by t0.v1";
+        SessionVariable original = connectContext.getSessionVariable();
+        SessionVariable sv = (SessionVariable) original.clone();
+        connectContext.setSessionVariable(sv);
+        try {
+            sv.setEnableRuntimeAdaptiveDop(true);
+            sv.setEnableSpill(false);
+            // the query alone gets runtime adaptive DOP
+            ExecPlan plan = getExecPlan(query);
+            Assertions.assertTrue(plan.getFragments().stream().anyMatch(PlanFragment::isUseRuntimeAdaptiveDop));
+
+            // a connector sink turns spill on (enable_connector_sink_spill, on by default) after the fragments are
+            // built; none of the fragments may keep adaptive DOP
+            plan = getExecPlan("insert into files (\"path\" = \"hdfs://127.0.0.1:9000/files/\", " +
+                    "\"format\"=\"parquet\", \"compression\" = \"uncompressed\") " + query);
+            Assertions.assertTrue(plan.getFragments().stream().noneMatch(PlanFragment::isUseRuntimeAdaptiveDop));
+        } finally {
+            connectContext.setSessionVariable(original);
+        }
+    }
 }
