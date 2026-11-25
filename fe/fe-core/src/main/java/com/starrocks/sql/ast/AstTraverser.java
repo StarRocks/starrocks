@@ -152,6 +152,9 @@ public class AstTraverser<R, C> implements AstVisitorExtendInterface<R, C> {
 
         if (node.getGroupBy() != null) {
             node.getGroupBy().forEach(x -> visit(x, context));
+        } else if (node.getGroupByClause() != null) {
+            // Before analysis the grouping expressions are only in the parsed clause, as the select list is above.
+            node.getGroupByClause().getParsedGroupingExprs().forEach(x -> visit(x, context));
         }
 
         if (node.getAggregate() != null) {

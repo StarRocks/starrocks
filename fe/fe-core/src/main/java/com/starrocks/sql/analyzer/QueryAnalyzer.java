@@ -2836,11 +2836,10 @@ public class QueryAnalyzer {
                         Preconditions.checkState(mvTable instanceof OlapTable);
                         OlapTable mvOlapTable = new OlapTable(mvTable.getType());
                         // Known: when a statement is planned, PlannerMetaLocker collects the base table of a
-                        // [_SYNC_MV_] relation by its index name, so this copy is taken under its READ lock -- but not
-                        // yet for a read in GROUP BY, which that collection does not walk before analysis. Nor does
-                        // every analysis run under the planner lock: CREATE VIEW analyzes its query
-                        // holding none, and the copy is taken all the same. Tracked as 2-g in the FE lock todo: the
-                        // analyzer is to stop copying, leaving the copy to the planner.
+                        // [_SYNC_MV_] relation by its index name, so this copy is taken under its READ lock. But not
+                        // every analysis runs under the planner lock -- CREATE VIEW analyzes its query holding none --
+                        // and the copy is taken all the same. Tracked as 2-g in the FE lock todo: the analyzer is to
+                        // stop copying, leaving the copy to the planner.
                         try (SnapshotCopyValidator.KnownViolation known = SnapshotCopyValidator.exemptKnownViolation(
                                 "[_SYNC_MV_] base table copied by analysis outside the planner lock (2-g)")) {
                             ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);

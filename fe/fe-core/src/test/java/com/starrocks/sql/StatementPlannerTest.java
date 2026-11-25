@@ -505,6 +505,12 @@ class StatementPlannerTest extends PlanTestBase {
     }
 
     @Test
+    public void testQueryFilesInGroupBySubqueryResolvedBeforeLock() throws Exception {
+        assertFilesResolvedBeforeLock("select count(*) from t0 "
+                + "group by (select count(*) from files(\"path\"=\"fake://group_by\", \"format\"=\"csv\"))");
+    }
+
+    @Test
     public void testQueryFilesInWhereSubqueryResolvedBeforeLock() throws Exception {
         assertFilesResolvedBeforeLock("select v1 from t0 where v1 in "
                 + "(select col_int from files(\"path\"=\"fake://where\", \"format\"=\"csv\"))");
