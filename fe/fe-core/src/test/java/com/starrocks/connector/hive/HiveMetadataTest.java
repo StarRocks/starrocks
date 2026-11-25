@@ -579,6 +579,21 @@ public class HiveMetadataTest {
     }
 
     @Test
+    public void testInvalidateCachedTableDropsFilesWhenMetastoreCacheIsOff() {
+        // enable_metastore_cache=false with enable_remote_file_cache=true: no cached table or partition to find
+        // the file lists by, so the table location is read from the metastore
+        HiveCacheUpdateProcessor processor = new HiveCacheUpdateProcessor("hive_catalog", metastore,
+                cachingRemoteFileIO, executorForHmsRefresh, false, false);
+        String location = metastore.getTable("db1", "unpartitioned_table").getTableLocation();
+        cachingRemoteFileIO.getRemoteFiles(RemotePathKey.of(location, false));
+        Assertions.assertFalse(cachingRemoteFileIO.getPresentPathKeyInCache(location, false).isEmpty());
+
+        processor.invalidateCachedTable("db1", "unpartitioned_table");
+
+        Assertions.assertTrue(cachingRemoteFileIO.getPresentPathKeyInCache(location, false).isEmpty());
+    }
+
+    @Test
     public void testAbortSink() {
         TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
         hiveMetadata.abortSink("hive_db", "hive_table", Lists.newArrayList());
