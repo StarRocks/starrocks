@@ -20,23 +20,30 @@ products: [oss]
 **JAR ファイルの取得方法:**
 
 - [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks/) から直接 Spark connector JAR ファイルをダウンロードします。
-- Maven プロジェクトの `pom.xml` ファイルに Spark connector を依存関係として追加し、ダウンロードします。具体的な手順については、[ユーザーガイド](../../loading/spark/Spark-connector-starrocks.md#obtain-spark-connector) を参照してください。
-- ソースコードをコンパイルして Spark connector JAR ファイルを作成します。具体的な手順については、[ユーザーガイド](../../loading/spark/Spark-connector-starrocks.md#obtain-spark-connector) を参照してください。
+- Maven プロジェクトの `pom.xml` ファイルに Spark connector を依存関係として追加し、ダウンロードします。具体的な手順については、[ユーザーガイド](../../loading/spark/Spark-connector-starrocks.md#spark-コネクタの取得) を参照してください。
+- ソースコードをコンパイルして Spark connector JAR ファイルを作成します。具体的な手順については、[ユーザーガイド](../../loading/spark/Spark-connector-starrocks.md#spark-コネクタの取得) を参照してください。
 
 **バージョン要件:**
 
 | Spark コネクタ    | Spark            | StarRocks     | Java | Scala |
 | --------------- | ---------------- | ------------- | ---- | ----- |
+| 1.1.5           | 4.0, 4.1            | 2.5 以降   | 17   | 2.13  |
+| 1.1.5           | 3.3, 3.4, 3.5       | 2.5 以降   | 8    | 2.12  |
 | 1.1.4           | 4.0, 4.1            | 2.5  以降  | 17   | 2.13  |
 | 1.1.4           | 3.3, 3.4, 3.5       | 2.5  以降  | 8    | 2.12  |
 | 1.1.3           | 3.2, 3.3, 3.4, 3.5  | 2.5 以降   | 8    | 2.12  |
-| 1.1.2           | 3.2, 3.3, 3.4, 3.5  | 2.5 以降   | 8    | 2.12  |
-| 1.1.1           | 3.2, 3.3, または 3.4 | 2.5 以降   | 8    | 2.12  |
-| 1.1.0           | 3.2, 3.3, または 3.4 | 2.5 以降   | 8    | 2.12  |
 
 ## リリースノート
 
 ### 1.1
+
+#### 1.1.5
+
+このリリースには、主にデータ読み取りに関する改善が含まれています。
+
+**改善**
+
+- `starrocks.request.warehouse` パラメータを追加し、共有データクラスタで読み取りを処理するウェアハウスを指定できるようにしました。[#172](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/172)
 
 #### 1.1.4
 
@@ -97,7 +104,7 @@ products: [oss]
 
 > **注意**
 >
-> Spark connector をこのバージョンにアップグレードする際のいくつかの変更に注意してください。詳細については、[Spark connector のアップグレード](../../loading/spark/Spark-connector-starrocks.md#upgrade-from-version-110-to-111) を参照してください。
+> Spark connector をこのバージョンにアップグレードする際のいくつかの変更に注意してください。詳細については、[Spark connector のアップグレード](../../loading/spark/Spark-connector-starrocks.md#バージョン-110-から-111-へのアップグレード) を参照してください。
 
 **機能**
 

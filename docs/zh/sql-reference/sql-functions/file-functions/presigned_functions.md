@@ -50,6 +50,8 @@ FILE get_presigned_file(VARCHAR storage_volume, FILE file_expr [, BIGINT expirat
 
 返回新的 FILE，仅将 uri 替换为预签名 URL，其他属性保持不变。`uri` 为 NULL、空字符串或 HTTP/HTTPS URL 时，原样返回 FILE。
 
+向 `ai_complete` 或 `ai_embed` 传入私有图片或视频时，请使用 `get_presigned_file`。模型服务通过完整的签名 URL 读取对象。将 `get_presigned_url` 返回的 `VARCHAR` 直接传给 `ai_embed` 时，生成的是 URL 文本的向量。参见[为对象存储中的视频生成向量](../ai-functions/ai_functions.mdx#video-embedding)。
+
 ## 示例
 
 以下示例使用名为 `media_volume` 的存储卷。

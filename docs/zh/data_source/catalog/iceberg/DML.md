@@ -21,6 +21,10 @@ products: [oss, enterprise, cloud, anywhere]
 
 与 StarRocks 的内部表类似，如果您在 Iceberg 表上具有 [INSERT](../../../administration/user_privs/authorization/privilege_item.md#table) 权限，您可以使用 [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) 语句将 StarRocks 表的数据下沉到该 Iceberg 表（目前仅支持 Parquet 格式的 Iceberg 表）。
 
+对于 Parquet 数据文件，StarRocks 支持 Iceberg 表属性 `write.parquet.page-size-bytes`、`write.parquet.dict-size-bytes` 和 `write.parquet.row-group-size-bytes`。每个值必须是大于 0 且不超过 2,147,483,647 字节的整数；无效值会导致写入失败。未设置属性时，StarRocks 使用写入器默认值：数据页和字典页均为 1 MiB，行组为 128 MiB。这些属性不用于配置位置删除文件。
+
+对于 Parquet 数据文件，可以通过 Iceberg 表属性 `write.parquet.compression-level` 设置整数压缩级别。ZSTD 支持 -131072 至 22，GZIP 支持 -1 至 9，Brotli 支持 0 至 11。其他压缩算法不支持显式设置级别。无效值会导致写入失败。未设置该属性时，Parquet 写入器使用所选压缩算法的默认级别。此级别不适用于位置删除文件。
+
 ### 语法
 
 ```SQL
@@ -119,6 +123,10 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
    ```SQL
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
    ```
+
+### Parquet 数据页版本
+
+对于 Parquet 数据文件，Iceberg 表属性 `write.parquet.page-version` 支持 `v1` 或 `v2`（不区分大小写）。未设置时，StarRocks 写入 DataPage V1。无效值会导致写入失败。如果数据文件的列中包含 BOOLEAN 类型（包括嵌套在数组、映射或结构中的 BOOLEAN），DataPage V2 写入会被拒绝，因为 StarRocks 读取器目前无法解码其 RLE 编码的值。此属性不用于配置位置删除文件。Parquet 数据页版本与 Iceberg 表格式版本不同。
 
 ## DELETE
 

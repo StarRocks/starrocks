@@ -65,6 +65,10 @@ import java.util.Map;
 import java.util.UUID;
 
 public class SerializableTable implements Table, Serializable, HasTableOperations {
+    // Pinned to the value the JVM computed for this class on every release up to the one that added it, so
+    // adding members (such as the JSON payload hooks below) does not break FE and BE of different versions.
+    private static final long serialVersionUID = -1554890835414786287L;
+
     private final String name;
     private final String location;
     private final UUID uuid;
@@ -102,6 +106,50 @@ public class SerializableTable implements Table, Serializable, HasTableOperation
         this.io = fileIO(fileIO);
         this.encryption = table.encryption();
         this.refs = SerializableMap.copyOf(table.refs());
+    }
+
+    // Rebuilds the table from an IcebergTablePayload, the format FE and BE of different versions can both read.
+    SerializableTable(String name, String location, UUID uuid, String metadataFileLocation,
+                      Map<String, String> properties, String schemaAsJson, int defaultSpecId,
+                      Map<Integer, String> specAsJsonMap, String sortOrderAsJson, FileIO io,
+                      EncryptionManager encryption, Map<String, SnapshotRef> refs) {
+        this.name = name;
+        this.location = location;
+        this.uuid = uuid;
+        this.metadataFileLocation = metadataFileLocation;
+        this.properties = SerializableMap.copyOf(properties);
+        this.schemaAsJson = schemaAsJson;
+        this.defaultSpecId = defaultSpecId;
+        this.specAsJsonMap = new HashMap<>(specAsJsonMap);
+        this.sortOrderAsJson = sortOrderAsJson;
+        this.io = io;
+        this.encryption = encryption;
+        this.refs = SerializableMap.copyOf(refs);
+    }
+
+    String metadataFileLocation() {
+        return metadataFileLocation;
+    }
+
+    String schemaAsJson() {
+        return schemaAsJson;
+    }
+
+    int defaultSpecId() {
+        return defaultSpecId;
+    }
+
+    Map<Integer, String> specAsJsonMap() {
+        return specAsJsonMap;
+    }
+
+    String sortOrderAsJson() {
+        return sortOrderAsJson;
+    }
+
+    // The FileIO as shipped, without the Azure path normalizing wrapper io() adds.
+    FileIO rawIO() {
+        return io;
     }
 
     private String metadataFileLocation(Table table) {

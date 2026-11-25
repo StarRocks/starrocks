@@ -33,7 +33,6 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/type_info_allocator_adapter.h"
 #include "storage/chunk_helper.h"
-#include "storage/convert_helper.h"
 #include "storage/delta_writer.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/segment.h"
@@ -432,79 +431,6 @@ TEST_F(SchemaChangeTest, convert_int_to_date) {
 
     int dst_value = (time_tm.tm_year + 1900) * 16 * 32 + (time_tm.tm_mon + 1) * 32 + time_tm.tm_mday;
     EXPECT_EQ(dst_value, (int)dst_datum.get_uint24());
-}
-
-TEST_F(SchemaChangeTest, convert_int_to_bitmap) {
-    auto src_tablet_schema = gen_tablet_schema("c1", "INT", "REPLACE", 4);
-    auto dst_tablet_schema = gen_tablet_schema("c2", "OBJECT", "BITMAP_UNION", 8);
-
-    ChunkPtr src_chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(src_tablet_schema), 4096);
-    ChunkPtr dst_chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
-    Column* src_col = src_chunk->get_column_raw_ptr_by_index(0);
-    Column* dst_col = dst_chunk->get_column_raw_ptr_by_index(0);
-    Field f1 = StorageSchemaHelper::convert_field(0, src_tablet_schema->column(0));
-    Field f2 = StorageSchemaHelper::convert_field(0, dst_tablet_schema->column(0));
-
-    Datum src_datum;
-    src_datum.set_int32(2);
-    src_col->append_datum(src_datum);
-
-    auto converter = get_materialized_converter(TYPE_INT, OLAP_MATERIALIZE_TYPE_BITMAP);
-    Status st = converter->convert_materialized(std::move(src_col), dst_col, f1.type().get());
-    ASSERT_TRUE(st.ok());
-
-    Datum dst_datum = dst_col->get(0);
-    const BitmapValue* bitmap_val = dst_datum.get_bitmap();
-    EXPECT_EQ(bitmap_val->cardinality(), 1);
-}
-
-TEST_F(SchemaChangeTest, convert_varchar_to_hll) {
-    auto src_tablet_schema = gen_tablet_schema("c1", "VARCHAR", "REPLACE", 255);
-    auto dst_tablet_schema = gen_tablet_schema("c2", "HLL", "HLL_UNION", 8);
-
-    ChunkPtr src_chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(src_tablet_schema), 4096);
-    ChunkPtr dst_chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
-    Column* src_col = src_chunk->get_column_raw_ptr_by_index(0);
-    Column* dst_col = dst_chunk->get_column_raw_ptr_by_index(0);
-    Field f1 = StorageSchemaHelper::convert_field(0, src_tablet_schema->column(0));
-    Field f2 = StorageSchemaHelper::convert_field(0, dst_tablet_schema->column(0));
-
-    Datum src_datum;
-    std::string str = "test string";
-    Slice slice(str.data(), str.size());
-    src_datum.set_slice(slice);
-    src_col->append_datum(src_datum);
-
-    auto converter = get_materialized_converter(TYPE_VARCHAR, OLAP_MATERIALIZE_TYPE_HLL);
-    Status st = converter->convert_materialized(std::move(src_col), dst_col, f1.type().get());
-    ASSERT_TRUE(st.ok());
-
-    Datum dst_datum = dst_col->get(0);
-    const HyperLogLog* hll = dst_datum.get_hyperloglog();
-    EXPECT_EQ(hll->estimate_cardinality(), 1);
-}
-
-TEST_F(SchemaChangeTest, convert_int_to_count) {
-    auto src_tablet_schema = gen_tablet_schema("c1", "INT", "REPLACE", 4);
-    auto dst_tablet_schema = gen_tablet_schema("c2", "BIGINT", "SUM", 8);
-
-    ChunkPtr src_chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(src_tablet_schema), 4096);
-    ChunkPtr dst_chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
-    Column* src_col = src_chunk->get_column_raw_ptr_by_index(0);
-    Column* dst_col = dst_chunk->get_column_raw_ptr_by_index(0);
-    Field f1 = StorageSchemaHelper::convert_field(0, src_tablet_schema->column(0));
-    Field f2 = StorageSchemaHelper::convert_field(0, dst_tablet_schema->column(0));
-
-    Datum src_datum;
-    src_datum.set_int32(2);
-    src_col->append_datum(src_datum);
-
-    auto converter = get_materialized_converter(TYPE_INT, OLAP_MATERIALIZE_TYPE_COUNT);
-    Status st = converter->convert_materialized(std::move(src_col), dst_col, f1.type().get());
-    ASSERT_TRUE(st.ok());
-
-    Datum dst_datum = dst_col->get(0);
-    EXPECT_EQ(dst_datum.get_int64(), 1);
 }
 
 TEST_F(SchemaChangeTest, schema_change_with_directing_v2) {

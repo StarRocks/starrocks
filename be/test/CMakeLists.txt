@@ -151,6 +151,7 @@ set(EXEC_FILES
         ./compute_env/load/stream_load_metrics_test.cpp
         ./compute_env/load/stream_load_context_handle_test.cpp
         #./orchestration/routine_load_task_executor_test.cpp
+        ./orchestration/routine_load_kafka_scan_range_test.cpp
         ./compute_env/load/time_bounded_stream_load_pipe_test.cpp
         ./runtime/merge_cascade_test.cpp
         ./runtime/exec_env_test.cpp
@@ -245,6 +246,17 @@ list(REMOVE_ITEM STARROCKS_TEST_LINK_LIBS arrow_testing)
 TARGET_LINK_LIBRARIES(starrocks_test ServiceBE Service SchemaScannerBuiltin ${STARROCKS_TEST_LINK_LIBS})
 STARROCKS_FORCE_LOAD_LIBS(starrocks_test ${EXPR_FORCE_LOAD_LIBS})
 
+# Keep the aggregate spill selector regression runnable without compiling every
+# source in starrocks_test_objs, while retaining the standard BE test environment.
+add_executable(aggregate_spill_selection_test
+        test_main.cpp
+        exec/aggregate_spill_selection_test.cpp
+        ${TEST_EXTRA_SOURCES})
+set_target_properties(aggregate_spill_selection_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+target_link_libraries(aggregate_spill_selection_test
+        StarRocksPCH ServiceBE Service SchemaScannerBuiltin ${STARROCKS_TEST_LINK_LIBS})
+STARROCKS_FORCE_LOAD_LIBS(aggregate_spill_selection_test ${EXPR_FORCE_LOAD_LIBS})
+
 
 SET(DW_TEST_FILES
     ./storage/base_compaction_test.cpp
@@ -259,7 +271,6 @@ SET(DW_TEST_FILES
     ./storage/compaction_parallelization_test.cpp
     ./storage/compaction_utils_test.cpp
     ./storage/conjunctive_predicates_test.cpp
-    ./storage/convert_helper_test.cpp
     ./storage/cumulative_compaction_test.cpp
     ./storage/data_dir_test.cpp
     ./storage/datum_variant_test.cpp

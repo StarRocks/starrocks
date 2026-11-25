@@ -66,33 +66,25 @@ public class ApplyMinMaxStatisticRule implements TreeRewriteRule {
         }
 
         Map<Integer, Pair<ConstantOperator, ConstantOperator>> infos = Maps.newHashMap();
+        // Numeric/date group-by keys that a min/max stats manager could supply a range for.
+        ColumnRefSet statsCandidates = new ColumnRefSet();
 
-        List<PhysicalOlapScanOperator> olapScans = Utils.extractPhysicalOlapScanOperator(root);
+        // Pass 1, without touching the stats managers: take the ranges global dicts give for free and find
+        // the keys the managers could cover.
+        List<PhysicalOlapScanOperator> olapScans = Utils.extractPhysicalOlapScanOperator(root).stream()
+                .filter(scan -> !((OlapTable) scan.getTable()).inputHasTempPartition(scan.getSelectedPartitionId()))
+                .collect(Collectors.toList());
         for (PhysicalOlapScanOperator scan : olapScans) {
             OlapTable table = (OlapTable) scan.getTable();
-            final Long lastUpdateTime = StatisticUtils.getTableLastUpdateTimestamp(table);
-            if (null == lastUpdateTime) {
-                continue;
-            }
-            if (table.inputHasTempPartition(scan.getSelectedPartitionId())) {
-                continue;
-            }
             Map<Integer, ColumnDict> globalDicts = toGlobalDictMap(scan.getGlobalDicts());
             // Dict-encoded group-by keys (shared with the iceberg branch below).
             collectDictGroupByMinMax(scan, groupByRefSets, globalDicts, infos);
             // Fallback to the internal table-level min/max stats manager for the remaining
             // numeric/date group-by keys that are not dict-encoded.
             for (ColumnRefOperator column : scan.getColRefToColumnMetaMap().keySet()) {
-                if (!isUncoveredGroupByKey(column, groupByRefSets, infos)) {
-                    continue;
+                if (isUncoveredGroupByKey(column, groupByRefSets, infos) && table.getColumn(column.getName()) != null) {
+                    statsCandidates.union(column);
                 }
-                Column c = table.getColumn(column.getName());
-                if (c == null) {
-                    continue;
-                }
-                putStatsMgrMinMax(column, infos, IMinMaxStatsMgr.internalInstance(),
-                        new ColumnIdentifier(table.getId(), c.getColumnId()),
-                        new StatsVersion(-1, lastUpdateTime));
             }
         }
 
@@ -100,33 +92,69 @@ public class ApplyMinMaxStatisticRule implements TreeRewriteRule {
         // codes in [1, dictSize]; the runtime contract is enforced by GlobalDictNotMatch retry on
         // the BE side. globalDicts is only populated for parquet scans (gated in
         // DecodeCollector.visitPhysicalIcebergScan), so non-parquet falls through naturally.
-        List<PhysicalScanOperator> icebergScans = Lists.newArrayList();
+        List<PhysicalIcebergScanOperator> icebergScans = Lists.newArrayList();
         Utils.extractOperator(root, icebergScans,
                 op -> OperatorType.PHYSICAL_ICEBERG_SCAN.equals(op.getOpType()));
-        for (PhysicalScanOperator scan : icebergScans) {
-            PhysicalIcebergScanOperator iceberg = (PhysicalIcebergScanOperator) scan;
+        for (PhysicalIcebergScanOperator iceberg : icebergScans) {
             IcebergTable table = (IcebergTable) iceberg.getTable();
             Map<Integer, ColumnDict> globalDicts = toGlobalDictMap(iceberg.getGlobalDicts());
             // Dict-encoded group-by keys (shared with the OLAP branch above).
             collectDictGroupByMinMax(iceberg, groupByRefSets, globalDicts, infos);
-            // Fallback to IcebergColumnMinMaxMgr for the remaining numeric/date group-by keys. Take
-            // the snapshot from the scan's own TvrVersionRange — analyzer already pinned it — so the
-            // cache key matches the exact snapshot BE will read. Null/empty/non-single-snapshot
-            // ranges (e.g. TvrTableDelta) skip the fallback.
-            TvrVersionRange tvr = iceberg.getTvrVersionRange();
-            Long snapshotId = (tvr instanceof TvrTableSnapshot snap && !snap.isEmpty())
-                    ? snap.getSnapshotId() : null;
-            if (snapshotId == null) {
+            // The remaining numeric/date group-by keys fall back to IcebergColumnMinMaxMgr, which needs a
+            // single snapshot (see below).
+            if (icebergSnapshotId(iceberg) == null) {
                 continue;
             }
             for (ColumnRefOperator column : iceberg.getColRefToColumnMetaMap().keySet()) {
-                if (!isUncoveredGroupByKey(column, groupByRefSets, infos)) {
-                    continue;
+                if (isUncoveredGroupByKey(column, groupByRefSets, infos) && table.getColumn(column.getName()) != null) {
+                    statsCandidates.union(column);
                 }
+            }
+        }
+
+        // An aggregation gets the compressed key only if every one of its group-by keys has a range, so a key
+        // that can never have one (a string without a global dict, an expression, ...) rules the whole
+        // aggregation out. Asking the managers for the other keys of such an aggregation would only trigger
+        // [_META_] collections over whole tables whose result could never be used.
+        ColumnRefSet statsNeeded = new ColumnRefSet();
+        for (PhysicalHashAggregateOperator agg : aggLists) {
+            boolean mayCompress = agg.getGroupBys().stream()
+                    .allMatch(groupBy -> infos.containsKey(groupBy.getId()) || statsCandidates.contains(groupBy));
+            if (mayCompress) {
+                agg.getGroupBys().stream().filter(statsCandidates::contains).forEach(statsNeeded::union);
+            }
+        }
+
+        // Pass 2: ask the managers, only for the keys an aggregation can use.
+        for (PhysicalOlapScanOperator scan : olapScans) {
+            List<ColumnRefOperator> columns = scan.getColRefToColumnMetaMap().keySet().stream()
+                    .filter(statsNeeded::contains).collect(Collectors.toList());
+            if (columns.isEmpty()) {
+                continue;
+            }
+            OlapTable table = (OlapTable) scan.getTable();
+            // Walks every partition of the table, so only paid for a scan that needs it.
+            final Long lastUpdateTime = StatisticUtils.getTableLastUpdateTimestamp(table);
+            if (null == lastUpdateTime) {
+                continue;
+            }
+            for (ColumnRefOperator column : columns) {
                 Column c = table.getColumn(column.getName());
-                if (c == null) {
-                    continue;
-                }
+                putStatsMgrMinMax(column, infos, IMinMaxStatsMgr.internalInstance(),
+                        new ColumnIdentifier(table.getId(), c.getColumnId()),
+                        new StatsVersion(-1, lastUpdateTime));
+            }
+        }
+        for (PhysicalIcebergScanOperator iceberg : icebergScans) {
+            List<ColumnRefOperator> columns = iceberg.getColRefToColumnMetaMap().keySet().stream()
+                    .filter(statsNeeded::contains).collect(Collectors.toList());
+            if (columns.isEmpty()) {
+                continue;
+            }
+            IcebergTable table = (IcebergTable) iceberg.getTable();
+            Long snapshotId = icebergSnapshotId(iceberg);
+            for (ColumnRefOperator column : columns) {
+                Column c = table.getColumn(column.getName());
                 putStatsMgrMinMax(column, infos, IMinMaxStatsMgr.icebergInstance(),
                         new ColumnIdentifier(table.getUUID(), c.getColumnId()),
                         new StatsVersion(-1, snapshotId));
@@ -147,6 +175,14 @@ public class ApplyMinMaxStatisticRule implements TreeRewriteRule {
         }
 
         return root;
+    }
+
+    // Take the snapshot from the scan's own TvrVersionRange -- analyzer already pinned it -- so the cache key
+    // matches the exact snapshot BE will read. Null/empty/non-single-snapshot ranges (e.g. TvrTableDelta)
+    // return null and skip the IcebergColumnMinMaxMgr fallback.
+    private static Long icebergSnapshotId(PhysicalIcebergScanOperator iceberg) {
+        TvrVersionRange tvr = iceberg.getTvrVersionRange();
+        return (tvr instanceof TvrTableSnapshot snap && !snap.isEmpty()) ? snap.getSnapshotId() : null;
     }
 
     // Numeric/date columns are the only ones whose dict codes form the contiguous [0, dictSize]

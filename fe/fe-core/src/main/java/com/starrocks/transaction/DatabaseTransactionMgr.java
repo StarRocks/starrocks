@@ -102,6 +102,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.LongPredicate;
@@ -2610,6 +2611,16 @@ public class DatabaseTransactionMgr {
 
     public void replayUpsertTransactionState(TransactionState transactionState) {
         boolean isCheckpoint = GlobalStateMgr.isCheckpointThread();
+        Database db = globalStateMgr.getLocalMetastore().getDb(transactionState.getDbId());
+        // A VISIBLE record moves the version of every partition the transaction wrote, one at a time. Hold the tables'
+        // WRITE locks as the leader and the batch replay do, before this manager's lock, or a reader holding a table
+        // lock could see the transaction in some partitions only (StarRocksTest#12648).
+        List<Long> lockedTableIds = db != null && transactionState.getTransactionStatus() == TransactionStatus.VISIBLE
+                ? tablesToLockForReplay(transactionState, db) : List.of();
+        Locker locker = new Locker();
+        if (!lockedTableIds.isEmpty()) {
+            locker.lockTablesWithIntensiveDbLock(db.getId(), lockedTableIds, LockType.WRITE);
+        }
         writeLock();
         try {
             if (transactionState.getTransactionStatus() == TransactionStatus.UNKNOWN) {
@@ -2618,7 +2629,6 @@ public class DatabaseTransactionMgr {
             }
             // set transaction status will call txn state change listener
             transactionState.replaySetTransactionStatus();
-            Database db = globalStateMgr.getLocalMetastore().getDb(transactionState.getDbId());
             if (db != null) {
                 if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
                     if (!isCheckpoint) {
@@ -2644,7 +2654,26 @@ public class DatabaseTransactionMgr {
             }
         } finally {
             writeUnlock();
+            if (!lockedTableIds.isEmpty()) {
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), lockedTableIds, LockType.WRITE);
+            }
         }
+    }
+
+    /**
+     * The tables to lock while a transaction's record is replayed: the ones it was opened on and any other it carries a
+     * commit for, that still exist. A DROP is replayed by this same thread, so the set cannot change meanwhile.
+     */
+    private List<Long> tablesToLockForReplay(TransactionState transactionState, Database db) {
+        Set<Long> tableIds = new TreeSet<>(transactionState.getTableIdList());
+        tableIds.addAll(transactionState.getIdToTableCommitInfos().keySet());
+        List<Long> existing = new ArrayList<>(tableIds.size());
+        for (long tableId : tableIds) {
+            if (globalStateMgr.getLocalMetastore().getTable(db.getId(), tableId) != null) {
+                existing.add(tableId);
+            }
+        }
+        return existing;
     }
 
     public void replayUpsertTransactionStateBatch(TransactionStateBatch transactionStateBatch) {

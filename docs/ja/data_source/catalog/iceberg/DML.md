@@ -21,6 +21,10 @@ Icebergテーブルにデータを挿入します。この機能はv3.1以降で
 
 StarRocksの内部テーブルと同様に、Icebergテーブルに対して [INSERT](../../../administration/user_privs/authorization/privilege_item.md#table) 権限を持っている場合、 [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) ステートメントを使用して、StarRocksテーブルのデータをそのIcebergテーブルにシンクできます（現在、Parquet形式のIcebergテーブルのみがサポートされています）。
 
+Parquet データファイルでは、StarRocks は Iceberg テーブルプロパティ `write.parquet.page-size-bytes`、`write.parquet.dict-size-bytes`、`write.parquet.row-group-size-bytes` を適用します。各値は 0 より大きく 2,147,483,647 バイト以下の整数である必要があり、無効な値の場合は書き込みが失敗します。プロパティを設定しない場合、ライターのデフォルト値（データページと辞書ページはそれぞれ 1 MiB、行グループは 128 MiB）が使用されます。これらのプロパティは位置削除ファイルには適用されません。
+
+Parquet データファイルでは、Iceberg テーブルプロパティ `write.parquet.compression-level` に整数を指定して、選択した圧縮コーデックのレベルを制御できます。指定できる範囲は ZSTD が -131072～22、GZIP が -1～9、Brotli が 0～11 です。その他のコーデックではレベルを明示的に指定できません。無効な値の場合は書き込みが失敗します。このプロパティを設定しない場合、Parquet ライターは選択したコーデックのデフォルトレベルを使用します。このレベルは位置削除ファイルには適用されません。
+
 ### 構文
 
 ```SQL
@@ -119,6 +123,10 @@ Iceberg テーブルにロードされるクエリストートメントの結果
    ```SQL
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
    ```
+
+### Parquet データページバージョン
+
+Parquet データファイルでは、Iceberg テーブルプロパティ `write.parquet.page-version` に `v1` または `v2` を指定できます（大文字と小文字は区別されません）。未設定の場合、StarRocks は DataPage V1 を書き込みます。無効な値の場合は書き込みが失敗します。データファイルのスキーマに BOOLEAN カラムが含まれる場合（配列、マップ、構造体内にネストされている場合も含む）、StarRocks リーダーが RLE エンコードされた値を現在デコードできないため、DataPage V2 の書き込みは拒否されます。このプロパティは位置削除ファイルには適用されません。Parquet のデータページバージョンと Iceberg のテーブルフォーマットバージョンは別の設定です。
 
 ## DELETE
 

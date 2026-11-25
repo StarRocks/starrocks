@@ -26,8 +26,6 @@
 
 namespace starrocks {
 
-static constexpr int32_t DEFAULT_STREAM_LOAD_PIPE_NON_BLOCKING_WAIT_US = 500;
-
 class TimeBoundedStreamLoadPipe : public StreamLoadPipe {
 public:
     TimeBoundedStreamLoadPipe(const std::string& name, int32_t active_window_ms,

@@ -22,6 +22,8 @@ import com.starrocks.sql.optimizer.base.OutputPropertyGroup;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -47,9 +49,10 @@ public class EnumeratePlan {
         // 2. count the valid plan in Memo and record in GroupExpression
         List<Integer> planCounts = Lists.newArrayList();
         int totalPlanCount = 0;
+        Map<Group, Set<PhysicalPropertySet>> counted = new HashMap<>();
         for (PhysicalPropertySet outputProperty : outputProperties) {
-            int planCount = countGroupValidPlan(rootGroup, outputProperty);
-            totalPlanCount += planCount;
+            int planCount = countGroupValidPlan(rootGroup, outputProperty, counted);
+            totalPlanCount = saturatedAdd(totalPlanCount, planCount);
             planCounts.add(planCount);
         }
 
@@ -191,37 +194,62 @@ public class EnumeratePlan {
     public static int computeKChildrenPlanCount(int k, List<Integer> childGroupExprCountList) {
         int result = 1;
         for (int i = 0; i <= k; ++i) {
-            result *= childGroupExprCountList.get(i);
+            result = saturatedMultiply(result, childGroupExprCountList.get(i));
         }
         return result;
     }
 
+    // Plan counts grow multiplicatively with the depth of the memo and easily exceed int; cap them instead of
+    // letting them wrap to a negative or zero count.
+    private static int saturatedAdd(int a, int b) {
+        long result = (long) a + b;
+        return result > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) result;
+    }
+
+    private static int saturatedMultiply(int a, int b) {
+        long result = (long) a * b;
+        return result > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) result;
+    }
+
     // Calculate the valid plan count for the group with required property.
     public static int countGroupValidPlan(Group group, PhysicalPropertySet outputProperty) {
+        return countGroupValidPlan(group, outputProperty, new HashMap<>());
+    }
+
+    // The memo is a DAG: a group is reachable through many paths, so without remembering which (group, property)
+    // pairs are already counted the recursion is exponential in the depth of the memo (e.g. twenty IN subqueries
+    // never finish counting, see RB-1118). The counts are stored in the group expressions, so a counted pair only
+    // needs to sum them up again.
+    private static int countGroupValidPlan(Group group, PhysicalPropertySet outputProperty,
+                                           Map<Group, Set<PhysicalPropertySet>> counted) {
+        boolean alreadyCounted = !counted.computeIfAbsent(group, g -> new HashSet<>()).add(outputProperty);
         int groupPlanCount = 0;
         for (GroupExpression groupExpression : group.getSatisfyOutputPropertyGroupExpressions(outputProperty)) {
-            if (groupExpression.getInputs().isEmpty()) {
-                // It's leaf node of the plan
-                groupExpression.addPlanCountOfProperties(OutputPropertyGroup.of(outputProperty), 1);
-            } else if (groupExpression.hasValidSubPlan()) {
-                // count the plan count of this group expression
-                countGroupExpressionValidPlan(groupExpression, outputProperty);
+            if (!alreadyCounted) {
+                if (groupExpression.getInputs().isEmpty()) {
+                    // It's leaf node of the plan
+                    groupExpression.addPlanCountOfProperties(OutputPropertyGroup.of(outputProperty), 1);
+                } else if (groupExpression.hasValidSubPlan()) {
+                    // count the plan count of this group expression
+                    countGroupExpressionValidPlan(groupExpression, outputProperty, counted);
+                }
             }
-            groupPlanCount += groupExpression.getOutputPropertyPlanCount(outputProperty);
+            groupPlanCount = saturatedAdd(groupPlanCount, groupExpression.getOutputPropertyPlanCount(outputProperty));
         }
         return groupPlanCount;
     }
 
     // Calculate the valid plan count for the group expression with required property.
     private static void countGroupExpressionValidPlan(GroupExpression groupExpression,
-                                                      PhysicalPropertySet outputProperty) {
+                                                      PhysicalPropertySet outputProperty,
+                                                      Map<Group, Set<PhysicalPropertySet>> counted) {
         for (OutputPropertyGroup outputPropertyGroup : groupExpression.getChildrenOutputProperties(outputProperty)) {
             List<PhysicalPropertySet> childrenOutputProperties = outputPropertyGroup.getChildrenOutputProperties();
 
             int childPlanCount = 1;
             for (int childIndex = 0; childIndex < groupExpression.arity(); ++childIndex) {
-                childPlanCount *= countGroupValidPlan(groupExpression.inputAt(childIndex),
-                        childrenOutputProperties.get(childIndex));
+                childPlanCount = saturatedMultiply(childPlanCount, countGroupValidPlan(
+                        groupExpression.inputAt(childIndex), childrenOutputProperties.get(childIndex), counted));
             }
 
             groupExpression.addPlanCountOfProperties(outputPropertyGroup, childPlanCount);

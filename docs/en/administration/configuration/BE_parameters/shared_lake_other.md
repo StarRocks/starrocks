@@ -87,6 +87,15 @@ This topic introduces the following types of BE configurations:
 - Description: Whether a compaction task in a shared-data cluster holds its input Segment objects on its own Rowset instances for the whole task, so that the per-column-group passes of vertical compaction reuse them instead of reloading them through the metadata cache. Without holding, whenever the metadata cache cannot hold all input segments (a small `lake_segment_metadata_cache_limit_percent`, or a node crowded with many tablets), every pass reloads and re-parses every input segment; that cost is CPU-bound and proportional to the column count, and can slow a wide-table compaction by an order of magnitude or make it fail with repeated memory-limit retries. While holding, the task does not fill the shared metadata cache with its input segments or delete vectors, because the inputs are deleted right after compaction and caching them only evicts other tablets' entries. The memory cost is one set of input segment metadata per running task, accounted on the compaction task's memory tracker and released with the task. Set this item to `false` to restore the previous behavior, in which compaction reuses segments through the shared metadata cache and fills that cache with its inputs.
 - Introduced in: v4.2
 
+### enable_lake_compaction_range_split
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether parallel compaction in a shared-data cluster splits its input by sort key range. When this item is set to `true`, each subtask of a parallel compaction reads the data of all input rowsets within one sort key range, and the subtasks together write one rowset whose segments do not overlap. Range split applies only when every input segment records its sort key bounds. Otherwise, or when this item is set to `false`, parallel compaction groups whole rowsets or splits a large rowset by segment index, and the outputs of the subtasks may overlap. The maximum number of subtasks per tablet is set by the table property `lake_compaction_max_parallel`.
+- Introduced in: v4.2
+
 ### lake_compaction_stream_buffer_size_bytes
 
 - Default: 1048576
@@ -172,17 +181,17 @@ Enable this option only after **all target CNs** support it. A normalized replic
 
 ### lake_enable_txn_vlog_group
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether schema-change publish in a shared-data cluster writes an ordered statement group into a separate `{tablet}_{version}.group.vlog` file for a multi-statement transaction. Legacy single logs use `{tablet}_{version}.vlog`. Readers in this version always support both legacy single-log files and statement groups, regardless of this setting. The default `false` retains the legacy merged-log writer, including the known failure when a DELETE followed by an INSERT causes mismatched partial-update metadata during shadow publish. This fix takes effect only after the setting is enabled. Enabling it does not convert versioned transaction logs that the legacy writer has already written.
+- Description: Whether schema-change publish in a shared-data cluster writes an ordered statement group into a separate `{tablet}_{version}.group.vlog` file for a multi-statement transaction. Legacy single logs use `{tablet}_{version}.vlog`. Readers in this version always support both legacy single-log files and statement groups, regardless of this setting. With the default `true`, each statement keeps its own schema, segments, rewrite metadata, and delete positions, so a DELETE followed by an INSERT in one transaction no longer causes mismatched partial-update metadata during shadow publish. Setting it to `false` restores the legacy merged-log writer, including that known failure. Changing the setting does not convert versioned transaction logs that have already been written.
 
-  Deploy reader support first. Before enabling group writes uniformly, verify that every CN that may perform publish, replay, or cleanup supports the group format, including background workers and images used for replacement nodes. Enabling group writes while older CNs remain can silently lose committed statements: after a group writer deletes some source logs, an older CN can retry using only the remaining sources and write an incomplete legacy log, which replay prefers over the group file.
+  CNs of versions without group readers cannot read statement groups. When you upgrade from an earlier version in which this setting does not exist or defaults to `false`, set `lake_enable_txn_vlog_group = false` in `cn.conf` before you start each upgraded CN, and keep it `false` until every CN that may perform publish, replay, or cleanup has been upgraded, including background workers and images used for replacement nodes. Then enable it as described below. If the earlier version cannot read statement groups, this step is required: enabling group writes while older CNs remain can silently lose committed statements. After a group writer deletes some source logs, an older CN can retry using only the remaining sources and write an incomplete legacy log, which replay prefers over the group file.
 
   Before changing this setting in either direction, pause the relevant schema-change and multi-statement publish work, drain in-flight requests, update all affected CNs consistently, and then resume the work. The setting does not negotiate reader capabilities or provide an atomic cluster-wide switch.
 
-  Setting it back to `false` only stops subsequent group writes; it does not convert, drain, or remove existing grouped logs. Before downgrading to a version without group readers, list every affected storage root's `txnlog` directory and verify that no `*.group.vlog` files remain, including unused group files next to valid legacy logs: older tablet cleanup also scans these files and cannot decode them. ALTER reaching `FINISHED`, transactions becoming `VISIBLE`, or routine vacuum completing does not establish this. With file bundling, successful replay leaves these logs in place, and routine vacuum does not reclaim version logs. If any remain, keep group-capable readers until safe cleanup has been completed. Disabling this setting alone does not make a downgrade safe.
+  Setting it to `false` only stops subsequent group writes; it does not convert, drain, or remove existing grouped logs. Before downgrading to a version without group readers, list every affected storage root's `txnlog` directory and verify that no `*.group.vlog` files remain, including unused group files next to valid legacy logs: older tablet cleanup also scans these files and cannot decode them. ALTER reaching `FINISHED`, transactions becoming `VISIBLE`, or routine vacuum completing does not establish this. With file bundling, successful replay leaves these logs in place, and routine vacuum does not reclaim version logs. If any remain, keep group-capable readers until safe cleanup has been completed. Disabling this setting alone does not make a downgrade safe.
 - Introduced in: -
 
 ### lake_pk_compaction_max_input_rowsets
@@ -711,6 +720,15 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Description: In a shared-data cluster, whether a Data Cache disk block that this CN process wrote and has not evicted since skips the first full-block checksum read when a later request touches it. That verification re-reads the whole block from disk to check data that the process has just written and still tracks in memory, which costs one extra disk read on the first access to every freshly cached block. Set this item to `false` to verify every block on first access, which is only worth its cost where the cache disk is suspected of corrupting data at rest. Blocks inherited from a previous run of the process are always verified regardless of this item, because nothing in the current process witnessed their write. This item is read once when Data Cache initializes.
 - Introduced in: v4.2.0
 
+### starlet_star_cache_write_overwrite
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: In a shared-data cluster, whether a Data Cache write replaces an object that is already cached under the same key. When this item is `false`, the existing object is kept and the write is reported as successful, which suits the read-through fill path, where the bytes being written are the ones already cached. Set this item to `true` to let a re-read refresh a block that is suspected to be stale or damaged. Data Cache reads this item on every write, so a change takes effect on the next write without re-initializing the cache.
+- Introduced in: -
+
 ### starlet_starmgr_client_compression_type
 
 - Default: none
@@ -811,6 +829,33 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Is mutable: Yes
 - Description: The maximum number of inline cache items in Data Cache. For some particularly small cache blocks, Data Cache stores them in `inline` mode, which caches the block data and metadata together in memory.
 - Introduced in: v3.4.0
+
+### datacache_lru_shard_evict_fallback_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether an LRU shard of Data Cache can evict entries from the other shards when it is being refilled or cannot supply the whole charge by itself. `false` restores the behavior that a shard only evicts its own entries, and `datacache_lru_shard_refill_low_watermark_percent` and `datacache_lru_shard_refill_high_watermark_percent` are ignored.
+- Introduced in: -
+
+### datacache_lru_shard_refill_low_watermark_percent
+
+- Default: 50
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: An LRU shard of Data Cache is refilled from the largest shards instead of evicting its own entries once its usage drops below this percentage of its capacity, until it reaches `datacache_lru_shard_refill_high_watermark_percent`. The value must not exceed `datacache_lru_shard_refill_high_watermark_percent`. Setting both parameters to `0` disables the refill.
+- Introduced in: -
+
+### datacache_lru_shard_refill_high_watermark_percent
+
+- Default: 70
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The percentage of the shard capacity at which the refill of an LRU shard of Data Cache stops. Valid values: `datacache_lru_shard_refill_low_watermark_percent` to `100`. Setting both parameters to `0` disables the refill.
+- Introduced in: -
 
 ### datacache_mem_size
 
@@ -1193,6 +1238,15 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Is mutable: Yes
 - Description: High water memory threshold expressed as a percentage of the process memory limit. When total memory consumption rises above this percentage, BE begins to free memory gradually (currently by evicting data cache and update cache, and by shrinking the shared-data metadata caches) to relieve pressure. The monitor uses this value to compute memory_high = mem_limit * memory_high_level / 100 and, if consumption `>` memory_high, performs controlled eviction guided by the GC advisor; if consumption exceeds memory_urgent_level (a separate config), more aggressive immediate reductions occur. This value is also consulted to disable certain memory‑intensive operations (for example, primary-key preload) when the threshold is exceeded. Must satisfy validation with memory_urgent_level (memory_urgent_level `>` memory_high_level, memory_high_level `>=` 1, memory_urgent_level `<=` 100).
 - Introduced in: v3.2.0
+
+### olap_string_max_length
+
+- Default: 1048576
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Maximum string length used by BE string functions, such as `repeat` and `concat`, to limit the size of each result. The default is 1 MiB. These functions return `NULL` when a result exceeds this limit. The limit is measured in bytes, not characters.
+- Introduced in: -
 
 ### report_exec_rpc_request_retry_num
 

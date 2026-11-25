@@ -107,7 +107,6 @@ TEST(StorageValueTypesTest, PrimitiveEnumHelpers) {
     EXPECT_TRUE(is_compaction(READER_CUMULATIVE_COMPACTION));
     EXPECT_FALSE(is_compaction(READER_QUERY));
 
-    EXPECT_EQ(OLAP_MATERIALIZE_TYPE_COUNT, 4);
     EXPECT_EQ(PUSH_NORMAL_V2, 4);
 }
 

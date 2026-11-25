@@ -60,6 +60,7 @@ import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
@@ -74,6 +75,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -447,6 +449,37 @@ public class RollupJobV2Test extends DDLTestBase {
         OlapTable followerTable = (OlapTable) followerMetastore.getTable(followerDb.getFullName(), table.getName());
         assertEquals(OlapTableState.NORMAL, followerTable.getState());
         assertRollupIndexVisible(followerTable, "r_prune_follower");
+    }
+
+    @Test
+    public void testFinishInvalidatesPlansBeforeExposingTheRollup() throws Exception {
+        OlapTable table = createTable("t_rollup_invalidate_before_finish");
+        RollupJobV2 job = addRollup(new MaterializedViewHandler(), table, "r_invalidate_before_finish");
+        job.runPendingJob();
+        assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+        job.runWaitingTxnJob();
+        assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+
+        // A lock-free plan reads the versions its table copy recorded and the layout later: the invalidation has to be
+        // in place when each rollup index is exposed, not only once the job has finished.
+        long beforeFinish = table.lastSchemaUpdateTime.get();
+        List<Long> invalidationAtExposure = new CopyOnWriteArrayList<>();
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public boolean visualiseShadowIndex(Invocation invocation, long shadowIndexId, boolean isBaseIndex) {
+                PhysicalPartition exposed = invocation.getInvokedInstance();
+                if (table.getPhysicalPartition(exposed.getId()) == exposed) {
+                    invalidationAtExposure.add(table.lastSchemaUpdateTime.get());
+                }
+                return invocation.proceed(shadowIndexId, isBaseIndex);
+            }
+        };
+        runToFinished(job);
+
+        assertFalse(invalidationAtExposure.isEmpty(), "the job exposed no rollup index");
+        assertTrue(invalidationAtExposure.stream().allMatch(time -> time > beforeFinish),
+                "plans must be invalidated before the rollup index is exposed (before=" + beforeFinish
+                        + ", at exposure=" + invalidationAtExposure + ")");
     }
 
     private static OlapTable createTable(String tableName) throws Exception {

@@ -14,6 +14,7 @@
 
 #include "service/service_be/config_update_hooks.h"
 
+#include <fmt/format.h>
 #include <gflags/gflags_declare.h>
 
 #include <algorithm>
@@ -292,6 +293,22 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
         }
         return cache->update_inline_cache_count_limit(config::datacache_inline_item_count_limit);
     });
+    auto update_lru_shard_refill = []() -> Status {
+        LocalDiskCacheEngine* cache = DataCache::GetInstance()->local_disk_cache();
+        if (cache == nullptr || !cache->is_initialized()) {
+            return Status::InternalError("Local cache is not initialized");
+        }
+        int32_t low = config::datacache_lru_shard_refill_low_watermark_percent;
+        int32_t high = config::datacache_lru_shard_refill_high_watermark_percent;
+        if (low < 0 || low > high || high > 100) {
+            return Status::InvalidArgument(fmt::format(
+                    "invalid lru shard refill watermarks: low={}, high={}, expect 0 <= low <= high <= 100", low, high));
+        }
+        return cache->update_lru_shard_refill(config::datacache_lru_shard_evict_fallback_enable, low, high);
+    };
+    registry->register_callback("datacache_lru_shard_evict_fallback_enable", update_lru_shard_refill);
+    registry->register_callback("datacache_lru_shard_refill_low_watermark_percent", update_lru_shard_refill);
+    registry->register_callback("datacache_lru_shard_refill_high_watermark_percent", update_lru_shard_refill);
 #endif
     registry->register_callback("max_compaction_concurrency", [=]() -> Status {
         if (!config::enable_event_based_compaction_framework) {
@@ -716,6 +733,7 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     UPDATE_STARLET_CONFIG(starlet_fslib_azure_storage_min_upload_part_size, fslib_azure_storage_min_upload_part_size);
     UPDATE_STARLET_CONFIG(s3_multipart_equal_part_size, fslib_s3_multipart_equal_part_size);
     UPDATE_STARLET_CONFIG(remote_read_skip_contended_cache_writes, remote_read_skip_contended_cache_writes);
+    UPDATE_STARLET_CONFIG(starlet_star_cache_write_overwrite, star_cache_write_overwrite);
 #undef UPDATE_STARLET_CONFIG
     registry->register_callback("remote_read_retain_prefetched_bytes", update_remote_read_retain_prefetched_bytes);
 

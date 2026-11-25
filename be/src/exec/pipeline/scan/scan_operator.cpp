@@ -157,7 +157,53 @@ Status ScanOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
+// Wakes the operator for its chunk sources whose input became readable, from whatever thread made it readable. The
+// operator detaches it when it closes, and from then on a wake-up only clears the waiting flag.
+class ScanOperator::InputReadyWaker {
+public:
+    explicit InputReadyWaker(ScanOperator* op) : _op(op) {}
+
+    void wake(std::atomic<bool>* waiting) {
+        std::lock_guard guard(_lock);
+        waiting->store(false, std::memory_order_release);
+        if (_op != nullptr) {
+            // notifies when it goes out of scope, before the lock is released: the operator stays open meanwhile
+            auto notify = scan_defer_notify(_op);
+        }
+    }
+
+    void detach() {
+        std::lock_guard guard(_lock);
+        _op = nullptr;
+    }
+
+private:
+    std::mutex _lock;
+    ScanOperator* _op;
+};
+
+std::function<void()> ScanOperator::input_ready_callback(std::shared_ptr<std::atomic<bool>> waiting) {
+    std::shared_ptr<InputReadyWaker> waker;
+    {
+        std::lock_guard guard(_input_ready_waker_lock);
+        if (_input_ready_waker == nullptr) {
+            _input_ready_waker = std::make_shared<InputReadyWaker>(_input_ready_waker_detached ? nullptr : this);
+        }
+        waker = _input_ready_waker;
+    }
+    return [waker = std::move(waker), waiting = std::move(waiting)]() { waker->wake(waiting.get()); };
+}
+
 void ScanOperator::close(RuntimeState* state) {
+    {
+        // An input that becomes readable from now on must not touch the operator. Not under _task_mutex: a wake-up
+        // holds the waker's lock while has_output() takes _task_mutex.
+        std::lock_guard guard(_input_ready_waker_lock);
+        _input_ready_waker_detached = true;
+        if (_input_ready_waker != nullptr) {
+            _input_ready_waker->detach();
+        }
+    }
     // For the running io task, we close its chunk sources in ~ScanOperator not in ScanOperator::close.
     for (size_t i = 0; i < _chunk_sources.size(); i++) {
         std::lock_guard guard(_task_mutex);
@@ -305,15 +351,28 @@ bool ScanOperator::has_output() const {
     // Can pick up more morsels or submit more tasks
     if (!_morsel_queue->empty()) {
         std::shared_lock guard(_task_mutex);
-        auto status_or_is_ready = _morsel_queue->ready_for_next();
-        if (status_or_is_ready.ok() && status_or_is_ready.value()) {
-            return true;
+        // A chunk source that waits for its input keeps its slot without an IO task: a morsel needs a slot that neither
+        // runs an IO task nor waits, and without one the operator waits until an input wakes it.
+        bool has_slot_for_morsel = false;
+        for (int i = 0; i < _io_tasks_per_scan_operator; ++i) {
+            const bool waiting = _chunk_sources[i] != nullptr && _chunk_sources[i]->is_waiting_for_input();
+            if (!_is_io_task_running[i] && !waiting) {
+                has_slot_for_morsel = true;
+                break;
+            }
+        }
+        if (has_slot_for_morsel) {
+            auto status_or_is_ready = _morsel_queue->ready_for_next();
+            if (status_or_is_ready.ok() && status_or_is_ready.value()) {
+                return true;
+            }
         }
     }
 
     for (int i = 0; i < _io_tasks_per_scan_operator; ++i) {
         std::shared_lock guard(_task_mutex);
-        if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk()) {
+        if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk() &&
+            !_chunk_sources[i]->is_waiting_for_input()) {
             return true;
         }
     }
@@ -410,12 +469,38 @@ StatusOr<ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
         evaluate_topn_runtime_filters(res.get());
         eval_runtime_bloom_filters(res.get());
         res->owner_info().set_owner_id(owner_id, is_eos);
+        _audit_output_rows += res->num_rows();
     }
 
     if (_scan_node->limit() != -1 && _op_pull_rows >= _scan_node->limit()) {
         _morsel_queue->set_reach_limit(true);
     }
 
+    return res;
+}
+
+void ScanOperator::_add_scan_audit_counters(const ScanAuditCounters& delta) {
+    if (delta.empty()) {
+        return;
+    }
+    std::lock_guard l(_audit_counters_lock);
+    _audit_counters.add(delta);
+}
+
+ScanAuditCounters ScanOperator::take_scan_audit_counters() {
+    ScanAuditCounters res;
+    {
+        std::lock_guard l(_audit_counters_lock);
+        std::swap(res, _audit_counters);
+    }
+    // Every scan counts its output rows; the reader counters apply only where the reader tracks them.
+    res.output_rows = _audit_output_rows.exchange(0);
+    // Report at least once, even a scan that read nothing: the receiver tells a scan that read nothing from one that
+    // never reported.
+    if (!res.empty() || !_audit_counters_reported) {
+        res.mask |= ScanAuditCounters::OUTPUT_ROWS;
+        _audit_counters_reported = true;
+    }
     return res;
 }
 
@@ -487,6 +572,9 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
             if (_is_io_task_running[i]) {
                 skip[i] = true;
                 total_cnt -= 1;
+            } else if (_chunk_sources[i] != nullptr && _chunk_sources[i]->is_waiting_for_input()) {
+                // keeps its slot without an IO task until its input wakes the operator
+                skip[i] = true;
             } else if (_chunk_sources[i] != nullptr && _chunk_sources[i]->has_next_chunk()) {
                 RETURN_IF_ERROR(_trigger_next_scan(state, i));
                 skip[i] = true;
@@ -539,6 +627,10 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
 void ScanOperator::_close_chunk_source_unlocked(RuntimeState* state, int chunk_source_index) {
     if (_chunk_sources[chunk_source_index] != nullptr) {
         _chunk_sources[chunk_source_index]->close(state);
+        // Some readers complete their audit counters only when closed, e.g. a lake tablet reader adds the IO bytes of
+        // its segment files then. Taken before the detach: is_finished() holds while the source is attached, so the
+        // driver collects the scan statistics for the last time after these counters are in.
+        _add_scan_audit_counters(_chunk_sources[chunk_source_index]->take_unreported_scan_audit_counters());
         _chunk_sources[chunk_source_index] = nullptr;
         detach_chunk_source(chunk_source_index);
     }
@@ -568,6 +660,8 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
             if (!_is_finished && _chunk_sources[chunk_source_index]->has_reusable_state()) {
                 auto reusable_chunk_source = std::move(_chunk_sources[chunk_source_index]);
                 reusable_chunk_source->release_for_reuse(state);
+                // Counters completed by the release, taken before the detach as in _close_chunk_source_unlocked.
+                _add_scan_audit_counters(reusable_chunk_source->take_unreported_scan_audit_counters());
                 detach_chunk_source(chunk_source_index);
                 _stash_reusable_chunk_source(state, chunk_source_index, std::move(reusable_chunk_source));
             } else {
@@ -648,6 +742,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             }
 
             int64_t delta_cpu_time = chunk_source->get_cpu_time_spent() - prev_cpu_time;
+            _add_scan_audit_counters(chunk_source->take_unreported_scan_audit_counters());
             _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
                                       chunk_source->get_scan_rows() - prev_scan_rows,
                                       chunk_source->get_scan_bytes() - prev_scan_bytes);

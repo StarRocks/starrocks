@@ -18,6 +18,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.View;
@@ -118,9 +119,14 @@ public class PlannerMetaLocker implements AutoCloseable {
     private record WalkedView(TableName name, View view, String inlineViewDef, long sqlMode) {
     }
 
+    /** A [_SYNC_MV_] relation, with the ids of the tables its index name resolved to for the lock set. */
+    private record WalkedSyncMV(TableName indexName, Set<Long> baseTableIds) {
+    }
+
     // The session the views were resolved in; null for a locker built by forAllTablesOf, which walks no view body.
     private final ConnectContext session;
     private final List<WalkedView> walkedViews;
+    private final List<WalkedSyncMV> walkedSyncMVs;
     private boolean walkedViewsChecked = false;
     // Whether the statement reads an external table a policy may apply to; see mayReachExternalTablePolicy.
     private boolean mayReachExternalTablePolicy = false;
@@ -134,6 +140,7 @@ public class PlannerMetaLocker implements AutoCloseable {
         this.queryId = session.getQueryId();
         this.session = session;
         this.walkedViews = collector.walkedViews;
+        this.walkedSyncMVs = collector.walkedSyncMVs;
         this.mayReachExternalTablePolicy = collector.mayReachExternalTablePolicy;
     }
 
@@ -152,6 +159,7 @@ public class PlannerMetaLocker implements AutoCloseable {
         this.acquireTimeoutMs = acquireTimeoutMs;
         this.session = null;
         this.walkedViews = List.of();
+        this.walkedSyncMVs = List.of();
     }
 
     /**
@@ -178,6 +186,18 @@ public class PlannerMetaLocker implements AutoCloseable {
                 unlock();
                 throw new StarRocksPlannerException(String.format("View %s was changed while the statement was "
                         + "being planned, please retry", walked.name()), ErrorType.INTERNAL_ERROR);
+            }
+        }
+        // The analyzer copies the base table of a [_SYNC_MV_] read while analyzing, before the coverage check of
+        // StatementPlanner#copyOlapTablesAndUnlock can see it. A base table dropped and recreated, or an index of that
+        // name added or dropped, between the walk and this lock would leave it copying a table this lock does not
+        // hold. With those locked, their indexes stay as they are.
+        for (WalkedSyncMV walked : walkedSyncMVs) {
+            if (!walked.baseTableIds().equals(tableIdsOf(resolveSyncMVBaseTables(session, walked.indexName())))) {
+                unlock();
+                throw new StarRocksPlannerException(String.format("The base table of %s [_SYNC_MV_] was changed "
+                        + "while the statement was being planned, please retry", walked.indexName()),
+                        ErrorType.INTERNAL_ERROR);
             }
         }
     }
@@ -289,6 +309,11 @@ public class PlannerMetaLocker implements AutoCloseable {
 
     public void setAcquireTimeoutMs(long acquireTimeoutMs) {
         this.acquireTimeoutMs = acquireTimeoutMs;
+    }
+
+    /** The bound {@link #setAcquireTimeoutMs} set, or negative for none. */
+    public long getAcquireTimeoutMs() {
+        return acquireTimeoutMs;
     }
 
     /**
@@ -465,6 +490,51 @@ public class PlannerMetaLocker implements AutoCloseable {
         return new Pair<>(db, table);
     }
 
+    /**
+     * The tables that may be behind a {@code [_SYNC_MV_]} relation: every olap table of the database with a rollup or
+     * synchronous materialized view of that name. As in {@code Database#getMaterializedViewIndexes}, which the analyzer
+     * reads it with, the base index of a table, named after the table, is not one, and the temporary tables of other
+     * sessions are left out. The analyzer picks the one whose index is visible; locking every table that has one,
+     * visible or not, covers it. Empty when nothing matches -- the analyzer reports that.
+     *
+     * <p>Run before the lock is taken, and again under it by {@link #checkWalkedViewsOnFirstLock} and the slow path of
+     * {@code StatementPlanner#copyOlapTablesAndUnlock}, holding the locks of other tables only. So it reads nothing a
+     * concurrent DDL on another table mutates in place: the database's table map is concurrent, and an index name is
+     * looked up in its table rather than found by iterating its indexes ({@code Database#getMaterializedViewIndexes}
+     * does that, and a rollup change on any table of the database can make it throw). Nor does it take a lock: under
+     * the lock it would take one out of order.
+     */
+    private static List<Pair<Database, Table>> resolveSyncMVBaseTables(ConnectContext session, TableName indexName) {
+        TableName qualified = qualify(session, indexName);
+        if (qualified == null || !CatalogMgr.isInternalCatalog(qualified.getCatalog())) {
+            return List.of();
+        }
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(qualified.getDb());
+        if (db == null) {
+            return List.of();
+        }
+        List<Pair<Database, Table>> baseTables = new ArrayList<>();
+        for (Table table : db.getTables()) {
+            if (!(table instanceof OlapTable olapTable) || !olapTable.isMetaLockTarget()) {
+                continue;
+            }
+            if (olapTable.isTemporaryTable() && !olapTable.getSessionId().equals(session.getSessionId())) {
+                continue;
+            }
+            Long indexMetaId = olapTable.getIndexMetaIdByName(qualified.getTbl());
+            if (indexMetaId != null && indexMetaId != olapTable.getBaseIndexMetaId()) {
+                baseTables.add(new Pair<>(db, olapTable));
+            }
+        }
+        return baseTables;
+    }
+
+    private static Set<Long> tableIdsOf(List<Pair<Database, Table>> dbAndTables) {
+        Set<Long> tableIds = new HashSet<>();
+        dbAndTables.forEach(dbAndTable -> tableIds.add(dbAndTable.second.getId()));
+        return tableIds;
+    }
+
     private static class TableCollector extends AstTraverser<Void, Void> {
         private final ConnectContext session;
 
@@ -479,6 +549,7 @@ public class PlannerMetaLocker implements AutoCloseable {
         // where the analyzer would read the CTE instead, never more: that would leave a table it reads unlocked.
         private final Deque<Set<String>> cteNames = new ArrayDeque<>();
         private final List<WalkedView> walkedViews = new ArrayList<>();
+        private final List<WalkedSyncMV> walkedSyncMVs = new ArrayList<>();
         // Whether the relations being walked get a policy injected by the analyzer, besides the ones the statement
         // flags itself: everything in the body of a view so flagged (see QueryAnalyzer#inheritPolicyRewriteFlag).
         private boolean inBodyRewrittenByPolicy = false;
@@ -657,6 +728,16 @@ public class PlannerMetaLocker implements AutoCloseable {
                 return null;
             }
             noteExternalTablePolicy(node);
+            if (node.isSyncMVQuery()) {
+                // [_SYNC_MV_] names a materialized index, not a table: resolving it as a table finds nothing, which
+                // left the base table the analyzer copies out of the lock set -- copied unlocked on the fast path,
+                // and failing the coverage check in StatementPlanner#copyOlapTablesAndUnlock on the slow one.
+                // A base table is never a view, and policies are not applied to a [_SYNC_MV_] read.
+                List<Pair<Database, Table>> baseTables = resolveSyncMVBaseTables(session, node.getName());
+                baseTables.forEach(this::put);
+                walkedSyncMVs.add(new WalkedSyncMV(node.getName(), tableIdsOf(baseTables)));
+                return null;
+            }
             Pair<Database, Table> dbAndTable = resolveTable(session, node.getName());
             put(dbAndTable);
             if (dbAndTable == null) {

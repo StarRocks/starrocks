@@ -1065,7 +1065,7 @@ public class TaskManager implements MemoryTrackable {
                     lastScheduleTime, periodSeconds, taskStartTime, currentDateTime);
             try {
                 task.setLastScheduleTime(TimeUtils.getEpochSeconds());
-                SubmitResult submitResult = executeTask(task.getName());
+                SubmitResult submitResult = executeTask(task.getName(), new ExecuteOption(task));
                 LOG.info("trigger periodical task immediately result: {}, task: {}", submitResult, task);
             } catch (Exception e) {
                 LOG.warn("failed to execute periodical task immediately: {}", task, e);

@@ -402,7 +402,7 @@ public class ListPartitionInfo extends PartitionInfo {
                 .collect(Collectors.joining(",")));
         sb.append(")");
         if (!isAutomaticPartition) {
-            List<Long> partitionIds = getPartitionIds(false);
+            Set<Long> partitionIds = Sets.newHashSet(getPartitionIds(false));
             sb.append("(\n");
             if (!idToValues.isEmpty()) {
                 sb.append(this.singleListPartitionSql(table, partitionIds, tableReplicationNum));
@@ -434,7 +434,7 @@ public class ListPartitionInfo extends PartitionInfo {
         return partitionExprs;
     }
 
-    private String singleListPartitionSql(OlapTable table, List<Long> partitionIds, short tableReplicationNum) {
+    private String singleListPartitionSql(OlapTable table, Set<Long> partitionIds, short tableReplicationNum) {
         StringBuilder sb = new StringBuilder();
         this.idToLiteralExprValues.forEach((partitionId, values) -> {
             if (partitionIds.contains(partitionId)) {
@@ -462,7 +462,7 @@ public class ListPartitionInfo extends PartitionInfo {
                 .collect(Collectors.joining(", ")) + ")";
     }
 
-    private String multiListPartitionSql(OlapTable table, List<Long> partitionIds, short tableReplicationNum) {
+    private String multiListPartitionSql(OlapTable table, Set<Long> partitionIds, short tableReplicationNum) {
         StringBuilder sb = new StringBuilder();
         this.idToMultiLiteralExprValues.forEach((partitionId, multiValues) -> {
             if (partitionIds.contains(partitionId)) {

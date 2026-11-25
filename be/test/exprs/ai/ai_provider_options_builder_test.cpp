@@ -19,6 +19,7 @@
 
 #include <future>
 #include <initializer_list>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -62,7 +63,7 @@ std::string request_body(const AIProviderOptions& options) {
             .model = "test-model",
             .api_key = "test-api-key",
             .prompt = "test-prompt",
-            .options = &options,
+            .options = std::make_shared<const AIProviderOptions>(options),
     });
     CHECK(request.ok()) << request.status().message();
     return std::move(request).value().body;

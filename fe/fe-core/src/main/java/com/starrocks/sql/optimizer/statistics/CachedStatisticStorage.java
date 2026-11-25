@@ -107,6 +107,8 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                 return keys.stream().collect(Collectors.toMap(TableStatsCacheKey::getPartitionId,
                         k -> data.getOrDefault(k, Optional.empty())));
             }
+            // Some partitions are still loading. Keep the ones already loaded instead of discarding them all.
+            return getLoadedTableStatistics(keys);
         } catch (InterruptedException e) {
             LOG.warn("Failed to execute tableStatsCache.getAll", e);
             Thread.currentThread().interrupt();
@@ -114,6 +116,27 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             LOG.warn("Faied to execute tableStatsCache.getAll", e);
         }
         return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> Optional.empty()));
+    }
+
+    /**
+     * The row counts of the partitions whose load has completed. A partition that is still loading, is not cached,
+     * or failed to load is left out: absent means not loaded yet, while Optional.empty() means loaded but without
+     * statistics. Reads through asMap() so that it neither counts as a cache hit or miss nor loads again.
+     */
+    private Map<Long, Optional<Long>> getLoadedTableStatistics(List<TableStatsCacheKey> keys) {
+        Map<TableStatsCacheKey, CompletableFuture<Optional<Long>>> cached = tableStatsCache.asMap();
+        Map<Long, Optional<Long>> loaded = new HashMap<>();
+        for (TableStatsCacheKey key : keys) {
+            CompletableFuture<Optional<Long>> future = cached.get(key);
+            if (future == null || !future.isDone() || future.isCompletedExceptionally()) {
+                continue;
+            }
+            Optional<Long> rowCount = future.getNow(null);
+            if (rowCount != null) {
+                loaded.put(key.getPartitionId(), rowCount);
+            }
+        }
+        return loaded;
     }
 
     /**
@@ -187,6 +210,32 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         } catch (Exception e) {
             LOG.warn("Failed to refresh getColumnStatistics", e);
         }
+        refreshCachedPartitionStatistics(cacheKeys, isSync);
+    }
+
+    private void refreshCachedPartitionStatistics(List<ColumnStatsCacheKey> cacheKeys, boolean isSync) {
+        // Recollecting a column also changes its partition NDV and null fraction. Include in-flight loads,
+        // which the synchronous view hides, so they cannot later cache pre-collection statistics.
+        // Inspect the async map without recording hits/misses or loading cold, analyzed columns.
+        List<ColumnStatsCacheKey> cachedKeys = cacheKeys.stream().filter(partitionStatistics.asMap()::containsKey)
+                .collect(Collectors.toList());
+        if (cachedKeys.isEmpty()) {
+            return;
+        }
+        try {
+            PartitionStatsCacheLoader loader = new PartitionStatsCacheLoader();
+            CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> future =
+                    loader.asyncLoadAll(cachedKeys, statsCacheRefresherExecutor);
+            CompletableFuture<Void> applied = applyRefresh(partitionStatistics, cachedKeys, future);
+            if (isSync) {
+                applied.get();
+            }
+        } catch (InterruptedException e) {
+            LOG.warn("Failed to refresh partition statistics", e);
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            LOG.warn("Failed to refresh partition statistics", e);
+        }
     }
 
     @Override
@@ -219,6 +268,12 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
 
     @Override
     public List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> columns) {
+        return getConnectorTableStatistics(table, columns, true);
+    }
+
+    @Override
+    public List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> columns,
+                                                                       boolean queryTriggerAnalyzeEnabled) {
         Preconditions.checkState(table != null);
 
         // get Statistics Table column info, just return default column statistics
@@ -242,13 +297,16 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             SessionVariable sessionVariable = ConnectContext.get() == null ?
                     GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable() :
                     ConnectContext.get().getSessionVariable();
+            // Decided here, on the query's thread: the callback runs on the refresher's, which has no
+            // ConnectContext, and possibly after the statement has moved on to its next optimization.
+            boolean triggerAnalyze = queryTriggerAnalyzeEnabled && sessionVariable.isEnableQueryTriggerAnalyze();
             result.whenCompleteAsync((res, e) -> {
                 if (e != null) {
                     LOG.warn("Get connector table column statistics filed, exception: ", e);
                     return;
                 }
                 // Followers too: the manager forwards their requests to the leader, which runs the analyze.
-                if (sessionVariable.isEnableQueryTriggerAnalyze()) {
+                if (triggerAnalyze) {
                     GlobalStateMgr.getCurrentState().getConnectorTableTriggerAnalyzeMgr().checkAndUpdateTableStats(res);
                 }
             }, statsCacheRefresherExecutor);
@@ -563,6 +621,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             allKeys.add(key);
         }
         columnStatistics.synchronous().invalidateAll(allKeys);
+        partitionStatistics.synchronous().invalidateAll(allKeys);
     }
 
     @Override

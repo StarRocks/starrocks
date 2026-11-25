@@ -50,6 +50,7 @@ include "PlanNodes.thrift"
 // Rules for this enum:
 //   - append new members with the next free value; never renumber or reuse one;
 //   - values >= 300 are reserved for extension fields and must not be used here.
+// REMOTE_SCAN_RESULT_SINK reserves the value used by the enterprise build.
 enum TDataSinkType {
     DATA_STREAM_SINK = 0,
     RESULT_SINK = 1,
@@ -70,7 +71,8 @@ enum TDataSinkType {
     NOOP_SINK = 16,
     ICEBERG_DELETE_SINK = 17,
     ICEBERG_ROW_DELTA_SINK = 18,
-    PAIMON_TABLE_SINK = 19
+    REMOTE_SCAN_RESULT_SINK = 19,
+    PAIMON_TABLE_SINK = 20
 }
 
 enum TResultSinkType {
@@ -316,6 +318,14 @@ struct TIcebergTableSink {
     12: optional TIcebergTableSinkExt ext
     // Parquet encryption info for encrypted Iceberg tables
     13: optional PlanNodes.TParquetEncryptionInfo parquet_encryption_info
+    // Explicit data-file Parquet writer sizes. Unset preserves BE defaults.
+    14: optional i32 parquet_page_size_bytes
+    15: optional i32 parquet_dict_size_bytes
+    16: optional i32 parquet_row_group_size_bytes
+    // Explicit compression level for Parquet data files. Unset uses the codec default.
+    17: optional i32 parquet_compression_level
+    // Explicit data-page version for Parquet data files. Unset uses the BE default (v1).
+    18: optional string parquet_data_page_version
 }
 
 struct THiveTableSink {

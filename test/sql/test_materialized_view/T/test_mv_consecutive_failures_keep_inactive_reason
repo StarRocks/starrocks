@@ -1,0 +1,53 @@
+-- name: test_mv_consecutive_failures_keep_inactive_reason
+-- A view whose own activation fails on every scheduled refresh has its task paused after too many failures, but keeps
+-- the reason it was inactivated for, so it can still be activated once that cause is fixed.
+create database db_${uuid0};
+use db_${uuid0};
+CREATE TABLE cf_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO cf_base VALUES ('2026-10-01',1,10),('2026-10-02',2,20);
+[UC]ADMIN SET FRONTEND CONFIG ("materialized_view_min_refresh_interval" = "1");
+CREATE MATERIALIZED VIEW mv_cf
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED ASYNC EVERY(INTERVAL 2 SECOND)
+PROPERTIES ('replication_num' = '1')
+AS SELECT dt, k, v FROM cf_base;
+[UC]ADMIN SET FRONTEND CONFIG ("materialized_view_min_refresh_interval" = "60");
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'mv_cf';
+ALTER TABLE cf_base DROP COLUMN v;
+function: wait_alter_table_finish()
+ALTER TABLE cf_base ADD COLUMN v varchar(16);
+function: wait_alter_table_finish()
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'mv_cf';
+-- An external-table view inactivated during a refresh keeps its task scheduled; resuming the task stands for that.
+ALTER TASK `${TASK_NAME}` RESUME;
+LOOP {
+  PROPERTY: {"timeout": 300, "interval": 3, "desc": "the task failed max_task_consecutive_fail_count times"}
+  result=SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND STATE = 'FAILED';
+  CHECK: int(${result}) >= 10
+} END LOOP
+LOOP {
+  PROPERTY: {"timeout": 60, "interval": 2, "desc": "no run of the view is left pending or running"}
+  result=SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND STATE IN ('PENDING', 'RUNNING');
+  CHECK: int(${result}) == 0
+} END LOOP
+[UC]RUNS=SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}';
+shell: sleep 10
+SELECT COUNT(*) - ${RUNS} FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}';
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE 'mv consecutive failures%' FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'mv_cf';
+ALTER TABLE cf_base DROP COLUMN v;
+function: wait_alter_table_finish()
+ALTER TABLE cf_base ADD COLUMN v bigint;
+function: wait_alter_table_finish()
+ALTER MATERIALIZED VIEW mv_cf ACTIVE;
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'mv_cf';
+[UC]OK_RUNS=SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND STATE = 'SUCCESS';
+LOOP {
+  PROPERTY: {"timeout": 120, "interval": 2, "desc": "the schedule refreshes the view again"}
+  result=SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND STATE = 'SUCCESS';
+  CHECK: int(${result}) > int(${OK_RUNS})
+} END LOOP
+SELECT dt, k FROM mv_cf ORDER BY k;
+DROP MATERIALIZED VIEW mv_cf;
+drop database db_${uuid0} force;

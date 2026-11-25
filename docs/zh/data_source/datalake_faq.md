@@ -109,3 +109,23 @@ products: [oss, enterprise, anywhere]
 proc_profile_mem_enable=false
 proc_profile_cpu_enable=false
 ```
+
+## 写入 Hive 时，为什么 /tmp/starrocks 占了很多空间？用 ViewFS 该怎么配？
+
+`/tmp/starrocks` 是 StarRocks 写入 HDFS 或 ViewFS 上的 Hive 表时默认使用的临时目录。数据先写到这里，提交时再移到表或分区目录。单次写入量大，或者同时跑了多个写入任务，这里就会占用较多空间。这里的 `/tmp` 在 HDFS 或 ViewFS 上，不是 FE、BE 本机的目录。
+
+写入结束时，StarRocks 会尝试清理临时目录。如果进程中途退出，或者清理失败，可能会留下文件。清理前先确认对应的写入任务已经结束，别删掉还在使用的目录。
+
+如果用了 ViewFS，还要看 `/tmp` 和表目录是不是在同一个挂载点下。即使路径都以 `viewfs://cluster/` 开头，也可能指向不同的 HDFS 命名空间，提交时就会因为不能跨挂载点重命名而失败。
+
+可以在执行写入前，把临时目录改到表目录下：
+
+```SQL
+SET hive_temp_staging_dir = '.sr_staging';
+```
+
+比如表在 `viewfs://cluster/warehouse/db/table`，临时文件就会写到 `viewfs://cluster/warehouse/db/table/.sr_staging/<UUID>/`。这样可以减少公共 `/tmp/starrocks` 下的占用，也能避免它和表目录位于不同 ViewFS 挂载点的问题；如果分区单独配置了 location，还要检查那个位置能不能从临时目录重命名过去。临时数据本身并没有变少，只是换了存放位置。也可以配置其他路径，但需要有对应目录的创建、重命名和删除权限。
+
+使用 `.sr_staging` 前要注意：非分区表执行 `INSERT OVERWRITE`，需要使用包含[相对临时目录修复](https://github.com/StarRocks/starrocks/pull/67615)的版本。这个修复并没有解决并发写入的问题，同一张表不要同时跑覆盖写入和其他写入任务，包括 Hive、Spark 发起的任务，否则其他任务的临时文件可能随表目录一起被移动或删除。
+
+这个 `SET` 只对当前连接生效。如果换了连接重试，要在新连接里重新设置。

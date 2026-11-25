@@ -116,6 +116,10 @@ public:
         int64_t decompress_ns = 0;
         int64_t vec_cond_ns = 0;
         int64_t del_filter_ns = 0;
+        int64_t rows_del_filtered_after_read = 0;
+        // Includes the remote bytes read while preparing splits, see remote_bytes_read_with_prepare().
+        int64_t remote_bytes_read = 0;
+        int64_t compressed_bytes_read_local_disk = 0;
     };
     RealtimeStats realtime_stats() const;
 

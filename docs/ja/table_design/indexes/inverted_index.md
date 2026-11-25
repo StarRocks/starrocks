@@ -30,12 +30,6 @@ StarRocksは、基盤となるデータを列ごとに整理されたデータ�
 
 ### 全文転置インデックスの作成
 
-全文転置インデックスを作成する前に、FE構成項目`enable_experimental_gin`を有効にする必要があります。
-
-```sql
-ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
-```
-
 :::note
 テーブルに全文転置インデックスを作成する場合、`replicated_storage`機能を無効にする必要があります。
 

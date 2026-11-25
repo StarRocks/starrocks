@@ -205,6 +205,9 @@ public class Config extends ConfigBase {
     public static int audit_log_delete_count = -1;
     @ConfField(mutable = true)
     public static boolean audit_log_json_format = false;
+    @ConfField(mutable = true, comment = "Max number of scan entries an execution attempt records in the " +
+            "ScanStats column of the audit log. An attempt with more scan nodes is marked scansTruncated.")
+    public static int audit_scan_stats_max_scans = 1000;
     @ConfField(mutable = true, comment = "Max length of the error message recorded in the audit log, truncate " +
             "messages longer than this specified limit. Set to 0 to stop recording error messages. Default: 1024")
     public static int audit_log_error_message_max_length = 1024;
@@ -1094,6 +1097,21 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_rest_bearer_authentication = true;
+
+    /**
+     * Lets a security-integration user present a JWT as the password of a MySQL login (the
+     * {@code mysql_clear_password} frame). When such a password has the shape of a JWT, the chain
+     * first offers it as a Bearer token to the JWT and OAuth 2.0 integrations; only if none
+     * accepts it is it tried as a password against the LDAP integrations. This is what lets a
+     * MySQL client without the OpenID Connect plugin log in through a JWT integration that shares
+     * {@code authentication_chain} with an LDAP one. MySQL only: HTTP and Arrow Flight carry a
+     * token in a Bearer header, so their Basic passwords are never read as tokens. Off by default:
+     * a password that happens to look like a token then costs one refused token verification
+     * before the password path, and the password path is the only one the login's outcome is
+     * counted under.
+     */
+    @ConfField(mutable = true)
+    public static boolean authentication_chain_accept_jwt_as_password = false;
 
     /**
      * Fe https port
@@ -2857,7 +2875,15 @@ public class Config extends ConfigBase {
      *   - Else if targetRows > statistic_sample_collect_rows: Use SAMPLE statistics
      *   - Else: Use FULL statistics
      *
-     * - For First Load:
+     * - For First Load by INSERT (physical partition commit version == 2):
+     *   totalRows = sum of FE row counts of the candidate first-load logical partitions
+     *   deltaRatio = loadRows / (totalRows + 1)
+     *   - If deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load: No collection
+     *   - Else if loadRows > statistic_sample_collect_rows: Use SAMPLE statistics
+     *   - Else: Use FULL statistics
+     *
+     * - For UPDATE (when enable_statistic_collect_on_update is enabled):
+     *   totalRows = positive table row count from statistics metadata, otherwise affected partitions' FE row counts
      *   deltaRatio = loadRows / (totalRows + 1)
      *   - If deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load: No collection
      *   - Else if loadRows > statistic_sample_collect_rows: Use SAMPLE statistics
@@ -3058,6 +3084,14 @@ public class Config extends ConfigBase {
             "rather than re-collected (a stale value is never served). Set to 0 to disable throttling.")
     public static int min_max_stats_collect_interval_sec = 60;
 
+    @ConfField(mutable = true, comment = "Do not collect min/max statistics for a table with more tablets than " +
+            "this. Min/max stats are collected via a [_META_] MetaScan over the whole table, whose planning " +
+            "(tablet locations, scan ranges) and execution cost grow with the tablet count. Such a table gets no " +
+            "min/max optimization (compressed group-by key, min()/max() folding), but a value already cached for " +
+            "the current data version is still used. A skip is not cached, so a raised limit applies within " +
+            "min_max_stats_collect_interval_sec. Set to 0 or a negative value to disable the limit.")
+    public static int min_max_stats_collect_max_tablets = 100000;
+
     /**
      * The column statistic cache update interval
      */
@@ -3170,7 +3204,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "The change ratio threshold for triggering statistics collection. " +
             "For INSERT OVERWRITE: deltaRatio = |targetRows - sourceRows| / (sourceRows + 1). " +
-            "For first load: deltaRatio = loadRows / (totalRows + 1). " +
+            "For first load by INSERT: deltaRatio = loadRows / (totalRows + 1), where totalRows is the sum of FE " +
+            "row counts of the candidate first-load logical partitions. " +
+            "For UPDATE: deltaRatio = loadRows / (totalRows + 1). " +
+            "totalRows uses a positive table statistics row count, otherwise affected partitions' FE row counts. " +
             "If deltaRatio < this threshold (default 0.1 or 10%), statistics collection is skipped. " +
             "Used in conjunction with enable_statistic_collect_on_first_load.")
     public static double statistic_sample_collect_ratio_threshold_of_first_load = 0.1;
@@ -3602,6 +3639,15 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int iceberg_table_refresh_expire_sec = 86400;
+
+    /**
+     * How the FE ships an Iceberg table to the BE metadata table scanners. 0: the Java-serialized table only,
+     * as before. 1: also a JSON form FE and BE of different versions can both read, while some alive BE or CN
+     * runs another build than this FE (a rolling upgrade); such a BE reads the JSON one. 2: always the JSON form
+     * too, and every BE reads it; for tests only (a BE without JSON support still reads the Java one).
+     */
+    @ConfField(mutable = true)
+    public static int iceberg_metadata_table_payload_mode = 1;
 
     /**
      * iceberg metadata cache dir
@@ -4122,9 +4168,6 @@ public class Config extends ConfigBase {
     public static boolean enable_experimental_rowstore = false;
 
     @ConfField(mutable = true)
-    public static boolean enable_experimental_gin = false;
-
-    @ConfField(mutable = true)
     public static boolean enable_experimental_mv = true;
 
     /**
@@ -4224,7 +4267,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Default max parallel compaction subtasks per tablet when not specified in " +
             "table properties. 0 means disable parallel compaction.")
-    public static int lake_compaction_max_parallel_default = 3;
+    public static int lake_compaction_max_parallel_default = 5;
 
     @ConfField(mutable = true)
     public static int lake_compaction_history_size = 20;

@@ -70,6 +70,16 @@ public interface StatisticStorage {
                 map(col -> ConnectorTableColumnStats.unknown()).collect(Collectors.toList());
     }
 
+    /**
+     * As {@link #getConnectorTableStatistics(Table, List)}, except that with {@code queryTriggerAnalyzeEnabled}
+     * false the lookup must not queue a query-triggered analyze for the table
+     * (see {@link com.starrocks.sql.optimizer.OptimizerOptions#isQueryTriggerAnalyzeEnabled()}).
+     */
+    default List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> columns,
+                                                                        boolean queryTriggerAnalyzeEnabled) {
+        return getConnectorTableStatistics(table, columns);
+    }
+
     default List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
         return getConnectorTableStatistics(table, columns);
     }

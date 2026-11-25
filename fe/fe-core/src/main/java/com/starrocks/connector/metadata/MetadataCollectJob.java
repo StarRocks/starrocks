@@ -16,10 +16,13 @@ package com.starrocks.connector.metadata;
 
 import com.google.common.collect.Sets;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TResultBatch;
@@ -73,6 +76,29 @@ public abstract class MetadataCollectJob {
     public void init(SessionVariable sessionVariable) {
         this.sql = buildCollectMetadataSQL();
         this.context = buildConnectContext(sessionVariable);
+    }
+
+    public void init(ConnectContext caller) {
+        init(caller.getSessionVariable());
+        inheritCallerPolicy(caller);
+    }
+
+    private void inheritCallerPolicy(ConnectContext caller) {
+        SimpleExecutor.checkInternalQueryState(caller);
+        context.setParentConnectContext(caller);
+        var variables = context.getSessionVariable();
+        variables.copyQueryResourcePolicyFrom(caller.getSessionVariable());
+        variables.copyQueryQueuePolicyFrom(caller.getSessionVariable());
+        // Classify with the caller before the trusted metadata identity can select a different group.
+        var group = caller.getResourceGroup();
+        if (group == null) {
+            group = CoordinatorPreprocessor.prepareResourceGroup(caller, ResourceGroupClassifier.QueryType.SELECT);
+        }
+        if (group != null) {
+            variables.setResourceGroup(group.getName());
+        }
+        // A parent link alone does not grant admission. The queue manager checks for an allocated parent slot.
+        context.setNeedQueued(true);
     }
 
     protected String getCatalogName() {

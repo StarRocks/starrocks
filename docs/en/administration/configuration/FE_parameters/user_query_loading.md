@@ -552,7 +552,13 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
     - Else, if `targetRows > statistic_sample_collect_rows` (Default: 200000), SAMPLE statistics collection is used.
     - Else, FULL statistics collection is used.
   
-  - For First Load: `deltaRatio = loadRows / (totalRows + 1)`
+  - For First Load by INSERT: `deltaRatio = loadRows / (totalRows + 1)`, where `totalRows` is the sum of FE row counts of the candidate first-load logical partitions. Candidates are selected from physical partitions with commit version 2.
+    - If `loadRows` is unavailable or non-positive, statistics collection will not be performed.
+    - If `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load` (Default: 0.1), statistics collection will not be performed.
+    - Else, if `loadRows > statistic_sample_collect_rows` (Default: 200000), SAMPLE statistics collection is used.
+    - Else, FULL statistics collection is used.
+
+  - For UPDATE, when `enable_statistic_collect_on_update` is enabled: `deltaRatio = loadRows / (totalRows + 1)`. `totalRows` uses a positive table statistics row count, otherwise the sum of FE row counts of the affected partitions.
     - If `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load` (Default: 0.1), statistics collection will not be performed.
     - Else, if `loadRows > statistic_sample_collect_rows` (Default: 200000), SAMPLE statistics collection is used.
     - Else, FULL statistics collection is used.

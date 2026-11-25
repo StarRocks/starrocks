@@ -149,6 +149,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of audit log files that can be retained within each retention period specified by the `audit_log_roll_interval` parameter.
 - Introduced in: -
 
+### `audit_scan_stats_max_scans`
+
+- Default: 1000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of scan entries that one execution attempt records in the `ScanStats` field of a query audit event. An attempt whose plan has more scan nodes keeps the first entries and is marked `scansTruncated`. `ScanStats` is recorded when the session variable `enable_collect_table_level_scan_stats` is `true`.
+- Introduced in: -
+
 ### `audit_stmt_before_execute`
 
 - Default: false
@@ -1030,6 +1039,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Master switch for Bearer-token authentication on the non-MySQL channels (HTTP, Arrow Flight, and BE-direct Stream Load). When set to `false`, these channels reject any `Authorization: Bearer ...` request with HTTP 401 and fall back to the behavior where only the MySQL protocol supports token authentication; Basic authentication and existing Arrow Flight UUID session tokens are unaffected. MySQL protocol authentication is never gated by this switch.
 - Introduced in: v4.2
+
+### `authentication_chain_accept_jwt_as_password`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a security-integration user may present a JWT as the password of a MySQL login (the `mysql_clear_password` plugin). When set to `true` and such a password has the shape of a JWT, StarRocks first offers it as a token to the JWT and OAuth 2.0 security integrations on `authentication_chain`, and only if none accepts it tries it as a password against the LDAP security integrations. This lets a MySQL client without the `authentication_openid_connect_client` plugin log in through a JWT security integration that shares `authentication_chain` with an LDAP one. When set to `false`, such a password goes straight to the LDAP security integrations. This item applies to the MySQL protocol only: HTTP and Arrow Flight carry a token as `Bearer`, and their `Basic` passwords are never read as tokens. A password that merely looks like a token costs one refused token verification before the password path; the login is counted in the authentication metrics by its final outcome only.
+- Introduced in: -
 
 ### `http_web_page_display_hardware`
 

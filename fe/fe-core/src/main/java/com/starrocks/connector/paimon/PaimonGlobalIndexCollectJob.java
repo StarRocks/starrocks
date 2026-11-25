@@ -15,11 +15,9 @@
 package com.starrocks.connector.paimon;
 
 import com.starrocks.catalog.PaimonTable;
-import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.TableName;
 import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SimpleExecutor;
@@ -82,20 +80,8 @@ public final class PaimonGlobalIndexCollectJob extends MetadataCollectJob {
             throw new IllegalArgumentException("Paimon index evaluation is unavailable with row or masking policies");
         }
         // Reuse Iceberg's internal identity; the outer query authorizes the base table.
-        init(caller.getSessionVariable());
-        getContext().setParentConnectContext(caller);
-        getContext().setNeedQueued(false);
+        init(caller);
         var variables = getContext().getSessionVariable();
-        variables.copyQueryResourcePolicyFrom(caller.getSessionVariable());
-        // GI runs before the outer coordinator. Classify with the caller's identity and plan costs
-        // before the trusted internal identity can select a different resource group.
-        var resourceGroup = caller.getResourceGroup();
-        if (resourceGroup == null) {
-            resourceGroup = CoordinatorPreprocessor.prepareResourceGroup(caller, ResourceGroupClassifier.QueryType.SELECT);
-        }
-        if (resourceGroup != null) {
-            variables.setResourceGroup(resourceGroup.getName());
-        }
         variables.setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
         variables.setEnableShortCircuit(false);
         // Bound each RPC result batch as well as the aggregate; a large combined chunk

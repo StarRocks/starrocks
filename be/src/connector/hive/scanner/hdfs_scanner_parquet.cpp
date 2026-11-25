@@ -70,6 +70,7 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
         ASSIGN_OR_RETURN(auto deletion_bitmap,
                          paimon_delete_file_builder.build(*_scanner_ctx->table_specific.paimon_deletion_file));
         _skip_rows_ctx->deletion_bitmap = std::move(deletion_bitmap);
+        _app_stats.delete_file_remote_bytes += paimon_delete_file_builder.bytes_read();
     } else if (_scanner_ctx->table_specific.deletion_vector_descriptor != nullptr) {
         SCOPED_RAW_TIMER(&_app_stats.deletion_vector_build_ns);
         formats::DeletionVector dv(formats::DeletionVectorOptions{
@@ -78,6 +79,7 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
                 .table_location = _scanner_ctx->table_location,
                 .datacache_options = _scanner_ctx->datacache_options,
                 .runtime_profile = _scanner_ctx->profile.runtime_profile,
+                .scan_stats = &_app_stats,
         });
         RETURN_IF_ERROR(dv.fill_row_indexes(_skip_rows_ctx));
         _app_stats.deletion_vector_build_count += 1;

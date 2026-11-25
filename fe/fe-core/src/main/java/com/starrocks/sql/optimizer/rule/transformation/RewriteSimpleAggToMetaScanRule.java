@@ -354,7 +354,12 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         long total = 0L;
         for (Partition partition : table.getVisiblePartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                long visibleVersion = physicalPartition.getVisibleVersion();
+                // Moved since the planning copy: the recheck may re-read the plan's scans at the new version, which a
+                // folded count would not follow. A meta scan is re-read with them.
+                if (table.isPlanningVisibleVersionMoved(physicalPartition)) {
+                    return Optional.empty();
+                }
+                long visibleVersion = table.getVisibleVersionForQuery(physicalPartition);
                 for (Tablet tablet : physicalPartition.getQueryableBaseIndex().getTablets()) {
                     long rowCount = tablet.getRowCountAtVersion(visibleVersion);
                     if (rowCount < 0) {

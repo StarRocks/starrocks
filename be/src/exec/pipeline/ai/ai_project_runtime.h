@@ -79,7 +79,7 @@ private:
 class AIProjectDispatcherSubmitter final : public AIProjectTaskSubmitter {
 public:
     static StatusOr<std::shared_ptr<AIProjectDispatcherSubmitter>> create(RuntimeState* state,
-                                                                          const AIProjectModelConfigs& configs,
+                                                                          const AIProviderConfigs& configs,
                                                                           AIRuntimeConfig config);
 
     AIProjectDispatcherSubmitter(const AIProjectDispatcherSubmitter&) = delete;

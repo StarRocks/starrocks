@@ -77,7 +77,9 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
         ScalarOperator left = predicate.getChild(0);
         ScalarOperator right = predicate.getChild(1);
         if (left.isColumnRef() && right.isColumnRef() && context.isAnd()) {
-            if (predicate.getBinaryType().isEqual()) {
+            // c = c is no column equality: it is not TRUE where c is NULL. As an equivalence it would only
+            // make the class {c}, which yields no compensation predicate, so the filter was lost on the MV.
+            if (predicate.getBinaryType().isEqual() && !left.equals(right)) {
                 columnEqualityPredicates.add(predicate);
             } else {
                 residualPredicates.add(predicate);

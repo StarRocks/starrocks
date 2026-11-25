@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <ctime>
 #include <memory>
 #include <string>
@@ -73,6 +74,14 @@ protected:
     static std::vector<UniqueId> pooled_ids(DataConsumerPool* pool) {
         std::vector<UniqueId> ids;
         for (const auto& consumer : pool->_pool) {
+            ids.push_back(consumer->id());
+        }
+        return ids;
+    }
+
+    static std::vector<UniqueId> committing_ids(DataConsumerPool* pool) {
+        std::vector<UniqueId> ids;
+        for (const auto& consumer : pool->_committing) {
             ids.push_back(consumer->id());
         }
         return ids;
@@ -254,6 +263,98 @@ TEST_F(DataConsumerPoolTest, clean_idle_consumers) {
     pool._clean_idle_consumer_bg();
     std::vector<UniqueId> expected{consumers[1]->id()};
     EXPECT_EQ(expected, pooled_ids(&pool));
+}
+
+// A consumer whose commit is on its way while the test says so. It matches every request.
+class CommitInFlightConsumer : public DataConsumer {
+public:
+    Status init(StreamLoadContext*) override { return Status::OK(); }
+    Status consume(StreamLoadContext*) override { return Status::OK(); }
+    Status cancel(StreamLoadContext*) override { return Status::OK(); }
+    Status reset() override { return Status::OK(); }
+    bool match(StreamLoadContext*) override { return true; }
+    bool has_commit_in_flight() override { return commit_in_flight.load(); }
+
+    std::atomic<bool> commit_in_flight{true};
+};
+
+// A consumer whose commit is still on its way would fetch nothing for a new assignment until the commit completes, and
+// closing it would wait for the commit. The pool keeps it apart and evicts nothing for it, a disabled pool too: the
+// rounds get other consumers, and the later commits of its group share it.
+TEST_F(DataConsumerPoolTest, consumer_with_a_commit_in_flight_is_kept_apart) {
+    for (int32_t pool_size : {4, 0}) {
+        config::routine_load_kafka_consumer_pool_size = pool_size;
+        DataConsumerPool pool;
+        auto committing = std::make_shared<CommitInFlightConsumer>();
+        EXPECT_TRUE(pool.return_consumer(committing).empty());
+        EXPECT_TRUE(pooled_ids(&pool).empty());
+        std::vector<UniqueId> expected{committing->id()};
+        EXPECT_EQ(expected, committing_ids(&pool));
+
+        std::shared_ptr<DataConsumer> consumer;
+        ASSERT_OK(pool.get_consumer(_context.get(), &consumer));
+        EXPECT_NE(committing->id(), consumer->id());
+        ASSERT_OK(pool.get_consumer_for_commit(_context.get(), &consumer));
+        EXPECT_EQ(committing->id(), consumer->id());
+        EXPECT_EQ(expected, committing_ids(&pool));
+        // returned again by a commit that shared it, it stays apart once
+        EXPECT_TRUE(pool.return_consumer(consumer).empty());
+        EXPECT_EQ(expected, committing_ids(&pool));
+    }
+}
+
+// A consumer kept apart is reused once its commits have completed and no commit uses it any more.
+TEST_F(DataConsumerPoolTest, consumer_kept_apart_is_reused_once_its_commits_completed) {
+    config::routine_load_kafka_consumer_pool_size = 4;
+    DataConsumerPool pool;
+    auto committing = std::make_shared<CommitInFlightConsumer>();
+    const UniqueId id = committing->id();
+    (void)pool.return_consumer(committing);
+    committing->commit_in_flight = false;
+
+    // a commit still uses it
+    std::shared_ptr<DataConsumer> consumer;
+    ASSERT_OK(pool.get_consumer(_context.get(), &consumer));
+    EXPECT_NE(id, consumer->id());
+
+    committing.reset();
+    ASSERT_OK(pool.get_consumer(_context.get(), &consumer));
+    EXPECT_EQ(id, consumer->id());
+    EXPECT_TRUE(committing_ids(&pool).empty());
+}
+
+// The background worker pools a consumer kept apart once its commits have completed and no commit uses it, or closes it
+// when the pool is full. Like a pooled consumer, one idle for too long is closed, whether its commits have completed or
+// not.
+TEST_F(DataConsumerPoolTest, background_worker_pools_or_closes_the_consumers_kept_apart) {
+    config::routine_load_kafka_consumer_pool_size = 1;
+    DataConsumerPool pool;
+    auto in_flight = std::make_shared<CommitInFlightConsumer>();
+    auto idle = std::make_shared<CommitInFlightConsumer>();
+    auto in_use = std::make_shared<CommitInFlightConsumer>();
+    auto completed = std::make_shared<CommitInFlightConsumer>();
+    auto no_room = std::make_shared<CommitInFlightConsumer>();
+    for (const auto& consumer : {in_flight, idle, in_use, completed, no_room}) {
+        EXPECT_TRUE(pool.return_consumer(consumer).empty());
+    }
+    idle->set_last_visit_time(time(nullptr) - 601);
+    in_use->commit_in_flight = false;
+    completed->commit_in_flight = false;
+    no_room->commit_in_flight = false;
+    std::vector<UniqueId> kept_apart{in_flight->id(), in_use->id()};
+    std::vector<UniqueId> pooled{completed->id()};
+    std::weak_ptr<DataConsumer> idle_ref = idle;
+    std::weak_ptr<DataConsumer> no_room_ref = no_room;
+    in_flight.reset();
+    idle.reset();
+    completed.reset();
+    no_room.reset();
+
+    pool._clean_idle_consumer_bg();
+    EXPECT_EQ(pooled, pooled_ids(&pool));
+    EXPECT_EQ(kept_apart, committing_ids(&pool));
+    EXPECT_TRUE(idle_ref.expired());
+    EXPECT_TRUE(no_room_ref.expired());
 }
 
 // The background worker takes the pool lock to clean idle consumers, so stopping must not hold it while joining.

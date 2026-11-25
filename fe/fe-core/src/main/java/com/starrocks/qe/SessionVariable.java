@@ -608,6 +608,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
     public static final String CBO_PUSH_DOWN_AGGREGATE_MODE = "cbo_push_down_aggregate_mode";
     public static final String CBO_PUSH_DOWN_COUNT_AGGREGATE = "cbo_push_down_count_aggregate";
+    public static final String CBO_PUSH_DOWN_AGGREGATE_CHECK_REDUCTION = "cbo_push_down_aggregate_check_reduction";
     public static final String CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN = "cbo_push_down_aggregate_on_broadcast_join";
     public static final String CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN_ROW_COUNT_LIMIT =
             "cbo_push_down_aggregate_on_broadcast_join_row_count_limit";
@@ -629,6 +630,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_PUSH_DOWN_GROUPINGSET_CASCADE_LEVEL =
             "cbo_push_down_groupingset_cascade_level";
     public static final String CBO_DEBUG_ALIVE_BACKEND_NUMBER = "cbo_debug_alive_backend_number";
+    public static final String ENABLE_CBO_WAREHOUSE_EXEC_NODES = "enable_cbo_warehouse_exec_nodes";
     public static final String CBO_PRUNE_SUBFIELD = "cbo_prune_subfield";
     public static final String CBO_PRUNE_JSON_SUBFIELD = "cbo_prune_json_subfield";
     public static final String CBO_PRUNE_JSON_SUBFIELD_DEPTH = "cbo_prune_json_subfield_depth";
@@ -2050,6 +2052,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CBO_DEBUG_ALIVE_BACKEND_NUMBER, flag = VariableMgr.INVISIBLE)
     private int cboDebugAliveBackendNumber = 0;
 
+    // In shared-data mode, the planner counts the alive execution nodes of the query's warehouse when it costs
+    // broadcast and hash joins and decides runtime filters. Turn it off to go back to the previous counts: the alive
+    // backends for the broadcast cost, the broadcast_row_limit check and runtime filters, and the alive backends plus
+    // every alive compute node of the cluster for the hash join cost. Shared-nothing mode is not affected either way.
+    @VariableMgr.VarAttr(name = ENABLE_CBO_WAREHOUSE_EXEC_NODES, flag = VariableMgr.INVISIBLE)
+    private boolean enableCboWarehouseExecNodes = true;
+
     @VariableMgr.VarAttr(name = TRANSACTION_VISIBLE_WAIT_TIMEOUT)
     private long transactionVisibleWaitTimeout = 10;
 
@@ -2342,6 +2351,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_PUSH_DOWN_COUNT_AGGREGATE, flag = VariableMgr.INVISIBLE)
     private boolean cboPushDownCountAggregate = true;
+
+    // Refuse aggregation push downs that cannot reduce rows. Off restores the previous push down gate.
+    @VarAttr(name = CBO_PUSH_DOWN_AGGREGATE_CHECK_REDUCTION, flag = VariableMgr.INVISIBLE)
+    private boolean cboPushDownAggregateCheckReduction = true;
 
     @VarAttr(name = CBO_ENABLE_INTERSECT_ADD_DISTINCT)
     private boolean cboEnableIntersectAddDistinct = true;
@@ -3431,6 +3444,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS)
     private boolean enableCollectTableLevelScanStats = true;
 
+    public boolean isEnableCollectTableLevelScanStats() {
+        return enableCollectTableLevelScanStats;
+    }
+
     @VarAttr(name = HIVE_TEMP_STAGING_DIR)
     private String hiveTempStagingDir = "/tmp/starrocks";
 
@@ -4439,6 +4456,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return queryMemLimit;
     }
 
+    public void copyQueryQueuePolicyFrom(SessionVariable caller) {
+        enableQueryQueue = caller.enableQueryQueue;
+        // Inherit queue classification without applying the unrelated execution-mode presets.
+        execMode = caller.execMode;
+    }
+
     public void copyQueryResourcePolicyFrom(SessionVariable caller) {
         queryMemLimit = caller.queryMemLimit;
         maxExecMemByte = caller.maxExecMemByte;
@@ -5009,6 +5032,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getCboDebugAliveBackendNumber() {
         return cboDebugAliveBackendNumber;
+    }
+
+    public void setCboDebugAliveBackendNumber(int cboDebugAliveBackendNumber) {
+        this.cboDebugAliveBackendNumber = cboDebugAliveBackendNumber;
+    }
+
+    public boolean isEnableCboWarehouseExecNodes() {
+        return enableCboWarehouseExecNodes;
+    }
+
+    public void setEnableCboWarehouseExecNodes(boolean enableCboWarehouseExecNodes) {
+        this.enableCboWarehouseExecNodes = enableCboWarehouseExecNodes;
     }
 
     public long getTransactionVisibleWaitTimeout() {
@@ -5741,6 +5776,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboPushDownCountAggregate = cboPushDownCountAggregate;
     }
 
+    public boolean isCboPushDownAggregateCheckReduction() {
+        return cboPushDownAggregateCheckReduction;
+    }
+
+    public void setCboPushDownAggregateCheckReduction(boolean cboPushDownAggregateCheckReduction) {
+        this.cboPushDownAggregateCheckReduction = cboPushDownAggregateCheckReduction;
+    }
+
     public String getCboPushDownAggregate() {
         return cboPushDownAggregate;
     }
@@ -5847,6 +5890,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getloadTransmissionCompressionType() {
         return loadTransmissionCompressionType;
+    }
+
+    public void setLoadTransmissionCompressionType(String loadTransmissionCompressionType) {
+        this.loadTransmissionCompressionType = loadTransmissionCompressionType;
     }
 
     public boolean isInterpolatePassthrough() {

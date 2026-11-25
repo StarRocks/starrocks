@@ -445,6 +445,10 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
     protected void visualiseShadowIndex(@NotNull OlapTable table) {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
 
+        // Invalidate lock-free plans first: they read the versions their copies recorded and resolve the layout later,
+        // so a plan that finds the new index has to fail validation and be planned again.
+        table.lastSchemaUpdateTime.set(System.nanoTime());
+
         for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
             PartitionRewriteState partitionState = partitionStates.get(physicalPartition.getId());
             Preconditions.checkState(partitionState != null && partitionState.commitVersion != null,

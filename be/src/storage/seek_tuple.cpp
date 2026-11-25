@@ -18,17 +18,8 @@
 #include <string>
 
 #include "column/datum_convert.h"
-#include "storage/convert_helper.h"
 
 namespace starrocks {
-
-void SeekTuple::convert_to(SeekTuple* new_tuple, const std::vector<LogicalType>& new_types) const {
-    _schema.convert_to(&new_tuple->_schema, new_types);
-
-    RowConverter converter;
-    WARN_IF_ERROR(converter.init(_schema, new_tuple->_schema), "Cannot get field converter");
-    converter.convert(&new_tuple->_values, _values);
-}
 
 std::string SeekTuple::debug_string() const {
     std::stringstream ss;

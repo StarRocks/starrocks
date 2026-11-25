@@ -1674,6 +1674,12 @@ CONF_Bool(starlet_star_cache_async_init, "true");
 // is set to, because nothing in this process witnessed their write. Read once when StarCache
 // initializes.
 CONF_Bool(starlet_star_cache_skip_fresh_block_checksum_verification, "true");
+// Whether a StarCache write replaces an object that is already cached under the same key. Off, the
+// existing object is kept and the write is reported as success, which suits the read-through fill
+// path where the bytes being written are the ones already cached. Turn it on to let a re-read
+// refresh a block that is suspected to be stale or damaged. StarCache reads it on every write, so a
+// change takes effect on the next write without re-initializing the cache.
+CONF_mBool(starlet_star_cache_write_overwrite, "false");
 CONF_mInt32(starlet_star_cache_mem_size_percent, "0");
 CONF_mInt64(starlet_star_cache_mem_size_bytes, "134217728");
 CONF_Int32(starlet_star_cache_disk_size_percent, "80");
@@ -2033,14 +2039,17 @@ CONF_mInt32(lake_pk_index_block_cache_limit_percent, "10");
 // the checksummed format, because during a rolling upgrade or a downgrade an older BE/CN uses the
 // legacy reader and cannot parse files written in the new format.
 CONF_mBool(lake_enable_protobuf_file_checksum, "true");
-// Write multi-statement version logs as ordered groups instead of the legacy merged TxnLogPB.
-// Disabled by default for a reader-first rollout; the legacy write path and its limitations remain
-// until enabled. Readers accept both formats regardless of this flag. Enable only after every CN
-// that can publish, replay or clean up these logs has the group reader. Before either enabling or
-// disabling, pause affected schema-change/multi-statement publishers and drain in-flight requests;
-// switching concurrently with publish is not supported. Disabling does not make existing groups
+// Write multi-statement version logs as ordered groups instead of the legacy merged TxnLogPB, so that
+// replay applies each statement with its own schema, segments, rewrite metadata and delete positions.
+// Readers accept both formats regardless of this flag. A CN without the group reader cannot read
+// groups, and its retry can write an incomplete legacy log that replay prefers: while such a CN can
+// still publish, replay or clean up these logs (a rolling upgrade from a pre-reader version), set this
+// to false on the upgraded CNs and enable it only after every CN has the reader. Before either
+// enabling or disabling, pause affected schema-change/multi-statement publishers and drain in-flight
+// requests; switching concurrently with publish is not supported. Disabling restores the legacy
+// merged writer and its DELETE-then-INSERT limitation, and does not make existing groups
 // downgrade-readable: drain and verify them before rolling back to a pre-reader CN.
-CONF_mBool(lake_enable_txn_vlog_group, "false");
+CONF_mBool(lake_enable_txn_vlog_group, "true");
 // clear *.meta cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_meta, "true");
 // clear *.data cache for lake table, so that a read which finds the local copy of a data file corrupted
@@ -2230,6 +2239,16 @@ CONF_Bool(datacache_unified_instance_enable, "true");
 // * lru: the typical `Least Recently Used` eviction policy.
 // * slru: segment lru eviction policies, which can better reduce cache pollution problem.
 CONF_String(datacache_eviction_policy, "slru");
+// Whether an lru shard of datacache can evict entries from the other shards when it is being refilled
+// or cannot supply the whole charge by itself. Setting it to `false` restores the old behavior that a
+// shard only ever evicts its own entries, and the refill watermarks below are ignored.
+CONF_mBool(datacache_lru_shard_evict_fallback_enable, "true");
+// An lru shard of datacache is refilled from the largest shards instead of evicting its own entries
+// once its usage drops below `datacache_lru_shard_refill_low_watermark_percent` of its capacity, until
+// it reaches `datacache_lru_shard_refill_high_watermark_percent`. They should satisfy
+// `low <= high <= 100`, and setting both to `0` disables the refill.
+CONF_mInt32(datacache_lru_shard_refill_low_watermark_percent, "50");
+CONF_mInt32(datacache_lru_shard_refill_high_watermark_percent, "70");
 
 // The BlockCache stores the raw data blocks of external tables and shared-data internal tables.
 // It shares the same limit (datacache_disk_size, datacache_mem_size) with the PageCache.
@@ -2741,7 +2760,7 @@ CONF_mInt32(thrift_max_recursion_depth, "64");
 CONF_mBool(enable_lake_compaction_use_partial_segments, "false");
 // If turned on, parallel compaction will split by sort key range instead of segment index.
 // This produces non-overlapping output rowsets, improving subsequent query performance.
-CONF_mBool(enable_lake_compaction_range_split, "false");
+CONF_mBool(enable_lake_compaction_range_split, "true");
 // chunk size used by lake compaction
 CONF_mInt32(lake_compaction_chunk_size, "4096");
 // Hold the input segments of a compaction task on its Rowset objects for the whole task, so the

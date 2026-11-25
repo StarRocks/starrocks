@@ -3200,18 +3200,21 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     /**
-     * Get Table descriptor and materialized index for the materialized view index specific by `dbName`.`tblName`
+     * Get the tables and materialized indexes of every visible rollup or synchronous materialized view named
+     * `dbName`.`indexName`. The base index of a table is left out.
      *
-     * @param dbName  - the string represents the database name
-     * @param tblName - the string represents the table name
-     * @return a Table instance
+     * @param dbName    - the string represents the database name
+     * @param indexName - the string represents the rollup or synchronous materialized view name
+     * @param sessionId - the session reading it: the temporary tables of other sessions are left out
+     * @return each matching index with its table; empty when there is none or the database does not exist
      */
-    public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String dbName, String tblName) {
+    public List<Pair<Table, MaterializedIndexMeta>> getMaterializedViewIndexes(String dbName, String indexName,
+                                                                               UUID sessionId) {
         Database database = getDb(dbName);
         if (database == null) {
-            return null;
+            return List.of();
         }
-        return database.getMaterializedViewIndex(tblName);
+        return database.getMaterializedViewIndexes(indexName, sessionId);
     }
 
     public Table getTableIncludeRecycleBin(Database db, long tableId) {

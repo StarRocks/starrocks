@@ -82,6 +82,7 @@ import com.starrocks.common.Version;
 import com.starrocks.common.profile.RawScopedTimer;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.ProfileKeyDictionary;
@@ -383,6 +384,10 @@ public class StmtExecutor {
     private boolean isInternalStmt = false;
     // Stores the last generated exec plan, used to dump the plan to fe.plan.log on query failure.
     private ExecPlan lastExecPlan = null;
+    // Per-scan read statistics of each execution attempt, for the ScanStats audit column.
+    private final ScanStatsRecorder scanStatsRecorder = new ScanStatsRecorder();
+    // The plan a statement that runs no retry loop ran, when it is not lastExecPlan (the INSERT of a CTAS).
+    private ExecPlan scanStatsFallbackPlan = null;
 
     // Whether the DML attempt handleDMLStmtWithProfile last ran lost the plain insert commit race and is to run
     // again. Decided once, there, and read by handleDMLStmtRetryingPlainInsertConflict: were the two to decide
@@ -672,6 +677,8 @@ public class StmtExecutor {
      * 3. ANALYZE: use fe_conf.statistic_collect_query_timeout
      */
     public int getExecTimeout() {
+        // Metadata workers may inspect a parent executor while their own context is thread-bound.
+        // Resolve the timeout against this statement's context, not the worker's session.
         if (parsedStmt instanceof CreateTableAsSelectStmt ctas) {
             Map<String, String> properties = ctas.getInsertStmt().getProperties();
             if (properties.containsKey(LoadStmt.TIMEOUT_PROPERTY)) {
@@ -681,7 +688,7 @@ public class StmtExecutor {
                     // ignore
                 }
             }
-            return ConnectContext.get().getSessionVariable().getInsertTimeoutS();
+            return context.getSessionVariable().getInsertTimeoutS();
         } else if (parsedStmt instanceof DmlStmt) {
             Map<String, String> properties = ((DmlStmt) parsedStmt).getProperties();
             if (properties.containsKey(LoadStmt.TIMEOUT_PROPERTY)) {
@@ -691,13 +698,13 @@ public class StmtExecutor {
                     // ignore
                 }
             }
-            return ConnectContext.get().getSessionVariable().getInsertTimeoutS();
+            return context.getSessionVariable().getInsertTimeoutS();
         } else if (parsedStmt instanceof AnalyzeStmt) {
             return (int) Config.statistic_collect_query_timeout;
         } else {
             // For SELECT queries:
             // session query_timeout is authoritative if explicitly overridden
-            ConnectContext ctx = ConnectContext.get();
+            ConnectContext ctx = context;
             int sessionQueryTimeout = ctx.getSessionVariable().getQueryTimeoutS();
             boolean sessionTimeoutOverridden = ctx.isSessionQueryTimeoutOverridden();
             if (parsedStmt instanceof QueryStatement) {
@@ -1169,6 +1176,7 @@ public class StmtExecutor {
                     // a per-attempt snapshot of it, distinct from lastExecPlan, which tracks the latest
                     // generated plan for the failure dump in fe.plan.log.
                     final ExecPlan attemptPlan = retryContext.getExecPlan();
+                    final long attemptStartMs = System.currentTimeMillis();
                     try {
                         //reset query id for each retry
                         if (i > 0) {
@@ -1217,6 +1225,7 @@ public class StmtExecutor {
                             throw e;
                         }
                     } finally {
+                        recordScanStatsAttempt(i, attemptStartMs, attemptPlan, needRetry);
                         boolean isAsync = false;
                         try {
                             if (needRetry) {
@@ -1669,6 +1678,8 @@ public class StmtExecutor {
             context.setCTAS(true);
             InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
             ExecPlan execPlan = StatementPlanner.plan(insertStmt, context);
+            // The plan that reads the source tables; the CTAS statement itself has none.
+            scanStatsFallbackPlan = execPlan;
             handleDMLStmtWithProfile(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt());
             if (context.getState().getStateType() == MysqlStateType.ERR) {
                 dropTableCreatedByCTAS(createTableAsSelectStmt);
@@ -3350,6 +3361,49 @@ public class StmtExecutor {
         context.getState().setStateType(MysqlStateType.NOOP);
     }
 
+    // Called when an attempt of the query retry loop ends. A retried attempt keeps the statistics it reported; the
+    // last one is completed with the statement's statistics when it is audited, see getScanStatsForAuditLog.
+    private void recordScanStatsAttempt(int attemptId, long startTimeMs, ExecPlan attemptPlan, boolean retried) {
+        try {
+            if (!context.getSessionVariable().isEnableCollectTableLevelScanStats()) {
+                return;
+            }
+            long endTimeMs = System.currentTimeMillis();
+            if (retried) {
+                PQueryStatistics statistics = statisticsForAuditLog;
+                if (statistics == null && coord != null) {
+                    statistics = coord.getAuditStatistics();
+                }
+                scanStatsRecorder.recordRetriedAttempt(attemptId, context.getExecutionId(), startTimeMs, endTimeMs,
+                        attemptPlan, AuditStatisticsUtil.copyProtobuf(statistics));
+            } else {
+                scanStatsRecorder.recordLastAttempt(attemptId, context.getExecutionId(), startTimeMs, endTimeMs,
+                        attemptPlan);
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to record the scan statistics of query {}", DebugUtil.printId(context.getExecutionId()), e);
+        }
+    }
+
+    /**
+     * The ScanStats audit column: the read statistics of every scan, per execution attempt. Null when the session
+     * does not collect scan statistics or the statement ran no plan.
+     */
+    public String getScanStatsForAuditLog(PQueryStatistics finalStatistics, ScanStatsRecorder.AttemptState finalState,
+                                          boolean referencesTables) {
+        if (!context.getSessionVariable().isEnableCollectTableLevelScanStats()) {
+            return null;
+        }
+        try {
+            ExecPlan fallbackPlan = scanStatsFallbackPlan != null ? scanStatsFallbackPlan : lastExecPlan;
+            return scanStatsRecorder.toJson(finalState, finalStatistics, referencesTables, fallbackPlan,
+                    context.getExecutionId(), context.getStartTime(), System.currentTimeMillis());
+        } catch (Exception e) {
+            LOG.warn("Failed to build the scan statistics of query {}", DebugUtil.printId(context.getExecutionId()), e);
+            return null;
+        }
+    }
+
     public void setQueryStatistics(PQueryStatistics statistics) {
         this.statisticsForAuditLog = statistics;
     }
@@ -4456,8 +4510,11 @@ public class StmtExecutor {
             }
         } finally {
             try {
-                if (context.isProfileEnabled()) {
-                    tryProcessProfileAsync(plan, 0);
+                if (coord != null) {
+                    coord.onReleaseSlots();
+                }
+                boolean asyncProfile = context.isProfileEnabled() && tryProcessProfileAsync(plan, 0);
+                if (asyncProfile) {
                     QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
                             context.getSessionVariable().getProfileTimeout() * 1000L);
                 } else {

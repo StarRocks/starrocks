@@ -407,12 +407,23 @@ public class StatisticsCollectionTrigger {
             return null;
         }
 
-        // Use BasicStatsMeta.getTotalRows() for more accurate totalRows
-        long totalRows = getTotalRowsFromStatsMeta(table);
+        if (dmlType == DmlType.INSERT_INTO && loadRows <= 0) {
+            return null;
+        }
+
+        // First-load INSERTs are compared with the selected partitions, not the table's historical rows.
+        // UPDATE keeps using the table statistics when available.
+        long totalRows = dmlType == DmlType.UPDATE
+                ? getTotalRowsFromStatsMeta(table) : getTotalRowsFromPartitions(table);
         double deltaRatio = 1.0 * loadRows / (totalRows + 1);
         if (deltaRatio < Config.statistic_sample_collect_ratio_threshold_of_first_load) {
+            LOG.debug("skip {} statistics collection for table {}: loadRows={}, totalRows={}, deltaRatio={}, threshold={}",
+                    dmlType, table.getId(), loadRows, totalRows, deltaRatio,
+                    Config.statistic_sample_collect_ratio_threshold_of_first_load);
             return null;
-        } else if (loadRows > Config.statistic_sample_collect_rows) {
+        }
+
+        if (loadRows > Config.statistic_sample_collect_rows) {
             return SAMPLE;
         } else {
             return StatsConstants.AnalyzeType.FULL;
@@ -431,6 +442,10 @@ public class StatisticsCollectionTrigger {
         }
         
         // Fallback to partition.getRowCount() if no stats meta exists
+        return getTotalRowsFromPartitions(table);
+    }
+
+    private long getTotalRowsFromPartitions(OlapTable table) {
         return partitionIds.stream()
                 .mapToLong(p -> table.mayGetPartition(p).stream().mapToLong(Partition::getRowCount).sum())
                 .sum();

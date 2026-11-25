@@ -454,4 +454,41 @@ TEST(QueryRuntimeStateTest, TracksCpuAndScanStats) {
     EXPECT_EQ(13, table200_total->scan_bytes());
 }
 
+TEST(QueryRuntimeStateTest, TracksPerScanStatsDeltaAndTotal) {
+    QueryRuntimeState state;
+    ScanAuditCounters c;
+    c.mask = ScanAuditCounters::PHYSICAL_ROWS | ScanAuditCounters::OUTPUT_ROWS;
+    c.physical_rows = 10;
+    c.output_rows = 3;
+    state.update_per_scan_stats(4, c);
+    state.update_per_scan_stats(4, c);
+    state.update_per_scan_stats(6, c);
+    state.update_per_scan_stats(8, ScanAuditCounters{});
+
+    QueryStatistics delta;
+    state.consume_delta_per_scan_stats(&delta);
+    PQueryStatistics delta_pb;
+    delta.to_pb(&delta_pb);
+    ASSERT_EQ(2, delta_pb.per_scan_stats_items_size());
+    for (const auto& item : delta_pb.per_scan_stats_items()) {
+        EXPECT_EQ(item.plan_node_id() == 4 ? 20 : 10, item.physical_rows_read());
+        EXPECT_FALSE(item.has_logical_rows_read());
+    }
+
+    QueryStatistics second_delta;
+    state.consume_delta_per_scan_stats(&second_delta);
+    PQueryStatistics second_delta_pb;
+    second_delta.to_pb(&second_delta_pb);
+    EXPECT_EQ(0, second_delta_pb.per_scan_stats_items_size());
+
+    QueryStatistics total;
+    state.add_total_per_scan_stats(&total);
+    PQueryStatistics total_pb;
+    total.to_pb(&total_pb);
+    ASSERT_EQ(2, total_pb.per_scan_stats_items_size());
+    for (const auto& item : total_pb.per_scan_stats_items()) {
+        EXPECT_EQ(item.plan_node_id() == 4 ? 6 : 3, item.output_rows());
+    }
+}
+
 } // namespace starrocks::pipeline

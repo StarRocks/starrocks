@@ -159,8 +159,6 @@ public:
     bool has_predicate_above_iterator = false;
 
 public:
-    Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;
-
     // Only used for debugging
     std::string debug_string() const;
 };
