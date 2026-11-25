@@ -400,17 +400,28 @@ public class CostModel {
                     result = CostEstimate.ofCpu(outputSize);
                     break;
                 case BROADCAST:
-                    // beNum is the number of right table should broadcast, now use alive backends
-                    int aliveBackendNumber = ctx.getAliveBackendNumber();
-                    int beNum = Math.max(1, aliveBackendNumber);
+                    // execNodeNumber is the number of nodes the right table is copied to. In shared-data mode these
+                    // are the alive execution nodes of the query's warehouse; otherwise (or with
+                    // enable_cbo_warehouse_exec_nodes off) the alive backends, which is 0 in a shared-data cluster
+                    // without backends.
+                    int execNodeNumber = ctx.isUseWarehouseExecNodes() ?
+                            ctx.getQueryExecNodeNumber() : ctx.getAliveBackendNumber();
+                    int beNum = Math.max(1, execNodeNumber);
 
-                    result = CostEstimate.of(outputSize * aliveBackendNumber,
+                    result = CostEstimate.of(outputSize * execNodeNumber,
                             outputSize * beNum,
                             Math.max(outputSize * beNum, 1));
                     if (outputSize > sessionVariable.getMaxExecMemByte()) {
                         result = result.multiplyBy(StatisticsEstimateCoefficient.BROADCAST_JOIN_MEM_EXCEED_PENALTY);
                     }
+<<<<<<< HEAD
                     LOG.debug("beNum: {}, aliveBeNum: {}, outputSize: {}.", aliveBackendNumber, beNum, outputSize);
+=======
+                    LOG.debug("beNum: {}, execNodeNumber: {}, outputSize: {}, broadcastMemThreshold: {}, " +
+                                    "broadcastMemExceededPenaltyFactor: {}.",
+                            beNum, execNodeNumber, outputSize, broadcastMemThreshold,
+                            broadcastMemExceededPenaltyFactor);
+>>>>>>> 38254d3 ([BugFix] Count the warehouse's execution nodes when costing joins in shared-data mode (#82918))
                     break;
                 case SHUFFLE:
                     // This is used to generate "ScanNode->LocalShuffle->OnePhaseLocalAgg" for the single backend,
