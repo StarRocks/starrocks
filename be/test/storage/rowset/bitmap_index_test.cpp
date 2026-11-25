@@ -195,10 +195,11 @@ protected:
 
     // A BIGINT bitmap index of one value per row, prefetch_value(0..kPrefetchRows-1), and one null, over several
     // dictionary and bitmap pages, read through |stream| with prefetching allowed. The dictionary of a value seek
-    // index is frame-of-reference encoded, which packs consecutive integers into one page; values 2^40 apart take
-    // 41 bits each, about 3 MB.
+    // index is frame-of-reference encoded, which packs consecutive integers into one page; values 2^40 + 1 apart take
+    // 41 bits each, about 3 MB. Their low bits are the row's, as the writer's hash map of the values needs: it hashes
+    // an integer by its low bits, and values whose low bits are all zero would land in one bucket.
     static constexpr int kPrefetchRows = 600000;
-    static int64_t prefetch_value(int64_t row) { return row << 40; }
+    static int64_t prefetch_value(int64_t row) { return row * ((int64_t{1} << 40) + 1); }
     void open_prefetch_index(const std::string& name, ColumnIndexMetaPB* meta,
                              std::unique_ptr<RecordingBitmapInputStream>* stream, BitmapIndexReader* reader) {
         std::vector<int64_t> values(kPrefetchRows);
