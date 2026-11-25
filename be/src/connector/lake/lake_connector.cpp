@@ -1659,8 +1659,6 @@ void LakeDataSource::update_realtime_counter(Chunk* chunk) {
     _cpu_time_spent_ns = stats.decompress_ns + stats.vec_cond_ns + stats.del_filter_ns;
 }
 
-<<<<<<< HEAD
-=======
 // The IO bytes of a segment file reach the reader statistics only when its iterator is closed or flushed, so they
 // are complete once the reader is closed or released. Local disk is the datacache of shared-data.
 void LakeDataSource::_update_scan_audit_counters(int64_t raw_rows_read, int64_t rows_del_filtered_after_read,
@@ -1672,56 +1670,6 @@ void LakeDataSource::_update_scan_audit_counters(int64_t raw_rows_read, int64_t 
     _scan_audit_counters.cache_bytes = local_disk_bytes;
 }
 
-void LakeDataSource::_update_bm25_phase1_counter(const OlapReaderStatistics& stats) {
-    if (_params.bm25_search_option == nullptr || !_params.bm25_search_option->enable || _runtime_profile == nullptr) {
-        return;
-    }
-    // Created here rather than in init_counter so a non-scoring scan does not carry a group of constant
-    // zeros (same as DictDecode / LateMaterialize below). Parents first: add_counter DCHECKs the parent.
-    auto* stats_build = ADD_TIMER(_runtime_profile, "BM25StatsBuild");
-    COUNTER_UPDATE(stats_build, stats.bm25_stats_build_ns);
-    COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "BM25StatsIOTime", "BM25StatsBuild"), stats.bm25_stats_io_ns);
-}
-
-void LakeDataSource::_update_bm25_counter(const OlapReaderStatistics& stats) {
-    if (_params.bm25_search_option == nullptr || !_params.bm25_search_option->enable) {
-        return;
-    }
-    _update_bm25_phase1_counter(stats);
-
-    // Phase-2 is the pre-fold plus the scoring pass; both run inside segment init, so they share one root
-    // that carries their sum -- a parent timer whose window contains its children (mirrors VectorIndex).
-    // Phase-1 and Phase-3 run in other stages and stay where they are.
-    auto* bm25 = ADD_CHILD_TIMER(_runtime_profile, "BM25", "SegmentInit");
-    COUNTER_UPDATE(bm25, stats.bm25_prefold_ns + stats.bm25_scoring_ns);
-
-    auto* prefold = ADD_CHILD_TIMER(_runtime_profile, "BM25ScalarPrefold", "BM25");
-    COUNTER_UPDATE(prefold, stats.bm25_prefold_ns);
-    COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "BM25ScalarPrefoldRows", TUnit::UNIT, "BM25ScalarPrefold"),
-                   stats.rows_bm25_prefold_filtered);
-    // The diagnostic: a non-zero value means a query shape lost the pruning its limit asked for.
-    COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "BM25TopkNotPushedSegments", TUnit::UNIT, "BM25ScalarPrefold"),
-                   stats.bm25_segments_topk_not_pushed);
-
-    auto* score = ADD_CHILD_TIMER(_runtime_profile, "BM25Score", "BM25");
-    COUNTER_UPDATE(score, stats.bm25_scoring_ns);
-    COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "BM25IndexOpen", "BM25Score"), stats.bm25_index_open_ns);
-    COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "BM25PostingScan", "BM25Score"), stats.bm25_posting_scan_ns);
-    COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "BM25CandidateRows", TUnit::UNIT, "BM25Score"),
-                   stats.bm25_candidate_rows);
-    COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "BM25ScoredRows", TUnit::UNIT, "BM25Score"),
-                   stats.bm25_scored_rows);
-    COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "BM25SegmentsScored", TUnit::UNIT, "BM25Score"),
-                   stats.bm25_segments_scored);
-    COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "BM25SegmentsNoPruning", TUnit::UNIT, "BM25Score"),
-                   stats.bm25_segments_no_pruning);
-
-    // Score-column materialization runs after the SegmentRead timer is stamped, so it hangs off the scan
-    // root like DictDecode rather than under SegmentRead.
-    COUNTER_UPDATE(ADD_TIMER(_runtime_profile, "BM25ScoreColumn"), stats.bm25_score_column_ns);
-}
-
->>>>>>> ca19c5aa042... [Feature][RB-659] Report per-scan read statistics in the audit log (#71038)
 void LakeDataSource::update_counter(RuntimeState* state) {
     const auto& reader_stats = _reader->stats();
     COUNTER_UPDATE(_create_seg_iter_timer, reader_stats.create_segment_iter_ns);

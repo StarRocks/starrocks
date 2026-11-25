@@ -82,12 +82,7 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.AgentBaseQueryRelation;
-import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
->>>>>>> ca19c5aa042... [Feature][RB-659] Report per-scan read statistics in the audit log (#71038)
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.OriginStatement;

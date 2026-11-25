@@ -731,11 +731,6 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
             }
             // read num values is how many rows actually read before doing dict filtering.
             read_num_values = position.num_values;
-<<<<<<< HEAD
-            if (_row_position_slot != nullptr) {
-                row_positions =
-                        ColumnHelper::create_column(_row_position_slot->type(), _row_position_slot->is_nullable());
-=======
             _app_stats.physical_rows_read += read_num_values;
             if (_skip_rows_ctx != nullptr && _skip_rows_ctx->has_skip_rows()) {
                 const auto& kept = down_cast<const BooleanColumn*>(row_delete_filter.get())->get_data();
@@ -743,9 +738,9 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
             } else {
                 _app_stats.logical_rows_read += read_num_values;
             }
-            if (_row_position_slot != nullptr || !_row_lineage_slots.empty()) {
-                row_positions = Int64Column::create();
->>>>>>> ca19c5aa042... [Feature][RB-659] Report per-scan read statistics in the audit log (#71038)
+            if (_row_position_slot != nullptr) {
+                row_positions =
+                        ColumnHelper::create_column(_row_position_slot->type(), _row_position_slot->is_nullable());
                 int64_t first_row = _orc_reader->current_row_number();
                 for (size_t i = 0; i < read_num_values; i++) {
                     row_positions->append_datum(Datum(static_cast<int64_t>(first_row + i)));

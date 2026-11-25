@@ -1054,14 +1054,8 @@ struct TMasterOpResult {
     // Followers that forward the statement never analyze it locally, so they cannot resolve
     // CTE aliases or qualify names; they reuse this list for the audit log instead.
     12:optional list<string> queried_relations;
-<<<<<<< HEAD
-=======
-    // Compact JSON target snapshot from the executing FE; no follower-side name resolution.
-    13:optional string audit_target;
     // ScanStats audit JSON built by the executing FE; a follower that forwarded the statement has no plan of its own.
     14:optional string audit_scan_stats;
-    // 101 is taken: context-celer's Query Catalog sends preserve_result_packet (optional bool) in it. Do not reuse.
->>>>>>> ca19c5aa042... [Feature][RB-659] Report per-scan read statistics in the audit log (#71038)
 }
 
 struct TIsMethodSupportedRequest {
