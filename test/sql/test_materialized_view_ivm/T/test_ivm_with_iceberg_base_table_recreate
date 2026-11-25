@@ -1,0 +1,102 @@
+-- name: test_ivm_with_iceberg_base_table_recreate
+-- An INCREMENTAL view cannot continue from a baseline on an Iceberg table that was dropped and created again under
+-- the same name: the refresh fails and inactivates the view, a plain refresh does not reactivate it, and ALTER ACTIVE
+-- binds it to the new table so that the next refresh rebuilds it through PCT.
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+create database mv_iceberg_${uuid0}.mv_ice_db_${uuid0};
+create table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 (k int, v bigint, dt date) partition by(dt);
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values (1,10,'2023-12-01'),(2,20,'2023-12-01'),(1,30,'2023-12-02'),(2,40,'2023-12-02'),(1,50,'2023-12-03'),(2,60,'2023-12-03');
+create database db_${uuid0};
+use db_${uuid0};
+set enable_materialized_view_rewrite = false;
+CREATE MATERIALIZED VIEW mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "incremental")
+AS SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY dt, k;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv1';
+[UC]REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values (3,3,'2023-12-03');
+[UC]REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+SELECT STATE, get_json_string(EXTRA_MESSAGE, '$.refreshMode'), get_json_string(EXTRA_MESSAGE, '$.refreshModeReason'), array_join(array_sort(cast(json_query(parse_json(EXTRA_MESSAGE), '$.mvPartitionsToRefresh') as array<varchar>)), ',') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+function: assert_equal_result("SELECT dt, k, s, c FROM mv1 ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY dt, k ORDER BY dt, k")
+
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+create table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 (k int, v bigint, dt date) partition by(dt);
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values (1,100,'2023-12-02'),(5,500,'2023-12-05');
+[UC]REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode'), get_json_string(EXTRA_MESSAGE, '$.refreshModeReason'), ERROR_MESSAGE LIKE '%base table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 was dropped and re-created%', ERROR_MESSAGE LIKE '%`db_${uuid0}`.`mv1` ACTIVE to recover%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND STATE = 'FAILED';
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv1';
+[UC]REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv1';
+
+ALTER MATERIALIZED VIEW mv1 ACTIVE;
+[UC]REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+SELECT STATE, get_json_string(EXTRA_MESSAGE, '$.refreshMode'), get_json_string(EXTRA_MESSAGE, '$.refreshModeReason'), array_join(array_sort(cast(json_query(parse_json(EXTRA_MESSAGE), '$.mvPartitionsToRefresh') as array<varchar>)), ',') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+SELECT IS_ACTIVE, INACTIVE_REASON = '' FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv1';
+SELECT dt, k, s, c FROM mv1 ORDER BY dt, k;
+function: assert_equal_result("SELECT dt, k, s, c FROM mv1 ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY dt, k ORDER BY dt, k")
+
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values (6,600,'2023-12-05');
+[UC]REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+SELECT STATE, get_json_string(EXTRA_MESSAGE, '$.refreshMode'), get_json_string(EXTRA_MESSAGE, '$.refreshModeReason'), array_join(array_sort(cast(json_query(parse_json(EXTRA_MESSAGE), '$.mvPartitionsToRefresh') as array<varchar>)), ',') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+function: assert_equal_result("SELECT dt, k, s, c FROM mv1 ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY dt, k ORDER BY dt, k")
+
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+drop database db_${uuid0} force;
+drop catalog mv_iceberg_${uuid0};
+
+-- name: test_ivm_with_iceberg_base_table_recreate_auto
+-- An AUTO view is not inactivated for good: the refresh after the re-create fails and inactivates it with
+-- "base-table changed", and the next refresh, without ALTER ACTIVE, binds it to the new table and rebuilds it through
+-- PCT before it returns to incremental.
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+create database mv_iceberg_${uuid0}.mv_ice_db_${uuid0};
+create table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 (k int, v bigint, dt date) partition by(dt);
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values (1,10,'2023-12-01'),(2,20,'2023-12-01'),(1,30,'2023-12-02'),(2,40,'2023-12-02'),(1,50,'2023-12-03'),(2,60,'2023-12-03');
+create database db_${uuid0};
+use db_${uuid0};
+set enable_materialized_view_rewrite = false;
+CREATE MATERIALIZED VIEW mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "auto")
+AS SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY dt, k;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv1';
+[UC]REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values (3,3,'2023-12-03');
+[UC]REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+SELECT STATE, get_json_string(EXTRA_MESSAGE, '$.refreshMode'), get_json_string(EXTRA_MESSAGE, '$.refreshModeReason'), array_join(array_sort(cast(json_query(parse_json(EXTRA_MESSAGE), '$.mvPartitionsToRefresh') as array<varchar>)), ',') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+create table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 (k int, v bigint, dt date) partition by(dt);
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values (1,100,'2023-12-02'),(5,500,'2023-12-05');
+[UC]REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode'), get_json_string(EXTRA_MESSAGE, '$.refreshModeReason'), ERROR_MESSAGE LIKE '%was recreated but its table type is not supported for automatic meta repair%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND STATE = 'FAILED';
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv1';
+
+[UC]REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+SELECT STATE, get_json_string(EXTRA_MESSAGE, '$.refreshMode'), get_json_string(EXTRA_MESSAGE, '$.refreshModeReason'), array_join(array_sort(cast(json_query(parse_json(EXTRA_MESSAGE), '$.mvPartitionsToRefresh') as array<varchar>)), ',') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+SELECT IS_ACTIVE, INACTIVE_REASON = '' FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv1';
+function: assert_equal_result("SELECT dt, k, s, c FROM mv1 ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY dt, k ORDER BY dt, k")
+
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values (6,600,'2023-12-05');
+[UC]REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+SELECT STATE, get_json_string(EXTRA_MESSAGE, '$.refreshMode'), get_json_string(EXTRA_MESSAGE, '$.refreshModeReason'), array_join(array_sort(cast(json_query(parse_json(EXTRA_MESSAGE), '$.mvPartitionsToRefresh') as array<varchar>)), ',') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+function: assert_equal_result("SELECT dt, k, s, c FROM mv1 ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY dt, k ORDER BY dt, k")
+
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+drop database db_${uuid0} force;
+drop catalog mv_iceberg_${uuid0};
