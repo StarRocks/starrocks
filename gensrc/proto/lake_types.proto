@@ -629,6 +629,12 @@ message TxnLogPB {
             // into DeltaColumnGroupVerPB.shared_files so one child's vacuum
             // cannot reclaim a file another child still reads.
             optional bool shared = 6 [default=false];
+            // Per entry of col_unique_ids, the relative filename of the `.cols`
+            // that served that column in the alter's read snapshot: the file
+            // the rewrite copied the column's values from. Publish installs a
+            // column only while that same file still serves it; otherwise the
+            // copy no longer matches the segment's data.
+            repeated string source_column_files = 7;
         }
         repeated SegmentEntry segment_entries = 1;
         optional int64 alter_version = 2;

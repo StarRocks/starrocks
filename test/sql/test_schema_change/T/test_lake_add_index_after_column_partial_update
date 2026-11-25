@@ -32,8 +32,14 @@ CREATE TABLE t_pu_then_bitmap (
 DISTRIBUTED BY HASH(k1) BUCKETS 1
 PROPERTIES ("replication_num" = "1");
 
-insert into t_pu_then_bitmap values
-    (1,10,1,1,1,1),(2,20,2,2,2,2),(3,30,3,3,3,3),(4,20,4,4,4,4),(5,20,5,5,5,5);
+-- One INSERT, so every row lands in the same segment. Rows 6..1205 only add
+-- distinct v1 values: a bitmap is used only when the probe selects at most
+-- 1/1000 of the dictionary (bitmap_max_filter_ratio defaults to 1), and the
+-- profile assertion below needs it used.
+insert into t_pu_then_bitmap
+select x, case when x = 1 then 10 when x = 2 then 20 when x = 3 then 30 when x <= 5 then 20 else 100000 + x end,
+       x, x, x, x
+from table(generate_series(1, 1205)) t(x);
 
 -- column-mode partial update FIRST: v1 of k1<=2 becomes 777, overlaid in .cols
 SET partial_update_mode = 'column';
@@ -48,14 +54,14 @@ select count(*) from t_pu_then_bitmap where v1 = 777;
 select count(*) from t_pu_then_bitmap where v1 = 20;
 select count(*) from t_pu_then_bitmap where v1 = 10;
 select count(*) from t_pu_then_bitmap where v1 = 30;
-select * from t_pu_then_bitmap order by k1;
+select * from t_pu_then_bitmap where k1 <= 5 order by k1;
 
 -- Correct results alone do not prove the fix: before it, results were already
 -- correct — the column just scanned unindexed. Assert the bitmap path actually
 -- ran on the rewritten overlay BEFORE any subsequent write can rebuild it.
--- One bucket and one initial rowset put all five rows in the same segment;
--- the partial update overlays v1 for that whole segment. No untouched segment
--- or post-alter update can supply the bitmap used by this assertion.
+-- One bucket and one initial rowset put all rows in the same segment; the
+-- partial update overlays v1 for that whole segment. No untouched segment or
+-- post-alter update can supply the bitmap used by this assertion.
 set enable_profile = true;
 set enable_async_profile = false;
 [UC]select count(*) from t_pu_then_bitmap where v1 = 777;
@@ -73,7 +79,7 @@ update t_pu_then_bitmap set v1 = 888 where k1 = 3;
 select count(*) from t_pu_then_bitmap where v1 = 888;
 select count(*) from t_pu_then_bitmap where v1 = 30;
 select count(*) from t_pu_then_bitmap where v1 = 777;
-select * from t_pu_then_bitmap order by k1;
+select * from t_pu_then_bitmap where k1 <= 5 order by k1;
 
 -- ============ BLOOM: column-mode update, then fast-path bloom_filter_columns ============
 CREATE TABLE t_pu_then_bloom (
@@ -127,5 +133,40 @@ update t_pu_then_bloom set s1 = 'yy' where k1 = 4;
 select count(*) from t_pu_then_bloom where s1 = 'yy';
 select count(*) from t_pu_then_bloom where s1 = 'bb';
 select * from t_pu_then_bloom order by k1;
+
+-- ============ BITMAP after a metadata-only CHAR -> VARCHAR ============
+-- The overlay is written while s1 is CHAR. MODIFY COLUMN to VARCHAR then only
+-- changes FE's catalog (fast schema evolution; s1 has no index yet), so tablet
+-- metadata keeps CHAR until the next write. The fast-path rewrite must build
+-- the overlay and its bitmap as VARCHAR: built as CHAR, the dictionary holds
+-- padded keys, a VARCHAR probe misses them and the matching rows are pruned.
+CREATE TABLE t_pu_char_to_varchar (
+    k1 int,
+    s1 char(16),
+    c2 int,
+    c3 int,
+    c4 int,
+    c5 int
+) PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES ("replication_num" = "1", "cloud_native_fast_schema_evolution_v2" = "true");
+
+insert into t_pu_char_to_varchar
+select x, concat('s', x), x, x, x, x from table(generate_series(1, 1200)) t(x);
+
+SET partial_update_mode = 'column';
+update t_pu_char_to_varchar set s1 = 'hit' where k1 <= 3;
+
+ALTER TABLE t_pu_char_to_varchar MODIFY COLUMN s1 varchar(16);
+function: wait_alter_table_finish()
+
+ALTER TABLE t_pu_char_to_varchar ADD INDEX idx_s1(s1) USING BITMAP;
+function: wait_alter_table_finish()
+
+-- s1='hit' -> 3 (k1=1,2,3); s1='s10' -> 1; s1='s1' -> 0 (k1=1 was updated)
+select count(*) from t_pu_char_to_varchar where s1 = 'hit';
+select count(*) from t_pu_char_to_varchar where s1 = 's10';
+select count(*) from t_pu_char_to_varchar where s1 = 's1';
+select k1, s1 from t_pu_char_to_varchar where k1 <= 5 order by k1;
 
 drop database lake_idx_after_pu_${uuid0};

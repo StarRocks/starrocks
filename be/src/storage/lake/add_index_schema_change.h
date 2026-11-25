@@ -174,8 +174,9 @@ private:
     // recorded in `_written_paths`. Called from `run()` when the overall build fails so
     // we don't leak objects on S3 when the ADD INDEX fast path aborts; the
     // caller returns the error and FE cancels the alter. Errors here are
-    // swallowed (logged): the cleanup is a courtesy, vacuum still reclaims
-    // these files later as orphans.
+    // swallowed (logged). Full vacuum still reclaims a leftover .idx, but it
+    // does not list .cols files, so a .cols this cleanup misses stays on
+    // storage, like one left behind by a failed column-mode partial update.
     void cleanup_written_idx_files();
 
     TabletManager* _tablet_mgr;

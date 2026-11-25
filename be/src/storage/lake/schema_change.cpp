@@ -918,6 +918,7 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
 
     LOG(INFO) << "ADD INDEX fast path commit: tablet=" << request.new_tablet_id << " txn_id=" << request.txn_id
               << " segment_entries=" << op_add_index->segment_entries_size()
+              << " dcg_entries=" << op_add_index->dcg_entries_size()
               << " new_indexes=" << op_add_index->new_indexes_size();
     StorageMetrics::instance()->lake_idg_files_written_total.increment(op_add_index->segment_entries_size());
     return _tablet_manager->put_txn_log(std::move(txn_log));

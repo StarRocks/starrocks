@@ -412,9 +412,15 @@ Status AddIndexSchemaChange::classify_indexes_for_segment(uint32_t rssid, std::v
 
 StatusOr<std::shared_ptr<TabletSchema>> AddIndexSchemaChange::build_dcg_write_schema(
         const std::vector<TabletIndexPB>& indexes) {
-    auto tablet_schema = _new_tablet.get_schema();
+    // The rewritten overlay must store each column in the type the catalog
+    // declares, exactly as the base `.idx` path builds its index. After a
+    // metadata-only type change (fast schema evolution, e.g. CHAR -> VARCHAR)
+    // tablet metadata keeps the old type until the next write; building the
+    // overlay from it would key the inlined bitmap on the old encoding (padded
+    // CHAR) while queries probe it with the new one, and prune matching rows.
+    const auto& tablet_schema = _authoritative_schema;
     if (tablet_schema == nullptr) {
-        return Status::InternalError("AddIndexSchemaChange: new tablet has null schema");
+        return Status::InternalError("AddIndexSchemaChange: authoritative schema is null");
     }
 
     std::vector<ColumnUID> uids;
@@ -435,7 +441,7 @@ StatusOr<std::shared_ptr<TabletSchema>> AddIndexSchemaChange::build_dcg_write_sc
         const uint32_t col_uid = static_cast<uint32_t>(ix.col_unique_id(0));
         // Dedup on (index_type, column), never on index_name: FE names every
         // bloom-filter entry coming from `bloom_filter_columns` with the empty
-        // string (SchemaChangeHandler::…), so a name-keyed check would collapse
+        // string (LakeTableAddIndexJob.buildIndexesToAdd), so a name-keyed check would collapse
         // distinct columns into one entry and leave the rest without their
         // TabletIndexPB — losing the NGRAMBF gram parameters that
         // get_indexes_for_column feeds to the column writer.
@@ -542,7 +548,10 @@ Status AddIndexSchemaChange::rewrite_dcg_for_segment(const RowsetMetadataPB& row
                 strings::Substitute("AddIndexSchemaChange: no delta column group for rssid $0", rssid));
     }
     ASSIGN_OR_RETURN(auto write_schema, build_dcg_write_schema(indexes));
-    auto read_schema = _new_tablet.get_schema();
+    // Read the overlay through the catalog schema as well, the way a query
+    // does: Segment::new_column_iterator casts a column stored in an older
+    // type (e.g. a CHAR overlay after CHAR -> VARCHAR) to the catalog type.
+    const auto& read_schema = _authoritative_schema;
 
     // 1. Open the base segment. It is not read for values here — the overlay
     //    holds those — but it anchors the directory used to resolve the
@@ -575,8 +584,12 @@ Status AddIndexSchemaChange::rewrite_dcg_for_segment(const RowsetMetadataPB& row
     std::vector<std::unique_ptr<ColumnIterator>> col_iters;
     OlapReaderStatistics stats;
     std::vector<ColumnIteratorOptions> iter_opts_holder;
+    // The `.cols` each column is copied from, recorded so publish can tell
+    // whether the column is still served by that file (see DcgEntry).
+    std::vector<std::string> source_files;
     col_iters.reserve(indexes.size());
     iter_opts_holder.reserve(indexes.size());
+    source_files.reserve(indexes.size());
 
     for (size_t i = 0; i < write_schema->num_columns(); i++) {
         const auto& column = write_schema->column(i);
@@ -589,10 +602,14 @@ Status AddIndexSchemaChange::rewrite_dcg_for_segment(const RowsetMetadataPB& row
             ASSIGN_OR_RETURN(auto column_file,
                              dcg->column_file_by_idx(parent_name(base_segment->file_name()), idx.first));
             if (dcg_segments.count(column_file) == 0) {
-                ASSIGN_OR_RETURN(auto seg, base_segment->new_dcg_segment(*dcg, idx.first, read_schema));
+                // A one-off read during the alter: keep it out of the local data cache, like
+                // every other read here.
+                ASSIGN_OR_RETURN(auto seg,
+                                 base_segment->new_dcg_segment(*dcg, idx.first, read_schema, read_opts, &stats));
                 dcg_segments[column_file] = std::move(seg);
             }
             dcg_segment = dcg_segments[column_file];
+            source_files.push_back(dcg->relative_column_files()[idx.first]);
             break;
         }
         if (dcg_segment == nullptr) {
@@ -673,6 +690,10 @@ Status AddIndexSchemaChange::rewrite_dcg_for_segment(const RowsetMetadataPB& row
         // expects the padded form, exactly as the column-mode partial update
         // path re-pads before appending.
         ChunkHelper::padding_char_columns(char_field_indexes, chunk_schema, write_schema, chunk.get());
+        // A batch of wide strings can overflow a binary column's offsets; refuse it cleanly,
+        // as the column-mode partial update path does before writing its `.cols`.
+        RETURN_IF_ERROR(
+                ChunkHelper::reject_if_over_capacity(*chunk, "ADD INDEX DCG rewrite chunk", _new_tablet.id(), _txn_id));
         RETURN_IF_ERROR(segment_writer->append_chunk(*chunk));
         written_rows += n;
         TEST_SYNC_POINT_CALLBACK("AddIndexSchemaChange::rewrite_dcg_for_segment:after_append", &written_rows);
@@ -696,12 +717,15 @@ Status AddIndexSchemaChange::rewrite_dcg_for_segment(const RowsetMetadataPB& row
         out_entry->set_encryption_meta(encryption_meta);
     }
     out_entry->set_file_size(static_cast<int64_t>(segment_file_size));
+    DCHECK_EQ(source_files.size(), write_schema->num_columns());
     for (size_t i = 0; i < write_schema->num_columns(); i++) {
         out_entry->add_col_unique_ids(static_cast<uint32_t>(write_schema->column(i).unique_id()));
+        out_entry->add_source_column_files(source_files[i]);
     }
-    LOG(INFO) << "ADD INDEX fast path rewrote DCG overlay with inlined index: tablet=" << _new_tablet.id()
-              << " rssid=" << rssid << " file=" << cols_filename << " rows=" << written_rows
-              << " columns=" << write_schema->num_columns();
+    // One line per segment; the tablet-level count is in the commit log of do_process_add_index_only.
+    VLOG(1) << "ADD INDEX fast path rewrote DCG overlay with inlined index: tablet=" << _new_tablet.id()
+            << " rssid=" << rssid << " file=" << cols_filename << " rows=" << written_rows
+            << " columns=" << write_schema->num_columns();
     return Status::OK();
 }
 

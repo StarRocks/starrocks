@@ -17,8 +17,10 @@ DISTRIBUTED BY HASH(k1) BUCKETS 1
 PROPERTIES ("replication_num" = "1");
 -- result:
 -- !result
-insert into t_pu_then_bitmap values
-    (1,10,1,1,1,1),(2,20,2,2,2,2),(3,30,3,3,3,3),(4,20,4,4,4,4),(5,20,5,5,5,5);
+insert into t_pu_then_bitmap
+select x, case when x = 1 then 10 when x = 2 then 20 when x = 3 then 30 when x <= 5 then 20 else 100000 + x end,
+       x, x, x, x
+from table(generate_series(1, 1205)) t(x);
 -- result:
 -- !result
 SET partial_update_mode = 'column';
@@ -50,7 +52,7 @@ select count(*) from t_pu_then_bitmap where v1 = 30;
 -- result:
 1
 -- !result
-select * from t_pu_then_bitmap order by k1;
+select * from t_pu_then_bitmap where k1 <= 5 order by k1;
 -- result:
 1	777	1	1	1	1
 2	777	2	2	2	2
@@ -96,7 +98,7 @@ select count(*) from t_pu_then_bitmap where v1 = 777;
 -- result:
 2
 -- !result
-select * from t_pu_then_bitmap order by k1;
+select * from t_pu_then_bitmap where k1 <= 5 order by k1;
 -- result:
 1	777	1	1	1	1
 2	777	2	2	2	2
@@ -207,6 +209,62 @@ select * from t_pu_then_bloom order by k1;
 3	cc	3	3	3	3
 4	yy	4	4	4	4
 5	bb	5	5	5	5
+-- !result
+CREATE TABLE t_pu_char_to_varchar (
+    k1 int,
+    s1 char(16),
+    c2 int,
+    c3 int,
+    c4 int,
+    c5 int
+) PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES ("replication_num" = "1", "cloud_native_fast_schema_evolution_v2" = "true");
+-- result:
+-- !result
+insert into t_pu_char_to_varchar
+select x, concat('s', x), x, x, x, x from table(generate_series(1, 1200)) t(x);
+-- result:
+-- !result
+SET partial_update_mode = 'column';
+-- result:
+-- !result
+update t_pu_char_to_varchar set s1 = 'hit' where k1 <= 3;
+-- result:
+-- !result
+ALTER TABLE t_pu_char_to_varchar MODIFY COLUMN s1 varchar(16);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+ALTER TABLE t_pu_char_to_varchar ADD INDEX idx_s1(s1) USING BITMAP;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select count(*) from t_pu_char_to_varchar where s1 = 'hit';
+-- result:
+3
+-- !result
+select count(*) from t_pu_char_to_varchar where s1 = 's10';
+-- result:
+1
+-- !result
+select count(*) from t_pu_char_to_varchar where s1 = 's1';
+-- result:
+0
+-- !result
+select k1, s1 from t_pu_char_to_varchar where k1 <= 5 order by k1;
+-- result:
+1	hit
+2	hit
+3	hit
+4	s4
+5	s5
 -- !result
 drop database lake_idx_after_pu_${uuid0};
 -- result:
