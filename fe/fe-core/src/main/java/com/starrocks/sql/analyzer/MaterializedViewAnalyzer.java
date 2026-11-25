@@ -724,15 +724,11 @@ public class MaterializedViewAnalyzer {
                         continue;
                     }
                     FeNameFormat.checkVirtualColumnNameNotUsed(colName);
-<<<<<<< HEAD
-=======
                     // An existing mv's DDL lists the names it was created with, including generated ones such as
                     // count(*) that the shared-nothing column name format rejects.
                     if (!REANALYZING_EXISTING_MV.get()) {
                         FeNameFormat.checkColumnName(colName);
-                        rejectReservedColumnName(colName);
                     }
->>>>>>> 63a014f94b8... [BugFix][RB-1755] Let ALTER MATERIALIZED VIEW ACTIVE keep an MV's generated column names in shared-nothing (#70929)
                 }
             }
             List<Column> mvColumns = Lists.newArrayList();
