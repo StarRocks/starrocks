@@ -722,6 +722,15 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
                                               EXPECT_GT(bytes, 0);
                                               EXPECT_GE(_primary_key_mgr->mem_tracker()->consumption(), bytes);
                                           });
+    // The row-id arrays an apply sorts the rows with are charged while they are alive.
+    std::atomic<int> charged_rowids{0};
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:rowids",
+                                          [&](void* arg) {
+                                              charged_rowids++;
+                                              const int64_t bytes = *static_cast<int64_t*>(arg);
+                                              EXPECT_GT(bytes, 0);
+                                              EXPECT_GE(_primary_key_mgr->mem_tracker()->consumption(), bytes);
+                                          });
     // The chunk an update file is decoded into is charged while it is alive, rows left out included.
     std::atomic<int> charged_chunks{0};
     SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:chunk", [&](void* arg) {
@@ -762,10 +771,13 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
         SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:routed");
         SyncPoint::GetInstance()->ClearCallBack(
                 "ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:charged");
+        SyncPoint::GetInstance()->ClearCallBack(
+                "ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:rowids");
         SyncPoint::GetInstance()->DisableProcessing();
     });
 
-    auto run_update = [&](int update_ratio) {
+    // With `disjoint`, every update file holds the rows of one source segment only.
+    auto run_update = [&](int update_ratio, bool disjoint = false) {
         // One column-mode update that rewrites c1 of every row, flushed as one update file per write.
         ConfigResetGuard<int64_t> write_buffer_guard(&config::write_buffer_size, 1);
         upt_reads = 0;
@@ -784,7 +796,8 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         for (int slice = 0; slice < kSourceSegments; slice++) {
-            auto chunk = strided_update(slice, update_ratio);
+            auto chunk = disjoint ? generate_data(kChunkSize, slice, true, update_ratio)
+                                  : strided_update(slice, update_ratio);
             ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
         }
         ASSERT_OK(delta_writer->finish_with_txnlog());
@@ -810,6 +823,7 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
     EXPECT_GT(flushes.load(), 0);
     EXPECT_EQ(kSourceSegments, charged_routes.load());
     EXPECT_GT(charged_reads.load(), 0);
+    EXPECT_EQ(kSourceSegments * kSourceSegments, charged_rowids.load());
     EXPECT_GT(charged_payloads.load(), 0);
     EXPECT_GT(charged_chunks.load(), 0);
     // Every update file has rows of every source segment, and a source segment is one streamed range.
@@ -933,6 +947,18 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
         ConfigResetGuard<int32_t> min_guard(&config::lake_pk_column_mode_spill_min_source_segments, kSourceSegments);
         run_update(14);
         EXPECT_EQ(kSourceSegments, upt_reads.load());
+    }
+    // Update files that each fall into one source segment are read once by the re-read path as
+    // well, so the default threshold does not spill them however many source segments there are. A
+    // threshold of 1 does.
+    {
+        run_update(15, true);
+        EXPECT_EQ(0, upt_reads.load());
+        ConfigResetGuard<int32_t> min_guard(&config::lake_pk_column_mode_spill_min_source_segments, 1);
+        applies = 0;
+        run_update(16, true);
+        EXPECT_EQ(kSourceSegments, upt_reads.load());
+        EXPECT_EQ(kSourceSegments, applies.load());
     }
     // Spill off: the previous per-segment re-read path, same result.
     {

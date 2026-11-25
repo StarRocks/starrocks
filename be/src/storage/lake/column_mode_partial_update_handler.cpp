@@ -23,6 +23,7 @@
 #include <limits>
 #include <mutex>
 #include <numeric>
+#include <unordered_set>
 
 #include "base/crypto/aes_util.h"
 #include "base/debug/trace.h"
@@ -862,6 +863,8 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_from_spill(uint32_t 
     int64_t payload_bytes = 0;
     DeferOp release_payload([&]() { _tracker->release(payload_bytes); });
     std::vector<uint32_t> selected; // rows of one record that fall into this source range
+    int64_t selected_bytes = 0;     // capacity of `selected` charged so far
+    DeferOp release_selected([&]() { _tracker->release(selected_bytes); });
     const auto& records = it->second;
     // The rows of the update file being collected. A record holds this segment's rows of several
     // update files, one run per file, and a flush in the middle of an update file leaves that
@@ -884,13 +887,21 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_from_spill(uint32_t 
         if (source_rowids.empty()) {
             return Status::OK();
         }
+        // The two row-id arrays below hold 8 bytes per collected row for the whole apply. With a
+        // narrow update column that is as much as the rows themselves, so charge them too.
+        int64_t rowid_bytes = static_cast<int64_t>(source_rowids.size() * 2 * sizeof(uint32_t));
+        _tracker->consume(rowid_bytes);
+        DeferOp release_rowids([&]() { _tracker->release(rowid_bytes); });
+        TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:rowids",
+                                 &rowid_bytes);
         // Order by source rowid like the whole-file path does.
-        std::vector<uint32_t> unsorted_upt_rowids(source_rowids.size());
+        std::vector<uint32_t> unsorted_upt_rowids;
+        std::vector<uint32_t> sorted_source_rowids;
+        TRY_CATCH_BAD_ALLOC(unsorted_upt_rowids.resize(source_rowids.size()));
+        TRY_CATCH_BAD_ALLOC(sorted_source_rowids.reserve(source_rowids.size()));
         std::iota(unsorted_upt_rowids.begin(), unsorted_upt_rowids.end(), 0);
         std::stable_sort(unsorted_upt_rowids.begin(), unsorted_upt_rowids.end(),
                          [&](uint32_t a, uint32_t b) { return source_rowids[a] < source_rowids[b]; });
-        std::vector<uint32_t> sorted_source_rowids;
-        sorted_source_rowids.reserve(source_rowids.size());
         for (const uint32_t upt_rowid : unsorted_upt_rowids) {
             sorted_source_rowids.push_back(source_rowids[upt_rowid]);
         }
@@ -972,6 +983,12 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_from_spill(uint32_t 
                 }
             }
             row += run.num_rows;
+            // `selected` is reused across runs and records, so its capacity lives until the end.
+            if (const int64_t grown = static_cast<int64_t>(selected.capacity() * sizeof(uint32_t)) - selected_bytes;
+                grown > 0) {
+                _tracker->consume(grown);
+                selected_bytes += grown;
+            }
             if (selected.empty()) {
                 continue;
             }
@@ -1142,17 +1159,28 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
         // Read each update file once and hand every source segment its own rows (see
         // _spill_update_rows). Declared before the runner so the spill outlives every task.
         // The spill pays off only when an update file would otherwise be read more than once. The
-        // re-read path reads every update file once per source range (see
-        // _read_from_source_segment_and_update), so a single source segment that fits in one range
-        // reads each file once, and there the spill would add a serialize, local write, local read
-        // and deserialize pass for nothing. The threshold counts source segments, not ranges: a
-        // single segment too large for one range stays on the re-read path with the default of 2
-        // and reads each update file once per range. A threshold of 1 spills that case too. The
-        // check also covers a load that matched no existing key (an insert-only COLUMN_UPSERT_MODE
-        // load), which has no segment task to feed.
+        // re-read path reads an update file once per source range of every source segment the file
+        // has rows of (see _read_from_source_segment_and_update), so the check counts those reads
+        // per update file rather than the source segments of the whole update: update files that
+        // each fall into a different source segment are read once either way, and there the spill
+        // would add a serialize, local write, local read and deserialize pass for nothing. The
+        // update is spilled when its update files feed at least the configured number of source
+        // segments on average. The count is of segments, not ranges: a single segment too large
+        // for one range stays on the re-read path with the default of 2 and reads each update file
+        // once per range. A threshold of 1 spills that case too. A load that matched no existing
+        // key (an insert-only COLUMN_UPSERT_MODE load) has no segment task to feed and never
+        // spills.
         const int32_t spill_min_source_segments = config::lake_pk_column_mode_spill_min_source_segments;
-        bool spill_update_rows = spill_min_source_segments > 0 &&
-                                 rss_upt_id_to_rowid_pairs.size() >= static_cast<size_t>(spill_min_source_segments);
+        size_t upt_file_reads = 0; // (source segment, update file) pairs: reads of the re-read path
+        std::unordered_set<uint32_t> upt_files;
+        for (const auto& [rssid, upt_map] : rss_upt_id_to_rowid_pairs) {
+            upt_file_reads += upt_map.size();
+            for (const auto& [upt_id, pairs] : upt_map) {
+                upt_files.insert(upt_id);
+            }
+        }
+        bool spill_update_rows = spill_min_source_segments > 0 && !upt_files.empty() &&
+                                 upt_file_reads >= upt_files.size() * static_cast<size_t>(spill_min_source_segments);
         if (spill_update_rows) {
             auto st = _spill_update_rows(rss_upt_id_to_rowid_pairs, partial_schema);
             // A local problem (disk full, spill directory not usable, a column the spill cannot
