@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include <fmt/format.h>
 #include <glog/logging.h>
 #include <sys/types.h>
 
@@ -47,8 +48,13 @@
 #include "base/coding.h"
 #include "base/string/faststring.h"
 #include "base/string/slice.h"
+#include "column/column_visitor_adapter.h"
+#include "column/decimalv3_column.h"
 #include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
+#include "column/storage_column_traits.h"
 #include "common/logging.h"
+#include "gutil/casts.h"
 #include "gutil/port.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/bitshuffle_wrapper.h"
@@ -423,6 +429,51 @@ inline Status BitShufflePageDecoder<Type>::next_batch(const SparseRange<>& range
     return Status::OK();
 }
 
+class BitShuffleRawDataVisitor final : public ColumnVisitorMutableAdapter<BitShuffleRawDataVisitor> {
+public:
+    BitShuffleRawDataVisitor(size_t add_count, size_t elem_size)
+            : ColumnVisitorMutableAdapter(this), _add_count(add_count), _elem_size(elem_size) {}
+
+    uint8_t* dst_raw() const { return _dst_raw; }
+    size_t orig_size() const { return _orig_size; }
+
+    template <typename T>
+    Status do_visit(FixedLengthColumn<T>* col) {
+        return visit_fixed(col);
+    }
+
+    template <typename T>
+    Status do_visit(DecimalV3Column<T>* col) {
+        return visit_fixed(col);
+    }
+
+    using ColumnVisitorMutableAdapter<BitShuffleRawDataVisitor>::visit;
+    Status visit(FixedLengthColumnBase<int256_t>* col) override { return visit_fixed(col); }
+
+    template <typename T>
+    static Status do_visit(const T&) {
+        return Status::NotSupported("unsupported column type");
+    }
+
+private:
+    template <typename ColType>
+    Status visit_fixed(ColType* col) {
+        using ValType = typename ColType::ValueType;
+        if (UNLIKELY(sizeof(ValType) != _elem_size)) {
+            return Status::NotSupported("element size mismatch");
+        }
+        _orig_size = col->size();
+        col->resize_uninitialized(_orig_size + _add_count);
+        _dst_raw = col->mutable_raw_data() + _orig_size * sizeof(ValType);
+        return Status::OK();
+    }
+
+    size_t _add_count;
+    size_t _elem_size;
+    size_t _orig_size = 0;
+    uint8_t* _dst_raw = nullptr;
+};
+
 template <LogicalType Type>
 inline Status BitShufflePageDecoder<Type>::read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids,
                                                           size_t* count, Column* column) {
@@ -432,6 +483,53 @@ inline Status BitShufflePageDecoder<Type>::read_by_rowids(const ordinal_t first_
     }
     size_t total = *count;
     size_t read_count = 0;
+
+    // rowids are sorted (callers partition them per page with lower_bound), so checking the first
+    // element covers all of them. A violation means a caller bug; fail loudly instead of
+    // skipping, because callers pair the decoded values with per-rowid null flags.
+    if (UNLIKELY(total > 0 && rowids[0] < first_ordinal_in_page)) {
+        return Status::Corruption(
+                fmt::format("rowid {} precedes page first ordinal {}", rowids[0], first_ordinal_in_page));
+    }
+
+    if constexpr (!std::is_same_v<CppType, bool>) {
+        if (LIKELY(!column->is_constant())) {
+            NullableColumn* nullable_col = nullptr;
+            Column* target_col = column;
+            if (column->is_nullable()) {
+                column->materialized_nullable();
+                nullable_col = down_cast<NullableColumn*>(column);
+                target_col = nullable_col->data_column_raw_ptr();
+                DCHECK_EQ(target_col->size(), nullable_col->null_column()->size());
+            }
+
+            if (LIKELY(!target_col->is_nullable() && !target_col->is_constant())) {
+                BitShuffleRawDataVisitor visitor(total, sizeof(CppType));
+                if (LIKELY(target_col->accept_mutable(&visitor).ok())) {
+                    uint8_t* dst_raw = visitor.dst_raw();
+                    size_t orig_size = visitor.orig_size();
+                    for (size_t i = 0; i < total; i++) {
+                        ordinal_t ord = rowids[i] - first_ordinal_in_page;
+                        if (UNLIKELY(ord >= _num_elements)) {
+                            break;
+                        }
+                        std::memcpy(dst_raw + read_count * sizeof(CppType), get_data(ord * SIZE_OF_TYPE),
+                                    sizeof(CppType));
+                        read_count++;
+                    }
+                    if (read_count < total) {
+                        target_col->resize(orig_size + read_count);
+                    }
+                    if (nullable_col != nullptr) {
+                        nullable_col->null_column_data().resize(orig_size + read_count, 0);
+                    }
+                    *count = read_count;
+                    return Status::OK();
+                }
+            }
+        }
+    }
+
     auto data = std::make_unique_for_overwrite<CppType[]>(total);
     for (size_t i = 0; i < total; i++) {
         ordinal_t ord = rowids[i] - first_ordinal_in_page;
