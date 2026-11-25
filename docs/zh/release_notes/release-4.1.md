@@ -24,6 +24,98 @@ products: [oss]
 
 :::
 
+## 4.1.8 \{#418}
+
+发布日期：2026 年 11 月 16 日
+
+### 行为变更 \{#behavior-changes}
+
+- 存算分离主键索引缓存的淘汰策略已变更：缓存新增了一个紧急级别，在每次 publish 后都会进行检查。[#81143](https://github.com/StarRocks/starrocks/pull/81143) [#81168](https://github.com/StarRocks/starrocks/pull/81168)
+- 本地（存算一体）主键导入默认不再检查不可变的 L1 和 L2 持久化索引文件中是否存在重复键。新的 BE 配置项 `skip_pindex_l1_l2_check_in_insert` 默认值为 `true`；将其设置为 `false` 可恢复之前的行为。[#81304](https://github.com/StarRocks/starrocks/pull/81304)
+- `lake_pk_preload_memory_limit_percent`、`lake_pk_index_block_cache_limit_percent` 和 `put_combined_txn_log_thread_pool_num_max` 现在可在运行时生效，无需重启 BE 或 CN。`lake_pk_index_block_cache_limit_percent` 现已支持动态修改。[#81164](https://github.com/StarRocks/starrocks/pull/81164) [#81244](https://github.com/StarRocks/starrocks/pull/81244) [#81677](https://github.com/StarRocks/starrocks/pull/81677)
+- 物化视图刷新处理逻辑已变更：被删除的基表分区会一直保持跟踪状态，直到其对应的物化视图分区被刷新；没有任何已跟踪基表分区对应的物化视图分区会被刷新；增量物化视图重建中被取代的批次将被跳过而不是导致失败。[#81187](https://github.com/StarRocks/starrocks/pull/81187) [#81192](https://github.com/StarRocks/starrocks/pull/81192) [#81262](https://github.com/StarRocks/starrocks/pull/81262)
+- 增量物化视图对 `__ROW_ID__` 使用无前缀的行 id 指纹。[#81259](https://github.com/StarRocks/starrocks/pull/81259)
+- 物化视图在 FE 启动时按层级逐层激活，从而避免占满 `mv-plan-cache` 线程池资源。[#81497](https://github.com/StarRocks/starrocks/pull/81497)
+- 针对 external catalog 表的 `DESCRIBE` 以及外部数据库和表的列举操作，现在使用调用者的会话上下文来进行元数据调用。[#80628](https://github.com/StarRocks/starrocks/pull/80628)
+- `bool_or` 现在可以合并包含 NULL 值的中间列。[#81237](https://github.com/StarRocks/starrocks/pull/81237)
+- 不支持的区间运算现在会报告描述性错误，而不是 `Unknown error`。[#81024](https://github.com/StarRocks/starrocks/pull/81024)
+- `CREATE BASELINE` 可在 follower FE 上正常工作。[#81157](https://github.com/StarRocks/starrocks/pull/81157)
+- FE 不再出现跨 FE 错误续期全局字典的问题。[#79511](https://github.com/StarRocks/starrocks/pull/79511)
+- 读取已删除存算分离 tablet 的第 1 版现在会返回 `NotFound`。[#81196](https://github.com/StarRocks/starrocks/pull/81196)
+- 存算分离主键 tablet 恢复机制已重构：publish 的 delete vector 与恢复过程保持一致；在主键不一致时会恢复多语句事务的批量应用；使用物理行 id；因 Compaction 继承的 delete 文件将被丢弃。[#81204](https://github.com/StarRocks/starrocks/pull/81204) [#81206](https://github.com/StarRocks/starrocks/pull/81206) [#81211](https://github.com/StarRocks/starrocks/pull/81211) [#81250](https://github.com/StarRocks/starrocks/pull/81250)
+- Kafka Routine Load 按分区跟踪 EOF，并对空导入（即未产生目标行的批次）采取不同的处理方式。[#81412](https://github.com/StarRocks/starrocks/pull/81412)
+- 显式事务的导入 id 现在会被持久化，以便在 FE 重启或 Leader 切换后，publish 操作仍能找到对应的事务日志。[#81413](https://github.com/StarRocks/starrocks/pull/81413)
+- 为遗留的基于每用户 DN 的 LDAP 用户保留了 Group providers。[#81399](https://github.com/StarRocks/starrocks/pull/81399)
+- FE 加载镜像文件时，会跳过被拒绝的会话变量值，而不是导致 FE 启动失败。[#81655](https://github.com/StarRocks/starrocks/pull/81655)
+- 对于 `FILES()` 和 Broker Load，Arrow 预缓冲的 Parquet 范围会在扫描线程上读取。[#81771](https://github.com/StarRocks/starrocks/pull/81771)
+- Iceberg 分区值现在会根据每个数据文件自身的分区规范进行解码。[#81789](https://github.com/StarRocks/starrocks/pull/81789)
+- 单事务 lake publish 批次现在会遵循重试退避机制。[#81803](https://github.com/StarRocks/starrocks/pull/81803)
+- 当 trie 边界此前将某个 flat JSON 路径丢弃时，现在该路径会被正确标记为 JSON 类型。[#81816](https://github.com/StarRocks/starrocks/pull/81816)
+- 修复了 lake 元数据缓存键以及元数据删除时缓存淘汰的问题。[#81978](https://github.com/StarRocks/starrocks/pull/81978)
+
+### 改进项 \{#improvements}
+
+- 新增了扫描执行器工作线程相关指标。[#77435](https://github.com/StarRocks/starrocks/pull/77435)
+- 存算分离 publish 版本超时时间现已支持配置。[#79332](https://github.com/StarRocks/starrocks/pull/79332)
+- 大型 flat JSON Compaction 的输出现在以流式方式写出，而不是缓冲整个 Segment。[#80470](https://github.com/StarRocks/starrocks/pull/80470)
+- `update_memory_limit_percent` 现已支持动态修改。[#81118](https://github.com/StarRocks/starrocks/pull/81118)
+- JVM 已提交内存现已计入 BE 进程内存跟踪器中。[#81127](https://github.com/StarRocks/starrocks/pull/81127)
+- 不可变索引的存在性检查复用了 `get`。[#81307](https://github.com/StarRocks/starrocks/pull/81307)
+- 支持在数据文件为 ORC 格式的 Iceberg 表上执行 `DELETE`。[#81435](https://github.com/StarRocks/starrocks/pull/81435)
+- 支持从 ORC 数据文件中读取 Iceberg v3 行血缘信息。[#81440](https://github.com/StarRocks/starrocks/pull/81440)
+- 跳过被 runtime filter 拒绝的分区的 Iceberg equality delete 文件，并且在规划 Iceberg 扫描范围时跳过按文件划分的分区工作。[#81437](https://github.com/StarRocks/starrocks/pull/81437) [#81438](https://github.com/StarRocks/starrocks/pull/81438)
+- 存算分离备份节点按 tablet 哈希进行分布。[#81436](https://github.com/StarRocks/starrocks/pull/81436)
+
+### 安全性 \{#security}
+
+- 将 FE ZooKeeper 升级到 3.9.6。[#81292](https://github.com/StarRocks/starrocks/pull/81292)
+- 将 pprof 升级到 release/20261022。[#81300](https://github.com/StarRocks/starrocks/pull/81300)
+- 将 guava 升级到 33.7.2，将 snappy-java 升级到 1.1.10.9。[#81859](https://github.com/StarRocks/starrocks/pull/81859)
+
+### 问题修复 \{#bug-fixes}
+
+修复了以下问题：
+
+- 修复了 Iceberg 读取和插入中的问题，包括未知的分区转换、ORC 字段 id、提升的边界值、未知类型以及默认值问题。[#81257](https://github.com/StarRocks/starrocks/pull/81257) [#81311](https://github.com/StarRocks/starrocks/pull/81311) [#81432](https://github.com/StarRocks/starrocks/pull/81432)
+- 修复了对具有分区演进的表进行 Iceberg 读写时的问题，包括将 position delete 保留在其数据文件规范下。[#81401](https://github.com/StarRocks/starrocks/pull/81401) [#81361](https://github.com/StarRocks/starrocks/pull/81361)
+- 修复了 Iceberg DML 目标查找、按行 id 配对的 v3 查找行，以及对没有写入默认值的列的 NULL 写入问题。[#81165](https://github.com/StarRocks/starrocks/pull/81165) [#81188](https://github.com/StarRocks/starrocks/pull/81188) [#81362](https://github.com/StarRocks/starrocks/pull/81362)
+- 修复了两个 Iceberg FE 挂起问题（explain 分区列表以及 OSS 预读等待）以及空闲 Iceberg commit executor 线程的问题。[#81711](https://github.com/StarRocks/starrocks/pull/81711) [#81805](https://github.com/StarRocks/starrocks/pull/81805)
+- Iceberg、Delta 和 Hudi 的 `INSERT` 数据源在表锁下会被失效处理，而不是刷新。[#81923](https://github.com/StarRocks/starrocks/pull/81923)
+- Iceberg REST catalog user agent 的构建不再包含 `NodeMgr`。[#80660](https://github.com/StarRocks/starrocks/pull/80660)
+- 在 `OR` 倒排索引回退中对 `MATCH` 取反时返回了 NULL 行。[#76350](https://github.com/StarRocks/starrocks/pull/76350)
+- 主键表 Compaction 中 Level -1 rowset 的选择没有限制。[#80471](https://github.com/StarRocks/starrocks/pull/80471)
+- 缓冲的直通 chunk 未计入查询和进程内存。[#80910](https://github.com/StarRocks/starrocks/pull/80910)
+- 聚合状态组合器在批次销毁时泄漏了被包装的状态。[#81054](https://github.com/StarRocks/starrocks/pull/81054)
+- 在 compactor 正在写入合并后的 JSON 列时，该列可能被释放。[#81117](https://github.com/StarRocks/starrocks/pull/81117)
+- 当一次 flush 并发完成时，spiller 的 flush-all 回调可能被执行两次。[#81134](https://github.com/StarRocks/starrocks/pull/81134)
+- min/max runtime filter 的边界值在未持有 slice 锁的情况下被读取。[#81138](https://github.com/StarRocks/starrocks/pull/81138)
+- 可落盘的聚合数据源可能访问已释放的 spiller。[#81199](https://github.com/StarRocks/starrocks/pull/81199)
+- `getShardInfo` 调用未对每批次的分片数量进行限制。[#81197](https://github.com/StarRocks/starrocks/pull/81197)
+- 导入 sink 关闭提交异常可能导致 BE 或 CN 进程终止。[#81251](https://github.com/StarRocks/starrocks/pull/81251)
+- Trino 的 `TIMESTAMP WITH TIME ZONE` 字面量使用了错误的时区方向。[#81256](https://github.com/StarRocks/starrocks/pull/81256)
+- `ALTER MATERIALIZED VIEW ... ACTIVE` 在激活失败时丢失了 `Can not active materialized view` 消息。[#81258](https://github.com/StarRocks/starrocks/pull/81258)
+- 加载镜像时未从物化视图属性中恢复 `mv_rewrite_staleness_second`。[#81263](https://github.com/StarRocks/starrocks/pull/81263)
+- 将 `DOUBLE` 或 `FLOAT` 转换为 `DECIMAL` 在 aarch64 上的结果与 x86 上不同。[#81261](https://github.com/StarRocks/starrocks/pull/81261)
+- 当结果超出 `DATETIME` 范围时，`convert_tz` 现在返回 NULL。[#81264](https://github.com/StarRocks/starrocks/pull/81264)
+- 对 `VARBINARY` 列进行等值过滤时的规划失败。[#81310](https://github.com/StarRocks/starrocks/pull/81310)
+- 物化视图命名与查找：当其引用的基表分区列未被分析时，该物化视图会被命名，并且 `inspect_mv_refresh_info` 通过全名来索引同名的基表。[#81357](https://github.com/StarRocks/starrocks/pull/81357) [#81358](https://github.com/StarRocks/starrocks/pull/81358)
+- 在存算一体模式下，全局延迟物化查找无法到达计算节点。[#81359](https://github.com/StarRocks/starrocks/pull/81359)
+- 由于 `lastSchemaUpdateTime` 的递增时机过晚，在存算分离 schema change 期间并发查询未能重新规划。[#81363](https://github.com/StarRocks/starrocks/pull/81363)
+- Ranger 服务定义不允许在视图和物化视图上授予 `SELECT`。[#81400](https://github.com/StarRocks/starrocks/pull/81400)
+- `UNION` 合并可能产生顺序错误的值。[#81420](https://github.com/StarRocks/starrocks/pull/81420)
+- 任务运行进程的启动时间未在 Follower 上回放。[#81433](https://github.com/StarRocks/starrocks/pull/81433)
+- 在 `IF EXISTS` 下，会对不可导入的外部表检查 `DROP` 权限。[#81434](https://github.com/StarRocks/starrocks/pull/81434)
+- 查询被取消后，不再打开 lake segment。[#81598](https://github.com/StarRocks/starrocks/pull/81598)
+- 由刷新操作导致的物化视图失活状态会被记录到日志，且其任务保持已调度状态。[#81660](https://github.com/StarRocks/starrocks/pull/81660)
+- 当仅约束了 key 前缀时，包含尾部 NULL 的分区被删除了。[#81675](https://github.com/StarRocks/starrocks/pull/81675)
+- 字符串 `IN` 谓词在运行时过滤器阶段被当作字典编码读取。[#81676](https://github.com/StarRocks/starrocks/pull/81676)
+- 延迟物化视图剪枝未能保留其谓词所需的列。[#81687](https://github.com/StarRocks/starrocks/pull/81687)
+- 常量 `IN` 谓词值列表中可能包含列引用。[#81825](https://github.com/StarRocks/starrocks/pull/81825)
+- 当常量 GROUP BY 键被折叠进 `HAVING` 后，未对其进行规范化。[#81919](https://github.com/StarRocks/starrocks/pull/81919)
+- 基于月份的日期运算被当作可逆运算进行改写。[#81979](https://github.com/StarRocks/starrocks/pull/81979)
+- 当保留期为 0 时，物化视图强制删除出现递归。[#81953](https://github.com/StarRocks/starrocks/pull/81953)
+- 将 StarOS 和 StarCache 升级到 v4.1.6。[#81508](https://github.com/StarRocks/starrocks/pull/81508)
+
 ## 4.1.5
 
 发布日期：2026 年 9 月 8 日
