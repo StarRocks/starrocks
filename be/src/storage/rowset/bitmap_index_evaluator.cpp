@@ -466,7 +466,46 @@ Status BitmapIndexEvaluator::init(BitmapIndexIteratorSupplier&& supplier) {
     return Status::OK();
 }
 
-Status BitmapIndexEvaluator::evaluate(SparseRange<>& dst_scan_range, PredicateTree& dst_pred_tree) {
+void BitmapIndexEvaluator::_prefetch_dictionary_pages() {
+    for (const auto& [node, node_ctx] : _ctx.compound_node_to_context) {
+        for (const auto& [cid, col_ctx] : node_ctx.col_contexts) {
+            auto* bitmap_iter = _bitmap_index_iterators[cid];
+            if (bitmap_iter == nullptr) {
+                continue;
+            }
+            for (const auto* col_node : col_ctx.nodes) {
+                const auto it = _ctx.is_node_support_bitmap.find(col_node);
+                if (it == _ctx.is_node_support_bitmap.end() || !it->second) {
+                    continue;
+                }
+                col_node->col_pred()->visit_bitmap_seek_values(
+                        [bitmap_iter](const void* value) { bitmap_iter->prefetch_dictionary_page(value); });
+            }
+        }
+    }
+}
+
+void BitmapIndexEvaluator::_prefetch_bitmap_pages() {
+    // The bitmaps BitmapIndexRetriver reads: those of the nodes the seek kept.
+    for (const auto& [node, node_ctx] : _ctx.compound_node_to_context) {
+        if (!node_ctx.used) {
+            continue;
+        }
+        for (const auto& [cid, col_ctx] : node_ctx.col_contexts) {
+            auto* bitmap_iter = _bitmap_index_iterators[cid];
+            if (bitmap_iter == nullptr) {
+                continue;
+            }
+            bitmap_iter->prefetch_bitmap_pages(col_ctx.bitmap_ranges);
+            if (bitmap_iter->has_null_bitmap() && !col_ctx.has_is_null_pred) {
+                const rowid_t null_ordinal = bitmap_iter->bitmap_nums() - 1;
+                bitmap_iter->prefetch_bitmap_pages(SparseRange<>(null_ordinal, null_ordinal + 1));
+            }
+        }
+    }
+}
+
+Status BitmapIndexEvaluator::evaluate(SparseRange<>& dst_scan_range, PredicateTree& dst_pred_tree, bool prefetch) {
     const auto optional_file_missing = [this]() {
         return std::ranges::any_of(_bitmap_index_iterators,
                                    [](const auto* iter) { return iter != nullptr && iter->is_file_missing(); });
@@ -481,6 +520,9 @@ Status BitmapIndexEvaluator::evaluate(SparseRange<>& dst_scan_range, PredicateTr
     // ---------------------------------------------------------
     // The root is an AND whose bitmap is intersected into the scan range, so predicates matched at the top
     // level are erasable. Erasability is only revoked while descending through a not-fully-covered OR.
+    if (prefetch) {
+        _prefetch_dictionary_pages();
+    }
     auto seek_result = _pred_tree.visit(BitmapIndexSeeker{this}, /*erasable=*/true);
     // Both dictionary data and row bitmaps are lazy. A file can disappear after iterator construction;
     // never commit partial pruning or erase predicates in that case. Only the actual optional-file I/O
@@ -506,6 +548,9 @@ Status BitmapIndexEvaluator::evaluate(SparseRange<>& dst_scan_range, PredicateTr
     // ---------------------------------------------------------
     // Retrieve the bitmap of each field.
     // ---------------------------------------------------------
+    if (prefetch) {
+        _prefetch_bitmap_pages();
+    }
     Roaring row_bitmap = range2roaring(dst_scan_range);
     const size_t input_rows = row_bitmap.cardinality();
     DCHECK_EQ(input_rows, dst_scan_range.span_size());

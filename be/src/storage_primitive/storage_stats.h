@@ -131,6 +131,10 @@ struct OlapReaderStatistics {
 
     int64_t rows_bitmap_index_filtered = 0;
     int64_t bitmap_index_filter_timer = 0;
+    // lake_scan_warm_index: the bitmap index pages the lookups asked for all at once ahead of reading them, and the
+    // cache blocks those requests newly queued or joined.
+    int64_t bitmap_index_prefetch_pages = 0;
+    int64_t bitmap_index_prefetch_blocks = 0;
     int64_t vector_index_load_ns = 0;
     int64_t get_row_ranges_by_vector_index_timer = 0;
     int64_t vector_index_cache_lookup_ns = 0;
@@ -371,6 +375,8 @@ struct OlapReaderStatistics {
         cached_pages_num += other.cached_pages_num;
         rows_bitmap_index_filtered += other.rows_bitmap_index_filtered;
         bitmap_index_filter_timer += other.bitmap_index_filter_timer;
+        bitmap_index_prefetch_pages += other.bitmap_index_prefetch_pages;
+        bitmap_index_prefetch_blocks += other.bitmap_index_prefetch_blocks;
         vector_index_load_ns += other.vector_index_load_ns;
         get_row_ranges_by_vector_index_timer += other.get_row_ranges_by_vector_index_timer;
         vector_index_cache_lookup_ns += other.vector_index_cache_lookup_ns;

@@ -242,6 +242,8 @@ private:
     RuntimeProfile::Counter* _block_fetch_timer = nullptr;
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
+    RuntimeProfile::Counter* _bi_prefetch_pages_counter = nullptr;
+    RuntimeProfile::Counter* _bi_prefetch_blocks_counter = nullptr;
     RuntimeProfile::Counter* _vector_index_timer = nullptr;
     RuntimeProfile::Counter* _vector_index_load_timer = nullptr;
     RuntimeProfile::Counter* _get_row_ranges_by_vector_index_timer = nullptr;

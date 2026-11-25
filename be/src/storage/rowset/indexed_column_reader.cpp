@@ -34,6 +34,8 @@
 
 #include "storage/rowset/indexed_column_reader.h"
 
+#include <algorithm>
+
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"     // for Substitute
@@ -99,6 +101,58 @@ Status IndexedColumnReader::read_page(const IndexReadOptions& opts, const PagePo
     page_opts.use_page_cache = opts.use_page_cache;
     page_opts.encoding_type = _encoding_info->encoding();
     return PageIO::read_and_decompress_page(page_opts, handle, body, footer);
+}
+
+bool IndexedColumnReader::data_page_at_or_after(const void* key, PagePointer* page) const {
+    if (!support_value_seek() || _num_values == 0) {
+        return false;
+    }
+    // The same choice IndexedColumnIterator::seek_at_or_after() makes.
+    if (!_has_index_page) {
+        *page = _sole_data_page;
+        return true;
+    }
+    std::string encoded_key;
+    _validx_key_coder->full_encode_ascending(key, &encoded_key);
+    IndexPageIterator iter(&_value_index_reader);
+    if (!iter.seek_at_or_after(encoded_key).ok()) {
+        return false;
+    }
+    *page = iter.current_page_pointer();
+    return true;
+}
+
+bool IndexedColumnReader::data_pages_of_ordinals(ordinal_t from, ordinal_t to, size_t max_pages,
+                                                 std::vector<PagePointer>* pages) const {
+    if (!support_ordinal_seek()) {
+        return false;
+    }
+    to = std::min<ordinal_t>(to, static_cast<ordinal_t>(_num_values));
+    if (from >= to || max_pages == 0) {
+        return true;
+    }
+    // The same choice IndexedColumnIterator::seek_to_ordinal() makes.
+    if (!_has_index_page) {
+        pages->push_back(_sole_data_page);
+        return true;
+    }
+    // The key of an entry is the first ordinal of its page, encoded so that the keys sort like the ordinals.
+    std::string from_key;
+    std::string to_key;
+    KeyCoderTraits<TYPE_UNSIGNED_BIGINT>::full_encode_ascending(&from, &from_key);
+    KeyCoderTraits<TYPE_UNSIGNED_BIGINT>::full_encode_ascending(&to, &to_key);
+    const auto& keys = _ordinal_index_reader.get_keys();
+    // The first page is the last one starting at or before |from|; the pages that follow it up to the first one
+    // starting at or after |to| hold the rest.
+    auto first = std::upper_bound(keys.begin(), keys.end(), Slice(from_key));
+    if (first != keys.begin()) {
+        --first;
+    }
+    const auto last = std::lower_bound(first, keys.end(), Slice(to_key));
+    for (auto it = first; it != last && max_pages > 0; ++it, --max_pages) {
+        pages->push_back(_ordinal_index_reader.get_value(static_cast<int>(it - keys.begin())));
+    }
+    return true;
 }
 
 Status IndexedColumnReader::new_iterator(const IndexReadOptions& opts, std::unique_ptr<IndexedColumnIterator>* iter) {

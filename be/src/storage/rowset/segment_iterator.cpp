@@ -37,6 +37,7 @@
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
 #include "common/config_exec_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/config_starlet_fwd.h"
@@ -528,6 +529,8 @@ private:
     void _init_prefetch_window(rowid_t start_row);
     // Whether this reader reads ahead through SegmentPrefetchWindow at all.
     bool _should_read_ahead() const;
+    // lake_scan_warm_index: whether the bitmap index lookups ask for the pages they read ahead of the reads.
+    bool _should_prefetch_index_pages() const;
     void _reset_prefetch_window() {
         _prefetch_window.reset();
         _prefetch_late_columns.clear();
@@ -1241,6 +1244,20 @@ bool SegmentIterator::_should_read_ahead() const {
            _segment->lake_tablet_manager() != nullptr && _opts.lake_io_opts.fill_data_cache &&
            !_opts.lake_io_opts.skip_disk_cache && !_opts.lake_io_opts.cache_file_only && !_scan_range.empty() &&
            (_opts.asc_hint || config::desc_hint_split_range <= 0);
+#endif // USE_STAROS
+}
+
+bool SegmentIterator::_should_prefetch_index_pages() const {
+#ifndef USE_STAROS
+    return false;
+#else
+    // The pages a bitmap index lookup reads depend on the predicate's values, so the tablet reader cannot warm them
+    // when it opens the segments; the lookups of a lake query read that fills the cache ask for them instead.
+    const auto& remote_read = _opts.lake_io_opts.remote_read;
+    return config::lake_scan_warm_index && remote_io_scheduler_enabled() && remote_read.is_set &&
+           remote_read.workload == RemoteReadContext::Workload::QUERY && _segment->lake_tablet_manager() != nullptr &&
+           _opts.lake_io_opts.fill_data_cache && !_opts.lake_io_opts.skip_disk_cache &&
+           !_opts.lake_io_opts.cache_file_only;
 #endif // USE_STAROS
 }
 
@@ -4766,6 +4783,7 @@ Status SegmentIterator::_apply_bitmap_index() {
     RETURN_IF(!config::enable_index_bitmap_filter, Status::OK());
     RETURN_IF(_scan_range.empty(), Status::OK());
     DCHECK_EQ(_predicate_columns, _opts.pred_tree.num_columns());
+    const bool prefetch = _should_prefetch_index_pages();
 
     {
         SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_iterator_init_ns);
@@ -4778,7 +4796,7 @@ Status SegmentIterator::_apply_bitmap_index() {
             cid_2_ucid[field->id()] = field->uid();
         }
 
-        RETURN_IF_ERROR(_bitmap_index_evaluator.init([&cid_2_ucid,
+        RETURN_IF_ERROR(_bitmap_index_evaluator.init([&cid_2_ucid, prefetch,
                                                       this](ColumnId cid) -> StatusOr<BitmapIndexIterator*> {
             // NOTE: deliberately the column's OWN unique id, not storage_column_uid(). An extended
             // column (JSON subfield) owns no bitmap index, so this misses every delta column group and
@@ -4802,6 +4820,7 @@ Status SegmentIterator::_apply_bitmap_index() {
             opts.lake_io_opts = _opts.lake_io_opts;
             opts.read_file = _column_files[cid].get();
             opts.stats = _opts.stats;
+            opts.prefetch_pages = prefetch;
             // IDG context — without this, the IDG branch in
             // ColumnReader::new_bitmap_index_iterator is unreachable and
             // fast-path built bitmap indexes stored in .idx sidecar files
@@ -4836,7 +4855,7 @@ Status SegmentIterator::_apply_bitmap_index() {
     {
         SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_filter_timer);
         const auto input_rows = _scan_range.span_size();
-        RETURN_IF_ERROR(_bitmap_index_evaluator.evaluate(_scan_range, _opts.pred_tree));
+        RETURN_IF_ERROR(_bitmap_index_evaluator.evaluate(_scan_range, _opts.pred_tree, prefetch));
         _opts.stats->rows_bitmap_index_filtered += input_rows - _scan_range.span_size();
     }
 

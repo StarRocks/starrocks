@@ -30,6 +30,7 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_json_flat_fwd.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/config_staros_worker_fwd.h"
 #include "common/status.h"
@@ -472,8 +473,8 @@ static bool allocate_initial_coarse_split(const PreparedSegmentReadStatePtr& seg
 }
 
 // lake_scan_warm_index: starts filling the local cache with the index pages the scan of |state| reads next, and
-// returns without waiting. Per segment: the short key index, the zone map and bloom filter roots of |predicate_cids|
-// and the ordinal index roots of |read_cids|. An index root that is not the sole data page of its index sits right
+// returns without waiting. Per segment: the short key index, the zone map, bloom filter and bitmap index roots of
+// |predicate_cids| and the ordinal index roots of |read_cids|. An index root that is not the sole data page of its index sits right
 // after that index's other pages, so the block before it is warmed as well. The fills are scheduled as a demand; the
 // reads that follow join them. Nothing here is required for correctness: a segment whose file cannot warm is read as
 // before.
@@ -551,6 +552,14 @@ static void warm_prepared_indexes(PreparedTabletReadState* state, const TabletSc
                     // A loaded BloomFilterIndexReader keeps its ordinal index, not its filter data pages, so the
                     // root and the block before it are warmed whether it is loaded or not.
                     add(roots.bloom_filter, !roots.bloom_filter_root_is_data);
+                    if (config::enable_index_bitmap_filter) {
+                        // The bitmap index lookups of each segment load these roots before anything else. Their
+                        // indexes have a single level, so no other index page sits before a root.
+                        const bool loaded = reader->has_loaded_bitmap_index();
+                        add_unloaded(roots.bitmap_dict_value, loaded, false);
+                        add_unloaded(roots.bitmap_dict_ordinal, loaded, false);
+                        add_unloaded(roots.bitmap_ordinal, loaded, false);
+                    }
                 }
             }
             for (ColumnId cid : read_cids) {

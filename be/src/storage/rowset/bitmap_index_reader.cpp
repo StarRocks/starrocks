@@ -39,9 +39,11 @@
 #include <memory>
 
 #include "base/string/utf8.h"
+#include "cache/mem_cache/page_cache.h"
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "common/logging.h"
 #include "exprs/function_context.h"
 #include "exprs/like_predicate.h"
 #include "runtime/mem_tracker.h"
@@ -136,6 +138,9 @@ Status BitmapIndexReader::new_iterator(const IndexReadOptions& opts, SegmentBitm
     *iterator = new SegmentBitmapIndexIterator(this, std::move(dict_iter), std::move(bitmap_iter),
                                                std::move(ngram_dict_iter), std::move(ngram_bitmap_iter), _has_null,
                                                bitmap_nums(), opts.idg_bitmap_file_missing);
+    if (opts.prefetch_pages && opts.read_file != nullptr) {
+        (*iterator)->enable_prefetch(opts.read_file, opts.use_page_cache, opts.stats);
+    }
     return Status::OK();
 }
 
@@ -400,6 +405,57 @@ Status SegmentBitmapIndexIterator::read_union_bitmap(const Buffer<rowid_t>& rowi
         *result |= bitmap;
     }
     return Status::OK();
+}
+
+void SegmentBitmapIndexIterator::prefetch_dictionary_page(const void* value) {
+    if (_prefetch_file == nullptr || _prefetch_disabled) {
+        return;
+    }
+    PagePointer page;
+    if (_reader->_dict_column_reader->data_page_at_or_after(value, &page)) {
+        _prefetch_page(page);
+    }
+}
+
+void SegmentBitmapIndexIterator::prefetch_bitmap_pages(const SparseRange<>& ordinals) {
+    if (_prefetch_file == nullptr || _prefetch_disabled) {
+        return;
+    }
+    std::vector<PagePointer> pages;
+    for (size_t i = 0; i < ordinals.size() && pages.size() < kMaxPrefetchBitmapPages; i++) { // NOLINT
+        _reader->_bitmap_column_reader->data_pages_of_ordinals(ordinals[i].begin(), ordinals[i].end(),
+                                                               kMaxPrefetchBitmapPages - pages.size(), &pages);
+    }
+    for (const auto& page : pages) {
+        _prefetch_page(page);
+    }
+}
+
+void SegmentBitmapIndexIterator::_prefetch_page(const PagePointer& page) {
+    if (_prefetch_disabled || page.size == 0 || !_prefetched_pages.insert(page.offset).second) {
+        return;
+    }
+    if (_prefetch_use_page_cache) {
+        auto* cache = StoragePageCache::instance();
+        PageCacheHandle handle;
+        if (cache != nullptr && cache->available() &&
+            cache->lookup(_prefetch_file->page_cache_key(page.offset), &handle)) {
+            return;
+        }
+    }
+    auto handle_or = _prefetch_file->warm_cache_async(page.offset, page.size, true /* urgent */);
+    if (!handle_or.ok()) {
+        // Nothing here is required for correctness: the reads fetch whatever was not prefetched.
+        VLOG(2) << "stop prefetching the bitmap index pages of " << _prefetch_file->filename() << ": "
+                << handle_or.status();
+        _prefetch_disabled = true;
+        return;
+    }
+    if (_prefetch_stats != nullptr) {
+        _prefetch_stats->bitmap_index_prefetch_pages++;
+        _prefetch_stats->bitmap_index_prefetch_blocks += static_cast<int64_t>((*handle_or)->submitted_blocks());
+    }
+    _prefetch_handles.emplace_back(std::move(handle_or).value());
 }
 
 } // namespace starrocks
