@@ -14,17 +14,15 @@
 
 package com.starrocks.connector.parser.trino;
 
+import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.MapType;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructType;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.type.ArrayType;
-import com.starrocks.type.FloatType;
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.MapType;
-import com.starrocks.type.StructType;
-import com.starrocks.type.Type;
-import com.starrocks.type.TypeFactory;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -1256,26 +1254,26 @@ public class TrinoQueryTest extends TrinoTestBase {
         String sql = "select cast(json_parse('{\"eur\": 0.9}') as map(varchar, double))";
         MapType mapType = getOutputMapType(sql);
         Assertions.assertTrue(mapType.getKeyType().isStringType(), mapType.toString());
-        Assertions.assertEquals(FloatType.DOUBLE, mapType.getValueType());
+        Assertions.assertEquals(Type.DOUBLE, mapType.getValueType());
         // The JSON to MAP cast must also plan, not only analyze
         getFragmentPlan(sql);
 
         sql = "select try_cast(json_parse('{\"eur\": 0.9}') as map(varchar, double))";
-        Assertions.assertEquals(FloatType.DOUBLE, getOutputMapType(sql).getValueType());
+        Assertions.assertEquals(Type.DOUBLE, getOutputMapType(sql).getValueType());
 
         sql = "select cast(null as map(varchar, double))";
-        Assertions.assertEquals(FloatType.DOUBLE, getOutputMapType(sql).getValueType());
+        Assertions.assertEquals(Type.DOUBLE, getOutputMapType(sql).getValueType());
 
         sql = "select cast(null as map(bigint, varchar(8)))";
         mapType = getOutputMapType(sql);
-        Assertions.assertEquals(IntegerType.BIGINT, mapType.getKeyType());
-        Assertions.assertEquals(TypeFactory.createVarcharType(8), mapType.getValueType());
+        Assertions.assertEquals(Type.BIGINT, mapType.getKeyType());
+        Assertions.assertEquals(ScalarType.createVarcharType(8), mapType.getValueType());
 
         sql = "select cast(null as map(varchar, decimal(10, 2)))";
-        Assertions.assertEquals(TypeFactory.createUnifiedDecimalType(10, 2), getOutputMapType(sql).getValueType());
+        Assertions.assertEquals(ScalarType.createUnifiedDecimalType(10, 2), getOutputMapType(sql).getValueType());
 
         sql = "select cast(null as map(varchar, array(bigint)))";
-        Assertions.assertEquals(new ArrayType(IntegerType.BIGINT), getOutputMapType(sql).getValueType());
+        Assertions.assertEquals(new ArrayType(Type.BIGINT), getOutputMapType(sql).getValueType());
 
         sql = "select cast(null as map(varchar, row(a bigint, b varchar)))";
         Type valueType = getOutputMapType(sql).getValueType();
@@ -1285,7 +1283,7 @@ public class TrinoQueryTest extends TrinoTestBase {
         sql = "select cast(null as map(varchar, map(varchar, double)))";
         valueType = getOutputMapType(sql).getValueType();
         Assertions.assertTrue(valueType.isMapType(), valueType.toString());
-        Assertions.assertEquals(FloatType.DOUBLE, ((MapType) valueType).getValueType());
+        Assertions.assertEquals(Type.DOUBLE, ((MapType) valueType).getValueType());
 
         sql = "select cast(null as array(map(varchar, double)))";
         Type type = getOutputType(sql);
@@ -1302,7 +1300,7 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "select element_at(rates, 'eur'), rates['eur'] from r";
         QueryStatement stmt = (QueryStatement) analyzeSuccess(sql);
         for (Expr expr : stmt.getQueryRelation().getOutputExpression()) {
-            Assertions.assertEquals(FloatType.DOUBLE, expr.getType(), expr.toString());
+            Assertions.assertEquals(Type.DOUBLE, expr.getType(), expr.toString());
         }
         getFragmentPlan(sql);
     }
