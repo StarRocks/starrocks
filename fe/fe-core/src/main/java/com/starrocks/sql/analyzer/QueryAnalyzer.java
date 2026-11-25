@@ -1942,6 +1942,12 @@ public class QueryAnalyzer {
 
         private Table refreshFilesystemExternalTable(String catalogName, String dbName,
                                                      TableName tableName, Table resolvedTable) {
+            // Read twice -- directly and through a scalar subquery, say -- it is refreshed once and bound to one
+            // object.
+            Table alreadyRefreshed = InsertSourceRefresher.refreshedTable(session, resolvedTable);
+            if (alreadyRefreshed != null) {
+                return alreadyRefreshed;
+            }
             metadataMgr.refreshTable(catalogName, dbName, resolvedTable, Lists.newArrayList(), false);
             Table refreshedTable = metadataMgr.getTable(session, catalogName, dbName, tableName.getTbl());
             if (refreshedTable != null) {
