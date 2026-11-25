@@ -36,4 +36,6 @@ public class OpRuleBit {
     public static final int OP_PUSH_DOWN_TOPN_AGG = 5;
     // Window operator has been split by the window skew rewrite, no need to split again.
     public static final int OP_SPLIT_WINDOW_SKEW = 6;
+    // Aggregate built by mv rollup rewrite: it re-aggregates the mv rows below it.
+    public static final int OP_MV_ROLLUP_AGG = 7;
 }
