@@ -183,6 +183,7 @@ public class ExpressionAnalyzer {
                     ((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.ARRAY_FILTER) ||
                     ((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.ANY_MATCH) ||
                     ((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.ALL_MATCH) ||
+                    ((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.NONE_MATCH) ||
                     ((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.ARRAY_SORTBY) ||
                     ((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.ARRAY_SORT) ||
                     ((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.ARRAY_SORT_LAMBDA)) {
@@ -232,7 +233,8 @@ public class ExpressionAnalyzer {
                 break;
             }
             case FunctionSet.ALL_MATCH:
-            case FunctionSet.ANY_MATCH: {
+            case FunctionSet.ANY_MATCH:
+            case FunctionSet.NONE_MATCH: {
                 // func(lambda_func_expr, arr1...) -> func(array_map(lambda_func_expr, arr1...))
                 FunctionCallExpr arrayMap = new FunctionCallExpr(FunctionSet.ARRAY_MAP,
                         Lists.newArrayList(functionCallExpr.getChildren()));
@@ -1347,6 +1349,7 @@ public class ExpressionAnalyzer {
                     break;
                 case FunctionSet.ALL_MATCH:
                 case FunctionSet.ANY_MATCH:
+                case FunctionSet.NONE_MATCH:
                     if (node.getChildren().size() != 1) {
                         throw new SemanticException(fnName + " should have a input array", node.getPos());
                     }
