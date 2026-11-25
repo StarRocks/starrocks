@@ -89,7 +89,7 @@ class UnifiedPaimonSystemTableReadTest {
 
     private void assertSystemTableRow(CatalogConnectorMetadata catalog, ConnectContext context, String name,
                                       String column, long expected) throws Exception {
-        assertTrue(catalog.tableExists(context, "db", name));
+        assertFalse(catalog.tableExists(context, "db", name));
         var table = assertInstanceOf(PaimonTable.class, catalog.getTable(context, "db", name));
         assertTrue(catalog.listPartitionNames("db", name, ConnectorMetadataRequestContext.DEFAULT).isEmpty());
         var version = catalog.getTableVersionRange("db", table, Optional.empty(), Optional.empty());

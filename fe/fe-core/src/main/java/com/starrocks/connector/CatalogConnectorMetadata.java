@@ -93,11 +93,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     }
 
     private ConnectorMetadata metadataOfTable(String dbName, String tableName) {
-        ConnectorMetadata database = metadataOfDb(dbName);
-        if (database == informationSchema) {
-            return database;
+        ConnectorMetadata dbMetadata = metadataOfDb(dbName);
+        if (dbMetadata == informationSchema) {
+            return dbMetadata;
         }
-        if (database instanceof UnifiedMetadata unified) {
+        if (dbMetadata instanceof UnifiedMetadata unified) {
             return unified.resolveTableForRead(dbName, tableName, tableMetadata);
         }
         // Dedicated Paimon catalogs resolve native system tables through the Paimon connector.
@@ -106,7 +106,7 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
                 || tableName.endsWith(com.starrocks.connector.paimon.PaimonGlobalIndexMetadataTable.SUFFIX))) {
             return tableMetadata;
         }
-        return database;
+        return dbMetadata;
     }
 
     private ConnectorMetadata metadataOfTable(Table table) {
@@ -153,8 +153,7 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     @Override
     public List<String> listPartitionNamesByValue(String databaseName, String tableName,
                                                   List<Optional<String>> partitionValues) {
-        ConnectorMetadata metadata = normal instanceof UnifiedMetadata ? metadataOfTable(databaseName, tableName) : normal;
-        return metadata.listPartitionNamesByValue(databaseName, tableName, partitionValues);
+        return normal.listPartitionNamesByValue(databaseName, tableName, partitionValues);
     }
 
     @Override
@@ -229,13 +228,6 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     @Override
     public boolean tableExists(ConnectContext context, String dbName, String tblName) {
         ConnectorMetadata metadata = metadataOfDb(dbName);
-        if (metadata instanceof UnifiedMetadata) {
-            metadata = metadataOfTable(dbName, tblName);
-            if (metadata == tableMetadata) {
-                // A synthetic metadata table has no entry under its full name in the metastore.
-                return metadata.getTable(context, dbName, tblName) != null;
-            }
-        }
         return metadata.tableExists(context, dbName, tblName);
     }
 

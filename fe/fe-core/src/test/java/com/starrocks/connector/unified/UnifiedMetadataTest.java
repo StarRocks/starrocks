@@ -89,6 +89,7 @@ import static com.starrocks.connector.unified.UnifiedMetadata.PAIMON_STORAGE_HAN
 import static com.starrocks.connector.unified.UnifiedMetadata.PAIMON_STORAGE_HANDLER_VALUE;
 import static com.starrocks.connector.unified.UnifiedMetadata.SPARK_TABLE_PROVIDER_KEY;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -155,18 +156,18 @@ public class UnifiedMetadataTest {
                 hiveMetadata.getTable((ConnectContext) any, "db", "orders");
                 result = base;
                 hiveMetadata.tableExists(connectContext, "db", name);
-                times = 0;
+                result = false;
                 paimonMetadata.getTable(connectContext, "db", name);
                 result = system;
                 paimonMetadata.getTableComment(connectContext, "db", name);
                 result = "system table";
                 paimonMetadata.tableExists(connectContext, "db", name);
-                result = true;
+                times = 0;
             }};
         CatalogConnectorMetadata catalog = unifiedCatalog();
         assertSame(system, catalog.getTable(connectContext, "db", name));
         assertEquals("system table", catalog.getTableComment(connectContext, "db", name));
-        assertTrue(catalog.tableExists(connectContext, "db", name));
+        assertFalse(catalog.tableExists(connectContext, "db", name));
     }
 
     @ParameterizedTest
@@ -217,24 +218,25 @@ public class UnifiedMetadataTest {
             }};
         CatalogConnectorMetadata catalog = unifiedCatalog();
         assertInstanceOf(IcebergSnapshotsTable.class, catalog.getTable(connectContext, "db", "orders$snapshots"));
-        assertTrue(catalog.tableExists(connectContext, "db", "orders$snapshots"));
+        assertFalse(catalog.tableExists(connectContext, "db", "orders$snapshots"));
     }
 
     @Test
     public void testSystemTableBaseLookupErrors() {
+        HiveTable physical = HiveTable.builder().setTableName("missing$snapshots").setFullSchema(List.of())
+                .setProperties(Map.of()).build();
         StarRocksConnectorException unavailable = new StarRocksConnectorException("Metastore unavailable");
         new Expectations() {{
                 hiveMetadata.getTable((ConnectContext) any, "db", "missing");
                 result = new StarRocksConnectorException("Failed to get table",
                         new InvocationTargetException(new NoSuchObjectException("missing")));
-                hiveMetadata.tableExists(connectContext, "db", "missing$snapshots");
-                result = true;
+                hiveMetadata.getTable((ConnectContext) any, "db", "missing$snapshots");
+                result = physical;
                 hiveMetadata.getTable((ConnectContext) any, "db", "unavailable");
                 result = unavailable;
             }};
         CatalogConnectorMetadata catalog = unifiedCatalog();
-        // Without a base table, existence checks still see a physical table with the full name.
-        assertTrue(catalog.tableExists(connectContext, "db", "missing$snapshots"));
+        assertSame(physical, catalog.getTable(connectContext, "db", "missing$snapshots"));
         assertSame(unavailable, assertThrows(StarRocksConnectorException.class,
                 () -> catalog.getTable(connectContext, "db", "unavailable$snapshots")));
     }
