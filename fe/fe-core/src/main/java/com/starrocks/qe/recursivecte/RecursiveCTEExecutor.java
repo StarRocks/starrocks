@@ -283,6 +283,11 @@ public class RecursiveCTEExecutor {
 
             if (node.getOutputExpression() != null) {
                 node.getOutputExpression().forEach(x -> visit(x, context));
+            } else if (node.getSelectList() != null) {
+                // pre-analysis: outputExpr is not populated yet, mirror AstTraverser#visitSelect
+                node.getSelectList().getItems().stream()
+                        .filter(item -> !item.isStar() && item.getExpr() != null)
+                        .forEach(item -> visit(item.getExpr(), context));
             }
 
             if (node.getPredicate() != null) {

@@ -181,6 +181,10 @@ public class TabletReshardJobMgrTest {
         }
 
         @Override
+        protected void addTabletsToInvertedIndex() {
+        }
+
+        @Override
         public TTabletReshardJobsItem getInfo() {
             return new TTabletReshardJobsItem();
         }

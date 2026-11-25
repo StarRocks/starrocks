@@ -67,6 +67,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -406,23 +407,41 @@ public class Database extends MetaObject implements Writable {
         return nameToTable.get(tableName);
     }
 
-    public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String mvName) {
+    /**
+     * Every visible rollup or synchronous materialized view named {@code indexName}, with its table. A synchronous
+     * materialized view's name is unique in the database, but a rollup's only in its table, so more than one table
+     * can have one.
+     *
+     * <p>The base index of a table, which is named after the table, is left out: {@code [_SYNC_MV_]} reads a
+     * materialized index that cannot be read by a table name, and a table is read by its name.
+     *
+     * <p>A temporary table is visible only in the session that created it, and {@link #idToTable} holds every
+     * session's: the ones of other sessions than {@code sessionId} are left out, as a name lookup leaves them out.
+     */
+    public List<Pair<Table, MaterializedIndexMeta>> getMaterializedViewIndexes(String indexName, UUID sessionId) {
         // TODO: add an index to speed it up.
+        List<Pair<Table, MaterializedIndexMeta>> indexes = new ArrayList<>();
         for (Table table : idToTable.values()) {
             if (table instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) table;
+                if (olapTable.isTemporaryTable() && !olapTable.getSessionId().equals(sessionId)) {
+                    continue;
+                }
                 for (MaterializedIndexMeta mvMeta : olapTable.getVisibleIndexMetas()) {
-                    String indexName = olapTable.getIndexNameByMetaId(mvMeta.getIndexMetaId());
-                    if (indexName == null) {
+                    if (mvMeta.getIndexMetaId() == olapTable.getBaseIndexMetaId()) {
                         continue;
                     }
-                    if (indexName.equals(mvName)) {
-                        return Pair.create(table, mvMeta);
+                    String name = olapTable.getIndexNameByMetaId(mvMeta.getIndexMetaId());
+                    if (name == null) {
+                        continue;
+                    }
+                    if (name.equals(indexName)) {
+                        indexes.add(Pair.create(table, mvMeta));
                     }
                 }
             }
         }
-        return null;
+        return indexes;
     }
 
     @Override

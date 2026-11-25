@@ -27,6 +27,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/conjunctive_predicates.h"
+#include "storage/delta_column_group.h"
 #include "storage/empty_iterator.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/utils.h"
@@ -279,6 +280,36 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
             config::enable_compaction_flat_json_mixed_inputs &&
             (flat_json_config != nullptr ? flat_json_config->is_flat_json_enabled() : config::enable_json_flat);
 
+    // A column-mode partial update gives a segment a delta column group, a .cols file holding the whole new column,
+    // and the segment iterator then reads the column from there (SegmentIterator::_get_dcg_segment) through the
+    // access path derived below. Derive the layout from that reader, not the segment's own: a layout that does not
+    // fit the .cols values drops the keys only the .cols file holds and casts its values to the segment's sub-column
+    // types (RB-1351). Only a primary key read loads delta column groups (see Rowset's segment options).
+    const auto& dcgs = _tablet_metadata->dcg_meta().dcgs();
+    const bool reads_dcg = _tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && !dcgs.empty();
+    // The .cols segments opened for the column being derived, whose column readers |readers| points into.
+    std::vector<SegmentPtr> dcg_segments;
+    auto column_reader_of = [&](const Rowset& rowset, const SegmentPtr& segment,
+                                const TabletColumn& col) -> StatusOr<const ColumnReader*> {
+        if (reads_dcg) {
+            // The segment id LakeDeltaColumnGroupLoader looks the segment up by, as the segment iterator builds it.
+            auto it = dcgs.find(static_cast<uint32_t>(rowset.id() + segment->id()));
+            if (it != dcgs.end()) {
+                DeltaColumnGroup dcg;
+                RETURN_IF_ERROR(dcg.load(_tablet_metadata->version(), it->second));
+                const int32_t file_idx = dcg.get_column_idx(col.unique_id()).first;
+                if (file_idx >= 0) {
+                    ASSIGN_OR_RETURN(auto dcg_segment, segment->new_dcg_segment(dcg, file_idx, _tablet_schema,
+                                                                                read_params.lake_io_opts, &_stats));
+                    const ColumnReader* reader = dcg_segment->column_with_uid(col.unique_id());
+                    dcg_segments.emplace_back(std::move(dcg_segment));
+                    return reader;
+                }
+            }
+        }
+        return segment->column_with_uid(col.unique_id());
+    };
+
     std::vector<const ColumnReader*> readers;
     for (size_t i = 0; i < _tablet_schema->num_columns(); i++) {
         const auto& col = _tablet_schema->column(i);
@@ -288,13 +319,14 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
             continue;
         }
         readers.clear();
+        dcg_segments.clear();
         int num_plain = 0;
         for (const auto& rowset : _rowsets) {
             for (const auto& segment : rowset->get_segments()) {
                 if (segment->num_rows() == 0) {
                     continue;
                 }
-                auto reader = segment->column_with_uid(col.unique_id());
+                ASSIGN_OR_RETURN(auto reader, column_reader_of(*rowset, segment, col));
                 if (reader != nullptr && reader->column_type() == LogicalType::TYPE_JSON &&
                     nullptr != reader->sub_readers() && !reader->sub_readers()->empty()) {
                     readers.emplace_back(reader);

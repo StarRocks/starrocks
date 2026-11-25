@@ -42,7 +42,7 @@ Routine Load は、Apache Kafka またはこのラボでは Redpanda を使用�
 
 - [Docker](https://docs.docker.com/engine/install/)
 - Docker に割り当てられた 4 GB の RAM
-- Docker に割り当てられた 10 GB の空きディスクスペース
+- Docker に割り当てられた 20 GB の空きディスクスペース
 
 ### SQL client
 
@@ -152,7 +152,7 @@ StarRocks で Object Storage として MinIO を使用するには、StarRocks �
 
 ### Open the MinIO web UI
 
-http://localhost:9001/access-keys にアクセスします。ユーザー名とパスワードは Docker compose ファイルに指定されており、`miniouser` と `miniopassword` です。1 つのアクセスキーがあることが確認できます。キーは `AAAAAAAAAAAAAAAAAAAA` で、MinIO コンソールではシークレットは表示されませんが、Docker compose ファイルには `BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB` と記載されています。
+http://localhost:9001/console/identity にアクセスします。ユーザー名とパスワードは Docker compose ファイルに指定されており、`miniouser` と `miniopassword` です。1 つのアクセスキーがあることが確認できます。キーは `AAAAAAAAAAAAAAAAAAAA` で、MinIO コンソールではシークレットは表示されませんが、Docker compose ファイルには `BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB` と記載されています。
 
 ![View the MinIO access key](../_assets/quick-start/MinIO-view-key.png)
 
@@ -166,7 +166,7 @@ StarRocks でストレージボリュームを作成する際に、データの 
     LOCATIONS = ("s3://my-starrocks-bucket/")
 ```
 
-[http://localhost:9001/buckets](http://localhost:9001/buckets) を開き、ストレージボリューム用のバケットを追加します。バケット名は `my-starrocks-bucket` にします。3 つのリストされたオプションのデフォルトを受け入れます。
+[http://localhost:9001/console/buckets](http://localhost:9001/console/buckets) を開き、ストレージボリューム用のバケットを追加します。バケット名は `my-starrocks-bucket` にします。3 つのリストされたオプションのデフォルトを受け入れます。
 
 ---
 
@@ -499,7 +499,7 @@ LatestSourcePosition: {"0":"5"}
 
 ## Verify that data is stored in MinIO
 
-MinIO を開き、[http://localhost:9001/browser/](http://localhost:9001/browser/) で `my-starrocks-bucket` の下にオブジェクトが保存されていることを確認します。
+MinIO を開き、[http://localhost:9001/console/browser/](http://localhost:9001/console/browser/) で `my-starrocks-bucket` の下にオブジェクトが保存されていることを確認します。
 
 ---
 

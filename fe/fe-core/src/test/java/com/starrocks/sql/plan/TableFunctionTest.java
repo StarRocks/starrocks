@@ -72,6 +72,18 @@ public class TableFunctionTest extends PlanTestBase {
     }
 
     @Test
+    public void testUsingJoin() throws Exception {
+        // A USING join on TABLE(unnest(...)) joins and outputs the unnest column, not the one-row relation's column.
+        String sql = "SELECT x FROM TABLE(unnest([1, 2])) u(x) JOIN (SELECT 2 AS x) s USING (x)";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "OUTPUT EXPRS:2: x", "predicates: 2: x = 2");
+
+        sql = "SELECT x FROM TABLE(unnest([1, 2])) u(x) FULL JOIN (SELECT 2 AS x UNION ALL SELECT 3 AS x) s USING (x)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "equal join conjunct: 8: expr = 2: x", "coalesce(2: x, 8: expr)");
+    }
+
+    @Test
     public void testSql2() throws Exception {
         String sql = "SELECT * FROM TABLE(unnest(ARRAY<INT>[1])) t0(x), TABLE(unnest(ARRAY<INT>[1, 2, 3])) t1(x)";
         String plan = getFragmentPlan(sql);

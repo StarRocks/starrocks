@@ -420,6 +420,7 @@ public class TransactionState implements Writable, GsonPreProcessable, GsonPostP
     // Tablets that the commit skipped because their physical partition no longer existed, reported under the
     // TXN_ROWS_DROPPED marker only once the transaction is committed, see TxnStateLogUtils.
     // table id -> (physical partition id -> tablet ids). Not persisted, the report is best effort.
+    // Tablets the FE could not resolve at all are kept under table id -1 and physical partition id -1.
     private Map<Long, Map<Long, List<Long>>> ignoredTablets = Maps.newHashMap();
 
     private long lastErrTimeMs = 0;
@@ -1004,7 +1005,8 @@ public class TransactionState implements Writable, GsonPreProcessable, GsonPostP
 
     /**
      * Remember the tablets of the given table that the commit skipped because their physical partition no longer
-     * exists, so that they can be reported once the transaction is committed.
+     * exists, so that they can be reported once the transaction is committed. Table id -1 holds the tablets
+     * the FE could not resolve to any table, under physical partition id -1.
      *
      * @param ignoredTabletsByPartition physical partition id -> tablet ids, empty when nothing was skipped
      */
