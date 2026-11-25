@@ -14,10 +14,23 @@
 
 package com.starrocks.connector.parser.trino;
 
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 public class TrinoQueryTest extends TrinoTestBase {
     @BeforeAll
@@ -997,6 +1010,32 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testSignedIntervalLiteral() throws Exception {
+        // Trino keeps the sign in front of the quoted value apart from the value.
+        assertPlanContains("select date '2022-01-03' + interval -'1' day;", "<slot 2> : '2022-01-02'");
+        assertPlanContains("select date '2022-01-03' - interval -'1' day;", "<slot 2> : '2022-01-04'");
+        assertPlanContains("select date '2022-01-03' + interval -'-1' day;", "<slot 2> : '2022-01-04'");
+        assertPlanContains("select date '2022-01-03' + interval '-1' day;", "<slot 2> : '2022-01-02'");
+        assertPlanContains("select date '2022-03-31' + interval -'1' month;", "<slot 2> : '2022-02-28'");
+        assertPlanContains("select timestamp '2022-01-01 00:00:00' + interval -'90' minute;",
+                "<slot 2> : '2021-12-31 22:30:00'");
+
+        // A same-unit qualifier is a single-unit interval and keeps the sign the same way.
+        assertPlanContains("select date '2022-01-03' + interval '1' day to day;", "<slot 2> : '2022-01-04'");
+        assertPlanContains("select date '2022-01-03' + interval -'1' day to day;", "<slot 2> : '2022-01-02'");
+        assertPlanContains("select date '2022-01-03' + interval -'-1' day to day;", "<slot 2> : '2022-01-04'");
+        assertPlanContains("select date '2022-01-03' + interval '1' year to year;", "<slot 2> : '2023-01-03'");
+        assertPlanContains("select date '2022-01-03' + interval -'1' year to year;", "<slot 2> : '2021-01-03'");
+        assertPlanContains("select date '2022-01-03' + interval -'-1' year to year;", "<slot 2> : '2023-01-03'");
+
+        // A compound qualifier is rejected instead of losing its end field.
+        analyzeFail("select date '2022-01-03' + interval '1 12' day to hour",
+                "does not support the interval qualifier DAY TO HOUR");
+        analyzeFail("select date '2022-01-03' + interval '1-2' year to month",
+                "does not support the interval qualifier YEAR TO MONTH");
+    }
+
+    @Test
     public void selectDoubleLiteral() throws Exception {
         String sql = "select 1.0";
         assertPlanContains(sql, "<slot 2> : 1.0");
@@ -1207,6 +1246,54 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testStandaloneUnnest() throws Exception {
+        // Only the UNNEST columns are visible, not the one-row relation it is joined to.
+        assertOutputColumns("select * from unnest(array[1, 2])", List.of("unnest"));
+        assertOutputColumns("select * from unnest(array[1, 2]) as t(x)", List.of("x"));
+        assertOutputColumns("select t.* from unnest(array[1, 2], array['a', 'b']) as t(x, y)", List.of("x", "y"));
+        assertPlanContains("select x from unnest(array[1, 2]) as t(x)", "tableFunctionName: unnest");
+
+        // UNNEST on the left side of a join
+        String sql = "select t.x, t0.v2 from unnest(array[1, 2]) as t(x) join t0 on t.x = t0.v1";
+        assertOutputColumns(sql, List.of("x", "v2"));
+        assertPlanContains(sql, "tableFunctionName: unnest");
+
+        // UNNEST in a CTE
+        sql = "with xs as (select x from unnest(array[1, 2, 3]) as t(x)) select count(*) from xs";
+        assertPlanContains(sql, "tableFunctionName: unnest");
+
+        // UNNEST on the right side of a join still references its left input.
+        sql = "select t0.v1, t.x from t0 cross join unnest(array[t0.v2, t0.v3]) as t(x)";
+        assertOutputColumns(sql, List.of("v1", "x"));
+        assertPlanContains(sql, "tableFunctionName: unnest", "[2: v2,3: v3]");
+
+        // A USING join on UNNEST joins and outputs the UNNEST columns, not the one-row relation's column.
+        sql = "select x from unnest(array[1, 2]) as u(x) join (select 2 as x) as s using (x)";
+        assertPlanContains(sql, "OUTPUT EXPRS:2: x", "predicates: 2: x = 2");
+        sql = "select x, y from unnest(array[1, 2], array['a', 'b']) as u(x, y) " +
+                "join (select 2 as x, 'b' as y) as s using (x, y)";
+        assertPlanContains(sql, "OUTPUT EXPRS:2: x | 3: y", "predicates: 2: x = 2, 3: y = 'b'");
+        sql = "select x from unnest(array[1, 2]) as u(x) full join (select 2 as x union all select 3 as x) as s using (x)";
+        assertPlanContains(sql, "equal join conjunct: 8: expr = 2: x", "coalesce(2: x, 8: expr)");
+
+        // A subquery in the JOIN ON clause can reference the UNNEST alias.
+        sql = "select u.x from unnest(array[1, 2]) as u(x) join (select 1 as k) as s " +
+                "on exists (select 1 from (values (1)) as r(y) where r.y = u.x)";
+        assertPlanContains(sql, "LEFT SEMI JOIN", "equal join conjunct: 2: x = 6: y");
+
+        analyzeFail("select * from unnest(array[1, 2]) as t(x, y)", "has 1 columns available but 2 columns specified");
+        analyzeFail("select * from unnest(array[10, 20]) with ordinality",
+                "does not support UNNEST WITH ORDINALITY");
+        analyzeFail("select t0.v1, u.x, u.n from t0 cross join unnest(array[t0.v2]) with ordinality as u(x, n)",
+                "does not support UNNEST WITH ORDINALITY");
+    }
+
+    private static void assertOutputColumns(String sql, List<String> expected) {
+        QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
+        Assertions.assertEquals(expected, statement.getQueryRelation().getColumnOutputNames());
+    }
+
+    @Test
     public void testRandom() throws Exception {
         String sql = "select rand();";
         assertPlanContains(sql, "<slot 2> : rand()");
@@ -1237,6 +1324,92 @@ public class TrinoQueryTest extends TrinoTestBase {
     public void testCastArrayDataType() throws Exception {
         String sql = "select cast(ARRAY[1] as array(int))";
         assertPlanContains(sql, " <slot 2> : [1]");
+    }
+
+    @Test
+    public void testCastMapDataType() throws Exception {
+        String sql = "select cast(json_parse('{\"eur\": 0.9}') as map(varchar, double))";
+        MapType mapType = getOutputMapType(sql);
+        Assertions.assertTrue(mapType.getKeyType().isStringType(), mapType.toString());
+        Assertions.assertEquals(FloatType.DOUBLE, mapType.getValueType());
+        // The JSON to MAP cast must also plan, not only analyze
+        getFragmentPlan(sql);
+
+        sql = "select try_cast(json_parse('{\"eur\": 0.9}') as map(varchar, double))";
+        Assertions.assertEquals(FloatType.DOUBLE, getOutputMapType(sql).getValueType());
+
+        sql = "select cast(null as map(varchar, double))";
+        Assertions.assertEquals(FloatType.DOUBLE, getOutputMapType(sql).getValueType());
+
+        sql = "select cast(null as map(bigint, varchar(8)))";
+        mapType = getOutputMapType(sql);
+        Assertions.assertEquals(IntegerType.BIGINT, mapType.getKeyType());
+        Assertions.assertEquals(TypeFactory.createVarcharType(8), mapType.getValueType());
+
+        sql = "select cast(null as map(varchar, decimal(10, 2)))";
+        Assertions.assertEquals(TypeFactory.createUnifiedDecimalType(10, 2), getOutputMapType(sql).getValueType());
+
+        sql = "select cast(null as map(varchar, array(bigint)))";
+        Assertions.assertEquals(new ArrayType(IntegerType.BIGINT), getOutputMapType(sql).getValueType());
+
+        sql = "select cast(null as map(varchar, row(a bigint, b varchar)))";
+        Type valueType = getOutputMapType(sql).getValueType();
+        Assertions.assertTrue(valueType.isStructType(), valueType.toString());
+        Assertions.assertEquals(2, ((StructType) valueType).getFields().size());
+
+        sql = "select cast(null as map(varchar, map(varchar, double)))";
+        valueType = getOutputMapType(sql).getValueType();
+        Assertions.assertTrue(valueType.isMapType(), valueType.toString());
+        Assertions.assertEquals(FloatType.DOUBLE, ((MapType) valueType).getValueType());
+
+        sql = "select cast(null as array(map(varchar, double)))";
+        Type type = getOutputType(sql);
+        Assertions.assertTrue(type.isArrayType(), type.toString());
+        Assertions.assertTrue(((ArrayType) type).getItemType().isMapType(), type.toString());
+    }
+
+    @Test
+    public void testCastJsonToMapInCte() throws Exception {
+        // A JSON to MAP cast in a CTE: upper-case names, a column argument and map lookups
+        String sql = "with r as (" +
+                "select CAST(JSON_PARSE(rates_json) AS MAP(VARCHAR, DOUBLE)) as rates " +
+                "from (values ('{\"eur\": 0.9}')) as t(rates_json)) " +
+                "select element_at(rates, 'eur'), rates['eur'] from r";
+        QueryStatement stmt = (QueryStatement) analyzeSuccess(sql);
+        for (Expr expr : stmt.getQueryRelation().getOutputExpression()) {
+            Assertions.assertEquals(FloatType.DOUBLE, expr.getType(), expr.toString());
+        }
+        getFragmentPlan(sql);
+    }
+
+    @Test
+    public void testCastMapDataTypeWithWrongArguments() {
+        boolean enableDialectDowngrade = connectContext.getSessionVariable().isEnableDialectDowngrade();
+        try {
+            // With downgrade on, a TrinoParserUnsupportedException would re-parse the query as StarRocks SQL
+            connectContext.getSessionVariable().setEnableDialectDowngrade(true);
+            for (String sql : List.of("select cast(null as map(varchar))",
+                    "select cast(null as map(varchar, double, bigint))",
+                    "select cast(null as map(varchar, 10))")) {
+                UnsupportedException e = Assertions.assertThrows(UnsupportedException.class,
+                        () -> SqlParser.parse(sql, connectContext.getSessionVariable()), sql);
+                Assertions.assertTrue(e.getMessage().contains("does not support the type"), e.getMessage());
+                Assertions.assertFalse(e.getMessage().contains("StarRocks parser also can not parse"), e.getMessage());
+            }
+        } finally {
+            connectContext.getSessionVariable().setEnableDialectDowngrade(enableDialectDowngrade);
+        }
+    }
+
+    private static Type getOutputType(String sql) {
+        QueryStatement stmt = (QueryStatement) analyzeSuccess(sql);
+        return stmt.getQueryRelation().getOutputExpression().get(0).getType();
+    }
+
+    private static MapType getOutputMapType(String sql) {
+        Type type = getOutputType(sql);
+        Assertions.assertTrue(type.isMapType(), type.toString());
+        return (MapType) type;
     }
 
     @Test

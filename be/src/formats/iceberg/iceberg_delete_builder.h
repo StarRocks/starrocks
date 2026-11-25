@@ -114,6 +114,9 @@ private:
             const std::shared_ptr<CacheInputStream>& cache_input_stream,
             const std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream) const;
     static void update_delete_file_io_counter(RuntimeProfile* parent_profile, const PositionDeleteIoStats& stats);
+    // Adds the bytes of a delete file read to the audit counters of the scanner reading the data file.
+    void add_delete_file_audit_bytes(const FormatScannerStats& fs_stats,
+                                     const std::shared_ptr<CacheInputStream>& cache_input_stream) const;
 
     IcebergDeleteBuilderContext _ctx;
     DeletionBitmapPtr _deletion_bitmap;

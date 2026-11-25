@@ -149,6 +149,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of audit log files that can be retained within each retention period specified by the `audit_log_roll_interval` parameter.
 - Introduced in: -
 
+### `audit_scan_stats_max_scans`
+
+- Default: 1000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of scan entries that one execution attempt records in the `ScanStats` field of a query audit event. An attempt whose plan has more scan nodes keeps the first entries and is marked `scansTruncated`. `ScanStats` is recorded when the session variable `enable_collect_table_level_scan_stats` is `true`.
+- Introduced in: -
+
 ### `audit_stmt_before_execute`
 
 - Default: false

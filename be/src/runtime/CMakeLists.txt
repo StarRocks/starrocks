@@ -27,6 +27,7 @@ set(RUNTIME_SRCS
     descriptors.cpp
     descriptors_ext.cpp
     runtime_state.cpp
+    kafka_scan_range_report.cpp
     mem_tracker.cpp
     mem_pool.cpp
     runtime_filter.cpp

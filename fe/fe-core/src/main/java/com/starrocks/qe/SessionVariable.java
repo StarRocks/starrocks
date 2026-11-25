@@ -3436,6 +3436,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS)
     private boolean enableCollectTableLevelScanStats = true;
 
+    public boolean isEnableCollectTableLevelScanStats() {
+        return enableCollectTableLevelScanStats;
+    }
+
     @VarAttr(name = HIVE_TEMP_STAGING_DIR)
     private String hiveTempStagingDir = "/tmp/starrocks";
 
@@ -4442,6 +4446,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getQueryMemLimit() {
         return queryMemLimit;
+    }
+
+    public void copyQueryQueuePolicyFrom(SessionVariable caller) {
+        enableQueryQueue = caller.enableQueryQueue;
+        // Inherit queue classification without applying the unrelated execution-mode presets.
+        execMode = caller.execMode;
     }
 
     public void copyQueryResourcePolicyFrom(SessionVariable caller) {
@@ -5860,6 +5870,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getloadTransmissionCompressionType() {
         return loadTransmissionCompressionType;
+    }
+
+    public void setLoadTransmissionCompressionType(String loadTransmissionCompressionType) {
+        this.loadTransmissionCompressionType = loadTransmissionCompressionType;
     }
 
     public boolean isInterpolatePassthrough() {

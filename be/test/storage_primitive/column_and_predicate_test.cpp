@@ -113,10 +113,13 @@ TEST_F(ColumnAndPredicateTest, zonemap_filter) {
 }
 
 TEST_F(ColumnAndPredicateTest, convert_to) {
+    auto target = get_type_info(TYPE_INT);
     const ColumnPredicate* new_pred = nullptr;
-    Status st = _pred->convert_to(&new_pred, get_type_info(TYPE_INT), &_pool);
+    Status st = _pred->convert_to(&new_pred, target, &_pool);
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(new_pred->debug_string(), "AND(0:(columnId(0)>=10), 1:(columnId(0)<=20))");
+    // The converted predicate shares the target type instead of a copy.
+    ASSERT_EQ(target.get(), new_pred->type_info());
 }
 
 } // namespace starrocks

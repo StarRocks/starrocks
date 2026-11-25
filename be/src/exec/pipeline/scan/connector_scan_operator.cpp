@@ -825,6 +825,24 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     _data_source->set_read_limit(_limit);
     _data_source->set_runtime_profile(runtime_profile);
     _data_source->update_has_any_predicate();
+    if (_data_source->can_wait_for_input()) {
+        _input_waiting = std::make_shared<std::atomic<bool>>(false);
+    }
+}
+
+// The input is empty for now and something else fills it, such as the pipe of a Kafka scan range: instead of the
+// operator running IO tasks that keep finding it empty, the source waits until it becomes readable, which wakes the
+// operator.
+void ConnectorChunkSource::_wait_for_input() {
+    if (_input_waiting == nullptr) {
+        return;
+    }
+    // set first, since the callback may run before wait_for_input() returns
+    _input_waiting->store(true, std::memory_order_release);
+    if (!_data_source->wait_for_input(_scan_op->input_ready_callback(_input_waiting))) {
+        // readable already, so the next IO task reads it at once
+        _input_waiting->store(false, std::memory_order_release);
+    }
 }
 
 ConnectorChunkSource::~ConnectorChunkSource() {
@@ -871,6 +889,8 @@ void ConnectorChunkSource::_reset_reuse_state(RuntimeState* state, MorselPtr&& m
     _cpu_time_spent_ns = 0;
     _scan_rows_num = 0;
     _scan_bytes = 0;
+    _scan_audit_counters = ScanAuditCounters{};
+    _reported_scan_audit_counters = ScanAuditCounters{};
     _io_time_spent_ns = 0;
     _status = Status::OK();
     _reach_limit.store(false);
@@ -892,6 +912,7 @@ void ConnectorChunkSource::release_for_reuse(RuntimeState* state) {
     }
 
     _data_source->release_for_reuse(state);
+    _scan_audit_counters = _data_source->scan_audit_counters();
     _opened = false;
     _closed = true;
     _status = Status::EndOfFile("");
@@ -1014,6 +1035,7 @@ void ConnectorChunkSource::close(RuntimeState* state) {
     }
     _closed = true;
     _data_source->close(state);
+    _scan_audit_counters = _data_source->scan_audit_counters();
 }
 
 Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_alloc_failed) {
@@ -1126,6 +1148,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
                     if (_status.is_time_out()) {
                         Status t = _status;
                         _status = Status::OK();
+                        _wait_for_input();
                         return t;
                     } else {
                         return _status;
@@ -1139,6 +1162,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
             DCHECK(_status.ok() || _status.is_end_of_file());
             _scan_rows_num = _data_source->raw_rows_read();
             _scan_bytes = _data_source->num_bytes_read();
+            _scan_audit_counters = _data_source->scan_audit_counters();
             _cpu_time_spent_ns = _data_source->cpu_time_spent();
             _io_time_spent_ns = _data_source->io_time_spent();
             delta_io_time_ns = _io_time_spent_ns - prev_io_time_ns;

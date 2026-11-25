@@ -76,6 +76,7 @@ public:
     int64_t raw_rows_read() const override { return _raw_rows_read; }
     int64_t num_rows_read() const override { return _num_rows_read; }
     int64_t num_bytes_read() const override { return _bytes_read; }
+    ScanAuditCounters scan_audit_counters() const override { return _scan_audit_counters; }
     int64_t cpu_time_spent() const override { return _cpu_time_spent_ns; }
 
     void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) override {
@@ -115,6 +116,8 @@ private:
     void apply_child_split_context(const pipeline::LakeSplitContext& split_context, bool use_prepared_state);
     Status build_scan_range(RuntimeState* state);
     void init_counter(RuntimeState* state);
+    void _update_scan_audit_counters(int64_t raw_rows_read, int64_t rows_del_filtered_after_read, int64_t remote_bytes,
+                                     int64_t local_disk_bytes);
     void update_realtime_counter(Chunk* chunk);
     void update_counter(RuntimeState* state);
     void refresh_reusable_reader_key();
@@ -184,6 +187,7 @@ private:
     int64_t _num_rows_read = 0;
     int64_t _raw_rows_read = 0;
     int64_t _bytes_read = 0;
+    ScanAuditCounters _scan_audit_counters;
     int64_t _cpu_time_spent_ns = 0;
 
     RuntimeProfile::Counter* _bytes_read_counter = nullptr;

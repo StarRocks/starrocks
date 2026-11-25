@@ -14,11 +14,19 @@
 
 #include "platform/llm/ai_media_input.h"
 
+#include <event2/http.h>
+
 #include <algorithm>
+#include <cerrno>
 #include <limits>
+#include <memory>
 #include <new>
+#include <string_view>
+#include <utility>
 
 #include "base/url_coding.h"
+#include "gutil/strings/memutil.h"
+#include "types/file_value.h"
 
 namespace starrocks {
 namespace {
@@ -36,7 +44,7 @@ bool is_mp4_brand(std::string_view brand) {
            brand == "iso6" || brand == "mp41" || brand == "mp42" || brand == "avc1" || brand == "M4V ";
 }
 
-std::string_view detect_mime(std::string_view bytes) {
+std::string_view detect_content_type_by_bytes(std::string_view bytes) {
     if (bytes.size() >= 6 && bytes.substr(0, 3) == std::string_view("\xff\xd8\xff", 3)) {
         const auto marker = static_cast<unsigned char>(bytes[3]);
         const auto segment_size = (static_cast<unsigned char>(bytes[4]) << 8) | static_cast<unsigned char>(bytes[5]);
@@ -65,48 +73,114 @@ std::string_view detect_mime(std::string_view bytes) {
     return {};
 }
 
-bool mime_matches(std::string_view declared, std::string_view detected) {
-    if (declared.empty()) return true;
-    if (declared.size() != detected.size()) return false;
-    for (size_t i = 0; i < declared.size(); ++i) {
-        const unsigned char byte = declared[i];
-        if ((byte >= 'A' && byte <= 'Z' ? byte - 'A' + 'a' : byte) != detected[i]) return false;
+bool ascii_iequals(std::string_view value, std::string_view other) {
+    return value.size() == other.size() && memcasecmp(value.data(), other.data(), other.size()) == 0;
+}
+
+std::string_view content_type_without_parameters(std::string_view content_type) {
+    return content_type.substr(0, content_type.find_first_of("; \t"));
+}
+
+bool has_content_type_prefix(std::string_view content_type, std::string_view prefix) {
+    return ascii_iequals(content_type.substr(0, prefix.size()), prefix);
+}
+
+Status validate_file_url(const std::string& url) {
+    if (url.find('\0') != std::string::npos) return Status::DataQualityError("Invalid AI FILE URL");
+    errno = 0;
+    std::unique_ptr<evhttp_uri, decltype(&evhttp_uri_free)> uri(evhttp_uri_parse(url.c_str()), evhttp_uri_free);
+    if (!uri) {
+        if (errno == ENOMEM) return Status::MemoryLimitExceeded("Failed to parse AI FILE URL");
+        return Status::DataQualityError("Invalid AI FILE URL");
     }
-    return true;
+    const char* scheme = evhttp_uri_get_scheme(uri.get());
+    const char* host = evhttp_uri_get_host(uri.get());
+    if (!scheme || (!ascii_iequals(scheme, "https") && !ascii_iequals(scheme, "http")) || !host || !*host) {
+        return Status::DataQualityError("Invalid AI FILE URL");
+    }
+    return Status::OK();
+}
+
+StatusOr<std::string_view> detect_content_type_by_url(const std::string& url) {
+    // The caller has validated the HTTP(S) URL, so the authority follows "://".
+    std::string_view host_and_path(url);
+    host_and_path.remove_prefix(host_and_path.find("://") + 3);
+    host_and_path = host_and_path.substr(0, host_and_path.find_first_of("?#"));
+    const auto slash = host_and_path.rfind('/');
+    const auto dot = host_and_path.rfind('.');
+    if (slash != std::string_view::npos && dot != std::string_view::npos && dot > slash) {
+        const auto extension = host_and_path.substr(dot);
+        if (ascii_iequals(extension, ".jpg") || ascii_iequals(extension, ".jpeg")) return "image/jpeg";
+        if (ascii_iequals(extension, ".png")) return "image/png";
+        if (ascii_iequals(extension, ".webp")) return "image/webp";
+        if (ascii_iequals(extension, ".mp4")) return "video/mp4";
+    }
+    return Status::DataQualityError("Cannot infer AI FILE content type from URL path");
 }
 
 } // namespace
 
-StatusOr<AIMediaInput> prepare_inline_ai_media(std::string_view bytes, std::string_view content_type,
-                                               size_t max_bytes) {
-    if (bytes.empty()) return Status::InvalidArgument("AI FILE input is empty");
-    if (bytes.size() > max_bytes) return Status::InvalidArgument("AI FILE input exceeds the configured byte limit");
-    const auto mime = detect_mime(bytes);
-    if (mime.empty()) return Status::InvalidArgument("AI FILE input has an unsupported or invalid media header");
-    if (!mime_matches(content_type, mime)) {
-        return Status::InvalidArgument("AI FILE content type does not match its media header");
-    }
+bool AIMediaInput::is_image() const {
+    return has_content_type_prefix(content_type, "image/");
+}
+
+bool AIMediaInput::is_audio() const {
+    return has_content_type_prefix(content_type, "audio/");
+}
+
+bool AIMediaInput::is_video() const {
+    return has_content_type_prefix(content_type, "video/");
+}
+
+StatusOr<AIMediaInput> create_ai_media(const FileRowRef& file, size_t inline_max_bytes) {
     try {
-        return AIMediaInput{std::string(mime), std::string(bytes)};
+        std::string_view content_type = file.content_type.value_or(Slice());
+        if (file.inline_bytes) {
+            const std::string_view bytes = *file.inline_bytes;
+            if (bytes.empty()) return Status::DataQualityError("AI FILE input is empty");
+            if (bytes.size() > inline_max_bytes) {
+                return Status::DataQualityError("AI FILE input exceeds the configured byte limit");
+            }
+            if (content_type.empty()) {
+                content_type = detect_content_type_by_bytes(bytes);
+                if (content_type.empty())
+                    return Status::DataQualityError("AI FILE input has an unsupported or invalid media header");
+            }
+            return AIMediaInput{.content_type = std::string(content_type), .inline_bytes = std::string(bytes)};
+        }
+        if (file.uri) {
+            if (file.offset.value_or(0) != 0) {
+                return Status::DataQualityError("AI FILE URL requires a NULL or zero offset");
+            }
+            std::string url = file.uri->to_string();
+            RETURN_IF_ERROR(validate_file_url(url));
+            if (content_type.empty()) {
+                ASSIGN_OR_RETURN(content_type, detect_content_type_by_url(url));
+            }
+            return AIMediaInput{.content_type = std::string(content_type), .referenced_url = std::move(url)};
+        }
+        return Status::DataQualityError("AI FILE input has neither inline bytes nor a URL");
     } catch (const std::bad_alloc&) {
         return Status::MemoryLimitExceeded("Failed to allocate AI FILE input");
     }
 }
 
 StatusOr<std::string> encode_ai_media_data_uri(const AIMediaInput& media) {
-    const auto mime = detect_mime(media.bytes);
-    if (mime.empty() || media.mime_type != mime) return Status::InvalidArgument("AI media input is invalid");
+    const auto content_type = content_type_without_parameters(media.content_type);
+    if (!media.inline_bytes || media.inline_bytes->empty() || media.referenced_url || content_type.empty()) {
+        return Status::InvalidArgument("AI media input is invalid");
+    }
     constexpr size_t kDataUriOverhead = sizeof("data:;base64,") - 1;
-    const size_t prefix_size = kDataUriOverhead + mime.size();
     // Provider JSON writers use 32-bit string lengths, even on hosts with a larger std::string limit.
     const size_t max_size = std::min<size_t>(std::string{}.max_size(), std::numeric_limits<uint32_t>::max());
-    if (media.bytes.size() > (max_size - prefix_size) / 4 * 3) {
+    if (content_type.size() > max_size - kDataUriOverhead ||
+        media.inline_bytes->size() > (max_size - kDataUriOverhead - content_type.size()) / 4 * 3) {
         return Status::InvalidArgument("AI media input is too large to encode");
     }
     try {
         std::string encoded;
-        base64_encode(media.bytes, &encoded);
-        encoded.insert(0, "data:" + std::string(mime) + ";base64,");
+        base64_encode(*media.inline_bytes, &encoded);
+        encoded.insert(0, "data:" + std::string(content_type) + ";base64,");
         return encoded;
     } catch (const std::bad_alloc&) {
         return Status::MemoryLimitExceeded("Failed to encode AI media input");

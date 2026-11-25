@@ -428,13 +428,18 @@ void collect_idg_orphan_files(const IndexDeltaGroupMetadataPB& old_idg_meta,
 class PrimaryKeyTxnLogApplier : public TxnLogApplier {
 public:
     PrimaryKeyTxnLogApplier(const Tablet& tablet, MutableTabletMetadataPtr metadata, int64_t new_version,
-                            bool rebuild_pindex, bool skip_write_tablet_metadata)
+                            bool rebuild_pindex, bool skip_write_tablet_metadata, TabletMetadataPtr base_metadata)
             : _tablet(tablet),
               _metadata(std::move(metadata)),
+              _base_metadata(std::move(base_metadata)),
               _base_version(_metadata->version()),
               _new_version(new_version),
               _builder(_tablet, _metadata),
               _rebuild_pindex(rebuild_pindex) {
+        // The index rebuild and the delete vector lookups would ignore any other metadata and read the base
+        // version back from storage.
+        DCHECK(_base_metadata == nullptr ||
+               (_base_metadata->id() == _metadata->id() && _base_metadata->version() == _base_version));
         _metadata->set_version(_new_version);
         _skip_write_tablet_metadata = skip_write_tablet_metadata;
     }
@@ -482,8 +487,9 @@ public:
             _metadata->clear_sstable_meta();
             _guard.reset(nullptr);
             _index_entry = nullptr;
-            ASSIGN_OR_RETURN(_index_entry, _tablet.primary_key_mgr()->rebuild_primary_index(
-                                                   _metadata, &_builder, _base_version, _new_version, _guard));
+            ASSIGN_OR_RETURN(_index_entry,
+                             _tablet.primary_key_mgr()->rebuild_primary_index(_metadata, &_builder, _base_version,
+                                                                              _new_version, _guard, _base_metadata));
             _rebuild_pindex = false;
         }
         return Status::OK();
@@ -688,8 +694,9 @@ private:
     // in `TxnLogApplier.init`, because we have to build primary index after apply `schema_change_log` finish.
     Status prepare_primary_index() {
         if (_index_entry == nullptr) {
-            ASSIGN_OR_RETURN(_index_entry, _tablet.primary_key_mgr()->prepare_primary_index(
-                                                   _metadata, &_builder, _base_version, _new_version, _guard));
+            ASSIGN_OR_RETURN(_index_entry,
+                             _tablet.primary_key_mgr()->prepare_primary_index(_metadata, &_builder, _base_version,
+                                                                              _new_version, _guard, _base_metadata));
             // Reset publish SST stats so we only count SSTs flushed during this publish session
             _index_entry->value().reset_publish_sst_stats();
             _publish_begin_time = UnixMillis();
@@ -722,11 +729,12 @@ private:
                 RETURN_IF_ERROR(update_metadata_schema(op_write, log->txn_id(), _metadata, _tablet.tablet_mgr()));
                 if (is_column_mode_partial_update(op_write)) {
                     RETURN_IF_ERROR(_tablet.primary_key_mgr()->publish_column_mode_partial_update(
-                            op_write, log->txn_id(), _metadata, &_tablet, _index_entry, &_builder, _base_version));
+                            op_write, log->txn_id(), _metadata, &_tablet, _index_entry, &_builder, _base_version,
+                            _base_metadata));
                 } else {
                     RETURN_IF_ERROR(_tablet.primary_key_mgr()->publish_primary_key_tablet(
                             op_write, log->txn_id(), _metadata, &_tablet, _index_entry, &_builder, _base_version,
-                            true));
+                            _base_metadata, true));
                 }
             }
         }
@@ -750,10 +758,10 @@ private:
         RETURN_IF_ERROR(prepare_primary_index());
         if (is_column_mode_partial_update(op_write)) {
             return _tablet.primary_key_mgr()->publish_column_mode_partial_update(
-                    op_write, txn_id, _metadata, &_tablet, _index_entry, &_builder, _base_version);
+                    op_write, txn_id, _metadata, &_tablet, _index_entry, &_builder, _base_version, _base_metadata);
         } else {
-            return _tablet.primary_key_mgr()->publish_primary_key_tablet(op_write, txn_id, _metadata, &_tablet,
-                                                                         _index_entry, &_builder, _base_version);
+            return _tablet.primary_key_mgr()->publish_primary_key_tablet(
+                    op_write, txn_id, _metadata, &_tablet, _index_entry, &_builder, _base_version, _base_metadata);
         }
     }
 
@@ -896,7 +904,10 @@ private:
             _base_version = op_schema_change.alter_version();
             auto base_meta = std::make_shared<TabletMetadata>(*_metadata);
             base_meta->set_version(_base_version);
-            RETURN_IF_ERROR(_tablet.put_metadata(std::move(base_meta)));
+            RETURN_IF_ERROR(_tablet.put_metadata(base_meta));
+            // The logs after this one apply on the version just saved, so it is the base version now: the index
+            // rebuild and the writes read the delete vectors at _base_version from it.
+            _base_metadata = std::move(base_meta);
         }
         return Status::OK();
     }
@@ -1082,6 +1093,10 @@ private:
 
     Tablet _tablet;
     MutableTabletMetadataPtr _metadata;
+    // The tablet metadata at _base_version, or null: the metadata _metadata was copied from, or the version a
+    // schema change log saved when it moved _base_version. Read-only: the delete vectors at _base_version come
+    // from it, both for the old segments a write deletes rows from and for a cold index to rebuild with.
+    TabletMetadataPtr _base_metadata;
     int64_t _base_version{0};
     int64_t _new_version{0};
     int64_t _max_txn_id{0}; // Used as the file name prefix of the delvec file
@@ -1662,10 +1677,10 @@ private:
 
 std::unique_ptr<TxnLogApplier> new_txn_log_applier(const Tablet& tablet, MutableTabletMetadataPtr metadata,
                                                    int64_t new_version, bool rebuild_pindex,
-                                                   bool skip_write_tablet_metadata) {
+                                                   bool skip_write_tablet_metadata, TabletMetadataPtr base_metadata) {
     if (metadata->schema().keys_type() == PRIMARY_KEYS) {
         return std::make_unique<PrimaryKeyTxnLogApplier>(tablet, std::move(metadata), new_version, rebuild_pindex,
-                                                         skip_write_tablet_metadata);
+                                                         skip_write_tablet_metadata, std::move(base_metadata));
     }
     return std::make_unique<NonPrimaryKeyTxnLogApplier>(tablet, std::move(metadata), new_version,
                                                         skip_write_tablet_metadata);

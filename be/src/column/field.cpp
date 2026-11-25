@@ -16,13 +16,6 @@
 
 namespace starrocks {
 
-FieldPtr Field::convert_to(LogicalType to_type) const {
-    FieldPtr new_field = std::make_shared<Field>(*this);
-    new_field->_type = get_type_info(to_type);
-    new_field->_short_key_length = static_cast<uint8_t>(new_field->_type->size());
-    return new_field;
-}
-
 FieldPtr Field::convert_to_dict_field(const Field& field) {
     if (field.type()->type() == TYPE_VARCHAR) {
         FieldPtr res = std::make_shared<Field>(field);

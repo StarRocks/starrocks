@@ -151,6 +151,7 @@ set(EXEC_FILES
         ./compute_env/load/stream_load_metrics_test.cpp
         ./compute_env/load/stream_load_context_handle_test.cpp
         #./orchestration/routine_load_task_executor_test.cpp
+        ./orchestration/routine_load_kafka_scan_range_test.cpp
         ./compute_env/load/time_bounded_stream_load_pipe_test.cpp
         ./runtime/merge_cascade_test.cpp
         ./runtime/exec_env_test.cpp
@@ -259,7 +260,6 @@ SET(DW_TEST_FILES
     ./storage/compaction_parallelization_test.cpp
     ./storage/compaction_utils_test.cpp
     ./storage/conjunctive_predicates_test.cpp
-    ./storage/convert_helper_test.cpp
     ./storage/cumulative_compaction_test.cpp
     ./storage/data_dir_test.cpp
     ./storage/datum_variant_test.cpp

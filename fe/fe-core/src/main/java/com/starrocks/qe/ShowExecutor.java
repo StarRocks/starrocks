@@ -115,6 +115,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -3500,7 +3501,7 @@ public class ShowExecutor {
                     .map(tableName -> tableName.toString())
                     .orElse(""));
             row.add(pipe.getPipeSource().toString());
-            row.add(pipe.getOriginSql());
+            row.add(SqlCredentialRedactor.redact(pipe.getOriginSql()));
             row.add(pipe.getPropertiesJson());
 
             rows.add(row);

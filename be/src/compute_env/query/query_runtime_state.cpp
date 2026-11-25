@@ -110,6 +110,31 @@ void QueryRuntimeState::add_total_scan_stats(QueryStatistics* query_statistic) {
     }
 }
 
+void QueryRuntimeState::update_per_scan_stats(int32_t plan_node_id, const ScanAuditCounters& delta) {
+    if (delta.empty()) {
+        return;
+    }
+    std::lock_guard l(_per_scan_stats_lock);
+    auto& stats = _per_scan_stats[plan_node_id];
+    stats.total.add(delta);
+    stats.delta.add(delta);
+}
+
+void QueryRuntimeState::consume_delta_per_scan_stats(QueryStatistics* query_statistic) {
+    std::lock_guard l(_per_scan_stats_lock);
+    for (auto& [plan_node_id, stats] : _per_scan_stats) {
+        query_statistic->add_per_scan_stats(plan_node_id, stats.delta);
+        stats.delta = ScanAuditCounters{};
+    }
+}
+
+void QueryRuntimeState::add_total_per_scan_stats(QueryStatistics* query_statistic) {
+    std::lock_guard l(_per_scan_stats_lock);
+    for (const auto& [plan_node_id, stats] : _per_scan_stats) {
+        query_statistic->add_per_scan_stats(plan_node_id, stats.total);
+    }
+}
+
 void QueryRuntimeState::add_ai_statistics(const AIExecutionStatistics& statistics) noexcept {
     if (statistics.empty()) {
         return;

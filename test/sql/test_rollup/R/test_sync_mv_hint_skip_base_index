@@ -1,0 +1,35 @@
+-- name: test_sync_mv_hint_skip_base_index
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_x (k1 INT, k2 INT, v1 INT) DUPLICATE KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE t_y (k1 INT, k2 INT, v1 INT) DUPLICATE KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 1 ROLLUP (t_x (k2, k1)) PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t_x VALUES (1, 10, 100), (2, 20, 200);
+-- result:
+-- !result
+INSERT INTO t_y VALUES (3, 30, 300);
+-- result:
+-- !result
+SELECT k2, k1 FROM t_x [_SYNC_MV_] ORDER BY k2;
+-- result:
+30	3
+-- !result
+SELECT k1, k2, v1 FROM t_x ORDER BY k1;
+-- result:
+1	10	100
+2	20	200
+-- !result
+function: assert_query_error_contains("SELECT * FROM t_y [_SYNC_MV_]", "Unknown table")
+-- result:
+None
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

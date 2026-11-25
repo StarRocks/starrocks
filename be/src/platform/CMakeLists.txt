@@ -49,7 +49,7 @@ set(PLATFORM_FILES
   llm/ai_runtime.cpp
   llm/ai_task_dispatcher.cpp
   llm/openai_compatible_provider.cpp
-  llm/dashscope_multimodal_provider.cpp
+  llm/dashscope_provider.cpp
   object_storage_presigner.cpp
   platform_env.cpp
   platform_metrics.cpp

@@ -32,9 +32,12 @@
 #include "column/datum_convert.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
+#include "column/json_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_compaction_fwd.h"
 #include "common/config_ingest_fwd.h"
+#include "common/config_json_flat_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
@@ -42,10 +45,13 @@
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
+#include "gutil/strings/substitute.h"
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/datum_variant.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
+#include "storage/lake/compaction_task.h"
+#include "storage/lake/compaction_task_context.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
@@ -6098,6 +6104,170 @@ TEST_F(LakeColumnUpsertModeTest, test_del_files_handling_in_column_upsert_mode) 
     }
 }
 
+// A column-mode partial update adds deletes to delete vectors at the publish's base version in two places:
+// _handle_delete_files, for the old segments its delete ops hit, and _handle_column_upsert_mode, for a
+// segment it synthesizes whose rows a later segment of the same load supersedes. Both take that version from
+// the metadata the publish already read rather than reading it back from storage once per segment (RB-792),
+// so with a metacache that keeps nothing, such a publish reads its base version exactly as often as one that
+// deletes nothing.
+TEST_F(LakeColumnUpsertModeTest, test_deletes_reuse_base_metadata) {
+    const auto tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+    // kOldLoads full-row loads of kChunkSize keys each, one segment per load: keys [0, kOldLoads * kChunkSize).
+    constexpr int kOldLoads = 4;
+    for (int i = 0; i < kOldLoads; i++) {
+        auto chunk = generate_data(kChunkSize, i, false, 3);
+        std::vector<uint32_t> indexes(kChunkSize);
+        std::iota(indexes.begin(), indexes.end(), 0);
+        const auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // The column-upsert loads below write c0, c1 and __op; the rows they insert keep c2's default (10).
+    std::vector<SlotDescriptor> op_slots;
+    op_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    op_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
+    op_slots.emplace_back(3, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT});
+    std::vector<SlotDescriptor*> op_slot_pointers;
+    for (auto& slot : op_slots) {
+        op_slot_pointers.emplace_back(&slot);
+    }
+    struct Batch {
+        std::vector<int> keys;
+        std::vector<int> values; // c1
+        std::vector<uint8_t> ops;
+        void add(int key, int value, uint8_t op) {
+            keys.push_back(key);
+            values.push_back(value);
+            ops.push_back(op);
+        }
+    };
+    // Writes one COLUMN_UPSERT_MODE load with one update segment per batch and returns its txn id.
+    auto column_upsert = [&](const std::vector<Batch>& batches) {
+        const auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&op_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
+                                                   .build());
+        CHECK_OK(delta_writer->open());
+        for (const auto& batch : batches) {
+            auto c0 = Int32Column::create();
+            auto c1 = Int32Column::create();
+            auto cop = Int8Column::create();
+            c0->append_numbers(batch.keys.data(), batch.keys.size() * sizeof(int));
+            c1->append_numbers(batch.values.data(), batch.values.size() * sizeof(int));
+            cop->append_numbers(batch.ops.data(), batch.ops.size() * sizeof(uint8_t));
+            Chunk::SlotHashMap slot_map;
+            slot_map[0] = 0;
+            slot_map[1] = 1;
+            slot_map[3] = 2; // op column
+            Chunk chunk({std::move(c0), std::move(c1), std::move(cop)}, slot_map);
+            std::vector<uint32_t> indexes(batch.keys.size());
+            std::iota(indexes.begin(), indexes.end(), 0);
+            CHECK_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+            // Close the memtable so each batch becomes its own update segment.
+            CHECK_OK(delta_writer->flush());
+        }
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        return txn_id;
+    };
+
+    // A metacache that keeps nothing once it is released, like a shard the base metadata outgrew: every
+    // read of the base version goes to storage.
+    const size_t metacache_capacity = _tablet_mgr->metacache()->tablet_metadata_capacity();
+    _tablet_mgr->metacache()->update_tablet_metadata_capacity(1);
+    DeferOp restore_metacache([&]() { _tablet_mgr->metacache()->update_tablet_metadata_capacity(metacache_capacity); });
+    ASSERT_EQ(1, _tablet_mgr->metacache()->tablet_metadata_capacity());
+    _tablet_mgr->metacache()->prune();
+
+    // While one publish runs, count its reads of the version it publishes on. The callback fires for the
+    // whole process, so this relies on nothing else reading this tablet's metadata meanwhile, which holds
+    // here: the test runs nothing in the background.
+    std::atomic<const std::string*> counted_file = nullptr;
+    std::atomic<int> base_metadata_reads = 0;
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::load_tablet_metadata:path", [&](void* arg) {
+        const std::string* file = counted_file.load();
+        if (file != nullptr && std::string_view(*static_cast<std::string*>(arg)).ends_with(*file)) {
+            ++base_metadata_reads;
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_callbacks([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::load_tablet_metadata:path");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    auto publish_counting = [&](int64_t txn_id) {
+        const std::string base_file = tablet_metadata_filename(tablet_id, version);
+        base_metadata_reads = 0;
+        counted_file = &base_file;
+        auto metadata_or = publish_single_version(tablet_id, version + 1, txn_id);
+        counted_file = nullptr;
+        version++;
+        return metadata_or;
+    };
+
+    constexpr int kNewKeys = kChunkSize / 2;
+    // New keys only: the publish deletes nothing and reads its base version for itself.
+    Batch insert;
+    for (int i = 0; i < kNewKeys; i++) {
+        insert.add(200 + i, (200 + i) * 11, TOpType::UPSERT);
+    }
+    ASSERT_OK(publish_counting(column_upsert({insert})).status());
+    const int own_reads = base_metadata_reads.load();
+    ASSERT_GE(own_reads, 1) << "the publish should have read its base version from storage";
+
+    // The first segment deletes the first key of every old load and inserts keys [100, 100 + kNewKeys); the
+    // second inserts those keys again and supersedes the first segment's rows of them.
+    Batch first;
+    Batch second;
+    for (int i = 0; i < kOldLoads; i++) {
+        first.add(i * kChunkSize, 0, TOpType::DELETE);
+    }
+    for (int i = 0; i < kNewKeys; i++) {
+        first.add(100 + i, (100 + i) * 5, TOpType::UPSERT);
+        second.add(100 + i, (100 + i) * 7, TOpType::UPSERT);
+    }
+    const auto txn_id = column_upsert({first, second});
+    {
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        ASSERT_EQ(2, txn_log->op_write().rowset().segment_metas_size());
+        ASSERT_GT(txn_log->op_write().dels_meta_size(), 0);
+    }
+    ASSIGN_OR_ABORT(auto published, publish_counting(txn_id));
+    // Nothing beyond the publish's own reads. Before RB-792 it read the base version once more for each of
+    // the kOldLoads old segments and for the superseded synthesized segment.
+    EXPECT_EQ(own_reads, base_metadata_reads.load());
+    // Every old load lost one row.
+    ASSERT_GE(published->delvec_meta().delvecs_size(), kOldLoads);
+
+    // The old keys but the deleted ones, and each new key once with the value its last writer gave it.
+    EXPECT_EQ(kOldLoads * (kChunkSize - 1) + 2 * kNewKeys, check(version, [](int c0, int c1, int c2) {
+                  if (c0 >= 200) return c1 == c0 * 11 && c2 == 10;
+                  if (c0 >= 100) return c1 == c0 * 7 && c2 == 10;
+                  return c0 % kChunkSize != 0 && c1 == c0 * 3 && c2 == c0 * 4;
+              }));
+}
+
 // A column-mode partial update publishes its del files through PrimaryKeyManager::_handle_delete_files,
 // which always erases via the memtable path and never reads op_write.del_ssts(). The import-time
 // tombstone-sstable build is byte-threshold-driven and would otherwise fire here too, producing a
@@ -7022,6 +7192,308 @@ TEST_F(LakePcuSchemaDriftTest, WriteThenDropTargetColumn_ReturnsInternalError) {
     EXPECT_TRUE(st.is_internal_error()) << "got: " << st.to_string();
     EXPECT_NE(std::string::npos, st.message().find("unique id"))
             << "expected 'unique id' in message; got: " << st.message();
+}
+
+// A primary key tablet with a JSON column, for a column-mode partial update followed by a compaction.
+class LakeColumnModeFlatJsonConfigTest : public TestBase {
+public:
+    LakeColumnModeFlatJsonConfigTest() : TestBase(kTestDirectory) {
+        _tablet_metadata = std::make_shared<TabletMetadata>();
+        _tablet_metadata->set_id(next_id());
+        _tablet_metadata->set_version(1);
+        _tablet_metadata->set_next_rowset_id(1);
+
+        //  | column | type | KEY | NULL |
+        //  +--------+------+-----+------+
+        //  |   c0   |  INT | YES |  NO  |
+        //  |   c1   |  INT | NO  |  YES |
+        //  |   c2   | JSON | NO  |  YES |
+        auto schema = _tablet_metadata->mutable_schema();
+        schema->set_id(next_id());
+        schema->set_num_short_key_columns(1);
+        schema->set_keys_type(PRIMARY_KEYS);
+        schema->set_num_rows_per_row_block(65535);
+        auto c0 = schema->add_column();
+        {
+            c0->set_unique_id(next_id());
+            c0->set_name("c0");
+            c0->set_type("INT");
+            c0->set_is_key(true);
+            c0->set_is_nullable(false);
+        }
+        auto c1 = schema->add_column();
+        {
+            c1->set_unique_id(next_id());
+            c1->set_name("c1");
+            c1->set_type("INT");
+            c1->set_is_key(false);
+            c1->set_is_nullable(true);
+            c1->set_aggregation("REPLACE");
+        }
+        auto c2 = schema->add_column();
+        {
+            c2->set_unique_id(next_id());
+            c2->set_name("c2");
+            c2->set_type("JSON");
+            c2->set_is_key(false);
+            c2->set_is_nullable(true);
+            c2->set_aggregation("REPLACE");
+        }
+
+        // The partial update carries the key and the JSON column only, so the .cols file it produces
+        // holds exactly the JSON column -- the thing under test.
+        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(2, "c2", TypeDescriptor{LogicalType::TYPE_JSON});
+        _slot_pointers.emplace_back(&_slots[0]);
+        _slot_pointers.emplace_back(&_slots[1]);
+
+        _full_slot_cid_map.emplace(0, 0);
+        _full_slot_cid_map.emplace(1, 1);
+        _full_slot_cid_map.emplace(2, 2);
+        _partial_slot_cid_map.emplace(0, 0);
+        _partial_slot_cid_map.emplace(2, 1);
+
+        _tablet_schema = TabletSchema::create(*schema);
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+    }
+
+    void SetUp() override {
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        CHECK_OK(_tablet_mgr->create_schema_file(_tablet_metadata->id(), _tablet_metadata->schema()));
+    }
+
+    void TearDown() override {
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
+        remove_test_dir_or_die();
+    }
+
+    // The table was created with the given "flat_json.enable"; the other knobs keep the be.conf
+    // defaults, exactly as an FE-issued TFlatJsonConfig does.
+    void set_table_flat_json_enable(bool enable) {
+        auto* flat_json_config = _tablet_metadata->mutable_flat_json_config();
+        flat_json_config->set_flat_json_enable(enable);
+        flat_json_config->set_flat_json_null_factor(config::json_flat_null_factor);
+        flat_json_config->set_flat_json_sparsity_factor(config::json_flat_sparsity_factor);
+        flat_json_config->set_flat_json_max_column_max(config::json_flat_column_max);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
+    // Rows whose JSON values all share the same two keys, i.e. the shape the flattener does extract.
+    Chunk generate_data(int64_t chunk_size, bool partial, int update_ratio) {
+        auto c0 = Int32Column::create();
+        auto c2 = JsonColumn::create();
+        for (int i = 0; i < chunk_size; i++) {
+            c0->append(i);
+            auto json = JsonValue::parse(strings::Substitute(R"({"a": $0, "b": $1})", i, i * update_ratio));
+            CHECK(json.ok());
+            c2->append(&json.value());
+        }
+        if (partial) {
+            return Chunk({std::move(c0), std::move(c2)}, _partial_slot_cid_map);
+        }
+        auto c1 = Int32Column::create();
+        for (int i = 0; i < chunk_size; i++) {
+            c1->append(i * update_ratio);
+        }
+        return Chunk({std::move(c0), std::move(c1), std::move(c2)}, _full_slot_cid_map);
+    }
+
+    // Every physical place the JSON column ends up, as <where, was it written flat>: the base
+    // segments of every rowset, and the .cols delta column groups the update produced.
+    std::vector<std::pair<std::string, bool>> collect_json_column_forms(int64_t version) {
+        std::vector<std::pair<std::string, bool>> forms;
+        const auto tablet_id = _tablet_metadata->id();
+        auto metadata = _tablet_mgr->get_tablet_metadata(tablet_id, version).value();
+        const auto j_uid = static_cast<size_t>(_tablet_schema->column(2).unique_id());
+        auto fs = FileSystemFactory::CreateSharedFromString(kTestDirectory).value();
+        auto form_of = [&](const std::string& kind, const std::string& name) {
+            auto path = _tablet_mgr->segment_location(tablet_id, name);
+            auto segment = Segment::open(fs, FileInfo{path}, 0, _tablet_schema).value();
+            const ColumnReader* reader = segment->column_with_uid(j_uid);
+            if (reader != nullptr) {
+                forms.emplace_back(kind + " " + name, reader->is_flat_json());
+            }
+        };
+        for (const auto& rowset : metadata->rowsets()) {
+            for (const auto& seg_meta : rowset.segment_metas()) {
+                form_of("segment", seg_meta.filename());
+            }
+        }
+        for (const auto& [rssid, dcg_ver] : metadata->dcg_meta().dcgs()) {
+            for (const auto& name : dcg_ver.column_files()) {
+                form_of("cols", name);
+            }
+        }
+        return forms;
+    }
+
+    // Whether a delta column group of |metadata| holds the column with |unique_id|.
+    static bool has_dcg_of(const TabletMetadataPB& metadata, int32_t unique_id) {
+        for (const auto& [_, dcg] : metadata.dcg_meta().dcgs()) {
+            for (const auto& ids : dcg.unique_column_ids()) {
+                for (auto id : ids.column_ids()) {
+                    if (static_cast<int64_t>(id) == unique_id) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    // Three rowsets of {"a": key, "b": 3 * key}; a column-mode partial update of the keys |updated| picks to a
+    // document with a key the segments never had (kNew) and a string where they have the BIGINT sub-column a;
+    // then a compaction of all of it, writing its output as the chunks arrive when |stream_output|. Every document
+    // must read the same before and after the compaction, and the compacted JSON column must be flat.
+    void column_update_then_compaction(bool (*updated)(int), bool stream_output) {
+        // Three small rowsets: let the primary key compaction policy pick them.
+        ConfigResetGuard<int64_t> min_input_guard(&config::lake_pk_compaction_min_input_segments, 1);
+        set_table_flat_json_enable(true);
+        const auto tablet_id = _tablet_metadata->id();
+        const auto json_uid = _tablet_schema->column(2).unique_id();
+        auto table_flat_json_config = std::make_shared<FlatJsonConfig>();
+        table_flat_json_config->update(_tablet_metadata->flat_json_config());
+        int64_t version = 1;
+
+        auto write = [&](const Chunk& chunk, uint32_t begin, uint32_t end, bool column_mode) {
+            auto indexes = std::vector<uint32_t>(end - begin);
+            std::iota(indexes.begin(), indexes.end(), begin);
+            const auto txn_id = next_id();
+            DeltaWriterBuilder builder;
+            builder.set_tablet_manager(_tablet_mgr.get())
+                    .set_tablet_id(tablet_id)
+                    .set_txn_id(txn_id)
+                    .set_partition_id(_partition_id)
+                    .set_mem_tracker(_mem_tracker.get())
+                    .set_schema_id(_tablet_schema->id())
+                    .set_flat_json_config(table_flat_json_config);
+            if (column_mode) {
+                builder.set_slot_descriptors(&_slot_pointers)
+                        .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE);
+            }
+            auto delta_writer = builder.build().value();
+            CHECK_OK(delta_writer->open());
+            CHECK_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+            CHECK_OK(delta_writer->finish_with_txnlog());
+            delta_writer->close();
+            CHECK_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+        };
+
+        // The keys not updated keep the loaded {"a": key, "b": 3 * key}.
+        auto expected = [&](int key) {
+            return updated(key) ? strings::Substitute(R"({"a": "s$0", "kNew": $0})", key)
+                                : strings::Substitute(R"({"a": $0, "b": $1})", key, key * 3);
+        };
+
+        auto chunk_full = generate_data(kChunkSize, false, 3);
+        write(chunk_full, 0, 43, false);
+        write(chunk_full, 43, 86, false);
+        write(chunk_full, 86, static_cast<uint32_t>(kChunkSize), false);
+        {
+            auto c0 = Int32Column::create();
+            auto c2 = JsonColumn::create();
+            for (int key = 0; key < kChunkSize; key++) {
+                if (!updated(key)) {
+                    continue;
+                }
+                c0->append(key);
+                ASSIGN_OR_ABORT(auto json, JsonValue::parse(expected(key)));
+                c2->append(&json);
+            }
+            Chunk chunk_partial({std::move(c0), std::move(c2)}, _partial_slot_cid_map);
+            write(chunk_partial, 0, static_cast<uint32_t>(chunk_partial.num_rows()), true);
+        }
+
+        auto check_documents = [&](const char* when) {
+            ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+            auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+            ASSERT_OK(reader->prepare());
+            ASSERT_OK(reader->open(TabletReaderParams()));
+            auto chunk = ChunkFactory::new_chunk(*_schema, 128);
+            std::vector<bool> seen(kChunkSize, false);
+            while (true) {
+                auto st = reader->get_next(chunk.get());
+                if (st.is_end_of_file()) {
+                    break;
+                }
+                ASSERT_OK(st);
+                for (size_t i = 0; i < chunk->num_rows(); i++) {
+                    const int key = chunk->get_column_by_index(0)->get(i).get_int32();
+                    ASSERT_TRUE(key >= 0 && key < kChunkSize && !seen[key]) << when << ", key " << key;
+                    seen[key] = true;
+                    const auto datum = chunk->get_column_by_index(2)->get(i);
+                    ASSERT_FALSE(datum.is_null()) << when << ", key " << key;
+                    ASSIGN_OR_ABORT(auto want, JsonValue::parse(expected(key)));
+                    EXPECT_EQ(want.to_string_uncheck(), datum.get_json()->to_string_uncheck())
+                            << when << ", key " << key;
+                }
+                chunk->reset();
+            }
+            EXPECT_EQ(kChunkSize, std::count(seen.begin(), seen.end(), true)) << when;
+        };
+
+        ASSIGN_OR_ABORT(auto updated_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        ASSERT_EQ(3, updated_metadata->rowsets_size());
+        ASSERT_TRUE(has_dcg_of(*updated_metadata, json_uid)) << "the update did not produce a delta column group";
+        ASSERT_FALSE(has_dcg_of(*updated_metadata, _tablet_schema->column(1).unique_id()));
+        check_documents("before compaction");
+
+        {
+            // A budget of 8 bytes makes the compaction's JSON column writer stream from the first chunk on.
+            ConfigResetGuard<int64_t> mem_limit_guard(&config::compaction_memory_limit_per_worker,
+                                                      stream_output ? 8 : config::compaction_memory_limit_per_worker);
+            const auto txn_id = next_id();
+            auto task_context =
+                    std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+            ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+            ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+            ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+        }
+        ASSIGN_OR_ABORT(auto compacted, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        ASSERT_EQ(1, compacted->rowsets_size());
+        ASSERT_FALSE(has_dcg_of(*compacted, json_uid));
+        check_documents("after compaction");
+        for (const auto& [where, is_flat] : collect_json_column_forms(version)) {
+            EXPECT_TRUE(is_flat) << where;
+        }
+    }
+
+    constexpr static const char* const kTestDirectory = "test_lake_column_mode_flat_json_config";
+
+protected:
+    constexpr static int64_t kChunkSize = 128;
+
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    std::shared_ptr<Schema> _schema;
+    int64_t _partition_id = next_id();
+    std::vector<SlotDescriptor> _slots;
+    std::vector<SlotDescriptor*> _slot_pointers;
+    Chunk::SlotHashMap _full_slot_cid_map;
+    Chunk::SlotHashMap _partial_slot_cid_map;
+};
+
+// A column-mode partial update gives a segment a .cols delta column group holding the whole new JSON column, and
+// the segment iterator reads that column from the .cols file. Compaction derived the flat JSON layout from the
+// segments' own column readers and read the .cols values through it, so a string written over the segments' BIGINT
+// sub-column a came back NULL and the compaction wrote what it read (RB-1351). The layout now comes from the .cols
+// file's reader for such a segment.
+TEST_F(LakeColumnModeFlatJsonConfigTest, compaction_keeps_json_values_of_delta_column_groups) {
+    ASSERT_NO_FATAL_FAILURE(column_update_then_compaction([](int key) { return key % 2 == 0; }, false));
+}
+
+// The same through a vertical compaction, which reads the JSON column in a column group of its own.
+TEST_F(LakeColumnModeFlatJsonConfigTest, vertical_compaction_keeps_json_values_of_delta_column_groups) {
+    ConfigResetGuard<int64_t> group_guard(&config::vertical_compaction_max_columns_per_group, 1);
+    ASSERT_NO_FATAL_FAILURE(column_update_then_compaction([](int key) { return key % 2 == 0; }, false));
+}
+
+// Only the first rowset updated, so the layout is derived from one .cols reader and two segments' own readers, and
+// the output written as the chunks arrive. The writer keeps streaming flat only while every chunk has one layout:
+// a column read whole instead has none, and the output would be written as whole JSON.
+TEST_F(LakeColumnModeFlatJsonConfigTest, compaction_streams_json_of_delta_column_groups_flat) {
+    ASSERT_NO_FATAL_FAILURE(column_update_then_compaction([](int key) { return key < 43 && key % 2 == 0; }, true));
 }
 
 // A publish iterator narrowed to this tablet's slice of a shared post-split segment reports NO

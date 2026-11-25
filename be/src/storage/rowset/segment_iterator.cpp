@@ -2859,7 +2859,7 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
             _opts.delete_predicates[i].predicates_of_column(cid, &preds);
         }
         DCHECK(!preds.empty());
-        _del_predicates.insert({cid, ColumnOrPredicate(get_type_info(preds[0]->type_info()), cid, preds)});
+        _del_predicates.insert({cid, ColumnOrPredicate(preds[0]->type_info_ptr(), cid, preds)});
     }
 
     // -------------------------------------------------------------
@@ -3329,6 +3329,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
                 brute_force_vec_col->resize(0);
             }
             _opts.stats->rows_del_filtered += old_sz;
+            _opts.stats->rows_del_filtered_after_read += old_sz;
         } else if (deletes > 0) {
             // flip boolean result.
             for (size_t i = 0; i < old_sz; i++) {
@@ -3343,6 +3344,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
                 brute_force_vec_col->filter_range(_selection, 0, old_sz);
             }
             _opts.stats->rows_del_filtered += old_sz - new_sz;
+            _opts.stats->rows_del_filtered_after_read += old_sz - new_sz;
         }
     }
 

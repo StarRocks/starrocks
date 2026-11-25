@@ -43,6 +43,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/type_info_allocator_adapter.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/delta_column_group.h"
 #include "storage/flat_json_metrics.h"
 #include "storage/json_path_deriver.h"
 #include "storage/lake/meta_file.h"
@@ -485,7 +486,12 @@ static void warm_prepared_indexes(PreparedTabletReadState* state, const TabletSc
                                   const std::atomic<bool>* is_cancelled, OlapReaderStatistics* stats) {
     LakeIOOptions lake_io_opts = query_io_opts;
     lake_io_opts.remote_read = ScopedRemoteReadContext::or_current(query_io_opts.remote_read);
+#ifdef USE_STAROS
     const int64_t block_size = std::max<int64_t>(1, config::starlet_star_cache_block_size_bytes);
+#else
+    // starlet_star_cache_block_size_bytes exists only in StarOS builds; use its default.
+    const int64_t block_size = 1 << 20;
+#endif
     for (size_t rowset_idx = 0; rowset_idx < state->rowset_segments.size(); ++rowset_idx) {
         const auto& segments = state->rowset_segments[rowset_idx];
         const RowsetMetadataPB* rowset_meta = nullptr;
@@ -732,14 +738,24 @@ const OlapReaderStatistics& TabletReader::compaction_stats() const {
 }
 
 TabletReader::RealtimeStats TabletReader::realtime_stats() const {
-    RealtimeStats result{_stats.raw_rows_read, _stats.bytes_read, _stats.decompress_ns, _stats.vec_cond_ns,
-                         _stats.del_filter_ns};
+    RealtimeStats result;
+    result.raw_rows_read = _stats.raw_rows_read;
+    result.bytes_read = _stats.bytes_read;
+    result.decompress_ns = _stats.decompress_ns;
+    result.vec_cond_ns = _stats.vec_cond_ns;
+    result.del_filter_ns = _stats.del_filter_ns;
+    result.rows_del_filtered_after_read = _stats.rows_del_filtered_after_read;
+    result.remote_bytes_read = _stats.remote_bytes_read_with_prepare();
+    result.compressed_bytes_read_local_disk = _stats.compressed_bytes_read_local_disk;
     for (const auto& rowset_stats : _parallel_rowset_stats) {
         result.raw_rows_read += rowset_stats->raw_rows_read;
         result.bytes_read += rowset_stats->bytes_read;
         result.decompress_ns += rowset_stats->decompress_ns;
         result.vec_cond_ns += rowset_stats->vec_cond_ns;
         result.del_filter_ns += rowset_stats->del_filter_ns;
+        result.rows_del_filtered_after_read += rowset_stats->rows_del_filtered_after_read;
+        result.remote_bytes_read += rowset_stats->remote_bytes_read_with_prepare();
+        result.compressed_bytes_read_local_disk += rowset_stats->compressed_bytes_read_local_disk;
     }
     return result;
 }
@@ -1048,6 +1064,36 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
             config::enable_compaction_flat_json_mixed_inputs &&
             (flat_json_config != nullptr ? flat_json_config->is_flat_json_enabled() : config::enable_json_flat);
 
+    // A column-mode partial update gives a segment a delta column group, a .cols file holding the whole new column,
+    // and the segment iterator then reads the column from there (SegmentIterator::_get_dcg_segment) through the
+    // access path derived below. Derive the layout from that reader, not the segment's own: a layout that does not
+    // fit the .cols values drops the keys only the .cols file holds and casts its values to the segment's sub-column
+    // types (RB-1351). Only a primary key read loads delta column groups (see Rowset's segment options).
+    const auto& dcgs = _tablet_metadata->dcg_meta().dcgs();
+    const bool reads_dcg = _tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && !dcgs.empty();
+    // The .cols segments opened for the column being derived, whose column readers |readers| points into.
+    std::vector<SegmentPtr> dcg_segments;
+    auto column_reader_of = [&](const Rowset& rowset, const SegmentPtr& segment,
+                                const TabletColumn& col) -> StatusOr<const ColumnReader*> {
+        if (reads_dcg) {
+            // The segment id LakeDeltaColumnGroupLoader looks the segment up by, as the segment iterator builds it.
+            auto it = dcgs.find(static_cast<uint32_t>(rowset.id() + segment->id()));
+            if (it != dcgs.end()) {
+                DeltaColumnGroup dcg;
+                RETURN_IF_ERROR(dcg.load(_tablet_metadata->version(), it->second));
+                const int32_t file_idx = dcg.get_column_idx(col.unique_id()).first;
+                if (file_idx >= 0) {
+                    ASSIGN_OR_RETURN(auto dcg_segment, segment->new_dcg_segment(dcg, file_idx, _tablet_schema,
+                                                                                read_params.lake_io_opts, &_stats));
+                    const ColumnReader* reader = dcg_segment->column_with_uid(col.unique_id());
+                    dcg_segments.emplace_back(std::move(dcg_segment));
+                    return reader;
+                }
+            }
+        }
+        return segment->column_with_uid(col.unique_id());
+    };
+
     std::vector<const ColumnReader*> readers;
     for (size_t i = 0; i < _tablet_schema->num_columns(); i++) {
         const auto& col = _tablet_schema->column(i);
@@ -1057,13 +1103,14 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
             continue;
         }
         readers.clear();
+        dcg_segments.clear();
         int num_plain = 0;
         for (const auto& rowset : _rowsets) {
             for (const auto& segment : rowset->get_non_null_segments()) {
                 if (segment->num_rows() == 0) {
                     continue;
                 }
-                auto reader = segment->column_with_uid(col.unique_id());
+                ASSIGN_OR_RETURN(auto reader, column_reader_of(*rowset, segment, col));
                 if (reader != nullptr && reader->column_type() == LogicalType::TYPE_JSON &&
                     nullptr != reader->sub_readers() && !reader->sub_readers()->empty()) {
                     readers.emplace_back(reader);
@@ -1900,6 +1947,11 @@ Status TabletReader::init_delete_predicates(const TabletReaderParams& params, De
 }
 
 bool TabletReader::union_reads_ahead(const TabletReaderParams& params) const {
+#ifndef USE_STAROS
+    // The segment readers read ahead only in StarOS builds (see SegmentIterator::_should_read_ahead()).
+    (void)params;
+    return false;
+#else
     // A query scan that walks all the segments of the tablet one after another, in ascending order, through the
     // union below starts the read-ahead of the next segments while it reads the current one; a split scan reads its
     // segments from several scan tasks at once already. Only the key types that always take the union branch
@@ -1918,6 +1970,7 @@ bool TabletReader::union_reads_ahead(const TabletReaderParams& params) const {
            _is_asc_hint && params.rowid_range_option == nullptr && params.short_key_ranges_option == nullptr &&
            remote_io_scheduler_enabled() && config::lake_scan_read_ahead_segments > 0 &&
            config::remote_prefetch_window_blocks > 0;
+#endif // USE_STAROS
 }
 
 Status TabletReader::init_collector(const TabletReaderParams& params) {
@@ -1988,12 +2041,17 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
         // SegmentIterator  ...    SegmentIterator
         //
         // With _union_reads_ahead, each child is one segment (see union_reads_ahead()).
+#ifdef USE_STAROS
         if (_union_reads_ahead) {
             _collect_iter = new_union_iterator(std::move(seg_iters), config::lake_scan_read_ahead_segments,
                                                config::remote_prefetch_window_blocks);
         } else {
             _collect_iter = new_union_iterator(std::move(seg_iters));
         }
+#else
+        // union_reads_ahead() is always false here.
+        _collect_iter = new_union_iterator(std::move(seg_iters));
+#endif
     } else if ((keys_type == AGG_KEYS || keys_type == UNIQUE_KEYS) && !skip_aggr) {
         //                 Timer
         //                   |

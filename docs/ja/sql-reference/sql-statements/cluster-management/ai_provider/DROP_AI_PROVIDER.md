@@ -28,7 +28,7 @@ DROP AI PROVIDER [IF EXISTS] <provider_name>
 
 ```sql
 DROP AI PROVIDER openai;
-DROP AI PROVIDER IF EXISTS cohere_rerank;
+DROP AI PROVIDER IF EXISTS dashscope_chat;
 ```
 
 ## 関連する SQL ステートメント

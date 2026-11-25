@@ -34,6 +34,9 @@ import static com.starrocks.sql.ast.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION;
+import static org.apache.iceberg.TableProperties.PARQUET_DICT_SIZE_BYTES;
+import static org.apache.iceberg.TableProperties.PARQUET_PAGE_SIZE_BYTES;
+import static org.apache.iceberg.TableProperties.PARQUET_ROW_GROUP_SIZE_BYTES;
 
 public class IcebergTableSink extends DataSink {
 
@@ -44,7 +47,12 @@ public class IcebergTableSink extends DataSink {
     private final String tableLocation;
     private final String dataLocation;
     private final String compressionType;
+    private final Integer parquetCompressionLevel;
+    private final String parquetDataPageVersion;
     private final long targetMaxFileSize;
+    private final Integer parquetPageSizeBytes;
+    private final Integer parquetDictSizeBytes;
+    private final Integer parquetRowGroupSizeBytes;
     private final boolean isStaticPartitionSink;
     private final String tableIdentifier;
     private final CloudConfiguration cloudConfiguration;
@@ -68,7 +76,13 @@ public class IcebergTableSink extends DataSink {
                 .toLowerCase();
         this.compressionType = nativeTable.properties().getOrDefault(PARQUET_COMPRESSION,
                 sessionVariable.getConnectorSinkCompressionCodec());
+        this.parquetCompressionLevel = IcebergUtil.getParquetCompressionLevel(nativeTable.properties(), compressionType);
+        this.parquetDataPageVersion = IcebergUtil.getParquetDataPageVersion(nativeTable.properties());
         this.targetMaxFileSize = IcebergUtil.resolveTargetMaxFileSize(nativeTable, sessionVariable);
+        this.parquetPageSizeBytes = IcebergUtil.getPositiveIntProperty(nativeTable.properties(), PARQUET_PAGE_SIZE_BYTES);
+        this.parquetDictSizeBytes = IcebergUtil.getPositiveIntProperty(nativeTable.properties(), PARQUET_DICT_SIZE_BYTES);
+        this.parquetRowGroupSizeBytes =
+                IcebergUtil.getPositiveIntProperty(nativeTable.properties(), PARQUET_ROW_GROUP_SIZE_BYTES);
         this.targetBranch = targetBranch;
 
         String catalogName = icebergTable.getCatalogName();
@@ -111,7 +125,22 @@ public class IcebergTableSink extends DataSink {
         TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);
         Preconditions.checkState(compression != null, "compression type not supported");
         tIcebergTableSink.setCompression_type(compression);
+        if (parquetCompressionLevel != null) {
+            tIcebergTableSink.setParquet_compression_level(parquetCompressionLevel);
+        }
+        if (parquetDataPageVersion != null) {
+            tIcebergTableSink.setParquet_data_page_version(parquetDataPageVersion);
+        }
         tIcebergTableSink.setTarget_max_file_size(targetMaxFileSize);
+        if (parquetPageSizeBytes != null) {
+            tIcebergTableSink.setParquet_page_size_bytes(parquetPageSizeBytes);
+        }
+        if (parquetDictSizeBytes != null) {
+            tIcebergTableSink.setParquet_dict_size_bytes(parquetDictSizeBytes);
+        }
+        if (parquetRowGroupSizeBytes != null) {
+            tIcebergTableSink.setParquet_row_group_size_bytes(parquetRowGroupSizeBytes);
+        }
         TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
         cloudConfiguration.toThrift(tCloudConfiguration);
         tIcebergTableSink.setCloud_configuration(tCloudConfiguration);

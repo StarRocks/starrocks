@@ -70,6 +70,20 @@ public class CompressionUtils {
         }
     }
 
+    // Whether a load can send its chunks to the tablets with the named compression: none, or one of the block codecs of
+    // the compute nodes (get_block_compression_codec). AUTO, DEFLATE and BZIP2 have a name but no block codec there,
+    // so a load planned with one of them fails on the compute nodes.
+    public static boolean isSupportedLoadTransmissionCompression(String name) {
+        TCompressionType compressionType = T_COMPRESSION_BY_NAME.get(name);
+        return compressionType == TCompressionType.NO_COMPRESSION
+                || compressionType == TCompressionType.LZ4
+                || compressionType == TCompressionType.LZ4_FRAME
+                || compressionType == TCompressionType.SNAPPY
+                || compressionType == TCompressionType.ZLIB
+                || compressionType == TCompressionType.ZSTD
+                || compressionType == TCompressionType.GZIP;
+    }
+
     public static List<String> getSupportedCompressionNames() {
         return new ArrayList<>(T_COMPRESSION_BY_NAME.keySet());
     }

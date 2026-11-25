@@ -37,6 +37,7 @@ import com.starrocks.connector.elasticsearch.EsUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
@@ -206,6 +207,22 @@ public class CreateTableAnalyzer {
         }
 
         stmt.setEngineName(engineName.toLowerCase());
+    }
+
+    static void applyCtasDefaultProperties(CreateTableStmt stmt) {
+        // Paimon uses PROPERTIES for native table options.
+        if (stmt.getEngineName().equalsIgnoreCase(Table.TableType.PAIMON.name())) {
+            return;
+        }
+
+        Map<String, String> properties = stmt.getProperties();
+        if (properties == null) {
+            properties = Maps.newHashMap();
+            stmt.setProperties(properties);
+        }
+        if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, String.valueOf(RunMode.defaultReplicationNum()));
+        }
     }
 
     private static void analyzeCharsetName(CreateTableStmt stmt) {
@@ -750,9 +767,20 @@ public class CreateTableAnalyzer {
                 PaimonCreateTableAnalyzer.analyzePartitionDesc(stmt);
             } else if (engineName.equalsIgnoreCase(Table.TableType.ELASTICSEARCH.name())) {
                 EsUtil.analyzePartitionDesc(partitionDesc);
-            } else if (engineName.equalsIgnoreCase(Table.TableType.ICEBERG.name())
-                    || engineName.equalsIgnoreCase(Table.TableType.HIVE.name())) {
+            } else if (engineName.equalsIgnoreCase(Table.TableType.ICEBERG.name())) {
                 if (partitionDesc != null) {
+                    if (!(partitionDesc instanceof ListPartitionDesc)) {
+                        throw new SemanticException("Create iceberg table only supports PARTITION BY (column or transform, ...)",
+                                partitionDesc.getPos());
+                    }
+                    ((ListPartitionDesc) partitionDesc).analyzeExternalPartitionColumns(stmt.getColumnDefs(), engineName);
+                }
+            } else if (engineName.equalsIgnoreCase(Table.TableType.HIVE.name())) {
+                if (partitionDesc != null) {
+                    if (!(partitionDesc instanceof ListPartitionDesc)) {
+                        throw new SemanticException("Create hive table only supports PARTITION BY (column, ...)",
+                                partitionDesc.getPos());
+                    }
                     ((ListPartitionDesc) partitionDesc).analyzeExternalPartitionColumns(stmt.getColumnDefs(), engineName);
                 }
             } else {

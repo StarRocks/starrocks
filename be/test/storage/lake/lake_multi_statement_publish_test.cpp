@@ -24,12 +24,23 @@
 // batch's last version only. A batch attempt that FE does not see succeed (another tablet of the partition
 // failed, or the node was stopped before it replied) is retried with the batch FE builds then, often longer
 // and possibly on another node, so the retry has to apply every transaction of the batch again.
+//
+// A publish therefore never deletes the statement logs, not even when it publishes the transaction alone: vacuum
+// does, by txn id, once the transaction is visible. A tablet left with only some of its logs looks like one that
+// the other statements did not load, so a publish that FE sends again would apply the remaining statements alone
+// and write a version without the rows of the others. Deleting the logs after a publish could leave such a tablet:
+// the delete is not atomic, and a PUT that object storage applies late brings a log back.
 
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 #include <unistd.h>
 
+#include <atomic>
 #include <ctime>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
@@ -44,6 +55,7 @@
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
 #include "storage/lake/tablet_reader.h"
@@ -267,10 +279,30 @@ TEST_P(LakeMultiStatementPublishTest, retry_after_txn_logs_deleted_keeps_publish
     EXPECT_EQ(kSumC0, sum_c0);
 }
 
-// The reader-first rollout must not change the default on-disk format. Older CNs must still be able
-// to read a newly materialized multi-statement version log until group writing is explicitly enabled.
-TEST_P(LakeMultiStatementPublishTest, publish_log_version_defaults_to_legacy_format) {
-    ASSERT_FALSE(config::lake_enable_txn_vlog_group);
+// Group writes are on by default: a newly materialized multi-statement version log is a statement group in a
+// file of its own, so replay applies each statement with its own schema, segments and delete positions.
+TEST_P(LakeMultiStatementPublishTest, publish_log_version_defaults_to_group_format) {
+    ASSERT_TRUE(config::lake_enable_txn_vlog_group);
+    const int64_t txn_id = next_id();
+    const auto first_load = make_load_id(381, 382);
+    const auto second_load = make_load_id(391, 392);
+    write_statement(txn_id, first_load, 0);
+    write_statement(txn_id, second_load, kChunkSize);
+
+    ASSERT_OK(publish_multi_statement_log_version(2, txn_id, {first_load, second_load}));
+    _tablet_mgr->metacache()->prune();
+    EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_metadata->id(), 2)));
+    const auto path = _tablet_mgr->txn_vlog_group_location(_tablet_metadata->id(), 2);
+    ASSIGN_OR_ABORT(auto logs, _tablet_mgr->get_txn_vlog_group(path, false));
+    ASSERT_EQ(2, logs.size());
+    EXPECT_EQ(first_load.SerializeAsString(), logs[0]->load_id().SerializeAsString());
+    EXPECT_EQ(second_load.SerializeAsString(), logs[1]->load_id().SerializeAsString());
+}
+
+// With group writes disabled the legacy merged writer is unchanged, so a cluster that still has CNs without the
+// group reader keeps writing a multi-statement version log they can read.
+TEST_P(LakeMultiStatementPublishTest, publish_log_version_writes_legacy_format_with_group_writes_disabled) {
+    ConfigResetGuard group_write_guard(&config::lake_enable_txn_vlog_group, false);
     const int64_t txn_id = next_id();
     const auto first_load = make_load_id(71, 72);
     const auto second_load = make_load_id(81, 82);
@@ -291,7 +323,7 @@ TEST_P(LakeMultiStatementPublishTest, publish_log_version_defaults_to_legacy_for
     EXPECT_EQ(legacy_log.value()->SerializeAsString(), new_reader_logs.front()->SerializeAsString());
 }
 
-TEST_P(LakeMultiStatementPublishTest, publish_log_version_group_write_is_opt_in) {
+TEST_P(LakeMultiStatementPublishTest, publish_log_version_group_write_uses_its_own_file) {
     ConfigResetGuard group_write_guard(&config::lake_enable_txn_vlog_group, true);
     const int64_t txn_id = next_id();
     const auto first_load = make_load_id(91, 92);
@@ -658,24 +690,117 @@ TEST_P(LakeMultiStatementPublishTest, publish_log_version_retry_across_enabling_
     EXPECT_EQ(kTotalRows, logs[0]->op_write().rowset().num_rows());
 }
 
-// During a schema change publish_log_version folds the statements of a shadow tablet into one .vlog. A retry
-// after the statements' logs were deleted finds the .vlog and succeeds; without either there is nothing to
-// publish.
+// During a schema change publish_log_version materializes the statements of a shadow tablet into a version log: a
+// statement group by default, one merged .vlog with group writes disabled. A retry after the statements' logs were
+// deleted finds that log and succeeds; without either there is nothing to publish.
 TEST_P(LakeMultiStatementPublishTest, publish_log_version_retry_after_txn_logs_deleted) {
-    const int64_t txn_id = next_id();
-    const auto load_id_1 = make_load_id(51, 52);
-    const auto load_id_2 = make_load_id(61, 62);
-    write_statement(txn_id, load_id_1, 0);
-    write_statement(txn_id, load_id_2, kChunkSize);
+    ConfigResetGuard group_write_guard(&config::lake_enable_txn_vlog_group, false);
+    for (bool group_writes : {false, true}) {
+        SCOPED_TRACE(fmt::format("group_writes={}", group_writes));
+        config::lake_enable_txn_vlog_group = group_writes;
+        const int64_t txn_id = next_id();
+        const auto load_id_1 = make_load_id(51, group_writes);
+        const auto load_id_2 = make_load_id(61, group_writes);
+        write_statement(txn_id, load_id_1, 0);
+        write_statement(txn_id, load_id_2, kChunkSize);
 
-    const int64_t log_version = 2;
-    ASSERT_OK(publish_multi_statement_log_version(log_version, txn_id, {load_id_1, load_id_2}));
-    ASSERT_TRUE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_metadata->id(), log_version)));
-    delete_statement_logs(txn_id, {load_id_1, load_id_2});
+        const int64_t log_version = group_writes ? 4 : 2;
+        ASSERT_OK(publish_multi_statement_log_version(log_version, txn_id, {load_id_1, load_id_2}));
+        const auto target = group_writes ? _tablet_mgr->txn_vlog_group_location(_tablet_metadata->id(), log_version)
+                                         : _tablet_mgr->txn_vlog_location(_tablet_metadata->id(), log_version);
+        ASSERT_TRUE(fs::path_exist(target));
+        delete_statement_logs(txn_id, {load_id_1, load_id_2});
 
-    ASSERT_OK(publish_multi_statement_log_version(log_version, txn_id, {load_id_1, load_id_2}));
-    auto st = publish_multi_statement_log_version(log_version + 1, next_id(), {load_id_1, load_id_2});
-    ASSERT_TRUE(st.is_not_found()) << st;
+        ASSERT_OK(publish_multi_statement_log_version(log_version, txn_id, {load_id_1, load_id_2}));
+        auto st = publish_multi_statement_log_version(log_version + 1, next_id(), {load_id_1, load_id_2});
+        ASSERT_TRUE(st.is_not_found()) << st;
+    }
+}
+
+// The statements of a multi-statement transaction are applied together, and a statement that overwrites
+// rows of old segments adds its deletes to each of those segments' delete vector at the publish's base
+// version -- through the metadata the publish already read, not by reading that version back from storage
+// once per segment (RB-792). With a metacache that keeps nothing, a transaction that deletes rows from many
+// old segments reads its base version exactly as often as one that deletes from none.
+TEST_P(LakeMultiStatementPublishTest, deletes_from_old_segments_reuse_base_metadata) {
+    if (GetParam() != PRIMARY_KEYS) {
+        GTEST_SKIP() << "only a primary key tablet has delete vectors";
+    }
+    const int64_t tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+    // Writes one statement of kChunkSize keys per element of |first_keys|, starting at that key, and
+    // returns the transaction's id and the statements' load ids.
+    auto write_txn = [&](const std::vector<int>& first_keys) {
+        const int64_t txn_id = next_id();
+        std::vector<PUniqueId> load_ids;
+        for (size_t i = 0; i < first_keys.size(); i++) {
+            load_ids.push_back(make_load_id(txn_id, static_cast<int64_t>(i) + 1));
+            write_statement(txn_id, load_ids.back(), first_keys[i]);
+        }
+        return std::make_pair(txn_id, std::move(load_ids));
+    };
+    // kOldLoads transactions of one statement each: keys [0, kOldLoads * kChunkSize), one segment per load.
+    constexpr int kOldLoads = 4;
+    for (int i = 0; i < kOldLoads; i++) {
+        auto [txn_id, load_ids] = write_txn({i * kChunkSize});
+        ASSERT_OK(publish_multi_statement(version + 1, txn_id, load_ids).status());
+        version++;
+    }
+
+    // A metacache that keeps nothing once it is released, like a shard the base metadata outgrew: every
+    // read of the base version goes to storage.
+    const size_t metacache_capacity = _tablet_mgr->metacache()->tablet_metadata_capacity();
+    _tablet_mgr->metacache()->update_tablet_metadata_capacity(1);
+    DeferOp restore_metacache([&]() { _tablet_mgr->metacache()->update_tablet_metadata_capacity(metacache_capacity); });
+    ASSERT_EQ(1, _tablet_mgr->metacache()->tablet_metadata_capacity());
+    _tablet_mgr->metacache()->prune();
+
+    // While one publish runs, count its reads of the version it publishes on. The callback fires for the
+    // whole process, so this relies on nothing else reading this tablet's metadata meanwhile, which holds
+    // here: the test runs nothing in the background.
+    std::atomic<const std::string*> counted_file = nullptr;
+    std::atomic<int> base_metadata_reads = 0;
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::load_tablet_metadata:path", [&](void* arg) {
+        const std::string* file = counted_file.load();
+        if (file != nullptr && std::string_view(*static_cast<std::string*>(arg)).ends_with(*file)) {
+            ++base_metadata_reads;
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_callbacks([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::load_tablet_metadata:path");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    auto publish_counting = [&](const std::pair<int64_t, std::vector<PUniqueId>>& txn) {
+        const std::string base_file = tablet_metadata_filename(tablet_id, version);
+        base_metadata_reads = 0;
+        counted_file = &base_file;
+        auto metadata_or = publish_multi_statement(version + 1, txn.first, txn.second);
+        counted_file = nullptr;
+        version++;
+        return metadata_or;
+    };
+
+    // New keys only: the publish deletes rows from no old segment and reads its base version for itself.
+    ASSERT_OK(publish_counting(write_txn({kOldLoads * kChunkSize, (kOldLoads + 1) * kChunkSize})).status());
+    const int own_reads = base_metadata_reads.load();
+    ASSERT_GE(own_reads, 1) << "the publish should have read its base version from storage";
+
+    // One statement per old load, each overwriting all of it: the publish deletes rows from every old segment.
+    std::vector<int> first_keys;
+    for (int i = 0; i < kOldLoads; i++) {
+        first_keys.push_back(i * kChunkSize);
+    }
+    ASSERT_OK(publish_counting(write_txn(first_keys)).status());
+    // Nothing beyond the publish's own reads. Before RB-792 it read the base version once more for each of
+    // the old segments.
+    EXPECT_EQ(own_reads, base_metadata_reads.load());
+
+    // Keys [0, (kOldLoads + 2) * kChunkSize), each once.
+    constexpr int64_t kRows = (kOldLoads + 2) * kChunkSize;
+    auto [rows, sum_c0] = read_back(version);
+    EXPECT_EQ(kRows, rows);
+    EXPECT_EQ(kRows * (kRows - 1) / 2, sum_c0);
 }
 
 // FE sends the load ids of every statement of the transaction, but a statement that loaded another table or
@@ -818,9 +943,9 @@ TEST_P(LakeMultiStatementPublishTest, batch_retry_with_txn_first_applies_txn_aga
     EXPECT_EQ(kSumC0 + chunk_sum_c0(kAfterTxnFirstKey), sum_c0);
 }
 
-// A batch publish leaves the logs of a transaction to vacuum, as it does those of an autocommit load; a
-// publish of the transaction alone still deletes them.
-TEST_P(LakeMultiStatementPublishTest, batch_publish_leaves_txn_logs_to_vacuum) {
+// A publish leaves the logs of a transaction to vacuum, whether it carries the transaction in a batch, where it
+// leaves the log of an autocommit load too, or alone.
+TEST_P(LakeMultiStatementPublishTest, publish_leaves_txn_logs_to_vacuum) {
     const int64_t load_before = next_id();
     const int64_t txn_id = next_id();
     const int64_t single_txn_id = next_id();
@@ -839,7 +964,7 @@ TEST_P(LakeMultiStatementPublishTest, batch_publish_leaves_txn_logs_to_vacuum) {
     EXPECT_TRUE(txn_log_exists(load_before, nullptr));
     EXPECT_TRUE(txn_log_exists(txn_id, &load_id_1));
     EXPECT_TRUE(txn_log_exists(txn_id, &load_id_2));
-    EXPECT_FALSE(txn_log_exists(single_txn_id, &single_load_id));
+    EXPECT_TRUE(txn_log_exists(single_txn_id, &single_load_id));
 
     // While the transaction is still active (not yet visible, so a retried batch may need its logs), vacuum
     // reclaims only the logs of older transactions.
@@ -859,6 +984,14 @@ TEST_P(LakeMultiStatementPublishTest, batch_publish_leaves_txn_logs_to_vacuum) {
     EXPECT_EQ(2, vacuumed_files);
     EXPECT_FALSE(txn_log_exists(txn_id, &load_id_1));
     EXPECT_FALSE(txn_log_exists(txn_id, &load_id_2));
+    EXPECT_TRUE(txn_log_exists(single_txn_id, &single_load_id));
+
+    // The same goes for the transaction that was published alone.
+    vacuumed_files = 0;
+    vacuumed_file_size = 0;
+    ASSERT_OK(vacuum_txn_log(root_location, single_txn_id + 1, &vacuumed_files, &vacuumed_file_size));
+    EXPECT_EQ(1, vacuumed_files);
+    EXPECT_FALSE(txn_log_exists(single_txn_id, &single_load_id));
 
     auto [rows, sum_c0] = read_back(4);
     EXPECT_EQ(kTotalRows + 2 * kChunkSize, rows);
@@ -867,10 +1000,11 @@ TEST_P(LakeMultiStatementPublishTest, batch_publish_leaves_txn_logs_to_vacuum) {
 
 // StarRocksTest#12646. A multi-table transaction published this partition on its own, but another of its
 // partitions failed, so it stayed COMMITTED and the next batch put it together with the transaction after it.
-// The batch publishes the partition again from the partition's visible version, and publishing the transaction
-// alone had deleted its logs, so the batch has to start from the version that publish wrote. Applying no
-// statement instead wrote the batch's version without the transaction's rows. The other partition keeps failing,
-// so the batch is retried on another node with one more load, and it applies the second transaction again.
+// The batch publishes the partition again from the partition's visible version. The node that published the
+// transaction alone ran a version that deleted its logs then, as a node not yet upgraded does during a rolling
+// upgrade, so the batch has to start from the version that publish wrote. Applying no statement instead wrote
+// the batch's version without the transaction's rows. The other partition keeps failing, so the batch is retried
+// on another node with one more load, and it applies the second transaction again.
 TEST_P(LakeMultiStatementPublishTest, batch_after_txn_published_alone_keeps_its_rows) {
     const int64_t txn_id = next_id();
     const int64_t next_txn_id = next_id();
@@ -887,6 +1021,7 @@ TEST_P(LakeMultiStatementPublishTest, batch_after_txn_published_alone_keeps_its_
     const auto info_after = make_txn_info(load_after, {});
 
     ASSERT_OK(publish_multi_statement(2, txn_id, {load_id_1, load_id_2}).status());
+    delete_statement_logs(txn_id, {load_id_1, load_id_2});
     switch_node();
     ASSERT_FALSE(txn_log_exists(txn_id, &load_id_1));
     ASSERT_FALSE(txn_log_exists(txn_id, &load_id_2));
@@ -905,6 +1040,64 @@ TEST_P(LakeMultiStatementPublishTest, batch_after_txn_published_alone_keeps_its_
     auto [rows_after_retry, sum_c0_after_retry] = read_back(4);
     EXPECT_EQ(kTotalRows + 2 * kChunkSize, rows_after_retry);
     EXPECT_EQ(kSumC0 + chunk_sum_c0(kAfterTxnFirstKey) + chunk_sum_c0(kLaterLoadFirstKey), sum_c0_after_retry);
+}
+
+// The transaction published this partition on its own, and FE did not see the partition succeed. Meanwhile object
+// storage applies a PUT of the second statement's log that it received before the publish: the request was sent
+// twice, as a client does after a timeout. When the publish deleted the statement logs, that left the tablet with
+// the second statement's log only, which looks like a tablet the first statement did not load. FE then publishes
+// the partition again in a batch with the next load, from the partition's visible version and on another node, as
+// it does after a leader change. The batch has to write the rows of both statements.
+TEST_P(LakeMultiStatementPublishTest, batch_after_txn_published_alone_reads_every_statement_log) {
+    const int64_t txn_id = next_id();
+    const int64_t load_after = next_id();
+    const auto load_id_1 = make_load_id(401, 402);
+    const auto load_id_2 = make_load_id(411, 412);
+    write_statement(txn_id, load_id_1, 0);
+    write_statement(txn_id, load_id_2, kChunkSize);
+    write_autocommit_txn(load_after, kAfterTxnFirstKey);
+    const auto second_log_path = _tablet_mgr->txn_log_location(_tablet_metadata->id(), txn_id, load_id_2);
+    ASSIGN_OR_ABORT(auto second_log, _tablet_mgr->get_txn_log(second_log_path, false));
+
+    ASSERT_OK(publish_multi_statement(2, txn_id, {load_id_1, load_id_2}).status());
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
+    EXPECT_TRUE(txn_log_exists(txn_id, &load_id_1));
+    EXPECT_TRUE(txn_log_exists(txn_id, &load_id_2));
+    ASSERT_OK(_tablet_mgr->put_txn_log(second_log, second_log_path));
+    switch_node();
+
+    auto res = publish_batch(1, {make_txn_info(txn_id, {load_id_1, load_id_2}), make_txn_info(load_after, {})});
+    ASSERT_TRUE(res.ok()) << res.status();
+    EXPECT_EQ(3, res.value()->version());
+    auto [rows, sum_c0] = read_back(3);
+    EXPECT_EQ(kTotalRows + kChunkSize, rows);
+    EXPECT_EQ(kSumC0 + chunk_sum_c0(kAfterTxnFirstKey), sum_c0);
+}
+
+// As above, but FE sends the publish of the transaction alone again, to a node that has not cached the published
+// version, and does not mark it as a retry: a new leader does not know that the previous one had sent it. The
+// node applies the transaction again and writes the version again, with the rows of both statements.
+TEST_P(LakeMultiStatementPublishTest, retry_after_txn_published_alone_reads_every_statement_log) {
+    const int64_t txn_id = next_id();
+    const auto load_id_1 = make_load_id(421, 422);
+    const auto load_id_2 = make_load_id(431, 432);
+    write_statement(txn_id, load_id_1, 0);
+    write_statement(txn_id, load_id_2, kChunkSize);
+    const auto second_log_path = _tablet_mgr->txn_log_location(_tablet_metadata->id(), txn_id, load_id_2);
+    ASSIGN_OR_ABORT(auto second_log, _tablet_mgr->get_txn_log(second_log_path, false));
+
+    ASSERT_OK(publish_multi_statement(2, txn_id, {load_id_1, load_id_2}).status());
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
+    EXPECT_TRUE(txn_log_exists(txn_id, &load_id_1));
+    EXPECT_TRUE(txn_log_exists(txn_id, &load_id_2));
+    ASSERT_OK(_tablet_mgr->put_txn_log(second_log, second_log_path));
+    switch_node();
+
+    ASSIGN_OR_ABORT(auto metadata, publish_multi_statement(2, txn_id, {load_id_1, load_id_2}));
+    EXPECT_EQ(2, metadata->version());
+    auto [rows, sum_c0] = read_back(2);
+    EXPECT_EQ(kTotalRows, rows);
+    EXPECT_EQ(kSumC0, sum_c0);
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeMultiStatementPublishTest, LakeMultiStatementPublishTest,

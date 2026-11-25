@@ -27,6 +27,7 @@
 #include "base/hash/hash_std.hpp"
 #include "base/phmap/phmap.h"
 #include "base/time/time.h"
+#include "common/scan_audit_counters.h"
 #include "exec_primitive/pipeline/primitives/operator_exec_stats.h"
 #include "gen_cpp/InternalService_types.h" // for TPipelineProfileLevel, TTimeUnit
 #include "gen_cpp/Types_types.h"           // for TUniqueId
@@ -229,6 +230,11 @@ public:
     void consume_delta_scan_stats(QueryStatistics* query_statistic);
     void add_total_scan_stats(QueryStatistics* query_statistic);
 
+    // Per scan node read counters for the audit log, keyed by plan node id.
+    void update_per_scan_stats(int32_t plan_node_id, const ScanAuditCounters& delta);
+    void consume_delta_per_scan_stats(QueryStatistics* query_statistic);
+    void add_total_per_scan_stats(QueryStatistics* query_statistic);
+
     // Publish a completed task before making its result visible to downstream operators.
     void add_ai_statistics(const AIExecutionStatistics& statistics) noexcept;
     AIExecutionStatistics ai_statistics() const;
@@ -273,6 +279,14 @@ private:
     SpinLock _scan_stats_lock;
     // table level scan stats
     phmap::flat_hash_map<int64_t, std::shared_ptr<ScanStats>, StdHash<int64_t>> _scan_stats;
+
+    struct PerScanStats {
+        ScanAuditCounters total;
+        ScanAuditCounters delta;
+    };
+    SpinLock _per_scan_stats_lock;
+    // scan node level read counters, keyed by plan node id
+    phmap::flat_hash_map<int32_t, PerScanStats> _per_scan_stats;
 
     mutable SpinLock _ai_statistics_lock;
     // Terminal callbacks must not allocate: an allocation failure before the

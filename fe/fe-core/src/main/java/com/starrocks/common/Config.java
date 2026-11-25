@@ -205,6 +205,9 @@ public class Config extends ConfigBase {
     public static int audit_log_delete_count = -1;
     @ConfField(mutable = true)
     public static boolean audit_log_json_format = false;
+    @ConfField(mutable = true, comment = "Max number of scan entries an execution attempt records in the " +
+            "ScanStats column of the audit log. An attempt with more scan nodes is marked scansTruncated.")
+    public static int audit_scan_stats_max_scans = 1000;
     @ConfField(mutable = true, comment = "Max length of the error message recorded in the audit log, truncate " +
             "messages longer than this specified limit. Set to 0 to stop recording error messages. Default: 1024")
     public static int audit_log_error_message_max_length = 1024;
@@ -4239,7 +4242,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Default max parallel compaction subtasks per tablet when not specified in " +
             "table properties. 0 means disable parallel compaction.")
-    public static int lake_compaction_max_parallel_default = 3;
+    public static int lake_compaction_max_parallel_default = 5;
 
     @ConfField(mutable = true)
     public static int lake_compaction_history_size = 20;

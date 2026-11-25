@@ -65,25 +65,6 @@ public:
     template <typename Container>
     void predicates_of_column(ColumnId cid, Container* container) const;
 
-    Status convert_to(ConjunctivePredicates* dst, const std::vector<LogicalType>& new_types,
-                      ObjectPool* obj_pool) const {
-        size_t num_vec_preds = _vec_preds.size();
-        dst->_vec_preds.resize(num_vec_preds);
-        for (size_t i = 0; i < num_vec_preds; ++i) {
-            ColumnId cid = _vec_preds[i]->column_id();
-            RETURN_IF_ERROR(_vec_preds[i]->convert_to(&dst->_vec_preds[i], get_type_info(new_types[cid]), obj_pool));
-        }
-
-        size_t num_non_vec_preds = _non_vec_preds.size();
-        dst->_non_vec_preds.resize(num_non_vec_preds);
-        for (size_t i = 0; i < num_non_vec_preds; ++i) {
-            ColumnId cid = _non_vec_preds[i]->column_id();
-            RETURN_IF_ERROR(
-                    _non_vec_preds[i]->convert_to(&dst->_non_vec_preds[i], get_type_info(new_types[cid]), obj_pool));
-        }
-        return Status::OK();
-    }
-
     std::string debug_string() const;
 
     std::vector<const ColumnPredicate*>& vec_preds() { return _vec_preds; }

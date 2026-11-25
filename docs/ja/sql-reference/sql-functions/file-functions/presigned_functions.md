@@ -50,6 +50,8 @@ FILE get_presigned_file(VARCHAR storage_volume, FILE file_expr [, BIGINT expirat
 
 `uri` のみを署名付き URL に置き換えた新しい FILE を返します。その他のフィールドは変更されません。`uri` が NULL、空文字列、または HTTP/HTTPS URL の場合、FILE をそのまま返します。
 
+非公開の画像や動画を `ai_complete` または `ai_embed` に渡すには `get_presigned_file` を使用します。モデルサービスは署名付き URL 全体を使用してオブジェクトを読み取ります。`get_presigned_url` が返す `VARCHAR` を直接 `ai_embed` に渡すと、URL 文字列の埋め込みベクトルが生成されます。[オブジェクトストレージ上の動画をベクトル化する](../ai-functions/ai_functions.mdx#video-embedding)を参照してください。
+
 ## 例
 
 以下の例では、`media_volume` という名前のストレージボリュームを使用します。

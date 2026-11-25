@@ -14,6 +14,11 @@
 
 #pragma once
 
+#include <atomic>
+#include <functional>
+#include <memory>
+#include <mutex>
+
 #include "base/concurrency/race_detect.h"
 #include "base/concurrency/spinlock.h"
 #include "compute_env/pipeline/driver_scan_operator.h"
@@ -80,6 +85,8 @@ public:
 
     int64_t get_last_scan_rows_num() override { return _last_scan_rows_num.exchange(0); }
     int64_t get_last_scan_bytes() override { return _last_scan_bytes.exchange(0); }
+    int32_t get_scan_plan_node_id() const override { return get_plan_node_id(); }
+    ScanAuditCounters take_scan_audit_counters() override;
 
     void set_cache_context(const query_cache::ScanCacheContextPtr& cache_context) override {
         _cache_context = cache_context;
@@ -89,6 +96,11 @@ public:
     }
 
     void set_query_ctx(const QueryContextPtr& query_ctx) override;
+
+    // A callback that clears `waiting` and wakes the operator, for a chunk source whose input became readable
+    // (ChunkSource::is_waiting_for_input). It may run on any thread, also after the operator closed, when it only
+    // clears the flag.
+    std::function<void()> input_ready_callback(std::shared_ptr<std::atomic<bool>> waiting);
 
     virtual int available_pickup_morsel_count() { return _io_tasks_per_scan_operator; }
     bool output_chunk_by_bucket() const { return _output_chunk_by_bucket; }
@@ -185,6 +197,7 @@ protected:
     Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
     Status _try_to_trigger_next_scan(RuntimeState* state);
     virtual void _close_chunk_source_unlocked(RuntimeState* state, int index);
+    void _add_scan_audit_counters(const ScanAuditCounters& delta);
     void _close_chunk_source(RuntimeState* state, int index);
     virtual void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns,
                                            int64_t scan_rows, int64_t scan_bytes);
@@ -282,6 +295,13 @@ protected:
 
     std::atomic_int64_t _last_scan_rows_num = 0;
     std::atomic_int64_t _last_scan_bytes = 0;
+    // Audit read counters grown since the last take_scan_audit_counters(): reader counters are added by the IO
+    // tasks, output rows by pull_chunk().
+    SpinLock _audit_counters_lock;
+    ScanAuditCounters _audit_counters;
+    std::atomic_int64_t _audit_output_rows = 0;
+    // Only the driver thread takes the counters.
+    bool _audit_counters_reported = false;
 
     // The number of morsels picked up by this scan operator.
     // A tablet may be divided into multiple morsels.
@@ -304,6 +324,13 @@ private:
     Status _scan_status;
     // we should hold a weak ptr because query context may be released before running io task
     std::weak_ptr<QueryContext> _query_ctx;
+
+    class InputReadyWaker;
+    // Created by the first chunk source that waits for its input, and detached when the operator closes; one created
+    // after that is detached from the start.
+    std::mutex _input_ready_waker_lock;
+    std::shared_ptr<InputReadyWaker> _input_ready_waker;
+    bool _input_ready_waker_detached = false;
 
     workgroup::WorkGroupPtr _workgroup = nullptr;
 

@@ -118,7 +118,7 @@ public class MetaScanNode extends AbstractOlapTableScanNode {
             int schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getMetaId());
             List<Tablet> tablets = index.getTablets();
 
-            long visibleVersion = partition.getVisibleVersion();
+            long visibleVersion = olapTable.getVisibleVersionForQuery(partition);
             String visibleVersionStr = String.valueOf(visibleVersion);
 
             for (Tablet tablet : tablets) {

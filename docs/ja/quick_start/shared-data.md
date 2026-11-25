@@ -42,7 +42,7 @@ import AIStorLicense from '../_assets/commonMarkdown/aistor_license.mdx'
 
 - [Docker](https://docs.docker.com/engine/install/)
 - Docker に割り当てられた 4 GB の RAM
-- Docker に割り当てられた 10 GB の空きディスクスペース
+- Docker に割り当てられた 20 GB の空きディスクスペース
 
 ### SQL クライアント
 
@@ -167,7 +167,7 @@ container quickstart-minio_mc-1 exited (0)
 
 StarRocks で MinIO をオブジェクトストレージとして使用するには、StarRocks に MinIO のアクセスキーが必要です。アクセスキーは Docker サービスの起動時に生成されました。StarRocks が MinIO に接続する方法をよりよく理解するために、キーが存在することを確認してください。
 
-[http://localhost:9001/access-keys](http://localhost:9001/access-keys) にアクセスします。ユーザー名とパスワードは Docker compose ファイルに指定されており、`miniouser` と `miniopassword` です。1 つのアクセスキーがあることが確認できます。キーは `AAAAAAAAAAAAAAAAAAAA` で、MinIO コンソールではシークレットは表示されませんが、Docker compose ファイルには `BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB` と記載されています。
+[http://localhost:9001/console/identity](http://localhost:9001/console/identity) にアクセスします。ユーザー名とパスワードは Docker compose ファイルに指定されており、`miniouser` と `miniopassword` です。1 つのアクセスキーがあることが確認できます。キーは `AAAAAAAAAAAAAAAAAAAA` で、MinIO コンソールではシークレットは表示されませんが、Docker compose ファイルには `BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB` と記載されています。
 
 ![MinIO アクセスキーを表示](../_assets/quick-start/MinIO-view-key.png)
 
@@ -193,7 +193,7 @@ StarRocks でストレージボリュームを作成する際に、データの 
     LOCATIONS = ("s3://my-starrocks-bucket/")
 ```
 
-[http://localhost:9001/buckets](http://localhost:9001/buckets) を開き、ストレージボリューム用のバケットを追加します。バケット名は `my-starrocks-bucket` とします。3 つのリストされたオプションのデフォルトを受け入れます。
+[http://localhost:9001/console/buckets](http://localhost:9001/console/buckets) を開き、ストレージボリューム用のバケットを追加します。バケット名は `my-starrocks-bucket` とします。3 つのリストされたオプションのデフォルトを受け入れます。
 
 ---
 
@@ -457,7 +457,7 @@ curl --location-trusted -u root             \
 
 ## MinIO にデータが保存されていることを確認する
 
-MinIO を開き、[http://localhost:9001/browser/my-starrocks-bucket](http://localhost:9001/browser/my-starrocks-bucket) にアクセスして、`my-starrocks-bucket/` 以下にエントリがあることを確認します。
+MinIO を開き、[http://localhost:9001/console/browser/my-starrocks-bucket](http://localhost:9001/console/browser/my-starrocks-bucket) にアクセスして、`my-starrocks-bucket/` 以下にエントリがあることを確認します。
 
 :::tip
 `my-starrocks-bucket/` 以下のフォルダ名はデータをロードした際に生成されます。`my-starrocks-bucket` の下に単一のディレクトリがあり、その下にさらに 2 つのディレクトリがあるはずです。それらのディレクトリにはデータ、メタデータ、またはスキーマエントリが含まれています。

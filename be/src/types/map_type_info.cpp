@@ -55,8 +55,8 @@ protected:
     }
 
 private:
-    TypeInfoPtr _key_type;
-    TypeInfoPtr _value_type;
+    const TypeInfoPtr _key_type;
+    const TypeInfoPtr _value_type;
 };
 
 TypeInfoPtr get_map_type_info(const TypeInfoPtr& key_type, const TypeInfoPtr& value_type) {
