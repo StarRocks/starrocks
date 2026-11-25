@@ -303,24 +303,4 @@ size_t Schema::get_field_index_by_name(std::string_view name) const {
     return p->second;
 }
 
-void Schema::convert_to(Schema* new_schema, const std::vector<LogicalType>& new_types) const {
-    size_t num_fields = _fields.size();
-    new_schema->_fields.resize(num_fields);
-    for (size_t i = 0; i < num_fields; ++i) {
-        auto cid = _fields[i]->id();
-        auto new_type = new_types[cid];
-        if (_fields[i]->type()->type() == new_type) {
-            new_schema->_fields[i] = _fields[i]->copy();
-        } else {
-            new_schema->_fields[i] = _fields[i]->convert_to(new_type);
-        }
-    }
-    new_schema->_num_keys = _num_keys;
-    if (!_share_name_to_index) {
-        new_schema->_name_to_index = _name_to_index;
-    } else {
-        new_schema->_build_index_map(new_schema->_fields);
-    }
-}
-
 } // namespace starrocks
