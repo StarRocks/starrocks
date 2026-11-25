@@ -260,7 +260,6 @@ SET(DW_TEST_FILES
     ./storage/compaction_parallelization_test.cpp
     ./storage/compaction_utils_test.cpp
     ./storage/conjunctive_predicates_test.cpp
-    ./storage/convert_helper_test.cpp
     ./storage/cumulative_compaction_test.cpp
     ./storage/data_dir_test.cpp
     ./storage/datum_variant_test.cpp

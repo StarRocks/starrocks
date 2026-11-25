@@ -146,7 +146,6 @@ set(STORAGE_FILES
     chunk_helper.cpp
     chunk_variant_helper.cpp
     runtime_filter_predicate.cpp
-    convert_helper.cpp
     delete_predicates.cpp
     predicate_parser.cpp
     row_store_encoder.cpp
