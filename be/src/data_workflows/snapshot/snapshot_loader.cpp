@@ -68,8 +68,8 @@ namespace starrocks {
 
 // Name of the per-tablet manifest written into the remote snapshot dir. It has no '.' on purpose:
 // the remote listing splits every file name at its last '.' to recover the md5 suffix and skips
-// names without one, so the manifest is naturally ignored by the download/delete logic and only
-// ever read explicitly by name.
+// names without one, so the manifest is naturally ignored by the download/delete logic. The listing
+// reports whether the manifest is present, and restore reads it by name only then.
 static const std::string SNAPSHOT_MANIFEST_FILENAME = "__starrocks_snapshot_manifest";
 
 #ifdef BE_TEST
@@ -313,10 +313,13 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
 
         // 2. get remote files
         std::map<std::string, FileStat> remote_files;
+        bool has_manifest = false;
         if (!download.__isset.use_broker || download.use_broker) {
-            RETURN_IF_ERROR(_get_existing_files_from_remote(*client, remote_path, download.broker_prop, &remote_files));
+            RETURN_IF_ERROR(_get_existing_files_from_remote(*client, remote_path, download.broker_prop, &remote_files,
+                                                            &has_manifest));
         } else {
-            RETURN_IF_ERROR(_get_existing_files_from_remote_without_broker(fs, remote_path, &remote_files));
+            RETURN_IF_ERROR(
+                    _get_existing_files_from_remote_without_broker(fs, remote_path, &remote_files, &has_manifest));
         }
         if (remote_files.empty()) {
             std::stringstream ss;
@@ -328,9 +331,9 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
         // Check the remote listing against the manifest written at backup time
         if (!download.__isset.use_broker || download.use_broker) {
             BrokerFileSystem fs_broker(download.broker_addr, download.broker_prop);
-            RETURN_IF_ERROR(_verify_snapshot_manifest(&fs_broker, remote_path, remote_files));
+            RETURN_IF_ERROR(_verify_snapshot_manifest(&fs_broker, remote_path, remote_files, has_manifest));
         } else {
-            RETURN_IF_ERROR(_verify_snapshot_manifest(fs.get(), remote_path, remote_files));
+            RETURN_IF_ERROR(_verify_snapshot_manifest(fs.get(), remote_path, remote_files, has_manifest));
         }
 
         TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(local_tablet_id);
@@ -479,19 +482,10 @@ Status SnapshotLoader::_write_snapshot_manifest(FileSystem* fs, const std::strin
 }
 
 Status SnapshotLoader::_read_snapshot_manifest(FileSystem* fs, const std::string& remote_dir,
-                                               std::vector<std::string>* file_names, bool* found) {
-    *found = false;
+                                               std::vector<std::string>* file_names) {
     file_names->clear();
     std::string manifest_path = remote_dir + "/" + SNAPSHOT_MANIFEST_FILENAME;
-    auto maybe_file = fs->new_sequential_file(manifest_path);
-    if (!maybe_file.ok()) {
-        if (maybe_file.status().is_not_found()) {
-            // Snapshot taken before the manifest existed: nothing to verify, keep legacy behavior.
-            return Status::OK();
-        }
-        return maybe_file.status();
-    }
-    auto sequential_file = std::move(maybe_file.value());
+    ASSIGN_OR_RETURN(auto sequential_file, fs->new_sequential_file(manifest_path));
 
     std::string content;
     char buf[4096];
@@ -515,20 +509,20 @@ Status SnapshotLoader::_read_snapshot_manifest(FileSystem* fs, const std::string
         start = end + 1;
     }
 
-    *found = true;
     VLOG(2) << "read snapshot manifest: " << manifest_path << ", file num: " << file_names->size();
     return Status::OK();
 }
 
 Status SnapshotLoader::_verify_snapshot_manifest(FileSystem* fs, const std::string& remote_path,
-                                                 const std::map<std::string, FileStat>& remote_files) {
-    std::vector<std::string> manifest_files;
-    bool found = false;
-    RETURN_IF_ERROR(_read_snapshot_manifest(fs, remote_path, &manifest_files, &found));
-    if (!found) {
-        // Snapshot taken before the manifest existed: keep legacy listing-based behavior.
+                                                 const std::map<std::string, FileStat>& remote_files,
+                                                 bool has_manifest) {
+    if (!has_manifest) {
+        // Snapshot taken before the manifest existed: keep legacy listing-based behavior. Decided from the
+        // listing, since a failed open of a missing file is not NotFound on every repository filesystem.
         return Status::OK();
     }
+    std::vector<std::string> manifest_files;
+    RETURN_IF_ERROR(_read_snapshot_manifest(fs, remote_path, &manifest_files));
     // Every file recorded in the manifest must appear in the remote listing.
     for (const std::string& expected_name : manifest_files) {
         if (remote_files.find(expected_name) == remote_files.end()) {
@@ -915,7 +909,10 @@ Status SnapshotLoader::_check_local_snapshot_paths(const std::map<std::string, s
 
 Status SnapshotLoader::_get_existing_files_from_remote(BrokerServiceConnection& client, const std::string& remote_path,
                                                        const std::map<std::string, std::string>& broker_prop,
-                                                       std::map<std::string, FileStat>* files) {
+                                                       std::map<std::string, FileStat>* files, bool* has_manifest) {
+    if (has_manifest != nullptr) {
+        *has_manifest = false;
+    }
     try {
         // get existing files from remote path
         TBrokerListResponse list_rep;
@@ -952,6 +949,12 @@ Status SnapshotLoader::_get_existing_files_from_remote(BrokerServiceConnection& 
             }
 
             const std::string& file_name = file.path;
+            if (file_name == SNAPSHOT_MANIFEST_FILENAME) {
+                if (has_manifest != nullptr) {
+                    *has_manifest = true;
+                }
+                continue;
+            }
             size_t pos = file_name.find_last_of('.');
             if (pos == std::string::npos || pos == file_name.size() - 1) {
                 // Not found checksum separator, ignore this file
@@ -979,7 +982,11 @@ Status SnapshotLoader::_get_existing_files_from_remote(BrokerServiceConnection& 
 
 Status SnapshotLoader::_get_existing_files_from_remote_without_broker(const std::unique_ptr<FileSystem>& fs,
                                                                       const std::string& remote_path,
-                                                                      std::map<std::string, FileStat>* files) {
+                                                                      std::map<std::string, FileStat>* files,
+                                                                      bool* has_manifest) {
+    if (has_manifest != nullptr) {
+        *has_manifest = false;
+    }
     int64_t file_num = 0;
     Status st;
     st.update(fs->iterate_dir2(remote_path, [&](DirEntry entry) {
@@ -994,6 +1001,12 @@ Status SnapshotLoader::_get_existing_files_from_remote_without_broker(const std:
         if (UNLIKELY(!entry.size.has_value())) {
             st.update(Status::InternalError("Unable to get file size"));
             return false;
+        }
+        if (entry.name == SNAPSHOT_MANIFEST_FILENAME) {
+            if (has_manifest != nullptr) {
+                *has_manifest = true;
+            }
+            return true;
         }
         size_t pos = entry.name.find_last_of('.');
         if (pos == std::string::npos || pos == entry.name.size() - 1) {
