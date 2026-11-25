@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "StarRocks クエリプロファイルから出力される演算子別メトリクスの権威ある参照情報。"
 keywords: ['profile', 'query', 'metric']
 sidebar_position: 80
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # クエリプロファイルメトリクス
@@ -252,6 +253,7 @@ OLAP_SCANオペレーターに似ていますが、Iceberg/Hive/Hudi/Deltaなど
 | RuntimeFilterInputRows | ParquetリーダーのJoin Runtime Filter評価に入力された行数。 |
 | RuntimeFilterOutputRows | ParquetリーダーのJoin Runtime Filter評価を通過した行数。`RuntimeFilterInputRows` との差が大きいほど、Lazy列がマテリアライズされる前に多くの行がフィルタリングされたことを意味します。 |
 | ScanRangesPrunedByPartitionValue | identity パーティション値が述語または到着済みの Join Runtime Filter で除外されたため、読み取り前にスキップされた Scan Range の数。 |
+| ScanRangesPrunedByFileStats | Iceberg Manifest のファイルレベルの min/max 値から、述語または到着済みの Runtime Filter（Join または Top-N）を満たす行が存在しないと判断されたため、データファイルを開く前にスキップされた Scan Range の数。Parquet および ORC ファイルのみが対象です。 |
 | PaimonFSAppIOCount | Paimonファイルシステムアダプターが受け取った有効な読み取り試行回数。順次読み取り、位置指定読み取り、非同期読み取りの合計です。 |
 | PaimonFSAppIOBytes | Paimonファイルシステムアダプター境界で正常に返された読み取りバイト数。 |
 | PaimonFSAppIOTime | Paimonファイルシステムアダプター境界での読み取りのエンドツーエンド時間。 |
@@ -302,6 +304,7 @@ OLAP_SCANオペレーターに似ていますが、Iceberg/Hive/Hudi/Deltaなど
 | ShuffleBufferFlushRows | この早期送信で送信された行数。 |
 | ShuffleBufferReleasedChunks | 早期送信の後、残りのメモリが `exchange_sink_buffer_flush_threshold_bytes` の半分を超えていたために解放された Partial Chunk の数。 |
 | PeakSerializedChunkBytes | シリアライズ後（圧縮前）の Chunk サイズの最大値。 |
+| PeakRequestBytes | ネットワーク経由で送信された単一リクエストのサイズの最大値（圧縮される場合は圧縮後のサイズ）。`BytesSent / RequestSent` がリクエストの平均サイズです。パススルーデータは含まれません。 |
 | SinkBufferPeakMemoryUsage | Sink Buffer で送信待ちまたは送信中のリクエストが使用するメモリのピーク値。 |
 | SinkBufferMemoryLimit | Sink Buffer のメモリ上限。デフォルトは `sink_buffer_mem_limit_per_driver` × 宛先の数です。上限に達すると、リクエストが完了するまで Sink はデータの受け入れを停止します。 |
 | SinkBufferPeakInFlightRpcNum | 同時に実行中の RPC 数のピーク値。 |

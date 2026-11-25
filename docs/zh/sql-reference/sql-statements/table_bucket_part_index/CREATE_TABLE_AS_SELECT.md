@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "CREATE TABLE AS SELECT 创建新表并使用查询结果填充，支持同步和异步模式。"
 keywords: ['CTAS']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE TABLE AS SELECT
@@ -62,9 +63,9 @@ CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原�
 
 ## 注意事项
 
-- 使用 CTAS 语句创建的新表需满足如下条件：
-  - `ENGINE` 类型为 `OLAP`。
+- Paimon CTAS 的目标表必须位于 Paimon Catalog。若目标位于 Unified Catalog，StarRocks 会在建表前报错。目标表名省略 catalog 或数据库时，使用会话中的当前 catalog 或数据库。支持的选项和失败时的行为请参见 [Paimon CTAS](../../../data_source/catalog/paimon_catalog.md#create-table-as-select)。
 
+- OLAP 目标表采用以下默认设置。
   - 表类型默认为明细表，您也可以在 `key_desc` 中指定为主键表。
 
   - 排序列为前三列且这三列类型的存储空间不能超过 36 个字节。

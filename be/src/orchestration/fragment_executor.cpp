@@ -28,10 +28,14 @@
 #include "compute_env/compute_env.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/load/load_stream_mgr.h"
 #include "compute_env/load/stream_context_mgr.h"
 #include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/stream_load_context_handle.h"
+#include "compute_env/load/stream_load_metrics.h"
+#include "compute_env/load/stream_load_pipe_attachment.h"
 #include "compute_env/pipeline/driver_limiter.h"
+#include "compute_env/query/query_remote_read.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
@@ -47,6 +51,7 @@
 #include "exec/lookup_node.h"
 #include "exec/pipeline/adaptive/collect_stats_event.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/pipeline_driver_instantiator.h"
@@ -67,8 +72,11 @@
 #include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
+#include "orchestration/routine_load_task_executor.h"
 #include "runtime/descriptors.h"
 #include "runtime/descriptors_ext.h"
+#include "runtime/fragment_attachment.h"
+#include "runtime/kafka_scan_range_report.h"
 #include "runtime/runtime_filter_query_lifecycle.h"
 
 namespace starrocks::orchestration {
@@ -611,6 +619,59 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
 Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
     const TExecPlanFragmentParams& unique_request = request.unique();
+    if (request.common().query_options.query_type == TQueryType::LOAD) {
+        std::vector<std::unique_ptr<FragmentAttachment>> attachments;
+        auto bind_pipes = [&](const std::vector<TScanRangeParams>& scan_ranges) -> Status {
+            for (const auto& scan_range : scan_ranges) {
+                if (!scan_range.scan_range.__isset.broker_scan_range) {
+                    continue;
+                }
+                const auto& broker_range = scan_range.scan_range.broker_scan_range;
+                // Channel and merge-commit inputs are prepared below with StreamLoadContextHandle.
+                if (broker_range.__isset.channel_id) {
+                    continue;
+                }
+                // Kafka scan ranges get their pipes registered and attached later, by _prepare_kafka_scan_ranges.
+                if (broker_range.__isset.kafka_scan_range) {
+                    continue;
+                }
+                for (const auto& range : broker_range.ranges) {
+                    if (range.file_type != TFileType::FILE_STREAM) {
+                        continue;
+                    }
+                    auto pipe = exec_env->load_stream_mgr()->get(range.load_id);
+                    if (pipe == nullptr) {
+                        auto status = Status::InternalError("Invalid or outdated load id " + print_id(range.load_id));
+                        for (const auto& attachment : attachments) {
+                            attachment->close(status);
+                        }
+                        return status;
+                    }
+                    attachments.emplace_back(std::make_unique<StreamLoadPipeAttachment>(std::move(pipe)));
+                }
+            }
+            return Status::OK();
+        };
+        for (const auto& [node_id, scan_ranges] : unique_request.params.per_node_scan_ranges) {
+            if (request.per_driver_seq_scan_ranges_of_node(node_id).empty()) {
+                RETURN_IF_ERROR(bind_pipes(scan_ranges));
+            }
+        }
+        if (unique_request.params.__isset.node_to_per_driver_seq_scan_ranges) {
+            for (const auto& [node_id, per_driver_ranges] : unique_request.params.node_to_per_driver_seq_scan_ranges) {
+                for (const auto& [driver_seq, scan_ranges] : per_driver_ranges) {
+                    RETURN_IF_ERROR(bind_pipes(scan_ranges));
+                }
+            }
+        }
+        // FE creates one input mode per fragment: existing BE-local pipes or channel inputs.
+        // Channel-only fragments fall through to StreamLoadContextHandle preparation below.
+        if (!attachments.empty()) {
+            _fragment_ctx->set_fragment_attachments(std::move(attachments));
+            return Status::OK();
+        }
+    }
+
     if (!unique_request.params.__isset.node_to_per_driver_seq_scan_ranges) {
         return Status::OK();
     }
@@ -695,6 +756,123 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
     return Status::OK();
 }
 
+// Like a classic routine load task (finish_stream_load), each instance of a routine load round in the coordinated mode
+// that finishes successfully counts the rows its sink loaded in the stream load metrics of the BE. That is the instance
+// that reads the Kafka scan ranges, or the one after the exchange when the round shuffles the rows to their sinks; an
+// instance without a sink loads no row. The fragment of a classic task, which the task prepares without the routine
+// load task executor, counts its rows in finish_stream_load instead.
+// It leaves the received bytes out, as a classic routine load task does: finish_stream_load counts
+// total_receive_bytes, which only an HTTP stream load sets.
+// Unlike a classic task, it counts the rows before the max_filter_ratio check. FE applies that check to the whole
+// round, one transaction, after every instance finished, so an instance cannot know its outcome. A round the check
+// rejects pauses its job, so its rows count at most once per pause, and the default ratio of 1 rejects none.
+// Checking each instance on its own instead could leave out rows of rounds that commit.
+void FragmentExecutor::_prepare_routine_load_rows_count(const UnifiedExecPlanFragmentParams& request) {
+    const auto& query_options = request.common().query_options;
+    if (_routine_load_task_executor == nullptr || !query_options.__isset.load_job_type ||
+        query_options.load_job_type != TLoadJobType::ROUTINE_LOAD) {
+        return;
+    }
+    _fragment_ctx->set_finish_cb([](pipeline::FragmentContext* fragment_ctx) {
+        if (!fragment_ctx->final_status().ok()) {
+            return;
+        }
+        StreamLoadMetrics::instance()->stream_load_rows_total.increment(
+                fragment_ctx->runtime_state()->num_rows_load_sink());
+    });
+}
+
+// A routine load round in the coordinated mode reads each Kafka scan range from a stream load pipe that this BE fills
+// by consuming the partitions of the scan range.
+Status FragmentExecutor::_prepare_kafka_scan_ranges(const UnifiedExecPlanFragmentParams& request) {
+    const TPlanFragmentExecParams& params = request.unique().params;
+    std::vector<const TBrokerScanRange*> kafka_scan_ranges;
+    auto collect_kafka_scan_ranges = [&kafka_scan_ranges](const std::vector<TScanRangeParams>& scan_ranges) {
+        for (const auto& scan_range : scan_ranges) {
+            const TScanRange& range = scan_range.scan_range;
+            if (range.__isset.broker_scan_range && range.broker_scan_range.__isset.kafka_scan_range) {
+                kafka_scan_ranges.push_back(&range.broker_scan_range);
+            }
+        }
+    };
+    for (const auto& [node_id, scan_ranges] : params.per_node_scan_ranges) {
+        collect_kafka_scan_ranges(scan_ranges);
+    }
+    if (params.__isset.node_to_per_driver_seq_scan_ranges) {
+        for (const auto& [node_id, per_driver_scan_ranges] : params.node_to_per_driver_seq_scan_ranges) {
+            for (const auto& [driver_seq, scan_ranges] : per_driver_scan_ranges) {
+                collect_kafka_scan_ranges(scan_ranges);
+            }
+        }
+    }
+    if (kafka_scan_ranges.empty()) {
+        return Status::OK();
+    }
+    if (_routine_load_task_executor == nullptr) {
+        return Status::ServiceUnavailable("Routine load task executor is unavailable for kafka scan ranges");
+    }
+    // Like a classic routine load task, the instance names the Kafka topic and the partitions it consumes, each with
+    // the offset it consumes from, as the source of its rejected records instead of its pipes. The scan ranges of a
+    // round share the topic of its job.
+    std::map<int32_t, int64_t> partition_begin_offset;
+    for (const TBrokerScanRange* scan_range : kafka_scan_ranges) {
+        const auto& begin_offsets = scan_range->kafka_scan_range.partition_begin_offset;
+        partition_begin_offset.insert(begin_offsets.begin(), begin_offsets.end());
+    }
+    _fragment_ctx->runtime_state()->set_routine_load_source_info(RoutineLoadTaskExecutor::kafka_source_info(
+            kafka_scan_ranges.front()->kafka_scan_range.topic, partition_begin_offset));
+
+    std::vector<std::unique_ptr<FragmentAttachment>> fragment_attachments;
+    std::vector<StreamLoadContext*> contexts;
+    bool success = false;
+    DeferOp defer_op([&] {
+        if (!success) {
+            const auto status = Status::Cancelled("Failed to prepare kafka scan ranges");
+            for (const auto& attachment : fragment_attachments) {
+                if (attachment != nullptr) {
+                    attachment->close(status);
+                }
+            }
+        }
+    });
+
+    for (const TBrokerScanRange* scan_range : kafka_scan_ranges) {
+        ASSIGN_OR_RETURN(auto* ctx, _routine_load_task_executor->prepare_kafka_scan_range(*scan_range));
+        // The attachment takes its own reference, which the fragment drops when it closes the attachment.
+        fragment_attachments.emplace_back(std::make_unique<StreamLoadContextHandle>(ctx, nullptr));
+        StreamLoadContext::release(ctx);
+        contexts.push_back(ctx);
+    }
+    success = true;
+    // Hand the pipes over to the fragment before any consumption starts: a consumption that fails cancels the
+    // fragment, which cancels its attachments, and must not race with installing them.
+    _fragment_ctx->append_fragment_attachments(std::move(fragment_attachments));
+
+    auto report = std::make_shared<KafkaScanRangeReport>();
+    _fragment_ctx->runtime_state()->set_kafka_scan_range_report(report);
+    // The query context owns the fragment context, so it is locked first and released last: a fragment context must
+    // not outlive its query context. A query context being destroyed releases its fragment contexts only within its
+    // destructor, so the fragment context is not locked once the query context cannot be.
+    std::weak_ptr<pipeline::QueryContext> weak_query_ctx = _query_ctx_hold;
+    std::weak_ptr<pipeline::FragmentContext> weak_fragment_ctx = _fragment_ctx;
+    auto cancel_fragment = [weak_query_ctx, weak_fragment_ctx](const Status& status) {
+        auto query_ctx = weak_query_ctx.lock();
+        if (query_ctx == nullptr) {
+            return;
+        }
+        auto fragment_ctx = weak_fragment_ctx.lock();
+        if (fragment_ctx != nullptr) {
+            pipeline::cancel_fragment_context(fragment_ctx.get(), status);
+        }
+    };
+    // The contexts stay alive with the attachments the fragment now owns. Once a consumption has started, a failure
+    // to start the next one fails the prepare, which destroys the fragment and cancels the started ones with it.
+    for (auto* ctx : contexts) {
+        RETURN_IF_ERROR(_routine_load_task_executor->start_kafka_scan_range(ctx, report, cancel_fragment));
+    }
+    return Status::OK();
+}
+
 bool FragmentExecutor::_is_in_colocate_exec_group(PlanNodeId plan_node_id) {
     for (auto& [group_id, group] : _colocate_exec_groups) {
         if (group->contains(plan_node_id)) {
@@ -736,6 +914,7 @@ bool FragmentExecutor::is_final_sink_type(TDataSinkType::type type) {
     case TDataSinkType::ICEBERG_DELETE_SINK:
     case TDataSinkType::ICEBERG_ROW_DELTA_SINK:
     case TDataSinkType::HIVE_TABLE_SINK:
+    case TDataSinkType::PAIMON_TABLE_SINK:
     case TDataSinkType::TABLE_FUNCTION_TABLE_SINK:
     case TDataSinkType::EXPORT_SINK:
     case TDataSinkType::BLACKHOLE_TABLE_SINK:
@@ -971,6 +1150,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
         auto mem_tracker = _fragment_ctx->runtime_state()->instance_mem_tracker();
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+        // The tablet metadata, schemas and indexes read to plan the scans are this query's remote reads.
+        ScopedRemoteReadContext remote_read_scope(query_remote_read_context(_fragment_ctx->runtime_state()));
 
         RETURN_IF_ERROR(_prepare_global_dict(request));
         RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
@@ -980,9 +1161,13 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
         auto mem_tracker = _fragment_ctx->runtime_state()->instance_mem_tracker();
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+        ScopedRemoteReadContext remote_read_scope(query_remote_read_context(_fragment_ctx->runtime_state()));
 
         RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
         RETURN_IF_ERROR(_prepare_stream_load_pipe(exec_env, request));
+        // before the Kafka scan ranges start to be consumed, whose failure fails the fragment
+        _prepare_routine_load_rows_count(request);
+        RETURN_IF_ERROR(_prepare_kafka_scan_ranges(request));
     }
 
     FAIL_POINT_TRIGGER_EXECUTE(fragment_prepare_sleep, { sleep(2); });

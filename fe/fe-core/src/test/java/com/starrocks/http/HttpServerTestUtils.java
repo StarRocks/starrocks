@@ -18,6 +18,8 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.Attribute;
+import io.netty.util.concurrent.EventExecutor;
+import io.netty.util.concurrent.ImmediateEventExecutor;
 
 import java.util.LinkedList;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -80,6 +82,7 @@ public class HttpServerTestUtils {
             when(attribute.get()).thenReturn(null);
             this.channel = mock(Channel.class);
             when(channel.attr(same(HTTP_SQL_CONNECT_CONTEXT_ATTRIBUTE_KEY))).thenReturn(attribute);
+            when(channel.isActive()).thenReturn(true);
             this.channelFuture = mock(ChannelFuture.class);
         }
 
@@ -102,6 +105,12 @@ public class HttpServerTestUtils {
         @Override
         public Channel channel() {
             return channel;
+        }
+
+        // Runs what the handler hands back to the event loop at once, on the calling thread.
+        @Override
+        public EventExecutor executor() {
+            return ImmediateEventExecutor.INSTANCE;
         }
 
         public int numResponses() {

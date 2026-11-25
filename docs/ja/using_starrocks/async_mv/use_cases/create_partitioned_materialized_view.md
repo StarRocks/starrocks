@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Create partitioned materialized views in StarRocks with time-range or list partitioning for incremental refresh and partition-level query rewrite."
 sidebar_position: 40
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # パーティション化されたマテリアライズドビューの作成
@@ -110,7 +111,7 @@ DISTRIBUTED BY HASH(k1);
 
   ```SQL
   CREATE MATERIALIZED VIEW par_mv1
-  REFRESH ASYNC
+  REFRESH ON_CHANGE
   PARTITION BY datekey
   AS 
   SELECT 
@@ -131,7 +132,7 @@ DISTRIBUTED BY HASH(k1);
 
   ```SQL
   CREATE MATERIALIZED VIEW par_mv2
-  REFRESH ASYNC
+  REFRESH ON_CHANGE
   PARTITION BY str2date(datekey, '%Y-%m-%d')
   AS 
   SELECT 
@@ -158,7 +159,7 @@ DISTRIBUTED BY HASH(k1);
 
   ```SQL
   CREATE MATERIALIZED VIEW par_mv3
-  REFRESH ASYNC
+  REFRESH ON_CHANGE
   PARTITION BY date_trunc('month', datekey)
   AS 
   SELECT 
@@ -183,7 +184,7 @@ DISTRIBUTED BY HASH(k1);
 
   ```SQL
   CREATE MATERIALIZED VIEW par_mv4
-  REFRESH ASYNC
+  REFRESH ON_CHANGE
   PARTITION BY date_trunc('month', mv_datekey)
   AS 
   SELECT 
@@ -214,7 +215,7 @@ SELECT
 
 ```SQL
 CREATE MATERIALIZED VIEW par_mv5
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PARTITION BY date_trunc('day', mv_datekey)
 AS 
 SELECT 
@@ -236,7 +237,7 @@ GROUP BY datekey, k1;
 ```SQL
 -- JOIN でテーブルを接続。
 CREATE MATERIALIZED VIEW par_mv6
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PARTITION BY datekey
 AS SELECT 
   par_tbl1.datekey,
@@ -249,7 +250,7 @@ GROUP BY par_tbl1.datekey, t1k1, t2k1;
 
 -- UNION でテーブルを接続。
 CREATE MATERIALIZED VIEW par_mv7
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PARTITION BY datekey
 AS SELECT 
   par_tbl1.datekey,
@@ -281,8 +282,8 @@ GROUP BY
   各リフレッシュ操作の粒度を指定するために、プロパティ `partition_refresh_number` を使用できます。`partition_refresh_number` は、リフレッシュがトリガーされたときにリフレッシュタスクでリフレッシュされる最大パーティション数を制御します。リフレッシュされるパーティションの数がこの値を超える場合、StarRocks はリフレッシュタスクを分割し、バッチで完了します。パーティションは、最も古いパーティションから最新のパーティション（将来のために動的に作成されたパーティションを除く）まで、時系列順にリフレッシュされます。`partition_refresh_number` の値が `-1 `の場合、リフレッシュタスクは分割されません。v3.3 以降、デフォルト値は `-1` から `1` に変更され、StarRocks はパーティションを 1 つずつリフレッシュするようになりました。
 
   また、`partition_refresh_strategy` プロパティを使用して、リフレッシュ戦略の適応性を制御できます。このパラメータは次の2つの値をサポートしています:
-  - "strict"（デフォルト）: パーティションリフレッシュは、リフレッシュ粒度を制御するために partition_refresh_number 設定に厳密に従います。
-  - "adaptive": ベーステーブルのパーティション内のデータ量に基づいて、バッチごとにリフレッシュされるパーティション数を適応的に調整し、リフレッシュ効率を向上させます。
+  - "strict"（v4.1 より前のバージョンのデフォルト）: パーティションリフレッシュは、リフレッシュ粒度を制御するために partition_refresh_number 設定に厳密に従います。
+  - "adaptive"（v4.1 以降のデフォルト）: ベーステーブルのパーティション内のデータ量に基づいて、バッチごとにリフレッシュされるパーティション数を適応的に調整し、リフレッシュ効率を向上させます。
 
 - **マテリアライゼーションの範囲**
 
@@ -290,8 +291,8 @@ GROUP BY
 
 - **リフレッシュ戦略**
 
-  - 自動リフレッシュ戦略（`REFRESH ASYNC`）を持つマテリアライズドビューは、ベーステーブルのデータが変更されるたびに自動的にリフレッシュされます。
-  - 定期的なリフレッシュ戦略（`REFRESH ASYNC [START (<start_time>)] EVERY (INTERVAL <interval>)`）を持つマテリアライズドビューは、定義された間隔で定期的にリフレッシュされます。
+  - 自動リフレッシュ戦略（`REFRESH ON_CHANGE`）を持つマテリアライズドビューは、ベーステーブルのデータが変更されるたびに自動的にリフレッシュされます。
+  - 定期的なリフレッシュ戦略（`REFRESH SCHEDULE [START (<start_time>)] EVERY (INTERVAL <interval>)`）を持つマテリアライズドビューは、定義された間隔で定期的にリフレッシュされます。
 
   :::note
 
@@ -305,7 +306,7 @@ GROUP BY
 
 ```SQL
 CREATE MATERIALIZED VIEW par_mv8
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PARTITION BY datekey
 PROPERTIES(
   "partition_ttl_number" = "2",

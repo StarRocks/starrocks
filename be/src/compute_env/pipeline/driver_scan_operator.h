@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <memory>
 
+#include "common/scan_audit_counters.h"
 #include "compute_env/query_cache/pipeline_cache_context.h"
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exec_primitive/pipeline/pipeline_fwd.h"
@@ -41,6 +42,9 @@ public:
     virtual int64_t get_last_scan_rows_num() = 0;
     virtual int64_t get_last_scan_bytes() = 0;
     virtual int64_t get_scan_table_id() const = 0;
+    // Plan node id of the scan and the growth of its audit read counters since the last call.
+    virtual int32_t get_scan_plan_node_id() const = 0;
+    virtual ScanAuditCounters take_scan_audit_counters() = 0;
 
     virtual void begin_driver_process() = 0;
     virtual void end_driver_process(DriverState driver_state) = 0;

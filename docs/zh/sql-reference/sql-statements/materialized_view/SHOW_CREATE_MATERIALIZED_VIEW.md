@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "查看指定异步物化视图的定义。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW CREATE MATERIALIZED VIEW
@@ -46,7 +47,7 @@ MySQL > SHOW CREATE MATERIALIZED VIEW lo_mv1\G
 Create Materialized View: CREATE MATERIALIZED VIEW `lo_mv1`
 COMMENT "MATERIALIZED_VIEW"
 DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 10 
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PROPERTIES (
 "replication_num" = "3",
 "storage_medium" = "HDD"

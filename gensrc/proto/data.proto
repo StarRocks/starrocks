@@ -68,12 +68,24 @@ message PQueryStatistics {
     optional int64 read_local_cnt = 12;
     optional int64 read_remote_cnt = 13;
     optional AIExecutionStatisticsPB ai_statistics = 14;
+    // Read counters of each scan node, keyed by plan node id, for the audit log.
+    repeated PerScanStatsItemPB per_scan_stats_items = 15;
 }
 
 message QueryStatisticsItemPB {
     optional int64 scan_rows = 1;
     optional int64 scan_bytes = 2;
     optional int64 table_id = 3;
+}
+
+// A counter is set only when the scan tracks it; an unset counter does not apply to the scan.
+message PerScanStatsItemPB {
+    optional int32 plan_node_id = 1;
+    optional int64 physical_rows_read = 2;
+    optional int64 logical_rows_read = 3;
+    optional int64 output_rows = 4;
+    optional int64 remote_bytes = 5;
+    optional int64 cache_bytes = 6;
 }
 
 message NodeExecStatsItemPB {

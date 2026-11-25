@@ -393,16 +393,20 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         partition.pinQueryableIndex(indexId, indexId);
         Assertions.assertTrue(partition.isUnsharing());
 
-        // Visible version the partition carried at the moment the query-layout cutover ran.
+        // Visible version the partition carried at the moment the query-layout cutover ran, and the table's
+        // plan-invalidation stamp at that moment.
         List<Long> versionAtCutover = Lists.newArrayList();
+        List<Long> invalidationAtCutover = Lists.newArrayList();
         new MockUp<PhysicalPartition>() {
             @Mock
             public boolean finishUnshare(Invocation invocation) {
                 PhysicalPartition self = invocation.getInvokedInstance();
                 versionAtCutover.add(self.getVisibleVersion());
+                invalidationAtCutover.add(table.lastSchemaUpdateTime.get());
                 return invocation.proceed();
             }
         };
+        long schemaUpdateBefore = table.lastSchemaUpdateTime.get();
 
         // Batch of three: a load at version 2, an UNSHARE compaction at version 3, a load at version 4.
         long baseVersionTime = System.currentTimeMillis();
@@ -433,6 +437,10 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         Assertions.assertEquals(1, versionAtCutover.size(), "unshare cutover should run exactly once");
         Assertions.assertEquals(4L, versionAtCutover.get(0),
                 "unshare cutover must not run before the batch's final version is visible");
+        // A lock-free plan reads the visible version it copied with the table and may resolve the layout after
+        // the cutover, so the invalidation has to be in place before the cutover is.
+        Assertions.assertTrue(invalidationAtCutover.get(0) > schemaUpdateBefore,
+                "optimistic plans must be invalidated before the query-layout cutover");
         Assertions.assertEquals(4, partition.getVisibleVersion());
         Assertions.assertFalse(partition.isUnsharing(), "the query-layout pin must be cleared by the batch");
     }
@@ -445,11 +453,13 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         partition.pinQueryableIndex(indexId, indexId);
 
         List<Long> versionAtCutover = Lists.newArrayList();
+        List<Long> invalidationAtCutover = Lists.newArrayList();
         new MockUp<PhysicalPartition>() {
             @Mock
             public boolean finishUnshare(Invocation invocation) {
                 PhysicalPartition self = invocation.getInvokedInstance();
                 versionAtCutover.add(self.getVisibleVersion());
+                invalidationAtCutover.add(table.lastSchemaUpdateTime.get());
                 return invocation.proceed();
             }
         };
@@ -474,6 +484,8 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         Assertions.assertFalse(partition.isUnsharing(), "the query-layout pin must be cleared");
         Assertions.assertTrue(table.lastSchemaUpdateTime.get() > schemaUpdateBefore,
                 "the layout cutover must invalidate optimistic plans that captured the parent layout");
+        Assertions.assertTrue(invalidationAtCutover.get(0) > schemaUpdateBefore,
+                "optimistic plans must be invalidated before the query-layout cutover, not after it");
     }
 
     // ---------- nextVersion is derived from the journal, not counted ----------

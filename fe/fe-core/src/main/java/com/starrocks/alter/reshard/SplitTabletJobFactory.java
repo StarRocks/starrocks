@@ -91,8 +91,8 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
     private int adaptiveBound() {
         if (adaptiveBound < 0) {
             // A statement that names its own tablets, or its own target size, asked for exactly what it
-            // asked for: leave the target alone and resolve nothing. A zero bound is what tells
-            // adaptiveTargetSize to do that.
+            // asked for: leave the target alone and resolve nothing. A zero bound is what switches the
+            // adaptive rule off.
             boolean explicitTarget = splitTabletClause.getProperties() != null
                     && splitTabletClause.getProperties()
                             .containsKey(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE);
@@ -106,13 +106,14 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
     /**
      * Split plan for one index: {@code oldTabletId -> child count}.
      *
-     * <p>The size rule decides first and is untouched. Where it declines, the adaptive target gets a
-     * turn: while the index holds fewer tablets than the bound, that target is the size that would
-     * give it one tablet per slot in the bound -- the warehouse's compute-node count capped by
-     * {@code tablet_reshard_max_split_count}, so lowering that configuration lowers this width too.
-     * The count is then capped by the slots the index has left, so it lands at or below the
-     * auto-merge floor however its data is spread. Merge acts strictly above that floor, so an index
-     * this widens is never one merge would immediately narrow.
+     * <p>The size rule decides first and is untouched. Where it declines, the adaptive rule gets a turn
+     * while the index holds fewer tablets than the bound -- the warehouse's compute-node count capped by
+     * {@code tablet_reshard_max_split_count}, so lowering that configuration lowers this width too -- and
+     * less than that many target sizes of data: the slots left go one child at a time to the largest
+     * pieces among the tablets the size rule left alone, down to {@code tablet_reshard_min_split_size}.
+     * The adaptive counts are capped by the slots the index has left, so they leave it at or below the
+     * auto-merge floor however its data is spread. Merge acts strictly above that floor, so an index this widens is never
+     * one merge would immediately narrow.
      *
      * <p>The size rule wins outright where it applies. That ordering is load bearing: a BE split is
      * all-or-nothing -- when the key distribution cannot produce exactly the requested number of
@@ -135,7 +136,6 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
             dataSizes[i] = tablets.get(i).getDataSize(true);
             indexDataSize += dataSizes[i];
         }
-        long adaptiveTarget = TabletReshardUtils.adaptiveTargetSize(indexDataSize, steadyTargetSize, bound);
         Map<Long, Integer> splitCounts = new LinkedHashMap<>();
 
         // The size rule decides first and is never overridden: asking for more children than it
@@ -148,31 +148,46 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                 planned += k - 1;
             }
         }
-        if (adaptiveTarget >= steadyTargetSize) {
+        // One reading of the floor for both the gate and the children it bounds.
+        long floor = TabletReshardUtils.adaptiveSplitFloor(steadyTargetSize);
+        if (!TabletReshardUtils.adaptiveRuleOn(indexDataSize, steadyTargetSize, bound, floor)) {
             return splitCounts;
         }
 
-        // What the adaptive rule may still spend, counted against the width the size rule has ALREADY
-        // committed to -- not against today's tablet count. Charging only the adaptive splits lets a
-        // mixed plan pass the bound: four tablets of 0/0/10/15 GiB against a bound of five give the
-        // size rule one extra tablet and the adaptive rule one more, landing on six, which is back
-        // inside auto-merge's range. Flooring does not catch it either; it bounds the children this
-        // rule asks for, not the ones the other rule already claimed.
-        int headroom = Math.max(0, bound - planned);
-        for (int i = 0; i < dataSizes.length && headroom > 0; ++i) {
-            long tabletId = tablets.get(i).getId();
-            if (splitCounts.containsKey(tabletId)) {
-                continue;
+        // What the adaptive rule may spend, counted against the width the size rule has ALREADY committed
+        // to -- not against today's tablet count. Charging only the adaptive splits lets a mixed plan pass
+        // the bound: four tablets of 0/0/10/15 GiB against a bound of five give the size rule one extra
+        // tablet and the adaptive rule one more, landing on six, which is back inside auto-merge's range.
+        // Each slot goes to the tablet whose children are the largest NOW, not to the one a cut would leave
+        // largest: that is what spreads before it deepens. A count of 0 marks the size rule's tablets.
+        int headroom = bound - planned;
+        if (headroom <= 0) {
+            return splitCounts;
+        }
+        int[] fillCounts = new int[dataSizes.length];
+        for (int i = 0; i < dataSizes.length; ++i) {
+            fillCounts[i] = splitCounts.containsKey(tablets.get(i).getId()) ? 0 : 1;
+        }
+        for (; headroom > 0; --headroom) {
+            int best = -1;
+            long bestChild = 0;
+            for (int i = 0; i < dataSizes.length; ++i) {
+                int count = fillCounts[i];
+                if (count > 0 && count < maxSplitCount
+                        && TabletReshardUtils.canSplitInto(dataSizes[i], count + 1, floor)
+                        && dataSizes[i] / count > bestChild) {
+                    best = i;
+                    bestChild = dataSizes[i] / count;
+                }
             }
-            // maxSplitCount bounds this rule too. adaptiveSplitCount caps itself at the global
-            // tablet_reshard_max_split_count, which is the looser of the two whenever the split drags an
-            // UNSHARE rewrite behind it -- without this the adaptive rule would spend fan-out the size
-            // rule was just denied.
-            int k = Math.min(TabletReshardUtils.adaptiveSplitCount(dataSizes[i], adaptiveTarget),
-                    Math.min(headroom + 1, maxSplitCount));
-            if (k > 1) {
-                splitCounts.put(tabletId, k);
-                headroom -= k - 1;
+            if (best < 0) {
+                break;
+            }
+            ++fillCounts[best];
+        }
+        for (int i = 0; i < dataSizes.length; ++i) {
+            if (fillCounts[i] > 1) {
+                splitCounts.put(tablets.get(i).getId(), fillCounts[i]);
             }
         }
         return splitCounts;

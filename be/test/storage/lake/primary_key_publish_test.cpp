@@ -17,6 +17,7 @@
 
 #include <atomic>
 #include <map>
+#include <numeric>
 #include <optional>
 #include <random>
 #include <set>
@@ -44,6 +45,7 @@
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "fs/remote_read_context.h"
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/datum_variant.h"
@@ -59,6 +61,7 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/persistent_index_memtable.h"
 #include "storage/lake/persistent_index_sstable.h"
+#include "storage/lake/rowset.h"
 #include "storage/lake/scoped_local_disk_cache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
@@ -3227,8 +3230,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_transform_batch_to_single) {
 TEST_P(LakePrimaryKeyPublishTest, test_mem_tracker) {
     EXPECT_EQ(10 * 1024 * 1024, _mem_tracker->limit());
     EXPECT_EQ(10 * 1024 * 1024 * config::lake_pk_preload_memory_limit_percent / 100,
-              _primary_key_mgr->compaction_state_mem_tracker()->limit());
-    EXPECT_EQ(10 * 1024 * 1024 * config::lake_pk_preload_memory_limit_percent / 100,
               _primary_key_mgr->update_state_mem_tracker()->limit());
 }
 
@@ -3316,6 +3317,323 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_with_cloud_native_index_rebuild) {
     // 3. second time
     do_load_func();
     ASSERT_EQ(kChunkSize * 3 * 4, read_rows(tablet_id, version));
+}
+
+// A publish that finds the primary index cold rebuilds it, and every rebuilt segment reads its delete
+// vector at the publish's base version. The publish has already read that version for itself, so the
+// rebuild takes it from the publish instead of reading it back from storage -- before RB-792 it did so
+// once per rebuilt segment, and on a tablet with tens of thousands of segments every retry of such a
+// publish timed out. With a metacache that keeps nothing, a publish that rebuilds the index reads its
+// base version exactly as often as one whose index is already loaded.
+TEST_P(LakePrimaryKeyPublishTest, test_cold_index_publish_reuses_base_metadata) {
+    if (!GetParam().enable_persistent_index ||
+        GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
+        return;
+    }
+    const int64_t tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+    // Upserts keys [shift * n, (shift + 1) * n) and returns the txn id.
+    auto write = [&](int n, int shift) {
+        auto [chunk, indexes] = gen_data_and_index(n, shift, true, true);
+        const int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        CHECK_OK(delta_writer->open());
+        CHECK_OK(delta_writer->write(*chunk, indexes.data(), indexes.size()));
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        return txn_id;
+    };
+    auto write_and_publish = [&](int n, int shift) {
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, write(n, shift)).status());
+        version++;
+    };
+    write_and_publish(kChunkSize, 0);
+    // Overwrites half of the first load, so the base version carries a delete vector.
+    write_and_publish(kChunkSize / 2, 0);
+    write_and_publish(kChunkSize, 1);
+
+    // A metacache that keeps nothing once it is released, like a shard the base metadata outgrew: every
+    // read of the base version goes to storage.
+    const size_t metacache_capacity = _tablet_mgr->metacache()->tablet_metadata_capacity();
+    _tablet_mgr->metacache()->update_tablet_metadata_capacity(1);
+    DeferOp restore_metacache([&]() { _tablet_mgr->metacache()->update_tablet_metadata_capacity(metacache_capacity); });
+    ASSERT_EQ(1, _tablet_mgr->metacache()->tablet_metadata_capacity());
+    _tablet_mgr->metacache()->prune();
+
+    // While one publish runs, count its reads of the version it publishes on, and its index rebuilds. The
+    // callbacks fire for the whole process, so this relies on nothing else reading this tablet's metadata
+    // or loading a primary index meanwhile, which holds here: the test runs nothing in the background.
+    const std::string warm_base_file = tablet_metadata_filename(tablet_id, version);
+    const std::string cold_base_file = tablet_metadata_filename(tablet_id, version + 1);
+    std::atomic<const std::string*> counted_file = nullptr;
+    std::atomic<int> base_metadata_reads = 0;
+    std::atomic<int> rebuilds = 0;
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::load_tablet_metadata:path", [&](void* arg) {
+        const std::string* file = counted_file.load();
+        if (file != nullptr && std::string_view(*static_cast<std::string*>(arg)).ends_with(*file)) {
+            ++base_metadata_reads;
+        }
+    });
+    auto count_rebuild = [&](void*) {
+        if (counted_file.load() != nullptr) {
+            ++rebuilds;
+        }
+    };
+    SyncPoint::GetInstance()->SetCallBack("LakePersistentIndex::load_from_lake_tablet:parallel", count_rebuild);
+    SyncPoint::GetInstance()->SetCallBack("LakePersistentIndex::load_from_lake_tablet:serial", count_rebuild);
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_callbacks([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::load_tablet_metadata:path");
+        SyncPoint::GetInstance()->ClearCallBack("LakePersistentIndex::load_from_lake_tablet:parallel");
+        SyncPoint::GetInstance()->ClearCallBack("LakePersistentIndex::load_from_lake_tablet:serial");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    auto publish_counting = [&](const std::string* base_file, int64_t txn_id) {
+        base_metadata_reads = 0;
+        rebuilds = 0;
+        counted_file = base_file;
+        auto metadata_or = publish_single_version(tablet_id, version + 1, txn_id);
+        counted_file = nullptr;
+        version++;
+        return metadata_or;
+    };
+
+    // The index is loaded: the publish reads its base version for itself only.
+    ASSIGN_OR_ABORT(auto warm_published, publish_counting(&warm_base_file, write(kChunkSize, 2)));
+    EXPECT_EQ(0, rebuilds.load());
+    const int warm_reads = base_metadata_reads.load();
+    ASSERT_GE(warm_reads, 1) << "the publish should have read its base version from storage";
+    // Nothing is in the index's sstables yet, so a rebuild covers all four rowsets, and one of them has
+    // rows deleted.
+    ASSERT_EQ(0, warm_published->sstable_meta().sstables_size());
+    ASSERT_EQ(4, warm_published->rowsets_size());
+    ASSERT_GT(warm_published->delvec_meta().delvecs_size(), 0);
+
+    // Evict the index: the next publish rebuilds it, reading every rebuilt segment's delete vector at its
+    // base version.
+    _primary_key_mgr->unload_and_remove_primary_index(tablet_id);
+    ASSERT_OK(publish_counting(&cold_base_file, write(kChunkSize, 3)).status());
+    EXPECT_EQ(1, rebuilds.load());
+    // Nothing beyond the publish's own reads. Before the rebuild took the publish's copy it read the
+    // base version once more, and before RB-792 once more for each rebuilt segment.
+    EXPECT_EQ(warm_reads, base_metadata_reads.load());
+
+    // Keys [0, 4 * kChunkSize), each once.
+    ASSERT_EQ(kChunkSize * 4, read_rows(tablet_id, version));
+}
+
+// A publish that overwrites rows of old segments adds its deletes to each of those segments' delete vector
+// at the publish's base version. The publish has already read that version for itself, so the lookups take
+// it from the publish instead of reading it back from storage -- before RB-792 each old segment read it once
+// more, a full metadata read whenever the metacache did not keep it. With a metacache that keeps nothing, a
+// publish that deletes rows from many old segments reads its base version exactly as often as one that
+// deletes from none.
+TEST_P(LakePrimaryKeyPublishTest, test_publish_deleting_from_old_segments_reuses_base_metadata) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+    // Upserts keys [shift * n, (shift + 1) * n) and returns the txn id.
+    auto write = [&](int n, int shift) {
+        auto [chunk, indexes] = gen_data_and_index(n, shift, true, true);
+        const int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        CHECK_OK(delta_writer->open());
+        CHECK_OK(delta_writer->write(*chunk, indexes.data(), indexes.size()));
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        return txn_id;
+    };
+    // kOldLoads loads of kChunkSize keys each, one segment per load: keys [0, kOldLoads * kChunkSize).
+    constexpr int kOldLoads = 4;
+    for (int i = 0; i < kOldLoads; i++) {
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, write(kChunkSize, i)).status());
+        version++;
+    }
+    // Overwrites half of the first load, so one old segment already carries a delete vector at the base
+    // version, which the publish below has to extend rather than replace.
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, write(kChunkSize / 2, 0)).status());
+    version++;
+
+    // A metacache that keeps nothing once it is released, like a shard the base metadata outgrew: every
+    // read of the base version goes to storage.
+    const size_t metacache_capacity = _tablet_mgr->metacache()->tablet_metadata_capacity();
+    _tablet_mgr->metacache()->update_tablet_metadata_capacity(1);
+    DeferOp restore_metacache([&]() { _tablet_mgr->metacache()->update_tablet_metadata_capacity(metacache_capacity); });
+    ASSERT_EQ(1, _tablet_mgr->metacache()->tablet_metadata_capacity());
+    _tablet_mgr->metacache()->prune();
+
+    // While one publish runs, count its reads of the version it publishes on. The callback fires for the
+    // whole process, so this relies on nothing else reading this tablet's metadata meanwhile, which holds
+    // here: the test runs nothing in the background.
+    std::atomic<const std::string*> counted_file = nullptr;
+    std::atomic<int> base_metadata_reads = 0;
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::load_tablet_metadata:path", [&](void* arg) {
+        const std::string* file = counted_file.load();
+        if (file != nullptr && std::string_view(*static_cast<std::string*>(arg)).ends_with(*file)) {
+            ++base_metadata_reads;
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_callbacks([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::load_tablet_metadata:path");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    auto publish_counting = [&](int64_t txn_id) {
+        const std::string base_file = tablet_metadata_filename(tablet_id, version);
+        base_metadata_reads = 0;
+        counted_file = &base_file;
+        auto metadata_or = publish_single_version(tablet_id, version + 1, txn_id);
+        counted_file = nullptr;
+        version++;
+        return metadata_or;
+    };
+
+    // New keys only: the publish deletes rows from no old segment and reads its base version for itself.
+    ASSIGN_OR_ABORT(auto inserted, publish_counting(write(kChunkSize, kOldLoads)));
+    const int own_reads = base_metadata_reads.load();
+    ASSERT_GE(own_reads, 1) << "the publish should have read its base version from storage";
+    ASSERT_GT(inserted->delvec_meta().delvecs_size(), 0);
+
+    // Every key of the old loads: the publish deletes rows from all kOldLoads + 1 old segments.
+    ASSERT_OK(publish_counting(write(kChunkSize * kOldLoads, 0)).status());
+    // Nothing beyond the publish's own reads. Before RB-792 it read the base version once more for each of
+    // the old segments.
+    EXPECT_EQ(own_reads, base_metadata_reads.load());
+
+    // Keys [0, (kOldLoads + 1) * kChunkSize), each once: a delete vector read wrong would have brought back
+    // a row it deleted.
+    ASSERT_EQ(kChunkSize * (kOldLoads + 1), read_rows(tablet_id, version));
+}
+
+// The shadow tablet of a schema change publishes the conversion and the loads that ran during it in one go:
+// its schema change log saves the converted rowsets as the alter version, and the loads, replayed from their
+// version logs, apply on that version. That makes it their base version, so the index rebuild and every
+// converted segment a replayed load deletes rows from read their delete vectors at it -- from the metadata the
+// schema change log has just saved, not by reading that version back from storage, which they did before
+// the publish moved its base metadata along with its base version: once for the rebuild, and once for each of
+// those segments. With a metacache that keeps nothing, the publish does not read the alter version at all.
+TEST_P(LakePrimaryKeyPublishTest, test_schema_change_replay_reuses_saved_base_metadata) {
+    if (!GetParam().enable_persistent_index ||
+        GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
+        return;
+    }
+    const int64_t tablet_id = _tablet_metadata->id();
+    // Writes keys [shift * n, (shift + 1) * n) as a load that is never published, and returns its txn log.
+    auto write = [&](int n, int shift) {
+        auto [chunk, indexes] = gen_data_and_index(n, shift, true, true);
+        const int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        CHECK_OK(delta_writer->open());
+        CHECK_OK(delta_writer->write(*chunk, indexes.data(), indexes.size()));
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        return txn_log;
+    };
+
+    // The conversion's output: kConvertedRowsets rowsets of kChunkSize keys each, keys
+    // [0, kConvertedRowsets * kChunkSize), numbered the way the conversion numbers them.
+    constexpr int kConvertedRowsets = 4;
+    constexpr int64_t kAlterVersion = 2;
+    auto schema_change_log = std::make_shared<TxnLog>();
+    schema_change_log->set_tablet_id(tablet_id);
+    schema_change_log->set_txn_id(next_id());
+    auto* op_schema_change = schema_change_log->mutable_op_schema_change();
+    op_schema_change->set_alter_version(kAlterVersion);
+    uint32_t next_rowset_id = 1;
+    for (int i = 0; i < kConvertedRowsets; i++) {
+        auto* rowset = op_schema_change->add_rowsets();
+        rowset->CopyFrom(write(kChunkSize, i)->op_write().rowset());
+        rowset->set_id(next_rowset_id);
+        next_rowset_id += get_rowset_id_step(*rowset);
+    }
+    ASSERT_OK(_tablet_mgr->put_txn_log(schema_change_log));
+    // The loads that ran during the conversion, one version log for each version after the alter version: each
+    // overwrites two of the converted rowsets, so between them they delete rows from every converted segment.
+    constexpr int64_t kNewVersion = kAlterVersion + 3;
+    for (int64_t v = kAlterVersion + 1; v < kNewVersion; v++) {
+        ASSERT_OK(_tablet_mgr->put_txn_vlog(write(2 * kChunkSize, static_cast<int>(v - kAlterVersion - 1)), v));
+    }
+    // The shadow tablet has no index loaded: the first replayed load rebuilds it over the converted rowsets.
+    _primary_key_mgr->unload_and_remove_primary_index(tablet_id);
+
+    // A metacache that keeps nothing once it is released, like a shard the metadata outgrew: every read of the
+    // alter version goes to storage.
+    const size_t metacache_capacity = _tablet_mgr->metacache()->tablet_metadata_capacity();
+    _tablet_mgr->metacache()->update_tablet_metadata_capacity(1);
+    DeferOp restore_metacache([&]() { _tablet_mgr->metacache()->update_tablet_metadata_capacity(metacache_capacity); });
+    ASSERT_EQ(1, _tablet_mgr->metacache()->tablet_metadata_capacity());
+    _tablet_mgr->metacache()->prune();
+
+    // While the publish runs, count its reads of the alter version and its index rebuilds. The callbacks fire for
+    // the whole process, so this relies on nothing else reading this tablet's metadata or loading a primary index
+    // meanwhile, which holds here: the test runs nothing in the background.
+    const std::string alter_version_file = tablet_metadata_filename(tablet_id, kAlterVersion);
+    std::atomic<bool> counting = false;
+    std::atomic<int> alter_version_reads = 0;
+    std::atomic<int> rebuilds = 0;
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::load_tablet_metadata:path", [&](void* arg) {
+        if (counting.load() && std::string_view(*static_cast<std::string*>(arg)).ends_with(alter_version_file)) {
+            ++alter_version_reads;
+        }
+    });
+    auto count_rebuild = [&](void*) {
+        if (counting.load()) {
+            ++rebuilds;
+        }
+    };
+    SyncPoint::GetInstance()->SetCallBack("LakePersistentIndex::load_from_lake_tablet:parallel", count_rebuild);
+    SyncPoint::GetInstance()->SetCallBack("LakePersistentIndex::load_from_lake_tablet:serial", count_rebuild);
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_callbacks([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::load_tablet_metadata:path");
+        SyncPoint::GetInstance()->ClearCallBack("LakePersistentIndex::load_from_lake_tablet:parallel");
+        SyncPoint::GetInstance()->ClearCallBack("LakePersistentIndex::load_from_lake_tablet:serial");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // One publish from the shadow tablet's first version: the schema change log, then the version logs.
+    const auto txns = std::vector<TxnInfoPB>{TEST_txn_info(schema_change_log->txn_id(), time(nullptr))};
+    counting = true;
+    auto published = publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), /*base_version=*/1, kNewVersion,
+                                     txns, false);
+    counting = false;
+    ASSERT_OK(published.status());
+    EXPECT_EQ(kNewVersion, published.value()->version());
+    EXPECT_EQ(1, rebuilds.load());
+    // Neither the rebuild nor the deletes from the converted segments read the alter version back. Before, the
+    // rebuild read it once and each of the kConvertedRowsets segments once more.
+    EXPECT_EQ(0, alter_version_reads.load());
+
+    // The schema change log saved the converted rowsets as the alter version.
+    ASSIGN_OR_ABORT(auto saved, _tablet_mgr->get_tablet_metadata(tablet_id, kAlterVersion));
+    EXPECT_EQ(kConvertedRowsets, saved->rowsets_size());
+    // Keys [0, kConvertedRowsets * kChunkSize), each once: a delete vector read wrong would have brought back a
+    // row a replayed load deleted.
+    ASSERT_EQ(kChunkSize * kConvertedRowsets, read_rows(tablet_id, kNewVersion));
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels) {
@@ -4218,11 +4536,10 @@ TEST_P(LakePrimaryKeyPublishTest, test_multi_chunk_upsert) {
 }
 
 // experimental_lake_ignore_lost_segment: a PK compaction whose output segment file is lost before the
-// compaction txn is published must not crash and must not fail the publish. This covers all three
+// compaction txn is published must not crash and must not fail the publish. This covers both
 // publish shapes with an error-injected (physically deleted) lost output segment:
-//   1. light publish, NO loss    -> normal SST ingest + conflict resolver
-//   2. light publish, lost seg   -> conflict-resolver lost branch + SST-ingest skip
-//   3. non-light publish, lost   -> PrimaryKeyCompactionState empty PK column
+//   1. NO loss    -> normal SST ingest + conflict resolver
+//   2. lost seg   -> conflict-resolver lost branch + SST-ingest skip
 // and runs under both LOCAL (resolver execute()) and CLOUD_NATIVE (resolver execute_without_update_index
 // + SST ingest) persistent index via the param list.
 TEST_P(LakePrimaryKeyPublishTest, test_compaction_publish_tolerates_lost_output_segment) {
@@ -4276,19 +4593,13 @@ TEST_P(LakePrimaryKeyPublishTest, test_compaction_publish_tolerates_lost_output_
         return st;
     };
 
-    // 1. Light publish (default enable_light_pk_compaction_publish=true), no loss: normal ingest path.
+    // 1. No loss: normal ingest path.
     write_rowsets(3);
     ASSERT_OK(compact_and_publish(/*lose_output_segment=*/false));
 
-    // 2. Light publish, lost output segment: resolver lost branch + SST-ingest skip.
+    // 2. Lost output segment: resolver lost branch + SST-ingest skip.
     config::experimental_lake_ignore_lost_segment = true;
     DeferOp reset_flag([] { config::experimental_lake_ignore_lost_segment = false; });
-    write_rowsets(3);
-    ASSERT_OK(compact_and_publish(/*lose_output_segment=*/true));
-
-    // 3. Non-light publish, lost output segment: PrimaryKeyCompactionState empty PK column path.
-    config::enable_light_pk_compaction_publish = false;
-    DeferOp reset_light([] { config::enable_light_pk_compaction_publish = true; });
     write_rowsets(3);
     ASSERT_OK(compact_and_publish(/*lose_output_segment=*/true));
 
@@ -4363,7 +4674,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_light_compaction_publish_row_count_from_m
 
     // Build index SSTs during load (write_buffer_size forces multi-segment rowsets; the 1-byte eager
     // threshold builds an index SST for each) so the compaction carries op_compaction.ssts and
-    // light_publish_primary_compaction dispatches to execute_without_update_index (the path under test)
+    // publish_primary_compaction dispatches to execute_without_update_index (the path under test)
     // rather than resolver->execute(). This is the recipe proven deterministic by pk_tablet_sst_writer_test.
     ConfigResetGuard<int64_t> g_write_buffer(&config::write_buffer_size, 512);
     ConfigResetGuard<int64_t> g_eager_threshold(&config::pk_index_eager_build_threshold_bytes, 1);
@@ -4415,7 +4726,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_light_compaction_publish_row_count_from_m
     EXPECT_EQ(240, read_rows(tablet_id, version));
 
     // Compact the rowsets into one; the eager-built index ssts drive
-    // light_publish_primary_compaction -> execute_without_update_index.
+    // publish_primary_compaction -> execute_without_update_index.
     int64_t txn_id = next_id();
     auto ctx = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(ctx.get()));
@@ -4430,7 +4741,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_light_compaction_publish_row_count_from_m
     version++;
 
     // The compaction preserves every live row. The publish goes through
-    // light_publish_primary_compaction -> execute_without_update_index (the path under test), where a
+    // publish_primary_compaction -> execute_without_update_index (the path under test), where a
     // wrong per-segment row count (from output_segment_num_rows()) would mis-advance the rows-mapper and
     // drop or duplicate rows.
     EXPECT_EQ(240, read_rows(tablet_id, version));
@@ -5086,6 +5397,123 @@ TEST_P(LakePrimaryKeyPublishTest, test_parallel_sstable_open_on_index_init) {
     ASSERT_EQ(kChunkSize * 6, read_rows(tablet_id, version));
 
     config::l0_max_mem_usage = old_l0_max_mem_usage;
+}
+
+// Under the remote I/O scheduler a non-split query scan whose segments are all opened in the cache builds its
+// iterators inline. A primary-key iterator loads its delete vector and delta column groups when it is constructed,
+// so a primary-key tablet does so only when that needs no read: no delta column group, every delete vector cached.
+// Every path returns the same rows, including those an upsert or a delete has masked through the delete vectors.
+TEST_P(LakePrimaryKeyPublishTest, test_cached_pk_rowsets_build_iterators_inline) {
+    constexpr int32_t kRows = 64;
+    const int64_t tablet_id = _tablet_metadata->id();
+    auto write = [&](int32_t begin, int32_t end, int32_t multiplier, bool upsert, int64_t version) {
+        auto keys = Int32Column::create();
+        auto values = Int32Column::create();
+        auto ops = Int8Column::create();
+        for (int32_t k = begin; k < end; ++k) {
+            keys->append(k);
+            values->append(k * multiplier);
+            ops->append(upsert ? TOpType::UPSERT : TOpType::DELETE);
+        }
+        auto chunk =
+                std::make_shared<Chunk>(Columns{std::move(keys), std::move(values), std::move(ops)}, _slot_cid_map);
+        std::vector<uint32_t> indexes(chunk->num_rows());
+        std::iota(indexes.begin(), indexes.end(), 0);
+        const int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
+                                             .set_tablet_manager(_tablet_mgr.get())
+                                             .set_tablet_id(tablet_id)
+                                             .set_txn_id(txn_id)
+                                             .set_partition_id(_partition_id)
+                                             .set_mem_tracker(_mem_tracker.get())
+                                             .set_schema_id(_tablet_schema->id())
+                                             .set_slot_descriptors(&_slot_pointers)
+                                             .set_profile(&_dummy_runtime_profile)
+                                             .build());
+        ASSERT_OK(writer->open());
+        ASSERT_OK(writer->write(*chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(writer->finish_with_txnlog());
+        writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version, txn_id).status());
+    };
+    // v2 writes [0, 64); v3 overwrites [32, 96) with new values; v4 deletes [0, 16).
+    ASSERT_NO_FATAL_FAILURE(write(0, kRows, 3, true, 2));
+    ASSERT_NO_FATAL_FAILURE(write(kRows / 2, kRows / 2 + kRows, 7, true, 3));
+    ASSERT_NO_FATAL_FAILURE(write(0, kRows / 4, 3, false, 4));
+    std::vector<std::pair<int32_t, int32_t>> expected;
+    for (int32_t k = kRows / 4; k < kRows / 2 + kRows; ++k) {
+        expected.emplace_back(k, k < kRows / 2 ? k * 3 : k * 7);
+    }
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 4));
+    ASSERT_GE(metadata->rowsets_size(), 2);
+    ASSERT_GT(metadata->delvec_meta().delvecs_size(), 0);
+
+    ConfigResetGuard<bool> parallel_guard(&config::enable_load_segment_parallel, false);
+    ConfigResetGuard<bool> open_guard(&config::lake_scan_parallel_segment_open, true);
+    ConfigResetGuard<bool> warm_guard(&config::lake_scan_warm_index, true);
+    const bool old_scheduler = g_remote_io_scheduler_enabled.exchange(true);
+    auto* sync = SyncPoint::GetInstance();
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+        g_remote_io_scheduler_enabled.store(old_scheduler);
+    });
+    std::atomic<int> rowset_tasks{0};
+    sync->SetCallBack("TabletReader::get_segment_iterators::submit", [&](void*) { ++rowset_tasks; });
+    // Returns the number of rowsets built inline; expects the others to have been submitted as tasks.
+    auto read = [&](const TabletMetadataPtr& meta) -> int64_t {
+        rowset_tasks = 0;
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), meta, *_schema);
+        CHECK_OK(reader->prepare());
+        CHECK_OK(reader->open(TabletReaderParams()));
+        std::vector<std::pair<int32_t, int32_t>> rows;
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
+        while (true) {
+            chunk->reset();
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) break;
+            CHECK_OK(st);
+            for (size_t i = 0; i < chunk->num_rows(); ++i) {
+                rows.emplace_back(chunk->get_column_by_index(0)->get(i).get_int32(),
+                                  chunk->get_column_by_index(1)->get(i).get_int32());
+            }
+        }
+        std::sort(rows.begin(), rows.end());
+        EXPECT_EQ(expected, rows);
+        const int64_t inline_rowsets = reader->stats().lake_prepared_tablet_inline_rowsets;
+        EXPECT_EQ(meta->rowsets_size(), inline_rowsets + rowset_tasks.load());
+        reader->close();
+        return inline_rowsets;
+    };
+    const int rowsets = metadata->rowsets_size();
+
+    // Nothing cached: parallel.
+    _tablet_mgr->prune_metacache();
+    EXPECT_EQ(0, read(metadata));
+    // Segments and delete vectors cached by the read above, no delta column group: inline.
+    EXPECT_EQ(rowsets, read(metadata));
+
+    // Segments cached but the delete vectors not: parallel.
+    _tablet_mgr->prune_metacache();
+    for (const auto& rowset : Rowset::get_rowsets(_tablet_mgr.get(), metadata)) {
+        ASSERT_OK(rowset->segments(true).status());
+    }
+    EXPECT_EQ(0, read(metadata));
+    EXPECT_EQ(rowsets, read(metadata));
+
+    // One segment not cached: parallel.
+    auto cached = Rowset::get_rowsets(_tablet_mgr.get(), metadata)[0]->lookup_opened_segment_at(0, {});
+    ASSERT_NE(nullptr, cached);
+    _tablet_mgr->metacache()->erase(MetacacheKey::segment(cached->file_info()));
+    EXPECT_EQ(0, read(metadata));
+
+    // A tablet with delta column groups stays parallel even when everything is cached. The entry names no segment
+    // of this tablet, so the rows read are unchanged.
+    EXPECT_EQ(rowsets, read(metadata));
+    auto with_dcg = std::make_shared<TabletMetadata>(*metadata);
+    (*with_dcg->mutable_dcg_meta()->mutable_dcgs())[1U << 30] = DeltaColumnGroupVerPB();
+    EXPECT_EQ(0, read(with_dcg));
 }
 
 } // namespace starrocks::lake

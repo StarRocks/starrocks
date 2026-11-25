@@ -2,6 +2,7 @@
 sidebar_position: 80
 displayed_sidebar: docs
 description: "AuditLoader 插件实现 StarRocks 审计日志的数据库存储和 SQL 查询管理。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 通过 AuditLoader 管理 StarRocks 中的审计日志
@@ -73,7 +74,7 @@ SHOW PARTITIONS FROM starrocks_audit_db__.starrocks_audit_tbl__;
 
 :::note
 
-如果该表是由早期版本创建的，请补齐此后新增的列，否则导入审计日志时对应字段会被静默丢弃。例如 `errorMessage` 自 v4.2.0 起引入：
+如果该表是由早期版本创建的，请补齐此后新增的列，否则导入审计日志时对应字段会被静默丢弃。例如 `errorMessage` 自 v4.1.6 起引入：
 
 ```SQL
 ALTER TABLE starrocks_audit_db__.starrocks_audit_tbl__

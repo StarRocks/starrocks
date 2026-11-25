@@ -1,0 +1,58 @@
+-- name: test_mv_compensate_keep_group_keys
+-- description: With a stale MV partition the rewrite reads UNION ALL(fresh MV partitions, MV query on the
+--              stale base partitions). That compensation aggregate may drop grouping keys only under an MV
+--              rollup; otherwise COUNT(*)/AVG above it see merged groups.
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE f (dt DATE NOT NULL, k INT NOT NULL, v INT NOT NULL)
+DUPLICATE KEY(dt, k)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2024-03-01'),
+    PARTITION p3 VALUES LESS THAN ('2024-04-01'),
+    PARTITION p4 VALUES LESS THAN ('2024-05-01'))
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO f SELECT date_add('2024-01-01', x % 120), x % 5, x % 7 FROM TABLE(generate_series(1, 240)) AS g(x);
+INSERT INTO f SELECT date_add('2024-01-01', x % 120), x % 5, x % 7 FROM TABLE(generate_series(1, 240)) AS g(x);
+
+-- MV output types match the base columns exactly, so no cast projection keeps the keys alive.
+CREATE MATERIALIZED VIEW mv_f
+PARTITION BY dt
+DISTRIBUTED BY RANDOM
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1')
+AS SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM f GROUP BY dt, k;
+REFRESH MATERIALIZED VIEW mv_f WITH SYNC MODE;
+
+INSERT INTO f VALUES ('2024-02-10', 1, 3), ('2024-02-10', 1, 3), ('2024-02-11', 9, 4);
+
+SET enable_materialized_view_rewrite = false;
+SELECT COUNT(*), AVG(s) FROM (SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM f GROUP BY dt, k) b;
+SELECT COUNT(*) FROM (SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM f GROUP BY dt, k) b;
+SELECT COUNT(*) FROM (SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM f GROUP BY dt, k) a
+WHERE s > (SELECT AVG(s) FROM (SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM f GROUP BY dt, k) b);
+SELECT k, SUM(v), COUNT(*) FROM f GROUP BY k ORDER BY k;
+SET enable_materialized_view_rewrite = true;
+
+-- The outer aggregate sits at the MV grain, so there is no rollup above the compensation.
+-- Text match is off to force the structural rewrite.
+function: print_hit_materialized_view("SELECT /*+ SET_VAR(enable_materialized_view_text_match_rewrite = false) */ COUNT(*), AVG(s) FROM (SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM f GROUP BY dt, k) b", "mv_f", "UNION")
+SELECT /*+ SET_VAR(enable_materialized_view_text_match_rewrite = false) */ COUNT(*), AVG(s)
+FROM (SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM f GROUP BY dt, k) b;
+function: print_hit_materialized_view("SELECT /*+ SET_VAR(enable_materialized_view_text_match_rewrite = false) */ COUNT(*) FROM (SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM f GROUP BY dt, k) b", "mv_f", "UNION")
+SELECT /*+ SET_VAR(enable_materialized_view_text_match_rewrite = false) */ COUNT(*)
+FROM (SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM f GROUP BY dt, k) b;
+
+-- A scalar subquery is not text matched, so it takes the structural rewrite with text match on.
+function: print_hit_materialized_view("SELECT COUNT(*) FROM (SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM f GROUP BY dt, k) a WHERE s > (SELECT AVG(s) FROM (SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM f GROUP BY dt, k) b)", "mv_f", "UNION")
+SELECT COUNT(*) FROM (SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM f GROUP BY dt, k) a
+WHERE s > (SELECT AVG(s) FROM (SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM f GROUP BY dt, k) b);
+
+-- Control: a rollup re-aggregates the compensation rows, which may still drop dt.
+function: print_hit_materialized_view("SELECT k, SUM(v), COUNT(*) FROM f GROUP BY k ORDER BY k", "mv_f", "UNION")
+SELECT k, SUM(v), COUNT(*) FROM f GROUP BY k ORDER BY k;
+
+DROP MATERIALIZED VIEW mv_f;
+DROP TABLE f;
+drop database db_${uuid0} force;

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "過去に実行されたクエリのダンプをquery_idで取得します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # get_query_dump_from_query_id

@@ -233,7 +233,14 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
                 if (!desc->skip_wait()) {
                     _global_rf_descriptors.emplace_back(desc);
 #ifdef FIU_ENABLE
-                    FAIL_POINT_TRIGGER_EXECUTE(global_runtime_filter_sync_A, { desc->barrier.arrive_A(); });
+                    // Bounded, so that a filter that never reaches this descriptor cannot hang the fragment prepare.
+                    FAIL_POINT_TRIGGER_EXECUTE(global_runtime_filter_sync_A, {
+                        if (!desc->barrier.arrive_A(std::chrono::seconds(10))) {
+                            LOG(WARNING) << "global_runtime_filter_sync_A: the runtime filter did not arrive in 10s, "
+                                            "filter_id="
+                                         << desc->filter_id();
+                        }
+                    });
 #endif
                     auto* observer = this->observer();
                     DCHECK(observer != nullptr || !runtime_state->enable_event_scheduler());
@@ -1133,6 +1140,10 @@ void PipelineDriver::_update_scan_statistics(RuntimeState* state) {
             if (state->enable_collect_table_level_scan_stats()) {
                 _query_runtime_state->update_scan_stats(table_id, scan_rows, scan_bytes);
             }
+        }
+        if (state->enable_collect_table_level_scan_stats()) {
+            _query_runtime_state->update_per_scan_stats(scan->get_scan_plan_node_id(),
+                                                        scan->take_scan_audit_counters());
         }
     }
 }

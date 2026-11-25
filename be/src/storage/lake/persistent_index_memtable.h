@@ -19,6 +19,7 @@
 
 #include "base/phmap/btree.h"
 #include "common/thread/threadpool.h"
+#include "fs/remote_read_context.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
 
@@ -92,6 +93,9 @@ public:
 
     std::unique_ptr<PersistentIndexSstable> release_sstable();
 
+    // Remote read context of an async flush (run()), which runs on a thread of its own. Set before submitting.
+    void set_flush_remote_read(const RemoteReadContext& ctx) { _flush_remote_read = ctx; }
+
     void run() override;
 
     void cancel() override;
@@ -121,6 +125,7 @@ private:
     // flush state mutex
     mutable std::mutex _flush_mutex;
     std::condition_variable _flush_cv;
+    RemoteReadContext _flush_remote_read;
 };
 
 } // namespace starrocks::lake

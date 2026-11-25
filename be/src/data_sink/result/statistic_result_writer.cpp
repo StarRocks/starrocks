@@ -43,9 +43,9 @@ const int STATISTIC_PARTITION_VERSION_V2 = 20;
 // Same per-column aggregate as STATISTIC_EXTERNAL_QUERY_VERSION_V2, plus how many partitions it
 // covers and the per-partition distinct counts added up - see TStatisticData in Data.thrift.
 const int STATISTIC_EXTERNAL_QUERY_VERSION_V3 = 21;
-// 22 is reserved for STATISTIC_EXTERNAL_QUERY_VERSION_V4 in the enterprise build - V3 plus the distinct counts
-// of two nested subsets of the covered partitions. Kept as a comment rather than a constant because an
-// unreferenced one fails the clang build (-Wunused-const-variable under -Werror). Do not reuse 22.
+// V3 plus the merged distinct counts and partition counts of two nested subsets of the covered
+// partitions - see TStatisticData in Data.thrift.
+const int STATISTIC_EXTERNAL_QUERY_VERSION_V4 = 22;
 
 StatisticResultWriter::StatisticResultWriter(BufferControlBlock* sinker,
                                              const std::vector<ExprContext*>& output_expr_ctxs,
@@ -169,7 +169,7 @@ StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(Chunk* chunk
     } else if (version == STATISTIC_EXTERNAL_QUERY_VERSION_V2) {
         RETURN_IF_ERROR_WITH_WARN(_fill_full_statistic_query_external_v2(version, result_columns, chunk, result.get()),
                                   "Fill table statistic data failed");
-    } else if (version == STATISTIC_EXTERNAL_QUERY_VERSION_V3) {
+    } else if (version == STATISTIC_EXTERNAL_QUERY_VERSION_V3 || version == STATISTIC_EXTERNAL_QUERY_VERSION_V4) {
         RETURN_IF_ERROR_WITH_WARN(_fill_full_statistic_query_external_v3(version, result_columns, chunk, result.get()),
                                   "Fill table statistic data failed");
     } else if (version == STATISTIC_MULTI_COLUMN_VERSION) {
@@ -715,12 +715,15 @@ Status StatisticResultWriter::_fill_full_statistic_query_external_v2(int version
 // the per-partition distinct counts added up. Both come out of the same aggregate over the same rows as
 // everything else here, which is the point - the read side can size and scale the result from the rows
 // themselves instead of from metadata maintained on another path that may disagree with them.
+// V4 appends four more from the same aggregate: the merged distinct counts and the partition counts of
+// two nested subsets of those partitions.
 Status StatisticResultWriter::_fill_full_statistic_query_external_v3(int version, const Columns& columns,
                                                                      const Chunk* chunk, TFetchDataResult* result) {
     SCOPED_TIMER(_serialize_timer);
 
     // mapping with Data.thrift.TStatisticData
-    DCHECK(columns.size() == 11);
+    const bool with_checkpoints = version == STATISTIC_EXTERNAL_QUERY_VERSION_V4;
+    DCHECK(columns.size() == (with_checkpoints ? 15 : 11));
 
     auto columnName = ColumnViewer<TYPE_VARCHAR>(columns[1]);
     auto rowCounts = ColumnViewer<TYPE_BIGINT>(columns[2]);
@@ -748,6 +751,18 @@ Status StatisticResultWriter::_fill_full_statistic_query_external_v3(int version
         data_list[i].__set_updateTime(updateTime.value(i).to_string());
         data_list[i].__set_collectedPartitionCount(collectedPartitionCounts.value(i));
         data_list[i].__set_perPartitionNdvSum(perPartitionNdvSums.value(i));
+    }
+    if (with_checkpoints) {
+        auto thirdNdvs = ColumnViewer<TYPE_BIGINT>(columns[11]);
+        auto twoThirdsNdvs = ColumnViewer<TYPE_BIGINT>(columns[12]);
+        auto thirdPartitionCounts = ColumnViewer<TYPE_BIGINT>(columns[13]);
+        auto twoThirdsPartitionCounts = ColumnViewer<TYPE_BIGINT>(columns[14]);
+        for (int i = 0; i < num_rows; ++i) {
+            data_list[i].__set_thirdNdv(thirdNdvs.value(i));
+            data_list[i].__set_twoThirdsNdv(twoThirdsNdvs.value(i));
+            data_list[i].__set_thirdPartitionCount(thirdPartitionCounts.value(i));
+            data_list[i].__set_twoThirdsPartitionCount(twoThirdsPartitionCounts.value(i));
+        }
     }
 
     result->result_batch.rows.resize(num_rows);

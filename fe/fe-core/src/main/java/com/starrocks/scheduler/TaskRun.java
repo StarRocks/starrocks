@@ -21,9 +21,9 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.alter.OptimizeTask;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.catalog.Database;
@@ -33,8 +33,6 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.MaterializedViewExceptions;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.LogUtil;
@@ -42,6 +40,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ExecuteAsExecutor;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
@@ -55,6 +54,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -395,6 +395,25 @@ public class TaskRun implements Comparable<TaskRun> {
                 // Fallback to previous behavior if fetching roles fails
                 context.setCurrentRoleIds(context.getCurrentUserIdentity());
             }
+            Set<String> groups = resolveCreatorGroups(context);
+            context.setGroups(groups);
+            if (!groups.isEmpty()) {
+                AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+                Set<Long> roleIds = new HashSet<>(context.getCurrentRoleIds());
+                groups.forEach(group -> roleIds.addAll(authorizationMgr.getRoleIdListByGroup(group)));
+                context.setCurrentRoleIds(roleIds);
+            }
+        }
+    }
+
+    private Set<String> resolveCreatorGroups(ConnectContext context) {
+        try {
+            return ExecuteAsExecutor.resolveGroups(context, context.getCurrentUserIdentity());
+        } catch (Exception e) {
+            // Unlike a login, a failed lookup does not fail the task: it runs without groups, as EXECUTE AS does.
+            LOG.warn("TaskRun {} failed to resolve the groups of {}, running without them",
+                    taskRunId, context.getCurrentUserIdentity(), e);
+            return Set.of();
         }
     }
 
@@ -486,35 +505,7 @@ public class TaskRun implements Comparable<TaskRun> {
             task.incConsecutiveFailCount();
             LOG.warn("Failed to execute task run, task_id: {}, task_run_id: {}, failCount:{}",
                     taskId, taskRunId, task.getConsecutiveFailCount(), e);
-            if (Constants.TaskSource.MV.equals(task.getSource())
-                    && MaterializedViewExceptions.isIncrementalBreakingFailure(e)) {
-                MaterializedView mv = TaskBuilder.getMvFromTask(task);
-                // Permanent incremental breakage: inactivate the MV and rethrow. Don't kill/suspend the running
-                // refresh here -- that would eat the actionable error; the consecutive-failure path suspends the task.
-                if (mv != null && mv.isActive()) {
-                    AlterMVJobExecutor.inactiveMvAndLog(mv,
-                            MaterializedViewExceptions.inactiveReasonForBreakingFailure(e, mv.getName()));
-                    throw e;
-                }
-            }
-            if (Constants.TaskSource.MV.equals(task.getSource()) && Config.max_task_consecutive_fail_count > 0 &&
-                    task.getConsecutiveFailCount() >= Config.max_task_consecutive_fail_count) {
-                LOG.warn("Task {} has failed {} times continuously, so we disable it",
-                        task.getName(), task.getConsecutiveFailCount());
-                TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-                taskManager.suspendTask(task, false);
-                String mvName = "";
-                MaterializedView mv = TaskBuilder.getMvFromTask(task);
-                if (mv != null) {
-                    // If the task is an mv task, inactive the mv
-                    AlterMVJobExecutor.inactiveForConsecutiveFailures(mv);
-                    mvName = mv.getName();
-                }
-                throw new StarRocksException(String.format("Task %s has continuously failed %d times " +
-                                "and has been suspended. If you want active it again, try `ALTER MATERIALIZED VIEW %s ACTIVE`.",
-                        task.getName(), task.getConsecutiveFailCount(), mvName), e);
-            }
-            throw e;
+            throw processor == null ? e : processor.onFailure(task, e);
         }
     }
 

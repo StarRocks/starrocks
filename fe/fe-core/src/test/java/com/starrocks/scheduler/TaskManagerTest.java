@@ -49,15 +49,21 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -1311,6 +1317,28 @@ public class TaskManagerTest {
     }
 
     @Test
+    public void testResumingAScheduledTaskCancelsTheSubmitterItReplaces() {
+        TaskManager taskManager = new TaskManager();
+        Task task = new Task("test");
+        TaskSchedule schedule = new TaskSchedule();
+        schedule.setStartTime(System.currentTimeMillis() / 1000 * 1000);
+        schedule.setPeriod(60);
+        schedule.setTimeUnit(TimeUnit.SECONDS);
+        task.setSchedule(schedule);
+        task.setType(Constants.TaskType.PERIODICAL);
+        task.setState(Constants.TaskState.ACTIVE);
+        task.setLastScheduleTime(-1);
+        taskManager.registerScheduler(task);
+        ScheduledFuture<?> first = taskManager.getPeriodFutureMap().get(task.getId());
+
+        // a task resumed while its schedule is still registered
+        taskManager.resumeTask(task, true);
+
+        Assertions.assertTrue(first.isCancelled(), "the replaced submitter would keep submitting");
+        Assertions.assertFalse(taskManager.getPeriodFutureMap().get(task.getId()).isCancelled());
+    }
+
+    @Test
     public void testRegisterSchedulerNonPeriodicalTask() {
         TaskManager taskManager = new TaskManager();
         Task task = new Task("test");
@@ -1336,242 +1364,214 @@ public class TaskManagerTest {
         Assertions.assertNull(taskManager.getPeriodFutureMap().get(task.getId()));
     }
 
+    // Exercise the real submission and builder; mocking executeTask(String) hides a manual catch-up.
     @Test
-    public void testRegisterSchedulerMVTaskTriggerImmediately() {
-        Task task = new Task("test_mv");
-        task.setSource(Constants.TaskSource.MV);
-        TaskSchedule schedule = new TaskSchedule();
-        
-        long now = TimeUtils.getEpochSeconds();
-        long startTime = now - 3600; // 1 hour ago
-        long lastScheduleTime = now - 180; // 3 minutes ago
-        
-        schedule.setStartTime(startTime);
-        schedule.setPeriod(60); // 1 minute period
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setId(1L);
-        task.setLastScheduleTime(lastScheduleTime);
-        
-        // Mock executeTask to verify it's called
-        final boolean[] executeTaskCalled = {false};
-        TaskManager spyTaskManager = new TaskManager() {
-            @Override
-            public SubmitResult executeTask(String taskName) {
-                executeTaskCalled[0] = true;
-                assertEquals("test_mv", taskName);
-                return new SubmitResult("xxxx", SubmitResult.SubmitStatus.SUBMITTED);
-            }
-        };
-        
-        spyTaskManager.replayCreateTask(task);
-        spyTaskManager.registerScheduler(task);
-        
-        // Should trigger immediately because lastScheduleTime + period < currentTime
-        Assertions.assertTrue(executeTaskCalled[0], "Task should be executed immediately");
-        Assertions.assertTrue(task.getLastScheduleTime() >= now, "LastScheduleTime should be updated");
-        Assertions.assertNotNull(spyTaskManager.getPeriodFutureMap().get(task.getId()));
+    public void testRegisterSchedulerMVTaskTriggerImmediately() throws Exception {
+        Task task = newPeriodicTask("test_mv_catch_up", Constants.TaskSource.MV, -180);
+        long beforeRegistration = TimeUtils.getEpochSeconds();
+        try (PeriodicTaskFixture fixture = new PeriodicTaskFixture(task)) {
+            fixture.manager.registerScheduler(task);
+            TaskRun run = fixture.onlyPendingRun();
+            assertPeriodicRun(task, run);
+            assertEquals(Constants.TaskType.PERIODICAL, task.getType());
+            Assertions.assertTrue(task.getLastScheduleTime() >= beforeRegistration);
+            Assertions.assertSame(fixture.future, fixture.manager.getPeriodFutureMap().get(task.getId()));
+        }
     }
 
     @Test
-    public void testRegisterSchedulerMVTaskNoImmediateTriggerWhenLastScheduleBeforeStart() {
-        Task task = new Task("test_mv");
-        task.setSource(Constants.TaskSource.MV);
-        TaskSchedule schedule = new TaskSchedule();
-
-        long now = TimeUtils.getEpochSeconds();
-        long startTime = now - 3600; // 1 hour ago
-        long lastScheduleTime = now - 7200; // 2 hours ago (before start time)
-
-        schedule.setStartTime(startTime);
-        schedule.setPeriod(60);
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(lastScheduleTime);
-        task.setId(2L);
-
-        // Mock executeTask to verify it's NOT called
-        final boolean[] executeTaskCalled = {false};
-        TaskManager spyTaskManager = new TaskManager() {
-            @Override
-            public SubmitResult executeTask(String taskName) {
-                executeTaskCalled[0] = true;
-                return new SubmitResult("xxxx", SubmitResult.SubmitStatus.SUBMITTED);
-            }
-        };
-
-        spyTaskManager.replayCreateTask(task);
-        spyTaskManager.registerScheduler(task);
-
-        // Should not trigger immediately because lastScheduleTime is before taskStartTime
-        Assertions.assertFalse(executeTaskCalled[0], "Task should not be executed immediately");
-        Assertions.assertNotNull(spyTaskManager.getPeriodFutureMap().get(task.getId()));
+    public void testRegisterSchedulerMVTaskNoImmediateTriggerWhenLastScheduleBeforeStart() throws Exception {
+        assertNoImmediateRun(newPeriodicTask("test_mv_before_start", Constants.TaskSource.MV, -7200));
     }
 
     @Test
-    public void testRegisterSchedulerMVTaskNoImmediateTriggerWhenNotExpired() {
-        Task task = new Task("test_mv");
-        task.setSource(Constants.TaskSource.MV);
-        TaskSchedule schedule = new TaskSchedule();
-
-        long now = TimeUtils.getEpochSeconds();
-        long startTime = now - 3600; // 1 hour ago
-        long lastScheduleTime = now - 30; // 30 seconds ago
-
-        schedule.setStartTime(startTime);
-        schedule.setPeriod(60); // 1 minute period
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(lastScheduleTime);
-        task.setId(3L);
-
-        // Mock executeTask to verify it's NOT called
-        final boolean[] executeTaskCalled = {false};
-        TaskManager spyTaskManager = new TaskManager() {
-            @Override
-            public SubmitResult executeTask(String taskName) {
-                executeTaskCalled[0] = true;
-                return new SubmitResult("xxxx", SubmitResult.SubmitStatus.SUBMITTED);
-            }
-        };
-
-        spyTaskManager.replayCreateTask(task);
-        spyTaskManager.registerScheduler(task);
-
-        // Should not trigger immediately because lastScheduleTime + period is in the future
-        Assertions.assertFalse(executeTaskCalled[0], "Task should not be executed immediately");
-        Assertions.assertNotNull(spyTaskManager.getPeriodFutureMap().get(task.getId()));
+    public void testRegisterSchedulerMVTaskNoImmediateTriggerWhenNotExpired() throws Exception {
+        assertNoImmediateRun(newPeriodicTask("test_mv_not_expired", Constants.TaskSource.MV, -10));
     }
 
     @Test
-    public void testRegisterSchedulerNonMVTaskNoImmediateTrigger() {
-        Task task = new Task("test_ctas");
-        task.setSource(Constants.TaskSource.CTAS);
-        TaskSchedule schedule = new TaskSchedule();
+    public void testRegisterSchedulerMVTaskNoImmediateTriggerWithoutLastScheduleTime() throws Exception {
+        Task task = newPeriodicTask("test_mv_no_last_schedule", Constants.TaskSource.MV, -180);
+        task.setLastScheduleTime(-1);
+        assertNoImmediateRun(task);
+    }
 
-        long now = TimeUtils.getEpochSeconds();
-        long startTime = now - 3600; // 1 hour ago
-        long lastScheduleTime = now - 180; // 3 minutes ago
+    @Test
+    public void testRegisterSchedulerNonMVTaskNoImmediateTrigger() throws Exception {
+        assertNoImmediateRun(newPeriodicTask("test_ctas_catch_up", Constants.TaskSource.CTAS, -180));
+    }
 
-        schedule.setStartTime(startTime);
-        schedule.setPeriod(60); // 1 minute period
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(lastScheduleTime);
-        task.setId(4L);
-
-        // Mock executeTask to verify it's NOT called
-        final boolean[] executeTaskCalled = {false};
-        TaskManager spyTaskManager = new TaskManager() {
-            @Override
-            public SubmitResult executeTask(String taskName) {
-                executeTaskCalled[0] = true;
-                return new SubmitResult("xxxx", SubmitResult.SubmitStatus.SUBMITTED);
-            }
-        };
-
-        spyTaskManager.replayCreateTask(task);
-        spyTaskManager.registerScheduler(task);
-
-        // Should not trigger immediately because source is not MV
-        Assertions.assertFalse(executeTaskCalled[0], "Non-MV task should not be executed immediately");
-        Assertions.assertNotNull(spyTaskManager.getPeriodFutureMap().get(task.getId()));
+    @Test
+    public void testManualExecutionRetainsManualType() throws Exception {
+        Task task = newPeriodicTask("test_mv_manual", Constants.TaskSource.MV, -180);
+        try (PeriodicTaskFixture fixture = new PeriodicTaskFixture(task)) {
+            assertEquals(SubmitResult.SubmitStatus.SUBMITTED, fixture.manager.executeTask(task.getName()).getStatus());
+            TaskRun run = fixture.onlyPendingRun();
+            assertEquals(Constants.TaskType.MANUAL, run.getType());
+            Assertions.assertTrue(run.getExecuteOption().isManual());
+            assertEquals(Constants.TaskType.PERIODICAL, task.getType());
+        }
     }
 
     @Test
     public void testPeriodSchedulerSkipsWhenNotLeader() throws Exception {
-        // Mock isLeader() to return false
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public boolean isLeader() {
-                return false;
-            }
-        };
-
-        final boolean[] executeTaskCalled = {false};
-        TaskManager spyTaskManager = new TaskManager() {
-            @Override
-            public SubmitResult executeTask(String taskName, ExecuteOption option) {
-                executeTaskCalled[0] = true;
-                return new SubmitResult("xxxx", SubmitResult.SubmitStatus.SUBMITTED);
-            }
-        };
-
-        Task task = new Task("test_period_leader_check");
-        task.setDefinition("select 1");
-        task.setSource(Constants.TaskSource.MV);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setId(10L);
-
-        TaskSchedule schedule = new TaskSchedule();
-        long now = TimeUtils.getEpochSeconds();
-        schedule.setStartTime(now - 3600);
-        schedule.setPeriod(1);
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-
-        spyTaskManager.replayCreateTask(task);
-        spyTaskManager.registerScheduler(task);
-
-        // Wait enough time for the scheduler to fire
-        ThreadUtil.sleepAtLeastIgnoreInterrupts(3000L);
-
-        // executeTask should NOT be called since isLeader() returns false
-        Assertions.assertFalse(executeTaskCalled[0],
-                "Periodical task should not execute on non-leader node");
+        mockLeader(false);
+        Task task = newPeriodicTask("test_period_not_leader", Constants.TaskSource.MV, -10);
+        try (PeriodicTaskFixture fixture = new PeriodicTaskFixture(task)) {
+            fixture.manager.registerScheduler(task);
+            fixture.tick.run();
+            Assertions.assertTrue(fixture.manager.getTaskRunScheduler().getCopiedPendingTaskRuns().isEmpty());
+        }
     }
 
     @Test
     public void testPeriodSchedulerExecutesWhenLeader() throws Exception {
-        // Mock isLeader() to return true
+        mockLeader(true);
+        Task task = newPeriodicTask("test_period_leader", Constants.TaskSource.MV, -10);
+        try (PeriodicTaskFixture fixture = new PeriodicTaskFixture(task)) {
+            fixture.manager.registerScheduler(task);
+            fixture.tick.run();
+            assertPeriodicRun(task, fixture.onlyPendingRun());
+        }
+    }
+
+    @Test
+    public void testCatchUpSubmissionFailureKeepsPeriodicSchedule() throws Exception {
+        mockLeader(true);
+        for (boolean throwException : new boolean[] {false, true}) {
+            Task task = newPeriodicTask("test_mv_rejected_" + throwException, Constants.TaskSource.MV, -180);
+            try (PeriodicTaskFixture fixture = new PeriodicTaskFixture(task)) {
+                TaskRunManager submissions = Mockito.spy(fixture.manager.getTaskRunManager());
+                AtomicInteger attempts = new AtomicInteger();
+                Mockito.doAnswer(invocation -> {
+                    if (attempts.getAndIncrement() == 0) {
+                        if (throwException) {
+                            throw new IllegalStateException("test submission failure");
+                        }
+                        return new SubmitResult(null, SubmitResult.SubmitStatus.REJECTED);
+                    }
+                    return invocation.callRealMethod();
+                }).when(submissions).submitTaskRun(Mockito.any(TaskRun.class), Mockito.any(ExecuteOption.class));
+                Field field = TaskManager.class.getDeclaredField("taskRunManager");
+                field.setAccessible(true);
+                field.set(fixture.manager, submissions);
+
+                fixture.manager.registerScheduler(task);
+                assertEquals(1, attempts.get());
+                Assertions.assertTrue(fixture.manager.getTaskRunScheduler().getCopiedPendingTaskRuns().isEmpty());
+                Assertions.assertSame(fixture.future, fixture.manager.getPeriodFutureMap().get(task.getId()));
+                fixture.tick.run();
+                assertEquals(2, attempts.get());
+                assertPeriodicRun(task, fixture.onlyPendingRun());
+            }
+        }
+    }
+
+    private static void mockLeader(boolean leader) {
         new MockUp<GlobalStateMgr>() {
             @Mock
             public boolean isLeader() {
-                return true;
+                return leader;
             }
         };
+    }
 
-        final boolean[] executeTaskCalled = {false};
-        TaskManager spyTaskManager = new TaskManager() {
-            @Override
-            public SubmitResult executeTask(String taskName, ExecuteOption option) {
-                executeTaskCalled[0] = true;
-                return new SubmitResult("xxxx", SubmitResult.SubmitStatus.SUBMITTED);
-            }
-        };
-
-        Task task = new Task("test_period_leader_execute");
+    static Task newPeriodicTask(String name, Constants.TaskSource source, long lastScheduleOffset) {
+        long now = TimeUtils.getEpochSeconds();
+        Task task = new Task(name);
+        task.setId(902029L);
         task.setDefinition("select 1");
-        task.setSource(Constants.TaskSource.MV);
+        task.setSource(source);
         task.setType(Constants.TaskType.PERIODICAL);
         task.setState(Constants.TaskState.ACTIVE);
-        task.setId(11L);
+        task.setProperties(ImmutableMap.of(TaskRun.MV_ID, "2029", "warehouse", "default_warehouse"));
+        task.setSchedule(new TaskSchedule(now - 3600, 60, TimeUnit.SECONDS));
+        task.setLastScheduleTime(now + lastScheduleOffset);
+        return task;
+    }
 
-        TaskSchedule schedule = new TaskSchedule();
-        long now = TimeUtils.getEpochSeconds();
-        schedule.setStartTime(now - 3600);
-        schedule.setPeriod(1);
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
+    private static void assertPeriodicRun(Task task, TaskRun run) {
+        assertEquals(Constants.TaskType.PERIODICAL, run.getType());
+        ExecuteOption option = run.getExecuteOption();
+        Assertions.assertFalse(option.isManual());
+        Assertions.assertFalse(option.getIsSync());
+        Assertions.assertFalse(option.isReplay());
+        assertEquals(Constants.TaskRunPriority.LOWEST.value(), option.getPriority());
+        Assertions.assertTrue(option.isMergeRedundant());
+        assertEquals(task.getProperties(), run.getProperties());
+        Assertions.assertFalse(run.getProperties().containsKey(TaskRun.PARTITION_START));
+        Assertions.assertFalse(run.getProperties().containsKey(TaskRun.PARTITION_END));
+    }
 
-        spyTaskManager.replayCreateTask(task);
-        spyTaskManager.registerScheduler(task);
+    private static void assertNoImmediateRun(Task task) throws Exception {
+        try (PeriodicTaskFixture fixture = new PeriodicTaskFixture(task)) {
+            fixture.manager.registerScheduler(task);
+            Assertions.assertTrue(fixture.manager.getTaskRunScheduler().getCopiedPendingTaskRuns().isEmpty());
+            Assertions.assertSame(fixture.future, fixture.manager.getPeriodFutureMap().get(task.getId()));
+        }
+    }
 
-        // Wait enough time for the scheduler to fire
-        ThreadUtil.sleepAtLeastIgnoreInterrupts(3000L);
+    // Keep real TaskManager/Builder/queue semantics while replacing only the timer's external scheduling.
+    // Shared with the PCT integration test so it executes the run the catch-up actually submitted.
+    static class PeriodicTaskFixture implements AutoCloseable {
+        final TaskManager manager = new TaskManager();
+        final ScheduledFuture<?> future = Mockito.mock(ScheduledFuture.class);
+        private final List<ExecutorService> executors = new ArrayList<>();
+        Runnable tick;
 
-        // executeTask SHOULD be called since isLeader() returns true
-        Assertions.assertTrue(executeTaskCalled[0],
-                "Periodical task should execute on leader node");
+        PeriodicTaskFixture(Task task) throws Exception {
+            ScheduledExecutorService timer = Mockito.mock(ScheduledExecutorService.class);
+            Mockito.doAnswer(invocation -> {
+                tick = invocation.getArgument(0);
+                return future;
+            }).when(timer).scheduleAtFixedRate(Mockito.any(Runnable.class), Mockito.anyLong(), Mockito.anyLong(),
+                    Mockito.eq(TimeUnit.SECONDS));
+            for (String name : new String[] {"periodScheduler", "dispatchScheduler"}) {
+                Field field = TaskManager.class.getDeclaredField(name);
+                field.setAccessible(true);
+                executors.add((ExecutorService) field.get(manager));
+                if (name.equals("periodScheduler")) {
+                    field.set(manager, timer);
+                }
+            }
+            Field pool = TaskRunExecutor.class.getDeclaredField("taskRunPool");
+            pool.setAccessible(true);
+            executors.add((ExecutorService) pool.get(manager.getTaskRunManager().getTaskRunExecutor()));
+            manager.replayCreateTask(task);
+        }
+
+        TaskRun onlyPendingRun() {
+            List<TaskRun> runs = manager.getTaskRunScheduler().getCopiedPendingTaskRuns();
+            assertEquals(1, runs.size());
+            return runs.get(0);
+        }
+
+        TaskRun takeRun() {
+            TaskRun pending = onlyPendingRun();
+            manager.getTaskRunScheduler().scheduledPendingTaskRun(run -> Assertions.assertSame(pending, run));
+            Assertions.assertTrue(manager.getTaskRunScheduler().getCopiedPendingTaskRuns().isEmpty());
+            return pending;
+        }
+
+        @Override
+        public void close() throws Exception {
+            for (ScheduledFuture<?> scheduled : manager.getPeriodFutureMap().values()) {
+                scheduled.cancel(true);
+            }
+            for (TaskRun run : manager.getTaskRunScheduler().getCopiedPendingTaskRuns()) {
+                manager.getTaskRunScheduler().removePendingTaskRun(run, Constants.TaskRunState.FAILED);
+            }
+            for (Long id : manager.getTaskRunScheduler().getCopiedRunningTaskIds()) {
+                TaskRun run = manager.getTaskRunScheduler().removeRunningTask(id);
+                if (run != null && !run.getFuture().isDone()) {
+                    run.getFuture().cancel(true);
+                }
+            }
+            for (ExecutorService executor : executors) {
+                executor.shutdownNow();
+                Assertions.assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS), "test executor did not terminate");
+            }
+        }
     }
 
     @Test

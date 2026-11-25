@@ -20,10 +20,11 @@ on:
   # recorded again once they finish: ERROR / conflict / automerge (sync pipeline), version and
   # behavior labels (PR CHECKER), the doc label (CI DOC Checker), docs-maintainer (Translation
   # Status Check, which runs after CI DOC Checker), version labels removed
-  # after the backport comment (MERGE PIPELINE), PAI-contributed on a backport (Contributed
+  # after the backport comment (MERGE PIPELINE), the version label of a patch-branch PR
+  # (IMAGE REBUILD (three-digit branches)), PAI-contributed on a backport (Contributed
   # Backport Label).
   workflow_run:
-    workflows: ["CD SYNC CI PIPELINE", "PR CHECKER", "CI DOC Checker", "Translation Status Check", "MERGE PIPELINE", "Contributed Backport Label"]
+    workflows: ["CD SYNC CI PIPELINE", "PR CHECKER", "CI DOC Checker", "Translation Status Check", "MERGE PIPELINE", "IMAGE REBUILD (three-digit branches)", "Contributed Backport Label"]
     types: [completed]
 
   # Every 2 hours, and by hand for a backfill: record again every open PR whose CI Metrics
@@ -32,7 +33,14 @@ on:
   # each gap's cause is found. A run costs ~25 GraphQL points. See `reconcile`.
   schedule:
     - cron: '17 */2 * * *'  # :17 past every even hour (UTC)
+  # With `prs`, records those PRs again instead: scripts/reconcile-version-label.py (ci-tool)
+  # dispatches it for the PR whose label it corrected, since that label emits no event.
   workflow_dispatch:
+    inputs:
+      prs:
+        description: PR numbers to record again, separated by spaces (empty runs the reconcile)
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -47,7 +55,7 @@ jobs:
     # and the labels a new sync PR gets right away would otherwise cancel it.
     # A workflow_run of a fork PR carries no PR number; its head commit keeps it apart.
     concurrency:
-      group: pr-record-${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number || github.event.workflow_run.head_sha }}${{ github.event.action == 'opened' && '-opened' || '' }}
+      group: pr-record-${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number || github.event.workflow_run.head_sha || github.run_id }}${{ github.event.action == 'opened' && '-opened' || '' }}
       cancel-in-progress: true  # every run reads the live state, so the newest run suffices
     # CI Metrics is the complete PR data source: every pull_request_target event in `on:` is
     # recorded on every PR, main PRs included.
@@ -58,6 +66,7 @@ jobs:
     # No comments inside the expression below: in a folded scalar a '#' line is part of it.
     if: >-
       github.event_name == 'pull_request_target' ||
+      (github.event_name == 'workflow_dispatch' && inputs.prs != '') ||
       github.event_name == 'workflow_run' ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
         github.event.comment.user.type == 'User' &&
@@ -79,10 +88,16 @@ jobs:
       SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
     steps:
       - name: record the PR
+        if: github.event_name != 'workflow_dispatch'
         run: python3 /var/lib/ci-tool/lib/pr_record.py --event "${GITHUB_EVENT_NAME}"
+      - name: record the dispatched PRs
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          PRS: ${{ inputs.prs }}
+        run: python3 /var/lib/ci-tool/lib/pr_record.py --repo "${GITHUB_REPOSITORY}" --prs "${PRS}"
 
   reconcile:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.prs == '')
     concurrency:
       group: pr-record-reconcile
       cancel-in-progress: false

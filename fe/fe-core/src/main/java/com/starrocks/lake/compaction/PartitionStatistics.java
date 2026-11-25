@@ -29,6 +29,8 @@ public class PartitionStatistics {
     private PartitionVersion currentVersion;
     @SerializedName(value = "nextCompactionTime")
     private long nextCompactionTime;
+    // The scheduler deferred this partition because its table was under an alter. This is leader-local.
+    private transient volatile long alterCompactionRetryTime;
     @SerializedName(value = "compactionScore")
     private Quantiles compactionScore;
     // default priority is 0, manual compaction will have priority value 1
@@ -89,7 +91,16 @@ public class PartitionStatistics {
     }
 
     public long getNextCompactionTime() {
-        return nextCompactionTime;
+        return Math.max(nextCompactionTime, alterCompactionRetryTime);
+    }
+
+    void setAlterCompactionRetryTime(long retryTime) {
+        this.alterCompactionRetryTime = retryTime;
+    }
+
+    void clearCompactionRetryTimes() {
+        setNextCompactionTime(0);
+        setAlterCompactionRetryTime(0);
     }
 
     public long getDeltaVersions() {

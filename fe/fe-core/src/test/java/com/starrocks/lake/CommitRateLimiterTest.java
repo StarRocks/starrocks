@@ -15,6 +15,8 @@
 package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.lake.compaction.CompactionMgr;
@@ -32,7 +34,11 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class CommitRateLimiterTest {
     private final long dbId = 1;
@@ -423,6 +429,81 @@ public class CommitRateLimiterTest {
             Config.lake_ingest_slowdown_threshold = oldThreshold;
             Config.lake_compaction_score_selector_min_score = oldMinScore;
             Config.lake_ingest_slowdown_ratio = oldRatio;
+            Config.lake_compaction_score_upper_bound = oldUpperBound;
+        }
+    }
+
+    /**
+     * A lake alter that waits for earlier transactions is cancelled once a partition of its table rejects commits
+     * (LakeAlterWaitGuard), so the lookup must find a partition exactly where check() rejects a commit into it.
+     */
+    @Test
+    public void testFindPartitionRejectingCommits() {
+        boolean oldSlowdown = Config.lake_enable_ingest_slowdown;
+        double oldRatio = Config.lake_ingest_slowdown_ratio;
+        double oldMinScore = Config.lake_compaction_score_selector_min_score;
+        long oldUpperBound = Config.lake_compaction_score_upper_bound;
+        try {
+            Config.lake_enable_ingest_slowdown = true;
+            // No delay, so that check() goes on to the upper bound.
+            Config.lake_ingest_slowdown_ratio = 0;
+            Config.lake_compaction_score_selector_min_score = 10;
+            Config.lake_compaction_score_upper_bound = 100;
+            long now = System.currentTimeMillis();
+            transactionState.setPrepareTime(now - 100);
+            transactionState.setWriteEndTimeMs(now);
+
+            OlapTable table = mock(OlapTable.class);
+            when(table.getId()).thenReturn(tableId);
+            PhysicalPartition atBound = new PhysicalPartition(3L, 3L);
+            PhysicalPartition aboveBound = new PhysicalPartition(6L, 6L);
+            when(table.getAllPhysicalPartitions()).thenReturn(List.of(atBound, aboveBound));
+            // Neither a partition without statistics nor one at the bound rejects commits.
+            Assertions.assertTrue(
+                    CommitRateLimiter.findPartitionRejectingCommits(compactionMgr, dbId, table).isEmpty());
+            compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, 3), 2, now,
+                    new Quantiles(1.0, 1.0, 100.0));
+            Assertions.assertTrue(
+                    CommitRateLimiter.findPartitionRejectingCommits(compactionMgr, dbId, table).isEmpty());
+            // Scores recorded under a different table or database do not count, even for the same partition id.
+            compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId + 1, 6), 2, now,
+                    new Quantiles(1.0, 1.0, 500.0));
+            compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId + 1, tableId, 6), 2, now,
+                    new Quantiles(1.0, 1.0, 500.0));
+            Assertions.assertTrue(
+                    CommitRateLimiter.findPartitionRejectingCommits(compactionMgr, dbId, table).isEmpty());
+
+            // Above the bound check() rejects a commit into the partition, and the lookup finds it.
+            compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, 6), 2, now,
+                    new Quantiles(1.0, 1.0, 101.0));
+            Assertions.assertThrows(CommitFailedException.class, () -> limiter.check(Set.of(6L), now));
+            Assertions.assertEquals(new CommitRateLimiter.RejectingPartition(6, 101.0, 100),
+                    CommitRateLimiter.findPartitionRejectingCommits(compactionMgr, dbId, table).orElseThrow());
+
+            // A partition the table no longer has, dropped or replaced by TRUNCATE, keeps its statistics until the
+            // scheduler cleans them up. It does not count, and the lookup goes on to the partitions the table has.
+            when(table.getAllPhysicalPartitions()).thenReturn(List.of(atBound));
+            Assertions.assertTrue(
+                    CommitRateLimiter.findPartitionRejectingCommits(compactionMgr, dbId, table).isEmpty());
+
+            // The bound is never below the selector's minimum score, as in check().
+            Config.lake_compaction_score_upper_bound = 5;
+            Assertions.assertEquals(10,
+                    CommitRateLimiter.findPartitionRejectingCommits(compactionMgr, dbId, table).orElseThrow().upperBound());
+
+            // Without a positive bound, or with ingestion slowdown off, nothing is rejected.
+            when(table.getAllPhysicalPartitions()).thenReturn(List.of(atBound, aboveBound));
+            Config.lake_compaction_score_upper_bound = 0;
+            Assertions.assertTrue(
+                    CommitRateLimiter.findPartitionRejectingCommits(compactionMgr, dbId, table).isEmpty());
+            Config.lake_compaction_score_upper_bound = 100;
+            Config.lake_enable_ingest_slowdown = false;
+            Assertions.assertTrue(
+                    CommitRateLimiter.findPartitionRejectingCommits(compactionMgr, dbId, table).isEmpty());
+        } finally {
+            Config.lake_enable_ingest_slowdown = oldSlowdown;
+            Config.lake_ingest_slowdown_ratio = oldRatio;
+            Config.lake_compaction_score_selector_min_score = oldMinScore;
             Config.lake_compaction_score_upper_bound = oldUpperBound;
         }
     }

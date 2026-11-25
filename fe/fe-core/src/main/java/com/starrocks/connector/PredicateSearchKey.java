@@ -18,6 +18,7 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Objects;
+import java.util.Set;
 
 public class PredicateSearchKey {
     private final String databaseName;
@@ -54,6 +55,17 @@ public class PredicateSearchKey {
         return params;
     }
 
+    // The columns whose statistics the planned files carry (null: all, or none without column statistics). Scans
+    // with different stats columns must not share planned files.
+    private Set<String> statsColumns() {
+        return params.isEnableColumnStats() ? params.getStatsColumnNames() : null;
+    }
+
+    // Optional statistics may be missing from the planned files, so they must not serve a scan that needs them.
+    private boolean optionalColumnStats() {
+        return params.isEnableColumnStats() && params.isOptionalColumnStats();
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -76,7 +88,9 @@ public class PredicateSearchKey {
                 return false;
             }
         }
-        if (params.isEnableColumnStats() != that.params.isEnableColumnStats()) {
+        if (params.isEnableColumnStats() != that.params.isEnableColumnStats() ||
+                !Objects.equals(statsColumns(), that.statsColumns()) ||
+                optionalColumnStats() != that.optionalColumnStats()) {
             return false;
         }
 
@@ -87,7 +101,8 @@ public class PredicateSearchKey {
 
     @Override
     public int hashCode() {
-        return Objects.hash(databaseName, tableName, getVersion(), getPredicate(), params.isEnableColumnStats());
+        return Objects.hash(databaseName, tableName, getVersion(), getPredicate(), params.isEnableColumnStats(),
+                statsColumns(), optionalColumnStats());
     }
 
     @Override
@@ -97,6 +112,7 @@ public class PredicateSearchKey {
                 ", version=" + getVersion() +
                 ", predicate=" + getPredicate() +
                 ", enableColumnStats=" + params.isEnableColumnStats() +
+                ", statsColumns=" + statsColumns() +
                 '}';
     }
 }

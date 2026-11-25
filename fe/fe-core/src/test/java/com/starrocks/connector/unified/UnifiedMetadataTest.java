@@ -23,12 +23,15 @@ import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.MvId;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.connector.CatalogConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetaPreparationItem;
@@ -40,7 +43,10 @@ import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.connector.hudi.HudiMetadata;
 import com.starrocks.connector.iceberg.IcebergMetaSpec;
 import com.starrocks.connector.iceberg.IcebergMetadata;
+import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.kudu.KuduMetadata;
+import com.starrocks.connector.metadata.TableMetaMetadata;
+import com.starrocks.connector.metadata.iceberg.IcebergSnapshotsTable;
 import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
@@ -55,13 +61,19 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.Mockito;
 import org.wildfly.common.Assert;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static com.starrocks.catalog.Table.TableType.DELTALAKE;
@@ -77,6 +89,8 @@ import static com.starrocks.connector.unified.UnifiedMetadata.PAIMON_STORAGE_HAN
 import static com.starrocks.connector.unified.UnifiedMetadata.PAIMON_STORAGE_HANDLER_VALUE;
 import static com.starrocks.connector.unified.UnifiedMetadata.SPARK_TABLE_PROVIDER_KEY;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -123,6 +137,124 @@ public class UnifiedMetadataTest {
         );
         this.getRemoteFilesParams = GetRemoteFilesParams.newBuilder().setPartitionKeys(ImmutableList.of())
                 .setTableVersionRange(TvrTableSnapshot.empty()).build();
+    }
+
+    private CatalogConnectorMetadata unifiedCatalog() {
+        return new CatalogConnectorMetadata(unifiedMetadata, new InformationSchemaMetadata("unified"),
+                new TableMetaMetadata("unified", "unified"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"files", "manifests", "partitions", "snapshots", "SNAPSHOTS", "schemas", "options",
+            "branch_dev$schemas"})
+    public void testRoutesPaimonSystemTableToItsOwner(String suffix) {
+        String name = "orders$" + suffix;
+        PaimonTable system = new PaimonTable();
+        HiveTable base = HiveTable.builder().setTableName("orders").setFullSchema(List.of())
+                .setProperties(Map.of(PAIMON_STORAGE_HANDLER_KEY, PAIMON_STORAGE_HANDLER_VALUE)).build();
+        new Expectations() {{
+                hiveMetadata.getTable((ConnectContext) any, "db", "orders");
+                result = base;
+                hiveMetadata.tableExists(connectContext, "db", name);
+                result = false;
+                paimonMetadata.getTable(connectContext, "db", name);
+                result = system;
+                paimonMetadata.getTableComment(connectContext, "db", name);
+                result = "system table";
+                paimonMetadata.tableExists(connectContext, "db", name);
+                times = 0;
+            }};
+        CatalogConnectorMetadata catalog = unifiedCatalog();
+        assertSame(system, catalog.getTable(connectContext, "db", name));
+        assertEquals("system table", catalog.getTableComment(connectContext, "db", name));
+        assertFalse(catalog.tableExists(connectContext, "db", name));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"orders$custom", "orders$history", "orders$bad$schemas", "orders$"})
+    public void testUnclaimedNameUsesPhysicalTable(String name) {
+        HiveTable base = HiveTable.builder().setTableName("orders").setFullSchema(List.of())
+                .setProperties(Map.of(PAIMON_STORAGE_HANDLER_KEY, PAIMON_STORAGE_HANDLER_VALUE)).build();
+        HiveTable physical = HiveTable.builder().setTableName(name).setFullSchema(List.of()).setProperties(Map.of()).build();
+        new Expectations() {{
+                hiveMetadata.getTable((ConnectContext) any, "db", "orders");
+                result = base;
+                minTimes = 0;
+                hiveMetadata.getTable((ConnectContext) any, "db", name);
+                result = physical;
+                hiveMetadata.tableExists(connectContext, "db", name);
+                result = true;
+            }};
+        CatalogConnectorMetadata catalog = unifiedCatalog();
+        assertSame(physical, catalog.getTable(connectContext, "db", name));
+        assertTrue(catalog.tableExists(connectContext, "db", name));
+    }
+
+    @Test
+    public void testClaimedTableFailureIsNotRetriedAsPhysicalTable() {
+        HiveTable base = HiveTable.builder().setTableName("orders").setFullSchema(List.of())
+                .setProperties(Map.of(PAIMON_STORAGE_HANDLER_KEY, PAIMON_STORAGE_HANDLER_VALUE)).build();
+        var failure = new StarRocksConnectorException("Paimon system table unavailable");
+        new Expectations() {{
+                hiveMetadata.getTable((ConnectContext) any, "db", "orders");
+                result = base;
+                paimonMetadata.getTable(connectContext, "db", "orders$schemas");
+                result = failure;
+                hiveMetadata.getTable((ConnectContext) any, "db", "orders$schemas");
+                times = 0;
+            }};
+        assertSame(failure, assertThrows(StarRocksConnectorException.class,
+                () -> unifiedCatalog().getTable(connectContext, "db", "orders$schemas")));
+    }
+
+    @Test
+    public void testIcebergSystemTableInUnifiedCatalog() {
+        HiveTable base = HiveTable.builder().setTableName("orders").setFullSchema(List.of())
+                .setProperties(Map.of(ICEBERG_TABLE_TYPE_NAME, ICEBERG_TABLE_TYPE_VALUE)).build();
+        new Expectations() {{
+                hiveMetadata.getTable((ConnectContext) any, "db", "orders");
+                result = base;
+                minTimes = 0;
+            }};
+        CatalogConnectorMetadata catalog = unifiedCatalog();
+        assertInstanceOf(IcebergSnapshotsTable.class, catalog.getTable(connectContext, "db", "orders$snapshots"));
+        assertFalse(catalog.tableExists(connectContext, "db", "orders$snapshots"));
+    }
+
+    @Test
+    public void testSystemTableBaseLookupErrorsUseFullName() {
+        HiveTable physical = HiveTable.builder().setTableName("orders$schemas").setFullSchema(List.of())
+                .setProperties(Map.of()).build();
+        var fullNameFailure = new StarRocksConnectorException("Failed to read db.missing$snapshots");
+        new Expectations() {{
+                hiveMetadata.getTable((ConnectContext) any, "db", "orders");
+                result = new StarRocksConnectorException("db.orders is a hive transactional table(insert only)");
+                hiveMetadata.getTable((ConnectContext) any, "db", "orders$schemas");
+                result = physical;
+                hiveMetadata.getTable((ConnectContext) any, "db", "missing");
+                result = new StarRocksConnectorException("Failed to get table",
+                        new InvocationTargetException(new NoSuchObjectException("missing")));
+                hiveMetadata.getTable((ConnectContext) any, "db", "missing$snapshots");
+                result = fullNameFailure;
+            }};
+        CatalogConnectorMetadata catalog = unifiedCatalog();
+        assertSame(physical, catalog.getTable(connectContext, "db", "orders$schemas"));
+        assertSame(fullNameFailure, assertThrows(StarRocksConnectorException.class,
+                () -> catalog.getTable(connectContext, "db", "missing$snapshots")));
+    }
+
+    @Test
+    public void testSystemTableInDedicatedPaimonCatalog() {
+        PaimonTable snapshots = new PaimonTable();
+        new Expectations() {{
+                paimonMetadata.getTableType();
+                result = PAIMON;
+                paimonMetadata.getTable(connectContext, "db", "orders$snapshots");
+                result = snapshots;
+            }};
+        CatalogConnectorMetadata catalog = new CatalogConnectorMetadata(paimonMetadata, new InformationSchemaMetadata("paimon"),
+                new TableMetaMetadata("paimon", "paimon"));
+        assertSame(snapshots, catalog.getTable(connectContext, "db", "orders$snapshots"));
     }
 
     @Test
@@ -253,6 +385,17 @@ public class UnifiedMetadataTest {
         unifiedMetadata.finishSink("test_db", "test_tbl", ImmutableList.of(), null);
         createTableStmt.setEngineName("hive");
         assertTrue(unifiedMetadata.createTable(connectContext, createTableStmt));
+    }
+
+    @Test
+    public void testInvalidateCachedTableReachesEveryConnector() {
+        // The table type is unknown without loading the table, so every connector drops its own copy
+        HiveMetadata hive = Mockito.mock(HiveMetadata.class);
+        ConnectorMetadata iceberg = Mockito.mock(ConnectorMetadata.class);
+        new UnifiedMetadata(ImmutableMap.of(HIVE, hive, ICEBERG, iceberg))
+                .invalidateCachedTable("test_db", "test_tbl");
+        Mockito.verify(hive).invalidateCachedTable("test_db", "test_tbl");
+        Mockito.verify(iceberg).invalidateCachedTable("test_db", "test_tbl");
     }
 
     @Test

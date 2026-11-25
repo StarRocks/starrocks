@@ -1,6 +1,7 @@
 ---
 sidebar_position: 40
 description: "主キーテーブルは、StarRocks によって設計された新しいストレージエンジンを使用します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 主キーテーブル

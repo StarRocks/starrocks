@@ -178,6 +178,16 @@ TEST(HashUtilTest, XxHashDeterminism) {
     EXPECT_EQ(h3, h3_repeat);
 }
 
+TEST(HashUtilTest, XxHashGoldenVectors) {
+    const std::string_view data = "starrocks";
+    const uint32_t seed32 = 0x12345678u;
+    const uint64_t seed = 0x1234567890abcdefULL;
+    EXPECT_EQ(HashUtil::xx_hash32(data.data(), static_cast<int32_t>(data.size()), seed32), 0x80128b3du);
+    EXPECT_EQ(HashUtil::xx_hash64(data.data(), static_cast<int32_t>(data.size()), seed), 0x9e303530e6d7948fULL);
+    EXPECT_EQ(HashUtil::xx_hash3_64(data.data(), static_cast<int32_t>(data.size()), seed), 0xb06cd33322d316dfULL);
+    EXPECT_EQ(HashUtil::xx_hash3_64(data.data(), static_cast<int32_t>(data.size()), 0), 0x5b39aa5db476edb0ULL);
+}
+
 TEST(HashUtilTest, Hash64Fallback) {
     const std::string_view data = "fallback";
     const uint64_t seed = 0x1122334455667788ULL;

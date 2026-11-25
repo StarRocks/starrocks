@@ -88,7 +88,7 @@ public class LakeCompactionMaxParallelTest extends StarRocksTestBase {
         // Test default value when property is not set
         Map<String, String> properties = new HashMap<>();
         int result = PropertyAnalyzer.analyzeLakeCompactionMaxParallel(properties);
-        Assertions.assertEquals(3, result);
+        Assertions.assertEquals(5, result);
     }
 
     @Test
@@ -135,7 +135,7 @@ public class LakeCompactionMaxParallelTest extends StarRocksTestBase {
     public void testAnalyzeLakeCompactionMaxParallelNullProperties() throws AnalysisException {
         // Test null properties should return default
         int result = PropertyAnalyzer.analyzeLakeCompactionMaxParallel(null);
-        Assertions.assertEquals(3, result);
+        Assertions.assertEquals(5, result);
     }
 
     // ===========================================
@@ -164,15 +164,13 @@ public class LakeCompactionMaxParallelTest extends StarRocksTestBase {
 
     @Test
     public void testTablePropertyBuildLakeCompactionMaxParallelNotSet() {
-        // Test property not set - getLakeCompactionMaxParallel returns default value 3
-        // because OlapTable.getLakeCompactionMaxParallel will use PropertyAnalyzer default
+        // Test property not set - getLakeCompactionMaxParallel returns the field default 5,
+        // the same value as Config.lake_compaction_max_parallel_default
         Map<String, String> properties = new HashMap<>();
         TableProperty tableProperty = new TableProperty(properties);
         tableProperty.buildLakeCompactionMaxParallel();
-        // When property is not set, lakeCompactionMaxParallel field in TableProperty is 0
-        // but PropertyAnalyzer.analyzeLakeCompactionMaxParallel returns 3 as default
         // The buildLakeCompactionMaxParallel only sets from properties, so it stays at field default
-        Assertions.assertEquals(3, tableProperty.getLakeCompactionMaxParallel());
+        Assertions.assertEquals(5, tableProperty.getLakeCompactionMaxParallel());
     }
 
     // ===========================================
@@ -200,8 +198,8 @@ public class LakeCompactionMaxParallelTest extends StarRocksTestBase {
                 "PRIMARY KEY(c0) " +
                 "DISTRIBUTED BY HASH(c0) BUCKETS 1", DB_NAME, tableName);
         LakeTable table = createTable(createSql);
-        // Default value is 3
-        Assertions.assertEquals(3, table.getLakeCompactionMaxParallel());
+        // Default value is 5
+        Assertions.assertEquals(5, table.getLakeCompactionMaxParallel());
     }
 
     @Test
@@ -239,7 +237,7 @@ public class LakeCompactionMaxParallelTest extends StarRocksTestBase {
                 "PRIMARY KEY(c0) " +
                 "DISTRIBUTED BY HASH(c0) BUCKETS 1", DB_NAME, tableName);
         LakeTable table = createTable(createSql);
-        Assertions.assertEquals(3, table.getLakeCompactionMaxParallel());
+        Assertions.assertEquals(5, table.getLakeCompactionMaxParallel());
 
         String alterSql = String.format(
                 "ALTER TABLE %s.%s SET ('lake_compaction_max_parallel' = '15')", DB_NAME, tableName);

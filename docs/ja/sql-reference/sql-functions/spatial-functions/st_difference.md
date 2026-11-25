@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ネイティブ平面ポリゴンまたはマルチポリゴンから別の領域を差し引きます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Difference

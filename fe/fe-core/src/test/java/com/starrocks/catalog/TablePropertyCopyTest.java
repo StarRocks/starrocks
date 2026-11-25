@@ -92,4 +92,19 @@ public class TablePropertyCopyTest {
         Assertions.assertTrue(copied.hasDelete());
         Assertions.assertTrue(copied.hasForbiddenGlobalDict());
     }
+
+    // The tablet split/merge target size is a scalar derived from the properties map, so the copy
+    // must carry the field and the map entry together.
+    @Test
+    public void testCopyPreservesTabletReshardTargetSize() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, "1073741824");
+        TableProperty original = new TableProperty(properties);
+        original.buildTabletReshardTargetSize();
+
+        TableProperty copied = original.copy();
+        Assertions.assertEquals(1073741824L, copied.getTabletReshardTargetSize());
+        Assertions.assertEquals("1073741824",
+                copied.getProperties().get(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE));
+    }
 }

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Subtracts a time interval from a date value."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # microseconds_sub

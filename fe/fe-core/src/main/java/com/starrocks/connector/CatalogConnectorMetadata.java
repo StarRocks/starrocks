@@ -25,6 +25,7 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
@@ -34,6 +35,7 @@ import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.metadata.TableMetaMetadata;
+import com.starrocks.connector.unified.UnifiedMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -90,12 +92,21 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
         this.tableMetadata = tableMetadata;
     }
 
-    private ConnectorMetadata metadataOfTable(String tableName) {
-        // Paimon system table shares the same pattern, ignore it here
-        if (getTableType() != Table.TableType.PAIMON && TableMetaMetadata.isMetadataTable(tableName)) {
+    private ConnectorMetadata metadataOfTable(String dbName, String tableName) {
+        ConnectorMetadata dbMetadata = metadataOfDb(dbName);
+        if (dbMetadata == informationSchema) {
+            return dbMetadata;
+        }
+        if (dbMetadata instanceof UnifiedMetadata unified) {
+            return unified.resolveTableForRead(dbName, tableName, tableMetadata);
+        }
+        // Dedicated Paimon catalogs resolve native system tables through the Paimon connector.
+        if (tableMetadata != null && TableMetaMetadata.isMetadataTable(tableName)
+                && (getTableType() != Table.TableType.PAIMON
+                || tableName.endsWith(com.starrocks.connector.paimon.PaimonGlobalIndexMetadataTable.SUFFIX))) {
             return tableMetadata;
         }
-        return null;
+        return dbMetadata;
     }
 
     private ConnectorMetadata metadataOfTable(Table table) {
@@ -135,7 +146,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     @Override
     public List<String> listPartitionNames(String databaseName, String tableName,
                                            ConnectorMetadataRequestContext requestContext) {
-        return normal.listPartitionNames(databaseName, tableName, requestContext);
+        ConnectorMetadata metadata = normal instanceof UnifiedMetadata ? metadataOfTable(databaseName, tableName) : normal;
+        return metadata.listPartitionNames(databaseName, tableName, requestContext);
     }
 
     @Override
@@ -146,21 +158,12 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
 
     @Override
     public Table getTable(ConnectContext context, String dbName, String tblName) {
-        ConnectorMetadata metadata = metadataOfTable(tblName);
-        if (metadata == null) {
-            metadata = metadataOfDb(dbName);
-        }
-
-        return metadata.getTable(context, dbName, tblName);
+        return metadataOfTable(dbName, tblName).getTable(context, dbName, tblName);
     }
 
     @Override
     public String getTableComment(ConnectContext context, String dbName, String tblName) {
-        ConnectorMetadata metadata = metadataOfTable(tblName);
-        if (metadata == null) {
-            metadata = metadataOfDb(dbName);
-        }
-        return metadata.getTableComment(context, dbName, tblName);
+        return metadataOfTable(dbName, tblName).getTableComment(context, dbName, tblName);
     }
 
     @Override
@@ -274,6 +277,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     }
 
     @Override
+    public Map<String, Pair<Double, Double>> getPartitionSourceColumnRanges(Table table, TvrVersionRange version) {
+        return normal.getPartitionSourceColumnRanges(table, version);
+    }
+
+    @Override
     public Set<DeleteFile> getDeleteFiles(IcebergTable table, Long snapshotId, ScalarOperator predicate, FileContent content) {
         return normal.getDeleteFiles(table, snapshotId, predicate, content);
     }
@@ -291,6 +299,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     @Override
     public void invalidateTableForRead(String srDbName, Table table) {
         normal.invalidateTableForRead(srDbName, table);
+    }
+
+    @Override
+    public void invalidateCachedTable(String dbName, String tableName) {
+        normal.invalidateCachedTable(dbName, tableName);
     }
 
     @Override

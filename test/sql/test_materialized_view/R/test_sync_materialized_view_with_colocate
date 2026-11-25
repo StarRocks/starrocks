@@ -1,133 +1,281 @@
--- name: test_sync_materialized_view_with_colocate
-admin set frontend config('alter_scheduler_interval_millisecond' = '100');
+-- name: test_sync_materialized_view_with_colocate @sequential
+-- Test Point: Colocated bitmap, HLL and percentile indexes retain sketch contents across three input batches.
+-- Method: Decode each index directly, compare independent cardinality/extrema, and require its query rewrite.
+
+[UC]function: original_colocate_mv_index=execute_sql("ADMIN SHOW FRONTEND CONFIG LIKE 'enable_colocate_mv_index'", True)["result"][0][2]
+
+ADMIN SET FRONTEND CONFIG ('enable_colocate_mv_index'='true');
 -- result:
 -- !result
+
+create database sync_mv_colocate_${uuid0};
+-- result:
+-- !result
+
+use sync_mv_colocate_${uuid0};
+-- result:
+-- !result
+
 create table user_tags (time date, user_id int, user_name varchar(20), tag_id int) partition by range (time)  (partition p1 values less than MAXVALUE) distributed by hash(time) buckets 3 properties('colocate_with' = 'colocate_gorup1', 'replicated_storage' = 'true');
 -- result:
 -- !result
+
 insert into user_tags values('2023-04-13', 1, 'a', 1), ('2023-04-13', 1, 'b', 2), ('2023-04-13', 1, 'c', 3), ('2023-04-13', 1, 'd', 4), ('2023-04-13', 1, 'e', 5), ('2023-04-13', 2, 'e', 5), ('2023-04-13', 3, 'e', 6);
 -- result:
 -- !result
+
 create materialized view user_tags_mv1
 PROPERTIES ("colocate_mv" = "true")
 as select user_id, time, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id, time;
 -- result:
 -- !result
+
 function: wait_materialized_view_finish()
 -- result:
 None
 -- !result
-create materialized view user_tags_hll_mv1 
+
+create materialized view user_tags_hll_mv1
 PROPERTIES ("colocate_mv" = "true")
 as select user_id, time, hll_union(hll_hash(tag_id)) from user_tags group by user_id, time;
 -- result:
 -- !result
+
 function: wait_materialized_view_finish()
 -- result:
 None
 -- !result
-create materialized view user_tags_percential_mv1 
+
+create materialized view user_tags_percential_mv1
 PROPERTIES ("colocate_mv" = "true")
 as select user_id, time, percentile_union(percentile_hash(tag_id)) from user_tags group by user_id, time;
 -- result:
 -- !result
+
 function: wait_materialized_view_finish()
 -- result:
 None
 -- !result
+
 insert into user_tags values('2023-04-13', 1, 'a', 1), ('2023-04-13', 1, 'b', 2), ('2023-04-13', 1, 'c', 3), ('2023-04-13', 1, 'd', 4), ('2023-04-13', 1, 'e', 5), ('2023-04-13', 2, 'e', 5), ('2023-04-13', 3, 'e', 6);
 -- result:
 -- !result
+
 insert into user_tags values('2023-04-13', 1, 'a', 1), ('2023-04-13', 1, 'b', 2), ('2023-04-13', 1, 'c', 3), ('2023-04-13', 1, 'd', 4), ('2023-04-13', 1, 'e', 5), ('2023-04-13', 2, 'e', 5), ('2023-04-13', 3, 'e', 6);
 -- result:
 -- !result
-ADMIN SET FRONTEND CONFIG ("enable_colocate_mv_index" = "true");
--- result:
--- !result
-select * from user_tags_mv1 [_SYNC_MV_] order by user_id;
--- result:
-1	2023-04-13	None
-2	2023-04-13	None
-3	2023-04-13	None
--- !result
-select user_id, count(distinct tag_id) from user_tags group by user_id order by user_id;
+
+[ORDER]select user_id, bitmap_count(mv_bitmap_union_tag_id) from user_tags_mv1 [_SYNC_MV_] order by user_id;
 -- result:
 1	5
 2	1
 3	1
 -- !result
-select user_id, bitmap_union_count(to_bitmap(tag_id)) from user_tags group by user_id order by user_id;
+
+[ORDER]select user_id, hll_cardinality(mv_hll_union_tag_id) from user_tags_hll_mv1 [_SYNC_MV_] order by user_id;
 -- result:
 1	5
 2	1
 3	1
 -- !result
-select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id order by user_id;
+
+[ORDER]select user_id, percentile_approx_raw(mv_percentile_union_tag_id, 0), percentile_approx_raw(mv_percentile_union_tag_id, 1) from user_tags_percential_mv1 [_SYNC_MV_] order by user_id;
+-- result:
+1	1.0	5.0
+2	5.0	5.0
+3	6.0	6.0
+-- !result
+
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+
+set enable_sync_materialized_view_rewrite = false;
+-- result:
+-- !result
+
+[ORDER]select user_id, count(distinct tag_id), min(tag_id), max(tag_id), count(*) from user_tags group by user_id order by user_id;
+-- result:
+1	5	1	5	15
+2	1	5	5	3
+3	1	6	6	3
+-- !result
+
+set enable_materialized_view_rewrite = true;
+-- result:
+-- !result
+
+set enable_sync_materialized_view_rewrite = true;
+-- result:
+-- !result
+
+set query_including_mv_names = "user_tags_mv1";
+-- result:
+-- !result
+
+function: check_hit_materialized_view("select user_id, count(distinct tag_id) from user_tags group by user_id order by user_id;", "user_tags_mv1")
+-- result:
+None
+-- !result
+
+[ORDER]select user_id, count(distinct tag_id) from user_tags group by user_id order by user_id;
 -- result:
 1	5
 2	1
 3	1
 -- !result
-select * from user_tags_hll_mv1 [_SYNC_MV_] order by user_id;
+
+function: check_hit_materialized_view("select user_id, bitmap_union_count(to_bitmap(tag_id)) from user_tags group by user_id order by user_id;", "user_tags_mv1")
 -- result:
-1	2023-04-13	None
-2	2023-04-13	None
-3	2023-04-13	None
+None
 -- !result
-select user_id, approx_count_distinct(tag_id) x from user_tags group by user_id order by user_id;
--- result:
-1	5
-2	1
-3	1
--- !result
-select user_id, ndv(tag_id) x from user_tags group by user_id order by user_id;
+
+[ORDER]select user_id, bitmap_union_count(to_bitmap(tag_id)) from user_tags group by user_id order by user_id;
 -- result:
 1	5
 2	1
 3	1
 -- !result
-select user_id, hll_union_agg(hll_hash(tag_id)) x from user_tags group by user_id order by user_id;
+
+function: check_hit_materialized_view("select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id order by user_id;", "user_tags_mv1")
+-- result:
+None
+-- !result
+
+[ORDER]select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id order by user_id;
 -- result:
 1	5
 2	1
 3	1
 -- !result
-select user_id, hll_cardinality(hll_union(hll_hash(tag_id))) x from user_tags group by user_id order by user_id;
+
+set query_including_mv_names = "user_tags_hll_mv1";
+-- result:
+-- !result
+
+function: check_hit_materialized_view("select user_id, approx_count_distinct(tag_id) x from user_tags group by user_id order by user_id;", "user_tags_hll_mv1")
+-- result:
+None
+-- !result
+
+[ORDER]select user_id, approx_count_distinct(tag_id) x from user_tags group by user_id order by user_id;
 -- result:
 1	5
 2	1
 3	1
 -- !result
-select * from user_tags_percential_mv1 [_SYNC_MV_] order by user_id;
+
+function: check_hit_materialized_view("select user_id, ndv(tag_id) x from user_tags group by user_id order by user_id;", "user_tags_hll_mv1")
 -- result:
-1	2023-04-13	None
-2	2023-04-13	None
-3	2023-04-13	None
+None
 -- !result
-select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id order by user_id;
+
+[ORDER]select user_id, ndv(tag_id) x from user_tags group by user_id order by user_id;
+-- result:
+1	5
+2	1
+3	1
+-- !result
+
+function: check_hit_materialized_view("select user_id, hll_union_agg(hll_hash(tag_id)) x from user_tags group by user_id order by user_id;", "user_tags_hll_mv1")
+-- result:
+None
+-- !result
+
+[ORDER]select user_id, hll_union_agg(hll_hash(tag_id)) x from user_tags group by user_id order by user_id;
+-- result:
+1	5
+2	1
+3	1
+-- !result
+
+function: check_hit_materialized_view("select user_id, hll_cardinality(hll_union(hll_hash(tag_id))) x from user_tags group by user_id order by user_id;", "user_tags_hll_mv1")
+-- result:
+None
+-- !result
+
+[ORDER]select user_id, hll_cardinality(hll_union(hll_hash(tag_id))) x from user_tags group by user_id order by user_id;
+-- result:
+1	5
+2	1
+3	1
+-- !result
+
+set query_including_mv_names = "user_tags_percential_mv1";
+-- result:
+-- !result
+
+function: check_hit_materialized_view("select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id order by user_id;", "user_tags_percential_mv1")
+-- result:
+None
+-- !result
+
+[ORDER]select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id order by user_id;
 -- result:
 1	5.0
 2	5.0
 3	6.0
 -- !result
-select user_id, percentile_approx(tag_id, 0) x from user_tags group by user_id order by user_id;
+
+function: check_hit_materialized_view("select user_id, percentile_approx(tag_id, 0) x from user_tags group by user_id order by user_id;", "user_tags_percential_mv1")
+-- result:
+None
+-- !result
+
+[ORDER]select user_id, percentile_approx(tag_id, 0) x from user_tags group by user_id order by user_id;
 -- result:
 1	1.0
 2	5.0
 3	6.0
 -- !result
-select user_id, round(percentile_approx(tag_id, 0)) x from user_tags group by user_id order by user_id;
+
+function: check_hit_materialized_view("select user_id, round(percentile_approx(tag_id, 0)) x from user_tags group by user_id order by user_id;", "user_tags_percential_mv1")
+-- result:
+None
+-- !result
+
+[ORDER]select user_id, round(percentile_approx(tag_id, 0)) x from user_tags group by user_id order by user_id;
 -- result:
 1	1
 2	5
 3	6
 -- !result
+
+set query_including_mv_names = "";
+-- result:
+-- !result
+
 drop materialized view user_tags_mv1;
 -- result:
 -- !result
+
 drop materialized view user_tags_hll_mv1;
 -- result:
 -- !result
+
 drop materialized view user_tags_percential_mv1;
 -- result:
 -- !result
+
+drop table user_tags;
+-- result:
+-- !result
+
+drop database sync_mv_colocate_${uuid0};
+-- result:
+-- !result
+
+ADMIN SET FRONTEND CONFIG ('enable_colocate_mv_index'='${original_colocate_mv_index}');
+-- result:
+-- !result
+
+function: execute_sql("ADMIN SHOW FRONTEND CONFIG LIKE 'enable_colocate_mv_index'", True)["result"][0][2] == "${original_colocate_mv_index}" or (_ for _ in ()).throw(AssertionError("colocate MV config was not restored"))
+-- result:
+True
+-- !result
+
+CLEANUP {
+  drop database if exists sync_mv_colocate_${uuid0} force;
+  ADMIN SET FRONTEND CONFIG ('enable_colocate_mv_index'='${original_colocate_mv_index}');
+  function: execute_sql("ADMIN SHOW FRONTEND CONFIG LIKE 'enable_colocate_mv_index'", True)["result"][0][2] == "${original_colocate_mv_index}" or (_ for _ in ()).throw(AssertionError("colocate MV config was not restored"))
+} END CLEANUP

@@ -1,7 +1,4 @@
 -- name: test_gin_property_key_case @slow
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
--- result:
--- !result
 CREATE DATABASE db_${uuid0};
 -- result:
 -- !result

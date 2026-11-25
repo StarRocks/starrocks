@@ -285,6 +285,98 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
         Assertions.assertEquals(1, getTableCalls.get());
     }
 
+    /**
+     * Analyze {@code sql}, which reads jdbc0.partitioned_db0.tbl0 and an internal table, with the JDBC metadata
+     * blocking, and assert the lock is not taken while it blocks and the analyzer reuses what the pre-pass resolved.
+     */
+    private void assertExternalMetadataFetchedBeforeLock(String sql) throws Exception {
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch allowReturn = new CountDownLatch(1);
+        AtomicInteger getTableCalls = new AtomicInteger();
+        registerBlockingJdbcMetadata(started, allowReturn, getTableCalls);
+
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
+        AtomicBoolean lockCalled = new AtomicBoolean(false);
+        PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt) {
+            @Override
+            public void lock() {
+                lockCalled.set(true);
+            }
+
+            @Override
+            public void unlock() {
+            }
+        };
+        Assertions.assertFalse(locker.isEmpty(), "the internal table has to be in the lock set: " + sql);
+
+        AtomicBoolean finished = new AtomicBoolean(false);
+        AtomicReference<Throwable> error = new AtomicReference<>();
+        Thread t = new Thread(() -> {
+            try {
+                StatementPlanner.analyzeStatement(stmt, connectContext, locker);
+                finished.set(true);
+            } catch (Throwable t0) {
+                error.set(t0);
+            }
+        });
+        t.start();
+
+        Assertions.assertTrue(started.await(10, TimeUnit.SECONDS));
+        Assertions.assertFalse(lockCalled.get(), "connector metadata fetched under the lock: " + sql);
+        allowReturn.countDown();
+        t.join(TimeUnit.SECONDS.toMillis(20));
+        if (error.get() != null) {
+            throw new RuntimeException(error.get());
+        }
+        Assertions.assertTrue(finished.get());
+        Assertions.assertTrue(lockCalled.get());
+        Assertions.assertEquals(1, getTableCalls.get());
+    }
+
+    /**
+     * A non-recursive CTE's name is in scope only after its own definition: inside it, a same-named table is the
+     * table. Here the inner tbl0 is the JDBC table of the current database, which the pre-pass must resolve
+     * rather than skip as the CTE, or the analyzer fetches it holding t0's lock.
+     */
+    @Test
+    public void testSameNameCteDefinitionFromExternalTableNotUnderLock() throws Exception {
+        assertInJdbcDatabase(() -> assertExternalMetadataFetchedBeforeLock(
+                "with tbl0 as (select * from tbl0) select * from default_catalog.test.t0 join tbl0 on true"));
+    }
+
+    /** Replace the metadata of jdbc0 with one that counts getTable and blocks it until {@code allowReturn}. */
+    private void registerBlockingJdbcMetadata(CountDownLatch started, CountDownLatch allowReturn,
+                                              AtomicInteger getTableCalls) {
+        MockedMetadataMgr metadataMgr = (MockedMetadataMgr) GlobalStateMgr.getCurrentState().getMetadataMgr();
+        Map<String, String> props = new HashMap<>();
+        props.put(JDBCResource.TYPE, "jdbc");
+        props.put(JDBCResource.DRIVER_CLASS, "org.mariadb.jdbc.Driver");
+        props.put(JDBCResource.URI, "jdbc:mariadb://127.0.0.1:3306");
+        props.put(JDBCResource.USER, "root");
+        props.put(JDBCResource.PASSWORD, "123456");
+        props.put(JDBCResource.CHECK_SUM, "xxxx");
+        props.put(JDBCResource.DRIVER_URL, "xxxx");
+        metadataMgr.registerMockedMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME,
+                new BlockingJDBCMetadata(props, started, allowReturn, getTableCalls));
+    }
+
+    private interface ThrowingRunnable {
+        void run() throws Exception;
+    }
+
+    private void assertInJdbcDatabase(ThrowingRunnable body) throws Exception {
+        String originalCatalog = connectContext.getCurrentCatalog();
+        String originalDb = connectContext.getDatabase();
+        try {
+            connectContext.setCurrentCatalog(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME);
+            connectContext.setDatabase(MockedJDBCMetadata.MOCKED_PARTITIONED_DB_NAME);
+            body.run();
+        } finally {
+            connectContext.setCurrentCatalog(originalCatalog);
+            connectContext.setDatabase(originalDb);
+        }
+    }
+
     @Test
     public void testMixedQueryNativeQueryMetadataNotUnderLock() throws Exception {
         CountDownLatch started = new CountDownLatch(1);

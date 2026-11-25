@@ -21,13 +21,14 @@ tablet_ids=$(${mysql_cmd} -D"${database}" -e "SHOW TABLETS FROM ${table}" | awk 
 
 # SHOW TABLETS lists every layout the partition still retains, including the single parent tablet a
 # split retires but keeps until vacuum reclaims it. A query only reaches the current layout and
-# rejects a retired tablet as dropped, so those are skipped rather than counted as empty.
+# rejects a retired tablet as one the table does not have, so those are skipped rather than counted
+# as empty.
 tablets=0
 empty=0
 for tablet_id in ${tablet_ids}; do
     if ! rows=$(${mysql_cmd} -D"${database}" -Ne "SELECT count(*) FROM ${table} TABLET(${tablet_id})" 2>&1); then
         case "${rows}" in
-            *"The tablet may have been dropped"*) continue ;;
+            *"has no such tablet"*) continue ;;
             *) echo "${rows}" >&2; exit 1 ;;
         esac
     fi

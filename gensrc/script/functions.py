@@ -236,6 +236,9 @@ vectorized_functions = [
     [10358, '__iceberg_transform_bucket', True, False, 'INT', ['DECIMAL128', 'INT'], 'MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL128>'],
 
 
+    [10360, '__paimon_bucket', False, False, 'INT', ['VARCHAR', 'ANY_STRUCT'], 'PaimonFunctions::bucket',
+     'PaimonFunctions::prepare', 'PaimonFunctions::close'],
+
     # 20xxx: bit functions
     [20010, 'bitand', True, False, 'TINYINT', ['TINYINT', 'TINYINT'], "BitFunctions::bitAnd<TYPE_TINYINT>"],
     [20011, 'bitand', True, False, 'SMALLINT', ['SMALLINT', 'SMALLINT'], "BitFunctions::bitAnd<TYPE_SMALLINT>"],
@@ -1685,6 +1688,7 @@ vectorized_functions = [
     [150300, 'array_filter', True, False, 'ANY_ARRAY', ['ANY_ARRAY', 'ARRAY_BOOLEAN'], 'ArrayFunctions::array_filter'],
     [150301, 'all_match', True, False, 'BOOLEAN', ['ARRAY_BOOLEAN'], 'ArrayFunctions::all_match'],
     [150302, 'any_match', True, False, 'BOOLEAN', ['ARRAY_BOOLEAN'], 'ArrayFunctions::any_match'],
+    [150303, 'none_match', True, False, 'BOOLEAN', ['ARRAY_BOOLEAN'], 'ArrayFunctions::none_match'],
 
     [150311, 'array_sortby', True, False, 'ANY_ARRAY', ['ANY_ARRAY', 'ARRAY_BOOLEAN'],
      'ArrayFunctions::array_sortby<TYPE_BOOLEAN>'],
@@ -1910,4 +1914,26 @@ vectorized_functions = [
          ],
          'ai': ai_metadata('CHAT', 'FILTER', 'BOOLEAN', inputs=('input', 'condition'))
      }],
+
+    # file functions
+    [210000, 'to_file', True, False, 'FILE', ['ANY_STRUCT'], 'FileFunctions::to_file'],
+    # [210001, 'to_file', True, False, 'FILE', ['VARCHAR', 'VARCHAR'], 'FileFunctions::to_file'],
+    [210002, 'try_to_file', True, False, 'FILE', ['ANY_STRUCT'], 'FileFunctions::try_to_file'],
+    # [210003, 'try_to_file', True, False, 'FILE', ['VARCHAR', 'VARCHAR'], 'FileFunctions::try_to_file'],
+    [210010, 'fl_get_uri', True, False, 'VARCHAR', ['FILE'], 'FileFunctions::fl_get_uri'],
+    [210011, 'fl_get_offset', True, False, 'BIGINT', ['FILE'], 'FileFunctions::fl_get_offset'],
+    [210012, 'fl_get_size', True, False, 'BIGINT', ['FILE'], 'FileFunctions::fl_get_size'],
+    [210013, 'fl_get_content_type', True, False, 'VARCHAR', ['FILE'], 'FileFunctions::fl_get_content_type'],
+    [210014, 'fl_get_checksum', True, False, 'VARCHAR', ['FILE'], 'FileFunctions::fl_get_checksum'],
+    [210015, 'fl_get_inline', True, False, 'VARBINARY', ['FILE'], 'FileFunctions::fl_get_inline'],
+    # get_presigned_url(storage_volume, absolute_uri [, expiration_seconds])
+    [210016, 'get_presigned_url', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'],
+     'FileFunctions::get_presigned_url'],
+    [210017, 'get_presigned_url', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'BIGINT'],
+     'FileFunctions::get_presigned_url_with_expiration'],
+    # get_presigned_file(storage_volume, file [, expiration_seconds])
+    [210018, 'get_presigned_file', True, False, 'FILE', ['VARCHAR', 'FILE'],
+     'FileFunctions::get_presigned_file'],
+    [210019, 'get_presigned_file', True, False, 'FILE', ['VARCHAR', 'FILE', 'BIGINT'],
+     'FileFunctions::get_presigned_file_with_expiration'],
 ]

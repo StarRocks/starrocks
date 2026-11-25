@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW BACKENDS 查看当前集群中所有 BE 节点的相关信息。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW BACKENDS

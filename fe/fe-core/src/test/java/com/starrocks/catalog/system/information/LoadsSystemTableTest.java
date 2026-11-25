@@ -18,25 +18,31 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.load.LoadJobVisibility;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.streamload.AbstractStreamLoadTask;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadMultiStmtTask;
 import com.starrocks.load.streamload.StreamLoadTask;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.thrift.TGetLoadsParams;
 import com.starrocks.thrift.TGetLoadsResult;
 import com.starrocks.thrift.TLoadInfo;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -61,6 +67,34 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * incompatible interpretation mid-flight.
  */
 public class LoadsSystemTableTest {
+
+    // The stream load tasks authorized by the current test.
+    private static final AtomicInteger AUTHORIZED_TASKS = new AtomicInteger();
+
+    // These tests pin the request predicates and paging. How much of a job a caller may see is covered by
+    // LoadJobVisibilityTest, so here every job is shown in full.
+    @BeforeEach
+    public void showEveryJob() {
+        AUTHORIZED_TASKS.set(0);
+        new MockUp<LoadJobVisibility>() {
+            @Mock
+            public ConnectContext callerOf(TGetLoadsParams request) {
+                return null;
+            }
+
+            @Mock
+            public LoadJobVisibility.Access accessOf(ConnectContext context, LoadJob job) {
+                return LoadJobVisibility.Access.FULL;
+            }
+
+            @Mock
+            public List<LoadJobVisibility.VisibleTask> visibleTasks(ConnectContext context,
+                                                                     AbstractStreamLoadTask task) {
+                AUTHORIZED_TASKS.incrementAndGet();
+                return LoadJobVisibility.allTasksInFull(task);
+            }
+        };
+    }
 
     private static long epochMillis(String wallClock, ZoneId zone) {
         return LocalDateTime.parse(wallClock.replace(' ', 'T'))
@@ -355,6 +389,55 @@ public class LoadsSystemTableTest {
         assertTrue(got.contains("loadJobUnfinished"));
         assertTrue(got.contains("streamTaskBefore"));
         assertTrue(got.contains("streamTaskAfter"));
+    }
+
+    /**
+     * A stream load task that left the manager before the loads history sync copied it is listed too, and only
+     * once when it left while the manager's tasks were read, so the sync neither misses nor duplicates it.
+     */
+    @Test
+    public void testQuery_listsTasksPendingLoadsHistoryOnce(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked LoadMgr loadMgr,
+            @Mocked StreamLoadMgr streamLoadMgr,
+            @Mocked LoadJob loadJobBefore,
+            @Mocked LoadJob loadJobAfter,
+            @Mocked LoadJob loadJobUnfinished,
+            @Mocked AbstractStreamLoadTask streamTaskBefore,
+            @Mocked AbstractStreamLoadTask streamTaskAfter,
+            @Mocked AbstractStreamLoadTask pendingTask) {
+        long anchorMs = wireMocks(globalStateMgr, loadMgr, streamLoadMgr,
+                loadJobBefore, loadJobAfter, loadJobUnfinished,
+                streamTaskBefore, streamTaskAfter);
+        new Expectations() {
+            {
+                streamLoadMgr.getTasksPendingLoadsHistory(null);
+                minTimes = 0;
+                result = Lists.newArrayList(pendingTask, streamTaskAfter);
+
+                pendingTask.getDbId();
+                minTimes = 0;
+                result = -1L;
+                pendingTask.getLoadFinishTimeMs();
+                minTimes = 0;
+                result = anchorMs;
+                pendingTask.getLoadStartTimeMs();
+                minTimes = 0;
+                result = null;
+                pendingTask.getCreateTimeMs();
+                minTimes = 0;
+                result = null;
+                pendingTask.toThrift();
+                minTimes = 0;
+                result = Lists.newArrayList(loadInfoWithLabel("pendingTask"));
+            }
+        };
+
+        List<String> got = labels(LoadsSystemTable.query(new TGetLoadsParams()));
+
+        assertEquals(6, got.size());
+        assertTrue(got.contains("pendingTask"));
+        assertEquals(1, got.stream().filter("streamTaskAfter"::equals).count());
     }
 
     /**
@@ -1180,5 +1263,7 @@ public class LoadsSystemTableTest {
 
         assertEquals(0, labels(result).size());
         assertFalse(result.isSetNext_job_id_offset());
+        // Authorizing locks the target tables, so a task the request rules out is not authorized.
+        assertEquals(0, AUTHORIZED_TASKS.get());
     }
 }

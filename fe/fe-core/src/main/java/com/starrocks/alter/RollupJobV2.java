@@ -811,6 +811,9 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     }
 
     private void onFinished(OlapTable tbl) {
+        // Invalidate lock-free plans first: they read the versions their copies recorded and resolve the layout later,
+        // so a plan that finds the new index has to fail validation and be planned again.
+        tbl.lastSchemaUpdateTime.set(System.nanoTime());
         for (Partition partition : tbl.getPartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 MaterializedIndex rollupIndex = physicalPartition.getLatestIndex(rollupIndexMetaId);
@@ -824,7 +827,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             }
         }
         tbl.rebuildFullSchema();
-        tbl.lastSchemaUpdateTime.set(System.nanoTime());
     }
 
     @Override

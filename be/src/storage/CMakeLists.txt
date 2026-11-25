@@ -134,6 +134,7 @@ set(STORAGE_FILES
     rowset/parsed_page.cpp
     rowset/zone_map_index.cpp
     rowset/segment_iterator.cpp
+    rowset/segment_prefetch_window.cpp
     rowset/options.cpp
     rowset/segment_options.cpp
     rowset/rowid_range_option.cpp
@@ -145,7 +146,6 @@ set(STORAGE_FILES
     chunk_helper.cpp
     chunk_variant_helper.cpp
     runtime_filter_predicate.cpp
-    convert_helper.cpp
     delete_predicates.cpp
     predicate_parser.cpp
     row_store_encoder.cpp
@@ -160,6 +160,7 @@ set(STORAGE_FILES
     lake_meta_reader.cpp
     olap_meta_reader.cpp
     seek_tuple.cpp
+    sort_key_bounds.cpp
     sort_key_sampler.cpp
     unique_iterator.cpp
     delta_writer.cpp
@@ -208,6 +209,7 @@ set(STORAGE_FILES
     lake/tablet_merger.cpp
     lake/tablet_virtual_merge.cpp
     lake/tablet_reshard.cpp
+    lake/replication_schema_utils.cpp
     lake/replication_txn_manager.cpp
     lake/lake_replication_txn_manager.cpp
     lake/lake_proto_normalizer.cpp
@@ -236,6 +238,7 @@ set(STORAGE_FILES
     lake/vertical_compaction_task.cpp
     lake/cloud_native_index_compaction_task.cpp
     lake/metacache.cpp
+    lake/metacache_adjuster.cpp
     lake/lake_primary_key_recover.cpp
     lake/spill_mem_table_sink.cpp
     lake/tablet_retain_info.cpp
@@ -266,7 +269,6 @@ set(STORAGE_FILES
     binlog_builder.cpp
     binlog_manager.cpp
     binlog_reader.cpp
-    lake/primary_key_compaction_state.cpp
     lake/txn_log_applier.cpp
     persistent_index_compaction_manager.cpp
     persistent_index_load_executor.cpp

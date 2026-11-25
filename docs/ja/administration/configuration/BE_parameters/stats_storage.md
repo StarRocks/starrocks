@@ -3,6 +3,7 @@ sidebar_position: 30
 displayed_sidebar: docs
 description: "BE 設定パラメーター：統計情報収集とストレージエンジンに関連する設定項目。"
 sidebar_label: "統計とストレージ"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -13,7 +14,6 @@ import PostBEConfig from '../../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
-import EditionSpecificBEItem from '../../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
 
 # BE 設定 - 統計とストレージ
 
@@ -90,8 +90,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ## ストレージ
 
-<EditionSpecificBEItem />
-
 ### alter_tablet_worker_count
 
 - デフォルト: 3
@@ -136,6 +134,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: 最後のベースコンパクションからの時間間隔。共有なしテーブルでは、ベースコンパクションのトリガー条件の一つです。共有データの主キーテーブルと、Base and Cumulative ポリシーを使用する非主キーテーブルでは、同一タブレットで前回のベースコンパクションが正常に完了してから、自動ベースコンパクションが少なくともこの時間だけ待機します。Size Tiered ポリシーを使用する非主キーテーブルでは、この間隔は削除バージョン数のしきい値によるベースコンパクションの強制だけを無効にし、通常のレベル選択は変更しません。手動コンパクションはこの制限の対象外です。
 - 導入バージョン: -
+
+このパラメータは v4.1 より前から存在しますが、その時点で共有データの間隔制御に対応していたことを意味しません。4.1 系列では、共有データ Base Compaction の制限には使用しません。上記の共有データの間隔制御は v4.2 からサポートされています。自動 Base Compaction の最小間隔であり、毎日定時に実行する周期ではありません。手動要求はこの制限を回避します。[バージョン別のサポート](../../management/compaction.md#primary-key-base-compaction-versions)と[実行時間の制御](../../management/compaction.md#base-compaction-time-controls)を参照してください。
 
 ### base_compaction_num_threads_per_disk
 
@@ -403,6 +403,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: Yes
 - 説明: 有効にすると、部分的なカラム更新によって生成される delta columns に対する compaction に「lazy」戦略を優先します。StarRocks は compaction の I/O を節約するために、delta-column ファイルをメインのセグメントファイルへ積極的にマージすることを避けます。実際には compaction 選択コードが部分カラム更新の rowset と複数の候補をチェックし、それらが見つかりこのフラグが true の場合、エンジンは compaction にさらに入力を追加するのを止めるか、空の rowset（レベル -1）のみをマージして delta columns を別に保持します。これにより compaction 時の即時 I/O と CPU が削減されますが、統合の遅延（セグメント数増加や一時的なストレージオーバーヘッドの可能性）というコストが発生します。正確性やクエリのセマンティクスに変更はありません。
 - 導入バージョン: v3.2.3
+
+### enable_light_pk_compaction_publish
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有なしクラスタの主キーテーブルで軽量コンパクション publish を使用するかどうかを指定します。この設定は共有なしテーブルにのみ適用されます。共有データの主キーテーブルは常に軽量コンパクション publish を使用するため、このパラメーターを `false` にしても共有データテーブルの軽量 publish パスは無効になりません。
+- 導入バージョン: -
 
 ### enable_new_load_on_memory_limit_exceeded
 
@@ -908,6 +917,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタの主キーテーブルに適用されます。ロードで生成された削除ファイルの行数がこの値以上の場合、システムはロード時にそのファイルの PK インデックスファイルも構築します。ロードの公開時には、削除された各キーをメモリ上の PK インデックスに書き込む代わりに、そのファイルを直接取り込みます。この条件は `pk_index_eager_build_threshold_bytes` と併せて機能し、削除ファイルがいずれかの条件を満たすとインデックスファイルが構築されます。`0` 以下に設定するとこの条件は無効になります。
 - 導入バージョン: -
 
+### pk_vector_chunk_size
+
+- デフォルト: 4096
+- タイプ: Int
+- 単位: 行
+- 変更可能: はい
+- 説明: 主キーテーブルが apply フェーズ（ロードまたはコンパクションの結果の適用）でセグメントからデータを読み取る際の、1 バッチあたりの行数。共有なしクラスタと共有データクラスタの両方に適用され、ロードされたデータの主キー、部分更新で読み取る列、コンパクション出力の主キーの読み取りが対象です。この項目は `vector_chunk_size` とは独立しているため、クエリ実行に影響を与えずに調整できます。値を小さくすると各バッチが保持するメモリが減り、値を大きくすると読み取り回数が減ります。`0` 以下の値は `4096` として、`65535` を超える値は `65535` として扱われます。セグメントから主キーインデックスを再構築する処理では、この項目は使用されません。
+- 導入バージョン: -
+
 ### primary_key_limit_size
 
 - デフォルト: 128
@@ -923,7 +941,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: BE ノードでのスナップショットリリースタスクの最大スレッド数。
+- 説明: BE ノードでのスナップショットリリースタスクの最大スレッド数。共有データクラスタでは、このスレッドプールは Vacuum、Full Vacuum、およびトランザクションログ削除タスクも実行します。
 - 導入バージョン: -
 
 ### repair_compaction_interval_seconds

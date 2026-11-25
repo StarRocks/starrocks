@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the union of the input maps."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # map_concat

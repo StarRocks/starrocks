@@ -3,6 +3,7 @@ sidebar_position: 120
 displayed_sidebar: docs
 description: "统一 catalog 从 v3.2 起支持 Hive、Iceberg、Hudi、Delta Lake、Kudu 数据源的统一查询。"
 toc_max_heading_level: 5
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
@@ -455,7 +456,7 @@ PROPERTIES
 | metastore_cache_refresh_interval_sec  | 否   | StarRocks 异步更新缓存的 Hive、Hudi 或 Delta Lake 表或分区元数据的时间间隔。单位：秒。默认值：`7200`，即 2 小时。 |
 | remote_file_cache_refresh_interval_sec | 否  | StarRocks 异步更新缓存的 Hive、Hudi 或 Delta Lake 表或分区的底层数据文件元数据的时间间隔。单位：秒。默认值：`60`。 |
 | metastore_cache_ttl_sec               | 否   | StarRocks 自动丢弃缓存的 Hive、Hudi 或 Delta Lake 表或分区元数据的时间间隔。单位：秒。默认值：`86400`，即 24 小时。 |
-| remote_file_cache_ttl_sec             | 否   | StarRocks 自动丢弃缓存的 Hive、Hudi 或 Delta Lake 表或分区的底层数据文件元数据的时间间隔。单位：秒。默认值：`129600`，即 36 小时。 |
+| remote_file_cache_ttl_sec             | 否   | StarRocks 自动丢弃缓存的 Hive、Hudi 或 Delta Lake 表或分区的底层数据文件元数据的时间间隔。单位：秒。默认值：自 v3.5.7 和 v4.0.0 起为 `86400`，即 24 小时；更早版本为 `129600`，即 36 小时。 |
 
 #### PaimonCatalogParams
 

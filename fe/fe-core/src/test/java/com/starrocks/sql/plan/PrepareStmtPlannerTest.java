@@ -14,10 +14,15 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.context.ai.AIProviderType;
+import com.starrocks.planner.OlapScanNode;
 import com.starrocks.qe.PrepareStmtContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.AIProviderMgr;
@@ -253,6 +258,32 @@ public class PrepareStmtPlannerTest extends PlanTestBase {
         }
     }
 
+    @Test
+    public void testCachedPointQueryRejectsGroupedMode() throws Exception {
+        SessionVariable saved = connectContext.getSessionVariable().clone();
+        try {
+            connectContext.getSessionVariable().setRangeScanExecutionMode("colocate");
+            PreparedQuery prepared = prepare("select v1 from tprimary where pk = ?");
+            ExecPlan cached = execute(prepared, bigint(1));
+            Assertions.assertSame(cached.getPhysicalPlan(), execute(prepared, bigint(2)).getPhysicalPlan());
+            Assertions.assertTrue(prepared.context().isCached());
+
+            connectContext.getSessionVariable().setRangeScanExecutionMode("grouped");
+            SemanticException failure = Assertions.assertThrows(SemanticException.class,
+                    () -> execute(prepared, bigint(3)));
+            Assertions.assertTrue(failure.getMessage().contains("range_scan_execution_mode=grouped"));
+            Assertions.assertTrue(failure.getMessage().contains("an aggregate is required"));
+            Assertions.assertEquals(2, scanPredicateValue(cached));
+            Assertions.assertTrue(connectContext.getSessionVariable().isGroupedRangeScan());
+
+            connectContext.getSessionVariable().setRangeScanExecutionMode("colocate");
+            Assertions.assertSame(cached.getPhysicalPlan(), execute(prepared, bigint(4)).getPhysicalPlan());
+            Assertions.assertEquals(4, scanPredicateValue(cached));
+        } finally {
+            connectContext.setSessionVariable(saved);
+        }
+    }
+
     /**
      * A hit re-prunes partitions and tablets on the table the cached scan is bound to, without the meta lock. That
      * is fine for the private copy planning off snapshots binds it to, but cbo_use_lock_db plans on the live table
@@ -288,6 +319,57 @@ public class PrepareStmtPlannerTest extends PlanTestBase {
                 () -> Assertions.assertTrue(prepared.context().isCached()),
                 () -> Assertions.assertEquals(live.getId(), scan.getTable().getId()),
                 () -> Assertions.assertNotSame(live, scan.getTable(), "the cached plan scans the live table"));
+    }
+
+    /**
+     * A hit rebuilds the scan ranges off the table copy the plan was first made from, without copying the table
+     * again. The copy recorded the partitions' visible versions when it was taken, so that one plan reads one state
+     * of the table; a hit still has to read the table as it is at that EXECUTE, not as it was at the first one.
+     */
+    @Test
+    public void testCachedPointQueryReadsTheVersionThePartitionHasNow() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `pq_version` (\n" +
+                "  `pk` bigint NOT NULL,\n" +
+                "  `v` int NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`pk`)\n" +
+                "DISTRIBUTED BY HASH(`pk`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        OlapTable live = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "pq_version");
+        PhysicalPartition partition = live.getPartitions().iterator().next().getDefaultPhysicalPartition();
+        // One load is visible, so the partition has data and is not pruned as empty.
+        publish(partition, 2L);
+        PreparedQuery prepared = prepare("select v from pq_version where pk = ?");
+        ExecPlan first = execute(prepared, bigint(1));
+        Assertions.assertEquals(2L, scanVersion(first, partition));
+
+        // Another load becomes visible after the plan was cached.
+        publish(partition, 3L);
+
+        ExecPlan hit = execute(prepared, bigint(2));
+        Assertions.assertAll(
+                () -> Assertions.assertTrue(prepared.context().isCached()),
+                () -> Assertions.assertSame(first.getPhysicalPlan(), hit.getPhysicalPlan()),
+                () -> Assertions.assertEquals(3L, scanVersion(hit, partition),
+                        "a hit read the partition at the version of the EXECUTE that cached the plan"));
+    }
+
+    private static void publish(PhysicalPartition partition, long version) {
+        for (Tablet tablet : partition.getQueryableBaseIndex().getTablets()) {
+            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                replica.updateVersion(version);
+            }
+        }
+        partition.setDataVersion(version);
+        partition.updateVisibleVersion(version);
+    }
+
+    private static long scanVersion(ExecPlan plan, PhysicalPartition partition) {
+        OlapScanNode scan = (OlapScanNode) plan.getScanNodes().get(0);
+        Long version = scan.getScanPartitionVersions().get(partition.getId());
+        Assertions.assertNotNull(version, "the scan did not read partition " + partition.getId() + ": "
+                + scan.getScanPartitionVersions());
+        return version;
     }
 
     @Test

@@ -41,6 +41,7 @@
 #include "common/config_local_io_fwd.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/serde/chunk_encode_context.h"
 #include "runtime/serde/protobuf_chunk_serde.h"
 #include "types/hll.h"
@@ -526,6 +527,14 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column_shredded_multiple_paths) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ColumnArraySerdeTest, hll_column_failed_deserialize) {
+    // The HLL registers allocator is process-global and normally installed by RuntimeEnv::init(). Install the same
+    // MemChunkAllocator-backed one so the failpoint below is reachable when this case runs alone.
+    HyperLogLog::RegistersAllocator allocator;
+    allocator.allocate = [](size_t size, void*, MemChunk* chunk) { return MemChunkAllocator::allocate(size, chunk); };
+    allocator.free = [](const MemChunk& chunk, void*) { MemChunkAllocator::free(chunk); };
+    Status st = HyperLogLog::set_registers_allocator(allocator);
+    ASSERT_TRUE(st.ok() || st.is_already_exist()) << st;
+
     auto c1 = HyperLogLogColumn::create();
     // prepare a sparse-encoded HLL (few non-zero registers)
     HyperLogLog sparse_hll;

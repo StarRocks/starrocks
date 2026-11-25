@@ -228,6 +228,7 @@ public class InformationSchemaDataSource {
             ConnectContext context = new ConnectContext();
             context.setCurrentUserIdentity(authContext.getCurrentUserIdentity());
             context.setCurrentRoleIds(authContext.getCurrentRoleIds());
+            context.setGroups(authContext.getGroups());
             return context;
         }
     }
@@ -737,7 +738,8 @@ public class InformationSchemaDataSource {
 
         AuthorizationMgr authMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
-            for (RolePrivilegeCollectionV2 role : authMgr.getApplicableRoles(currentUser)) {
+            for (RolePrivilegeCollectionV2 role : authMgr.getApplicableRoles(currentUser,
+                    result.authContext.getGroups(), result.authContext.getCurrentRoleIds())) {
                 String roleName = role.getName();
                 String roleHost = "%";
 

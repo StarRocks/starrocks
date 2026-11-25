@@ -33,7 +33,10 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
-    bool has_output() const override { return _except_ctx->is_probe_finished() && !_except_ctx->is_output_finished(); }
+    bool has_output() const override {
+        return _except_ctx->is_probe_finished() && _except_ctx->is_build_finished() &&
+               !_except_ctx->is_output_finished();
+    }
 
     bool is_finished() const override { return _except_ctx->is_probe_finished() && _except_ctx->is_output_finished(); }
 

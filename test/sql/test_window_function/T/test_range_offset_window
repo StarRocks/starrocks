@@ -152,3 +152,15 @@ SELECT id, k,
 FROM test_range_offset_window
 WHERE id IN (3, 6, 7)
 ORDER BY id;
+
+-- NOT NULL DECIMAL order key with a nullable `key - offset` boundary column (RB-1283: the order column
+-- compared itself against the nullable boundary column as a plain DECIMAL column and crashed the BE).
+SELECT id,
+       SUM(v) OVER (ORDER BY CAST(id AS DECIMAL(10, 2)) RANGE BETWEEN 2 PRECEDING AND CURRENT ROW) AS w
+FROM test_range_offset_window
+ORDER BY id;
+
+SELECT id,
+       SUM(v) OVER (ORDER BY CAST(id = 3 AS DECIMAL) RANGE 2 PRECEDING) AS w
+FROM test_range_offset_window
+ORDER BY id;

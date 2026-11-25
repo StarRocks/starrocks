@@ -62,18 +62,26 @@ public class MaterializedViewRowIdBoundariesTest {
 
     private int savedIdCacheSize;
     private long savedMinSplitSize;
+    private long savedPreSplitTargetSize;
+    private int savedMaxSplitCount;
 
     @BeforeEach
     public void setUp() {
         savedIdCacheSize = Config.auto_increment_cache_size;
         Config.auto_increment_cache_size = 25;
         savedMinSplitSize = Config.tablet_reshard_min_split_size;
+        savedPreSplitTargetSize = Config.tablet_pre_split_target_size;
+        Config.tablet_pre_split_target_size = 1L << 20;
+        savedMaxSplitCount = Config.tablet_reshard_max_split_count;
+        Config.tablet_reshard_max_split_count = 1024;
     }
 
     @AfterEach
     public void tearDown() {
         Config.auto_increment_cache_size = savedIdCacheSize;
         Config.tablet_reshard_min_split_size = savedMinSplitSize;
+        Config.tablet_pre_split_target_size = savedPreSplitTargetSize;
+        Config.tablet_reshard_max_split_count = savedMaxSplitCount;
     }
 
     @Test
@@ -142,7 +150,8 @@ public class MaterializedViewRowIdBoundariesTest {
             globalStateMgr.when(GlobalStateMgr::getCurrentState).thenReturn(globalState);
 
             DerivedBoundarySource.Result result = MaterializedViewRowIdBoundaries
-                    .sourceFor(materializedView, new Estimates(BIG_ENOUGH.totalBytes(), 0L), /*nodes=*/ 1)
+                    .sourceFor(materializedView, new Estimates(BIG_ENOUGH.totalBytes(), 0L), /*nodes=*/ 1,
+                            /*partitionCount=*/ 1)
                     .plan(target, /*requestedTabletCount=*/ 4);
 
             Assertions.assertNull(result.skipReason());
@@ -213,7 +222,7 @@ public class MaterializedViewRowIdBoundariesTest {
             globalStateMgr.when(GlobalStateMgr::getCurrentState).thenReturn(globalState);
 
             DerivedBoundarySource source = MaterializedViewRowIdBoundaries.sourceFor(
-                    materializedView, BIG_ENOUGH, /*activeComputeNodeCount=*/ 1);
+                    materializedView, BIG_ENOUGH, /*activeComputeNodeCount=*/ 1, /*partitionCount=*/ 1);
 
             DerivedBoundarySource.Result pristine = source.plan(rowIdIndexTarget(), /*requestedTabletCount=*/ 4);
             Assertions.assertNull(pristine.skipReason());
@@ -229,6 +238,96 @@ public class MaterializedViewRowIdBoundariesTest {
             Assertions.assertEquals(List.of(bigintTuple(250_500), bigintTuple(500_500), bigintTuple(750_500)),
                     used.boundaries().getBoundaries());
         }
+    }
+
+    @Test
+    public void testFingerprintSourceSharesTheBudgetAcrossPartitions() {
+        // 5 MiB at a 1 MiB target is a budget of 5 tablets for the whole refresh. Each of the 2 partitions
+        // takes ceil(5 / 2) = 3 of them and ceil(5 MiB / 2) = 2.5 MiB of the bytes, which a 1 KiB minimum
+        // split size does not clamp.
+        Config.tablet_reshard_min_split_size = 1L << 10;
+
+        DerivedBoundarySource.Result result = fingerprintSource(new Estimates(5L << 20, 0L), /*partitionCount=*/ 2)
+                .plan(fingerprintTarget(100L), /*requestedTabletCount=*/ 7);
+
+        Assertions.assertEquals(List.of("JJ", "ee"), cutsOf(result));
+    }
+
+    @Test
+    public void testMinimumSplitSizeAppliesToEachPartition() {
+        // A budget of 4 for 4 MiB. The minimum split size bounds a partition's own tablets, so it is checked
+        // against the partition's share of the bytes rather than against the whole refresh.
+        Config.tablet_reshard_min_split_size = 1L << 20;
+        Estimates estimates = new Estimates(4L << 20, 0L);
+
+        // 2 partitions: 2 tablets each over 2 MiB, which affords exactly 2.
+        Assertions.assertEquals(List.of("U+"), cutsOf(fingerprintSource(estimates, /*partitionCount=*/ 2)
+                .plan(fingerprintTarget(100L), /*requestedTabletCount=*/ 7)));
+
+        // 3 partitions: still 2 tablets each, but 1,398,102 bytes affords only 1.
+        DerivedBoundarySource.Result result = fingerprintSource(estimates, /*partitionCount=*/ 3)
+                .plan(fingerprintTarget(100L), /*requestedTabletCount=*/ 7);
+        Assertions.assertEquals(SkipReason.ROW_ID_SPAN_TOO_SMALL, result.skipReason());
+    }
+
+    @Test
+    public void testMaxSplitCountCapsEachPartitionNotTheRefresh() {
+        // The cap bounds how many tablets one old tablet splits into. Each partition has its own old tablet,
+        // so the cap applies to a partition's share; capping the refresh's budget to 2 before dividing it
+        // between 2 partitions would leave each with 1 tablet and skip the split.
+        Config.tablet_reshard_max_split_count = 2;
+        Config.tablet_reshard_min_split_size = 1L << 20;
+
+        // Budget 4 -> 2 per partition.
+        Assertions.assertEquals(List.of("U+"),
+                cutsOf(fingerprintSource(new Estimates(4L << 20, 0L), /*partitionCount=*/ 2)
+                        .plan(fingerprintTarget(100L), /*requestedTabletCount=*/ 7)));
+        // Budget 8 -> 4 per partition, capped to 2.
+        Assertions.assertEquals(List.of("U+"),
+                cutsOf(fingerprintSource(new Estimates(8L << 20, 0L), /*partitionCount=*/ 2)
+                        .plan(fingerprintTarget(100L), /*requestedTabletCount=*/ 7)));
+    }
+
+    @Test
+    public void testBudgetJustAbovePartitionCountStillSplits() {
+        // A budget of 5 over 3 partitions rounds up to 2 tablets each; rounding down would give 1 and skip.
+        // Each partition's 1,747,627 bytes affords 6 tablets of 256 KiB, so the count is not clamped.
+        Config.tablet_reshard_min_split_size = 1L << 18;
+
+        DerivedBoundarySource.Result result = fingerprintSource(new Estimates(5L << 20, 0L), /*partitionCount=*/ 3)
+                .plan(fingerprintTarget(100L), /*requestedTabletCount=*/ 7);
+
+        Assertions.assertEquals(List.of("U+"), cutsOf(result));
+    }
+
+    @Test
+    public void testEveryPartitionGetsTheCutsPlannedForTheFirst() {
+        // The pipeline asks the source once per partition, and the planner reads the minimum split size on
+        // every call. A config change between two partitions must not give them different cuts.
+        Config.tablet_reshard_min_split_size = 1L << 20;
+        Estimates estimates = new Estimates(4L << 20, 0L);
+        DerivedBoundarySource source = fingerprintSource(estimates, /*partitionCount=*/ 2);
+
+        DerivedBoundarySource.Result first = source.plan(fingerprintTarget(100L), /*requestedTabletCount=*/ 7);
+        Assertions.assertEquals(List.of("U+"), cutsOf(first));
+
+        Config.tablet_reshard_min_split_size = 4L << 20;
+        DerivedBoundarySource.Result second = source.plan(fingerprintTarget(101L), /*requestedTabletCount=*/ 7);
+        Assertions.assertEquals(cutsOf(first), cutsOf(second));
+
+        // A source built after the change does skip, so the change would have mattered had it been read again.
+        DerivedBoundarySource.Result rebuilt = fingerprintSource(estimates, /*partitionCount=*/ 2)
+                .plan(fingerprintTarget(100L), /*requestedTabletCount=*/ 7);
+        Assertions.assertEquals(SkipReason.ROW_ID_SPAN_TOO_SMALL, rebuilt.skipReason());
+    }
+
+    @Test
+    public void testAutoIncrementSourceServesOnePartitionOnly() {
+        // One counter serves every partition, so a partition's ids occupy a narrow band of the span and
+        // whole-span cuts would leave most of its tablets empty.
+        Assertions.assertThrows(IllegalArgumentException.class, () -> MaterializedViewRowIdBoundaries.sourceFor(
+                mockMaterializedView(RowIdStrategy.AUTO_INCREMENT, /*visibleIndexCount=*/ 1), BIG_ENOUGH,
+                /*activeComputeNodeCount=*/ 1, /*partitionCount=*/ 2));
     }
 
     /**
@@ -295,5 +394,25 @@ public class MaterializedViewRowIdBoundariesTest {
 
     private static IndexPreSplitTarget rowIdIndexTarget() {
         return new IndexPreSplitTarget(BASE_INDEX_META_ID, /*oldTabletId=*/ 100L, List.of(rowIdColumn()));
+    }
+
+    private static DerivedBoundarySource fingerprintSource(Estimates estimates, int partitionCount) {
+        MaterializedView materializedView = mockMaterializedView(RowIdStrategy.QUERY_COMPUTED,
+                /*visibleIndexCount=*/ 1, IvmOpUtils.ENCODE_ROW_ID_VERSION_FINGERPRINT_V2);
+        return MaterializedViewRowIdBoundaries.sourceFor(materializedView, estimates, /*activeComputeNodeCount=*/ 1,
+                partitionCount);
+    }
+
+    private static IndexPreSplitTarget fingerprintTarget(long oldTabletId) {
+        return new IndexPreSplitTarget(BASE_INDEX_META_ID, oldTabletId, List.of(varcharRowIdColumn()));
+    }
+
+    private static List<String> cutsOf(DerivedBoundarySource.Result result) {
+        Assertions.assertNull(result.skipReason());
+        List<String> cuts = new ArrayList<>();
+        for (Tuple cut : result.boundaries().getBoundaries()) {
+            cuts.add(cut.getValues().get(0).getStringValue());
+        }
+        return cuts;
     }
 }

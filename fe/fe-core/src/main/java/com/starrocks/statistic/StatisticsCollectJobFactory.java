@@ -45,6 +45,7 @@ import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -254,6 +255,24 @@ public class StatisticsCollectJobFactory {
                                                                          StatsConstants.AnalyzeType analyzeType,
                                                                          StatsConstants.ScheduleType scheduleType,
                                                                          Map<String, String> properties) {
+        return buildExternalStatisticsCollectJob(catalogName, db, table, partitionNames, columnNames, columnTypes,
+                analyzeType, scheduleType, properties, null);
+    }
+
+    /**
+     * @param tablePartitionNames every partition of the table, as the caller already fetched it, or null when the
+     *                            caller does not have it. Only used to tell whether a FULL job over
+     *                            {@code partitionNames} covers the whole table; it is never fetched here, so a
+     *                            caller that passes null keeps the FULL commit it always got.
+     */
+    public static StatisticsCollectJob buildExternalStatisticsCollectJob(String catalogName, Database db, Table table,
+                                                                         List<String> partitionNames,
+                                                                         List<String> columnNames,
+                                                                         List<Type> columnTypes,
+                                                                         StatsConstants.AnalyzeType analyzeType,
+                                                                         StatsConstants.ScheduleType scheduleType,
+                                                                         Map<String, String> properties,
+                                                                         Collection<String> tablePartitionNames) {
         // refresh table to get latest table/partition info
         GlobalStateMgr.getCurrentState().getMetadataMgr().refreshTable(catalogName,
                 db.getFullName(), table, Lists.newArrayList(), true);
@@ -285,8 +304,16 @@ public class StatisticsCollectJobFactory {
                     columnTypes, analyzeType, scheduleType, properties, allPartitionNames);
         }
 
-        return new ExternalFullStatisticsCollectJob(catalogName, db, table, partitionNames, columnNames, columnTypes,
-                StatsConstants.AnalyzeType.FULL, scheduleType, properties);
+        ExternalFullStatisticsCollectJob fullJob = new ExternalFullStatisticsCollectJob(catalogName, db, table,
+                partitionNames, columnNames, columnTypes, StatsConstants.AnalyzeType.FULL, scheduleType, properties);
+        if (allPartitionNames != null) {
+            // this job lists and scans every partition itself
+            fullJob.setTablePartitions(true, allPartitionNames.size());
+        } else if (tablePartitionNames != null) {
+            fullJob.setTablePartitions(new HashSet<>(partitionNames).containsAll(tablePartitionNames),
+                    new HashSet<>(tablePartitionNames).size());
+        }
+        return fullJob;
     }
 
     private static List<String> needCollectStatsColumns(ExternalBasicStatsMeta basicStatsMeta, Table table,
@@ -445,12 +472,17 @@ public class StatisticsCollectJobFactory {
                                                    Database db, Table table, List<String> columnNames,
                                                    List<Type> columnTypes) {
         // get updated partitions
-        Set<String> updatedPartitions = StatisticUtils.getUpdatedPartitionNames(table, statisticsUpdateTime);
+        // the full partition list comes from the same partition info fetch, so knowing whether this job covers
+        // the whole table costs no extra connector call
+        StatisticUtils.UpdatedPartitionNames partitions =
+                StatisticUtils.getUpdatedAndAllPartitionNames(table, statisticsUpdateTime);
+        Set<String> updatedPartitions = partitions.updated();
         LOG.info("[ExternalStats] create full job | table={} partitions={}",
                 table.getName(), updatedPartitions);
         allTableJobMap.add(buildExternalStatisticsCollectJob(job.getCatalogName(), db, table,
                 updatedPartitions == null ? null : Lists.newArrayList(updatedPartitions),
-                columnNames, columnTypes, StatsConstants.AnalyzeType.FULL, job.getScheduleType(), Maps.newHashMap()));
+                columnNames, columnTypes, StatsConstants.AnalyzeType.FULL, job.getScheduleType(), Maps.newHashMap(),
+                updatedPartitions == null ? null : partitions.all()));
     }
     private static void createExternalSampleStatsJob(List<StatisticsCollectJob> allTableJobMap,
                                                      LocalDateTime statisticsUpdateTime,

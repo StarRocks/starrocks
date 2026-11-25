@@ -26,6 +26,7 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
@@ -277,6 +278,18 @@ public interface ConnectorMetadata {
         return Statistics.builder().build();
     }
 
+    /**
+     * The value range each partition source column covers in the given table version, read from table metadata
+     * without scanning data. Used to widen ANALYZE min/max that predate later ingestion. Values are in the
+     * optimizer's statistics domain (see {@link com.starrocks.statistic.StatisticUtils#convertStatisticsToDouble}).
+     *
+     * @return lower-cased column name to [min, max]; empty when unknown or unsupported
+     */
+    default Map<String, Pair<Double, Double>> getPartitionSourceColumnRanges(Table table,
+                                                                          TvrVersionRange tableVersionRange) {
+        return Map.of();
+    }
+
     default boolean prepareMetadata(MetaPreparationItem item, Tracers tracers, ConnectContext connectContext) {
         return true;
     }
@@ -303,6 +316,13 @@ public interface ConnectorMetadata {
      */
     default void invalidateTableForRead(String srDbName, Table table) {
         refreshTable(srDbName, table, new ArrayList<>(), false);
+    }
+
+    /**
+     * Drop what this FE cached about the table, by name and with no remote I/O, so the next read loads it as it
+     * is now. Sent by the FE that committed to the table, so this FE does not keep serving the pre-commit table.
+     */
+    default void invalidateCachedTable(String dbName, String tableName) {
     }
 
     default boolean dbExists(ConnectContext context, String dbName) {
@@ -357,6 +377,11 @@ public interface ConnectorMetadata {
     }
 
     default void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
+    }
+
+    default void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos,
+                           Object extra, ConnectContext context) {
+        abortSink(dbName, table, commitInfos);
     }
 
     default ShowResultSet alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {

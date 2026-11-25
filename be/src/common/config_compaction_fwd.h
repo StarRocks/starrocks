@@ -258,7 +258,8 @@ CONF_mDouble(lake_pk_compaction_delvec_benefit_weight, "12.0");
 // Set to 0 to disable the override (no size cap).
 CONF_mDouble(lake_pk_compaction_size_overflow_ratio, "2.0");
 
-// Skip get from pk index when light pk compaction publish is enabled
+// Skip get from pk index when light pk compaction publish is enabled.
+// Only for shared-nothing primary key tables: shared-data primary key tables always use light compaction publish.
 CONF_mBool(enable_light_pk_compaction_publish, "true");
 
 // if turned on, each compaction will use at most `max_cumulative_compaction_num_singleton_deltas` segments,
@@ -267,7 +268,7 @@ CONF_mBool(enable_lake_compaction_use_partial_segments, "false");
 
 // If turned on, parallel compaction will split by sort key range instead of segment index.
 // This produces non-overlapping output rowsets, improving subsequent query performance.
-CONF_mBool(enable_lake_compaction_range_split, "false");
+CONF_mBool(enable_lake_compaction_range_split, "true");
 
 // chunk size used by lake compaction
 CONF_mInt32(lake_compaction_chunk_size, "4096");

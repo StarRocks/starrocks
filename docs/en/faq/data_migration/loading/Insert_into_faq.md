@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "It is not recommended to insert data piece by piece to OLAP."
+products: [oss, enterprise]
 ---
 
 # Insert Into

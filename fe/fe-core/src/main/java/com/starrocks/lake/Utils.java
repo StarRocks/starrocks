@@ -123,13 +123,24 @@ public class Utils {
     public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
                                       long newVersion, ComputeResource computeResource, boolean useAggregatePublish)
             throws NoAliveBackendException, RpcException {
+        publishVersion(tablets, txnInfo, baseVersion, newVersion, computeResource, useAggregatePublish, false);
+    }
+
+    /**
+     * @param isRetryPublish see {@link Utils#publishVersionBatch}; true when an earlier attempt of this publish
+     *        was sent and did not finish.
+     */
+    public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
+                                      long newVersion, ComputeResource computeResource, boolean useAggregatePublish,
+                                      boolean isRetryPublish)
+            throws NoAliveBackendException, RpcException {
         // Collect async vector index build infos reported by BE and enqueue them into the
         // scheduler. Callers of this simplified overload (lake alter/rollup/schema-change
         // paths) would otherwise drop those infos and the newly published versions would
         // stay unbuilt until the next normal publish or leader recoveryScan.
         List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
-        publishVersion(tablets, txnInfo, baseVersion, newVersion, null, computeResource,
-                null, useAggregatePublish, vectorIndexBuildInfos);
+        publishVersion(tablets, txnInfo, baseVersion, newVersion, null, null, computeResource,
+                null, useAggregatePublish, vectorIndexBuildInfos, false, isRetryPublish);
         VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, /* fromCompaction= */ false);
     }
 

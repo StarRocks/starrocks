@@ -42,6 +42,7 @@
 #include <shared_mutex>
 #include <sstream>
 #include <utility>
+#include <vector>
 
 #include "base/brpc/brpc.h"
 #include "base/concurrency/stopwatch.hpp"
@@ -411,8 +412,11 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
             std::make_shared<std::vector<orchestration::FragmentExecutor>>(unique_requests.size());
     size_t failed_idx = unique_requests.size();
     bool submitted = true;
+    auto* routine_load_task_executor =
+            _orchestration_env != nullptr ? _orchestration_env->routine_load_task_executor() : nullptr;
     for (int i = 0; i < unique_requests.size(); ++i) {
         fragment_executors->at(i).set_batch_write_mgr(_batch_write_mgr);
+        fragment_executors->at(i).set_routine_load_task_executor(routine_load_task_executor);
         PromiseStatusSharedPtr ms = std::make_shared<PromiseStatus>();
         submitted = _exec_env->execution_services().pipeline_prepare_pool->try_offer(
                 [ms, i, fragment_executors, t_batch_requests, exec_env = _exec_env] {
@@ -639,6 +643,9 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecP
     SCOPED_SET_MODULE_TYPE(ThreadModuleType::QUERY);
     DUMP_TRACE_IF_TIMEOUT(config::pipeline_prepare_timeout_guard_ms);
     orchestration::FragmentExecutor fragment_executor(_batch_write_mgr);
+    if (_orchestration_env != nullptr) {
+        fragment_executor.set_routine_load_task_executor(_orchestration_env->routine_load_task_executor());
+    }
     auto status = fragment_executor.prepare(_exec_env, t_common_param, t_unique_request);
     if (status.ok()) {
         return fragment_executor.execute(_exec_env);
@@ -916,6 +923,8 @@ void PInternalServiceImplBase<T>::get_info(google::protobuf::RpcController* cont
 template <typename T>
 void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, PProxyResult* response,
                                                  google::protobuf::Closure* done, int timeout_ms) {
+    // Destroy the guard first: an evicted consumer's broker close must not hold up the RPC response.
+    std::vector<std::shared_ptr<DataConsumer>> evicted_consumers;
     ClosureGuard closure_guard(done);
 #ifdef __APPLE__
     Status::NotSupported("get_info is not supported on MacOS").to_protobuf(response->mutable_status());
@@ -939,7 +948,7 @@ void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, P
     if (request->has_kafka_meta_request()) {
         std::vector<int32_t> partition_ids;
         st = routine_load_task_executor->get_kafka_partition_meta(request->kafka_meta_request(), &partition_ids,
-                                                                  timeout_ms, &group_id);
+                                                                  timeout_ms, &group_id, &evicted_consumers);
         if (st.ok()) {
             PKafkaMetaProxyResult* kafka_result = response->mutable_kafka_meta_result();
             for (int32_t id : partition_ids) {
@@ -950,7 +959,8 @@ void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, P
         std::vector<int64_t> beginning_offsets;
         std::vector<int64_t> latest_offsets;
         st = routine_load_task_executor->get_kafka_partition_offset(request->kafka_offset_request(), &beginning_offsets,
-                                                                    &latest_offsets, timeout_ms, &group_id);
+                                                                    &latest_offsets, timeout_ms, &group_id,
+                                                                    &evicted_consumers);
         if (st.ok()) {
             auto result = response->mutable_kafka_offset_result();
             for (int i = 0; i < beginning_offsets.size(); i++) {
@@ -959,6 +969,9 @@ void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, P
                 result->add_latest_offsets(latest_offsets[i]);
             }
         }
+    } else if (request->has_kafka_commit_offset_request()) {
+        st = routine_load_task_executor->commit_kafka_offsets(request->kafka_commit_offset_request(), timeout_ms,
+                                                              &group_id, &evicted_consumers);
     } else if (request->has_kafka_offset_batch_request()) {
         for (const auto& offset_req : request->kafka_offset_batch_request().requests()) {
             std::vector<int64_t> beginning_offsets;
@@ -971,7 +984,7 @@ void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, P
             }
 
             st = routine_load_task_executor->get_kafka_partition_offset(offset_req, &beginning_offsets, &latest_offsets,
-                                                                        left_ms, &group_id);
+                                                                        left_ms, &group_id, &evicted_consumers);
             auto offset_result = response->mutable_kafka_offset_batch_result()->add_results();
             if (st.ok()) {
                 for (int i = 0; i < beginning_offsets.size(); i++) {
@@ -1020,6 +1033,8 @@ template <typename T>
 void PInternalServiceImplBase<T>::_get_pulsar_info_impl(const PPulsarProxyRequest* request,
                                                         PPulsarProxyResult* response, google::protobuf::Closure* done,
                                                         int timeout_ms) {
+    // The RPC owns request/response only until the guard runs; consumers own their broker state independently.
+    std::vector<std::shared_ptr<DataConsumer>> evicted_consumers;
     ClosureGuard closure_guard(done);
 #ifdef __APPLE__
     Status::NotSupported("get_pulsar_info is not supported on MacOS").to_protobuf(response->mutable_status());
@@ -1035,7 +1050,8 @@ void PInternalServiceImplBase<T>::_get_pulsar_info_impl(const PPulsarProxyReques
 
     if (request->has_pulsar_meta_request()) {
         std::vector<std::string> partitions;
-        Status st = routine_load_task_executor->get_pulsar_partition_meta(request->pulsar_meta_request(), &partitions);
+        Status st = routine_load_task_executor->get_pulsar_partition_meta(request->pulsar_meta_request(), &partitions,
+                                                                          &evicted_consumers);
         if (st.ok()) {
             PPulsarMetaProxyResult* pulsar_result = response->mutable_pulsar_meta_result();
             for (const std::string& p : partitions) {
@@ -1048,7 +1064,7 @@ void PInternalServiceImplBase<T>::_get_pulsar_info_impl(const PPulsarProxyReques
     if (request->has_pulsar_backlog_request()) {
         std::vector<int64_t> backlog_nums;
         Status st = routine_load_task_executor->get_pulsar_partition_backlog(request->pulsar_backlog_request(),
-                                                                             &backlog_nums);
+                                                                             &backlog_nums, &evicted_consumers);
         if (st.ok()) {
             auto result = response->mutable_pulsar_backlog_result();
             for (int i = 0; i < backlog_nums.size(); i++) {
@@ -1062,7 +1078,8 @@ void PInternalServiceImplBase<T>::_get_pulsar_info_impl(const PPulsarProxyReques
     if (request->has_pulsar_backlog_batch_request()) {
         for (const auto& backlog_req : request->pulsar_backlog_batch_request().requests()) {
             std::vector<int64_t> backlog_nums;
-            Status st = routine_load_task_executor->get_pulsar_partition_backlog(backlog_req, &backlog_nums);
+            Status st = routine_load_task_executor->get_pulsar_partition_backlog(backlog_req, &backlog_nums,
+                                                                                 &evicted_consumers);
             auto backlog_result = response->mutable_pulsar_backlog_batch_result()->add_results();
             if (st.ok()) {
                 for (int i = 0; i < backlog_nums.size(); i++) {

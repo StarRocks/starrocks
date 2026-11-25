@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.builtins.VectorizedBuiltinFunctions;
+import com.starrocks.builtins.VectorizedBuiltinFunctions.AIFunctionDescriptor;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.GlobalFunctionMgr;
@@ -30,7 +32,6 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.common.AIModelConfigs;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.type.FileType;
@@ -46,7 +47,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -125,6 +125,10 @@ public class AIFunctionArgumentsTest {
         return ((StringLiteral) call.getChild(index)).getValue();
     }
 
+    private AIFunctionDescriptor descriptor(FunctionCallExpr call) {
+        return VectorizedBuiltinFunctions.getAIFunctionDescriptor(call.getFn().getFunctionId());
+    }
+
     @Test
     public void testAllSignaturesAndPositionalPrefixes() {
         String[] calls = {"ai_complete('x')", "ai_complete('x',file_column)",
@@ -137,17 +141,18 @@ public class AIFunctionArgumentsTest {
         for (int i = 0; i < calls.length; i++) {
             FunctionCallExpr defaults = analyze(calls[i]);
             assertEquals(ids[i], defaults.getFn().getFunctionId());
-            assertTrue(AIModelConfigs.shouldUseDefaultProvider(defaults));
-            int providerIndex = AIModelConfigs.getProviderArgument(defaults.getFn());
-            int modelIndex = AIModelConfigs.getModelArgument(defaults.getFn());
+            int providerIndex = descriptor(defaults).providerArgument();
+            int modelIndex = descriptor(defaults).modelArgument();
+            assertEquals("", stringArgument(defaults, providerIndex));
             assertEquals(providerIndex + 1, modelIndex);
             assertEquals("provider", defaults.getFn().getArgNames()[providerIndex]);
             assertEquals("model", defaults.getFn().getArgNames()[modelIndex]);
             String provider = i == 2 || i == 3 ? "embed_provider" : "chat_provider";
+            assertEquals(provider, AIFunctionProviderResolver.resolveProvider(providers, defaults).getName());
             String prefix = calls[i].substring(0, calls[i].length() - 1);
             FunctionCallExpr withProvider = analyze(prefix + ", '" + provider + "')");
-            assertFalse(AIModelConfigs.shouldUseDefaultProvider(withProvider));
-            assertEquals(provider, AIModelConfigs.resolveProvider(providers, withProvider).getName());
+            assertEquals(provider, stringArgument(withProvider, providerIndex));
+            assertEquals(provider, AIFunctionProviderResolver.resolveProvider(providers, withProvider).getName());
             FunctionCallExpr withModel = analyze(prefix + ", '" + provider + "', 'explicit-model')");
             assertEquals("explicit-model", stringArgument(withModel, modelIndex));
             assertEquals(provider, stringArgument(withModel, providerIndex));
@@ -174,7 +179,7 @@ public class AIFunctionArgumentsTest {
             FunctionCallExpr withNullDefaults = analyze(defaults.getFunctionName()
                     + "(" + String.join(",", nullDefaults) + ")");
             assertEquals(ids[i], withNullDefaults.getFn().getFunctionId());
-            assertTrue(AIModelConfigs.shouldUseDefaultProvider(withNullDefaults));
+            assertEquals(provider, AIFunctionProviderResolver.resolveProvider(providers, withNullDefaults).getName());
             assertEquals("", stringArgument(withNullDefaults, providerIndex));
             assertEquals("", stringArgument(withNullDefaults, modelIndex));
         }
@@ -187,12 +192,11 @@ public class AIFunctionArgumentsTest {
             FunctionCallExpr call = analyze(sql);
             assertEquals(200006, call.getFn().getFunctionId());
             assertEquals("labels", call.getFn().getArgNames()[1]);
-            assertTrue(AIModelConfigs.shouldUseDefaultProvider(call));
-            assertEquals("chat_provider", AIModelConfigs.resolveProvider(providers, call).getName());
+            assertEquals("", stringArgument(call, descriptor(call).providerArgument()));
+            assertEquals("chat_provider", AIFunctionProviderResolver.resolveProvider(providers, call).getName());
         }
         FunctionCallExpr explicit = analyze("ai_extract(model => 'explicit-model', labels => ['name'], provider => "
                 + "'chat_provider', input => 'Alice')");
-        assertFalse(AIModelConfigs.shouldUseDefaultProvider(explicit));
         assertEquals("chat_provider", stringArgument(explicit, 2));
         assertEquals("explicit-model", stringArgument(explicit, 3));
         reject("ai_extract(input => 'Alice', `keys` => ['name'])", "does not support parameter 'keys'");
@@ -216,49 +220,31 @@ public class AIFunctionArgumentsTest {
     }
 
     @Test
-    public void testExplicitEmptySelectorsAndOptionsUseDefaults() {
+    public void testExplicitEmptySelectorsUseDefaults() {
         for (String parameter : List.of("provider", "model")) {
             for (String value : List.of("NULL", "''", "cast(NULL as varchar)",
                     "concat('', '')", "if(true, NULL, 'x')")) {
                 FunctionCallExpr call = analyze("ai_complete(prompt => 'x', " + parameter + " => " + value + ")");
-                assertTrue(AIModelConfigs.shouldUseDefaultProvider(call));
-                assertEquals("chat_provider", AIModelConfigs.resolveProvider(providers, call).getName());
-                Expr model = ExprUtils.analyzeAndCastFold(call.getChild(AIModelConfigs.getModelArgument(call.getFn())));
+                assertEquals("chat_provider", AIFunctionProviderResolver.resolveProvider(providers, call).getName());
+                Expr model = ExprUtils.analyzeAndCastFold(call.getChild(descriptor(call).modelArgument()));
                 assertEquals("", ((StringLiteral) model).getValue());
             }
             reject("ai_complete(prompt => 'x', " + parameter + " => '   ')", "whitespace");
-        }
-        for (String value : List.of("NULL", "json_object()", "cast(NULL as json)", "parse_json('{}')",
-                "if(true, cast(NULL as json), json_object('a',1))")) {
-            analyze("ai_complete(prompt => 'x', options => " + value + ")");
-        }
-        for (String value : List.of("''", "'   '", "cast(NULL as varchar)", "concat('', '')",
-                "map{}", "map{'guardrails':true}", "'{\"guardrails\":true}'")) {
-            assertThrows(SemanticException.class, () -> analyze("ai_complete(prompt => 'x', options => " + value + ")"));
         }
         analyze("ai_complete('x', '', 'model')");
         analyze("ai_complete('x', 'chat_provider', '')");
         analyze("ai_complete('x', 'chat_provider', 'model', NULL)");
         analyze("ai_complete('x', NULL, NULL, json_object())");
         analyze("ai_sentiment('x', NULL, NULL)");
-        reject("ai_complete('x', 'chat_provider', 'model', '')", "constant JSON");
     }
 
     @Test
-    public void testConstantSelectorsAndOptions() {
-        reject("ai_complete(prompt => 'x', model => model_column)", "constant model");
-        reject("ai_complete(prompt => 'x', provider => provider_column)", "constant provider");
-        reject("ai_complete(prompt => 'x', options => json_object('value', value_column))", "constant options");
+    public void testFoldedSelectorsResolveProviderAndModel() {
         FunctionCallExpr call = analyze("ai_complete(prompt => prompt_column, "
-                + "model => concat('my-', 'model'), provider => concat('chat_', 'provider'), "
-                + "options => json_object('temperature',0.5))");
-        assertEquals("chat_provider", AIModelConfigs.resolveProvider(providers, call).getName());
-        analyze("ai_complete(prompt => 'x', options => json_object())");
-        analyze("ai_complete(prompt => 'x', options => parse_json('{\"guardrails\":true,\"dimensions\":512}'))");
-        analyze("ai_complete(prompt => 'x', options => to_json(map{'guardrails':true}))");
-        analyze("ai_complete(prompt => 'x', options => parse_json('invalid json'))");
-        analyze("ai_complete(prompt => 'x', options => parse_json('null'))");
-        analyze("ai_complete(prompt => 'x', options => json_object('nested', json_object('value',NULL)))");
+                + "model => concat('my-', 'model'), provider => concat('chat_', 'provider'))");
+        assertEquals("chat_provider", AIFunctionProviderResolver.resolveProvider(providers, call).getName());
+        Expr model = ExprUtils.analyzeAndCastFold(call.getChild(descriptor(call).modelArgument()));
+        assertEquals("my-model", ((StringLiteral) model).getValue());
     }
 
     @Test
@@ -269,7 +255,7 @@ public class AIFunctionArgumentsTest {
             FunctionCallExpr copy = (FunctionCallExpr) call.clone();
             ExpressionAnalyzer.analyzeExpressionIgnoreSlot(copy, context);
             assertEquals(call.getChildren(), copy.getChildren());
-            assertTrue(AIModelConfigs.shouldUseDefaultProvider(copy));
+            assertEquals("", stringArgument(copy, descriptor(copy).providerArgument()));
             assertTrue(ExprUtils.analyzeAndCastFold(call.clone()) instanceof FunctionCallExpr);
         }
     }
@@ -291,8 +277,8 @@ public class AIFunctionArgumentsTest {
                 Expr reparsed = restored.getChild(i);
                 assertEquals(AstToSQLBuilder.toSQL(original), AstToSQLBuilder.toSQL(reparsed), storedSql);
             }
-            assertEquals(AIModelConfigs.resolveProvider(providers, call).getName(),
-                    AIModelConfigs.resolveProvider(providers, restored).getName());
+            assertEquals(AIFunctionProviderResolver.resolveProvider(providers, call).getName(),
+                    AIFunctionProviderResolver.resolveProvider(providers, restored).getName());
         }
     }
 
@@ -309,8 +295,6 @@ public class AIFunctionArgumentsTest {
         reject("ai_embed(input => NULL)", "required parameter 'input' cannot be NULL");
         FunctionCallExpr call = analyze("ai_complete('x', NULL)");
         assertEquals(200000, call.getFn().getFunctionId());
-        assertEquals("", stringArgument(call, AIModelConfigs.getProviderArgument(call.getFn())));
-        // JSON contents, including reserved keys, are checked by BE before dispatch.
-        analyze("ai_complete(prompt => 'x', options => json_object('model','bad'))");
+        assertEquals("", stringArgument(call, descriptor(call).providerArgument()));
     }
 }

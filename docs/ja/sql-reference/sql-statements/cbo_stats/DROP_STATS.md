@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CBO 統計情報を削除します（基本統計とヒストグラムを含みます）。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP STATS

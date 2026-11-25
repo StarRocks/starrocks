@@ -34,8 +34,10 @@
 
 #pragma once
 
+#include <atomic>
 #include <condition_variable>
 #include <deque>
+#include <functional>
 #include <mutex>
 #include <type_traits>
 #include <utility>
@@ -51,6 +53,7 @@ namespace starrocks {
 
 static constexpr size_t DEFAULT_STREAM_LOAD_PIPE_BUFFERED_BYTES = 1024 * 1024;
 static constexpr size_t DEFAULT_STREAM_LOAD_PIPE_CHUNK_SIZE = 64 * 1024;
+static constexpr int32_t DEFAULT_STREAM_LOAD_PIPE_NON_BLOCKING_WAIT_US = 500;
 
 // StreamLoadPipe use to transfer data from producer to consumer
 // Data in pip is stored in chunks.
@@ -104,6 +107,13 @@ public:
     // called when producer/consumer failed
     void cancel(const Status& status) override;
 
+    // The status the pipe was cancelled with, or OK while it is not cancelled. A producer that waits for data learns
+    // from it that nothing reads the pipe any more.
+    Status cancel_status() {
+        std::unique_lock<std::mutex> l(_lock);
+        return _cancelled ? _err_st : Status::OK();
+    }
+
     int32_t num_waiting_append_buffer() {
         std::unique_lock<std::mutex> l(_lock);
         return _num_waiting_append_buffer;
@@ -119,8 +129,23 @@ public:
         return _append_buffer_bytes;
     }
 
+    // For a reader that does not block: registers a callback that runs once when the pipe becomes readable, i.e. it
+    // holds data, finishes or is cancelled. Returns false without registering when the pipe is readable already, so
+    // that the reader reads again instead of waiting. The callback runs on the thread that makes the pipe readable,
+    // outside the pipe's lock.
+    bool notify_when_readable(std::function<void()> callback);
+
+    // Drops the registered callback, which then does not run. One that a writer took just before may still be
+    // running, so a callback must only touch state that stays valid on its own.
+    void clear_readable_callback();
+
 private:
     Status _append(const ByteBufferPtr& buf);
+    void _run_readable_callback();
+
+    // guarded by _lock; _has_readable_callback lets a pipe without one skip the lock
+    std::function<void()> _readable_callback;
+    std::atomic<bool> _has_readable_callback{false};
 
     // Blocking queue
     std::mutex _lock;

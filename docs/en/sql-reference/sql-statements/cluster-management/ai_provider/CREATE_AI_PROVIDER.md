@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
-description: "Register an external AI service of type chat, embedding, or rerank as an AI Provider in the cluster."
+description: "Register an external chat or embedding service as an AI Provider in the cluster."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE AI PROVIDER
@@ -8,17 +9,8 @@ description: "Register an external AI service of type chat, embedding, or rerank
 Registers an external AI service provider in the cluster. A single, unified AI-provider registry
 holds providers of different **types** and keeps one default **per type**:
 
-- `embedding` — OpenAI-compatible `/v1/embeddings` endpoint, used by the semantic-context module to
-  embed `CONTEXT UPSERT` content and `query_text` searches, and by [ai_embed](../../../sql-functions/ai-functions/ai_text_functions.md#ai_embed).
-- `rerank` — Cohere-compatible `/rerank` endpoint (Cohere / Jina / Voyage / OpenRouter / local TEI),
-  used by the optional cross-encoder second phase of `/api/context/search`.
-- `chat` — chat / completion endpoint (OpenAI Chat Completions or Anthropic Messages).
-
-Each provider also declares the wire **protocol** its endpoint speaks via the `protocol` property.
-When omitted it defaults to the protocol the type implies: `openai` for `embedding` and `chat`,
-`cohere` for `rerank`.
-
-[ai_complete](../../../sql-functions/ai-functions/ai_text_functions.md#ai_complete) and [ai_embed](../../../sql-functions/ai-functions/ai_text_functions.md#ai_embed) currently require the `openai` protocol. Other registered protocols are rejected when these functions are planned.
+- `embedding` — supplies an endpoint for [ai_embed](../../../sql-functions/ai-functions/ai_embed.md). The semantic-context module uses an OpenAI-compatible `/v1/embeddings` endpoint for `CONTEXT UPSERT` and `query_text` searches.
+- `chat` — supplies a chat completion endpoint for [ai_complete](../../../sql-functions/ai-functions/ai_complete.md) and other chat functions.
 
 The provider object — including the `api_key` property — is persisted on the FE metadata journal and
 image, so cluster restarts and upgrades retain the credential. There is no `fe.conf` knob for these
@@ -29,7 +21,7 @@ settings.
 > Anyone with read access to the FE meta image / BDB journal directory can read provider `api_key`
 > values; protect those files with filesystem permissions.
 
-Create a Provider with `protocol = "openai"`. Both HTTP and HTTPS endpoints are supported, with or without an API key. A nonempty key produces an `Authorization: Bearer ...` header. URL format, control-character, DNS, and address validation still apply. Use a trusted endpoint and data approved for transmission.
+For SQL AI functions, both `openai` and `dashscope` Providers support HTTP and HTTPS with or without an API key. A nonempty key produces an `Authorization: Bearer ...` header. URL format, control-character, DNS, and address validation still apply. Use a trusted endpoint and data approved for transmission.
 
 Set a default with `SET <provider_name> AS DEFAULT AI PROVIDER`. If the corresponding default is absent, FE rejects implicit Provider calls, including `EXPLAIN`. Each execution plan captures its selected Provider configuration. ALTER and default changes affect newly planned queries; each prepared `EXECUTE` replans against current metadata.
 
@@ -41,15 +33,13 @@ Creating or managing providers requires SYSTEM `OPERATE`. Calling a provider thr
 
 ```SQL
 CREATE AI PROVIDER [IF NOT EXISTS] <provider_name>
-TYPE { embedding | rerank | chat }
+TYPE { embedding | chat }
 [ COMMENT '<comment>' ]
 PROPERTIES (
     "endpoint"   = "<url>",
     "model"      = "<model_name>"
-    [, "protocol" = "{ openai | anthropic | cohere }" ]
+    [, "protocol" = "{ openai | dashscope }" ]
     [, "dimensions" = "<int>" ]      -- embedding only
-    [, "max_documents" = "<int>" ]   -- rerank only (optional)
-    [, "deadline_ms" = "<int>" ]     -- rerank only (optional)
     [, "timeout_ms" = "<int>" ]
     [, "api_key" = "<key>" ]
 )
@@ -60,7 +50,7 @@ PROPERTIES (
 | Parameter       | Description                                                                                          |
 | --------------- | ---------------------------------------------------------------------------------------------------- |
 | `provider_name` | Name of the provider. Used by `SET ... AS DEFAULT AI PROVIDER` and shown in `SHOW AI PROVIDERS`.     |
-| `TYPE`          | `embedding`, `rerank`, or `chat`. Determines which properties are allowed and which per-type default this provider can become. |
+| `TYPE`          | `embedding` or `chat`. Determines which properties are allowed and which per-type default this provider can become. |
 | `COMMENT`       | Optional comment string.                                                                             |
 | `PROPERTIES`    | `"key" = "value"` configuration. Allowed keys depend on `TYPE` (see below). Any other key is rejected. |
 
@@ -69,13 +59,26 @@ PROPERTIES (
 | Property        | Types          | Required | Description                                                                                          |
 | --------------- | -------------- | -------- | ---------------------------------------------------------------------------------------------------- |
 | `endpoint`      | all            | Yes      | HTTP(S) endpoint URL. Must start with `http://` or `https://`.                                       |
-| `model`         | all            | Yes      | Model name passed in the request `model` field (e.g. `text-embedding-3-small`, `cohere/rerank-4-fast`). |
-| `protocol`      | all            | No       | Wire protocol of the endpoint: `openai`, `anthropic`, or `cohere`. Default: `openai` for `embedding` and `chat`, `cohere` for `rerank`. |
+| `model`         | all            | Yes      | Model name passed in the request `model` field (e.g. `text-embedding-3-small`). |
+| `protocol`      | all            | No       | SQL AI functions support the OpenAI-compatible protocol (`openai`) and the native Alibaba Cloud Model Studio protocol (`dashscope`). The default for `chat` and `embedding` is `openai`. |
 | `dimensions`    | embedding      | No       | Embedding vector dimension (positive int). Must match the provider output and the vector index dim. |
-| `max_documents` | rerank         | No       | Max documents sent per rerank request (positive int; default 1000).                                  |
-| `deadline_ms`   | rerank         | No       | Overall wall-clock budget in ms for the whole rerank call across all retry attempts (positive int; default 10000). Bounds how long a slow/unreachable reranker can stall a search before it degrades to fusion order. A timeout is never retried; only a connection failure or HTTP 5xx is. |
-| `timeout_ms`    | all            | No       | Per-request HTTP timeout in milliseconds (positive int). For rerank, effectively capped by the remaining `deadline_ms` budget. |
+| `timeout_ms`    | all            | No       | Per-request HTTP timeout in milliseconds (positive integer). |
 | `api_key`       | all            | No       | Bearer token for the `Authorization` header. Omit for local providers that don't require auth.       |
+
+### SQL AI function endpoints
+
+For Alibaba Cloud Model Studio (Bailian), use `openai` with `/compatible-mode/v1/...` endpoints and `dashscope` with native endpoints.
+
+For `dashscope`, set `endpoint` to the full native URL for the operation. Its path must match the Provider `TYPE`. Overriding `model` in SQL still sends requests to the configured endpoint.
+
+| Provider type | Operation | Native endpoint path |
+| --- | --- | --- |
+| `chat` | Text generation | `/api/v1/services/aigc/text-generation/generation` |
+| `chat` | Multimodal generation | `/api/v1/services/aigc/multimodal-generation/generation` |
+| `embedding` | Text embedding | `/api/v1/services/embeddings/text-embedding/text-embedding` |
+| `embedding` | Multimodal embedding | `/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding` |
+
+See the [supported inputs by endpoint](../../../sql-functions/ai-functions/ai_functions.mdx#file-input) and the [Model Studio multimodal embedding API](https://www.alibabacloud.com/help/en/model-studio/multimodal-embedding-api-reference).
 
 ## Examples
 
@@ -92,29 +95,15 @@ PROPERTIES (
 SET openai AS DEFAULT AI PROVIDER;   -- becomes the default embedding provider
 ```
 
-Register a rerank provider and make it the default for the `rerank` type (independent of the
-embedding default):
+The following example registers a `chat` Provider using the native Model Studio multimodal generation endpoint.
 
 ```sql
-CREATE AI PROVIDER cohere_rerank TYPE rerank
+CREATE AI PROVIDER dashscope_chat TYPE chat
 PROPERTIES (
-    "endpoint"   = "https://openrouter.ai/api/v1/rerank",
-    "model"      = "cohere/rerank-4-fast",
-    "timeout_ms" = "15000",
-    "api_key"    = "sk-or-..."
-);
-SET cohere_rerank AS DEFAULT AI PROVIDER;   -- becomes the default rerank provider
-```
-
-Register a chat provider that speaks the Anthropic Messages protocol:
-
-```sql
-CREATE AI PROVIDER claude TYPE chat
-PROPERTIES (
-    "protocol" = "anthropic",
-    "endpoint" = "https://api.anthropic.com/v1/messages",
-    "model"    = "claude-sonnet-4-5",
-    "api_key"  = "sk-ant-..."
+    "protocol" = "dashscope",
+    "endpoint" = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
+    "model"    = "qwen3-vl-plus",
+    "api_key"  = "YOUR_DASHSCOPE_API_KEY"
 );
 ```
 

@@ -16,9 +16,15 @@
 package com.starrocks.scheduler;
 
 import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.HivePartitionDataInfo;
+import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.scheduler.mv.pct.MVPCTMetaRepairer;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -31,8 +37,12 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+import org.mockito.Mockito;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.connector.iceberg.MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -215,5 +225,59 @@ public class MVPCTMetaRepairerTest extends MVTestBase {
 
         ConnectorPlanTestBase.dropCatalog("hive0");
         Config.enable_materialized_view_external_table_precise_refresh = false;
+    }
+
+    @Test
+    public void testRepairFetchesPartitionInfoOnlyWhenSomePartitionIsUnchanged() {
+        MaterializedView mv = Mockito.mock(MaterializedView.class);
+        Mockito.when(mv.getRefreshScheme()).thenReturn(Mockito.mock(MaterializedView.MvRefreshScheme.class));
+        BaseTableInfo baseTableInfo = Mockito.mock(BaseTableInfo.class);
+        Mockito.when(baseTableInfo.getTableIdentifier()).thenReturn("orders:1");
+        // An internal catalog ends the repair before it writes the mv's meta, which needs a real database.
+        Mockito.when(baseTableInfo.isInternalCatalog()).thenReturn(true);
+        Mockito.when(mv.getBaseTableRefreshInfo(baseTableInfo))
+                .thenReturn(Map.of("p1", trackedFiles(1L), "p2", trackedFiles(1L)));
+        HiveTable table = Mockito.mock(HiveTable.class);
+        Mockito.when(table.getTableIdentifier()).thenReturn("orders:2");
+        Mockito.when(table.getCatalogName()).thenReturn("hive_catalog");
+
+        HiveMetadata hiveMetadata = Mockito.mock(HiveMetadata.class);
+        MetadataMgr metadataMgr = Mockito.mock(MetadataMgr.class);
+        Mockito.when(metadataMgr.getOptionalMetadata("hive_catalog"))
+                .thenReturn(Optional.<ConnectorMetadata>of(hiveMetadata));
+        AtomicInteger partitionInfoFetches = new AtomicInteger();
+        new MockUp<PartitionUtil>() {
+            @Mock
+            public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(Table t, List<String> names) {
+                partitionInfoFetches.incrementAndGet();
+                return Map.of();
+            }
+        };
+
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        MetadataMgr originalMetadataMgr = globalStateMgr.getMetadataMgr();
+        globalStateMgr.setMetadataMgr(metadataMgr);
+        try {
+            Mockito.when(hiveMetadata.getHivePartitionDataInfos(Mockito.eq(table), Mockito.anyList(), Mockito.anyInt()))
+                    .thenReturn(Optional.of(Map.of("p1", Optional.of(new HivePartitionDataInfo(1L, 1)),
+                            "p2", Optional.of(new HivePartitionDataInfo(2L, 1)))));
+            new MVPCTMetaRepairer(null, mv).repairTableIfNeeded(table, baseTableInfo);
+            Assertions.assertEquals(1, partitionInfoFetches.get(), "p1 is unchanged and needs the new partition info");
+
+            Mockito.when(hiveMetadata.getHivePartitionDataInfos(Mockito.eq(table), Mockito.anyList(), Mockito.anyInt()))
+                    .thenReturn(Optional.of(Map.of("p1", Optional.of(new HivePartitionDataInfo(2L, 1)),
+                            "p2", Optional.of(new HivePartitionDataInfo(2L, 1)))));
+            new MVPCTMetaRepairer(null, mv).repairTableIfNeeded(table, baseTableInfo);
+            Assertions.assertEquals(1, partitionInfoFetches.get(), "every partition changed, nothing to fetch");
+        } finally {
+            globalStateMgr.setMetadataMgr(originalMetadataMgr);
+        }
+    }
+
+    private static MaterializedView.BasePartitionInfo trackedFiles(long lastFileModifiedTime) {
+        MaterializedView.BasePartitionInfo info = new MaterializedView.BasePartitionInfo(-1, 1, 1);
+        info.setExtLastFileModifiedTime(lastFileModifiedTime);
+        info.setFileNumber(1);
+        return info;
     }
 }

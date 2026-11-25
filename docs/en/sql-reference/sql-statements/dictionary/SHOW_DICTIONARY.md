@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Shows information about dictionary objects."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW DICTIONARY

@@ -15,6 +15,7 @@ package com.starrocks.scheduler.mv.ivm;
 
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
 
@@ -31,6 +32,12 @@ public class TvrTableSnapshotInfo extends PCTTableSnapshotInfo  {
 
     public void setTvrSnapshot(TvrVersionRange tvrVersionRange) {
         this.tvrVersionRange = tvrVersionRange;
+    }
+
+    // Once the delta is merged, the MV holds the base table as of the delta's end.
+    @Override
+    protected TvrVersionRange readSnapshot() {
+        return tvrVersionRange != null ? TvrTableSnapshot.of(tvrVersionRange.to()) : super.readSnapshot();
     }
 
     @Override

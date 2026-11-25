@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "StarRocks Query Profile发出的所有原始指标的参考，按操作符类型组织。"
 sidebar_position: 80
 keywords: ['profile', 'query', '指标']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 查询概要指标
@@ -253,6 +254,7 @@ OLAP_SCAN Operator 负责从 StarRocks 内表中读取数据。
 | RuntimeFilterInputRows | 进入 Parquet Reader Join Runtime Filter 求值的行数。 |
 | RuntimeFilterOutputRows | 通过 Parquet Reader Join Runtime Filter 求值的行数。与 `RuntimeFilterInputRows` 差距越大，说明在物化 Lazy 列之前过滤掉的行越多。 |
 | ScanRangesPrunedByPartitionValue | 因 identity 分区值被谓词或已到达的 Join Runtime Filter 过滤，而在读取前被跳过的 Scan Range 数量。 |
+| ScanRangesPrunedByFileStats | 根据 Iceberg Manifest 中的文件级 min/max 值判断没有任何行能满足谓词或已到达的 Runtime Filter（Join 或 Top-N），而在打开数据文件前被跳过的 Scan Range 数量。仅适用于 Parquet 和 ORC 文件。 |
 | PaimonFSAppIOCount | Paimon 文件系统适配层收到的有效读请求次数，为顺序读、位置读和异步读次数之和。 |
 | PaimonFSAppIOBytes | Paimon 文件系统适配层成功返回的读取字节数。 |
 | PaimonFSAppIOTime | Paimon 文件系统适配层读请求的端到端耗时。 |
@@ -302,6 +304,7 @@ Exchange Operator 负责在 BE 节点之间传输数据。可以有几种交换�
 | ShuffleBufferFlushRows | 提前发送的行数。 |
 | ShuffleBufferReleasedChunks | 提前发送后，因剩余占用内存仍超过 `exchange_sink_buffer_flush_threshold_bytes` 的一半而被释放的 Partial Chunk 数量。 |
 | PeakSerializedChunkBytes | 单个 Chunk 序列化后（压缩前）大小的最大值。 |
+| PeakRequestBytes | 通过网络发送的单个请求大小的最大值（如有压缩，为压缩后的大小）。`BytesSent / RequestSent` 即为请求的平均大小。不包含 passthrough 数据。 |
 | SinkBufferPeakMemoryUsage | Sink Buffer 中等待发送或正在发送的请求占用内存的峰值。 |
 | SinkBufferMemoryLimit | Sink Buffer 的内存上限。默认为 `sink_buffer_mem_limit_per_driver` 乘以目标数量。达到上限后，Sink 会停止接收数据，直到有请求完成。 |
 | SinkBufferPeakInFlightRpcNum | 同时进行中的 RPC 数量峰值。 |

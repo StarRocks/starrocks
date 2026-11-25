@@ -299,8 +299,9 @@ public final class TabletPreSplitCoordinator {
             }
         }
         if (prepared.isEmpty()) {
-            LOG.info("Pre-split skipped for table {}: planner found no useful cuts", table.getName());
-            return new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS);
+            SkipReason reason = pipeline.emptyPreSubmitReason();
+            LOG.info("Pre-split skipped for table {}: no job prepared ({})", table.getName(), reason);
+            return new PreSplitOutcome.Skipped(reason);
         }
 
         PreSplitPipeline.PreparedReshardJob preparedJob = prepared.get();
@@ -581,13 +582,64 @@ public final class TabletPreSplitCoordinator {
     }
 
     /**
-     * Choose how many tablets to split into, sized against {@code tablet_reshard_target_size}.
-     * Load-time pre-split calls {@link #selectPreSplitTabletCount} instead, which sizes against
-     * {@code tablet_pre_split_target_size}; this form serves the non-load callers that reshape an
-     * index outside a load (range-rewrite schema change, range rollup).
+     * Pre-split variant of {@link #selectTabletCount(Estimates, int, long)}, sized against
+     * {@link #preSplitTargetSize(OlapTable)}.
      *
-     * <p>Takes the byte-volume estimate
-     * ({@code ceil(estimatedTotalBytes / tablet_reshard_target_size)}), rounds it up
+     * <p>Every load-time pre-split path routes here so one config controls how finely a load's
+     * target partitions are carved, independently of the size the background split/merge daemon
+     * maintains for the rest of the cluster. Non-load callers (range-rewrite schema change,
+     * range rollup) call {@link #selectTabletCount(Estimates, int, long)} with the table's own target
+     * instead: they reshape an index that is not being written by a load, so the size the daemon
+     * maintains for that table is the right size for them.
+     */
+    public static int selectPreSplitTabletCount(Estimates estimates, int activeComputeNodeCount, OlapTable table) {
+        return selectTabletCount(estimates, activeComputeNodeCount, preSplitTargetSize(table));
+    }
+
+    /**
+     * Sizing for a load that carves several old tablets with one estimate: the same arithmetic as
+     * {@link #selectPreSplitTabletCount} without the {@code tablet_reshard_max_split_count} bound, which limits how many
+     * tablets ONE old tablet may split into, not how many a whole load may produce. The caller shares the budget across
+     * its tablets and caps each share itself. Saturates at {@link Integer#MAX_VALUE}, which also keeps the compute-node
+     * rounding free of overflow. Below the cap the result equals {@link #selectPreSplitTabletCount}.
+     */
+    static int selectPreSplitTabletBudget(Estimates estimates, int activeComputeNodeCount, OlapTable table) {
+        return (int) sizeTabletCount(estimates, activeComputeNodeCount, preSplitTargetSize(table), Integer.MAX_VALUE);
+    }
+
+    /**
+     * The target tablet size load-time pre-split sizes against: the table's own target when its
+     * {@code tablet_reshard_target_size} property is in force, else {@code tablet_pre_split_target_size}
+     * when set to a positive value, else the {@code tablet_reshard_target_size} configuration.
+     *
+     * <p>A load that starts from one catch-all range tablet is bottlenecked on a single writer, and
+     * the split count that fixes that is driven by write parallelism, not by the steady-state
+     * tablet size the cluster wants to keep. Splitting below {@code tablet_reshard_target_size}
+     * is therefore deliberate and self-correcting: the background merge daemon measures against the
+     * table's target (its {@code tablet_reshard_target_size} property when in force, else the configuration,
+     * which is the case whenever this fallback applies) and merges the finer tablets back after the load.
+     */
+    @VisibleForTesting
+    static long preSplitTargetSize(OlapTable table) {
+        long reshardTargetSize = Config.tablet_reshard_target_size;
+        long tableTarget = table.getTabletReshardTargetSizeOverride(reshardTargetSize);
+        if (tableTarget > 0) {
+            return tableTarget;
+        }
+        long preSplitTargetSize = Config.tablet_pre_split_target_size;
+        return preSplitTargetSize > 0 ? preSplitTargetSize : reshardTargetSize;
+    }
+
+    /**
+     * Choose how many tablets to split into, sized against a caller-supplied target-size snapshot:
+     * load-time pre-split passes {@link #preSplitTargetSize(OlapTable)} through
+     * {@link #selectPreSplitTabletCount}, and the non-load callers that reshape an index outside a load
+     * (range-rewrite schema change, range rollup) pass {@link OlapTable#getTabletReshardTargetSize()}.
+     * Callers that branch on the mutable target config must capture it once and pass the same value
+     * here so one sizing decision cannot mix config generations. Every other bound still comes from the
+     * {@code tablet_reshard_*} configs.
+     *
+     * <p>Takes the byte-volume estimate ({@code ceil(estimatedTotalBytes / targetSize)}), rounds it up
      * to a whole multiple of the active compute-node count so tablets spread evenly
      * across nodes, floors it at the node count (so every node gets at least one
      * tablet), and clamps to {@code [2, tablet_reshard_max_split_count]}. Two is the
@@ -606,61 +658,29 @@ public final class TabletPreSplitCoordinator {
      *                               {@link Estimates#totalBytes} is read.
      * @param activeComputeNodeCount total provisioned compute nodes in the load's warehouse.
      *                               Must be {@code >= 1}.
-     */
-    public static int selectTabletCount(Estimates estimates, int activeComputeNodeCount) {
-        return selectTabletCount(estimates, activeComputeNodeCount, Config.tablet_reshard_target_size);
-    }
-
-    /**
-     * Pre-split variant of {@link #selectTabletCount(Estimates, int)}, sized against
-     * {@link #preSplitTargetSize()} instead of {@code tablet_reshard_target_size}.
-     *
-     * <p>Every load-time pre-split path routes here so one config controls how finely a load's
-     * target partitions are carved, independently of the size the background split/merge daemon
-     * maintains for the rest of the cluster. Non-load callers (range-rewrite schema change,
-     * range rollup) keep using the two-argument form: they reshape an index that is not being
-     * written by a load, so the daemon's steady-state target is the right size for them.
-     */
-    public static int selectPreSplitTabletCount(Estimates estimates, int activeComputeNodeCount) {
-        return selectTabletCount(estimates, activeComputeNodeCount, preSplitTargetSize());
-    }
-
-    /**
-     * The target tablet size load-time pre-split sizes against: {@code tablet_pre_split_target_size}
-     * when set to a positive value, otherwise {@code tablet_reshard_target_size}.
-     *
-     * <p>A load that starts from one catch-all range tablet is bottlenecked on a single writer, and
-     * the split count that fixes that is driven by write parallelism, not by the steady-state
-     * tablet size the cluster wants to keep. Splitting below {@code tablet_reshard_target_size}
-     * is therefore deliberate and self-correcting: the background merge daemon still measures
-     * against {@code tablet_reshard_target_size} and merges the finer tablets back after the load.
-     */
-    @VisibleForTesting
-    static long preSplitTargetSize() {
-        long preSplitTargetSize = Config.tablet_pre_split_target_size;
-        return preSplitTargetSize > 0 ? preSplitTargetSize : Config.tablet_reshard_target_size;
-    }
-
-    /**
-     * Shared sizing implementation against a caller-supplied target-size snapshot. Callers that
-     * branch on the mutable target config must capture it once and pass the same value here so one
-     * sizing decision cannot mix config generations. Every other bound still comes from the
-     * {@code tablet_reshard_*} configs.
-     *
-     * @param targetSize target tablet size in bytes the byte-volume estimate is divided by.
-     *                   Must be {@code > 0}.
+     * @param targetSize             target tablet size in bytes the byte-volume estimate is divided by.
+     *                               Must be {@code > 0}.
      */
     public static int selectTabletCount(Estimates estimates, int activeComputeNodeCount, long targetSize) {
+        int maxSplitCount = Config.tablet_reshard_max_split_count;
+        Preconditions.checkState(maxSplitCount >= 2,
+                "tablet_reshard_max_split_count must be >= 2, was %s", maxSplitCount);
+        return (int) sizeTabletCount(estimates, activeComputeNodeCount, targetSize, maxSplitCount);
+    }
+
+    /**
+     * The sizing arithmetic shared by {@link #selectTabletCount(Estimates, int, long)} and
+     * {@link #selectPreSplitTabletBudget}; {@code upperBound} is the largest count it may return.
+     */
+    private static long sizeTabletCount(Estimates estimates, int activeComputeNodeCount, long targetSize,
+                                        long upperBound) {
         Objects.requireNonNull(estimates, "estimates");
         Preconditions.checkArgument(activeComputeNodeCount >= 1,
                 "activeComputeNodeCount must be >= 1, was %s", activeComputeNodeCount);
 
-        int maxSplitCount = Config.tablet_reshard_max_split_count;
         long minSplitSize = Config.tablet_reshard_min_split_size;
         Preconditions.checkState(targetSize > 0,
                 "target tablet size must be > 0, was %s", targetSize);
-        Preconditions.checkState(maxSplitCount >= 2,
-                "tablet_reshard_max_split_count must be >= 2, was %s", maxSplitCount);
         Preconditions.checkState(minSplitSize > 0,
                 "tablet_reshard_min_split_size must be > 0, was %s", minSplitSize);
 
@@ -668,11 +688,11 @@ public final class TabletPreSplitCoordinator {
         // does not overflow when totalBytes is near Long.MAX_VALUE.
         long totalBytes = estimates.totalBytes();
         long byteTargetTabletCount = totalBytes == 0L ? 0L : ((totalBytes - 1) / targetSize) + 1;
-        // Clamp to maxSplitCount before the node-count rounding. The final result is
-        // capped at maxSplitCount anyway, and clamping first keeps the rounding
+        // Clamp to upperBound before the node-count rounding. The final result is
+        // capped at upperBound anyway, and clamping first keeps the rounding
         // arithmetic (+ activeComputeNodeCount) from overflowing on a near-
         // Long.MAX_VALUE estimate (tiny target_size + huge input).
-        long boundedByteTarget = Math.min(byteTargetTabletCount, maxSplitCount);
+        long boundedByteTarget = Math.min(byteTargetTabletCount, upperBound);
         // Bound the node count we align to by how many min-split-size tablets the input can
         // fill (totalBytes / tablet_reshard_min_split_size). Without this, the rounding and
         // node-count floor below would split a small load into one tiny tablet per node on a
@@ -690,8 +710,7 @@ public final class TabletPreSplitCoordinator {
                 ((boundedByteTarget + alignmentNodeCount - 1) / alignmentNodeCount)
                         * alignmentNodeCount;
         long proposed = Math.max(alignmentNodeCount, nodeAlignedCount);
-        long clamped = Math.max(2L, Math.min(proposed, maxSplitCount));
-        return (int) clamped;
+        return Math.max(2L, Math.min(proposed, upperBound));
     }
 
     /**
@@ -933,7 +952,7 @@ public final class TabletPreSplitCoordinator {
             }
 
             int requestedTabletCount = selectPreSplitTabletCount(
-                    new Estimates(entry.estimatedBytes(), 0L), activeComputeNodeCount);
+                    new Estimates(entry.estimatedBytes(), 0L), activeComputeNodeCount, table);
             // Plan every index into a LOCAL map first; merge only on full success so a throw
             // mid-way never leaves a base-only remnant in the combined map. targets.get(0) is the
             // base (resolveVisibleIndexTargets returns base first); the rest are rollups matched

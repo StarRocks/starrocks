@@ -62,6 +62,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.GlobalDictNotMatchException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.lake.LakeMetaVersionNotFoundException;
 import com.starrocks.metric.MetricRepo;
@@ -69,6 +70,7 @@ import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
+import com.starrocks.planner.PaimonTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.RangeColocateUnalignedException;
@@ -92,6 +94,7 @@ import com.starrocks.qe.scheduler.dag.PhasedExecutionSchedule;
 import com.starrocks.qe.scheduler.dag.SingleNodeSchedule;
 import com.starrocks.qe.scheduler.slot.DeployState;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
+import com.starrocks.qe.scheduler.slot.SharedQueryQueueSlot;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
@@ -198,7 +201,9 @@ public class DefaultCoordinator extends Coordinator {
 
     private boolean thriftServerHighLoad;
 
-    private LogicalSlot slot = null;
+    private volatile LogicalSlot slot = null;
+    // Guarded by this. Each coordinator owns one reference, including a child borrowing parent admission.
+    private SharedQueryQueueSlot sharedQueueSlot;
 
     private ShortCircuitExecutor shortCircuitExecutor = null;
     private boolean isShortCircuit = false;
@@ -350,8 +355,49 @@ public class DefaultCoordinator extends Coordinator {
         return slot;
     }
 
-    public void setSlot(LogicalSlot slot) {
+    public synchronized void setSlot(LogicalSlot slot) {
         this.slot = slot;
+        this.sharedQueueSlot = new SharedQueryQueueSlot(slot, jobSpec.getSlotProvider());
+    }
+
+    public synchronized void markSlotAdmitted() {
+        if (sharedQueueSlot != null) {
+            sharedQueueSlot.markAdmitted();
+        }
+    }
+
+    private synchronized SharedQueryQueueSlot retainQueueSlot() {
+        return sharedQueueSlot != null && sharedQueueSlot.retain() ? sharedQueueSlot : null;
+    }
+
+    public boolean borrowQueueSlot(DefaultCoordinator parent) {
+        if (parent == this || !jobSpec.isEnableQueue() || !jobSpec.isNeedQueued()
+                || connectContext.getCurrentWarehouseId() != parent.connectContext.getCurrentWarehouseId()) {
+            return false;
+        }
+        long groupId = jobSpec.getResourceGroup() == null ? LogicalSlot.ABSENT_GROUP_ID
+                : jobSpec.getResourceGroup().getId();
+        long parentGroupId = parent.jobSpec.getResourceGroup() == null ? LogicalSlot.ABSENT_GROUP_ID
+                : parent.jobSpec.getResourceGroup().getId();
+        if (groupId != parentGroupId) {
+            return false;
+        }
+        SharedQueryQueueSlot inherited = parent.retainQueueSlot();
+        if (inherited == null) {
+            return false;
+        }
+        SharedQueryQueueSlot previous;
+        synchronized (this) {
+            previous = sharedQueueSlot;
+            sharedQueueSlot = inherited;
+            // Never cancel the parent's request or apply its adaptive DOP to the metadata query.
+            slot = null;
+        }
+        if (previous != null) {
+            previous.release();
+        }
+        LOG.debug("Metadata query {} shares admitted slot {}", getQueryId(), inherited.getSlot().getSlotId());
+        return true;
     }
 
     @Override
@@ -537,8 +583,9 @@ public class DefaultCoordinator extends Coordinator {
             }
         }
         if (jobSpec.getScanNodes().stream()
-                .anyMatch(scan -> scan instanceof OlapScanNode nativeScan && nativeScan.isParallelRangeScan())) {
-            // Native parallel tablet tasks use the ordinary one-shot assignment and deployment lifecycle.
+                .anyMatch(scan -> scan instanceof OlapScanNode nativeScan
+                        && (nativeScan.isParallelRangeScan() || nativeScan.isGroupedRangeScan()))) {
+            // Captured native tablet/group tasks use the ordinary one-shot deployment lifecycle.
             jobSpec.setIncrementalScanRanges(false);
         }
 
@@ -555,9 +602,13 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public void onReleaseSlots() {
-        if (slot != null) {
-            jobSpec.getSlotProvider().cancelSlotRequirement(slot);
-            jobSpec.getSlotProvider().releaseSlot(slot);
+        SharedQueryQueueSlot owned;
+        synchronized (this) {
+            owned = sharedQueueSlot;
+            sharedQueueSlot = null;
+        }
+        if (owned != null) {
+            owned.release();
         }
     }
 
@@ -630,6 +681,10 @@ public class DefaultCoordinator extends Coordinator {
         try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Pending")) {
             QueryQueueManager.getInstance().maybeWait(connectContext, this);
         }
+        if (connectContext != null && connectContext.isMetadataContext()) {
+            // Recheck both execution budgets after maybeWait() records the actual queue waiting time.
+            setTimeoutSecond(SimpleExecutor.checkInternalQueryState(connectContext));
+        }
 
         if (isShortCircuit) {
             execShortCircuit();
@@ -648,6 +703,10 @@ public class DefaultCoordinator extends Coordinator {
         }
 
         try {
+            if (connectContext != null && connectContext.isMetadataContext()) {
+                // Fragment preparation may also exhaust the deadline before anything has been dispatched.
+                setTimeoutSecond(SimpleExecutor.checkInternalQueryState(connectContext));
+            }
             try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Deploy")) {
                 deliverExecFragments(option);
             }
@@ -689,9 +748,21 @@ public class DefaultCoordinator extends Coordinator {
 
     private void prepareProfile() {
         this.queryProfile.initFragmentProfiles(executionDAG.getFragmentsInCreatedOrder().size());
-
         ExecutionFragment rootExecFragment = executionDAG.getRootFragment();
-        boolean isLoadType = !(rootExecFragment.getPlanFragment().getSink() instanceof ResultSink);
+        PlanFragment rootPlanFragment = rootExecFragment.getPlanFragment();
+        if (rootPlanFragment.getSink() instanceof PaimonTableSink sink) {
+            if (!jobSpec.isEnablePipeline() || rootPlanFragment.isUseRuntimeAdaptiveDop()) {
+                throw new StarRocksConnectorException("Paimon publication requires fixed-DOP pipeline producers");
+            }
+            Map<TUniqueId, Integer> sinkInstanceDops = new HashMap<>();
+            for (FragmentInstance instance : rootExecFragment.getInstances()) {
+                // This is the same fixed DOP sent as pipeline_sink_dop by TFragmentInstanceFactory.
+                sinkInstanceDops.put(instance.getInstanceId(), instance.getTableSinkDop());
+            }
+            queryProfile.initPaimonSink(sink.getPaimonSinkExtra(), sinkInstanceDops);
+        }
+
+        boolean isLoadType = !(rootPlanFragment.getSink() instanceof ResultSink);
         if (isLoadType) {
             // for non-pipeline engine, enable_profile is renamed from is_report_success,
             // which is not only for report profile but also for report success.
@@ -757,6 +828,12 @@ public class DefaultCoordinator extends Coordinator {
     private void deliverExecFragments(ScheduleOption option) throws RpcException, StarRocksException {
         lock();
         try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployLockInternalTime")) {
+            if (!queryStatus.ok()) {
+                // Preparation may publish a receiver and instances after cancel() has run.
+                // Clean them up and reject deployment under the same lock used by cancellation.
+                cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
+                dealStatusToTryRetry(queryStatus);
+            }
             Deployer deployer =
                     new Deployer(connectContext, jobSpec, executionDAG, coordinatorPreprocessor.getCoordAddress(),
                             this::handleErrorExecution, option.doDeploy);
@@ -1445,14 +1522,16 @@ public class DefaultCoordinator extends Coordinator {
             LOG.warn("update profile failed {}", instanceId, e);
         }
 
-        // update load profile
-        try {
-            lock();
-            queryProfile.updateLoadChannelProfile(params);
-        } catch (Throwable e) {
-            LOG.warn("update load channel profile failed {}", instanceId, e);
-        } finally {
-            unlock();
+        // A status-only report must not wait for deployment while updating absent load data.
+        if (params.isSetLoad_channel_profile()) {
+            try {
+                lock();
+                queryProfile.updateLoadChannelProfile(params);
+            } catch (Throwable e) {
+                LOG.warn("update load channel profile failed {}", instanceId, e);
+            } finally {
+                unlock();
+            }
         }
 
         // update job progress
@@ -1494,17 +1573,39 @@ public class DefaultCoordinator extends Coordinator {
             throw new RuntimeException(String.format("updateFinishInstance called after fragment is finished:%s, query_id:%s",
                     instanceId, DebugUtil.printId(params.getQuery_id())));
         }
+        boolean paimonReportFailed = false;
         try {
-            lock();
-            queryProfile.updateLoadInformation(execState, params);
+            List<Runnable> loadUpdates = queryProfile.buildLoadInformationUpdates(execState, params);
+            if (!loadUpdates.isEmpty()) {
+                lock();
+                try {
+                    for (Runnable update : loadUpdates) {
+                        update.run();
+                    }
+                } finally {
+                    unlock();
+                }
+            }
         } catch (Throwable e) {
             LOG.warn("update load information failed {}", instanceId, e);
-        } finally {
-            unlock();
+            if (queryProfile.hasPaimonSink()) {
+                // A failed aggregation is not a completed prepare. Preserve the report for abort but
+                // fail publication before counting down the final instance; do not silently publish a subset.
+                queryProfile.recordPaimonReportFailure();
+                paimonReportFailed = true;
+            }
         }
 
-        // NOTE: it's critical for query execution, and must be put after the profile update
-        queryProfile.finishInstance(params.getFragment_instance_id());
+        try {
+            if (paimonReportFailed) {
+                updateStatus(new Status(TStatusCode.INTERNAL_ERROR,
+                        "Cannot aggregate the final Paimon producer report"), params.getFragment_instance_id());
+            }
+        } finally {
+            // NOTE: it's critical for query execution, and must be put after the profile/status update.
+            // Even cancellation/diagnostic failure must not strand this terminal report's instance.
+            queryProfile.finishInstance(params.getFragment_instance_id());
+        }
     }
 
     @Override

@@ -32,6 +32,9 @@ public:
                                        const std::vector<TupleSlotMapping>& parent_mappings) override;
 
 protected:
+    // Ordered spill requires sortable keys; partitionwise spill can also handle keys such as MAP.
+    bool _group_by_keys_support_orderby() const;
+
     const TPlanNode& _tnode;
     // _group_by_expr_ctxs used by the pipeline execution engine to push down rf to children nodes before
     // pipeline decomposition.

@@ -199,25 +199,18 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
                             normalizeIcebergModifiedTimeToMicros(basePartitionInfo.getLastRefreshTime());
                     long normalizedLatestPartitionModifiedTime =
                             normalizeIcebergModifiedTimeToMicros(latestPartition.getModifiedTime());
-                    if (normalizedLatestPartitionModifiedTime > 0) {
-                        // last_updated_at is available: use modifiedTime as the primary signal.
-                        // Covers both live-snapshot partitions and historical MVs whose basePartitionVersion
-                        // was stored as a timestamp.
-                        if (normalizedLatestPartitionModifiedTime != normalizedBasePartitionModifiedTime) {
-                            result.add(basePartitionName);
-                        }
-                    } else {
-                        // last_updated_at is null: the partition's snapshot has been GC'd.
-                        // Historical MVs stored basePartitionVersion as a millisecond timestamp (~10^12),
-                        // which is always larger than Integer.MAX_VALUE. Stats fingerprints are in [0, 2^31-1].
-                        // If basePartitionVersion looks like a timestamp, skip the comparison to avoid a
-                        // spurious refresh — we have no reliable signal to compare against.
-                        boolean isLegacyTimestampVersion = basePartitionVersion == -1
-                                || basePartitionVersion > Integer.MAX_VALUE;
-                        if (!isLegacyTimestampVersion && latestPartitionVersion >= 0
-                                && latestPartitionVersion != basePartitionVersion) {
-                            result.add(basePartitionName);
-                        }
+                    // Historical MVs stored basePartitionVersion as a timestamp (> Integer.MAX_VALUE) rather than a
+                    // stats fingerprint in [0, 2^31-1]; those are not comparable.
+                    boolean isLegacyTimestampVersion = basePartitionVersion == -1
+                            || basePartitionVersion > Integer.MAX_VALUE;
+                    boolean isFingerprintChanged = !isLegacyTimestampVersion && latestPartitionVersion >= 0
+                            && latestPartitionVersion != basePartitionVersion;
+                    boolean isModifiedTimeChanged = normalizedLatestPartitionModifiedTime > 0
+                            && normalizedLatestPartitionModifiedTime != normalizedBasePartitionModifiedTime;
+                    // last_updated_at only tracks the newest live file (and is null once its snapshot is GC'd);
+                    // the fingerprint catches commits that just remove older files.
+                    if (isModifiedTimeChanged || isFingerprintChanged) {
+                        result.add(basePartitionName);
                     }
                 } else {
                     // TODO: correct the logic here by comparing version and modified time
@@ -244,26 +237,35 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
 
     @Override
     public Set<String> getUpdatedPartitionNames(LocalDateTime checkTime, int extraSeconds) {
-        List<String> updatedPartitions = Lists.newArrayList();
         try {
-            getPartitionNameWithPartitionInfo().
-                    forEach((partitionName, partitionInfo) -> {
-                        long partitionModifiedTimeMillis = partitionInfo.getModifiedTimeUnit().toMillis(
-                                partitionInfo.getModifiedTime());
-
-                        LocalDateTime partitionUpdateTime = LocalDateTime.ofInstant(
-                                Instant.ofEpochMilli(partitionModifiedTimeMillis).plusSeconds(extraSeconds),
-                                Clock.systemDefaultZone().getZone());
-                        if (partitionUpdateTime.isAfter(checkTime)) {
-                            updatedPartitions.add(partitionName);
-                        }
-                    });
-            return Sets.newHashSet(updatedPartitions);
+            return getUpdatedPartitionNames(getPartitionNameWithPartitionInfo(), checkTime, extraSeconds);
         } catch (Exception e) {
             // some external table traits do not support getPartitionNameWithPartitionInfo, will throw exception,
             // just return null
             return null;
         }
+    }
+
+    /**
+     * The partitions of an already-fetched {@code partitionInfos} map modified after {@code checkTime}. Lets a
+     * caller that also needs the full partition list take both from one {@link #getPartitionNameWithPartitionInfo()}
+     * call instead of asking the connector twice.
+     */
+    public static Set<String> getUpdatedPartitionNames(Map<String, PartitionInfo> partitionInfos,
+                                                       LocalDateTime checkTime, int extraSeconds) {
+        List<String> updatedPartitions = Lists.newArrayList();
+        partitionInfos.forEach((partitionName, partitionInfo) -> {
+            long partitionModifiedTimeMillis = partitionInfo.getModifiedTimeUnit().toMillis(
+                    partitionInfo.getModifiedTime());
+
+            LocalDateTime partitionUpdateTime = LocalDateTime.ofInstant(
+                    Instant.ofEpochMilli(partitionModifiedTimeMillis).plusSeconds(extraSeconds),
+                    Clock.systemDefaultZone().getZone());
+            if (partitionUpdateTime.isAfter(checkTime)) {
+                updatedPartitions.add(partitionName);
+            }
+        });
+        return Sets.newHashSet(updatedPartitions);
     }
 
     @Override

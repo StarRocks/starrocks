@@ -2,6 +2,7 @@
 sidebar_position: 20
 displayed_sidebar: docs
 description: "StarRocks provides a self-developed connector for Apache Spark to read StarRocks data for complex processing and machine learning."
+products: [oss, enterprise]
 ---
 
 # 使用 Spark Connector 读取数据
@@ -24,22 +25,16 @@ Spark Connector 支持三种数据读取方式：Spark SQL、Spark DataFrame 和
 
 | Spark connector | Spark              | StarRocks      | Java | Scala |
 | --------------- | ------------------ | -------------- | ---- | ----- |
+| 1.1.5           | 4.0, 4.1           | 2.5 及以上      | 17   | 2.13  |
+| 1.1.5           | 3.3, 3.4, 3.5      | 2.5 及以上      | 8    | 2.12  |
 | 1.1.4           | 4.0, 4.1           | 2.5 及以上      | 17   | 2.13  |
 | 1.1.4           | 3.3, 3.4, 3.5      | 2.5 及以上      | 8    | 2.12  |
 | 1.1.3           | 3.2, 3.3, 3.4, 3.5 | 2.5 及以上      | 8    | 2.12  |
-| 1.1.2           | 3.2, 3.3, 3.4, 3.5 | 2.5 及以上      | 8    | 2.12  |
-| 1.1.1           | 3.2, 3.3, or 3.4   | 2.5 及以上      | 8    | 2.12  |
-| 1.1.0           | 3.2, 3.3, or 3.4   | 2.5 及以上      | 8    | 2.12  |
-| 1.0.0           | 3.x                | 1.18 及以上     | 8    | 2.12  |
-| 1.0.0           | 2.x                | 1.18 及以上     | 8    | 2.11  |
 
 > **注意**
 >
 > - 了解不同版本的 Spark connector 之间的行为变化，请查看[升级 Spark connector](#100-升级至-110)。
 > - 自 1.1.1 版本起，Spark connector 不再提供 MySQL JDBC 驱动程序，您需要将驱动程序手动放到 Spark 的类路径中。您可以在 [MySQL 官网](https://dev.mysql.com/downloads/connector/j/)或 [Maven 中央仓库](https://repo1.maven.org/maven2/mysql/mysql-connector-java/)上找到该驱动程序。
-> - 1.0.0 版本只支持读取 StarRocks，从 1.1.0 版本开始同时支持读写 StarRocks。
-> - 1.0.0 版本和 1.1.0 版本在参数和类型映射上存在差别，请查看[升级 Spark connector](#100-升级至-110)。
-> - 1.0.0 版本一般情况下不再增加新功能，条件允许请尽快升级 Spark Connector。
 
 ## 获取 Spark Connector
 
@@ -170,6 +165,7 @@ Spark Connector Jar 包的命名格式如下：
 | starrocks.request.read.timeout.ms    | 30000             | 一个读请求读取 StarRocks 数据超时时间。|
 | starrocks.request.query.timeout.s    | 3600              | 从 StarRocks 查询数据的超时时间。默认超时时间为 1 小时。|
 | starrocks.request.tablet.size        | Integer.MAX_VALUE | 一个 Spark RDD 分区对应的 StarRocks Tablet 的个数。参数设置越小，生成的分区越多，Spark 侧的并行度也就越大，但与此同时会给 StarRocks 侧造成更大的压力。 |
+| starrocks.request.warehouse          | 无                | 自 1.1.5 版本起支持。存算分离集群中负责读取的 Warehouse。FE 在该 Warehouse 上规划读取，Spark 从该 Warehouse 的计算节点读取数据。如果不设置，FE 使用 `default_warehouse`。如果指定的 Warehouse 不存在，读取会失败并报错 `The warehouse parameter [<name>] is invalid`。该参数在 StarRocks v3.4.5+、v3.5.1+ 和 v4.0+ 上生效，更早的版本会忽略该参数，从 `default_warehouse` 读取数据。参见[从指定 Warehouse 读取数据](#从指定-warehouse-读取数据)。 |
 | starrocks.batch.size                 | 4096              | 单次从 BE 读取的最大行数。调大参数取值可减少 Spark 与 StarRocks 之间建立连接的次数，从而减轻网络延迟所带来的的额外时间开销。对于StarRocks 2.2及以后版本最小支持的batch size为4096，如果配置小于该值，则按4096处理 |
 | starrocks.exec.mem.limit             | 2147483648        | 单个查询的内存限制。单位：字节。默认内存限制为 2 GB。        |
 | starrocks.deserialize.arrow.async    | false             | 是否支持把 Arrow 格式异步转换为 Spark Connector 迭代所需的 RowBatch。 |
@@ -511,6 +507,26 @@ Spark Connector 中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
    ```Scala
    res1: Array[AnyRef] = Array([1, Bob, 21], [2, Stan, 21], [3, Sam, 22], [4, Tony, 22], [5, Alice, 22], [6, Lucy, 23], [7, Polly, 23], [8, Tom, 23], [9, Rose, 24], [10, Jerry, 24], [11, Jason, 24], [12, Lily, 25], [13, Stephen, 25], [14, David, 25], [15, Eddie, 26], [16, Kate, 27], [17, Cathy, 27], [18, Judy, 27], [19, Julia, 28], [20, Robert, 28], [21, Jack, 29])
    ```
+
+### 从指定 Warehouse 读取数据
+
+在包含多个 Warehouse 的存算分离集群中，如果不设置 `starrocks.request.warehouse`（自 1.1.5 版本起支持），Spark 会在 `default_warehouse` 上读取数据。您可以设置该参数，让大批量的读取避开负责导入或查询的 Warehouse。设置后，FE 会在您指定的 Warehouse 上规划读取，Spark Executor 从该 Warehouse 的计算节点读取数据，因此 Spark Executor 必须能够通过 BE Thrift 端口（默认为 `9060`）访问这些节点。
+
+- Spark SQL：在 `OPTIONS` 中添加 `"starrocks.request.warehouse" = "<warehouse_name>"`。
+- Spark DataFrame：
+
+  ```Scala
+  scala> val starrocksSparkDF = spark.read.format("starrocks")
+             .option("starrocks.table.identifier", s"test.score_board")
+             .option("starrocks.fe.http.url", s"<fe_host>:<fe_http_port>")
+             .option("starrocks.fe.jdbc.url", s"jdbc:mysql://<fe_host>:<fe_query_port>")
+             .option("starrocks.user", s"root")
+             .option("starrocks.password", s"")
+             .option("starrocks.request.warehouse", s"<warehouse_name>")
+             .load()
+  ```
+
+- Spark RDD：在 `cfg` 中添加 `"starrocks.request.warehouse" -> "<warehouse_name>"`。
 
 ## 最佳实践
 

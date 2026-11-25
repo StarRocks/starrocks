@@ -3,17 +3,16 @@ displayed_sidebar: docs
 description: "Iceberg catalog は Iceberg データを StarRocks に手動作成なしで直接クエリおよび変換ロード。"
 toc_max_heading_level: 5
 keywords: ['iceberg']
+products: [oss, enterprise, cloud, anywhere]
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
-import QSTip from '../../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
-import IcebergCatalogIcebergRestSecurityLink from '../../../_assets/commonMarkdown/iceberg_catalog_iceberg_rest_security_link.mdx'
-import EditionSpecificIcebergCatalogSyntax from '../../../_assets/commonMarkdown/Edition_Specific_Iceberg_Catalog_Syntax.mdx'
-import EditionSpecificIcebergCatalogParam from '../../../_assets/commonMarkdown/Edition_Specific_Iceberg_Catalog_Param.mdx'
 
 # Iceberg catalog
 
-<QSTip />
+:::tip
+この例では、[StarRocks Basics](../../../quick_start/shared-nothing.md) クイックスタートで紹介されている Local Climatological Data (LCD) データセットを使用しています。データをロードして、自分で例を試すことができます。
+:::
 
 Iceberg catalog は、StarRocks が v2.4 以降でサポートする外部 catalog の一種です。Iceberg catalog を使用すると、以下のことが可能です。
 
@@ -34,7 +33,21 @@ Iceberg クラスターで SQL ワークロードを成功させるためには�
 
 :::
 
-リスト、マップ、構造体に geography を含む Iceberg 列は、列全体が `UNKNOWN_TYPE` と表示され、地理空間型以外のサブフィールドも含めてクエリできません。他のサポート対象列とスカラーの geography は引き続き読み取れます。
+## Iceberg の型マッピング
+
+| Iceberg の型 | StarRocks の型 | 読み取り条件 |
+| --- | --- | --- |
+| `geometry` | `GEOMETRY` | Iceberg フォーマットバージョン 3 以降の Parquet テーブルのトップレベル列とネストされたフィールドに対応します。CRS は `OGC:CRS84`（既定値）または `EPSG:<n>` である必要があります。`n` は ASCII 数字のみで構成され、32 ビット符号付き整数の範囲内の正の値を表します。それ以外の CRS 識別子は `UNKNOWN_TYPE` にマッピングされます。 |
+
+StarRocks は保存された CRS 識別子をそのまま保持します。`OGC:CRS84` と `EPSG:4326` は別の識別子です。GEOMETRY の値を返すには `ST_AsText(g)` または `ST_AsBinary(g)` を使用します。GEOMETRY 列を直接出力するクエリは、その列を含む `SELECT *` も含め、クエリの解析時にエラーになります。
+
+Parquet データファイルを使用するフォーマットバージョン 3 以降の Iceberg テーブルでは、配列要素、マップの値、構造体フィールドの `GEOGRAPHY` と `GEOMETRY` を SQL で読み取れます。GEO フィールドを含む構造体の配列など、複数階層のネストにも対応します。`GEOGRAPHY` は `OGC:CRS84` と球面の辺アルゴリズムに対応します。ネストされた `GEOMETRY` には、トップレベルの `GEOMETRY` と同じ CRS の規則が適用されます。
+
+ネストされた値を返すには、末端の値を取り出して明示的にシリアライズします。例えば、配列には `ST_AsText(places[1])`、マップには `ST_AsText(places_by_id[42])`、構造体には `ST_AsBinary(location.shape)` を使用します。GEO フィールドを含むコンテナを直接出力することはできません。
+
+いずれかの階層に GEO 型のマップキーがある場合や、未対応の地理空間メタデータがある場合は、コンテナ全体が `UNKNOWN_TYPE` にマッピングされます。GEO の比較、グループ化、並べ替え、空間境界によるプルーニング、ネストされた GEO を含む SQL 定義の保存、これらのコンテナのネイティブテーブルへの格納には引き続き対応していません。
+
+ローリングアップグレードでは、まずすべての BE と CN ノードを Parquet 内の該当するネストされた GEO 型の読み取りに対応するバージョンにアップグレードしてください。その後、FE ノードを SQL での読み取りを有効にするバージョンにアップグレードしてください。
 
 ## 使用上の注意
 
@@ -115,7 +128,18 @@ HDFS クラスターまたは Hive metastore に Kerberos 認証が有効にな�
 
 ### 構文
 
-<EditionSpecificIcebergCatalogSyntax />
+```SQL
+CREATE EXTERNAL CATALOG <catalog_name>
+[COMMENT <comment>]
+PROPERTIES
+(
+    "type" = "iceberg",
+    [SecurityParams],
+    MetastoreParams,
+    StorageCredentialParams,
+    MetadataRelatedParams
+)
+```
 
 ---
 
@@ -140,7 +164,7 @@ Iceberg catalog の説明です。このパラメーターはオプションで�
 
 StarRock sがカタログへのデータアクセスを管理する方法に関するパラメータ。
 
-<IcebergCatalogIcebergRestSecurityLink />
+Iceberg REST カタログのデータアクセス管理の詳細な手順については、[Iceberg REST カタログのセキュリティ設定](./iceberg_rest_security.md)を参照してください。
 
 ##### catalog.access.control
 
@@ -830,8 +854,8 @@ v3.3.3 以降、StarRocks は [定期的なメタデータリフレッシュ戦�
 | iceberg_manifest_cache_with_column_statistics | true                  | 列の統計をキャッシュするかどうか。有効にすると、パーティションソース列、ソートキー列、identifier 列の統計は常にキャッシュされ、その他の列も合計 `iceberg_manifest_cache_statistics_max_columns` 列までキャッシュされます。これにより、キャッシュがウォームな状態でもファイルレベルの min/max プルーニングが機能します。 |
 | iceberg_manifest_cache_statistics_max_columns | 100                   | `iceberg_manifest_cache_with_column_statistics` が有効な場合に、Manifest ごとに統計をキャッシュする列の最大数。パーティションソース列、ソートキー列、identifier 列は常にキャッシュされ、残りの枠は、まずメトリクスモードが min/max の上限・下限を書き込む列（`truncate(N)` または `full`）に割り当てられ、その中でも `write.metadata.metrics.column.<col>` で明示的に設定された列が優先されます。その後に `counts` のみの列に割り当てられます。各グループ内では、トップレベルのプリミティブ列にフィールド ID 順に割り当てられ、次に struct 内のプリミティブフィールドに割り当てられます。配列や map 内のフィールドはプルーニングに使えないため、キャッシュされません。統計は列ごとに格納され、データファイル 1 つあたり 1 列につき約 25 バイトです。STRING 列と BINARY 列の 16 文字（バイト）を超える上限・下限は、Iceberg のデフォルトの `truncate(16)` メトリクスモードと同様にキャッシュ内で切り詰められます。プルーニング結果が誤ることはなく、まれにプルーニングされるファイルが少なくなるだけです。`0` に設定するとパーティションソース列、ソートキー列、identifier 列のみをキャッシュします。負の値は `0` として扱われます。 |
 | refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | Data File Cache のリフレッシュをトリガーする最小の Manifest ファイル長。 |
-| iceberg_data_file_cache_memory_usage_ratio    | 0.1                   | Data File Manifest キャッシュの最大メモリ使用率。v3.5.6 以降でサポートされています。 |
-| iceberg_delete_file_cache_memory_usage_ratio  | 0.1                   | Delete File Manifest キャッシュの最大メモリ使用率。v3.5.6 以降でサポートされています。 |
+| iceberg_data_file_cache_memory_usage_ratio    | 0.1                   | Data File Manifest キャッシュの最大メモリ使用率。FE 設定項目 `iceberg_data_file_cache_global_memory_ratio` が `0` より大きい場合は無視されます。v3.5.6 以降でサポートされています。 |
+| iceberg_delete_file_cache_memory_usage_ratio  | 0.1                   | Delete File Manifest キャッシュの最大メモリ使用率。FE 設定項目 `iceberg_delete_file_cache_global_memory_ratio` が `0` より大きい場合は無視されます。v3.5.6 以降でサポートされています。 |
 | iceberg_table_cache_refresh_interval_sec      | 60                    | Iceberg テーブルキャッシュの非同期更新がトリガーされる間隔（秒単位）。v3.5.7 以降でサポートされています。 |
 
 v3.4 以降、StarRocks は、以下のパラメーターを設定することで、Iceberg メタデータを読み取ることで Iceberg テーブルの統計情報を取得できます。これにより、Iceberg テーブルの統計情報の収集を積極的にトリガーする必要はありません。
@@ -839,8 +863,6 @@ v3.4 以降、StarRocks は、以下のパラメーターを設定すること�
 | **パラメーター**                                 | **デフォルト**           | **説明**                                                   |
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
 | enable_get_stats_from_external_metadata       | false                 | Iceberg メタデータから統計情報を取得するかどうか。この項目を `true` に設定すると、セッション変数 [`enable_get_stats_from_external_metadata`](../../../sql-reference/System_variable.md#enable_get_stats_from_external_metadata) を通じて、収集する統計情報の種類をさらに制御できます。  |
-
-<EditionSpecificIcebergCatalogParam />
 
 ### 例
 
@@ -1493,6 +1515,24 @@ v3.3.3 以降、StarRocks は [定期的なメタデータリフレッシュ戦�
 - 単位: バイト
 - デフォルト値: `8388608`、8 MB に相当
 - 説明: キャッシュできるファイルの最大サイズ。このパラメーターの値を超えるサイズのファイルはキャッシュできません。クエリがこれらのファイルを要求する場合、StarRocks はリモートストレージからそれらを取得します。
+
+##### iceberg_data_file_cache_global_memory_ratio
+
+- 単位: N/A
+- デフォルト値: `0`
+- 説明: すべての Iceberg カタログで共有する 1 つの Data File Manifest キャッシュに使用できる FE JVM ヒープの割合。カタログの数にかかわらず、合計がこの上限に収まります。デフォルトの `0` では、カタログごとに専用のキャッシュを持ち、その上限はカタログプロパティ `iceberg_data_file_cache_memory_usage_ratio` で決まります。`0` より大きい場合、そのカタログプロパティは無視されます。
+
+##### iceberg_delete_file_cache_global_memory_ratio
+
+- 単位: N/A
+- デフォルト値: `0`
+- 説明: すべての Iceberg カタログで共有する 1 つの Delete File Manifest キャッシュに使用できる FE JVM ヒープの割合。削除ファイルから構築される削除ファイルインデックスには、同じ割合の別キャッシュが割り当てられます。デフォルトの `0` では、どちらもカタログごとに専用で、その上限はカタログプロパティ `iceberg_delete_file_cache_memory_usage_ratio` で決まります。`0` より大きい場合、そのカタログプロパティは無視されます。
+
+##### iceberg_partition_cache_global_memory_ratio
+
+- 単位: N/A
+- デフォルト値: `0`
+- 説明: すべての Iceberg カタログで共有する 1 つのパーティションキャッシュに使用できる FE JVM ヒープの割合。デフォルトの `0` では、カタログごとに専用のキャッシュを持ち、その上限はカタログプロパティ `iceberg_partition_cache_memory_usage_ratio` で決まります。`0` より大きい場合、そのカタログプロパティは無視されます。
 
 ##### enable_background_refresh_connector_metadata
 

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "7 つの H3 セル・ポリゴン関数でネイティブ GEOGRAPHY を索引化します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # H3 関数

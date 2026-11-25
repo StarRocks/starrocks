@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Use asynchronous materialized views in StarRocks to accelerate queries against data lake tables (Iceberg, Hive, Hudi, Delta Lake) through transparent rewrite."
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # マテリアライズドビューによるデータレイククエリアクセラレーション
@@ -161,7 +162,7 @@ Hive メタデータキャッシュリフレッシュ機能を有効にするに
 **デフォルト**: 86400 (24 時間)<br/>
 **説明**: Hive メタデータキャッシュリフレッシュタスクの有効期限。アクセスされた Hive catalog に対して、指定された時間を超えてアクセスされていない場合、StarRocks はそのキャッシュされたメタデータのリフレッシュを停止します。アクセスされていない Hive catalog に対して、StarRocks はそのキャッシュされたメタデータをリフレッシュしません。単位：秒。
 
-v3.1.4 以降、StarRocks は Iceberg Catalog のパーティションレベルでのデータ変更を検出することをサポートしています。現在、Iceberg V1 テーブルのみがサポートされています。
+v3.1.4 以降、StarRocks は Iceberg Catalog のパーティションレベルでのデータ変更を検出することをサポートしています。
 
 ### external catalog ベースのマテリアライズドビューのクエリの書き換えを有効にする
 
@@ -236,7 +237,7 @@ ORDER BY d_year, p_brand;
 CREATE MATERIALIZED VIEW lineorder_flat_mv
 DISTRIBUTED BY HASH(LO_ORDERDATE, LO_ORDERKEY) BUCKETS 48
 PARTITION BY LO_ORDERDATE
-REFRESH ASYNC EVERY(INTERVAL 1 DAY) 
+REFRESH SCHEDULE EVERY(INTERVAL 1 DAY) 
 PROPERTIES ( 
     -- 一意の制約を指定します。
     "unique_constraints" = "
@@ -295,7 +296,7 @@ AS SELECT
   CREATE MATERIALIZED VIEW mv_2_1 
   DISTRIBUTED BY HASH(lo_orderdate)
   PARTITION BY LO_ORDERDATE
-  REFRESH ASYNC EVERY(INTERVAL 1 DAY) 
+  REFRESH SCHEDULE EVERY(INTERVAL 1 DAY) 
   AS 
   SELECT
   lo_orderdate, count(distinct lo_orderkey)
@@ -305,7 +306,7 @@ AS SELECT
   CREATE MATERIALIZED VIEW mv_2_2 
   DISTRIBUTED BY HASH(lo_orderdate)
   PARTITION BY LO_ORDERDATE
-  REFRESH ASYNC EVERY(INTERVAL 1 DAY) 
+  REFRESH SCHEDULE EVERY(INTERVAL 1 DAY) 
   AS 
   SELECT
   -- lo_orderkey はクエリの書き換えに使用できるように BIGINT 型でなければなりません。
@@ -324,7 +325,7 @@ AS SELECT
   CREATE MATERIALIZED VIEW mv_2_3
   DISTRIBUTED BY HASH(lo_orderdate)
   PARTITION BY LO_ORDERDATE
-  REFRESH ASYNC EVERY(INTERVAL 1 DAY) 
+  REFRESH SCHEDULE EVERY(INTERVAL 1 DAY) 
   AS 
   SELECT
   lo_orderdate, lo_discount, lo_quantity, d_year, d_yearmonth, SUM(lo_extendedprice * lo_discount) AS REVENUE
@@ -338,7 +339,7 @@ AS SELECT
   CREATE MATERIALIZED VIEW mv_2_4
   DISTRIBUTED BY HASH(lo_orderdate)
   PARTITION BY LO_ORDERDATE
-  REFRESH ASYNC EVERY(INTERVAL 1 DAY) 
+  REFRESH SCHEDULE EVERY(INTERVAL 1 DAY) 
   PROPERTIES (
       "force_external_table_query_rewrite" = "TRUE"
   )
@@ -379,7 +380,7 @@ Q5 は最初に `customer` テーブルで集計クエリを実行し、その�
 --mv_3_1
 CREATE MATERIALIZED VIEW mv_3_1
 DISTRIBUTED BY HASH(c_custkey)
-REFRESH ASYNC EVERY(INTERVAL 1 DAY) 
+REFRESH SCHEDULE EVERY(INTERVAL 1 DAY) 
 PROPERTIES (
     "force_external_table_query_rewrite" = "TRUE"
 )
@@ -390,7 +391,7 @@ SELECT distinct c_custkey, c_region from hive.ssb_1g_csv.customer;
 CREATE MATERIALIZED VIEW mv_3_2
 DISTRIBUTED BY HASH(lo_orderdate)
 PARTITION BY LO_ORDERDATE
-REFRESH ASYNC EVERY(INTERVAL 1 DAY) 
+REFRESH SCHEDULE EVERY(INTERVAL 1 DAY) 
 PROPERTIES (
     "force_external_table_query_rewrite" = "TRUE"
 )
@@ -410,7 +411,7 @@ GROUP BY l.lo_orderkey, l.lo_orderdate, mv.c_custkey, mv.c_region;
 CREATE MATERIALIZED VIEW mv_4_1 
 DISTRIBUTED BY HASH(lo_orderdate)
 PARTITION BY LO_ORDERDATE
-REFRESH ASYNC EVERY(INTERVAL 1 DAY) 
+REFRESH SCHEDULE EVERY(INTERVAL 1 DAY) 
 AS 
 SELECT lo_orderkey, lo_orderdate, lo_revenue
 FROM hive.ssb_1g_csv.lineorder

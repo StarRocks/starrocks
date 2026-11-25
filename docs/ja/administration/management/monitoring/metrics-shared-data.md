@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "StarRocks の共有データクラスタ用に Shared-data Dashboard と Starlet Dashboard の監視メトリクスを提供します。"
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 共有データクラスタの監視メトリクス
@@ -70,6 +71,10 @@ Shared-data Dashboard には、次のカテゴリの監視メトリクスが含�
 #### Segment Cache Miss Per Minute
 
 - 説明: Segment Cache における 1 分あたりのキャッシュミスの数。
+
+#### Metacache Adjustment Evictions
+
+- 説明: メモリ逼迫時に容量が引き下げられたことで、Tablet メタデータキャッシュと Segment メタデータキャッシュから追い出されたエントリの累積バイト数（BE 設定項目 `lake_tablet_metadata_cache_min_limit` を参照）。キャッシュが満杯になったときの通常の追い出しは含まれません。BE または CN の起動時に 0 から数え始めます。bvar: `lake_metacache_adjust_evicted_bytes`。
 
 ### Vacuum
 

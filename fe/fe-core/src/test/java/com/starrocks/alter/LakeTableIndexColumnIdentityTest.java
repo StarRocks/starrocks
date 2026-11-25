@@ -28,6 +28,7 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.thrift.TAlterTabletReqV2;
 import com.starrocks.thrift.TColumn;
+import com.starrocks.thrift.TDropIndexInfo;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -89,6 +90,9 @@ public class LakeTableIndexColumnIdentityTest {
         return assertInstanceOf(jobClass, jobs.get(0));
     }
 
+    /**
+     * The request the job sends the base index tablet, from the definitions its last prepareAlterRequests rebuilt.
+     */
     private TAlterTabletReqV2 requestFor(LakeTableAddIndexJob job) {
         long indexMetaId = table.getBaseIndexMetaId();
         MaterializedIndexMeta meta = table.getIndexMetaByMetaId(indexMetaId);
@@ -119,11 +123,16 @@ public class LakeTableIndexColumnIdentityTest {
         alterTable("ALTER TABLE t ADD INDEX idx (vr) USING BITMAP");
         LakeTableAddIndexJob job = getJob(LakeTableAddIndexJob.class);
         assertEquals(List.of(original.getColumnId()), job.getNewIndexes().get(0).getColumns());
+        // The definitions carry the display name; each request converts its own copy to the ColumnId.
+        assertEquals(List.of("vr"), job.buildIndexesToAdd(table).get(0).getColumns());
+        // Every task of a dispatch reads the same definitions: none may see another's conversion.
+        job.prepareAlterRequests(table);
         assertIndexedColumn(requestFor(job), original);
-        assertEquals(List.of("vr"), job.getIndexesToAdd().get(0).getColumns());
-        assertIndexedColumn(requestFor((LakeTableAddIndexJob) job.copyForPersist()), original);
         assertIndexedColumn(requestFor(job), original);
-        assertEquals(List.of("vr"), job.getIndexesToAdd().get(0).getColumns());
+        // An FE that loaded the job rebuilds the same request.
+        LakeTableAddIndexJob loaded = (LakeTableAddIndexJob) job.copyForPersist();
+        loaded.prepareAlterRequests(table);
+        assertIndexedColumn(requestFor(loaded), original);
     }
 
     @Test
@@ -133,6 +142,7 @@ public class LakeTableIndexColumnIdentityTest {
         alterTable("ALTER TABLE t RENAME COLUMN other TO v");
         alterTable("ALTER TABLE t SET ('bloom_filter_columns'='vr')");
         LakeTableAddIndexJob addJob = getJob(LakeTableAddIndexJob.class);
+        addJob.prepareAlterRequests(table);
         assertIndexedColumn(requestFor(addJob), original);
 
         // Exercise the catalog flip separately from the BE publish lifecycle.
@@ -147,8 +157,9 @@ public class LakeTableIndexColumnIdentityTest {
         table.setState(OlapTable.OlapTableState.NORMAL);
         alterTable("ALTER TABLE t SET ('bloom_filter_columns'='')");
         LakeTableDropIndexJob dropJob = getJob(LakeTableDropIndexJob.class);
-        assertEquals(1, dropJob.getDropInfos().size());
-        assertEquals(original.getUniqueId(), dropJob.getDropInfos().get(0).getCol_unique_id());
+        List<TDropIndexInfo> dropInfos = dropJob.buildDropInfos(table);
+        assertEquals(1, dropInfos.size());
+        assertEquals(original.getUniqueId(), dropInfos.get(0).getCol_unique_id());
         dropJob.applyCatalogMutation(table);
         assertNull(table.getBfColumnIds());
     }

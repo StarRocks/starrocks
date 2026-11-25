@@ -42,6 +42,7 @@ import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.base.QueryGroupDistributionSpec;
 import com.starrocks.sql.optimizer.base.RangeDistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
@@ -235,7 +236,20 @@ public class OptExpressionDuplicator {
             if (scanOperator instanceof LogicalOlapScanOperator) {
                 LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) scanOperator;
                 LogicalOlapScanOperator.Builder olapScanBuilder = (LogicalOlapScanOperator.Builder) scanBuilder;
-                if (olapScan.getDistributionSpec() instanceof HashDistributionSpec) {
+                if (olapScan.getDistributionSpec() instanceof QueryGroupDistributionSpec grouped) {
+                    List<DistributionCol> columns = grouped.getOrderedCColumns().stream()
+                            .map(col -> new DistributionCol(getNewDistributionColRef(col).getId(), col.isNullStrict()))
+                            .toList();
+                    EquivalentDescriptor descriptor = new EquivalentDescriptor(grouped.getTableId(),
+                            grouped.getEquivalentDescriptor().getPartitionIds());
+                    descriptor.initDistributionUnionFind(columns);
+                    updateDistributionUnionFind(descriptor.getNullStrictUnionFind(),
+                            grouped.getEquivalentDescriptor().getNullStrictUnionFind());
+                    updateDistributionUnionFind(descriptor.getNullRelaxUnionFind(),
+                            grouped.getEquivalentDescriptor().getNullRelaxUnionFind());
+                    olapScanBuilder.setDistributionSpec(new QueryGroupDistributionSpec(grouped.getTableId(), columns,
+                            grouped.getOrderedPhysicalCUniqueIds(), descriptor));
+                } else if (olapScan.getDistributionSpec() instanceof HashDistributionSpec) {
                     HashDistributionSpec newHashDistributionSpec =
                             processHashDistributionSpec((HashDistributionSpec) olapScan.getDistributionSpec());
                     olapScanBuilder.setDistributionSpec(newHashDistributionSpec);

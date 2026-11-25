@@ -34,6 +34,7 @@
 #include "compute_env/global_dict/parser.h"
 #include "compute_env/query/fragment_runtime_state.h"
 #include "compute_env/query/partition_scan_range_pruner.h"
+#include "compute_env/query/query_remote_read.h"
 #include "compute_env/query/query_runtime_state.h"
 #include "compute_env/query/query_scan_metrics.h"
 #include "compute_env/runtime_range_pruner.hpp"
@@ -291,6 +292,9 @@ void LakeDataSource::close(RuntimeState* state) {
         // close reader to update statistics before update counters
         _reader->close();
         update_counter(state);
+        const auto& stats = _reader->stats();
+        _update_scan_audit_counters(stats.raw_rows_read, stats.rows_del_filtered_after_read,
+                                    stats.remote_bytes_read_with_prepare(), stats.compressed_bytes_read_local_disk);
     }
     if (_prj_iter) {
         _prj_iter->close();
@@ -326,6 +330,7 @@ Status LakeDataSource::reuse(RuntimeState* state, pipeline::ScanMorsel* morsel) 
     _morsel = morsel;
     _split_context = morsel->get_split_context();
     _needs_reopen = true;
+    _scan_audit_counters = ScanAuditCounters{};
     return Status::OK();
 }
 
@@ -334,7 +339,15 @@ void LakeDataSource::release_for_reuse(RuntimeState* state) {
     if (_reader == nullptr) {
         return;
     }
+    // The reused segment iterators stay open across scans; report what this scan read through them.
+    _reader->flush_reusable_iterator_io_stats();
     update_counter(state);
+    {
+        // Kept until reuse(): the chunk source reads them after this release.
+        const auto& stats = _reader->stats();
+        _update_scan_audit_counters(stats.raw_rows_read, stats.rows_del_filtered_after_read,
+                                    stats.remote_bytes_read_with_prepare(), stats.compressed_bytes_read_local_disk);
+    }
     _reader->reset_stats();
     _num_rows_read = 0;
     _raw_rows_read = 0;
@@ -528,6 +541,8 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
             !config::disable_storage_page_cache && _scan_range.fill_data_cache && !_scan_range.skip_page_cache;
     _params.lake_io_opts.fill_data_cache = _scan_range.fill_data_cache;
     _params.lake_io_opts.skip_disk_cache = _scan_range.skip_disk_cache;
+    // Set on the files themselves: some are opened on other threads (parallel segment loads).
+    _params.lake_io_opts.remote_read = query_remote_read_context(_runtime_state);
 
     if (thrift_lake_scan_node.__isset.sorted_by_keys_per_tablet) {
         _params.sorted_by_keys_per_tablet = thrift_lake_scan_node.sorted_by_keys_per_tablet;
@@ -801,6 +816,9 @@ Status LakeDataSource::reopen_reader(RuntimeState* /*state*/) {
 
 void LakeDataSource::apply_child_split_context(const pipeline::LakeSplitContext& split_context,
                                                bool use_prepared_state) {
+    // This shares immutable segment objects, not predicates or prepared row-range caches. It remains
+    // valid when late runtime filters rebuild a CLASSIC reader's query-specific iterators.
+    _params.classic_tablet_read_state = split_context.classic_tablet_read_state;
     if (is_pre_refinement_coarse_split(split_context)) {
         ++_lake_prerefinement_coarse_splits;
     } else if (is_initial_coarse_split(split_context)) {
@@ -1522,6 +1540,21 @@ void LakeDataSource::init_counter(RuntimeState* state) {
             ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareIOCountRemote", TUnit::UNIT, tablet_prepare_name);
     _lake_tablet_prepare_bytes_read_remote_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareBytesReadRemote", TUnit::BYTES, tablet_prepare_name);
+    _lake_tablet_prepare_cached_segments_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareCachedSegments", TUnit::UNIT, tablet_prepare_name);
+    // lake_scan_warm_index: the index pages a query scan started warming once it opened the tablet's segments.
+    _lake_tablet_prepare_warm_index_segments_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareIndexWarmSegments", TUnit::UNIT, tablet_prepare_name);
+    _lake_tablet_prepare_warm_index_ranges_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareIndexWarmRanges", TUnit::UNIT, tablet_prepare_name);
+    _lake_tablet_prepare_warm_index_blocks_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareIndexWarmBlocks", TUnit::UNIT, tablet_prepare_name);
+    _lake_tablet_prepare_warm_index_skipped_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareIndexWarmSkipped", TUnit::UNIT, tablet_prepare_name);
+    _lake_tablet_prepare_warm_index_pruned_segments_counter = ADD_CHILD_COUNTER(
+            _runtime_profile, "TabletPrepareIndexWarmPrunedSegments", TUnit::UNIT, tablet_prepare_name);
+    _lake_tablet_prepare_inline_rowsets_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareInlineRowsets", TUnit::UNIT, tablet_prepare_name);
     _lake_seed_segment_init_timer = ADD_CHILD_TIMER(_runtime_profile, "SeedSegmentInitTime", "SeedPrepareTime");
 
     const std::string seed_vector_index_name = "SeedVectorIndex";
@@ -1597,6 +1630,23 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _prefetch_hit_counter = ADD_CHILD_COUNTER(_runtime_profile, "PrefetchHitCount", TUnit::UNIT, io_statistics_name);
     _prefetch_wait_finish_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchWaitFinishTime", io_statistics_name);
     _prefetch_pending_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchPendingTime", io_statistics_name);
+    _remote_io_queue_wait_timer = ADD_CHILD_TIMER(_runtime_profile, "RemoteIOQueueWaitTime", io_statistics_name);
+    _remote_io_fill_wait_timer = ADD_CHILD_TIMER(_runtime_profile, "RemoteIOFillWaitTime", io_statistics_name);
+    _remote_io_fill_join_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "RemoteIOFillJoinCount", TUnit::UNIT, io_statistics_name);
+    _segment_first_chunk_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "SegmentFirstChunks", TUnit::UNIT, io_statistics_name);
+    _segment_first_chunk_timer = ADD_CHILD_TIMER(_runtime_profile, "SegmentFirstChunkTime", io_statistics_name);
+    _segment_read_ahead_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "SegmentReadAheadStarted", TUnit::UNIT, io_statistics_name);
+    _remote_prefetch_block_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "RemotePrefetchBlocks", TUnit::UNIT, io_statistics_name);
+    _remote_prefetch_rejected_block_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "RemotePrefetchRejectedBlocks", TUnit::UNIT, io_statistics_name);
+    _remote_prefetch_range_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "RemotePrefetchRanges", TUnit::UNIT, io_statistics_name);
+    _remote_prefetch_late_read_ahead_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "RemotePrefetchLateReadAhead", TUnit::UNIT, io_statistics_name);
 }
 
 void LakeDataSource::update_realtime_counter(Chunk* chunk) {
@@ -1604,7 +1654,20 @@ void LakeDataSource::update_realtime_counter(Chunk* chunk) {
     const auto stats = _reader->realtime_stats();
     _raw_rows_read = stats.raw_rows_read;
     _bytes_read = stats.bytes_read;
+    _update_scan_audit_counters(stats.raw_rows_read, stats.rows_del_filtered_after_read, stats.remote_bytes_read,
+                                stats.compressed_bytes_read_local_disk);
     _cpu_time_spent_ns = stats.decompress_ns + stats.vec_cond_ns + stats.del_filter_ns;
+}
+
+// The IO bytes of a segment file reach the reader statistics only when its iterator is closed or flushed, so they
+// are complete once the reader is closed or released. Local disk is the datacache of shared-data.
+void LakeDataSource::_update_scan_audit_counters(int64_t raw_rows_read, int64_t rows_del_filtered_after_read,
+                                                 int64_t remote_bytes, int64_t local_disk_bytes) {
+    _scan_audit_counters.mask = ScanAuditCounters::ROWS_AND_BYTES;
+    _scan_audit_counters.physical_rows = raw_rows_read;
+    _scan_audit_counters.logical_rows = raw_rows_read - rows_del_filtered_after_read;
+    _scan_audit_counters.remote_bytes = remote_bytes;
+    _scan_audit_counters.cache_bytes = local_disk_bytes;
 }
 
 void LakeDataSource::update_counter(RuntimeState* state) {
@@ -1706,6 +1769,16 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_lake_tablet_prepare_io_remote_timer, reader_stats.lake_prepared_tablet_io_remote_ns);
     COUNTER_UPDATE(_lake_tablet_prepare_io_count_remote_counter, reader_stats.lake_prepared_tablet_io_count_remote);
     COUNTER_UPDATE(_lake_tablet_prepare_bytes_read_remote_counter, reader_stats.lake_prepared_tablet_bytes_read_remote);
+    COUNTER_UPDATE(_lake_tablet_prepare_cached_segments_counter, reader_stats.lake_prepared_tablet_cached_segments);
+    COUNTER_UPDATE(_lake_tablet_prepare_warm_index_segments_counter,
+                   reader_stats.lake_prepared_tablet_warm_index_segments);
+    COUNTER_UPDATE(_lake_tablet_prepare_warm_index_ranges_counter, reader_stats.lake_prepared_tablet_warm_index_ranges);
+    COUNTER_UPDATE(_lake_tablet_prepare_warm_index_blocks_counter, reader_stats.lake_prepared_tablet_warm_index_blocks);
+    COUNTER_UPDATE(_lake_tablet_prepare_warm_index_skipped_counter,
+                   reader_stats.lake_prepared_tablet_warm_index_skipped);
+    COUNTER_UPDATE(_lake_tablet_prepare_warm_index_pruned_segments_counter,
+                   reader_stats.lake_prepared_tablet_warm_index_pruned_segments);
+    COUNTER_UPDATE(_lake_tablet_prepare_inline_rowsets_counter, reader_stats.lake_prepared_tablet_inline_rowsets);
     COUNTER_UPDATE(_lake_seed_io_timer, reader_stats.lake_prepared_seed_io_ns);
     COUNTER_UPDATE(_lake_seed_io_count_counter, reader_stats.lake_prepared_seed_io_count);
     COUNTER_UPDATE(_lake_seed_io_remote_timer, reader_stats.lake_prepared_seed_io_remote_ns);
@@ -1813,6 +1886,16 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_prefetch_hit_counter, reader_stats.prefetch_hit_count);
     COUNTER_UPDATE(_prefetch_wait_finish_timer, reader_stats.prefetch_wait_finish_ns);
     COUNTER_UPDATE(_prefetch_pending_timer, reader_stats.prefetch_pending_ns);
+    COUNTER_UPDATE(_remote_io_queue_wait_timer, reader_stats.remote_io_queue_wait_ns);
+    COUNTER_UPDATE(_remote_io_fill_wait_timer, reader_stats.remote_io_fill_wait_ns);
+    COUNTER_UPDATE(_remote_io_fill_join_counter, reader_stats.remote_io_fill_joins);
+    COUNTER_UPDATE(_segment_first_chunk_counter, reader_stats.segment_first_chunks);
+    COUNTER_UPDATE(_segment_first_chunk_timer, reader_stats.segment_first_chunk_ns);
+    COUNTER_UPDATE(_segment_read_ahead_counter, reader_stats.segment_read_ahead_started);
+    COUNTER_UPDATE(_remote_prefetch_block_counter, reader_stats.remote_prefetch_blocks);
+    COUNTER_UPDATE(_remote_prefetch_rejected_block_counter, reader_stats.remote_prefetch_rejected_blocks);
+    COUNTER_UPDATE(_remote_prefetch_range_counter, reader_stats.remote_prefetch_ranges);
+    COUNTER_UPDATE(_remote_prefetch_late_read_ahead_counter, reader_stats.remote_prefetch_late_read_ahead);
 
     // update cache related info for CACHE SELECT
     if (_runtime_state->query_options().__isset.query_type &&

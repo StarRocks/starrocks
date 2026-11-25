@@ -36,6 +36,7 @@
 
 #include <unistd.h>
 
+#include <chrono>
 #include <condition_variable>
 #include <deque>
 #include <list>
@@ -148,6 +149,27 @@ public:
     // Return -1 on shutdown;
     int try_get(T* out) {
         std::unique_lock<Lock> l(_lock);
+        if (!_items.empty()) {
+            if constexpr (std::is_move_assignable<T>::value) {
+                *out = std::move(_items.front());
+            } else {
+                *out = _items.front();
+            }
+            _items.pop_front();
+            _not_full.notify_one();
+            return 1;
+        }
+        return _shutdown ? -1 : 0;
+    }
+
+    // Waits at most `timeout` for an item.
+    // Return 1 on success;
+    // Return 0 on timeout;
+    // Return -1 on shutdown;
+    template <class Rep, class Period>
+    int timed_get(T* out, const std::chrono::duration<Rep, Period>& timeout) {
+        std::unique_lock<Lock> l(_lock);
+        _not_empty.wait_for(l, timeout, [this]() { return !_items.empty() || _shutdown; });
         if (!_items.empty()) {
             if constexpr (std::is_move_assignable<T>::value) {
                 *out = std::move(_items.front());

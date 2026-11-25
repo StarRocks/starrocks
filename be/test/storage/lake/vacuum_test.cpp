@@ -44,7 +44,13 @@
 #include "test_util.h"
 
 #if defined(ADDRESS_SANITIZER)
+// clang's compiler-rt ships this header; gcc's libsanitizer exports the symbol but not the
+// header, so declare it ourselves there.
+#if __has_include(<sanitizer/allocator_interface.h>)
 #include <sanitizer/allocator_interface.h>
+#else
+extern "C" size_t __sanitizer_get_current_allocated_bytes(void);
+#endif
 #elif STARROCKS_ENABLE_JEMALLOC_MEM_HOOK
 #include "jemalloc/jemalloc.h"
 #endif
@@ -7498,6 +7504,111 @@ TEST_P(LakeVacuumTest, test_delete_tablets_deletes_txnlog_data_when_fe_says_not_
 
     EXPECT_FALSE(file_exist(owned));
     EXPECT_FALSE(file_exist(txn_log_filename(900, 7001)));
+}
+
+TEST_P(LakeVacuumTest, test_delete_tablets_statement_vlog_group) {
+    const std::vector<std::string> files = {"00000000011659e4_99dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat",
+                                            "00000000011759e4_aadc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"};
+    for (bool is_range : {false, true}) {
+        TxnLogVector logs;
+        for (const auto& file : files) {
+            create_data_file(file);
+            auto log = std::make_shared<TxnLog>();
+            log->set_tablet_id(900);
+            log->set_txn_id(7002);
+            log->mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename(file);
+            logs.emplace_back(std::move(log));
+        }
+        ASSERT_OK(_tablet_mgr->put_txn_vlog_group(logs, 10));
+        ASSERT_TRUE(file_exist(txn_vlog_group_filename(900, 10)));
+
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(900);
+        request.set_is_range_distribution(is_range);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(0, response.status().status_code()) << response.status().DebugString();
+        EXPECT_FALSE(file_exist(txn_vlog_group_filename(900, 10)));
+        for (const auto& file : files) {
+            EXPECT_EQ(is_range, file_exist(file));
+        }
+    }
+}
+
+// A retry that straddled a writer-flag change can leave a damaged version log next to a valid one in the other
+// format. Whichever of the two is damaged, the drop deletes it without reading it, walks the valid one, and
+// succeeds. With both damaged nothing names the data files, so the drop fails and deletes nothing.
+TEST_P(LakeVacuumTest, test_delete_tablets_damaged_vlog_next_to_valid_counterpart) {
+    // Damaged files fail as written, without dropping cached blocks and reading them again.
+    ConfigResetGuard<bool> clear_cache_guard(&config::lake_clear_corrupted_cache_meta, false);
+    const int64_t tablet_id = 901;
+    const int64_t version = 10;
+    const auto legacy = txn_vlog_filename(tablet_id, version);
+    const auto group = txn_vlog_group_filename(tablet_id, version);
+    const std::vector<std::string> files = {"00000000011859e4_badc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat",
+                                            "00000000011959e4_cadc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"};
+    // Writes the two statements' version log in both formats, then overwrites the |damaged| files.
+    auto put_version_logs = [&](const std::vector<std::string>& damaged) {
+        TxnLogVector statements;
+        auto merged = std::make_shared<TxnLog>();
+        merged->set_tablet_id(tablet_id);
+        merged->set_txn_id(7003);
+        for (const auto& file : files) {
+            // A range-distributed drop keeps the data files of the round before.
+            if (!file_exist(file)) {
+                create_data_file(file);
+            }
+            auto log = std::make_shared<TxnLog>();
+            log->set_tablet_id(tablet_id);
+            log->set_txn_id(7003);
+            log->mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename(file);
+            statements.emplace_back(std::move(log));
+            merged->mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename(file);
+        }
+        ASSERT_OK(_tablet_mgr->put_txn_vlog_group(statements, version));
+        ASSERT_OK(_tablet_mgr->put_txn_vlog(merged, version));
+        ASSERT_TRUE(file_exist(group));
+        ASSERT_TRUE(file_exist(legacy));
+        for (const auto& name : damaged) {
+            WritableFileOptions opts{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+            ASSIGN_OR_ABORT(auto writer, FileSystem::Default()->new_writable_file(
+                                                 opts, join_path(join_path(kTestDir, kTxnLogDirectoryName), name)));
+            ASSERT_OK(writer->append("damaged"));
+            ASSERT_OK(writer->close());
+        }
+    };
+    auto drop = [&](bool is_range) {
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(tablet_id);
+        request.set_is_range_distribution(is_range);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        EXPECT_TRUE(response.has_status());
+        return response.status().status_code();
+    };
+
+    for (bool is_range : {false, true}) {
+        for (const auto& damaged : {group, legacy}) {
+            SCOPED_TRACE(damaged + (is_range ? " range" : " non-range"));
+            ASSERT_NO_FATAL_FAILURE(put_version_logs({damaged}));
+            ASSERT_EQ(0, drop(is_range));
+            EXPECT_FALSE(file_exist(group));
+            EXPECT_FALSE(file_exist(legacy));
+            // A range-distributed tablet keeps its data files: the tablets of a reshard may still read them.
+            for (const auto& file : files) {
+                EXPECT_EQ(is_range, file_exist(file)) << file;
+            }
+        }
+    }
+
+    ASSERT_NO_FATAL_FAILURE(put_version_logs({group, legacy}));
+    EXPECT_NE(0, drop(false));
+    EXPECT_TRUE(file_exist(group));
+    EXPECT_TRUE(file_exist(legacy));
+    for (const auto& file : files) {
+        EXPECT_TRUE(file_exist(file)) << file;
+    }
 }
 
 // An older FE does not send the field at all. BE then falls back to what it did before: the answer comes

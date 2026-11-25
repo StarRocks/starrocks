@@ -32,6 +32,7 @@
 namespace starrocks {
 
 class AggStateDesc;
+struct GeoTypeDescriptor;
 
 class Field {
 public:
@@ -157,6 +158,7 @@ public:
     ColumnId id() const { return _id; }
     std::string_view name() const { return {_name.data(), _name.size()}; }
     const TypeInfoPtr& type() const { return _type; }
+    const GeoTypeDescriptor* geo_descriptor() const;
 
     bool is_nullable() const;
 
@@ -177,8 +179,6 @@ public:
     void set_aggregate_method(StorageAggregateType agg_method) { _agg_method = agg_method; }
 
     starrocks::StorageAggregateType aggregate_method() const { return _agg_method; }
-
-    FieldPtr convert_to(LogicalType to_type) const;
 
     void add_sub_field(const Field& sub_field);
 

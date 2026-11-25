@@ -166,6 +166,43 @@ public class MaterializedViewAnalyzerTest {
     }
 
     @Test
+    public void testCreatePartitionedMvOnExternalTableReferencedWithUpperCase() throws Exception {
+        // Hive/Glue-backed tables are named in lower case; the query may spell them otherwise.
+        String[] froms = {
+                "iceberg0.partitioned_db.T1",
+                "iceberg0.PARTITIONED_DB.t1",
+                "(SELECT id, data, date FROM iceberg0.partitioned_db.T1) s",
+                "hive0.partitioned_db.T1",
+        };
+        for (String from : froms) {
+            boolean iceberg = from.contains("iceberg0");
+            String partCol = iceberg ? "date" : "par_col";
+            String cols = iceberg ? "id, data, date" : "c1, c2, par_col";
+            String mvName = "mv_upper_case_ref";
+            starRocksAssert.useDatabase("test")
+                    .withMaterializedView("CREATE MATERIALIZED VIEW test." + mvName + "\n" +
+                            "PARTITION BY " + partCol + "\n" +
+                            "DISTRIBUTED BY HASH(" + (iceberg ? "id" : "c1") + ") BUCKETS 10\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "AS SELECT " + cols + " FROM " + from);
+            MaterializedView mv = (MaterializedView) starRocksAssert.getTable("test", mvName);
+            Assertions.assertNotNull(mv, from);
+            Assertions.assertFalse(mv.getPartitionExprMaps().isEmpty(), from);
+            starRocksAssert.dropMaterializedView(mvName);
+        }
+
+        String windowMv = "CREATE MATERIALIZED VIEW test.mv_upper_case_window\n" +
+                "PARTITION BY date\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "AS SELECT id, date, row_number() over (%s) AS rn FROM iceberg0.partitioned_db.T1";
+        starRocksAssert.withMaterializedView(String.format(windowMv, "partition by date order by id"));
+        starRocksAssert.dropMaterializedView("mv_upper_case_window");
+        analyzeFail(String.format(windowMv, "order by id"),
+                "should contain the partition column date of materialized view");
+    }
+
+    @Test
     public void testCreateIcebergTable2WithAdaptive() throws Exception {
         String mvName = "iceberg_parttbl_mv1";
         starRocksAssert.useDatabase("test")
@@ -222,7 +259,7 @@ public class MaterializedViewAnalyzerTest {
                 .withMaterializedView("CREATE MATERIALIZED VIEW `mv1` (a comment \"a1\", b comment \"b2\", c)\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "DISTRIBUTED BY HASH(a) BUCKETS 12\n" +
-                        "REFRESH ASYNC\n" +
+                        "REFRESH ON_CHANGE\n" +
                         "PROPERTIES (\n" +
                         "\"compression\" = \"zstd\",\n" +
                         "\"replication_num\" = \"1\",\n" +
@@ -397,7 +434,7 @@ public class MaterializedViewAnalyzerTest {
 
             // Not supported
             String mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
-                    "REFRESH ASYNC " +
+                    "REFRESH ON_CHANGE " +
                     "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
                     "PROPERTIES(\n" +
                     "  \"partition_refresh_number\" = \"4\")\n" +
@@ -414,7 +451,7 @@ public class MaterializedViewAnalyzerTest {
 
             // Not supported: with subquery
             mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
-                    "REFRESH ASYNC \n" +
+                    "REFRESH ON_CHANGE \n" +
                     "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
                     "PROPERTIES(\n" + "  \"partition_refresh_number\" = \"4\")\n" +
                     "AS\n" +
@@ -432,7 +469,7 @@ public class MaterializedViewAnalyzerTest {
 
             // Supported: with subquery
             mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
-                    "REFRESH ASYNC \n" +
+                    "REFRESH ON_CHANGE \n" +
                     "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
                     "PROPERTIES(\n" + "  \"partition_refresh_number\" = \"4\")\n" +
                     "AS\n" +
@@ -448,7 +485,7 @@ public class MaterializedViewAnalyzerTest {
 
             // Not supported: with CTE
             mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
-                    "REFRESH ASYNC \n" +
+                    "REFRESH ON_CHANGE \n" +
                     "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
                     "PROPERTIES(\n" + "  \"partition_refresh_number\" = \"4\")\n" +
                     "AS\n" +
@@ -467,7 +504,7 @@ public class MaterializedViewAnalyzerTest {
 
             // Supported: with CTE
             mvSql = "CREATE MATERIALIZED VIEW denorm_mv_root_order\n" +
-                    "REFRESH ASYNC \n" +
+                    "REFRESH ON_CHANGE \n" +
                     "PARTITION BY date_trunc('day', sequence_timestamp)\n" +
                     "PROPERTIES(\n" + "  \"partition_refresh_number\" = \"4\")\n" +
                     "AS\n" +

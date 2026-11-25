@@ -20,6 +20,7 @@
 #include <unordered_set>
 
 #include "base/debug/trace.h"
+#include "base/phmap/phmap.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/datum_convert.h"
@@ -78,6 +79,37 @@ static SegmentReadStateCache make_segment_read_state_cache(const PreparedSegment
     return cache;
 }
 
+// The schema that rowset |rowset_index| of |tablet_metadata| was written with: the historical schema that
+// rowset_to_schema maps it to, or else the tablet schema.
+static const TabletSchemaPB& rowset_schema_pb(const TabletMetadataPB& tablet_metadata, int rowset_index) {
+    const auto& rowset_to_schema = tablet_metadata.rowset_to_schema();
+    auto it = rowset_to_schema.find(tablet_metadata.rowsets(rowset_index).id());
+    if (it == rowset_to_schema.end()) {
+        return tablet_metadata.schema();
+    }
+    auto schema_it = tablet_metadata.historical_schemas().find(it->second);
+    CHECK(schema_it != tablet_metadata.historical_schemas().end());
+    return schema_it->second;
+}
+
+std::vector<RowsetPtr> Rowset::get_rowsets(TabletManager* tablet_mgr, const TabletMetadataPtr& tablet_metadata) {
+    std::vector<RowsetPtr> rowsets;
+    rowsets.reserve(tablet_metadata->rowsets_size());
+    // Reuse the lookup result for each exact schema in this metadata snapshot. Key by address to keep different
+    // protobufs separate even when they share a schema id.
+    phmap::flat_hash_map<const TabletSchemaPB*, TabletSchemaPtr> schemas;
+    for (int i = 0, size = tablet_metadata->rowsets_size(); i < size; ++i) {
+        const TabletSchemaPB* schema_pb = &rowset_schema_pb(*tablet_metadata, i);
+        auto [it, inserted] = schemas.try_emplace(schema_pb);
+        if (inserted) {
+            it->second = GlobalTabletSchemaMap::Instance()->emplace(*schema_pb).first;
+        }
+        rowsets.emplace_back(
+                std::make_shared<Rowset>(tablet_mgr, tablet_metadata, i, 0 /* compaction_segment_limit */, it->second));
+    }
+    return rowsets;
+}
+
 Rowset::Rowset(TabletManager* tablet_mgr, int64_t tablet_id, const RowsetMetadataPB* metadata, int index,
                TabletSchemaPtr tablet_schema)
         : _tablet_mgr(tablet_mgr),
@@ -89,23 +121,18 @@ Rowset::Rowset(TabletManager* tablet_mgr, int64_t tablet_id, const RowsetMetadat
           _compaction_segment_limit(0) {}
 
 Rowset::Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index,
-               size_t compaction_segment_limit)
+               size_t compaction_segment_limit, TabletSchemaPtr tablet_schema)
         : _tablet_mgr(tablet_mgr),
           _tablet_id(tablet_metadata->id()),
           _metadata(&tablet_metadata->rowsets(rowset_index)),
           _index(rowset_index),
+          _tablet_schema(std::move(tablet_schema)),
           _tablet_metadata(std::move(tablet_metadata)),
           _parallel_load(config::enable_load_segment_parallel),
           _compaction_segment_limit(0) {
-    auto rowset_id = _tablet_metadata->rowsets(rowset_index).id();
-    if (_tablet_metadata->rowset_to_schema().empty() ||
-        _tablet_metadata->rowset_to_schema().find(rowset_id) == _tablet_metadata->rowset_to_schema().end()) {
-        _tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first;
-    } else {
-        auto schema_id = _tablet_metadata->rowset_to_schema().at(rowset_id);
-        CHECK(_tablet_metadata->historical_schemas().count(schema_id) > 0);
+    if (_tablet_schema == nullptr) {
         _tablet_schema =
-                GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->historical_schemas().at(schema_id)).first;
+                GlobalTabletSchemaMap::Instance()->emplace(rowset_schema_pb(*_tablet_metadata, rowset_index)).first;
     }
 
     // if segments are loaded in parallel, can not perform partial compaction, since
@@ -569,8 +596,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
 
     // Check if segment metadata filter can be used.
     // Apply metadata filter BEFORE loading segments to avoid loading unnecessary segment footers.
-    bool use_metadata_filter = config::enable_lake_segment_metadata_filter && metadata().segment_metas_size() > 0 &&
-                               !options.pred_tree_for_zone_map.empty() && options.tablet_schema != nullptr;
+    bool use_metadata_filter =
+            SegmentMetadataFilter::filter_tree(options) != nullptr && metadata().segment_metas_size() > 0;
 
     std::unordered_set<int> skip_segment_idxs;
     if (use_metadata_filter) {
@@ -709,7 +736,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
             }
         }
     }
-    if (segment_iterators.size() > 1 && !is_overlapped()) {
+    if (segment_iterators.size() > 1 && !is_overlapped() && options.union_segments) {
         // union non-overlapped segment iterators
         auto iter = new_union_iterator(std::move(segment_iterators));
         return std::vector<ChunkIteratorPtr>{iter};
@@ -775,7 +802,8 @@ StatusOr<size_t> Rowset::get_read_iterator_num() {
 }
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const Schema& schema, bool file_data_cache,
-                                                                          OlapReaderStatistics* stats) {
+                                                                          OlapReaderStatistics* stats,
+                                                                          size_t chunk_size) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_us");
     std::vector<LoadedSegment> segments;
     RETURN_IF_ERROR(load_segments(&segments, file_data_cache));
@@ -790,6 +818,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
     SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(root_loc));
     seg_options.stats = stats;
+    if (chunk_size > 0) {
+        seg_options.chunk_size = chunk_size;
+    }
 
     ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
 
@@ -846,7 +877,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_delvec(
         const Schema& schema, int64_t version, const MetaFileBuilder* builder, OlapReaderStatistics* stats,
         const std::vector<SparseRangePtr>* rowid_range_per_segment,
-        const std::vector<OlapReaderStatistics*>* per_segment_stats) {
+        const std::vector<OlapReaderStatistics*>* per_segment_stats, const TabletMetadataPtr& delvec_metadata) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_iterator_with_delvec_us");
     std::vector<LoadedSegment> segments;
     {
@@ -866,12 +897,17 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     seg_options.lake_io_opts.fs = seg_options.fs;
     seg_options.lake_io_opts.location_provider = _tablet_mgr->location_provider();
     seg_options.is_primary_keys = true;
-    // The caller already supplied the complete tablet metadata used to build this rowset. Reuse it
-    // for delvec lookup instead of reading the same version back from object storage. This is
-    // required by aggregate publish: query-parent synthesis flushes child PK indexes before the
-    // new-version bundle has been persisted, so that version exists only in the RPC response here.
-    seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet_mgr, builder, true /*fill cache*/,
-                                                                   seg_options.lake_io_opts, _tablet_metadata);
+    // Hand the delvec loader the metadata to read the delete vectors from, so that it does not read |version|
+    // back from object storage for every segment: the caller's |delvec_metadata|, else the complete tablet
+    // metadata this rowset was built from. Aggregate publish needs the latter: query-parent synthesis flushes
+    // child PK indexes before the new-version bundle has been persisted, so that version exists only in the
+    // RPC response here. The loader reads |version| back only when the metadata it holds is not this tablet at
+    // |version|.
+    DCHECK(delvec_metadata == nullptr ||
+           (delvec_metadata->id() == tablet_id() && delvec_metadata->version() == version));
+    seg_options.delvec_loader =
+            std::make_shared<LakeDelvecLoader>(_tablet_mgr, builder, true /*fill cache*/, seg_options.lake_io_opts,
+                                               delvec_metadata != nullptr ? delvec_metadata : _tablet_metadata);
     seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
     seg_options.idg_loader = std::make_shared<LakeIndexDeltaGroupLoader>(_tablet_metadata);
     seg_options.version = version;
@@ -975,6 +1011,17 @@ StatusOr<std::vector<SegmentSharedPtr>> Rowset::get_segments_checked(const LakeI
         refresh_held_segments_bytes_locked();
     }
     return _segments;
+}
+
+Status Rowset::set_segments_for_split(const std::vector<SegmentPtr>& segments) {
+    if (!can_hold_segments() || segments.size() != static_cast<size_t>(num_segments())) {
+        return Status::InvalidArgument("CLASSIC split requires a full metadata-ordered segment set");
+    }
+    std::lock_guard<std::mutex> l(_held_segments_mutex);
+    _segments = segments;
+    _segments_loaded = true;
+    refresh_held_segments_bytes_locked();
+    return Status::OK();
 }
 
 std::vector<SegmentSharedPtr> Rowset::get_segments() {
@@ -1128,17 +1175,17 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
     for (auto& ls : loaded) {
         segments.emplace_back(std::move(ls.segment));
     }
-    if (!effective_opts.hold_segments) {
+    if (!can_hold_segments()) {
         return segments;
     }
-    // read() feeds the held set through the prepared-segments path, which derives each segment's
-    // metadata position from its index in the vector. load_segments() appends in metadata order
-    // except when a parallel-load submit falls back to a serial load mid-loop
-    // (enable_load_segment_parallel): that segment lands ahead of the futures still pending.
-    // can_hold_segments() has already ruled out the partial-compaction and segment-range modes, so
-    // the loaded positions here are exactly [0, size) and reordering by segment_meta_pos restores
-    // the invariant. Anything else is unexpected: hold nothing, so read() keeps loading per read
-    // rather than indexing a set whose positions it cannot trust.
+    // The prepared-segments path of read() -- a held set, or the segments a tablet reader opened
+    // up front -- derives each segment's metadata position from its index in the vector.
+    // load_segments() appends in metadata order except when a parallel-load submit falls back to a
+    // serial load mid-loop (enable_load_segment_parallel): that segment lands ahead of the futures
+    // still pending. can_hold_segments() has ruled out the partial-compaction and segment-range
+    // modes, so the loaded positions here are exactly [0, size) and reordering by segment_meta_pos
+    // restores the invariant. Anything else is unexpected: hold nothing, so read() keeps loading per
+    // read rather than indexing a set whose positions it cannot trust.
     std::vector<SegmentPtr> ordered(segments.size());
     for (size_t i = 0; i < loaded.size(); i++) {
         const int32_t pos = loaded[i].segment_meta_pos;
@@ -1148,6 +1195,9 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
             return segments;
         }
         ordered[pos] = segments[i];
+    }
+    if (!effective_opts.hold_segments) {
+        return ordered;
     }
     std::lock_guard<std::mutex> l(_held_segments_mutex);
     // Loading runs outside the lock. A fallback during IO must also prevent publication, while
@@ -1165,6 +1215,56 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
     return _held_segments;
 }
 
+FileInfo Rowset::segment_file_info(int32_t segment_meta_pos, const LakeIOOptions& lake_io_opts,
+                                   std::shared_ptr<FileSystem> fs) const {
+    const auto& segment_meta = metadata().segment_metas(segment_meta_pos);
+    const auto& seg_name = segment_meta.filename();
+    std::string segment_path;
+    if (lake_io_opts.location_provider) {
+        segment_path = lake_io_opts.location_provider->segment_location(tablet_id(), seg_name);
+    } else {
+        segment_path = _tablet_mgr->segment_location(tablet_id(), seg_name);
+    }
+    auto segment_info = FileInfo{.path = segment_path, .fs = std::move(fs)};
+    // RowsetMetaData upgraded from an old version may not have per-segment size.
+    if (LIKELY(segment_meta.has_size())) {
+        segment_info.size = segment_meta.size();
+    }
+    if (segment_meta.has_bundle_file_offset()) {
+        segment_info.bundle_file_offset = segment_meta.bundle_file_offset();
+    }
+    if (segment_meta.has_encryption_meta()) {
+        segment_info.encryption_meta = segment_meta.encryption_meta();
+    }
+    return segment_info;
+}
+
+SegmentPtr Rowset::lookup_opened_segment_at(int32_t segment_meta_pos, const LakeIOOptions& lake_io_opts) const {
+    if (!can_hold_segments() || lake_io_opts.hold_segments) {
+        return nullptr;
+    }
+    return _tablet_mgr->lookup_opened_segment(segment_file_info(segment_meta_pos, lake_io_opts, nullptr),
+                                              _tablet_schema);
+}
+
+StatusOr<SegmentPtr> Rowset::load_segment_at(int32_t segment_meta_pos, const LakeIOOptions& lake_io_opts,
+                                             OlapReaderStatistics* stats) {
+    DCHECK(can_hold_segments());
+    auto segment_info = segment_file_info(segment_meta_pos, lake_io_opts, nullptr);
+    const uint32_t segment_id = get_segment_idx(metadata(), segment_meta_pos);
+    auto segment_or = _tablet_mgr->load_segment(segment_info, segment_id, lake_io_opts,
+                                                lake_io_opts.fill_metadata_cache, _tablet_schema, stats);
+    if (segment_or.status().is_not_found() && config::experimental_lake_ignore_lost_segment) {
+        LOG(WARNING) << "Ignored lost segment " << segment_info.path;
+        return SegmentPtr();
+    }
+    if (!segment_or.ok()) {
+        return segment_or.status().clone_and_prepend(fmt::format("load_segment failed tablet:{} rowset:{} segid:{}",
+                                                                 _tablet_id, metadata().id(), segment_id));
+    }
+    return segment_or;
+}
+
 // Adds the fields Segment::open fills to |to|.
 static void add_segment_open_stats(const OlapReaderStatistics& from, OlapReaderStatistics* to) {
     to->segments_opened += from.segments_opened;
@@ -1177,6 +1277,7 @@ static void add_segment_open_stats(const OlapReaderStatistics& from, OlapReaderS
     to->io_count_remote += from.io_count_remote;
     to->io_ns_read_local_disk += from.io_ns_read_local_disk;
     to->io_ns_remote += from.io_ns_remote;
+    to->add_remote_io_waits(from);
 }
 
 Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size) {
@@ -1307,24 +1408,11 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
             continue;
         }
 
-        std::string segment_path;
         auto lake_io_opts = seg_options.lake_io_opts;
-        if (lake_io_opts.location_provider) {
-            segment_path = lake_io_opts.location_provider->segment_location(tablet_id(), seg_name);
-        } else {
-            segment_path = _tablet_mgr->segment_location(tablet_id(), seg_name);
-        }
-        auto segment_info = FileInfo{.path = segment_path, .fs = seg_options.fs};
-        // RowsetMetaData upgraded from an old version may not have per-segment size.
-        if (LIKELY(segment_meta.has_size())) {
-            segment_info.size = segment_meta.size();
-        }
-        if (segment_meta.has_bundle_file_offset()) {
-            segment_info.bundle_file_offset = segment_meta.bundle_file_offset();
-        }
-        if (segment_meta.has_encryption_meta()) {
-            segment_info.encryption_meta = segment_meta.encryption_meta();
-        }
+        // A parallel load opens the segment on the load segment pool, where the caller's scoped remote read context
+        // does not reach: take it along explicitly.
+        lake_io_opts.remote_read = ScopedRemoteReadContext::or_current(lake_io_opts.remote_read);
+        auto segment_info = segment_file_info(index, lake_io_opts, seg_options.fs);
 
         if (_parallel_load) {
             int captured_idx = current_idx;
@@ -1352,10 +1440,15 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
             });
 
             auto packaged_func = [task]() { (*task)(); };
-            if (auto st = RuntimeEnv::GetInstance()->load_segment_thread_pool()->submit_func(std::move(packaged_func));
-                !st.ok()) {
+            Status submit_st;
+            TEST_SYNC_POINT_CALLBACK("Rowset::load_segments::submit", &submit_st);
+            if (submit_st.ok()) {
+                submit_st =
+                        RuntimeEnv::GetInstance()->load_segment_thread_pool()->submit_func(std::move(packaged_func));
+            }
+            if (!submit_st.ok()) {
                 // try load segment serially
-                LOG(WARNING) << "sumbit_func failed: " << st.code_as_string()
+                LOG(WARNING) << "sumbit_func failed: " << submit_st.code_as_string()
                              << ", try to load segment serially, seg_id: " << segment_id;
                 auto segment_or =
                         _tablet_mgr->load_segment(segment_info, segment_id, &footer_size_hint, lake_io_opts,

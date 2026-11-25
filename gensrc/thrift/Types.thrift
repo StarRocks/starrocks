@@ -125,12 +125,6 @@ enum TGeoLogicalType {
     GEOMETRY = 2
 }
 
-enum TGeoCoordinateSystem {
-    UNKNOWN = 0,
-    SPHERICAL = 1,
-    CARTESIAN = 2
-}
-
 enum TGeoEdgeAlgorithm {
     UNKNOWN = 0,
     SPHERICAL = 1,
@@ -144,10 +138,9 @@ enum TGeoEdgeAlgorithm {
 // Semantic and physical metadata for native geo types.
 struct TGeoTypeDesc {
     1: optional TGeoLogicalType logical_type
-    2: optional TGeoCoordinateSystem coordinate_system
-    3: optional TGeoEdgeAlgorithm edge_algorithm
-    4: optional string crs
-    5: optional i32 srid
+    2: optional TGeoEdgeAlgorithm edge_algorithm
+    3: optional string crs
+    4: optional i32 srid
 }
 
 struct TScalarType {
@@ -587,6 +580,9 @@ struct TUserIdentity {
     3: optional bool is_domain
     4: optional bool is_ephemeral
     5: optional TUserRoles current_role_ids
+    // The groups of the session (directory memberOf, token claims, group providers), so that an FE rebuilding the
+    // caller from this identity also grants the roles mapped to those groups.
+    6: optional list<string> groups
 }
 
 const i32 TSNAPSHOT_REQ_VERSION1 = 3; // corresponding to alpha rowset
@@ -698,6 +694,21 @@ struct THiveFileInfo {
     5: optional i64 file_size_in_bytes
 }
 
+// One producer's final PrepareCommit result. The SDK version is separate from
+// SerializeList's binary payload; producer identity also covers an empty result.
+struct TPaimonCommitInfo {
+    1: optional string operation_id
+    2: optional string producer_id
+    3: optional i32 attempt_id
+    4: optional i32 serializer_version
+    5: optional binary commit_messages
+    6: optional i64 schema_id
+    7: optional string table_identity
+    8: optional i64 row_count
+    9: optional list<string> owned_files
+    10: optional bool prepare_complete
+}
+
 // Extension point for TSinkCommitInfo. DO NOT MODIFY: do not add fields here,
 // and do not rename, renumber or remove it. The field numbers inside are
 // allocated separately, so anything added here collides with them, and
@@ -709,6 +720,7 @@ struct TSinkCommitInfoExt {
 struct TSinkCommitInfo {
     1: optional TIcebergDataFile iceberg_data_file
     2: optional THiveFileInfo hive_file_info
+    3: optional TPaimonCommitInfo paimon_commit_info
     // ... for other tables sink commit info
 
     100: optional bool is_overwrite;

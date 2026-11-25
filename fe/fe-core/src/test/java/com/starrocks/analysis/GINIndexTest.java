@@ -19,7 +19,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
@@ -61,7 +60,6 @@ public class GINIndexTest extends PlanTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
-        Config.enable_experimental_gin = true;
         PlanTestBase.beforeClass();
         starRocksAssert.withTable("CREATE TABLE `test_index_tbl` (\n" +
                 "  `f1` int NOT NULL COMMENT \"\",\n" +

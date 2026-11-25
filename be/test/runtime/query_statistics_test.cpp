@@ -229,4 +229,121 @@ TEST_F(QueryStatisticsTest, AIStatisticsUsageRequiresValidTokenAndCoveragePair) 
     EXPECT_EQ(0, result.ai_statistics().total_tokens());
 }
 
+namespace {
+
+const PerScanStatsItemPB* find_per_scan_item(const PQueryStatistics& ps, int32_t plan_node_id) {
+    for (const auto& item : ps.per_scan_stats_items()) {
+        if (item.plan_node_id() == plan_node_id) {
+            return &item;
+        }
+    }
+    return nullptr;
+}
+
+ScanAuditCounters make_counters(uint32_t mask, int64_t physical, int64_t logical, int64_t output, int64_t remote,
+                                int64_t cache) {
+    ScanAuditCounters c;
+    c.mask = mask;
+    c.physical_rows = physical;
+    c.logical_rows = logical;
+    c.output_rows = output;
+    c.remote_bytes = remote;
+    c.cache_bytes = cache;
+    return c;
+}
+
+} // namespace
+
+TEST_F(QueryStatisticsTest, PerScanStatsKeepScansApartAndSetOnlyTrackedCounters) {
+    QueryStatistics s;
+    constexpr uint32_t all = ScanAuditCounters::ROWS_AND_BYTES | ScanAuditCounters::OUTPUT_ROWS;
+    // Two scans of the same table stay apart: they are keyed by plan node id.
+    s.add_per_scan_stats(3, make_counters(all, 10, 8, 5, 100, 20));
+    s.add_per_scan_stats(3, make_counters(all, 1, 1, 1, 10, 2));
+    s.add_per_scan_stats(7, make_counters(ScanAuditCounters::OUTPUT_ROWS, 0, 0, 4, 0, 0));
+    // An empty delta adds no item.
+    s.add_per_scan_stats(9, ScanAuditCounters{});
+
+    PQueryStatistics ps;
+    s.to_pb(&ps);
+    ASSERT_EQ(2, ps.per_scan_stats_items_size());
+    // Per scan counters leave the query level scan counters alone.
+    EXPECT_EQ(0, ps.scan_rows());
+    const auto* scan3 = find_per_scan_item(ps, 3);
+    ASSERT_NE(nullptr, scan3);
+    EXPECT_EQ(11, scan3->physical_rows_read());
+    EXPECT_EQ(9, scan3->logical_rows_read());
+    EXPECT_EQ(6, scan3->output_rows());
+    EXPECT_EQ(110, scan3->remote_bytes());
+    EXPECT_EQ(22, scan3->cache_bytes());
+    const auto* scan7 = find_per_scan_item(ps, 7);
+    ASSERT_NE(nullptr, scan7);
+    EXPECT_TRUE(scan7->has_output_rows());
+    EXPECT_EQ(4, scan7->output_rows());
+    EXPECT_FALSE(scan7->has_physical_rows_read());
+    EXPECT_FALSE(scan7->has_logical_rows_read());
+    EXPECT_FALSE(scan7->has_remote_bytes());
+    EXPECT_FALSE(scan7->has_cache_bytes());
+
+    TAuditStatistics params;
+    s.to_params(&params);
+    ASSERT_TRUE(params.__isset.per_scan_stats_items);
+    ASSERT_EQ(2, params.per_scan_stats_items.size());
+    for (const auto& item : params.per_scan_stats_items) {
+        if (item.plan_node_id == 3) {
+            EXPECT_EQ(11, item.physical_rows_read);
+            EXPECT_EQ(22, item.cache_bytes);
+        } else {
+            EXPECT_EQ(7, item.plan_node_id);
+            EXPECT_TRUE(item.__isset.output_rows);
+            EXPECT_FALSE(item.__isset.physical_rows_read);
+        }
+    }
+
+    // merge_pb sums the same plan node and keeps which counters are set.
+    QueryStatistics receiver;
+    receiver.merge_pb(ps);
+    receiver.merge_pb(ps);
+    PQueryStatistics merged;
+    receiver.to_pb(&merged);
+    ASSERT_EQ(2, merged.per_scan_stats_items_size());
+    EXPECT_EQ(22, find_per_scan_item(merged, 3)->physical_rows_read());
+    EXPECT_EQ(8, find_per_scan_item(merged, 7)->output_rows());
+    EXPECT_FALSE(find_per_scan_item(merged, 7)->has_physical_rows_read());
+}
+
+TEST_F(QueryStatisticsTest, PerScanStatsMergeConsumesTheSender) {
+    QueryStatistics sender;
+    sender.add_per_scan_stats(1, make_counters(ScanAuditCounters::PHYSICAL_ROWS, 5, 0, 0, 0, 0));
+    QueryStatistics receiver;
+    receiver.add_per_scan_stats(1, make_counters(ScanAuditCounters::LOGICAL_ROWS, 0, 4, 0, 0, 0));
+    receiver.merge(0, sender);
+
+    PQueryStatistics ps;
+    receiver.to_pb(&ps);
+    ASSERT_EQ(1, ps.per_scan_stats_items_size());
+    EXPECT_EQ(5, ps.per_scan_stats_items(0).physical_rows_read());
+    EXPECT_EQ(4, ps.per_scan_stats_items(0).logical_rows_read());
+
+    PQueryStatistics drained;
+    sender.to_pb(&drained);
+    EXPECT_EQ(0, drained.per_scan_stats_items_size());
+
+    receiver.clear();
+    PQueryStatistics cleared;
+    receiver.to_pb(&cleared);
+    EXPECT_EQ(0, cleared.per_scan_stats_items_size());
+}
+
+TEST_F(QueryStatisticsTest, ScanAuditCountersDeltaNeverGoesNegative) {
+    ScanAuditCounters prev = make_counters(ScanAuditCounters::ROWS_AND_BYTES, 10, 10, 0, 100, 50);
+    ScanAuditCounters now = make_counters(ScanAuditCounters::ROWS_AND_BYTES, 4, 12, 0, 120, 50);
+    ScanAuditCounters d = ScanAuditCounters::delta(now, prev);
+    EXPECT_EQ(ScanAuditCounters::ROWS_AND_BYTES, d.mask);
+    EXPECT_EQ(0, d.physical_rows);
+    EXPECT_EQ(2, d.logical_rows);
+    EXPECT_EQ(20, d.remote_bytes);
+    EXPECT_EQ(0, d.cache_bytes);
+}
+
 } // namespace starrocks

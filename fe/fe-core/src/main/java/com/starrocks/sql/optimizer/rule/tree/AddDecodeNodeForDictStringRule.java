@@ -82,6 +82,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
+import java.util.function.LongPredicate;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.ast.expression.BinaryType.EQ_FOR_NULL;
@@ -487,6 +488,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                                     scanOperator.getProjection(), scanOperator.isUsePkIndex(),
                                     scanOperator.getVectorSearchOptions());
                     newOlapScan.setParallelRangeScan(scanOperator.isParallelRangeScan());
+                    newOlapScan.setGroupedRangeScan(scanOperator.isGroupedRangeScan());
+                    newOlapScan.setOrderedPhysicalCUniqueIds(scanOperator.getOrderedPhysicalCUniqueIds());
                     newOlapScan.setScanOptimizeOption(scanOperator.getScanOptimizeOption());
                     newOlapScan.setPreAggregation(scanOperator.isPreAggregation());
                     newOlapScan.setGlobalDicts(globalDicts);
@@ -502,7 +505,12 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                                     context.stringColumnIdToDictColumnIds))
                             .setStatistics(optExpression.getStatistics())
                             .setCost(optExpression.getCost());
-                    return visitProjectionAfter(builder.build(), context);
+                    OptExpression rewritten = builder.build();
+                    if (scanOperator.isGroupedRangeScan()) {
+                        // Dictionary encoding leaves the numeric grouping columns and their ownership unchanged.
+                        rewritten.setOutputProperty(optExpression.getOutputProperty());
+                    }
+                    return visitProjectionAfter(rewritten, context);
                 }
             }
             return visitProjectionAfter(optExpression, context);
@@ -970,6 +978,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             if (table.inputHasTempPartition(scanOperator.getSelectedPartitionId())) {
                 continue;
             }
+            List<Pair<ColumnRefOperator, ColumnDict>> dictColumns = Lists.newArrayList();
             for (ColumnRefOperator column : scanOperator.getColRefToColumnMetaMap().keySet()) {
                 // Condition 1:
                 if (!column.getType().isVarchar()) {
@@ -1007,16 +1016,28 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     if (!dict.isPresent()) {
                         continue;
                     }
-                    globalDictCache.put(new Pair<>(table.getId(), column.getName()), dict.get());
-                    if (!tableIdToStringColumnIds.containsKey(table.getId())) {
-                        Set<Integer> integers = Sets.newHashSet();
-                        integers.add(column.getId());
-                        tableIdToStringColumnIds.put(table.getId(), integers);
-                    } else {
-                        tableIdToStringColumnIds.get(table.getId()).add(column.getId());
-                    }
+                    dictColumns.add(new Pair<>(column, dict.get()));
                 } else {
                     LOG.debug("{} doesn't have global dict", column.getName());
+                }
+            }
+
+            // As in DecodeCollector: the scan reads the versions the table copy recorded, and a dict collected from a
+            // newer state may lack a value they hold. Tested once every dict is fetched, against every partition the
+            // copy recorded: each scan of the table gets the dict accepted last (globalDictCache).
+            LongPredicate copyOlderThan = table.planningCopyOlderThan(null);
+            for (Pair<ColumnRefOperator, ColumnDict> dictColumn : dictColumns) {
+                ColumnRefOperator column = dictColumn.first;
+                if (copyOlderThan.test(dictColumn.second.getCollectedVersion())) {
+                    continue;
+                }
+                globalDictCache.put(new Pair<>(table.getId(), column.getName()), dictColumn.second);
+                if (!tableIdToStringColumnIds.containsKey(table.getId())) {
+                    Set<Integer> integers = Sets.newHashSet();
+                    integers.add(column.getId());
+                    tableIdToStringColumnIds.put(table.getId(), integers);
+                } else {
+                    tableIdToStringColumnIds.get(table.getId()).add(column.getId());
                 }
             }
         }

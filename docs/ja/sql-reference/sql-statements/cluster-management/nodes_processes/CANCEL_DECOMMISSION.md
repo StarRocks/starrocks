@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ノードのデコミッションを取り消します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CANCEL DECOMMISSION

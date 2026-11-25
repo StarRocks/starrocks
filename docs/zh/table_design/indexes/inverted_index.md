@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "How to create and use full-text inverted indexes in StarRocks to accelerate text keyword searches by indexing individual words."
 toc_max_heading_level: 4
 sidebar_position: 50
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
@@ -28,12 +29,6 @@ StarRocks 将其底层数据存储在按列组织的数据文件中。每个数�
 ## 基本操作
 
 ### 创建全文倒排索引
-
-在创建全文倒排索引之前，需要启用 FE 配置项 `enable_experimental_gin`。
-
-```sql
-ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
-```
 
 :::note
 在为表创建全文倒排索引时，必须禁用该表的 `replicated_storage` 功能。

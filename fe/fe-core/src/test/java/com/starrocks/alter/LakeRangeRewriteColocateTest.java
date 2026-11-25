@@ -461,7 +461,8 @@ public class LakeRangeRewriteColocateTest {
     private static void mockRequestedTabletCount(int tabletCount) {
         new MockUp<LakeOnlineRewriteJobBase>() {
             @Mock
-            int selectRequestedTabletCount(LakeOnlineRewriteJobBase.PendingPartitionPlan plan, int activeComputeNodeCount) {
+            int selectRequestedTabletCount(LakeOnlineRewriteJobBase.PendingPartitionPlan plan, int activeComputeNodeCount,
+                                           long targetSize) {
                 return tabletCount;
             }
         };
@@ -543,8 +544,6 @@ public class LakeRangeRewriteColocateTest {
 
     /** Runs a WAITING_TXN job to RUNNING: the loads before the watershed are reported finished. */
     private static void runWaitingTxnJobToRunning(LakeRangeRewriteSchemaChangeJob job) throws Exception {
-        // The first round allocates the watershed and exposes the shadow index to loads.
-        job.runWaitingTxnJob();
         new MockUp<LakeRangeRewriteSchemaChangeJob>() {
             @Mock
             public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) {

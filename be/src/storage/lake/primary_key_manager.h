@@ -18,10 +18,10 @@
 #include <unordered_map>
 
 #include "cache/dynamic_cache.h"
+#include "column/column.h"
 #include "runtime/runtime_fwd.h"
 #include "storage/del_vector.h"
 #include "storage/lake/lake_persistent_index.h"
-#include "storage/lake/primary_key_compaction_state.h"
 #include "storage/lake/rowset_update_state.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
@@ -92,7 +92,7 @@ private:
     std::unordered_map<uint32_t, uint32_t> _rssid_to_rowid;
 };
 
-// Manages primary-key indexes and the rowset update/compaction state used by shared-data tablets.
+// Manages primary-key indexes and the rowset update state used by shared-data tablets.
 class PrimaryKeyManager {
 public:
     PrimaryKeyManager(std::shared_ptr<LocationProvider> location_provider, MemTracker* mem_tracker);
@@ -106,9 +106,14 @@ public:
     int64_t get_cache_expire_ms() const { return _cache_expire_ms; }
 
     // publish primary key tablet, update primary index and delvec, then update meta file
+    //
+    // |base_metadata| is the tablet's metadata at |base_version| when the caller already holds it, else null.
+    // The delete vector of every old segment this write deletes rows from is then read through it, not by
+    // reading the base version back from storage once per segment.
     Status publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                       const TabletMetadataPtr& metadata, Tablet* tablet, IndexEntry* index_entry,
-                                      MetaFileBuilder* builder, int64_t base_version, bool batch_apply = false);
+                                      MetaFileBuilder* builder, int64_t base_version,
+                                      const TabletMetadataPtr& base_metadata, bool batch_apply = false);
 
     // Materialize one batch of inserted rows out of an already-opened source segment. The segment is
     // opened once per source segment by `_open_upsert_source_segment` and reused across batches;
@@ -124,18 +129,21 @@ public:
 
     Status _handle_column_upsert_mode(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                       const TabletMetadataPtr& metadata, Tablet* tablet, LakePersistentIndex& index,
-                                      MetaFileBuilder* builder, int64_t base_version, uint32_t rowset_id,
+                                      MetaFileBuilder* builder, int64_t base_version,
+                                      const TabletMetadataPtr& base_metadata, uint32_t rowset_id,
                                       const std::vector<std::vector<uint32_t>>& insert_rowids_by_segment,
                                       uint32_t* new_del_rebuild_rssid);
 
     Status _handle_delete_files(const TxnLogPB_OpWrite& op_write, int64_t txn_id, const TabletMetadataPtr& metadata,
                                 Tablet* tablet, LakePersistentIndex& index, IndexEntry* index_entry,
-                                MetaFileBuilder* builder, int64_t base_version, uint32_t del_rebuild_rssid,
-                                const RowsetUpdateStateParams& params);
+                                MetaFileBuilder* builder, int64_t base_version, const TabletMetadataPtr& base_metadata,
+                                uint32_t del_rebuild_rssid, const RowsetUpdateStateParams& params);
 
+    // |base_metadata|: as for publish_primary_key_tablet().
     Status publish_column_mode_partial_update(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                               const TabletMetadataPtr& metadata, Tablet* tablet,
-                                              IndexEntry* index_entry, MetaFileBuilder* builder, int64_t base_version);
+                                              IndexEntry* index_entry, MetaFileBuilder* builder, int64_t base_version,
+                                              const TabletMetadataPtr& base_metadata);
 
     // get rowids from primary index by each upserts
     Status get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version, const MutableColumns& upserts,
@@ -160,9 +168,12 @@ public:
                              bool with_default, const std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              MutableColumns* columns, const std::map<string, string>* column_to_expr_value = nullptr,
                              AutoIncrementPartialUpdateState* auto_increment_state = nullptr);
-    // get delvec by version
-    Status get_del_vec(const TabletSegmentId& tsid, int64_t version, const MetaFileBuilder* builder, bool fill_cache,
-                       DelVectorPtr* pdelvec);
+    // Get the delete vector of |tsid| at |version|: the one |builder| holds if any, else the one recorded in the
+    // tablet metadata at |version|. |base_metadata| is that metadata when the caller already holds it, else
+    // null, and is used only when it is this tablet's at |version|; otherwise the metadata is read back from
+    // storage, which is a full metadata read for every call when the metacache does not keep it.
+    Status get_del_vec(const TabletSegmentId& tsid, int64_t version, const MetaFileBuilder* builder,
+                       const TabletMetadataPtr& base_metadata, bool fill_cache, DelVectorPtr* pdelvec);
 
     // get delvec from tablet meta file
     Status get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t meta_ver, bool fill_cache, DelVector* delvec);
@@ -177,13 +188,11 @@ public:
     // avoiding repeated metadata loads for each segment.
     size_t get_rowset_num_deletes(const TabletMetadata& metadata, const RowsetMetadataPB& rowset_meta);
 
+    // Resolve the compaction against the writes published since it started, using the rows mapper (.lcrm) the
+    // compaction wrote, then update the primary index, delvecs and tablet metadata.
     Status publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
                                       const TabletMetadataPtr& metadata, const Tablet& tablet, IndexEntry* index_entry,
                                       MetaFileBuilder* builder, int64_t base_version);
-
-    Status light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
-                                            const TabletMetadataPtr& metadata, const Tablet& tablet,
-                                            IndexEntry* index_entry, MetaFileBuilder* builder, int64_t base_version);
 
     bool try_remove_primary_index_cache(uint32_t tablet_id);
 
@@ -201,26 +210,21 @@ public:
 
     // Shrink the primary index cache to |percent|% of its capacity if it holds more. Indexes in use are kept.
     void evict_cache(int32_t percent);
-    void preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet, const TabletSchemaCSPtr& tablet_schema);
 
     // check if pk index's cache ref == ref_cnt
     bool TEST_check_primary_index_cache_ref(uint32_t tablet_id, uint32_t ref_cnt);
 
     bool TEST_check_update_state_cache_absent(uint32_t tablet_id, int64_t txn_id);
-    bool TEST_check_compaction_cache_absent(uint32_t tablet_id, int64_t txn_id);
-    void TEST_remove_compaction_cache(uint32_t tablet_id, int64_t txn_id);
 
-    // Re-derive the index cache capacity, the block cache capacity and the update/compaction state tracker
-    // limits from the current primary key mem tracker limit, after it changed.
+    // Re-derive the index cache capacity, the block cache capacity and the update state tracker limit from the
+    // current primary key mem tracker limit, after it changed.
     void refresh_mem_limits();
 
-    // Re-apply lake_pk_preload_memory_limit_percent to the update state and compaction state trackers.
+    // Re-apply lake_pk_preload_memory_limit_percent to the update state tracker.
     void refresh_preload_mem_limit();
 
     // Re-apply lake_pk_index_block_cache_limit_percent to the primary index sstable block cache.
     void refresh_block_cache_mem_limit();
-
-    MemTracker* compaction_state_mem_tracker() const { return _compaction_state_mem_tracker.get(); }
 
     MemTracker* update_state_mem_tracker() const { return _update_state_mem_tracker.get(); }
 
@@ -229,9 +233,14 @@ public:
     MemTracker* mem_tracker() const { return _primary_key_mem_tracker; }
 
     // get or create primary index, and prepare primary index state
+    //
+    // |base_metadata| is the tablet's metadata at |base_version| when the caller already holds it, else null.
+    // A cold index rebuilds with the delete vectors in it instead of reading the base version back from
+    // storage; see LakePersistentIndex::load_from_lake_tablet().
     StatusOr<IndexEntry*> prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                 int64_t base_version, int64_t new_version,
-                                                std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock);
+                                                std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock,
+                                                const TabletMetadataPtr& base_metadata = nullptr);
 
     // Charge |index_entry| at its index's current memory_usage() and refresh the lake_pk_index_cache_* gauges.
     // Caller holds the index lock.
@@ -261,9 +270,11 @@ public:
     // during this call.
     StatusOr<TabletMetadataPtr> flush_pk_memtable(const TabletMetadataPtr& metadata, int64_t generation_version);
 
+    // |base_metadata|: as for prepare_primary_index().
     StatusOr<IndexEntry*> rebuild_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                 int64_t base_version, int64_t new_version,
-                                                std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock);
+                                                std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock,
+                                                const TabletMetadataPtr& base_metadata = nullptr);
 
     DynamicCache<uint64_t, LakePersistentIndex>& index_cache() { return _index_cache; }
 
@@ -343,9 +354,6 @@ private:
 
     PkIndexShard& _get_pk_index_shard(int64_t tabletId);
 
-    // decide whether use light publish compaction stategy or not
-    bool _use_light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction);
-
     static const size_t kPrintMemoryStatsInterval = 300; // 5min
 private:
     // default 6min
@@ -355,8 +363,6 @@ private:
 
     // rowset cache
     DynamicCache<string, RowsetUpdateState> _update_state_cache;
-    // compaction cache
-    DynamicCache<string, PrimaryKeyCompactionState> _compaction_cache;
     std::atomic<int64_t> _last_clear_expired_cache_millis = 0;
     std::shared_ptr<LocationProvider> _location_provider;
     TabletManager* _tablet_mgr = nullptr;
@@ -366,7 +372,6 @@ private:
     MemTracker* _primary_key_mem_tracker = nullptr;
     std::unique_ptr<MemTracker> _index_cache_mem_tracker;
     std::unique_ptr<MemTracker> _update_state_mem_tracker;
-    std::unique_ptr<MemTracker> _compaction_state_mem_tracker;
 
     std::vector<PkIndexShard> _pk_index_shards;
 

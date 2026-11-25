@@ -436,6 +436,54 @@ TEST_F(VectorIndexSearchTest, factory_create_and_init_null_fs_uses_injected_cach
     }
 }
 
+// Opens like the starlet filesystem: no existence check, so a missing object only fails once it is accessed.
+class LazyOpenFileSystem : public MemoryFileSystem {
+public:
+    using MemoryFileSystem::new_random_access_file;
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                       const std::string& path) override {
+        return new_random_access_file(opts, FileInfo{.path = path});
+    }
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                       const FileInfo& info) override {
+        return RandomAccessFile::from(std::make_unique<MissingObjectStream>(info.path), info.path, false,
+                                      FileEncryptionInfo());
+    }
+
+private:
+    class MissingObjectStream : public io::SeekableInputStream {
+    public:
+        explicit MissingObjectStream(std::string path) : _path(std::move(path)) {}
+        StatusOr<int64_t> read(void* data, int64_t count) override { return not_found(); }
+        Status seek(int64_t position) override { return not_found(); }
+        StatusOr<int64_t> position() override { return 0; }
+        StatusOr<int64_t> get_size() override { return not_found(); }
+
+    private:
+        Status not_found() const { return Status::NotFound(_path + " does not exist"); }
+        std::string _path;
+    };
+};
+
+// An async-build segment is queried before its .vi lands. On an object store the open succeeds and the
+// NotFound only shows up when the size is read; the factory must fall back to brute force, not fail.
+TEST_F(VectorIndexSearchTest, factory_falls_back_when_lazily_opened_vi_is_missing) {
+    auto tablet_index = prepare_tablet_index();
+    tablet_index->add_common_properties("index_type", "hnsw");
+    tablet_index->add_common_properties("dim", "3");
+    tablet_index->add_common_properties("is_vector_normed", "false");
+    tablet_index->add_common_properties("metric_type", "l2_distance");
+    tablet_index->add_index_properties("efconstruction", "40");
+    tablet_index->add_index_properties("m", "16");
+
+    FileInfo vi_file{.path = "/not_built_yet.vi", .fs = std::make_shared<LazyOpenFileSystem>()};
+    VectorIndexReaderFactory factory(*_reader_cache);
+    OlapReaderStatistics stats;
+    ASSIGN_OR_ABORT(auto result, factory.create_and_init(vi_file, tablet_index, {}, {.stats = stats}));
+    EXPECT_EQ(VectorIndexReaderInitResult::kFallback, result.state);
+    EXPECT_EQ(nullptr, result.reader);
+}
+
 TEST_F(VectorIndexSearchTest, reports_index_load_timing_and_query_cache_hit_miss) {
     auto tablet_index = prepare_tablet_index();
     tablet_index->add_common_properties("index_type", "hnsw");

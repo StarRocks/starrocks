@@ -29,6 +29,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.Version;
+import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
@@ -924,11 +925,25 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         if (table == null) {
             getTable();
         }
+        // The compute nodes record rejected rows only when the plan's query options carry log_rejected_record_num,
+        // and the coordinator builds those options from this task's session (SessionVariable#toThrift). A request
+        // that sets it, 0 included, wins; one that does not keeps the session's value, which a new session takes from
+        // the global one.
+        if (streamLoadInfo.isLogRejectedRecordNumSet()) {
+            context.getSessionVariable().setLogRejectedRecordNum(streamLoadInfo.getLogRejectedRecordNum());
+        }
         LoadPlanner loadPlanner = new LoadPlanner(id, loadId, txnId, dbId, dbName, table,
                 streamLoadInfo.isStrictMode(), streamLoadInfo.getTimezone(), streamLoadInfo.isPartialUpdate(),
                 context, null, streamLoadInfo.getLoadMemLimit(), streamLoadInfo.getExecMemLimit(),
                 streamLoadInfo.getNegative(), channelNum, streamLoadInfo.getColumnExprDescs(), streamLoadInfo, label,
                 streamLoadInfo.getTimeout());
+        // The coordinator takes the transmission compression of the plan from this task's session
+        // (SessionVariable#toThrift), not from the request. A request that does not set it, or names a compression the
+        // load cannot send its data with, keeps the session's value, which a new session takes from the global one.
+        streamLoadParams.getTransmissionCompressionType()
+                .filter(CompressionUtils::isSupportedLoadTransmissionCompression)
+                .ifPresent(compressionType ->
+                        context.getSessionVariable().setLoadTransmissionCompressionType(compressionType));
 
         // Unlike the other load paths, a transaction stream load reaches the planner holding no table lock, so let the
         // planner take it: a schema change committing mid-plan would split the load's slots from its sink schema.
@@ -1563,6 +1578,10 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
 
     public long getDBId() {
         return dbId;
+    }
+
+    public long getTableId() {
+        return tableId;
     }
 
     @Override

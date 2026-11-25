@@ -1043,6 +1043,156 @@ public class ExternalStatsPartialCollectTest extends PlanTestNoneDBBase {
         Assertions.assertEquals(1000, estimated.getRowCount());
     }
 
+    // ---------------------------------------------------------------------------------------------------
+    // A FULL job that refreshes only some partitions cannot vouch for the whole table.
+    // ---------------------------------------------------------------------------------------------------
+
+    private static RecordingJob incrementalJob(int scanned, boolean scansWholeTable, int tablePartitions,
+                                               Set<Integer> failAtIndexes) {
+        RecordingJob job = new RecordingJob(partitions(scanned), columns(), columnTypes(), failAtIndexes) {
+            @Override
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+                runCollectPhases(context, analyzeStatus, 1L);
+            }
+        };
+        job.setTablePartitions(scansWholeTable, tablePartitions);
+        return job;
+    }
+
+    @Test
+    public void testIncrementalFullJobIsCommittedAsSampleOverTheTable() throws Exception {
+        // The column is FULL from an earlier whole-table run, and that FULL entry still carries the hashes an
+        // even earlier SAMPLE run merged in.
+        Set<Long> leftOver = new HashSet<>();
+        for (int i = 0; i < 10; i++) {
+            leftOver.add(hash("par_col=" + i));
+        }
+        putMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), leftOver, -1));
+
+        // 3 of the table's 100 partitions were updated and refreshed.
+        new StatisticExecutor().collectStatistics(connectContext, incrementalJob(3, false, 100, new HashSet<>()),
+                newAnalyzeStatus(), false, false);
+
+        ColumnStatsMeta columnMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                .getExternalTableBasicStatsMeta(CATALOG, DB, TABLE).getColumnStatsMeta("c1");
+        Assertions.assertEquals(StatsConstants.AnalyzeType.SAMPLE, columnMeta.getType());
+        Assertions.assertEquals(100, columnMeta.getAllPartitionSize());
+        // Neither this run's 3 partitions nor the old 10 are recorded: the read path takes the covered count
+        // from the rows, and a set would only stand in for it on a backend that cannot report it.
+        Assertions.assertTrue(columnMeta.getSampledPartitionsHashValue().isEmpty());
+        Assertions.assertFalse(columnMeta.isCoverageIncomplete());
+
+        // Rows still covering every partition: used as is.
+        Assertions.assertEquals(1000, StatisticsUtils.estimateColumnStatistics(hiveTable, "c1",
+                sampledStats(1000, 100, 100, 0)).getRowCount());
+        // Rows missing half the table (e.g. partitions never reported as updated): extrapolated instead of
+        // being taken as the whole table.
+        Assertions.assertEquals(2000, StatisticsUtils.estimateColumnStatistics(hiveTable, "c1",
+                sampledStats(1000, 100, 50, 0)).getRowCount());
+        // A backend that cannot report the covered count: unknown, not 1000 rows scaled by 100 / 10.
+        Assertions.assertTrue(StatisticsUtils.estimateColumnStatistics(hiveTable, "c1", sampledStats(1000))
+                .isUnknown());
+    }
+
+    @Test
+    public void testFullJobOverTheWholeTableStaysFull() throws Exception {
+        new StatisticExecutor().collectStatistics(connectContext, incrementalJob(3, true, 3, new HashSet<>()),
+                newAnalyzeStatus(), false, false);
+
+        ColumnStatsMeta columnMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                .getExternalTableBasicStatsMeta(CATALOG, DB, TABLE).getColumnStatsMeta("c1");
+        Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, columnMeta.getType());
+    }
+
+    @Test
+    public void testFullJobWithUnknownTablePartitionsStaysFull() throws Exception {
+        // A caller that did not know the table's partitions keeps the FULL commit it always got.
+        RecordingJob job = new RecordingJob(partitions(3), columns(), columnTypes(), new HashSet<>()) {
+            @Override
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+                runCollectPhases(context, analyzeStatus, 1L);
+            }
+        };
+        new StatisticExecutor().collectStatistics(connectContext, job, newAnalyzeStatus(), false, false);
+
+        ColumnStatsMeta columnMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                .getExternalTableBasicStatsMeta(CATALOG, DB, TABLE).getColumnStatsMeta("c1");
+        Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, columnMeta.getType());
+    }
+
+    @Test
+    public void testPartialIncrementalFullJobIsSizedByTheTable() throws Exception {
+        // 200 updated partitions of a 500-partition table, one query lost: the downgrade to SAMPLE sizes the
+        // table by its own partition count, not by the 200 this run asked for.
+        new StatisticExecutor().collectStatistics(connectContext, incrementalJob(200, false, 500, Set.of(5)),
+                newAnalyzeStatus(), false, false);
+
+        ColumnStatsMeta columnMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                .getExternalTableBasicStatsMeta(CATALOG, DB, TABLE).getColumnStatsMeta("c1");
+        Assertions.assertEquals(StatsConstants.AnalyzeType.SAMPLE, columnMeta.getType());
+        Assertions.assertEquals(500, columnMeta.getAllPartitionSize());
+        Assertions.assertEquals(199, columnMeta.getSampledPartitionsHashValue().size());
+    }
+
+    @Test
+    public void testPartialRunKeepsTheEntryOfAnIncrementalFullRun() throws Exception {
+        // c1 was left by an incremental FULL run, so its rows cover the table like a FULL entry's. A later run
+        // that loses a partition keeps that entry - and its update time - exactly as it would keep a FULL one:
+        // advancing the update time past the lost partition would stop the next run from selecting it again.
+        LocalDateTime before = LocalDateTime.now().minusHours(1).withNano(0);
+        putMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, before, new HashSet<>(), 250, 0));
+
+        new StatisticExecutor().collectStatistics(connectContext, incrementalJob(200, false, 250, Set.of(5)),
+                newAnalyzeStatus(), false, false);
+
+        ColumnStatsMeta columnMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                .getExternalTableBasicStatsMeta(CATALOG, DB, TABLE).getColumnStatsMeta("c1");
+        Assertions.assertEquals(StatsConstants.AnalyzeType.SAMPLE, columnMeta.getType());
+        Assertions.assertEquals(before, columnMeta.getUpdateTime());
+        Assertions.assertEquals(250, columnMeta.getAllPartitionSize());
+        Assertions.assertTrue(columnMeta.getSampledPartitionsHashValue().isEmpty());
+        Assertions.assertTrue(columnMeta.isFullCoverageByRows());
+    }
+
+    @Test
+    public void testOnlyAnIncrementalFullEntryCoversTheTableByRows() {
+        Assertions.assertTrue(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.FULL, LocalDateTime.now())
+                .isFullCoverageByRows());
+        Assertions.assertTrue(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                new HashSet<>(), 10, 0).isFullCoverageByRows());
+        // a collected sample records what it sampled
+        Assertions.assertFalse(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                new HashSet<>(Set.of(1L)), 10, 0).isFullCoverageByRows());
+        // an incomplete one is being resumed
+        Assertions.assertFalse(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                new HashSet<>(), 10, 10).isFullCoverageByRows());
+        // no partition count: legacy or unusable
+        Assertions.assertFalse(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                new HashSet<>(), 0).isFullCoverageByRows());
+    }
+
+    @Test
+    public void testDirectValueColumnWithoutFullCoverageIsNotPromoted() {
+        // A FULL job scans direct-value columns over its own partitions only; committed as SAMPLE without
+        // full coverage, such a column must not be turned back into FULL.
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public boolean isDirectValuePartitionColumn(Table table, String columnName) {
+                return true;
+            }
+        };
+
+        new StatisticExecutor().commitExternalColumnStatsMeta(hiveDb, hiveTable, CATALOG,
+                Lists.newArrayList("c1"), Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE,
+                LocalDateTime.now(), Maps.newHashMap(), new HashSet<>(), Collections.emptySet(), 100,
+                Collections.emptyMap(), Collections.emptyMap(), true, false);
+
+        ColumnStatsMeta columnMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                .getExternalTableBasicStatsMeta(CATALOG, DB, TABLE).getColumnStatsMeta("c1");
+        Assertions.assertEquals(StatsConstants.AnalyzeType.SAMPLE, columnMeta.getType());
+        Assertions.assertEquals(100, columnMeta.getAllPartitionSize());
+    }
+
     @Test
     public void testTheDenominatorComesFromTheRowsNotTheRecordedSet() {
         // The recorded set says 10 partitions; the rows say 50 came from a later run whose metadata is

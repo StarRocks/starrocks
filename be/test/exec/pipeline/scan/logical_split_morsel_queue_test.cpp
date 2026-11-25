@@ -40,6 +40,7 @@
 #include "storage/query/split_morsel_queue.h"
 #include "storage/query/split_scan_morsel.h"
 #include "storage/rowset/base_rowset.h"
+#include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
@@ -84,11 +85,11 @@ ChunkUniquePtr make_chunk(const std::shared_ptr<TabletSchema>& schema, int begin
     return chunk;
 }
 
-TScanRange make_scan_range(int64_t tablet_id) {
+TScanRange make_scan_range(int64_t tablet_id, int64_t version = 1) {
     TScanRange scan_range;
     TInternalScanRange internal;
     internal.tablet_id = tablet_id;
-    internal.version = "1";
+    internal.version = std::to_string(version);
     internal.partition_id = 1;
     scan_range.__set_internal_scan_range(internal);
     return scan_range;
@@ -97,9 +98,16 @@ TScanRange make_scan_range(int64_t tablet_id) {
 // Minimal BaseRowset that just wraps pre-built, pre-index-loaded segments.
 class FakeRowset : public BaseRowset {
 public:
-    FakeRowset(std::vector<SegmentSharedPtr> segments, bool overlapped, int64_t id)
-            : _segments(std::move(segments)), _overlapped(overlapped) {
+    FakeRowset(std::vector<SegmentSharedPtr> segments, bool overlapped, int64_t id, Version version = Version(1, 1))
+            : _segments(std::move(segments)) {
         _rowset_id.init(id);
+        RowsetMetaPB pb;
+        pb.set_rowset_id(_rowset_id.to_string());
+        pb.set_num_segments(_segments.size());
+        pb.set_start_version(version.first);
+        pb.set_end_version(version.second);
+        pb.set_segments_overlap_pb(overlapped ? OVERLAPPING : NONOVERLAPPING);
+        _meta = std::make_shared<RowsetMeta>(pb);
     }
     RowsetId rowset_id() const override { return _rowset_id; }
     int64_t num_rows() const override {
@@ -109,15 +117,15 @@ public:
         }
         return n;
     }
-    bool is_overlapped() const override { return _overlapped; }
+    bool is_overlapped() const override { return _meta->is_segments_overlapping(); }
     std::vector<SegmentSharedPtr> get_segments() override { return _segments; }
     bool has_data_files() const override { return true; }
-    int64_t start_version() const override { return 1; }
-    int64_t end_version() const override { return 1; }
+    int64_t start_version() const override { return _meta->start_version(); }
+    int64_t end_version() const override { return _meta->end_version(); }
 
 private:
     std::vector<SegmentSharedPtr> _segments;
-    bool _overlapped;
+    RowsetMetaSharedPtr _meta;
     RowsetId _rowset_id;
 };
 
@@ -260,6 +268,44 @@ TEST_F(LogicalSplitMorselQueueTest, logical_split_matches_full_scan) {
     // The tablet really was split -- otherwise the union property below is vacuous.
     ASSERT_GT(num_splits, 1);
     EXPECT_EQ(sorted(expected_rows(0, 150)), sorted(collected));
+}
+
+TEST_F(LogicalSplitMorselQueueTest, version_overwrite_preserves_overlapping_segments) {
+    auto schema = make_schema();
+    std::vector<SegmentSharedPtr> segments = {write_segment(schema, 0, 50, 100), write_segment(schema, 1, 0, 100)};
+    auto rowset = std::make_shared<FakeRowset>(segments, true, 1, Version(0, 2));
+    std::vector<BaseTabletSharedPtr> tablets = {std::make_shared<FakeTablet>(10003, 200)};
+    std::vector<std::vector<BaseRowsetSharedPtr>> tablet_rowsets = {{rowset}};
+
+    Morsels morsels;
+    morsels.emplace_back(std::make_unique<ScanMorsel>(1, make_scan_range(10003, 2)));
+    LogicalSplitMorselQueue queue(std::move(morsels), 1, 25);
+    queue.set_tablets(tablets);
+    queue.set_tablet_rowsets(tablet_rowsets);
+    queue.set_tablet_schema(schema);
+    queue.set_ticket_checker(std::make_shared<SplitMorselTicketChecker>());
+
+    std::vector<Row> expected;
+    for (const auto& segment : segments) {
+        auto rows = read_with_short_key_ranges(segment, schema, {});
+        expected.insert(expected.end(), rows.begin(), rows.end());
+    }
+    std::vector<Row> actual;
+    int num_splits = 0;
+    while (true) {
+        ASSIGN_OR_ABORT(auto morsel, queue.try_get());
+        if (morsel == nullptr) break;
+        auto* logical = dynamic_cast<LogicalSplitScanMorsel*>(morsel.get());
+        ASSERT_NE(logical, nullptr);
+        ++num_splits;
+        for (const auto& segment : segments) {
+            auto rows = read_with_short_key_ranges(segment, schema,
+                                                   logical->get_short_key_ranges_option()->short_key_ranges);
+            actual.insert(actual.end(), rows.begin(), rows.end());
+        }
+    }
+    ASSERT_GT(num_splits, 1);
+    EXPECT_EQ(sorted(expected), sorted(actual));
 }
 
 } // namespace starrocks::pipeline

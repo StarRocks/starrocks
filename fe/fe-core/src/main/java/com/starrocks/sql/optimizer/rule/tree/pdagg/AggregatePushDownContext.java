@@ -57,6 +57,11 @@ public class AggregatePushDownContext {
     public OptExpression targetPosition = null;
     // Whether targetPosition is an immediate left child of a small broadcast join.
     public boolean immediateChildOfSmallBroadcastJoin = false;
+    // whether origAggregator reduces its input in the local phase of a two-phase aggregation
+    public boolean origAggReducedLocally = false;
+    // Whether targetPosition is below the probe side of a join that can broadcast its build side, so the plan
+    // without the push down need not move the probe rows.
+    public boolean belowBroadcastableJoinProbe = false;
     public int rootToLeafPathIndex = 0;
 
     public boolean hasWindow = false;

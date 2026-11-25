@@ -40,6 +40,7 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -177,10 +178,12 @@ public class PCTPredicateBuilder {
         PCTPartitionTopology partitionTopology = partitioner.mvContext.getPartitionTopology();
         PCellSortedSet mvToCellMap = partitionTopology == null ? PCellSortedSet.of() : partitionTopology.getMvToCellMap();
         List<Range<PartitionKey>> mvPartitionRange = Lists.newArrayList();
-        for (String partitionName : mvPartitionNames.getPartitionNames()) {
-            Preconditions.checkArgument(mvToCellMap.containsName(partitionName));
-            PRangeCell rangeCell = (PRangeCell) mvToCellMap.getPCell(partitionName);
-            mvPartitionRange.add(rangeCell.getRange());
+        // Prefer the cell the caller carries: a partition retention refused to create is absent from the
+        // topology, and its range is only available on the set describing it.
+        for (PCellWithName cellWithName : mvPartitionNames.getPartitions()) {
+            PCell cell = cellWithName.cell() != null ? cellWithName.cell() : mvToCellMap.getPCell(cellWithName.name());
+            Preconditions.checkArgument(cell != null, "no partition cell for %s", cellWithName.name());
+            mvPartitionRange.add(((PRangeCell) cell).getRange());
         }
         mvPartitionRange = MvUtils.mergeRanges(mvPartitionRange);
 
@@ -267,12 +270,17 @@ public class PCTPredicateBuilder {
                 }
             }
             Expr mvPartitionExpr = mvPartitionExprs.get(0);
-            Expr inPredicate = MvUtils.convertToInPredicate(mvPartitionExpr, selectedPartitionValues);
-            if (isContainsNullPartition) {
-                return ExprUtils.compoundOr(Lists.newArrayList(inPredicate, new IsNullPredicate(mvPartitionExpr, false)));
-            } else {
-                return inPredicate;
+            if (!isContainsNullPartition) {
+                return MvUtils.convertToInPredicate(mvPartitionExpr, selectedPartitionValues);
             }
+            Expr isNull = new IsNullPredicate(mvPartitionExpr, false);
+            // convertToInPredicate answers TRUE for an empty value list, so or-ing it in would claim every
+            // row for a set whose only member is null.
+            if (selectedPartitionValues.isEmpty()) {
+                return isNull;
+            }
+            return ExprUtils.compoundOr(Lists.newArrayList(
+                    MvUtils.convertToInPredicate(mvPartitionExpr, selectedPartitionValues), isNull));
         } else {
             List<Expr> partitionPredicates = Lists.newArrayList();
             for (PCell pCell : mvPartitionNames.getPCells()) {

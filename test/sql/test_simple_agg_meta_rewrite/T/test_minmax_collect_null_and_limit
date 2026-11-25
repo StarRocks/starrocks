@@ -1,0 +1,91 @@
+-- name: test_minmax_null_result_recollect
+-- A min/max collection that finds no value (empty table, all-NULL column) is cached only for the
+-- table version it ran at. It used to be cached with no version at all, and never expired: a table
+-- that was empty the first time its min/max was asked for never got min/max stats afterwards, until
+-- DDL, eviction or an FE restart.
+--
+-- inspect_minmax() goes through getStatsSync(): it loads a missing entry synchronously, and drops
+-- (without reloading) an entry that is stale for the current table version. So the first call after
+-- a load returns NULL and the second one reloads.
+--
+-- NOTE: the expected results in R/ are the CORRECT values. Before the fix the last call returns NULL
+-- and the case FAILS. Do not regenerate R/ with `run.py -r` to make it pass.
+
+DROP DATABASE IF EXISTS test_minmax_null_result;
+CREATE DATABASE test_minmax_null_result;
+USE test_minmax_null_result;
+
+CREATE TABLE t (
+  k INT NOT NULL,
+  v INT NULL
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+
+-- Empty table.
+SELECT inspect_minmax('test_minmax_null_result.t', 'v');
+
+-- All-NULL column.
+INSERT INTO t VALUES (1, NULL);
+SELECT inspect_minmax('test_minmax_null_result.t', 'v');
+SELECT inspect_minmax('test_minmax_null_result.t', 'v');
+
+-- Values arrive: the NULL entry expires with the table version and is collected again.
+INSERT INTO t VALUES (2, 10), (3, 20);
+SELECT inspect_minmax('test_minmax_null_result.t', 'v');
+SELECT inspect_minmax('test_minmax_null_result.t', 'v');
+
+DROP DATABASE test_minmax_null_result;
+
+-- name: test_minmax_collect_max_tablets @sequential
+-- min_max_stats_collect_max_tablets: min/max is not collected for a table with more tablets than
+-- this, because the [_META_] scan that collects it always covers the whole table. A value already
+-- cached for the current table version is still served. A skip is not cached, so raising the limit
+-- (or setting it <= 0) admits the table without waiting for its version to move.
+--
+-- @sequential because it changes a global FE config, which would skip min/max collection for the
+-- tables of concurrently running cases.
+
+DROP DATABASE IF EXISTS test_minmax_max_tablets;
+CREATE DATABASE test_minmax_max_tablets;
+USE test_minmax_max_tablets;
+
+-- 2 tablets.
+CREATE TABLE t (
+  k INT NOT NULL,
+  v INT NOT NULL
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+INSERT INTO t VALUES (1, 10), (2, 20);
+
+-- Over the limit: not collected.
+admin set frontend config ("min_max_stats_collect_max_tablets" = "1");
+SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+
+-- The limit now admits the table. A skip is not cached, so the next call collects.
+admin set frontend config ("min_max_stats_collect_max_tablets" = "2");
+SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+
+-- Lowering the limit again keeps serving the value cached for the current version ...
+admin set frontend config ("min_max_stats_collect_max_tablets" = "1");
+SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+
+-- ... until the table moves on: then it is not collected again.
+INSERT INTO t VALUES (3, 30);
+SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+
+-- <= 0 disables the limit.
+admin set frontend config ("min_max_stats_collect_max_tablets" = "0");
+SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+
+admin set frontend config ("min_max_stats_collect_max_tablets" = "100000");
+DROP DATABASE test_minmax_max_tablets;
+
+CLEANUP {
+    admin set frontend config ("min_max_stats_collect_max_tablets" = "100000");
+} END CLEANUP

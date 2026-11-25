@@ -187,6 +187,17 @@ public class StarRocksIcebergTableScanTest {
     }
 
     @Test
+    public void testTopRankedStatsColumnsSkipTheKeepSet() {
+        // c150 is ranked first by its explicit mode; c1 is in the keep-set, which does not count against the limit
+        Table table = wideTable(ImmutableMap.of(TableProperties.METRICS_MODE_COLUMN_CONF_PREFIX + "c150", "truncate(16)"));
+        Map<Integer, Long> ranks = StarRocksIcebergTableScan.statsCandidateRanks(table);
+
+        Assertions.assertEquals(Set.of(150, 2, 3), StarRocksIcebergTableScan.topRankedStatsColumnIds(ranks, Set.of(1), 3));
+        Assertions.assertEquals(Set.of(), StarRocksIcebergTableScan.topRankedStatsColumnIds(ranks, Set.of(1), 0));
+        Assertions.assertEquals(150, StarRocksIcebergTableScan.topRankedStatsColumnIds(ranks, Set.of(), 1000).size());
+    }
+
+    @Test
     public void testStatsCandidateRanksWithoutMetricsConfigKeepFieldIdOrder() {
         Table table = wideTable(ImmutableMap.of());
         Mockito.when(table.schema()).thenThrow(new IllegalStateException("no current schema"));

@@ -53,6 +53,7 @@ public class UserIdentityUtilsTest {
 
     private static long openRoleId;
     private static long secretRoleId;
+    private static long groupRoleId;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -64,16 +65,23 @@ public class UserIdentityUtilsTest {
                 .withTable("CREATE TABLE t_open (k INT) DUPLICATE KEY(k) "
                         + "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1')")
                 .withTable("CREATE TABLE t_secret (k INT) DUPLICATE KEY(k) "
+                        + "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1')")
+                .withTable("CREATE TABLE t_group (k INT) DUPLICATE KEY(k) "
                         + "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1')");
         starRocksAssert.ddl("CREATE ROLE uiu_open_role");
         starRocksAssert.ddl("CREATE ROLE uiu_secret_role");
         starRocksAssert.ddl("GRANT SELECT ON TABLE " + DB + ".t_open TO ROLE uiu_open_role");
         starRocksAssert.ddl("GRANT SELECT ON TABLE " + DB + ".t_secret TO ROLE uiu_secret_role");
+        starRocksAssert.ddl("CREATE ROLE uiu_group_role");
+        starRocksAssert.ddl("GRANT SELECT ON TABLE " + DB + ".t_group TO ROLE uiu_group_role");
+        starRocksAssert.ddl("GRANT uiu_group_role TO EXTERNAL GROUP uiu_group");
         starRocksAssert.ddl("CREATE USER uiu_native");
         starRocksAssert.ddl("GRANT uiu_open_role TO USER uiu_native");
         openRoleId = GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdByNameAllowNull("uiu_open_role");
         secretRoleId =
                 GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdByNameAllowNull("uiu_secret_role");
+        groupRoleId =
+                GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdByNameAllowNull("uiu_group_role");
     }
 
     private static TUserIdentity userIdent(UserIdentity user, List<Long> roleIds) {
@@ -81,6 +89,12 @@ public class UserIdentityUtilsTest {
         TUserRoles roles = new TUserRoles();
         roles.setRole_id_list(roleIds);
         userIdent.setCurrent_role_ids(roles);
+        return userIdent;
+    }
+
+    private static TUserIdentity userIdent(UserIdentity user, List<Long> roleIds, List<String> groups) {
+        TUserIdentity userIdent = userIdent(user, roleIds);
+        userIdent.setGroups(groups);
         return userIdent;
     }
 
@@ -123,6 +137,67 @@ public class UserIdentityUtilsTest {
         assertEquals(Set.of(openRoleId), caller.getCurrentRoleIds());
         assertThrows(AccessDeniedException.class,
                 () -> Authorizer.checkTableAction(caller, DB, "t_secret", PrivilegeType.SELECT));
+    }
+
+    @Test
+    public void testNativeUserGetsTheRolesOfItsGroups() throws Exception {
+        // A role the session got from its group, e.g. an LDAP memberOf, is kept, and grants its privileges.
+        TUserIdentity userIdent = userIdent(new UserIdentity("uiu_native", "%"), List.of(openRoleId, groupRoleId),
+                List.of("uiu_group"));
+        ConnectContext caller = withoutSession(() -> callerOf(userIdent));
+
+        assertEquals(Set.of("uiu_group"), caller.getGroups());
+        assertEquals(Set.of(openRoleId, groupRoleId), caller.getCurrentRoleIds());
+        assertDoesNotThrow(() -> Authorizer.checkTableAction(caller, DB, "t_group", PrivilegeType.SELECT));
+        assertThrows(AccessDeniedException.class,
+                () -> Authorizer.checkTableAction(caller, DB, "t_secret", PrivilegeType.SELECT));
+    }
+
+    @Test
+    public void testGroupRoleNeedsTheGroup() throws Exception {
+        // The role of a group is not kept for a caller that is not in the group.
+        for (List<String> groups : List.of(List.<String>of(), List.of("uiu_other_group"))) {
+            TUserIdentity userIdent = userIdent(new UserIdentity("uiu_native", "%"), List.of(openRoleId, groupRoleId),
+                    groups);
+            ConnectContext caller = withoutSession(() -> callerOf(userIdent));
+
+            assertEquals(Set.of(openRoleId), caller.getCurrentRoleIds());
+            assertThrows(AccessDeniedException.class,
+                    () -> Authorizer.checkTableAction(caller, DB, "t_group", PrivilegeType.SELECT));
+        }
+    }
+
+    @Test
+    public void testNativeUserWithoutActivatedRolesGetsTheRolesOfItsGroups() throws Exception {
+        // A caller that sends no role ids gets its default roles and the roles of its groups, as at login.
+        TUserIdentity userIdent = UserIdentityUtils.toThrift(new UserIdentity("uiu_native", "%"));
+        userIdent.setGroups(List.of("uiu_group"));
+        ConnectContext caller = withoutSession(() -> callerOf(userIdent));
+
+        assertDoesNotThrow(() -> Authorizer.checkTableAction(caller, DB, "t_group", PrivilegeType.SELECT));
+    }
+
+    @Test
+    public void testSessionGroupsReachTheRpc() throws Exception {
+        // information_schema.tables: a session whose only active role comes through its group sees what that role
+        // may read (uiu_open_role is granted to the user but is not a default role, so it is not active).
+        ConnectContext session = new ConnectContext();
+        UserIdentity user = new UserIdentity("uiu_native", "%");
+        session.setCurrentUserIdentity(user);
+        session.setGroups(Set.of("uiu_group"));
+        session.setCurrentRoleIds(user, Set.of("uiu_group"));
+        TUserIdentity userIdent = UserIdentityUtils.callerToThrift(session);
+        assertEquals(List.of("uiu_group"), userIdent.getGroups());
+
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setCurrent_user_ident(userIdent);
+        authInfo.setPattern(DB);
+        TGetTablesInfoRequest request = new TGetTablesInfoRequest();
+        request.setAuth_info(authInfo);
+
+        List<String> tables = withoutSession(() -> InformationSchemaDataSource.generateTablesInfoResponse(request)
+                .getTables_infos().stream().map(TTableInfo::getTable_name).sorted().collect(Collectors.toList()));
+        assertEquals(List.of("t_group"), tables);
     }
 
     @Test

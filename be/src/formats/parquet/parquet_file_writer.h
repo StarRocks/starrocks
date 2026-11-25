@@ -27,6 +27,7 @@
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
 #include <parquet/platform.h>
+#include <parquet/properties.h>
 #include <parquet/schema.h>
 #include <parquet/types.h>
 #include <stddef.h>
@@ -87,20 +88,37 @@ struct ParquetWriterOptions : FileWriterOptions {
     int64_t page_size = 1024 * 1024;           // 1MB
     int64_t write_batch_size = 4096;
     int64_t rowgroup_size = 128L * 1024 * 1024; // 128MB
+    std::optional<int> compression_level;
     std::optional<std::vector<FileColumnId>> column_ids = std::nullopt;
     std::string time_zone = TimezoneUtils::default_time_zone;
     bool use_legacy_decimal_encoding = false;
     bool use_int96_timestamp_encoding = false;
     ::parquet::ParquetVersion::type version = ::parquet::ParquetVersion::PARQUET_2_6;
+    ::parquet::ParquetDataPageVersion data_page_version = ::parquet::ParquetDataPageVersion::V1;
 
     // Column-level dictionary encoding configuration
     // key: column name, value: whether to enable dictionary encoding
     // Columns not in this map use the global default behavior
     std::unordered_map<std::string, bool> column_dictionary_enabled;
+    // Parquet Modular Encryption (PME) - for Iceberg encrypted tables.
+    // BE generates a fresh per-file DEK; FE only signals that encryption is on and
+    // which algorithm to use (Iceberg "encryption v0": footer key + algorithm only).
+    bool encryption_enabled = false;
+    std::string encryption_algorithm; // "AES_GCM_V1" or "AES_GCM_CTR_V1"
+    // Bytes: 16, 24 or 32, from the Iceberg table property encryption.data-key-length. 0 means
+    // "not supplied" and is REJECTED when encryption is on -- deliberately not defaulted. Silently
+    // picking a length would write a key weaker than the table's declared policy with nothing
+    // surfaced, so an absent length has to fail the write instead.
+    int encryption_dek_length = 0;
 
     inline static std::string USE_LEGACY_DECIMAL_ENCODING = "use_legacy_decimal_encoding";
     inline static std::string USE_INT96_TIMESTAMP_ENCODING = "use_int96_timestamp_encoding";
     inline static std::string VERSION = "version";
+    inline static std::string PAGE_SIZE_BYTES = "write.parquet.page-size-bytes";
+    inline static std::string DICT_SIZE_BYTES = "write.parquet.dict-size-bytes";
+    inline static std::string ROW_GROUP_SIZE_BYTES = "write.parquet.row-group-size-bytes";
+    inline static std::string COMPRESSION_LEVEL = "write.parquet.compression-level";
+    inline static std::string DATA_PAGE_VERSION = "write.parquet.page-version";
 };
 
 class ParquetFileWriter final : public FileWriter {
@@ -151,6 +169,14 @@ private:
     std::shared_ptr<::parquet::ParquetFileWriter> _writer;
     std::shared_ptr<parquet::ChunkWriter> _rowgroup_writer;
     const std::function<void()> _rollback_action;
+
+    // Zeroes and clears the writer's copy of the key material (the DEK and the AAD prefix).
+    void wipe_key_material();
+
+    // Per-file PME material generated in init() when encryption is enabled; the raw DEK is returned
+    // to FE at commit. The writer's copy is zeroed on every path that drops it (see wipe_key_material).
+    std::string _file_dek;
+    std::string _aad_prefix;
 };
 
 class ParquetFileWriterFactory : public FileWriterFactory {

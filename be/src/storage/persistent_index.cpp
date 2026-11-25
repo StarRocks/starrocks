@@ -5360,6 +5360,9 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
                     }
                 }
             }
+        } else {
+            LOG(WARNING) << "persistent index version " << version << " is not the applied version " << applied_version
+                         << ", rebuild persistent index, tablet: " << tablet_id;
         }
     }
 

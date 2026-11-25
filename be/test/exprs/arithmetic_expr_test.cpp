@@ -341,6 +341,37 @@ TEST_F(VectorizedArithmeticExprTest, produceNullModExpr) {
     }
 }
 
+#ifdef STARROCKS_JIT_ENABLE
+// int_col DIV decimal_col is an INT_DIVIDE with a BIGINT type over DECIMAL operands. It must not be JIT-compiled:
+// the generated code divided the decimal values as BIGINT and, for DECIMAL128 operands, wrote past the result column.
+TEST_F(VectorizedArithmeticExprTest, intDivOfDecimalIsNotJitCompiled) {
+    runtime_state.set_jit_level(-1);
+    expr_node.opcode = TExprOpcode::INT_DIVIDE;
+    expr_node.type = gen_type_desc(TPrimitiveType::BIGINT);
+
+    for (LogicalType decimal_type : {TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128}) {
+        std::unique_ptr<Expr> expr(VectorizedArithmeticExprFactory::from_thrift(expr_node));
+        TExprNode decimal_node = expr_node;
+        decimal_node.type = TypeDescriptor::create_decimalv3_type(decimal_type, 9, 4).to_thrift();
+        MockCostExpr col1(decimal_node);
+        MockCostExpr col2(decimal_node);
+        expr->_children.push_back(&col1);
+        expr->_children.push_back(&col2);
+        ASSERT_FALSE(expr->is_compilable(&runtime_state)) << "decimal type " << decimal_type;
+        expr->_children.clear();
+    }
+
+    // BIGINT DIV BIGINT stays compilable.
+    std::unique_ptr<Expr> expr(VectorizedArithmeticExprFactory::from_thrift(expr_node));
+    MockCostExpr col1(expr_node);
+    MockCostExpr col2(expr_node);
+    expr->_children.push_back(&col1);
+    expr->_children.push_back(&col2);
+    ASSERT_TRUE(expr->is_compilable(&runtime_state));
+    expr->_children.clear();
+}
+#endif
+
 TEST_F(VectorizedArithmeticExprTest, mergeNullDivExpr) {
     expr_node.opcode = TExprOpcode::DIVIDE;
     expr_node.is_nullable = true;

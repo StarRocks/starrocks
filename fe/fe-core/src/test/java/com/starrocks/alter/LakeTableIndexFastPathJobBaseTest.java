@@ -15,27 +15,37 @@
 package com.starrocks.alter;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Config;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.lake.compaction.PartitionIdentifier;
+import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.WALApplier;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LeaderLease;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -48,9 +58,12 @@ import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.GtidGenerator;
 import com.starrocks.transaction.TransactionIdGenerator;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
@@ -98,10 +111,13 @@ import static org.mockito.Mockito.when;
  * abstract base.
  */
 public class LakeTableIndexFastPathJobBaseTest {
+    private static final LeaderLease TEST_LEADER_LEASE = new LeaderLease(10L, 1L);
 
+    /** An ADD INDEX job with one index to build, so a dispatch has a payload to send. */
     private LakeTableAddIndexJob newJob() {
-        return new LakeTableAddIndexJob(1L, 2L, 3L, "t", 60_000L,
-                new ArrayList<>(), new ArrayList<>());
+        Index index = new Index("idx_c1", List.of(ColumnId.create("c1")), IndexDef.IndexType.BITMAP, "",
+                new HashMap<>());
+        return new LakeTableAddIndexJob(1L, 2L, 3L, "t", 60_000L, List.of(index));
     }
 
     private static void setField(Object o, String name, Object value) throws Exception {
@@ -211,6 +227,8 @@ public class LakeTableIndexFastPathJobBaseTest {
     /** Build a {@link GlobalStateMgr} mock wired up for catalog reads + lock fallback. */
     private GlobalStateMgr buildLockableGsm(Database db, OlapTable table) {
         GlobalStateMgr gsm = mock(GlobalStateMgr.class);
+        when(gsm.captureLeaderLease()).thenReturn(TEST_LEADER_LEASE);
+        when(gsm.isLeaderLeaseValid(TEST_LEADER_LEASE)).thenReturn(true);
         LocalMetastore lm = mock(LocalMetastore.class);
         when(lm.getDb(anyLong())).thenReturn(db);
         when(lm.getTable(anyLong(), anyLong())).thenReturn(table);
@@ -224,12 +242,18 @@ public class LakeTableIndexFastPathJobBaseTest {
         // GlobalStateMgr.getCurrentState().getLockManager(); supply a real
         // LockManager so cancelImpl can take its locks.
         when(gsm.getLockManager()).thenReturn(new com.starrocks.common.util.concurrent.lock.LockManager());
+        when(gsm.getCompactionMgr()).thenReturn(new CompactionMgr());
         // Build the EditLog mock OUTSIDE the chained when(..) to avoid
         // Mockito's UnfinishedStubbing detection (mockEditLog itself does
         // doAnswer().when(edit) which Mockito interprets as nested
         // stubbing if invoked inside another when().thenReturn(...) chain).
         EditLog editLog = mockEditLog();
         when(gsm.getEditLog()).thenReturn(editLog);
+        // runRunningJob looks up the nodes its in-flight tasks went to; by default the cluster knows none of them.
+        SystemInfoService clusterInfo = mock(SystemInfoService.class);
+        NodeMgr nodeMgr = mock(NodeMgr.class);
+        when(nodeMgr.getClusterInfo()).thenReturn(clusterInfo);
+        when(gsm.getNodeMgr()).thenReturn(nodeMgr);
         return gsm;
     }
 
@@ -376,6 +400,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         when(idx.getTablets()).thenReturn(new ArrayList<>());
         when(pp.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(Collections.singletonList(idx));
+        when(pp.getVisibleVersion()).thenReturn(4L);
         when(table.getPhysicalPartition(100L)).thenReturn(pp);
 
         GlobalStateMgr gsm = buildLockableGsm(db, table);
@@ -391,6 +416,62 @@ public class LakeTableIndexFastPathJobBaseTest {
             assertFalse(job.isForceSkippedAtCommitted());
             verify(pp, never()).setVisibleVersion(anyLong(), anyLong());
             verify(table, never()).setState(OlapTable.OlapTableState.NORMAL);
+        }
+    }
+
+    @Test
+    public void testCancelImpl_FinishedRewriting_ForceRefusedWhileEarlierLoadNotVisible() throws Exception {
+        // Reserved V=5 but visible is 3: a load holding 4 has not finished on FE.
+        // It may already be published on BE, so the no-op publish of 5 would
+        // succeed while the visible bump to 5 is skipped, leaving 5 invisible
+        // forever. The force cancel must be refused before any no-op publish.
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.FINISHED_REWRITING);
+        Map<Long, Long> commit = new HashMap<>();
+        commit.put(100L, 5L);
+        setField(job, "commitVersionMap", commit);
+
+        Database db = new Database(2L, "db");
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        when(pp.getVisibleVersion()).thenReturn(3L);
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+
+        GlobalStateMgr gsm = buildLockableGsm(db, table);
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+
+            assertFalse(job.cancelImpl("force skip", true));
+
+            assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+            assertFalse(job.isForceSkippedAtCommitted());
+            utilsStatic.verify(() -> Utils.noOpPublishForForceSkip(anyLong(), any(), anyLong(), anyLong(),
+                    any(), any(), any(), anyBoolean()), never());
+            verify(pp, never()).setVisibleVersion(anyLong(), anyLong());
+            verify(table, never()).setState(OlapTable.OlapTableState.NORMAL);
+        }
+    }
+
+    @Test
+    public void testReadyToForceSkipPublish_NothingToCheckIsReady() throws Exception {
+        // Nothing reserved, or the db / table / partition is gone: there is no
+        // version to advance, so the check must not block the force cancel.
+        LakeTableAddIndexJob job = newJob();
+        Map<Long, Long> commit = new HashMap<>();
+        assertTrue(job.readyToForceSkipPublish(null));
+        assertTrue(job.readyToForceSkipPublish(commit));
+        commit.put(100L, 5L);
+
+        OlapTable table = mock(OlapTable.class);
+        when(table.getPhysicalPartition(100L)).thenReturn(null);
+        List<GlobalStateMgr> states = List.of(buildLockableGsm(null, null),
+                buildLockableGsm(new Database(2L, "db"), null), buildLockableGsm(new Database(2L, "db"), table));
+        for (GlobalStateMgr gsm : states) {
+            try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+                gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+                assertTrue(job.readyToForceSkipPublish(commit));
+            }
         }
     }
 
@@ -1049,21 +1130,159 @@ public class LakeTableIndexFastPathJobBaseTest {
     // -------- runWaitingTxnJob --------
 
     @Test
-    public void testRunWaitingTxnJob_PreviousTxnsNotFinishedReturns() throws Exception {
+    public void testRunWaitingTxnJob_DoesNotCancelWhenLastBlockerFinishes() throws Exception {
         LakeTableAddIndexJob job = newJob();
         setField(job, "jobState", AlterJobV2.JobState.WAITING_TXN);
         setField(job, "watershedTxnId", 5L);
 
-        GlobalStateMgr gsm = mock(GlobalStateMgr.class);
+        OlapTable table = mock(OlapTable.class);
+        when(table.getId()).thenReturn(3L);
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        when(table.getAllPhysicalPartitions()).thenReturn(List.of(new PhysicalPartition(11L, 11L)));
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
         GlobalTransactionMgr txnMgr = mock(GlobalTransactionMgr.class);
-        when(txnMgr.isPreviousTransactionsFinished(eq(5L), eq(2L), any())).thenReturn(false);
+        when(txnMgr.isPreviousTransactionsFinished(eq(5L), eq(2L), any())).thenReturn(false, true);
         when(gsm.getGlobalTransactionMgr()).thenReturn(txnMgr);
+        CompactionMgr compactionMgr = new CompactionMgr();
+        compactionMgr.handleLoadingFinished(new PartitionIdentifier(2L, 3L, 11L), 2,
+                System.currentTimeMillis(), new Quantiles(1.0, 1.0, 101.0));
+        when(gsm.getCompactionMgr()).thenReturn(compactionMgr);
 
+        boolean oldSlowdown = Config.lake_enable_ingest_slowdown;
+        long oldUpperBound = Config.lake_compaction_score_upper_bound;
+        Config.lake_enable_ingest_slowdown = true;
+        Config.lake_compaction_score_upper_bound = 100;
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            // The last transaction was running at the first check and became visible before the guard checked again.
             invokePrivate(job, "runWaitingTxnJob");
+            verify(txnMgr).getOldestPreviousRunningTransaction(5L, 2L, List.of(3L));
+            assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+            invokePrivate(job, "runWaitingTxnJob");
+            assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        } finally {
+            Config.lake_enable_ingest_slowdown = oldSlowdown;
+            Config.lake_compaction_score_upper_bound = oldUpperBound;
         }
-        assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+    }
+
+    /**
+     * StarRocksTest#12647: the table does not compact while the job waits. Once a partition's compaction score is
+     * above lake_compaction_score_upper_bound, every commit into it is rejected, the commit of the transaction the job
+     * waits for included, so the job is cancelled, naming that transaction, instead of keeping the table read-only.
+     */
+    @Test
+    public void testRunWaitingTxnJob_CancelsOnceCommitsAreRejected() throws Exception {
+        LakeTableAddIndexJob job = Mockito.spy(newJob());
+        Mockito.doNothing().when(job).createConnectContextIfNeeded();
+        setField(job, "jobState", AlterJobV2.JobState.WAITING_TXN);
+        setField(job, "watershedTxnId", 5L);
+
+        CompactionMgr compactionMgr = new CompactionMgr();
+        // The table has partition 11. Partition 12 was dropped, but the scheduler has not cleaned up its statistics.
+        OlapTable table = mock(OlapTable.class);
+        when(table.getId()).thenReturn(3L);
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        when(table.getAllPhysicalPartitions()).thenReturn(List.of(new PhysicalPartition(11L, 11L)));
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
+        WarehouseManager warehouseManager = mock(WarehouseManager.class);
+        when(warehouseManager.acquireComputeResource(any(CRAcquireContext.class)))
+                .thenThrow(new IllegalStateException("compute resource unavailable"));
+        when(gsm.getWarehouseMgr()).thenReturn(warehouseManager);
+        GlobalTransactionMgr txnMgr = mock(GlobalTransactionMgr.class);
+        when(txnMgr.isPreviousTransactionsFinished(eq(5L), eq(2L), any())).thenReturn(false);
+        TransactionState prepared = mock(TransactionState.class);
+        when(prepared.getTransactionId()).thenReturn(4L);
+        when(prepared.getLabel()).thenReturn("prepared_load");
+        when(prepared.getTransactionStatus()).thenReturn(TransactionStatus.PREPARED);
+        when(txnMgr.getOldestPreviousRunningTransaction(eq(5L), eq(2L), any())).thenReturn(prepared);
+        when(gsm.getGlobalTransactionMgr()).thenReturn(txnMgr);
+        when(gsm.getCompactionMgr()).thenReturn(compactionMgr);
+        PartitionIdentifier partition = new PartitionIdentifier(2L, 3L, 11L);
+        PartitionIdentifier droppedPartition = new PartitionIdentifier(2L, 3L, 12L);
+        boolean oldSlowdown = Config.lake_enable_ingest_slowdown;
+        long oldUpperBound = Config.lake_compaction_score_upper_bound;
+        Config.lake_enable_ingest_slowdown = true;
+        Config.lake_compaction_score_upper_bound = 100;
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            // At the bound commits still go through, and the job keeps waiting.
+            compactionMgr.handleLoadingFinished(partition, 2, System.currentTimeMillis(), new Quantiles(1.0, 1.0, 100.0));
+            invokePrivate(job, "runWaitingTxnJob");
+            assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+            // A score left behind by the dropped partition rejects no commit, so it does not cancel the job either.
+            compactionMgr.handleLoadingFinished(droppedPartition, 2, System.currentTimeMillis(),
+                    new Quantiles(1.0, 1.0, 500.0));
+            invokePrivate(job, "runWaitingTxnJob");
+            assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+
+            // Above the bound commits are rejected, and the job can cancel without acquiring a compute resource.
+            compactionMgr.handleLoadingFinished(partition, 3, System.currentTimeMillis(), new Quantiles(1.0, 1.0, 101.0));
+            job.run();
+            assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+            assertTrue(job.errMsg.contains("transaction 4 (label prepared_load, PREPARED)"), job.errMsg);
+            assertTrue(job.errMsg.contains("partition 11"), job.errMsg);
+            assertTrue(job.errMsg.contains("lake_compaction_score_upper_bound 100"), job.errMsg);
+            verify(table).setState(OlapTable.OlapTableState.NORMAL);
+        } finally {
+            Config.lake_enable_ingest_slowdown = oldSlowdown;
+            Config.lake_compaction_score_upper_bound = oldUpperBound;
+        }
+    }
+
+    /**
+     * After a leader change the job comes back in PENDING with its watershed recorded: the fast path journals the
+     * watershed while PENDING and enters WAITING_TXN only in memory. A round without a compute resource still cancels
+     * it once commits into its table are rejected, since it waits for the same transactions.
+     */
+    @Test
+    public void testReplayedPendingJobIsCancelledWithoutComputeResourceOnceCommitsAreRejected() throws Exception {
+        LakeTableAddIndexJob job = Mockito.spy(newJob());
+        Mockito.doNothing().when(job).createConnectContextIfNeeded();
+        setField(job, "jobState", AlterJobV2.JobState.PENDING);
+        setField(job, "watershedTxnId", 5L);
+
+        CompactionMgr compactionMgr = new CompactionMgr();
+        OlapTable table = mock(OlapTable.class);
+        when(table.getId()).thenReturn(3L);
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        when(table.getAllPhysicalPartitions()).thenReturn(List.of(new PhysicalPartition(11L, 11L)));
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
+        WarehouseManager warehouseManager = mock(WarehouseManager.class);
+        when(warehouseManager.acquireComputeResource(any(CRAcquireContext.class)))
+                .thenThrow(new IllegalStateException("compute resource unavailable"));
+        when(gsm.getWarehouseMgr()).thenReturn(warehouseManager);
+        GlobalTransactionMgr txnMgr = mock(GlobalTransactionMgr.class);
+        TransactionState prepared = mock(TransactionState.class);
+        when(prepared.getTransactionId()).thenReturn(4L);
+        when(prepared.getLabel()).thenReturn("prepared_load");
+        when(prepared.getTransactionStatus()).thenReturn(TransactionStatus.PREPARED);
+        when(txnMgr.getOldestPreviousRunningTransaction(eq(5L), eq(2L), any())).thenReturn(prepared);
+        when(gsm.getGlobalTransactionMgr()).thenReturn(txnMgr);
+        when(gsm.getCompactionMgr()).thenReturn(compactionMgr);
+        PartitionIdentifier partition = new PartitionIdentifier(2L, 3L, 11L);
+        boolean oldSlowdown = Config.lake_enable_ingest_slowdown;
+        long oldUpperBound = Config.lake_compaction_score_upper_bound;
+        Config.lake_enable_ingest_slowdown = true;
+        Config.lake_compaction_score_upper_bound = 100;
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            // At the bound commits still go through: the job stays PENDING until it gets a compute resource.
+            compactionMgr.handleLoadingFinished(partition, 2, System.currentTimeMillis(), new Quantiles(1.0, 1.0, 100.0));
+            job.run();
+            assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
+
+            // Above the bound commits are rejected, and the job is cancelled without a compute resource.
+            compactionMgr.handleLoadingFinished(partition, 3, System.currentTimeMillis(), new Quantiles(1.0, 1.0, 101.0));
+            job.run();
+            assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+            assertTrue(job.errMsg.contains("transaction 4 (label prepared_load, PREPARED)"), job.errMsg);
+            assertTrue(job.errMsg.contains("partition 11"), job.errMsg);
+            verify(table).setState(OlapTable.OlapTableState.NORMAL);
+        } finally {
+            Config.lake_enable_ingest_slowdown = oldSlowdown;
+            Config.lake_compaction_score_upper_bound = oldUpperBound;
+        }
     }
 
     @Test
@@ -1121,8 +1340,76 @@ public class LakeTableIndexFastPathJobBaseTest {
         batch.addTask(mockTaskFinished(false, 1L, 1L));
         setField(job, "batchTask", batch);
 
-        invokePrivate(job, "runRunningJob");
+        // The in-flight round also checks the nodes the tasks went to; this cluster knows none of them.
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), mock(OlapTable.class));
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            invokePrivate(job, "runRunningJob");
+        }
         assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+    }
+
+    /**
+     * A node restarted on an older binary loses the tasks it was sent, and the task report does not resend them to a
+     * node without the fast path (AlterReplicaTask#shouldResend). The job waits while the node is uncertified and
+     * cancels once its heartbeat shows the fast path is gone, instead of holding the table until the alter timeout.
+     */
+    @Test
+    public void testRunRunningJob_CancelsWhenDispatchedNodeLosesFastPath() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        AgentBatchTask batch = new AgentBatchTask();
+        batch.addTask(mockTaskFinished(true, 12L, 1L));
+        batch.addTask(mockTaskFinished(false, 11L, 2L));
+        setField(job, "batchTask", batch);
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), mock(OlapTable.class));
+        ComputeNode node = mock(ComputeNode.class);
+        when(node.getId()).thenReturn(11L);
+        when(gsm.getNodeMgr().getClusterInfo().getBackendOrComputeNode(11L)).thenReturn(node);
+
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            when(node.isSupportLakeIndexFastPath()).thenReturn(false);
+            invokePrivate(job, "runRunningJob");
+            assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+
+            when(node.hasLakeIndexFastPathHeartbeat(TEST_LEADER_LEASE)).thenReturn(true);
+            AlterCancelException thrown = assertThrows(AlterCancelException.class,
+                    () -> invokePrivate(job, "runRunningJob"));
+            assertTrue(thrown.getMessage().contains("compute node 11"), thrown.getMessage());
+        }
+    }
+
+    /**
+     * The job acquires a CN group of its warehouse at every scheduling round, not necessarily the default one, so
+     * admission must see a node without the fast path in any group.
+     */
+    @Test
+    public void testComputeNodesWithoutFastPathCoversEveryCnGroup() {
+        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), mock(OlapTable.class));
+        WarehouseManager wm = mock(WarehouseManager.class);
+        ComputeResourceProvider provider = mock(ComputeResourceProvider.class);
+        Warehouse warehouse = mock(Warehouse.class);
+        when(gsm.getWarehouseMgr()).thenReturn(wm);
+        when(wm.getComputeResourceProvider()).thenReturn(provider);
+        when(wm.getWarehouse(warehouseId)).thenReturn(warehouse);
+        when(warehouse.getWorkerGroupIds()).thenReturn(List.of(0L, 7L));
+        ComputeResource defaultGroup = mock(ComputeResource.class);
+        ComputeResource otherGroup = mock(ComputeResource.class);
+        when(provider.ofComputeResource(warehouseId, 0L)).thenReturn(defaultGroup);
+        when(provider.ofComputeResource(warehouseId, 7L)).thenReturn(otherGroup);
+        when(wm.getAllComputeNodeIds(defaultGroup)).thenReturn(List.of(11L));
+        when(wm.getAllComputeNodeIds(otherGroup)).thenReturn(List.of(12L));
+        ComputeNode upgraded = mock(ComputeNode.class);
+        when(upgraded.isSupportLakeIndexFastPath()).thenReturn(true);
+        when(gsm.getNodeMgr().getClusterInfo().getBackendOrComputeNode(11L)).thenReturn(upgraded);
+        when(gsm.getNodeMgr().getClusterInfo().getBackendOrComputeNode(12L)).thenReturn(mock(ComputeNode.class));
+
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            assertEquals(List.of(12L), LakeTableIndexFastPathJobBase.computeNodesWithoutFastPath(warehouseId));
+        }
     }
 
     @Test
@@ -1136,7 +1423,13 @@ public class LakeTableIndexFastPathJobBaseTest {
         batch.addTask(mockTaskFinished(false, 1L, 1L));
         setField(job, "batchTask", batch);
 
-        assertThrows(AlterCancelException.class, () -> invokePrivate(job, "runRunningJob"));
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), mock(OlapTable.class));
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            AlterCancelException thrown = assertThrows(AlterCancelException.class,
+                    () -> invokePrivate(job, "runRunningJob"));
+            assertTrue(thrown.getMessage().contains("timeout"), thrown.getMessage());
+        }
     }
 
     @Test
@@ -1220,6 +1513,8 @@ public class LakeTableIndexFastPathJobBaseTest {
         GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
         WarehouseManager wm = mock(WarehouseManager.class);
         ComputeNode cn = mock(ComputeNode.class);
+        when(cn.isSupportLakeIndexFastPath()).thenReturn(true);
+        when(cn.hasLakeIndexFastPathHeartbeat(TEST_LEADER_LEASE)).thenReturn(true);
         when(cn.getId()).thenReturn(11L);
         when(wm.getComputeNodeAssignedToTablet(any(), anyLong())).thenReturn(cn);
         when(gsm.getWarehouseMgr()).thenReturn(wm);
@@ -1263,6 +1558,46 @@ public class LakeTableIndexFastPathJobBaseTest {
         }
     }
 
+    /**
+     * Dispatch trusts a node's fast-path flag only once the node has answered a heartbeat of this leader session:
+     * before that the flag may be stale either way (an image older than the field, a downgrade during a leader
+     * change, a restart since a failed heartbeat). An uncertified node defers the dispatch, and a certified node that
+     * lacks the fast path cancels the job; neither sends anything.
+     */
+    @Test
+    public void testRunRunningJob_DispatchTrustsOnlyACertifiedFlag() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = configureRunningDispatch(job, table, 1L);
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
+        WarehouseManager wm = mock(WarehouseManager.class);
+        ComputeNode node = mock(ComputeNode.class);
+        when(node.getId()).thenReturn(11L);
+        when(wm.getComputeNodeAssignedToTablet(any(), anyLong())).thenReturn(node);
+        when(gsm.getWarehouseMgr()).thenReturn(wm);
+
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<AgentTaskQueue> queueStatic = Mockito.mockStatic(AgentTaskQueue.class);
+                MockedStatic<AgentTaskExecutor> executorStatic = Mockito.mockStatic(AgentTaskExecutor.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+
+            when(node.isSupportLakeIndexFastPath()).thenReturn(true);
+            when(node.hasLakeIndexFastPathHeartbeat(TEST_LEADER_LEASE)).thenReturn(false);
+            invokePrivate(job, "runRunningJob");
+            assertFailedDispatchLeavesRunning(job, pp, gsm);
+
+            when(node.isSupportLakeIndexFastPath()).thenReturn(false);
+            when(node.hasLakeIndexFastPathHeartbeat(TEST_LEADER_LEASE)).thenReturn(true);
+            AlterCancelException thrown = assertThrows(AlterCancelException.class,
+                    () -> invokePrivate(job, "runRunningJob"));
+            assertTrue(thrown.getMessage().contains("compute node 11"), thrown.getMessage());
+            assertFailedDispatchLeavesRunning(job, pp, gsm);
+            queueStatic.verify(() -> AgentTaskQueue.addTask(any()), never());
+            executorStatic.verify(() -> AgentTaskExecutor.submit(any()), never());
+        }
+    }
+
     @Test
     public void testRunRunningJob_CleansOnlyOwnedTasksOnRegistrationRefusal() throws Exception {
         LakeTableAddIndexJob job = newJob();
@@ -1272,6 +1607,8 @@ public class LakeTableIndexFastPathJobBaseTest {
         GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
         WarehouseManager wm = mock(WarehouseManager.class);
         ComputeNode cn = mock(ComputeNode.class);
+        when(cn.isSupportLakeIndexFastPath()).thenReturn(true);
+        when(cn.hasLakeIndexFastPathHeartbeat(TEST_LEADER_LEASE)).thenReturn(true);
         when(cn.getId()).thenReturn(11L);
         when(wm.getComputeNodeAssignedToTablet(any(), anyLong())).thenReturn(cn);
         when(gsm.getWarehouseMgr()).thenReturn(wm);
@@ -1312,6 +1649,8 @@ public class LakeTableIndexFastPathJobBaseTest {
         GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
         WarehouseManager wm = mock(WarehouseManager.class);
         ComputeNode cn = mock(ComputeNode.class);
+        when(cn.isSupportLakeIndexFastPath()).thenReturn(true);
+        when(cn.hasLakeIndexFastPathHeartbeat(TEST_LEADER_LEASE)).thenReturn(true);
         when(cn.getId()).thenReturn(11L);
         when(wm.getComputeNodeAssignedToTablet(any(), anyLong())).thenReturn(cn);
         when(gsm.getWarehouseMgr()).thenReturn(wm);
@@ -1352,6 +1691,19 @@ public class LakeTableIndexFastPathJobBaseTest {
         setField(job, "publishVersionFuture", f);
     }
 
+    /**
+     * A table whose physical partition 100 is at {@code visibleVersion}, for a job with commit version 5 on it.
+     */
+    private GlobalStateMgr buildGsmWithPartition(LakeTableAddIndexJob job, PhysicalPartition pp, long visibleVersion)
+            throws Exception {
+        setField(job, "commitVersionMap", new HashMap<>(Map.of(100L, 5L)));
+        OlapTable table = mock(OlapTable.class);
+        when(table.getIndexes()).thenReturn(new ArrayList<>());
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+        when(pp.getVisibleVersion()).thenReturn(visibleVersion);
+        return buildLockableGsm(new Database(2L, "db"), table);
+    }
+
     @Test
     public void testRunFinishedRewritingJob_PublishVersionPendingReturns() throws Exception {
         LakeTableAddIndexJob job = newJob();
@@ -1359,9 +1711,15 @@ public class LakeTableIndexFastPathJobBaseTest {
         // Future not yet done -> publishVersion() returns false; method returns early.
         CompletableFuture<Boolean> pending = new CompletableFuture<>();
         setField(job, "publishVersionFuture", pending);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        GlobalStateMgr gsm = buildGsmWithPartition(job, pp, 4L);
 
-        invokePrivate(job, "runFinishedRewritingJob");
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            invokePrivate(job, "runFinishedRewritingJob");
+        }
         assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        verify(pp, never()).setVisibleVersion(anyLong(), anyLong());
     }
 
     @Test
@@ -1372,8 +1730,55 @@ public class LakeTableIndexFastPathJobBaseTest {
         setField(job, "timeoutMs", 1L);
         CompletableFuture<Boolean> pending = new CompletableFuture<>();
         setField(job, "publishVersionFuture", pending);
+        GlobalStateMgr gsm = buildGsmWithPartition(job, mock(PhysicalPartition.class), 4L);
 
-        assertThrows(AlterCancelException.class, () -> invokePrivate(job, "runFinishedRewritingJob"));
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            AlterCancelException e = assertThrows(AlterCancelException.class,
+                    () -> invokePrivate(job, "runFinishedRewritingJob"));
+            assertTrue(e.getMessage().contains("publish timeout"), e.getMessage());
+        }
+    }
+
+    /**
+     * A load that committed after the watershed holds version 4, below the job's commit version 5, and is not
+     * visible yet. The job must neither publish on top of version 4 nor make version 5 visible: the load could
+     * then never finish.
+     */
+    @Test
+    public void testRunFinishedRewritingJob_WaitsForVersionBelowCommitVersion() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.FINISHED_REWRITING);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        GlobalStateMgr gsm = buildGsmWithPartition(job, pp, 3L);
+
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            invokePrivate(job, "runFinishedRewritingJob");
+        }
+        assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        assertNull(getField(job, "publishVersionFuture"));
+        verify(pp, never()).setVisibleVersion(anyLong(), anyLong());
+    }
+
+    /**
+     * An earlier attempt of the finish step made the commit version visible and later loads moved the partition
+     * on before the job reached FINISHED. Finishing now must not move the visible version back.
+     */
+    @Test
+    public void testRunFinishedRewritingJob_DoesNotMoveVisibleVersionBack() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.FINISHED_REWRITING);
+        setPublishFuture(job, true);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        GlobalStateMgr gsm = buildGsmWithPartition(job, pp, 7L);
+
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            invokePrivate(job, "runFinishedRewritingJob");
+        }
+        assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+        verify(pp, never()).setVisibleVersion(anyLong(), anyLong());
     }
 
     @Test
@@ -1389,6 +1794,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         OlapTable table = mock(OlapTable.class);
         when(table.getIndexes()).thenReturn(new ArrayList<>());
         PhysicalPartition pp = mock(PhysicalPartition.class);
+        when(pp.getVisibleVersion()).thenReturn(4L);
         when(table.getPhysicalPartition(100L)).thenReturn(pp);
 
         GlobalStateMgr gsm = buildLockableGsm(db, table);
@@ -1423,6 +1829,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         OlapTable table = mock(OlapTable.class);
         when(table.getIndexes()).thenReturn(new ArrayList<>());
         PhysicalPartition pp = mock(PhysicalPartition.class);
+        when(pp.getVisibleVersion()).thenReturn(4L);
         when(table.getPhysicalPartition(100L)).thenReturn(pp);
         MaterializedIndexMeta retiredMeta = mock(MaterializedIndexMeta.class);
         when(retiredMeta.getSchemaId()).thenReturn(999L);
@@ -1557,14 +1964,17 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
-            // Utils.publishVersion is a no-op overload accepting (List, TxnInfoPB, long, long, ComputeResource, boolean).
-            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+            // Utils.publishVersion is a no-op overload accepting
+            // (List, TxnInfoPB, long, long, ComputeResource, boolean useAggregatePublish, boolean isRetryPublish).
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean(),
+                    anyBoolean()))
                     .thenAnswer(inv -> null);
             assertTrue(job.lakePublishVersion());
             // Per-tablet publish (useAggregatePublish=false); the aggregate path is NOT used.
-            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), eq(4L), eq(5L), any(), eq(false)),
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), eq(4L), eq(5L), any(), eq(false), anyBoolean()),
                     times(1));
-            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(true)),
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(true),
+                    anyBoolean()),
                     never());
         }
     }
@@ -1603,14 +2013,15 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
-            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean(),
+                    anyBoolean()))
                     .thenAnswer(invocation -> null);
 
             assertTrue(job.lakePublishVersion());
 
             ArgumentCaptor<List<Tablet>> tabletsCaptor = ArgumentCaptor.forClass(List.class);
             utilsStatic.verify(() -> Utils.publishVersion(tabletsCaptor.capture(), any(), eq(4L), eq(5L), any(),
-                    eq(false)), times(2));
+                    eq(false), anyBoolean()), times(2));
             List<List<Tablet>> published = tabletsCaptor.getAllValues();
             assertEquals(List.of(List.of(latestBaseTablet), List.of(latestRollupTablet)), published);
             assertEquals(201L, published.get(0).get(0).getId());
@@ -1651,19 +2062,21 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
-            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean(),
+                    anyBoolean()))
                     .thenAnswer(invocation -> null);
 
             assertTrue(job.lakePublishVersion());
 
             ArgumentCaptor<List<Tablet>> tabletsCaptor = ArgumentCaptor.forClass(List.class);
             utilsStatic.verify(() -> Utils.publishVersion(tabletsCaptor.capture(), any(), eq(4L), eq(5L), any(),
-                    eq(true)), times(1));
+                    eq(true), anyBoolean()), times(1));
             List<Tablet> published = tabletsCaptor.getValue();
             assertEquals(List.of(latestBaseTablet, latestRollupTablet), published);
             assertEquals(201L, published.get(0).getId());
             assertEquals(202L, published.get(1).getId());
-            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(false)),
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(false),
+                    anyBoolean()),
                     never());
         }
     }
@@ -1693,7 +2106,8 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
-            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean(),
+                    anyBoolean()))
                     .thenThrow(new RuntimeException("rpc fail"));
             assertFalse(job.lakePublishVersion());
         }
@@ -1739,7 +2153,8 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
-            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean(),
+                    anyBoolean()))
                     .thenAnswer(inv -> null);
 
             assertTrue(job.lakePublishVersion());
@@ -1749,8 +2164,9 @@ public class LakeTableIndexFastPathJobBaseTest {
             @SuppressWarnings("unchecked")
             ArgumentCaptor<List<Tablet>> tabletsCaptor = ArgumentCaptor.forClass(List.class);
             utilsStatic.verify(() -> Utils.publishVersion(tabletsCaptor.capture(), any(), eq(4L), eq(5L),
-                    any(), eq(true)), times(1));
-            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(false)),
+                    any(), eq(true), anyBoolean()), times(1));
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(false),
+                    anyBoolean()),
                     never());
             List<Tablet> published = tabletsCaptor.getValue();
             assertEquals(2, published.size());
@@ -1799,7 +2215,8 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
-            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean(),
+                    anyBoolean()))
                     .thenAnswer(inv -> null);
 
             assertTrue(job.lakePublishVersion());
@@ -1807,12 +2224,16 @@ public class LakeTableIndexFastPathJobBaseTest {
             // Exactly one aggregate publish per partition, each carrying only its own
             // tablet at its own base->commit version; no cross-partition mixing.
             utilsStatic.verify(() -> Utils.publishVersion(
-                    argThat(l -> l.size() == 1 && l.contains(tA)), any(), eq(4L), eq(5L), any(), eq(true)), times(1));
+                    argThat(l -> l.size() == 1 && l.contains(tA)), any(), eq(4L), eq(5L), any(), eq(true),
+                    anyBoolean()), times(1));
             utilsStatic.verify(() -> Utils.publishVersion(
-                    argThat(l -> l.size() == 1 && l.contains(tB)), any(), eq(7L), eq(8L), any(), eq(true)), times(1));
-            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(true)),
+                    argThat(l -> l.size() == 1 && l.contains(tB)), any(), eq(7L), eq(8L), any(), eq(true),
+                    anyBoolean()), times(1));
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(true),
+                    anyBoolean()),
                     times(2));
-            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(false)),
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(false),
+                    anyBoolean()),
                     never());
         }
     }
@@ -1843,9 +2264,57 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
-            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(true)))
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(true),
+                    anyBoolean()))
                     .thenThrow(new RuntimeException("rpc fail"));
             assertFalse(job.lakePublishVersion());
+        }
+    }
+
+    @Test
+    public void testLakePublishVersion_RetryIsPerPartition() throws Exception {
+        // Partition 100 fails on the first attempt, so partition 101 is never sent. On the next attempt only
+        // partition 100 is a retry; partition 101 is still a first attempt.
+        LakeTableAddIndexJob job = new LakeTableAddIndexJob(1L, 2L, 3L, "t", 60_000L,
+                new ArrayList<>(), new ArrayList<>());
+        Map<Long, Long> commit = new LinkedHashMap<>();
+        commit.put(100L, 5L);
+        commit.put(101L, 8L);
+        setField(job, "commitVersionMap", commit);
+
+        Database db = new Database(2L, "db");
+        OlapTable table = mock(OlapTable.class);
+        when(table.isFileBundling()).thenReturn(false);
+        for (long partitionId : commit.keySet()) {
+            MaterializedIndex idx = mock(MaterializedIndex.class);
+            when(idx.getTablets()).thenReturn(Collections.singletonList(mock(Tablet.class)));
+            PhysicalPartition pp = mock(PhysicalPartition.class);
+            when(pp.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                    .thenReturn(Collections.singletonList(idx));
+            when(table.getPhysicalPartition(partitionId)).thenReturn(pp);
+        }
+
+        GlobalStateMgr gsm = mock(GlobalStateMgr.class);
+        LocalMetastore lm = mock(LocalMetastore.class);
+        when(lm.getDb(anyLong())).thenReturn(db);
+        when(lm.getTable(anyLong(), anyLong())).thenReturn(table);
+        when(gsm.getLocalMetastore()).thenReturn(lm);
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), eq(4L), eq(5L), any(), anyBoolean(),
+                    eq(false))).thenThrow(new RuntimeException("rpc fail"));
+            assertFalse(job.lakePublishVersion());
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), eq(7L), eq(8L), any(), anyBoolean(),
+                    anyBoolean()), never());
+
+            assertTrue(job.lakePublishVersion());
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), eq(4L), eq(5L), any(), eq(false),
+                    eq(true)), times(1));
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), eq(7L), eq(8L), any(), eq(false),
+                    eq(false)), times(1));
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), eq(7L), eq(8L), any(), anyBoolean(),
+                    eq(true)), never());
         }
     }
 
@@ -1878,10 +2347,11 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
-            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean(),
+                    anyBoolean()))
                     .thenAnswer(inv -> null);
             assertTrue(job.lakePublishVersion());
-            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), eq(4L), eq(5L), any(), eq(true)),
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), eq(4L), eq(5L), any(), eq(true), anyBoolean()),
                     times(1));
         }
     }
@@ -1914,6 +2384,8 @@ public class LakeTableIndexFastPathJobBaseTest {
         GlobalStateMgr gsm = buildLockableGsm(db, table);
         WarehouseManager wm = mock(WarehouseManager.class);
         ComputeNode cn = mock(ComputeNode.class);
+        when(cn.isSupportLakeIndexFastPath()).thenReturn(true);
+        when(cn.hasLakeIndexFastPathHeartbeat(TEST_LEADER_LEASE)).thenReturn(true);
         when(cn.getId()).thenReturn(11L);
         when(wm.getComputeNodeAssignedToTablet(any(), eq(1L))).thenReturn(cn);
         when(gsm.getWarehouseMgr()).thenReturn(wm);
@@ -1963,6 +2435,8 @@ public class LakeTableIndexFastPathJobBaseTest {
         GlobalStateMgr gsm = buildLockableGsm(db, table);
         WarehouseManager wm = mock(WarehouseManager.class);
         ComputeNode cn = mock(ComputeNode.class);
+        when(cn.isSupportLakeIndexFastPath()).thenReturn(true);
+        when(cn.hasLakeIndexFastPathHeartbeat(TEST_LEADER_LEASE)).thenReturn(true);
         when(cn.getId()).thenReturn(11L);
         when(wm.getComputeNodeAssignedToTablet(any(), eq(1L))).thenReturn(cn);
         when(gsm.getWarehouseMgr()).thenReturn(wm);
@@ -2195,6 +2669,8 @@ public class LakeTableIndexFastPathJobBaseTest {
         WarehouseManager wm = mock(WarehouseManager.class);
         ComputeNode cn = mock(ComputeNode.class);
         when(cn.getId()).thenReturn(11L);
+        when(cn.isSupportLakeIndexFastPath()).thenReturn(true);
+        when(cn.hasLakeIndexFastPathHeartbeat(TEST_LEADER_LEASE)).thenReturn(true);
         when(wm.getComputeNodeAssignedToTablet(any(), anyLong())).thenReturn(cn);
         when(wm.acquireComputeResource(any(CRAcquireContext.class))).thenReturn(mock(ComputeResource.class));
         return wm;

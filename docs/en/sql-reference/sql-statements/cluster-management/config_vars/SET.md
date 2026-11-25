@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Sets the specified system variables or user-defined variables for StarRocks."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SET
@@ -36,10 +37,10 @@ mysql> SET time_zone = "Asia/Shanghai";
 Query OK, 0 rows affected (0.00 sec)
 ```
 
-Example 2: Set the `exec_mem_limit` to `2147483648` globally.
+Example 2: Set the `query_mem_limit` to `2147483648` globally.
 
 ```Plain
-mysql> SET GLOBAL exec_mem_limit = 2147483648;
+mysql> SET GLOBAL query_mem_limit = 2147483648;
 Query OK, 0 rows affected (0.00 sec)
 ```
 
@@ -47,7 +48,7 @@ Example 3: Set multiple global variables. Add the `GLOBAL` keyword before each v
 
 ```Plain
 mysql> SET 
-       GLOBAL exec_mem_limit = 2147483648,
+       GLOBAL query_mem_limit = 2147483648,
        GLOBAL time_zone = "Asia/Shanghai";
 Query OK, 0 rows affected (0.00 sec)
 ```

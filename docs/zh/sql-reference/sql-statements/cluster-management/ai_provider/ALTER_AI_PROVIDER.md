@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "更新已有 AI provider 的属性。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER AI PROVIDER

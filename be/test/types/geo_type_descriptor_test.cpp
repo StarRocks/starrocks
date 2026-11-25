@@ -33,8 +33,7 @@ using apache::thrift::protocol::TCompactProtocol;
 using apache::thrift::transport::TMemoryBuffer;
 
 GeoColumnDescriptor geography() {
-    return {GeoTypeDescriptor{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL, GEO_EDGE_ALGORITHM_SPHERICAL,
-                              "OGC:CRS84", std::nullopt}};
+    return {GeoTypeDescriptor{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", std::nullopt}};
 }
 
 template <typename Protocol = TBinaryProtocol, typename Thrift>
@@ -76,7 +75,6 @@ TEST(GeoTypeDescriptorTest, AllAlgorithmsRoundTrip) {
         desc.type.edge_algorithm = algorithm;
         if (algorithm == GEO_EDGE_ALGORITHM_PLANAR) {
             desc.type.logical_type = GEO_LOGICAL_TYPE_GEOMETRY;
-            desc.type.coordinate_system = GEO_COORDINATE_SYSTEM_CARTESIAN;
         }
         desc.type.srid = 4326;
         check_round_trip(desc.type);
@@ -91,12 +89,6 @@ TEST(GeoTypeDescriptorTest, WireOrdinalsRemainStable) {
     EXPECT_EQ(1, GEO_LOGICAL_TYPE_GEOGRAPHY);
     EXPECT_EQ(2, TGeoLogicalType::GEOMETRY);
     EXPECT_EQ(2, GEO_LOGICAL_TYPE_GEOMETRY);
-    EXPECT_EQ(0, TGeoCoordinateSystem::UNKNOWN);
-    EXPECT_EQ(0, GEO_COORDINATE_SYSTEM_UNKNOWN);
-    EXPECT_EQ(1, TGeoCoordinateSystem::SPHERICAL);
-    EXPECT_EQ(1, GEO_COORDINATE_SYSTEM_SPHERICAL);
-    EXPECT_EQ(2, TGeoCoordinateSystem::CARTESIAN);
-    EXPECT_EQ(2, GEO_COORDINATE_SYSTEM_CARTESIAN);
     EXPECT_EQ(0, TGeoEdgeAlgorithm::UNKNOWN);
     EXPECT_EQ(0, GEO_EDGE_ALGORITHM_UNKNOWN);
     EXPECT_EQ(1, TGeoEdgeAlgorithm::SPHERICAL);
@@ -118,10 +110,9 @@ TEST(GeoTypeDescriptorTest, WireOrdinalsRemainStable) {
     EXPECT_EQ(4, GEO_DIMENSION_XYZM);
     EXPECT_EQ(5, GEO_DIMENSION_MIXED);
     EXPECT_EQ(1, GeoTypeDescPB::kLogicalTypeFieldNumber);
-    EXPECT_EQ(2, GeoTypeDescPB::kCoordinateSystemFieldNumber);
-    EXPECT_EQ(3, GeoTypeDescPB::kEdgeAlgorithmFieldNumber);
-    EXPECT_EQ(4, GeoTypeDescPB::kCrsFieldNumber);
-    EXPECT_EQ(5, GeoTypeDescPB::kSridFieldNumber);
+    EXPECT_EQ(2, GeoTypeDescPB::kEdgeAlgorithmFieldNumber);
+    EXPECT_EQ(3, GeoTypeDescPB::kCrsFieldNumber);
+    EXPECT_EQ(4, GeoTypeDescPB::kSridFieldNumber);
     EXPECT_EQ(1, GeoColumnDescPB::kTypeFieldNumber);
 }
 
@@ -145,7 +136,6 @@ TEST(GeoTypeDescriptorTest, MissingFieldsNormalizeWithoutGuessingSemantics) {
 
     TGeoTypeDesc type;
     type.__set_logical_type(TGeoLogicalType::UNKNOWN);
-    type.__set_coordinate_system(TGeoCoordinateSystem::UNKNOWN);
     type.__set_edge_algorithm(TGeoEdgeAlgorithm::UNKNOWN);
     type.__set_crs("");
     EXPECT_EQ(GeoTypeDescriptor{}, GeoTypeDescriptor::from_thrift(type));
@@ -205,8 +195,6 @@ std::string protobuf_enum_wire(int field, int32_t value) {
 TEST(GeoTypeDescriptorTest, WireFieldsUseDeclaredEnums) {
     static_assert(std::is_same_v<decltype(TGeoTypeDesc{}.logical_type), TGeoLogicalType::type>);
     static_assert(std::is_same_v<decltype(GeoTypeDescPB{}.logical_type()), GeoLogicalTypePB>);
-    static_assert(std::is_same_v<decltype(TGeoTypeDesc{}.coordinate_system), TGeoCoordinateSystem::type>);
-    static_assert(std::is_same_v<decltype(GeoTypeDescPB{}.coordinate_system()), GeoCoordinateSystemPB>);
     static_assert(std::is_same_v<decltype(TGeoTypeDesc{}.edge_algorithm), TGeoEdgeAlgorithm::type>);
     static_assert(std::is_same_v<decltype(GeoTypeDescPB{}.edge_algorithm()), GeoEdgeAlgorithmPB>);
 }
@@ -216,7 +204,7 @@ constexpr std::array unknown_values = {127, -1, std::numeric_limits<int32_t>::ma
 
 TEST(GeoTypeDescriptorTest, UnknownThriftEnumsNormalizeToUnknown) {
     for (int32_t value : unknown_values) {
-        for (int16_t field = 1; field <= 3; ++field) {
+        for (int16_t field = 1; field <= 2; ++field) {
             SCOPED_TRACE(::testing::Message() << field << "/" << value);
             auto type_wire = thrift_enum_wire<TGeoTypeDesc>(field, value);
             type_wire.__set_crs("OGC:CRS84");
@@ -236,7 +224,7 @@ TEST(GeoTypeDescriptorTest, UnknownThriftEnumsNormalizeToUnknown) {
 
 TEST(GeoTypeDescriptorTest, UnknownProtobufWireEnumsUseUnknownDefault) {
     for (int32_t value : unknown_values) {
-        for (int field = 1; field <= 3; ++field) {
+        for (int field = 1; field <= 2; ++field) {
             SCOPED_TRACE(::testing::Message() << field << "/" << value);
             GeoTypeDescPB type;
             ASSERT_TRUE(type.ParseFromString(protobuf_enum_wire(field, value)));
@@ -257,7 +245,7 @@ TEST(GeoTypeDescriptorTest, UnknownProtobufWireEnumsUseUnknownDefault) {
 TEST(GeoTypeDescriptorTest, ProtobufKnownEnumsAreNotOverriddenByUnknownFields) {
     const auto expected = geography();
     for (int32_t value : unknown_values) {
-        for (int field = 1; field <= 3; ++field) {
+        for (int field = 1; field <= 2; ++field) {
             for (bool known_first : {false, true}) {
                 SCOPED_TRACE(::testing::Message() << field << "/" << value << "/" << known_first);
                 const auto unknown = protobuf_enum_wire(field, value);
@@ -294,19 +282,16 @@ TEST(GeoTypeDescriptorTest, ParsedSridIsNotTypeIdentity) {
 
 TEST(GeoTypeDescriptorTest, SemanticMismatchIsNotImplicitlyConverted) {
     const auto source = geography();
-    for (int field = 0; field < 4; ++field) {
+    for (int field = 0; field < 3; ++field) {
         auto target = source;
         switch (field) {
         case 0:
             target.type.logical_type = GEO_LOGICAL_TYPE_GEOMETRY;
             break;
         case 1:
-            target.type.coordinate_system = GEO_COORDINATE_SYSTEM_CARTESIAN;
-            break;
-        case 2:
             target.type.edge_algorithm = GEO_EDGE_ALGORITHM_KARNEY;
             break;
-        case 3:
+        case 2:
             target.type.crs = "EPSG:4326";
             break; // Not an axis-order-safe CRS84 alias.
         }

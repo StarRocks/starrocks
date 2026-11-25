@@ -72,6 +72,7 @@ set(COMPUTE_ENV_QUERY_FILES
     query/file_scan_split_context.cpp
     query/global_late_materialization_context.cpp
     query/partition_scan_range_pruner.cpp
+    query/query_remote_read.cpp
     query/query_runtime_state.cpp
     query/query_scan_metrics.cpp
     query/scan_conjuncts_manager.cpp
@@ -100,6 +101,7 @@ set(COMPUTE_ENV_LOAD_FILES
     load/stream_load_context.cpp
     load/stream_load_metrics.cpp
     load/stream_load_pipe.cpp
+    load/stream_load_pipe_attachment.cpp
     load/time_bounded_stream_load_pipe.cpp
 )
 
