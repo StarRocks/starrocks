@@ -16,17 +16,11 @@ package com.starrocks.statistic.base;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-<<<<<<< HEAD
+import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-=======
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Table;
-import com.starrocks.sql.ast.KeysType;
-import com.starrocks.type.StructType;
-import com.starrocks.type.Type;
->>>>>>> e41f5b8 ([BugFix] Route UNIQUE and AGG value statistics through data sampling (#83008))
 
 import java.util.List;
 
