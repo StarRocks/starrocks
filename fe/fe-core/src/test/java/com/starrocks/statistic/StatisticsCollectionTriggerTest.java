@@ -15,10 +15,12 @@
 package com.starrocks.statistic;
 
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DmlType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.InMemoryStatisticStorage;
@@ -29,12 +31,17 @@ import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.PartitionCommitInfo;
 import com.starrocks.transaction.TableCommitInfo;
 import com.starrocks.transaction.TransactionState;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 public class StatisticsCollectionTriggerTest extends PlanTestBase {
 
@@ -48,6 +55,18 @@ public class StatisticsCollectionTriggerTest extends PlanTestBase {
     @AfterAll
     public static void afterClass() {
         PlanTestBase.afterClass();
+    }
+
+    @BeforeEach
+    public void mockStatisticsCollection() {
+        // These tests verify trigger decisions without running queries or changing the supplied statistics metadata.
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public AnalyzeStatus collectStatistics(ConnectContext context, StatisticsCollectJob job,
+                                                  AnalyzeStatus status, boolean refreshAsync, boolean resetWarehouse) {
+                return status;
+            }
+        };
     }
 
     @Test
@@ -83,7 +102,7 @@ public class StatisticsCollectionTriggerTest extends PlanTestBase {
             StatisticsCollectionTrigger trigger =
                     StatisticsCollectionTrigger.triggerOnFirstLoad(transactionState, db, table, true, true,
                             DmlType.INSERT_INTO);
-            Assertions.assertEquals(null, trigger.getAnalyzeType());
+            Assertions.assertNull(trigger.getAnalyzeType());
         }
         {
             InsertTxnCommitAttachment attachment = new InsertTxnCommitAttachment(1000, 5);
@@ -105,6 +124,281 @@ public class StatisticsCollectionTriggerTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void triggerOnFirstLoadUsesCandidatePartitionSize() throws Exception {
+        final String dbName = "test_statistics";
+        final String tableName = "t_first_load_large_history";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName);
+        createPartitionedTable(tableName, "");
+        starRocksAssert.ddl("alter table " + tableName + " add partition p_history values in ('2')");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        OlapTable table = (OlapTable) db.getTable(tableName);
+        setPartitionStatistics(table, "p_history", 1_000_000_000L);
+        BasicStatsMeta statsMeta = new BasicStatsMeta(db.getId(), table.getId(), List.of(),
+                StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(), Map.of(), 1_000_000_000L);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().put(table.getId(), statsMeta);
+
+        TransactionState transactionState = new TransactionState();
+        TableCommitInfo commitInfo = new TableCommitInfo(table.getId());
+        commitInfo.addPartitionCommitInfo(new PartitionCommitInfo(
+                table.getPartition("p1").getDefaultPhysicalPartition().getId(), Partition.PARTITION_INIT_VERSION + 1, 1));
+        transactionState.putIdToTableCommitInfo(table.getId(), commitInfo);
+
+        // A new partition's FE row count may still be zero, or may have already been synchronized.
+        for (long partitionRows : new long[] {0, 1000}) {
+            setPartitionStatistics(table, "p1", partitionRows);
+            for (long loadedRows : new long[] {1000, Config.statistic_sample_collect_rows,
+                    Config.statistic_sample_collect_rows + 1}) {
+                transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(loadedRows));
+                StatisticsCollectionTrigger trigger = StatisticsCollectionTrigger.triggerOnFirstLoad(
+                        transactionState, db, table, true, true, DmlType.INSERT_INTO);
+                StatsConstants.AnalyzeType expectedType = loadedRows > Config.statistic_sample_collect_rows
+                        ? StatsConstants.AnalyzeType.SAMPLE : StatsConstants.AnalyzeType.FULL;
+                Assertions.assertEquals(expectedType, trigger.getAnalyzeType(),
+                        "first load with " + loadedRows + " rows and FE partition row count " + partitionRows);
+            }
+
+            transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(1));
+            StatisticsCollectionTrigger trigger = StatisticsCollectionTrigger.triggerOnFirstLoad(
+                    transactionState, db, table, true, true, DmlType.INSERT_INTO);
+            if (partitionRows == 0) {
+                Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, trigger.getAnalyzeType());
+            } else {
+                Assertions.assertNull(trigger.getAnalyzeType());
+            }
+        }
+    }
+
+    @Test
+    public void triggerOnFirstLoadSumsOnlyCandidatePartitions() throws Exception {
+        final String dbName = "test_statistics";
+        final String tableName = "t_first_load_multiple_partitions";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName);
+        createPartitionedTable(tableName, "");
+        starRocksAssert.ddl("alter table " + tableName + " add partition p2 values in ('2')");
+        starRocksAssert.ddl("alter table " + tableName + " add partition p_existing values in ('3')");
+        starRocksAssert.ddl("alter table " + tableName + " add partition p_history values in ('4')");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        OlapTable table = (OlapTable) db.getTable(tableName);
+        setPartitionStatistics(table, "p1", 1000);
+        setPartitionStatistics(table, "p2", 9000);
+        setPartitionStatistics(table, "p_existing", 1_000_000_000L);
+        setPartitionStatistics(table, "p_history", 1_000_000_000L);
+        BasicStatsMeta statsMeta = new BasicStatsMeta(db.getId(), table.getId(), List.of(),
+                StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(), Map.of(), 2_000_010_000L);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().put(table.getId(), statsMeta);
+
+        TransactionState transactionState = new TransactionState();
+        TableCommitInfo commitInfo = new TableCommitInfo(table.getId());
+        for (String partitionName : List.of("p1", "p2")) {
+            commitInfo.addPartitionCommitInfo(new PartitionCommitInfo(
+                    table.getPartition(partitionName).getDefaultPhysicalPartition().getId(),
+                    Partition.PARTITION_INIT_VERSION + 1, 1));
+        }
+        commitInfo.addPartitionCommitInfo(new PartitionCommitInfo(
+                table.getPartition("p_existing").getDefaultPhysicalPartition().getId(),
+                Partition.PARTITION_INIT_VERSION + 5, 1));
+        transactionState.putIdToTableCommitInfo(table.getId(), commitInfo);
+
+        // Both first-load partitions count; neither the touched existing partition nor untouched history counts.
+        transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(500));
+        StatisticsCollectionTrigger trigger = StatisticsCollectionTrigger.triggerOnFirstLoad(
+                transactionState, db, table, true, true, DmlType.INSERT_INTO);
+        Assertions.assertNull(trigger.getAnalyzeType());
+
+        transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(2000));
+        trigger = StatisticsCollectionTrigger.triggerOnFirstLoad(
+                transactionState, db, table, true, true, DmlType.INSERT_INTO);
+        Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, trigger.getAnalyzeType());
+
+        transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(Config.statistic_sample_collect_rows + 1));
+        trigger = StatisticsCollectionTrigger.triggerOnFirstLoad(
+                transactionState, db, table, true, true, DmlType.INSERT_INTO);
+        Assertions.assertEquals(StatsConstants.AnalyzeType.SAMPLE, trigger.getAnalyzeType());
+    }
+
+    @Test
+    public void triggerOnFirstPhysicalLoadUsesLogicalPartitionSize() throws Exception {
+        final String dbName = "test_statistics";
+        final String tableName = "t_first_load_new_physical";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName);
+        createPartitionedTable(tableName, "");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        OlapTable table = (OlapTable) db.getTable(tableName);
+        Partition partition = table.getPartition("p1");
+        PhysicalPartition existingPhysical = partition.getDefaultPhysicalPartition();
+        existingPhysical.updateVisibleVersion(Partition.PARTITION_INIT_VERSION + 5);
+        existingPhysical.setDataVersion(Partition.PARTITION_INIT_VERSION + 5);
+        setPartitionStatistics(table, "p1", 9000);
+
+        MaterializedIndex newIndex = new MaterializedIndex(GlobalStateMgr.getCurrentState().getNextId());
+        newIndex.setRowCount(1000);
+        PhysicalPartition newPhysical = new PhysicalPartition(
+                GlobalStateMgr.getCurrentState().getNextId(), partition.getId(), newIndex);
+        newPhysical.updateVisibleVersion(Partition.PARTITION_INIT_VERSION + 1);
+        newPhysical.setDataVersion(Partition.PARTITION_INIT_VERSION + 1);
+        partition.addSubPartition(newPhysical);
+        table.addPhysicalPartition(newPhysical);
+
+        TransactionState transactionState = new TransactionState();
+        TableCommitInfo commitInfo = new TableCommitInfo(table.getId());
+        commitInfo.addPartitionCommitInfo(new PartitionCommitInfo(
+                newPhysical.getId(), Partition.PARTITION_INIT_VERSION + 1, 1));
+        transactionState.putIdToTableCommitInfo(table.getId(), commitInfo);
+
+        // The candidate is the logical partition, including rows in its previously loaded physical partition.
+        transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(500));
+        StatisticsCollectionTrigger trigger = StatisticsCollectionTrigger.triggerOnFirstLoad(
+                transactionState, db, table, true, true, DmlType.INSERT_INTO);
+        Assertions.assertNull(trigger.getAnalyzeType());
+
+        transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(2000));
+        trigger = StatisticsCollectionTrigger.triggerOnFirstLoad(
+                transactionState, db, table, true, true, DmlType.INSERT_INTO);
+        Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, trigger.getAnalyzeType());
+    }
+
+    @Test
+    public void triggerOnFirstLoadSkipsEmptyOrUnknownLoad() throws Exception {
+        final String dbName = "test_statistics";
+        final String tableName = "t_first_load_empty";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName);
+        createPartitionedTable(tableName, "");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Table table = db.getTable(tableName);
+        TransactionState transactionState = new TransactionState();
+        TableCommitInfo commitInfo = new TableCommitInfo(table.getId());
+        commitInfo.addPartitionCommitInfo(new PartitionCommitInfo(
+                table.getPartition("p1").getDefaultPhysicalPartition().getId(), Partition.PARTITION_INIT_VERSION + 1, 1));
+        transactionState.putIdToTableCommitInfo(table.getId(), commitInfo);
+
+        for (long loadedRows : new long[] {0, -1}) {
+            transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(loadedRows));
+            StatisticsCollectionTrigger trigger = StatisticsCollectionTrigger.triggerOnFirstLoad(
+                    transactionState, db, table, true, true, DmlType.INSERT_INTO);
+            Assertions.assertNull(trigger.getAnalyzeType());
+        }
+
+        transactionState.setTxnCommitAttachment(null);
+        StatisticsCollectionTrigger trigger = StatisticsCollectionTrigger.triggerOnFirstLoad(
+                transactionState, db, table, true, true, DmlType.INSERT_INTO);
+        Assertions.assertNull(trigger.getAnalyzeType());
+    }
+
+    @Test
+    public void triggerOnInsertSkipsPreviouslyLoadedPartition() throws Exception {
+        final String dbName = "test_statistics";
+        final String tableName = "t_repeated_load";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName);
+        createPartitionedTable(tableName, "");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Table table = db.getTable(tableName);
+        TransactionState transactionState = new TransactionState();
+        TableCommitInfo commitInfo = new TableCommitInfo(table.getId());
+        commitInfo.addPartitionCommitInfo(new PartitionCommitInfo(
+                table.getPartition("p1").getDefaultPhysicalPartition().getId(), Partition.PARTITION_INIT_VERSION + 5, 1));
+        transactionState.putIdToTableCommitInfo(table.getId(), commitInfo);
+        transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(Config.statistic_sample_collect_rows + 1));
+
+        StatisticsCollectionTrigger trigger = StatisticsCollectionTrigger.triggerOnFirstLoad(
+                transactionState, db, table, true, true, DmlType.INSERT_INTO);
+        Assertions.assertNull(trigger.getAnalyzeType());
+    }
+
+    @Test
+    public void triggerOnLoadSkipsPartitionRemovedByConcurrentOptimize() throws Exception {
+        // Regression: during online optimize, a load txn becomes VISIBLE and its post-commit, best-effort
+        // first-load stats trigger iterates the txn's PartitionCommitInfo. A concurrent OnlineOptimizeJobV2 can
+        // replacePartition + disableDoubleWritePartition in between, so the committed partition id no longer
+        // resolves on the table. Previously prepareAnalyzeJobForLoad dereferenced it unguarded and NPE'd,
+        // surfacing an already-committed load to the client as FAILED. The trigger must skip the missing
+        // partition (and still process the surviving ones) instead.
+        final String dbName = "test_statistics";
+        final String tableName = "t_load_optimize_race";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName);
+        starRocksAssert.withTable("create table " + tableName + " (" +
+                "c1 int not null," +
+                "c2 int not null" +
+                ") " +
+                "partition by (c1)\n" +
+                "properties('replication_num'='1')");
+        starRocksAssert.ddl("alter table " + tableName + " add partition p1 values in ('1')");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Table table = db.getTable(tableName);
+
+        // Case 1 (guard #1, physicalPartition == null): a commit info whose physical partition was swapped out
+        // by a concurrent optimize -> use an id that is not assigned to any partition of the table.
+        // Must not throw (pre-fix this NPE'd at getParentId()); with nothing resolvable there is nothing to collect.
+        {
+            long vanishedPhysicalPartitionId = GlobalStateMgr.getCurrentState().getNextId();
+            TransactionState transactionState = new TransactionState();
+            TableCommitInfo commitInfo = new TableCommitInfo(table.getId());
+            commitInfo.addPartitionCommitInfo(new PartitionCommitInfo(vanishedPhysicalPartitionId, 2, 1));
+            transactionState.putIdToTableCommitInfo(table.getId(), commitInfo);
+            transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(1000, 5));
+
+            StatisticsCollectionTrigger trigger = Assertions.assertDoesNotThrow(() ->
+                    StatisticsCollectionTrigger.triggerOnFirstLoad(transactionState, db, table, true, true,
+                            DmlType.INSERT_INTO));
+            Assertions.assertNull(trigger.getAnalyzeType());
+        }
+
+        // Case 2 (pin `continue` semantics): a vanished partition alongside a still-valid one. The vanished entry
+        // must be skipped while the valid partition is still collected -> proves we `continue` rather than abort
+        // the whole loop on the first miss.
+        {
+            Partition valid = table.getPartition("p1");
+            setPartitionStatistics((OlapTable) table, "p1", 1000);
+            TransactionState transactionState = new TransactionState();
+            TableCommitInfo commitInfo = new TableCommitInfo(table.getId());
+            commitInfo.addPartitionCommitInfo(
+                    new PartitionCommitInfo(GlobalStateMgr.getCurrentState().getNextId(), 2, 1)); // vanished
+            commitInfo.addPartitionCommitInfo(
+                    new PartitionCommitInfo(valid.getDefaultPhysicalPartition().getId(), 2, 1));  // survives
+            transactionState.putIdToTableCommitInfo(table.getId(), commitInfo);
+            transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(1000, 5));
+
+            StatisticsCollectionTrigger trigger = Assertions.assertDoesNotThrow(() ->
+                    StatisticsCollectionTrigger.triggerOnFirstLoad(transactionState, db, table, true, true,
+                            DmlType.INSERT_INTO));
+            // Valid partition was still picked up -> collection proceeds (FULL for a 1000-row first load).
+            Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, trigger.getAnalyzeType());
+        }
+
+        // Case 3 (guard #2, physicalPartition != null but parent logical partition == null): the physical
+        // partition still resolves but its parent logical partition was removed by the concurrent optimize.
+        // Use a spy so getPhysicalPartition returns a stub whose parentId points at a non-existent logical id.
+        {
+            OlapTable spyTable = Mockito.spy((OlapTable) table);
+            long orphanPhysicalId = GlobalStateMgr.getCurrentState().getNextId();
+            long missingParentLogicalId = GlobalStateMgr.getCurrentState().getNextId();
+            PhysicalPartition orphan = Mockito.mock(PhysicalPartition.class);
+            Mockito.when(orphan.getParentId()).thenReturn(missingParentLogicalId);
+            Mockito.doReturn(orphan).when(spyTable).getPhysicalPartition(orphanPhysicalId);
+            // real getPartition(missingParentLogicalId) returns null since that id is unassigned -> hits guard #2.
+
+            TransactionState transactionState = new TransactionState();
+            TableCommitInfo commitInfo = new TableCommitInfo(spyTable.getId());
+            commitInfo.addPartitionCommitInfo(new PartitionCommitInfo(orphanPhysicalId, 2, 1));
+            transactionState.putIdToTableCommitInfo(spyTable.getId(), commitInfo);
+            transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(1000, 5));
+
+            StatisticsCollectionTrigger trigger = Assertions.assertDoesNotThrow(() ->
+                    StatisticsCollectionTrigger.triggerOnFirstLoad(transactionState, db, spyTable, true, true,
+                            DmlType.INSERT_INTO));
+            Assertions.assertNull(trigger.getAnalyzeType());
+        }
+    }
+
+    @Test
+>>>>>>> bbf98d2 ([BugFix] Restore partition ratios for first-load statistics collection (#82913))
     public void triggerOnInsertOverwrite() throws Exception {
         final String dbName = "test_statistics";
         final String tableName = "t_overwrite";
@@ -201,6 +495,45 @@ public class StatisticsCollectionTriggerTest extends PlanTestBase {
         transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(500000));
         trigger = StatisticsCollectionTrigger.triggerOnFirstLoad(transactionState, db, table, true, true,
                 DmlType.UPDATE);
+        Assertions.assertEquals(StatsConstants.AnalyzeType.SAMPLE, trigger.getAnalyzeType());
+    }
+
+    @Test
+    public void triggerOnUpdateStillUsesTableSize() throws Exception {
+        final String dbName = "test_statistics";
+        final String tableName = "t_update_large_history";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName);
+        createPartitionedTable(tableName, "");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        OlapTable table = (OlapTable) db.getTable(tableName);
+        setPartitionStatistics(table, "p1", 1000);
+        BasicStatsMeta statsMeta = new BasicStatsMeta(db.getId(), table.getId(), List.of(),
+                StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(), Map.of(), 1_000_000_000L);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().put(table.getId(), statsMeta);
+
+        TransactionState transactionState = new TransactionState();
+        TableCommitInfo commitInfo = new TableCommitInfo(table.getId());
+        commitInfo.addPartitionCommitInfo(new PartitionCommitInfo(
+                table.getPartition("p1").getDefaultPhysicalPartition().getId(), Partition.PARTITION_INIT_VERSION + 5, 1));
+        transactionState.putIdToTableCommitInfo(table.getId(), commitInfo);
+
+        for (long loadedRows : new long[] {500, Config.statistic_sample_collect_rows + 1}) {
+            transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(loadedRows));
+            StatisticsCollectionTrigger trigger = StatisticsCollectionTrigger.triggerOnFirstLoad(
+                    transactionState, db, table, true, true, DmlType.UPDATE);
+            Assertions.assertNull(trigger.getAnalyzeType());
+        }
+
+        statsMeta.setTotalRows(1000L);
+        transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(500));
+        StatisticsCollectionTrigger trigger = StatisticsCollectionTrigger.triggerOnFirstLoad(
+                transactionState, db, table, true, true, DmlType.UPDATE);
+        Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, trigger.getAnalyzeType());
+
+        transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(Config.statistic_sample_collect_rows + 1));
+        trigger = StatisticsCollectionTrigger.triggerOnFirstLoad(
+                transactionState, db, table, true, true, DmlType.UPDATE);
         Assertions.assertEquals(StatsConstants.AnalyzeType.SAMPLE, trigger.getAnalyzeType());
     }
 
