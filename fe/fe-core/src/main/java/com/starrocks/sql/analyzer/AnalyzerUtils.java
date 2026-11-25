@@ -173,6 +173,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -1206,6 +1207,36 @@ public class AnalyzerUtils {
 
     public static void copyOlapTable(StatementBase statementBase, Set<OlapTable> olapTables) {
         new AnalyzerUtils.OlapTableCollector(olapTables, true).visit(statementBase);
+    }
+
+    /**
+     * Walk the definition of {@code cte} with its name coming into scope where the analyzer brings it in, calling
+     * {@code declare} at that point. A CTE is in scope only after its own definition: in
+     * {@code WITH t0 AS (SELECT * FROM t0)} the inner {@code t0} is the table. In a WITH RECURSIVE clause a CTE
+     * defined by a union is in scope after its anchor, the first operand, and before its recursive members, as
+     * {@code QueryAnalyzer#tryProcessRecursiveCte} has it: a self-reference there is the CTE, not a table.
+     *
+     * <p>For the walks that run before analysis, which must agree with the analyzer on what is a table. The
+     * parser does not mark a CTE recursive, so {@code AstTraverser#visitCTE} does not leave the recursive members
+     * out of such a walk.
+     *
+     * @param inRecursiveWithClause whether the with clause that defines {@code cte} is WITH RECURSIVE
+     * @param walkDefinition        walks the whole definition, for a CTE that is not recursive
+     * @param walkOperand           walks one operand of the union that defines a recursive CTE
+     */
+    public static void walkCteDefinition(CTERelation cte, boolean inRecursiveWithClause, Runnable walkDefinition,
+                                         Consumer<QueryRelation> walkOperand, Runnable declare) {
+        QueryRelation query = cte.getCteQueryStatement() == null ? null :
+                cte.getCteQueryStatement().getQueryRelation();
+        if (inRecursiveWithClause && query instanceof UnionRelation union && !union.getRelations().isEmpty()) {
+            List<QueryRelation> operands = union.getRelations();
+            walkOperand.accept(operands.get(0));
+            declare.run();
+            operands.subList(1, operands.size()).forEach(walkOperand);
+            return;
+        }
+        walkDefinition.run();
+        declare.run();
     }
 
     /** The olap tables {@link #copyOlapTable} would copy, left in place. */

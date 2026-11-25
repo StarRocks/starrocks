@@ -548,6 +548,8 @@ public class PlannerMetaLocker implements AutoCloseable {
         // The CTE names of the with clauses in scope, innermost first. A table of the same name stays unlocked only
         // where the analyzer would read the CTE instead, never more: that would leave a table it reads unlocked.
         private final Deque<Set<String>> cteNames = new ArrayDeque<>();
+        // Whether the with clause whose CTEs are being walked is WITH RECURSIVE; see visitCTE.
+        private boolean inRecursiveWithClause = false;
         private final List<WalkedView> walkedViews = new ArrayList<>();
         private final List<WalkedSyncMV> walkedSyncMVs = new ArrayList<>();
         // Whether the relations being walked get a policy injected by the analyzer, besides the ones the statement
@@ -614,7 +616,7 @@ public class PlannerMetaLocker implements AutoCloseable {
          */
         private void visitRawDmlClauses(List<CTERelation> cteRelations, List<Relation> relations,
                                         Expr wherePredicate) {
-            withCtes(cteRelations, () -> {
+            withCtes(cteRelations, false, () -> {
                 if (cteRelations != null) {
                     cteRelations.forEach(this::visitIfPresent);
                 }
@@ -675,40 +677,52 @@ public class PlannerMetaLocker implements AutoCloseable {
 
         @Override
         public Void visitSelect(SelectRelation node, Void context) {
-            withCtes(node.getCteRelations(), () -> super.visitSelect(node, context));
+            withCtes(node.getCteRelations(), node.isHasRecursiveCTE(), () -> super.visitSelect(node, context));
             return null;
         }
 
         @Override
         public Void visitSetOp(SetOperationRelation node, Void context) {
-            withCtes(node.getCteRelations(), () -> super.visitSetOp(node, context));
+            withCtes(node.getCteRelations(), node.isHasRecursiveCTE(), () -> super.visitSetOp(node, context));
             return null;
         }
 
-        /** Run {@code body} in a new with-clause scope, which {@link #visitCTE} fills as the CTEs are walked. */
-        private void withCtes(List<CTERelation> cteRelations, Runnable body) {
-            if (cteRelations == null || cteRelations.isEmpty()) {
-                body.run();
-                return;
+        /**
+         * Run {@code body} in a new with-clause scope, which {@link #visitCTE} fills as the CTEs are walked.
+         * {@code recursive}: whether the clause is WITH RECURSIVE.
+         */
+        private void withCtes(List<CTERelation> cteRelations, boolean recursive, Runnable body) {
+            boolean scoped = cteRelations != null && !cteRelations.isEmpty();
+            boolean enclosingRecursive = inRecursiveWithClause;
+            if (scoped) {
+                cteNames.push(new HashSet<>());
             }
-            cteNames.push(new HashSet<>());
+            inRecursiveWithClause = recursive;
             try {
                 body.run();
             } finally {
-                cteNames.pop();
+                inRecursiveWithClause = enclosingRecursive;
+                if (scoped) {
+                    cteNames.pop();
+                }
             }
         }
 
         /**
-         * A CTE's name is in scope only after its own definition, as the analyzer has it: in
-         * {@code WITH t0 AS (SELECT * FROM t0)} the inner {@code t0} is the table.
+         * A CTE's name comes into scope where the analyzer brings it in: after its own definition, so in
+         * {@code WITH t0 AS (SELECT * FROM t0)} the inner {@code t0} is the table, but before the recursive
+         * members of a recursive one, where a self-reference is the CTE.
          */
         @Override
         public Void visitCTE(CTERelation node, Void context) {
-            super.visitCTE(node, context);
-            if (!cteNames.isEmpty() && node.getName() != null) {
-                cteNames.peek().add(node.getName());
-            }
+            AnalyzerUtils.walkCteDefinition(node, inRecursiveWithClause,
+                    () -> super.visitCTE(node, context),
+                    operand -> visit(operand, context),
+                    () -> {
+                        if (!cteNames.isEmpty() && node.getName() != null) {
+                            cteNames.peek().add(node.getName());
+                        }
+                    });
             return null;
         }
 
