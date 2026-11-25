@@ -491,7 +491,8 @@ CONF_mInt64(pk_index_target_file_size, "67108864");
 CONF_mDouble(pk_index_compaction_score_ratio, "1.5");
 // early sst compaction threshold for primary key index in shared-data mode.
 CONF_mInt32(pk_index_early_sst_compaction_threshold, "5");
-// Whether enable parallel compaction for primary key index in shared-data mode.
+// Deprecated and ignored: PK index major compaction in shared-data mode always runs in parallel, because the
+// serial path can drop sstables of a range-split fileset from the index.
 CONF_mBool(enable_pk_index_parallel_compaction, "true");
 // Whether enable parallel get for primary key index in shared-data mode.
 CONF_mBool(enable_pk_index_parallel_execution, "true");

@@ -778,6 +778,78 @@ TEST_F(LakePersistentIndexFilesetTest, test_index_reload_after_major_compaction)
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
 
+// A major compaction must merge a range-split fileset as a whole. apply_opcompaction removes every
+// fileset that holds an input, so an input set that takes only part of a fileset drops the rest of that
+// fileset from the index. The serial major_compact picks a prefix of the flattened sstable list and,
+// with lake_pk_index_sst_max_compaction_versions=2, would merge only the first two sstables of the base
+// fileset below. That is why execute_index_major_compaction always takes the parallel path.
+TEST_F(LakePersistentIndexFilesetTest, test_major_compaction_keeps_whole_range_split_fileset) {
+    ConfigResetGuard<int32_t> max_versions_guard(&config::lake_pk_index_sst_max_compaction_versions, 2);
+
+    const int kKeysPerSstable = 100;
+    // Base fileset: three sstables with disjoint key ranges sharing one fileset id.
+    const std::vector<int> base_start_keys = {0, 1000, 2000};
+    // A newer fileset that overlaps the first base sstable, and the active fileset.
+    const int newer_start_key = 0;
+    const int active_start_key = 500;
+
+    auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
+    tablet_metadata_ptr->CopyFrom(*_tablet_metadata);
+    auto* sstable_meta = tablet_metadata_ptr->mutable_sstable_meta();
+    auto add_sstable = [&](const std::string& filename, int start_key, const UniqueId& fileset_id,
+                           uint64_t max_rss_rowid) {
+        PersistentIndexSstablePB sst_pb;
+        ASSERT_OK(create_test_sstable(filename, start_key, kKeysPerSstable, &sst_pb, &fileset_id));
+        sst_pb.set_max_rss_rowid(max_rss_rowid);
+        sstable_meta->add_sstables()->CopyFrom(sst_pb);
+    };
+    auto base_fileset_id = UniqueId::gen_uid();
+    for (size_t i = 0; i < base_start_keys.size(); i++) {
+        add_sstable(fmt::format("base_{}.sst", i), base_start_keys[i], base_fileset_id, 1ULL << 32);
+    }
+    add_sstable("newer.sst", newer_start_key, UniqueId::gen_uid(), 2ULL << 32);
+    add_sstable("active.sst", active_start_key, UniqueId::gen_uid(), 3ULL << 32);
+    _tablet_metadata->CopyFrom(*tablet_metadata_ptr);
+
+    auto txn_log = std::make_shared<TxnLogPB>();
+    auto parallel_compact_mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(parallel_compact_mgr->init());
+    ASSERT_OK(LakePersistentIndex::parallel_major_compact(parallel_compact_mgr.get(), _tablet_mgr.get(),
+                                                          tablet_metadata_ptr, txn_log.get()));
+    // Every sstable of the base fileset and the newer fileset is an input; the active fileset is not.
+    ASSERT_EQ(base_start_keys.size() + 1, txn_log->op_compaction().input_sstables_size());
+    ASSERT_GT(txn_log->op_compaction().output_sstables_size(), 0);
+
+    {
+        auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_metadata_ptr->id());
+        ASSERT_OK(index->init(_tablet_metadata));
+        ASSERT_OK(index->apply_opcompaction(tablet_metadata_ptr, txn_log->op_compaction()));
+        Tablet tablet(_tablet_mgr.get(), tablet_metadata_ptr->id());
+        MetaFileBuilder builder(tablet, tablet_metadata_ptr);
+        ASSERT_OK(index->commit(&builder));
+        ASSERT_OK(builder.finalize(1));
+        _tablet_metadata->CopyFrom(*tablet_metadata_ptr);
+    }
+
+    // Reload and look up every key that was written, including the last base sstable.
+    std::vector<int> start_keys = base_start_keys;
+    start_keys.push_back(active_start_key);
+    std::vector<std::string> key_strs;
+    for (int start_key : start_keys) {
+        for (int i = 0; i < kKeysPerSstable; i++) {
+            key_strs.emplace_back(fmt::format("key_{:016X}", start_key + i));
+        }
+    }
+    std::vector<Slice> keys(key_strs.begin(), key_strs.end());
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), _tablet_metadata->id());
+    ASSERT_OK(index->init(_tablet_metadata));
+    std::vector<IndexValue> values(keys.size(), IndexValue(NullIndexValue));
+    ASSERT_OK(index->get(keys.size(), keys.data(), values.data()));
+    for (size_t i = 0; i < keys.size(); i++) {
+        ASSERT_NE(NullIndexValue, values[i].get_value()) << "key lost after major compaction: " << key_strs[i];
+    }
+}
+
 TEST_F(LakePersistentIndexFilesetTest, test_index_multiple_reload_cycles) {
     auto l0_max_mem_usage = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 10;
