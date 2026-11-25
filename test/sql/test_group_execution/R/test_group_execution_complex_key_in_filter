@@ -1,0 +1,77 @@
+-- name: test_group_execution_complex_key_in_filter
+set enable_group_execution = true;
+-- result:
+-- !result
+set pipeline_dop = 1;
+-- result:
+-- !result
+CREATE TABLE t0 (
+    k_id INT NOT NULL,
+    c_varchar_nn VARCHAR(50) NOT NULL,
+    a_int ARRAY<INT> NULL,
+    m_str_int MAP<VARCHAR(20), INT> NULL
+) DUPLICATE KEY(k_id) DISTRIBUTED BY HASH(k_id) BUCKETS 4
+PROPERTIES ("colocate_with" = "${uuid0}", "replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE t1 (
+    k_id INT NOT NULL,
+    c_varchar_nn VARCHAR(50) NOT NULL,
+    a_int ARRAY<INT> NULL,
+    m_str_int MAP<VARCHAR(20), INT> NULL
+) DUPLICATE KEY(k_id) DISTRIBUTED BY HASH(k_id) BUCKETS 4
+PROPERTIES ("colocate_with" = "${uuid0}", "replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t0 VALUES
+    (1, 'n1', [3,2,1], map{'k':1}), (2, 'n2', [0], map{'b':2}), (3, 'n0', [1,2], map{'':0}),
+    (4, 'n1', [2,1], map{'a':1}), (5, 'n2', [10,20,30], map{'x':10}), (6, 'n0', [NULL,NULL], map{'c':3}),
+    (7, 'n1', [7,7,7], map{'a':5}), (8, 'n2', [100], NULL), (9, 'n0', NULL, map{}),
+    (10, 'n1', [], map{'a':1}), (11, 'n2', [1,NULL,3], map{'a':2}), (12, 'n0', [NULL], map{'a':NULL});
+-- result:
+-- !result
+INSERT INTO t1 SELECT * FROM t0 WHERE k_id % 3 != 0;
+-- result:
+-- !result
+SELECT * FROM t0 a RIGHT SEMI JOIN [COLOCATE] t0 b USING (a_int, k_id) ORDER BY k_id;
+-- result:
+[3,2,1]	1	n1	{"k":1}
+[0]	2	n2	{"b":2}
+[1,2]	3	n0	{"":0}
+[2,1]	4	n1	{"a":1}
+[10,20,30]	5	n2	{"x":10}
+[null,null]	6	n0	{"c":3}
+[7,7,7]	7	n1	{"a":5}
+[100]	8	n2	None
+[]	10	n1	{"a":1}
+[1,null,3]	11	n2	{"a":2}
+[null]	12	n0	{"a":null}
+-- !result
+SELECT * FROM t0 a RIGHT SEMI JOIN [COLOCATE] t0 b USING (k_id, m_str_int) ORDER BY k_id;
+-- result:
+1	{"k":1}	n1	[3,2,1]
+2	{"b":2}	n2	[0]
+3	{"":0}	n0	[1,2]
+4	{"a":1}	n1	[2,1]
+5	{"x":10}	n2	[10,20,30]
+6	{"c":3}	n0	[null,null]
+7	{"a":5}	n1	[7,7,7]
+9	{}	n0	None
+10	{"a":1}	n1	[]
+11	{"a":2}	n2	[1,null,3]
+12	{"a":null}	n0	[null]
+-- !result
+SELECT t0.k_id, t1.c_varchar_nn FROM t0 JOIN [COLOCATE] t1 ON t0.k_id = t1.k_id AND t0.a_int = t1.a_int AND t0.m_str_int = t1.m_str_int ORDER BY t0.k_id;
+-- result:
+1	n1
+2	n2
+4	n1
+5	n2
+7	n1
+10	n1
+11	n2
+-- !result
+SELECT count(*) FROM t0 a LEFT SEMI JOIN [COLOCATE] t1 b ON a.k_id = b.k_id AND a.a_int = b.a_int;
+-- result:
+8
+-- !result
