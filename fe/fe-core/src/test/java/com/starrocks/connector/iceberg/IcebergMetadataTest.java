@@ -41,6 +41,7 @@ import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersion;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.ConnectorAlterTableExecutor;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
@@ -59,6 +60,8 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.connector.iceberg.procedure.IcebergProcedureRegistry;
 import com.starrocks.connector.iceberg.procedure.RemoveOrphanFilesProcedure;
+import com.starrocks.connector.iceberg.procedure.RewriteDataFilesProcedure;
+import com.starrocks.connector.iceberg.procedure.RollbackToSnapshotProcedure;
 import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.metadata.iceberg.IcebergMetadataCollectJob;
@@ -76,6 +79,7 @@ import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.IcebergMetadataDeleteNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
@@ -2027,6 +2031,64 @@ public class IcebergMetadataTest extends TableTestBase {
 
         Assertions.assertEquals(List.of(invalidationOf("iceberg_db", "iceberg_table")), invalidated);
         Assertions.assertEquals(List.of(1), filesLeftWhenInvalidated);
+    }
+
+    @Test
+    public void testExecuteMetadataDeleteInvalidatesOtherFesWhenCommitStateIsUnknown() throws Exception {
+        // The delete may have been applied although the commit reported an unknown state, as in truncateTable
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).commit();
+        TestTables.TestTable stateUnknownTable = TestTables.tableWithCommitSucceedButStateUnknown(tableDir, "tb");
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), stateUnknownTable, Maps.newHashMap());
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
+                new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(2));
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        mockCommitInfoFrontend();
+        List<Integer> filesLeftWhenInvalidated = new ArrayList<>();
+        List<String> invalidated = recordOtherFeInvalidations(() -> {
+            mockedNativeTableB.refresh();
+            filesLeftWhenInvalidated.add(Lists.newArrayList(mockedNativeTableB.newScan().planFiles()).size());
+        });
+
+        StarRocksConnectorException exception = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.executeMetadataDelete(icebergTable, predicate, connectContext));
+
+        Assertions.assertTrue(exception.getCause() instanceof CommitStateUnknownException);
+        Assertions.assertEquals(List.of(invalidationOf("iceberg_db", "iceberg_table")), invalidated);
+        Assertions.assertEquals(List.of(1), filesLeftWhenInvalidated);
+    }
+
+    @Test
+    public void testAlterTableDoesNotWaitTwiceForRewriteDataFiles(@Mocked IcebergHiveCatalog icebergHiveCatalog)
+            throws StarRocksException {
+        // rewrite_data_files commits through finishSink, which already waits for the other FEs
+        new MockUp<ConnectorAlterTableExecutor>() {
+            @Mock
+            public ShowResultSet execute() {
+                return null;
+            }
+        };
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        List<String> invalidated = recordOtherFeInvalidations(() -> {
+        });
+        TableName tableName = new TableName("db", "tbl");
+        AlterTableOperationClause rewrite = new AlterTableOperationClause(NodePosition.ZERO,
+                "rewrite_data_files", List.of(), null);
+        rewrite.setTableProcedure(RewriteDataFilesProcedure.getInstance());
+        AlterTableOperationClause rollback = new AlterTableOperationClause(NodePosition.ZERO,
+                "rollback_to_snapshot", List.of(), null);
+        rollback.setTableProcedure(RollbackToSnapshotProcedure.getInstance());
+
+        metadata.alterTable(new ConnectContext(), new AlterTableStmt(createTableRef(tableName),
+                Lists.newArrayList(rewrite)));
+        Assertions.assertEquals(List.of(), invalidated);
+
+        metadata.alterTable(new ConnectContext(), new AlterTableStmt(createTableRef(tableName),
+                Lists.newArrayList(rollback)));
+        Assertions.assertEquals(List.of(invalidationOf("db", "tbl")), invalidated);
     }
 
     @Test
