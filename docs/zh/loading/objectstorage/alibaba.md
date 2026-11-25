@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
-products: [oss, enterprise, anywhere]
+description: "从阿里云 OSS 导入数据到 StarRocks，支持 Broker Load 和 INSERT 导入方式。"
+products: [oss]
 ---
 
 # 从阿里云 OSS 导入
@@ -394,3 +395,4 @@ WHERE LABEL = "label1";
 ## 常见问题
 
 请参见 [Broker Load 常见问题](../../faq/data_migration/loading/Broker_load_faq.md)。
+

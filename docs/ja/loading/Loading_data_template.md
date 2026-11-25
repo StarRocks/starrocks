@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 unlisted: True
-products: [oss, enterprise, anywhere]
+products: [oss]
 ---
 
 # データを \<SOURCE\> からロードするテンプレート

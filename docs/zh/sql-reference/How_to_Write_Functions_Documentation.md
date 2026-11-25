@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 unlisted: true
-products: [oss, enterprise, cloud, anywhere]
+products: [oss]
 ---
 
 # CONVERT_TZ

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
-products: [oss, enterprise, anywhere]
+description: "从腾讯云 COS 导入数据到 StarRocks，支持 Broker Load 和 INSERT 导入方式。"
+products: [oss]
 ---
 
 # 从腾讯云 COS 导入
