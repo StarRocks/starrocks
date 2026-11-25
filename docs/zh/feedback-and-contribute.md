@@ -65,4 +65,3 @@ displayed_sidebar: docs
 
 - [函数文档模板](./sql-reference/How_to_Write_Functions_Documentation.md)
 - [SQL命令模板](./sql-reference/How_to_write_SQL_command_doc.md)
-- [参数/变量模板](./sql-reference/template_for_config.md)
