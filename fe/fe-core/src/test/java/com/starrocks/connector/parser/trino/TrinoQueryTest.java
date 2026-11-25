@@ -14,7 +14,15 @@
 
 package com.starrocks.connector.parser.trino;
 
+import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.MapType;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructType;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.sql.parser.SqlParser;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -1313,6 +1321,92 @@ public class TrinoQueryTest extends TrinoTestBase {
     public void testCastArrayDataType() throws Exception {
         String sql = "select cast(ARRAY[1] as array(int))";
         assertPlanContains(sql, " <slot 2> : [1]");
+    }
+
+    @Test
+    public void testCastMapDataType() throws Exception {
+        String sql = "select cast(json_parse('{\"eur\": 0.9}') as map(varchar, double))";
+        MapType mapType = getOutputMapType(sql);
+        Assertions.assertTrue(mapType.getKeyType().isStringType(), mapType.toString());
+        Assertions.assertEquals(Type.DOUBLE, mapType.getValueType());
+        // The JSON to MAP cast must also plan, not only analyze
+        getFragmentPlan(sql);
+
+        sql = "select try_cast(json_parse('{\"eur\": 0.9}') as map(varchar, double))";
+        Assertions.assertEquals(Type.DOUBLE, getOutputMapType(sql).getValueType());
+
+        sql = "select cast(null as map(varchar, double))";
+        Assertions.assertEquals(Type.DOUBLE, getOutputMapType(sql).getValueType());
+
+        sql = "select cast(null as map(bigint, varchar(8)))";
+        mapType = getOutputMapType(sql);
+        Assertions.assertEquals(Type.BIGINT, mapType.getKeyType());
+        Assertions.assertEquals(ScalarType.createVarcharType(8), mapType.getValueType());
+
+        sql = "select cast(null as map(varchar, decimal(10, 2)))";
+        Assertions.assertEquals(ScalarType.createUnifiedDecimalType(10, 2), getOutputMapType(sql).getValueType());
+
+        sql = "select cast(null as map(varchar, array(bigint)))";
+        Assertions.assertEquals(new ArrayType(Type.BIGINT), getOutputMapType(sql).getValueType());
+
+        sql = "select cast(null as map(varchar, row(a bigint, b varchar)))";
+        Type valueType = getOutputMapType(sql).getValueType();
+        Assertions.assertTrue(valueType.isStructType(), valueType.toString());
+        Assertions.assertEquals(2, ((StructType) valueType).getFields().size());
+
+        sql = "select cast(null as map(varchar, map(varchar, double)))";
+        valueType = getOutputMapType(sql).getValueType();
+        Assertions.assertTrue(valueType.isMapType(), valueType.toString());
+        Assertions.assertEquals(Type.DOUBLE, ((MapType) valueType).getValueType());
+
+        sql = "select cast(null as array(map(varchar, double)))";
+        Type type = getOutputType(sql);
+        Assertions.assertTrue(type.isArrayType(), type.toString());
+        Assertions.assertTrue(((ArrayType) type).getItemType().isMapType(), type.toString());
+    }
+
+    @Test
+    public void testCastJsonToMapInCte() throws Exception {
+        // A JSON to MAP cast in a CTE: upper-case names, a column argument and map lookups
+        String sql = "with r as (" +
+                "select CAST(JSON_PARSE(rates_json) AS MAP(VARCHAR, DOUBLE)) as rates " +
+                "from (values ('{\"eur\": 0.9}')) as t(rates_json)) " +
+                "select element_at(rates, 'eur'), rates['eur'] from r";
+        QueryStatement stmt = (QueryStatement) analyzeSuccess(sql);
+        for (Expr expr : stmt.getQueryRelation().getOutputExpression()) {
+            Assertions.assertEquals(Type.DOUBLE, expr.getType(), expr.toString());
+        }
+        getFragmentPlan(sql);
+    }
+
+    @Test
+    public void testCastMapDataTypeWithWrongArguments() {
+        boolean enableDialectDowngrade = connectContext.getSessionVariable().isEnableDialectDowngrade();
+        try {
+            // With downgrade on, a TrinoParserUnsupportedException would re-parse the query as StarRocks SQL
+            connectContext.getSessionVariable().setEnableDialectDowngrade(true);
+            for (String sql : List.of("select cast(null as map(varchar))",
+                    "select cast(null as map(varchar, double, bigint))",
+                    "select cast(null as map(varchar, 10))")) {
+                UnsupportedException e = Assertions.assertThrows(UnsupportedException.class,
+                        () -> SqlParser.parse(sql, connectContext.getSessionVariable()), sql);
+                Assertions.assertTrue(e.getMessage().contains("does not support the type"), e.getMessage());
+                Assertions.assertFalse(e.getMessage().contains("StarRocks parser also can not parse"), e.getMessage());
+            }
+        } finally {
+            connectContext.getSessionVariable().setEnableDialectDowngrade(enableDialectDowngrade);
+        }
+    }
+
+    private static Type getOutputType(String sql) {
+        QueryStatement stmt = (QueryStatement) analyzeSuccess(sql);
+        return stmt.getQueryRelation().getOutputExpression().get(0).getType();
+    }
+
+    private static MapType getOutputMapType(String sql) {
+        Type type = getOutputType(sql);
+        Assertions.assertTrue(type.isMapType(), type.toString());
+        return (MapType) type;
     }
 
     @Test
