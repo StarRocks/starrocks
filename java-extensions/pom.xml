@@ -59,7 +59,7 @@
         <parquet.version>1.18.1</parquet.version>
         <airlift.version>2.0.3</airlift.version>
         <avro.version>1.12.0</avro.version>
-        <luben.zstd.jni.version>1.5.7-15</luben.zstd.jni.version>
+        <luben.zstd.jni.version>1.6.0-1</luben.zstd.jni.version>
         <kryo.version>4.0.2</kryo.version>
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <lz4-java.version>1.11.4</lz4-java.version>
@@ -675,6 +675,8 @@
                                         <exclude>com.fasterxml.jackson.jaxrs:*:[,2.15.0)</exclude>
                                         <!-- commons-lang3 below 3.18.0 is affected by CVE-2025-48924 -->
                                         <exclude>org.apache.commons:commons-lang3:[,3.18.0)</exclude>
+                                        <!-- zstd-jni below 1.6.0-1 is affected by CVE-2026-124851 -->
+                                        <exclude>com.github.luben:zstd-jni:[,1.6.0-1)</exclude>
                                         <!-- ships jquery 1.4.2 (CVE-2011-4969 etc.); only avro-mapred's
                                              unused tether feature references it -->
                                         <exclude>org.apache.avro:avro-ipc</exclude>
