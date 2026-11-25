@@ -335,4 +335,119 @@ public class RecursiveCTETest extends PlanTestBase {
         assertContains(plan, "Outer Statement After Rewriting:\n"
                 + "WITH RECURSIVE `cte2`");
     }
+
+    private boolean hasRecursiveCte(String sql) {
+        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        connectContext.getSessionVariable().setEnableRecursiveCTE(true);
+        return RecursiveCTEAstCheck.hasRecursiveCte(statement, connectContext);
+    }
+
+    @Test
+    public void testOrdinaryNestedCteShadowingTableIsNotRecursive() throws Exception {
+        // The inner CTE t0 is not visible in its own definition, so the t0 in the scalar subquery is the
+        // base table t0. This is an ordinary nested CTE, not a (multi-level) recursive one.
+        String sql = "with a as ("
+                + " with t0 as (select (select count(*) from t0) as n)"
+                + " select n from t0"
+                + ") select n from a";
+        Assertions.assertFalse(hasRecursiveCte(sql));
+        connectContext.getSessionVariable().setEnableRecursiveCTE(true);
+        getFragmentPlan(sql);
+    }
+
+    @Test
+    public void testOrdinaryCteSelfNameIsNotRecursive() {
+        // Without WITH RECURSIVE, or when the definition is not a UNION, the CTE name inside its own
+        // definition refers to the base table.
+        Assertions.assertFalse(hasRecursiveCte(
+                "with t0 as (select v1 from t0 union all select v1 + 1 from t0) select * from t0"));
+        Assertions.assertFalse(hasRecursiveCte(
+                "with recursive t0 as (select v1 from t0 where v1 > 1) select * from t0"));
+    }
+
+    @Test
+    public void testInnerCteShadowsOuterRecursiveCte() throws Exception {
+        // The q inside the recursive member resolves to the inner ordinary CTE q, so the only
+        // recursive reference is the one in FROM cte.
+        String sql = "with recursive cte as ("
+                + " select v1 from t0"
+                + " union all"
+                + " select v1 + 1 from cte where v1 < (with cte as (select 1 as v1) select max(v1) from cte)"
+                + ") select * from cte";
+        Assertions.assertTrue(hasRecursiveCte(sql));
+
+        String onlyShadowed = "with recursive cte as ("
+                + " select v1 from t0"
+                + " union all"
+                + " select * from (with cte as (select 1 as v1) select v1 from cte) t"
+                + ") select * from cte";
+        Assertions.assertFalse(hasRecursiveCte(onlyShadowed));
+    }
+
+    @Test
+    public void testRecursiveCteDetectionUnchanged() {
+        Assertions.assertTrue(hasRecursiveCte("with recursive cte as "
+                + "(select v1 from t0 union all select v1 + 1 from cte where v1 < 10) select * from cte"));
+        // a recursive CTE nested in an ordinary CTE is still a single-level recursive CTE
+        Assertions.assertTrue(hasRecursiveCte("with a as ("
+                + " with recursive cte as (select v1 from t0 union all select v1 + 1 from cte where v1 < 10)"
+                + " select v1 from cte"
+                + ") select v1 from a"));
+        // a recursive CTE referenced only from the outer query is not recursive
+        Assertions.assertFalse(hasRecursiveCte("with recursive cte as "
+                + "(select v1 from t0 union all select v2 from t0) select * from cte"));
+        // nested recursive CTEs are still rejected
+        SemanticException e = Assertions.assertThrows(SemanticException.class, () -> hasRecursiveCte(
+                "with recursive q as ("
+                        + " select v1 from t0"
+                        + " union all ("
+                        + "   with recursive x as (select v1 from t0 union all select v1 from x where v1 < 10)"
+                        + "   select v1 from x"
+                        + " )"
+                        + ") select v1 from q"));
+        Assertions.assertTrue(e.getMessage().contains("Doesn't support multi-level recursive CTE"), e.getMessage());
+    }
+
+    @Test
+    public void testRecursiveCteNotVisibleInItsAnchor() throws Exception {
+        // As in QueryAnalyzer, a recursive CTE enters the scope only after its anchor, so the t0 in the
+        // anchor (here inside the nested recursive CTE x) is the base table, not a multi-level reference.
+        String sql = "with recursive t0(v1) as ("
+                + " (with recursive x as (select v1 from t0 union all select 1) select v1 from x)"
+                + " union all"
+                + " select v1 + 1 from t0 where v1 < 3"
+                + ") select * from t0";
+        Assertions.assertTrue(hasRecursiveCte(sql));
+        String plan = explainRecursiveCte(sql);
+        assertContains(plan, "Recursive Statement:");
+    }
+
+    @Test
+    public void testCteShadowingIsCaseSensitive() {
+        // With case-sensitive table names, the ordinary CTE R does not shadow the recursive CTE r.
+        String sql = "with recursive r(n) as ("
+                + " select 1"
+                + " union all"
+                + " (with R as (select 42 as n) select n + 1 from r where n < 3)"
+                + ") select * from r";
+        Assertions.assertTrue(hasRecursiveCte(sql));
+    }
+
+    @Test
+    public void testRecursiveCteInsideAnchorRejected() {
+        // A real recursive CTE nested in the anchor of another recursive CTE is still multi-level,
+        // whether or not the two share a name.
+        for (String inner : new String[] {"q", "x"}) {
+            String sql = "with recursive q(n) as ("
+                    + " (with recursive " + inner + "(n) as ("
+                    + "   select 1 union all select n + 1 from " + inner + " where n < 2"
+                    + " ) select n from " + inner + ")"
+                    + " union all"
+                    + " select n + 1 from q where n < 3"
+                    + ") select n from q";
+            SemanticException e = Assertions.assertThrows(SemanticException.class, () -> hasRecursiveCte(sql));
+            Assertions.assertTrue(e.getMessage().contains("Doesn't support multi-level recursive CTE"),
+                    e.getMessage());
+        }
+    }
 }
