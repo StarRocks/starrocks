@@ -2850,7 +2850,7 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
             _opts.delete_predicates[i].predicates_of_column(cid, &preds);
         }
         DCHECK(!preds.empty());
-        _del_predicates.insert({cid, ColumnOrPredicate(get_type_info(preds[0]->type_info()), cid, preds)});
+        _del_predicates.insert({cid, ColumnOrPredicate(preds[0]->type_info_ptr(), cid, preds)});
     }
 
     // -------------------------------------------------------------

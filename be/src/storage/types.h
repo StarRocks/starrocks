@@ -30,6 +30,5 @@ TypeInfoPtr get_type_info(const ColumnMetaPB& column_meta_pb);
 TypeInfoPtr get_type_info(const TabletColumn& col);
 TypeInfoPtr get_type_info(const TypeDescriptor& type_desc);
 TypeInfoPtr get_type_info(LogicalType field_type, int precision, int scale);
-TypeInfoPtr get_type_info(const TypeInfo* type_info);
 
 } // namespace starrocks

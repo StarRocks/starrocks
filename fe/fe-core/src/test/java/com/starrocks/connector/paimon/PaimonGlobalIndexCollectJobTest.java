@@ -184,7 +184,7 @@ class PaimonGlobalIndexCollectJobTest {
         var child = job.getContext();
         assertSame(caller, child.getParent());
         assertTrue(child.isMetadataContext());
-        assertFalse(child.isNeedQueued());
+        assertTrue(child.isNeedQueued());
         assertFalse(child.getSessionVariable().isEnableSPMRewrite());
         assertFalse(child.getSessionVariable().isEnableShortCircuit());
         assertTrue(child.getSessionVariable().isEnableProfile());

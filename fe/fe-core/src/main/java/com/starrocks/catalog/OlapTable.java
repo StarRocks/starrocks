@@ -38,6 +38,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.base.Supplier;
+import com.google.common.base.Suppliers;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
@@ -133,6 +135,7 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.type.PrimitiveType;
+import it.unimi.dsi.fastutil.objects.Reference2LongOpenHashMap;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
@@ -160,6 +163,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.LongPredicate;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
@@ -320,6 +324,20 @@ public class OlapTable extends Table {
     // read a published table -- see SnapshotCopyValidator for why this is a mark and not a metastore lookup.
     private boolean planningSnapshot = false;
 
+    // Not persisted. On a planning copy: each physical partition's visible version when the copy was taken under the
+    // table's lock. The copy shares the PhysicalPartition objects, whose versions move once the lock is gone; a plan
+    // reads these instead, so it sees every transaction in all of its partitions or in none (StarRocksTest#12648).
+    // Keyed by object: a partition put into the copy later (a bookmark read's) is read at its own version.
+    private Reference2LongOpenHashMap<PhysicalPartition> planningVisibleVersions = null;
+
+    // Not persisted. The newest visible version time among the formal partitions when the copy was taken.
+    private long planningVisibleVersionTime = 0L;
+
+    // Not persisted. Set when an optimizer rule chose what the plan reads by live metadata; see PlanningVersionRecheck.
+    private volatile boolean planningVersionsMarkedForRecheck = false;
+
+    private static final long NO_PLANNING_VERSION = Long.MIN_VALUE;
+
     public OlapTable() {
         this(TableType.OLAP);
     }
@@ -445,18 +463,30 @@ public class OlapTable extends Table {
         }
         Map<Long, Partition> idToPartitions = new HashMap<>(this.idToPartition.size());
         Map<String, Partition> nameToPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        Reference2LongOpenHashMap<PhysicalPartition> visibleVersions =
+                new Reference2LongOpenHashMap<>(this.physicalPartitionIdToPartitionId.size());
+        visibleVersions.defaultReturnValue(NO_PLANNING_VERSION);
+        long newestVisibleVersionTime = 0L;
         for (Map.Entry<Long, Partition> kv : this.idToPartition.entrySet()) {
             Partition copiedPartition = kv.getValue().shallowCopy();
             idToPartitions.put(kv.getKey(), copiedPartition);
             nameToPartitions.put(kv.getValue().getName(), copiedPartition);
+            newestVisibleVersionTime =
+                    Math.max(newestVisibleVersionTime, recordVisibleVersions(copiedPartition, visibleVersions));
         }
         olapTable.idToPartition = idToPartitions;
         olapTable.nameToPartition = nameToPartitions;
         olapTable.physicalPartitionIdToPartitionId = this.physicalPartitionIdToPartitionId;
         olapTable.tempPartitions = new TempPartitions();
         for (Partition tempPartition : this.getTempPartitions()) {
-            olapTable.tempPartitions.addPartition(tempPartition.shallowCopy());
+            Partition copiedPartition = tempPartition.shallowCopy();
+            olapTable.tempPartitions.addPartition(copiedPartition);
+            recordVisibleVersions(copiedPartition, visibleVersions);
         }
+        olapTable.planningVisibleVersions = visibleVersions;
+        // A copy of a copy is at the state its source was taken at, like its versions.
+        olapTable.planningVisibleVersionTime =
+                planningVisibleVersions != null ? planningVisibleVersionTime : newestVisibleVersionTime;
         olapTable.baseIndexMetaId = this.baseIndexMetaId;
         olapTable.tableProperty = this.tableProperty.copy();
 
@@ -484,6 +514,113 @@ public class OlapTable extends Table {
     /** Whether this object is a private planning copy made by {@link #copyOnlyForQuery}, not a published table. */
     public boolean isPlanningSnapshot() {
         return planningSnapshot;
+    }
+
+    /**
+     * The version a plan reads {@code physicalPartition} at: on a planning copy the one recorded when it was taken, on a
+     * published table, whose caller holds its lock, the live one. Planning code takes partition versions from here.
+     */
+    public long getVisibleVersionForQuery(PhysicalPartition physicalPartition) {
+        if (planningVisibleVersions != null) {
+            long version = planningVisibleVersions.getLong(physicalPartition);
+            if (version != NO_PLANNING_VERSION) {
+                return version;
+            }
+        }
+        return physicalPartition.getVisibleVersion();
+    }
+
+    /** Drops the recorded versions, for a copy that outlives its plan: a cached prepared plan reads live versions. */
+    public void forgetPlanningVisibleVersions() {
+        planningVisibleVersions = null;
+    }
+
+    /** Whether this is a planning copy that still holds the versions it recorded when it was taken. */
+    public boolean hasPlanningVisibleVersions() {
+        return planningVisibleVersions != null;
+    }
+
+    /**
+     * A test of whether metadata collected when the table's newest visible version time was the tested one, a global
+     * dict say, may describe a newer state than this planning copy and lack something the copy recorded for
+     * {@code partitionIds} (every partition if null). An older time cannot. A time no older can only once one of
+     * those partitions moved: while none did, whatever was collected read them as the copy recorded them, as after
+     * dropping the newest partition. The same time counts because shared-nothing labels a version with its commit
+     * time, and a transaction committed earlier can become visible after the copy. Whether they moved is read once,
+     * at the first test of such a time, so create the test after fetching what it tests. Never true on a table that
+     * records no versions or on a copy that recorded no partition.
+     */
+    public LongPredicate planningCopyOlderThan(Collection<Long> partitionIds) {
+        if (planningVisibleVersions == null || planningVisibleVersions.isEmpty()) {
+            return visibleVersionTime -> false;
+        }
+        long copiedTime = planningVisibleVersionTime;
+        Supplier<Boolean> moved = Suppliers.memoize(() -> anyPlanningVisibleVersionMoved(partitionIds));
+        return visibleVersionTime -> visibleVersionTime >= copiedTime && moved.get();
+    }
+
+    private boolean anyPlanningVisibleVersionMoved(Collection<Long> partitionIds) {
+        if (partitionIds == null) {
+            Reference2LongOpenHashMap<PhysicalPartition> recorded = planningVisibleVersions;
+            if (recorded != null) {
+                for (PhysicalPartition physicalPartition : recorded.keySet()) {
+                    if (isPlanningVisibleVersionMoved(physicalPartition)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+        for (long partitionId : partitionIds) {
+            Partition partition = getPartition(partitionId);
+            if (partition == null) {
+                continue;
+            }
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                if (isPlanningVisibleVersionMoved(physicalPartition)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** Marks a planning copy whose plan chose what it reads by live metadata. A no-op on a published table. */
+    public void markPlanningVersionsForRecheck() {
+        if (planningVisibleVersions != null) {
+            planningVersionsMarkedForRecheck = true;
+        }
+    }
+
+    public boolean isPlanningVersionsMarkedForRecheck() {
+        return planningVersionsMarkedForRecheck;
+    }
+
+    /** Whether {@code physicalPartition}'s live version differs from the recorded one; false if none was recorded. */
+    public boolean isPlanningVisibleVersionMoved(PhysicalPartition physicalPartition) {
+        if (planningVisibleVersions == null) {
+            return false;
+        }
+        long recorded = planningVisibleVersions.getLong(physicalPartition);
+        return recorded != NO_PLANNING_VERSION && recorded != physicalPartition.getVisibleVersion();
+    }
+
+    /** Records {@code physicalPartition}'s live version, under the table's READ lock when more than one is re-read. */
+    public void rereadPlanningVisibleVersion(PhysicalPartition physicalPartition) {
+        if (planningVisibleVersions != null && planningVisibleVersions.containsKey(physicalPartition)) {
+            planningVisibleVersions.put(physicalPartition, physicalPartition.getVisibleVersion());
+        }
+    }
+
+    // Records the version of each of the partition's physical partitions and returns their newest visible version
+    // time. A copy of a copy records what its source recorded, not the live version.
+    private long recordVisibleVersions(Partition partition, Reference2LongOpenHashMap<PhysicalPartition> into) {
+        long newestVisibleVersionTime = 0L;
+        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+            into.put(physicalPartition, getVisibleVersionForQuery(physicalPartition));
+            newestVisibleVersionTime = Math.max(newestVisibleVersionTime, physicalPartition.getVisibleVersionTime());
+        }
+        return newestVisibleVersionTime;
     }
 
     public void addDoubleWritePartition(long sourcePartitionId, long tempPartitionId) {

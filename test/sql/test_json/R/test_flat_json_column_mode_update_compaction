@@ -1,0 +1,78 @@
+-- name: test_flat_json_column_mode_update_compaction
+create table t1 (id bigint not null, a int, counters json) primary key(id) distributed by hash(id) buckets 1
+  properties("replication_num"="1", "flat_json.enable"="true", "flat_json.column.max"="0",
+             "flat_json.sparsity.factor"="0.001", "flat_json.null.factor"="0.99");
+-- result:
+-- !result
+insert into t1 select n, n % 100, parse_json(concat('{"k1":', n, ',"k2":', n * 2, ',"g":{"x":', n, '}}'))
+  from table(generate_series(1, 500)) x(n);
+-- result:
+-- !result
+insert into t1 select n, n % 100, parse_json(concat('{"k1":', n, ',"k2":', n * 2, ',"g":{"x":', n, '}}'))
+  from table(generate_series(501, 1000)) x(n);
+-- result:
+-- !result
+insert into t1 select n, n % 100, parse_json(concat('{"k1":', n, ',"k2":', n * 2, ',"g":{"x":', n, '}}'))
+  from table(generate_series(1001, 1500)) x(n);
+-- result:
+-- !result
+insert into t1 select n, n % 100, parse_json(concat('{"k1":', n, ',"k2":', n * 2, ',"g":{"x":', n, '}}'))
+  from table(generate_series(1501, 2000)) x(n);
+-- result:
+-- !result
+insert into t1 select n, n % 100, parse_json(concat('{"k1":', n, ',"k2":', n * 2, ',"g":{"x":', n, '}}'))
+  from table(generate_series(2001, 2500)) x(n);
+-- result:
+-- !result
+insert into t1 select n, n % 100, parse_json(concat('{"k1":', n, ',"k2":', n * 2, ',"g":{"x":', n, '}}'))
+  from table(generate_series(2501, 3000)) x(n);
+-- result:
+-- !result
+set partial_update_mode = 'column';
+-- result:
+-- !result
+update t1 set counters = parse_json(concat('{"k1":2.5,"kNew":', id, ',"g":{"x":"str"}}')) where id % 10 = 0;
+-- result:
+-- !result
+set partial_update_mode = 'auto';
+-- result:
+-- !result
+select count(*), count(get_json_int(counters, '$.kNew')), sum(get_json_double(counters, '$.k1')),
+  count(get_json_string(counters, '$.g.x')) from t1;
+-- result:
+3000	300	4050750.0	3000
+-- !result
+alter table t1 compact;
+-- result:
+-- !result
+function: wait_compaction_finish("t1", 1)
+-- result:
+None
+-- !result
+select count(*), count(get_json_int(counters, '$.kNew')), sum(get_json_double(counters, '$.k1')),
+  count(get_json_string(counters, '$.g.x')) from t1;
+-- result:
+3000	300	4050750.0	3000
+-- !result
+select id, get_json_double(counters, '$.k1'), get_json_int(counters, '$.kNew'), get_json_string(counters, '$.g.x'),
+  get_json_int(counters, '$.k2') from t1 where id in (9, 10, 20, 1000, 2990) order by id;
+-- result:
+9	9.0	None	9	18
+10	2.5	10	str	None
+20	2.5	20	str	None
+1000	2.5	1000	str	None
+2990	2.5	2990	str	None
+-- !result
+set cbo_json_v2_rewrite = false;
+-- result:
+-- !result
+select id, get_json_double(counters, '$.k1'), get_json_int(counters, '$.kNew'), get_json_string(counters, '$.g.x')
+  from t1 where id in (9, 10, 20) order by id;
+-- result:
+9	9.0	None	9
+10	2.5	10	str
+20	2.5	20	str
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result

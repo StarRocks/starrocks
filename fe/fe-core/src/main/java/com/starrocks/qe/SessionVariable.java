@@ -4440,6 +4440,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return queryMemLimit;
     }
 
+    public void copyQueryQueuePolicyFrom(SessionVariable caller) {
+        enableQueryQueue = caller.enableQueryQueue;
+        // Inherit queue classification without applying the unrelated execution-mode presets.
+        execMode = caller.execMode;
+    }
+
     public void copyQueryResourcePolicyFrom(SessionVariable caller) {
         queryMemLimit = caller.queryMemLimit;
         maxExecMemByte = caller.maxExecMemByte;

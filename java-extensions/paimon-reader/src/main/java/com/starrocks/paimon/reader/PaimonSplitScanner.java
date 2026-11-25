@@ -115,10 +115,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
             initOffHeapTableWriter(requiredTypes, requiredFields, fetchSize);
             initReader();
         } catch (Exception e) {
-            close();
-            String msg = "Failed to open the paimon reader for table " + table.name();
-            LOG.error(msg, e);
-            throw new IOException(msg, e);
+            throw closeAndWrap("Failed to open the paimon reader", e);
         }
     }
 
@@ -129,10 +126,36 @@ public class PaimonSplitScanner extends ConnectorScanner {
                 iterator.close();
             }
         } catch (Exception e) {
-            String msg = "Failed to close the paimon reader for table " + table.name();
+            String msg = "Failed to close the paimon reader for table " + tableName() + ", caused by: " + rootCause(e);
             LOG.error(msg, e);
             throw new IOException(msg, e);
         }
+    }
+
+    // The table may not be decoded yet, e.g. when the FE and BE bundle Paimon versions whose
+    // Java-serialized classes are incompatible, so never dereference it while reporting an error.
+    private String tableName() {
+        return table == null ? "<not decoded>" : table.name();
+    }
+
+    // Only the first lines of the Java exception reach the client, so put the root cause in the message.
+    private static String rootCause(Throwable t) {
+        Throwable cause = t;
+        while (cause.getCause() != null && cause.getCause() != cause) {
+            cause = cause.getCause();
+        }
+        return cause.toString();
+    }
+
+    private IOException closeAndWrap(String action, Exception e) {
+        try {
+            close();
+        } catch (Exception closeException) {
+            e.addSuppressed(closeException);
+        }
+        String msg = action + " for table " + tableName() + ", caused by: " + rootCause(e);
+        LOG.error(msg, e);
+        return new IOException(msg, e);
     }
 
     @Override
@@ -157,10 +180,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
             }
             return numRows;
         } catch (Exception e) {
-            close();
-            String msg = "Failed to get the next off-heap table chunk for table " + table.name();
-            LOG.error(msg, e);
-            throw new IOException(msg, e);
+            throw closeAndWrap("Failed to get the next off-heap table chunk", e);
         }
 
     }
