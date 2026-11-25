@@ -20,6 +20,7 @@
 #include <string>
 
 #include "common/config_exec_fwd.h"
+#include "common/util/debug_util.h"
 #include "common/util/thrift_util.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors_ext.h"
@@ -482,6 +483,66 @@ TEST_F(JniScannerTest, test_create_odps_jni_scanner) {
             {"time_zone", "Asia/Shanghai"},
     };
     check_jni_scanner_params(scanner->_jni_scanner_params, expected);
+}
+
+static TTableDescriptor create_iceberg_metadata_table_desc() {
+    THdfsTable hdfs_table;
+    hdfs_table.__set_hive_column_names("file_path,record_count");
+    hdfs_table.__set_hive_column_types("string#bigint");
+    hdfs_table.__set_time_zone("Asia/Shanghai");
+
+    TTableDescriptor table_desc;
+    table_desc.__set_id(100000042);
+    table_desc.__set_tableType(TTableType::ICEBERG_FILES_TABLE);
+    table_desc.__set_numCols(2);
+    table_desc.__set_numClusteringCols(0);
+    table_desc.__set_tableName("t$files");
+    table_desc.__set_dbName("db");
+    table_desc.__set_hdfsTable(hdfs_table);
+    return table_desc;
+}
+
+TEST_F(JniScannerTest, test_create_iceberg_metadata_jni_scanner) {
+    TTableDescriptor t_table_desc = create_iceberg_metadata_table_desc();
+    IcebergMetadataTableDescriptor table(t_table_desc, &_pool);
+    THdfsScanRange scan_range;
+    scan_range.__set_serialized_split("split");
+
+    for (bool with_json : {false, true}) {
+        THdfsScanNode scan_node;
+        scan_node.__set_serialized_table("java-table");
+        scan_node.__set_serialized_predicate("java-predicate");
+        scan_node.__set_metadata_table_type("FILES");
+        if (with_json) {
+            scan_node.__set_iceberg_metadata_payload("{\"format\":1}");
+            scan_node.__set_iceberg_predicate_json("true");
+        }
+
+        JniScanner::CreateOptions options;
+        options.hive_table = &table;
+        options.scan_range = &scan_range;
+        options.scan_node = &scan_node;
+        auto scanner = create_iceberg_metadata_jni_scanner(options);
+        const auto& params = scanner->_jni_scanner_params;
+
+        ASSERT_EQ("java-table", params.at("serialized_table"));
+        ASSERT_EQ("java-predicate", params.at("serialized_predicate"));
+        ASSERT_EQ("split", params.at("split_info"));
+        ASSERT_EQ("Asia/Shanghai", params.at("time_zone"));
+        if (with_json) {
+            ASSERT_EQ("{\"format\":1}", params.at("iceberg_metadata_payload"));
+            ASSERT_EQ("true", params.at("iceberg_predicate_json"));
+            ASSERT_EQ(get_short_version(), params.at("reader_build"));
+        } else {
+            ASSERT_EQ(0, params.count("iceberg_metadata_payload"));
+            ASSERT_EQ(0, params.count("iceberg_predicate_json"));
+            ASSERT_EQ(0, params.count("reader_build"));
+        }
+        // the table forms carry storage credentials (in clear text in the JSON one): never logged
+        for (const char* key : {"serialized_table", "serialized_predicate", "iceberg_metadata_payload"}) {
+            ASSERT_EQ(1, scanner->_skipped_log_jni_scanner_params.count(key)) << key;
+        }
+    }
 }
 
 // Test that scanner can be safely closed even when JNI initialization fails

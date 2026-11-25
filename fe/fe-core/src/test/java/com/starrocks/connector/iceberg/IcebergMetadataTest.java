@@ -14,6 +14,8 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
@@ -61,6 +63,8 @@ import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.metadata.iceberg.IcebergMetadataCollectJob;
 import com.starrocks.connector.share.iceberg.IcebergPartitionUtils;
+import com.starrocks.connector.share.iceberg.IcebergTablePayload;
+import com.starrocks.connector.share.iceberg.SerializableTable;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric;
@@ -134,7 +138,9 @@ import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.ExternalHistogramStatsMeta;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TIcebergColumnStats;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TIcebergFileContent;
@@ -177,6 +183,7 @@ import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.SchemaParser;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.TableMetadata;
@@ -193,6 +200,7 @@ import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.hive.HiveCatalog;
 import org.apache.iceberg.hive.HiveTableOperations;
+import org.apache.iceberg.inmemory.InMemoryCatalog;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.puffin.StandardBlobTypes;
@@ -234,6 +242,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ENABLE_DISTRIBUTED_PLAN_LOAD_DATA_FILE_COLUMN_STATISTICS_WITH_EQ_DELETE;
@@ -4078,7 +4087,8 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
-    public void testGetMetaSpec(@Mocked LocalMetastore localMetastore, @Mocked TemporaryTableMgr temporaryTableMgr) {
+    public void testGetMetaSpec(@Mocked LocalMetastore localMetastore, @Mocked TemporaryTableMgr temporaryTableMgr)
+            throws Exception {
         mockedNativeTableG.newAppend().appendFile(FILE_B_5).commit();
         new MockUp<IcebergHiveCatalog>() {
             @Mock
@@ -4117,6 +4127,93 @@ public class IcebergMetadataTest extends TableTestBase {
         List<RemoteMetaSplit> splits = icebergMetaSpec.getSplits();
         Assertions.assertFalse(icebergMetaSpec.loadColumnStats());
         Assertions.assertEquals(1, splits.size());
+
+        int mode = Config.iceberg_metadata_table_payload_mode;
+        try {
+            // mode 2 (tests): always the JSON forms
+            Config.iceberg_metadata_table_payload_mode = 2;
+            IcebergMetaSpec forced = metadataMgr.getSerializedMetaSpec(
+                    "catalog", "db", "tg", -1, null, MetadataTableType.LOGICAL_ICEBERG_METADATA).cast();
+            Assertions.assertNotNull(forced.getTable());
+            JsonNode envelope = Assertions.assertDoesNotThrow(() -> new ObjectMapper().readTree(forced.getJsonPayload()));
+            Assertions.assertEquals(1, envelope.get("format").asInt());
+            // no build: every BE reads the JSON form
+            Assertions.assertEquals("", envelope.get("build").asText());
+            Assertions.assertEquals(org.apache.iceberg.expressions.Expressions.alwaysTrue(),
+                    org.apache.iceberg.expressions.ExpressionParser.fromJson(forced.getPredicateJson()));
+            JsonNode payload = envelope.get("table");
+            Assertions.assertEquals(mockedNativeTableG.name(), payload.get("name").asText());
+            Assertions.assertEquals(mockedNativeTableG.location(), payload.get("location").asText());
+            Assertions.assertEquals(SchemaParser.toJson(mockedNativeTableG.schema()), payload.get("schema").asText());
+            Assertions.assertEquals(TestTables.LocalFileIO.class.getName(), payload.get("file_io").get("impl").asText());
+
+            // mode 0: the Java form only
+            Config.iceberg_metadata_table_payload_mode = 0;
+            IcebergMetaSpec javaOnly = metadataMgr.getSerializedMetaSpec(
+                    "catalog", "db", "tg", -1, null, MetadataTableType.LOGICAL_ICEBERG_METADATA).cast();
+            Assertions.assertNotNull(javaOnly.getTable());
+            Assertions.assertNull(javaOnly.getJsonPayload());
+            Assertions.assertNull(javaOnly.getPredicateJson());
+
+            // mode 1: the JSON forms only while an alive node runs another build (a rolling upgrade)
+            Config.iceberg_metadata_table_payload_mode = 1;
+            List<ComputeNode> nodes = new ArrayList<>();
+            new MockUp<SystemInfoService>() {
+                @Mock
+                public Stream<ComputeNode> backendAndComputeNodeStream() {
+                    return nodes.stream();
+                }
+            };
+            Function<String, IcebergMetaSpec> specWithNode = version -> {
+                nodes.clear();
+                ComputeNode node = new ComputeNode(1L, "127.0.0.1", 9050);
+                node.setAlive(true);
+                node.setVersion(version);
+                nodes.add(node);
+                return metadataMgr.getSerializedMetaSpec(
+                        "catalog", "db", "tg", -1, null, MetadataTableType.LOGICAL_ICEBERG_METADATA).cast();
+            };
+            Assertions.assertNull(specWithNode.apply(IcebergMetadata.metadataPayloadBuild()).getJsonPayload());
+            IcebergMetaSpec upgrading = specWithNode.apply("another-build");
+            Assertions.assertNotNull(upgrading.getJsonPayload());
+            Assertions.assertNotNull(upgrading.getPredicateJson());
+            Assertions.assertEquals(IcebergMetadata.metadataPayloadBuild(),
+                    new ObjectMapper().readTree(upgrading.getJsonPayload()).get("build").asText());
+
+            // a table the JSON form cannot express: the Java forms only, as before
+            new MockUp<IcebergTablePayload>() {
+                @Mock
+                public String toJson(SerializableTable table, String build) {
+                    throw new IllegalStateException("cannot express the table");
+                }
+            };
+            IcebergMetaSpec failed = specWithNode.apply("another-build");
+            Assertions.assertNotNull(failed.getTable());
+            Assertions.assertNull(failed.getJsonPayload());
+            Assertions.assertNull(failed.getPredicateJson());
+        } finally {
+            Config.iceberg_metadata_table_payload_mode = mode;
+        }
+    }
+
+    @Test
+    public void testJsonPayloadRebuildsTheTable() {
+        InMemoryCatalog catalog = new InMemoryCatalog();
+        catalog.initialize("payload", new HashMap<>());
+        catalog.createNamespace(Namespace.of("db"));
+        org.apache.iceberg.Table table = catalog.createTable(TableIdentifier.of("db", "t"), SCHEMA_A, SPEC_A);
+        SerializableTable source = new SerializableTable(table, table.io());
+
+        String json = IcebergTablePayload.toJson(source, IcebergMetadata.metadataPayloadBuild());
+        Assertions.assertEquals(IcebergMetadata.metadataPayloadBuild(), IcebergTablePayload.readBuild(json));
+        SerializableTable rebuilt = IcebergTablePayload.fromJson(json);
+        Assertions.assertEquals(table.name(), rebuilt.name());
+        Assertions.assertEquals(table.location(), rebuilt.location());
+        Assertions.assertEquals(table.uuid(), rebuilt.uuid());
+        Assertions.assertTrue(table.schema().sameSchema(rebuilt.schema()));
+        Assertions.assertEquals(table.specs(), rebuilt.specs());
+        Assertions.assertEquals(table.sortOrder(), rebuilt.sortOrder());
+        Assertions.assertEquals(table.properties(), rebuilt.properties());
     }
 
     @Test
