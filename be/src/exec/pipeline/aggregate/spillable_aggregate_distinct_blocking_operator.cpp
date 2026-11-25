@@ -17,7 +17,6 @@
 #include <utility>
 
 #include "base/concurrency/race_detect.h"
-#include "base/uid_util.h"
 #include "compute_env/query/fragment_runtime_state.h"
 #include "compute_env/spill/mem_tracker_guard.h"
 #include "compute_env/spill/spiller.hpp"
@@ -233,8 +232,10 @@ bool SpillableAggregateDistinctBlockingSourceOperator::is_finished() const {
     // created and only released in Aggregator::close(). If a polled driver still observes it released, there is
     // nothing left to restore, so report finished instead of dereferencing a null shared_ptr.
     if (_aggregator->spiller() == nullptr) {
-        LOG(WARNING) << "spillable distinct aggregate source sees a released spiller, treat it as finished. query_id="
-                     << print_id(get_factory()->runtime_state()->query_id());
+        // The factory of this operator does not run OperatorFactory::prepare(), so it has no runtime state to
+        // take the query id from.
+        LOG(WARNING) << "spillable distinct aggregate source sees a released spiller, treat it as finished."
+                     << " plan_node_id=" << get_plan_node_id() << " driver_sequence=" << get_driver_sequence();
         return true;
     }
     if (!_aggregator->spiller()->spilled()) {

@@ -16,7 +16,6 @@
 
 #include <algorithm>
 
-#include "base/uid_util.h"
 #include "common/status.h"
 #include "compute_env/spill/mem_tracker_guard.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
@@ -79,8 +78,10 @@ bool SpillableAggregateBlockingSourceOperator::is_finished() const {
     // driver can still observe it released; there is nothing left to restore then, so report finished
     // instead of dereferencing a null shared_ptr.
     if (_aggregator->spiller() == nullptr) {
-        LOG(WARNING) << "spillable aggregate source sees a released spiller, treat it as finished. query_id="
-                     << print_id(get_factory()->runtime_state()->query_id());
+        // The factory of this operator does not run OperatorFactory::prepare(), so it has no runtime state to
+        // take the query id from.
+        LOG(WARNING) << "spillable aggregate source sees a released spiller, treat it as finished."
+                     << " plan_node_id=" << get_plan_node_id() << " driver_sequence=" << get_driver_sequence();
         return true;
     }
     if (!_aggregator->spiller()->spilled()) {
