@@ -1,0 +1,15 @@
+-- name: test_self_compare_range_third_conjunct
+-- description: A self comparison of a column (d <= d, also inside BETWEEN ... AND d), a range on the same column and
+--              a third predicate on that column: the third predicate was dropped and every row came back
+--              (StarRocks/starrocks#84125). STARTS_WITH(x, NULL) is NULL, so no row qualifies.
+
+CREATE TABLE t (k INT, s VARCHAR(20), d DATETIME) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO t VALUES (1, 'ab', '2020-01-01 00:00:00'), (2, 'cd', '2021-01-01 00:00:00');
+
+SELECT count(*) FROM t WHERE d BETWEEN '1970-01-24 16:17:11' AND d AND STARTS_WITH(CAST(d AS VARCHAR), NULL);
+SELECT count(*) FROM t WHERE d >= '1970-01-24 16:17:11' AND d <= d AND STARTS_WITH(CAST(d AS VARCHAR), NULL);
+SELECT count(*) FROM t WHERE d >= '1970-01-24 16:17:11' AND d <= d AND hour(d) = 1;
+SELECT count(*) FROM t WHERE d >= '1970-01-24 16:17:11' AND STARTS_WITH(CAST(d AS VARCHAR), NULL);
+SELECT count(*) FROM t WHERE d <= d AND STARTS_WITH(CAST(d AS VARCHAR), NULL);
+SELECT k FROM t WHERE d BETWEEN '2020-06-01 00:00:00' AND d AND s = 'cd';
