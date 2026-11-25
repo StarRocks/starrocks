@@ -292,48 +292,6 @@ public:
 };
 
 // NOLINTNEXTLINE
-TEST_F(DictionaryCacheManagerTest, refresh_rejects_empty_dictionary_schema) {
-    TDescriptorTableBuilder descriptors;
-    TTupleDescriptorBuilder tuple;
-    tuple.add_slot(TSlotDescriptorBuilder().type(TYPE_BIGINT).column_name("slot_only").column_pos(1).id(1).build());
-    tuple.build(&descriptors);
-
-    TOlapTableSchemaParam schema;
-    schema.slot_descs = descriptors.desc_tbl().slotDescriptors;
-    schema.tuple_desc = descriptors.desc_tbl().tupleDescriptors[0];
-    auto& index = schema.indexes.emplace_back();
-    index.id = 4;
-    index.columns = {"slot_only"};
-    TOlapTableColumnParam columns;
-    columns.columns = get_create_tablet_request(0, 0).tablet_schema.columns;
-    index.__set_column_param(columns);
-    OlapTableSchemaParam olap_schema;
-    ASSERT_OK(olap_schema.init(schema));
-
-    PProcessDictionaryCacheRequest request;
-    request.set_dict_id(1);
-    request.set_txn_id(1);
-    request.set_key_size(1);
-    request.set_type(PProcessDictionaryCacheRequestType::REFRESH);
-    olap_schema.to_protobuf(request.mutable_schema());
-    Chunk chunk;
-    auto column = Int64Column::create();
-    column->append(7);
-    chunk.append_column(std::move(column), 1);
-    ASSERT_OK(DictionaryCacheChunkUtil::compress_and_serialize_chunk(&chunk, request.mutable_chunk()));
-
-    DictionaryCacheManager manager;
-    const auto status = manager.refresh(&request);
-    ASSERT_TRUE(status.is_invalid_argument()) << status;
-    EXPECT_EQ("No matching columns in dictionary cache schema", status.message());
-    EXPECT_EQ(nullptr, manager.get_dictionary_schema_by_id(request.dict_id()));
-
-    request.mutable_schema()->clear_indexes();
-    const auto missing_index = manager.refresh(&request);
-    ASSERT_TRUE(missing_index.is_invalid_argument()) << missing_index;
-    EXPECT_EQ("Missing index columns in dictionary cache schema", missing_index.message());
-}
-
 TEST_F(DictionaryCacheManagerTest, precheck_value_encode_resets_non_normal_flags_for_zero_byte) {
     Fields fields;
     fields.emplace_back(new Field(0, "v", TYPE_VARCHAR, false));

@@ -96,12 +96,13 @@ struct ColumnPtrBuilder {
 };
 
 MutableColumnPtr column_from_pool(const Field& field) {
-    if (field.geo_descriptor()) {
+    const auto type = field.type()->type();
+    if (type == TYPE_GEOGRAPHY || type == TYPE_GEOMETRY) {
         return ChunkFactory::column_from_field(field);
     }
     auto precision = field.type()->precision();
     auto scale = field.type()->scale();
-    return field_type_dispatch_column(field.type()->type(), ColumnPtrBuilder(), field, precision, scale);
+    return field_type_dispatch_column(type, ColumnPtrBuilder(), field, precision, scale);
 }
 
 Chunk* ChunkFactory::new_chunk_pooled(const Schema& schema, size_t chunk_size) {
