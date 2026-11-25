@@ -491,6 +491,9 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
             asyncRefreshOthersFeMetadataCache(dbName, tableName);
         }
+        // Schema and property changes, branches and tags, and the table procedures (rollback, cherry-pick,
+        // expire snapshots, ...) all commit new table metadata. A rename drops the old name.
+        invalidateOthersFeTable(dbName, tableName);
         return resultSet;
     }
 
@@ -524,6 +527,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             if (shouldInvalidateCache) {
                 invalidateCacheAfterCommit(dbName, tableName);
                 asyncRefreshOthersFeMetadataCache(dbName, tableName);
+                invalidateOthersFeTable(dbName, tableName);
             }
         }
     }
@@ -799,6 +803,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         // Invalidate cache after commit
         invalidateCacheAfterCommit(dbName, tableName);
         asyncRefreshOthersFeMetadataCache(dbName, tableName);
+        invalidateOthersFeTable(dbName, tableName);
     }
 
     /**
@@ -833,6 +838,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
             dropNameKeyedStatistics(stmt.getDbName(), stmt.getTableName());
             asyncRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
+            invalidateOthersFeTable(stmt.getDbName(), stmt.getTableName());
             return;
         }
 
@@ -849,6 +855,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
         StatisticUtils.dropStatisticsAfterDropTable(icebergTable);
         asyncRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
+        // Otherwise the other FEs keep serving the dropped table, and a table re-created under its name
+        invalidateOthersFeTable(stmt.getDbName(), stmt.getTableName());
     }
 
     /**
@@ -3265,9 +3273,14 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
         }
 
-        // The commit writes no edit log, and the refresh the commit dispatched to the other FEs is not waited
-        // for: make them drop the pre-commit table before the statement returns. Outside the commit queue, so
-        // a slow peer does not hold up the next commit to the table.
+        // Outside the commit queue, so a slow peer does not hold up the next commit to the table.
+        invalidateOthersFeTable(dbName, tableName);
+    }
+
+    // A change to an Iceberg table writes no edit log, so the journal wait of a forwarded statement does nothing
+    // for it, and the refresh dispatched to the other FEs is not waited for: make them drop the pre-change table
+    // before the statement returns, so that a read on any FE sees the change. Never throws.
+    private void invalidateOthersFeTable(String dbName, String tableName) {
         GlobalStateMgr.getCurrentState().invalidateOthersFeTable(new TableName(catalogName, dbName, tableName),
                 Config.iceberg_commit_invalidate_other_fe_timeout_ms);
     }
