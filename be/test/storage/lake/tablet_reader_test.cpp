@@ -3951,6 +3951,97 @@ TEST_F(LakeTabletReaderSpit, test_column_reader_keeps_index_root_pages) {
     }
 }
 
+// The bitmap index roots of a predicate column are warmed with its other index roots, and skipped once the segment has
+// loaded the bitmap index.
+TEST_F(LakeTabletReaderSpit, test_index_warm_includes_bitmap_index_roots) {
+    _tablet_metadata->mutable_schema()->mutable_column(1)->set_has_bitmap_index(true);
+    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    write_two_rowsets_with_three_segments();
+    // Keep only rowset 2, whose single segment all the warm calls below belong to.
+    _tablet_metadata->mutable_rowsets()->DeleteSubrange(0, 1);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    ConfigResetGuard<bool> warm_guard(&config::lake_scan_warm_index, true);
+    ConfigResetGuard<bool> open_guard(&config::lake_scan_parallel_segment_open, false);
+    const bool old_scheduler = g_remote_io_scheduler_enabled.exchange(true);
+    auto* sync = SyncPoint::GetInstance();
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+        g_remote_io_scheduler_enabled.store(old_scheduler);
+    });
+    std::vector<std::pair<int64_t, size_t>> ranges;
+    sync->SetCallBack("TabletReader::warm_prepared_indexes::warm", [&](void* arg) {
+        auto* call = static_cast<IndexWarmCall*>(arg);
+        ranges.emplace_back(std::get<0>(*call), std::get<1>(*call));
+        *std::get<2>(*call) = std::make_shared<FakeIndexWarmHandle>();
+    });
+    std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(get_type_info(TYPE_INT), 1, "8"));
+    auto read = [&]() {
+        ranges.clear();
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+        EXPECT_OK(reader->prepare());
+        TabletReaderParams params;
+        params.reader_type = READER_QUERY;
+        PredicateAndNode root;
+        root.add_child(PredicateColumnNode(pred.get()));
+        params.pred_tree = PredicateTree::create(std::move(root));
+        EXPECT_OK(reader->open(params));
+        auto chunk = ChunkFactory::new_chunk(*_schema, 1024);
+        int64_t rows = 0;
+        while (true) {
+            chunk->reset();
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) break;
+            EXPECT_OK(st);
+            rows += chunk->num_rows();
+        }
+        EXPECT_EQ(1, rows); // c1 = 8 is the row with key 4
+        auto stats = reader->stats();
+        reader->close();
+        return stats;
+    };
+    auto covered = [&](const PagePointer& page) {
+        for (const auto& [offset, length] : ranges) {
+            if (offset <= static_cast<int64_t>(page.offset) &&
+                static_cast<int64_t>(page.offset + page.size) <= offset + static_cast<int64_t>(length)) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    _tablet_mgr->metacache()->prune();
+    const auto cold = read();
+    EXPECT_EQ(1, cold.lake_prepared_tablet_warm_index_segments);
+
+    // A cached segment whose bitmap index is loaded: the next scan skips its bitmap roots.
+    _tablet_mgr->metacache()->prune();
+    auto rowsets = Rowset::get_rowsets(_tablet_mgr.get(), _tablet_metadata);
+    ASSERT_EQ(1, rowsets.size());
+    ASSIGN_OR_ABORT(auto segments, rowsets[0]->segments(true));
+    ASSERT_EQ(1, segments.size());
+    auto* column = const_cast<ColumnReader*>(segments[0]->column(1));
+    const auto roots = column->index_root_pages();
+    ASSERT_GT(roots.bitmap_dict_value.size, 0);
+    ASSERT_GT(roots.bitmap_ordinal.size, 0);
+    EXPECT_TRUE(covered(roots.bitmap_dict_value));
+    EXPECT_TRUE(covered(roots.bitmap_ordinal));
+    ASSIGN_OR_ABORT(auto file, segments[0]->new_segment_read_file());
+    OlapReaderStatistics load_stats;
+    IndexReadOptions opts;
+    opts.read_file = file->stream().get();
+    opts.stats = &load_stats;
+    BitmapIndexIterator* raw = nullptr;
+    ASSERT_OK(column->new_bitmap_index_iterator(opts, &raw));
+    std::unique_ptr<BitmapIndexIterator> iter(raw);
+    ASSERT_TRUE(column->has_loaded_bitmap_index());
+    const auto warm = read();
+    // Two roots per bitmap index in this segment (no dictionary ordinal index), on top of what the cold scan skipped.
+    EXPECT_EQ(cold.lake_prepared_tablet_warm_index_skipped + 2, warm.lake_prepared_tablet_warm_index_skipped);
+}
+
 // Concurrent readers of the index roots while other threads load the indexes see the same, stable values.
 TEST_F(LakeTabletReaderSpit, test_index_root_pages_stable_while_loading) {
     write_two_rowsets_with_three_segments();

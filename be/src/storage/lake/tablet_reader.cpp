@@ -474,9 +474,10 @@ static bool allocate_initial_coarse_split(const PreparedSegmentReadStatePtr& seg
 
 // lake_scan_warm_index: starts filling the local cache with the index pages the scan of |state| reads next, and
 // returns without waiting. Per segment: the short key index, the zone map, bloom filter and bitmap index roots of
-// |predicate_cids| and the ordinal index roots of |read_cids|. An index root that is not the sole data page of its index sits right
-// after that index's other pages, so the block before it is warmed as well. The fills are scheduled as a demand; the
-// reads that follow join them. Nothing here is required for correctness: a segment whose file cannot warm is read as
+// |predicate_cids| and the ordinal index roots of |read_cids|. An index root that is not the sole data page of its
+// index sits right after that index's other pages, so the block before it is warmed as well (a bitmap index has a
+// single index level, so its roots are warmed alone). The fills are scheduled as a demand; the reads that follow
+// join them. Nothing here is required for correctness: a segment whose file cannot warm is read as
 // before.
 // With a non-null |prune_tree|, a segment that SegmentMetadataFilter excludes is not warmed: Rowset::read skips it by
 // the same test before loading any segment. A rowset whose opened segments are not indexed by metadata position, or a
