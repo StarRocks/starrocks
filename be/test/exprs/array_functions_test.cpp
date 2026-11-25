@@ -20,10 +20,12 @@
 #include <limits>
 #include <unordered_set>
 
+#include "column/array_column.h"
 #include "column/const_column.h"
 #include "column/map_column.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/mock_vectorized_expr.h"
+#include "testutil/assert.h"
 #include "types/constexpr.h"
 
 namespace starrocks {
@@ -757,6 +759,71 @@ TEST_F(ArrayFunctionsTest, array_contains_nullable_array) {
         EXPECT_TRUE(result->get(1).is_null());
         EXPECT_TRUE(result->get(2).is_null());
     }
+}
+
+// An argument computed to a constant (e.g. `array_sort([2, 1])`) is a ConstColumn at runtime, but prepare() does
+// not see it as constant and builds no state for it. process() used the state for any constant input: a null state
+// crashed the BE, and a state built from the other input answered from a result prepare() never computed.
+// NOLINTNEXTLINE
+TEST_F(ArrayFunctionsTest, array_contains_all_computed_const_argument) {
+    auto make_array = [this](const std::vector<std::vector<int32_t>>& rows) -> ColumnPtr {
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+        for (const auto& row : rows) {
+            DatumArray datums;
+            for (int32_t v : row) {
+                datums.emplace_back(v);
+            }
+            array->append_datum(datums);
+        }
+        return array;
+    };
+    auto make_const = [&](const std::vector<int32_t>& value, size_t rows) -> ColumnPtr {
+        return ConstColumn::create(make_array({value}), rows);
+    };
+    auto run = [&](bool seq, const std::vector<ColumnPtr>& literals, const Columns& args) {
+        std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_ARRAY_INT, TYPE_ARRAY_INT};
+        std::unique_ptr<FunctionContext> ctx(
+                FunctionContext::create_test_context(std::move(arg_types), TYPE_BOOLEAN_DESC));
+        ctx->set_constant_columns(literals);
+        auto prepare = seq ? ArrayFunctions::array_contains_seq_specific_prepare<TYPE_INT>
+                           : ArrayFunctions::array_contains_all_specific_prepare<TYPE_INT>;
+        auto close = seq ? ArrayFunctions::array_contains_seq_specific_close<TYPE_INT>
+                         : ArrayFunctions::array_contains_all_specific_close<TYPE_INT>;
+        EXPECT_OK(prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
+        auto result = seq ? ArrayFunctions::array_contains_seq_specific<TYPE_INT>(ctx.get(), args)
+                          : ArrayFunctions::array_contains_all_specific<TYPE_INT>(ctx.get(), args);
+        EXPECT_OK(close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
+        EXPECT_TRUE(result.ok()) << result.status();
+        if (!result.ok()) {
+            return std::string();
+        }
+        return result.value()->is_constant() ? result.value()->debug_item(0) : result.value()->debug_string();
+    };
+
+    for (bool seq : {false, true}) {
+        // both inputs computed constants: no state at all
+        EXPECT_EQ("[1, 1, 1]", run(seq, {nullptr, nullptr}, {make_const({1, 2, 3}, 3), make_const({1, 2}, 3)})) << seq;
+        EXPECT_EQ("[0, 0, 0]", run(seq, {nullptr, nullptr}, {make_const({1, 2, 3}, 3), make_const({4}, 3)})) << seq;
+
+        // one input computed constant, the other a column: no state at all
+        auto column = make_array({{1, 2}, {3}});
+        EXPECT_EQ("[1, 0]", run(seq, {nullptr, nullptr}, {column, make_const({1, 2}, 2)})) << seq;
+        EXPECT_EQ("[1, 0]", run(seq, {nullptr, nullptr}, {make_const({1, 2}, 2), column})) << seq;
+    }
+
+    // right input a literal (state built from it), left input a computed constant: the result for two constants
+    // was never computed by prepare()
+    auto right_literal = make_const({1, 2}, 1);
+    EXPECT_EQ("[1, 1]", run(false, {nullptr, right_literal}, {make_const({1, 2, 3}, 2), make_const({1, 2}, 2)}));
+    EXPECT_EQ("[1, 1]", run(true, {nullptr, right_literal}, {make_const({1, 2, 3}, 2), make_const({1, 2}, 2)}));
+
+    // left input a literal, right input a computed constant
+    auto left_literal = make_const({1, 2, 3}, 1);
+    EXPECT_EQ("[1, 1]", run(false, {left_literal, nullptr}, {make_const({1, 2, 3}, 2), make_const({3, 1}, 2)}));
+    EXPECT_EQ("[0, 0]", run(true, {left_literal, nullptr}, {make_const({1, 2, 3}, 2), make_const({3, 1}, 2)}));
+
+    // both literals: the result prepare() computed is still used
+    EXPECT_EQ("CONST: 1", run(false, {left_literal, right_literal}, {make_const({1, 2, 3}, 2), make_const({1, 2}, 2)}));
 }
 
 // NOLINTNEXTLINE
