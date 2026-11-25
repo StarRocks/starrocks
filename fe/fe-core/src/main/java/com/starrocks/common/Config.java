@@ -2461,6 +2461,44 @@ public class Config extends ConfigBase {
     @ConfField
     public static int low_cardinality_threshold = 255;
 
+<<<<<<< HEAD
+=======
+    // Global-dictionary thrash guard.
+    // A "rolling low-cardinality" column (distinct values stay under low_cardinality_threshold at any
+    // instant but the value set keeps rotating, e.g. an id whose active set churns) never trips the
+    // cardinality blacklist, yet every load introduces values missing from the current global dict and
+    // invalidates it. Each invalidation forces a full MetaScan re-collection, wasting IO and, on
+    // shared-data, hammering the segment metadata cache lock. This guard detects a dictionary that is
+    // invalidated too often and forbids collecting it, so it stops thrashing.
+    @ConfField(mutable = true, comment = "Enable the global-dictionary thrash guard that forbids " +
+            "dictionaries which keep getting invalidated and re-collected.")
+    public static boolean enable_dict_thrash_guard = true;
+
+    @ConfField(mutable = true, comment = "Sliding time window (in seconds) used by the global-dictionary " +
+            "thrash guard to count how often a column dictionary is invalidated.")
+    public static int dict_thrash_guard_window_sec = 60;
+
+    @ConfField(mutable = true, comment = "If a column dictionary is invalidated at least this many times " +
+            "within dict_thrash_guard_window_sec, the thrash guard forbids collecting it. Set to 0 to " +
+            "disable the count check while keeping the guard enabled.")
+    public static int dict_thrash_guard_threshold = 5;
+
+    @ConfField(mutable = true, comment = "Minimum interval, in seconds, between two min/max statistics " +
+            "collections for the same column. Min/max stats are collected on demand via a [_META_] " +
+            "MetaScan that reads every segment's zone-map metadata; a frequently loaded column would " +
+            "otherwise re-scan on every load. Within the interval the min/max optimization is skipped " +
+            "rather than re-collected (a stale value is never served). Set to 0 to disable throttling.")
+    public static int min_max_stats_collect_interval_sec = 60;
+
+    @ConfField(mutable = true, comment = "Do not collect min/max statistics for a table with more tablets than " +
+            "this. Min/max stats are collected via a [_META_] MetaScan over the whole table, whose planning " +
+            "(tablet locations, scan ranges) and execution cost grow with the tablet count. Such a table gets no " +
+            "min/max optimization (compressed group-by key, min()/max() folding), but a value already cached for " +
+            "the current data version is still used. A skip is not cached, so a raised limit applies within " +
+            "min_max_stats_collect_interval_sec. Set to 0 or a negative value to disable the limit.")
+    public static int min_max_stats_collect_max_tablets = 100000;
+
+>>>>>>> 081dcfe ([BugFix] Avoid unnecessary whole-table min/max collection (#82909))
     /**
      * The column statistic cache update interval
      */
