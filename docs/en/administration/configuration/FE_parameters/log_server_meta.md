@@ -1643,6 +1643,15 @@ This topic introduces the following types of FE configurations:
 - Description: The number of threads in the FE-global dispatch executor for asynchronous "refresh other FE" jobs. These threads only schedule background refresh tasks from connector write paths. They do not send peer FE refresh RPCs directly. Changes take effect on running FEs without restart.
 - Introduced in: -
 
+### `paimon_commit_invalidate_other_fe_timeout_ms`
+
+- Default: 3000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The maximum time an INSERT, INSERT OVERWRITE, TRUNCATE TABLE, or DROP TABLE on a Paimon table waits for the other FEs to drop their cached copy of the table, so that a query on any FE sees the change once the statement returns. An FE that does not respond in time is left to the background refresh. During a rolling upgrade, an FE of an earlier version either refreshes the table instead, so a statement can wait up to this long, or keeps its copy until the background refresh. Set it to 0 or less to disable the wait.
+- Introduced in: -
+
 ### `iceberg_commit_invalidate_other_fe_timeout_ms`
 
 - Default: 3000

@@ -16,7 +16,9 @@ package com.starrocks.connector.paimon;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PaimonTable;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
@@ -25,18 +27,24 @@ import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.CatalogContext;
 import org.apache.paimon.catalog.CatalogFactory;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.data.BinaryString;
 import org.apache.paimon.data.GenericRow;
+import org.apache.paimon.options.CatalogOptions;
 import org.apache.paimon.options.Options;
 import org.apache.paimon.schema.TableSchema;
 import org.apache.paimon.table.FileStoreTable;
@@ -53,6 +61,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -289,6 +298,97 @@ public class PaimonDdlMetadataTest {
                 + " (replacement int) engine=paimon properties ('bucket'='-1', 'file.format'='parquet')")));
         assertNotSame(stale, table());
         assertEquals(List.of("replacement"), table().getFieldNames());
+    }
+
+    @Test
+    public void testDropTableInvalidatesOtherFes() throws Exception {
+        // Another FE's catalog has cached the table; nothing in the journal tells it about the drop
+        createTarget();
+        try (Catalog otherFeCatalog = newOtherFeCatalog()) {
+            assertNotNull(newMetadata(otherFeCatalog).getTable(null, DB, TABLE));
+            List<Boolean> droppedWhenAsked = new ArrayList<>();
+            List<String> invalidated = recordOtherFeInvalidations(otherFeCatalog, droppedWhenAsked);
+
+            metadata.dropTable(null, drop(false, false));
+            assertEquals(List.of(invalidation()), invalidated);
+            assertEquals(List.of(true), droppedWhenAsked);
+            assertNull(newMetadata(otherFeCatalog).getTable(null, DB, TABLE));
+
+            // nothing dropped, nothing to tell
+            metadata.dropTable(null, drop(true, false));
+            assertThrows(StarRocksConnectorException.class, () -> metadata.dropTable(null, drop(false, false)));
+            assertEquals(List.of(invalidation()), invalidated);
+        }
+    }
+
+    @Test
+    public void testTruncateTableInvalidatesOtherFes() throws Exception {
+        createTarget();
+        seed(row(1, "one", 10), row(2, "two", 20));
+        try (Catalog otherFeCatalog = newOtherFeCatalog()) {
+            assertEquals(Set.of("p=one", "p=two"),
+                    new HashSet<>(newMetadata(otherFeCatalog).listPartitionNames(DB, TABLE, null)));
+            List<Boolean> truncatedWhenAsked = new ArrayList<>();
+            List<String> invalidated = recordOtherFeInvalidations(otherFeCatalog, truncatedWhenAsked);
+
+            metadata.truncateTable(new TruncateTableStmt(new TableRef(QualifiedName.of(List.of(CATALOG, DB, TABLE)),
+                    null, NodePosition.ZERO)), new ConnectContext());
+            assertEquals(List.of(invalidation()), invalidated);
+            assertEquals(List.of(true), truncatedWhenAsked);
+            // the partitions, and their times, the other FE judges materialized view freshness by
+            assertTrue(newMetadata(otherFeCatalog).listPartitionNames(DB, TABLE, null).isEmpty());
+        }
+    }
+
+    @Test
+    public void testInvalidateCachedTableDropsTheCatalogCachedTable() throws Exception {
+        createTarget();
+        try (Catalog otherFeCatalog = newOtherFeCatalog()) {
+            PaimonTable cached = (PaimonTable) newMetadata(otherFeCatalog).getTable(null, DB, TABLE);
+            catalog.dropTable(TARGET, false);
+            assertSame(cached.getNativeTable(),
+                    ((PaimonTable) newMetadata(otherFeCatalog).getTable(null, DB, TABLE)).getNativeTable());
+
+            // a new metadata instance, as the receiving FE uses: what it drops must be the catalog's
+            newMetadata(otherFeCatalog).invalidateCachedTable(DB, TABLE);
+            assertNull(newMetadata(otherFeCatalog).getTable(null, DB, TABLE));
+        }
+    }
+
+    // Answers the invalidation as the receiving FE does, recording what a statement asked for, as
+    // catalog.db.table@timeoutMs, and whether its change was already in the lake when it asked
+    private List<String> recordOtherFeInvalidations(Catalog otherFeCatalog, List<Boolean> changedWhenAsked) {
+        List<String> invalidated = new ArrayList<>();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public void invalidateOthersFeTable(TableName tableName, int timeoutMs) {
+                invalidated.add(tableName.getCatalog() + "." + tableName.getDb() + "." + tableName.getTbl() + "@"
+                        + timeoutMs);
+                try (Catalog fresh = newCatalog()) {
+                    FileStoreTable table = (FileStoreTable) fresh.getTable(TARGET);
+                    changedWhenAsked.add(table.newReadBuilder().newScan().plan().splits().isEmpty());
+                } catch (Catalog.TableNotExistException e) {
+                    changedWhenAsked.add(true);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+                newMetadata(otherFeCatalog).invalidateCachedTable(tableName.getDb(), tableName.getTbl());
+            }
+        };
+        return invalidated;
+    }
+
+    private static String invalidation() {
+        return CATALOG + "." + DB + "." + TABLE + "@" + Config.paimon_commit_invalidate_other_fe_timeout_ms;
+    }
+
+    // Configured as PaimonConnector configures a catalog, which also caches the partition list
+    private Catalog newOtherFeCatalog() {
+        Options options = new Options();
+        options.setString("warehouse", warehouse.toUri().toString());
+        options.setString("cache-enabled", "true");
+        options.setString(CatalogOptions.CACHE_PARTITION_MAX_NUM.key(), "1000");
+        return CatalogFactory.createCatalog(CatalogContext.create(options));
     }
 
     private Catalog newCatalog() {
