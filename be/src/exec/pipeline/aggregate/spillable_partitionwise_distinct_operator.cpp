@@ -101,6 +101,10 @@ Status SpillablePartitionWiseDistinctSinkOperator::prepare(RuntimeState* state) 
     _peak_revocable_mem_bytes = _unique_metrics->AddHighWaterMarkCounter(
             "PeakRevocableMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
     _hash_table_spill_times = ADD_COUNTER(_unique_metrics.get(), "HashTableSpillTimes", TUnit::UNIT);
+    // Spilling resets the hash set after every chunk, so the same key would be counted against the
+    // LIMIT again for each chunk it shows up in, and the sink would stop reading while fewer than
+    // LIMIT distinct keys exist. The sibling aggregate sinks turn the shortcut off for the same reason.
+    _distinct_op->aggregator()->params()->enable_pipeline_share_limit = false;
 
     return Status::OK();
 }
