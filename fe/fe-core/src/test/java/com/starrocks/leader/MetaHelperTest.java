@@ -17,6 +17,7 @@ package com.starrocks.leader;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.InvalidMetaDirException;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.persist.ImageFormatVersion;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
@@ -285,8 +286,8 @@ public class MetaHelperTest {
         }
 
         String url() {
-            return "http://" + server.getAddress().getHostString() + ":" + server.getAddress().getPort()
-                    + "/image?version=147304";
+            return "http://" + NetUtils.getHostPortInAccessibleFormat(server.getAddress().getHostString(),
+                    server.getAddress().getPort()) + "/image?version=147304";
         }
 
         @Override
