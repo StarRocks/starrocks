@@ -2552,7 +2552,6 @@ public class QueryAnalyzer {
                         Table mvTable = materializedIndex.first;
                         Preconditions.checkState(mvTable != null);
                         Preconditions.checkState(mvTable instanceof OlapTable);
-                        // Add read lock to avoid concurrent problems.
                         OlapTable mvOlapTable = new OlapTable(mvTable.getType());
                         ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
                         // Copy the necessary olap table meta to avoid changing original meta;
