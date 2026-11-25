@@ -122,34 +122,47 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
         return HIVE;
     }
 
-    /** Resolve a virtual table before falling back to an ordinary lookup of the full HMS name. */
+    /**
+     * Routes a {@code base$suffix} read. The suffix is claimed only when the format of the base table
+     * recognizes it: on Paimon bases, native system tables go to the Paimon connector and the global index
+     * relation goes to the metadata table factory; on Iceberg bases, StarRocks metadata tables go to the
+     * metadata table factory. Anything else, including a physical table whose name merely looks like one
+     * of these, is looked up by its full HMS name.
+     */
     public ConnectorMetadata resolveTableForRead(String dbName, String fullName, ConnectorMetadata tableMetadata) {
         if (fullName.indexOf('$') < 1) {
             return this;
         }
         MetadataTableName metadataName = MetadataTableName.isMetadataTable(fullName) ? MetadataTableName.from(fullName) : null;
-        if (metadataName != null && metadataName.getTableType() == MetadataTableType.PAIMON_GLOBAL_INDEX) {
-            // Only the internal metadata factory may authorize and construct this relation.
-            if (tableMetadata == null) {
-                throw new StarRocksConnectorException("No metadata table factory for %s.%s", dbName, fullName);
-            }
+        boolean globalIndex = metadataName != null && metadataName.getTableType() == MetadataTableType.PAIMON_GLOBAL_INDEX;
+
+        // When both parses succeed they agree on the base, since a branch-qualified Paimon name is not a
+        // valid metadata table name.
+        String paimonBase = PaimonUtils.systemTableBaseName(dbName, fullName);
+        String baseName = paimonBase != null ? paimonBase : metadataName != null ? metadataName.getTableName() : null;
+        if (baseName == null) {
+            return this;
+        }
+        Table.TableType baseType = getBaseTableType(dbName, baseName);
+        if (baseType == PAIMON && globalIndex && tableMetadata != null) {
             return tableMetadata;
         }
-        String paimonBase = PaimonUtils.systemTableBaseName(dbName, fullName);
-        if (paimonBase == null && metadataName == null) {
-            return this;
-        }
-        Table.TableType owner;
-        try {
-            owner = getTableType(dbName, paimonBase != null ? paimonBase : metadataName.getTableName());
-        } catch (StarRocksConnectorException e) {
-            // The full name can identify a physical table even when the base cannot be read.
-            return this;
-        }
-        if (owner == PAIMON && paimonBase != null) {
+        if (baseType == PAIMON && paimonBase != null) {
             return metadataOfType(PAIMON);
         }
-        return owner == ICEBERG && metadataName != null && tableMetadata != null ? tableMetadata : this;
+        if (baseType == ICEBERG && metadataName != null && !globalIndex && tableMetadata != null) {
+            return tableMetadata;
+        }
+        return this;
+    }
+
+    /** Returns null when the base cannot be read, since the full name may still be a physical table. */
+    private Table.TableType getBaseTableType(String dbName, String baseName) {
+        try {
+            return getTableType(dbName, baseName);
+        } catch (StarRocksConnectorException e) {
+            return null;
+        }
     }
 
     private Table.TableType getTableType(Table table) {

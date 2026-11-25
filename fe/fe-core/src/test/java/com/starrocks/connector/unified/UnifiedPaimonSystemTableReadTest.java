@@ -51,6 +51,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -85,6 +86,34 @@ class UnifiedPaimonSystemTableReadTest {
         } finally {
             ConnectContext.remove();
         }
+    }
+
+    @Test
+    void routeGlobalIndexSuffixByBaseTableFormat() {
+        var hive = mock(HiveMetadata.class);
+        var paimon = mock(PaimonMetadata.class);
+        var tableMetadata = new TableMetaMetadata("unified", "unified");
+        var unified = new UnifiedMetadata(Map.of(Table.TableType.HIVE, hive, Table.TableType.PAIMON, paimon));
+        when(hive.getTable(any(), eq("db"), eq("orders"))).thenReturn(hiveTable("orders", Map.of()));
+        when(hive.getTable(any(), eq("db"), eq("paimon_orders"))).thenReturn(hiveTable("paimon_orders", Map.of(
+                UnifiedMetadata.PAIMON_STORAGE_HANDLER_KEY, UnifiedMetadata.PAIMON_STORAGE_HANDLER_VALUE)));
+        when(hive.getTable(any(), eq("db"), eq("iceberg_orders"))).thenReturn(hiveTable("iceberg_orders", Map.of(
+                UnifiedMetadata.ICEBERG_TABLE_TYPE_NAME, UnifiedMetadata.ICEBERG_TABLE_TYPE_VALUE)));
+
+        assertSame(unified, unified.resolveTableForRead("db", "orders$paimon_global_index", tableMetadata));
+        assertSame(unified, unified.resolveTableForRead("db", "missing$paimon_global_index", tableMetadata));
+        assertSame(unified, unified.resolveTableForRead("db", "iceberg_orders$paimon_global_index", tableMetadata));
+        assertSame(tableMetadata, unified.resolveTableForRead("db", "paimon_orders$paimon_global_index", tableMetadata));
+        assertSame(unified, unified.resolveTableForRead("db", "paimon_orders$paimon_global_index", null));
+
+        HiveTable physical = hiveTable("orders$paimon_global_index", Map.of());
+        when(hive.getTable(any(), eq("db"), eq("orders$paimon_global_index"))).thenReturn(physical);
+        var catalog = new CatalogConnectorMetadata(unified, new InformationSchemaMetadata("unified"), tableMetadata);
+        assertSame(physical, catalog.getTable(new ConnectContext(), "db", "orders$paimon_global_index"));
+    }
+
+    private static HiveTable hiveTable(String name, Map<String, String> properties) {
+        return HiveTable.builder().setTableName(name).setFullSchema(List.of()).setProperties(properties).build();
     }
 
     private void assertSystemTableRow(CatalogConnectorMetadata catalog, ConnectContext context, String name,
