@@ -307,11 +307,20 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
             enable_agg_spill = false;
         }
         if (enable_agg_spill && has_group_by_keys) {
+<<<<<<< HEAD
             if (runtime_state()->enable_spill_partitionwise_agg()) {
                 ops_with_source =
                         _decompose_to_pipeline<AggregatorFactory, SpillablePartitionWiseAggregateSourceOperatorFactory,
                                                SpillablePartitionWiseAggregateSinkOperatorFactory>(ops_with_sink,
                                                                                                    context, false);
+=======
+            if (runtime_state()->spill_partitionwise_agg() || !_group_by_keys_support_orderby()) {
+                ASSIGN_OR_RETURN(
+                        ops_with_source,
+                        (_decompose_to_pipeline<AggregatorFactory, SpillablePartitionWiseAggregateSourceOperatorFactory,
+                                                SpillablePartitionWiseAggregateSinkOperatorFactory>(ops_with_sink,
+                                                                                                    context, false)));
+>>>>>>> e4d8a33 ([BugFix] Use partitionwise spill for unorderable aggregation keys (#82919))
             } else {
                 ops_with_source =
                         _decompose_to_pipeline<AggregatorFactory, SpillableAggregateBlockingSourceOperatorFactory,

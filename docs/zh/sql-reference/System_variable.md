@@ -897,6 +897,149 @@ FROM test;
 * 描述：是否开启查询触发 ANALYZE 外表任务。
 * 引入版本：v3.4.0
 
+<<<<<<< HEAD
+=======
+### enable_rbo_table_prune
+
+* **描述**: 启用后，优化器在当前会话中对保持基数的连接应用基于规则的 (RBO) 表裁剪。优化器运行一系列重写和裁剪步骤（分区裁剪、投影合并/拆分、`UniquenessBasedTablePruneRule`、连接重排 和 `RboTablePruneRule`）以移除不必要的表扫描备选项并减少连接中的扫描分区/行数。启用此选项还会在逻辑规则重写运行时禁用连接等价推导（`context.setEnableJoinEquivalenceDerive(false)`），以避免冲突的转换。如果设置了 `enable_table_prune_on_update`，裁剪流程在处理 UPDATE 语句时可能额外运行 `PrimaryKeyUpdateTableRule`。该规则仅在查询包含可裁剪连接时执行（通过 `Utils.hasPrunableJoin(tree)` 检查）。
+* **范围**: Session
+* **默认值**: `false`
+* **数据类型**: boolean
+* **引入版本**: v3.2.0
+
+### enable_runtime_adaptive_dop
+
+* **范围**: Session
+* **描述**: 当为某个 Session 启用此功能时，Planner 和 Fragment Builder 会标记支持运行时自适应 DOP 的 Pipeline-capable Fragment，使其在运行时使用自适应并行度。此选项仅在 `enable_pipeline_engine` 为 true 时生效。启用后，Fragment 在计划构建期间会使用自适应并行度：Join 的 Probe 可能会等待所有 Build 阶段完成（这与 `group_execution` 行为冲突），启用运行时自适应 DOP 会禁用 Pipeline 级别的 Multi-Partitioned Runtime Filter。该参数会记录在 Query Profile 中，并且可以在每个会话中切换。
+* **默认值**: `false`
+* **数据类型**: boolean
+* **引入版本**: v3.2.0
+
+### enable_scan_datacache
+
+* 描述：是否开启 Data Cache 特性。该特性开启之后，StarRocks 通过将外部存储系统中的热数据缓存成多个 block，加速数据查询和分析。更多信息，参见 [Data Cache](../data_source/data_cache/data_cache.md)。该特性从 2.5 版本开始支持。在 3.2 之前各版本中，对应变量为 `enable_scan_block_cache`。
+* 默认值：true
+* 引入版本：v2.5
+
+### enable_short_circuit
+
+* 描述：是否启用短路径查询。默认值：`false`。如果将其设置为 `true`，当[查询满足条件](../table_design/hybrid_table.md#查询数据)（用于评估是否为点查）：WHERE 子句的条件列必须包含所有主键列，并且运算符为 `=` 或者 `IN`，则该查询才会走短路径。
+* 默认值：false
+* 引入版本：v3.2.3
+
+### enable_sort_aggregate
+
+* 描述：是否开启 sorted streaming 聚合。`true` 表示开启 sorted streaming 聚合功能，对流中的数据进行排序。
+* 默认值：false
+* 引入版本：v2.5
+
+### enable_spill
+
+* 描述：是否启用中间结果落盘。默认值：`false`。如果将其设置为 `true`，StarRocks 会将中间结果落盘，以减少在查询中处理聚合、排序或连接算子时的内存使用量。
+* 默认值：false
+* 引入版本：v3.0
+
+启用聚合落盘时，MAP 或包含 MAP 的 ARRAY/STRUCT 等不可排序的分组键会自动使用基于哈希分区的 partitionwise 落盘，即使 `spill_partitionwise_agg` 为 `false`。可排序的分组键仍遵循该设置。
+
+### enable_spill_to_remote_storage
+
+* 描述：是否启用将中间结果落盘至对象存储。如果设置为 `true`，当本地磁盘的用量达到上限后，StarRocks 将中间结果落盘至 `spill_storage_volume` 中指定的存储卷中。有关更多信息，请参阅 [将中间结果落盘至对象存储](../administration/management/resource_management/spill_to_disk.md#preview-将中间结果落盘至对象存储)。
+* 默认值：false
+* 引入版本：v3.3.0
+
+### enable_spm_rewrite
+
+* 描述：是否启用 SQL Plan Manager (SPM) 查询改写功能。启用此功能后，StarRocks 将自动将相应的查询改写为绑定的查询计划，以提升查询性能和稳定性。
+* 默认值：false
+
+### enable_strict_order_by
+
+* 描述：是否校验 ORDER BY 引用列是否有歧义。设置为默认值 `TRUE` 时，如果查询中的输出列存在不同的表达式使用重复别名的情况，且按照该别名进行排序，查询会报错，例如 `select distinct t1.* from tbl1 t1 order by t1.k1;`。该行为和 2.3 及之前版本的逻辑一致。如果取值为 `FALSE`，采用宽松的去重机制，把这类查询作为有效 SQL 处理。
+* 默认值：true
+* 引入版本：v2.5.18，v3.1.7
+
+### enable_sync_materialized_view_rewrite
+
+* 描述：是否启用基于同步物化视图的查询改写。
+* 默认值：true
+* 引入版本：v3.1.11，v3.2.5
+
+### enable_table_prune_on_update
+
+* **范围**: Session
+* **描述**: 控制优化器是否为 UPDATE 语句应用针对主键的表裁剪规则。启用时，QueryOptimizer（在 pruneTables 阶段）会调用 `PrimaryKeyUpdateTableRule` 来重写/裁剪更新计划 —— 可能在主键更新模式下改进裁剪效果。该标志仅在基于规则/成本模型（rule-based/CBO）表裁剪启用时生效（参见 `enable_rbo_table_prune`）。默认禁用，因为该转换可能会改变数据布局/计划形态（例如 OlapTableSink 的 bucket-shuffle 布局），并可能在并发更新时导致正确性或性能回退。
+* **默认值**: `false`
+* **数据类型**: boolean
+* **引入版本**: v3.2.4
+
+### enable_tablet_internal_parallel
+
+* 描述：是否开启自适应 Tablet 并行扫描，使用多个线程并行分段扫描一个 Tablet，可以减少 Tablet 数量对查询能力的限制。
+* 默认值：true
+* 引入版本：v2.3
+
+### enable_tablet_pre_split
+
+* 描述：基于采样的 Tablet 预分裂（Sample-Based Tablet Pre-Split）的会话级开关。默认 `true`，因此主开关由 FE 配置 `enable_tablet_pre_split_for_*` 控制。对于不希望被预分裂干扰的会话，可将其设为 `false`。预分裂需同时满足对应 FE 配置和该会话变量都为 `true`。
+* 默认值：true
+* 引入版本：v4.1.0
+
+### enable_topn_filter_back_pressure
+
+* 描述: Scan 是否自动启用 TopN Runtime Filter（RF）背压。当一个 TopN/流式构建的 RF（来自 `ORDER BY ... LIMIT` 查询，或聚合 in-filter）作用于某个 Scan 时,背压会在该 RF 真正到达之前,将 Scan 的预读 IO 任务数钳制到较小的值,避免大量并发读取超出(非并发感知的)行预算、在 RF 生效前就淹没下游聚合。该机制对 shared-nothing（OLAP）和 shared-data（湖仓/connector）Scan 均生效。设为 `false` 时,Scan 仅在 FE 的 `topn_filter_back_pressure_mode` 开启时才启用背压。
+* 默认值: true
+* 引入版本: v4.1
+
+以下变量用于调节背压行为,仅在 `enable_topn_filter_back_pressure` 为 `true` 时生效:
+
+| 变量 | 默认值 | 描述 |
+| --- | --- | --- |
+| `topn_filter_back_pressure_io_tasks` | 1 | TopN RF 尚未到达期间,Scan 预读的 IO 任务数上限。设为 `<= 0` 可关闭钳制（Scan 使用完整的 `io_tasks_per_scan_operator`）。 |
+| `topn_back_pressure_num_rows` | 1024 | 第一个节流轮次中,背压开始节流前 Scan 可读取的行数。每个后续轮次翻倍。 |
+| `topn_back_pressure_throttle_time_ms` | 8 | 第一个节流窗口的时长（毫秒）。每个后续轮次翻倍。 |
+| `topn_back_pressure_throttle_time_upper_bound_ms` | 100 | 背压节流某个 Scan 的总时长上限（毫秒）；达到上限后即使 RF 仍未到达,也会放行 Scan 以完整预读运行。 |
+| `topn_back_pressure_max_rounds` | 8 | 背压放弃前的最大节流轮次数。 |
+
+### enable_topn_runtime_filter
+
+* 描述: 是否启用 TopN Runtime Filter。如果启用此功能，对于 ORDER BY LIMIT 查询，将动态构建一个 Runtime Filter 并将其下推到 Scan 阶段进行过滤。
+* 默认值: true
+* 引入版本: v3.3
+
+### enable_ukfk_opt
+
+* **描述**: 启用优化器对 Unique-Key / Foreign-Key (UK/FK) 基于的转换和统计增强的支持。设置后，优化器会运行 `UKFKConstraintsCollector` 自底向上收集唯一键和外键约束并将其附加到计划节点（OptExpressions）。收集到的约束将被像 `PruneUKFKJoinRule`（可以裁剪连接的 UK 侧、将谓词从 UK 列重写到 FK 列并为外连接场景添加 IS NULL 检查）和 `PruneUKFKGroupByKeysRule`（可以删除由 UK/FK 关系派生的冗余 GROUP BY 键）等转换规则使用。收集的 UK/FK 信息也被 `StatisticsCalculator` 使用，以为 UK‑FK 连接生成更紧的连接基数估计，并在更精确时替代默认估计。默认关闭（`false`），因为这些优化依赖于声明性的模式约束，并且可能改变计划形状和谓词放置。
+* **默认值**: `false`
+* **范围**: Session
+* **数据类型**: boolean
+* **引入版本**: v3.2.4
+
+### enable_vector_index_refine
+
+* **描述**：是否基于原始向量重新计算量化向量索引返回候选项的精确距离，并重新排序。该变量适用于 IVFPQ 以及使用 `sq4`、`sq8` 或 `pq` 量化器的 HNSW 索引；对未量化的 HNSW 索引（`quantizer = flat`）无效。开启后可以提高结果准确性，但会增加 I/O 和计算开销。可以通过 `EXPLAIN` 中的 `Refine: ON/OFF` 确认是否生效。
+* **默认值**：`false`
+* **数据类型**：Boolean
+* **作用域**：Session
+
+### enable_view_based_mv_rewrite
+
+* 描述：是否为基于逻辑视图创建的物化视图启用查询改写。如果此项设置为 `true`，则逻辑视图被用作统一节点进行查询改写，从而获得更好的性能。如果此项设置为 `false`，则系统将针对逻辑视图的查询展开变为针对物理表或物化视图的查询，然后进行改写。
+* 默认值：false
+* 引入版本：v3.1.9，v3.2.5，v3.3.0
+
+### enable_wait_dependent_event
+
+* 描述: 在同一 Fragment 内，Pipeline 是否等待依赖的 Operator 完成执行后再继续执行。例如，在 Left Join 查询中，当启用此功能时，Probe Side Operator 会在 Build Side Operator 完成执行后再开始执行。启用此功能可减少内存使用，但可能增加查询延迟。然而，对于在CTE中重用的查询，启用此功能可能增加内存使用。
+* 默认值: false
+* 引入版本: v3.3
+
+### enable_write_hive_external_table
+
+* 描述：是否开启往 Hive 的 External Table 写数据的功能。
+* 默认值：false
+* 引入版本：v3.2
+
+>>>>>>> e4d8a33 ([BugFix] Use partitionwise spill for unorderable aggregation keys (#82919))
 ### event_scheduler
 
 * 描述：用于兼容 MySQL 客户端。无实际作用。
