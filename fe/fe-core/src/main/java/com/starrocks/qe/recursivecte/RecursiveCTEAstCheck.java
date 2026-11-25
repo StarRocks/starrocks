@@ -22,6 +22,7 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 
@@ -72,6 +73,17 @@ public class RecursiveCTEAstCheck extends AstTraverser<Void, Void> {
     @Override
     public Void visitSetOp(SetOperationRelation node, Void context) {
         return visitWithScope(node, () -> super.visitSetOp(node, context));
+    }
+
+    @Override
+    public Void visitSubqueryRelation(SubqueryRelation node, Void context) {
+        return visitWithScope(node, () -> {
+            // For WITH x AS (...) (SELECT ...), the CTEs belong to the SubqueryRelation itself
+            if (node.hasWithClause()) {
+                node.getCteRelations().forEach(x -> visit(x, context));
+            }
+            super.visitSubqueryRelation(node, context);
+        });
     }
 
     private Void visitWithScope(QueryRelation node, Runnable visitor) {

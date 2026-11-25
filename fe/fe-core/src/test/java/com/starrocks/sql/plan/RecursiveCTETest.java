@@ -450,4 +450,16 @@ public class RecursiveCTETest extends PlanTestBase {
                     e.getMessage());
         }
     }
+
+    @Test
+    public void testCteOnParenthesizedQueryShadowsOuterRecursiveCte() {
+        // WITH r AS (...) (SELECT ...) attaches the inner r to a parenthesized query; that r shadows the
+        // outer recursive candidate r, so there is no recursive reference.
+        String sql = "with recursive r(n) as ("
+                + " select 1"
+                + " union all"
+                + " select n from (with r(n) as (select 2) (select n from r)) x"
+                + ") select * from r";
+        Assertions.assertFalse(hasRecursiveCte(sql));
+    }
 }
