@@ -40,6 +40,7 @@ set(BASE_TEST_FILES
     concurrency/once_test.cpp
     concurrency/shared_mutex_test.cpp
     concurrency/core_local_test.cpp
+    concurrency/spinlock_test.cpp
     compression/block_compression_test.cpp
     container/heap_test.cpp
     lru_cache_test.cpp
