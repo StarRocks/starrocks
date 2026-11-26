@@ -25,9 +25,12 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
+
+import static org.junit.jupiter.api.Assertions.assertTimeout;
 
 public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
     @BeforeAll
@@ -70,5 +73,23 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
     @Test
     public void testFullOuterJoinPlan_2() {
         runFileUnitTest("enumerate-plan/full-outer-join-2");
+    }
+
+    @Test
+    public void testExtractNthPlanWithManyInSubqueries() {
+        // RB-1118: counting the plans of the memo revisited shared groups once per path, which is exponential in the
+        // depth of the memo; with twenty IN subqueries in one grouping set, extracting the nth plan never finished.
+        StringBuilder sql = new StringBuilder("select count(*) from lineitem group by grouping sets ((");
+        for (int i = 0; i < 10; i++) {
+            if (i > 0) {
+                sql.append(", ");
+            }
+            sql.append("cast(l_orderkey in (select o_orderkey from orders o").append(i).append(") as varchar) = ")
+                    .append("(l_partkey in (select p_partkey from part p").append(i).append("))");
+        }
+        sql.append("))");
+        connectContext.getSessionVariable().setUseNthExecPlan(2);
+        String plan = assertTimeout(Duration.ofSeconds(60), () -> getFragmentPlan(sql.toString()));
+        assertContains(plan, "REPEAT_NODE");
     }
 }
