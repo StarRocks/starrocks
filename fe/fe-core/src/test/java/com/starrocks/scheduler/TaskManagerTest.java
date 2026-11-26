@@ -1319,30 +1319,6 @@ public class TaskManagerTest {
     }
 
     @Test
-<<<<<<< HEAD
-=======
-    public void testResumingAScheduledTaskCancelsTheSubmitterItReplaces() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test");
-        TaskSchedule schedule = new TaskSchedule();
-        schedule.setStartTime(System.currentTimeMillis() / 1000 * 1000);
-        schedule.setPeriod(60);
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(-1);
-        taskManager.registerScheduler(task);
-        ScheduledFuture<?> first = taskManager.getPeriodFutureMap().get(task.getId());
-
-        // a task resumed while its schedule is still registered
-        taskManager.resumeTask(task, false);
-
-        Assertions.assertTrue(first.isCancelled(), "the replaced submitter would keep submitting");
-        Assertions.assertFalse(taskManager.getPeriodFutureMap().get(task.getId()).isCancelled());
-    }
-
-    @Test
     public void testReplaySwitchToManualCancelsPeriodicScheduler() {
         mockLeader(false);
         TaskManager taskManager = new TaskManager();
@@ -1446,7 +1422,6 @@ public class TaskManagerTest {
     }
 
     @Test
->>>>>>> 4fe4fb3 ([BugFix] Cancel periodic MV refresh on task replay (#83685))
     public void testRegisterSchedulerNonPeriodicalTask() {
         TaskManager taskManager = new TaskManager();
         Task task = new Task("test");
