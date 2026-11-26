@@ -32,6 +32,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
@@ -44,9 +45,11 @@ import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileOperations;
+import com.starrocks.connector.RemoteFileScanContext;
 import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HivePartitionStats;
+import com.starrocks.connector.unified.UnifiedMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -69,6 +72,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.THiveFileInfo;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.type.IntegerType;
@@ -87,6 +91,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -423,6 +428,86 @@ public class HiveMetadataTest {
     }
 
     @Test
+    public void testDropTableInvalidatesOtherFes() throws DdlException {
+        // DROP TABLE writes no edit log: the other FEs would keep serving the dropped table, and a table re-created
+        // under its name
+        AtomicBoolean dropped = new AtomicBoolean(false);
+        new MockUp<HiveMetastoreOperations>() {
+            @Mock
+            public void dropTable(String dbName, String tableName) {
+                dropped.set(true);
+            }
+        };
+        AtomicBoolean statisticsDropped = new AtomicBoolean(false);
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public void dropStatisticsAfterDropTable(Table table) {
+                statisticsDropped.set(true);
+            }
+        };
+        List<TableName> invalidated = new ArrayList<>();
+        List<Boolean> droppedWhenInvalidated = new ArrayList<>();
+        List<Boolean> statisticsDroppedWhenInvalidated = new ArrayList<>();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public void invalidateOthersFeTable(TableName tableName, int timeoutMs) {
+                invalidated.add(tableName);
+                droppedWhenInvalidated.add(dropped.get());
+                statisticsDroppedWhenInvalidated.add(statisticsDropped.get());
+            }
+        };
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "hive_table")),
+                null, NodePosition.ZERO);
+
+        // refused without FORCE: nothing dropped, nothing to tell
+        Assertions.assertThrows(DdlException.class,
+                () -> hiveMetadata.dropTable(connectContext, new DropTableStmt(false, tableRef, false)));
+        Assertions.assertEquals(List.of(), invalidated);
+
+        hiveMetadata.dropTable(connectContext, new DropTableStmt(false, tableRef, true));
+        Assertions.assertEquals(List.of(new TableName("hive_catalog", "hive_db", "hive_table")), invalidated);
+        Assertions.assertEquals(List.of(true), droppedWhenInvalidated);
+        // the name-keyed statistics go before the wait, so that a table re-created meanwhile keeps its own
+        Assertions.assertEquals(List.of(true), statisticsDroppedWhenInvalidated);
+    }
+
+    @Test
+    public void testDropTableDropsThisFesFileLists() throws DdlException {
+        // The metastore drop only clears the metastore cache: a table re-created at the same location must not be
+        // planned with the dropped table's file lists on the FE that ran the DROP either
+        HiveCacheUpdateProcessor processor = new HiveCacheUpdateProcessor("hive_catalog", cachingHiveMetastore,
+                cachingRemoteFileIO, executorForHmsRefresh, false, false);
+        HiveMetadata metadata = new HiveMetadata("hive_catalog", new HdfsEnvironment(), hmsOps, fileOps,
+                statisticsProvider, Optional.of(processor), executorForHmsRefresh, executorForHmsRefresh,
+                new ConnectorProperties(ConnectorType.HIVE));
+        new MockUp<HiveMetastoreOperations>() {
+            @Mock
+            public void dropTable(String dbName, String tableName) {
+            }
+        };
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public void invalidateOthersFeTable(TableName tableName, int timeoutMs) {
+            }
+        };
+        RemotePathKey key = scannedFileList(metastore.getTable("db1", "unpartitioned_table"));
+        Assertions.assertTrue(cachingRemoteFileIO.getPresentRemoteFiles(List.of(key)).containsKey(key));
+
+        metadata.dropTable(connectContext, new DropTableStmt(false, new TableRef(QualifiedName.of(
+                Lists.newArrayList("hive_catalog", "db1", "unpartitioned_table")), null, NodePosition.ZERO), true));
+
+        Assertions.assertFalse(cachingRemoteFileIO.getPresentRemoteFiles(List.of(key)).containsKey(key));
+    }
+
+    // Loads the file list at the table location as a scan of the table does: through a key carrying its scan context
+    private RemotePathKey scannedFileList(Table table) {
+        RemotePathKey key = RemotePathKey.of(table.getTableLocation(), false);
+        key.setScanContext(new RemoteFileScanContext(table));
+        cachingRemoteFileIO.getRemoteFiles(key);
+        return key;
+    }
+
+    @Test
     public void testFinishSink() {
         assertThrows(StarRocksConnectorException.class, () -> {
             String stagingDir = "hdfs://127.0.0.1:10000/tmp/starrocks/queryid";
@@ -579,18 +664,89 @@ public class HiveMetadataTest {
     }
 
     @Test
-    public void testInvalidateCachedTableDropsFilesWhenMetastoreCacheIsOff() {
-        // enable_metastore_cache=false with enable_remote_file_cache=true: no cached table or partition to find
-        // the file lists by, so the table location is read from the metastore
+    public void testInvalidateCachedTableDropsFilesWithoutReadingTheMetastoreWhenItsCacheIsOff() {
+        // enable_metastore_cache=false with enable_remote_file_cache=true: no cached table or partition to find the
+        // file lists by, and the metastore is not read (the table may be dropped, the metastore slow, or the table one
+        // of another connector in a unified catalog)
         HiveCacheUpdateProcessor processor = new HiveCacheUpdateProcessor("hive_catalog", metastore,
                 cachingRemoteFileIO, executorForHmsRefresh, false, false);
-        String location = metastore.getTable("db1", "unpartitioned_table").getTableLocation();
-        cachingRemoteFileIO.getRemoteFiles(RemotePathKey.of(location, false));
-        Assertions.assertFalse(cachingRemoteFileIO.getPresentPathKeyInCache(location, false).isEmpty());
+        RemotePathKey key = scannedFileList(metastore.getTable("db1", "unpartitioned_table"));
+        Assertions.assertTrue(cachingRemoteFileIO.getPresentRemoteFiles(List.of(key)).containsKey(key));
+        new MockUp<HiveMetastoreTest.MockedHiveMetaClient>() {
+            @Mock
+            public org.apache.hadoop.hive.metastore.api.Table getTable(String dbName, String tblName) {
+                throw new IllegalStateException("the metastore must not be read to drop a cached table");
+            }
+        };
 
         processor.invalidateCachedTable("db1", "unpartitioned_table");
 
-        Assertions.assertTrue(cachingRemoteFileIO.getPresentPathKeyInCache(location, false).isEmpty());
+        Assertions.assertFalse(cachingRemoteFileIO.getPresentRemoteFiles(List.of(key)).containsKey(key));
+    }
+
+    @Test
+    public void testInvalidateCachedTableWithMetastoreCacheOffDropsFileListsCachedForAnotherTable() {
+        // A file list is keyed by path, not owned by a table: with two tables at one location, the list a scan of one
+        // cached is also the other's. Without a metastore cache nothing tells which tables share it, so dropping either
+        // table must not leave it behind
+        HiveCacheUpdateProcessor processor = new HiveCacheUpdateProcessor("hive_catalog", metastore,
+                cachingRemoteFileIO, executorForHmsRefresh, false, false);
+        RemotePathKey cachedForOtherTable = scannedFileList(metastore.getTable("db1", "unpartitioned_table"));
+
+        processor.invalidateCachedTable("db1", "table1");
+
+        Assertions.assertFalse(
+                cachingRemoteFileIO.getPresentRemoteFiles(List.of(cachedForOtherTable)).containsKey(cachedForOtherTable));
+    }
+
+    @Test
+    public void testInvalidateCachedTableFindsFilesByNameWhenTableAndPartitionsHaveExpired() {
+        // The metastore cache and the file cache expire independently: with neither the table nor a partition of it
+        // cached, its file lists are still found by its name
+        RemotePathKey key = scannedFileList(metastore.getTable("db1", "unpartitioned_table"));
+        new MockUp<CachingHiveMetastore>() {
+            @Mock
+            public Table getTableIfPresent(String dbName, String tableName) {
+                return null;
+            }
+
+            @Mock
+            public Map<HivePartitionName, Partition> getCachedPartitionsOfTable(String dbName, String tableName) {
+                return Map.of();
+            }
+        };
+        HiveCacheUpdateProcessor processor = new HiveCacheUpdateProcessor("hive_catalog", cachingHiveMetastore,
+                cachingRemoteFileIO, executorForHmsRefresh, false, false);
+
+        processor.invalidateCachedTable("db1", "unpartitioned_table");
+
+        Assertions.assertFalse(cachingRemoteFileIO.getPresentRemoteFiles(List.of(key)).containsKey(key));
+    }
+
+    @Test
+    public void testInvalidatingAnotherConnectorsTableInUnifiedCatalogReadsNoMetastore() {
+        // A unified catalog asks every connector to drop a changed table, whatever its type: an Iceberg commit must not
+        // cost the Hive side a metastore read on each other FE, even with its metastore cache off
+        HiveCacheUpdateProcessor processor = new HiveCacheUpdateProcessor("hive_catalog", metastore,
+                cachingRemoteFileIO, executorForHmsRefresh, false, false);
+        HiveMetadata hive = new HiveMetadata("hive_catalog", new HdfsEnvironment(), hmsOps, fileOps,
+                statisticsProvider, Optional.of(processor), executorForHmsRefresh, executorForHmsRefresh,
+                new ConnectorProperties(ConnectorType.HIVE));
+        ConnectorMetadata iceberg = Mockito.mock(ConnectorMetadata.class);
+        AtomicInteger tableReads = new AtomicInteger();
+        new MockUp<HiveMetastoreTest.MockedHiveMetaClient>() {
+            @Mock
+            public org.apache.hadoop.hive.metastore.api.Table getTable(Invocation inv, String dbName, String tblName) {
+                tableReads.incrementAndGet();
+                return inv.proceed(dbName, tblName);
+            }
+        };
+
+        new UnifiedMetadata(Map.of(Table.TableType.HIVE, hive, Table.TableType.ICEBERG, iceberg))
+                .invalidateCachedTable("db1", "unpartitioned_table");
+
+        Assertions.assertEquals(0, tableReads.get());
+        Mockito.verify(iceberg).invalidateCachedTable("db1", "unpartitioned_table");
     }
 
     @Test
@@ -1523,6 +1679,43 @@ public class HiveMetadataTest {
 
         // Clean up
         ConnectContext.remove();
+    }
+
+    @Test
+    public void testAddPartitionInvalidatesOtherFes() throws Exception {
+        // ADD PARTITION writes no edit log: the other FEs would keep the partition list without the new partition
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setQueryId(UUIDUtil.genUUID());
+        ctx.setThreadLocalInfo();
+        AtomicBoolean added = new AtomicBoolean(false);
+        new MockUp<HiveMetastoreOperations>() {
+            @Mock
+            public void addPartitions(String dbName, String tableName, List<HivePartitionWithStats> partitions) {
+                added.set(true);
+            }
+        };
+        List<TableName> invalidated = new ArrayList<>();
+        List<Boolean> addedWhenInvalidated = new ArrayList<>();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public void invalidateOthersFeTable(TableName tableName, int timeoutMs) {
+                invalidated.add(tableName);
+                addedWhenInvalidated.add(added.get());
+            }
+        };
+        SingleItemListPartitionDesc partitionDesc =
+                new SingleItemListPartitionDesc(false, "p1", Lists.newArrayList("1"), new HashMap<>());
+        AlterTableStmt stmt = new AlterTableStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("hive_catalog", "db1", "table1")), null, NodePosition.ZERO),
+                Lists.newArrayList(new AddPartitionClause(partitionDesc, null, new HashMap<>(), false)));
+        try {
+            hiveMetadata.alterTable(ctx, stmt);
+        } finally {
+            ConnectContext.remove();
+        }
+
+        Assertions.assertEquals(List.of(new TableName("hive_catalog", "db1", "table1")), invalidated);
+        Assertions.assertEquals(List.of(true), addedWhenInvalidated);
     }
 
     @Test

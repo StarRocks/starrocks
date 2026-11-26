@@ -38,7 +38,6 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
-import com.starrocks.connector.paimon.PaimonSplitUtils;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.PartitionPruner;
 import com.starrocks.planner.RangePartitionPruner;
@@ -64,7 +63,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.table.source.Split;
 
 import java.util.ArrayList;
@@ -566,22 +564,6 @@ public class OptExternalPartitionPruner {
             long rowCount = getRowCount(splits);
             if (rowCount > 0) {
                 scanOperatorPredicates.getSelectedPartitionIds().add(1L);
-            }
-
-            //check scan partition num
-            Set<BinaryRow> selectedPartitions = new HashSet<>();
-            for (Split split : splits) {
-                PaimonSplitUtils.getDataSplit(split)
-                        .ifPresent(dataSplit -> selectedPartitions.add(dataSplit.partition()));
-            }
-            int scanLakePartitionNumLimit = context.getSessionVariable().getScanLakePartitionNumLimit();
-            if (scanLakePartitionNumLimit > 0 && selectedPartitions.size() > scanLakePartitionNumLimit) {
-                String msg = "Exceeded the limit of number of paimon table partitions to be scanned. " +
-                        "Number of partitions allowed: " + scanLakePartitionNumLimit +
-                        ", number of partitions to be scanned: " + selectedPartitions.size() +
-                        ". Please adjust the SQL or change the limit by set variable scan_lake_partition_num_limit.";
-                LOG.warn("{} queryId: {}", msg, DebugUtil.printId(context.getQueryId()));
-                throw new AnalysisException(msg);
             }
         } else if (table instanceof FlussTable) {
             ListPartitionPruner partitionPruner =

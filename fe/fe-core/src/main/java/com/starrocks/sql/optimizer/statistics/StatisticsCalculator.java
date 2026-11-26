@@ -1573,8 +1573,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                         ErrorType.INTERNAL_ERROR);
         }
         Statistics joinStats = joinStatsBuilder.build();
+        ColumnRefSet preservedColumns = new ColumnRefSet();
         if (joinType.isOuterJoin()) {
-            ColumnRefSet preservedColumns = new ColumnRefSet();
             if (!joinType.isRightOuterJoin()) {
                 preservedColumns.union(leftStatistics.getUsedColumns());
             }
@@ -1600,6 +1600,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     Math.max(Math.min(estimateStatistics.getOutputRowCount(), leftRowCount), 1));
         } else if (joinType.isAsofLeftOuterJoin()) {
             estimateStatistics = estimateStatistics.withOutputRowCount(Math.max(1, leftRowCount));
+        }
+        // Restore stats for outer joins after the residual ON predicates are evaluated
+        if (joinType.isOuterJoin()) {
+            estimateStatistics = restorePreservedColumnsStats(estimateStatistics, rawCrossJoinStats,
+                    preservedColumns);
         }
 
         context.setStatistics(estimateStatistics);
@@ -2046,6 +2051,44 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             }
         }
         return builder == null ? joinStats : builder.build();
+    }
+
+    // Restore the original NDV and range of the preserved columns for preserved sides of the outer join.
+    // A histogram rebuilt by the join is kept if the restored NDV does not exceed the NDV it was built for.
+    // Otherwise it is dropped since its frequencies describe only the matched rows, so they would be inconsistent with the
+    // restored NDV.
+    private static Statistics restorePreservedColumnsStats(Statistics joinStats, Statistics rawCrossJoinStats,
+                                                           ColumnRefSet preservedColumns) {
+        double outputRowCount = Math.max(1, joinStats.getOutputRowCount());
+        Map<ColumnRefOperator, ColumnStatistic> restored = new HashMap<>();
+        joinStats.getColumnStatistics().forEach((column, current) -> {
+            if (!preservedColumns.contains(column) || current.isUnknown()) {
+                return;
+            }
+            ColumnStatistic raw = rawCrossJoinStats.getColumnStatistics().get(column);
+            if (raw == null || raw.isUnknown()) {
+                return;
+            }
+
+            double joinedNdv = current.getDistinctValuesCount();
+            double ndv = Math.max(joinedNdv, Math.min(raw.getDistinctValuesCount(), outputRowCount));
+            // Keep a joined histogram only if the restored NDV and range are not larger than the ones it was built for
+            Histogram histogram = null;
+            if (current.getHistogram() == raw.getHistogram() || (ndv <= joinedNdv
+                    && raw.getMinValue() >= current.getMinValue() && raw.getMaxValue() <= current.getMaxValue())) {
+                histogram = current.getHistogram();
+            }
+            restored.put(column, ColumnStatistic.buildFrom(current)
+                    .setMinValue(raw.getMinValue())
+                    .setMaxValue(raw.getMaxValue())
+                    .setDistinctValuesCount(ndv)
+                    .setHistogram(histogram)
+                    .build());
+        });
+        if (restored.isEmpty()) {
+            return joinStats;
+        }
+        return Statistics.buildFrom(joinStats).addColumnStatistics(restored).build();
     }
 
     // For an equi-join key whose statistics are unknown on one side only, assume its values are contained in the

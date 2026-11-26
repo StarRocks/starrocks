@@ -1723,9 +1723,13 @@ CONF_Int32(remote_read_compaction_weight, "1");
 CONF_Int32(remote_read_background_weight, "1");
 // Cache blocks a query's segment reader keeps asked for ahead of what it is consuming -- queued, in flight, or filled
 // and not read yet -- while the remote I/O scheduler is enabled. It bounds how far a reader runs ahead of itself;
-// when the blocks are fetched is the scheduler's decision. Loads, compaction and other background reads do not read
-// ahead. 0 turns the read-ahead off. Applies to the segment readers opened afterwards.
+// when the blocks are fetched is the scheduler's decision. Loads and other background reads do not read ahead;
+// compaction reads ahead under lake_compaction_prefetch_window_blocks. 0 turns the read-ahead off. Applies to the
+// segment readers opened afterwards.
 CONF_mInt32(remote_prefetch_window_blocks, "128");
+// Target cache blocks a lake compaction task requests ahead across its input segments; zero disables it.
+// Every input segment keeps at least one block ahead, so an input with more segments than this exceeds it.
+CONF_mInt32(lake_compaction_prefetch_window_blocks, "32");
 // With late materialization, the columns read only for the rows that pass the predicates are fetched per chunk once
 // those rows are known. From the fourth chunk of a segment reader on, once those rows have touched at least this
 // share of the pages they span, these columns are read ahead like the predicate columns. Above 1, never. Applies to

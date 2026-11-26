@@ -41,6 +41,35 @@ CompactionTask::CompactionTask(VersionedTablet tablet, std::vector<std::shared_p
           _context(context),
           _tablet_schema(std::move(tablet_schema)) {}
 
+int32_t CompactionTask::prefetch_blocks_per_segment() const {
+#ifdef USE_STAROS
+    int64_t blocks = config::lake_compaction_prefetch_window_blocks;
+    if (blocks <= 0 || config::starlet_star_cache_block_size_bytes <= 0) {
+        return 0;
+    }
+    // Leave headroom for the read buffers, merge and writer. Count every physical input
+    // segment, including non-overlapping segments that may be consumed one at a time.
+    const int64_t limit = config::compaction_memory_limit_per_worker;
+    if (limit > 0) {
+        blocks = std::min(blocks, limit / 8 / config::starlet_star_cache_block_size_bytes);
+    }
+    int64_t segments = 0;
+    for (const auto& rowset : _input_rowsets) {
+        segments += rowset->num_segments();
+    }
+    if (blocks <= 0 || segments <= 0) {
+        return 0;
+    }
+    // Keep at least one block ahead per segment: an input of many small segments would otherwise
+    // round its share down to zero and read every block on demand. The budget is then a target: with
+    // more segments than blocks the task requests one block per segment, above the budget and the
+    // memory cap; the remote I/O scheduler's in-flight limit and retain budget bound what it holds.
+    return static_cast<int32_t>(std::max<int64_t>(1, blocks / segments));
+#else
+    return 0;
+#endif
+}
+
 int64_t CompactionTask::stream_buffer_size(int64_t num_streams) {
     const int64_t configured = config::lake_compaction_stream_buffer_size_bytes;
     const int64_t mem_limit = config::compaction_memory_limit_per_worker;

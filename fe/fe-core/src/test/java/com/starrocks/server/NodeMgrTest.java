@@ -19,16 +19,24 @@ import com.starrocks.common.Pair;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.leader.CheckpointController;
+import com.starrocks.leader.MetaHelper;
+import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.FrontendHbResponse;
+import com.starrocks.utframe.MockImageSource;
 import com.starrocks.utframe.UtFrameUtils;
+import org.apache.commons.io.FileUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -144,6 +152,45 @@ public class NodeMgrTest {
         // "journaled=true" means the record was already written and applied when the call was made
         Assertions.assertEquals(
                 List.of("removeElectableNode(journaled=true)", "removeUnstableNode(journaled=true)"), calls);
+    }
+
+    /**
+     * A new FE takes its first image from its helper. That download is checked like the others: a damaged
+     * image is refused, so the FE does not start from it, and a good one is stored.
+     */
+    @Test
+    public void testNewImageOnStartupIsCheckedAgainstItsChecksum() throws Exception {
+        String savedMetaDir = Config.meta_dir;
+        int savedHttpPort = Config.http_port;
+        String metaDir = "meta_dir_test_" + UUID.randomUUID();
+        Config.meta_dir = metaDir;
+        File imageDir = new File(MetaHelper.getImageFileDir(true));
+        Assertions.assertTrue(imageDir.mkdirs());
+        Method getNewImageOnStartup =
+                NodeMgr.class.getDeclaredMethod("getNewImageOnStartup", Pair.class, String.class);
+        getNewImageOnStartup.setAccessible(true);
+        byte[] image = MockImageSource.imageBytes();
+        try {
+            NodeMgr nodeMgr = new NodeMgr();
+            try (MockImageSource helper = new MockImageSource(MockImageSource.damaged(image),
+                    MockImageSource.checksum(image), 100, ImageFormatVersion.v2)) {
+                Config.http_port = helper.port();
+                InvocationTargetException e = assertThrows(InvocationTargetException.class,
+                        () -> getNewImageOnStartup.invoke(nodeMgr, Pair.create(helper.host(), 9010), ""));
+                Assertions.assertInstanceOf(IOException.class, e.getCause());
+                Assertions.assertFalse(new File(imageDir, "image.100").exists());
+            }
+            try (MockImageSource helper = new MockImageSource(image, MockImageSource.checksum(image), 100,
+                    ImageFormatVersion.v2)) {
+                Config.http_port = helper.port();
+                getNewImageOnStartup.invoke(nodeMgr, Pair.create(helper.host(), 9010), "");
+                Assertions.assertArrayEquals(image, Files.readAllBytes(new File(imageDir, "image.100").toPath()));
+            }
+        } finally {
+            Config.meta_dir = savedMetaDir;
+            Config.http_port = savedHttpPort;
+            FileUtils.deleteQuietly(new File(metaDir));
+        }
     }
 
     private static class RecordingHAProtocol implements HAProtocol {

@@ -14,6 +14,7 @@
 
 #include "compute_env/query/partition_scan_range_pruner.h"
 
+#include "base/failpoint/fail_point.h"
 #include "column/column_helper.h"
 #include "column/runtime_type_traits.h"
 #include "common/object_pool.h"
@@ -21,11 +22,14 @@
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
+
+DEFINE_FAIL_POINT(partition_scan_range_pruner_bad_alloc);
 
 StatusOr<ColumnPtr> build_partition_col_values(const SlotDescriptor* slot_desc, const TKeyRange& column_range,
                                                ObjectPool* obj_pool, RuntimeState* state) {
@@ -98,6 +102,13 @@ Status prune_scan_ranges_by_partition_conjuncts(RuntimeState* state, const Tuple
         return Status::OK();
     }
 
+    // This runs while the fragment is prepared, outside of any operator, so nothing else would catch an
+    // allocation failure. Without the catched flag the memory tracker limit is not checked, but an allocation
+    // larger than the physical memory still fails and operator new throws std::bad_alloc: a partition conjunct
+    // like space(<date column>) asks for GBs, and the exception escaping here terminated the BE. Report it as
+    // an error instead; the callers then scan all ranges unpruned, and the conjunct is evaluated again during
+    // execution, where an allocation failure is an ordinary query error.
+    TRY_CATCH_ALLOC_SCOPE_START()
     phmap::flat_hash_map<std::string, SlotDescriptor*> column_name_to_slot;
     for (auto* slot : tuple_desc->slots()) {
         column_name_to_slot[slot->col_name()] = slot;
@@ -132,6 +143,7 @@ Status prune_scan_ranges_by_partition_conjuncts(RuntimeState* state, const Tuple
                 if (ctx->root()->get_slot_ids(&slot_ids) != 1 || slot_ids[0] != slot->id()) {
                     continue;
                 }
+                FAIL_POINT_TRIGGER_EXECUTE(partition_scan_range_pruner_bad_alloc, { throw std::bad_alloc(); });
                 ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(&partition_cols_chunk, filter.data()));
                 size_t true_count = ColumnHelper::count_true_with_notnull(column);
                 if (true_count == column->size()) {
@@ -158,6 +170,7 @@ Status prune_scan_ranges_by_partition_conjuncts(RuntimeState* state, const Tuple
         }
     }
     pruned_scan_ranges->swap(temp);
+    TRY_CATCH_ALLOC_SCOPE_END()
     return Status::OK();
 }
 

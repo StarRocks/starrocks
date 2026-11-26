@@ -501,13 +501,22 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：启用延迟物化时，只为通过谓词的行读取的列，会在这些行确定后按 Chunk 逐批读取。从 Segment Reader 的第四个 Chunk 起，如果这些行已经触及其所跨页面的比例达到该值，这些列改为与谓词列一样预读。取值大于 1 时从不切换。修改后对之后打开的 Segment Reader 生效。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
 - 引入版本：-
 
+### lake_compaction_prefetch_window_blocks
+
+- 默认值：32
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：实验参数。单个 lake compaction 任务提前读取并填入 Data Cache 的目标块数。预算最多占已配置的每 worker 内存限额的八分之一，按物理输入 segment 数平均分配并向下取整。每个 segment 至少提前 1 块，因此 segment 数多于预算时，每个 segment 各读 1 块，总量会超过预算和内存上限。0 表示关闭。需要启用 remote I/O scheduler、表缓存及对应 compaction 模式的缓存填充。符合条件的标量数据页使用 COMPACTION 工作负载。
+- 引入版本：-
+
 ### remote_prefetch_window_blocks
 
 - 默认值：128
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：查询的 Segment Reader 最多提前请求多少个 Data Cache 缓存块，包括排队中、读取中以及已读取但尚未消费的缓存块。该参数限制 Reader 超前的距离，缓存块何时读取由调度器决定。导入、Compaction 等后台读取不预读。设为 `0` 关闭预读。修改后对之后打开的 Segment Reader 生效。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 描述：查询的 Segment Reader 最多提前请求多少个 Data Cache 缓存块，包括排队中、读取中以及已读取但尚未消费的缓存块。该参数限制 Reader 超前的距离，缓存块何时读取由调度器决定。导入等其他后台读取不预读，compaction 的预读由 `lake_compaction_prefetch_window_blocks` 控制。设为 `0` 关闭预读。修改后对之后打开的 Segment Reader 生效。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
 - 引入版本：-
 
 ### remote_read_adaptive_limit

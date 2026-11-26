@@ -3588,8 +3588,9 @@ public class Config extends ConfigBase {
      * Max time a change to a table of an external catalog waits for the other FEs to drop their cached copy of the
      * table, so that a query on any FE sees the change once the statement returns. The statements that wait: on
      * Iceberg, INSERT, INSERT OVERWRITE, DELETE, UPDATE, MERGE, compaction, TRUNCATE, ALTER TABLE and DROP TABLE; on
-     * Hive, INSERT, INSERT OVERWRITE and TRUNCATE; on Paimon, INSERT, INSERT OVERWRITE, TRUNCATE and DROP TABLE.
-     * 0 or less disables the wait. Replaces the per-connector configs, whose names are kept as aliases.
+     * Hive, INSERT, INSERT OVERWRITE, TRUNCATE, DROP TABLE and ADD PARTITION; on
+     * Paimon, INSERT, INSERT OVERWRITE, TRUNCATE and DROP TABLE. 0 or less disables the wait. Replaces the
+     * per-connector configs, whose names are kept as aliases.
      */
     @ConfField(mutable = true, aliases = {"iceberg_commit_invalidate_other_fe_timeout_ms",
             "hive_commit_invalidate_other_fe_timeout_ms", "paimon_commit_invalidate_other_fe_timeout_ms"})
