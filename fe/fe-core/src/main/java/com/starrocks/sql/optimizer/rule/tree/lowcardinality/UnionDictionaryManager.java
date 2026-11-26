@@ -219,6 +219,10 @@ public class UnionDictionaryManager {
 
     }
 
+    void removeConstants(ColumnRefSet columns) {
+        constantColumns.keySet().removeIf(columns::contains);
+    }
+
     boolean isSupportedConstant(ColumnRefOperator c) {
         return constantColumns.containsKey(c.getId());
     }
