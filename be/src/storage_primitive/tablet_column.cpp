@@ -126,9 +126,6 @@ TabletColumn& TabletColumn::operator=(TabletColumn&& rhs) noexcept {
 }
 
 void TabletColumn::init_from_pb(const ColumnPB& column) {
-    if (_extra_fields) {
-        _extra_fields->geo_descriptor.reset();
-    }
     _unique_id = column.unique_id();
     _col_name.assign(column.name());
     _type = string_to_logical_type(column.type());
