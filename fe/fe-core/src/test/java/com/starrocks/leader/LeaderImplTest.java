@@ -301,6 +301,10 @@ public class LeaderImplTest {
             {
                 schemaChangeHandler.handleFinishAlterTask((AlterReplicaTask) any);
                 times = 0;
+                // The older job no longer has the copy queued, so it gets both reports: a cancelled fast-path job
+                // deletes what the copy wrote.
+                schemaChangeHandler.handleFinishReportOfRemovedAlterTask(OLD_JOB_ID, tabletId, ALTER_BE_ID);
+                times = 2;
             }
         };
     }
@@ -322,6 +326,8 @@ public class LeaderImplTest {
             {
                 schemaChangeHandler.handleFinishAlterTask(task);
                 times = 1;
+                schemaChangeHandler.handleFinishReportOfRemovedAlterTask(anyLong, anyLong, anyLong);
+                times = 0;
             }
         };
     }
@@ -366,7 +372,7 @@ public class LeaderImplTest {
 
         new Verifications() {
             {
-                schemaChangeHandler.handleFinishReportOfRemovedAlterTask(OLD_JOB_ID, tabletId);
+                schemaChangeHandler.handleFinishReportOfRemovedAlterTask(OLD_JOB_ID, tabletId, ALTER_BE_ID);
                 times = 2;
                 schemaChangeHandler.handleFinishAlterTask((AlterReplicaTask) any);
                 times = 0;
@@ -374,7 +380,7 @@ public class LeaderImplTest {
         };
         new Verifications() {
             {
-                schemaChangeHandler.handleFinishReportOfRemovedAlterTask(anyLong, anyLong);
+                schemaChangeHandler.handleFinishReportOfRemovedAlterTask(anyLong, anyLong, anyLong);
                 times = 2;
             }
         };

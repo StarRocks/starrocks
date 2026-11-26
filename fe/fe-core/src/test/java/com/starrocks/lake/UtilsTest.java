@@ -51,12 +51,12 @@ import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -223,45 +223,76 @@ public class UtilsTest {
         Assertions.assertEquals(1001L, (long) request.getComputeNodes().get(0).getId());
     }
 
-    // One abort request per node, carrying the tablets the warehouse assigns to it. A tablet without a node is
+    // One abort request per node. A tablet goes to the node the caller already knows while that node is alive; the
+    // rest are looked up in one batch call, never one call per tablet. A tablet left without an alive node is
     // skipped, and an RPC that fails does not keep the other nodes from getting theirs.
     @Test
     public void testAbortTxnWithCleanupSendsOneRequestPerNode() {
         ComputeNode node1 = new ComputeNode(1L, "cn-1", 9040);
         node1.setBrpcPort(8060);
+        node1.setAlive(true);
         ComputeNode node2 = new ComputeNode(2L, "cn-2", 9040);
         node2.setBrpcPort(8060);
+        node2.setAlive(true);
+        ComputeNode deadNode = new ComputeNode(3L, "cn-3", 9040);
+        deadNode.setBrpcPort(8060);
+        deadNode.setAlive(false);
+        SystemInfoService clusterInfo = Mockito.mock(SystemInfoService.class);
+        Mockito.when(clusterInfo.getBackendOrComputeNode(1L)).thenReturn(node1);
+        Mockito.when(clusterInfo.getBackendOrComputeNode(2L)).thenReturn(node2);
+        Mockito.when(clusterInfo.getBackendOrComputeNode(3L)).thenReturn(deadNode);
         ComputeResource resource = WarehouseManager.DEFAULT_RESOURCE;
         WarehouseManager warehouseManager = Mockito.mock(WarehouseManager.class);
-        Mockito.when(warehouseManager.getComputeNodeAssignedToTablet(resource, 101L)).thenReturn(node1);
-        Mockito.when(warehouseManager.getComputeNodeAssignedToTablet(resource, 102L)).thenReturn(node2);
-        Mockito.when(warehouseManager.getComputeNodeAssignedToTablet(resource, 103L)).thenReturn(node1);
-        Mockito.when(warehouseManager.getComputeNodeAssignedToTablet(resource, 105L))
-                .thenThrow(new RuntimeException("warehouse not found"));
-        GlobalStateMgr globalStateMgr = Mockito.mock(GlobalStateMgr.class);
-        Mockito.when(globalStateMgr.getWarehouseMgr()).thenReturn(warehouseManager);
+        // 102 was handled by the dead node and moves to an alive one; 104 has only the dead node; 105 is missing
+        // from the reply.
+        Map<Long, List<Long>> assigned = new HashMap<>();
+        assigned.put(102L, List.of(3L, 1L));
+        assigned.put(104L, List.of(3L));
+        Mockito.when(warehouseManager.getAllComputeNodeIdsAssignToTablets(resource, List.of(102L, 104L, 105L)))
+                .thenReturn(assigned);
         LakeService service1 = Mockito.mock(LakeService.class);
         LakeService service2 = Mockito.mock(LakeService.class);
         Mockito.when(service1.abortTxn(Mockito.any())).thenThrow(new RuntimeException("rpc failed"));
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public NodeMgr getNodeMgr() {
+                return nodeMgr;
+            }
+
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return warehouseManager;
+            }
+        };
+        new MockUp<NodeMgr>() {
+            @Mock
+            public SystemInfoService getClusterInfo() {
+                return clusterInfo;
+            }
+        };
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(String host, int port) {
+                return "cn-1".equals(host) ? service1 : service2;
+            }
+        };
         TxnInfoPB txnInfo = TxnInfoHelper.forJobPublish(7L, TxnTypePB.TXN_NORMAL, 0L, 0L);
 
-        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
-                MockedStatic<BrpcProxy> brpcStatic = Mockito.mockStatic(BrpcProxy.class)) {
-            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(globalStateMgr);
-            brpcStatic.when(() -> BrpcProxy.getLakeService("cn-1", 8060)).thenReturn(service1);
-            brpcStatic.when(() -> BrpcProxy.getLakeService("cn-2", 8060)).thenReturn(service2);
+        Utils.abortTxnWithCleanup(List.of(101L, 102L, 103L, 104L, 105L), Map.of(101L, 1L, 102L, 3L, 103L, 2L),
+                txnInfo, resource);
 
-            Utils.abortTxnWithCleanup(List.of(101L, 102L, 103L, 104L, 105L), txnInfo, resource);
-        }
-
+        Mockito.verify(warehouseManager, Mockito.times(1)).getAllComputeNodeIdsAssignToTablets(Mockito.any(),
+                Mockito.any());
+        Mockito.verify(warehouseManager, Mockito.never()).getComputeNodeAssignedToTablet(Mockito.any(),
+                Mockito.anyLong());
         ArgumentCaptor<AbortTxnRequest> request1 = ArgumentCaptor.forClass(AbortTxnRequest.class);
         Mockito.verify(service1, Mockito.times(1)).abortTxn(request1.capture());
-        Assertions.assertEquals(List.of(101L, 103L), request1.getValue().tabletIds);
+        Assertions.assertEquals(List.of(101L, 102L), request1.getValue().tabletIds);
         Assertions.assertEquals(List.of(txnInfo), request1.getValue().txnInfos);
         Assertions.assertFalse(request1.getValue().skipCleanup);
         ArgumentCaptor<AbortTxnRequest> request2 = ArgumentCaptor.forClass(AbortTxnRequest.class);
         Mockito.verify(service2, Mockito.times(1)).abortTxn(request2.capture());
-        Assertions.assertEquals(List.of(102L), request2.getValue().tabletIds);
+        Assertions.assertEquals(List.of(103L), request2.getValue().tabletIds);
         Assertions.assertEquals(List.of(txnInfo), request2.getValue().txnInfos);
         Assertions.assertFalse(request2.getValue().skipCleanup);
     }

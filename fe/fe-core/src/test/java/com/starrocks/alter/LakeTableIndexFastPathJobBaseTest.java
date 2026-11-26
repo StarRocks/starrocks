@@ -472,6 +472,16 @@ public class LakeTableIndexFastPathJobBaseTest {
         setField(job, "jobState", AlterJobV2.JobState.RUNNING);
         setField(job, "watershedTxnId", 1000L);
         setField(job, "partitionToTablets", twoPartitionsThreeTablets());
+        // This leader dispatched tablets 11 and 12, so their nodes need no lookup; 21 has none recorded.
+        AgentBatchTask batch = new AgentBatchTask();
+        for (long[] tabletAndNode : new long[][] {{11L, 1L}, {12L, 2L}}) {
+            AgentTask task = mock(AgentTask.class);
+            when(task.getTabletId()).thenReturn(tabletAndNode[0]);
+            when(task.getSignature()).thenReturn(tabletAndNode[0]);
+            when(task.getBackendId()).thenReturn(tabletAndNode[1]);
+            batch.addTask(task);
+        }
+        setField(job, "batchTask", batch);
 
         Database db = new Database(2L, "db");
         OlapTable table = mock(OlapTable.class);
@@ -484,6 +494,7 @@ public class LakeTableIndexFastPathJobBaseTest {
             assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
             utilsStatic.verify(() -> Utils.abortTxnWithCleanup(
                     argThat(tabletIds -> tabletIds.size() == 3 && tabletIds.containsAll(List.of(11L, 12L, 21L))),
+                    eq(Map.of(11L, 1L, 12L, 2L)),
                     argThat(txnInfo -> txnInfo.txnId == 1000L && !txnInfo.combinedTxnLog
                             && txnInfo.txnType == TxnTypePB.TXN_NORMAL),
                     any()), times(1));
@@ -504,7 +515,7 @@ public class LakeTableIndexFastPathJobBaseTest {
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             assertTrue(job.cancelImpl("err"));
-            utilsStatic.verify(() -> Utils.abortTxnWithCleanup(any(), any(), any()), never());
+            utilsStatic.verify(() -> Utils.abortTxnWithCleanup(any(), any(), any(), any()), never());
         }
     }
 
@@ -543,7 +554,7 @@ public class LakeTableIndexFastPathJobBaseTest {
             assertTrue(job.cancelImpl("force skip", true));
 
             assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
-            utilsStatic.verify(() -> Utils.abortTxnWithCleanup(any(), any(), any()), never());
+            utilsStatic.verify(() -> Utils.abortTxnWithCleanup(any(), any(), any(), any()), never());
         }
     }
 
@@ -573,11 +584,12 @@ public class LakeTableIndexFastPathJobBaseTest {
 
         try (MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             for (LakeTableAddIndexJob job : List.of(cancelled, forcedOut, running, finished)) {
-                job.handleFinishReportOfRemovedTask(11L);
+                job.handleFinishReportOfRemovedTask(11L, 5L);
             }
-            utilsStatic.verify(() -> Utils.abortTxnWithCleanup(eq(List.of(11L)),
+            // The abort goes to the node that sent the report, with no lookup.
+            utilsStatic.verify(() -> Utils.abortTxnWithCleanup(eq(List.of(11L)), eq(Map.of(11L, 5L)),
                     argThat(txnInfo -> txnInfo.txnId == 1000L), any()), times(1));
-            utilsStatic.verify(() -> Utils.abortTxnWithCleanup(any(), any(), any()), times(1));
+            utilsStatic.verify(() -> Utils.abortTxnWithCleanup(any(), any(), any(), any()), times(1));
         }
     }
 

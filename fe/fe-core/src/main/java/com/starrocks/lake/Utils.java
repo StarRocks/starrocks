@@ -64,6 +64,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Future;
@@ -199,30 +200,50 @@ public class Utils {
      * tablet's txn log of that transaction and the data files the log references. Only for a transaction that will
      * never be published, since what it deletes is exactly what a publish would install.
      *
-     * <p>Best effort. Tablets are grouped by the compute node {@code computeResource} assigns them, one request per
-     * node, and the responses are not awaited. A tablet with no assigned node is skipped and keeps its files.
+     * <p>Best effort: one request per node, responses not awaited. A tablet goes to its node in {@code nodeOfTablet}
+     * while that node is alive, which costs no lookup. The other tablets are looked up together, in batches
+     * ({@link WarehouseManager#getAllComputeNodeIdsAssignToTablets}); one left without an alive node keeps its files.
      */
-    public static void abortTxnWithCleanup(Collection<Long> tabletIds, TxnInfoPB txnInfo,
-                                           ComputeResource computeResource) {
-        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+    public static void abortTxnWithCleanup(Collection<Long> tabletIds, Map<Long, Long> nodeOfTablet,
+                                           TxnInfoPB txnInfo, ComputeResource computeResource) {
+        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         Map<ComputeNode, List<Long>> tabletsByNode = new HashMap<>();
-        int skipped = 0;
+        List<Long> unplaced = new ArrayList<>();
         for (Long tabletId : tabletIds) {
-            ComputeNode node = null;
-            try {
-                node = warehouseManager.getComputeNodeAssignedToTablet(computeResource, tabletId);
-            } catch (RuntimeException e) {
-                LOG.debug("no node to abort txn {} on tablet {}", txnInfo.txnId, tabletId, e);
+            ComputeNode node = aliveNode(clusterInfo, nodeOfTablet.get(tabletId));
+            if (node != null) {
+                tabletsByNode.computeIfAbsent(node, k -> new ArrayList<>()).add(tabletId);
+            } else {
+                unplaced.add(tabletId);
             }
-            if (node == null) {
-                skipped++;
-                continue;
-            }
-            tabletsByNode.computeIfAbsent(node, k -> new ArrayList<>()).add(tabletId);
         }
-        if (skipped > 0) {
-            LOG.warn("skip aborting txn {} on {} of {} tablet(s): no compute node is assigned to them",
-                    txnInfo.txnId, skipped, tabletIds.size());
+        if (!unplaced.isEmpty()) {
+            Map<Long, List<Long>> assigned = null;
+            try {
+                assigned = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                        .getAllComputeNodeIdsAssignToTablets(computeResource, unplaced);
+            } catch (RuntimeException e) {
+                LOG.debug("fail to look up the nodes to abort txn {} on {} tablet(s)", txnInfo.txnId,
+                        unplaced.size(), e);
+            }
+            int skipped = 0;
+            for (Long tabletId : unplaced) {
+                List<Long> nodeIds = assigned == null ? null : assigned.get(tabletId);
+                ComputeNode node = nodeIds == null ? null : nodeIds.stream()
+                        .map(nodeId -> aliveNode(clusterInfo, nodeId))
+                        .filter(Objects::nonNull)
+                        .findFirst()
+                        .orElse(null);
+                if (node == null) {
+                    skipped++;
+                    continue;
+                }
+                tabletsByNode.computeIfAbsent(node, k -> new ArrayList<>()).add(tabletId);
+            }
+            if (skipped > 0) {
+                LOG.warn("skip aborting txn {} on {} of {} tablet(s): no alive compute node is assigned to them",
+                        txnInfo.txnId, skipped, tabletIds.size());
+            }
         }
         for (Map.Entry<ComputeNode, List<Long>> entry : tabletsByNode.entrySet()) {
             ComputeNode node = entry.getKey();
@@ -237,6 +258,14 @@ public class Utils {
                         request.tabletIds.size(), node.getId(), e.getMessage());
             }
         }
+    }
+
+    private static ComputeNode aliveNode(SystemInfoService clusterInfo, Long nodeId) {
+        if (nodeId == null) {
+            return null;
+        }
+        ComputeNode node = clusterInfo.getBackendOrComputeNode(nodeId);
+        return node != null && node.isAlive() ? node : null;
     }
 
     public static void publishVersionBatch(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,

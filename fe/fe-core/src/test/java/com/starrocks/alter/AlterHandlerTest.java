@@ -98,11 +98,11 @@ public class AlterHandlerTest {
         AlterJobV2 otherJob = createMockJob(2L, 100L, 1000L, AlterJobV2.JobState.CANCELLED);
         handler.addAlterJobV2(otherJob);
 
-        handler.handleFinishReportOfRemovedAlterTask(1L, 13L);
-        handler.handleFinishReportOfRemovedAlterTask(2L, 13L);
-        handler.handleFinishReportOfRemovedAlterTask(3L, 13L);
+        handler.handleFinishReportOfRemovedAlterTask(1L, 13L, 21L);
+        handler.handleFinishReportOfRemovedAlterTask(2L, 13L, 21L);
+        handler.handleFinishReportOfRemovedAlterTask(3L, 13L, 21L);
 
-        verify(fastPathJob, times(1)).handleFinishReportOfRemovedTask(13L);
+        verify(fastPathJob, times(1)).handleFinishReportOfRemovedTask(13L, 21L);
     }
 
     @Test

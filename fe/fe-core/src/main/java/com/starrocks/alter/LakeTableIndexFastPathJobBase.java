@@ -711,26 +711,22 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         // CANCELLED is in the journal now, so no leader will publish this txn. A task still running or queued on a
         // node writes its txn log after this abort looked for it; its finish report aborts that tablet again
         // (handleFinishReportOfRemovedTask).
-        abortTxnOnTablets(allTabletIds());
+        abortTxnOnTablets(allTabletIds(), dispatchedNodeOfTablet());
         LOG.info("index fast-path job {} cancelled (force={}): {}", jobId, force, errMsg);
         return true;
     }
 
     /**
-     * Handles the finish report of one of this job's AlterReplicaTasks that arrives after the task left
-     * AgentTaskQueue. A cancel removes every task from the queue, but a node may still be running or queueing some
-     * of them: such a node writes the task's txn log and files after the abort sent at the cancel looked for them,
-     * so the report is when they can be reclaimed.
+     * Handles the finish report that node {@code backendId} sent for one of this job's AlterReplicaTasks after the task
+     * left AgentTaskQueue. A cancel removes every task from the queue, but a node may still be running or queueing
+     * some of them: such a node writes the task's txn log and files after the abort sent at the cancel looked for
+     * them, so the report is when they can be reclaimed.
+     *
+     * <p>Synchronized like run() and cancel(), which write the state the decision reads. They hold the monitor of a
+     * cancelled job only briefly, since it is final.
      */
-    public void handleFinishReportOfRemovedTask(long tabletId) {
-        if (jobState != JobState.CANCELLED) {
-            return;
-        }
-        // Decide under the monitor run() and cancel() hold while they write the fields the decision reads. A
-        // cancelled job is final, so neither of them holds it for long any more.
-        synchronized (this) {
-            abortTxnOnTablets(List.of(tabletId));
-        }
+    public synchronized void handleFinishReportOfRemovedTask(long tabletId, long backendId) {
+        abortTxnOnTablets(List.of(tabletId), Map.of(tabletId, backendId));
     }
 
     /**
@@ -740,8 +736,10 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
      * publish is sent only after they are reserved at the RUNNING -> FINISHED_REWRITING transition, and a job forced
      * out of FINISHED_REWRITING may already have published on some tablets, whose files the cleanup would delete
      * from under the published metadata.
+     *
+     * <p>{@code nodeOfTablet} names the node already known to have handled a tablet, so it needs no lookup.
      */
-    private void abortTxnOnTablets(Collection<Long> tabletIds) {
+    private void abortTxnOnTablets(Collection<Long> tabletIds, Map<Long, Long> nodeOfTablet) {
         boolean hasReservedVersion = commitVersionMap != null && !commitVersionMap.isEmpty();
         if (jobState != JobState.CANCELLED || hasReservedVersion || watershedTxnId == -1 || tabletIds.isEmpty()) {
             return;
@@ -750,7 +748,12 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         TxnInfoPB txnInfo = TxnInfoHelper.forJobPublish(watershedTxnId, TxnTypePB.TXN_NORMAL,
                 System.currentTimeMillis(), commitGtid);
         LOG.info("index fast-path job {} aborts txn {} on {} tablet(s)", jobId, watershedTxnId, tabletIds.size());
-        Utils.abortTxnWithCleanup(tabletIds, txnInfo, computeResource);
+        try {
+            Utils.abortTxnWithCleanup(tabletIds, nodeOfTablet, txnInfo, computeResource);
+        } catch (Exception e) {
+            // Best effort: the cancel is already in the journal, and what is not deleted stays as before this cleanup.
+            LOG.warn("index fast-path job {} fails to abort txn {}", jobId, watershedTxnId, e);
+        }
     }
 
     private List<Long> allTabletIds() {
@@ -759,6 +762,17 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             partitionToTablets.values().forEach(tabletIds::addAll);
         }
         return tabletIds;
+    }
+
+    /** The node each task of this leader's dispatch went to, by tablet; empty when this leader dispatched none. */
+    private Map<Long, Long> dispatchedNodeOfTablet() {
+        Map<Long, Long> nodeOfTablet = new HashMap<>();
+        if (batchTask != null) {
+            for (AgentTask task : batchTask.getAllTasks()) {
+                nodeOfTablet.put(task.getTabletId(), task.getBackendId());
+            }
+        }
+        return nodeOfTablet;
     }
 
     /** True iff this job's database and table both still exist in the catalog. */
