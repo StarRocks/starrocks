@@ -28,7 +28,12 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorPartitionTraits;
+<<<<<<< HEAD
 import com.starrocks.connector.PartitionUtil;
+=======
+import com.starrocks.connector.MVPartitionCellBuilder;
+import com.starrocks.connector.partitiontraits.DeltaLakePartitionTraits;
+>>>>>>> 6eb489f ([Enhancement] Record delta version for MVs (#82533))
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
@@ -107,6 +112,11 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
             updatePCTOlapPartitionInfos(olapTable, refreshedPartitionNames);
         } else if (MVPCTRefreshPartitioner.isPartitionRefreshSupported(baseTable)) {
             updatePCTExternalPartitionInfos(baseTable, refreshedPartitionNames);
+        } else if (pinnedRange == null && DeltaLakePartitionTraits.isTableVersionTracked(baseTable)) {
+            // record the Delta table version for query rewrite
+            ConnectorPartitionTraits.build(baseTable).getPartitionNameWithPartitionInfo(refreshedPartitionNames)
+                    .forEach((name, info) ->
+                            refreshedPartitionInfos.put(name, MaterializedView.BasePartitionInfo.fromExternalTable(info)));
         } else {
             // FIXME: base table does not support partition-level refresh and does not update the meta
             //  in materialized view.
