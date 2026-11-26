@@ -1048,4 +1048,27 @@ public class TablePruningTest extends TablePruningTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 4: created_at < 5: updated_at"));
     }
+
+    @Test
+    public void testRboJoinReorderSkipsExpressionEqualityPredicate() throws Exception {
+        String createTableSql = "CREATE TABLE rbo_expr_predicate_test (\n" +
+                "  k1 BIGINT NOT NULL,\n" +
+                "  k2 BIGINT\n" +
+                ") PRIMARY KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                "PROPERTIES(\"replication_num\"=\"1\");";
+        starRocksAssert.withTable(createTableSql);
+        try {
+            ctx.getSessionVariable().setEnableCboTablePrune(false);
+            ctx.getSessionVariable().setEnableRboTablePrune(true);
+            String sql = "SELECT COUNT(1) FROM rbo_expr_predicate_test a " +
+                    "JOIN rbo_expr_predicate_test b ON a.k2 = b.k2 " +
+                    "WHERE CASE WHEN a.k1 = b.k1 THEN 1 ELSE 2 END = 2";
+            Assertions.assertNotNull(UtFrameUtils.explainLogicalPlan(ctx, sql));
+        } finally {
+            ctx.getSessionVariable().setEnableRboTablePrune(false);
+            ctx.getSessionVariable().setEnableCboTablePrune(false);
+            starRocksAssert.dropTable("rbo_expr_predicate_test");
+        }
+    }
 }
