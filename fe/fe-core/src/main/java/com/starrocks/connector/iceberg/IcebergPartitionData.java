@@ -106,10 +106,11 @@ public class IcebergPartitionData implements StructLike {
             }
             validPathPartitionNames.add(parts[0]);
         }
-        partitionNames.forEach(name -> {
-                if (!validPathPartitionNames.contains(name)) {
+        spec.fields().forEach(field -> {
+                // a void field's value is always null, so a path may leave it out
+                if (!validPathPartitionNames.contains(field.name()) && !field.transform().isVoid()) {
                     throw new StarRocksConnectorException("Partition column %s not found in path %s",
-                            name, relativePartitionPath);
+                            field.name(), relativePartitionPath);
                 }
             }
         );
@@ -125,12 +126,16 @@ public class IcebergPartitionData implements StructLike {
             throw new InternalError("Invalid partition and fingerprint size, partition:" + relativePartitionPath +
                     " partition size:" + partitions.length + " fingerprint:" + partitionNullFingerprint);
         }
+        // Path segments are matched to spec fields by name, not position: the sink leaves out a V1 void field whose
+        // source column was dropped, so the path can be shorter than the spec. A field left out stays null.
+        boolean[] inPath = new boolean[partitionFields.size()];
         for (int i = 0; i < partitions.length; i++) {
-            PartitionField field = partitionFields.get(i);
             String[] parts = partitions[i].split("=", 2);
-            Preconditions.checkArgument(parts.length == 2 && parts[0] != null &&
-                    field.name().equals(parts[0]), "Invalid partition: %s", partitions[i]);
-            org.apache.iceberg.types.Type resultType = spec.partitionType().fields().get(i).type();
+            int pos = parts.length == 2 ? fieldPosition(partitionFields, parts[0]) : -1;
+            Preconditions.checkArgument(pos >= 0 && !inPath[pos], "Invalid partition: %s", partitions[i]);
+            inPath[pos] = true;
+            PartitionField field = partitionFields.get(pos);
+            org.apache.iceberg.types.Type resultType = spec.partitionType().fields().get(pos).type();
             // org.apache.iceberg.types.Type sourceType = table.schema().findType(field.sourceId());
             // NOTICE:
             // The behavior here should match the make_partition_path method in be,
@@ -208,15 +213,28 @@ public class IcebergPartitionData implements StructLike {
             }
 
             if (partitionNullFingerprint.charAt(i) == '1') {
-                data.set(i, null);
+                data.set(pos, null);
             } else if (resultType.typeId() == Type.TypeID.BINARY) {
-                data.set(i, parts[1].getBytes(StandardCharsets.ISO_8859_1));
+                data.set(pos, parts[1].getBytes(StandardCharsets.ISO_8859_1));
             } else if (resultType.typeId() == Type.TypeID.TIMESTAMP) {
-                data.set(i, Literal.of(parts[1]).to(Types.TimestampType.withoutZone()).value());
+                data.set(pos, Literal.of(parts[1]).to(Types.TimestampType.withoutZone()).value());
             } else {
-                data.set(i, Conversions.fromPartitionString(resultType, parts[1]));
+                data.set(pos, Conversions.fromPartitionString(resultType, parts[1]));
             }
         }
+        for (int pos = 0; pos < partitionFields.size(); pos++) {
+            Preconditions.checkArgument(inPath[pos] || partitionFields.get(pos).transform().isVoid(),
+                    "Partition field %s not found in path %s", partitionFields.get(pos).name(), relativePartitionPath);
+        }
         return data;
+    }
+
+    private static int fieldPosition(List<PartitionField> fields, String name) {
+        for (int pos = 0; pos < fields.size(); pos++) {
+            if (fields.get(pos).name().equals(name)) {
+                return pos;
+            }
+        }
+        return -1;
     }
 }
