@@ -171,6 +171,11 @@ dependencies {
     testImplementation("org.apache.commons:commons-dbcp2")
     implementation("org.apache.commons:commons-lang3")
     implementation("org.apache.commons:commons-pool2")
+    implementation("org.apache.flink:flink-core")
+    implementation("org.apache.fluss:fluss-client")
+    implementation("org.apache.fluss:fluss-common")
+    implementation("org.apache.fluss:fluss-flink-common")
+    implementation("org.apache.fluss:fluss-lake-paimon")
     implementation("org.apache.groovy:groovy-groovysh")
     implementation("org.apache.hadoop:hadoop-aliyun") {
         exclude(group = "org.jdom", module = "jdom2")
