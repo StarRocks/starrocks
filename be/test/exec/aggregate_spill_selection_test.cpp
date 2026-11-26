@@ -116,7 +116,7 @@ protected:
         } else {
             node = std::make_unique<AggregateBlockingNode>(state->obj_pool(), plan, *descriptors);
         }
-        node->add_child(&child);
+        node->set_children({&child});
         CHECK_OK(node->init(plan, state));
         pipeline::PipelineBuilderContext context(&fragment, 1, 1, false);
         auto sources = node->decompose_to_pipeline(&context);
