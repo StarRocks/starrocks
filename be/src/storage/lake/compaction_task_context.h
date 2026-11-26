@@ -99,6 +99,9 @@ struct CompactionTaskStats {
     int64_t column_iterator_init_ns = 0;
     int64_t io_count_local_disk = 0;
     int64_t io_count_remote = 0;
+    int64_t remote_prefetch_ranges = 0;
+    int64_t remote_prefetch_blocks = 0;
+    int64_t remote_prefetch_rejected_blocks = 0;
     int64_t in_queue_time_sec = 0;
     int64_t input_rowset_count = 0;
     int64_t input_row_count = 0;

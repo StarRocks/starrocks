@@ -97,7 +97,8 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
                                   .buffer_size = _stream_buffer_size,
                                   .fill_metadata_cache = reuse_via_shared_cache,
                                   .hold_segments = _hold_input_segments,
-                                  .remote_read = remote_read_context()};
+                                  .remote_read = remote_read_context(),
+                                  .compaction_prefetch_blocks = prefetch_blocks_per_segment()};
     reader_params.column_access_paths = &_column_access_paths;
 
     // Apply range filter for range-split parallel compaction. TabletReader requires
