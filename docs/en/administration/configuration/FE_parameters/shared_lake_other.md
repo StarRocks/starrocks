@@ -1218,6 +1218,33 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Description: The timeout duration of a backup job. If this value is exceeded, the backup job fails.
 - Introduced in: -
 
+### `dictionary_node_resync_max_interval_second`
+
+- Default: 1800
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: If a BE or CN node still has no copy of a dictionary after an early refresh (see `dictionary_node_resync_min_interval_second`), the wait before the next early refresh of that dictionary doubles, up to this value.
+- Introduced in: -
+
+### `dictionary_node_resync_min_interval_second`
+
+- Default: -1
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The leader FE refreshes a dictionary early when a BE or CN node restarts, joins the cluster, or missed the last commit, because that node has no copy of the current version of the dictionary. This parameter is the shortest time between two such early refreshes of one dictionary. A negative value disables early refreshes. A value from `0` to `10` waits 10 seconds, because the scheduler checks every 10 seconds. Early refreshes also run for a dictionary with no automatic refresh, so its content can change at that time. Enable this parameter together with `dictionary_refresh_leave_out_failed_nodes`. Without it, an early refresh that fails at COMMIT on one node ends in `CANCELLED`, and then queries on the dictionary fail on every node.
+- Introduced in: -
+
+### `dictionary_refresh_leave_out_failed_nodes`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a dictionary refresh leaves out a BE or CN node that fails and goes on with the other nodes, instead of failing the refresh on every node. Enable early refreshes together with this parameter, by setting `dictionary_node_resync_min_interval_second`. Without them, a left-out node keeps the old version until the next regular refresh, and queries on it fail. Enable this parameter only after every BE and CN node runs a version that reports how many rows it received: a node that does not report it is left out, so refreshes fail until the upgrade is complete.
+- Introduced in: -
+
 ### `enable_backup_snapshot_auto_clean`
 
 - Default: true

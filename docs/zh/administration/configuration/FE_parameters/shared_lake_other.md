@@ -1254,6 +1254,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 备份作业的超时时长。如果超过此值，备份作业将失败。
 - 引入版本: -
 
+### `dictionary_node_resync_max_interval_second`
+
+- 默认值: 1800
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 如果某个 BE 或 CN 节点在一次提前刷新（参见 `dictionary_node_resync_min_interval_second`）之后仍然没有字典的副本，则该字典下一次提前刷新前的等待时间加倍，最大不超过此值。
+- 引入版本: -
+
+### `dictionary_node_resync_min_interval_second`
+
+- 默认值: -1
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 当某个 BE 或 CN 节点重启、加入集群或错过了上一次提交时，该节点上没有字典当前版本的副本，Leader FE 会提前刷新该字典。此参数为同一个字典两次提前刷新之间的最短时间。设置为负值表示关闭提前刷新。设置为 `0` 到 `10` 之间的值时等待 10 秒，因为调度器每 10 秒检查一次。未开启自动刷新的字典也会进行提前刷新，因此其内容可能在此时发生变化。请与 `dictionary_refresh_leave_out_failed_nodes` 一起开启此参数。否则，若提前刷新在某个节点上 COMMIT 失败，字典状态将变为 `CANCELLED`，之后所有节点上对该字典的查询都会失败。
+- 引入版本: -
+
+### `dictionary_refresh_leave_out_failed_nodes`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 字典刷新时是否跳过失败的 BE 或 CN 节点并继续在其他节点上刷新，而不是让所有节点上的刷新都失败。请同时通过设置 `dictionary_node_resync_min_interval_second` 开启提前刷新。否则，被跳过的节点会保留旧版本直到下一次常规刷新，该节点上的查询会失败。请仅在所有 BE 和 CN 节点都升级到会上报所接收行数的版本之后再开启此参数：不上报行数的节点会被跳过，因此在升级完成之前刷新会失败。
+- 引入版本: -
+
 ### `enable_backup_snapshot_auto_clean`
 
 - 默认值: true
