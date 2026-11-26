@@ -1392,6 +1392,135 @@ public class PaimonMetadataTest {
         }
     }
 
+    @Test
+    public void testTagReadSurvivesSnapshotExpiration() throws Exception {
+        java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_tag_expire_");
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.setThreadLocalInfo();
+        try (Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())))) {
+            catalog.createDatabase("test_db", true);
+            Identifier identifier = Identifier.create("test_db", "tagged_table");
+            catalog.createTable(identifier, Schema.newBuilder()
+                    .column("id", DataTypes.INT())
+                    .option(CoreOptions.BUCKET.key(), "-1")
+                    .build(), false);
+            FileStoreTable nativeTable = (FileStoreTable) catalog.getTable(identifier);
+            writeRows(nativeTable, GenericRow.of(1));
+            long taggedSnapshot = nativeTable.latestSnapshot().orElseThrow().id();
+            nativeTable.createTag("t1", taggedSnapshot);
+            writeRows(nativeTable, GenericRow.of(2));
+            writeRows(nativeTable, GenericRow.of(3));
+
+            PaimonMetadata tagMetadata = new PaimonMetadata(
+                    "paimon", new HdfsEnvironment(), catalog, new ConnectorProperties(ConnectorType.PAIMON));
+            PaimonTable table = (PaimonTable) tagMetadata.getTable(context, "test_db", "tagged_table");
+            ConnectorTableVersion tagVersion = new ConnectorTableVersion(
+                    PointerType.VERSION, new ConstantOperator("tag:t1", VARCHAR));
+            TvrVersionRange tagRange = tagMetadata.getTableVersionRange("test_db", table,
+                    Optional.empty(), Optional.of(tagVersion));
+            assertEquals(taggedSnapshot, tagRange.end().orElseThrow());
+            assertEquals("t1", PaimonVersionRange.tagOf(tagRange));
+            assertEquals("main", PaimonVersionRange.branchOf(tagRange));
+            assertEquals(tagRange, tagRange.copy(tagRange.from(), tagRange.to()));
+            // A numeric snapshot read and a tag read at the same snapshot id are different versions.
+            TvrVersionRange snapshotRange = tagMetadata.getTableVersionRange("test_db", table, Optional.empty(),
+                    Optional.of(new ConnectorTableVersion(PointerType.VERSION,
+                            ConstantOperator.createBigint(taggedSnapshot))));
+            assertNull(PaimonVersionRange.tagOf(snapshotRange));
+            assertNotEquals(tagRange, snapshotRange);
+            assertNotEquals(snapshotRange, tagRange);
+            // An incremental read ending at a tag keeps reading by snapshot ids.
+            assertNull(PaimonVersionRange.tagOf(tagMetadata.getTableVersionRange("test_db", table,
+                    Optional.of(new ConnectorTableVersion(PointerType.VERSION, ConstantOperator.createBigint(1L))),
+                    Optional.of(tagVersion))));
+
+            List<RemoteFileInfo> files = tagMetadata.getRemoteFiles(table, tagParams(tagRange));
+            assertEquals(1, plannedRowCount(files));
+            Map<String, String> options = plannedOptions(files);
+            assertEquals("t1", options.get(CoreOptions.SCAN_TAG_NAME.key()));
+            org.junit.jupiter.api.Assertions.assertFalse(options.containsKey(CoreOptions.SCAN_SNAPSHOT_ID.key()));
+            assertEquals(1, plannedRowCount(tagMetadata.getRemoteFiles(table, tagParams(snapshotRange))));
+
+            nativeTable.newExpireSnapshots().config(org.apache.paimon.options.ExpireConfig.builder()
+                    .snapshotRetainMax(1).snapshotRetainMin(1).build()).expire();
+            org.junit.jupiter.api.Assertions.assertFalse(nativeTable.snapshotManager().snapshotExists(taggedSnapshot));
+
+            PaimonMetadata expiredMetadata = new PaimonMetadata(
+                    "paimon", new HdfsEnvironment(), catalog, new ConnectorProperties(ConnectorType.PAIMON));
+            PaimonTable expiredTable = (PaimonTable) expiredMetadata.getTable(context, "test_db", "tagged_table");
+            TvrVersionRange expiredTagRange = expiredMetadata.getTableVersionRange("test_db", expiredTable,
+                    Optional.empty(), Optional.of(tagVersion));
+            assertEquals(taggedSnapshot, expiredTagRange.end().orElseThrow());
+            assertEquals(1, plannedRowCount(expiredMetadata.getRemoteFiles(expiredTable, tagParams(expiredTagRange))));
+            assertThrows(RuntimeException.class, () -> expiredMetadata.getRemoteFiles(expiredTable,
+                    tagParams(TvrTableSnapshot.of(taggedSnapshot))));
+        } finally {
+            ConnectContext.remove();
+            FileUtils.deleteDirectory(tmpDir.toFile());
+        }
+    }
+
+    @Test
+    public void testTagReadAndBranchReadAtSameSnapshotIdDoNotInterfere() throws Exception {
+        java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_tag_branch_");
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.setThreadLocalInfo();
+        try (Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())))) {
+            catalog.createDatabase("test_db", true);
+            Identifier identifier = Identifier.create("test_db", "tbl");
+            catalog.createTable(identifier, Schema.newBuilder()
+                    .column("id", DataTypes.INT())
+                    .option(CoreOptions.BUCKET.key(), "-1")
+                    .build(), false);
+            FileStoreTable nativeTable = (FileStoreTable) catalog.getTable(identifier);
+            writeRows(nativeTable, GenericRow.of(1));
+            long taggedSnapshot = nativeTable.latestSnapshot().orElseThrow().id();
+            nativeTable.createTag("t2", taggedSnapshot);
+            writeRows(nativeTable, GenericRow.of(2));
+            // A new branch starts without snapshots, so its first commit reuses the tagged snapshot id.
+            nativeTable.createBranch("dev");
+            FileStoreTable devTable = (FileStoreTable) catalog.getTable(new Identifier("test_db", "tbl", "dev"));
+            writeRows(devTable, GenericRow.of(10), GenericRow.of(11), GenericRow.of(12));
+            assertEquals(taggedSnapshot, devTable.latestSnapshot().orElseThrow().id());
+
+            PaimonMetadata tagMetadata = new PaimonMetadata(
+                    "paimon", new HdfsEnvironment(), catalog, new ConnectorProperties(ConnectorType.PAIMON));
+            PaimonTable table = (PaimonTable) tagMetadata.getTable(context, "test_db", "tbl");
+            TvrVersionRange tagRange = tagMetadata.getTableVersionRange("test_db", table, Optional.empty(),
+                    Optional.of(new ConnectorTableVersion(PointerType.VERSION, new ConstantOperator("tag:t2", VARCHAR))));
+            TvrVersionRange devRange = tagMetadata.getTableVersionRange("test_db", table, Optional.empty(),
+                    Optional.of(new ConnectorTableVersion(PointerType.VERSION,
+                            new ConstantOperator("branch:dev", VARCHAR))));
+            assertEquals(tagRange.end(), devRange.end());
+            assertNotEquals(tagRange, devRange);
+            org.junit.jupiter.api.Assertions.assertFalse(tagRange.timeRangeEquals(devRange));
+            assertNull(PaimonVersionRange.tagOf(devRange));
+
+            // Interleave the reads so a split-cache or option leak between them would show up.
+            for (TvrVersionRange range : List.of(tagRange, devRange, tagRange, devRange)) {
+                boolean tag = range.equals(tagRange);
+                List<RemoteFileInfo> files = tagMetadata.getRemoteFiles(table, tagParams(range));
+                assertEquals(tag ? 1 : 3, plannedRowCount(files));
+                Map<String, String> options = plannedOptions(files);
+                assertEquals(tag ? "t2" : null, options.get(CoreOptions.SCAN_TAG_NAME.key()));
+                assertEquals(tag ? "main" : "dev", CoreOptions.branch(options));
+            }
+        } finally {
+            ConnectContext.remove();
+            FileUtils.deleteDirectory(tmpDir.toFile());
+        }
+    }
+
+    private static GetRemoteFilesParams tagParams(TvrVersionRange range) {
+        return GetRemoteFilesParams.newBuilder().setFieldNames(List.of("id")).setLimit(-1)
+                .setTableVersionRange(range).build();
+    }
+
+    private static Map<String, String> plannedOptions(List<RemoteFileInfo> files) {
+        return ((PaimonRemoteFileDesc) files.get(0).getFiles().get(0)).getPaimonSplitsInfo()
+                .getNativeTable().options();
+    }
+
     private static void assertBranchScanDescriptors(ConnectContext context, PaimonTable catalogTable,
                                                      TvrVersionRange devVersion, TvrVersionRange mainVersion)
             throws Exception {
