@@ -117,10 +117,33 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
      * invalidated.
      */
     public void invalidateTableForRead(Table table) {
-        String dbName = table.getCatalogDBName();
-        String tblName = table.getCatalogTableName();
+        invalidateTableAndFiles(table.getCatalogDBName(), table.getCatalogTableName(), table.getTableLocation());
+    }
+
+    /**
+     * As {@link #invalidateTableForRead}, by name. With a metastore cache nothing is loaded: the table location comes
+     * from the cached table, and when the table entry is gone (it can expire before its partitions) the file lists
+     * are still found through the cached partitions. Without one (enable_metastore_cache=false) there is nothing
+     * cached to find the file lists by, so the table location is read from the metastore, as every query of such a
+     * catalog does. Run when the FE that wrote to the table asks the others to stop serving the pre-write copy.
+     */
+    public void invalidateCachedTable(String dbName, String tblName) {
+        String tableLocation = null;
+        if (metastore instanceof CachingHiveMetastore cachingMetastore) {
+            Table table = cachingMetastore.getTableIfPresent(dbName, tblName);
+            tableLocation = table == null ? null : table.getTableLocation();
+        } else if (remoteFileIO.isPresent()) {
+            try {
+                tableLocation = metastore.getTable(dbName, tblName).getTableLocation();
+            } catch (Exception e) {
+                LOG.warn("Failed to read the location of {}.{} to drop its cached file lists", dbName, tblName, e);
+            }
+        }
+        invalidateTableAndFiles(dbName, tblName, tableLocation);
+    }
+
+    private void invalidateTableAndFiles(String dbName, String tblName, String tableLocation) {
         if (remoteFileIO.isPresent()) {
-            String tableLocation = table.getTableLocation();
             Set<RemotePathKey> keys = new HashSet<>();
             if (!Strings.isNullOrEmpty(tableLocation)) {
                 keys.addAll(remoteFileIO.get().getPresentPathKeyInCache(tableLocation, isRecursive));
