@@ -462,6 +462,18 @@ public abstract class TabletReshardJob implements Writable {
 
     protected abstract void registerReshardingTabletsOnRestart();
 
+    // Puts the job's new tablets into the tablet inverted index when the job reserves its version, or replays that record.
+    protected abstract void addTabletsToInvertedIndex();
+
+    // On image load only. Image load rebuilds the inverted index from the indexes installed on partitions, and the new index is
+    // installed only at CLEANING. Without this, an FE started from an image of a PREPARING or RUNNING job installs it at CLEANING
+    // with tablets that loads write into but commits cannot resolve. From CLEANING on, the rebuild covers the installed index.
+    void addTabletsToInvertedIndexOnRestart() {
+        if (jobState == JobState.PREPARING || jobState == JobState.RUNNING) {
+            addTabletsToInvertedIndex();
+        }
+    }
+
     public abstract TTabletReshardJobsItem getInfo();
 
     /**
