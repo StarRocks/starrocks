@@ -256,6 +256,8 @@ public class StarRocksIcebergTableScanTest {
         Mockito.when(manifest.path()).thenReturn(path);
         Mockito.when(manifest.existingFilesCount()).thenReturn(existingFilesCount);
         Mockito.when(manifest.addedFilesCount()).thenReturn(addedFilesCount);
+        // a mock returns 0L for Long; null is a manifest without row ids, keyed by its path alone
+        Mockito.when(manifest.firstRowId()).thenReturn(null);
         return manifest;
     }
 }
