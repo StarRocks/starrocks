@@ -46,7 +46,15 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CredentialMask;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.PrintableMap;
+import com.starrocks.connector.hadoop.HadoopExt;
+>>>>>>> 2937771 ([BugFix] Persist UDF cloud configuration across FE replay (#82920))
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.CloudType;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.sql.ast.expression.Expr;
@@ -61,8 +69,10 @@ import com.starrocks.type.Type;
 import com.starrocks.type.TypeSerializer;
 import org.apache.commons.lang.ArrayUtils;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -73,7 +83,8 @@ import java.util.stream.Collectors;
 /**
  * Base class for all functions.
  */
-public class Function implements Writable {
+public class Function implements Writable, GsonPostProcessable {
+    private static final String MASKED_LOCATION = "***";
 
     // Enum for how to compare function signatures.
     // For decimal types, the type in the function can be a wildcard, i.e. decimal(*,*).
@@ -167,7 +178,14 @@ public class Function implements Writable {
 
     private boolean isMetaFunction = false;
 
+    // The old cloud_configuration JSON contained only {}, because CloudConfiguration's fields are
+    // excluded by Gson. Keep it only to identify functions persisted by the old format.
     @SerializedName(value = "cloud_configuration")
+    private CloudConfiguration legacyCloudConfiguration;
+
+    @SerializedName(value = "cloud_configuration_properties")
+    private Map<String, String> cloudConfigurationProperties;
+
     private CloudConfiguration cloudConfiguration;
 
     // Only used for serialization
@@ -247,6 +265,22 @@ public class Function implements Writable {
         isNullable = other.isNullable;
         isMetaFunction = other.isMetaFunction;
         aggStateDesc = other.aggStateDesc;
+<<<<<<< HEAD
+=======
+        inputType = other.inputType;
+        legacyCloudConfiguration = other.legacyCloudConfiguration;
+        cloudConfigurationProperties = other.cloudConfigurationProperties == null ? null
+                : new HashMap<>(other.cloudConfigurationProperties);
+        cloudConfiguration = other.cloudConfiguration;
+    }
+
+    public void setInputType(String inputType) {
+        this.inputType = inputType;
+    }
+
+    public String getInputType() {
+        return inputType;
+>>>>>>> 2937771 ([BugFix] Persist UDF cloud configuration across FE replay (#82920))
     }
 
     public FunctionName getFunctionName() {
@@ -296,6 +330,25 @@ public class Function implements Writable {
 
     public void setCloudConfiguration(CloudConfiguration cloudConfiguration) {
         this.cloudConfiguration = cloudConfiguration;
+        if (cloudConfiguration == null) {
+            cloudConfigurationProperties = null;
+            return;
+        }
+        TCloudConfiguration thrift = new TCloudConfiguration();
+        cloudConfiguration.toThrift(thrift);
+        cloudConfigurationProperties = new HashMap<>(thrift.getCloud_properties());
+        // This is derived from the other properties and can contain credentials in a second form.
+        cloudConfigurationProperties.remove(HadoopExt.HADOOP_CLOUD_CONFIGURATION_STRING);
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        if (cloudConfigurationProperties != null) {
+            cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(cloudConfigurationProperties);
+            if (cloudConfiguration.getCloudType() == CloudType.DEFAULT) {
+                throw new IOException("Cannot restore UDF cloud configuration from persisted properties");
+            }
+        }
     }
 
     public TFunctionBinaryType getBinaryType() {
@@ -762,6 +815,10 @@ public class Function implements Writable {
     }
 
     public TFunction toThrift() {
+        if (legacyCloudConfiguration != null && cloudConfiguration == null) {
+            throw new IllegalStateException("UDF cloud configuration was saved in an unsupported format; "
+                    + "recreate the function");
+        }
         TFunction fn = new TFunction();
         fn.setName(name.toThrift());
         fn.setBinary_type(binaryType);
