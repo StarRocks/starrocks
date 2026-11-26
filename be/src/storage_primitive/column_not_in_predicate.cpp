@@ -124,6 +124,10 @@ public:
             indices |= index;
         }
         *row_bitmap -= indices;
+        // NULL NOT IN (...) is NULL: drop NULL rows too, as nothing re-evaluates the predicate once the index answers it.
+        roaring::Roaring null_roaring;
+        RETURN_IF_ERROR(iterator->read_null(column_name, &null_roaring));
+        *row_bitmap -= null_roaring;
         return Status::OK();
     }
 
@@ -294,6 +298,10 @@ public:
             indices |= index;
         }
         *row_bitmap -= indices;
+        // NULL NOT IN (...) is NULL: drop NULL rows too, as nothing re-evaluates the predicate once the index answers it.
+        roaring::Roaring null_roaring;
+        RETURN_IF_ERROR(iterator->read_null(column_name, &null_roaring));
+        *row_bitmap -= null_roaring;
         return Status::OK();
     }
 
