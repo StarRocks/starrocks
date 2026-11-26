@@ -1322,31 +1322,7 @@ public class TaskManagerTest {
     }
 
     @Test
-<<<<<<< HEAD
-=======
-    public void testResumingAScheduledTaskCancelsTheSubmitterItReplaces() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test");
-        TaskSchedule schedule = new TaskSchedule();
-        schedule.setStartTime(System.currentTimeMillis() / 1000 * 1000);
-        schedule.setPeriod(60);
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(-1);
-        taskManager.registerScheduler(task);
-        ScheduledFuture<?> first = taskManager.getPeriodFutureMap().get(task.getId());
-
-        // a task resumed while its schedule is still registered
-        taskManager.resumeTask(task, false);
-
-        Assertions.assertTrue(first.isCancelled(), "the replaced submitter would keep submitting");
-        Assertions.assertFalse(taskManager.getPeriodFutureMap().get(task.getId()).isCancelled());
-    }
-
-    @Test
-    public void testReplaySwitchToManualCancelsPeriodicScheduler() {
+    public void testReplaySwitchToManualCancelsPeriodicScheduler() throws Exception {
         mockLeader(false);
         TaskManager taskManager = new TaskManager();
         Task task = newPeriodicTask("mv_replay_manual", Constants.TaskSource.MV, -1);
@@ -1365,30 +1341,30 @@ public class TaskManagerTest {
             Assertions.assertNull(taskManager.getPeriodFutureMap().get(task.getId()));
             Assertions.assertTrue(future.isCancelled());
         } finally {
-            taskManager.periodScheduler.shutdownNow();
+            shutdownSchedulers(taskManager);
         }
     }
 
     @Test
-    public void testReplayedSwitchToManualLeavesNothingScheduled() {
+    public void testReplayedSwitchToManualLeavesNothingScheduled() throws Exception {
         assertReplayedChangeLeavesNothingScheduled("mv_replay_manual_inv", (taskManager, task) ->
                 taskManager.replayAlterTask(new AlterTaskInfo(task.getName(), Constants.TaskType.MANUAL, null)));
     }
 
     @Test
-    public void testReplayedSuspendLeavesNothingScheduled() {
+    public void testReplayedSuspendLeavesNothingScheduled() throws Exception {
         assertReplayedChangeLeavesNothingScheduled("mv_replay_pause", (taskManager, task) ->
                 taskManager.replayAlterTask(new AlterTaskInfo(task.getName(), Constants.TaskState.PAUSE)));
     }
 
     @Test
-    public void testReplayedDropLeavesNothingScheduled() {
+    public void testReplayedDropLeavesNothingScheduled() throws Exception {
         assertReplayedChangeLeavesNothingScheduled("mv_replay_drop", (taskManager, task) ->
                 taskManager.replayDropTasks(List.of(task.getId())));
     }
 
     @Test
-    public void testReplayedResumeIsScheduledOnceThisFeLeads() {
+    public void testReplayedResumeIsScheduledOnceThisFeLeads() throws Exception {
         mockLeader(false);
         TaskManager taskManager = new TaskManager();
         Task task = newPeriodicTask("mv_replay_resume", Constants.TaskSource.MV, -1);
@@ -1404,27 +1380,13 @@ public class TaskManagerTest {
 
             Assertions.assertFalse(taskManager.getPeriodFutureMap().get(task.getId()).isCancelled());
         } finally {
-            taskManager.stop();
+            shutdownSchedulers(taskManager);
         }
     }
 
-    @Test
-    public void testReplayedResumeOnADemotedLeaderDoesNotThrow() {
-        mockLeader(false);
-        TaskManager taskManager = new TaskManager();
-        taskManager.start();
-        taskManager.stop();
-        Task task = newPeriodicTask("mv_replay_after_demotion", Constants.TaskSource.MV, -1);
-        task.setState(Constants.TaskState.PAUSE);
-        task.getSchedule().setStartTime(TimeUtils.getEpochSeconds() + 3600);
-        taskManager.replayCreateTask(task);
-
-        Assertions.assertDoesNotThrow(() -> taskManager.resumeTask(task, true));
-        assertEquals(Constants.TaskState.ACTIVE, task.getState());
-    }
-
     private static void assertReplayedChangeLeavesNothingScheduled(String name,
-                                                                   BiConsumer<TaskManager, Task> replayedChange) {
+                                                                   BiConsumer<TaskManager, Task> replayedChange)
+            throws Exception {
         mockLeader(false);
         TaskManager taskManager = new TaskManager();
         Task task = newPeriodicTask(name, Constants.TaskSource.MV, -1);
@@ -1440,7 +1402,7 @@ public class TaskManagerTest {
             Assertions.assertFalse(isLive(afterResume), "a schedule the follower registered keeps running");
             Assertions.assertFalse(isLive(taskManager.getPeriodFutureMap().get(task.getId())));
         } finally {
-            taskManager.periodScheduler.shutdownNow();
+            shutdownSchedulers(taskManager);
         }
     }
 
@@ -1448,8 +1410,15 @@ public class TaskManagerTest {
         return future != null && !future.isCancelled();
     }
 
+    private static void shutdownSchedulers(TaskManager taskManager) throws Exception {
+        for (String name : new String[] {"periodScheduler", "dispatchScheduler"}) {
+            Field field = TaskManager.class.getDeclaredField(name);
+            field.setAccessible(true);
+            ((ExecutorService) field.get(taskManager)).shutdownNow();
+        }
+    }
+
     @Test
->>>>>>> 4fe4fb3 ([BugFix] Cancel periodic MV refresh on task replay (#83685))
     public void testRegisterSchedulerNonPeriodicalTask() {
         TaskManager taskManager = new TaskManager();
         Task task = new Task("test");

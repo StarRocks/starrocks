@@ -17,8 +17,11 @@ package com.starrocks.load.pipe;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.StarRocksException;
@@ -52,6 +55,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendServiceImpl;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
@@ -95,6 +99,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
@@ -151,7 +156,7 @@ public class PipeManagerTest {
     private void createPipe(String sql) throws Exception {
         PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        pm.createPipe(createStmt);
+        pm.createPipe(ctx, createStmt);
     }
 
     private void alterPipe(String sql) throws Exception {
@@ -247,7 +252,7 @@ public class PipeManagerTest {
         String sql = "create pipe p1 properties ('AUTO_INGEST'='FALSE') as " +
                 "insert into tbl select * from files('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        pm.createPipe(createStmt);
+        pm.createPipe(ctx, createStmt);
         UtFrameUtils.PseudoImage image1 = new UtFrameUtils.PseudoImage();
         pm.getRepo().save(image1.getImageWriter());
 
@@ -262,7 +267,7 @@ public class PipeManagerTest {
         // pause pipe 1
         sql = "create pipe p2 as insert into tbl select * from files('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createStmt1 = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        pm.createPipe(createStmt1);
+        pm.createPipe(ctx, createStmt1);
         sql = "alter pipe p1 suspend";
         AlterPipeStmt alterPipeStmt = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.alterPipe(alterPipeStmt);
@@ -527,7 +532,7 @@ public class PipeManagerTest {
         String sql = "create pipe p3 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
-        pm.createPipe(createStmt);
+        pm.createPipe(ctx, createStmt);
 
         mockTaskExecution(Constants.TaskRunState.SUCCESS);
         Pipe p1 = pm.mayGetPipe(new PipeName(PIPE_TEST_DB, "p3")).get();
@@ -1173,6 +1178,68 @@ public class PipeManagerTest {
         Assertions.assertEquals(Pipe.State.RUNNING, pipe.getState());
     }
 
+    private static final String CREATE_P_REPLACE_SQL =
+            "create pipe p_replace as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
+    private static final String REPLACE_P_REPLACE_SQL =
+            "create or replace pipe p_replace as insert into tbl1 " +
+                    "select * from files('path'='fake://pipe', 'format'='parquet')";
+
+    @Test
+    public void testReplaceChecksDropAtExecution() throws Exception {
+        mockRepoExecutor();
+        // the pipe appeared after the statement was authorized, and the user has no DROP on it
+        createPipe(CREATE_P_REPLACE_SQL);
+        long id = getPipe("p_replace").getId();
+        new MockUp<Authorizer>() {
+            @Mock
+            public void checkPipeAction(ConnectContext context, PipeName name, PrivilegeType privilegeType)
+                    throws AccessDeniedException {
+                throw new AccessDeniedException();
+            }
+        };
+        ErrorReportException e = Assertions.assertThrows(ErrorReportException.class,
+                () -> createPipe(REPLACE_P_REPLACE_SQL));
+        Assertions.assertTrue(e.getMessage().contains("DROP"), e.getMessage());
+        Assertions.assertEquals(id, getPipe("p_replace").getId());
+    }
+
+    @Test
+    public void testReplaceRejectsPipeReplacedAfterCheck() throws Exception {
+        mockRepoExecutor();
+        createPipe(CREATE_P_REPLACE_SQL);
+        // DROP was checked on the old pipe, then another session replaces it before the write lock
+        new MockUp<Authorizer>() {
+            @Mock
+            public void checkPipeAction(ConnectContext context, PipeName name, PrivilegeType privilegeType) {
+                try {
+                    dropPipe("p_replace");
+                    createPipe(CREATE_P_REPLACE_SQL);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        };
+        DdlException e = Assertions.assertThrows(DdlException.class, () -> createPipe(REPLACE_P_REPLACE_SQL));
+        Assertions.assertTrue(e.getMessage().contains("changed concurrently"), e.getMessage());
+        long id = getPipe("p_replace").getId();
+        // a pipe that did not exist at the check but exists at the lock is not replaced either
+        new MockUp<PipeManager>() {
+            boolean hidden = false;
+
+            @Mock
+            public Optional<Pipe> mayGetPipe(Invocation inv, PipeName name) {
+                if (!hidden) {
+                    hidden = true;
+                    return Optional.empty();
+                }
+                return inv.proceed();
+            }
+        };
+        e = Assertions.assertThrows(DdlException.class, () -> createPipe(REPLACE_P_REPLACE_SQL));
+        Assertions.assertTrue(e.getMessage().contains("changed concurrently"), e.getMessage());
+        Assertions.assertEquals(id, getPipe("p_replace").getId());
+    }
+
     @Test
     public void pipeCRUD() throws Exception {
         mockRepoExecutor();
@@ -1185,32 +1252,32 @@ public class PipeManagerTest {
         String sql =
                 "create pipe p_crud as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        pm.createPipe(createStmt);
+        pm.createPipe(ctx, createStmt);
 
         Pipe pipe = pm.mayGetPipe(name).get();
         Assertions.assertEquals(Pipe.State.RUNNING, pipe.getState());
 
         // create if not exists
         CreatePipeStmt createAgain = createStmt;
-        Assertions.assertThrows(SemanticException.class, () -> pm.createPipe(createAgain));
+        Assertions.assertThrows(SemanticException.class, () -> pm.createPipe(ctx, createAgain));
         sql = "create pipe if not exists p_crud as insert into tbl1 " +
                 "select * from files('path'='fake://pipe', 'format'='parquet')";
         createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        pm.createPipe(createStmt);
+        pm.createPipe(ctx, createStmt);
 
         // create or replace
         String createOrReplaceSql = "create or replace pipe p_crud as insert into tbl1 " +
                 "select * from files('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createOrReplace = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(createOrReplaceSql, ctx);
         long previousId = getPipe("p_crud").getId();
-        pm.createPipe(createOrReplace);
+        pm.createPipe(ctx, createOrReplace);
         Assertions.assertNotEquals(previousId, getPipe("p_crud").getId());
         pipe = pm.mayGetPipe(name).get();
 
         // create or replace when not exists
         previousId = pipe.getId();
         dropPipe(name.getPipeName());
-        pm.createPipe(createOrReplace);
+        pm.createPipe(ctx, createOrReplace);
         pipe = pm.mayGetPipe(name).get();
         Assertions.assertNotEquals(previousId, pipe.getId());
 
@@ -1253,10 +1320,10 @@ public class PipeManagerTest {
         // drop database
         sql = "create pipe p_crud as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        pm.createPipe(createStmt);
+        pm.createPipe(ctx, createStmt);
         sql = "create pipe p_crud1 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        pm.createPipe(createStmt);
+        pm.createPipe(ctx, createStmt);
         long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
         Assertions.assertEquals(0, pm.getPipesUnlock().size());
@@ -1269,12 +1336,12 @@ public class PipeManagerTest {
         String createSql =
                 "create pipe show_1 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
-        pm.createPipe(createStmt);
+        pm.createPipe(ctx, createStmt);
 
         createSql =
                 "create pipe show_2 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
-        pm.createPipe(createStmt);
+        pm.createPipe(ctx, createStmt);
 
         // show
         String sql = "show pipes where name like 'show%'";
@@ -1361,7 +1428,7 @@ public class PipeManagerTest {
         String createSql =
                 "create pipe list_p1 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
-        pm.createPipe(createStmt);
+        pm.createPipe(ctx, createStmt);
 
         Assertions.assertFalse(impl.listPipes(params).pipes.isEmpty());
 
@@ -1379,7 +1446,7 @@ public class PipeManagerTest {
         String createSql =
                 "create pipe list_p2 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
-        pm.createPipe(createStmt);
+        pm.createPipe(ctx, createStmt);
 
         List<PipeFileRecord> records = Arrays.asList(
                 new PipeFileRecord(1, "file1", "version1", 1024),
