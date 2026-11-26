@@ -1,11 +1,11 @@
 -- name: test_minmax_null_result_recollect
-DROP DATABASE IF EXISTS test_minmax_null_result;
+DROP DATABASE IF EXISTS test_minmax_null_result_${uuid0};
 -- result:
 -- !result
-CREATE DATABASE test_minmax_null_result;
+CREATE DATABASE test_minmax_null_result_${uuid0};
 -- result:
 -- !result
-USE test_minmax_null_result;
+USE test_minmax_null_result_${uuid0};
 -- result:
 -- !result
 CREATE TABLE t (
@@ -16,43 +16,45 @@ DISTRIBUTED BY HASH(k) BUCKETS 2
 PROPERTIES ("replication_num" = "1");
 -- result:
 -- !result
-SELECT inspect_minmax('test_minmax_null_result.t', 'v');
+SELECT inspect_minmax('test_minmax_null_result_${uuid0}.t', 'v');
 -- result:
 None
 -- !result
 INSERT INTO t VALUES (1, NULL);
 -- result:
 -- !result
-SELECT inspect_minmax('test_minmax_null_result.t', 'v');
+SELECT inspect_minmax('test_minmax_null_result_${uuid0}.t', 'v');
 -- result:
 None
 -- !result
-SELECT inspect_minmax('test_minmax_null_result.t', 'v');
+SELECT inspect_minmax('test_minmax_null_result_${uuid0}.t', 'v');
 -- result:
 None
 -- !result
 INSERT INTO t VALUES (2, 10), (3, 20);
 -- result:
 -- !result
-SELECT inspect_minmax('test_minmax_null_result.t', 'v');
+SELECT inspect_minmax('test_minmax_null_result_${uuid0}.t', 'v');
 -- result:
 None
 -- !result
-SELECT inspect_minmax('test_minmax_null_result.t', 'v');
+SELECT inspect_minmax('test_minmax_null_result_${uuid0}.t', 'v');
 -- result:
 ColumnMinMax[minValue=10, maxValue=20]
 -- !result
-DROP DATABASE test_minmax_null_result;
+DROP DATABASE test_minmax_null_result_${uuid0};
 -- result:
 -- !result
 -- name: test_minmax_collect_max_tablets @sequential
-DROP DATABASE IF EXISTS test_minmax_max_tablets;
+[UC]function: orig_minmax_tablet_limit=execute_sql("ADMIN SHOW FRONTEND CONFIG LIKE 'min_max_stats_collect_max_tablets'", True)["result"][0][2]
+
+DROP DATABASE IF EXISTS test_minmax_max_tablets_${uuid0};
 -- result:
 -- !result
-CREATE DATABASE test_minmax_max_tablets;
+CREATE DATABASE test_minmax_max_tablets_${uuid0};
 -- result:
 -- !result
-USE test_minmax_max_tablets;
+USE test_minmax_max_tablets_${uuid0};
 -- result:
 -- !result
 CREATE TABLE t (
@@ -69,60 +71,60 @@ INSERT INTO t VALUES (1, 10), (2, 20);
 admin set frontend config ("min_max_stats_collect_max_tablets" = "1");
 -- result:
 -- !result
-SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+SELECT inspect_minmax('test_minmax_max_tablets_${uuid0}.t', 'v');
 -- result:
 None
 -- !result
-SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+SELECT inspect_minmax('test_minmax_max_tablets_${uuid0}.t', 'v');
 -- result:
 None
 -- !result
 admin set frontend config ("min_max_stats_collect_max_tablets" = "2");
 -- result:
 -- !result
-SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+SELECT inspect_minmax('test_minmax_max_tablets_${uuid0}.t', 'v');
 -- result:
 ColumnMinMax[minValue=10, maxValue=20]
 -- !result
-SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+SELECT inspect_minmax('test_minmax_max_tablets_${uuid0}.t', 'v');
 -- result:
 ColumnMinMax[minValue=10, maxValue=20]
 -- !result
 admin set frontend config ("min_max_stats_collect_max_tablets" = "1");
 -- result:
 -- !result
-SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+SELECT inspect_minmax('test_minmax_max_tablets_${uuid0}.t', 'v');
 -- result:
 ColumnMinMax[minValue=10, maxValue=20]
 -- !result
 INSERT INTO t VALUES (3, 30);
 -- result:
 -- !result
-SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+SELECT inspect_minmax('test_minmax_max_tablets_${uuid0}.t', 'v');
 -- result:
 None
 -- !result
-SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+SELECT inspect_minmax('test_minmax_max_tablets_${uuid0}.t', 'v');
 -- result:
 None
 -- !result
 admin set frontend config ("min_max_stats_collect_max_tablets" = "0");
 -- result:
 -- !result
-SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+SELECT inspect_minmax('test_minmax_max_tablets_${uuid0}.t', 'v');
 -- result:
 ColumnMinMax[minValue=10, maxValue=30]
 -- !result
-SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+SELECT inspect_minmax('test_minmax_max_tablets_${uuid0}.t', 'v');
 -- result:
 ColumnMinMax[minValue=10, maxValue=30]
 -- !result
-admin set frontend config ("min_max_stats_collect_max_tablets" = "100000");
+admin set frontend config ("min_max_stats_collect_max_tablets" = "${orig_minmax_tablet_limit}");
 -- result:
 -- !result
-DROP DATABASE test_minmax_max_tablets;
+DROP DATABASE test_minmax_max_tablets_${uuid0};
 -- result:
 -- !result
 CLEANUP {
-    admin set frontend config ("min_max_stats_collect_max_tablets" = "100000");
+    admin set frontend config ("min_max_stats_collect_max_tablets" = "${orig_minmax_tablet_limit}");
 } END CLEANUP

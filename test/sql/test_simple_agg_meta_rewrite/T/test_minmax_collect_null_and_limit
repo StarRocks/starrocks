@@ -11,9 +11,9 @@
 -- NOTE: the expected results in R/ are the CORRECT values. Before the fix the last call returns NULL
 -- and the case FAILS. Do not regenerate R/ with `run.py -r` to make it pass.
 
-DROP DATABASE IF EXISTS test_minmax_null_result;
-CREATE DATABASE test_minmax_null_result;
-USE test_minmax_null_result;
+DROP DATABASE IF EXISTS test_minmax_null_result_${uuid0};
+CREATE DATABASE test_minmax_null_result_${uuid0};
+USE test_minmax_null_result_${uuid0};
 
 CREATE TABLE t (
   k INT NOT NULL,
@@ -23,19 +23,19 @@ DISTRIBUTED BY HASH(k) BUCKETS 2
 PROPERTIES ("replication_num" = "1");
 
 -- Empty table.
-SELECT inspect_minmax('test_minmax_null_result.t', 'v');
+SELECT inspect_minmax('test_minmax_null_result_${uuid0}.t', 'v');
 
 -- All-NULL column.
 INSERT INTO t VALUES (1, NULL);
-SELECT inspect_minmax('test_minmax_null_result.t', 'v');
-SELECT inspect_minmax('test_minmax_null_result.t', 'v');
+SELECT inspect_minmax('test_minmax_null_result_${uuid0}.t', 'v');
+SELECT inspect_minmax('test_minmax_null_result_${uuid0}.t', 'v');
 
 -- Values arrive: the NULL entry expires with the table version and is collected again.
 INSERT INTO t VALUES (2, 10), (3, 20);
-SELECT inspect_minmax('test_minmax_null_result.t', 'v');
-SELECT inspect_minmax('test_minmax_null_result.t', 'v');
+SELECT inspect_minmax('test_minmax_null_result_${uuid0}.t', 'v');
+SELECT inspect_minmax('test_minmax_null_result_${uuid0}.t', 'v');
 
-DROP DATABASE test_minmax_null_result;
+DROP DATABASE test_minmax_null_result_${uuid0};
 
 -- name: test_minmax_collect_max_tablets @sequential
 -- min_max_stats_collect_max_tablets: min/max is not collected for a table with more tablets than
@@ -46,9 +46,11 @@ DROP DATABASE test_minmax_null_result;
 -- @sequential because it changes a global FE config, which would skip min/max collection for the
 -- tables of concurrently running cases.
 
-DROP DATABASE IF EXISTS test_minmax_max_tablets;
-CREATE DATABASE test_minmax_max_tablets;
-USE test_minmax_max_tablets;
+[UC]function: orig_minmax_tablet_limit=execute_sql("ADMIN SHOW FRONTEND CONFIG LIKE 'min_max_stats_collect_max_tablets'", True)["result"][0][2]
+
+DROP DATABASE IF EXISTS test_minmax_max_tablets_${uuid0};
+CREATE DATABASE test_minmax_max_tablets_${uuid0};
+USE test_minmax_max_tablets_${uuid0};
 
 -- 2 tablets.
 CREATE TABLE t (
@@ -61,31 +63,31 @@ INSERT INTO t VALUES (1, 10), (2, 20);
 
 -- Over the limit: not collected.
 admin set frontend config ("min_max_stats_collect_max_tablets" = "1");
-SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
-SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+SELECT inspect_minmax('test_minmax_max_tablets_${uuid0}.t', 'v');
+SELECT inspect_minmax('test_minmax_max_tablets_${uuid0}.t', 'v');
 
 -- The limit now admits the table. A skip is not cached, so the next call collects.
 admin set frontend config ("min_max_stats_collect_max_tablets" = "2");
-SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
-SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+SELECT inspect_minmax('test_minmax_max_tablets_${uuid0}.t', 'v');
+SELECT inspect_minmax('test_minmax_max_tablets_${uuid0}.t', 'v');
 
 -- Lowering the limit again keeps serving the value cached for the current version ...
 admin set frontend config ("min_max_stats_collect_max_tablets" = "1");
-SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+SELECT inspect_minmax('test_minmax_max_tablets_${uuid0}.t', 'v');
 
 -- ... until the table moves on: then it is not collected again.
 INSERT INTO t VALUES (3, 30);
-SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
-SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+SELECT inspect_minmax('test_minmax_max_tablets_${uuid0}.t', 'v');
+SELECT inspect_minmax('test_minmax_max_tablets_${uuid0}.t', 'v');
 
 -- <= 0 disables the limit.
 admin set frontend config ("min_max_stats_collect_max_tablets" = "0");
-SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
-SELECT inspect_minmax('test_minmax_max_tablets.t', 'v');
+SELECT inspect_minmax('test_minmax_max_tablets_${uuid0}.t', 'v');
+SELECT inspect_minmax('test_minmax_max_tablets_${uuid0}.t', 'v');
 
-admin set frontend config ("min_max_stats_collect_max_tablets" = "100000");
-DROP DATABASE test_minmax_max_tablets;
+admin set frontend config ("min_max_stats_collect_max_tablets" = "${orig_minmax_tablet_limit}");
+DROP DATABASE test_minmax_max_tablets_${uuid0};
 
 CLEANUP {
-    admin set frontend config ("min_max_stats_collect_max_tablets" = "100000");
+    admin set frontend config ("min_max_stats_collect_max_tablets" = "${orig_minmax_tablet_limit}");
 } END CLEANUP
