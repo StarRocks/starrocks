@@ -78,22 +78,40 @@ public class WholePhaseLockPolicyTest extends PlanTestBase {
     @BeforeEach
     public void installPolicy() {
         // A row access policy on the guarded table that reads the mapping table, as an access controller returns it.
+        // NativeAccessController on this branch declares no row policy lookup to hook, so the
+        // policy goes on Authorizer: on the audited lookups and on the unaudited ones the
+        // planner's lock-set pre-pass takes.
         new MockUp<Authorizer>() {
             @Mock
             public Expr getRowAccessPolicy(ConnectContext context, TableName tableName) {
-                if (!"t_policy_lock".equalsIgnoreCase(tableName.getTbl())) {
-                    return null;
-                }
-                return SqlParser.parseSqlToExpr("EXISTS (SELECT 1 FROM " + MAP_DB + ".t_map m WHERE m.k = k1)",
-                        context.getSessionVariable().getSqlMode());
+                return policyOf(context, tableName);
+            }
+
+            @Mock
+            public Expr getRowAccessPolicyWithoutAudit(ConnectContext context, TableName tableName) {
+                return policyOf(context, tableName);
             }
 
             @Mock
             public Map<String, Expr> getColumnMaskingPolicy(ConnectContext context, TableName tableName,
-                                                                   List<Column> columns) {
+                                                            List<Column> columns) {
+                return null;
+            }
+
+            @Mock
+            public Map<String, Expr> getColumnMaskingPolicyWithoutAudit(ConnectContext context, TableName tableName,
+                                                                        List<Column> columns) {
                 return null;
             }
         };
+    }
+
+    private static Expr policyOf(ConnectContext context, TableName tableName) {
+        if (!"t_policy_lock".equalsIgnoreCase(tableName.getTbl())) {
+            return null;
+        }
+        return SqlParser.parseSqlToExpr("EXISTS (SELECT 1 FROM " + MAP_DB + ".t_map m WHERE m.k = k1)",
+                context.getSessionVariable().getSqlMode());
     }
 
     @BeforeEach
@@ -192,6 +210,24 @@ public class WholePhaseLockPolicyTest extends PlanTestBase {
             @Mock
             public Map<String, Expr> getColumnMaskingPolicy(Invocation invocation, ConnectContext session,
                                                             TableName name, List<Column> columns) {
+                if (Thread.currentThread() == planner) {
+                    lookups.merge("mask:" + name.getTbl(), 1, Integer::sum);
+                }
+                return invocation.proceed(session, name, columns);
+            }
+
+            // the lock-set pre-pass asks through the unaudited lookups
+            @Mock
+            public Expr getRowAccessPolicyWithoutAudit(Invocation invocation, ConnectContext session, TableName name) {
+                if (Thread.currentThread() == planner) {
+                    lookups.merge("row:" + name.getTbl(), 1, Integer::sum);
+                }
+                return invocation.proceed(session, name);
+            }
+
+            @Mock
+            public Map<String, Expr> getColumnMaskingPolicyWithoutAudit(Invocation invocation, ConnectContext session,
+                                                                        TableName name, List<Column> columns) {
                 if (Thread.currentThread() == planner) {
                     lookups.merge("mask:" + name.getTbl(), 1, Integer::sum);
                 }
