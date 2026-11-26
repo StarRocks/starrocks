@@ -365,7 +365,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Long
 - 单位：-
 - 是否动态：是
-- 描述：一个 BE/CN 上所有查询扫描合计最多可以有多少个已发出预读、但还没读到的缓存块，包括 `remote_prefetch_window_blocks` 允许每个 Segment 提前读的块，以及 `lake_scan_read_ahead_segments` 提前开始的 Segment 的块。正在预读的 Segment 平分该上限：每个 Segment 最多持有上限除以这些 Segment 的个数（至少 1 块），后开始的扫描也能拿到自己的一份；已持有的块多于这一份的 Segment，要等读掉多出的部分后才会再发预读。达到该值后，Segment 不再多发预读，Tablet 扫描也不再提前开始下一个 Segment，相应的数据改为读到时再取。马上要读的块不受限制。多个扫描并发时，合计可能略超过该值。设为 `0` 表示不限制。指标 `lake_scan_read_ahead_blocks`、`lake_scan_read_ahead_windows` 和 `lake_scan_read_ahead_capped_total` 分别记录当前合计值、分摊上限的 Segment 个数，以及上限压住预读的次数。
+- 描述：一个 BE/CN 上所有查询扫描合计最多可以有多少个已发出预读、但还没读到的缓存块，包括 `remote_prefetch_window_blocks` 允许每个 Segment 提前读的块，以及 `lake_scan_read_ahead_segments` 提前开始的 Segment 的块。正在预读的 Segment 平分该上限：每个 Segment 最多持有上限除以这些 Segment 的个数（至少 1 块），后开始的扫描也能拿到自己的一份；已持有的块多于这一份的 Segment，要等读掉多出的部分后才会再发预读。达到该值后，Segment 不再多发预读，Tablet 扫描也不再提前开始下一个 Segment，相应的数据改为读到时再取。马上要读的块不受限制。预读块以原子方式预留，多个扫描并发时合计也不会超过该值。设为 `0` 表示不限制。指标 `lake_scan_read_ahead_blocks`、`lake_scan_read_ahead_windows` 和 `lake_scan_read_ahead_capped_total` 分别记录当前合计值、分摊上限的 Segment 个数，以及上限压住预读的次数。
 - 引入版本：-
 
 ### lake_scan_read_ahead_segments

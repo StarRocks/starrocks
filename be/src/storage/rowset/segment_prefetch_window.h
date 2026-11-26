@@ -20,6 +20,7 @@
 
 #include "io/seekable_input_stream.h"
 #include "storage/rowset/ordinal_page_index.h"
+#include "storage/rowset/read_ahead_budget.h"
 #include "storage_primitive/range.h"
 #include "storage_primitive/rowid_types.h"
 
@@ -38,11 +39,12 @@ struct OlapReaderStatistics;
 // so far ahead that it evicts what it still needs; when the blocks are fetched, and for whom first, is the
 // scheduler's decision. It never guesses: only pages the reader will read (per the ordinal index and the
 // scan range) are warmed, and a page leaves the window once the reader has passed its last row. The page
-// list is produced incrementally, so the window's memory does not grow with the segment. All windows of a node
-// together keep at most lake_scan_read_ahead_max_blocks blocks ahead, and share that limit equally: while it is set, a
-// window keeps at most the limit divided by the windows reading ahead (at least one block). A window that holds more
-// than its share, because more windows started after it, asks for no more until its reader has consumed the excess.
-// Beyond that the reads fetch what they reach.
+// list is produced incrementally, so the window's memory does not grow with the segment.
+//
+// The blocks of all windows of a node are bounded by ReadAheadBudget (lake_scan_read_ahead_max_blocks): a window
+// asks for a grant before it warms blocks, and a window that holds its share, or finds the node full, asks for no
+// more until it has given some back. Each warm-up keeps its grant until the reader has passed its pages: the
+// blocks count until they are read, whether queued, in flight or fetched. Beyond that the reads fetch what they reach.
 class SegmentPrefetchWindow {
 public:
     struct Column {
@@ -57,12 +59,6 @@ public:
     SegmentPrefetchWindow(std::vector<Column> columns, const SparseRange<>* scan_range, rowid_t start_row,
                           size_t ahead_blocks, double late_read_ahead_ratio, size_t block_size,
                           OlapReaderStatistics* stats);
-    ~SegmentPrefetchWindow();
-
-    // Whether the query scans of the node, all windows together, hold fewer blocks ahead than
-    // lake_scan_read_ahead_max_blocks. When it returns false the caller gave up something for the limit, which is
-    // counted.
-    static bool node_has_room();
 
     // The reader is about to read the rows from `row` on: forget what it has consumed and top the
     // window up again.
@@ -108,18 +104,20 @@ private:
         rowid_t end_row;
         size_t blocks;
         std::shared_ptr<io::CacheWarmHandle> handle;
+        // The blocks it holds of the node's budget.
+        ReadAheadBudget::Grant grant;
     };
 
     // Moves `c` to the first page at or after its current one that intersects the scan range.
     void settle(Cursor* c);
     // Reads `columns` ahead from `start_row` on.
     void add_cursors(const std::vector<Column>& columns, rowid_t start_row);
-    // Asks for the next blocks of `cursor_idx`, keeping the window within `limit` blocks.
-    void submit(size_t cursor_idx, rowid_t row, size_t limit);
-    // The blocks the window may keep ahead now: `_ahead_limit`, or less, its share of lake_scan_read_ahead_max_blocks.
-    size_t share() const;
-    // Adds `blocks` (may be negative) to the blocks this window, and the node, hold ahead.
-    void hold(int64_t blocks);
+    // Asks for the next blocks of `cursor_idx`. False when the budget grants none or the window got disabled.
+    bool submit(size_t cursor_idx, rowid_t row);
+    // The blocks the window holds of the node's budget.
+    size_t granted_blocks() const;
+    // Stops reading ahead: drops every warm-up and leaves the budget.
+    void disable();
     // `urgent`: pages a read is about to consume, fetched in parallel as a demand rather than as read-ahead.
     bool warm(io::SeekableInputStream* file, int64_t offset, int64_t size, bool urgent,
               std::shared_ptr<io::CacheWarmHandle>* handle);
@@ -133,6 +131,7 @@ private:
     // Warmed pages the reader has not passed yet, and their blocks.
     std::vector<InFlight> _inflight;
     size_t _ahead_blocks = 0;
+    ReadAheadBudget::Member _member;
     std::vector<std::shared_ptr<io::CacheWarmHandle>> _row_batch;
     // Set when the stream cannot warm the cache at all (e.g. a non-starlet file); the window then
     // stays out of the way.

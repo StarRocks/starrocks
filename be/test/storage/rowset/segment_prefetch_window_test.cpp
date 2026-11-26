@@ -16,8 +16,10 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "base/testutil/assert.h"
@@ -30,6 +32,7 @@
 #include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
+#include "storage/rowset/read_ahead_budget.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/storage_metrics.h"
@@ -217,7 +220,7 @@ TEST_F(SegmentPrefetchWindowTest, node_limit_bounds_all_windows) {
     first->advance(0);
     EXPECT_EQ(4u, first->ahead_blocks());
     EXPECT_EQ(base + 4, node.value());
-    EXPECT_TRUE(SegmentPrefetchWindow::node_has_room());
+    EXPECT_TRUE(ReadAheadBudget::instance()->has_room());
 
     // The second window gets only what is left of the node's blocks.
     const int64_t capped_before = capped.value();
@@ -226,7 +229,7 @@ TEST_F(SegmentPrefetchWindowTest, node_limit_bounds_all_windows) {
     EXPECT_EQ(2u, second->ahead_blocks());
     EXPECT_EQ(base + 6, node.value());
     EXPECT_GT(capped.value(), capped_before);
-    EXPECT_FALSE(SegmentPrefetchWindow::node_has_room());
+    EXPECT_FALSE(ReadAheadBudget::instance()->has_room());
 
     first.reset();
     EXPECT_EQ(base + 2, node.value());
@@ -293,6 +296,74 @@ TEST_F(SegmentPrefetchWindowTest, node_limit_is_shared_equally) {
     first.reset();
     EXPECT_EQ(0, windows.value());
     EXPECT_EQ(0, node.value());
+}
+
+// A grant gives its blocks back when released, moved over, or destroyed.
+TEST(ReadAheadBudgetTest, grant_gives_back_its_blocks) {
+    const int64_t old_limit = config::lake_scan_read_ahead_max_blocks;
+    DeferOp restore([&] { config::lake_scan_read_ahead_max_blocks = old_limit; });
+    config::lake_scan_read_ahead_max_blocks = 10;
+    ReadAheadBudget budget;
+    {
+        auto member = budget.join();
+        auto grant = budget.acquire(6, 0, 100);
+        EXPECT_EQ(6u, grant.blocks());
+        // No more than the node has left.
+        auto rest = budget.acquire(6, 6, 100);
+        EXPECT_EQ(4u, rest.blocks());
+        EXPECT_EQ(0u, budget.acquire(1, 10, 100).blocks());
+        EXPECT_FALSE(budget.has_room());
+        // Moving a grant over another gives the overwritten blocks back.
+        rest = std::move(grant);
+        EXPECT_EQ(0u, grant.blocks());
+        EXPECT_EQ(6, budget.held_blocks());
+        rest.release();
+        EXPECT_EQ(0, budget.held_blocks());
+        EXPECT_EQ(1, budget.members());
+    }
+    EXPECT_EQ(0, budget.held_blocks());
+    EXPECT_EQ(0, budget.members());
+}
+
+// Concurrent members never hold more than the limit together, nor more than their share each.
+TEST(ReadAheadBudgetTest, concurrent_grants_stay_within_limit) {
+    const int64_t old_limit = config::lake_scan_read_ahead_max_blocks;
+    DeferOp restore([&] { config::lake_scan_read_ahead_max_blocks = old_limit; });
+    constexpr int kThreads = 8;
+    constexpr int64_t kLimit = 64;
+    config::lake_scan_read_ahead_max_blocks = kLimit;
+    ReadAheadBudget budget;
+    std::vector<ReadAheadBudget::Member> members;
+    for (int i = 0; i < kThreads; ++i) {
+        members.push_back(budget.join());
+    }
+    std::atomic<bool> over{false};
+    std::vector<std::thread> threads;
+    for (int t = 0; t < kThreads; ++t) {
+        threads.emplace_back([&, t] {
+            std::vector<ReadAheadBudget::Grant> held;
+            size_t blocks = 0;
+            for (int i = 0; i < 20000; ++i) {
+                auto grant = budget.acquire(3, blocks, 1000);
+                blocks += grant.blocks();
+                if (grant.blocks() > 0) {
+                    held.push_back(std::move(grant));
+                }
+                if (budget.held_blocks() > kLimit || blocks > static_cast<size_t>(kLimit / kThreads)) {
+                    over = true;
+                }
+                if ((i + t) % 3 == 0 && !held.empty()) {
+                    blocks -= held.back().blocks();
+                    held.pop_back();
+                }
+            }
+        });
+    }
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    EXPECT_FALSE(over.load());
+    EXPECT_EQ(0, budget.held_blocks());
 }
 
 // Once the reader is past a page, its warm-up is withdrawn and the window moves on.

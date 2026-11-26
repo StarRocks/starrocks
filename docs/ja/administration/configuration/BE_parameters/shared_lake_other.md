@@ -368,7 +368,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Long
 - 単位: -
 - 変更可能: はい
-- 説明: BE/CN 上のすべてのクエリスキャンが合計で、先読みとして取得を要求し、まだ読んでいない状態で保持できるキャッシュブロック数。`remote_prefetch_window_blocks` により各 Segment が先読みするブロックと、`lake_scan_read_ahead_segments` により早めに開始した Segment のブロックを含みます。先読み中の Segment はこの上限を均等に分け合い、各 Segment が保持できるのは上限を先読み中の Segment 数で割った数（最低 1 ブロック）までです。そのため、後から開始したスキャンも自分の分を確保できます。自分の分より多く保持している Segment は、超過分を読み終えるまで先読みを要求しません。この数に達すると、Segment はそれ以上先読みを要求せず、Tablet スキャンも次の Segment を早めに開始しません。該当するデータは読む時点で取得されます。直後に読むブロックは常に取得されます。スキャンが並行する場合、合計がこの値をわずかに超えることがあります。`0` は無制限を意味します。メトリクス `lake_scan_read_ahead_blocks`、`lake_scan_read_ahead_windows`、`lake_scan_read_ahead_capped_total` が、現在の合計、上限を分け合う Segment 数、上限が先読みを抑えた回数を示します。
+- 説明: BE/CN 上のすべてのクエリスキャンが合計で、先読みとして取得を要求し、まだ読んでいない状態で保持できるキャッシュブロック数。`remote_prefetch_window_blocks` により各 Segment が先読みするブロックと、`lake_scan_read_ahead_segments` により早めに開始した Segment のブロックを含みます。先読み中の Segment はこの上限を均等に分け合い、各 Segment が保持できるのは上限を先読み中の Segment 数で割った数（最低 1 ブロック）までです。そのため、後から開始したスキャンも自分の分を確保できます。自分の分より多く保持している Segment は、超過分を読み終えるまで先読みを要求しません。この数に達すると、Segment はそれ以上先読みを要求せず、Tablet スキャンも次の Segment を早めに開始しません。該当するデータは読む時点で取得されます。直後に読むブロックは常に取得されます。ブロックはアトミックに予約されるため、スキャンが並行しても合計がこの値を超えることはありません。`0` は無制限を意味します。メトリクス `lake_scan_read_ahead_blocks`、`lake_scan_read_ahead_windows`、`lake_scan_read_ahead_capped_total` が、現在の合計、上限を分け合う Segment 数、上限が先読みを抑えた回数を示します。
 - 導入バージョン: -
 
 ### lake_scan_read_ahead_segments
