@@ -92,6 +92,8 @@ dependencies {
     implementation("com.fasterxml.uuid:java-uuid-generator")
     implementation("com.github.ben-manes.caffeine:caffeine")
     testImplementation("com.github.hazendaz.jmockit:jmockit")
+    // Must precede paimon-bundle which embeds unrelocated com.github.luben.zstd classes
+    implementation("com.github.luben:zstd-jni")
     implementation("com.github.oshi:oshi-core")
     implementation("com.github.seancfoley:ipaddress")
     implementation("com.google.cloud.bigdataoss:gcs-connector")

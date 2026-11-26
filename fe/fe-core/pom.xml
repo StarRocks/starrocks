@@ -676,6 +676,12 @@ under the License.
             <artifactId>parquet-common</artifactId>
         </dependency>
 
+        <!-- must precede paimon-bundle which embeds unrelocated com.github.luben.zstd classes -->
+        <dependency>
+            <groupId>com.github.luben</groupId>
+            <artifactId>zstd-jni</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.apache.paimon</groupId>
             <artifactId>paimon-bundle</artifactId>

@@ -70,7 +70,7 @@ subprojects {
         set("kafka-clients.version", "3.9.1")
         set("kudu.version", "1.17.1")
         set("log4j.version", "2.19.0")
-        set("luben.zstd.jni.version", "1.5.7-15")
+        set("luben.zstd.jni.version", "1.6.0-1")
         set("nimbusds.version", "9.37.2")
         set("odps.version", "0.48.7-public")
         set("paimon.version", "1.3.1")
