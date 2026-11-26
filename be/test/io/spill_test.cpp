@@ -26,14 +26,6 @@
 #include <utility>
 #include <vector>
 
-<<<<<<< HEAD:be/test/io/spill_test.cpp
-=======
-#include "base/hash/hash_util.hpp"
-#include "base/testutil/assert.h"
-#include "base/uid_util.h"
-#include "base/utility/defer_op.h"
-#include "column/adaptive_nullable_column.h"
->>>>>>> e4d8a33 ([BugFix] Use partitionwise spill for unorderable aggregation keys (#82919)):be/test/compute_env/spill/spill_test.cpp
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -68,6 +60,7 @@
 #include "testutil/assert.h"
 #include "types/logical_type.h"
 #include "util/defer_op.h"
+#include "util/hash_util.hpp"
 #include "util/runtime_profile.h"
 #include "util/uid_util.h"
 
