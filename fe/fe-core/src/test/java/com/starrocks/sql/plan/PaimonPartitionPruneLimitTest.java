@@ -20,6 +20,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
+import com.starrocks.connector.paimon.PaimonScanRangeParams;
 import com.starrocks.connector.paimon.PaimonSplitUtils;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
 import com.starrocks.server.MetadataMgr;
@@ -31,9 +32,11 @@ import org.apache.paimon.globalindex.IndexedSplit;
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.utils.Range;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 public class PaimonPartitionPruneLimitTest extends ConnectorPlanTestBase {
@@ -47,8 +50,11 @@ public class PaimonPartitionPruneLimitTest extends ConnectorPlanTestBase {
         }
     }
 
-    @Test
-    public void testPaimonPartitionPruneLimit() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = {"local", "off", "auto", "distributed"})
+    public void testPaimonPartitionPruneLimit(String mode) throws Exception {
+        connectContext.getSessionVariable().setPaimonGlobalIndexMode(mode);
+        connectContext.getSessionVariable().setScanLakePartitionNumLimit(0);
         // 1.partition table
         String sql1 = "select * from partitioned_table;";
 
@@ -84,35 +90,45 @@ public class PaimonPartitionPruneLimitTest extends ConnectorPlanTestBase {
         assertContains(plan4, "partitions=0/1");
     }
 
-    @Test
-    public void testIndexedSplitPaimonPartitionPruneLimit() {
+    @ParameterizedTest
+    @ValueSource(strings = {"auto", "distributed"})
+    public void testIndexedSplitPaimonPartitionPruneLimit(String mode) throws Exception {
+        AtomicInteger indexedSplitCount = new AtomicInteger(1);
         new MockUp<MetadataMgr>() {
             @Mock
             public List<RemoteFileInfo> getRemoteFiles(Invocation invocation, Table table,
                                                        GetRemoteFilesParams params) {
                 List<RemoteFileInfo> remoteFileInfos = invocation.proceed(table, params);
+                if (!(params instanceof PaimonScanRangeParams)) {
+                    return remoteFileInfos;
+                }
                 PaimonRemoteFileDesc remoteFileDesc =
                         (PaimonRemoteFileDesc) remoteFileInfos.get(0).getFiles().get(0);
                 PaimonSplitsInfo splitsInfo = remoteFileDesc.getPaimonSplitsInfo();
                 List<Split> indexedSplits = splitsInfo.getPaimonSplits().stream()
+                        .limit(indexedSplitCount.get())
                         .map(PaimonSplitUtils::getDataSplit)
                         .map(optional -> optional.orElseThrow(
                                 () -> new IllegalStateException("Expected a Paimon data split")))
                         .map(dataSplit -> (Split) new IndexedSplit(dataSplit,
                                 List.of(new Range(0, dataSplit.rowCount() - 1)), null))
                         .collect(Collectors.toList());
-                PaimonSplitsInfo indexedSplitsInfo = new PaimonSplitsInfo(splitsInfo.getPredicate(), indexedSplits);
+                PaimonSplitsInfo indexedSplitsInfo =
+                        new PaimonSplitsInfo(splitsInfo.getPredicate(), indexedSplits, splitsInfo.getNativeTable());
                 return List.of(RemoteFileInfo.builder()
                         .setFiles(List.of(PaimonRemoteFileDesc.createPaimonRemoteFileDesc(indexedSplitsInfo)))
                         .build());
             }
         };
 
-        connectContext.getSessionVariable().setScanLakePartitionNumLimit(3);
-        String msg = "Exceeded the limit of number of paimon table partitions to be scanned. " +
-                "Number of partitions allowed: 3, number of partitions to be scanned: 10. " +
-                "Please adjust the SQL or change the limit by set variable scan_lake_partition_num_limit.";
-        ExceptionChecker.expectThrowsWithMsg(StarRocksPlannerException.class, msg,
-                () -> getFragmentPlan("select * from partitioned_table"));
+        connectContext.getSessionVariable().setPaimonGlobalIndexMode(mode);
+        connectContext.getSessionVariable().setScanLakePartitionNumLimit(1);
+        String sql = "select * from partitioned_table where d = '2'";
+        assertContains(getFragmentPlan(sql), "partitions=1/10");
+
+        indexedSplitCount.set(2);
+        ExceptionChecker.expectThrowsWithMsg(StarRocksPlannerException.class,
+                "Number of partitions allowed: 1, number of partitions to be scanned: 2.",
+                () -> getFragmentPlan(sql));
     }
 }

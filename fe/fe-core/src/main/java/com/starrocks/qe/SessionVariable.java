@@ -3125,7 +3125,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean paimonForceJNIReader = false;
 
     @VariableMgr.VarAttr(name = PAIMON_GLOBAL_INDEX_MODE)
-    private String paimonGlobalIndexMode = PaimonGlobalIndexMode.LOCAL.modeName();
+    private String paimonGlobalIndexMode = PaimonGlobalIndexMode.AUTO.modeName();
 
     @VariableMgr.VarAttr(name = PAIMON_READER_MODE)
     private String paimonReaderMode = PaimonReaderMode.AUTO.name();
