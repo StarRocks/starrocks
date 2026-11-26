@@ -232,8 +232,23 @@ public class HiveMetadata implements ConnectorMetadata {
             });
         }
 
-        fileOps.truncateLocations(locations);
-        refreshTable(dbName, hiveTable, null, true);
+        try {
+            fileOps.truncateLocations(locations);
+            refreshTable(dbName, hiveTable, null, true);
+        } finally {
+            // Deleted files are not restored on failure: the other FEs must drop the table either way
+            invalidateOthersFeTable(hiveTable);
+        }
+    }
+
+    // A Hive write logs no edit log entry, so the journal wait of a forwarded statement does nothing for it, and the
+    // refresh dispatched to the other FEs is not waited for: make them drop the pre-write table before the
+    // statement returns, so that a read on any FE sees the write. Never throws.
+    private void invalidateOthersFeTable(HiveTable table) {
+        // The metastore names, which the other FEs' cache keys use
+        TableName tableName = new TableName(catalogName, table.getCatalogDBName(), table.getCatalogTableName());
+        GlobalStateMgr.getCurrentState().invalidateOthersFeTable(tableName,
+                Config.hive_commit_invalidate_other_fe_timeout_ms);
     }
 
     private List<String> filterTruncatePartitions(TruncateTablePartitionStmt stmt, HiveTable table,
@@ -567,6 +582,11 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public void invalidateCachedTable(String dbName, String tableName) {
+        cacheUpdateProcessor.ifPresent(processor -> processor.invalidateCachedTable(dbName, tableName));
+    }
+
+    @Override
     public void finishSink(String dbName, String tableName, List<TSinkCommitInfo> commitInfos, String branch) {
         if (commitInfos.isEmpty()) {
             LOG.warn("No commit info on {}.{} after hive sink", dbName, tableName);
@@ -609,6 +629,7 @@ public class HiveMetadata implements ConnectorMetadata {
         long startMs = System.currentTimeMillis();
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "HIVE.SINK.commit")) {
             committer.commit(partitionUpdates);
+            invalidateOthersFeTable(table);
             long totalRows = partitionUpdates.stream().mapToLong(PartitionUpdate::getRowCount).sum();
             long totalBytes = partitionUpdates.stream().mapToLong(PartitionUpdate::getTotalSizeInBytes).sum();
             long totalFiles = partitionUpdates.stream().mapToLong(PartitionUpdate::getFileCount).sum();

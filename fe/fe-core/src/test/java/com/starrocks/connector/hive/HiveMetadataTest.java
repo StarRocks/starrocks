@@ -48,6 +48,7 @@ import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HivePartitionStats;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -74,6 +75,7 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -86,6 +88,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -94,6 +97,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 import static com.starrocks.connector.hive.HiveMetadata.STARROCKS_QUERY_ID;
@@ -434,6 +438,159 @@ public class HiveMetadataTest {
             hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(), null);
             hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo), null);
         });
+    }
+
+    private TSinkCommitInfo appendCommitInfo() {
+        THiveFileInfo fileInfo = new THiveFileInfo();
+        fileInfo.setFile_name("myfile.parquet");
+        fileInfo.setPartition_path("hdfs://127.0.0.1:10000/tmp/starrocks/queryid/col1=2");
+        fileInfo.setRecord_count(10);
+        fileInfo.setFile_size_in_bytes(100);
+        TSinkCommitInfo commitInfo = new TSinkCommitInfo();
+        commitInfo.setStaging_dir("hdfs://127.0.0.1:10000/tmp/starrocks/queryid");
+        commitInfo.setIs_overwrite(false);
+        commitInfo.setHive_file_info(fileInfo);
+        return commitInfo;
+    }
+
+    @Test
+    public void testFinishSinkInvalidatesOtherFesOnceCommitted() {
+        // A Hive commit writes no edit log: the other FEs must drop the pre-commit table before the statement returns
+        new MockUp<HiveMetastoreOperations>() {
+            @Mock
+            public boolean partitionExists(Table table, List<String> partitionValues) {
+                return true;
+            }
+        };
+        AtomicBoolean committed = new AtomicBoolean(false);
+        new MockUp<HiveCommitter>() {
+            @Mock
+            public void commit(List<PartitionUpdate> partitionUpdates) {
+                committed.set(true);
+            }
+        };
+        List<TableName> invalidated = new ArrayList<>();
+        List<Integer> timeouts = new ArrayList<>();
+        List<Boolean> committedWhenInvalidated = new ArrayList<>();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public void invalidateOthersFeTable(TableName tableName, int timeoutMs) {
+                invalidated.add(tableName);
+                timeouts.add(timeoutMs);
+                committedWhenInvalidated.add(committed.get());
+            }
+        };
+
+        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(appendCommitInfo()), null);
+
+        Assertions.assertEquals(List.of(new TableName("hive_catalog", "hive_db", "hive_table")), invalidated);
+        Assertions.assertEquals(List.of(Config.hive_commit_invalidate_other_fe_timeout_ms), timeouts);
+        Assertions.assertEquals(List.of(true), committedWhenInvalidated);
+    }
+
+    @Test
+    public void testFinishSinkDoesNotInvalidateOtherFesWhenCommitFails() {
+        new MockUp<HiveMetastoreOperations>() {
+            @Mock
+            public boolean partitionExists(Table table, List<String> partitionValues) {
+                return true;
+            }
+        };
+        new MockUp<HiveCommitter>() {
+            @Mock
+            public void commit(List<PartitionUpdate> partitionUpdates) {
+                throw new StarRocksConnectorException("commit refused");
+            }
+        };
+        AtomicInteger invalidations = new AtomicInteger();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public void invalidateOthersFeTable(TableName tableName, int timeoutMs) {
+                invalidations.incrementAndGet();
+            }
+        };
+
+        assertThrows(StarRocksConnectorException.class, () ->
+                hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(appendCommitInfo()), null));
+        Assertions.assertEquals(0, invalidations.get());
+    }
+
+    @Test
+    public void testInvalidateCachedTableDropsTableAndFilesWithoutLoading() {
+        // Run on the other FEs when a commit asks them to drop the table: by name, and loading nothing
+        HiveCacheUpdateProcessor processor = new HiveCacheUpdateProcessor("hive_catalog", cachingHiveMetastore,
+                cachingRemoteFileIO, executorForHmsRefresh, false, false);
+        HiveMetadata metadata = new HiveMetadata("hive_catalog", new HdfsEnvironment(), hmsOps, fileOps,
+                statisticsProvider, Optional.of(processor), executorForHmsRefresh, executorForHmsRefresh,
+                new ConnectorProperties(ConnectorType.HIVE));
+        AtomicInteger tableLoads = new AtomicInteger();
+        new MockUp<HiveMetastoreTest.MockedHiveMetaClient>() {
+            @Mock
+            public org.apache.hadoop.hive.metastore.api.Table getTable(Invocation inv, String dbName, String tblName) {
+                tableLoads.incrementAndGet();
+                return inv.proceed(dbName, tblName);
+            }
+        };
+
+        String location = hmsOps.getTable("db1", "unpartitioned_table").getTableLocation();
+        cachingRemoteFileIO.getRemoteFiles(RemotePathKey.of(location, false));
+        int loadsWhenCached = tableLoads.get();
+        hmsOps.getTable("db1", "unpartitioned_table");
+        Assertions.assertEquals(loadsWhenCached, tableLoads.get());
+        Assertions.assertFalse(cachingRemoteFileIO.getPresentPathKeyInCache(location, false).isEmpty());
+
+        metadata.invalidateCachedTable("db1", "unpartitioned_table");
+        Assertions.assertEquals(loadsWhenCached, tableLoads.get());
+        Assertions.assertTrue(cachingRemoteFileIO.getPresentPathKeyInCache(location, false).isEmpty());
+        hmsOps.getTable("db1", "unpartitioned_table");
+        Assertions.assertTrue(tableLoads.get() > loadsWhenCached);
+
+        // A table this FE has not cached is not loaded just to be dropped
+        int loadsBefore = tableLoads.get();
+        metadata.invalidateCachedTable("db1", "never_read_table");
+        Assertions.assertEquals(loadsBefore, tableLoads.get());
+    }
+
+    @Test
+    public void testInvalidateCachedTableFindsFilesThroughPartitionsWhenTableIsNotCached() {
+        // The table entry can expire before its partitions: the file lists of the cached partitions must still go
+        String partitionPath = "hdfs://127.0.0.1:10000/hive/col1=1";
+        cachingRemoteFileIO.getRemoteFiles(RemotePathKey.of(partitionPath, false));
+        Assertions.assertFalse(cachingRemoteFileIO.getPresentPathKeyInCache(partitionPath, false).isEmpty());
+        Partition partition = new Partition(Maps.newHashMap(), RemoteFileInputFormat.PARQUET,
+                new TextFileFormatDesc("a", "b", "c", "d"), partitionPath, true);
+        new MockUp<CachingHiveMetastore>() {
+            @Mock
+            public Table getTableIfPresent(String dbName, String tableName) {
+                return null;
+            }
+
+            @Mock
+            public Map<HivePartitionName, Partition> getCachedPartitionsOfTable(String dbName, String tableName) {
+                return Map.of(HivePartitionName.of(dbName, tableName, List.of("1")), partition);
+            }
+        };
+        HiveCacheUpdateProcessor processor = new HiveCacheUpdateProcessor("hive_catalog", cachingHiveMetastore,
+                cachingRemoteFileIO, executorForHmsRefresh, false, false);
+
+        processor.invalidateCachedTable("db1", "table1");
+
+        Assertions.assertTrue(cachingRemoteFileIO.getPresentPathKeyInCache(partitionPath, false).isEmpty());
+    }
+
+    @Test
+    public void testInvalidateCachedTableDropsFilesWhenMetastoreCacheIsOff() {
+        // enable_metastore_cache=false with enable_remote_file_cache=true: no cached table or partition to find
+        // the file lists by, so the table location is read from the metastore
+        HiveCacheUpdateProcessor processor = new HiveCacheUpdateProcessor("hive_catalog", metastore,
+                cachingRemoteFileIO, executorForHmsRefresh, false, false);
+        String location = metastore.getTable("db1", "unpartitioned_table").getTableLocation();
+        cachingRemoteFileIO.getRemoteFiles(RemotePathKey.of(location, false));
+        Assertions.assertFalse(cachingRemoteFileIO.getPresentPathKeyInCache(location, false).isEmpty());
+
+        processor.invalidateCachedTable("db1", "unpartitioned_table");
+
+        Assertions.assertTrue(cachingRemoteFileIO.getPresentPathKeyInCache(location, false).isEmpty());
     }
 
     @Test
@@ -1128,6 +1285,68 @@ public class HiveMetadataTest {
         TruncateTableStmt stmt = new TruncateTableStmt(tableRef);
         hiveMetadata.truncateTable(stmt, connectContext);
         Assertions.assertTrue(called.get());
+    }
+
+    @Test
+    public void testTruncateInvalidatesOtherFes() throws Exception {
+        // TRUNCATE writes no edit log either: the other FEs must drop the table before the statement returns
+        AtomicBoolean truncated = new AtomicBoolean(false);
+        new MockUp<RemoteFileOperations>() {
+            @Mock
+            public void truncateLocations(List<String> paths) {
+                truncated.set(true);
+            }
+        };
+        List<TableName> invalidated = new ArrayList<>();
+        List<Boolean> truncatedWhenInvalidated = new ArrayList<>();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public void invalidateOthersFeTable(TableName tableName, int timeoutMs) {
+                invalidated.add(tableName);
+                truncatedWhenInvalidated.add(truncated.get());
+            }
+        };
+
+        TableRef tableRef = new TableRef(
+                com.starrocks.sql.ast.QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "unpartitioned_table")),
+                null,
+                com.starrocks.sql.parser.NodePosition.ZERO);
+        hiveMetadata.truncateTable(new TruncateTableStmt(tableRef), connectContext);
+
+        Assertions.assertEquals(List.of(new TableName("hive_catalog", "hive_db", "unpartitioned_table")), invalidated);
+        Assertions.assertEquals(List.of(true), truncatedWhenInvalidated);
+    }
+
+    @Test
+    public void testTruncateInvalidatesOtherFesWhenLocalRefreshFails() {
+        // The data is gone once truncateLocations returns: tell the other FEs even if the local refresh then fails
+        new MockUp<RemoteFileOperations>() {
+            @Mock
+            public void truncateLocations(List<String> paths) {
+            }
+        };
+        new MockUp<HiveMetadata>() {
+            @Mock
+            public void refreshTable(String srDbName, Table table, List<String> partitionNames,
+                                     boolean onlyCachedPartitions) {
+                throw new StarRocksConnectorException("refresh failed");
+            }
+        };
+        AtomicInteger invalidations = new AtomicInteger();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public void invalidateOthersFeTable(TableName tableName, int timeoutMs) {
+                invalidations.incrementAndGet();
+            }
+        };
+
+        TableRef tableRef = new TableRef(
+                com.starrocks.sql.ast.QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "unpartitioned_table")),
+                null,
+                com.starrocks.sql.parser.NodePosition.ZERO);
+        assertThrows(StarRocksConnectorException.class,
+                () -> hiveMetadata.truncateTable(new TruncateTableStmt(tableRef), connectContext));
+        Assertions.assertEquals(1, invalidations.get());
     }
 
     @Test
