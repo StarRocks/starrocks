@@ -1,0 +1,43 @@
+-- name: test_mv_rewrite_scalar_agg_missing_group
+create table t_sales (sale_id int not null, product_id int null, quantity int null, price decimal(12,2) null)
+duplicate key(sale_id) distributed by hash(sale_id) buckets 1 properties ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_sales values (1, 10, 5, 99.90), (2, 20, 7, 12.50), (3, 10, 2, 5.00);
+-- result:
+-- !result
+create materialized view mv_sales_agg distributed by hash(product_id) buckets 1 refresh manual properties ("replication_num" = "1")
+as select product_id, count(quantity) as cnt_quantity, sum(quantity) as sum_quantity, max(price) as max_price from t_sales group by product_id;
+-- result:
+-- !result
+refresh materialized view mv_sales_agg with sync mode;
+function: print_hit_materialized_views("select count(quantity) from t_sales where product_id = 999999")
+-- result:
+mv_sales_agg
+-- !result
+select count(quantity) from t_sales where product_id = 999999;
+-- result:
+0
+-- !result
+select count(quantity), sum(quantity), max(price) from t_sales where product_id = 999999;
+-- result:
+0	None	None
+-- !result
+select count(quantity) from t_sales where product_id in (999999);
+-- result:
+0
+-- !result
+select (select count(quantity) from t_sales where product_id = 999999) as c;
+-- result:
+0
+-- !result
+select count(quantity), sum(quantity), max(price) from t_sales where product_id = 10;
+-- result:
+2	7	99.90
+-- !result
+select count(quantity) from t_sales where product_id = 999999 group by product_id;
+-- result:
+-- !result
+drop materialized view mv_sales_agg;
+-- result:
+-- !result
