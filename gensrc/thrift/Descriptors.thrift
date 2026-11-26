@@ -791,6 +791,8 @@ struct TJDBCTable {
 
 struct TLanceTable {
   1: optional string lance_dataset_uri
+  // Dataset snapshot used for both schema discovery and every scan in the query.
+  2: optional i64 lance_dataset_version
 }
 
 // "Union" of all table types.

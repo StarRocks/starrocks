@@ -25,6 +25,8 @@ public class LanceTable extends Table {
 
     private final String uri;
 
+    private final long datasetVersion;
+
     private final String catalogName;
 
     private final String dbName;
@@ -38,7 +40,13 @@ public class LanceTable extends Table {
     }
 
     public LanceTable(long id, String catalogName, String dbName, String name, List<Column> schema, String uri) {
+        this(id, catalogName, dbName, name, schema, uri, 0);
+    }
+
+    public LanceTable(long id, String catalogName, String dbName, String name, List<Column> schema, String uri,
+                      long datasetVersion) {
         super(id, name, TableType.LANCE, schema);
+        this.datasetVersion = datasetVersion;
         this.uri = uri;
         this.catalogName = catalogName;
         this.dbName = dbName;
@@ -63,6 +71,10 @@ public class LanceTable extends Table {
         return uri;
     }
 
+    public long getDatasetVersion() {
+        return datasetVersion;
+    }
+
     @Override
     public String getTableLocation() {
         return getUri();
@@ -70,13 +82,16 @@ public class LanceTable extends Table {
 
     @Override
     public boolean isSupported() {
-        return false;
+        return true;
     }
 
     @Override
     public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
         TLanceTable tLanceTable = new TLanceTable();
         tLanceTable.setLance_dataset_uri(getUri());
+        if (datasetVersion > 0) {
+            tLanceTable.setLance_dataset_version(datasetVersion);
+        }
 
         TTableDescriptor tTableDescriptor =
                 new TTableDescriptor(id, TTableType.LANCE_TABLE, fullSchema.size(), 0, getCatalogTableName(), getCatalogDBName());
