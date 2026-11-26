@@ -2182,8 +2182,8 @@ public class InsertPlanTest extends PlanTestBase {
             ExecPlan plan = getExecPlan(query);
             Assertions.assertTrue(plan.getFragments().stream().anyMatch(PlanFragment::isUseRuntimeAdaptiveDop));
 
-            // a connector sink turns spill on (enable_connector_sink_spill, on by default) after the fragments are
-            // built; none of the fragments may keep adaptive DOP
+            // a connector sink turns spill on (enable_connector_sink_spill, on by default) before planning, so none of
+            // the fragments uses adaptive DOP
             plan = getExecPlan("insert into files (\"path\" = \"hdfs://127.0.0.1:9000/files/\", " +
                     "\"format\"=\"parquet\", \"compression\" = \"uncompressed\") " + query);
             Assertions.assertTrue(plan.getFragments().stream().noneMatch(PlanFragment::isUseRuntimeAdaptiveDop));
