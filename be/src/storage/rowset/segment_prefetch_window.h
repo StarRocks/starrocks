@@ -39,7 +39,8 @@ struct OlapReaderStatistics;
 // so far ahead that it evicts what it still needs; when the blocks are fetched, and for whom first, is the
 // scheduler's decision. It never guesses: only pages the reader will read (per the ordinal index and the
 // scan range) are warmed, and a page leaves the window once the reader has passed its last row. The page
-// list is produced incrementally, so the window's memory does not grow with the segment.
+// list is produced incrementally, so the window's memory does not grow with the segment. A page the reader will take
+// from the memory page cache is not warmed: its read does not touch the file.
 //
 // The blocks of the query windows of a node are bounded by ReadAheadBudget (lake_scan_read_ahead_max_blocks): a window
 // asks for a grant before it warms blocks, and a window that holds its share, or finds the node full, asks for no
@@ -53,6 +54,9 @@ public:
         // Where the column's file starts in its object (non-zero for a bundle file), so that blocks are
         // counted where the cache stores them.
         int64_t object_offset = 0;
+        // Whether the reads of this column look their pages up in the memory page cache first, under the keys
+        // `file` gives them.
+        bool use_page_cache = false;
     };
 
     // `scan_range` (ascending) must outlive the window; the pages before `start_row` are skipped. `budget` bounds the
@@ -119,6 +123,8 @@ private:
     size_t granted_blocks() const;
     // Stops reading ahead: drops every warm-up and leaves the budget.
     void disable();
+    // Whether the read of `page` will find it in the memory page cache instead of reading the file.
+    static bool in_page_cache(const Column& column, const PagePointer& page);
     // `urgent`: pages a read is about to consume, fetched in parallel as a demand rather than as read-ahead.
     bool warm(io::SeekableInputStream* file, int64_t offset, int64_t size, bool urgent,
               std::shared_ptr<io::CacheWarmHandle>* handle);

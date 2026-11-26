@@ -1650,6 +1650,8 @@ void LakeDataSource::init_counter(RuntimeState* state) {
             ADD_CHILD_COUNTER(_runtime_profile, "RemotePrefetchRejectedBlocks", TUnit::UNIT, io_statistics_name);
     _remote_prefetch_range_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "RemotePrefetchRanges", TUnit::UNIT, io_statistics_name);
+    _remote_prefetch_cached_page_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "RemotePrefetchCachedPages", TUnit::UNIT, io_statistics_name);
     _remote_prefetch_late_read_ahead_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "RemotePrefetchLateReadAhead", TUnit::UNIT, io_statistics_name);
 }
@@ -1902,6 +1904,7 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_remote_prefetch_block_counter, reader_stats.remote_prefetch_blocks);
     COUNTER_UPDATE(_remote_prefetch_rejected_block_counter, reader_stats.remote_prefetch_rejected_blocks);
     COUNTER_UPDATE(_remote_prefetch_range_counter, reader_stats.remote_prefetch_ranges);
+    COUNTER_UPDATE(_remote_prefetch_cached_page_counter, reader_stats.remote_prefetch_cached_pages);
     COUNTER_UPDATE(_remote_prefetch_late_read_ahead_counter, reader_stats.remote_prefetch_late_read_ahead);
 
     // update cache related info for CACHE SELECT

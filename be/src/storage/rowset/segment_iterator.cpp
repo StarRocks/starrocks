@@ -1291,6 +1291,8 @@ void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
         out->file = file->second.get();
         // A delta column group overlay reads a file of its own, so each column takes its own stream's offset.
         out->object_offset = out->file->bundle_offset();
+        // As the column's data page reads do (ColumnReader::read_page()).
+        out->use_page_cache = _opts.use_page_cache;
         return true;
     };
     const size_t num_fields = _schema.num_fields();
