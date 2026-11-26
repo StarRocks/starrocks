@@ -65,7 +65,6 @@ void Pipeline::setup_pipeline_profile(RuntimeState* runtime_state) {
 }
 
 void Pipeline::setup_drivers_profile(const DriverPtr& driver) {
-    runtime_profile()->add_child(driver->runtime_profile(), true, nullptr);
     auto& operators = driver->operators();
     for (int32_t i = operators.size() - 1; i >= 0; --i) {
         auto& curr_op = operators[i];
@@ -76,6 +75,7 @@ void Pipeline::setup_drivers_profile(const DriverPtr& driver) {
             });
         }
     }
+    runtime_profile()->add_child(driver->runtime_profile(), true, nullptr);
 }
 
 struct OutputAmplificationAddCalculator {

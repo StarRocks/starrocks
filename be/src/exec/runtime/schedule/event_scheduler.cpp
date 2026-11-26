@@ -63,7 +63,8 @@ void EventScheduler::add_blocked_driver(const DriverRawPtr driver) {
     auto token = driver->acquire_schedule_token();
     // The driver is ready put to block queue. but is_in_block_queue is false, but the driver is active.
     // set this flag to make the block queue should check the driver is active
-    if (!token.acquired() || driver->need_check_reschedule()) {
+    if (!token.acquired() || driver->need_check_reschedule() ||
+        (runtime_state->is_cancelled() && !driver->is_operator_cancelled())) {
         driver->observer()->cancel_trigger();
     }
 }

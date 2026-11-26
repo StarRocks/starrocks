@@ -228,5 +228,23 @@ TEST(EventSchedulerExecRuntimeTest, AddBlockedDriverReschedulesWhenCheckRequeste
     EXPECT_EQ(DriverState::READY, harness.driver->driver_state());
 }
 
+TEST(EventSchedulerExecRuntimeTest, AddBlockedDriverReschedulesWhenFragmentCancelledBeforeBlock) {
+    SchedulerHarness harness;
+
+    ASSERT_OK(harness.prepare());
+    ASSERT_FALSE(harness.driver->need_check_reschedule());
+    ASSERT_FALSE(harness.driver->is_operator_cancelled());
+
+    harness.runtime_state.set_is_cancelled(true);
+    harness.mark_driver_input_empty();
+
+    harness.event_scheduler.add_blocked_driver(harness.driver.get());
+
+    ASSERT_EQ(1, harness.driver_queue.queued_drivers.size());
+    EXPECT_EQ(harness.driver.get(), harness.driver_queue.queued_drivers.back());
+    EXPECT_FALSE(harness.driver->is_in_blocked());
+    EXPECT_EQ(DriverState::INPUT_EMPTY, harness.driver->driver_state());
+}
+
 } // namespace
 } // namespace starrocks::pipeline

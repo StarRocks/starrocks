@@ -23,6 +23,8 @@
 
 #include "base/testutil/assert.h"
 #include "common/config_exec_flow_fwd.h"
+#include "common/object_pool.h"
+#include "common/runtime_profile.h"
 #include "common/system/cpu_info.h"
 #include "common/thread/priority_thread_pool.hpp"
 #include "compute_env/query/query_runtime_state.h"
@@ -32,6 +34,7 @@
 #include "exec/runtime/group_execution/execution_group.h"
 #include "exec/runtime/pipeline.h"
 #include "exec/runtime/pipeline_driver.h"
+#include "exec/runtime/schedule/event_scheduler.h"
 #include "exec_primitive/pipeline/operator.h"
 #include "exec_primitive/pipeline/operator_factory.h"
 #include "exec_primitive/pipeline/primitives/driver_executor.h"
@@ -39,6 +42,7 @@
 #include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
 #include "exec_primitive/pipeline/scan/morsel_queue_factory_base.h"
 #include "exec_primitive/pipeline/source_operator.h"
+#include "runtime/query_context_lifetime.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 
@@ -50,14 +54,24 @@ public:
     NoopDriverQueue() : DriverQueue(nullptr) {}
 
     void close() override {}
-    void put_back(const DriverRawPtr driver) override {}
-    void put_back(const std::vector<DriverRawPtr>& drivers) override {}
-    void put_back_from_executor(const DriverRawPtr driver) override {}
+    void put_back(const DriverRawPtr driver) override {
+        queued_drivers.push_back(driver);
+        driver->set_in_ready(true);
+        driver->set_in_queue(this);
+    }
+    void put_back(const std::vector<DriverRawPtr>& drivers) override {
+        for (auto* driver : drivers) {
+            put_back(driver);
+        }
+    }
+    void put_back_from_executor(const DriverRawPtr driver) override { put_back(driver); }
     StatusOr<DriverRawPtr> take(const bool block) override { return nullptr; }
     void cancel(DriverRawPtr driver) override {}
     void update_statistics(const DriverRawPtr driver) override {}
-    size_t size() const override { return 0; }
+    size_t size() const override { return queued_drivers.size(); }
     bool should_yield(const DriverRawPtr driver, int64_t unaccounted_runtime_ns) const override { return false; }
+
+    std::vector<DriverRawPtr> queued_drivers;
 };
 
 class RecordingDriverExecutor final : public DriverExecutor {
@@ -69,7 +83,23 @@ public:
     void close() override {}
     void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
                            bool done) override {
-        report_exec_state_count.fetch_add(1, std::memory_order_relaxed);
+        if (fragment_ctx != nullptr && fragment_ctx->runtime_state() != nullptr) {
+            auto* instance_profile = fragment_ctx->runtime_state()->runtime_profile();
+            if (instance_profile != nullptr) {
+                ObjectPool obj_pool;
+                std::vector<RuntimeProfile*> pipeline_profiles;
+                instance_profile->get_children(&pipeline_profiles);
+                for (auto* pipeline_profile : pipeline_profiles) {
+                    std::vector<RuntimeProfile*> driver_profiles;
+                    pipeline_profile->get_children(&driver_profiles);
+                    if (!driver_profiles.empty()) {
+                        (void)RuntimeProfile::merge_isomorphic_profiles(&obj_pool, driver_profiles);
+                        merged_profile_count.fetch_add(1, std::memory_order_relaxed);
+                    }
+                }
+            }
+        }
+        report_exec_state_count.fetch_add(1, std::memory_order_release);
     }
     void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) override {}
     void report_audit_statistics_on_failure(QueryContext* query_ctx, FragmentContext* fragment_ctx) override {
@@ -81,6 +111,7 @@ public:
     void bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) override {}
 
     std::atomic<int> report_exec_state_count{0};
+    std::atomic<int> merged_profile_count{0};
     int audit_failure_count = 0;
     QueryContext* last_query_ctx = nullptr;
     FragmentContext* last_fragment_ctx = nullptr;
@@ -416,14 +447,18 @@ TEST(FragmentContextExecRuntimeTest, ReportExecStateSkipsUnpublishedAdaptivePipe
 TEST(FragmentContextExecRuntimeTest, ConcurrentAdaptivePublishAndProfileReport) {
     CpuInfo::init();
 
+    RecordingDriverExecutor* recording_executor = nullptr;
     workgroup::PipelineExecutorSetConfig config{
             1, 1, 1, 1, CpuUtil::CpuIds{}, false, false, PipelineExecutorMetrics::instance()};
     workgroup::WorkGroupManager manager(
             config, nullptr, [](DriverQueueMetrics*) { return std::make_unique<NoopDriverQueue>(); },
-            [](const std::string&, const CpuUtil::CpuIds&, const std::vector<CpuUtil::CpuIds>&, uint32_t,
-               PipelineExecutorMetrics*,
-               const workgroup::WorkGroupSchedulePolicy&) -> StatusOr<std::unique_ptr<DriverExecutor>> {
-                return std::make_unique<RecordingDriverExecutor>();
+            [&recording_executor](
+                    const std::string&, const CpuUtil::CpuIds&, const std::vector<CpuUtil::CpuIds>&, uint32_t,
+                    PipelineExecutorMetrics*,
+                    const workgroup::WorkGroupSchedulePolicy&) -> StatusOr<std::unique_ptr<DriverExecutor>> {
+                auto executor = std::make_unique<RecordingDriverExecutor>();
+                recording_executor = executor.get();
+                return std::move(executor);
             });
     ASSERT_OK(manager.start());
     auto default_wg = std::make_shared<workgroup::WorkGroup>(
@@ -468,8 +503,12 @@ TEST(FragmentContextExecRuntimeTest, ConcurrentAdaptivePublishAndProfileReport) 
         fragment_ctx.set_pipelines({exec_group}, {p0, p1});
 
         ASSERT_OK(fragment_ctx.prepare_all_pipelines());
+        p0->setup_pipeline_profile(state);
         instantiate_test_drivers(&fragment_ctx, &query_runtime_state, p0.get());
         ASSERT_OK(fragment_ctx.prepare_active_drivers());
+
+        ASSERT_NE(nullptr, recording_executor);
+        const int base_merges = recording_executor->merged_profile_count.load(std::memory_order_acquire);
 
         std::atomic<bool> stop{false};
         std::thread reporter([&]() {
@@ -477,19 +516,32 @@ TEST(FragmentContextExecRuntimeTest, ConcurrentAdaptivePublishAndProfileReport) 
                 fragment_ctx.report_exec_state_if_necessary();
                 fragment_ctx.iterate_drivers(
                         [](const DriverPtr& driver) { EXPECT_TRUE(driver->local_prepare_is_done()); });
+                std::this_thread::yield();
             }
         });
 
         p1->setup_pipeline_profile(state);
         instantiate_test_drivers(&fragment_ctx, &query_runtime_state, p1.get());
+
+        // Ensure the reporter thread executes real profile merging on the instantiated (but unprepared) p1.
+        const int during_prepare_target =
+                recording_executor->report_exec_state_count.load(std::memory_order_acquire) + 1;
+        while (recording_executor->report_exec_state_count.load(std::memory_order_acquire) < during_prepare_target) {
+            std::this_thread::yield();
+        }
+        EXPECT_GT(recording_executor->merged_profile_count.load(std::memory_order_acquire), base_merges);
+
         for (const auto& driver : p1->drivers()) {
             ASSERT_OK(driver->prepare(state));
             ASSERT_OK(driver->prepare_local_state(state));
         }
         p1->set_drivers_prepared(true);
 
-        // Let the concurrent reporter observe the published pipeline at least once.
-        fragment_ctx.report_exec_state_if_necessary();
+        // Wait for the reporter thread itself to observe the published pipeline at least once.
+        const int post_publish_target = recording_executor->report_exec_state_count.load(std::memory_order_acquire) + 1;
+        while (recording_executor->report_exec_state_count.load(std::memory_order_acquire) < post_publish_target) {
+            std::this_thread::yield();
+        }
         stop.store(true, std::memory_order_release);
         reporter.join();
 
@@ -500,6 +552,106 @@ TEST(FragmentContextExecRuntimeTest, ConcurrentAdaptivePublishAndProfileReport) 
         });
         EXPECT_EQ(10, total_visible);
     }
+
+    prepare_pool.shutdown();
+    prepare_pool.join();
+    manager.close();
+}
+
+TEST(FragmentContextExecRuntimeTest, CancelDuringAdaptivePrepareWakesDriverOnBlock) {
+    CpuInfo::init();
+
+    RecordingDriverExecutor* recording_executor = nullptr;
+    workgroup::PipelineExecutorSetConfig config{
+            1, 1, 1, 1, CpuUtil::CpuIds{}, false, false, PipelineExecutorMetrics::instance()};
+    workgroup::WorkGroupManager manager(
+            config, nullptr, [](DriverQueueMetrics*) { return std::make_unique<NoopDriverQueue>(); },
+            [&recording_executor](
+                    const std::string&, const CpuUtil::CpuIds&, const std::vector<CpuUtil::CpuIds>&, uint32_t,
+                    PipelineExecutorMetrics*,
+                    const workgroup::WorkGroupSchedulePolicy&) -> StatusOr<std::unique_ptr<DriverExecutor>> {
+                auto executor = std::make_unique<RecordingDriverExecutor>();
+                recording_executor = executor.get();
+                return std::move(executor);
+            });
+    ASSERT_OK(manager.start());
+    auto default_wg = std::make_shared<workgroup::WorkGroup>(
+            "default_wg", workgroup::WorkGroup::DEFAULT_WG_ID, workgroup::WorkGroup::DEFAULT_VERSION, 1, 1.0, 0, 1.0,
+            workgroup::WorkGroupType::WG_DEFAULT, workgroup::WorkGroup::DEFAULT_MEM_POOL);
+    default_wg->set_shared_executors(manager.shared_executors());
+
+    PriorityThreadPool prepare_pool("ut_cancel_prepare", 2, 16);
+    ExecutionEnv execution_services;
+    execution_services.workgroup_manager = &manager;
+    execution_services.pipeline_prepare_pool = &prepare_pool;
+    QueryExecutionServices query_execution_services;
+    query_execution_services.execution = &execution_services;
+
+    QueryRuntimeState query_runtime_state;
+    auto query_lifetime = std::make_shared<QueryContextLifetime>();
+
+    FragmentContext fragment_ctx;
+    auto runtime_state = std::make_shared<RuntimeState>(TQueryGlobals{});
+    runtime_state->set_query_execution_services(&query_execution_services);
+    auto* query_ctx = reinterpret_cast<QueryContext*>(static_cast<uintptr_t>(0x1234));
+    runtime_state->set_query_ctx(query_ctx, &query_runtime_state, nullptr);
+    runtime_state->set_query_ctx_lifetime(query_lifetime);
+    runtime_state->set_fragment_ctx(&fragment_ctx, &fragment_ctx.fragment_runtime_state());
+    runtime_state->set_fragment_dict_state(fragment_ctx.dict_state());
+    runtime_state->set_enable_event_scheduler(true);
+    fragment_ctx.set_runtime_state(std::move(runtime_state));
+    auto* state = fragment_ctx.runtime_state();
+    fragment_ctx.set_workgroup(default_wg);
+    fragment_ctx.init_event_scheduler();
+
+    NoopDriverQueue recording_queue;
+    fragment_ctx.event_scheduler()->attach_queue(&recording_queue);
+
+    auto exec_group = std::make_shared<NormalExecutionGroup>();
+    OpFactories p0_ops{
+            std::make_shared<DummySourceOperatorFactory>(1, 10, 1, SourceOperatorFactory::AdaptiveState::ACTIVE),
+            std::make_shared<DummySinkOperatorFactory>(2, 20)};
+    OpFactories p1_ops{
+            std::make_shared<DummySourceOperatorFactory>(3, 30, 1, SourceOperatorFactory::AdaptiveState::INACTIVE),
+            std::make_shared<DummySinkOperatorFactory>(4, 40)};
+    auto p0 = std::make_shared<Pipeline>(0, std::move(p0_ops), exec_group.get());
+    auto p1 = std::make_shared<Pipeline>(1, std::move(p1_ops), exec_group.get());
+    exec_group->add_pipeline(p0.get());
+    exec_group->add_pipeline(p1.get());
+    fragment_ctx.set_pipelines({exec_group}, {p0, p1});
+
+    ASSERT_OK(fragment_ctx.prepare_all_pipelines());
+    instantiate_test_drivers(&fragment_ctx, &query_runtime_state, p0.get());
+    p0->drivers()[0]->set_observer(fragment_ctx.event_scheduler()->create_driver_observer(p0->drivers()[0].get()));
+    p0->drivers()[0]->assign_observer();
+    ASSERT_OK(fragment_ctx.prepare_active_drivers());
+
+    // Instantiate adaptive pipeline p1 with an observer, then cancel before p1 finishes prepare.
+    instantiate_test_drivers(&fragment_ctx, &query_runtime_state, p1.get());
+    ASSERT_EQ(1, p1->drivers().size());
+    auto p1_driver = p1->drivers()[0];
+    p1_driver->set_observer(fragment_ctx.event_scheduler()->create_driver_observer(p1_driver.get()));
+    p1_driver->assign_observer();
+    ASSERT_FALSE(p1->is_drivers_prepared());
+
+    fragment_ctx.cancel(Status::Cancelled("cancel during adaptive prepare"));
+    ASSERT_TRUE(state->is_cancelled());
+    EXPECT_FALSE(p1_driver->need_check_reschedule());
+
+    // Finish prepare after cancellation and simulate submit() parking the empty-input driver in EventScheduler.
+    ASSERT_OK(p1_driver->prepare(state));
+    ASSERT_OK(p1_driver->prepare_local_state(state));
+    p1->set_drivers_prepared(true);
+
+    ASSERT_FALSE(p1_driver->source_operator()->has_output());
+    ASSERT_FALSE(p1_driver->source_operator()->is_finished());
+    p1_driver->set_driver_state(DriverState::INPUT_EMPTY);
+    fragment_ctx.event_scheduler()->add_blocked_driver(p1_driver.get());
+
+    ASSERT_EQ(1, recording_queue.queued_drivers.size());
+    EXPECT_EQ(p1_driver.get(), recording_queue.queued_drivers.back());
+    EXPECT_FALSE(p1_driver->is_in_blocked());
+    ASSERT_NE(nullptr, recording_executor);
 
     prepare_pool.shutdown();
     prepare_pool.join();
