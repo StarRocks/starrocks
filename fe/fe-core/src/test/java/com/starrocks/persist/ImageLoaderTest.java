@@ -14,6 +14,7 @@
 
 package com.starrocks.persist;
 
+import com.starrocks.common.Config;
 import org.apache.commons.io.FileUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
@@ -21,6 +22,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -161,6 +164,45 @@ public class ImageLoaderTest {
             for (Path path : pathList) {
                 Files.delete(path);
             }
+        }
+    }
+
+    /**
+     * An image that fails its checksum check stops the FE from loading it, unless
+     * metadata_ignore_image_checksum_error is set: then it is loaded with a warning.
+     */
+    @Test
+    public void testCheckCheckSumHonorsMetadataIgnoreImageChecksumError() throws Exception {
+        Path image = Path.of(imageDir.toString(), "v2", "image.3000");
+        Path checksum = Path.of(imageDir.toString(), "v2", "checksum.3000");
+        try {
+            Files.writeString(image, "xxxxxxx=========aaabbccc");
+            Files.writeString(checksum, "12345");
+            IOException e = Assertions.assertThrows(IOException.class, ImageLoaderTest::loadAndCheck);
+            Assertions.assertTrue(e.getMessage().contains("checksum mismatch"), e.getMessage());
+            Files.writeString(checksum, "22513?2568");
+            Assertions.assertThrows(NumberFormatException.class, ImageLoaderTest::loadAndCheck);
+
+            Config.metadata_ignore_image_checksum_error = true;
+            try {
+                loadAndCheck();
+                Files.writeString(checksum, "12345");
+                loadAndCheck();
+            } finally {
+                Config.metadata_ignore_image_checksum_error = false;
+            }
+        } finally {
+            Files.deleteIfExists(image);
+            Files.deleteIfExists(checksum);
+        }
+    }
+
+    private static void loadAndCheck() throws IOException {
+        ImageLoader loader = new ImageLoader(imageDir.toString());
+        try (InputStream in = Files.newInputStream(loader.getImageFile().toPath())) {
+            loader.setInputStream(in);
+            loader.readTheRemainingBytes();
+            loader.checkCheckSum();
         }
     }
 }
