@@ -3266,6 +3266,32 @@ public class LowCardinalityTest2 extends PlanTestBase {
     }
 
     @Test
+    public void testUnionWithConstantFromOuterJoinNullSide() throws Exception {
+        // t.x is the constant 'zzz' below the join, but the RIGHT JOIN outputs NULL for it on unmatched rows.
+        // The union must take t.x from the join instead of the dictionary code of 'zzz'.
+        String sql = """
+                  SELECT C_USER FROM low_card_t1
+                  UNION ALL
+                  SELECT t.x FROM (SELECT DISTINCT 'zzz' AS x) t RIGHT JOIN supplier ON S_ADDRESS > 'a'
+                  """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [23, VARCHAR, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [12: cast, VARCHAR, true]\n" +
+                "  |      [14: expr, VARCHAR, true]");
+        assertContains(plan, "  9:Project\n" +
+                "  |  output columns:\n" +
+                "  |  14 <-> [14: expr, VARCHAR, true]\n" +
+                "  |  hasNullableGenerateChild: true\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  8:NESTLOOP JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN");
+    }
+
+    @Test
     public void testUnionSameChildColumnPartiallyMergeable() throws Exception {
         // C_USER feeds BOTH union output positions:
         //   position 0: C_USER / C_DEPT     -> both have a dictionary, the merge succeeds
