@@ -134,6 +134,7 @@ public class ThriftConnectionPool<SERVER_CLIENT extends org.apache.thrift.TServi
             // transport.open() doesn't set timeout, Maybe the timeoutMs change.
             TSocket socket = (TSocket) object.getOutputProtocol().getTransport();
             socket.setTimeout(timeoutMs);
+            ConfigurableTSocket.refreshTransport(object.getInputProtocol().getTransport());
         } catch (TTransportException e) {
             LOG.warn("reopen error", e);
             ok = false;
@@ -150,13 +151,16 @@ public class ThriftConnectionPool<SERVER_CLIENT extends org.apache.thrift.TServi
     }
 
     public SERVER_CLIENT borrowObject(TNetworkAddress address) throws Exception {
-        return pool.borrowObject(address);
+        SERVER_CLIENT serverClient = pool.borrowObject(address);
+        ConfigurableTSocket.refreshTransport(serverClient.getInputProtocol().getTransport());
+        return serverClient;
     }
 
     public SERVER_CLIENT borrowObject(TNetworkAddress address, int timeoutMs) throws Exception {
         SERVER_CLIENT serverClient = pool.borrowObject(address);
         TSocket socket = (TSocket) (serverClient.getOutputProtocol().getTransport());
         socket.setTimeout(timeoutMs);
+        ConfigurableTSocket.refreshTransport(serverClient.getInputProtocol().getTransport());
         return serverClient;
     }
 
@@ -192,7 +196,7 @@ public class ThriftConnectionPool<SERVER_CLIENT extends org.apache.thrift.TServi
                 LOG.debug("before create socket hostname={} key.port={} timeoutMs={}",
                         key.hostname, key.port, defaultTimeoutMs);
             }
-            TTransport transport = new TSocket(key.hostname, key.port, defaultTimeoutMs);
+            TTransport transport = new ConfigurableTSocket(key.hostname, key.port, defaultTimeoutMs);
             transport.open();
             TProtocol protocol = new TBinaryProtocol(transport);
             return (SERVER_CLIENT) newInstance(className, protocol);

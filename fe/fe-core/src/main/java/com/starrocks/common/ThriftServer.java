@@ -19,6 +19,8 @@ package com.starrocks.common;
 
 import com.google.common.collect.Sets;
 import com.starrocks.common.util.NetUtils;
+import com.starrocks.rpc.ConfigurableTProtocolFactory;
+import com.starrocks.rpc.ConfigurableTSocket;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
@@ -57,13 +59,16 @@ public class ThriftServer {
         TServerSocket.ServerSocketTransportArgs socketTransportArgs = new TServerSocket.ServerSocketTransportArgs()
                 .bindAddr(NetUtils.getSockAddrBasedOnCurrIpVersion(port))
                 .clientTimeout(Config.thrift_client_timeout_ms)
+                .maxFrameSize(ConfigurableTProtocolFactory.effectiveMaxFrameSizeConfig())
+                .maxMessageSize(ConfigurableTProtocolFactory.effectiveMaxMessageSizeConfig())
                 .backlog(Config.thrift_backlog_num);
 
         TBinaryProtocol.Factory factory =
                 new TBinaryProtocol.Factory(Config.thrift_rpc_strict_mode, true, Config.thrift_rpc_max_body_size, -1);
         SRTThreadPoolServer.Args serverArgs =
-                new SRTThreadPoolServer.Args(new TServerSocket(socketTransportArgs)).protocolFactory(
-                        factory).processor(processor);
+                new SRTThreadPoolServer.Args(
+                        new ConfigurableTSocket.ServerSocket(socketTransportArgs, Config.thrift_client_timeout_ms))
+                        .protocolFactory(factory).processor(processor);
         ThreadPoolExecutor threadPoolExecutor = ThreadPoolManager
                 .newDaemonFixedThreadPoolWithAbortPolicy(Config.thrift_server_max_worker_threads,
                         Config.thrift_server_queue_size,
