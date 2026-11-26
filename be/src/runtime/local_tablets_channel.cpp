@@ -498,19 +498,35 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     _flush_stale_memtables();
 
     if (close_channel) {
-        // persist txn.
+        // Persist the txns this BE committed for the channel: the tablets _commit_tablets committed and, with
+        // replicated storage, the secondary replicas committed by their primary's last segment (waited for above).
+        // request.tablet_ids() only holds the tablets of the rows in this request, which is empty when the last
+        // request carries no rows. Aborted tablets have no commit to persist, and their data dirs must not fail or
+        // stall the load.
         std::vector<TabletSharedPtr> tablets;
-        tablets.reserve(request.tablet_ids().size());
-        for (const auto tablet_id : request.tablet_ids()) {
+        tablets.reserve(_delta_writers.size());
+        for (const auto& [tablet_id, delta_writer] : _delta_writers) {
+            if (delta_writer->get_state() != kCommitted) {
+                continue;
+            }
             TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
             if (tablet != nullptr) {
                 tablets.emplace_back(std::move(tablet));
             }
         }
+        TEST_SYNC_POINT_CALLBACK("LocalTabletsChannel::add_chunk:persist_txns", &tablets);
         auto persist_start = watch.elapsed_time();
         auto st = StorageEngine::instance()->txn_manager()->persist_tablet_related_txns(tablets);
+        TEST_SYNC_POINT_CALLBACK("LocalTabletsChannel::add_chunk:persist_txns_status", &st);
         COUNTER_UPDATE(_wait_txn_persist_timer, watch.elapsed_time() - persist_start);
-        LOG_IF(WARNING, !st.ok()) << "failed to persist transactions: " << st;
+        if (!st.ok()) {
+            LOG(WARNING) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
+                         << " failed to persist transactions: " << st;
+            // The commits are not durable, so the load must not be reported as successful.
+            if (response->status().status_code() == TStatusCode::OK) {
+                st.to_protobuf(response->mutable_status());
+            }
+        }
     } else if (request.wait_all_sender_close()) {
         _num_initial_senders.fetch_sub(1);
         std::string msg = fmt::format("LocalTabletsChannel txn_id: {} load_id: {}", _txn_id, print_id(request.id()));

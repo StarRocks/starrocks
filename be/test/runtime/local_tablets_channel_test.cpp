@@ -17,6 +17,9 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
+#include <map>
+#include <set>
+
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -30,9 +33,11 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_schema.h"
+#include "storage/txn_manager.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "testutil/sync_point.h"
+#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/reusable_closure.h"
 #include "util/runtime_profile.h"
@@ -312,6 +317,230 @@ TEST_F(LocalTabletsChannelTest, test_add_chunk_not_exist_tablet_for_chunk_rows) 
 
     ASSERT_EQ(TStatusCode::INTERNAL_ERROR, add_chunk_response.status().status_code()) << add_chunk_response.status();
     _tablets_channel->abort();
+}
+
+// The last request of a load often carries no rows, but the txns of every tablet in the channel must still be
+// persisted before the channel reports success.
+TEST_F(LocalTabletsChannelTest, test_persist_all_tablets_when_last_request_has_no_rows) {
+    _create_tablets(3);
+    std::vector<ReplicaInfo> replica_infos;
+    for (auto& tablet : _tablets) {
+        replica_infos.emplace_back(ReplicaInfo{tablet->tablet_id(), {_nodes[0]}});
+    }
+    PTabletWriterOpenRequest open_request;
+    _create_open_request(_nodes[0].node_id(), replica_infos, &open_request);
+    open_request.set_is_replicated_storage(false);
+    std::shared_ptr<OlapTableSchemaParam> schema_param(new OlapTableSchemaParam());
+    ASSERT_OK(schema_param->init(open_request.schema()));
+    PTabletWriterOpenResult open_response;
+    ASSERT_OK(_tablets_channel->open(open_request, &open_response, schema_param, false));
+
+    std::set<int64_t> persisted_tablet_ids;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("LocalTabletsChannel::add_chunk:persist_txns", [&](void* arg) {
+        for (auto& tablet : *static_cast<std::vector<TabletSharedPtr>*>(arg)) {
+            persisted_tablet_ids.insert(tablet->tablet_id());
+        }
+    });
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("LocalTabletsChannel::add_chunk:persist_txns");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    PTabletWriterAddChunkRequest request;
+    request.mutable_id()->CopyFrom(_load_id);
+    request.set_index_id(_index_id);
+    request.set_sink_id(_sink_id);
+    request.set_sender_id(0);
+    request.set_timeout_ms(60000);
+
+    // Packet 0 carries rows for tablets[0] only.
+    {
+        request.set_eos(false);
+        request.set_packet_seq(0);
+        int num_rows = 4;
+        auto chunk = _generate_data(num_rows, _tablets[0]->tablet_schema());
+        for (int i = 0; i < num_rows; i++) {
+            request.add_tablet_ids(_tablets[0]->tablet_id());
+        }
+        bool close_channel = false;
+        PTabletWriterAddBatchResult response;
+        _tablets_channel->add_chunk(&chunk, request, &response, &close_channel);
+        ASSERT_EQ(TStatusCode::OK, response.status().status_code()) << response.status().DebugString();
+        ASSERT_FALSE(close_channel);
+    }
+    // Packet 1 is the eos request and carries no rows.
+    {
+        request.clear_tablet_ids();
+        request.set_eos(true);
+        request.set_packet_seq(1);
+        request.add_partition_ids(_partition_id);
+        bool close_channel = false;
+        PTabletWriterAddBatchResult response;
+        _tablets_channel->add_chunk(nullptr, request, &response, &close_channel);
+        ASSERT_EQ(TStatusCode::OK, response.status().status_code()) << response.status().DebugString();
+        ASSERT_TRUE(close_channel);
+    }
+
+    std::set<int64_t> expected_tablet_ids;
+    for (auto& tablet : _tablets) {
+        expected_tablet_ids.insert(tablet->tablet_id());
+    }
+    ASSERT_EQ(expected_tablet_ids, persisted_tablet_ids);
+
+    // All three tablets are committed, including the two without rows.
+    std::map<TabletInfo, std::pair<RowsetSharedPtr, bool>> tablet_infos;
+    StorageEngine::instance()->txn_manager()->get_txn_related_tablets(_txn_id, _partition_id, &tablet_infos);
+    std::set<int64_t> committed_tablet_ids;
+    for (auto& [tablet_info, rowset] : tablet_infos) {
+        committed_tablet_ids.insert(tablet_info.tablet_id);
+    }
+    for (auto tablet_id : expected_tablet_ids) {
+        ASSERT_TRUE(committed_tablet_ids.count(tablet_id) > 0) << tablet_id;
+    }
+}
+
+// A tablet whose partition receives no rows is aborted, not committed: it has no txn to persist, and its data dir
+// must not be able to fail or stall the load.
+TEST_F(LocalTabletsChannelTest, test_persist_only_committed_tablets) {
+    _create_tablets(3);
+    std::vector<ReplicaInfo> replica_infos;
+    for (auto& tablet : _tablets) {
+        replica_infos.emplace_back(ReplicaInfo{tablet->tablet_id(), {_nodes[0]}});
+    }
+    PTabletWriterOpenRequest open_request;
+    _create_open_request(_nodes[0].node_id(), replica_infos, &open_request);
+    open_request.set_is_replicated_storage(false);
+    // tablets[2] belongs to a partition that the load sends no rows to.
+    const int64_t empty_partition_id = _partition_id + 1;
+    open_request.mutable_tablets(2)->set_partition_id(empty_partition_id);
+    std::shared_ptr<OlapTableSchemaParam> schema_param(new OlapTableSchemaParam());
+    ASSERT_OK(schema_param->init(open_request.schema()));
+    PTabletWriterOpenResult open_response;
+    ASSERT_OK(_tablets_channel->open(open_request, &open_response, schema_param, false));
+
+    std::set<int64_t> persisted_tablet_ids;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("LocalTabletsChannel::add_chunk:persist_txns", [&](void* arg) {
+        for (auto& tablet : *static_cast<std::vector<TabletSharedPtr>*>(arg)) {
+            persisted_tablet_ids.insert(tablet->tablet_id());
+        }
+    });
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("LocalTabletsChannel::add_chunk:persist_txns");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    PTabletWriterAddChunkRequest request;
+    request.mutable_id()->CopyFrom(_load_id);
+    request.set_index_id(_index_id);
+    request.set_sink_id(_sink_id);
+    request.set_sender_id(0);
+    request.set_timeout_ms(60000);
+    request.set_eos(true);
+    request.set_packet_seq(0);
+    int num_rows = 4;
+    auto chunk = _generate_data(num_rows, _tablets[0]->tablet_schema());
+    for (int i = 0; i < num_rows; i++) {
+        request.add_tablet_ids(_tablets[i % 2]->tablet_id());
+    }
+    request.add_partition_ids(_partition_id);
+    bool close_channel = false;
+    PTabletWriterAddBatchResult response;
+    _tablets_channel->add_chunk(&chunk, request, &response, &close_channel);
+    ASSERT_EQ(TStatusCode::OK, response.status().status_code()) << response.status().DebugString();
+    ASSERT_TRUE(close_channel);
+
+    std::set<int64_t> expected_tablet_ids{_tablets[0]->tablet_id(), _tablets[1]->tablet_id()};
+    ASSERT_EQ(expected_tablet_ids, persisted_tablet_ids);
+}
+
+// With replicated storage, a secondary replica's txn is committed on its BE by the primary's last segment, not by
+// _commit_tablets. The close on the secondary's BE must persist that txn too, but not one of an aborted secondary.
+TEST_F(LocalTabletsChannelTest, test_persist_committed_secondary_replicas) {
+    _create_tablets(2);
+    // open as the secondary replica of 3 replicas
+    std::vector<ReplicaInfo> replica_infos;
+    for (auto& tablet : _tablets) {
+        replica_infos.push_back(ReplicaInfo{tablet->tablet_id(), _nodes});
+    }
+    _open_channel(_nodes[1].node_id(), replica_infos);
+    const auto& writers = _tablets_channel->TEST_delta_writers();
+    // tablets[0] got its primary's last segment, which closes and commits the secondary (SegmentFlushTask).
+    auto* committed_writer = writers.at(_tablets[0]->tablet_id())->writer();
+    ASSERT_OK(committed_writer->close());
+    ASSERT_OK(committed_writer->commit());
+    // tablets[1] was aborted by its primary.
+    writers.at(_tablets[1]->tablet_id())->writer()->abort(false);
+
+    std::set<int64_t> persisted_tablet_ids;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("LocalTabletsChannel::add_chunk:persist_txns", [&](void* arg) {
+        for (auto& tablet : *static_cast<std::vector<TabletSharedPtr>*>(arg)) {
+            persisted_tablet_ids.insert(tablet->tablet_id());
+        }
+    });
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("LocalTabletsChannel::add_chunk:persist_txns");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    PTabletWriterAddChunkRequest request;
+    request.mutable_id()->CopyFrom(_load_id);
+    request.set_index_id(_index_id);
+    request.set_sink_id(_sink_id);
+    request.set_sender_id(0);
+    request.set_txn_id(_txn_id);
+    request.set_eos(true);
+    request.set_packet_seq(0);
+    request.set_wait_all_sender_close(true);
+    request.set_timeout_ms(60000);
+    bool close_channel = false;
+    PTabletWriterAddBatchResult response;
+    _tablets_channel->add_chunk(nullptr, request, &response, &close_channel);
+    ASSERT_TRUE(close_channel);
+    ASSERT_EQ(TStatusCode::OK, response.status().status_code()) << response.status().DebugString();
+    ASSERT_EQ(std::set<int64_t>{_tablets[0]->tablet_id()}, persisted_tablet_ids);
+}
+
+// If the txns cannot be persisted, the channel must not report the load as successful.
+TEST_F(LocalTabletsChannelTest, test_fail_close_when_persist_txns_fails) {
+    _create_tablets(1);
+    auto& tablet = _tablets[0];
+    _open_channel(_nodes[0].node_id(), {ReplicaInfo{tablet->tablet_id(), {_nodes[0]}}});
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("LocalTabletsChannel::add_chunk:persist_txns_status", [](void* arg) {
+        *static_cast<Status*>(arg) = Status::IOError("injected persist failure");
+    });
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("LocalTabletsChannel::add_chunk:persist_txns_status");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    PTabletWriterAddChunkRequest request;
+    request.mutable_id()->CopyFrom(_load_id);
+    request.set_index_id(_index_id);
+    request.set_sink_id(_sink_id);
+    request.set_sender_id(0);
+    request.set_eos(true);
+    request.set_packet_seq(0);
+    request.set_timeout_ms(60000);
+    int num_rows = 4;
+    auto chunk = _generate_data(num_rows, tablet->tablet_schema());
+    for (int i = 0; i < num_rows; i++) {
+        request.add_tablet_ids(tablet->tablet_id());
+    }
+    request.add_partition_ids(_partition_id);
+
+    bool close_channel = false;
+    PTabletWriterAddBatchResult response;
+    _tablets_channel->add_chunk(&chunk, request, &response, &close_channel);
+    ASSERT_TRUE(close_channel);
+    ASSERT_NE(TStatusCode::OK, response.status().status_code());
+    ASSERT_GT(response.status().error_msgs_size(), 0);
+    ASSERT_NE(std::string::npos, response.status().error_msgs(0).find("injected persist failure"))
+            << response.status().DebugString();
 }
 
 TEST_F(LocalTabletsChannelTest, diagnose_stack_trace) {
