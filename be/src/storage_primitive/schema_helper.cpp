@@ -20,6 +20,8 @@
 
 #include "column/schema.h"
 #include "storage_primitive/tablet_column.h"
+#include "types/geo_type_info.h"
+#include "types/type_descriptor.h"
 #include "types/type_info.h"
 
 namespace starrocks {
@@ -48,7 +50,16 @@ TypeInfoPtr get_tablet_column_type_info(const TabletColumn& col) {
 } // namespace
 
 Field StorageSchemaHelper::convert_field(ColumnId id, const TabletColumn& c) {
-    starrocks::Field f(id, std::string(c.name()), get_tablet_column_type_info(c), c.is_nullable());
+    TypeInfoPtr type_info = [&] {
+        if (c.type() == TYPE_GEOGRAPHY || c.type() == TYPE_GEOMETRY) {
+            const auto* descriptor = c.geo_descriptor();
+            CHECK(descriptor != nullptr);
+            auto type = TypeDescriptor::create_geo_type(c.type(), *descriptor);
+            return get_geo_type_info(type).value();
+        }
+        return get_tablet_column_type_info(c);
+    }();
+    Field f(id, c.name(), std::move(type_info), c.is_nullable());
     f.set_is_key(c.is_key());
     f.set_length(c.length());
     f.set_uid(c.unique_id());
