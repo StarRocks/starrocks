@@ -390,7 +390,7 @@ public class Deployer {
                 firstErrResult = res;
                 firstErrExecution = execution;
             } else if (firstErrResult.getStatusCode() == TStatusCode.CANCELLED &&
-                    ExecuteExceptionHandler.isRetryableStatus(res.getStatusCode())) {
+                    ExecuteExceptionHandler.isRetryableStatus(res.getStatusCode(), res.getStatus().getErrorMsg())) {
                 // If the first error is cancelled and the subsequent error is retryable, we store the latter to give a chance
                 // to retry this query.
                 firstErrResult = res;

@@ -168,6 +168,21 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
         Assertions.assertFalse(ExecuteExceptionHandler.isRetryableStatus(TStatusCode.CANCELLED));
     }
 
+    @Test
+    public void testDictionaryVersionNotFoundStatusIsRetryable() {
+        // Lets a version miss replace a CANCELLED that another fragment reported first.
+        Assertions.assertTrue(ExecuteExceptionHandler.isRetryableStatus(TStatusCode.INTERNAL_ERROR,
+                VERSION_NOT_FOUND_MESSAGE));
+        Assertions.assertTrue(ExecuteExceptionHandler.isRetryableStatus(TStatusCode.LAKE_META_VERSION_NOT_FOUND,
+                null));
+        Assertions.assertFalse(ExecuteExceptionHandler.isRetryableStatus(TStatusCode.INTERNAL_ERROR,
+                "open dictionary expression failed, there is no cache for dictionary: 5"));
+        Assertions.assertFalse(ExecuteExceptionHandler.isRetryableStatus(TStatusCode.INTERNAL_ERROR, null));
+        Config.enable_dictionary_version_retry = false;
+        Assertions.assertFalse(ExecuteExceptionHandler.isRetryableStatus(TStatusCode.INTERNAL_ERROR,
+                VERSION_NOT_FOUND_MESSAGE));
+    }
+
     /**
      * The retry log reports the version the fresh plan picked for the partition BE could not read,
      * which is the batch's final version once published. This pins that lookup: it must search the

@@ -1079,7 +1079,7 @@ public class DefaultCoordinator extends Coordinator {
                 // replacing. Deployer.waitForDeploymentCompletion applies the same preference at
                 // deploy time.
                 if (queryStatus.isCancelled() && !explicitlyCancelled
-                        && ExecuteExceptionHandler.isRetryableStatus(status.getErrorCode())) {
+                        && ExecuteExceptionHandler.isRetryableStatus(status.getErrorCode(), status.getErrorMsg())) {
                     LOG.warn("replace cancelled query status with retryable status {}, query id: {}",
                             status.getErrorCode(), DebugUtil.printId(jobSpec.getQueryId()));
                     queryStatus.setStatus(status);

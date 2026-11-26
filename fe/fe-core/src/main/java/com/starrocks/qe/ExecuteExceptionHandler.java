@@ -229,6 +229,16 @@ public class ExecuteExceptionHandler {
                 || statusCode == TStatusCode.LAKE_META_VERSION_NOT_FOUND;
     }
 
+    // The BE reports a dictionary version miss as a plain INTERNAL_ERROR, so only its text tells it apart.
+    // Without this, a fragment that was only cancelled can hide the miss and the query fails without a retry.
+    public static boolean isRetryableStatus(TStatusCode statusCode, String errorMsg) {
+        if (isRetryableStatus(statusCode)) {
+            return true;
+        }
+        return Config.enable_dictionary_version_retry && errorMsg != null
+                && DICTIONARY_VERSION_NOT_FOUND_ERROR.matcher(errorMsg).find();
+    }
+
     // If modifications are made to the partition files of a Hive table by user,
     // such as through "insert overwrite partition", the Frontend couldn't be aware of these changes.
     // As a result, queries may use the file information cached in the FE for execution.
