@@ -556,6 +556,11 @@ if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
         patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-thrift.patch
         touch $PATCHED_MARK
     fi
+    if [ ! -f $PATCHED_MARK.zstd_1_6_0 ] && [ $ARROW_SOURCE = "arrow-apache-arrow-19.0.1" ] ; then
+        # Bump Arrow's bundled zstd from 1.5.7 to 1.6.0 (CVE-2026-124851).
+        patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-use-zstd-1.6.0.patch
+        touch $PATCHED_MARK.zstd_1_6_0
+    fi
     cd -
     echo "Finished patching $ARROW_SOURCE"
 fi
