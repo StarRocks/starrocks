@@ -728,6 +728,8 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: false
 * **Introduced in**: v3.0
 
+When aggregation spilling is enabled, grouping keys that cannot be sorted, such as MAP or ARRAY/STRUCT containing MAP, automatically use hash-partitioned (partitionwise) spilling even if `spill_partitionwise_agg` is `false`. Sortable grouping keys continue to follow that setting.
+
 ### enable_spill_to_remote_storage
 
 * **Description**: Whether to enable intermediate result spilling to object storage. If it is set to `true`, StarRocks spills the intermediate results to the storage volume specified in `spill_storage_volume` after the capacity limit of the local disk is reached. For more information, see [Spill to object storage](../administration/management/resource_management/spill_to_disk.md#preview-spill-intermediate-result-to-object-storage).
@@ -812,43 +814,6 @@ Used for MySQL client compatibility. No practical usage.
 
 * **Description**: Whether to enable the Data Cache I/O Adaptor. Setting this to `true` enables the feature. When this feature is enabled, the system automatically routes some cache requests to remote storage when the disk I/O load is high, reducing disk pressure.
 * **Default**: true
-<<<<<<< HEAD
-=======
-* **Introduced in**: v2.5
-
-### enable_shared_scan
-
-* **Scope**: Session
-* **Description**: Session-level boolean flag intended to request shared scan execution for pipeline queries. When pipeline execution is enabled, the FE will propagate this setting into the fragment execution parameters (`TExecPlanFragmentParams.enable_shared_scan`) so the BE can perform shared scanning (see `.../TFragmentInstanceFactory.java:153-159`). However, the FE currently does not honor user changes: `SessionVariable.isEnableSharedScan()` always returns `false` (see `.../SessionVariable.java:4176-4180`) and the feature has been disabled in FE since later versions due to incompatibility with event-based scheduling. As a result, setting this variable in a session has no effect in current releases.
-* **Default**: `false`
-* **Data Type**: boolean
-* **Introduced in**: v3.2.0
-
-### enable_short_circuit
-
-* **Description**: Whether to enable short circuiting for queries. Default: `false`. If it is set to `true`, when the query meets the criteria (to evaluate whether the query is a point query): the conditional columns in the WHERE clause include all primary key columns, and the operators in the WHERE clause are `=` or `IN`, the query takes the short circuit.
-* **Default**: false
-* **Introduced in**: v3.2.3
-
-### enable_sort_aggregate
-
-* **Description**: Specifies whether to enable sorted streaming. `true` indicates sorted streaming is enabled to sort data in data streams.
-* **Default**: false
-* **Introduced in**: v2.5
-
-### enable_spill
-
-* **Description**: Whether to enable intermediate result spilling. Default: `false`. If it is set to `true`, StarRocks spills the intermediate results to disk to reduce the memory usage when processing aggregate, sort, or join operators in queries.
-* **Default**: false
-* **Introduced in**: v3.0
-
-When aggregation spilling is enabled, grouping keys that cannot be sorted, such as MAP or ARRAY/STRUCT containing MAP, automatically use hash-partitioned (partitionwise) spilling even if `spill_partitionwise_agg` is `false`. Sortable grouping keys continue to follow that setting.
-
-### enable_spill_to_remote_storage
-
-* **Description**: Whether to enable intermediate result spilling to object storage. If it is set to `true`, StarRocks spills the intermediate results to the storage volume specified in `spill_storage_volume` after the capacity limit of the local disk is reached. For more information, see [Spill to object storage](../administration/management/resource_management/spill_to_disk.md#preview-spill-intermediate-result-to-object-storage).
-* **Default**: false
->>>>>>> e4d8a33 ([BugFix] Use partitionwise spill for unorderable aggregation keys (#82919))
 * **Introduced in**: v3.3.0
 
 ### enable_file_metacache

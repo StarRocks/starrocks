@@ -20,16 +20,16 @@
 #include <utility>
 #include <vector>
 
-#include "base/testutil/assert.h"
 #include "exec/aggregate/aggregate_blocking_node.h"
 #include "exec/aggregate/distinct_blocking_node.h"
 #include "exec/empty_set_node.h"
-#include "exec/runtime/fragment_context.h"
-#include "exec/runtime/pipeline.h"
-#include "exec/runtime/pipeline_builder_context.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/pipeline.h"
+#include "exec/pipeline/pipeline_builder.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
-#include "types/type_descriptor.h"
+#include "runtime/types.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 namespace {
@@ -118,8 +118,8 @@ protected:
         }
         node->add_child(&child);
         CHECK_OK(node->init(plan, state));
-        pipeline::PipelineBuilderContext context(&fragment, 1, 1);
-        ASSIGN_OR_ABORT(auto sources, node->decompose_to_pipeline(&context));
+        pipeline::PipelineBuilderContext context(&fragment, 1, 1, false);
+        auto sources = node->decompose_to_pipeline(&context);
         CHECK_GE(sources.size(), 1);
         auto pipelines = context.pipelines();
         return {sources[0]->get_raw_name(), pipelines.back()->sink_operator_factory()->get_raw_name(),

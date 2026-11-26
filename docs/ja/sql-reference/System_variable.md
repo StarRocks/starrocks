@@ -663,6 +663,8 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: false
 * **導入バージョン**: v3.0
 
+集計のスピルが有効な場合、MAP や MAP を含む ARRAY/STRUCT など、ソートできないグループ化キーには、`spill_partitionwise_agg` が `false` でもハッシュ分割による partitionwise スピルが自動的に使用されます。ソート可能なグループ化キーは、引き続きこの設定に従います。
+
 ### enable_spill_to_remote_storage
 
 * **説明**: 中間結果をオブジェクトストレージにスピルするかどうか。`true` に設定されている場合、StarRocks はローカルディスクの容量制限に達した後、`spill_storage_volume` で指定されたストレージボリュームに中間結果をスピルします。詳細については、[Spill to object storage](../administration/management/resource_management/spill_to_disk.md#preview-spill-intermediate-result-to-object-storage) を参照してください。
@@ -744,27 +746,8 @@ MySQL クライアント互換性のために使用されます。実際の用�
 
 ### enable_datacache_io_adaptor
 
-<<<<<<< HEAD
 * **説明**: Data Cache I/O アダプタを有効にするかどうか。この機能を有効にすると、ディスク I/O 負荷が高い場合にシステムが一部のキャッシュ要求をリモートストレージに自動的にルーティングし、ディスクの負荷を軽減します。
 * **デフォルト**: true
-=======
-* **説明**: ソートされたストリーミングを有効にするかどうかを指定します。`true` はソートされたストリーミングが有効で、データストリーム内のデータをソートします。
-* **デフォルト**: false
-* **導入バージョン**: v2.5
-
-### enable_spill
-
-* **説明**: 中間結果のスピルを有効にするかどうか。デフォルト: `false`。`true` に設定されている場合、StarRocks はクエリ内の集計、ソート、またはジョインオペレーターを処理する際にメモリ使用量を削減するために中間結果をディスクにスピルします。
-* **デフォルト**: false
-* **導入バージョン**: v3.0
-
-集計のスピルが有効な場合、MAP や MAP を含む ARRAY/STRUCT など、ソートできないグループ化キーには、`spill_partitionwise_agg` が `false` でもハッシュ分割による partitionwise スピルが自動的に使用されます。ソート可能なグループ化キーは、引き続きこの設定に従います。
-
-### enable_spill_to_remote_storage
-
-* **説明**: 中間結果をオブジェクトストレージにスピルするかどうか。`true` に設定されている場合、StarRocks はローカルディスクの容量制限に達した後、`spill_storage_volume` で指定されたストレージボリュームに中間結果をスピルします。詳細については、[Spill to object storage](../administration/management/resource_management/spill_to_disk.md#preview-spill-intermediate-result-to-object-storage) を参照してください。
-* **デフォルト**: false
->>>>>>> e4d8a33 ([BugFix] Use partitionwise spill for unorderable aggregation keys (#82919))
 * **導入バージョン**: v3.3.0
 
 ### enable_file_metacache
