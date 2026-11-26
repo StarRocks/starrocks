@@ -368,6 +368,8 @@ TEST(FragmentContextExecRuntimeTest, ReportExecStateSkipsUnpublishedAdaptivePipe
     EXPECT_FALSE(p1->is_drivers_prepared());
 
     // Simulate adaptive DOP instantiating drivers for p1 before prepare/prepare_local_state finish.
+    // Like instantiate_pipeline_drivers(), the pipeline profile is attached at instantiation time.
+    p1->setup_pipeline_profile(state);
     instantiate_test_drivers(&fragment_ctx, &query_runtime_state, p1.get());
     ASSERT_EQ(2, p1->drivers().size());
     ASSERT_FALSE(p1->drivers()[0]->local_prepare_is_done());
@@ -384,14 +386,14 @@ TEST(FragmentContextExecRuntimeTest, ReportExecStateSkipsUnpublishedAdaptivePipe
     });
     EXPECT_EQ(2, observed_drivers);
     EXPECT_NE(nullptr, state->runtime_profile()->get_child("Pipeline (id=0)"));
-    EXPECT_EQ(nullptr, state->runtime_profile()->get_child("Pipeline (id=1)"));
+    // p1's profile is already attached; only the drivers are skipped until they are prepared.
+    EXPECT_NE(nullptr, state->runtime_profile()->get_child("Pipeline (id=1)"));
 
     // Once p1 finishes prepare + prepare_local_state and marks prepared, it becomes visible to reporting and iteration.
     for (const auto& driver : p1->drivers()) {
         ASSERT_OK(driver->prepare(state));
         ASSERT_OK(driver->prepare_local_state(state));
     }
-    p1->setup_pipeline_profile(state);
     p1->set_drivers_prepared(true);
     EXPECT_TRUE(p1->is_drivers_prepared());
     EXPECT_EQ(2, p1->drivers().size());
@@ -405,7 +407,6 @@ TEST(FragmentContextExecRuntimeTest, ReportExecStateSkipsUnpublishedAdaptivePipe
         ++observed_drivers;
     });
     EXPECT_EQ(4, observed_drivers);
-    EXPECT_NE(nullptr, state->runtime_profile()->get_child("Pipeline (id=1)"));
 
     prepare_pool.shutdown();
     prepare_pool.join();
@@ -479,12 +480,12 @@ TEST(FragmentContextExecRuntimeTest, ConcurrentAdaptivePublishAndProfileReport) 
             }
         });
 
+        p1->setup_pipeline_profile(state);
         instantiate_test_drivers(&fragment_ctx, &query_runtime_state, p1.get());
         for (const auto& driver : p1->drivers()) {
             ASSERT_OK(driver->prepare(state));
             ASSERT_OK(driver->prepare_local_state(state));
         }
-        p1->setup_pipeline_profile(state);
         p1->set_drivers_prepared(true);
 
         // Let the concurrent reporter observe the published pipeline at least once.
