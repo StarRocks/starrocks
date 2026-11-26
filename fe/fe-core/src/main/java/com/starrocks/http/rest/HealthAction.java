@@ -34,6 +34,7 @@
 
 package com.starrocks.http.rest;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.Config;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -41,10 +42,19 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.GracefulExitFlag;
+import com.starrocks.system.SystemInfoService;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 public class HealthAction extends RestBaseAction {
+    @VisibleForTesting
+    static final String CHECK_NODES_PARAM = "check_nodes";
+
+    // Set once this FE process has seen an alive BE/CN (or found none registered). Never reset.
+    private static final AtomicBoolean NODES_READY = new AtomicBoolean(false);
+
     public HealthAction(ActionController controller) {
         super(controller);
     }
@@ -66,16 +76,41 @@ public class HealthAction extends RestBaseAction {
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response) {
         if (GracefulExitFlag.isGracefulExit()) {
             sendResult(request, response, HttpResponseStatus.INTERNAL_SERVER_ERROR);
-        } else {
-            response.setContentType("application/json");
-
-            RestResult result = new RestResult();
-            result.addResultEntry("total_backend_num",
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber());
-            result.addResultEntry("online_backend_num",
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveBackendNumber());
-            sendResult(request, response, result);
+            return;
         }
+
+        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        if ("true".equalsIgnoreCase(request.getSingleParameter(CHECK_NODES_PARAM))
+                && !isNodesReady(
+                        clusterInfo.getTotalBackendNumber() + clusterInfo.getTotalComputeNodeNumber(),
+                        clusterInfo.getAliveBackendNumber() + clusterInfo.getAliveComputeNodeNumber())) {
+            sendResult(request, response, HttpResponseStatus.SERVICE_UNAVAILABLE);
+            return;
+        }
+
+        response.setContentType("application/json");
+
+        RestResult result = new RestResult();
+        result.addResultEntry("total_backend_num", clusterInfo.getTotalBackendNumber());
+        result.addResultEntry("online_backend_num", clusterInfo.getAliveBackendNumber());
+        sendResult(request, response, result);
+    }
+
+    @VisibleForTesting
+    public static boolean isNodesReady(int totalNodes, int aliveNodes) {
+        if (NODES_READY.get()) {
+            return true;
+        }
+        if (totalNodes == 0 || aliveNodes > 0) {
+            NODES_READY.set(true);
+            return true;
+        }
+        return false;
+    }
+
+    @VisibleForTesting
+    public static void resetNodesReadyForTest() {
+        NODES_READY.set(false);
     }
 
     @Override
