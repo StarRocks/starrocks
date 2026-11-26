@@ -74,10 +74,33 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true)
           python3 lib/backport_assign.py
 
-  title-check:
-    runs-on: ubuntu-latest
+  # A release-branch backport must carry every file of the PR it backports, or name the ones it
+  # leaves out in its description ("Dropped: <path> — <reason>"). #69889, the conflict-resolved
+  # 4.0 backport of #69383, dropped the file that held the fix and passed every check.
+  # title-check, a required check on the release branches, fails when this job fails.
+  backport-completeness:
     needs: sync-checker
     if: >
+      github.base_ref != 'main' &&
+      contains(github.event.pull_request.title, '(backport #') &&
+      !startsWith(github.event.pull_request.title, 'Revert ')
+    runs-on: [self-hosted, quick]
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.number }}
+    steps:
+      - name: compare with the source PR
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && (cd ci-tool && git pull -q || true)
+          python3 ci-tool/lib/backport_completeness.py
+
+  title-check:
+    runs-on: ubuntu-latest
+    needs: [ sync-checker, backport-completeness ]
+    # Waits for backport-completeness, which is skipped on most PRs; title-check still runs then.
+    if: >
+      !cancelled() && needs.sync-checker.result == 'success' &&
       !startsWith(github.event.pull_request.title, 'Revert ')
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -137,6 +160,12 @@ jobs:
 
         run: |
           echo "::error::Branch PR does not contain the backport option!"
+          exit 1
+
+      - name: check backport completeness
+        if: always() && needs.backport-completeness.result == 'failure'
+        run: |
+          echo "::error::This backport misses files of the PR it backports: see the backport-completeness job."
           exit 1
 
   # The backport versions come from the branch map (ci-tool conf/sync_branch_map.json:
