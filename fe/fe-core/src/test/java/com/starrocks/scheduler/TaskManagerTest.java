@@ -1515,9 +1515,11 @@ public class TaskManagerTest {
                     field.set(manager, timer);
                 }
             }
+            Field runExecutor = TaskRunManager.class.getDeclaredField("taskRunExecutor");
+            runExecutor.setAccessible(true);
             Field pool = TaskRunExecutor.class.getDeclaredField("taskRunPool");
             pool.setAccessible(true);
-            executors.add((ExecutorService) pool.get(manager.getTaskRunManager().getTaskRunExecutor()));
+            executors.add((ExecutorService) pool.get(runExecutor.get(manager.getTaskRunManager())));
             manager.replayCreateTask(task);
         }
 
