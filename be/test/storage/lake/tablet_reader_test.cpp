@@ -1531,6 +1531,8 @@ public:
     explicit WarmableFileSystem(std::shared_ptr<FileSystem> fs) : _fs(std::move(fs)) {}
 
     std::atomic<int64_t> warms{0};
+    // Blocks each warm-up reports it queued for a fetch: 0 as when the files are cached.
+    std::atomic<size_t> submitted{1};
     // The next segment reader that opens a file whose name ends with this fails to open it, once.
     std::string fail_once;
 
@@ -1541,7 +1543,8 @@ public:
             return Status::IOError("injected");
         }
         ASSIGN_OR_RETURN(auto file, _fs->new_random_access_file(opts, fname));
-        std::shared_ptr<io::SeekableInputStream> stream = std::make_shared<WarmableStream>(std::move(file), &warms);
+        std::shared_ptr<io::SeekableInputStream> stream =
+                std::make_shared<WarmableStream>(std::move(file), &warms, &submitted);
         return std::make_unique<RandomAccessFile>(std::move(stream), fname);
     }
     Type type() const override { return _fs->type(); }
@@ -1593,23 +1596,30 @@ public:
 private:
     class Handle final : public io::CacheWarmHandle {
     public:
-        size_t submitted_blocks() const override { return 1; }
+        explicit Handle(size_t submitted) : _submitted(submitted) {}
+        size_t submitted_blocks() const override { return _submitted; }
         size_t pending_blocks() const override { return 0; }
+
+    private:
+        const size_t _submitted;
     };
     class WarmableStream final : public io::SeekableInputStreamWrapper {
     public:
-        WarmableStream(std::unique_ptr<RandomAccessFile> file, std::atomic<int64_t>* warms)
+        WarmableStream(std::unique_ptr<RandomAccessFile> file, std::atomic<int64_t>* warms,
+                       const std::atomic<size_t>* submitted)
                 : io::SeekableInputStreamWrapper(file.get(), kDontTakeOwnership),
                   _file(std::move(file)),
-                  _warms(warms) {}
+                  _warms(warms),
+                  _submitted(submitted) {}
         StatusOr<std::shared_ptr<io::CacheWarmHandle>> warm_cache_async(int64_t, size_t, bool) override {
             _warms->fetch_add(1);
-            return std::make_shared<Handle>();
+            return std::make_shared<Handle>(_submitted->load());
         }
 
     private:
         std::unique_ptr<RandomAccessFile> _file;
         std::atomic<int64_t>* _warms;
+        const std::atomic<size_t>* _submitted;
     };
 
     std::shared_ptr<FileSystem> _fs;
@@ -1660,7 +1670,8 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_ahead_starts_segment_windows) {
     DeferOp restore([&] { g_remote_io_scheduler_enabled.store(scheduler_was_enabled); });
     ConfigResetGuard<int32_t> window_guard(&config::remote_prefetch_window_blocks, 128);
 
-    auto scan = [&](bool scheduler, int32_t segments_ahead, OlapReaderStatistics* stats) {
+    auto scan = [&](bool scheduler, int32_t segments_ahead, OlapReaderStatistics* stats,
+                    ColumnPredicate* pred = nullptr) {
         g_remote_io_scheduler_enabled.store(scheduler);
         ConfigResetGuard<int32_t> ahead_guard(&config::lake_scan_read_ahead_segments, segments_ahead);
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
@@ -1670,6 +1681,11 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_ahead_starts_segment_windows) {
         params.lake_io_opts.fill_data_cache = true;
         params.lake_io_opts.fs = fs;
         params.lake_io_opts.remote_read = RemoteReadContext::for_query(1, 1, 0, 42);
+        if (pred != nullptr) {
+            PredicateAndNode root;
+            root.add_child(PredicateColumnNode(pred));
+            params.pred_tree = PredicateTree::create(std::move(root));
+        }
         CHECK_OK(reader->open(params));
         std::vector<std::pair<int, int>> rows;
         auto chunk = ChunkFactory::new_chunk(*_schema, 4096);
@@ -1707,6 +1723,25 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_ahead_starts_segment_windows) {
     EXPECT_EQ(2, started_early);
     EXPECT_EQ(0, started_with_chunks);
     EXPECT_GT(fs->warms.load(), 0);
+    EXPECT_EQ(0, stats.remote_prefetch_idle_windows);
+
+    // With the files cached, each segment asks for its first page only, and none starts early.
+    const int64_t uncached_warms = fs->warms.load();
+    fs->submitted = 0;
+    EXPECT_EQ(expected, scan(true, 16, &stats));
+    EXPECT_EQ(0, stats.segment_read_ahead_started);
+    EXPECT_EQ(3, stats.remote_prefetch_idle_windows);
+    EXPECT_LT(fs->warms.load() - uncached_warms, uncached_warms);
+
+    // A predicate every row passes: each segment reads its first chunk with late materialization, then switches
+    // context, which rebuilds the window of a segment that reads ahead. An idle window is kept: one per segment.
+    std::unique_ptr<ColumnPredicate> all_rows(new_column_ge_predicate(get_type_info(TYPE_INT), 1, "0"));
+    EXPECT_EQ(expected, scan(true, 16, &stats, all_rows.get()));
+    EXPECT_GT(stats.late_materialize_rows, 0);
+    EXPECT_LT(stats.late_materialize_rows, static_cast<int64_t>(expected.size()));
+    EXPECT_EQ(3, stats.remote_prefetch_idle_windows);
+    EXPECT_EQ(0, stats.segment_read_ahead_started);
+    fs->submitted = 1;
 
     // Each segment still reads ahead at its own turn.
     int64_t warms = fs->warms.load();

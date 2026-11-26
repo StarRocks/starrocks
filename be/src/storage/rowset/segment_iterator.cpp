@@ -159,6 +159,7 @@ public:
         return _prefetch_window != nullptr ? _prefetch_window->ahead_blocks() : 0;
     }
     bool read_ahead_done() const override { return _prefetch_window == nullptr || _prefetch_window->exhausted(); }
+    bool read_ahead_cached() const override { return _prefetch_window != nullptr && _prefetch_window->idle(); }
 
     // Public entry point used by the segment_seek_range_to_rowid_range() /
     // segment_seek_ranges_to_rowid_ranges() free functions. The caller
@@ -1278,6 +1279,12 @@ bool SegmentIterator::_should_prefetch_bitmap_index_pages() const {
 }
 
 void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
+    if (_prefetch_window != nullptr && _prefetch_window->idle()) {
+        // The segment is cached (see SegmentPrefetchWindow::idle()): on a context switch or a narrowed scan range, keep
+        // the idle window rather than build one that would ask for its first page again.
+        _prefetch_late_columns.clear();
+        return;
+    }
     _reset_prefetch_window();
 #ifdef USE_STAROS
     const int32_t blocks = _read_ahead_blocks();
@@ -1333,12 +1340,13 @@ void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
     if (columns.empty() && _prefetch_late_columns.empty()) {
         return;
     }
+    const bool query = _opts.lake_io_opts.remote_read.workload == RemoteReadContext::Workload::QUERY;
     _prefetch_window = std::make_unique<SegmentPrefetchWindow>(
             std::move(columns), &_scan_range, start_row, blocks, config::remote_prefetch_late_read_ahead_ratio,
             config::starlet_star_cache_block_size_bytes, _opts.stats,
-            // Only query scans share the node read-ahead budget; compaction keeps its own window bound.
-            _opts.lake_io_opts.remote_read.workload == RemoteReadContext::Workload::QUERY ? ReadAheadBudget::instance()
-                                                                                          : nullptr);
+            // Only query scans share the node read-ahead budget and stop reading ahead on a cached segment; compaction
+            // keeps its own window bound.
+            query ? ReadAheadBudget::instance() : nullptr, query /* idle_when_cached */);
 #else
     (void)start_row;
 #endif // USE_STAROS

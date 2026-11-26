@@ -40,7 +40,8 @@ struct OlapReaderStatistics;
 // scheduler's decision. It never guesses: only pages the reader will read (per the ordinal index and the
 // scan range) are warmed, and a page leaves the window once the reader has passed its last row. The page
 // list is produced incrementally, so the window's memory does not grow with the segment. A page the reader will take
-// from the memory page cache is not warmed: its read does not touch the file.
+// from the memory page cache is not warmed: its read does not touch the file. A window built `idle_when_cached` asks
+// for nothing more once its first page turns out cached (see idle()).
 //
 // The blocks of the query windows of a node are bounded by ReadAheadBudget (lake_scan_read_ahead_max_blocks): a window
 // asks for a grant before it warms blocks, and a window that holds its share, or finds the node full, asks for no
@@ -61,9 +62,10 @@ public:
 
     // `scan_range` (ascending) must outlive the window; the pages before `start_row` are skipped. `budget` bounds the
     // blocks of all windows that share it; nullptr leaves the window to its own `ahead_blocks` only.
+    // `idle_when_cached`: see idle().
     SegmentPrefetchWindow(std::vector<Column> columns, const SparseRange<>* scan_range, rowid_t start_row,
                           size_t ahead_blocks, double late_read_ahead_ratio, size_t block_size,
-                          OlapReaderStatistics* stats, ReadAheadBudget* budget);
+                          OlapReaderStatistics* stats, ReadAheadBudget* budget, bool idle_when_cached = false);
 
     // The reader is about to read the rows from `row` on: forget what it has consumed and top the
     // window up again.
@@ -82,12 +84,19 @@ public:
     bool reads_ahead_late_columns() const { return _late_read_ahead; }
 
     bool disabled() const { return _disabled; }
+    // Set when the first page the window asked for needed no fetch, if the window was built `idle_when_cached`; a
+    // window with no column to read ahead goes by the first batch of warm_rows() instead. The segment was most likely
+    // read as a whole recently, and looking each of its pages up would cost more than the reads it could speed up, so
+    // the window asks for nothing more. A page whose read-ahead the scheduler refused, its queue being full, counts
+    // as needing no fetch too: no more read-ahead would get in either.
+    bool idle() const { return _idle; }
 
     // Cache blocks asked for and not consumed yet.
     size_t ahead_blocks() const { return _ahead_blocks; }
     // Whether every page the reader will read of the read-ahead columns has been asked for.
     bool exhausted() const {
-        return _disabled || std::all_of(_cursors.begin(), _cursors.end(), [](const Cursor& c) { return c.done; });
+        return _disabled || _idle ||
+               std::all_of(_cursors.begin(), _cursors.end(), [](const Cursor& c) { return c.done; });
     }
 
 private:
@@ -117,12 +126,15 @@ private:
     void settle(Cursor* c);
     // Reads `columns` ahead from `start_row` on.
     void add_cursors(const std::vector<Column>& columns, rowid_t start_row);
-    // Asks for the next blocks of `cursor_idx`. False when the budget grants none or the window got disabled.
+    // Asks for the next blocks of `cursor_idx`. False when the budget grants none or the window stopped (disabled or
+    // idle).
     bool submit(size_t cursor_idx, rowid_t row);
     // The blocks the window holds of the node's budget.
     size_t granted_blocks() const;
     // Stops reading ahead: drops every warm-up and leaves the budget.
     void disable();
+    // Goes idle (see idle()): drops every warm-up and leaves the budget.
+    void set_idle();
     // Whether the read of `page` will find it in the memory page cache instead of reading the file.
     static bool in_page_cache(const Column& column, const PagePointer& page);
     // `urgent`: pages a read is about to consume, fetched in parallel as a demand rather than as read-ahead.
@@ -144,6 +156,9 @@ private:
     // Set when the stream cannot warm the cache at all (e.g. a non-starlet file); the window then
     // stays out of the way.
     bool _disabled = false;
+    // Set until the window has asked for its first page, if it was built `idle_when_cached` (see idle()).
+    bool _probe_first_page;
+    bool _idle = false;
     // Distinct pages of the late columns the batches of warm_rows() touched, the first and the last page each column touched
     // (-1 before its first), the number of batches, and whether those columns are read ahead now.
     int64_t _late_pages_touched = 0;
