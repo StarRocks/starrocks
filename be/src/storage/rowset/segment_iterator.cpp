@@ -1734,6 +1734,17 @@ struct IndexOnlyPredicateChecker {
     }
 };
 
+// Expression predicates and the OR subtrees holding one.
+struct ExprPredicateChecker {
+    bool operator()(const PredicateColumnNode& node) const { return node.col_pred()->is_expr_predicate(); }
+
+    template <CompoundNodeType Type>
+    bool operator()(const PredicateCompoundNode<Type>& node) const {
+        return std::any_of(node.children().begin(), node.children().end(),
+                           [&](const auto& child) { return child.visit(*this); });
+    }
+};
+
 StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
         const PredicateTree& pred_tree, const Schema& schema,
         const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid,
@@ -1758,6 +1769,11 @@ StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
     if (used_tree.empty()) {
         return candidate;
     }
+
+    // A contiguous batch may read across short gaps between the runs of `candidate` only when the tree has no
+    // expression predicates: those are cheap and safe to evaluate on the rows outside `candidate`, while an
+    // expression is never computed for a row outside it.
+    const bool bridge_gaps = !used_tree.visit(ExprPredicateChecker());
 
     // cid -> field index in `schema`.
     std::unordered_map<ColumnId, size_t> cid_2_fid;
@@ -1803,8 +1819,32 @@ StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
     SparseRange<> rows = roaring2range(candidate);
     roaring::Roaring result;
     std::vector<uint8_t> selection;
-    for (auto iter = rows.new_iterator(); iter.has_more();) {
-        Range<> r = iter.next(kEvalBatch);
+    // A delete vector scattered over the segment splits `candidate` into many short runs. A batch per run costs about
+    // 1us (column, seek, chunk, tree evaluation) while reading a row costs a few ns, so a contiguous batch reads
+    // across gaps of up to kMaxBridgedGap rows, and the rows it picks up from the gaps are dropped at the end.
+    constexpr rowid_t kMaxBridgedGap = 128;
+    size_t run = 0;
+    rowid_t next_row = rows.empty() ? 0 : rows[0].begin();
+    bool bridged = false;
+    const auto next_span = [&]() {
+        const rowid_t begin = std::max(next_row, rows[run].begin());
+        const rowid_t limit = begin + kEvalBatch;
+        rowid_t end = std::min(rows[run].end(), limit);
+        while (bridge_gaps && end == rows[run].end() && run + 1 < rows.size() &&
+               rows[run + 1].begin() - end <= kMaxBridgedGap && rows[run + 1].begin() < limit) {
+            ++run;
+            bridged = true;
+            end = std::min(rows[run].end(), limit);
+        }
+        if (end == rows[run].end()) {
+            ++run;
+        }
+        next_row = end;
+        return Range<>(begin, end);
+    };
+    while (run < rows.size()) {
+        // A batch is one contiguous span of at most kEvalBatch rows.
+        Range<> r = next_span();
         const uint32_t bn = r.end() - r.begin();
 
         // Build a chunk keyed by column id so PredicateTree::evaluate (chunk->get_column_by_id(cid))
@@ -1842,6 +1882,9 @@ StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
                 result.add(r.begin() + i);
             }
         }
+    }
+    if (bridged) {
+        result &= candidate;
     }
     return result;
 }
@@ -2356,16 +2399,6 @@ bool SegmentIterator::need_early_materialize_subfield(const FieldPtr& field) {
     }
     return false;
 }
-
-struct ExprPredicateChecker {
-    bool operator()(const PredicateColumnNode& node) const { return node.col_pred()->is_expr_predicate(); }
-
-    template <CompoundNodeType Type>
-    bool operator()(const PredicateCompoundNode<Type>& node) const {
-        return std::any_of(node.children().begin(), node.children().end(),
-                           [&](const auto& child) { return child.visit(*this); });
-    }
-};
 
 void SegmentIterator::_init_column_predicates() {
     SCOPED_RAW_TIMER(&_opts.stats->init_context_ns);
