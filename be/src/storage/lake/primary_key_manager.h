@@ -285,8 +285,9 @@ public:
     // does not help is not repeated.
     bool request_pk_index_rebuild(int64_t tablet_id, int64_t base_version);
 
-    // Logs the keys whose index entry points at a segment the tablet no longer has. `rss_rowids` are
-    // the index lookups of `pk_column`. Does nothing unless `st` is a missing rssid error.
+    // Logs the rssid and rowid of the index entries that point at a segment the tablet no longer has,
+    // never the key values. `rss_rowids` are the index lookups of `pk_column`. Does nothing unless `st`
+    // is a missing rssid error.
     static void log_keys_at_missing_rssid(const Status& st, const RowsetUpdateStateParams& params,
                                           const Column& pk_column, const std::vector<uint64_t>& rss_rowids);
 

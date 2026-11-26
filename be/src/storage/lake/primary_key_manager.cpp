@@ -392,9 +392,9 @@ void PrimaryKeyManager::log_keys_at_missing_rssid(const Status& st, const Rowset
     if (!is_missing_rssid_error(st)) {
         return;
     }
-    constexpr size_t kMaxLoggedKeys = 10;
+    constexpr size_t kMaxLoggedEntries = 10;
     const auto& rssid_to_file = params.container.rssid_to_file();
-    std::stringstream keys;
+    std::stringstream entries;
     size_t stale_keys = 0;
     for (size_t i = 0; i < rss_rowids.size() && i < pk_column.size(); i++) {
         const uint64_t rss_rowid = rss_rowids[i];
@@ -402,14 +402,14 @@ void PrimaryKeyManager::log_keys_at_missing_rssid(const Status& st, const Rowset
         if (rss_rowid == static_cast<uint64_t>(-1) || rssid_to_file.count(rssid) > 0) {
             continue;
         }
-        if (++stale_keys <= kMaxLoggedKeys) {
-            keys << " key=" << pk_column.debug_item(i) << " rssid=" << rssid
-                 << " rowid=" << static_cast<uint32_t>(rss_rowid & 0xffffffff);
+        // Key values are user data and are never logged; the rssid/rowid pair identifies the index entry.
+        if (++stale_keys <= kMaxLoggedEntries) {
+            entries << " rssid=" << rssid << " rowid=" << static_cast<uint32_t>(rss_rowid & 0xffffffff);
         }
     }
     LOG(WARNING) << "PK index of tablet " << params.metadata->id() << " version " << params.metadata->version()
-                 << " points " << stale_keys << " keys at missing segments, first " << kMaxLoggedKeys << ":"
-                 << keys.str();
+                 << " points " << stale_keys << " keys at missing segments, first " << kMaxLoggedEntries
+                 << " entries:" << entries.str();
 }
 
 bool PrimaryKeyManager::request_pk_index_rebuild(int64_t tablet_id, int64_t base_version) {
