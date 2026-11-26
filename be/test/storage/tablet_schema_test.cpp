@@ -16,11 +16,93 @@
 
 #include <gtest/gtest.h>
 
+#include <utility>
+
 #include "base/json/json_util.h"
+#include "column/chunk_factory.h"
+#include "column/column_helper.h"
+#include "column/geo_column.h"
+#include "column/schema.h"
 #include "storage/tablet_schema_helper.h"
 #include "storage/tablet_schema_map.h"
 
 namespace starrocks {
+
+TEST(TabletSchemaTest, materializes_geo_tablet_columns) {
+    const GeoTypeDescriptor descriptors[] = {
+            {GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", std::nullopt},
+            {GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857},
+            {GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "custom:LocalSurveyGrid-Moscow-2026", std::nullopt},
+    };
+    for (const auto& expected : descriptors) {
+        SCOPED_TRACE(expected.crs);
+        const bool geography = expected.logical_type == GEO_LOGICAL_TYPE_GEOGRAPHY;
+        const auto type = geography ? TYPE_GEOGRAPHY : TYPE_GEOMETRY;
+        auto tablet_schema = std::make_shared<TabletSchema>();
+        TabletColumn control(STORAGE_AGGREGATE_NONE, TYPE_INT, false, 10, sizeof(int32_t));
+        control.set_name("control");
+        control.set_is_key(true);
+        tablet_schema->append_column(control);
+        {
+            TabletColumn geo(STORAGE_AGGREGATE_NONE, type, !geography, 11, 0);
+            geo.set_name("geo");
+            auto descriptor = expected;
+            geo.set_geo_descriptor(descriptor);
+            tablet_schema->append_column(geo);
+        }
+
+        // This overload copies the supplied TabletColumns directly.
+        auto copy = TabletSchema::copy(*tablet_schema, tablet_schema->columns());
+        tablet_schema.reset();
+        const auto& schema = *copy->schema();
+        ASSERT_EQ(2, schema.num_fields());
+        EXPECT_EQ(TYPE_INT, schema.field(0)->type()->type());
+        EXPECT_TRUE(schema.field(0)->is_key());
+        EXPECT_EQ(11, schema.field(1)->uid());
+        EXPECT_EQ(type, schema.field(1)->type()->type());
+        ASSERT_NE(nullptr, schema.field(1)->geo_descriptor());
+        EXPECT_EQ(expected, *schema.field(1)->geo_descriptor());
+
+        auto chunk = ChunkFactory::new_chunk(schema, 8);
+        ASSERT_EQ(2, chunk->num_columns());
+        EXPECT_EQ("integral-4", chunk->get_column_by_index(0)->get_name());
+        const auto* column = chunk->get_column_by_index(1).get();
+        ASSERT_EQ(!geography, column->is_nullable());
+        const auto* geo = dynamic_cast<const GeoColumn*>(ColumnHelper::get_data_column(column));
+        ASSERT_NE(nullptr, geo);
+        EXPECT_EQ(expected, geo->descriptor().type);
+    }
+}
+
+TEST(TabletSchemaTest, compares_geo_descriptor_values) {
+    const auto append_geo = [](TabletSchema& schema, const GeoTypeDescriptor& descriptor) {
+        TabletColumn column(STORAGE_AGGREGATE_NONE, TYPE_GEOMETRY, true, 11, 0);
+        column.set_name("shape");
+        column.set_geo_descriptor(descriptor);
+        schema.append_column(std::move(column));
+    };
+
+    const GeoTypeDescriptor descriptor{GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857};
+    TabletSchema original;
+    TabletSchema same;
+    append_geo(original, descriptor);
+    append_geo(same, descriptor);
+    ASSERT_NE(original.column(0).geo_descriptor(), same.column(0).geo_descriptor());
+    EXPECT_EQ(original, same);
+
+    auto no_srid = descriptor;
+    no_srid.srid.reset();
+    TabletSchema without_srid;
+    append_geo(without_srid, no_srid);
+    EXPECT_NE(original, without_srid);
+
+    auto other_crs = no_srid;
+    other_crs.crs = "custom:LocalSurveyGrid";
+    TabletSchema different_crs;
+    append_geo(different_crs, other_crs);
+    EXPECT_NE(without_srid, different_crs);
+}
+
 // NOLINTNEXTLINE
 TEST(TabletSchemaTest, test_estimate_row_size) {
     TabletSchemaPB schema_pb;

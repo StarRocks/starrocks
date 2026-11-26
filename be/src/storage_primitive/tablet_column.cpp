@@ -280,7 +280,10 @@ bool operator==(const TabletColumn& a, const TabletColumn& b) {
     if (a._length != b._length) return false;
     if (a._index_length != b._index_length) return false;
     if (a._zstd_compression_page_size != b._zstd_compression_page_size) return false;
-    return true;
+    const auto* a_geo = a.geo_descriptor();
+    const auto* b_geo = b.geo_descriptor();
+    if ((a_geo == nullptr) != (b_geo == nullptr)) return false;
+    return a_geo == nullptr || *a_geo == *b_geo;
 }
 
 bool operator!=(const TabletColumn& a, const TabletColumn& b) {
