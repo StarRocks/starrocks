@@ -51,12 +51,9 @@ import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-<<<<<<< HEAD
-=======
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
->>>>>>> 6ea75a0 ([BugFix] Refresh cached partition statistics after collection (#82914))
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
