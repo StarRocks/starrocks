@@ -65,8 +65,9 @@ import com.starrocks.type.InvalidType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeSerializer;
 import org.apache.commons.lang.ArrayUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -81,6 +82,7 @@ import java.util.stream.Collectors;
  * Base class for all functions.
  */
 public class Function implements Writable, GsonPostProcessable {
+    private static final Logger LOG = LogManager.getLogger(Function.class);
     private static final String MASKED_LOCATION = "***";
 
     // Enum for how to compare function signatures.
@@ -342,12 +344,20 @@ public class Function implements Writable, GsonPostProcessable {
     }
 
     @Override
-    public void gsonPostProcess() throws IOException {
+    public void gsonPostProcess() {
         if (cloudConfigurationProperties != null) {
-            cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(cloudConfigurationProperties);
-            if (cloudConfiguration.getCloudType() == CloudType.DEFAULT) {
-                throw new IOException("Cannot restore UDF cloud configuration from persisted properties");
+            cloudConfiguration = null;
+            try {
+                CloudConfiguration restored =
+                        CloudConfigurationFactory.buildCloudConfigurationForStorage(cloudConfigurationProperties);
+                if (restored != null && restored.getCloudType() != CloudType.DEFAULT) {
+                    cloudConfiguration = restored;
+                    return;
+                }
+            } catch (RuntimeException e) {
+                // A malformed function must not prevent the FE from loading its image or edit log.
             }
+            LOG.warn("Cannot restore cloud configuration for UDF {}; recreate the function before using it", name);
         }
     }
 
@@ -829,9 +839,15 @@ public class Function implements Writable, GsonPostProcessable {
     }
 
     public TFunction toThrift() {
-        if (legacyCloudConfiguration != null && cloudConfiguration == null) {
-            throw new IllegalStateException("UDF cloud configuration was saved in an unsupported format; "
-                    + "recreate the function");
+        if (cloudConfiguration == null) {
+            if (legacyCloudConfiguration != null) {
+                throw new IllegalStateException("UDF cloud configuration was saved in an unsupported format; "
+                        + "recreate the function");
+            }
+            if (cloudConfigurationProperties != null) {
+                throw new IllegalStateException("UDF cloud configuration could not be restored from persisted properties; "
+                        + "recreate the function");
+            }
         }
         TFunction fn = new TFunction();
         fn.setName(name.toThrift());
