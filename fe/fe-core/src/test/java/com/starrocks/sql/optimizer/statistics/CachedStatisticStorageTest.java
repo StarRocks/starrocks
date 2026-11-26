@@ -51,12 +51,9 @@ import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-<<<<<<< HEAD
-=======
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
->>>>>>> 6ea75a0 ([BugFix] Refresh cached partition statistics after collection (#82914))
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -415,35 +412,6 @@ public class CachedStatisticStorageTest {
         }
     }
 
-    @Test
-<<<<<<< HEAD
-=======
-    public void testInvalidateConnectorTableColumnStatisticsByUuid() {
-        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
-        try {
-            // null / empty UUID is a no-op and must not throw.
-            cachedStatisticStorage.invalidateConnectorTableColumnStatistics(null, ImmutableList.of("c1"));
-            cachedStatisticStorage.invalidateConnectorTableColumnStatistics("", ImmutableList.of("c1"));
-            // A normal UUID invalidates by key without resolving the table.
-            cachedStatisticStorage.invalidateConnectorTableColumnStatistics(
-                    "hive0.partitioned_db.t1.1234", ImmutableList.of("c1", "c2"));
-        } catch (Exception e) {
-            Assertions.fail();
-        }
-    }
-
-    @Test
-    public void testInvalidateConnectorHistogramStatisticsByUuid() {
-        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
-        try {
-            cachedStatisticStorage.invalidateConnectorHistogramStatistics(null, ImmutableList.of("c1"));
-            cachedStatisticStorage.invalidateConnectorHistogramStatistics(
-                    "hive0.partitioned_db.t1.1234", ImmutableList.of("c1"));
-        } catch (Exception e) {
-            Assertions.fail();
-        }
-    }
-
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     public void testRefreshReplacesInFlightPartitionLoad(boolean isSync) {
@@ -697,7 +665,6 @@ public class CachedStatisticStorageTest {
     }
 
     @Test
->>>>>>> 6ea75a0 ([BugFix] Refresh cached partition statistics after collection (#82914))
     public void testGetColumnNDVForPartitions(@Mocked AsyncLoadingCache<ColumnStatsCacheKey, Optional<PartitionStats>>
                                                           partitionStatistics) {
         Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
