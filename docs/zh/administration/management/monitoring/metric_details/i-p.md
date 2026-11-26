@@ -862,6 +862,12 @@ products: [oss, enterprise, cloud, anywhere]
 - 单位：计数
 - 描述：当前正在运行的查询计划片段数量。
 
+## `primary_key_index_auto_rebuild_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：仅存算分离模式。主键表 Publish 时，因索引条目指向 tablet 中已不存在的 Segment 而重建 tablet 云原生持久化索引的次数。仅在 `lake_pk_index_auto_rebuild_on_missing_rssid` 设置为 `true` 时计数。重建所在的 Publish 成功，或仍然因同样的 Segment 不存在错误而失败时，计入该次重建。如果重建所在的 Publish 因其他原因失败，则不计入，因为下一次尝试会再次重建索引。
+
 ## `process_fd_num_limit_hard`
 
 - 单位：计数
