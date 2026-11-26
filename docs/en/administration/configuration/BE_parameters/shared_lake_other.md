@@ -504,13 +504,22 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Description: With late materialization, the columns that are read only for the rows passing the predicates are fetched chunk by chunk once those rows are known. From the fourth chunk of a segment reader onwards, once those rows have touched at least this fraction of the pages they span, these columns are read ahead like the predicate columns. A value greater than 1 disables the switch. A change applies to segment readers opened afterwards. Takes effect only when `remote_io_scheduler_enable` is `true`.
 - Introduced in: -
 
+### lake_compaction_prefetch_window_blocks
+
+- Default: 32
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Experimental. Target number of Data Cache blocks a lake compaction task prefetches across its input segments. The budget is capped at one eighth of the configured per-worker memory limit and divided among the physical input segments, rounding down. Each segment still prefetches at least one block, so an input with more segments than the budget prefetches one block per segment and exceeds both the budget and the memory cap. Zero disables prefetch. Requires the remote I/O scheduler, a cache-enabled table, and data cache fills for the compaction mode. Eligible scalar pages use the COMPACTION workload.
+- Introduced in: -
+
 ### remote_prefetch_window_blocks
 
 - Default: 128
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of Data Cache blocks that a query's segment reader requests ahead of what it is consuming, including blocks that are queued, being fetched, or fetched but not read yet. It limits how far a reader runs ahead of itself; when the blocks are fetched is decided by the scheduler. Loads, compaction, and other background reads do not read ahead. `0` disables the read-ahead. A change applies to segment readers opened afterwards. Takes effect only when `remote_io_scheduler_enable` is `true`.
+- Description: The maximum number of Data Cache blocks that a query's segment reader requests ahead of what it is consuming, including blocks that are queued, being fetched, or fetched but not read yet. It limits how far a reader runs ahead of itself; when the blocks are fetched is decided by the scheduler. Loads and other background reads do not read ahead; compaction reads ahead under `lake_compaction_prefetch_window_blocks`. `0` disables the read-ahead. A change applies to segment readers opened afterwards. Takes effect only when `remote_io_scheduler_enable` is `true`.
 - Introduced in: -
 
 ### remote_read_adaptive_limit

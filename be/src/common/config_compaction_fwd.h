@@ -142,6 +142,14 @@ CONF_Int64(max_segment_file_size, "1073741824");
 
 CONF_Int64(meta_threshold_to_manual_compact, "10737418240"); // 10G
 
+#ifdef USE_STAROS
+CONF_Int32(starlet_star_cache_block_size_bytes, "1048576");
+
+// Target cache blocks a lake compaction task requests ahead across its input segments; zero disables it.
+// Every input segment keeps at least one block ahead, so an input with more segments than this exceeds it.
+CONF_mInt32(lake_compaction_prefetch_window_blocks, "32");
+
+#endif
 CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
 
 // The interval to check whether lake compaction is valid. Set to <= 0 to disable the check.

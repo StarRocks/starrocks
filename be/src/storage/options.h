@@ -87,6 +87,8 @@ struct LakeIOOptions {
     std::shared_ptr<starrocks::lake::LocationProvider> location_provider;
     // Who the remote reads are for (query, load, compaction), handed to every file opened for the read.
     RemoteReadContext remote_read;
+    // Share of the compaction task's read-ahead budget assigned to one input segment.
+    int32_t compaction_prefetch_blocks = 0;
 };
 
 } // namespace starrocks

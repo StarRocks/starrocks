@@ -495,13 +495,22 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 遅延マテリアライゼーションでは、述語を満たす行のためだけに読む列は、それらの行が確定した後にチャンクごとに取得されます。Segment Reader の 4 番目のチャンク以降、それらの行が範囲内のページのうちこの割合以上に触れた場合、これらの列は述語列と同様に先読みされるようになります。1 より大きい値では切り替わりません。変更は以降に開かれる Segment Reader に反映されます。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
 - 導入バージョン: -
 
+### lake_compaction_prefetch_window_blocks
+
+- デフォルト: 32
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 実験用。lake compaction タスクが入力セグメント全体で先読みして Data Cache に格納する目標ブロック数です。ワーカーのメモリ上限が設定されている場合、予算はその 8 分の 1 に制限され、物理入力セグメント数で割って切り捨てられます。ただし、各セグメントは少なくとも 1 ブロックを先読みするため、セグメント数が予算より多い入力では各セグメントが 1 ブロックずつ先読みし、合計が予算とメモリ上限を超えます。0 で無効になります。remote I/O scheduler、テーブルのキャッシュ、対象の compaction モードのキャッシュ書き込みを有効にする必要があります。対象のスカラーページは COMPACTION ワークロードを使用します。
+- 導入バージョン: -
+
 ### remote_prefetch_window_blocks
 
 - デフォルト: 128
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: クエリの Segment Reader が、消費中の位置より先に要求する Data Cache ブロックの最大数。キュー中、取得中、取得済みで未読のブロックを含みます。Reader がどこまで先行するかを制限するもので、ブロックをいつ取得するかはスケジューラが決めます。ロード、Compaction などのバックグラウンド読み取りは先読みしません。`0` で先読みを無効にします。変更は以降に開かれる Segment Reader に反映されます。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 説明: クエリの Segment Reader が、消費中の位置より先に要求する Data Cache ブロックの最大数。キュー中、取得中、取得済みで未読のブロックを含みます。Reader がどこまで先行するかを制限するもので、ブロックをいつ取得するかはスケジューラが決めます。ロードなどのその他のバックグラウンド読み取りは先読みしません。Compaction の先読みは `lake_compaction_prefetch_window_blocks` で制御します。`0` で先読みを無効にします。変更は以降に開かれる Segment Reader に反映されます。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
 - 導入バージョン: -
 
 ### remote_read_adaptive_limit
