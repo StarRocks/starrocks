@@ -168,6 +168,16 @@ public:
         bool zone_map_root_is_data = true;
         PagePointer bloom_filter;
         bool bloom_filter_root_is_data = true;
+        // The bitmap index loads the root of its dictionary's value index, of its dictionary's ordinal index when it
+        // has one, and of its bitmaps' ordinal index. The dictionary and the bitmaps are IndexedColumns, whose index
+        // has a single level: each root is the only index page of its index, or the only data page of its column.
+        // The load does not read a root that is a data page: the lookups do.
+        PagePointer bitmap_dict_value;
+        bool bitmap_dict_value_root_is_data = true;
+        PagePointer bitmap_dict_ordinal;
+        bool bitmap_dict_ordinal_root_is_data = true;
+        PagePointer bitmap_ordinal;
+        bool bitmap_ordinal_root_is_data = true;
     };
     const IndexRootPages& index_root_pages() const { return _index_root_pages; }
 
@@ -175,6 +185,7 @@ public:
     // do not inspect the index metas, which the loading thread may already have released.
     bool has_loaded_ordinal_index() const;
     bool has_loaded_zone_map_index() const;
+    bool has_loaded_bitmap_index() const;
 
     PagePointer get_dict_page_pointer() const { return _dict_page_pointer; }
     LogicalType column_type() const { return _column_type; }

@@ -34,13 +34,17 @@
 
 #pragma once
 
+#include <memory>
 #include <roaring/roaring.hh>
+#include <unordered_set>
+#include <vector>
 
 #include "base/concurrency/once.h"
 #include "column/column_helper.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
+#include "io/seekable_input_stream.h"
 #include "storage/rowset/indexed_column_reader.h"
 #include "storage_primitive/bitmap_index_iterator.h"
 #include "storage_primitive/range.h"
@@ -219,7 +223,27 @@ public:
 
     rowid_t current_ordinal() const override { return _current_rowid; }
 
+    // Fetches the pages through |file|, which must be the file the iterator reads, ahead of the reads. A page the memory
+    // page cache holds is not fetched when |use_page_cache| is set, since the read takes it from there. Not set by
+    // default: the iterator then prefetches nothing.
+    void enable_prefetch(io::SeekableInputStream* file, bool use_page_cache, OlapReaderStatistics* stats) {
+        _prefetch_file = file;
+        _prefetch_use_page_cache = use_page_cache;
+        _prefetch_stats = stats;
+    }
+    void prefetch_dictionary_page(const void* value) override;
+    void prefetch_bitmap_pages(const SparseRange<>& ordinals) override;
+
 private:
+    // Bitmap pages asked for at most per prefetch_bitmap_pages() call: a long ordinal range is read one page after
+    // another anyway, and its first pages are what the read waits for first.
+    static constexpr size_t kMaxPrefetchBitmapPages = 64;
+
+    void _prefetch_page(const PagePointer& page);
+
+    // kMaxPrefetchBitmapPages; tests lower it, since an index with that many bitmap pages is too large for them.
+    size_t _max_prefetch_bitmap_pages = kMaxPrefetchBitmapPages;
+
     BitmapIndexReader* _reader;
     std::unique_ptr<IndexedColumnIterator> _dict_column_iter;
     std::unique_ptr<IndexedColumnIterator> _bitmap_column_iter;
@@ -229,6 +253,15 @@ private:
     rowid_t _num_bitmap;
     rowid_t _current_rowid{0};
     std::shared_ptr<bool> _file_missing;
+
+    io::SeekableInputStream* _prefetch_file = nullptr;
+    bool _prefetch_use_page_cache = false;
+    OlapReaderStatistics* _prefetch_stats = nullptr;
+    // Set once the file refuses to fill its cache in the background: it will not start to.
+    bool _prefetch_disabled = false;
+    // Offsets of the pages already asked for: lookups of nearby values or ordinals often share a page.
+    std::unordered_set<uint64_t> _prefetched_pages;
+    std::vector<std::shared_ptr<io::CacheWarmHandle>> _prefetch_handles;
 };
 
 } // namespace starrocks

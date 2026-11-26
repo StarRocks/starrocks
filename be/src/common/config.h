@@ -887,11 +887,13 @@ CONF_Int32(load_segment_thread_pool_queue_size, "10240");
 CONF_mBool(enable_lake_segment_metadata_filter, "true");
 
 // Once a query scan of a lake tablet has opened its segments, split or not, start filling the local cache with the
-// index pages its reads need next -- the short key index of every segment, the zone map and bloom filter roots of the
-// predicate columns and the ordinal index roots of the read columns -- asynchronously, without waiting for them. The
-// reads then join those fills instead of fetching one page after another. Takes effect only for queries and only
-// while the remote I/O scheduler is enabled and initialized (remote_io_scheduler_enable); otherwise, and when a file
-// cannot be warmed, the scan reads its index pages as before. Independent of lake_scan_parallel_segment_open.
+// index pages its reads need next -- the short key index of every segment, the zone map, bloom filter and bitmap
+// index roots of the predicate columns and the ordinal index roots of the read columns -- asynchronously, without
+// waiting for them. The reads then join those fills instead of fetching one page after another. The bitmap index
+// lookups of EQ and IN predicates likewise ask for the dictionary pages of all their values at once, and then for the
+// pages of all the bitmaps they selected, before reading them. Takes effect only for queries and only while the remote
+// I/O scheduler is enabled and initialized (remote_io_scheduler_enable); otherwise, and when a file cannot be warmed,
+// the scan reads its index pages as before. Independent of lake_scan_parallel_segment_open.
 CONF_mBool(lake_scan_warm_index, "true");
 
 // When a prepared-split scan's main morsel queue is momentarily empty (its seed page-pruning is still

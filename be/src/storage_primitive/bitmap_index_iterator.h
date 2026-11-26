@@ -46,6 +46,13 @@ public:
 
     virtual Status read_union_bitmap(rowid_t from, rowid_t to, roaring::Roaring* result) = 0;
     virtual Status read_union_bitmap(const SparseRange<>& range, roaring::Roaring* result) = 0;
+
+    // Starts fetching, without waiting, the dictionary page seek_dictionary(|value|) reads, so that the lookups of
+    // several values fetch their pages at the same time instead of one after another. An iterator whose storage cannot
+    // fill its cache in the background ignores it. What it started stays wanted until the iterator is destroyed.
+    virtual void prefetch_dictionary_page(const void* value) {}
+    // Likewise for the pages holding the bitmaps of |ordinals|, which read_union_bitmap() and read_null_bitmap() read.
+    virtual void prefetch_bitmap_pages(const SparseRange<>& ordinals) {}
 };
 
 } // namespace starrocks
