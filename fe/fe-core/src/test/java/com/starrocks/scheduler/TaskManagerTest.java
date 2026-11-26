@@ -26,6 +26,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.persist.AlterTaskInfo;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
@@ -64,6 +65,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiConsumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -1317,6 +1319,103 @@ public class TaskManagerTest {
         Assertions.assertNotNull(
                 taskManager.getPeriodFutureMap().get(task.getId())
         );
+    }
+
+    @Test
+    public void testReplaySwitchToManualCancelsPeriodicScheduler() throws Exception {
+        mockLeader(false);
+        TaskManager taskManager = new TaskManager();
+        Task task = newPeriodicTask("mv_replay_manual", Constants.TaskSource.MV, -1);
+        task.setState(Constants.TaskState.PAUSE);
+        task.getSchedule().setStartTime(TimeUtils.getEpochSeconds() + 3600);
+        try {
+            taskManager.replayCreateTask(task);
+            task.setState(Constants.TaskState.ACTIVE);
+            taskManager.registerScheduler(task);
+            ScheduledFuture<?> future = taskManager.getPeriodFutureMap().get(task.getId());
+            Assertions.assertFalse(future.isCancelled());
+
+            taskManager.replayAlterTask(new AlterTaskInfo(task.getName(), Constants.TaskType.MANUAL, null));
+
+            assertEquals(Constants.TaskType.MANUAL, task.getType());
+            Assertions.assertNull(taskManager.getPeriodFutureMap().get(task.getId()));
+            Assertions.assertTrue(future.isCancelled());
+        } finally {
+            shutdownSchedulers(taskManager);
+        }
+    }
+
+    @Test
+    public void testReplayedSwitchToManualLeavesNothingScheduled() throws Exception {
+        assertReplayedChangeLeavesNothingScheduled("mv_replay_manual_inv", (taskManager, task) ->
+                taskManager.replayAlterTask(new AlterTaskInfo(task.getName(), Constants.TaskType.MANUAL, null)));
+    }
+
+    @Test
+    public void testReplayedSuspendLeavesNothingScheduled() throws Exception {
+        assertReplayedChangeLeavesNothingScheduled("mv_replay_pause", (taskManager, task) ->
+                taskManager.replayAlterTask(new AlterTaskInfo(task.getName(), Constants.TaskState.PAUSE)));
+    }
+
+    @Test
+    public void testReplayedDropLeavesNothingScheduled() throws Exception {
+        assertReplayedChangeLeavesNothingScheduled("mv_replay_drop", (taskManager, task) ->
+                taskManager.replayDropTasks(List.of(task.getId())));
+    }
+
+    @Test
+    public void testReplayedResumeIsScheduledOnceThisFeLeads() throws Exception {
+        mockLeader(false);
+        TaskManager taskManager = new TaskManager();
+        Task task = newPeriodicTask("mv_replay_resume", Constants.TaskSource.MV, -1);
+        task.setState(Constants.TaskState.PAUSE);
+        task.getSchedule().setStartTime(TimeUtils.getEpochSeconds() + 3600);
+        try {
+            taskManager.replayCreateTask(task);
+            taskManager.resumeTask(task, true);
+            assertEquals(Constants.TaskState.ACTIVE, task.getState());
+            Assertions.assertNull(taskManager.getPeriodFutureMap().get(task.getId()));
+
+            taskManager.start();
+
+            Assertions.assertFalse(taskManager.getPeriodFutureMap().get(task.getId()).isCancelled());
+        } finally {
+            shutdownSchedulers(taskManager);
+        }
+    }
+
+    private static void assertReplayedChangeLeavesNothingScheduled(String name,
+                                                                   BiConsumer<TaskManager, Task> replayedChange)
+            throws Exception {
+        mockLeader(false);
+        TaskManager taskManager = new TaskManager();
+        Task task = newPeriodicTask(name, Constants.TaskSource.MV, -1);
+        task.setState(Constants.TaskState.PAUSE);
+        task.getSchedule().setStartTime(TimeUtils.getEpochSeconds() + 3600);
+        try {
+            taskManager.replayCreateTask(task);
+            taskManager.resumeTask(task, true);
+            ScheduledFuture<?> afterResume = taskManager.getPeriodFutureMap().get(task.getId());
+
+            replayedChange.accept(taskManager, task);
+
+            Assertions.assertFalse(isLive(afterResume), "a schedule the follower registered keeps running");
+            Assertions.assertFalse(isLive(taskManager.getPeriodFutureMap().get(task.getId())));
+        } finally {
+            shutdownSchedulers(taskManager);
+        }
+    }
+
+    private static boolean isLive(ScheduledFuture<?> future) {
+        return future != null && !future.isCancelled();
+    }
+
+    private static void shutdownSchedulers(TaskManager taskManager) throws Exception {
+        for (String name : new String[] {"periodScheduler", "dispatchScheduler"}) {
+            Field field = TaskManager.class.getDeclaredField(name);
+            field.setAccessible(true);
+            ((ExecutorService) field.get(taskManager)).shutdownNow();
+        }
     }
 
     @Test
