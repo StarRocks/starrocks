@@ -1400,6 +1400,11 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _seg_init_timer = ADD_TIMER(_runtime_profile, segment_init_name);
     _bi_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexFilter", segment_init_name);
     _bi_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BitmapIndexFilterRows", TUnit::UNIT, segment_init_name);
+    // lake_scan_warm_index: the bitmap index pages the lookups asked for all at once ahead of reading them.
+    _bi_prefetch_pages_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "BitmapIndexPrefetchPages", TUnit::UNIT, "BitmapIndexFilter");
+    _bi_prefetch_blocks_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "BitmapIndexPrefetchBlocks", TUnit::UNIT, "BitmapIndexFilter");
     _bf_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BloomFilterFilterRows", TUnit::UNIT, segment_init_name);
     _seg_zm_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "SegmentZoneMapFilterRows", TUnit::UNIT, segment_init_name);
@@ -1735,6 +1740,8 @@ void LakeDataSource::update_counter(RuntimeState* state) {
 
     COUNTER_UPDATE(_bi_filtered_counter, reader_stats.rows_bitmap_index_filtered);
     COUNTER_UPDATE(_bi_filter_timer, reader_stats.bitmap_index_filter_timer);
+    COUNTER_UPDATE(_bi_prefetch_pages_counter, reader_stats.bitmap_index_prefetch_pages);
+    COUNTER_UPDATE(_bi_prefetch_blocks_counter, reader_stats.bitmap_index_prefetch_blocks);
     COUNTER_UPDATE(_vector_index_timer,
                    reader_stats.vector_index_load_ns + reader_stats.get_row_ranges_by_vector_index_timer);
     COUNTER_UPDATE(_vector_index_load_timer, reader_stats.vector_index_load_ns);

@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -122,6 +123,11 @@ public:
     virtual Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const {
         return Status::Cancelled("not implemented");
     }
+
+    // Calls |visit| with each value seek_bitmap_dictionary() looks up with BitmapIndexIterator::seek_dictionary(), in
+    // the representation it passes there, and returns true; a predicate that reads the dictionary in another way
+    // returns false without calling it. A reader uses the values to fetch the dictionary pages ahead of the lookups.
+    virtual bool visit_bitmap_seek_values(const std::function<void(const void*)>& visit) const { return false; }
 
     virtual Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                        roaring::Roaring* row_bitmap) const {
