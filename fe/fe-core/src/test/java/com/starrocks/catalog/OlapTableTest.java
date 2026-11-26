@@ -714,6 +714,116 @@ public class OlapTableTest {
     }
 
     @Test
+    public void testRangePartitionDataCacheDurationWithDateColumn() throws AnalysisException {
+        Column k1 = new Column("k1", new ScalarType(PrimitiveType.DATE), true, null, "", "");
+        List<Column> partitionColumns = new LinkedList<>();
+        partitionColumns.add(k1);
+        RangePartitionInfo rangePartitionInfo = new RangePartitionInfo(partitionColumns);
+        LocalDate today = LocalDate.now();
+        rangePartitionInfo.setRange(1L, false, Range.closedOpen(
+                PartitionKey.ofDate(today.minusMonths(3)), PartitionKey.ofDate(today.minusMonths(2))));
+        rangePartitionInfo.setRange(2L, false, Range.closedOpen(
+                PartitionKey.ofDate(today.minusMonths(2)), PartitionKey.ofDate(today.minusMonths(1))));
+        rangePartitionInfo.setRange(3L, false, Range.closedOpen(
+                PartitionKey.ofDate(today.minusDays(5)), PartitionKey.ofDate(today.plusDays(5))));
+        rangePartitionInfo.setRange(4L, false, Range.closedOpen(
+                PartitionKey.ofDate(today.plusMonths(1)), PartitionKey.ofDate(today.plusMonths(2))));
+        rangePartitionInfo.setRange(5L, false, Range.closedOpen(
+                PartitionKey.ofDate(today.plusMonths(24)), PartitionKey.ofDate(today.plusMonths(25))));
+
+        OlapTable olapTable = new OlapTable(1L, "tb1", partitionColumns, KeysType.AGG_KEYS,
+                (PartitionInfo) rangePartitionInfo, null);
+        olapTable.setTableProperty(new TableProperty(new HashMap<>()));
+        olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("1 month"));
+
+        Assertions.assertFalse(olapTable.isEnableFillDataCache(
+                new Partition(1L, 11, "pExpired", new MaterializedIndex(), null)));
+        Assertions.assertFalse(olapTable.isEnableFillDataCache(
+                new Partition(2L, 21, "pBoundaryExpired", new MaterializedIndex(), null)));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(
+                new Partition(3L, 31, "pCurrent", new MaterializedIndex(), null)));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(
+                new Partition(4L, 41, "pFuture", new MaterializedIndex(), null)));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(
+                new Partition(5L, 51, "pFarFuture", new MaterializedIndex(), null)));
+    }
+
+    @Test
+    public void testRangePartitionDataCacheDurationWithDateTimeColumn() throws AnalysisException {
+        Column k1 = new Column("k1", new ScalarType(PrimitiveType.DATETIME), true, null, "", "");
+        List<Column> partitionColumns = new LinkedList<>();
+        partitionColumns.add(k1);
+        RangePartitionInfo rangePartitionInfo = new RangePartitionInfo(partitionColumns);
+        LocalDateTime now = LocalDateTime.now();
+        rangePartitionInfo.setRange(1L, false, Range.closedOpen(
+                PartitionKey.ofDateTime(now.minusHours(48)), PartitionKey.ofDateTime(now.minusHours(25))));
+        rangePartitionInfo.setRange(2L, false, Range.closedOpen(
+                PartitionKey.ofDateTime(now.minusHours(1)), PartitionKey.ofDateTime(now.plusHours(1))));
+        rangePartitionInfo.setRange(3L, false, Range.closedOpen(
+                PartitionKey.ofDateTime(now.plusHours(24)), PartitionKey.ofDateTime(now.plusHours(48))));
+
+        OlapTable olapTable = new OlapTable(1L, "tb1", partitionColumns, KeysType.AGG_KEYS,
+                (PartitionInfo) rangePartitionInfo, null);
+        olapTable.setTableProperty(new TableProperty(new HashMap<>()));
+        olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("24 hour"));
+
+        Assertions.assertFalse(olapTable.isEnableFillDataCache(
+                new Partition(1L, 11, "pExpired", new MaterializedIndex(), null)));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(
+                new Partition(2L, 21, "pCurrent", new MaterializedIndex(), null)));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(
+                new Partition(3L, 31, "pFuture", new MaterializedIndex(), null)));
+    }
+
+    @Test
+    public void testListPartitionDataCacheDurationWithFutureValues() throws AnalysisException {
+        Column k1 = new Column("k1", new ScalarType(PrimitiveType.DATE), true, null, "", "");
+        List<Column> partitionColumns = new LinkedList<>();
+        partitionColumns.add(k1);
+        ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST, partitionColumns);
+        LocalDate today = LocalDate.now();
+        listPartitionInfo.setValues(1L, Arrays.asList(today.minusDays(30).toString()));
+        listPartitionInfo.setValues(2L, Arrays.asList(today.plusDays(30).toString()));
+        listPartitionInfo.setValues(3L, Arrays.asList(today.minusDays(30).toString(), today.plusDays(30).toString()));
+
+        OlapTable olapTable = new OlapTable(1L, "tb1", partitionColumns, null, (PartitionInfo) listPartitionInfo, null);
+        olapTable.setTableProperty(new TableProperty(new HashMap<>()));
+        olapTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("7 day"));
+
+        Assertions.assertFalse(olapTable.isEnableFillDataCache(
+                new Partition(1L, 11, "pExpired", new MaterializedIndex(), null)));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(
+                new Partition(2L, 21, "pFuture", new MaterializedIndex(), null)));
+        Assertions.assertTrue(olapTable.isEnableFillDataCache(
+                new Partition(3L, 31, "pExpiredAndFuture", new MaterializedIndex(), null)));
+
+        Column varcharColumn = new Column("k1", new ScalarType(PrimitiveType.VARCHAR), true, null, "", "");
+        Column dateTimeColumn = new Column("k2", new ScalarType(PrimitiveType.DATETIME), true, null, "", "");
+        List<Column> multiColumns = new LinkedList<>();
+        multiColumns.add(varcharColumn);
+        multiColumns.add(dateTimeColumn);
+        ListPartitionInfo multiListPartitionInfo = new ListPartitionInfo(PartitionType.LIST, multiColumns);
+        List<String> expiredValues = Arrays.asList("abcd",
+                DateUtils.formatDateTimeUnix(LocalDateTime.now().minusHours(48)));
+        List<List<String>> expiredMultiValues = Arrays.asList(expiredValues);
+        multiListPartitionInfo.setMultiValues(1L, expiredMultiValues);
+        List<String> futureValues = Arrays.asList("abcd",
+                DateUtils.formatDateTimeUnix(LocalDateTime.now().plusHours(48)));
+        List<List<String>> futureMultiValues = Arrays.asList(futureValues);
+        multiListPartitionInfo.setMultiValues(2L, futureMultiValues);
+
+        OlapTable multiColumnTable = new OlapTable(2L, "tb2", multiColumns, null,
+                (PartitionInfo) multiListPartitionInfo, null);
+        multiColumnTable.setTableProperty(new TableProperty(new HashMap<>()));
+        multiColumnTable.setDataCachePartitionDuration(TimeUtils.parseHumanReadablePeriodOrDuration("24 hour"));
+
+        Assertions.assertFalse(multiColumnTable.isEnableFillDataCache(
+                new Partition(1L, 11, "pExpired", new MaterializedIndex(), null)));
+        Assertions.assertTrue(multiColumnTable.isEnableFillDataCache(
+                new Partition(2L, 21, "pFuture", new MaterializedIndex(), null)));
+    }
+
+    @Test
     public void testGetIndexesBySchema() {
         List<Index> indexesInTable = Lists.newArrayList();
         Column k1 = new Column("k1", new ScalarType(PrimitiveType.VARCHAR), true, null, "", "");
