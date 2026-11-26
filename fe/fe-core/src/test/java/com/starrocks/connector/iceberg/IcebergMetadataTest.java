@@ -7196,7 +7196,6 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals(Optional.of(s1), tableRelation.getTvrVersionRange().end());
     }
 
-<<<<<<< HEAD
     private Schema createTableWithIdentifierFields(String identifierFields) throws DdlException {
         IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
         ArgumentCaptor<Schema> schemaCaptor = ArgumentCaptor.forClass(Schema.class);
@@ -7284,7 +7283,8 @@ public class IcebergMetadataTest extends TableTestBase {
         schema = new Schema(List.of(required(1, "id", Types.LongType.get()),
                 required(2, "ID", Types.LongType.get())), Set.of(2));
         Assertions.assertNull(IcebergApiConverter.toIdentifierFieldsProperty(schema));
-=======
+    }
+
     // RB-1253: V1 keeps a removed partition field as a void field, so its source column can then be dropped. The
     // sink shuffle skips that field, and the commit parses a partition path that leaves it out.
     @Test
@@ -7323,6 +7323,5 @@ public class IcebergMetadataTest extends TableTestBase {
         // a field that is not void must still be in the path
         Assertions.assertThrows(IllegalArgumentException.class,
                 () -> IcebergPartitionData.partitionDataFromPath("ts_day=2026-01-03", "0", spec));
->>>>>>> 005517f37ef... [BugFix][RB-1253] Fix INSERT into Iceberg V1 tables whose void partition field lost its source column (#70097)
     }
 }
