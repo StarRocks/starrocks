@@ -176,6 +176,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.nio.file.Files;
 import java.time.Instant;
@@ -1224,9 +1225,12 @@ public class PaimonMetadataTest {
     }
 
     private static Stream<Arguments> globalIndexPlanningCases() {
-        return Stream.of("auto", "distributed").flatMap(mode ->
-                Stream.of("collection", "attachment", "planning", "fallback", "empty", "success",
-                        "timeout", "cancelled", "unsupported").map(scenario -> Arguments.of(mode, scenario)));
+        return Stream.concat(
+                Stream.of("auto", "distributed").flatMap(mode ->
+                        Stream.of("collection", "attachment", "planning", "fallback", "empty", "success",
+                                "timeout", "cancelled", "unsupported", "success timeout", "success cancelled")
+                                .map(scenario -> Arguments.of(mode, scenario))),
+                Stream.of("retry timeout", "retry cancelled").map(scenario -> Arguments.of("auto", scenario)));
     }
 
     @ParameterizedTest
@@ -1239,6 +1243,8 @@ public class PaimonMetadataTest {
         context.getSessionVariable().setQueryTimeoutS(30);
         context.setStartTime();
         context.setThreadLocalInfo();
+        boolean stopsDuringRetry = failure.startsWith("retry ");
+        boolean stopsAfterIndexedPlanning = failure.startsWith("success ");
         RuntimeException indexFailure = new IllegalStateException("test index " + failure);
         RuntimeException ordinaryFailure = new IllegalStateException("test ordinary planning failure");
         AtomicInteger collections = new AtomicInteger();
@@ -1295,13 +1301,22 @@ public class PaimonMetadataTest {
                 }
                 DataEvolutionBatchScan scan = invocation.getInvokedInstance();
                 scans.add(scan);
-                if (attached.containsKey(scan) && (failure.equals("planning") || failure.equals("fallback"))) {
+                if (attached.containsKey(scan)
+                        && (failure.equals("planning") || failure.equals("fallback") || stopsDuringRetry)) {
                     throw indexFailure;
                 }
                 if (!attached.containsKey(scan) && failure.equals("fallback")) {
                     throw ordinaryFailure;
                 }
-                return invocation.proceed();
+                TableScan.Plan plan = invocation.proceed();
+                if (stopsDuringRetry || stopsAfterIndexedPlanning) {
+                    if (failure.endsWith("timeout")) {
+                        context.setStartTime(Instant.now().minusSeconds(31));
+                    } else {
+                        context.setKilled();
+                    }
+                }
+                return plan;
             }
         };
         try (Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())))) {
@@ -1324,7 +1339,18 @@ public class PaimonMetadataTest {
             Tracers.register(context);
             Tracers.init(Tracers.Mode.VARS, Tracers.Module.EXTERNAL, true, false);
             injectFailure.set(true);
-            if (failure.equals("timeout") || failure.equals("cancelled")) {
+            if (stopsDuringRetry || stopsAfterIndexedPlanning) {
+                RuntimeException error = assertThrows(RuntimeException.class, () -> metadata.getRemoteFiles(table, params));
+                assertTrue(error.getMessage().contains(failure.endsWith("timeout") ? "timed out" : "cancelled"),
+                        error.getMessage());
+                assertEquals(stopsDuringRetry ? 2 : 1, scans.size());
+                if (stopsDuringRetry) {
+                    assertNotSame(scans.get(0), scans.get(1));
+                    assertFalse(attached.containsKey(scans.get(1)));
+                } else {
+                    assertTrue(attached.containsKey(scans.get(0)));
+                }
+            } else if (failure.equals("timeout") || failure.equals("cancelled")) {
                 RuntimeException error = assertThrows(RuntimeException.class, () -> metadata.getRemoteFiles(table, params));
                 if (mode.equals("distributed")) {
                     assertSame(indexFailure, error);
@@ -1371,10 +1397,10 @@ public class PaimonMetadataTest {
             assertEquals(failure.equals("unsupported") ? 0 : 1, collections.get(), mode + ": " + failure);
             Map<String, Object> trace = new HashMap<>();
             Tracers.getAllVars().forEach(var -> trace.put(var.getName(), var.getValue()));
-            boolean applied = failure.equals("success") || failure.equals("empty");
+            boolean applied = failure.equals("success") || failure.equals("empty") || stopsAfterIndexedPlanning;
             assertEquals(applied, "applied".equals(trace.get("PaimonGlobalIndex.Result")));
-            boolean fellBack = mode.equals("auto") && List.of("collection", "attachment", "planning", "fallback")
-                    .contains(failure);
+            boolean fellBack = mode.equals("auto") &&
+                    (stopsDuringRetry || List.of("collection", "attachment", "planning", "fallback").contains(failure));
             assertEquals(fellBack ? indexFailure.getMessage() : null, trace.get("PaimonGlobalIndex.Fallback"));
         } finally {
             Tracers.close();
@@ -1431,8 +1457,9 @@ public class PaimonMetadataTest {
         }
     }
 
-    @Test
-    public void testAutoFinalPlanningBypassesProbeAndFallbackSplits() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testAutoFinalPlanningSplitCache(boolean indexEnabled) throws Exception {
         java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_distributed_splits_");
         Identifier identifier = Identifier.create("test_db", "indexed_table");
         ConnectContext context = UtFrameUtils.createDefaultCtx();
@@ -1447,11 +1474,14 @@ public class PaimonMetadataTest {
                     .option(CoreOptions.BUCKET.key(), "-1")
                     .option(CoreOptions.ROW_TRACKING_ENABLED.key(), "true")
                     .option(CoreOptions.DATA_EVOLUTION_ENABLED.key(), "true")
+                    .option("global-index.enabled", String.valueOf(indexEnabled))
                     .build(), false);
             FileStoreTable written = (FileStoreTable) catalog.getTable(identifier);
             writeRows(written, GenericRow.of(1, BinaryString.fromString("first")),
                     GenericRow.of(2, BinaryString.fromString("second")));
-            buildBtreeIndex(written, "id", tmpDir);
+            if (indexEnabled) {
+                buildBtreeIndex(written, "id", tmpDir);
+            }
             long snapshotId = catalog.getTable(identifier).latestSnapshot().orElseThrow().id();
             PaimonMetadata scanMetadata = new PaimonMetadata("paimon", new HdfsEnvironment(), catalog,
                     new ConnectorProperties(ConnectorType.PAIMON));
@@ -1481,6 +1511,13 @@ public class PaimonMetadataTest {
             assertSame(probe, ((PaimonRemoteFileDesc) scanMetadata.getRemoteFiles(table, probeParams)
                     .get(0).getFiles().get(0)).getPaimonSplitsInfo());
             assertEquals(0, evaluations.get());
+
+            if (!indexEnabled) {
+                assertSame(probe, ((PaimonRemoteFileDesc) scanMetadata.getRemoteFiles(table, scanParams)
+                        .get(0).getFiles().get(0)).getPaimonSplitsInfo());
+                assertEquals(0, evaluations.get());
+                return;
+            }
 
             // First planning falls back. Later planning retries the index instead of reusing that fallback.
             for (int attempt = 1; attempt <= 3; attempt++) {

@@ -944,10 +944,10 @@ public class PaimonMetadata implements ConnectorMetadata {
         boolean evaluateIndex = usesDistributedIndex && forScan && indexEnabled && DEFAULT_MAIN_BRANCH.equals(currentBranch)
                 && tvrVersionRange.start().isEmpty();
         PaimonSplitsInfo splitsInfo;
-        if (usesDistributedIndex && forScan) {
-            // Final distributed scans must plan their own splits, including after an index fallback.
+        if (evaluateIndex) {
+            // Scans that can attempt distributed indexing must plan their own splits.
             // Reusing optimizer/statistics probe splits here would skip index evaluation.
-            splitsInfo = planSplits(paimonTable, paimonNativeTable, params, mode, evaluateIndex, snapshotId, caller);
+            splitsInfo = planSplits(paimonTable, paimonNativeTable, params, mode, true, snapshotId, caller);
         } else {
             PredicateSearchKey filter = PredicateSearchKey.of(paimonTable.getCatalogDBName(),
                     paimonTable.getCatalogTableName(), params.copy());
@@ -1031,6 +1031,9 @@ public class PaimonMetadata implements ConnectorMetadata {
                 }
                 throw e;
             }
+        }
+        if (evaluateIndex) {
+            SimpleExecutor.checkInternalQueryState(caller);
         }
         traceScanMetrics(paimonMetricRegistry, splits, paimonTable.getCatalogTableName(), predicates);
 
