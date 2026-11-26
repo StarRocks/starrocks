@@ -18,6 +18,7 @@ import com.starrocks.type.ArrayType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -54,13 +55,22 @@ public class LanceApiConverter {
             return INT;
         } else if (lower.equals("int64") || lower.equals("bigint")) {
             return BIGINT;
+        } else if (lower.equals("uint8")) {
+            return SMALLINT;
+        } else if (lower.equals("uint16")) {
+            return INT;
+        } else if (lower.equals("uint32")) {
+            return BIGINT;
+        } else if (lower.equals("uint64")) {
+            return TypeFactory.createUnifiedDecimalType(20, 0);
         } else if (lower.equals("float16") || lower.equals("float32") || lower.equals("float")) {
             return FLOAT;
         } else if (lower.equals("float64") || lower.equals("double")) {
             return DOUBLE;
-        } else if (lower.equals("string") || lower.equals("utf8") || lower.equals("varchar")) {
+        } else if (lower.equals("string") || lower.equals("utf8") || lower.equals("varchar") || lower.equals("large_string")
+                || lower.equals("large_utf8")) {
             return VARCHAR;
-        } else if (lower.equals("binary") || lower.equals("varbinary")) {
+        } else if (lower.equals("binary") || lower.equals("varbinary") || lower.equals("large_binary")) {
             return VARBINARY;
         } else if (lower.equals("date") || lower.equals("date32")) {
             return DATE;
