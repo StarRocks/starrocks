@@ -201,8 +201,10 @@ public class Utils {
      * never be published, since what it deletes is exactly what a publish would install.
      *
      * <p>Best effort: one request per node, responses not awaited. A tablet goes to its node in {@code nodeOfTablet}
-     * while that node is alive, which costs no lookup. The other tablets are looked up together, in batches
-     * ({@link WarehouseManager#getAllComputeNodeIdsAssignToTablets}); one left without an alive node keeps its files.
+     * while that node is alive, which costs no lookup. The other tablets are looked up once, together, in batches
+     * ({@link WarehouseManager#getAllComputeNodeIdsAssignToTablets}). A tablet left without an alive node keeps its
+     * files, and so do the tablets of a batch that fails and of the batches after it: a cancel runs this on the alter
+     * scheduler thread under the job's lock, so it waits for one StarMgr timeout at most.
      */
     public static void abortTxnWithCleanup(Collection<Long> tabletIds, Map<Long, Long> nodeOfTablet,
                                            TxnInfoPB txnInfo, ComputeResource computeResource) {
@@ -218,9 +220,7 @@ public class Utils {
             }
         }
         int skipped = 0;
-        // A failed batch ends a lookup and leaves the tablets of the batches after it out of the reply, so look those
-        // up again, for as long as a lookup returns any of them.
-        while (!unplaced.isEmpty()) {
+        if (!unplaced.isEmpty()) {
             Map<Long, List<Long>> assigned = null;
             try {
                 assigned = GlobalStateMgr.getCurrentState().getWarehouseMgr()
@@ -229,17 +229,9 @@ public class Utils {
                 LOG.debug("fail to look up the nodes to abort txn {} on {} tablet(s)", txnInfo.txnId,
                         unplaced.size(), e);
             }
-            if (assigned == null || assigned.isEmpty()) {
-                break;
-            }
-            List<Long> notReturned = new ArrayList<>();
             for (Long tabletId : unplaced) {
-                List<Long> nodeIds = assigned.get(tabletId);
-                if (nodeIds == null) {
-                    notReturned.add(tabletId);
-                    continue;
-                }
-                ComputeNode node = nodeIds.stream()
+                List<Long> nodeIds = assigned == null ? null : assigned.get(tabletId);
+                ComputeNode node = nodeIds == null ? null : nodeIds.stream()
                         .map(nodeId -> aliveNode(clusterInfo, nodeId))
                         .filter(Objects::nonNull)
                         .findFirst()
@@ -250,12 +242,7 @@ public class Utils {
                     tabletsByNode.computeIfAbsent(node, k -> new ArrayList<>()).add(tabletId);
                 }
             }
-            if (notReturned.size() == unplaced.size()) {
-                break;
-            }
-            unplaced = notReturned;
         }
-        skipped += unplaced.size();
         if (skipped > 0) {
             LOG.warn("skip aborting txn {} on {} of {} tablet(s): no alive compute node is assigned to them",
                     txnInfo.txnId, skipped, tabletIds.size());

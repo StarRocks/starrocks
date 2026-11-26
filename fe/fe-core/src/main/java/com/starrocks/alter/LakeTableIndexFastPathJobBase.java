@@ -153,9 +153,9 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
     // leader demotion. Holds the partition object so a pin can be released after its table left the catalog.
     private final transient Map<Long, RetainPin> retainPins = new ConcurrentHashMap<>();
 
-    // Set once cancelImpl has journaled CANCELLED on this FE. Volatile: finish reports read it on FE request threads
-    // without the job's monitor (handleFinishReportOfRemovedTask).
-    private transient volatile boolean cancelJournaled = false;
+    // Set once cancelImpl has accepted the cancel, before it removes the tasks from AgentTaskQueue. Volatile: finish
+    // reports read it on FE request threads without the job's monitor (handleFinishReportOfRemovedTask).
+    private transient volatile boolean cancelStarted = false;
 
     private record RetainPin(PhysicalPartition partition, long version) {
     }
@@ -673,6 +673,9 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             forceSkippedAtCommitted = true;
         }
 
+        // From here on a report that finds its task removed waits for this cancel to finish
+        // (handleFinishReportOfRemovedTask).
+        cancelStarted = true;
         if (batchTask != null) {
             for (AgentTask task : batchTask.getAllTasks()) {
                 AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.ALTER, task.getSignature());
@@ -712,7 +715,6 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             releaseRetainPins();
             persistStateChange(this, JobState.CANCELLED);
         }
-        cancelJournaled = true;
         // CANCELLED is in the journal now, so no leader will publish this txn. A task still running or queued on a
         // node writes its txn log after this abort looked for it; its finish report aborts that tablet again
         // (handleFinishReportOfRemovedTask).
@@ -733,9 +735,10 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
     public void handleFinishReportOfRemovedTask(long tabletId, long backendId) {
         // Most of these reports belong to a job that is not cancelled: after a leader change, every task the previous
         // leader sent reports to a job that no longer has it queued. Return for them without the monitor, which run()
-        // holds through a whole dispatch. A cancel on this FE sets the volatile cancelJournaled; a job loaded already
-        // cancelled reads CANCELLED from jobState.
-        if (!cancelJournaled && jobState != JobState.CANCELLED) {
+        // holds through a whole dispatch. A cancel on this FE sets the volatile cancelStarted before it removes the
+        // tasks, so a report of a task it removed waits for it to finish; a job loaded already cancelled reads
+        // CANCELLED from jobState.
+        if (!cancelStarted && jobState != JobState.CANCELLED) {
             return;
         }
         TxnInfoPB txnInfo;

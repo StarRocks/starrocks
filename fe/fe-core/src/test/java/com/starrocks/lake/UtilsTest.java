@@ -224,9 +224,8 @@ public class UtilsTest {
     }
 
     // One abort request per node. A tablet goes to the node the caller already knows while that node is alive; the
-    // rest are looked up together, never one call per tablet, and a tablet the reply leaves out is looked up once more.
-    // A tablet left without an alive node is skipped, and an RPC that fails does not keep the other nodes from getting
-    // theirs.
+    // rest are looked up in one call, never one call per tablet. A tablet left without an alive node, or left out of
+    // the reply, is skipped, and an RPC that fails does not keep the other nodes from getting theirs.
     @Test
     public void testAbortTxnWithCleanupSendsOneRequestPerNode() {
         ComputeNode node1 = new ComputeNode(1L, "cn-1", 9040);
@@ -282,12 +281,7 @@ public class UtilsTest {
         Utils.abortTxnWithCleanup(List.of(101L, 102L, 103L, 104L, 105L), Map.of(101L, 1L, 102L, 3L, 103L, 2L),
                 txnInfo, resource);
 
-        // 105, left out of the first reply, is looked up again; the second reply has nothing, so the lookups stop.
-        Mockito.verify(warehouseManager, Mockito.times(1)).getAllComputeNodeIdsAssignToTablets(resource,
-                List.of(102L, 104L, 105L));
-        Mockito.verify(warehouseManager, Mockito.times(1)).getAllComputeNodeIdsAssignToTablets(resource,
-                List.of(105L));
-        Mockito.verify(warehouseManager, Mockito.times(2)).getAllComputeNodeIdsAssignToTablets(Mockito.any(),
+        Mockito.verify(warehouseManager, Mockito.times(1)).getAllComputeNodeIdsAssignToTablets(Mockito.any(),
                 Mockito.any());
         Mockito.verify(warehouseManager, Mockito.never()).getComputeNodeAssignedToTablet(Mockito.any(),
                 Mockito.anyLong());
@@ -301,64 +295,6 @@ public class UtilsTest {
         Assertions.assertEquals(List.of(103L), request2.getValue().tabletIds);
         Assertions.assertEquals(List.of(txnInfo), request2.getValue().txnInfos);
         Assertions.assertFalse(request2.getValue().skipCleanup);
-    }
-
-    // A failed batch ends a lookup and its reply leaves out the tablets of that batch and the ones after it. They are
-    // looked up again until a lookup returns none of them, so a transient StarMgr error does not drop them all.
-    @Test
-    public void testAbortTxnWithCleanupLooksUpAgainWhatAFailedBatchLeftOut() {
-        ComputeNode node1 = new ComputeNode(1L, "cn-1", 9040);
-        node1.setBrpcPort(8060);
-        node1.setAlive(true);
-        ComputeNode node2 = new ComputeNode(2L, "cn-2", 9040);
-        node2.setBrpcPort(8060);
-        node2.setAlive(true);
-        SystemInfoService clusterInfo = Mockito.mock(SystemInfoService.class);
-        Mockito.when(clusterInfo.getBackendOrComputeNode(1L)).thenReturn(node1);
-        Mockito.when(clusterInfo.getBackendOrComputeNode(2L)).thenReturn(node2);
-        ComputeResource resource = WarehouseManager.DEFAULT_RESOURCE;
-        WarehouseManager warehouseManager = Mockito.mock(WarehouseManager.class);
-        Mockito.when(warehouseManager.getAllComputeNodeIdsAssignToTablets(resource, List.of(201L, 202L, 203L)))
-                .thenReturn(Map.of(201L, List.of(1L)));
-        Mockito.when(warehouseManager.getAllComputeNodeIdsAssignToTablets(resource, List.of(202L, 203L)))
-                .thenReturn(Map.of(202L, List.of(2L), 203L, List.of(2L)));
-        LakeService service1 = Mockito.mock(LakeService.class);
-        LakeService service2 = Mockito.mock(LakeService.class);
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public NodeMgr getNodeMgr() {
-                return nodeMgr;
-            }
-
-            @Mock
-            public WarehouseManager getWarehouseMgr() {
-                return warehouseManager;
-            }
-        };
-        new MockUp<NodeMgr>() {
-            @Mock
-            public SystemInfoService getClusterInfo() {
-                return clusterInfo;
-            }
-        };
-        new MockUp<BrpcProxy>() {
-            @Mock
-            public LakeService getLakeService(String host, int port) {
-                return "cn-1".equals(host) ? service1 : service2;
-            }
-        };
-        TxnInfoPB txnInfo = TxnInfoHelper.forJobPublish(7L, TxnTypePB.TXN_NORMAL, 0L, 0L);
-
-        Utils.abortTxnWithCleanup(List.of(201L, 202L, 203L), Map.of(), txnInfo, resource);
-
-        Mockito.verify(warehouseManager, Mockito.times(2)).getAllComputeNodeIdsAssignToTablets(Mockito.any(),
-                Mockito.any());
-        ArgumentCaptor<AbortTxnRequest> request1 = ArgumentCaptor.forClass(AbortTxnRequest.class);
-        Mockito.verify(service1, Mockito.times(1)).abortTxn(request1.capture());
-        Assertions.assertEquals(List.of(201L), request1.getValue().tabletIds);
-        ArgumentCaptor<AbortTxnRequest> request2 = ArgumentCaptor.forClass(AbortTxnRequest.class);
-        Mockito.verify(service2, Mockito.times(1)).abortTxn(request2.capture());
-        Assertions.assertEquals(List.of(202L, 203L), request2.getValue().tabletIds);
     }
 
     // ---- prefer_shared_initial_metadata predicate ----------------------------------------

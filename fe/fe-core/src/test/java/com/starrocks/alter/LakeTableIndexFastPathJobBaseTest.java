@@ -638,6 +638,48 @@ public class LakeTableIndexFastPathJobBaseTest {
     }
 
     @Test
+    public void testHandleFinishReportOfRemovedTask_WaitsForACancelInProgress() throws Exception {
+        // A cancel marks itself before it removes the tasks from AgentTaskQueue. A report of a task it removed can
+        // arrive while the cancel still holds the job's monitor to journal CANCELLED; it must wait for the outcome
+        // instead of returning on the state from before the cancel.
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        setField(job, "watershedTxnId", 1000L);
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Thread cancel = new Thread(() -> {
+            synchronized (job) {
+                try {
+                    setField(job, "cancelStarted", true);
+                    locked.countDown();
+                    release.await();
+                } catch (Exception e) {
+                    throw new IllegalStateException(e);
+                }
+            }
+        });
+        cancel.start();
+        Thread report = null;
+        try {
+            assertTrue(locked.await(10, TimeUnit.SECONDS));
+            report = new Thread(() -> job.handleFinishReportOfRemovedTask(11L, 5L));
+            report.start();
+            long deadline = System.currentTimeMillis() + 10_000;
+            while (report.getState() != Thread.State.BLOCKED && report.isAlive()
+                    && System.currentTimeMillis() < deadline) {
+                Thread.sleep(10);
+            }
+            assertEquals(Thread.State.BLOCKED, report.getState());
+        } finally {
+            release.countDown();
+            cancel.join();
+            if (report != null) {
+                report.join(10_000);
+            }
+        }
+    }
+
+    @Test
     public void testReadyToForceSkipPublish_NothingToCheckIsReady() throws Exception {
         // Nothing reserved, or the db / table / partition is gone: there is no
         // version to advance, so the check must not block the force cancel.
