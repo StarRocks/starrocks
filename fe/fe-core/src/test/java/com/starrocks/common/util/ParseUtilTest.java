@@ -77,6 +77,15 @@ public class ParseUtilTest {
     }
 
     @Test
+    public void testParseDataVolumeStrRejectsOverflow() {
+        // Statement analysis uses this entry point and must still fail closed.
+        RuntimeException e = assertThrows(RuntimeException.class,
+                () -> ParseUtil.parseDataVolumeStr("17179869184G"));
+        Assertions.assertTrue(e.getCause() instanceof AnalysisException);
+        Assertions.assertTrue(e.getCause().getMessage().contains("overflow"));
+    }
+
+    @Test
     public void testAnalyzeDataVolumeInvalidInput() {
         for (String s : new String[] {"0G", "-1G", "abc", "", "1XB"}) {
             try {

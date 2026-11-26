@@ -20,6 +20,7 @@ import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.TableName;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -204,7 +205,19 @@ public class Pipe implements GsonPostProcessable {
                     break;
                 }
                 case PipeAnalyzer.PROPERTY_BATCH_SIZE: {
-                    pipeSource.setBatchSize(ParseUtil.parseDataVolumeStr(value));
+                    // Image load and journal replay parse the stored string again. A value an
+                    // older version accepted and wrapped, such as 17179869184G, must not abort
+                    // startup. New statements are still rejected in PipeAnalyzer and validateProperties.
+                    try {
+                        pipeSource.setBatchSize(ParseUtil.parseDataVolumeStr(value));
+                    } catch (RuntimeException e) {
+                        if (!isDataVolumeOverflow(e)) {
+                            throw e;
+                        }
+                        LOG.warn("pipe {} keeps batch_size {} because '{}' overflows a long and was "
+                                        + "stored by an older version: {}",
+                                name, pipeSource.getBatchSize(), value, e.getMessage());
+                    }
                     break;
                 }
                 case PipeAnalyzer.PROPERTY_BATCH_FILES: {
@@ -733,6 +746,13 @@ public class Pipe implements GsonPostProcessable {
 
     public void setLoadStatus(LoadStatus loadStatus) {
         this.loadStatus = loadStatus;
+    }
+
+    private static boolean isDataVolumeOverflow(RuntimeException e) {
+        Throwable cause = e.getCause();
+        return cause instanceof AnalysisException
+                && cause.getMessage() != null
+                && cause.getMessage().contains("data volume overflow");
     }
 
     @Override
