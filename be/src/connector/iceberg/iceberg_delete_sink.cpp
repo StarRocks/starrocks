@@ -349,7 +349,7 @@ StatusOr<std::unique_ptr<ConnectorSink>> IcebergDeleteSinkProvider::create_sink(
 }
 
 // Writes a chunk to the file-level delete file for a specific source data file.
-// Creates a writer for (partition, file_path) if one doesn't exist.
+// Creates a writer for file_path if one doesn't exist.
 //
 // Parameters:
 //   partition - The partition name
@@ -361,16 +361,13 @@ StatusOr<std::unique_ptr<ConnectorSink>> IcebergDeleteSinkProvider::create_sink(
 Status IcebergDeleteSink::write_file_level_chunk(const std::string& partition,
                                                  const std::vector<int8_t>& partition_field_null_list,
                                                  const ChunkPtr& chunk, const std::string& file_path) {
-    // Key: (partition, file_path)
-    auto key = std::make_pair(partition, file_path);
-
     // Check if writer already exists for this file
-    auto it = _file_writers.find(key);
+    auto it = _file_writers.find(file_path);
     if (it != _file_writers.end()) {
         return it->second->write(chunk);
     }
 
-    // Create new writer for this (partition, file_path)
+    // Create new writer for this file_path
     auto writer = _partition_chunk_writer_factory->create(partition, partition_field_null_list);
 
     // Set up callbacks - capture file_path to set referenced_data_file in result
@@ -387,7 +384,7 @@ Status IcebergDeleteSink::write_file_level_chunk(const std::string& partition,
     // Initialize and cache the writer
     RETURN_IF_ERROR(writer->init());
 
-    _file_writers[key] = writer;
+    _file_writers[file_path] = writer;
     _writers.push_back(writer);
     return writer->write(chunk);
 }

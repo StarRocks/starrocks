@@ -1963,4 +1963,43 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
                 () -> source.buildScanRange(task, task.file(), source.addPartition(task)));
         Assertions.assertTrue(e.getMessage().contains("cannot read"), e.getMessage());
     }
+
+    @Test
+    public void testRecordDeleteReferencedDataFilesForPartitionedTable() {
+        DataFile dataFile = DataFiles.builder(SPEC_A)
+                .withPath("/path/to/data-a-stats.parquet")
+                .withFormat(FileFormat.PARQUET)
+                .withFileSizeInBytes(128)
+                .withPartitionPath("data_bucket=0")
+                .withRecordCount(10)
+                .withMetrics(new Metrics(10L, Map.of(1, 40L), Map.of(1, 10L), null, null))
+                .build();
+        TestTables.TestTable v2Table = create(SCHEMA_A, SPEC_A, "ta_v2_delete_referenced", 2);
+        v2Table.newFastAppend().appendFile(dataFile).commit();
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog", "resource", "db",
+                "table", "", Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR)), v2Table,
+                Maps.newHashMap());
+
+        List<RemoteFileInfo> infos = new ArrayList<>();
+        v2Table.newScan().planFiles().forEach(task -> infos.add(new IcebergRemoteFileInfo(task)));
+
+        IcebergConnectorScanRangeSource deleteSource = new IcebergConnectorScanRangeSource(icebergTable,
+                new RemoteFileInfoDefaultSource(infos), IcebergMORParams.EMPTY, tupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false, true);
+        Assertions.assertEquals(1, deleteSource.getSourceOutputs(100).size());
+        DataFile recorded = deleteSource.getDeleteReferencedDataFile(dataFile.location());
+        Assertions.assertNotNull(recorded);
+        Assertions.assertEquals(SPEC_A.specId(), recorded.specId());
+        Assertions.assertEquals(dataFile.partition(), recorded.partition());
+        Assertions.assertNull(recorded.valueCounts());
+
+        deleteSource.clearScannedFiles();
+        Assertions.assertNull(deleteSource.getDeleteReferencedDataFile(dataFile.location()));
+
+        IcebergConnectorScanRangeSource normalSource = new IcebergConnectorScanRangeSource(icebergTable,
+                new RemoteFileInfoDefaultSource(infos), IcebergMORParams.EMPTY, tupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false, false);
+        Assertions.assertEquals(1, normalSource.getSourceOutputs(100).size());
+        Assertions.assertNull(normalSource.getDeleteReferencedDataFile(dataFile.location()));
+    }
 }

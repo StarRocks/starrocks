@@ -746,6 +746,10 @@ public class IcebergScanNode extends ScanNode {
         return scanRangeSource.getScannedDataFiles();
     }
 
+    public DataFile getDeleteReferencedDataFile(String location) {
+        return scanRangeSource == null ? null : scanRangeSource.getDeleteReferencedDataFile(location);
+    }
+
     public Set<DeleteFile> getPosAppliedDeleteFiles() {
         return scanRangeSource.getPosAppliedDeleteFiles();
     }

@@ -583,4 +583,105 @@ TEST_F(IcebergDeleteSinkTest, verify_required_columns_in_parquet) {
     }
 }
 
+namespace {
+
+class RecordingPartitionChunkWriter final : public PartitionChunkWriter {
+public:
+    RecordingPartitionChunkWriter(std::string partition, std::vector<int8_t> null_list,
+                                  const std::shared_ptr<PartitionChunkWriterContext>& ctx,
+                                  std::shared_ptr<int64_t> rows_written)
+            : PartitionChunkWriter(std::move(partition), std::move(null_list), ctx),
+              _rows_written(std::move(rows_written)) {}
+
+    Status init() override { return Status::OK(); }
+    Status write(const ChunkPtr& chunk) override {
+        *_rows_written += chunk->num_rows();
+        return Status::OK();
+    }
+    Status flush() override { return Status::OK(); }
+    Status wait_flush() override { return Status::OK(); }
+    Status finish() override { return Status::OK(); }
+    bool is_finished() override { return true; }
+    int64_t get_written_bytes() override { return 0; }
+    int64_t get_flushable_bytes() override { return 0; }
+
+private:
+    std::shared_ptr<int64_t> _rows_written;
+};
+
+class RecordingPartitionChunkWriterFactory final : public PartitionChunkWriterFactory {
+public:
+    Status init() override { return Status::OK(); }
+
+    PartitionChunkWriterPtr create(std::string partition,
+                                   std::vector<int8_t> partition_field_null_list) const override {
+        created_partitions.push_back(partition);
+        auto rows = std::make_shared<int64_t>(0);
+        rows_per_writer.push_back(rows);
+        return std::make_shared<RecordingPartitionChunkWriter>(
+                std::move(partition), std::move(partition_field_null_list),
+                std::make_shared<PartitionChunkWriterContext>(), std::move(rows));
+    }
+
+    mutable std::vector<std::string> created_partitions;
+    mutable std::vector<std::shared_ptr<int64_t>> rows_per_writer;
+};
+
+} // namespace
+
+// A single referenced data file whose rows evaluate to different partitions (e.g. across a
+// timestamptz month boundary or a partition-column UPDATE) must still reuse one writer and
+// emit a single position delete file rather than splitting by recomputed partition.
+TEST_F(IcebergDeleteSinkTest, same_file_across_different_computed_partitions_uses_single_writer) {
+    auto factory = std::make_unique<RecordingPartitionChunkWriterFactory>();
+    auto* factory_ptr = factory.get();
+
+    std::vector<std::unique_ptr<ColumnEvaluator>> part_evaluators;
+    part_evaluators.push_back(std::make_unique<ColumnSlotIdEvaluator>(2, TypeDescriptor(TYPE_BIGINT)));
+
+    std::unordered_map<std::string, TExprNode> column_slot_map;
+    TExprNode file_node;
+    file_node.node_type = TExprNodeType::SLOT_REF;
+    file_node.__set_slot_ref(TSlotRef());
+    file_node.slot_ref.slot_id = 0;
+    column_slot_map["_file"] = file_node;
+
+    TExprNode pos_node;
+    pos_node.node_type = TExprNodeType::SLOT_REF;
+    pos_node.__set_slot_ref(TSlotRef());
+    pos_node.slot_ref.slot_id = 1;
+    column_slot_map["_pos"] = pos_node;
+
+    IcebergDeleteSink sink({"visit_start_time_month"}, {"month"}, std::move(part_evaluators), std::move(factory),
+                           _runtime_state.get(), std::move(column_slot_map));
+
+    auto make_chunk = [](const std::string& file_path, int64_t pos, int64_t months_since_epoch) {
+        auto chunk = std::make_shared<Chunk>();
+        auto file_col = BinaryColumn::create();
+        file_col->append(Slice(file_path));
+        auto pos_col = Int64Column::create();
+        pos_col->append(pos);
+        auto part_col = Int64Column::create();
+        part_col->append(months_since_epoch);
+        chunk->append_column(std::move(file_col), 0);
+        chunk->append_column(std::move(pos_col), 1);
+        chunk->append_column(std::move(part_col), 2);
+        return chunk;
+    };
+
+    const std::string feb_file = "s3://bucket/table/data/visit_start_time_month=2026-02/a.parquet";
+    const std::string other_file = "s3://bucket/table/data/visit_start_time_month=2026-02/b.parquet";
+
+    // Row 0 evaluates to 2026-02 (673), row 1 from the same data file evaluates to 2026-03 (674).
+    ASSERT_OK(sink.add(make_chunk(feb_file, 10, 673)));
+    ASSERT_OK(sink.add(make_chunk(feb_file, 20, 674)));
+    ASSERT_EQ(factory_ptr->created_partitions.size(), 1);
+    ASSERT_EQ(*factory_ptr->rows_per_writer[0], 2);
+
+    // A distinct referenced data file still gets its own writer.
+    ASSERT_OK(sink.add(make_chunk(other_file, 30, 674)));
+    ASSERT_EQ(factory_ptr->created_partitions.size(), 2);
+    ASSERT_EQ(*factory_ptr->rows_per_writer[1], 1);
+}
+
 } // namespace starrocks::connector

@@ -15,6 +15,8 @@
 #pragma once
 
 #include <memory>
+#include <string>
+#include <unordered_map>
 
 #include "column/chunk.h"
 #include "common/status.h"
@@ -115,8 +117,10 @@ private:
 
     bool _count_loaded_rows;
 
-    // Map: (partition, file_path) -> writer for file-level delete files
-    std::map<std::pair<std::string, std::string>, PartitionChunkWriterPtr> _file_writers;
+    // Map: file_path -> writer for file-level delete files.
+    // Keying strictly by file_path ensures a single referenced data file is never split across multiple
+    // delete files within a sink driver even when recomputed row partitions differ.
+    std::unordered_map<std::string, PartitionChunkWriterPtr> _file_writers;
 
     Status write_file_level_chunk(const std::string& partition, const std::vector<int8_t>& partition_field_null_list,
                                   const ChunkPtr& chunk, const std::string& file_path);
