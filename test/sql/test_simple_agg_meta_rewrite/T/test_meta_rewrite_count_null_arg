@@ -1,0 +1,11 @@
+-- name: test_meta_rewrite_count_null_arg
+-- count(x) is the row count only when x is a non-NULL literal. An argument that reads no column but is NULL on
+-- every row must count 0 (RB-1129, RB-1438, RB-1439).
+create table t1 (id int, a int) duplicate key(id) distributed by hash(id) buckets 1 properties ("replication_num" = "1");
+insert into t1 values (1, 10), (2, 20), (3, 30);
+select count(nullif(upper('a'), 'A')) from t1;
+select count(false + interval 1 day) from t1;
+select count(([a, id] is null and id <=> 3) + interval 1 day) from t1;
+select count(case when c is null then 1 end) from (select trim(false) c from t1) s;
+select count(*) from (select trim(false) c from t1) s where c is null;
+select count(1), count(*), count(id) from t1;
