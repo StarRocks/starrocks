@@ -1962,6 +1962,25 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
+        // count of a column-free expression that is not a literal can be NULL on every row, so it is not
+        // the row count (RB-1129)
+        sql = "select count(nullif(upper('a'), 'A')) from test_all_type_not_null";
+        plan = getFragmentPlan(sql);
+        assertNotContains(plan, "MetaScan");
+        assertContains(plan, "0:OlapScanNode");
+        // the same for an argument that is NULL on every row after constant folding (RB-1439) or after the
+        // projection of a derived table is merged into it (RB-1438)
+        for (String nullArgSql : new String[] {
+                "select count(false + interval 1 day) from test_all_type_not_null",
+                "select count(case when c is null then 1 end) from " +
+                        "(select trim(false) c from test_all_type_not_null) s"}) {
+            plan = getFragmentPlan(nullArgSql);
+            assertNotContains(plan, "MetaScan");
+            assertContains(plan, "0:OlapScanNode");
+        }
+        sql = "select count(1) from test_all_type_not_null";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "0:MetaScan");
         // with count distinct, shouldn't apply RewriteSimpleAggToMetaScanRule
         sql = "select count(distinct t1b) from test_all_type_not_null";
         plan = getFragmentPlan(sql);

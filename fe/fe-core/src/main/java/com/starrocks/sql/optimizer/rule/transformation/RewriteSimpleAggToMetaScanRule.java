@@ -276,7 +276,11 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                                 // count()/count(*)
                                 return true;
                             } else {
-                                return arguments.size() == 1 && !arguments.get(0).isConstantNull();
+                                // Only a literal is known not to be NULL. An argument that reads no column but
+                                // is not a literal, such as nullif(upper('a'), 'A'), can be NULL on every row,
+                                // and the row count would then be wrong.
+                                return arguments.size() == 1 && arguments.get(0) instanceof ConstantOperator &&
+                                        !arguments.get(0).isConstantNull();
                             }
                         }
                         return false;
