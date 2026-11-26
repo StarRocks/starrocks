@@ -14,10 +14,15 @@
 
 #include "common/system/backend_options.h"
 
+#include <netinet/in.h>
+
 #include <vector>
 
 #include "base/network/cidr.h"
+#include "base/network/network_util.h"
+#include "base/testutil/assert.h"
 #include "common/config_network_fwd.h"
+#include "common/status.h"
 #include "gen_cpp/Types_types.h"
 #include "gtest/gtest.h"
 
@@ -100,6 +105,94 @@ TEST_F(BackendOptionsTest, EmptyPriorityNetworkConfigIsAllowed) {
     ASSERT_TRUE(BackendOptions::analyze_priority_cidrs());
     EXPECT_TRUE(BackendOptions::_s_priority_cidrs.empty());
     EXPECT_FALSE(BackendOptions::is_in_prior_network("10.10.10.8"));
+}
+
+namespace {
+
+std::vector<InetAddress> loopback_only_hosts() {
+    return {InetAddress("127.0.0.1", AF_INET, true), InetAddress("::1", AF_INET6, true)};
+}
+
+bool has_non_loopback(const std::vector<InetAddress>& hosts) {
+    for (const auto& host : hosts) {
+        if (!host.is_loopback()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
+TEST_F(BackendOptionsTest, WaitForNonLoopbackReturnsAtOnceWhenAvailable) {
+    int calls = 0;
+    auto provider = [&](std::vector<InetAddress>* hosts) {
+        ++calls;
+        *hosts = loopback_only_hosts();
+        hosts->emplace_back("10.0.0.1", AF_INET, false);
+        return Status::OK();
+    };
+    std::vector<InetAddress> hosts;
+    ASSERT_OK(BackendOptions::get_hosts_waiting_for_non_loopback(provider, 60000, 1, &hosts));
+    EXPECT_EQ(1, calls);
+    EXPECT_EQ(3, hosts.size());
+}
+
+// The address shows up after startup, e.g. a DHCP lease is acquired after the process started.
+TEST_F(BackendOptionsTest, WaitForNonLoopbackPicksUpLateAddress) {
+    int calls = 0;
+    auto provider = [&](std::vector<InetAddress>* hosts) {
+        ++calls;
+        *hosts = loopback_only_hosts();
+        if (calls >= 3) {
+            hosts->emplace_back("10.133.68.156", AF_INET, false);
+        }
+        return Status::OK();
+    };
+    std::vector<InetAddress> hosts;
+    ASSERT_OK(BackendOptions::get_hosts_waiting_for_non_loopback(provider, 60000, 1, &hosts));
+    EXPECT_EQ(3, calls);
+    ASSERT_TRUE(has_non_loopback(hosts));
+    EXPECT_EQ("10.133.68.156", hosts.back().get_host_address());
+}
+
+TEST_F(BackendOptionsTest, WaitForNonLoopbackGivesUpAfterTimeout) {
+    int calls = 0;
+    auto provider = [&](std::vector<InetAddress>* hosts) {
+        ++calls;
+        *hosts = loopback_only_hosts();
+        return Status::OK();
+    };
+    std::vector<InetAddress> hosts;
+    ASSERT_OK(BackendOptions::get_hosts_waiting_for_non_loopback(provider, 50, 5, &hosts));
+    EXPECT_GT(calls, 1);
+    EXPECT_EQ(2, hosts.size());
+    EXPECT_FALSE(has_non_loopback(hosts));
+}
+
+TEST_F(BackendOptionsTest, WaitForNonLoopbackDisabledByZeroTimeout) {
+    int calls = 0;
+    auto provider = [&](std::vector<InetAddress>* hosts) {
+        ++calls;
+        *hosts = loopback_only_hosts();
+        return Status::OK();
+    };
+    std::vector<InetAddress> hosts;
+    ASSERT_OK(BackendOptions::get_hosts_waiting_for_non_loopback(provider, 0, 1000, &hosts));
+    EXPECT_EQ(1, calls);
+    EXPECT_EQ(2, hosts.size());
+}
+
+TEST_F(BackendOptionsTest, WaitForNonLoopbackPropagatesProviderError) {
+    int calls = 0;
+    auto provider = [&](std::vector<InetAddress>* hosts) {
+        ++calls;
+        return Status::InternalError("getifaddrs failed");
+    };
+    std::vector<InetAddress> hosts;
+    auto st = BackendOptions::get_hosts_waiting_for_non_loopback(provider, 60000, 1, &hosts);
+    EXPECT_FALSE(st.ok());
+    EXPECT_EQ(1, calls);
 }
 
 } // namespace starrocks
