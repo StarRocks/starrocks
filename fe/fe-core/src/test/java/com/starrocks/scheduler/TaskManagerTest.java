@@ -59,12 +59,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
-<<<<<<< HEAD
-=======
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
->>>>>>> 1533924 ([BugFix] Preserve periodic MV semantics in leader catch-up refreshes (#83375))
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -1350,129 +1347,6 @@ public class TaskManagerTest {
 
     // Exercise the real submission and builder; mocking executeTask(String) hides a manual catch-up.
     @Test
-<<<<<<< HEAD
-    public void testRegisterSchedulerMVTaskTriggerImmediately() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_mv");
-        task.setSource(Constants.TaskSource.MV);
-        TaskSchedule schedule = new TaskSchedule();
-        
-        long now = TimeUtils.getEpochSeconds();
-        long startTime = now - 3600; // 1 hour ago
-        long lastScheduleTime = now - 180; // 3 minutes ago
-        
-        schedule.setStartTime(startTime);
-        schedule.setPeriod(60); // 1 minute period
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setId(1L);
-        task.setLastScheduleTime(lastScheduleTime);
-        
-        // Mock executeTask to verify it's called
-        final boolean[] executeTaskCalled = {false};
-        TaskManager spyTaskManager = new TaskManager() {
-            @Override
-            public SubmitResult executeTask(String taskName) {
-                executeTaskCalled[0] = true;
-                assertEquals("test_mv", taskName);
-                return new SubmitResult("xxxx", SubmitResult.SubmitStatus.SUBMITTED);
-            }
-        };
-        
-        spyTaskManager.replayCreateTask(task);
-        spyTaskManager.registerScheduler(task);
-        
-        // Should trigger immediately because lastScheduleTime + period < currentTime
-        Assertions.assertTrue(executeTaskCalled[0], "Task should be executed immediately");
-        Assertions.assertTrue(task.getLastScheduleTime() >= now, "LastScheduleTime should be updated");
-        Assertions.assertNotNull(spyTaskManager.getPeriodFutureMap().get(task.getId()));
-    }
-
-    @Test
-    public void testRegisterSchedulerMVTaskNoImmediateTriggerWhenLastScheduleBeforeStart() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_mv");
-        task.setSource(Constants.TaskSource.MV);
-        TaskSchedule schedule = new TaskSchedule();
-
-        long now = TimeUtils.getEpochSeconds();
-        long startTime = now - 3600; // 1 hour ago
-        long lastScheduleTime = now - 7200; // 2 hours ago (before start time)
-
-        schedule.setStartTime(startTime);
-        schedule.setPeriod(60);
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(lastScheduleTime);
-        task.setId(2L);
-
-        // Mock executeTask to verify it's NOT called
-        final boolean[] executeTaskCalled = {false};
-        TaskManager spyTaskManager = new TaskManager() {
-            @Override
-            public SubmitResult executeTask(String taskName) {
-                executeTaskCalled[0] = true;
-                return new SubmitResult("xxxx", SubmitResult.SubmitStatus.SUBMITTED);
-            }
-        };
-
-        spyTaskManager.replayCreateTask(task);
-        spyTaskManager.registerScheduler(task);
-
-        // Should not trigger immediately because lastScheduleTime is before taskStartTime
-        Assertions.assertFalse(executeTaskCalled[0], "Task should not be executed immediately");
-        Assertions.assertNotNull(spyTaskManager.getPeriodFutureMap().get(task.getId()));
-    }
-
-    @Test
-    public void testRegisterSchedulerMVTaskNoImmediateTriggerWhenNotExpired() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_mv");
-        task.setSource(Constants.TaskSource.MV);
-        TaskSchedule schedule = new TaskSchedule();
-
-        long now = TimeUtils.getEpochSeconds();
-        long startTime = now - 3600; // 1 hour ago
-        long lastScheduleTime = now - 30; // 30 seconds ago
-
-        schedule.setStartTime(startTime);
-        schedule.setPeriod(60); // 1 minute period
-        schedule.setTimeUnit(TimeUnit.SECONDS);
-        task.setSchedule(schedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        task.setState(Constants.TaskState.ACTIVE);
-        task.setLastScheduleTime(lastScheduleTime);
-        task.setId(3L);
-
-        // Mock executeTask to verify it's NOT called
-        final boolean[] executeTaskCalled = {false};
-        TaskManager spyTaskManager = new TaskManager() {
-            @Override
-            public SubmitResult executeTask(String taskName) {
-                executeTaskCalled[0] = true;
-                return new SubmitResult("xxxx", SubmitResult.SubmitStatus.SUBMITTED);
-            }
-        };
-
-        spyTaskManager.replayCreateTask(task);
-        spyTaskManager.registerScheduler(task);
-
-        // Should not trigger immediately because lastScheduleTime + period is in the future
-        Assertions.assertFalse(executeTaskCalled[0], "Task should not be executed immediately");
-        Assertions.assertNotNull(spyTaskManager.getPeriodFutureMap().get(task.getId()));
-    }
-
-    @Test
-    public void testRegisterSchedulerNonMVTaskNoImmediateTrigger() {
-        TaskManager taskManager = new TaskManager();
-        Task task = new Task("test_ctas");
-        task.setSource(Constants.TaskSource.CTAS);
-        TaskSchedule schedule = new TaskSchedule();
-=======
     public void testRegisterSchedulerMVTaskTriggerImmediately() throws Exception {
         Task task = newPeriodicTask("test_mv_catch_up", Constants.TaskSource.MV, -180);
         long beforeRegistration = TimeUtils.getEpochSeconds();
@@ -1502,7 +1376,6 @@ public class TaskManagerTest {
         task.setLastScheduleTime(-1);
         assertNoImmediateRun(task);
     }
->>>>>>> 1533924 ([BugFix] Preserve periodic MV semantics in leader catch-up refreshes (#83375))
 
     @Test
     public void testRegisterSchedulerNonMVTaskNoImmediateTrigger() throws Exception {
