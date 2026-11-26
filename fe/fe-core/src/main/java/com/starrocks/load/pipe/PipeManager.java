@@ -26,7 +26,9 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AuthorizerStmtVisitor;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
 import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
 import com.starrocks.sql.ast.pipe.AlterPipePauseResume;
@@ -42,6 +44,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -62,10 +65,24 @@ public class PipeManager {
         repo = new PipeRepo(this);
     }
 
-    public void createPipe(CreatePipeStmt stmt) throws DdlException {
+    public void createPipe(ConnectContext context, CreatePipeStmt stmt) throws DdlException {
+        // OR REPLACE drops the existing pipe, so check DROP on it here, outside the lock (the privilege
+        // check takes the pipe lock), and replace only if that same pipe, or no pipe, is still there
+        boolean checkReplace = stmt.isReplace() && !context.isBypassAuthorizerCheck();
+        PipeId checkedId = null;
+        if (checkReplace) {
+            Optional<Pipe> existing = mayGetPipe(stmt.getPipeName());
+            if (existing.isPresent()) {
+                checkedId = existing.get().getPipeId();
+                AuthorizerStmtVisitor.checkDropPipe(context, stmt.getPipeName());
+            }
+        }
         try {
             lock.writeLock().lock();
             Pair<Long, String> dbIdAndName = resolvePipeNameUnlock(stmt.getPipeName());
+            if (checkReplace && !Objects.equals(checkedId, nameToId.get(dbIdAndName))) {
+                throw new DdlException("Pipe " + stmt.getPipeName() + " was changed concurrently, please retry");
+            }
             boolean existed = nameToId.containsKey(dbIdAndName);
             if (existed) {
                 if (!stmt.isIfNotExists() && !stmt.isReplace()) {
