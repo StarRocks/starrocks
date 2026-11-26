@@ -61,7 +61,6 @@ import org.apache.iceberg.types.Types;
 import org.apache.iceberg.view.View;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.parquet.Strings;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -289,10 +288,10 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         }
     }
 
-    // do not cache if jwt or oauth2 is used AND it is a REST Catalog.
+    // do not cache if it is a REST Catalog that forwards the session's JWT, as the loaded table is per user.
     private boolean tableCacheAllowed(ConnectContext connectContext) {
         return icebergProperties.isEnableIcebergTableCache() &&
-                (Strings.isNullOrEmpty(connectContext.getAuthToken()) || !(delegate instanceof IcebergRESTCatalog));
+                !(delegate instanceof IcebergRESTCatalog restCatalog && restCatalog.forwardsSessionToken(connectContext));
     }
 
     private Table recordLoadTime(Table table) {
