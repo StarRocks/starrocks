@@ -140,14 +140,14 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
         return Optional.empty();
     }
 
-    // The number of tablets the [_META_] scan of genMinMaxSql reads: the queryable base index of every
+    // The number of tablets the [_META_] scan of genMinMaxSql reads: the latest base index of every
     // physical partition (see MetaScanNode#computeRangeLocations). Walks all partitions, so only call it when
     // a collection is about to run.
     @VisibleForTesting
     static long countMetaScanTablets(OlapTable table) {
         long tabletNum = 0;
         for (PhysicalPartition partition : table.getPhysicalPartitions()) {
-            tabletNum += partition.getQueryableBaseIndex().getTablets().size();
+            tabletNum += partition.getLatestBaseIndex().getTablets().size();
         }
         return tabletNum;
     }
@@ -169,16 +169,10 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
         return true;
     }
 
-    @Override
-<<<<<<< HEAD
-=======
-    public Optional<ColumnMinMax> getStatsSync(ColumnIdentifier identifier, StatsVersion version) {
-        if (!REPLAY_MINMAX.isEmpty()) {
-            ColumnMinMax replay = REPLAY_MINMAX.get(identifier);
-            if (replay != null) {
-                return Optional.of(replay);
-            }
-        }
+    // Loads a missing entry and waits for it (or joins the in-flight load of a present one). Only tests use it:
+    // it lets them observe the result of the load getStats() started.
+    @VisibleForTesting
+    Optional<ColumnMinMax> getStatsSync(ColumnIdentifier identifier, StatsVersion version) {
         try {
             CompletableFuture<Optional<CacheValue>> future = cache.get(identifier);
             Optional<CacheValue> cacheValue = future.get();
@@ -197,7 +191,6 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
     }
 
     @Override
->>>>>>> 081dcfe ([BugFix] Avoid unnecessary whole-table min/max collection (#82909))
     public void removeStats(ColumnIdentifier identifier) {
         // skip dictionary operator in checkpoint thread
         if (GlobalStateMgr.isCheckpointThread()) {
