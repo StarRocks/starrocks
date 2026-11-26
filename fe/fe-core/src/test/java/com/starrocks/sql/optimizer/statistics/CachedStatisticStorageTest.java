@@ -22,6 +22,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -57,12 +58,15 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -437,6 +441,183 @@ public class CachedStatisticStorageTest {
         } catch (Exception e) {
             Assertions.fail();
         }
+    }
+
+    private static Table tableWithPartitionCount(int partitionCount) {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t0");
+        return new Table(table.getId(), table.getName(), Table.TableType.OLAP, table.getFullSchema()) {
+            @Override
+            public Collection<Partition> getPartitions() {
+                // Only the size is needed; avoid allocating a large partition catalog for this test.
+                return Collections.nCopies(partitionCount, null);
+            }
+        };
+    }
+
+    private static List<ColumnStatsCacheKey> cachePartitionColumns(CachedStatisticStorage storage, Table table, int count) {
+        List<ColumnStatsCacheKey> keys = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            ColumnStatsCacheKey key = new ColumnStatsCacheKey(table.getId(), "column_" + i);
+            // A previously absent value is still a warm key and must be refreshed after collection.
+            storage.partitionStatistics.synchronous().put(key, Optional.empty());
+            keys.add(key);
+        }
+        return keys;
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1, 30000, 100001, Integer.MAX_VALUE})
+    public void testPartitionRefreshBatchesByTableSize(int partitionCount) {
+        Table table = tableWithPartitionCount(partitionCount);
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        List<ColumnStatsCacheKey> keys = cachePartitionColumns(storage, table, partitionCount <= 1 ? 35 : 7);
+        List<Integer> batchSizes = new ArrayList<>();
+        List<ColumnStatsCacheKey> loadedKeys = new ArrayList<>();
+        PartitionStats current = new PartitionStats();
+        new MockUp<PartitionStatsCacheLoader>() {
+            @Mock
+            public CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> asyncLoadAll(
+                    Iterable<? extends ColumnStatsCacheKey> requested, java.util.concurrent.Executor executor) {
+                List<ColumnStatsCacheKey> batch = ImmutableList.copyOf(requested);
+                batchSizes.add(batch.size());
+                loadedKeys.addAll(batch);
+                Map<ColumnStatsCacheKey, Optional<PartitionStats>> result = Maps.newHashMap();
+                batch.forEach(key -> result.put(key, Optional.of(current)));
+                return CompletableFuture.completedFuture(result);
+            }
+        };
+
+        storage.refreshColumnStatistics(table, keys.stream().map(key -> key.column).toList(), true);
+
+        List<Integer> expectedSizes = switch (partitionCount) {
+            case 0, 1 -> ImmutableList.of(32, 3);
+            case 30000 -> ImmutableList.of(3, 3, 1);
+            default -> Collections.nCopies(7, 1);
+        };
+        Assertions.assertEquals(expectedSizes, batchSizes);
+        Assertions.assertEquals(keys, loadedKeys);
+        keys.forEach(key -> Assertions.assertSame(current,
+                storage.partitionStatistics.synchronous().getIfPresent(key).orElseThrow()));
+    }
+
+    @Test
+    @Timeout(10)
+    public void testAsyncPartitionRefreshPublishesBeforeAdvancingAndSkipsInvalidatedKeys() {
+        Table table = tableWithPartitionCount(100001);
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        List<ColumnStatsCacheKey> keys = cachePartitionColumns(storage, table, 3);
+        List<List<ColumnStatsCacheKey>> batches = new ArrayList<>();
+        CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> firstLoad = new CompletableFuture<>();
+        PartitionStats current = new PartitionStats();
+        new MockUp<PartitionStatsCacheLoader>() {
+            @Mock
+            public CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> asyncLoadAll(
+                    Iterable<? extends ColumnStatsCacheKey> requested, java.util.concurrent.Executor executor) {
+                List<ColumnStatsCacheKey> batch = ImmutableList.copyOf(requested);
+                batches.add(batch);
+                if (batches.size() == 1) {
+                    return firstLoad;
+                }
+                // Publishing this batch must happen before allocating the next batch's result.
+                Assertions.assertSame(current,
+                        storage.partitionStatistics.synchronous().getIfPresent(keys.get(0)).orElseThrow());
+                Assertions.assertFalse(storage.partitionStatistics.asMap().containsKey(keys.get(1)));
+                return CompletableFuture.completedFuture(ImmutableMap.of(keys.get(2), Optional.of(current)));
+            }
+        };
+
+        storage.refreshColumnStatistics(table, keys.stream().map(key -> key.column).toList(), false);
+        Assertions.assertEquals(ImmutableList.of(ImmutableList.of(keys.get(0))), batches);
+        Assertions.assertEquals(Optional.empty(), storage.partitionStatistics.synchronous().getIfPresent(keys.get(0)));
+        storage.partitionStatistics.synchronous().invalidate(keys.get(1));
+        firstLoad.complete(ImmutableMap.of(keys.get(0), Optional.of(current)));
+
+        Assertions.assertEquals(ImmutableList.of(ImmutableList.of(keys.get(0)), ImmutableList.of(keys.get(2))), batches);
+        Assertions.assertSame(current,
+                storage.partitionStatistics.synchronous().getIfPresent(keys.get(2)).orElseThrow());
+        Assertions.assertFalse(storage.partitionStatistics.asMap().containsKey(keys.get(1)));
+    }
+
+    @Test
+    @Timeout(10)
+    public void testSynchronousPartitionRefreshWaitsForEveryBatch() throws Exception {
+        Table table = tableWithPartitionCount(100001);
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        List<ColumnStatsCacheKey> keys = cachePartitionColumns(storage, table, 2);
+        CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> firstLoad = new CompletableFuture<>();
+        CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> secondLoad = new CompletableFuture<>();
+        CountDownLatch firstStarted = new CountDownLatch(1);
+        CountDownLatch secondStarted = new CountDownLatch(1);
+        AtomicInteger loads = new AtomicInteger();
+        PartitionStats current = new PartitionStats();
+        new MockUp<PartitionStatsCacheLoader>() {
+            @Mock
+            public CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> asyncLoadAll(
+                    Iterable<? extends ColumnStatsCacheKey> requested, java.util.concurrent.Executor executor) {
+                int batch = loads.getAndIncrement();
+                Assertions.assertEquals(ImmutableList.of(keys.get(batch)), ImmutableList.copyOf(requested));
+                if (batch == 0) {
+                    firstStarted.countDown();
+                    return firstLoad;
+                }
+                Assertions.assertSame(current,
+                        storage.partitionStatistics.synchronous().getIfPresent(keys.get(0)).orElseThrow());
+                secondStarted.countDown();
+                return secondLoad;
+            }
+        };
+
+        CompletableFuture<Void> refresh = CompletableFuture.runAsync(() ->
+                storage.refreshColumnStatistics(table, keys.stream().map(key -> key.column).toList(), true));
+        try {
+            Assertions.assertTrue(firstStarted.await(5, TimeUnit.SECONDS));
+            Assertions.assertEquals(1, loads.get());
+            Assertions.assertFalse(refresh.isDone());
+            firstLoad.complete(ImmutableMap.of(keys.get(0), Optional.of(current)));
+            Assertions.assertTrue(secondStarted.await(5, TimeUnit.SECONDS));
+            Assertions.assertFalse(refresh.isDone());
+            secondLoad.complete(ImmutableMap.of(keys.get(1), Optional.of(current)));
+            refresh.get(5, TimeUnit.SECONDS);
+            Assertions.assertEquals(2, loads.get());
+            Assertions.assertSame(current,
+                    storage.partitionStatistics.synchronous().getIfPresent(keys.get(1)).orElseThrow());
+        } finally {
+            firstLoad.complete(ImmutableMap.of(keys.get(0), Optional.of(current)));
+            secondLoad.complete(ImmutableMap.of(keys.get(1), Optional.of(current)));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testPartitionRefreshContinuesAfterFailedBatch(boolean rejected) {
+        Table table = tableWithPartitionCount(100001);
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        List<ColumnStatsCacheKey> keys = cachePartitionColumns(storage, table, 2);
+        AtomicInteger loads = new AtomicInteger();
+        PartitionStats current = new PartitionStats();
+        new MockUp<PartitionStatsCacheLoader>() {
+            @Mock
+            public CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> asyncLoadAll(
+                    Iterable<? extends ColumnStatsCacheKey> requested, java.util.concurrent.Executor executor) {
+                int batch = loads.getAndIncrement();
+                Assertions.assertEquals(ImmutableList.of(keys.get(batch)), ImmutableList.copyOf(requested));
+                if (batch == 0) {
+                    if (rejected) {
+                        throw new RejectedExecutionException("refresh executor rejected the batch");
+                    }
+                    return CompletableFuture.failedFuture(new RuntimeException("statistics query failure"));
+                }
+                Assertions.assertFalse(storage.partitionStatistics.asMap().containsKey(keys.get(0)));
+                return CompletableFuture.completedFuture(ImmutableMap.of(keys.get(1), Optional.of(current)));
+            }
+        };
+
+        storage.refreshColumnStatistics(table, keys.stream().map(key -> key.column).toList(), true);
+
+        Assertions.assertEquals(2, loads.get());
+        Assertions.assertFalse(storage.partitionStatistics.asMap().containsKey(keys.get(0)));
+        Assertions.assertSame(current,
+                storage.partitionStatistics.synchronous().getIfPresent(keys.get(1)).orElseThrow());
     }
 
     @ParameterizedTest
