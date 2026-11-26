@@ -1689,10 +1689,23 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_ahead_starts_segment_windows) {
         return rows;
     };
 
+    // A segment started early builds its chunks only when its turn comes, so the started ones hold none meanwhile.
+    int started_early = 0;
+    int started_with_chunks = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("SegmentIterator::start_read_ahead::initialized", [&](void* arg) {
+        started_early++;
+        started_with_chunks += *static_cast<bool*>(arg) ? 1 : 0;
+    });
+    sync->EnableProcessing();
     OlapReaderStatistics stats;
     EXPECT_EQ(expected, scan(true, 16, &stats));
+    sync->DisableProcessing();
+    sync->ClearCallBack("SegmentIterator::start_read_ahead::initialized");
     // The first segment reads ahead at its own turn; the two after it start while it is read.
     EXPECT_EQ(2, stats.segment_read_ahead_started);
+    EXPECT_EQ(2, started_early);
+    EXPECT_EQ(0, started_with_chunks);
     EXPECT_GT(fs->warms.load(), 0);
 
     // Each segment still reads ahead at its own turn.

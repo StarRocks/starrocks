@@ -27,6 +27,7 @@
 #include "base/failpoint/fail_point.h"
 #include "base/format.h"
 #include "base/simd/simd.h"
+#include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "cache/scan/shared_buffered_input_stream.h"
@@ -469,6 +470,8 @@ private:
     FieldPtr _make_field(size_t i);
 
     Status _switch_context(ScanContext* to);
+    // The chunks `ctx` reads into, built for `_reserve_chunk_size` rows.
+    Status _alloc_context_chunks(ScanContext* ctx);
 
     // `_check_low_cardinality_optimization` and `_init_column_iterators` must have been called
     // before you calling this method, otherwise the result is incorrect.
@@ -660,6 +663,9 @@ private:
     // Set when start_read_ahead() failed to initialize the reader, which may have left it partly initialized: _init()
     // returns it instead of initializing again.
     Status _read_ahead_init_status;
+    // Set while start_read_ahead() initializes the reader: the context gets its chunks at the first read instead
+    // (see _switch_context()).
+    bool _defer_context_chunks = false;
     // Until the first get_next after the iterator was opened or reused returns.
     bool _first_chunk_pending = true;
     bool _one_time_setup_done = false;
@@ -1197,7 +1203,13 @@ Status SegmentIterator::_init_scan_range_and_context() {
 
 Status SegmentIterator::start_read_ahead(bool* started) {
     if (!_inited) {
+        _defer_context_chunks = true;
         Status st = _init();
+        _defer_context_chunks = false;
+#ifdef BE_TEST
+        bool holds_chunks = st.ok() && _context != nullptr && _context->_read_chunk != nullptr;
+        TEST_SYNC_POINT_CALLBACK("SegmentIterator::start_read_ahead::initialized", &holds_chunks);
+#endif
         if (!st.ok()) {
             // The read returns this status when the reader's turn comes. An end of file (e.g. every row deleted) only
             // means there is nothing to read, so the readers after it may still start.
@@ -3255,6 +3267,11 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     MonotonicStopWatch sw;
     sw.start();
 
+    if (_context->_read_chunk == nullptr) {
+        // Initialized by start_read_ahead(), which leaves the chunks to the first read.
+        RETURN_IF_ERROR(_alloc_context_chunks(_context));
+    }
+
 #ifdef USE_STAROS
     // only used for CACHE SELECT, do not form any chunk to save CPU time,
     // just read file content in `_scan_range`
@@ -3925,6 +3942,22 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
         _context->close();
     }
 
+    // A reader started ahead of its turn (start_read_ahead()) builds its chunks when it first reads: the readers a
+    // scan starts ahead would otherwise all hold chunks at once, instead of each reusing the memory the reader before
+    // it released.
+    if (!_defer_context_chunks) {
+        RETURN_IF_ERROR(_alloc_context_chunks(to));
+    }
+
+    _context = to;
+    if (rebuild_prefetch_window) {
+        // Early and late columns differ between the contexts.
+        _init_prefetch_window(_cur_rowid);
+    }
+    return Status::OK();
+}
+
+Status SegmentIterator::_alloc_context_chunks(ScanContext* to) {
     if (to->_read_chunk == nullptr) {
         ASSIGN_OR_RETURN(to->_read_chunk, RuntimeChunkHelper::new_chunk_checked(to->_read_schema, _reserve_chunk_size));
     }
@@ -3985,12 +4018,6 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
                          RuntimeChunkHelper::new_chunk_checked(this->output_schema(), _reserve_chunk_size));
     } else {
         to->_adapt_global_dict_chunk = to->_final_chunk;
-    }
-
-    _context = to;
-    if (rebuild_prefetch_window) {
-        // Early and late columns differ between the contexts.
-        _init_prefetch_window(_cur_rowid);
     }
     return Status::OK();
 }
