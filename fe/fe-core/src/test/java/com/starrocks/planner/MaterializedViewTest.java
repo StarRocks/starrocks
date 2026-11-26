@@ -610,6 +610,35 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+    public void testAggregateWithoutGroupByKeepsAggregationOnMvKeyEquality() {
+        // A query without GROUP BY returns one row even when WHERE deptno = <value> matches no MV row, so the
+        // rewrite must keep an aggregation over the MV scan instead of projecting the MV rows (RB-1100).
+        String mv = "select deptno, count(empid) as c, sum(empid) as s, max(empid) as m from emps group by deptno";
+        // count rolls up to sum(c) without grouping keys, which returns one row on no input, and the rollup turns
+        // its NULL on no input into 0
+        String countRollup = "AGGREGATE (update serialize)\n" +
+                "  |  output: sum(14: c)\n" +
+                "  |  group by: \n";
+        for (String query : new String[] {
+                "select count(empid) from emps where deptno = 999999",
+                "select count(empid) from emps where deptno in (999999)",
+                "select (select count(empid) from emps where deptno = 999999) as c"}) {
+            testRewriteOK(mv, query)
+                    .contains(countRollup)
+                    .contains("coalesce(17: count, 0)");
+        }
+        // sum and max roll up to sum and max, NULL on no input
+        testRewriteOK(mv, "select count(empid), sum(empid), max(empid) from emps where deptno = 999999")
+                .contains("AGGREGATE (update serialize)\n" +
+                        "  |  output: sum(14: c), sum(15: s), max(16: m)\n" +
+                        "  |  group by: \n")
+                .contains("coalesce(17: count, 0)");
+        // with GROUP BY an empty result is right, and the aggregation can still be dropped
+        testRewriteOK(mv, "select deptno, count(empid) from emps where deptno = 999999 group by deptno")
+                .notContain("AGGREGATE");
+    }
+
+    @Test
     public void testAggregate0() {
         testRewriteOK("select deptno, count(*) as c, empid + 2 as d, sum(empid) as s "
                         + "from emps group by empid, deptno",
