@@ -77,7 +77,7 @@ jobs:
   # A release-branch backport must carry every file of the PR it backports, or name the ones it
   # leaves out in its description ("Dropped: <path> — <reason>"). #69889, the conflict-resolved
   # 4.0 backport of #69383, dropped the file that held the fix and passed every check.
-  # title-check, a required check on the release branches, fails when this job fails.
+  # A required check on the release branches; skipped on every other PR, which counts as passing.
   backport-completeness:
     needs: sync-checker
     if: >
@@ -97,10 +97,8 @@ jobs:
 
   title-check:
     runs-on: ubuntu-latest
-    needs: [ sync-checker, backport-completeness ]
-    # Waits for backport-completeness, which is skipped on most PRs; title-check still runs then.
+    needs: sync-checker
     if: >
-      !cancelled() && needs.sync-checker.result == 'success' &&
       !startsWith(github.event.pull_request.title, 'Revert ')
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -160,12 +158,6 @@ jobs:
 
         run: |
           echo "::error::Branch PR does not contain the backport option!"
-          exit 1
-
-      - name: check backport completeness
-        if: always() && needs.backport-completeness.result == 'failure'
-        run: |
-          echo "::error::This backport misses files of the PR it backports: see the backport-completeness job."
           exit 1
 
   # The backport versions come from the branch map (ci-tool conf/sync_branch_map.json:
