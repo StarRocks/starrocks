@@ -61,19 +61,18 @@ public class ApplyMinMaxStatisticRule implements TreeRewriteRule {
         }
 
         Map<Integer, Pair<ConstantOperator, ConstantOperator>> infos = Maps.newHashMap();
+        // Numeric/date group-by keys that a min/max stats manager could supply a range for.
+        ColumnRefSet statsCandidates = new ColumnRefSet();
 
-        List<PhysicalOlapScanOperator> scanOperators = Utils.extractPhysicalOlapScanOperator(root);
+        // Pass 1, without touching the stats manager: take the ranges global dicts give for free and find
+        // the keys the manager could cover.
+        List<PhysicalOlapScanOperator> scanOperators = Utils.extractPhysicalOlapScanOperator(root).stream()
+                .filter(scan -> !((OlapTable) scan.getTable()).inputHasTempPartition(scan.getSelectedPartitionId()))
+                .collect(Collectors.toList());
         for (PhysicalOlapScanOperator scanOperator : scanOperators) {
             final Map<Integer, ColumnDict> globalDicts =
                     scanOperator.getGlobalDicts().stream().collect(Collectors.toMap(p -> p.first, p -> p.second));
             OlapTable table = (OlapTable) scanOperator.getTable();
-            final Long lastUpdateTime = StatisticUtils.getTableLastUpdateTimestamp(table);
-            if (null == lastUpdateTime) {
-                continue;
-            }
-            if (table.inputHasTempPartition(scanOperator.getSelectedPartitionId())) {
-                continue;
-            }
             if (scanOperator.getProjection() != null) {
                 for (var entry : scanOperator.getProjection().getColumnRefMap().entrySet()) {
                     if (groupByRefSets.contains(entry.getKey()) &&
@@ -107,17 +106,52 @@ public class ApplyMinMaxStatisticRule implements TreeRewriteRule {
                         infos.put(column.getId(), new Pair<>(min, max));
                         continue;
                     }
-                    Column c = table.getColumn(column.getName());
-                    Optional<IMinMaxStatsMgr.ColumnMinMax> minMax = IMinMaxStatsMgr.internalInstance()
-                            .getStats(new ColumnIdentifier(table.getId(), c.getColumnId()),
-                                    new StatsVersion(-1, lastUpdateTime));
-                    if (minMax.isEmpty()) {
-                        continue;
+                    // Fallback to the internal table-level min/max stats manager for the remaining
+                    // numeric/date group-by keys that are not dict-encoded.
+                    if (table.getColumn(column.getName()) != null) {
+                        statsCandidates.union(column);
                     }
-                    final ConstantOperator min = ConstantOperator.createVarchar(minMax.get().minValue());
-                    final ConstantOperator max = ConstantOperator.createVarchar(minMax.get().maxValue());
-                    infos.put(column.getId(), new Pair<>(min, max));
                 }
+            }
+        }
+
+        // An aggregation gets the compressed key only if every one of its group-by keys has a range, so a key
+        // that can never have one (a string without a global dict, an expression, ...) rules the whole
+        // aggregation out. Asking the manager for the other keys of such an aggregation would only trigger
+        // [_META_] collections over whole tables whose result could never be used.
+        ColumnRefSet statsNeeded = new ColumnRefSet();
+        for (PhysicalHashAggregateOperator agg : aggLists) {
+            boolean mayCompress = agg.getGroupBys().stream()
+                    .allMatch(groupBy -> infos.containsKey(groupBy.getId()) || statsCandidates.contains(groupBy));
+            if (mayCompress) {
+                agg.getGroupBys().stream().filter(statsCandidates::contains).forEach(statsNeeded::union);
+            }
+        }
+
+        // Pass 2: ask the manager, only for the keys an aggregation can use.
+        for (PhysicalOlapScanOperator scanOperator : scanOperators) {
+            List<ColumnRefOperator> columns = scanOperator.getColRefToColumnMetaMap().keySet().stream()
+                    .filter(statsNeeded::contains).collect(Collectors.toList());
+            if (columns.isEmpty()) {
+                continue;
+            }
+            OlapTable table = (OlapTable) scanOperator.getTable();
+            // Walks every partition of the table, so only paid for a scan that needs it.
+            final Long lastUpdateTime = StatisticUtils.getTableLastUpdateTimestamp(table);
+            if (null == lastUpdateTime) {
+                continue;
+            }
+            for (ColumnRefOperator column : columns) {
+                Column c = table.getColumn(column.getName());
+                Optional<IMinMaxStatsMgr.ColumnMinMax> minMax = IMinMaxStatsMgr.internalInstance()
+                        .getStats(new ColumnIdentifier(table.getId(), c.getColumnId()),
+                                new StatsVersion(-1, lastUpdateTime));
+                if (minMax.isEmpty()) {
+                    continue;
+                }
+                final ConstantOperator min = ConstantOperator.createVarchar(minMax.get().minValue());
+                final ConstantOperator max = ConstantOperator.createVarchar(minMax.get().maxValue());
+                infos.put(column.getId(), new Pair<>(min, max));
             }
         }
 
