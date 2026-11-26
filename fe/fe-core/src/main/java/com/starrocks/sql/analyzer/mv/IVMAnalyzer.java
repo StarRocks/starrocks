@@ -26,7 +26,9 @@ import com.starrocks.catalog.combinator.AggStateUtils;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.GroupByClause;
 import com.starrocks.sql.ast.JoinOperator;
@@ -211,6 +213,7 @@ public class IVMAnalyzer {
         this.pinnedEncodeRowIdVersion = pinnedVersion;
 
         try {
+            pinColumnNames(queryStatement);
             QueryRelation queryRelation = queryStatement.getQueryRelation();
             // A query that computes its own __ROW_ID__ (e.g. an aggregate's encode(group_by_keys)) uses
             // QUERY_COMPUTED; an append-only scan without one relies on storage AUTO_INCREMENT.
@@ -231,6 +234,51 @@ public class IVMAnalyzer {
                 throw new SemanticException("Failed to rewrite the query for IVM: %s", e.getMessage());
             }
             return Optional.empty();
+        }
+    }
+
+    // The rewritten query is analyzed again, which names an unaliased item after its analyzed expression: table names
+    // spelled out, aggregates replaced by their state merges. Pin the name the user's query gave it.
+    private static void pinColumnNames(QueryStatement queryStatement) {
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitSelect(SelectRelation select, Void context) {
+                pinItemNames(select);
+                return super.visitSelect(select, context);
+            }
+        }.visit(queryStatement);
+    }
+
+    // Matched by position, since two items can share one expression. A star's fields come from the relation it reads,
+    // so it spans the fields up to the next item's.
+    private static void pinItemNames(SelectRelation select) {
+        List<SelectListItem> items = select.getSelectList().getItems();
+        List<Field> fields = select.getRelationFields().getAllFields();
+        List<String> names = new ArrayList<>(items.size());
+        int position = 0;
+        for (int i = 0; i < items.size(); i++) {
+            SelectListItem item = items.get(i);
+            if (item.isStar()) {
+                Expr nextItemExpr = items.stream().skip(i + 1).filter(other -> !other.isStar())
+                        .map(SelectListItem::getExpr).findFirst().orElse(null);
+                while (position < fields.size() && fields.get(position).getOriginExpression() != nextItemExpr) {
+                    position++;
+                }
+                names.add(null);
+                continue;
+            }
+            if (position == fields.size() || fields.get(position).getOriginExpression() != item.getExpr()) {
+                return;
+            }
+            names.add(fields.get(position++).getName());
+        }
+        if (position != fields.size()) {
+            return;
+        }
+        for (int i = 0; i < items.size(); i++) {
+            if (items.get(i).getAlias() == null && names.get(i) != null) {
+                items.get(i).setAlias(names.get(i));
+            }
         }
     }
 
