@@ -14,10 +14,16 @@
 
 #include <gtest/gtest.h>
 
+<<<<<<< HEAD
+=======
+#include "column/binary_column.h"
+#include "common/overloaded.h"
+>>>>>>> c4efa1b4447... [BugFix][RB-1764] Accept a plain one-row column as a constant predicate value in scan pushdown (#70446)
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/load/stream_load_pipe.h"
 #include "compute_env/query/scan_conjuncts_manager.h"
 #include "exec/tablet_scanner.h"
+#include "exprs/binary_predicate.h"
 #include "exprs/column_ref.h"
 #include "exprs/in_const_predicate.hpp"
 #include "formats/parquet/parquet_test_util/util.h"
@@ -641,6 +647,60 @@ TEST_F(ChunkPredicateBuilderTest, varchar_rt_has_null) {
     ASSERT_EQ(ret3.value().debug_string(),
               "{\"and\":[{\"or\":[{\"pred\":\"(ColumnId(1) IS "
               "NULL)\"},{\"and\":[{\"pred\":\"(columnId(1)>=111)\"},{\"pred\":\"(columnId(1)<=222)\"}]}]}]}");
+}
+
+namespace {
+// A constant expression whose result is a plain one-row column rather than a ConstColumn, the way
+// get_query_profile(last_query_id()) evaluates.
+class PlainColumnConstExpr final : public Expr {
+public:
+    PlainColumnConstExpr(const TypeDescriptor& type, ColumnPtr column) : Expr(type), _column(std::move(column)) {}
+
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new PlainColumnConstExpr(*this)); }
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _column; }
+    bool is_constant() const override { return true; }
+
+private:
+    ColumnPtr _column;
+};
+} // namespace
+
+// `c1 > <constant>` where the constant evaluates to a plain column is still a column range on c1.
+TEST_F(ChunkPredicateBuilderTest, varchar_binary_pred_with_plain_column_constant) {
+    SlotId slot_id = 1;
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC, 1}, {"c2", TYPE_VARCHAR_DESC, 2}, {""}};
+    _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+
+    auto value = BinaryColumn::create();
+    value->append(Slice("U1"));
+    ASSERT_FALSE(value->is_constant());
+    ASSERT_FALSE(value->is_nullable());
+
+    TExprNode gt_node;
+    gt_node.__set_node_type(TExprNodeType::BINARY_PRED);
+    gt_node.__set_opcode(TExprOpcode::GT);
+    gt_node.__set_num_children(2);
+    gt_node.__set_child_type(TPrimitiveType::VARCHAR);
+    gt_node.__set_type(TYPE_BOOLEAN_DESC.to_thrift());
+    gt_node.__set_is_nullable(true);
+    Expr* gt = _pool.add(VectorizedBinaryPredicateFactory::from_thrift(gt_node));
+    gt->add_child(_pool.add(new ColumnRef(TYPE_VARCHAR_DESC, slot_id)));
+    gt->add_child(_pool.add(new PlainColumnConstExpr(TYPE_VARCHAR_DESC, std::move(value))));
+
+    auto* ctx = _pool.add(new ExprContext(gt));
+    ASSERT_OK(ctx->prepare(&_runtime_state));
+    ASSERT_OK(ctx->open(&_runtime_state));
+    _expr_containers.emplace_back(BoxedExprContext(ctx));
+
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, _expr_containers, true);
+    ASSIGN_OR_ASSERT_FAIL(auto normalized, builder.parse_conjuncts());
+    ASSERT_TRUE(normalized);
+    ASSERT_TRUE(builder.is_pred_normalized(0));
+
+    auto varchar_schema = SchemaTestHelper::gen_schema_of_dup(TYPE_VARCHAR, 1, 3, 1);
+    OlapPredicateParser varchar_pred_parser(varchar_schema);
+    ASSIGN_OR_ASSERT_FAIL(auto pred, builder.get_predicate_tree_root(&varchar_pred_parser, _predicate_free_pool));
+    ASSERT_EQ(pred.debug_string(), "{\"and\":[{\"pred\":\"(columnId(1)>U1)\"}]}");
 }
 
 TEST_F(ChunkPredicateBuilderTest, range_rt_has_null_min) {
